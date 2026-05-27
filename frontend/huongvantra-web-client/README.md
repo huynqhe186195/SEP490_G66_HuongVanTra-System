@@ -1,16 +1,29 @@
-# React + Vite
+# Cách chạy frontend
+1) Mở Terminal (PowerShell) rồi vào thư mục dự án. Ví dụ:
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+```bash
+cd C:\path\to\SEP490_G66_HuongVanTra-System\frontend\huongvantra-web-client
+```
 
-Currently, two official plugins are available:
+2) Kiểm tra máy đã có Node chưa:
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+```bash
+node -v
+npm -v
+```
 
-## React Compiler
+Nếu chưa có, tải và cài Node từ https://nodejs.org (chọn bản LTS).
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+3) Cài thư viện cần thiết:
 
-## Expanding the ESLint configuration
+```bash
+npm install
+```
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+4) Chạy ứng dụng (mở trình duyệt tới địa chỉ hiển thị, thường http://localhost:5173):
+
+```bash
+npm run dev
+```
+
+
