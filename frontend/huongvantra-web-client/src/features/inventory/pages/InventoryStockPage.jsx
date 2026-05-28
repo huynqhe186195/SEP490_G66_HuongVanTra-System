@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom'
+
 const stockRows = [
   { code: 'KHO-01', product: 'Hồng Trà 100g', batch: 'Lô A05', expiry: '05/2027', stock: '86', alert: 'Ổn định', accent: 'text-gray-600' },
   { code: 'KHO-01', product: 'Kẹo Trà', batch: 'Lô K12', expiry: '12/2026', stock: '12', alert: 'Tồn thấp', accent: 'text-amber-600' },
@@ -41,9 +43,9 @@ function InventoryStockPage() {
             <button type="button" className="bg-[#c3dbbc]/30 px-5 py-2 text-sm font-medium text-gray-700 rounded-lg transition-colors hover:bg-[#c3dbbc]/50">
               Trạng thái
             </button>
-            <button type="button" className="ml-auto flex items-center rounded-lg bg-[#c3dbbc] px-5 py-2 text-sm font-bold text-[#446e52]">
-              <span className="mr-1.5">+</span> Tạo mới
-            </button>
+            <Link to="/inventory/bom" className="ml-auto flex items-center rounded-lg bg-[#c3dbbc] px-5 py-2 text-sm font-bold text-[#446e52]">
+              <span className="mr-1.5">+</span> Tao moi BOM
+            </Link>
           </div>
         </section>
       </header>
