@@ -12,7 +12,6 @@ Thumbs.db
 # Environment and security
 .env
 .env.*
-appsettings*.json
 
 # AI Agent instructions
 .rules/
