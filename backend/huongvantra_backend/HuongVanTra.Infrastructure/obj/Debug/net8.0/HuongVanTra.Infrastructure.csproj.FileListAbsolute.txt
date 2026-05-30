@@ -1,0 +1,17 @@
+D:\_Study_Materials\_archives\2026_2_summer\sep409\_project\SEP490_G66_HuongVanTra-System\backend\huongvantra_backend\HuongVanTra.Infrastructure\bin\Debug\net8.0\HuongVanTra.Infrastructure.deps.json
+D:\_Study_Materials\_archives\2026_2_summer\sep409\_project\SEP490_G66_HuongVanTra-System\backend\huongvantra_backend\HuongVanTra.Infrastructure\bin\Debug\net8.0\HuongVanTra.Infrastructure.runtimeconfig.json
+D:\_Study_Materials\_archives\2026_2_summer\sep409\_project\SEP490_G66_HuongVanTra-System\backend\huongvantra_backend\HuongVanTra.Infrastructure\bin\Debug\net8.0\HuongVanTra.Infrastructure.dll
+D:\_Study_Materials\_archives\2026_2_summer\sep409\_project\SEP490_G66_HuongVanTra-System\backend\huongvantra_backend\HuongVanTra.Infrastructure\bin\Debug\net8.0\HuongVanTra.Infrastructure.pdb
+D:\_Study_Materials\_archives\2026_2_summer\sep409\_project\SEP490_G66_HuongVanTra-System\backend\huongvantra_backend\HuongVanTra.Infrastructure\bin\Debug\net8.0\HuongVanTra.Core.dll
+D:\_Study_Materials\_archives\2026_2_summer\sep409\_project\SEP490_G66_HuongVanTra-System\backend\huongvantra_backend\HuongVanTra.Infrastructure\bin\Debug\net8.0\HuongVanTra.Core.pdb
+D:\_Study_Materials\_archives\2026_2_summer\sep409\_project\SEP490_G66_HuongVanTra-System\backend\huongvantra_backend\HuongVanTra.Infrastructure\obj\Debug\net8.0\HuongVanTra.Infrastructure.csproj.AssemblyReference.cache
+D:\_Study_Materials\_archives\2026_2_summer\sep409\_project\SEP490_G66_HuongVanTra-System\backend\huongvantra_backend\HuongVanTra.Infrastructure\obj\Debug\net8.0\HuongVanTra.Infrastructure.GeneratedMSBuildEditorConfig.editorconfig
+D:\_Study_Materials\_archives\2026_2_summer\sep409\_project\SEP490_G66_HuongVanTra-System\backend\huongvantra_backend\HuongVanTra.Infrastructure\obj\Debug\net8.0\HuongVanTra.Infrastructure.AssemblyInfoInputs.cache
+D:\_Study_Materials\_archives\2026_2_summer\sep409\_project\SEP490_G66_HuongVanTra-System\backend\huongvantra_backend\HuongVanTra.Infrastructure\obj\Debug\net8.0\HuongVanTra.Infrastructure.AssemblyInfo.cs
+D:\_Study_Materials\_archives\2026_2_summer\sep409\_project\SEP490_G66_HuongVanTra-System\backend\huongvantra_backend\HuongVanTra.Infrastructure\obj\Debug\net8.0\HuongVanTra.Infrastructure.csproj.CoreCompileInputs.cache
+D:\_Study_Materials\_archives\2026_2_summer\sep409\_project\SEP490_G66_HuongVanTra-System\backend\huongvantra_backend\HuongVanTra.Infrastructure\obj\Debug\net8.0\HuongVan.F2E5D258.Up2Date
+D:\_Study_Materials\_archives\2026_2_summer\sep409\_project\SEP490_G66_HuongVanTra-System\backend\huongvantra_backend\HuongVanTra.Infrastructure\obj\Debug\net8.0\HuongVanTra.Infrastructure.dll
+D:\_Study_Materials\_archives\2026_2_summer\sep409\_project\SEP490_G66_HuongVanTra-System\backend\huongvantra_backend\HuongVanTra.Infrastructure\obj\Debug\net8.0\refint\HuongVanTra.Infrastructure.dll
+D:\_Study_Materials\_archives\2026_2_summer\sep409\_project\SEP490_G66_HuongVanTra-System\backend\huongvantra_backend\HuongVanTra.Infrastructure\obj\Debug\net8.0\HuongVanTra.Infrastructure.pdb
+D:\_Study_Materials\_archives\2026_2_summer\sep409\_project\SEP490_G66_HuongVanTra-System\backend\huongvantra_backend\HuongVanTra.Infrastructure\obj\Debug\net8.0\HuongVanTra.Infrastructure.genruntimeconfig.cache
+D:\_Study_Materials\_archives\2026_2_summer\sep409\_project\SEP490_G66_HuongVanTra-System\backend\huongvantra_backend\HuongVanTra.Infrastructure\obj\Debug\net8.0\ref\HuongVanTra.Infrastructure.dll

@@ -1,0 +1,2054 @@
+{
+  "Version": 1,
+  "WorkspaceRootPath": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\",
+  "Documents": [
+    {
+      "AbsoluteMoniker": "D:0:0:{18DCB131-94AF-4C89-A941-04F0F5ED9532}|HuongVanTra.Infrastructure\\HuongVanTra.Infrastructure.csproj|d:\\_study_materials\\_archives\\2026_2_summer\\sep409\\_project\\sep490_g66_huongvantra-system\\backend\\huongvantra_backend\\huongvantra.infrastructure\\data\\appdbcontext.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{18DCB131-94AF-4C89-A941-04F0F5ED9532}|HuongVanTra.Infrastructure\\HuongVanTra.Infrastructure.csproj|solutionrelative:huongvantra.infrastructure\\data\\appdbcontext.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{18DCB131-94AF-4C89-A941-04F0F5ED9532}|HuongVanTra.Infrastructure\\HuongVanTra.Infrastructure.csproj|d:\\_study_materials\\_archives\\2026_2_summer\\sep409\\_project\\sep490_g66_huongvantra-system\\backend\\huongvantra_backend\\huongvantra.infrastructure\\configurations\\documents\\documentconfiguration.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{18DCB131-94AF-4C89-A941-04F0F5ED9532}|HuongVanTra.Infrastructure\\HuongVanTra.Infrastructure.csproj|solutionrelative:huongvantra.infrastructure\\configurations\\documents\\documentconfiguration.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{CA458C9E-2C20-4C42-9240-8B25021430AC}|HuongVanTra.Core\\HuongVanTra.Core.csproj|d:\\_study_materials\\_archives\\2026_2_summer\\sep409\\_project\\sep490_g66_huongvantra-system\\backend\\huongvantra_backend\\huongvantra.core\\entities\\documents\\document.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{CA458C9E-2C20-4C42-9240-8B25021430AC}|HuongVanTra.Core\\HuongVanTra.Core.csproj|solutionrelative:huongvantra.core\\entities\\documents\\document.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{18DCB131-94AF-4C89-A941-04F0F5ED9532}|HuongVanTra.Infrastructure\\HuongVanTra.Infrastructure.csproj|d:\\_study_materials\\_archives\\2026_2_summer\\sep409\\_project\\sep490_g66_huongvantra-system\\backend\\huongvantra_backend\\huongvantra.infrastructure\\configurations\\finance\\cashflowvoucherconfiguration.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{18DCB131-94AF-4C89-A941-04F0F5ED9532}|HuongVanTra.Infrastructure\\HuongVanTra.Infrastructure.csproj|solutionrelative:huongvantra.infrastructure\\configurations\\finance\\cashflowvoucherconfiguration.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{18DCB131-94AF-4C89-A941-04F0F5ED9532}|HuongVanTra.Infrastructure\\HuongVanTra.Infrastructure.csproj|d:\\_study_materials\\_archives\\2026_2_summer\\sep409\\_project\\sep490_g66_huongvantra-system\\backend\\huongvantra_backend\\huongvantra.infrastructure\\configurations\\production\\productionorderconfiguration.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{18DCB131-94AF-4C89-A941-04F0F5ED9532}|HuongVanTra.Infrastructure\\HuongVanTra.Infrastructure.csproj|solutionrelative:huongvantra.infrastructure\\configurations\\production\\productionorderconfiguration.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{CA458C9E-2C20-4C42-9240-8B25021430AC}|HuongVanTra.Core\\HuongVanTra.Core.csproj|d:\\_study_materials\\_archives\\2026_2_summer\\sep409\\_project\\sep490_g66_huongvantra-system\\backend\\huongvantra_backend\\huongvantra.core\\entities\\finance\\cashflowvoucher.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{CA458C9E-2C20-4C42-9240-8B25021430AC}|HuongVanTra.Core\\HuongVanTra.Core.csproj|solutionrelative:huongvantra.core\\entities\\finance\\cashflowvoucher.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{CA458C9E-2C20-4C42-9240-8B25021430AC}|HuongVanTra.Core\\HuongVanTra.Core.csproj|d:\\_study_materials\\_archives\\2026_2_summer\\sep409\\_project\\sep490_g66_huongvantra-system\\backend\\huongvantra_backend\\huongvantra.core\\entities\\production\\productionorder.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{CA458C9E-2C20-4C42-9240-8B25021430AC}|HuongVanTra.Core\\HuongVanTra.Core.csproj|solutionrelative:huongvantra.core\\entities\\production\\productionorder.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{18DCB131-94AF-4C89-A941-04F0F5ED9532}|HuongVanTra.Infrastructure\\HuongVanTra.Infrastructure.csproj|d:\\_study_materials\\_archives\\2026_2_summer\\sep409\\_project\\sep490_g66_huongvantra-system\\backend\\huongvantra_backend\\huongvantra.infrastructure\\configurations\\system\\auditlogconfiguration.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{18DCB131-94AF-4C89-A941-04F0F5ED9532}|HuongVanTra.Infrastructure\\HuongVanTra.Infrastructure.csproj|solutionrelative:huongvantra.infrastructure\\configurations\\system\\auditlogconfiguration.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{18DCB131-94AF-4C89-A941-04F0F5ED9532}|HuongVanTra.Infrastructure\\HuongVanTra.Infrastructure.csproj|d:\\_study_materials\\_archives\\2026_2_summer\\sep409\\_project\\sep490_g66_huongvantra-system\\backend\\huongvantra_backend\\huongvantra.infrastructure\\configurations\\hr\\departmentconfiguration.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{18DCB131-94AF-4C89-A941-04F0F5ED9532}|HuongVanTra.Infrastructure\\HuongVanTra.Infrastructure.csproj|solutionrelative:huongvantra.infrastructure\\configurations\\hr\\departmentconfiguration.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{CA458C9E-2C20-4C42-9240-8B25021430AC}|HuongVanTra.Core\\HuongVanTra.Core.csproj|d:\\_study_materials\\_archives\\2026_2_summer\\sep409\\_project\\sep490_g66_huongvantra-system\\backend\\huongvantra_backend\\huongvantra.core\\entities\\system\\auditlog.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{CA458C9E-2C20-4C42-9240-8B25021430AC}|HuongVanTra.Core\\HuongVanTra.Core.csproj|solutionrelative:huongvantra.core\\entities\\system\\auditlog.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{CA458C9E-2C20-4C42-9240-8B25021430AC}|HuongVanTra.Core\\HuongVanTra.Core.csproj|d:\\_study_materials\\_archives\\2026_2_summer\\sep409\\_project\\sep490_g66_huongvantra-system\\backend\\huongvantra_backend\\huongvantra.core\\entities\\hr\\department.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{CA458C9E-2C20-4C42-9240-8B25021430AC}|HuongVanTra.Core\\HuongVanTra.Core.csproj|solutionrelative:huongvantra.core\\entities\\hr\\department.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{CA458C9E-2C20-4C42-9240-8B25021430AC}|HuongVanTra.Core\\HuongVanTra.Core.csproj|d:\\_study_materials\\_archives\\2026_2_summer\\sep409\\_project\\sep490_g66_huongvantra-system\\backend\\huongvantra_backend\\huongvantra.core\\entities\\hr\\salaryrecord.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{CA458C9E-2C20-4C42-9240-8B25021430AC}|HuongVanTra.Core\\HuongVanTra.Core.csproj|solutionrelative:huongvantra.core\\entities\\hr\\salaryrecord.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{18DCB131-94AF-4C89-A941-04F0F5ED9532}|HuongVanTra.Infrastructure\\HuongVanTra.Infrastructure.csproj|d:\\_study_materials\\_archives\\2026_2_summer\\sep409\\_project\\sep490_g66_huongvantra-system\\backend\\huongvantra_backend\\huongvantra.infrastructure\\configurations\\hr\\salaryrecordconfiguration.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{18DCB131-94AF-4C89-A941-04F0F5ED9532}|HuongVanTra.Infrastructure\\HuongVanTra.Infrastructure.csproj|solutionrelative:huongvantra.infrastructure\\configurations\\hr\\salaryrecordconfiguration.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{18DCB131-94AF-4C89-A941-04F0F5ED9532}|HuongVanTra.Infrastructure\\HuongVanTra.Infrastructure.csproj|d:\\_study_materials\\_archives\\2026_2_summer\\sep409\\_project\\sep490_g66_huongvantra-system\\backend\\huongvantra_backend\\huongvantra.infrastructure\\configurations\\identity\\employeeconfiguration.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{18DCB131-94AF-4C89-A941-04F0F5ED9532}|HuongVanTra.Infrastructure\\HuongVanTra.Infrastructure.csproj|solutionrelative:huongvantra.infrastructure\\configurations\\identity\\employeeconfiguration.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{CA458C9E-2C20-4C42-9240-8B25021430AC}|HuongVanTra.Core\\HuongVanTra.Core.csproj|d:\\_study_materials\\_archives\\2026_2_summer\\sep409\\_project\\sep490_g66_huongvantra-system\\backend\\huongvantra_backend\\huongvantra.core\\entities\\identity\\employee.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{CA458C9E-2C20-4C42-9240-8B25021430AC}|HuongVanTra.Core\\HuongVanTra.Core.csproj|solutionrelative:huongvantra.core\\entities\\identity\\employee.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{18DCB131-94AF-4C89-A941-04F0F5ED9532}|HuongVanTra.Infrastructure\\HuongVanTra.Infrastructure.csproj|d:\\_study_materials\\_archives\\2026_2_summer\\sep409\\_project\\sep490_g66_huongvantra-system\\backend\\huongvantra_backend\\huongvantra.infrastructure\\configurations\\sales\\stockdeductqueueconfiguration.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{18DCB131-94AF-4C89-A941-04F0F5ED9532}|HuongVanTra.Infrastructure\\HuongVanTra.Infrastructure.csproj|solutionrelative:huongvantra.infrastructure\\configurations\\sales\\stockdeductqueueconfiguration.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{18DCB131-94AF-4C89-A941-04F0F5ED9532}|HuongVanTra.Infrastructure\\HuongVanTra.Infrastructure.csproj|d:\\_study_materials\\_archives\\2026_2_summer\\sep409\\_project\\sep490_g66_huongvantra-system\\backend\\huongvantra_backend\\huongvantra.infrastructure\\configurations\\sales\\orderconfiguration.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{18DCB131-94AF-4C89-A941-04F0F5ED9532}|HuongVanTra.Infrastructure\\HuongVanTra.Infrastructure.csproj|solutionrelative:huongvantra.infrastructure\\configurations\\sales\\orderconfiguration.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{18DCB131-94AF-4C89-A941-04F0F5ED9532}|HuongVanTra.Infrastructure\\HuongVanTra.Infrastructure.csproj|d:\\_study_materials\\_archives\\2026_2_summer\\sep409\\_project\\sep490_g66_huongvantra-system\\backend\\huongvantra_backend\\huongvantra.infrastructure\\configurations\\products\\productcategoryconfiguration.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{18DCB131-94AF-4C89-A941-04F0F5ED9532}|HuongVanTra.Infrastructure\\HuongVanTra.Infrastructure.csproj|solutionrelative:huongvantra.infrastructure\\configurations\\products\\productcategoryconfiguration.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{18DCB131-94AF-4C89-A941-04F0F5ED9532}|HuongVanTra.Infrastructure\\HuongVanTra.Infrastructure.csproj|d:\\_study_materials\\_archives\\2026_2_summer\\sep409\\_project\\sep490_g66_huongvantra-system\\backend\\huongvantra_backend\\huongvantra.infrastructure\\configurations\\sales\\orderpromotionconfiguration.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{18DCB131-94AF-4C89-A941-04F0F5ED9532}|HuongVanTra.Infrastructure\\HuongVanTra.Infrastructure.csproj|solutionrelative:huongvantra.infrastructure\\configurations\\sales\\orderpromotionconfiguration.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{CA458C9E-2C20-4C42-9240-8B25021430AC}|HuongVanTra.Core\\HuongVanTra.Core.csproj|d:\\_study_materials\\_archives\\2026_2_summer\\sep409\\_project\\sep490_g66_huongvantra-system\\backend\\huongvantra_backend\\huongvantra.core\\entities\\sales\\orderpromotion.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{CA458C9E-2C20-4C42-9240-8B25021430AC}|HuongVanTra.Core\\HuongVanTra.Core.csproj|solutionrelative:huongvantra.core\\entities\\sales\\orderpromotion.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{CA458C9E-2C20-4C42-9240-8B25021430AC}|HuongVanTra.Core\\HuongVanTra.Core.csproj|d:\\_study_materials\\_archives\\2026_2_summer\\sep409\\_project\\sep490_g66_huongvantra-system\\backend\\huongvantra_backend\\huongvantra.core\\entities\\sales\\order.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{CA458C9E-2C20-4C42-9240-8B25021430AC}|HuongVanTra.Core\\HuongVanTra.Core.csproj|solutionrelative:huongvantra.core\\entities\\sales\\order.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{18DCB131-94AF-4C89-A941-04F0F5ED9532}|HuongVanTra.Infrastructure\\HuongVanTra.Infrastructure.csproj|d:\\_study_materials\\_archives\\2026_2_summer\\sep409\\_project\\sep490_g66_huongvantra-system\\backend\\huongvantra_backend\\huongvantra.infrastructure\\configurations\\sales\\paymenttransactionconfiguration.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{18DCB131-94AF-4C89-A941-04F0F5ED9532}|HuongVanTra.Infrastructure\\HuongVanTra.Infrastructure.csproj|solutionrelative:huongvantra.infrastructure\\configurations\\sales\\paymenttransactionconfiguration.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{18DCB131-94AF-4C89-A941-04F0F5ED9532}|HuongVanTra.Infrastructure\\HuongVanTra.Infrastructure.csproj|d:\\_study_materials\\_archives\\2026_2_summer\\sep409\\_project\\sep490_g66_huongvantra-system\\backend\\huongvantra_backend\\huongvantra.infrastructure\\configurations\\sales\\orderitemconfiguration.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{18DCB131-94AF-4C89-A941-04F0F5ED9532}|HuongVanTra.Infrastructure\\HuongVanTra.Infrastructure.csproj|solutionrelative:huongvantra.infrastructure\\configurations\\sales\\orderitemconfiguration.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{CA458C9E-2C20-4C42-9240-8B25021430AC}|HuongVanTra.Core\\HuongVanTra.Core.csproj|d:\\_study_materials\\_archives\\2026_2_summer\\sep409\\_project\\sep490_g66_huongvantra-system\\backend\\huongvantra_backend\\huongvantra.core\\entities\\sales\\stockdeductqueue.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{CA458C9E-2C20-4C42-9240-8B25021430AC}|HuongVanTra.Core\\HuongVanTra.Core.csproj|solutionrelative:huongvantra.core\\entities\\sales\\stockdeductqueue.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{CA458C9E-2C20-4C42-9240-8B25021430AC}|HuongVanTra.Core\\HuongVanTra.Core.csproj|d:\\_study_materials\\_archives\\2026_2_summer\\sep409\\_project\\sep490_g66_huongvantra-system\\backend\\huongvantra_backend\\huongvantra.core\\entities\\sales\\paymenttransaction.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{CA458C9E-2C20-4C42-9240-8B25021430AC}|HuongVanTra.Core\\HuongVanTra.Core.csproj|solutionrelative:huongvantra.core\\entities\\sales\\paymenttransaction.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{18DCB131-94AF-4C89-A941-04F0F5ED9532}|HuongVanTra.Infrastructure\\HuongVanTra.Infrastructure.csproj|d:\\_study_materials\\_archives\\2026_2_summer\\sep409\\_project\\sep490_g66_huongvantra-system\\backend\\huongvantra_backend\\huongvantra.infrastructure\\configurations\\identity\\employeeconfigurationrole.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{18DCB131-94AF-4C89-A941-04F0F5ED9532}|HuongVanTra.Infrastructure\\HuongVanTra.Infrastructure.csproj|solutionrelative:huongvantra.infrastructure\\configurations\\identity\\employeeconfigurationrole.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{CA458C9E-2C20-4C42-9240-8B25021430AC}|HuongVanTra.Core\\HuongVanTra.Core.csproj|d:\\_study_materials\\_archives\\2026_2_summer\\sep409\\_project\\sep490_g66_huongvantra-system\\backend\\huongvantra_backend\\huongvantra.core\\entities\\sales\\orderitem.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{CA458C9E-2C20-4C42-9240-8B25021430AC}|HuongVanTra.Core\\HuongVanTra.Core.csproj|solutionrelative:huongvantra.core\\entities\\sales\\orderitem.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{18DCB131-94AF-4C89-A941-04F0F5ED9532}|HuongVanTra.Infrastructure\\HuongVanTra.Infrastructure.csproj|d:\\_study_materials\\_archives\\2026_2_summer\\sep409\\_project\\sep490_g66_huongvantra-system\\backend\\huongvantra_backend\\huongvantra.infrastructure\\configurations\\inventory\\inventorytransactionconfiguration.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{18DCB131-94AF-4C89-A941-04F0F5ED9532}|HuongVanTra.Infrastructure\\HuongVanTra.Infrastructure.csproj|solutionrelative:huongvantra.infrastructure\\configurations\\inventory\\inventorytransactionconfiguration.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{18DCB131-94AF-4C89-A941-04F0F5ED9532}|HuongVanTra.Infrastructure\\HuongVanTra.Infrastructure.csproj|d:\\_study_materials\\_archives\\2026_2_summer\\sep409\\_project\\sep490_g66_huongvantra-system\\backend\\huongvantra_backend\\huongvantra.infrastructure\\configurations\\inventory\\stockvoucherconfiguration.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{18DCB131-94AF-4C89-A941-04F0F5ED9532}|HuongVanTra.Infrastructure\\HuongVanTra.Infrastructure.csproj|solutionrelative:huongvantra.infrastructure\\configurations\\inventory\\stockvoucherconfiguration.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{CA458C9E-2C20-4C42-9240-8B25021430AC}|HuongVanTra.Core\\HuongVanTra.Core.csproj|d:\\_study_materials\\_archives\\2026_2_summer\\sep409\\_project\\sep490_g66_huongvantra-system\\backend\\huongvantra_backend\\huongvantra.core\\entities\\inventory\\inventorytransaction.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{CA458C9E-2C20-4C42-9240-8B25021430AC}|HuongVanTra.Core\\HuongVanTra.Core.csproj|solutionrelative:huongvantra.core\\entities\\inventory\\inventorytransaction.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{18DCB131-94AF-4C89-A941-04F0F5ED9532}|HuongVanTra.Infrastructure\\HuongVanTra.Infrastructure.csproj|d:\\_study_materials\\_archives\\2026_2_summer\\sep409\\_project\\sep490_g66_huongvantra-system\\backend\\huongvantra_backend\\huongvantra.infrastructure\\configurations\\inventory\\warehouseconfiguration.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{18DCB131-94AF-4C89-A941-04F0F5ED9532}|HuongVanTra.Infrastructure\\HuongVanTra.Infrastructure.csproj|solutionrelative:huongvantra.infrastructure\\configurations\\inventory\\warehouseconfiguration.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{18DCB131-94AF-4C89-A941-04F0F5ED9532}|HuongVanTra.Infrastructure\\HuongVanTra.Infrastructure.csproj|d:\\_study_materials\\_archives\\2026_2_summer\\sep409\\_project\\sep490_g66_huongvantra-system\\backend\\huongvantra_backend\\huongvantra.infrastructure\\configurations\\inventory\\inventorybalanceconfiguration.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{18DCB131-94AF-4C89-A941-04F0F5ED9532}|HuongVanTra.Infrastructure\\HuongVanTra.Infrastructure.csproj|solutionrelative:huongvantra.infrastructure\\configurations\\inventory\\inventorybalanceconfiguration.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{CA458C9E-2C20-4C42-9240-8B25021430AC}|HuongVanTra.Core\\HuongVanTra.Core.csproj|d:\\_study_materials\\_archives\\2026_2_summer\\sep409\\_project\\sep490_g66_huongvantra-system\\backend\\huongvantra_backend\\huongvantra.core\\entities\\inventory\\warehouse.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{CA458C9E-2C20-4C42-9240-8B25021430AC}|HuongVanTra.Core\\HuongVanTra.Core.csproj|solutionrelative:huongvantra.core\\entities\\inventory\\warehouse.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{CA458C9E-2C20-4C42-9240-8B25021430AC}|HuongVanTra.Core\\HuongVanTra.Core.csproj|d:\\_study_materials\\_archives\\2026_2_summer\\sep409\\_project\\sep490_g66_huongvantra-system\\backend\\huongvantra_backend\\huongvantra.core\\entities\\inventory\\inventorybalance.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{CA458C9E-2C20-4C42-9240-8B25021430AC}|HuongVanTra.Core\\HuongVanTra.Core.csproj|solutionrelative:huongvantra.core\\entities\\inventory\\inventorybalance.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{CA458C9E-2C20-4C42-9240-8B25021430AC}|HuongVanTra.Core\\HuongVanTra.Core.csproj|d:\\_study_materials\\_archives\\2026_2_summer\\sep409\\_project\\sep490_g66_huongvantra-system\\backend\\huongvantra_backend\\huongvantra.core\\entities\\inventory\\stockvoucher.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{CA458C9E-2C20-4C42-9240-8B25021430AC}|HuongVanTra.Core\\HuongVanTra.Core.csproj|solutionrelative:huongvantra.core\\entities\\inventory\\stockvoucher.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{18DCB131-94AF-4C89-A941-04F0F5ED9532}|HuongVanTra.Infrastructure\\HuongVanTra.Infrastructure.csproj|d:\\_study_materials\\_archives\\2026_2_summer\\sep409\\_project\\sep490_g66_huongvantra-system\\backend\\huongvantra_backend\\huongvantra.infrastructure\\configurations\\products\\productconfiguration.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{18DCB131-94AF-4C89-A941-04F0F5ED9532}|HuongVanTra.Infrastructure\\HuongVanTra.Infrastructure.csproj|solutionrelative:huongvantra.infrastructure\\configurations\\products\\productconfiguration.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{18DCB131-94AF-4C89-A941-04F0F5ED9532}|HuongVanTra.Infrastructure\\HuongVanTra.Infrastructure.csproj|d:\\_study_materials\\_archives\\2026_2_summer\\sep409\\_project\\sep490_g66_huongvantra-system\\backend\\huongvantra_backend\\huongvantra.infrastructure\\configurations\\products\\bomlineconfiguration.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{18DCB131-94AF-4C89-A941-04F0F5ED9532}|HuongVanTra.Infrastructure\\HuongVanTra.Infrastructure.csproj|solutionrelative:huongvantra.infrastructure\\configurations\\products\\bomlineconfiguration.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{18DCB131-94AF-4C89-A941-04F0F5ED9532}|HuongVanTra.Infrastructure\\HuongVanTra.Infrastructure.csproj|d:\\_study_materials\\_archives\\2026_2_summer\\sep409\\_project\\sep490_g66_huongvantra-system\\backend\\huongvantra_backend\\huongvantra.infrastructure\\configurations\\products\\bomheaderconfiguration.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{18DCB131-94AF-4C89-A941-04F0F5ED9532}|HuongVanTra.Infrastructure\\HuongVanTra.Infrastructure.csproj|solutionrelative:huongvantra.infrastructure\\configurations\\products\\bomheaderconfiguration.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{18DCB131-94AF-4C89-A941-04F0F5ED9532}|HuongVanTra.Infrastructure\\HuongVanTra.Infrastructure.csproj|d:\\_study_materials\\_archives\\2026_2_summer\\sep409\\_project\\sep490_g66_huongvantra-system\\backend\\huongvantra_backend\\huongvantra.infrastructure\\configurations\\customers\\membershiptierconfiguration.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{18DCB131-94AF-4C89-A941-04F0F5ED9532}|HuongVanTra.Infrastructure\\HuongVanTra.Infrastructure.csproj|solutionrelative:huongvantra.infrastructure\\configurations\\customers\\membershiptierconfiguration.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{18DCB131-94AF-4C89-A941-04F0F5ED9532}|HuongVanTra.Infrastructure\\HuongVanTra.Infrastructure.csproj|d:\\_study_materials\\_archives\\2026_2_summer\\sep409\\_project\\sep490_g66_huongvantra-system\\backend\\huongvantra_backend\\huongvantra.infrastructure\\configurations\\stores\\storesettingconfiguration.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{18DCB131-94AF-4C89-A941-04F0F5ED9532}|HuongVanTra.Infrastructure\\HuongVanTra.Infrastructure.csproj|solutionrelative:huongvantra.infrastructure\\configurations\\stores\\storesettingconfiguration.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{CA458C9E-2C20-4C42-9240-8B25021430AC}|HuongVanTra.Core\\HuongVanTra.Core.csproj|d:\\_study_materials\\_archives\\2026_2_summer\\sep409\\_project\\sep490_g66_huongvantra-system\\backend\\huongvantra_backend\\huongvantra.core\\entities\\products\\bomline.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{CA458C9E-2C20-4C42-9240-8B25021430AC}|HuongVanTra.Core\\HuongVanTra.Core.csproj|solutionrelative:huongvantra.core\\entities\\products\\bomline.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{CA458C9E-2C20-4C42-9240-8B25021430AC}|HuongVanTra.Core\\HuongVanTra.Core.csproj|d:\\_study_materials\\_archives\\2026_2_summer\\sep409\\_project\\sep490_g66_huongvantra-system\\backend\\huongvantra_backend\\huongvantra.core\\entities\\products\\bomheader.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{CA458C9E-2C20-4C42-9240-8B25021430AC}|HuongVanTra.Core\\HuongVanTra.Core.csproj|solutionrelative:huongvantra.core\\entities\\products\\bomheader.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{CA458C9E-2C20-4C42-9240-8B25021430AC}|HuongVanTra.Core\\HuongVanTra.Core.csproj|d:\\_study_materials\\_archives\\2026_2_summer\\sep409\\_project\\sep490_g66_huongvantra-system\\backend\\huongvantra_backend\\huongvantra.core\\entities\\customers\\customer.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{CA458C9E-2C20-4C42-9240-8B25021430AC}|HuongVanTra.Core\\HuongVanTra.Core.csproj|solutionrelative:huongvantra.core\\entities\\customers\\customer.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{CA458C9E-2C20-4C42-9240-8B25021430AC}|HuongVanTra.Core\\HuongVanTra.Core.csproj|d:\\_study_materials\\_archives\\2026_2_summer\\sep409\\_project\\sep490_g66_huongvantra-system\\backend\\huongvantra_backend\\huongvantra.core\\entities\\customers\\membershiptier.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{CA458C9E-2C20-4C42-9240-8B25021430AC}|HuongVanTra.Core\\HuongVanTra.Core.csproj|solutionrelative:huongvantra.core\\entities\\customers\\membershiptier.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{CA458C9E-2C20-4C42-9240-8B25021430AC}|HuongVanTra.Core\\HuongVanTra.Core.csproj|d:\\_study_materials\\_archives\\2026_2_summer\\sep409\\_project\\sep490_g66_huongvantra-system\\backend\\huongvantra_backend\\huongvantra.core\\entities\\products\\product.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{CA458C9E-2C20-4C42-9240-8B25021430AC}|HuongVanTra.Core\\HuongVanTra.Core.csproj|solutionrelative:huongvantra.core\\entities\\products\\product.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{CA458C9E-2C20-4C42-9240-8B25021430AC}|HuongVanTra.Core\\HuongVanTra.Core.csproj|d:\\_study_materials\\_archives\\2026_2_summer\\sep409\\_project\\sep490_g66_huongvantra-system\\backend\\huongvantra_backend\\huongvantra.core\\entities\\products\\productcategory.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{CA458C9E-2C20-4C42-9240-8B25021430AC}|HuongVanTra.Core\\HuongVanTra.Core.csproj|solutionrelative:huongvantra.core\\entities\\products\\productcategory.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{CA458C9E-2C20-4C42-9240-8B25021430AC}|HuongVanTra.Core\\HuongVanTra.Core.csproj|d:\\_study_materials\\_archives\\2026_2_summer\\sep409\\_project\\sep490_g66_huongvantra-system\\backend\\huongvantra_backend\\huongvantra.core\\entities\\stores\\storesettings.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{CA458C9E-2C20-4C42-9240-8B25021430AC}|HuongVanTra.Core\\HuongVanTra.Core.csproj|solutionrelative:huongvantra.core\\entities\\stores\\storesettings.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{CA458C9E-2C20-4C42-9240-8B25021430AC}|HuongVanTra.Core\\HuongVanTra.Core.csproj|d:\\_study_materials\\_archives\\2026_2_summer\\sep409\\_project\\sep490_g66_huongvantra-system\\backend\\huongvantra_backend\\huongvantra.core\\entities\\stores\\store.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{CA458C9E-2C20-4C42-9240-8B25021430AC}|HuongVanTra.Core\\HuongVanTra.Core.csproj|solutionrelative:huongvantra.core\\entities\\stores\\store.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{CA458C9E-2C20-4C42-9240-8B25021430AC}|HuongVanTra.Core\\HuongVanTra.Core.csproj|d:\\_study_materials\\_archives\\2026_2_summer\\sep409\\_project\\sep490_g66_huongvantra-system\\backend\\huongvantra_backend\\huongvantra.core\\entities\\identity\\employeerole.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{CA458C9E-2C20-4C42-9240-8B25021430AC}|HuongVanTra.Core\\HuongVanTra.Core.csproj|solutionrelative:huongvantra.core\\entities\\identity\\employeerole.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{CA458C9E-2C20-4C42-9240-8B25021430AC}|HuongVanTra.Core\\HuongVanTra.Core.csproj|d:\\_study_materials\\_archives\\2026_2_summer\\sep409\\_project\\sep490_g66_huongvantra-system\\backend\\huongvantra_backend\\huongvantra.core\\entities\\identity\\role.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{CA458C9E-2C20-4C42-9240-8B25021430AC}|HuongVanTra.Core\\HuongVanTra.Core.csproj|solutionrelative:huongvantra.core\\entities\\identity\\role.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{CA458C9E-2C20-4C42-9240-8B25021430AC}|HuongVanTra.Core\\HuongVanTra.Core.csproj|d:\\_study_materials\\_archives\\2026_2_summer\\sep409\\_project\\sep490_g66_huongvantra-system\\backend\\huongvantra_backend\\huongvantra.core\\entities\\identity\\user.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{CA458C9E-2C20-4C42-9240-8B25021430AC}|HuongVanTra.Core\\HuongVanTra.Core.csproj|solutionrelative:huongvantra.core\\entities\\identity\\user.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A9F83925-18BD-4FBF-8D84-7E7600F09C6A}|HuongVanTra.API\\HuongVanTra.API.csproj|d:\\_study_materials\\_archives\\2026_2_summer\\sep409\\_project\\sep490_g66_huongvantra-system\\backend\\huongvantra_backend\\huongvantra.api\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{A9F83925-18BD-4FBF-8D84-7E7600F09C6A}|HuongVanTra.API\\HuongVanTra.API.csproj|solutionrelative:huongvantra.api\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A9F83925-18BD-4FBF-8D84-7E7600F09C6A}|HuongVanTra.API\\HuongVanTra.API.csproj|d:\\_study_materials\\_archives\\2026_2_summer\\sep409\\_project\\sep490_g66_huongvantra-system\\backend\\huongvantra_backend\\huongvantra.api\\appsettings.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}",
+      "RelativeMoniker": "D:0:0:{A9F83925-18BD-4FBF-8D84-7E7600F09C6A}|HuongVanTra.API\\HuongVanTra.API.csproj|solutionrelative:huongvantra.api\\appsettings.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{18DCB131-94AF-4C89-A941-04F0F5ED9532}|HuongVanTra.Infrastructure\\HuongVanTra.Infrastructure.csproj|d:\\_study_materials\\_archives\\2026_2_summer\\sep409\\_project\\sep490_g66_huongvantra-system\\backend\\huongvantra_backend\\huongvantra.infrastructure\\configurations\\customers\\customerconfiguration.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{18DCB131-94AF-4C89-A941-04F0F5ED9532}|HuongVanTra.Infrastructure\\HuongVanTra.Infrastructure.csproj|solutionrelative:huongvantra.infrastructure\\configurations\\customers\\customerconfiguration.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{18DCB131-94AF-4C89-A941-04F0F5ED9532}|HuongVanTra.Infrastructure\\HuongVanTra.Infrastructure.csproj|d:\\_study_materials\\_archives\\2026_2_summer\\sep409\\_project\\sep490_g66_huongvantra-system\\backend\\huongvantra_backend\\huongvantra.infrastructure\\configurations\\identity\\roleconfiguration.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{18DCB131-94AF-4C89-A941-04F0F5ED9532}|HuongVanTra.Infrastructure\\HuongVanTra.Infrastructure.csproj|solutionrelative:huongvantra.infrastructure\\configurations\\identity\\roleconfiguration.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{18DCB131-94AF-4C89-A941-04F0F5ED9532}|HuongVanTra.Infrastructure\\HuongVanTra.Infrastructure.csproj|d:\\_study_materials\\_archives\\2026_2_summer\\sep409\\_project\\sep490_g66_huongvantra-system\\backend\\huongvantra_backend\\huongvantra.infrastructure\\configurations\\identity\\userconfiguration.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{18DCB131-94AF-4C89-A941-04F0F5ED9532}|HuongVanTra.Infrastructure\\HuongVanTra.Infrastructure.csproj|solutionrelative:huongvantra.infrastructure\\configurations\\identity\\userconfiguration.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{18DCB131-94AF-4C89-A941-04F0F5ED9532}|HuongVanTra.Infrastructure\\HuongVanTra.Infrastructure.csproj|d:\\_study_materials\\_archives\\2026_2_summer\\sep409\\_project\\sep490_g66_huongvantra-system\\backend\\huongvantra_backend\\huongvantra.infrastructure\\configurations\\stores\\storeconfiguration.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{18DCB131-94AF-4C89-A941-04F0F5ED9532}|HuongVanTra.Infrastructure\\HuongVanTra.Infrastructure.csproj|solutionrelative:huongvantra.infrastructure\\configurations\\stores\\storeconfiguration.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    }
+  ],
+  "DocumentGroupContainers": [
+    {
+      "Orientation": 0,
+      "VerticalTabListWidth": 256,
+      "DocumentGroups": [
+        {
+          "DockedWidth": 200,
+          "SelectedChildIndex": 29,
+          "Children": [
+            {
+              "$type": "Document",
+              "DocumentIndex": 52,
+              "Title": "appsettings.json",
+              "DocumentMoniker": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.API\\appsettings.json",
+              "RelativeDocumentMoniker": "HuongVanTra.API\\appsettings.json",
+              "ToolTip": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.API\\appsettings.json",
+              "RelativeToolTip": "HuongVanTra.API\\appsettings.json",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAkAAABMAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001642|",
+              "WhenOpened": "2026-05-30T03:38:17.317Z",
+              "IsPinned": true,
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 51,
+              "Title": "Program.cs",
+              "DocumentMoniker": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.API\\Program.cs",
+              "RelativeDocumentMoniker": "HuongVanTra.API\\Program.cs",
+              "ToolTip": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.API\\Program.cs",
+              "RelativeToolTip": "HuongVanTra.API\\Program.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAABUAAAAhAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-30T03:39:03.466Z",
+              "IsPinned": true,
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 50,
+              "Title": "User.cs",
+              "DocumentMoniker": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Core\\Entities\\Identity\\User.cs",
+              "RelativeDocumentMoniker": "HuongVanTra.Core\\Entities\\Identity\\User.cs",
+              "ToolTip": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Core\\Entities\\Identity\\User.cs",
+              "RelativeToolTip": "HuongVanTra.Core\\Entities\\Identity\\User.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAYAAAAvAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-30T03:37:17.844Z",
+              "IsPinned": true,
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 49,
+              "Title": "Role.cs",
+              "DocumentMoniker": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Core\\Entities\\Identity\\Role.cs",
+              "RelativeDocumentMoniker": "HuongVanTra.Core\\Entities\\Identity\\Role.cs",
+              "ToolTip": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Core\\Entities\\Identity\\Role.cs",
+              "RelativeToolTip": "HuongVanTra.Core\\Entities\\Identity\\Role.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAlAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-30T03:52:52.725Z",
+              "IsPinned": true,
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 14,
+              "Title": "Employee.cs",
+              "DocumentMoniker": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Core\\Entities\\Identity\\Employee.cs",
+              "RelativeDocumentMoniker": "HuongVanTra.Core\\Entities\\Identity\\Employee.cs",
+              "ToolTip": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Core\\Entities\\Identity\\Employee.cs",
+              "RelativeToolTip": "HuongVanTra.Core\\Entities\\Identity\\Employee.cs",
+              "ViewState": "AgIAAAYAAAAAAAAAAAAmwBEAAAAtAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-30T05:13:59.569Z",
+              "IsPinned": true,
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 48,
+              "Title": "EmployeeRole.cs",
+              "DocumentMoniker": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Core\\Entities\\Identity\\EmployeeRole.cs",
+              "RelativeDocumentMoniker": "HuongVanTra.Core\\Entities\\Identity\\EmployeeRole.cs",
+              "ToolTip": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Core\\Entities\\Identity\\EmployeeRole.cs",
+              "RelativeToolTip": "HuongVanTra.Core\\Entities\\Identity\\EmployeeRole.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAIAAAAlAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-30T05:15:15.53Z",
+              "IsPinned": true,
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 47,
+              "Title": "Store.cs",
+              "DocumentMoniker": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Core\\Entities\\Stores\\Store.cs",
+              "RelativeDocumentMoniker": "HuongVanTra.Core\\Entities\\Stores\\Store.cs",
+              "ToolTip": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Core\\Entities\\Stores\\Store.cs",
+              "RelativeToolTip": "HuongVanTra.Core\\Entities\\Stores\\Store.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAcAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-30T04:01:08.388Z",
+              "IsPinned": true,
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 46,
+              "Title": "StoreSettings.cs",
+              "DocumentMoniker": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Core\\Entities\\Stores\\StoreSettings.cs",
+              "RelativeDocumentMoniker": "HuongVanTra.Core\\Entities\\Stores\\StoreSettings.cs",
+              "ToolTip": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Core\\Entities\\Stores\\StoreSettings.cs",
+              "RelativeToolTip": "HuongVanTra.Core\\Entities\\Stores\\StoreSettings.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAcAAAAxAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-30T04:01:17.774Z",
+              "IsPinned": true,
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 42,
+              "Title": "Customer.cs",
+              "DocumentMoniker": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Core\\Entities\\Customers\\Customer.cs",
+              "RelativeDocumentMoniker": "HuongVanTra.Core\\Entities\\Customers\\Customer.cs",
+              "ToolTip": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Core\\Entities\\Customers\\Customer.cs",
+              "RelativeToolTip": "HuongVanTra.Core\\Entities\\Customers\\Customer.cs",
+              "ViewState": "AgIAAAMAAAAAAAAAAAAAAAkAAAAqAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-30T14:59:27.991Z",
+              "IsPinned": true,
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 43,
+              "Title": "MembershipTier.cs",
+              "DocumentMoniker": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Core\\Entities\\Customers\\MembershipTier.cs",
+              "RelativeDocumentMoniker": "HuongVanTra.Core\\Entities\\Customers\\MembershipTier.cs",
+              "ToolTip": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Core\\Entities\\Customers\\MembershipTier.cs",
+              "RelativeToolTip": "HuongVanTra.Core\\Entities\\Customers\\MembershipTier.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAsAAAABAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-30T14:59:07.228Z",
+              "IsPinned": true,
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 44,
+              "Title": "Product.cs",
+              "DocumentMoniker": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Core\\Entities\\Products\\Product.cs",
+              "RelativeDocumentMoniker": "HuongVanTra.Core\\Entities\\Products\\Product.cs",
+              "ToolTip": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Core\\Entities\\Products\\Product.cs",
+              "RelativeToolTip": "HuongVanTra.Core\\Entities\\Products\\Product.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAkAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-30T15:07:35.068Z",
+              "IsPinned": true,
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 45,
+              "Title": "ProductCategory.cs",
+              "DocumentMoniker": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Core\\Entities\\Products\\ProductCategory.cs",
+              "RelativeDocumentMoniker": "HuongVanTra.Core\\Entities\\Products\\ProductCategory.cs",
+              "ToolTip": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Core\\Entities\\Products\\ProductCategory.cs",
+              "RelativeToolTip": "HuongVanTra.Core\\Entities\\Products\\ProductCategory.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAgAAAAgAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-30T15:07:21.921Z",
+              "IsPinned": true,
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 41,
+              "Title": "BomHeader.cs",
+              "DocumentMoniker": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Core\\Entities\\Products\\BomHeader.cs",
+              "RelativeDocumentMoniker": "HuongVanTra.Core\\Entities\\Products\\BomHeader.cs",
+              "ToolTip": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Core\\Entities\\Products\\BomHeader.cs",
+              "RelativeToolTip": "HuongVanTra.Core\\Entities\\Products\\BomHeader.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAkAAAA+AAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-30T15:08:00.988Z",
+              "IsPinned": true,
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 40,
+              "Title": "BomLine.cs",
+              "DocumentMoniker": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Core\\Entities\\Products\\BomLine.cs",
+              "RelativeDocumentMoniker": "HuongVanTra.Core\\Entities\\Products\\BomLine.cs",
+              "ToolTip": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Core\\Entities\\Products\\BomLine.cs",
+              "RelativeToolTip": "HuongVanTra.Core\\Entities\\Products\\BomLine.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAgAAAAqAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-30T15:08:17.287Z",
+              "IsPinned": true,
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 32,
+              "Title": "Warehouse.cs",
+              "DocumentMoniker": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Core\\Entities\\Inventory\\Warehouse.cs",
+              "RelativeDocumentMoniker": "HuongVanTra.Core\\Entities\\Inventory\\Warehouse.cs",
+              "ToolTip": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Core\\Entities\\Inventory\\Warehouse.cs",
+              "RelativeToolTip": "HuongVanTra.Core\\Entities\\Inventory\\Warehouse.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAYwAUAAAAcAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-30T15:19:48.797Z",
+              "IsPinned": true,
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 33,
+              "Title": "InventoryBalance.cs",
+              "DocumentMoniker": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Core\\Entities\\Inventory\\InventoryBalance.cs",
+              "RelativeDocumentMoniker": "HuongVanTra.Core\\Entities\\Inventory\\InventoryBalance.cs",
+              "ToolTip": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Core\\Entities\\Inventory\\InventoryBalance.cs",
+              "RelativeToolTip": "HuongVanTra.Core\\Entities\\Inventory\\InventoryBalance.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAQAAAAjAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-30T15:20:11.499Z",
+              "IsPinned": true,
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 34,
+              "Title": "StockVoucher.cs",
+              "DocumentMoniker": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Core\\Entities\\Inventory\\StockVoucher.cs",
+              "RelativeDocumentMoniker": "HuongVanTra.Core\\Entities\\Inventory\\StockVoucher.cs",
+              "ToolTip": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Core\\Entities\\Inventory\\StockVoucher.cs",
+              "RelativeToolTip": "HuongVanTra.Core\\Entities\\Inventory\\StockVoucher.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAkAAAAuAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-30T15:20:24.856Z",
+              "IsPinned": true,
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 29,
+              "Title": "InventoryTransaction.cs",
+              "DocumentMoniker": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Core\\Entities\\Inventory\\InventoryTransaction.cs",
+              "RelativeDocumentMoniker": "HuongVanTra.Core\\Entities\\Inventory\\InventoryTransaction.cs",
+              "ToolTip": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Core\\Entities\\Inventory\\InventoryTransaction.cs",
+              "RelativeToolTip": "HuongVanTra.Core\\Entities\\Inventory\\InventoryTransaction.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAgAAAAsAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-30T15:21:17.456Z",
+              "IsPinned": true,
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 20,
+              "Title": "Order.cs",
+              "DocumentMoniker": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Core\\Entities\\Sales\\Order.cs",
+              "RelativeDocumentMoniker": "HuongVanTra.Core\\Entities\\Sales\\Order.cs",
+              "ToolTip": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Core\\Entities\\Sales\\Order.cs",
+              "RelativeToolTip": "HuongVanTra.Core\\Entities\\Sales\\Order.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAABQAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-30T15:26:51.744Z",
+              "IsPinned": true,
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 19,
+              "Title": "OrderPromotion.cs",
+              "DocumentMoniker": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Core\\Entities\\Sales\\OrderPromotion.cs",
+              "RelativeDocumentMoniker": "HuongVanTra.Core\\Entities\\Sales\\OrderPromotion.cs",
+              "ToolTip": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Core\\Entities\\Sales\\OrderPromotion.cs",
+              "RelativeToolTip": "HuongVanTra.Core\\Entities\\Sales\\OrderPromotion.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAUwAUAAAA2AAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-30T15:26:43.78Z",
+              "IsPinned": true,
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 26,
+              "Title": "OrderItem.cs",
+              "DocumentMoniker": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Core\\Entities\\Sales\\OrderItem.cs",
+              "RelativeDocumentMoniker": "HuongVanTra.Core\\Entities\\Sales\\OrderItem.cs",
+              "ToolTip": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Core\\Entities\\Sales\\OrderItem.cs",
+              "RelativeToolTip": "HuongVanTra.Core\\Entities\\Sales\\OrderItem.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAgAAAAuAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-30T15:27:07.061Z",
+              "IsPinned": true,
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 24,
+              "Title": "PaymentTransaction.cs",
+              "DocumentMoniker": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Core\\Entities\\Sales\\PaymentTransaction.cs",
+              "RelativeDocumentMoniker": "HuongVanTra.Core\\Entities\\Sales\\PaymentTransaction.cs",
+              "ToolTip": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Core\\Entities\\Sales\\PaymentTransaction.cs",
+              "RelativeToolTip": "HuongVanTra.Core\\Entities\\Sales\\PaymentTransaction.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAUAAAAoAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-30T15:27:14.608Z",
+              "IsPinned": true,
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 23,
+              "Title": "StockDeductQueue.cs",
+              "DocumentMoniker": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Core\\Entities\\Sales\\StockDeductQueue.cs",
+              "RelativeDocumentMoniker": "HuongVanTra.Core\\Entities\\Sales\\StockDeductQueue.cs",
+              "ToolTip": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Core\\Entities\\Sales\\StockDeductQueue.cs",
+              "RelativeToolTip": "HuongVanTra.Core\\Entities\\Sales\\StockDeductQueue.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAsAAABCAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-30T15:27:22.827Z",
+              "IsPinned": true,
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 10,
+              "Title": "Department.cs",
+              "DocumentMoniker": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Core\\Entities\\HR\\Department.cs",
+              "RelativeDocumentMoniker": "HuongVanTra.Core\\Entities\\HR\\Department.cs",
+              "ToolTip": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Core\\Entities\\HR\\Department.cs",
+              "RelativeToolTip": "HuongVanTra.Core\\Entities\\HR\\Department.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAkAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-30T15:40:13.282Z",
+              "IsPinned": true,
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 11,
+              "Title": "SalaryRecord.cs",
+              "DocumentMoniker": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Core\\Entities\\HR\\SalaryRecord.cs",
+              "RelativeDocumentMoniker": "HuongVanTra.Core\\Entities\\HR\\SalaryRecord.cs",
+              "ToolTip": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Core\\Entities\\HR\\SalaryRecord.cs",
+              "RelativeToolTip": "HuongVanTra.Core\\Entities\\HR\\SalaryRecord.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAcAAAAuAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-30T15:40:31.349Z",
+              "IsPinned": true,
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 9,
+              "Title": "AuditLog.cs",
+              "DocumentMoniker": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Core\\Entities\\System\\AuditLog.cs",
+              "RelativeDocumentMoniker": "HuongVanTra.Core\\Entities\\System\\AuditLog.cs",
+              "ToolTip": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Core\\Entities\\System\\AuditLog.cs",
+              "RelativeToolTip": "HuongVanTra.Core\\Entities\\System\\AuditLog.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAcAAAAzAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-30T15:40:57.846Z",
+              "IsPinned": true,
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 6,
+              "Title": "ProductionOrder.cs",
+              "DocumentMoniker": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Core\\Entities\\Production\\ProductionOrder.cs",
+              "RelativeDocumentMoniker": "HuongVanTra.Core\\Entities\\Production\\ProductionOrder.cs",
+              "ToolTip": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Core\\Entities\\Production\\ProductionOrder.cs",
+              "RelativeToolTip": "HuongVanTra.Core\\Entities\\Production\\ProductionOrder.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAYAAAAzAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-30T15:50:20.204Z",
+              "IsPinned": true,
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 5,
+              "Title": "CashflowVoucher.cs",
+              "DocumentMoniker": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Core\\Entities\\Finance\\CashflowVoucher.cs",
+              "RelativeDocumentMoniker": "HuongVanTra.Core\\Entities\\Finance\\CashflowVoucher.cs",
+              "ToolTip": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Core\\Entities\\Finance\\CashflowVoucher.cs",
+              "RelativeToolTip": "HuongVanTra.Core\\Entities\\Finance\\CashflowVoucher.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAcAAAA0AAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-30T15:50:27.379Z",
+              "IsPinned": true,
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 2,
+              "Title": "Document.cs",
+              "DocumentMoniker": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Core\\Entities\\Documents\\Document.cs",
+              "RelativeDocumentMoniker": "HuongVanTra.Core\\Entities\\Documents\\Document.cs",
+              "ToolTip": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Core\\Entities\\Documents\\Document.cs",
+              "RelativeToolTip": "HuongVanTra.Core\\Entities\\Documents\\Document.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAUAAAAjAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-30T15:50:34.947Z",
+              "IsPinned": true,
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "AppDbContext.cs",
+              "DocumentMoniker": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Infrastructure\\Data\\AppDbContext.cs",
+              "RelativeDocumentMoniker": "HuongVanTra.Infrastructure\\Data\\AppDbContext.cs",
+              "ToolTip": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Infrastructure\\Data\\AppDbContext.cs",
+              "RelativeToolTip": "HuongVanTra.Infrastructure\\Data\\AppDbContext.cs",
+              "ViewState": "AgIAAC0AAAAAAAAAAAA2wDQAAABJAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-30T03:37:52.18Z",
+              "IsPinned": true,
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 55,
+              "Title": "UserConfiguration.cs",
+              "DocumentMoniker": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Infrastructure\\Configurations\\Identity\\UserConfiguration.cs",
+              "RelativeDocumentMoniker": "HuongVanTra.Infrastructure\\Configurations\\Identity\\UserConfiguration.cs",
+              "ToolTip": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Infrastructure\\Configurations\\Identity\\UserConfiguration.cs",
+              "RelativeToolTip": "HuongVanTra.Infrastructure\\Configurations\\Identity\\UserConfiguration.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAA0AAAAFAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-30T03:54:12.755Z",
+              "IsPinned": true,
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 54,
+              "Title": "RoleConfiguration.cs",
+              "DocumentMoniker": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Infrastructure\\Configurations\\Identity\\RoleConfiguration.cs",
+              "RelativeDocumentMoniker": "HuongVanTra.Infrastructure\\Configurations\\Identity\\RoleConfiguration.cs",
+              "ToolTip": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Infrastructure\\Configurations\\Identity\\RoleConfiguration.cs",
+              "RelativeToolTip": "HuongVanTra.Infrastructure\\Configurations\\Identity\\RoleConfiguration.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAQAAAA1AAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-30T03:54:33.907Z",
+              "IsPinned": true,
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 56,
+              "Title": "StoreConfiguration.cs",
+              "DocumentMoniker": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Infrastructure\\Configurations\\Stores\\StoreConfiguration.cs",
+              "RelativeDocumentMoniker": "HuongVanTra.Infrastructure\\Configurations\\Stores\\StoreConfiguration.cs",
+              "ToolTip": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Infrastructure\\Configurations\\Stores\\StoreConfiguration.cs",
+              "RelativeToolTip": "HuongVanTra.Infrastructure\\Configurations\\Stores\\StoreConfiguration.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAMAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-30T04:02:00.328Z",
+              "IsPinned": true,
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 39,
+              "Title": "StoreSettingConfiguration.cs",
+              "DocumentMoniker": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Infrastructure\\Configurations\\Stores\\StoreSettingConfiguration.cs",
+              "RelativeDocumentMoniker": "HuongVanTra.Infrastructure\\Configurations\\Stores\\StoreSettingConfiguration.cs",
+              "ToolTip": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Infrastructure\\Configurations\\Stores\\StoreSettingConfiguration.cs",
+              "RelativeToolTip": "HuongVanTra.Infrastructure\\Configurations\\Stores\\StoreSettingConfiguration.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAgAAAAmAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-30T04:02:13.975Z",
+              "IsPinned": true,
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 13,
+              "Title": "EmployeeConfiguration.cs",
+              "DocumentMoniker": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Infrastructure\\Configurations\\Identity\\EmployeeConfiguration.cs",
+              "RelativeDocumentMoniker": "HuongVanTra.Infrastructure\\Configurations\\Identity\\EmployeeConfiguration.cs",
+              "ToolTip": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Infrastructure\\Configurations\\Identity\\EmployeeConfiguration.cs",
+              "RelativeToolTip": "HuongVanTra.Infrastructure\\Configurations\\Identity\\EmployeeConfiguration.cs",
+              "ViewState": "AgIAAAkAAAAAAAAAAAAuwBIAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-30T05:16:08.516Z",
+              "IsPinned": true,
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 25,
+              "Title": "EmployeeConfigurationRole.cs",
+              "DocumentMoniker": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Infrastructure\\Configurations\\Identity\\EmployeeConfigurationRole.cs",
+              "RelativeDocumentMoniker": "HuongVanTra.Infrastructure\\Configurations\\Identity\\EmployeeConfigurationRole.cs",
+              "ToolTip": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Infrastructure\\Configurations\\Identity\\EmployeeConfigurationRole.cs",
+              "RelativeToolTip": "HuongVanTra.Infrastructure\\Configurations\\Identity\\EmployeeConfigurationRole.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAABIAAAAFAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-30T05:16:27.012Z",
+              "IsPinned": true,
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 53,
+              "Title": "CustomerConfiguration.cs",
+              "DocumentMoniker": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Infrastructure\\Configurations\\Customers\\CustomerConfiguration.cs",
+              "RelativeDocumentMoniker": "HuongVanTra.Infrastructure\\Configurations\\Customers\\CustomerConfiguration.cs",
+              "ToolTip": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Infrastructure\\Configurations\\Customers\\CustomerConfiguration.cs",
+              "RelativeToolTip": "HuongVanTra.Infrastructure\\Configurations\\Customers\\CustomerConfiguration.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAABwAAAABAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-30T15:01:00.42Z",
+              "IsPinned": true,
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 38,
+              "Title": "MembershipTierConfiguration.cs",
+              "DocumentMoniker": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Infrastructure\\Configurations\\Customers\\MembershipTierConfiguration.cs",
+              "RelativeDocumentMoniker": "HuongVanTra.Infrastructure\\Configurations\\Customers\\MembershipTierConfiguration.cs",
+              "ToolTip": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Infrastructure\\Configurations\\Customers\\MembershipTierConfiguration.cs",
+              "RelativeToolTip": "HuongVanTra.Infrastructure\\Configurations\\Customers\\MembershipTierConfiguration.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAYAAABEAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-30T15:00:47.784Z",
+              "IsPinned": true,
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 35,
+              "Title": "ProductConfiguration.cs",
+              "DocumentMoniker": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Infrastructure\\Configurations\\Products\\ProductConfiguration.cs",
+              "RelativeDocumentMoniker": "HuongVanTra.Infrastructure\\Configurations\\Products\\ProductConfiguration.cs",
+              "ToolTip": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Infrastructure\\Configurations\\Products\\ProductConfiguration.cs",
+              "RelativeToolTip": "HuongVanTra.Infrastructure\\Configurations\\Products\\ProductConfiguration.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAgAAAAmAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-30T15:11:13.24Z",
+              "IsPinned": true,
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 17,
+              "Title": "ProductCategoryConfiguration.cs",
+              "DocumentMoniker": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Infrastructure\\Configurations\\Products\\ProductCategoryConfiguration.cs",
+              "RelativeDocumentMoniker": "HuongVanTra.Infrastructure\\Configurations\\Products\\ProductCategoryConfiguration.cs",
+              "ToolTip": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Infrastructure\\Configurations\\Products\\ProductCategoryConfiguration.cs",
+              "RelativeToolTip": "HuongVanTra.Infrastructure\\Configurations\\Products\\ProductCategoryConfiguration.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAABEAAAAFAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-30T15:09:38.322Z",
+              "IsPinned": true,
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 37,
+              "Title": "BomHeaderConfiguration.cs",
+              "DocumentMoniker": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Infrastructure\\Configurations\\Products\\BomHeaderConfiguration.cs",
+              "RelativeDocumentMoniker": "HuongVanTra.Infrastructure\\Configurations\\Products\\BomHeaderConfiguration.cs",
+              "ToolTip": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Infrastructure\\Configurations\\Products\\BomHeaderConfiguration.cs",
+              "RelativeToolTip": "HuongVanTra.Infrastructure\\Configurations\\Products\\BomHeaderConfiguration.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAsAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-30T15:11:26.969Z",
+              "IsPinned": true,
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 36,
+              "Title": "BomLineConfiguration.cs",
+              "DocumentMoniker": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Infrastructure\\Configurations\\Products\\BomLineConfiguration.cs",
+              "RelativeDocumentMoniker": "HuongVanTra.Infrastructure\\Configurations\\Products\\BomLineConfiguration.cs",
+              "ToolTip": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Infrastructure\\Configurations\\Products\\BomLineConfiguration.cs",
+              "RelativeToolTip": "HuongVanTra.Infrastructure\\Configurations\\Products\\BomLineConfiguration.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAA8AAAA1AAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-30T15:11:40.693Z",
+              "IsPinned": true,
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 30,
+              "Title": "WarehouseConfiguration.cs",
+              "DocumentMoniker": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Infrastructure\\Configurations\\Inventory\\WarehouseConfiguration.cs",
+              "RelativeDocumentMoniker": "HuongVanTra.Infrastructure\\Configurations\\Inventory\\WarehouseConfiguration.cs",
+              "ToolTip": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Infrastructure\\Configurations\\Inventory\\WarehouseConfiguration.cs",
+              "RelativeToolTip": "HuongVanTra.Infrastructure\\Configurations\\Inventory\\WarehouseConfiguration.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAABcAAAABAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-30T15:21:47.247Z",
+              "IsPinned": true,
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 31,
+              "Title": "InventoryBalanceConfiguration.cs",
+              "DocumentMoniker": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Infrastructure\\Configurations\\Inventory\\InventoryBalanceConfiguration.cs",
+              "RelativeDocumentMoniker": "HuongVanTra.Infrastructure\\Configurations\\Inventory\\InventoryBalanceConfiguration.cs",
+              "ToolTip": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Infrastructure\\Configurations\\Inventory\\InventoryBalanceConfiguration.cs",
+              "RelativeToolTip": "HuongVanTra.Infrastructure\\Configurations\\Inventory\\InventoryBalanceConfiguration.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAUAAABLAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-30T15:22:01.799Z",
+              "IsPinned": true,
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 28,
+              "Title": "StockVoucherConfiguration.cs",
+              "DocumentMoniker": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Infrastructure\\Configurations\\Inventory\\StockVoucherConfiguration.cs",
+              "RelativeDocumentMoniker": "HuongVanTra.Infrastructure\\Configurations\\Inventory\\StockVoucherConfiguration.cs",
+              "ToolTip": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Infrastructure\\Configurations\\Inventory\\StockVoucherConfiguration.cs",
+              "RelativeToolTip": "HuongVanTra.Infrastructure\\Configurations\\Inventory\\StockVoucherConfiguration.cs",
+              "ViewState": "AgIAAA0AAAAAAAAAAAAUwB4AAAABAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-30T15:22:29.712Z",
+              "IsPinned": true,
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 27,
+              "Title": "InventoryTransactionConfiguration.cs",
+              "DocumentMoniker": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Infrastructure\\Configurations\\Inventory\\InventoryTransactionConfiguration.cs",
+              "RelativeDocumentMoniker": "HuongVanTra.Infrastructure\\Configurations\\Inventory\\InventoryTransactionConfiguration.cs",
+              "ToolTip": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Infrastructure\\Configurations\\Inventory\\InventoryTransactionConfiguration.cs",
+              "RelativeToolTip": "HuongVanTra.Infrastructure\\Configurations\\Inventory\\InventoryTransactionConfiguration.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAABEAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-30T15:22:41.578Z",
+              "IsPinned": true,
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 16,
+              "Title": "OrderConfiguration.cs",
+              "DocumentMoniker": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Infrastructure\\Configurations\\Sales\\OrderConfiguration.cs",
+              "RelativeDocumentMoniker": "HuongVanTra.Infrastructure\\Configurations\\Sales\\OrderConfiguration.cs",
+              "ToolTip": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Infrastructure\\Configurations\\Sales\\OrderConfiguration.cs",
+              "RelativeToolTip": "HuongVanTra.Infrastructure\\Configurations\\Sales\\OrderConfiguration.cs",
+              "ViewState": "AgIAAAoAAAAAAAAAAAAQwAcAAAAmAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-30T15:29:18.156Z",
+              "IsPinned": true,
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 18,
+              "Title": "OrderPromotionConfiguration.cs",
+              "DocumentMoniker": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Infrastructure\\Configurations\\Sales\\OrderPromotionConfiguration.cs",
+              "RelativeDocumentMoniker": "HuongVanTra.Infrastructure\\Configurations\\Sales\\OrderPromotionConfiguration.cs",
+              "ToolTip": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Infrastructure\\Configurations\\Sales\\OrderPromotionConfiguration.cs",
+              "RelativeToolTip": "HuongVanTra.Infrastructure\\Configurations\\Sales\\OrderPromotionConfiguration.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAA4AAAABAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-30T15:29:09.332Z",
+              "IsPinned": true,
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 22,
+              "Title": "OrderItemConfiguration.cs",
+              "DocumentMoniker": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Infrastructure\\Configurations\\Sales\\OrderItemConfiguration.cs",
+              "RelativeDocumentMoniker": "HuongVanTra.Infrastructure\\Configurations\\Sales\\OrderItemConfiguration.cs",
+              "ToolTip": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Infrastructure\\Configurations\\Sales\\OrderItemConfiguration.cs",
+              "RelativeToolTip": "HuongVanTra.Infrastructure\\Configurations\\Sales\\OrderItemConfiguration.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAABAAAAA1AAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-30T15:29:28.548Z",
+              "IsPinned": true,
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 21,
+              "Title": "PaymentTransactionConfiguration.cs",
+              "DocumentMoniker": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Infrastructure\\Configurations\\Sales\\PaymentTransactionConfiguration.cs",
+              "RelativeDocumentMoniker": "HuongVanTra.Infrastructure\\Configurations\\Sales\\PaymentTransactionConfiguration.cs",
+              "ToolTip": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Infrastructure\\Configurations\\Sales\\PaymentTransactionConfiguration.cs",
+              "RelativeToolTip": "HuongVanTra.Infrastructure\\Configurations\\Sales\\PaymentTransactionConfiguration.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAABMAAAABAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-30T15:29:39.529Z",
+              "IsPinned": true,
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 15,
+              "Title": "StockDeductQueueConfiguration.cs",
+              "DocumentMoniker": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Infrastructure\\Configurations\\Sales\\StockDeductQueueConfiguration.cs",
+              "RelativeDocumentMoniker": "HuongVanTra.Infrastructure\\Configurations\\Sales\\StockDeductQueueConfiguration.cs",
+              "ToolTip": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Infrastructure\\Configurations\\Sales\\StockDeductQueueConfiguration.cs",
+              "RelativeToolTip": "HuongVanTra.Infrastructure\\Configurations\\Sales\\StockDeductQueueConfiguration.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAABAAAAAlAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-30T15:29:48.72Z",
+              "IsPinned": true,
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 8,
+              "Title": "DepartmentConfiguration.cs",
+              "DocumentMoniker": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Infrastructure\\Configurations\\HR\\DepartmentConfiguration.cs",
+              "RelativeDocumentMoniker": "HuongVanTra.Infrastructure\\Configurations\\HR\\DepartmentConfiguration.cs",
+              "ToolTip": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Infrastructure\\Configurations\\HR\\DepartmentConfiguration.cs",
+              "RelativeToolTip": "HuongVanTra.Infrastructure\\Configurations\\HR\\DepartmentConfiguration.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAABIAAAABAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-30T15:42:33.154Z",
+              "IsPinned": true,
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 12,
+              "Title": "SalaryRecordConfiguration.cs",
+              "DocumentMoniker": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Infrastructure\\Configurations\\HR\\SalaryRecordConfiguration.cs",
+              "RelativeDocumentMoniker": "HuongVanTra.Infrastructure\\Configurations\\HR\\SalaryRecordConfiguration.cs",
+              "ToolTip": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Infrastructure\\Configurations\\HR\\SalaryRecordConfiguration.cs",
+              "RelativeToolTip": "HuongVanTra.Infrastructure\\Configurations\\HR\\SalaryRecordConfiguration.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAABMAAAABAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-30T15:43:32.894Z",
+              "IsPinned": true,
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 7,
+              "Title": "AuditLogConfiguration.cs",
+              "DocumentMoniker": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Infrastructure\\Configurations\\System\\AuditLogConfiguration.cs",
+              "RelativeDocumentMoniker": "HuongVanTra.Infrastructure\\Configurations\\System\\AuditLogConfiguration.cs",
+              "ToolTip": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Infrastructure\\Configurations\\System\\AuditLogConfiguration.cs",
+              "RelativeToolTip": "HuongVanTra.Infrastructure\\Configurations\\System\\AuditLogConfiguration.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAABIAAAABAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-30T15:43:47.171Z",
+              "IsPinned": true,
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 4,
+              "Title": "ProductionOrderConfiguration.cs",
+              "DocumentMoniker": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Infrastructure\\Configurations\\Production\\ProductionOrderConfiguration.cs",
+              "RelativeDocumentMoniker": "HuongVanTra.Infrastructure\\Configurations\\Production\\ProductionOrderConfiguration.cs",
+              "ToolTip": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Infrastructure\\Configurations\\Production\\ProductionOrderConfiguration.cs",
+              "RelativeToolTip": "HuongVanTra.Infrastructure\\Configurations\\Production\\ProductionOrderConfiguration.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAABEAAAABAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-30T15:51:39.952Z",
+              "IsPinned": true,
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 3,
+              "Title": "CashflowVoucherConfiguration.cs",
+              "DocumentMoniker": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Infrastructure\\Configurations\\Finance\\CashflowVoucherConfiguration.cs",
+              "RelativeDocumentMoniker": "HuongVanTra.Infrastructure\\Configurations\\Finance\\CashflowVoucherConfiguration.cs",
+              "ToolTip": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Infrastructure\\Configurations\\Finance\\CashflowVoucherConfiguration.cs",
+              "RelativeToolTip": "HuongVanTra.Infrastructure\\Configurations\\Finance\\CashflowVoucherConfiguration.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAABEAAAABAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-30T15:51:52.781Z",
+              "IsPinned": true,
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "DocumentConfiguration.cs",
+              "DocumentMoniker": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Infrastructure\\Configurations\\Documents\\DocumentConfiguration.cs",
+              "RelativeDocumentMoniker": "HuongVanTra.Infrastructure\\Configurations\\Documents\\DocumentConfiguration.cs",
+              "ToolTip": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Infrastructure\\Configurations\\Documents\\DocumentConfiguration.cs",
+              "RelativeToolTip": "HuongVanTra.Infrastructure\\Configurations\\Documents\\DocumentConfiguration.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAABIAAAABAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-30T15:54:28.855Z",
+              "IsPinned": true,
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:1:0:{e8b06f52-6d01-11d2-aa7d-00c04f990343}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:1:0:{3ae79031-e1bc-11d0-8f78-00a0c9110057}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:132:0:{13b12e3e-c1b4-4539-9371-4fe9a0d523fc}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:128:0:{1fc202d4-d401-403c-9834-5b218574bb67}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:128:0:{13b12e3e-c1b4-4539-9371-4fe9a0d523fc}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:130:0:{116d2292-e37d-41cd-a077-ebacac4c8cc4}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:131:0:{116d2292-e37d-41cd-a077-ebacac4c8cc4}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:2:0:{e8b06f52-6d01-11d2-aa7d-00c04f990343}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{873151d0-cf2e-48cc-b4bf-ad0394f6a3c3}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{c9c0ae26-aa77-11d2-b3f0-0000f87570ee}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:1377497384:0:{83107a3e-496a-485e-b455-16ddb978e55e}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:15:0:{e8b06f52-6d01-11d2-aa7d-00c04f990343}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:16:0:{e8b06f52-6d01-11d2-aa7d-00c04f990343}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:17:0:{e8b06f52-6d01-11d2-aa7d-00c04f990343}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:14:0:{e8b06f52-6d01-11d2-aa7d-00c04f990343}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:13:0:{e8b06f52-6d01-11d2-aa7d-00c04f990343}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:12:0:{e8b06f52-6d01-11d2-aa7d-00c04f990343}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:11:0:{e8b06f52-6d01-11d2-aa7d-00c04f990343}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:10:0:{e8b06f52-6d01-11d2-aa7d-00c04f990343}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:9:0:{e8b06f52-6d01-11d2-aa7d-00c04f990343}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:8:0:{e8b06f52-6d01-11d2-aa7d-00c04f990343}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:7:0:{e8b06f52-6d01-11d2-aa7d-00c04f990343}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:6:0:{e8b06f52-6d01-11d2-aa7d-00c04f990343}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:5:0:{e8b06f52-6d01-11d2-aa7d-00c04f990343}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:4:0:{e8b06f52-6d01-11d2-aa7d-00c04f990343}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:3:0:{e8b06f52-6d01-11d2-aa7d-00c04f990343}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:129:0:{1fc202d4-d401-403c-9834-5b218574bb67}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{e1b7d1f8-9b3c-49b1-8f4f-bfc63a88835d}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{588470cc-84f8-4a57-9ac4-86bca0625ff4}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:1928210406:0:{bf84ea66-d821-4dba-b1b1-2777d8574775}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:350743133:0:{bf84ea66-d821-4dba-b1b1-2777d8574775}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:132:0:{116d2292-e37d-41cd-a077-ebacac4c8cc4}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:29:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:12:0:{2456bd12-ecf7-4988-a4a6-67d49173f565}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:13:0:{2456bd12-ecf7-4988-a4a6-67d49173f565}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{6324226f-61b6-4f28-92ee-18d4b5fe1e48}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:34:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:133:0:{116d2292-e37d-41cd-a077-ebacac4c8cc4}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:134:0:{116d2292-e37d-41cd-a077-ebacac4c8cc4}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:133:0:{13b12e3e-c1b4-4539-9371-4fe9a0d523fc}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:134:0:{13b12e3e-c1b4-4539-9371-4fe9a0d523fc}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:1:0:{e8b06f53-6d01-11d2-aa7d-00c04f990343}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:134:0:{1fc202d4-d401-403c-9834-5b218574bb67}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:135:0:{1fc202d4-d401-403c-9834-5b218574bb67}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:136:0:{1fc202d4-d401-403c-9834-5b218574bb67}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:137:0:{1fc202d4-d401-403c-9834-5b218574bb67}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:138:0:{1fc202d4-d401-403c-9834-5b218574bb67}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{e506b91c-c606-466a-90a9-123d1d1e12b3}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{fbcae063-e2c0-4ab1-a516-996ea3dafb72}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{f5cd1b51-c771-5648-966f-646d419b1e7c}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:133:0:{1fc202d4-d401-403c-9834-5b218574bb67}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:41:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:30:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:129:0:{13b12e3e-c1b4-4539-9371-4fe9a0d523fc}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:147:0:{116d2292-e37d-41cd-a077-ebacac4c8cc4}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:148:0:{116d2292-e37d-41cd-a077-ebacac4c8cc4}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:143:0:{116d2292-e37d-41cd-a077-ebacac4c8cc4}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:144:0:{116d2292-e37d-41cd-a077-ebacac4c8cc4}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:145:0:{116d2292-e37d-41cd-a077-ebacac4c8cc4}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:146:0:{116d2292-e37d-41cd-a077-ebacac4c8cc4}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:142:0:{1fc202d4-d401-403c-9834-5b218574bb67}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:139:0:{116d2292-e37d-41cd-a077-ebacac4c8cc4}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:140:0:{116d2292-e37d-41cd-a077-ebacac4c8cc4}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:141:0:{116d2292-e37d-41cd-a077-ebacac4c8cc4}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:136:0:{116d2292-e37d-41cd-a077-ebacac4c8cc4}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:138:0:{116d2292-e37d-41cd-a077-ebacac4c8cc4}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:130:0:{13b12e3e-c1b4-4539-9371-4fe9a0d523fc}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:135:0:{13b12e3e-c1b4-4539-9371-4fe9a0d523fc}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:139:0:{1fc202d4-d401-403c-9834-5b218574bb67}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:137:0:{13b12e3e-c1b4-4539-9371-4fe9a0d523fc}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:138:0:{13b12e3e-c1b4-4539-9371-4fe9a0d523fc}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:38:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:69:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:129:0:{116d2292-e37d-41cd-a077-ebacac4c8cc4}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:130:0:{1fc202d4-d401-403c-9834-5b218574bb67}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:131:0:{1fc202d4-d401-403c-9834-5b218574bb67}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:132:0:{1fc202d4-d401-403c-9834-5b218574bb67}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:70:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:71:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:69:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:73:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:72:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:54:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{0504ff91-9d61-11d0-a794-00a0c9110051}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:1:0:{004be353-6879-467c-9d1e-9ac23cdf6d49}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:93:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:37:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:49:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:68:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:67:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:18:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:17:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:33:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:45:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:45:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:1196186238:0:{83107a3e-496a-485e-b455-16ddb978e55e}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:14:0:{2456bd12-ecf7-4988-a4a6-67d49173f565}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:18:0:{2456bd12-ecf7-4988-a4a6-67d49173f565}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:10:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:21:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:19:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:20:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:7:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:7:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:46:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:47:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:63:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:64:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:65:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:32:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:37:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:39:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:40:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:43:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:42:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:41:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:20:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:129:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:132:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:1:0:{fabf9319-47eb-497e-b8f6-d9f73fba5f55}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{99a11807-c5db-4877-ad35-09b56a044012}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{131369f2-062d-44a2-8671-91ff31efb4f4}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{9a7cebbb-dc5c-4986-bc49-962da46aa506}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:128:0:{75188d03-9892-4ae2-abf1-207126247ce5}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:48:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:11:0:{2456bd12-ecf7-4988-a4a6-67d49173f565}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:141:0:{1fc202d4-d401-403c-9834-5b218574bb67}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:143:0:{1fc202d4-d401-403c-9834-5b218574bb67}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:144:0:{1fc202d4-d401-403c-9834-5b218574bb67}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:145:0:{1fc202d4-d401-403c-9834-5b218574bb67}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:146:0:{1fc202d4-d401-403c-9834-5b218574bb67}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:147:0:{1fc202d4-d401-403c-9834-5b218574bb67}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:131:0:{13b12e3e-c1b4-4539-9371-4fe9a0d523fc}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:145:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:146:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:142:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:147:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:146:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:147:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:129:0:{75188d03-9892-4ae2-abf1-207126247ce5}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{605322a2-17ae-43f4-b60f-766556e46c87}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{0174dea2-fdbe-4ef1-8f99-c0beae78880f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:131:0:{75188d03-9892-4ae2-abf1-207126247ce5}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{1c64b9c2-e352-428e-a56d-0ace190b99a6}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{1c4feeaa-4718-4aa9-859d-94ce25d182ba}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:16:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:44:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:63:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:74:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:26:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:25:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:136:0:{13b12e3e-c1b4-4539-9371-4fe9a0d523fc}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:74:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:75:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:76:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:77:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:78:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:44:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:128:0:{116d2292-e37d-41cd-a077-ebacac4c8cc4}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:8:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{4a9b7e51-aa16-11d0-a8c5-00a0c921a4d2}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{74946827-37a0-11d2-a273-00c04f8ef4ff}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:27:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:9:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{40ea2e6b-2121-4bb8-a43e-c83c04b51041}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:11:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:29:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:31:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:34:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{26341fe2-71dd-46fd-bb1b-2e51a92a0d64}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{80c411e8-fd5e-4b16-914b-0d9d84172cc1}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{c93a910a-0fa6-4307-93a4-f2bd61ec7828}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:130:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:134:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:134:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:135:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:133:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:129:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:131:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:14:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:3:0:{57d563b6-44a5-47df-85be-f4199ad6b651}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:6:0:{57d563b6-44a5-47df-85be-f4199ad6b651}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{57d563b6-44a5-47df-85be-f4199ad6b651}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:132:0:{75188d03-9892-4ae2-abf1-207126247ce5}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:1:0:{6bf11835-8a31-496c-b01e-94f731afc7ce}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:2:0:{6bf11835-8a31-496c-b01e-94f731afc7ce}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:48:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:62:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:81:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:36:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:1:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{b1e99781-ab81-11d0-b683-00aa00a3ee26}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:2:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:3:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:4:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:5:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:6:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{34e76e81-ee4a-11d0-ae2e-00a0c90fffc3}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{d78612c7-9962-4b83-95d9-268046dad23a}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:114700942:0:{83107a3e-496a-485e-b455-16ddb978e55e}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:12:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:14:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{aa2115a1-9712-457b-9047-dbb71ca2cdd2}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{3ae79031-e1bc-11d0-8f78-00a0c9110057}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:28:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:1:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:254354193:0:{71f361cc-493f-47c0-923f-f2570b6f8618}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:25:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{0ad07096-bba9-4900-a651-0598d26f6d24}"
+            }
+          ]
+        },
+        {
+          "DockedWidth": 73,
+          "SelectedChildIndex": -1,
+          "Children": [
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{5b6781c0-e99d-11d0-9954-00a0c91bc8e5}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:132:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:31:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:32:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:16:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:53:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:67:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:68:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:73:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:78:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:81:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{eefa5220-e298-11d0-8f78-00a0c9110057}"
+            }
+          ]
+        },
+        {
+          "DockedWidth": 1304,
+          "SelectedChildIndex": -1,
+          "Children": [
+            {
+              "$type": "Bookmark",
+              "Name": "ST:43:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:22:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:23:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:24:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:35:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{260978c3-582c-487d-ab12-c1fdde07c578}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:36:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:38:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:39:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:40:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:42:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:15:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:133:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{93c5e7ad-af06-49e6-a756-b8f3eaca790d}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:13:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:33:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:27:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:30:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:28:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:15:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:12:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:10:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:8:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:9:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:13:0:{d212f56b-c48a-434c-a121-1c5d80b59b9f}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:26:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:35:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:22:0:{e8034f19-ab72-4f06-83fd-f6832b41aa63}"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
