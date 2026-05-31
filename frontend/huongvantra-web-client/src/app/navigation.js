@@ -30,11 +30,14 @@ function hasRole(roles, candidateRoles) {
 }
 
 export function getNavigationItemsForRoles(roles = []) {
-  if (!roles.length) {
-    return []
-  }
+  // Tạm thời: hiển thị đầy đủ sidebar cho mọi tài khoản đã đăng nhập.
+  void roles
+  return navigationItems
 
-  return navigationItems.filter((item) => hasRole(roles, item.roles))
+  // if (!roles.length) {
+  //   return []
+  // }
+  // return navigationItems.filter((item) => hasRole(roles, item.roles))
 }
 
 export function getHomeRouteForRoles(roles = []) {
@@ -69,4 +72,13 @@ export function getHomeRouteForRoles(roles = []) {
   }
 
   return '/dashboard'
+}
+
+export function resolveHomeRoute(authSession) {
+  if (!authSession) {
+    return '/login'
+  }
+
+  const homeRoute = getHomeRouteForRoles(authSession.roles ?? [])
+  return homeRoute === '/login' ? '/dashboard' : homeRoute
 }

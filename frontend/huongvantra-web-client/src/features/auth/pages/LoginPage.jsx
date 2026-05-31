@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { login } from '../services/authApi.js'
-import { saveAuthSession } from '../services/authSession.js'
-import { getHomeRouteForRoles } from '../../../app/navigation.js'
+import { loadAuthSession, saveAuthSession } from '../services/authSession.js'
+import { getHomeRouteForRoles, resolveHomeRoute } from '../../../app/navigation.js'
 
 function LoginPage() {
   const navigate = useNavigate()
@@ -17,6 +17,13 @@ function LoginPage() {
   useEffect(() => {
     setRemember(Boolean(localStorage.getItem('hv-remember-username')))
   }, [])
+
+  useEffect(() => {
+    const session = loadAuthSession()
+    if (session) {
+      navigate(resolveHomeRoute(session), { replace: true })
+    }
+  }, [navigate])
 
   const canSubmit = useMemo(() => username.trim() && password.trim() && !isSubmitting, [username, password, isSubmitting])
 

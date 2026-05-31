@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import AdminLayout from '../layouts/AdminLayout.jsx'
+import RootRedirect from './RootRedirect.jsx'
 import ForgotPasswordPage from '../features/auth/pages/ForgotPasswordPage.jsx'
 import LoginPage from '../features/auth/pages/LoginPage.jsx'
 import OtpVerificationPage from '../features/auth/pages/OtpVerificationPage.jsx'
@@ -30,7 +31,7 @@ import StaffPage from '../features/staff/pages/StaffPage.jsx'
 function App() {
   return (
     <Routes>
-      <Route index element={<Navigate to="/login" replace />} />
+      <Route index element={<RootRedirect />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/forgot-password/otp" element={<OtpVerificationPage />} />

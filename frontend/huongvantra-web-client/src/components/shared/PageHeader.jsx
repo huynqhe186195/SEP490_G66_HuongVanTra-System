@@ -2,8 +2,6 @@ function PageHeader({
   title,
   description,
   searchPlaceholder,
-  userLabel = 'Admin',
-  isSyncingAuth = false,
   rightContent = null,
 }) {
   const hasTitle = Boolean(title)
@@ -44,25 +42,13 @@ function PageHeader({
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="w-full lg:max-w-xl">{searchInput}</div>
 
-            <div className="flex flex-wrap items-center gap-3 text-[#356647] lg:justify-end">
-              <div className="hidden text-right sm:block">
-                <p className="text-[10px] uppercase tracking-[0.24em] text-[#7b847c]">Dang nhap</p>
-                <p className="text-[0.95rem] font-semibold text-[#1f241f]">{isSyncingAuth ? 'Dang dong bo...' : userLabel}</p>
-              </div>
-
-              {rightContent}
-            </div>
+            {rightContent ? (
+              <div className="flex flex-wrap items-center gap-3 text-[#356647] lg:justify-end">{rightContent}</div>
+            ) : null}
           </div>
-        ) : (
-          <div className="flex flex-wrap items-center gap-3 text-[#356647]">
-            <div className="hidden text-right sm:block">
-              <p className="text-[10px] uppercase tracking-[0.24em] text-[#7b847c]">Dang nhap</p>
-              <p className="text-[0.95rem] font-semibold text-[#1f241f]">{isSyncingAuth ? 'Dang dong bo...' : userLabel}</p>
-            </div>
-
-            {rightContent}
-          </div>
-        )}
+        ) : rightContent ? (
+          <div className="flex flex-wrap items-center gap-3 text-[#356647]">{rightContent}</div>
+        ) : null}
       </div>
     </header>
   )
