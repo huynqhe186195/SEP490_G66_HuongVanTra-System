@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("HuongVanTra.Infrastructure")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+5cf9c6e19f6a6cd35e1e6aacde3d1527cc448ef1")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+7110a9ff27344e16b139a6de9deb96e7038d7f6b")]
 [assembly: System.Reflection.AssemblyProductAttribute("HuongVanTra.Infrastructure")]
 [assembly: System.Reflection.AssemblyTitleAttribute("HuongVanTra.Infrastructure")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

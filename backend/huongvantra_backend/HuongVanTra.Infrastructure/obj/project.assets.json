@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "targets": {
     "net8.0": {
       "Humanizer.Core/2.14.1": {
@@ -2167,23 +2167,23 @@
     ]
   },
   "packageFolders": {
-    "C:\\Users\\Admin\\.nuget\\packages\\": {},
+    "C:\\Users\\Simon\\.nuget\\packages\\": {},
     "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages": {}
   },
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Infrastructure\\HuongVanTra.Infrastructure.csproj",
+      "projectUniqueName": "C:\\Users\\Simon\\Desktop\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Infrastructure\\HuongVanTra.Infrastructure.csproj",
       "projectName": "HuongVanTra.Infrastructure",
-      "projectPath": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Infrastructure\\HuongVanTra.Infrastructure.csproj",
-      "packagesPath": "C:\\Users\\Admin\\.nuget\\packages\\",
-      "outputPath": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Infrastructure\\obj\\",
+      "projectPath": "C:\\Users\\Simon\\Desktop\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Infrastructure\\HuongVanTra.Infrastructure.csproj",
+      "packagesPath": "C:\\Users\\Simon\\.nuget\\packages\\",
+      "outputPath": "C:\\Users\\Simon\\Desktop\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Infrastructure\\obj\\",
       "projectStyle": "PackageReference",
       "fallbackFolders": [
         "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
       ],
       "configFilePaths": [
-        "C:\\Users\\Admin\\AppData\\Roaming\\NuGet\\NuGet.Config",
+        "C:\\Users\\Simon\\AppData\\Roaming\\NuGet\\NuGet.Config",
         "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
         "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
       ],
@@ -2196,10 +2196,11 @@
       },
       "frameworks": {
         "net8.0": {
+          "framework": "net8.0",
           "targetAlias": "net8.0",
           "projectReferences": {
-            "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Core\\HuongVanTra.Core.csproj": {
-              "projectPath": "D:\\_Study_Materials\\_archives\\2026_2_summer\\sep409\\_project\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Core\\HuongVanTra.Core.csproj"
+            "C:\\Users\\Simon\\Desktop\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Core\\HuongVanTra.Core.csproj": {
+              "projectPath": "C:\\Users\\Simon\\Desktop\\SEP490_G66_HuongVanTra-System\\backend\\huongvantra_backend\\HuongVanTra.Core\\HuongVanTra.Core.csproj"
             }
           }
         }
@@ -2214,10 +2215,11 @@
         "auditLevel": "low",
         "auditMode": "direct"
       },
-      "SdkAnalysisLevel": "9.0.300"
+      "SdkAnalysisLevel": "10.0.300"
     },
     "frameworks": {
       "net8.0": {
+        "framework": "net8.0",
         "targetAlias": "net8.0",
         "dependencies": {
           "Microsoft.EntityFrameworkCore.Tools": {
@@ -2247,7 +2249,7 @@
             "privateAssets": "all"
           }
         },
-        "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.310/PortableRuntimeIdentifierGraph.json"
+        "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\10.0.300/PortableRuntimeIdentifierGraph.json"
       }
     }
   }

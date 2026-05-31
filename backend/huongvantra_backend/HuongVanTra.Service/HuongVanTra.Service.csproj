@@ -7,6 +7,12 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.27" />
+    <PackageReference Include="Microsoft.IdentityModel.Tokens" Version="7.0.3" />
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="7.0.3" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\HuongVanTra.Core\HuongVanTra.Core.csproj" />
     <ProjectReference Include="..\HuongVanTra.Infrastructure\HuongVanTra.Infrastructure.csproj" />
   </ItemGroup>

@@ -21,3 +21,11 @@ gemini.md
 # Logs
 .antigravity/logs/
 *.ai.log
+
+# .NET / Visual Studio
+**/bin/
+**/obj/
+.vs/
+*.cache
+*.pdb
+*.vsidx
