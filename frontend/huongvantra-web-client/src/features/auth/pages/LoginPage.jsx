@@ -1,14 +1,12 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-
-const DEMO_USERS = [
-  { username: 'admin', password: '123456' },
-  { username: 'sale01', password: '123456' },
-]
+import { login } from '../services/authApi.js'
+import { saveAuthSession } from '../services/authSession.js'
+import { getHomeRouteForRoles } from '../../../app/navigation.js'
 
 function LoginPage() {
   const navigate = useNavigate()
-  const [username, setUsername] = useState('')
+  const [username, setUsername] = useState(() => localStorage.getItem('hv-remember-username') ?? '')
   const [password, setPassword] = useState('')
   const [remember, setRemember] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
@@ -16,9 +14,13 @@ function LoginPage() {
   const [submitSuccess, setSubmitSuccess] = useState(false)
   const [error, setError] = useState('')
 
+  useEffect(() => {
+    setRemember(Boolean(localStorage.getItem('hv-remember-username')))
+  }, [])
+
   const canSubmit = useMemo(() => username.trim() && password.trim() && !isSubmitting, [username, password, isSubmitting])
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault()
 
     if (!username.trim() || !password.trim()) {
@@ -29,29 +31,26 @@ function LoginPage() {
     setError('')
     setIsSubmitting(true)
 
-    setTimeout(() => {
-      const matchedUser = DEMO_USERS.find((user) => user.username === username.trim() && user.password === password)
+    try {
+      const authResult = await login(username.trim(), password)
 
-      if (!matchedUser) {
-        setIsSubmitting(false)
-        setSubmitSuccess(false)
-        setError('Tên đăng nhập hoặc mật khẩu không chính xác.')
-        return
-      }
+      saveAuthSession(authResult)
 
       setSubmitSuccess(true)
 
-      setTimeout(() => {
-        setIsSubmitting(false)
-        setSubmitSuccess(false)
-        if (remember) {
-          localStorage.setItem('hv-remember-username', username.trim())
-        } else {
-          localStorage.removeItem('hv-remember-username')
-        }
-        navigate('/inventory')
-      }, 900)
-    }, 1200)
+      if (remember) {
+        localStorage.setItem('hv-remember-username', username.trim())
+      } else {
+        localStorage.removeItem('hv-remember-username')
+      }
+
+      navigate(getHomeRouteForRoles(authResult.roles), { replace: true })
+    } catch (loginError) {
+      setSubmitSuccess(false)
+      setError(loginError instanceof Error ? loginError.message : 'Đăng nhập thất bại. Vui lòng thử lại.')
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (

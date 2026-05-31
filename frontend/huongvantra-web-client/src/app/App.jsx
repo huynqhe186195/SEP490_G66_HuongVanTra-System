@@ -30,6 +30,7 @@ import StaffPage from '../features/staff/pages/StaffPage.jsx'
 function App() {
   return (
     <Routes>
+      <Route index element={<Navigate to="/login" replace />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/forgot-password/otp" element={<OtpVerificationPage />} />
@@ -63,7 +64,7 @@ function App() {
         <Route path="/reports/customers" element={<ReportsCustomersPage />} />
         <Route path="/integrations" element={<IntegrationsPage />} />
       </Route>
-      <Route path="*" element={<Navigate to="/inventory" replace />} />
+      <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
   )
 }

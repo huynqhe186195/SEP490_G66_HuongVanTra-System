@@ -231,7 +231,6 @@ C:\Users\Simon\Desktop\SEP490_G66_HuongVanTra-System\backend\huongvantra_backend
 C:\Users\Simon\Desktop\SEP490_G66_HuongVanTra-System\backend\huongvantra_backend\HuongVanTra.API\obj\Debug\net8.0\staticwebassets.development.json
 C:\Users\Simon\Desktop\SEP490_G66_HuongVanTra-System\backend\huongvantra_backend\HuongVanTra.API\obj\Debug\net8.0\staticwebassets.build.endpoints.json
 C:\Users\Simon\Desktop\SEP490_G66_HuongVanTra-System\backend\huongvantra_backend\HuongVanTra.API\obj\Debug\net8.0\swae.build.ex.cache
-C:\Users\Simon\Desktop\SEP490_G66_HuongVanTra-System\backend\huongvantra_backend\HuongVanTra.API\obj\Debug\net8.0\staticwebassets.upToDateCheck.txt
 C:\Users\Simon\Desktop\SEP490_G66_HuongVanTra-System\backend\huongvantra_backend\HuongVanTra.API\obj\Debug\net8.0\HuongVan.92A1FA68.Up2Date
 C:\Users\Simon\Desktop\SEP490_G66_HuongVanTra-System\backend\huongvantra_backend\HuongVanTra.API\obj\Debug\net8.0\HuongVanTra.API.dll
 C:\Users\Simon\Desktop\SEP490_G66_HuongVanTra-System\backend\huongvantra_backend\HuongVanTra.API\obj\Debug\net8.0\refint\HuongVanTra.API.dll
@@ -246,3 +245,4 @@ C:\Users\Simon\Desktop\SEP490_G66_HuongVanTra-System\backend\huongvantra_backend
 C:\Users\Simon\Desktop\SEP490_G66_HuongVanTra-System\backend\huongvantra_backend\HuongVanTra.API\bin\Debug\net8.0\Microsoft.IdentityModel.Protocols.OpenIdConnect.dll
 C:\Users\Simon\Desktop\SEP490_G66_HuongVanTra-System\backend\huongvantra_backend\HuongVanTra.API\bin\Debug\net8.0\Microsoft.IdentityModel.Tokens.dll
 C:\Users\Simon\Desktop\SEP490_G66_HuongVanTra-System\backend\huongvantra_backend\HuongVanTra.API\bin\Debug\net8.0\System.IdentityModel.Tokens.Jwt.dll
+C:\Users\Simon\Desktop\SEP490_G66_HuongVanTra-System\backend\huongvantra_backend\HuongVanTra.API\obj\Debug\net8.0\staticwebassets.upToDateCheck.txt

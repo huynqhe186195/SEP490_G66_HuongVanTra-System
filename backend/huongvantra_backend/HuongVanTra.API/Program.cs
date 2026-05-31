@@ -16,6 +16,17 @@ namespace HuongVanTra.API {
                 options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString)));
             builder.Services.AddScoped<IAuthService, AuthService>();
 
+            builder.Services.AddCors(options => {
+                options.AddPolicy("Frontend", policy => {
+                    policy.WithOrigins(
+                            "http://localhost:5173",
+                            "http://127.0.0.1:5173",
+                            "http://localhost:4173")
+                        .AllowAnyHeader()
+                        .AllowAnyMethod();
+                });
+            });
+
             builder.Services.AddControllers();
             // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
             builder.Services.AddEndpointsApiExplorer();
@@ -70,7 +81,11 @@ namespace HuongVanTra.API {
                 app.UseSwaggerUI();
             }
 
-            app.UseHttpsRedirection();
+            if (!app.Environment.IsDevelopment()) {
+                app.UseHttpsRedirection();
+            }
+
+            app.UseCors("Frontend");
 
             app.UseAuthentication();
             app.UseAuthorization();
