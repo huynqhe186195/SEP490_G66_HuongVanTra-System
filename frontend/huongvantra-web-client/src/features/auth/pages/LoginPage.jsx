@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { login } from '../services/authApi.js'
+import { enrichSessionWithAccess, login } from '../services/authApi.js'
 import { loadAuthSession, saveAuthSession } from '../services/authSession.js'
-import { getHomeRouteForRoles, resolveHomeRoute } from '../../../app/navigation.js'
+import { resolveHomeRoute } from '../../../app/navigation.js'
 
 function LoginPage() {
   const navigate = useNavigate()
@@ -40,8 +40,15 @@ function LoginPage() {
 
     try {
       const authResult = await login(username.trim(), password)
+      let session = authResult
 
-      saveAuthSession(authResult)
+      try {
+        session = await enrichSessionWithAccess(authResult)
+      } catch {
+        // Fallback: sidebar uses roles from login response if access API is unavailable.
+      }
+
+      saveAuthSession(session)
 
       setSubmitSuccess(true)
 
@@ -51,7 +58,7 @@ function LoginPage() {
         localStorage.removeItem('hv-remember-username')
       }
 
-      navigate(getHomeRouteForRoles(authResult.roles), { replace: true })
+      navigate(resolveHomeRoute(session), { replace: true })
     } catch (loginError) {
       setSubmitSuccess(false)
       setError(loginError instanceof Error ? loginError.message : 'Đăng nhập thất bại. Vui lòng thử lại.')

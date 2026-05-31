@@ -1,11 +1,11 @@
+using HuongVanTra.API.Extensions;
 using HuongVanTra.API.Models.Auth;
 using HuongVanTra.Service.Auth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
 
 namespace HuongVanTra.API.Controllers {
+    [Authorize]
     [ApiController]
     [Route("api/[controller]")]
     public class AuthController : ControllerBase {
@@ -15,6 +15,7 @@ namespace HuongVanTra.API.Controllers {
             _authService = authService;
         }
 
+        [AllowAnonymous]
         [HttpPost("login")]
         public async Task<ActionResult<LoginResponse>> Login([FromBody] LoginRequest request) {
             if (string.IsNullOrWhiteSpace(request.Username) || string.IsNullOrWhiteSpace(request.Password)) {
@@ -36,6 +37,7 @@ namespace HuongVanTra.API.Controllers {
             });
         }
 
+        [AllowAnonymous]
         [HttpPost("refresh")]
         public async Task<ActionResult<LoginResponse>> Refresh([FromBody] RefreshTokenRequest request) {
             if (string.IsNullOrWhiteSpace(request.AccessToken) || string.IsNullOrWhiteSpace(request.RefreshToken)) {
@@ -57,19 +59,18 @@ namespace HuongVanTra.API.Controllers {
             });
         }
 
-        [Authorize]
         [HttpPost("logout")]
         public async Task<IActionResult> Logout([FromBody] LogoutRequest request) {
             if (string.IsNullOrWhiteSpace(request.RefreshToken)) {
                 return BadRequest("Refresh token is required.");
             }
 
-            var sub = User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            if (!int.TryParse(sub, out var userId)) {
+            var userId = User.GetUserId();
+            if (userId is null) {
                 return Unauthorized("Invalid token subject.");
             }
 
-            var isSuccess = await _authService.LogoutAsync(request.RefreshToken, userId);
+            var isSuccess = await _authService.LogoutAsync(request.RefreshToken, userId.Value);
             if (!isSuccess) {
                 return Unauthorized("Invalid token.");
             }
@@ -77,15 +78,14 @@ namespace HuongVanTra.API.Controllers {
             return Ok("Logged out successfully.");
         }
 
-        [Authorize]
         [HttpGet("me")]
         public async Task<ActionResult<CurrentUserResponse>> Me() {
-            var sub = User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            if (!int.TryParse(sub, out var userId)) {
+            var userId = User.GetUserId();
+            if (userId is null) {
                 return Unauthorized("Invalid token subject.");
             }
 
-            var currentUser = await _authService.GetCurrentUserAsync(userId);
+            var currentUser = await _authService.GetCurrentUserAsync(userId.Value);
             if (currentUser is null) {
                 return NotFound("User not found.");
             }

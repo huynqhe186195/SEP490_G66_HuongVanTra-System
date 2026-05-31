@@ -25,10 +25,28 @@ async function parseResponseError(response) {
   return text.trim() || 'Đăng nhập thất bại. Vui lòng thử lại.'
 }
 
+import { showError } from '../../../app/toast'
+
 async function request(path, options) {
   const response = await fetch(`${getApiBaseUrl()}${path}`, options)
 
   if (!response.ok) {
+    // handle auth/authorization errors centrally
+    if (response.status === 401 || response.status === 403) {
+      const errMsg = await parseResponseError(response)
+
+      if (response.status === 401) {
+        // not authenticated: show message and redirect to login
+        try { showError(errMsg || 'Bạn chưa đăng nhập hoặc token không hợp lệ.'); } catch {}
+        try { window.location.href = '/login'; } catch {}
+      } else {
+        // forbidden: show message
+        try { showError(errMsg || 'Bạn không có quyền truy cập trang này.'); } catch {}
+      }
+
+      throw new Error(errMsg)
+    }
+
     throw new Error(await parseResponseError(response))
   }
 
@@ -83,4 +101,23 @@ export async function me(accessToken) {
       Authorization: `Bearer ${accessToken}`,
     },
   })
+}
+
+export async function fetchAccess(accessToken) {
+  return request('/api/access/me', {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  })
+}
+
+export async function enrichSessionWithAccess(session) {
+  const access = await fetchAccess(session.accessToken)
+
+  return {
+    ...session,
+    roles: access.roles ?? session.roles ?? [],
+    modules: access.modules ?? [],
+  }
 }

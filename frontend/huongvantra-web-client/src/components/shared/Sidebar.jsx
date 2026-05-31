@@ -2,8 +2,10 @@ import { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { logout as logoutApi } from '../../features/auth/services/authApi.js'
 import { clearAuthSession, formatDisplayName, loadAuthSession } from '../../features/auth/services/authSession.js'
+import { canAccessModule } from '../../app/navigation.js'
+import { showError } from '../../app/toast'
 
-function Sidebar({ items }) {
+function Sidebar({ items, isLoading = false }) {
   const navigate = useNavigate()
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const authSession = loadAuthSession()
@@ -36,15 +38,29 @@ function Sidebar({ items }) {
         </div>
         <div>
           <h1 className="text-sm font-bold">Hương Vân Trà</h1>
-          <p className="text-[10px] opacity-70">Admin System</p>
         </div>
       </div>
 
       <nav className="flex-1 space-y-1 overflow-y-auto pr-1">
+        {isLoading ? (
+          <p className="px-4 py-2 text-sm text-white/70">Dang tai menu...</p>
+        ) : null}
         {items.map((item) => (
           <NavLink
             key={item.path}
             to={item.path}
+            onClick={(e) => {
+              try {
+                const session = loadAuthSession()
+                const allowed = canAccessModule(session, item.module)
+                if (!allowed) {
+                  e.preventDefault()
+                  showError('Bạn không có quyền truy cập tab này.')
+                }
+              } catch {
+                // fallback: allow navigation
+              }
+            }}
             className={({ isActive }) =>
               `flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm transition-colors ${
                 isActive ? 'bg-[#A7C49E] font-semibold text-[#538463] shadow-sm' : 'opacity-80 hover:bg-white/10'

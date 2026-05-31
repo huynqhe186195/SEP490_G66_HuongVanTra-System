@@ -1,3 +1,4 @@
+using HuongVanTra.Core.Authorization;
 using HuongVanTra.Core.Entities.Identity;
 using HuongVanTra.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
@@ -178,11 +179,15 @@ namespace HuongVanTra.Service.Auth {
                 new(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
                 new(JwtRegisteredClaimNames.UniqueName, user.Username),
                 new(ClaimTypes.NameIdentifier, user.Id.ToString()),
-                new(ClaimTypes.Name, user.Username)
+                new(ClaimTypes.Name, user.Username),
             };
 
+            if (user.EmployeeId > 0) {
+                claims.Add(new Claim(AppClaims.EmployeeId, user.EmployeeId.ToString()));
+            }
+
             foreach (var role in roleNames) {
-                claims.Add(new Claim(ClaimTypes.Role, role));
+                claims.Add(new Claim(AppClaims.Role, role));
             }
 
             var signingCredentials = new SigningCredentials(

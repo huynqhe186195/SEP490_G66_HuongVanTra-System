@@ -1,10 +1,15 @@
+using HuongVanTra.API.Authorization;
+using HuongVanTra.Core.Authorization;
 using HuongVanTra.Infrastructure.Data;
 using HuongVanTra.Service.Auth;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using System.Security.Claims;
 using System.Text;
+using System.Text.Json;
+using Microsoft.AspNetCore.Http;
 
 namespace HuongVanTra.API {
     public class Program {
@@ -69,9 +74,13 @@ namespace HuongVanTra.API {
                         ValidateIssuerSigningKey = true,
                         ValidIssuer = jwtIssuer,
                         ValidAudience = jwtAudience,
-                        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey!))
+                        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey!)),
+                        RoleClaimType = AppClaims.Role,
+                        NameClaimType = ClaimTypes.Name,
                     };
                 });
+
+            builder.Services.AddAppAuthorization();
 
             var app = builder.Build();
 
@@ -90,6 +99,25 @@ namespace HuongVanTra.API {
             app.UseAuthentication();
             app.UseAuthorization();
 
+            // Middleware: return friendly JSON messages for 401/403 responses
+            app.Use(async (context, next) => {
+                await next();
+
+                if (context.Response.HasStarted) {
+                    return;
+                }
+
+                if (context.Response.StatusCode == StatusCodes.Status401Unauthorized) {
+                    context.Response.ContentType = "application/json";
+                    var payload = JsonSerializer.Serialize(new { message = "Bạn chưa đăng nhập hoặc token không hợp lệ." });
+                    await context.Response.WriteAsync(payload);
+                }
+                else if (context.Response.StatusCode == StatusCodes.Status403Forbidden) {
+                    context.Response.ContentType = "application/json";
+                    var payload = JsonSerializer.Serialize(new { message = "Bạn không có quyền truy cập trang này." });
+                    await context.Response.WriteAsync(payload);
+                }
+            });
 
             app.MapControllers();
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { me, refresh } from '../../features/auth/services/authApi.js'
+import { enrichSessionWithAccess, me, refresh } from '../../features/auth/services/authApi.js'
 import { loadAuthSession, saveAuthSession } from '../../features/auth/services/authSession.js'
 import PageHeader from './PageHeader.jsx'
 
@@ -74,8 +74,19 @@ function AppTopHeader({ searchPlaceholder = 'Tim kiem...', rightContent = null }
       } catch {
         try {
           const refreshedSession = await refresh(session.accessToken, session.refreshToken)
-          saveAuthSession(refreshedSession)
-          await syncCurrentUser(refreshedSession.accessToken, refreshedSession)
+          let sessionToSave = refreshedSession
+
+          try {
+            sessionToSave = await enrichSessionWithAccess(refreshedSession)
+          } catch {
+            sessionToSave = {
+              ...refreshedSession,
+              modules: session.modules ?? [],
+            }
+          }
+
+          saveAuthSession(sessionToSave)
+          await syncCurrentUser(sessionToSave.accessToken, sessionToSave)
         } catch {
           handleInvalidSession()
         }
