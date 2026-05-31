@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { me, refresh } from '../../features/auth/services/authApi.js'
-import { loadAuthSession, saveAuthSession } from '../../features/auth/services/authSession.js'
+import { formatDisplayName, loadAuthSession, saveAuthSession } from '../../features/auth/services/authSession.js'
 import PageHeader from './PageHeader.jsx'
 
 function AppTopHeader({ searchPlaceholder = 'Tim kiem...', rightContent = null }) {
@@ -94,7 +94,7 @@ function AppTopHeader({ searchPlaceholder = 'Tim kiem...', rightContent = null }
     }
   }, [authSession, navigate])
 
-  const userLabel = currentUser?.username || authSession?.username || 'Admin'
+  const userLabel = formatDisplayName(currentUser?.username || authSession?.username) || 'Admin'
 
   return (
     <PageHeader searchPlaceholder={searchPlaceholder} userLabel={userLabel} isSyncingAuth={isSyncingAuth} rightContent={rightContent} />

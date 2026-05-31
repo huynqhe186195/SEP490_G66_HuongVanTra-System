@@ -1,9 +1,10 @@
 import { loadAuthSession } from '../../features/auth/services/authSession.js'
 import PageHeader from './PageHeader.jsx'
+import { formatDisplayName } from '../../features/auth/services/authSession.js'
 
 function SectionPage({ title, description, searchPlaceholder = 'Tìm kiếm...', children }) {
   const authSession = loadAuthSession()
-  const userLabel = authSession?.username || 'Admin'
+  const userLabel = formatDisplayName(authSession?.username) || 'Admin'
 
   return (
     <div className="flex h-full flex-col gap-6">

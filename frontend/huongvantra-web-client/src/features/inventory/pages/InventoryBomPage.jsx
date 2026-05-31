@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import AppTopHeader from '../../../components/shared/AppTopHeader.jsx'
+import PageHeader from '../../../components/shared/PageHeader.jsx'
 
 const bomRows = [
   {
@@ -43,7 +43,11 @@ const bomRows = [
 function InventoryBomPage() {
   return (
     <div className="relative flex min-h-0 flex-1 flex-col gap-6 [font-family:'Manrope',sans-serif]">
-      <AppTopHeader searchPlaceholder="Search BOM by code or product name..." />
+      <PageHeader
+        title="BOM / Công thức"
+        description="Quản lý công thức sản phẩm, trạng thái và lần cập nhật gần nhất"
+        searchPlaceholder="Search BOM by code or product name..."
+      />
 
       <section className="rounded-[24px] border border-[#c1c9c0]/30 bg-white p-6 shadow-sm">
         <div className="mb-6 flex flex-col justify-between gap-4 md:flex-row md:items-end">

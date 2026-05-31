@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import AppTopHeader from '../../../components/shared/AppTopHeader.jsx'
+import PageHeader from '../../../components/shared/PageHeader.jsx'
 
 const loginHistory = [
   { id: '1', channel: 'He thong POS 02', time: '14:20', date: 'Lan cuoi: Hom nay', icon: 'devices', active: true },
@@ -32,7 +32,11 @@ function StaffDetailPage() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-6 [font-family:'Manrope',sans-serif]">
-      <AppTopHeader searchPlaceholder="Tim kiem he thong..." />
+      <PageHeader
+        title="Chi tiết nhân viên"
+        description="Xem và chỉnh sửa thông tin tài khoản, quyền truy cập và lịch sử đăng nhập"
+        searchPlaceholder="Tim kiem he thong..."
+      />
 
       <section className="rounded-[24px] border border-[#c1c9c0]/30 bg-white p-6 shadow-sm">
         <div className="mb-8">

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import AppTopHeader from '../../../components/shared/AppTopHeader.jsx'
+import PageHeader from '../../../components/shared/PageHeader.jsx'
 
 const ingredientOptions = [
   { name: 'Premium Matcha Powder (JP)', unitCost: 280 },
@@ -118,7 +118,11 @@ function InventoryBomCreatePage() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-6 [font-family:'Manrope',sans-serif]">
-      <AppTopHeader searchPlaceholder={isEditMode ? `Edit BOM ${bomId}` : 'Recipe Definition (BOM)'} />
+      <PageHeader
+        title={isEditMode ? `Chỉnh sửa BOM ${bomId}` : 'Tạo BOM mới'}
+        description="Định nghĩa công thức, nguyên liệu và quy trình pha chế cho sản phẩm"
+        searchPlaceholder={isEditMode ? `Edit BOM ${bomId}` : 'Recipe Definition (BOM)'}
+      />
 
       <div className="grid flex-1 grid-cols-1 gap-4 lg:grid-cols-[1fr_380px]">
         <div className="custom-scrollbar space-y-4 overflow-y-auto pb-20">

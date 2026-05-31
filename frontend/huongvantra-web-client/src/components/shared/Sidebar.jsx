@@ -1,13 +1,13 @@
 import { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { logout as logoutApi } from '../../features/auth/services/authApi.js'
-import { clearAuthSession, loadAuthSession } from '../../features/auth/services/authSession.js'
+import { clearAuthSession, formatDisplayName, loadAuthSession } from '../../features/auth/services/authSession.js'
 
 function Sidebar({ items }) {
   const navigate = useNavigate()
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const authSession = loadAuthSession()
-  const userLabel = authSession?.username || 'Admin'
+  const userLabel = formatDisplayName(authSession?.username) || 'Admin'
 
   const handleLogout = async () => {
     if (!authSession) {

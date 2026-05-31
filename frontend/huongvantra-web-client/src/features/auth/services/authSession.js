@@ -1,5 +1,18 @@
 const AUTH_SESSION_KEY = 'hv-auth-session'
 
+export function formatDisplayName(value) {
+  if (!value || typeof value !== 'string') {
+    return ''
+  }
+
+  return value
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(' ')
+}
+
 export function saveAuthSession(session) {
   localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(session))
 }

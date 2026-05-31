@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import AppTopHeader from '../../../components/shared/AppTopHeader.jsx'
+import PageHeader from '../../../components/shared/PageHeader.jsx'
 
 const staffRows = [
   {
@@ -61,7 +61,11 @@ const stats = [
 function StaffPage() {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-6 [font-family:'Manrope',sans-serif]">
-      <AppTopHeader searchPlaceholder="Tim kiem nhan vien..." />
+      <PageHeader
+        title="Nhân viên"
+        description="Quản lý tài khoản nhân sự, trạng thái hoạt động và vai trò trong hệ thống"
+        searchPlaceholder="Tim kiem nhan vien..."
+      />
 
       <section className="rounded-[24px] border border-[#c1c9c0]/30 bg-white p-6 shadow-sm">
         <div className="mb-8 flex flex-col justify-between gap-4 md:flex-row md:items-end">

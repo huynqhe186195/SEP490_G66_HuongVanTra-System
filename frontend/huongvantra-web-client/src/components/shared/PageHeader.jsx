@@ -9,48 +9,60 @@ function PageHeader({
   const hasTitle = Boolean(title)
   const hasSearch = Boolean(searchPlaceholder)
 
+  const searchInput = hasSearch ? (
+    <div className={`relative w-full ${hasTitle ? 'min-w-0 lg:max-w-xl' : 'lg:max-w-xl'}`}>
+      <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-[20px] text-[#58635b]">search</span>
+      <input
+        type="text"
+        placeholder={searchPlaceholder}
+        className="h-11 w-full rounded-full border border-[#c1c9c0]/90 bg-white pl-12 pr-4 text-sm text-[#1b1c17] shadow-[0_1px_0_rgba(255,255,255,0.8),0_8px_20px_rgba(0,0,0,0.03)] outline-none transition focus:border-[#538463] focus:ring-2 focus:ring-[#356647]/20"
+      />
+    </div>
+  ) : null
+
   return (
-    <header className="rounded-[24px] border border-[#c1c9c0]/40 bg-[#fbf9f1] px-6 py-5 shadow-sm">
-      <div className={`flex flex-col gap-4 ${hasTitle ? 'xl:flex-row xl:items-start xl:justify-between' : 'lg:flex-row lg:items-center lg:justify-between'}`}>
-        <div className="min-w-0">
-          {hasTitle ? (
-            <div>
-              <div className="border-b-2 border-[#538463] pb-1">
-                <span className="text-sm font-medium text-[#538463]">{title}</span>
+    <header className="rounded-[28px] border border-[#c1c9c0]/40 bg-[linear-gradient(180deg,#fdfcf6_0%,#fbf9f1_100%)] px-6 py-6 shadow-[0_10px_30px_rgba(27,28,23,0.04)]">
+      <div className="flex flex-col gap-5">
+        {hasTitle ? (
+          <div className="min-w-0">
+            <div className="space-y-3">
+              <div className="flex items-center gap-3">
+                <span className="h-10 w-1 rounded-full bg-[#538463]" aria-hidden="true" />
+                <span className="text-[11px] font-semibold uppercase tracking-[0.28em] text-[#7b847c]">Trang quản trị</span>
               </div>
-              {description ? <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[#717971]">{description}</p> : null}
+              <div>
+                <h1 className="text-[1.75rem] font-semibold leading-tight tracking-[-0.03em] text-[#1f241f] lg:text-[2rem]">{title}</h1>
+                {description ? <p className="mt-2 max-w-3xl text-[0.95rem] leading-7 text-[#707a72]">{description}</p> : null}
+              </div>
             </div>
-          ) : hasSearch ? (
-            <div className="relative w-full lg:max-w-md">
-              <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-[#414942]">search</span>
-              <input
-                type="text"
-                placeholder={searchPlaceholder}
-                className="h-10 w-full rounded-full border border-[#c1c9c0] bg-[#f0eee6] pl-12 pr-4 text-sm text-[#1b1c17] outline-none focus:ring-2 focus:ring-[#356647]/30"
-              />
-            </div>
-          ) : null}
-        </div>
-
-        <div className="flex flex-wrap items-center gap-3 text-[#356647]">
-          {hasTitle && hasSearch ? (
-            <div className="relative w-full min-w-[240px] sm:w-80">
-              <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-[#414942]">search</span>
-              <input
-                type="text"
-                placeholder={searchPlaceholder}
-                className="h-10 w-full rounded-full border border-[#c1c9c0] bg-[#f0eee6] pl-12 pr-4 text-sm text-[#1b1c17] outline-none focus:ring-2 focus:ring-[#356647]/30"
-              />
-            </div>
-          ) : null}
-
-          <div className="hidden text-right sm:block">
-            <p className="text-[11px] uppercase tracking-[0.18em] text-[#717971]">Dang nhap</p>
-            <p className="text-sm font-semibold text-[#1b1c17]">{isSyncingAuth ? 'Dang dong bo...' : userLabel}</p>
           </div>
+        ) : hasSearch ? (
+          searchInput
+        ) : null}
 
-          {rightContent}
-        </div>
+        {hasTitle ? (
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="w-full lg:max-w-xl">{searchInput}</div>
+
+            <div className="flex flex-wrap items-center gap-3 text-[#356647] lg:justify-end">
+              <div className="hidden text-right sm:block">
+                <p className="text-[10px] uppercase tracking-[0.24em] text-[#7b847c]">Dang nhap</p>
+                <p className="text-[0.95rem] font-semibold text-[#1f241f]">{isSyncingAuth ? 'Dang dong bo...' : userLabel}</p>
+              </div>
+
+              {rightContent}
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-center gap-3 text-[#356647]">
+            <div className="hidden text-right sm:block">
+              <p className="text-[10px] uppercase tracking-[0.24em] text-[#7b847c]">Dang nhap</p>
+              <p className="text-[0.95rem] font-semibold text-[#1f241f]">{isSyncingAuth ? 'Dang dong bo...' : userLabel}</p>
+            </div>
+
+            {rightContent}
+          </div>
+        )}
       </div>
     </header>
   )

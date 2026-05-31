@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import PageHeader from '../../../components/shared/PageHeader.jsx'
 
 const categoryCards = [
   { name: 'Trà xanh', count: '17 sản phẩm' },
@@ -18,25 +19,18 @@ const pricingRules = [
 function ProductsPricingPage() {
   return (
     <main className="flex min-h-0 flex-1 flex-col overflow-y-auto p-8">
-      <header className="mb-8 flex items-start justify-between gap-4" data-purpose="page-header">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-800">Danh mục &amp; bảng giá</h1>
-          <p className="mt-1 text-sm text-gray-500">Cây danh mục, quy tắc giá lẻ, giá đại lý và giá theo kênh</p>
-        </div>
+      <PageHeader
+        title="Danh mục &amp; bảng giá"
+        description="Cây danh mục, quy tắc giá lẻ, giá đại lý và giá theo kênh"
+        searchPlaceholder="Tìm kiếm nhanh..."
+      />
 
-        <div className="flex items-center space-x-4">
-          <div className="relative w-80">
-            <input
-              className="w-full rounded-xl border-none bg-white px-4 py-2.5 text-sm shadow-sm ring-1 ring-black/5 focus:ring-[#538463]"
-              placeholder="Tìm kiếm nhanh..."
-              type="text"
-            />
-          </div>
-          <Link className="rounded-xl bg-[#a3c4ae]/40 px-6 py-2 text-sm font-semibold text-[#3e634a] transition hover:bg-[#a3c4ae]/60" to="/products/create">
-            Lưu nháp
-          </Link>
-        </div>
-      </header>
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-white p-3 shadow-sm">
+        <div className="text-sm font-medium text-slate-500">Danh mục và quy tắc giá</div>
+        <Link className="rounded-xl bg-[#a3c4ae]/40 px-6 py-2 text-sm font-semibold text-[#3e634a] transition hover:bg-[#a3c4ae]/60" to="/products/create">
+          Lưu nháp
+        </Link>
+      </div>
 
       <div className="flex flex-1 gap-8 overflow-y-auto pb-6">
         <section className="flex-[3] rounded-[1rem] bg-white p-8 shadow-sm" data-purpose="category-tree">
