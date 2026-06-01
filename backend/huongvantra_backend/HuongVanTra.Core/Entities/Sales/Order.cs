@@ -19,11 +19,13 @@ namespace HuongVanTra.Core.Entities.Sales {
         public decimal DeductAmount { get; set; }
         public decimal TotalAmount { get; set; }
         public string? Notes { get; set; }
-        public string PaymentStatus { get; set; } = "UNPAID";
-        public string StockStatus { get; set; } = "PENDING";
-        public string OrderStatus { get; set; } = "PENDING";
+        public string PaymentMethod { get; set; } = "CASH";
+        public string PaymentStatus { get; set; } = "unpaid";
+        public string StockStatus { get; set; } = "pending_deduct";
+        public string OrderStatus { get; set; } = "confirmed";
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime? UpdatedAt { get; set; }
+        public DateTime? LastRemindedAt { get; set; }
 
         public Store Store { get; set; } = null!;
         public Customer? Customer { get; set; }

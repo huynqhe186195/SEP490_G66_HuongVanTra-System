@@ -15,12 +15,16 @@ namespace HuongVanTra.Infrastructure.Configurations.Sales {
             builder.Property(x => x.DeductAmount).HasColumnType("decimal(18,2)");
             builder.Property(x => x.TotalAmount).HasColumnType("decimal(18,2)");
             builder.Property(x => x.Notes).HasMaxLength(500);
-            builder.HasIndex(x => x.OrderCode);
-            builder.HasIndex(x => x.CreatedAt);
-            builder.HasIndex(x => x.OrderStatus);
+            builder.Property(x => x.PaymentMethod).HasMaxLength(30).IsRequired();
             builder.Property(x => x.PaymentStatus).HasMaxLength(30).IsRequired();
             builder.Property(x => x.StockStatus).HasMaxLength(30).IsRequired();
             builder.Property(x => x.OrderStatus).HasMaxLength(30).IsRequired();
+            builder.Property(x => x.LastRemindedAt).IsRequired(false);
+            builder.Property(x => x.UpdatedAt).IsRequired(false);
+
+            builder.HasIndex(x => x.OrderCode);
+            builder.HasIndex(x => x.CreatedAt);
+            builder.HasIndex(x => x.OrderStatus);
 
             builder.HasOne(o => o.Store).WithMany().HasForeignKey(o => o.StoreId).OnDelete(DeleteBehavior.Restrict);
             builder.HasOne(o => o.Customer).WithMany().HasForeignKey(o => o.CustomerId).OnDelete(DeleteBehavior.SetNull);
