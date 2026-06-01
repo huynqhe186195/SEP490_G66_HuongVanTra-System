@@ -1,4 +1,3 @@
-using HuongVanTra.Core.Entities.Inventory;
 using HuongVanTra.Core.Entities.Sales;
 using HuongVanTra.Core.Entities.System;
 using HuongVanTra.Infrastructure.Data;
@@ -7,41 +6,36 @@ using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
 
 namespace HuongVanTra.Service.Sales {
-    public class PosOrderService : IPosOrderService {
+    public class OnlineOrderService : IOnlineOrderService {
         private readonly AppDbContext _db;
 
-        public PosOrderService(AppDbContext db) {
+        public OnlineOrderService(AppDbContext db) {
             _db = db;
         }
 
-        public async Task<PosOrderResult> CreateOnlineOrderAsync(CreatePosOrderCommand command) {
+        public async Task<OnlineOrderResult> CreateVietQrOrderAsync(CreateOnlineOrderCommand command) {
             var (productMap, discount, membershipDiscount) = await ValidateAndLoadAsync(command);
 
             await using var tx = await _db.Database.BeginTransactionAsync();
             try {
                 var order = BuildOrder(command, productMap, discount, membershipDiscount);
-                order.StockStatus = "pending_deduct";
+                order.PaymentMethod = "VIETQR";
                 order.PaymentStatus = "pending_payment";
-                order.OrderStatus = "confirmed";
+                order.StockStatus   = "pending_deduct";
+                order.OrderStatus   = "confirmed";
 
                 _db.Orders.Add(order);
                 await _db.SaveChangesAsync();
 
-                var bomSnapshot = await BuildBomSnapshotAsync(command);
-                _db.StockDeductQueues.Add(new StockDeductQueue {
-                    OrderId = order.Id,
-                    Status = "waiting",
-                    BomSnapshot = JsonSerializer.Serialize(bomSnapshot),
-                    CreatedAt = DateTime.UtcNow
-                });
-
+                await CreateStockDeductQueueAsync(command, order.Id);
                 await UpdateCustomerSpendAsync(command.CustomerId, order.TotalAmount);
                 await WriteAuditLogAsync("create", "orders", order.Id, command.CashierId, command.StoreId);
 
                 await _db.SaveChangesAsync();
                 await tx.CommitAsync();
 
-                return ToResult(order);
+                var qrPayload = VietQrHelper.GenerateQrPayload(order.OrderCode, order.TotalAmount);
+                return ToResult(order, qrPayload);
             }
             catch {
                 await tx.RollbackAsync();
@@ -49,31 +43,28 @@ namespace HuongVanTra.Service.Sales {
             }
         }
 
-        public async Task<PosOrderResult> CreateOfflineOrderAsync(CreatePosOrderCommand command) {
+        public async Task<OnlineOrderResult> CreateCodOrderAsync(CreateOnlineOrderCommand command) {
             var (productMap, discount, membershipDiscount) = await ValidateAndLoadAsync(command);
-
-            var warehouse = await _db.Warehouses
-                .FirstOrDefaultAsync(w => w.StoreId == command.StoreId)
-                ?? throw new InvalidOperationException($"No warehouse found for store {command.StoreId}.");
 
             await using var tx = await _db.Database.BeginTransactionAsync();
             try {
                 var order = BuildOrder(command, productMap, discount, membershipDiscount);
-                order.StockStatus = "deducted";
-                order.PaymentStatus = "paid";
-                order.OrderStatus = "confirmed";
+                order.PaymentMethod = "COD";
+                order.PaymentStatus = "unpaid";
+                order.StockStatus   = "pending_deduct";
+                order.OrderStatus   = "confirmed";
 
                 _db.Orders.Add(order);
                 await _db.SaveChangesAsync();
 
-                await DeductInventoryAsync(order, warehouse.Id, command.CashierId);
+                await CreateStockDeductQueueAsync(command, order.Id);
                 await UpdateCustomerSpendAsync(command.CustomerId, order.TotalAmount);
                 await WriteAuditLogAsync("create", "orders", order.Id, command.CashierId, command.StoreId);
 
                 await _db.SaveChangesAsync();
                 await tx.CommitAsync();
 
-                return ToResult(order);
+                return ToResult(order, null);
             }
             catch {
                 await tx.RollbackAsync();
@@ -81,17 +72,15 @@ namespace HuongVanTra.Service.Sales {
             }
         }
 
-        // ── validation & data loading ────────────────────────────────────────
+        // ── helpers ─────────────────────────────────────────────────────────
 
         private async Task<(Dictionary<int, (string Name, string Sku, decimal Price)> productMap,
                             (string type, decimal value) discount,
                             decimal membershipDiscount)>
-            ValidateAndLoadAsync(CreatePosOrderCommand command) {
+            ValidateAndLoadAsync(CreateOnlineOrderCommand command) {
 
             if (command.Items.Count == 0)
                 throw new ArgumentException("Order must have at least one item.");
-            if (command.Payments.Count == 0)
-                throw new ArgumentException("Order must have at least one payment.");
 
             var storeExists = await _db.Stores.AnyAsync(s => s.Id == command.StoreId);
             if (!storeExists)
@@ -138,7 +127,7 @@ namespace HuongVanTra.Service.Sales {
         }
 
         private static Order BuildOrder(
-            CreatePosOrderCommand command,
+            CreateOnlineOrderCommand command,
             Dictionary<int, (string name, string sku, decimal price)> productMap,
             (string type, decimal value) discount,
             decimal membershipDiscountPercent) {
@@ -157,24 +146,14 @@ namespace HuongVanTra.Service.Sales {
             }).ToList();
 
             var subtotal = items.Sum(i => i.LineTotal);
-
-            // Apply promotion discount first
             var afterPromo = discount.type switch {
                 "PERCENTAGE" => subtotal * (1 - discount.value / 100),
                 "FIXED"      => Math.Max(0, subtotal - discount.value),
                 _            => subtotal
             };
-
-            // Then apply membership tier discount on top
             var totalAmount = membershipDiscountPercent > 0
                 ? afterPromo * (1 - membershipDiscountPercent / 100)
                 : afterPromo;
-
-            var payments = command.Payments.Select(p => new PaymentTransaction {
-                PaymentMethod   = p.PaymentMethod,
-                Amount          = p.Amount,
-                TransactionDate = DateTime.UtcNow
-            }).ToList();
 
             return new Order {
                 OrderCode           = GenerateOrderCode(),
@@ -183,98 +162,59 @@ namespace HuongVanTra.Service.Sales {
                 CashierId           = command.CashierId,
                 PromotionId         = command.PromotionId,
                 TotalAmount         = Math.Round(totalAmount, 2),
-                // Caller sets PaymentStatus / StockStatus / OrderStatus
+                PaymentMethod       = command.PaymentMethod,
                 PaymentStatus       = "unpaid",
                 StockStatus         = "pending_deduct",
                 OrderStatus         = "confirmed",
                 CreatedAt           = DateTime.UtcNow,
-                OrderItems          = items,
-                PaymentTransactions = payments
+                OrderItems          = items
             };
         }
 
-        private async Task DeductInventoryAsync(Order order, int warehouseId, int cashierId) {
-            var productIds = order.OrderItems
-                .Where(i => i.IsGift == 0)
-                .Select(i => i.ProductId)
-                .Distinct()
-                .ToList();
-
+        private async Task CreateStockDeductQueueAsync(CreateOnlineOrderCommand command, int orderId) {
+            var productIds = command.Items.Select(i => i.ProductId).Distinct().ToList();
             var bomHeaders = await _db.BomHeaders
                 .Include(b => b.BomLines)
                 .Where(b => productIds.Contains(b.FinishedGoodId))
-                .ToDictionaryAsync(b => b.FinishedGoodId);
+                .ToListAsync();
 
-            // Build materialId -> qty to deduct
-            var deductMap = new Dictionary<int, decimal>();
-            foreach (var item in order.OrderItems.Where(i => i.IsGift == 0)) {
-                if (bomHeaders.TryGetValue(item.ProductId, out var bom)) {
+            var snapshot = new List<BomSnapshotEntry>();
+            foreach (var item in command.Items.Where(i => i.IsGift == 0)) {
+                var bom = bomHeaders.FirstOrDefault(b => b.FinishedGoodId == item.ProductId);
+                if (bom is not null) {
                     var multiplier = item.Quantity / bom.QuantityOutput;
-                    foreach (var line in bom.BomLines) {
-                        deductMap.TryGetValue(line.MaterialId, out var existing);
-                        deductMap[line.MaterialId] = existing + line.Quantity * multiplier;
-                    }
+                    foreach (var line in bom.BomLines)
+                        snapshot.Add(new BomSnapshotEntry {
+                            ProductId  = item.ProductId,
+                            MaterialId = line.MaterialId,
+                            Quantity   = line.Quantity * multiplier
+                        });
                 }
                 else {
-                    deductMap.TryGetValue(item.ProductId, out var existing);
-                    deductMap[item.ProductId] = existing + item.Quantity;
+                    snapshot.Add(new BomSnapshotEntry {
+                        ProductId  = item.ProductId,
+                        MaterialId = item.ProductId,
+                        Quantity   = item.Quantity
+                    });
                 }
             }
 
-            var materialIds = deductMap.Keys.ToList();
-            var balances = await _db.InventoryBalances
-                .Where(b => b.WarehouseId == warehouseId && materialIds.Contains(b.ProductId))
-                .ToDictionaryAsync(b => b.ProductId);
-
-            var txnCode = $"TXN-{order.OrderCode}";
-
-            foreach (var (materialId, qty) in deductMap) {
-                if (!balances.TryGetValue(materialId, out var balance)) {
-                    balance = new InventoryBalance {
-                        WarehouseId = warehouseId,
-                        ProductId   = materialId,
-                        Quantity    = 0
-                    };
-                    _db.InventoryBalances.Add(balance);
-                    await _db.SaveChangesAsync();
-                    balances[materialId] = balance;
-                }
-
-                var before = balance.Quantity;
-                var after  = before - qty;
-
-                if (after < 0)
-                    throw new InvalidOperationException(
-                        $"Insufficient stock for product {materialId}: available {before}, required {qty}.");
-
-                balance.Quantity = after;
-
-                _db.InventoryTransactions.Add(new InventoryTransaction {
-                    TxnCode        = $"{txnCode}-{materialId}",
-                    WarehouseId    = warehouseId,
-                    ProductId      = materialId,
-                    TxnType        = "OUT",
-                    Quantity       = qty,
-                    QuantityBefore = before,
-                    QuantityAfter  = after,
-                    RefType        = "ORDER",
-                    RefId          = order.Id,
-                    CreatedById    = cashierId,
-                    CreatedAt      = DateTime.UtcNow
-                });
-            }
+            _db.StockDeductQueues.Add(new StockDeductQueue {
+                OrderId     = orderId,
+                Status      = "waiting",
+                BomSnapshot = JsonSerializer.Serialize(snapshot),
+                CreatedAt   = DateTime.UtcNow
+            });
         }
 
         private async Task UpdateCustomerSpendAsync(int? customerId, decimal amount) {
             if (customerId is null) return;
-
             var customer = await _db.Customers
                 .FirstOrDefaultAsync(c => c.Id == customerId.Value);
             if (customer is null) return;
 
             customer.TotalSpend += amount;
 
-            // Auto-upgrade to highest qualifying tier
             var bestTier = await _db.MembershipTiers
                 .Where(t => t.MinTotalSpend <= customer.TotalSpend)
                 .OrderByDescending(t => t.MinTotalSpend)
@@ -295,54 +235,98 @@ namespace HuongVanTra.Service.Sales {
                 Status     = "SUCCESS",
                 CreatedAt  = DateTime.UtcNow
             });
-            await Task.CompletedTask; // SaveChanges called by caller
+            await Task.CompletedTask;
         }
 
-        private async Task<List<BomSnapshotEntry>> BuildBomSnapshotAsync(CreatePosOrderCommand command) {
-            var productIds = command.Items.Select(i => i.ProductId).Distinct().ToList();
+        public async Task<CodDeliveredResult> MarkCodDeliveredAndPaidAsync(int orderId, int employeeId) {
+            var order = await _db.Orders
+                .FirstOrDefaultAsync(o => o.Id == orderId)
+                ?? throw new ArgumentException($"Order {orderId} does not exist.");
 
-            var bomHeaders = await _db.BomHeaders
-                .Include(b => b.BomLines)
-                .Where(b => productIds.Contains(b.FinishedGoodId))
+            if (order.PaymentMethod != "COD")
+                throw new InvalidOperationException($"Order {orderId} is not a COD order.");
+
+            if (order.PaymentStatus == "paid")
+                throw new InvalidOperationException($"Order {orderId} has already been marked as paid.");
+
+            if (order.OrderStatus == "cancelled")
+                throw new InvalidOperationException($"Order {orderId} is cancelled and cannot be updated.");
+
+            await using var tx = await _db.Database.BeginTransactionAsync();
+            try {
+                order.PaymentStatus = "paid";
+                order.OrderStatus   = "completed";
+
+                _db.AuditLogs.Add(new AuditLog {
+                    Action     = "cod_delivered_paid",
+                    EntityType = "orders",
+                    EntityId   = order.Id,
+                    UserId     = employeeId,
+                    StoreId    = order.StoreId,
+                    Status     = "SUCCESS",
+                    CreatedAt  = DateTime.UtcNow
+                });
+
+                await _db.SaveChangesAsync();
+                await tx.CommitAsync();
+
+                return new CodDeliveredResult {
+                    OrderId       = order.Id,
+                    OrderCode     = order.OrderCode,
+                    PaymentStatus = order.PaymentStatus,
+                    OrderStatus   = order.OrderStatus,
+                    ConfirmedAt   = DateTime.UtcNow
+                };
+            }
+            catch {
+                await tx.RollbackAsync();
+                throw;
+            }
+        }
+
+        public async Task<List<OverdueCodOrderResult>> GetOverdueCodOrdersAsync() {
+            var cutoff = DateTime.UtcNow.AddDays(-7);
+
+            // Đơn COD treo: là COD, chưa paid, chưa cancelled, và đã quá 7 ngày
+            // kể từ ngày tạo hoặc từ lần nhắc gần nhất
+            var orders = await _db.Orders
+                .Where(o => o.PaymentMethod == "COD"
+                         && o.PaymentStatus != "paid"
+                         && o.OrderStatus   != "cancelled"
+                         && (o.LastRemindedAt == null
+                                ? o.CreatedAt <= cutoff
+                                : o.LastRemindedAt <= cutoff))
+                .OrderBy(o => o.CreatedAt)
                 .ToListAsync();
 
-            var snapshot = new List<BomSnapshotEntry>();
-            foreach (var item in command.Items.Where(i => i.IsGift == 0)) {
-                var bom = bomHeaders.FirstOrDefault(b => b.FinishedGoodId == item.ProductId);
-                if (bom is not null) {
-                    var multiplier = item.Quantity / bom.QuantityOutput;
-                    foreach (var line in bom.BomLines) {
-                        snapshot.Add(new BomSnapshotEntry {
-                            ProductId  = item.ProductId,
-                            MaterialId = line.MaterialId,
-                            Quantity   = line.Quantity * multiplier
-                        });
-                    }
-                }
-                else {
-                    snapshot.Add(new BomSnapshotEntry {
-                        ProductId  = item.ProductId,
-                        MaterialId = item.ProductId,
-                        Quantity   = item.Quantity
-                    });
-                }
-            }
-            return snapshot;
+            var now = DateTime.UtcNow;
+            return orders.Select(o => new OverdueCodOrderResult {
+                OrderId        = o.Id,
+                OrderCode      = o.OrderCode,
+                TotalAmount    = o.TotalAmount,
+                PaymentStatus  = o.PaymentStatus,
+                OrderStatus    = o.OrderStatus,
+                CreatedAt      = o.CreatedAt,
+                LastRemindedAt = o.LastRemindedAt,
+                DaysPending    = (int)(now - (o.LastRemindedAt ?? o.CreatedAt)).TotalDays
+            }).ToList();
         }
 
         private static string GenerateOrderCode() {
             var ts     = DateTime.UtcNow.ToString("yyyyMMddHHmmss");
             var suffix = Guid.NewGuid().ToString("N")[..6].ToUpper();
-            return $"POS-{ts}-{suffix}";
+            return $"ONL-{ts}-{suffix}";
         }
 
-        private static PosOrderResult ToResult(Order order) => new() {
+        private static OnlineOrderResult ToResult(Order order, string? qrPayload) => new() {
             OrderId       = order.Id,
             OrderCode     = order.OrderCode,
             TotalAmount   = order.TotalAmount,
+            PaymentMethod = order.PaymentMethod,
             PaymentStatus = order.PaymentStatus,
             StockStatus   = order.StockStatus,
             OrderStatus   = order.OrderStatus,
+            QrPayload     = qrPayload,
             CreatedAt     = order.CreatedAt,
             Items         = order.OrderItems.Select(i => new PosOrderItemResult {
                 ProductId   = i.ProductId,

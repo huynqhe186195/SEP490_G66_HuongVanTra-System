@@ -22,6 +22,8 @@ namespace HuongVanTra.API {
                 options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString)));
             builder.Services.AddScoped<IAuthService, AuthService>();
             builder.Services.AddScoped<IPosOrderService, PosOrderService>();
+            builder.Services.AddScoped<IOnlineOrderService, OnlineOrderService>();
+            builder.Services.AddScoped<IStockDeductQueueService, StockDeductQueueService>();
 
             builder.Services.AddCors(options => {
                 options.AddPolicy("Frontend", policy => {

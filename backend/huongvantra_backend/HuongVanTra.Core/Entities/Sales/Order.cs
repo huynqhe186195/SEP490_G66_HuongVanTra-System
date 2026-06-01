@@ -14,10 +14,12 @@ namespace HuongVanTra.Core.Entities.Sales {
         public int? PromotionId { get; set; }
 
         public decimal TotalAmount { get; set; }
-        public string PaymentStatus { get; set; } = "UNPAID";
-        public string StockStatus { get; set; } = "PENDING";
-        public string OrderStatus { get; set; } = "COMPLETED";
+        public string PaymentMethod { get; set; } = "CASH";
+        public string PaymentStatus { get; set; } = "unpaid";
+        public string StockStatus { get; set; } = "pending_deduct";
+        public string OrderStatus { get; set; } = "confirmed";
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime? LastRemindedAt { get; set; }
 
         public Store Store { get; set; } = null!;
         public Customer? Customer { get; set; }

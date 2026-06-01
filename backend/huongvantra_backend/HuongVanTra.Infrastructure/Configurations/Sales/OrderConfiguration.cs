@@ -10,9 +10,11 @@ namespace HuongVanTra.Infrastructure.Configurations.Sales {
 
             builder.Property(x => x.OrderCode).HasMaxLength(50).IsRequired();
             builder.Property(x => x.TotalAmount).HasColumnType("decimal(18,2)");
+            builder.Property(x => x.PaymentMethod).HasMaxLength(30).IsRequired();
             builder.Property(x => x.PaymentStatus).HasMaxLength(30).IsRequired();
             builder.Property(x => x.StockStatus).HasMaxLength(30).IsRequired();
             builder.Property(x => x.OrderStatus).HasMaxLength(30).IsRequired();
+            builder.Property(x => x.LastRemindedAt).IsRequired(false);
 
             builder.HasOne(o => o.Store).WithMany().HasForeignKey(o => o.StoreId).OnDelete(DeleteBehavior.Restrict);
             builder.HasOne(o => o.Customer).WithMany().HasForeignKey(o => o.CustomerId).OnDelete(DeleteBehavior.SetNull);

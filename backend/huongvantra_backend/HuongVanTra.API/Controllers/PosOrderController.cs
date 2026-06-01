@@ -45,7 +45,7 @@ namespace HuongVanTra.API.Controllers {
 
             try {
                 var result = await _posOrderService.CreateOnlineOrderAsync(command);
-                return Ok(ToResponse(result));
+                return StatusCode(201, ToResponse(result));
             }
             catch (ArgumentException ex) {
                 return BadRequest(ex.Message);
@@ -84,7 +84,7 @@ namespace HuongVanTra.API.Controllers {
 
             try {
                 var result = await _posOrderService.CreateOfflineOrderAsync(command);
-                return Ok(ToResponse(result));
+                return StatusCode(201, ToResponse(result));
             }
             catch (ArgumentException ex) {
                 return BadRequest(ex.Message);
@@ -95,18 +95,21 @@ namespace HuongVanTra.API.Controllers {
         }
 
         private static PosOrderResponse ToResponse(PosOrderResult result) => new() {
-            OrderId = result.OrderId,
-            OrderCode = result.OrderCode,
-            TotalAmount = result.TotalAmount,
+            OrderId       = result.OrderId,
+            OrderCode     = result.OrderCode,
+            TotalAmount   = result.TotalAmount,
             PaymentStatus = result.PaymentStatus,
-            StockStatus = result.StockStatus,
-            OrderStatus = result.OrderStatus,
-            CreatedAt = result.CreatedAt,
-            Items = result.Items.Select(i => new PosOrderItemResponse {
-                ProductId = i.ProductId,
-                Quantity = i.Quantity,
-                LineTotal = i.LineTotal,
-                IsGift = i.IsGift
+            StockStatus   = result.StockStatus,
+            OrderStatus   = result.OrderStatus,
+            CreatedAt     = result.CreatedAt,
+            Items         = result.Items.Select(i => new PosOrderItemResponse {
+                ProductId   = i.ProductId,
+                ProductName = i.ProductName,
+                Sku         = i.Sku,
+                UnitPrice   = i.UnitPrice,
+                Quantity    = i.Quantity,
+                LineTotal   = i.LineTotal,
+                IsGift      = i.IsGift
             }).ToList()
         };
     }

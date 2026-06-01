@@ -10,6 +10,7 @@ namespace HuongVanTra.Infrastructure.Configurations.Sales {
 
             builder.Property(x => x.Status).HasMaxLength(30).IsRequired();
             builder.Property(x => x.BomSnapshot).HasColumnType("json").IsRequired();
+            builder.Property(x => x.ConfirmedAt).IsRequired(false);
 
             builder.HasOne(q => q.Order)
                    .WithOne(o => o.StockDeductQueue)
