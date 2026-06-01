@@ -11,10 +11,15 @@ using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Identity;
+using HuongVanTra.Core.Entities.Identity;
 
-namespace HuongVanTra.API {
-    public class Program {
-        public static void Main(string[] args) {
+namespace HuongVanTra.API
+{
+    public class Program
+    {
+        public static void Main(string[] args)
+        {
             var builder = WebApplication.CreateBuilder(args);
 
             var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
@@ -24,9 +29,12 @@ namespace HuongVanTra.API {
             builder.Services.AddScoped<IPosOrderService, PosOrderService>();
             builder.Services.AddScoped<IOnlineOrderService, OnlineOrderService>();
             builder.Services.AddScoped<IStockDeductQueueService, StockDeductQueueService>();
+            builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
 
-            builder.Services.AddCors(options => {
-                options.AddPolicy("Frontend", policy => {
+            builder.Services.AddCors(options =>
+            {
+                options.AddPolicy("Frontend", policy =>
+                {
                     policy.WithOrigins(
                             "http://localhost:5173",
                             "http://127.0.0.1:5173",
@@ -39,9 +47,11 @@ namespace HuongVanTra.API {
             builder.Services.AddControllers();
             // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
             builder.Services.AddEndpointsApiExplorer();
-            builder.Services.AddSwaggerGen(options => {
+            builder.Services.AddSwaggerGen(options =>
+            {
                 options.SwaggerDoc("v1", new OpenApiInfo { Title = "HuongVanTra.API", Version = "v1" });
-                options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme {
+                options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+                {
                     Name = "Authorization",
                     Type = SecuritySchemeType.Http,
                     Scheme = "bearer",
@@ -89,12 +99,14 @@ namespace HuongVanTra.API {
             var app = builder.Build();
 
             // Configure the HTTP request pipeline.
-            if (app.Environment.IsDevelopment()) {
+            if (app.Environment.IsDevelopment())
+            {
                 app.UseSwagger();
                 app.UseSwaggerUI();
             }
 
-            if (!app.Environment.IsDevelopment()) {
+            if (!app.Environment.IsDevelopment())
+            {
                 app.UseHttpsRedirection();
             }
 
@@ -104,19 +116,23 @@ namespace HuongVanTra.API {
             app.UseAuthorization();
 
             // Middleware: return friendly JSON messages for 401/403 responses
-            app.Use(async (context, next) => {
+            app.Use(async (context, next) =>
+            {
                 await next();
 
-                if (context.Response.HasStarted) {
+                if (context.Response.HasStarted)
+                {
                     return;
                 }
 
-                if (context.Response.StatusCode == StatusCodes.Status401Unauthorized) {
+                if (context.Response.StatusCode == StatusCodes.Status401Unauthorized)
+                {
                     context.Response.ContentType = "application/json";
                     var payload = JsonSerializer.Serialize(new { message = "Bạn chưa đăng nhập hoặc token không hợp lệ." });
                     await context.Response.WriteAsync(payload);
                 }
-                else if (context.Response.StatusCode == StatusCodes.Status403Forbidden) {
+                else if (context.Response.StatusCode == StatusCodes.Status403Forbidden)
+                {
                     context.Response.ContentType = "application/json";
                     var payload = JsonSerializer.Serialize(new { message = "Bạn không có quyền truy cập trang này." });
                     await context.Response.WriteAsync(payload);
