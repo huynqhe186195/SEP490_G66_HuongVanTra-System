@@ -16,6 +16,7 @@ import InventoryBomCreatePage from '../features/inventory/pages/InventoryBomCrea
 import InventoryPage from '../features/inventory/pages/InventoryPage.jsx'
 import InventoryImportPage from '../features/inventory/pages/InventoryImportPage.jsx'
 import InventoryStockPage from '../features/inventory/pages/InventoryStockPage.jsx'
+import ProfilePage from '../features/profile/pages/ProfilePage.jsx'
 import OrdersPage from '../features/orders/pages/OrdersPage.jsx'
 import OrderDetailPage from '../features/orders/pages/OrderDetailPage.jsx'
 import QuickOrderPage from '../features/orders/pages/QuickOrderPage.jsx'
@@ -58,6 +59,7 @@ function App() {
         <Route path="/customers" element={<CustomersPage />} />
         <Route path="/customers/create" element={<CustomerFormPage />} />
         <Route path="/customers/:customerId/edit" element={<CustomerFormPage />} />
+        <Route path="/profile" element={<ProfilePage />} />
         <Route path="/staff" element={<StaffPage />} />
         <Route path="/staff/create" element={<StaffCreatePage />} />
         <Route path="/staff/:id" element={<StaffDetailPage />} />
