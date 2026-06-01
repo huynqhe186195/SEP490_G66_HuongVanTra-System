@@ -2,6 +2,7 @@ using HuongVanTra.API.Authorization;
 using HuongVanTra.Core.Authorization;
 using HuongVanTra.Infrastructure.Data;
 using HuongVanTra.Service.Auth;
+using HuongVanTra.Service.Sales;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
@@ -20,6 +21,7 @@ namespace HuongVanTra.API {
             builder.Services.AddDbContext<AppDbContext>(options =>
                 options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString)));
             builder.Services.AddScoped<IAuthService, AuthService>();
+            builder.Services.AddScoped<IPosOrderService, PosOrderService>();
 
             builder.Services.AddCors(options => {
                 options.AddPolicy("Frontend", policy => {
