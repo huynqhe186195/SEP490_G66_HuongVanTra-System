@@ -77,6 +77,12 @@ namespace HuongVanTra.API
             var jwtIssuer = builder.Configuration["Jwt:Issuer"];
             var jwtAudience = builder.Configuration["Jwt:Audience"];
 
+            if (string.IsNullOrWhiteSpace(jwtKey) || string.IsNullOrWhiteSpace(jwtIssuer) || string.IsNullOrWhiteSpace(jwtAudience))
+            {
+                throw new InvalidOperationException(
+                    "JWT configuration is missing. Add Jwt:Key, Jwt:Issuer, and Jwt:Audience to appsettings.json (or user secrets / environment variables).");
+            }
+
             builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 .AddJwtBearer(options =>
                 {
