@@ -10,6 +10,8 @@ using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Identity;
+using HuongVanTra.Core.Entities.Identity;
 
 namespace HuongVanTra.API {
     public class Program {
@@ -20,6 +22,7 @@ namespace HuongVanTra.API {
             builder.Services.AddDbContext<AppDbContext>(options =>
                 options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString)));
             builder.Services.AddScoped<IAuthService, AuthService>();
+            builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
 
             builder.Services.AddCors(options => {
                 options.AddPolicy("Frontend", policy => {
