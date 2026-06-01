@@ -11,6 +11,13 @@ namespace HuongVanTra.Infrastructure.Configurations {
             builder.Property(e => e.EmployeeCode).HasMaxLength(50).IsRequired();
             builder.Property(e => e.FullName).HasMaxLength(150).IsRequired();
             builder.Property(e => e.Status).HasMaxLength(20).IsRequired();
+            builder.Property(e => e.Phone).HasMaxLength(20);
+            builder.Property(e => e.Notes).HasMaxLength(500);
+
+            builder.HasOne(e => e.Store)
+                   .WithMany()
+                   .HasForeignKey(e => e.StoreId)
+                   .OnDelete(DeleteBehavior.Restrict);
 
             builder.HasOne(e => e.User)
                    .WithOne(u => u.Employee)

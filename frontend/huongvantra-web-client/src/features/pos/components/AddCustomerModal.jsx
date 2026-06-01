@@ -1,5 +1,18 @@
-function AddCustomerModal({ isOpen, onClose }) {
+import { useState } from 'react'
+
+function AddCustomerModal({ isOpen, onClose, onSaved }) {
+  const [customerName, setCustomerName] = useState('')
+
   if (!isOpen) return null
+
+  const handleSave = () => {
+    const name = customerName.trim()
+    if (name && onSaved) {
+      onSaved(name)
+    }
+    setCustomerName('')
+    onClose()
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm" onClick={onClose}>
@@ -35,7 +48,13 @@ function AddCustomerModal({ isOpen, onClose }) {
 
               <div className="flex flex-col gap-1.5">
                 <label className="text-sm font-semibold text-gray-700">Tên khách hàng<span className="text-red-500">*</span></label>
-                <input className="w-full rounded-lg border border-gray-200 px-4 py-3 text-sm outline-none transition placeholder:text-gray-400 focus:border-[#538463] focus:ring-4 focus:ring-[#538463]/15" placeholder="Nhập họ và tên..." type="text" />
+                <input
+                  className="w-full rounded-lg border border-gray-200 px-4 py-3 text-sm outline-none transition placeholder:text-gray-400 focus:border-[#538463] focus:ring-4 focus:ring-[#538463]/15"
+                  placeholder="Nhập họ và tên..."
+                  type="text"
+                  value={customerName}
+                  onChange={(event) => setCustomerName(event.target.value)}
+                />
               </div>
 
               <div className="flex flex-col gap-1.5">
@@ -88,10 +107,10 @@ function AddCustomerModal({ isOpen, onClose }) {
           <button type="button" onClick={onClose} className="w-full rounded-lg border border-[#e5e7eb] px-8 py-3 font-medium text-gray-700 transition hover:bg-gray-50 sm:w-auto">
             Hủy bỏ
           </button>
-          <button type="button" className="w-full rounded-lg bg-[#538463] px-6 py-3 font-medium text-white shadow-sm transition hover:bg-[#436b50] sm:w-auto">
+          <button type="button" onClick={handleSave} className="w-full rounded-lg bg-[#538463] px-6 py-3 font-medium text-white shadow-sm transition hover:bg-[#436b50] sm:w-auto">
             Lưu &amp; Lên đơn ngay
           </button>
-          <button type="button" className="w-full rounded-lg bg-[#538463] px-8 py-3 font-medium text-white shadow-sm transition hover:bg-[#436b50] sm:w-auto">
+          <button type="button" onClick={handleSave} className="w-full rounded-lg bg-[#538463] px-8 py-3 font-medium text-white shadow-sm transition hover:bg-[#436b50] sm:w-auto">
             Lưu thông tin
           </button>
         </footer>

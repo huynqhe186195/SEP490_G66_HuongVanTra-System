@@ -2,10 +2,13 @@ using HuongVanTra.API.Authorization;
 using HuongVanTra.Core.Authorization;
 using HuongVanTra.Infrastructure.Data;
 using HuongVanTra.Service.Auth;
+using HuongVanTra.Service.Orders;
+using HuongVanTra.Service.Profile;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
@@ -22,6 +25,8 @@ namespace HuongVanTra.API {
             builder.Services.AddDbContext<AppDbContext>(options =>
                 options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString)));
             builder.Services.AddScoped<IAuthService, AuthService>();
+            builder.Services.AddScoped<IProfileService, ProfileService>();
+            builder.Services.AddScoped<IOrderService, OrderService>();
             builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
 
             builder.Services.AddCors(options => {
@@ -69,6 +74,8 @@ namespace HuongVanTra.API {
             builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 .AddJwtBearer(options =>
                 {
+                    // Keep JWT claim names as-is ("role", "sub") so [Authorize(Roles/Policies)] works.
+                    options.MapInboundClaims = false;
                     options.TokenValidationParameters = new TokenValidationParameters
                     {
                         ValidateIssuer = true,
@@ -79,7 +86,7 @@ namespace HuongVanTra.API {
                         ValidAudience = jwtAudience,
                         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey!)),
                         RoleClaimType = AppClaims.Role,
-                        NameClaimType = ClaimTypes.Name,
+                        NameClaimType = JwtRegisteredClaimNames.UniqueName,
                     };
                 });
 

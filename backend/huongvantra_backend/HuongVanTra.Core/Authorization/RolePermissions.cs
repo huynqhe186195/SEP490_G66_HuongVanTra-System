@@ -43,6 +43,7 @@ namespace HuongVanTra.Core.Authorization {
                 },
                 [AppRoles.SalesStaff] = new[] {
                     AppModules.Pos,
+                    AppModules.Orders,
                 },
                 [AppRoles.InventoryManager] = new[] {
                     AppModules.Products,

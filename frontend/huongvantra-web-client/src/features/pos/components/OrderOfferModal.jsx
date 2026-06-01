@@ -1,5 +1,17 @@
-function OrderOfferModal({ isOpen, onClose }) {
+import { useState } from 'react'
+
+function OrderOfferModal({ isOpen, onClose, onConfirm }) {
+  const [discountPercent, setDiscountPercent] = useState('')
+
   if (!isOpen) return null
+
+  const handleConfirm = () => {
+    const percent = Math.min(100, Math.max(0, Number(discountPercent) || 0))
+    if (onConfirm) {
+      onConfirm(percent)
+    }
+    onClose()
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm" onClick={onClose}>
@@ -36,10 +48,16 @@ function OrderOfferModal({ isOpen, onClose }) {
             <label className="mb-3 block text-sm font-semibold text-gray-700">Chiết khấu thủ công</label>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <div className="relative">
-                <select className="w-full appearance-none rounded-xl border border-gray-200 bg-white py-3 pl-4 pr-10 text-sm text-gray-500 outline-none transition focus:border-[#6d8c71] focus:ring-4 focus:ring-[#6d8c71]/15">
-                  <option>Chiết khấu %</option>
-                  <option>5%</option>
-                  <option>10%</option>
+                <select
+                  className="w-full appearance-none rounded-xl border border-gray-200 bg-white py-3 pl-4 pr-10 text-sm text-gray-500 outline-none transition focus:border-[#6d8c71] focus:ring-4 focus:ring-[#6d8c71]/15"
+                  value={discountPercent}
+                  onChange={(event) => setDiscountPercent(event.target.value)}
+                >
+                  <option value="">Chiết khấu %</option>
+                  <option value="5">5%</option>
+                  <option value="10">10%</option>
+                  <option value="15">15%</option>
+                  <option value="20">20%</option>
                 </select>
                 <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3">
                   <svg className="h-5 w-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
@@ -102,7 +120,7 @@ function OrderOfferModal({ isOpen, onClose }) {
           <button type="button" onClick={onClose} className="rounded-xl border border-gray-300 px-8 py-3 font-semibold text-gray-700 transition hover:bg-gray-50">
             Hủy
           </button>
-          <button type="button" className="rounded-xl bg-[#6d8c71] px-8 py-3 font-semibold text-white shadow-sm transition hover:bg-[#538463]">
+          <button type="button" onClick={handleConfirm} className="rounded-xl bg-[#6d8c71] px-8 py-3 font-semibold text-white shadow-sm transition hover:bg-[#538463]">
             Xác nhận
           </button>
         </footer>

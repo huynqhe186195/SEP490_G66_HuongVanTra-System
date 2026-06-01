@@ -13,11 +13,17 @@ namespace HuongVanTra.Core.Entities.Sales {
         public int CashierId { get; set; }
         public int? PromotionId { get; set; }
 
+        public decimal SubTotal { get; set; }
+        public decimal CouponDiscount { get; set; }
+        public decimal ManualDiscount { get; set; }
+        public decimal DeductAmount { get; set; }
         public decimal TotalAmount { get; set; }
+        public string? Notes { get; set; }
         public string PaymentStatus { get; set; } = "UNPAID";
         public string StockStatus { get; set; } = "PENDING";
-        public string OrderStatus { get; set; } = "COMPLETED";
+        public string OrderStatus { get; set; } = "PENDING";
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime? UpdatedAt { get; set; }
 
         public Store Store { get; set; } = null!;
         public Customer? Customer { get; set; }
