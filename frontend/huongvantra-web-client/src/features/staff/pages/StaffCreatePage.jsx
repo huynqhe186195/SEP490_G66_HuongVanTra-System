@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import AppTopHeader from '../../../components/shared/AppTopHeader.jsx'
+import PageHeader from '../../../components/shared/PageHeader.jsx'
 
 function StaffCreatePage() {
   const navigate = useNavigate()
@@ -26,7 +26,11 @@ function StaffCreatePage() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-6 [font-family:'Manrope',sans-serif]">
-      <AppTopHeader searchPlaceholder="Tim kiem he thong..." />
+      <PageHeader
+        title="Tạo nhân viên"
+        description="Thêm tài khoản nhân sự mới, gán vai trò và phạm vi sử dụng"
+        searchPlaceholder="Tim kiem he thong..."
+      />
 
       <section className="rounded-[24px] border border-[#c1c9c0]/30 bg-white p-6 shadow-sm">
         <div className="mb-8">

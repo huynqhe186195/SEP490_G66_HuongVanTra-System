@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import AppTopHeader from '../../../components/shared/AppTopHeader.jsx'
+import PageHeader from '../../../components/shared/PageHeader.jsx'
 
 const customerTemplates = {
   'C-CORP-001': {
@@ -73,7 +73,9 @@ function CustomerFormPage() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-6 [font-family:'Manrope',sans-serif]">
-      <AppTopHeader
+      <PageHeader
+        title={isEditMode ? 'Chỉnh sửa khách hàng' : 'Thêm khách hàng'}
+        description="Cập nhật thông tin liên hệ, hạng thành viên, công nợ và trạng thái tài khoản"
         searchPlaceholder={formTitle}
         rightContent={
           <div className="flex items-center gap-2 rounded-full bg-[#f6f4ec] px-3 py-1.5">

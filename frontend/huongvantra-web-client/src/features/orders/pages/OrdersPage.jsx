@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import PageHeader from '../../../components/shared/PageHeader.jsx'
 
 const orders = [
   { id: 'HV1028', customer: 'Nguyễn An', initials: 'NA', channel: 'Website', channelClass: 'bg-purple-50 text-purple-600', payment: 'COD', status: 'Đang giao', statusClass: 'bg-amber-50 text-amber-600', total: '860k', highlight: false },
@@ -18,33 +19,13 @@ const stats = [
 function OrdersPage() {
   return (
     <main className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-[#fbf9f1] p-8">
-      <header className="mb-8 flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-800">Đơn hàng đa kênh</h1>
-          <p className="mt-1 text-slate-500">Quản lý đơn từ POS, Website, Zalo, điện thoại và đại lý</p>
-        </div>
+      <PageHeader
+        title="Đơn hàng đa kênh"
+        description="Quản lý đơn từ POS, Website, Zalo, điện thoại và đại lý"
+        searchPlaceholder="Tìm kiếm đơn hàng, sản phẩm..."
+      />
 
-        <div className="flex items-center gap-4">
-          <div className="relative">
-            <input
-              className="w-80 rounded-xl border border-slate-200 bg-white py-2.5 pl-4 pr-10 text-sm shadow-sm outline-none focus:border-[#538463] focus:ring-2 focus:ring-[#538463]/20"
-              placeholder="Tìm kiếm đơn hàng, sản phẩm..."
-              type="text"
-            />
-            <div className="absolute right-3 top-2.5 text-slate-400">
-              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-              </svg>
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-[#538463]/20 bg-[#b6d4b8]/40 px-4 py-2.5 text-sm font-semibold text-[#538463]">
-            0968.567.433
-          </div>
-        </div>
-      </header>
-
-      <div className="mb-8 flex gap-3 rounded-2xl border border-slate-100 bg-white p-3 shadow-sm">
+      <div className="mb-8 flex flex-wrap items-center gap-3 rounded-2xl border border-slate-100 bg-white p-3 shadow-sm">
         <button type="button" className="rounded-xl bg-[#538463] px-5 py-2.5 text-sm font-medium text-white shadow-md shadow-[#538463]/20">
           Tất cả
         </button>
@@ -57,7 +38,8 @@ function OrdersPage() {
         <button type="button" className="rounded-xl bg-[#f6f4ec] px-5 py-2.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-200">
           Trạng thái
         </button>
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-3">
+          <div className="rounded-xl border border-[#538463]/20 bg-[#b6d4b8]/40 px-4 py-2.5 text-sm font-semibold text-[#538463]">0968.567.433</div>
           <Link className="inline-flex items-center gap-2 rounded-xl bg-[#b6d4b8] px-5 py-2.5 text-sm font-bold text-[#538463] transition-colors hover:bg-[#a7c9aa]" to="/orders/create">
             <span className="text-xl leading-none">+</span>
             Tạo mới

@@ -1,9 +1,12 @@
+using HuongVanTra.Core.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace HuongVanTra.API.Controllers
 {
     [ApiController]
     [Route("[controller]")]
+    [Authorize(Policy = AppPolicies.ViewDashboard)]
     public class WeatherForecastController : ControllerBase
     {
         private static readonly string[] Summaries = new[]

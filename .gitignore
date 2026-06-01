@@ -1,13 +1,14 @@
-# OS/IDE
+# OS / IDE
 .DS_Store
 Thumbs.db
-.vscode/
 .idea/
+.vscode/
 *.suo
+*.user
+*.userosscache
+*.sln.docstates
 *.ntvs*
 *.njsproj
-*.sln.docstates
-*.user
 
 # Environment and security
 .env
@@ -21,3 +22,54 @@ gemini.md
 # Logs
 .antigravity/logs/
 *.ai.log
+[Ll]og/
+[Ll]ogs/
+
+# .NET / Visual Studio — build outputs
+[Bb]in/
+[Oo]bj/
+[Oo]ut/
+[Bb]uild/
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+artifacts/
+publish/
+[Tt]est[Rr]esult*/
+*.binlog
+*.Cache
+*.cache
+*.mdb
+*.opendb
+*.opensdf
+*.sdf
+*.VC.db
+*.VC.VC.opendb
+
+# Visual Studio / Rider
+.vs/
+**/.vs/
+**/CopilotIndices/
+**/FileContentIndex/
+**/DesignTimeBuild/
+*.vsidx
+*.vsp
+*.vspx
+*.vssscc
+*.vspscc
+
+# NuGet
+packages/
+*.nupkg
+*.snupkg
+.nuget/
+project.lock.json
+project.fragment.lock.json
+
+# Frontend (Vite / npm)
+**/node_modules/
+**/dist/
+**/dist-ssr/
+**/.vite/
+*.local

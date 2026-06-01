@@ -1,4 +1,4 @@
-import AppTopHeader from '../../../components/shared/AppTopHeader.jsx'
+import PageHeader from '../../../components/shared/PageHeader.jsx'
 
 const reportRows = [
   {
@@ -100,14 +100,10 @@ function statusBadge(status) {
 function ReportsPage() {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-6 [font-family:'Manrope',sans-serif]">
-      <AppTopHeader searchPlaceholder="Tim kiem bao cao..." />
+      <PageHeader title="Báo cáo kho hàng" description="Theo dõi tồn kho, định mức nguyên vật liệu và biến động hàng hóa" searchPlaceholder="Tim kiem bao cao..." />
 
-      <section className="rounded-[24px] border border-[#c1c9c0]/30 bg-white p-6 shadow-sm">
-        <div className="mb-8 flex flex-col justify-between gap-4 xl:flex-row xl:items-end">
-          <div>
-            <h1 className="text-3xl font-bold text-[#356647]">Xuat bao cao Kho hang</h1>
-            <p className="text-sm text-[#414942]">Theo doi ton kho, dinh muc nguyen vat lieu va bien dong hang hoa</p>
-          </div>
+      <div className="rounded-2xl border border-[#c1c9c0]/30 bg-white p-3 shadow-sm">
+        <div className="flex flex-wrap items-center justify-end gap-3">
           <button
             type="button"
             className="inline-flex items-center gap-2 rounded-lg bg-[#4a6242] px-6 py-2.5 text-sm font-semibold text-white transition-all hover:shadow-lg active:scale-95"
@@ -116,7 +112,9 @@ function ReportsPage() {
             Xuat bao cao (Excel)
           </button>
         </div>
+      </div>
 
+      <section className="rounded-[24px] border border-[#c1c9c0]/30 bg-white p-6 shadow-sm">
         <div className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-3">
           <article className="rounded-xl border border-[#c1c9c0] bg-white p-5 shadow-sm">
             <div className="mb-4 flex items-start justify-between">

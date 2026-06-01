@@ -1,5 +1,7 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import AdminLayout from '../layouts/AdminLayout.jsx'
+import HomeRedirect from './HomeRedirect.jsx'
+import RootRedirect from './RootRedirect.jsx'
 import ForgotPasswordPage from '../features/auth/pages/ForgotPasswordPage.jsx'
 import LoginPage from '../features/auth/pages/LoginPage.jsx'
 import OtpVerificationPage from '../features/auth/pages/OtpVerificationPage.jsx'
@@ -30,12 +32,13 @@ import StaffPage from '../features/staff/pages/StaffPage.jsx'
 function App() {
   return (
     <Routes>
+      <Route index element={<RootRedirect />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/forgot-password/otp" element={<OtpVerificationPage />} />
 
       <Route element={<AdminLayout />}>
-        <Route index element={<Navigate to="/inventory" replace />} />
+        <Route index element={<HomeRedirect />} />
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/pos" element={<PosPage />} />
         <Route path="/orders" element={<OrdersPage />} />
@@ -63,7 +66,7 @@ function App() {
         <Route path="/reports/customers" element={<ReportsCustomersPage />} />
         <Route path="/integrations" element={<IntegrationsPage />} />
       </Route>
-      <Route path="*" element={<Navigate to="/inventory" replace />} />
+      <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
   )
 }

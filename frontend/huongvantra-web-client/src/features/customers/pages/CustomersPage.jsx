@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import AppTopHeader from '../../../components/shared/AppTopHeader.jsx'
+import PageHeader from '../../../components/shared/PageHeader.jsx'
 
 const corporateStats = [
   { label: 'Total Corporate', value: '128', note: '+5% this month', noteClass: 'text-[#4a6242]' },
@@ -181,7 +181,11 @@ function CustomersPage() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-6 [font-family:'Manrope',sans-serif]">
-      <AppTopHeader searchPlaceholder="Search customers..." />
+      <PageHeader
+        title="Khách hàng"
+        description="Quản lý khách VIP và khách doanh nghiệp, theo dõi chi tiêu và hợp đồng"
+        searchPlaceholder="Search customers..."
+      />
 
       <main className="flex flex-col gap-4">
         <section className="flex flex-col gap-4 rounded-[24px] border border-[#c1c9c0]/30 bg-white p-6 shadow-sm">

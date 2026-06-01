@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import AppTopHeader from '../../../components/shared/AppTopHeader.jsx'
+import PageHeader from '../../../components/shared/PageHeader.jsx'
 
 const customerRows = [
   {
@@ -67,19 +67,20 @@ function avatarClass(tier) {
 function ReportsCustomersPage() {
   return (
     <div className="relative flex min-h-0 flex-1 flex-col gap-6 [font-family:'Manrope',sans-serif]">
-      <AppTopHeader
+      <PageHeader
+        title="Báo cáo khách hàng"
+        description="Xuất và phân tích dữ liệu khách hàng, hạng thành viên và chi tiêu"
         searchPlaceholder="Tim kiem bao cao hoac khach hang..."
-        rightContent={
-          <div className="flex items-center gap-2">
-            <Link to="/reports" className="rounded-full bg-[#eae8e0] px-4 py-2 text-xs font-semibold text-[#414942]">
-              Tong quan
-            </Link>
-            <Link to="/reports/customers" className="rounded-full bg-[#356647] px-4 py-2 text-xs font-semibold text-white">
-              Khach hang
-            </Link>
-          </div>
-        }
       />
+
+      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-[#c1c9c0]/30 bg-white p-3 shadow-sm">
+        <Link to="/reports" className="rounded-full bg-[#eae8e0] px-4 py-2 text-xs font-semibold text-[#414942]">
+          Tong quan
+        </Link>
+        <Link to="/reports/customers" className="rounded-full bg-[#356647] px-4 py-2 text-xs font-semibold text-white">
+          Khach hang
+        </Link>
+      </div>
 
       <section className="rounded-[24px] border border-[#c1c9c0]/30 bg-white p-6 shadow-sm">
         <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">

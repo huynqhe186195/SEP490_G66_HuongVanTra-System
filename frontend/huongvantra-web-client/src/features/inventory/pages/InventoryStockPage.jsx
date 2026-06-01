@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import PageHeader from '../../../components/shared/PageHeader.jsx'
 
 const stockRows = [
   { code: 'KHO-01', product: 'Hồng Trà 100g', batch: 'Lô A05', expiry: '05/2027', stock: '86', alert: 'Ổn định', accent: 'text-gray-600' },
@@ -10,45 +11,32 @@ const stockRows = [
 function InventoryStockPage() {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-6">
-      <header className="rounded-[24px] border border-gray-200 bg-[#fefcf3] px-8 py-6 shadow-sm">
-        <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-800">Kho &amp; tồn hàng</h1>
-            <p className="mt-1 text-sm text-gray-500">Theo dõi tồn kho, lô hàng, hạn dùng và nhập xuất</p>
-          </div>
+      <PageHeader
+        title="Kho &amp; tồn hàng"
+        description="Theo dõi tồn kho, lô hàng, hạn dùng và nhập xuất"
+        searchPlaceholder="Tìm kiếm đơn hàng, sản phẩm..."
+      />
 
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <div className="relative">
-              <input
-                className="w-full rounded-xl border-none bg-white py-2 pl-4 pr-10 text-sm ring-1 ring-gray-200 focus:ring-2 focus:ring-[#538463] sm:w-64"
-                placeholder="Tìm kiếm đơn hàng, sản phẩm..."
-                type="text"
-              />
-            </div>
-            <div className="rounded-lg bg-[#c3dbbc]/40 px-4 py-2 text-sm font-bold text-[#446e52]">0968.567.433</div>
-          </div>
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-gray-100 bg-white p-3 shadow-sm">
+        <div className="flex flex-wrap items-center gap-3">
+          <button type="button" className="rounded-lg bg-[#446e52] px-5 py-2 text-sm font-medium text-white">
+            Tất cả
+          </button>
+          <button type="button" className="rounded-lg bg-[#c3dbbc]/30 px-5 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-[#c3dbbc]/50">
+            Hôm nay
+          </button>
+          <button type="button" className="rounded-lg bg-[#c3dbbc]/30 px-5 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-[#c3dbbc]/50">
+            Theo kênh
+          </button>
+          <button type="button" className="rounded-lg bg-[#c3dbbc]/30 px-5 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-[#c3dbbc]/50">
+            Trạng thái
+          </button>
         </div>
 
-        <section className="mt-5">
-          <div className="flex items-center space-x-3">
-            <button type="button" className="bg-[#446e52] px-5 py-2 text-sm font-medium text-white rounded-lg">
-              Tất cả
-            </button>
-            <button type="button" className="bg-[#c3dbbc]/30 px-5 py-2 text-sm font-medium text-gray-700 rounded-lg transition-colors hover:bg-[#c3dbbc]/50">
-              Hôm nay
-            </button>
-            <button type="button" className="bg-[#c3dbbc]/30 px-5 py-2 text-sm font-medium text-gray-700 rounded-lg transition-colors hover:bg-[#c3dbbc]/50">
-              Theo kênh
-            </button>
-            <button type="button" className="bg-[#c3dbbc]/30 px-5 py-2 text-sm font-medium text-gray-700 rounded-lg transition-colors hover:bg-[#c3dbbc]/50">
-              Trạng thái
-            </button>
-            <Link to="/inventory/bom" className="ml-auto flex items-center rounded-lg bg-[#c3dbbc] px-5 py-2 text-sm font-bold text-[#446e52]">
-              <span className="mr-1.5">+</span> Tao moi BOM
-            </Link>
-          </div>
-        </section>
-      </header>
+        <Link to="/inventory/bom" className="flex items-center rounded-lg bg-[#c3dbbc] px-5 py-2 text-sm font-bold text-[#446e52]">
+          <span className="mr-1.5">+</span> Tao moi BOM
+        </Link>
+      </div>
 
       <section className="overflow-hidden rounded-[24px] border border-gray-100 bg-white shadow-sm">
         <div className="border-b border-gray-100 px-6 py-5">
