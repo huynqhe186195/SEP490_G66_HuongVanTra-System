@@ -9,6 +9,7 @@ namespace HuongVanTra.Infrastructure.Configurations.Products {
             builder.HasKey(x => x.Id);
 
             builder.Property(x => x.Sku).HasMaxLength(50).IsRequired();
+            builder.Property(x => x.Name).HasMaxLength(200).IsRequired();
             builder.Property(x => x.ProductType).HasMaxLength(30).IsRequired();
             builder.Property(x => x.Price).HasColumnType("decimal(18,2)");
             builder.Property(x => x.MinStockAlert).HasColumnType("decimal(18,2)");

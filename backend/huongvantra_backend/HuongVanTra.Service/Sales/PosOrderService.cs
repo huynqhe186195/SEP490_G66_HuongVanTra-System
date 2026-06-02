@@ -21,7 +21,7 @@ namespace HuongVanTra.Service.Sales {
             try {
                 var order = BuildOrder(command, productMap, discount, membershipDiscount);
                 order.StockStatus = "pending_deduct";
-                order.PaymentStatus = "pending_payment";
+                order.PaymentStatus = "paid";
                 order.OrderStatus = "confirmed";
 
                 _db.Orders.Add(order);
@@ -106,7 +106,7 @@ namespace HuongVanTra.Service.Sales {
             var productIds = command.Items.Select(i => i.ProductId).Distinct().ToList();
             var products = await _db.Products
                 .Where(p => productIds.Contains(p.Id))
-                .Select(p => new { p.Id, p.Sku, p.Price })
+                .Select(p => new { p.Id, p.Name, p.Sku, p.Price })
                 .ToListAsync();
 
             if (products.Count != productIds.Count)
@@ -114,7 +114,7 @@ namespace HuongVanTra.Service.Sales {
 
             var productMap = products.ToDictionary(
                 p => p.Id,
-                p => (Name: p.Sku, Sku: p.Sku, Price: p.Price));
+                p => (Name: p.Name, Sku: p.Sku, Price: p.Price));
 
             var discount = await GetDiscountAsync(command.PromotionId);
             var membershipDiscount = await GetMembershipDiscountAsync(command.CustomerId);
@@ -170,9 +170,16 @@ namespace HuongVanTra.Service.Sales {
                 ? afterPromo * (1 - membershipDiscountPercent / 100)
                 : afterPromo;
 
+            var roundedTotal = Math.Round(totalAmount, 2);
+            var paymentsTotal = command.Payments.Sum(p => p.Amount);
+            if (paymentsTotal != roundedTotal)
+                throw new ArgumentException(
+                    $"Total payments amount ({paymentsTotal}) must equal order total ({roundedTotal}).");
+
             var payments = command.Payments.Select(p => new PaymentTransaction {
                 PaymentMethod   = p.PaymentMethod,
                 Amount          = p.Amount,
+                Status          = "confirmed",
                 TransactionDate = DateTime.UtcNow
             }).ToList();
 
@@ -182,8 +189,7 @@ namespace HuongVanTra.Service.Sales {
                 CustomerId          = command.CustomerId,
                 CashierId           = command.CashierId,
                 PromotionId         = command.PromotionId,
-                TotalAmount         = Math.Round(totalAmount, 2),
-                // Caller sets PaymentStatus / StockStatus / OrderStatus
+                TotalAmount         = roundedTotal,
                 PaymentStatus       = "unpaid",
                 StockStatus         = "pending_deduct",
                 OrderStatus         = "confirmed",

@@ -18,6 +18,7 @@ namespace HuongVanTra.Core.Entities.Sales {
         public string PaymentStatus { get; set; } = "unpaid";
         public string StockStatus { get; set; } = "pending_deduct";
         public string OrderStatus { get; set; } = "confirmed";
+        public string? ShippingAddress { get; set; }
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime? LastRemindedAt { get; set; }
 
