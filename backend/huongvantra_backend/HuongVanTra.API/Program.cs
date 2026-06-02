@@ -1,22 +1,25 @@
 using HuongVanTra.API.Authorization;
 using HuongVanTra.Core.Authorization;
+using HuongVanTra.Core.Interfaces;
 using HuongVanTra.Infrastructure.Data;
+using HuongVanTra.Infrastructure.Repositories;
 using HuongVanTra.Service.Auth;
 using HuongVanTra.Service.Orders;
 using HuongVanTra.Service.Profile;
 using HuongVanTra.Service.Sales;
 using HuongVanTra.Service.Staff;
-using Microsoft.EntityFrameworkCore;
+using HuongVanTra.Service.Implementations;
+using HuongVanTra.Service.Interfaces;
+using HuongVanTra.Core.Entities.Identity;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Identity;
-using HuongVanTra.Core.Entities.Identity;
 
 namespace HuongVanTra.API
 {
@@ -29,6 +32,7 @@ namespace HuongVanTra.API
             var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
             builder.Services.AddDbContext<AppDbContext>(options =>
                 options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString)));
+
             builder.Services.AddScoped<IAuthService, AuthService>();
             builder.Services.AddScoped<IProfileService, ProfileService>();
             builder.Services.AddScoped<IStaffAccountService, StaffAccountService>();
@@ -51,6 +55,12 @@ namespace HuongVanTra.API
                         .AllowAnyMethod();
                 });
             });
+
+            builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
+            builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
+            builder.Services.AddScoped<IInventoryService, InventoryService>();
+            builder.Services.AddScoped<IProductionService, ProductionService>();
+            builder.Services.AddScoped<ICustomerService, CustomerService>();
 
             builder.Services.AddControllers();
             // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
