@@ -26,8 +26,19 @@ namespace HuongVanTra.Service.Sales {
                 order.StockStatus   = "pending_deduct";
                 order.OrderStatus   = "confirmed";
 
+                // OrderCode chưa có ở đây — sẽ set sau SaveChanges; lưu tạm để gán cho PaymentTransaction sau
                 _db.Orders.Add(order);
                 await _db.SaveChangesAsync();
+
+                // Tạo PaymentTransaction pending, reference = order_code
+                _db.PaymentTransactions.Add(new PaymentTransaction {
+                    OrderId         = order.Id,
+                    PaymentMethod   = "VIETQR",
+                    Amount          = order.TotalAmount,
+                    Status          = "pending",
+                    ReferenceCode   = order.OrderCode,
+                    TransactionDate = DateTime.UtcNow
+                });
 
                 await CreateStockDeductQueueAsync(command, order.Id);
                 await UpdateCustomerSpendAsync(command.CustomerId, order.TotalAmount);
@@ -58,6 +69,15 @@ namespace HuongVanTra.Service.Sales {
 
                 _db.Orders.Add(order);
                 await _db.SaveChangesAsync();
+
+                // Tạo PaymentTransaction unpaid cho COD
+                _db.PaymentTransactions.Add(new PaymentTransaction {
+                    OrderId         = order.Id,
+                    PaymentMethod   = "COD",
+                    Amount          = order.TotalAmount,
+                    Status          = "unpaid",
+                    TransactionDate = DateTime.UtcNow
+                });
 
                 await CreateStockDeductQueueAsync(command, order.Id);
                 await UpdateCustomerSpendAsync(command.CustomerId, order.TotalAmount);
@@ -97,7 +117,7 @@ namespace HuongVanTra.Service.Sales {
             var productIds = command.Items.Select(i => i.ProductId).Distinct().ToList();
             var products = await _db.Products
                 .Where(p => productIds.Contains(p.Id))
-                .Select(p => new { p.Id, p.Sku, p.Price })
+                .Select(p => new { p.Id, p.Name, p.Sku, p.Price })
                 .ToListAsync();
 
             if (products.Count != productIds.Count)
@@ -105,7 +125,7 @@ namespace HuongVanTra.Service.Sales {
 
             var productMap = products.ToDictionary(
                 p => p.Id,
-                p => (Name: p.Sku, Sku: p.Sku, Price: p.Price));
+                p => (Name: p.Name, Sku: p.Sku, Price: p.Price));
 
             var discount = await GetDiscountAsync(command.PromotionId);
             var membershipDiscount = await GetMembershipDiscountAsync(command.CustomerId);
@@ -168,6 +188,7 @@ namespace HuongVanTra.Service.Sales {
                 PaymentStatus       = "unpaid",
                 StockStatus         = "pending_deduct",
                 OrderStatus         = "confirmed",
+                ShippingAddress     = command.ShippingAddress,
                 CreatedAt           = DateTime.UtcNow,
                 OrderItems          = items
             };
@@ -255,6 +276,50 @@ namespace HuongVanTra.Service.Sales {
             };
         }
 
+        public async Task<CodRemindedResult> MarkCodRemindedAsync(int orderId, int employeeId) {
+            var order = await _db.Orders
+                .FirstOrDefaultAsync(o => o.Id == orderId)
+                ?? throw new ArgumentException($"Order {orderId} does not exist.");
+
+            if (order.PaymentMethod != "COD")
+                throw new InvalidOperationException($"Order {orderId} is not a COD order.");
+
+            if (order.PaymentStatus == "paid")
+                throw new InvalidOperationException($"Order {orderId} has already been paid.");
+
+            if (order.OrderStatus == "cancelled")
+                throw new InvalidOperationException($"Order {orderId} is cancelled and cannot be reminded.");
+
+            await using var tx = await _db.Database.BeginTransactionAsync();
+            try {
+                var remindedAt = DateTime.UtcNow;
+                order.LastRemindedAt = remindedAt;
+
+                _db.AuditLogs.Add(new AuditLog {
+                    Action = "cod_mark_reminded",
+                    EntityType = "orders",
+                    EntityId = order.Id,
+                    UserId = employeeId,
+                    StoreId = order.StoreId,
+                    Status = "SUCCESS",
+                    CreatedAt = remindedAt
+                });
+
+                await _db.SaveChangesAsync();
+                await tx.CommitAsync();
+
+                return new CodRemindedResult {
+                    OrderId = order.Id,
+                    OrderCode = order.OrderCode,
+                    RemindedAt = remindedAt
+                };
+            }
+            catch {
+                await tx.RollbackAsync();
+                throw;
+            }
+        }
+
         public async Task<List<OverdueCodOrderResult>> GetOverdueCodOrdersAsync() {
             var cutoff = DateTime.UtcNow.AddDays(-7);
 
@@ -281,6 +346,59 @@ namespace HuongVanTra.Service.Sales {
                 LastRemindedAt = o.LastRemindedAt,
                 DaysPending    = (int)(now - (o.LastRemindedAt ?? o.CreatedAt)).TotalDays
             }).ToList();
+        }
+
+        public async Task<VietQrPaidResult> MarkVietQrPaidAsync(int orderId, int employeeId) {
+            var order = await _db.Orders
+                .Include(o => o.PaymentTransactions)
+                .FirstOrDefaultAsync(o => o.Id == orderId)
+                ?? throw new ArgumentException($"Order {orderId} does not exist.");
+
+            if (order.PaymentMethod != "VIETQR")
+                throw new InvalidOperationException($"Order {orderId} is not a VIETQR order.");
+
+            if (order.PaymentStatus == "paid")
+                throw new InvalidOperationException($"Order {orderId} has already been marked as paid.");
+
+            if (order.OrderStatus == "cancelled")
+                throw new InvalidOperationException($"Order {orderId} is cancelled and cannot be updated.");
+
+            await using var tx = await _db.Database.BeginTransactionAsync();
+            try {
+                var confirmedAt = DateTime.UtcNow;
+                order.PaymentStatus = "paid";
+
+                var paymentTxn = order.PaymentTransactions.FirstOrDefault();
+                if (paymentTxn is not null) {
+                    paymentTxn.Status = "paid";
+                    paymentTxn.ConfirmedById = employeeId;
+                    paymentTxn.ConfirmedAt = confirmedAt;
+                }
+
+                _db.AuditLogs.Add(new AuditLog {
+                    Action     = "vietqr_mark_paid",
+                    EntityType = "orders",
+                    EntityId   = order.Id,
+                    UserId     = employeeId,
+                    StoreId    = order.StoreId,
+                    Status     = "SUCCESS",
+                    CreatedAt  = confirmedAt
+                });
+
+                await _db.SaveChangesAsync();
+                await tx.CommitAsync();
+
+                return new VietQrPaidResult {
+                    OrderId       = order.Id,
+                    OrderCode     = order.OrderCode,
+                    PaymentStatus = order.PaymentStatus,
+                    ConfirmedAt   = confirmedAt
+                };
+            }
+            catch {
+                await tx.RollbackAsync();
+                throw;
+            }
         }
 
         private static string GenerateOrderCode() {

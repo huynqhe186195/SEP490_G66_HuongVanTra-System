@@ -17,4 +17,17 @@ namespace HuongVanTra.Service.Sales.Models {
         public DateTime? LastRemindedAt { get; set; }
         public int DaysPending { get; set; }
     }
+
+    public class CodRemindedResult {
+        public int OrderId { get; set; }
+        public string OrderCode { get; set; } = null!;
+        public DateTime RemindedAt { get; set; }
+    }
+
+    public class VietQrPaidResult {
+        public int OrderId { get; set; }
+        public string OrderCode { get; set; } = null!;
+        public string PaymentStatus { get; set; } = null!;
+        public DateTime ConfirmedAt { get; set; }
+    }
 }

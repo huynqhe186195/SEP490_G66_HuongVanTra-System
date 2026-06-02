@@ -74,6 +74,34 @@ namespace HuongVanTra.API.Controllers {
         }
 
         /// <summary>
+        /// Kế toán/nhân sự đối soát thủ công: xác nhận đã nhận tiền VietQR.
+        /// Cập nhật payment_status = paid, PaymentTransaction.Status = paid, ghi audit log.
+        /// Chỉ áp dụng cho đơn VIETQR chưa paid, chưa cancelled.
+        /// </summary>
+        [HttpPatch("{id:int}/vietqr/mark-paid")]
+        public async Task<ActionResult> MarkVietQrPaid(int id) {
+            var employeeId = User.GetEmployeeId();
+            if (employeeId is null)
+                return Unauthorized("Employee ID not found in token.");
+
+            try {
+                var result = await _onlineOrderService.MarkVietQrPaidAsync(id, employeeId.Value);
+                return Ok(new {
+                    result.OrderId,
+                    result.OrderCode,
+                    result.PaymentStatus,
+                    result.ConfirmedAt
+                });
+            }
+            catch (ArgumentException ex) {
+                return NotFound(ex.Message);
+            }
+            catch (InvalidOperationException ex) {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        /// <summary>
         /// Nhân sự COD tick thủ công "Đã giao hàng và Đã nhận tiền".
         /// Cập nhật payment_status = paid, order_status = completed, ghi audit log.
         /// </summary>
@@ -146,6 +174,32 @@ namespace HuongVanTra.API.Controllers {
             OrderStatus = result.OrderStatus,
             ConfirmedAt = result.ConfirmedAt,
         };
+
+        /// <summary>
+        /// Nhân sự COD đánh dấu đã nhắc đơn treo.
+        /// Cập nhật last_reminded_at để đơn không xuất hiện lại trong overdue list cho đến sau 7 ngày.
+        /// </summary>
+        [HttpPatch("{id:int}/cod/mark-reminded")]
+        public async Task<ActionResult> MarkCodReminded(int id) {
+            var employeeId = User.GetEmployeeId();
+            if (employeeId is null)
+                return Unauthorized("Employee ID not found in token.");
+
+            try {
+                var result = await _onlineOrderService.MarkCodRemindedAsync(id, employeeId.Value);
+                return Ok(new {
+                    result.OrderId,
+                    result.OrderCode,
+                    result.RemindedAt
+                });
+            }
+            catch (ArgumentException ex) {
+                return NotFound(ex.Message);
+            }
+            catch (InvalidOperationException ex) {
+                return BadRequest(ex.Message);
+            }
+        }
 
         /// <summary>
         /// Danh sách đơn COD treo: chưa giao thành công, chưa hủy,

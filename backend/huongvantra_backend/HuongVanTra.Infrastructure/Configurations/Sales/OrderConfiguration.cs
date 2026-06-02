@@ -19,6 +19,7 @@ namespace HuongVanTra.Infrastructure.Configurations.Sales {
             builder.Property(x => x.PaymentStatus).HasMaxLength(30).IsRequired();
             builder.Property(x => x.StockStatus).HasMaxLength(30).IsRequired();
             builder.Property(x => x.OrderStatus).HasMaxLength(30).IsRequired();
+            builder.Property(x => x.ShippingAddress).HasMaxLength(500).IsRequired(false);
             builder.Property(x => x.LastRemindedAt).IsRequired(false);
             builder.Property(x => x.UpdatedAt).IsRequired(false);
 
