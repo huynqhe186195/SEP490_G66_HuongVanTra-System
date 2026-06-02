@@ -234,6 +234,122 @@ namespace HuongVanTra.Service.Sales {
             });
         }
 
+        public async Task<CodRejectedResult> MarkCodRejectedAsync(int orderId, int employeeId, string? reason) {
+            var order = await _db.Orders
+                .Include(o => o.OrderItems)
+                .Include(o => o.StockDeductQueue)
+                .FirstOrDefaultAsync(o => o.Id == orderId)
+                ?? throw new ArgumentException($"Order {orderId} does not exist.");
+
+            if (order.PaymentMethod != "COD")
+                throw new InvalidOperationException($"Order {orderId} is not a COD order.");
+
+            if (order.OrderStatus == "cancelled")
+                throw new InvalidOperationException($"Order {orderId} is already cancelled.");
+
+            if (order.PaymentStatus == "paid")
+                throw new InvalidOperationException($"Order {orderId} has already been paid and cannot be rejected.");
+
+            var queue = order.StockDeductQueue;
+            var stockReversed = false;
+
+            await using var tx = await _db.Database.BeginTransactionAsync();
+            try {
+                var cancelledAt = DateTime.UtcNow;
+
+                if (queue is not null && queue.Status == "confirmed") {
+                    var warehouse = await _db.Warehouses
+                        .FirstOrDefaultAsync(w => w.StoreId == order.StoreId)
+                        ?? throw new InvalidOperationException($"No warehouse found for store {order.StoreId}.");
+
+                    await ReverseInventoryAsync(order, queue, warehouse.Id, employeeId);
+                    stockReversed = true;
+                }
+
+                if (queue is not null && queue.Status != "cancelled")
+                    queue.Status = "cancelled";
+
+                order.OrderStatus  = "cancelled";
+                order.StockStatus  = "cancelled";
+                order.UpdatedAt    = cancelledAt;
+
+                _db.AuditLogs.Add(new AuditLog {
+                    Action     = "cod_rejected",
+                    EntityType = "orders",
+                    EntityId   = order.Id,
+                    UserId     = employeeId,
+                    StoreId    = order.StoreId,
+                    Status     = "SUCCESS",
+                    NewValues  = reason,
+                    CreatedAt  = cancelledAt
+                });
+
+                await _db.SaveChangesAsync();
+                await tx.CommitAsync();
+
+                return new CodRejectedResult {
+                    OrderId       = order.Id,
+                    OrderCode     = order.OrderCode,
+                    OrderStatus   = order.OrderStatus,
+                    StockStatus   = order.StockStatus,
+                    StockReversed = stockReversed,
+                    Reason        = reason,
+                    CancelledAt   = cancelledAt
+                };
+            }
+            catch {
+                await tx.RollbackAsync();
+                throw;
+            }
+        }
+
+        private async Task ReverseInventoryAsync(Order order, StockDeductQueue queue, int warehouseId, int employeeId) {
+            var snapshot = JsonSerializer.Deserialize<List<BomSnapshotEntry>>(queue.BomSnapshot) ?? new();
+
+            var deductMap = snapshot
+                .GroupBy(e => e.MaterialId)
+                .ToDictionary(g => g.Key, g => g.Sum(e => e.Quantity));
+
+            if (deductMap.Count == 0) return;
+
+            var materialIds = deductMap.Keys.ToList();
+            var balances = await _db.InventoryBalances
+                .Where(b => b.WarehouseId == warehouseId && materialIds.Contains(b.ProductId))
+                .ToDictionaryAsync(b => b.ProductId);
+
+            var txnCode = $"REV-{order.OrderCode}";
+            foreach (var (materialId, qty) in deductMap) {
+                if (!balances.TryGetValue(materialId, out var balance)) {
+                    balance = new HuongVanTra.Core.Entities.Inventory.InventoryBalance {
+                        WarehouseId = warehouseId,
+                        ProductId   = materialId,
+                        Quantity    = 0
+                    };
+                    _db.InventoryBalances.Add(balance);
+                    await _db.SaveChangesAsync();
+                    balances[materialId] = balance;
+                }
+
+                var before = balance.Quantity;
+                var after  = before + qty;
+                balance.Quantity = after;
+
+                _db.InventoryTransactions.Add(new HuongVanTra.Core.Entities.Inventory.InventoryTransaction {
+                    TxnCode        = $"{txnCode}-{materialId}",
+                    WarehouseId    = warehouseId,
+                    ProductId      = materialId,
+                    TxnType        = "IN",
+                    Quantity       = qty,
+                    QuantityBefore = before,
+                    QuantityAfter  = after,
+                    RefType        = "ORDER_CANCEL",
+                    RefId          = order.Id,
+                    CreatedById    = employeeId,
+                    CreatedAt      = DateTime.UtcNow
+                });
+            }
+        }
+
         private async Task UpdateCustomerSpendAsync(int? customerId, decimal amount) {
             if (customerId is null) return;
             var customer = await _db.Customers

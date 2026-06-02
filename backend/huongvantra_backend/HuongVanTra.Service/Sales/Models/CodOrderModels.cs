@@ -30,4 +30,14 @@ namespace HuongVanTra.Service.Sales.Models {
         public string PaymentStatus { get; set; } = null!;
         public DateTime ConfirmedAt { get; set; }
     }
+
+    public class CodRejectedResult {
+        public int OrderId { get; set; }
+        public string OrderCode { get; set; } = null!;
+        public string OrderStatus { get; set; } = null!;
+        public string StockStatus { get; set; } = null!;
+        public bool StockReversed { get; set; }
+        public string? Reason { get; set; }
+        public DateTime CancelledAt { get; set; }
+    }
 }
