@@ -172,9 +172,9 @@ namespace HuongVanTra.Service.Sales {
 
             var roundedTotal = Math.Round(totalAmount, 2);
             var paymentsTotal = command.Payments.Sum(p => p.Amount);
-            if (paymentsTotal != roundedTotal)
+            if (paymentsTotal < 0 || paymentsTotal > roundedTotal)
                 throw new ArgumentException(
-                    $"Total payments amount ({paymentsTotal}) must equal order total ({roundedTotal}).");
+                    $"Total payments amount ({paymentsTotal}) must be between 0 and order total ({roundedTotal}).");
 
             var payments = command.Payments.Select(p => new PaymentTransaction {
                 PaymentMethod   = p.PaymentMethod,

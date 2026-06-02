@@ -8,7 +8,8 @@ namespace HuongVanTra.Service.Customers {
             string? status,
             int? tierId,
             int? assignedEmployeeId,
-            CustomerAccessContext accessContext);
+            CustomerAccessContext accessContext,
+            bool forPos = false);
 
         Task<CustomerResult> GetCustomerByIdAsync(int id, CustomerAccessContext accessContext);
         Task<CustomerResult> CreateCustomerAsync(CreateCustomerRequest request, CustomerAccessContext accessContext);

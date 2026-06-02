@@ -8,7 +8,13 @@ import {
   fetchMembershipTiers,
   updateCustomer,
 } from '../services/customersApi.js'
-import { generateCustomerCode, tabKeyFromCustomerType } from '../utils/customerDisplay.js'
+import {
+  customerTypeFromTab,
+  customerTypeLabel,
+  generateCustomerCode,
+  supportsMembershipTierForTab,
+  tabKeyFromCustomerType,
+} from '../utils/customerDisplay.js'
 
 function CustomerFormPage() {
   const navigate = useNavigate()
@@ -20,7 +26,9 @@ function CustomerFormPage() {
   const [isLoading, setIsLoading] = useState(isEditMode)
   const [isSaving, setIsSaving] = useState(false)
   const [form, setForm] = useState({
-    type: searchParams.get('type') === 'vip' ? 'vip' : 'corporate',
+    type: ['general', 'vip', 'corporate'].includes(searchParams.get('type'))
+      ? searchParams.get('type')
+      : 'general',
     name: '',
     phone: '',
     email: '',
@@ -92,12 +100,20 @@ function CustomerFormPage() {
   const buildPayload = () => ({
     customerCode: isEditMode ? undefined : generateCustomerCode(form.type),
     fullName: form.name.trim(),
-    customerType: form.type === 'corporate' ? 'CORPORATE' : 'VIP',
+    customerType: customerTypeFromTab(form.type),
     phone: form.phone.trim() || null,
     email: form.email.trim() || null,
     address: form.address.trim() || null,
-    tierId: form.tierId ? Number(form.tierId) : null,
+    tierId: supportsMembershipTierForTab(form.type) && form.tierId ? Number(form.tierId) : null,
   })
+
+  const handleTypeChange = (type) => {
+    setForm((current) => ({
+      ...current,
+      type,
+      tierId: supportsMembershipTierForTab(type) ? current.tierId : '',
+    }))
+  }
 
   const handleSubmit = async () => {
     if (!form.name.trim()) {
@@ -149,18 +165,25 @@ function CustomerFormPage() {
         rightContent={
           <div className="flex items-center gap-2 rounded-full bg-[#f6f4ec] px-3 py-1.5">
             <span className="text-xs text-[#717971]">Loại khách</span>
-            <div className="inline-flex gap-1 rounded-full bg-white p-1">
+            <div className="inline-flex flex-wrap gap-1 rounded-full bg-white p-1">
+              <button
+                type="button"
+                className={`rounded-full px-4 py-1 text-xs font-semibold ${form.type === 'general' ? 'bg-[#4a6242] text-white' : 'text-[#414942]'}`}
+                onClick={() => handleTypeChange('general')}
+              >
+                Phổ thông
+              </button>
               <button
                 type="button"
                 className={`rounded-full px-4 py-1 text-xs font-semibold ${form.type === 'vip' ? 'bg-[#4a6242] text-white' : 'text-[#414942]'}`}
-                onClick={() => setForm((current) => ({ ...current, type: 'vip' }))}
+                onClick={() => handleTypeChange('vip')}
               >
                 VIP
               </button>
               <button
                 type="button"
                 className={`rounded-full px-4 py-1 text-xs font-semibold ${form.type === 'corporate' ? 'bg-[#7e5700] text-white' : 'text-[#414942]'}`}
-                onClick={() => setForm((current) => ({ ...current, type: 'corporate' }))}
+                onClick={() => handleTypeChange('corporate')}
               >
                 Corporate
               </button>
@@ -221,21 +244,27 @@ function CustomerFormPage() {
                 />
               </label>
 
-              <label className="space-y-2">
-                <span className="text-xs font-semibold text-[#717971]">Hạng thành viên</span>
-                <select
-                  className="w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20"
-                  value={form.tierId}
-                  onChange={updateField('tierId')}
-                >
-                  <option value="">Chưa gán hạng</option>
-                  {tiers.map((tier) => (
-                    <option key={tier.id} value={tier.id}>
-                      {tier.tierCode}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              {supportsMembershipTierForTab(form.type) ? (
+                <label className="space-y-2">
+                  <span className="text-xs font-semibold text-[#717971]">Hạng thành viên (Bronze / Silver / Gold)</span>
+                  <select
+                    className="w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20"
+                    value={form.tierId}
+                    onChange={updateField('tierId')}
+                  >
+                    <option value="">Tự gán Bronze (mặc định)</option>
+                    {tiers.map((tier) => (
+                      <option key={tier.id} value={tier.id}>
+                        {tier.tierCode}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : (
+                <div className="rounded-xl bg-[#f6f4ec] p-3 text-sm text-[#717971] md:col-span-2">
+                  Khách VIP / Corporate không gán hạng Bronze, Silver, Gold.
+                </div>
+              )}
 
               <label className="space-y-2">
                 <span className="text-xs font-semibold text-[#717971]">Trạng thái</span>
@@ -276,7 +305,7 @@ function CustomerFormPage() {
 
             <div className="rounded-xl bg-[#f6f4ec] p-4">
               <p className="text-xs text-[#717971]">Loại</p>
-              <p className="text-sm font-bold text-[#1b1c17]">{form.type === 'corporate' ? 'Khách doanh nghiệp' : 'Khách VIP'}</p>
+              <p className="text-sm font-bold text-[#1b1c17]">{customerTypeLabel(form.type)}</p>
             </div>
 
             <div className="rounded-xl bg-[#f6f4ec] p-4">

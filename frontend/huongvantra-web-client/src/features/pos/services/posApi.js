@@ -77,6 +77,74 @@ export function mapPosProduct(item) {
   }
 }
 
+export function mapPosCustomer(item) {
+  return {
+    customerId: item.customerId ?? item.CustomerId,
+    customerCode: item.customerCode ?? item.CustomerCode ?? '',
+    fullName: item.fullName ?? item.FullName ?? '',
+    phone: item.phone ?? item.Phone ?? '',
+  }
+}
+
+export function mapPosCustomerContext(item) {
+  return {
+    customerId: item.customerId ?? item.CustomerId,
+    customerCode: item.customerCode ?? item.CustomerCode ?? '',
+    fullName: item.fullName ?? item.FullName ?? '',
+    customerType: item.customerType ?? item.CustomerType ?? '',
+    phone: item.phone ?? item.Phone ?? '',
+    email: item.email ?? item.Email ?? '',
+    address: item.address ?? item.Address ?? '',
+    tierCode: item.tierCode ?? item.TierCode ?? '',
+    outstandingBalance: Number(item.outstandingBalance ?? item.OutstandingBalance ?? 0),
+    recentOrders: (item.recentOrders ?? item.RecentOrders ?? []).map((row) => ({
+      orderCode: row.orderCode ?? row.OrderCode ?? '',
+      entryType: row.entryType ?? row.EntryType ?? '',
+      amount: Number(row.amount ?? row.Amount ?? 0),
+      paymentStatus: row.paymentStatus ?? row.PaymentStatus ?? '',
+      orderStatus: row.orderStatus ?? row.OrderStatus ?? '',
+      cashierName: row.cashierName ?? row.CashierName ?? '',
+      cashierRole: row.cashierRole ?? row.CashierRole ?? '',
+      createdAt: row.createdAt ?? row.CreatedAt,
+    })),
+    unpaidOrders: (item.unpaidOrders ?? item.UnpaidOrders ?? []).map((row) => ({
+      orderCode: row.orderCode ?? row.OrderCode ?? '',
+      totalAmount: Number(row.totalAmount ?? row.TotalAmount ?? 0),
+      paidAmount: Number(row.paidAmount ?? row.PaidAmount ?? 0),
+      remainingAmount: Number(row.remainingAmount ?? row.RemainingAmount ?? 0),
+      paymentStatus: row.paymentStatus ?? row.PaymentStatus ?? '',
+      createdAt: row.createdAt ?? row.CreatedAt,
+    })),
+  }
+}
+
+export async function fetchPosCustomerContext(customerId) {
+  const data = await requestWithAuth(`/api/PosOrder/customers/${customerId}/context`, {
+    method: 'GET',
+  })
+  return mapPosCustomerContext(data)
+}
+
+export async function fetchPosCustomers({ search, limit = 20 }) {
+  const query = new URLSearchParams()
+  if (search?.trim()) query.set('search', search.trim())
+  query.set('limit', String(limit))
+
+  const items = await requestWithAuth(`/api/PosOrder/customers?${query.toString()}`, {
+    method: 'GET',
+  })
+
+  return Array.isArray(items) ? items.map(mapPosCustomer) : []
+}
+
+export function createPosCustomer(payload) {
+  return requestWithAuth('/api/PosOrder/customers', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).then(mapPosCustomer)
+}
+
 export async function fetchPosProducts({ storeId, search, limit = 30 }) {
   const query = new URLSearchParams()
   query.set('storeId', String(storeId))

@@ -48,14 +48,16 @@ namespace HuongVanTra.Service.Customers {
             string? status,
             int? tierId,
             int? assignedEmployeeId,
-            CustomerAccessContext accessContext) {
+            CustomerAccessContext accessContext,
+            bool forPos = false) {
             var query = _dbContext.Customers
                 .AsNoTracking()
                 .Include(c => c.Tier)
                 .Include(c => c.AssignedEmployee)
                 .AsQueryable();
 
-            if (accessContext.IsSalesStaff) {
+            // POS: nhân viên bán cần tìm mọi khách ACTIVE để lên đơn, không giới hạn NV phụ trách
+            if (accessContext.IsSalesStaff && !forPos) {
                 if (!accessContext.EmployeeId.HasValue) {
                     return new List<CustomerListItemResponse>();
                 }
@@ -144,7 +146,12 @@ namespace HuongVanTra.Service.Customers {
                 return CustomerResult.Failure("Current user employee id is required to create customers.");
             }
 
-            var referenceValidation = await ValidateReferencesAsync(request.TierId, assignedEmployeeId);
+            var tierResolution = await ResolveTierIdForCustomerTypeAsync(customerType, request.TierId);
+            if (!tierResolution.Success) {
+                return CustomerResult.Failure(tierResolution.ErrorMessage!);
+            }
+
+            var referenceValidation = await ValidateReferencesAsync(tierResolution.TierId, assignedEmployeeId);
             if (referenceValidation is not null) {
                 return CustomerResult.Failure(referenceValidation);
             }
@@ -157,7 +164,7 @@ namespace HuongVanTra.Service.Customers {
                 Email = NormalizeOptional(request.Email),
                 Address = NormalizeOptional(request.Address),
                 Status = "ACTIVE",
-                TierId = request.TierId,
+                TierId = tierResolution.TierId,
                 AssignedEmployeeId = assignedEmployeeId,
                 TotalSpend = 0
             };
@@ -179,17 +186,23 @@ namespace HuongVanTra.Service.Customers {
                 return CustomerResult.Forbidden("You do not have permission to access this customer.");
             }
 
-            var referenceValidation = await ValidateReferencesAsync(request.TierId, request.AssignedEmployeeId);
+            var customerType = request.CustomerType!.Trim();
+            var tierResolution = await ResolveTierIdForCustomerTypeAsync(customerType, request.TierId);
+            if (!tierResolution.Success) {
+                return CustomerResult.Failure(tierResolution.ErrorMessage!);
+            }
+
+            var referenceValidation = await ValidateReferencesAsync(tierResolution.TierId, request.AssignedEmployeeId);
             if (referenceValidation is not null) {
                 return CustomerResult.Failure(referenceValidation);
             }
 
             customer.FullName = request.FullName!.Trim();
-            customer.CustomerType = request.CustomerType!.Trim();
+            customer.CustomerType = customerType;
             customer.Phone = NormalizeOptional(request.Phone);
             customer.Email = NormalizeOptional(request.Email);
             customer.Address = NormalizeOptional(request.Address);
-            customer.TierId = request.TierId;
+            customer.TierId = tierResolution.TierId;
             customer.AssignedEmployeeId = request.AssignedEmployeeId;
 
             await _dbContext.SaveChangesAsync();
@@ -338,6 +351,39 @@ namespace HuongVanTra.Service.Customers {
                 string.Equals(role, "Sale", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(role, "Sales", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(role, "Staff", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool SupportsMembershipTier(string customerType) {
+            var normalized = customerType.Trim().ToUpperInvariant();
+            return normalized is "GENERAL" or "RETAIL";
+        }
+
+        private async Task<(bool Success, int? TierId, string? ErrorMessage)> ResolveTierIdForCustomerTypeAsync(
+            string customerType,
+            int? tierId) {
+            if (!SupportsMembershipTier(customerType)) {
+                if (tierId.HasValue) {
+                    return (false, null, "Chỉ khách phổ thông mới được gán hạng thành viên.");
+                }
+
+                return (true, null, null);
+            }
+
+            if (tierId.HasValue) {
+                return (true, tierId, null);
+            }
+
+            var defaultTierId = await _dbContext.MembershipTiers
+                .AsNoTracking()
+                .OrderBy(t => t.MinTotalSpend)
+                .Select(t => (int?)t.Id)
+                .FirstOrDefaultAsync();
+
+            if (!defaultTierId.HasValue) {
+                return (false, null, "Chưa cấu hình hạng thành viên (Bronze/Silver/Gold).");
+            }
+
+            return (true, defaultTierId, null);
         }
     }
 }
