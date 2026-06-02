@@ -1,43 +1,9 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { showError, showSuccess } from '../../../app/toast.js'
 import AddCustomerModal from '../components/AddCustomerModal.jsx'
 import OrderOfferModal from '../components/OrderOfferModal.jsx'
-
-const searchResults = [
-  {
-    group: 'Sản phẩm',
-    items: [
-      {
-        name: 'Trà Xanh Thái Nguyên Thượng Hạng',
-        sku: 'TX-TN-001',
-        stock: 'Tồn: 15',
-        price: 150000,
-        image: 'https://images.unsplash.com/photo-1523920290228-4f321a939b4c?q=80&w=800&auto=format&fit=crop',
-      },
-      {
-        name: 'Hồng Trà Cổ Thụ Hà Giang',
-        sku: 'HT-HG-002',
-        stock: 'Tồn: 8',
-        price: 220000,
-        image: 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?q=80&w=800&auto=format&fit=crop',
-      },
-      {
-        name: 'Trà Ô Long Lâm Đồng',
-        sku: 'OL-LD-003',
-        stock: 'Tồn: 20',
-        price: 320000,
-        image: 'https://images.unsplash.com/photo-1515823064-d6e0c04616a7?q=80&w=800&auto=format&fit=crop',
-      },
-      {
-        name: 'Trà Sen Tây Hồ',
-        sku: 'TS-TH-004',
-        stock: 'Tồn: 12',
-        price: 450000,
-        image: 'https://images.unsplash.com/photo-1544787219-7f47ccb76574?q=80&w=800&auto=format&fit=crop',
-      },
-    ],
-  },
-]
+import { confirmOrderPayment, createPosOrderOffline, createPosOrderOnline, fetchPosProducts, resolvePosStoreId } from '../services/posApi.js'
 
 const PAYMENT_METHODS = [
   { id: 'CASH', label: 'Tiền mặt', icon: 'payments' },
@@ -83,6 +49,9 @@ function PosPage() {
   const [paymentMethod, setPaymentMethod] = useState('CASH')
   const [amountPaidInput, setAmountPaidInput] = useState('')
   const [cartItems, setCartItems] = useState([])
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [searchProducts, setSearchProducts] = useState([])
+  const [isSearchLoading, setIsSearchLoading] = useState(false)
 
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0]
 
@@ -104,17 +73,36 @@ function PosPage() {
   const amountPaid = parseMoneyInput(amountPaidInput)
   const change = Math.max(amountPaid - total, 0)
 
-  const filteredResults = useMemo(() => {
-    const query = searchValue.trim().toLowerCase()
-    if (!query) {
-      return []
-    }
+  useEffect(() => {
+    let cancelled = false
 
-    return searchResults.flatMap((section) =>
-      section.items
-        .filter((item) => item.name.toLowerCase().includes(query) || item.sku.toLowerCase().includes(query))
-        .map((item) => ({ ...item, group: section.group })),
-    )
+    const timerId = setTimeout(async () => {
+      setIsSearchLoading(true)
+      try {
+        const items = await fetchPosProducts({
+          storeId: resolvePosStoreId(),
+          search: searchValue.trim(),
+          limit: 30,
+        })
+        if (!cancelled) {
+          setSearchProducts(items)
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setSearchProducts([])
+          showError(error.message)
+        }
+      } finally {
+        if (!cancelled) {
+          setIsSearchLoading(false)
+        }
+      }
+    }, searchValue.trim() ? 250 : 0)
+
+    return () => {
+      cancelled = true
+      clearTimeout(timerId)
+    }
   }, [searchValue])
 
   const addTab = () => {
@@ -152,6 +140,7 @@ function PosPage() {
       return [
         ...currentItems,
         {
+          productId: product.productId,
           sku: product.sku,
           name: product.name,
           qty: 1,
@@ -217,29 +206,72 @@ function PosPage() {
   const isTransferPayment = paymentMethod === 'TRANSFER'
   const canPayCash = total > 0 && amountPaid >= total
   const canPayTransfer = total > 0 && hasCartItems
-  const canPay = isTransferPayment ? canPayTransfer : canPayCash
+  const canPay = (isTransferPayment ? canPayTransfer : canPayCash) && !isSubmitting
 
-  const handlePayment = () => {
+  const buildOrderPayload = (method, amount) => {
+    const storeId = resolvePosStoreId()
+    return {
+      storeId,
+      customerId: null,
+      promotionId: null,
+      items: cartItems.map((item) => ({
+        productId: item.productId,
+        quantity: item.qty,
+        isGift: 0,
+      })),
+      payments: [
+        {
+          paymentMethod: method,
+          amount,
+        },
+      ],
+    }
+  }
+
+  const handlePayment = async () => {
     if (!canPay) {
       return
     }
 
-    if (isTransferPayment) {
-      navigate('/pos/payment/qr', {
-        state: {
-          total,
-          orderLabel: activeTab.label,
-          customer: selectedCustomer,
-          paymentMethod: 'TRANSFER',
-        },
-      })
-      return
-    }
+    setIsSubmitting(true)
+    try {
+      if (isTransferPayment) {
+        const payload = buildOrderPayload('TRANSFER', total)
+        const result = await createPosOrderOnline(payload)
 
-    // Tiền mặt: giữ chỗ cho luồng hoàn tất đơn sau.
+        showSuccess(`Tao don ${result.orderCode} thanh cong.`)
+        navigate('/pos/payment/qr', {
+          state: {
+            total,
+            orderLabel: result.orderCode || activeTab.label,
+            customer: selectedCustomer,
+            paymentMethod: 'TRANSFER',
+          },
+        })
+        return
+      }
+
+      const payload = buildOrderPayload('CASH', total)
+      const result = await createPosOrderOffline(payload)
+      await confirmOrderPayment(result.orderId, {
+        paymentReference: `POS-CASH-${result.orderCode}`,
+        note: 'Auto confirm from POS cash payment',
+      })
+      showSuccess(`Thanh toan thanh cong. Don: ${result.orderCode}`)
+      setCartItems([])
+      setAmountPaidInput('')
+      setOrderDiscountPercent(0)
+      setSelectedCustomer('')
+    } catch (error) {
+      showError(error.message)
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
-  const showSearchDropdown = searchValue.trim().length > 0 && filteredResults.length > 0
+  const hasSearchQuery = searchValue.trim().length > 0
+  const showSearchDropdown = hasSearchQuery && searchProducts.length > 0
+  const showSearchEmpty = hasSearchQuery && !isSearchLoading && searchProducts.length === 0
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[28px] border border-[#c1c9c0]/40 bg-[#fbf9f1] shadow-[0_10px_30px_rgba(27,28,23,0.04)]">
@@ -285,7 +317,7 @@ function PosPage() {
       <div className="flex min-h-0 flex-1 overflow-hidden">
         {/* Left: search + cart lines (larger touch targets) */}
         <section className="order-1 flex min-w-0 flex-1 flex-col bg-white text-base">
-          <div className="relative z-20 shrink-0 border-b border-[#c1c9c0]/60 bg-[#f6f4ec] p-5">
+          <div className="relative z-30 shrink-0 overflow-visible border-b border-[#c1c9c0]/60 bg-[#f6f4ec] p-5">
             <div className="relative">
               <Icon className="absolute left-4 top-1/2 -translate-y-1/2 text-[22px] text-[#717971]">search</Icon>
               <input
@@ -299,29 +331,37 @@ function PosPage() {
               <Icon className="absolute right-4 top-1/2 -translate-y-1/2 text-[22px] text-[#717971]">barcode_scanner</Icon>
             </div>
 
+            {hasSearchQuery && isSearchLoading ? (
+              <div className="absolute left-5 right-5 top-full z-30 mt-2 rounded-xl border border-[#c1c9c0] bg-white p-3 text-sm text-[#717971] shadow-2xl">
+                Dang tim san pham...
+              </div>
+            ) : null}
             {showSearchDropdown ? (
               <div className="custom-scrollbar absolute left-5 right-5 top-full z-30 mt-2 max-h-[min(45vh,400px)] overflow-y-auto rounded-xl border border-[#c1c9c0] bg-white shadow-2xl">
-                {filteredResults.map((item) => (
+                {searchProducts.map((item) => (
                   <button
-                    key={item.sku}
+                    key={`${item.productId}-${item.sku}`}
                     type="button"
                     onClick={() => addToCart(item)}
                     className="flex w-full items-center gap-3 border-b border-[#f0eee6] p-3.5 text-left last:border-b-0 hover:bg-[#f6f4ec]"
                   >
-                    {item.image ? (
-                      <img className="h-12 w-12 rounded-lg object-cover" src={item.image} alt={item.name} />
-                    ) : (
-                      <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-[#ceebc1]">
-                        <Icon className="text-[24px] text-[#4a6242]">eco</Icon>
-                      </div>
-                    )}
+                    <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-[#ceebc1]">
+                      <Icon className="text-[24px] text-[#4a6242]">eco</Icon>
+                    </div>
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-base font-medium">{item.name}</div>
-                      <div className="text-xs text-[#717971]">{item.sku}</div>
+                      <div className="text-xs text-[#717971]">
+                        {item.sku} · Ton: {formatMoney(item.stockQuantity || 0)}
+                      </div>
                     </div>
                     <div className="shrink-0 text-base font-bold text-[#356647]">{formatMoney(item.price)}</div>
                   </button>
                 ))}
+              </div>
+            ) : null}
+            {showSearchEmpty ? (
+              <div className="absolute left-5 right-5 top-full z-30 mt-2 rounded-xl border border-[#c1c9c0] bg-white p-3 text-sm text-[#717971] shadow-2xl">
+                Khong tim thay san pham.
               </div>
             ) : null}
           </div>
@@ -602,7 +642,7 @@ function PosPage() {
               className="flex flex-col items-center justify-center rounded-xl bg-[#356647] py-3 text-sm font-bold text-white shadow-md hover:brightness-110 disabled:opacity-50"
             >
               <span className="text-[10px] opacity-70">F12</span>
-              {isTransferPayment ? 'Thanh toán · QR' : 'Thanh toán'}
+              {isSubmitting ? 'Dang xu ly...' : isTransferPayment ? 'Thanh toán · QR' : 'Thanh toán'}
             </button>
           </div>
         </section>

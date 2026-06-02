@@ -1,147 +1,22 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
+import { showError } from '../../../app/toast.js'
+import { fetchCustomers } from '../services/customersApi.js'
+import {
+  CUSTOMER_TYPE_BY_TAB,
+  formatVnd,
+  getInitials,
+  getStatusDisplay,
+  getTierClass,
+} from '../utils/customerDisplay.js'
 
-const corporateStats = [
-  { label: 'Total Corporate', value: '128', note: '+5% this month', noteClass: 'text-[#4a6242]' },
-  { label: 'Active Contracts', value: '94', note: '8 Pending', noteClass: 'text-[#717971]' },
-  { label: 'Total Receivables', value: '482M', note: 'VND', noteClass: 'text-[#7e5700]' },
-  { label: 'Collection Rate', value: '92.4%', note: 'trending_up', noteClass: 'text-[#4a6242]', isIconNote: true },
-]
-
-const corporateRows = [
-  {
-    id: 'C-CORP-001',
-    company: 'VinGroup JSC',
-    email: 'vincorp@vin.com.vn',
-    representative: 'Pham Nhat V.',
-    taxId: '0101234567',
-    debt: '125,000,000 VND',
-    debtTone: 'text-[#7e5700]',
-    status: 'Active',
-    statusClass: 'bg-[#627b59] text-[#f8ffef]',
-    icon: 'corporate_fare',
-    iconClass: 'bg-[#ceebc1] text-[#354d2e]',
-  },
-  {
-    id: 'C-CORP-002',
-    company: 'FPT Software',
-    email: 'contact@fsoft.fpt.vn',
-    representative: 'Truong Gia B.',
-    taxId: '0315987654',
-    debt: '0 VND',
-    debtTone: 'text-[#1b1c17]',
-    status: 'Active',
-    statusClass: 'bg-[#627b59] text-[#f8ffef]',
-    icon: 'business',
-    iconClass: 'bg-[#baefc8] text-[#1f5033]',
-  },
-  {
-    id: 'C-CORP-003',
-    company: 'The Gioi Di Dong',
-    email: 'admin@tgdd.vn',
-    representative: 'Nguyen Duc T.',
-    taxId: '0109988776',
-    debt: '45,200,000 VND',
-    debtTone: 'text-[#ba1a1a]',
-    status: 'Overdue',
-    statusClass: 'bg-[#ffdad6] text-[#93000a]',
-    icon: 'domain',
-    iconClass: 'bg-[#e4e3db] text-[#717971]',
-  },
-  {
-    id: 'C-CORP-004',
-    company: 'Masan Group',
-    email: 'supply@masan.com',
-    representative: 'Nguyen Dang Q.',
-    taxId: '0303322114',
-    debt: '312,800,000 VND',
-    debtTone: 'text-[#7e5700]',
-    status: 'Active',
-    statusClass: 'bg-[#627b59] text-[#f8ffef]',
-    icon: 'factory',
-    iconClass: 'bg-[#ceebc1] text-[#354d2e]',
-  },
-]
-
-const vipStats = [
-  {
-    label: 'Total Customers',
-    value: '1,284',
-    note: '+12% from last month',
-    noteIcon: 'trending_up',
-    icon: 'group',
-    toneClass: 'text-[#356647] bg-[#4e7f5e]/10',
-    glow: 'bg-[#356647]/10',
-  },
-  {
-    label: 'VIP Members',
-    value: '342',
-    note: 'Active Gold & Silver tiers',
-    icon: 'workspace_premium',
-    toneClass: 'text-[#7e5700] bg-[#fec25b]/10',
-    glow: 'bg-[#7e5700]/10',
-  },
-  {
-    label: 'New This Month',
-    value: '87',
-    note: 'Targeted goal: 100',
-    noteIcon: 'person_add',
-    icon: 'new_releases',
-    toneClass: 'text-[#4a6242] bg-[#627b59]/10',
-    glow: 'bg-[#4a6242]/10',
-  },
-]
-
-const vipRows = [
-  {
-    id: 'C-VIP-001',
-    name: 'Pham Thanh Tam',
-    email: 'tam.pham@gmail.com',
-    phone: '090 123 4567',
-    tier: 'VIP GOLD',
-    tierClass: 'bg-[#fec25b] text-[#744f00]',
-    points: '12,450',
-    spending: '45,200,000 VND',
-    initials: 'PT',
-    initialsClass: 'bg-[#ffdead] text-[#281900]',
-  },
-  {
-    id: 'C-VIP-002',
-    name: 'Nguyen Hong Hanh',
-    email: 'hanh.ng@hotmail.com',
-    phone: '098 765 4321',
-    tier: 'VIP SILVER',
-    tierClass: 'bg-[#e4e3db] text-[#414942] border border-[#c1c9c0]',
-    points: '4,200',
-    spending: '18,750,000 VND',
-    initials: 'NH',
-    initialsClass: 'bg-[#c1c9c0] text-[#1b1c17]',
-  },
-  {
-    id: 'C-VIP-003',
-    name: 'Le Van Quan',
-    email: 'quanle88@outlook.com',
-    phone: '091 234 5678',
-    tier: 'VIP GOLD',
-    tierClass: 'bg-[#fec25b] text-[#744f00]',
-    points: '8,900',
-    spending: '32,100,000 VND',
-    initials: 'LV',
-    initialsClass: 'bg-[#baefc8] text-[#00210f]',
-  },
-  {
-    id: 'C-VIP-004',
-    name: 'Tran Thu Ha',
-    email: 'ha.tran@vmail.vn',
-    phone: '097 555 1234',
-    tier: 'VIP SILVER',
-    tierClass: 'bg-[#e4e3db] text-[#414942] border border-[#c1c9c0]',
-    points: '3,150',
-    spending: '12,400,000 VND',
-    initials: 'TH',
-    initialsClass: 'bg-[#ceebc1] text-[#0a2007]',
-  },
+const corporateIcons = ['corporate_fare', 'business', 'domain', 'factory']
+const corporateIconClasses = [
+  'bg-[#ceebc1] text-[#354d2e]',
+  'bg-[#baefc8] text-[#1f5033]',
+  'bg-[#e4e3db] text-[#717971]',
+  'bg-[#ceebc1] text-[#354d2e]',
 ]
 
 const sectorBars = [
@@ -170,6 +45,9 @@ const activityFeed = [
 
 function CustomersPage() {
   const [activeTab, setActiveTab] = useState('corporate')
+  const [customers, setCustomers] = useState([])
+  const [searchValue, setSearchValue] = useState('')
+  const [isLoading, setIsLoading] = useState(true)
 
   const tabs = useMemo(
     () => [
@@ -179,12 +57,91 @@ function CustomersPage() {
     [],
   )
 
+  useEffect(() => {
+    let mounted = true
+
+    const timer = setTimeout(async () => {
+      try {
+        setIsLoading(true)
+        const data = await fetchCustomers({
+          keyword: searchValue.trim() || undefined,
+          customerType: CUSTOMER_TYPE_BY_TAB[activeTab],
+        })
+        if (mounted) setCustomers(Array.isArray(data) ? data : [])
+      } catch (error) {
+        if (mounted) {
+          setCustomers([])
+          showError(error.message)
+        }
+      } finally {
+        if (mounted) setIsLoading(false)
+      }
+    }, 250)
+
+    return () => {
+      mounted = false
+      clearTimeout(timer)
+    }
+  }, [activeTab, searchValue])
+
+  const corporateStats = useMemo(() => {
+    const activeCount = customers.filter((item) => item.status?.toUpperCase() === 'ACTIVE').length
+    const totalSpend = customers.reduce((sum, item) => sum + Number(item.totalSpend || 0), 0)
+    return [
+      { label: 'Total Corporate', value: String(customers.length), note: 'from API', noteClass: 'text-[#4a6242]' },
+      { label: 'Active Accounts', value: String(activeCount), note: `${customers.length - activeCount} inactive`, noteClass: 'text-[#717971]' },
+      { label: 'Total Spending', value: formatVnd(totalSpend).replace(' VND', ''), note: 'VND', noteClass: 'text-[#7e5700]' },
+      { label: 'Collection Rate', value: '—', note: 'trending_up', noteClass: 'text-[#4a6242]', isIconNote: true },
+    ]
+  }, [customers])
+
+  const vipStats = useMemo(() => {
+    const withTier = customers.filter((item) => item.tierCode).length
+    const activeCount = customers.filter((item) => item.status?.toUpperCase() === 'ACTIVE').length
+    return [
+      {
+        label: 'Total Customers',
+        value: String(customers.length),
+        note: `${activeCount} active`,
+        noteIcon: 'trending_up',
+        icon: 'group',
+        toneClass: 'text-[#356647] bg-[#4e7f5e]/10',
+        glow: 'bg-[#356647]/10',
+      },
+      {
+        label: 'VIP Members',
+        value: String(withTier),
+        note: 'With membership tier',
+        icon: 'workspace_premium',
+        toneClass: 'text-[#7e5700] bg-[#fec25b]/10',
+        glow: 'bg-[#7e5700]/10',
+      },
+      {
+        label: 'Total Spending',
+        value: formatVnd(customers.reduce((sum, item) => sum + Number(item.totalSpend || 0), 0)).replace(' VND', ''),
+        note: 'VND',
+        noteIcon: 'payments',
+        icon: 'new_releases',
+        toneClass: 'text-[#4a6242] bg-[#627b59]/10',
+        glow: 'bg-[#4a6242]/10',
+      },
+    ]
+  }, [customers])
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-6 [font-family:'Manrope',sans-serif]">
       <PageHeader
         title="Khách hàng"
         description="Quản lý khách VIP và khách doanh nghiệp, theo dõi chi tiêu và hợp đồng"
-        searchPlaceholder="Search customers..."
+        rightContent={
+          <input
+            className="h-11 w-full min-w-[240px] rounded-full border border-[#c1c9c0]/90 bg-white px-4 text-sm text-[#1b1c17] outline-none focus:border-[#538463] focus:ring-2 focus:ring-[#356647]/20 lg:min-w-[320px]"
+            placeholder="Tìm khách hàng..."
+            type="search"
+            value={searchValue}
+            onChange={(event) => setSearchValue(event.target.value)}
+          />
+        }
       />
 
       <main className="flex flex-col gap-4">
@@ -263,53 +220,68 @@ function CustomersPage() {
                   <thead>
                     <tr className="bg-[#f6f4ec] text-xs uppercase tracking-wider text-[#717971]">
                       <th className="px-6 py-4 font-semibold">Company Name</th>
-                      <th className="px-6 py-4 font-semibold">Representative</th>
-                      <th className="px-6 py-4 font-semibold">Tax ID</th>
-                      <th className="px-6 py-4 font-semibold">Debt (A/R)</th>
+                      <th className="px-6 py-4 font-semibold">NV phụ trách</th>
+                      <th className="px-6 py-4 font-semibold">Mã KH</th>
+                      <th className="px-6 py-4 font-semibold">Tổng chi tiêu</th>
                       <th className="px-6 py-4 font-semibold">Status</th>
                       <th className="px-6 py-4 font-semibold">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#f0eee6] text-[#1b1c17]">
-                    {corporateRows.map((row) => (
-                      <tr key={row.company} className="group transition-colors hover:bg-[#ffffff]">
-                        <td className="px-6 py-5">
-                          <div className="flex items-center gap-3">
-                            <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${row.iconClass}`}>
-                              <span className="material-symbols-outlined">{row.icon}</span>
-                            </div>
-                            <div className="flex flex-col">
-                              <span className="font-bold">{row.company}</span>
-                              <span className="text-xs text-[#717971]">{row.email}</span>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-5">{row.representative}</td>
-                        <td className="px-6 py-5 font-mono text-xs">{row.taxId}</td>
-                        <td className="px-6 py-5">
-                          <span className={`font-bold ${row.debtTone}`}>{row.debt}</span>
-                        </td>
-                        <td className="px-6 py-5">
-                          <span className={`rounded-full px-2 py-1 text-[11px] font-bold uppercase ${row.statusClass}`}>{row.status}</span>
-                        </td>
-                        <td className="px-6 py-5">
-                          <div className="flex items-center gap-2 opacity-0 transition-opacity group-hover:opacity-100">
-                            <Link to={`/customers/${row.id}/edit`} className="p-2 text-[#717971] hover:text-[#356647]">
-                              <span className="material-symbols-outlined text-sm">edit</span>
-                            </Link>
-                            <button type="button" className="p-2 text-[#717971] hover:text-[#356647]">
-                              <span className="material-symbols-outlined text-sm">visibility</span>
-                            </button>
-                          </div>
+                    {isLoading ? (
+                      <tr>
+                        <td className="px-6 py-8 text-center text-[#717971]" colSpan={6}>
+                          Đang tải danh sách khách hàng...
                         </td>
                       </tr>
-                    ))}
+                    ) : customers.length === 0 ? (
+                      <tr>
+                        <td className="px-6 py-8 text-center text-[#717971]" colSpan={6}>
+                          Chưa có khách hàng doanh nghiệp.
+                        </td>
+                      </tr>
+                    ) : (
+                      customers.map((row, index) => {
+                        const status = getStatusDisplay(row.status)
+                        const debtTone = Number(row.totalSpend) > 0 ? 'text-[#7e5700]' : 'text-[#1b1c17]'
+                        return (
+                          <tr key={row.customerId} className="group transition-colors hover:bg-[#ffffff]">
+                            <td className="px-6 py-5">
+                              <div className="flex items-center gap-3">
+                                <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${corporateIconClasses[index % corporateIconClasses.length]}`}>
+                                  <span className="material-symbols-outlined">{corporateIcons[index % corporateIcons.length]}</span>
+                                </div>
+                                <div className="flex flex-col">
+                                  <span className="font-bold">{row.fullName}</span>
+                                  <span className="text-xs text-[#717971]">{row.email || '—'}</span>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-6 py-5">{row.assignedEmployeeName || '—'}</td>
+                            <td className="px-6 py-5 font-mono text-xs">{row.customerCode}</td>
+                            <td className="px-6 py-5">
+                              <span className={`font-bold ${debtTone}`}>{formatVnd(row.totalSpend)}</span>
+                            </td>
+                            <td className="px-6 py-5">
+                              <span className={`rounded-full px-2 py-1 text-[11px] font-bold uppercase ${status.className}`}>{status.label}</span>
+                            </td>
+                            <td className="px-6 py-5">
+                              <div className="flex items-center gap-2 opacity-0 transition-opacity group-hover:opacity-100">
+                                <Link to={`/customers/${row.customerId}/edit`} className="p-2 text-[#717971] hover:text-[#356647]">
+                                  <span className="material-symbols-outlined text-sm">edit</span>
+                                </Link>
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })
+                    )}
                   </tbody>
                 </table>
               </div>
 
               <div className="flex flex-wrap items-center justify-between gap-3 bg-[#f6f4ec] p-6">
-                <span className="text-xs text-[#717971]">Showing 4 of 128 corporate customers</span>
+                <span className="text-xs text-[#717971]">Hiển thị {customers.length} khách hàng doanh nghiệp</span>
                 <div className="flex gap-1">
                   <button type="button" className="flex h-8 w-8 items-center justify-center rounded text-[#717971]" disabled>
                     <span className="material-symbols-outlined text-sm">chevron_left</span>
@@ -425,42 +397,60 @@ function CustomersPage() {
                       <th className="border-b border-[#f0eee6] px-6 py-4 font-semibold">Name</th>
                       <th className="border-b border-[#f0eee6] px-6 py-4 font-semibold">Phone</th>
                       <th className="border-b border-[#f0eee6] px-6 py-4 font-semibold">Tier</th>
-                      <th className="border-b border-[#f0eee6] px-6 py-4 font-semibold">Points</th>
+                      <th className="border-b border-[#f0eee6] px-6 py-4 font-semibold">Mã KH</th>
                       <th className="border-b border-[#f0eee6] px-6 py-4 font-semibold">Total Spending</th>
                       <th className="border-b border-[#f0eee6] px-6 py-4 text-right font-semibold">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="text-sm">
-                    {vipRows.map((row) => (
-                      <tr key={row.email} className="transition-colors hover:bg-[#f6f4ec]">
-                        <td className="border-b border-[#f0eee6] px-6 py-4">
-                          <div className="flex items-center gap-3">
-                            <div className={`flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold ${row.initialsClass}`}>{row.initials}</div>
-                            <div>
-                              <p className="font-bold text-[#1b1c17]">{row.name}</p>
-                              <p className="text-xs text-[#717971]">{row.email}</p>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="border-b border-[#f0eee6] px-6 py-4 text-[#414942]">{row.phone}</td>
-                        <td className="border-b border-[#f0eee6] px-6 py-4">
-                          <span className={`rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-tight ${row.tierClass}`}>{row.tier}</span>
-                        </td>
-                        <td className="border-b border-[#f0eee6] px-6 py-4 font-bold text-[#1b1c17]">{row.points}</td>
-                        <td className="border-b border-[#f0eee6] px-6 py-4 text-lg font-bold text-[#356647]">{row.spending}</td>
-                        <td className="border-b border-[#f0eee6] px-6 py-4 text-right">
-                          <Link to={`/customers/${row.id}/edit`} className="rounded-full p-2 text-[#717971] transition-colors hover:bg-[#e4e3db]">
-                            <span className="material-symbols-outlined">edit</span>
-                          </Link>
+                    {isLoading ? (
+                      <tr>
+                        <td className="border-b border-[#f0eee6] px-6 py-8 text-center text-[#717971]" colSpan={6}>
+                          Đang tải danh sách khách hàng...
                         </td>
                       </tr>
-                    ))}
+                    ) : customers.length === 0 ? (
+                      <tr>
+                        <td className="border-b border-[#f0eee6] px-6 py-8 text-center text-[#717971]" colSpan={6}>
+                          Chưa có khách VIP.
+                        </td>
+                      </tr>
+                    ) : (
+                      customers.map((row) => (
+                        <tr key={row.customerId} className="transition-colors hover:bg-[#f6f4ec]">
+                          <td className="border-b border-[#f0eee6] px-6 py-4">
+                            <div className="flex items-center gap-3">
+                              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#ffdead] text-sm font-bold text-[#281900]">
+                                {getInitials(row.fullName)}
+                              </div>
+                              <div>
+                                <p className="font-bold text-[#1b1c17]">{row.fullName}</p>
+                                <p className="text-xs text-[#717971]">{row.email || '—'}</p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="border-b border-[#f0eee6] px-6 py-4 text-[#414942]">{row.phone || '—'}</td>
+                          <td className="border-b border-[#f0eee6] px-6 py-4">
+                            <span className={`rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-tight ${getTierClass(row.tierCode)}`}>
+                              {row.tierCode || 'Chưa có hạng'}
+                            </span>
+                          </td>
+                          <td className="border-b border-[#f0eee6] px-6 py-4 font-bold text-[#1b1c17]">{row.customerCode}</td>
+                          <td className="border-b border-[#f0eee6] px-6 py-4 text-lg font-bold text-[#356647]">{formatVnd(row.totalSpend)}</td>
+                          <td className="border-b border-[#f0eee6] px-6 py-4 text-right">
+                            <Link to={`/customers/${row.customerId}/edit`} className="rounded-full p-2 text-[#717971] transition-colors hover:bg-[#e4e3db]">
+                              <span className="material-symbols-outlined">edit</span>
+                            </Link>
+                          </td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>
 
               <div className="flex flex-wrap items-center justify-between gap-3 p-6 text-sm text-[#414942]">
-                <p>Showing 4 of 342 VIP members</p>
+                <p>Hiển thị {customers.length} khách VIP</p>
                 <div className="flex gap-2">
                   <button type="button" className="flex h-10 w-10 items-center justify-center rounded-lg border border-[#c1c9c0] opacity-30" disabled>
                     <span className="material-symbols-outlined">chevron_left</span>

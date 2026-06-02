@@ -1,8 +1,10 @@
 using HuongVanTra.API.Extensions;
 using HuongVanTra.API.Models.Sales;
+using HuongVanTra.Infrastructure.Data;
 using HuongVanTra.Service.Sales;
 using HuongVanTra.Service.Sales.Models;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Mvc;
 
 namespace HuongVanTra.API.Controllers {
@@ -11,9 +13,59 @@ namespace HuongVanTra.API.Controllers {
     [Route("api/[controller]")]
     public class PosOrderController : ControllerBase {
         private readonly IPosOrderService _posOrderService;
+        private readonly AppDbContext _dbContext;
 
-        public PosOrderController(IPosOrderService posOrderService) {
+        public PosOrderController(IPosOrderService posOrderService, AppDbContext dbContext) {
             _posOrderService = posOrderService;
+            _dbContext = dbContext;
+        }
+
+        [HttpGet("products")]
+        public async Task<ActionResult<List<PosProductSearchItemResponse>>> SearchProducts(
+            [FromQuery] int storeId,
+            [FromQuery] string? search,
+            [FromQuery] int limit = 30,
+            CancellationToken cancellationToken = default) {
+            if (storeId <= 0) {
+                return BadRequest("storeId is required.");
+            }
+
+            var queryLimit = Math.Clamp(limit, 1, 100);
+            var query = _dbContext.Products.AsNoTracking();
+
+            if (!string.IsNullOrWhiteSpace(search)) {
+                var term = $"%{search.Trim()}%";
+                query = query.Where(p =>
+                    EF.Functions.Like(p.Name, term) ||
+                    EF.Functions.Like(p.Sku, term));
+            }
+
+            var products = await query
+                .OrderBy(p => p.Name)
+                .Take(queryLimit)
+                .Select(p => new {
+                    p.Id,
+                    p.Sku,
+                    p.Name,
+                    p.Price
+                })
+                .ToListAsync(cancellationToken);
+
+            var productIds = products.Select(p => p.Id).ToList();
+            var stockByProductId = await _dbContext.InventoryBalances
+                .AsNoTracking()
+                .Where(b => productIds.Contains(b.ProductId) && b.Warehouse.StoreId == storeId)
+                .GroupBy(b => b.ProductId)
+                .Select(g => new { ProductId = g.Key, Quantity = g.Sum(x => x.Quantity) })
+                .ToDictionaryAsync(x => x.ProductId, x => x.Quantity, cancellationToken);
+
+            return Ok(products.Select(p => new PosProductSearchItemResponse {
+                ProductId = p.Id,
+                Sku = p.Sku,
+                Name = p.Name,
+                Price = p.Price,
+                StockQuantity = stockByProductId.TryGetValue(p.Id, out var qty) ? qty : 0
+            }).ToList());
         }
 
         /// <summary>
