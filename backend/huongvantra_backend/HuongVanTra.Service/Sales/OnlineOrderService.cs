@@ -488,6 +488,7 @@ namespace HuongVanTra.Service.Sales {
             try {
                 var confirmedAt = DateTime.UtcNow;
                 order.PaymentStatus = "paid";
+                order.UpdatedAt = confirmedAt;
 
                 var paymentTxn = order.PaymentTransactions.FirstOrDefault();
                 if (paymentTxn is not null) {
@@ -495,6 +496,9 @@ namespace HuongVanTra.Service.Sales {
                     paymentTxn.ConfirmedById = employeeId;
                     paymentTxn.ConfirmedAt = confirmedAt;
                 }
+
+                var invoice = PaymentWebhookService.CreateInvoice(order, employeeId, confirmedAt);
+                _db.Invoices.Add(invoice);
 
                 _db.AuditLogs.Add(new AuditLog {
                     Action     = "vietqr_mark_paid",
@@ -513,6 +517,7 @@ namespace HuongVanTra.Service.Sales {
                     OrderId       = order.Id,
                     OrderCode     = order.OrderCode,
                     PaymentStatus = order.PaymentStatus,
+                    InvoiceCode   = invoice.InvoiceCode,
                     ConfirmedAt   = confirmedAt
                 };
             }
