@@ -2,19 +2,26 @@ function PageHeader({
   title,
   description,
   searchPlaceholder,
+  searchDropdown = null,
   rightContent = null,
 }) {
   const hasTitle = Boolean(title)
   const hasSearch = Boolean(searchPlaceholder)
 
   const searchInput = hasSearch ? (
-    <div className={`relative w-full ${hasTitle ? 'min-w-0 lg:max-w-xl' : 'lg:max-w-xl'}`}>
+    <div className={`group relative w-full ${hasTitle ? 'min-w-0 lg:max-w-xl' : 'lg:max-w-xl'}`}>
       <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-[20px] text-[#58635b]">search</span>
       <input
         type="text"
         placeholder={searchPlaceholder}
         className="h-11 w-full rounded-full border border-[#c1c9c0]/90 bg-white pl-12 pr-4 text-sm text-[#1b1c17] shadow-[0_1px_0_rgba(255,255,255,0.8),0_8px_20px_rgba(0,0,0,0.03)] outline-none transition focus:border-[#538463] focus:ring-2 focus:ring-[#356647]/20"
       />
+
+      {searchDropdown ? (
+        <div className="absolute left-0 right-0 top-full z-50 mt-2 hidden max-h-[60vh] overflow-y-auto rounded-2xl border border-[#c1c9c0] bg-white shadow-[0_20px_40px_rgba(27,28,23,0.12)] group-focus-within:block">
+          {searchDropdown}
+        </div>
+      ) : null}
     </div>
   ) : null
 
