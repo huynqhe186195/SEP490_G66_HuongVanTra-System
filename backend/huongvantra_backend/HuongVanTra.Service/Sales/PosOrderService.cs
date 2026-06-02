@@ -97,11 +97,12 @@ namespace HuongVanTra.Service.Sales {
             if (!storeExists)
                 throw new ArgumentException($"Store {command.StoreId} does not exist.");
 
-            if (command.CustomerId.HasValue) {
-                var customerExists = await _db.Customers.AnyAsync(c => c.Id == command.CustomerId.Value);
-                if (!customerExists)
-                    throw new ArgumentException($"Customer {command.CustomerId.Value} does not exist.");
-            }
+            if (command.CustomerId <= 0)
+                throw new ArgumentException("CustomerId is required for POS orders.");
+
+            var customerExists = await _db.Customers.AnyAsync(c => c.Id == command.CustomerId);
+            if (!customerExists)
+                throw new ArgumentException($"Customer {command.CustomerId} does not exist.");
 
             var productIds = command.Items.Select(i => i.ProductId).Distinct().ToList();
             var products = await _db.Products
@@ -129,11 +130,10 @@ namespace HuongVanTra.Service.Sales {
             return (promo.DiscountType, promo.DiscountValue);
         }
 
-        private async Task<decimal> GetMembershipDiscountAsync(int? customerId) {
-            if (customerId is null) return 0;
+        private async Task<decimal> GetMembershipDiscountAsync(int customerId) {
             var customer = await _db.Customers
                 .Include(c => c.Tier)
-                .FirstOrDefaultAsync(c => c.Id == customerId.Value);
+                .FirstOrDefaultAsync(c => c.Id == customerId);
             return customer?.Tier?.DiscountPercent ?? 0;
         }
 
@@ -275,11 +275,9 @@ namespace HuongVanTra.Service.Sales {
             }
         }
 
-        private async Task UpdateCustomerSpendAsync(int? customerId, decimal amount) {
-            if (customerId is null) return;
-
+        private async Task UpdateCustomerSpendAsync(int customerId, decimal amount) {
             var customer = await _db.Customers
-                .FirstOrDefaultAsync(c => c.Id == customerId.Value);
+                .FirstOrDefaultAsync(c => c.Id == customerId);
             if (customer is null) return;
 
             customer.TotalSpend += amount;
