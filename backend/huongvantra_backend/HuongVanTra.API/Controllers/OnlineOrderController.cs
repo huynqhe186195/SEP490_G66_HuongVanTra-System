@@ -11,9 +11,13 @@ namespace HuongVanTra.API.Controllers {
     [Route("api/online-orders")]
     public class OnlineOrderController : ControllerBase {
         private readonly IOnlineOrderService _onlineOrderService;
+        private readonly IOrderConfirmationService _orderConfirmationService;
 
-        public OnlineOrderController(IOnlineOrderService onlineOrderService) {
+        public OnlineOrderController(
+            IOnlineOrderService onlineOrderService,
+            IOrderConfirmationService orderConfirmationService) {
             _onlineOrderService = onlineOrderService;
+            _orderConfirmationService = orderConfirmationService;
         }
 
         /// <summary>
@@ -74,20 +78,39 @@ namespace HuongVanTra.API.Controllers {
         /// Cập nhật payment_status = paid, order_status = completed, ghi audit log.
         /// </summary>
         [HttpPatch("{id:int}/cod/mark-delivered-and-paid")]
-        public async Task<ActionResult> MarkCodDeliveredAndPaid(int id) {
+        public Task<ActionResult<OrderConfirmationResponse>> MarkCodDeliveredAndPaid(int id) {
+            return ConfirmCodCompletedInternal(id);
+        }
+
+        /// <summary>
+        /// Xác nhận COD đã giao và đã thu tiền (alias rõ nghĩa hơn).
+        /// </summary>
+        [HttpPatch("{id:int}/cod/confirm-completed")]
+        public Task<ActionResult<OrderConfirmationResponse>> ConfirmCodCompleted(int id) {
+            return ConfirmCodCompletedInternal(id);
+        }
+
+        /// <summary>
+        /// Xác nhận khách đã chuyển khoản / VietQR (đơn online không phải COD).
+        /// </summary>
+        [HttpPatch("{id:int}/confirm-payment")]
+        public async Task<ActionResult<OrderConfirmationResponse>> ConfirmPayment(
+            int id,
+            [FromBody] ConfirmPaymentRequest? request) {
             var employeeId = User.GetEmployeeId();
-            if (employeeId is null)
+            if (employeeId is null) {
                 return Unauthorized("Employee ID not found in token.");
+            }
 
             try {
-                var result = await _onlineOrderService.MarkCodDeliveredAndPaidAsync(id, employeeId.Value);
-                return Ok(new {
-                    result.OrderId,
-                    result.OrderCode,
-                    result.PaymentStatus,
-                    result.OrderStatus,
-                    result.ConfirmedAt
+                var result = await _orderConfirmationService.ConfirmPaymentAsync(new ConfirmPaymentCommand {
+                    OrderId = id,
+                    EmployeeId = employeeId.Value,
+                    PaymentReference = request?.PaymentReference,
+                    Note = request?.Note,
                 });
+
+                return Ok(ToConfirmationResponse(result));
             }
             catch (ArgumentException ex) {
                 return NotFound(ex.Message);
@@ -96,6 +119,33 @@ namespace HuongVanTra.API.Controllers {
                 return BadRequest(ex.Message);
             }
         }
+
+        private async Task<ActionResult<OrderConfirmationResponse>> ConfirmCodCompletedInternal(int id) {
+            var employeeId = User.GetEmployeeId();
+            if (employeeId is null) {
+                return Unauthorized("Employee ID not found in token.");
+            }
+
+            try {
+                var result = await _orderConfirmationService.ConfirmCodCompletedAsync(id, employeeId.Value);
+                return Ok(ToConfirmationResponse(result));
+            }
+            catch (ArgumentException ex) {
+                return NotFound(ex.Message);
+            }
+            catch (InvalidOperationException ex) {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        private static OrderConfirmationResponse ToConfirmationResponse(OrderConfirmationResult result) => new() {
+            OrderId = result.OrderId,
+            OrderCode = result.OrderCode,
+            PaymentMethod = result.PaymentMethod,
+            PaymentStatus = result.PaymentStatus,
+            OrderStatus = result.OrderStatus,
+            ConfirmedAt = result.ConfirmedAt,
+        };
 
         /// <summary>
         /// Danh sách đơn COD treo: chưa giao thành công, chưa hủy,

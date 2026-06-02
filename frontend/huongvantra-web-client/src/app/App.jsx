@@ -21,6 +21,7 @@ import OrdersPage from '../features/orders/pages/OrdersPage.jsx'
 import OrderDetailPage from '../features/orders/pages/OrderDetailPage.jsx'
 import QuickOrderPage from '../features/orders/pages/QuickOrderPage.jsx'
 import PosPage from '../features/pos/pages/PosPage.jsx'
+import PosTransferQrPage from '../features/pos/pages/PosTransferQrPage.jsx'
 import ProductFormPage from '../features/products/pages/ProductFormPage.jsx'
 import ProductsListPage from '../features/products/pages/ProductsListPage.jsx'
 import ProductsPricingPage from '../features/products/pages/ProductsPricingPage.jsx'
@@ -42,6 +43,7 @@ function App() {
         <Route index element={<HomeRedirect />} />
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/pos" element={<PosPage />} />
+        <Route path="/pos/payment/qr" element={<PosTransferQrPage />} />
         <Route path="/orders" element={<OrdersPage />} />
         <Route path="/orders/:id" element={<OrderDetailPage />} />
         <Route path="/orders/create" element={<QuickOrderPage />} />

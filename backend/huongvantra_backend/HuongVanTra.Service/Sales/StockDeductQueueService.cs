@@ -80,6 +80,10 @@ namespace HuongVanTra.Service.Sales {
                 .GroupBy(e => e.MaterialId)
                 .ToDictionary(g => g.Key, g => g.Sum(e => e.Quantity));
 
+            if (deductMap.Count == 0) {
+                throw new InvalidOperationException("No inventory items to deduct for this order.");
+            }
+
             var materialIds = deductMap.Keys.ToList();
             var balances = await _db.InventoryBalances
                 .Where(b => b.WarehouseId == warehouseId && materialIds.Contains(b.ProductId))

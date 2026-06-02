@@ -208,7 +208,7 @@ namespace HuongVanTra.Service.Sales {
             // Build materialId -> qty to deduct
             var deductMap = new Dictionary<int, decimal>();
             foreach (var item in order.OrderItems.Where(i => i.IsGift == 0)) {
-                if (bomHeaders.TryGetValue(item.ProductId, out var bom)) {
+                if (bomHeaders.TryGetValue(item.ProductId, out var bom) && bom.BomLines.Count > 0) {
                     var multiplier = item.Quantity / bom.QuantityOutput;
                     foreach (var line in bom.BomLines) {
                         deductMap.TryGetValue(line.MaterialId, out var existing);
@@ -219,6 +219,10 @@ namespace HuongVanTra.Service.Sales {
                     deductMap.TryGetValue(item.ProductId, out var existing);
                     deductMap[item.ProductId] = existing + item.Quantity;
                 }
+            }
+
+            if (deductMap.Count == 0) {
+                throw new InvalidOperationException("No inventory items to deduct for this order.");
             }
 
             var materialIds = deductMap.Keys.ToList();
@@ -309,7 +313,7 @@ namespace HuongVanTra.Service.Sales {
             var snapshot = new List<BomSnapshotEntry>();
             foreach (var item in command.Items.Where(i => i.IsGift == 0)) {
                 var bom = bomHeaders.FirstOrDefault(b => b.FinishedGoodId == item.ProductId);
-                if (bom is not null) {
+                if (bom is not null && bom.BomLines.Count > 0) {
                     var multiplier = item.Quantity / bom.QuantityOutput;
                     foreach (var line in bom.BomLines) {
                         snapshot.Add(new BomSnapshotEntry {

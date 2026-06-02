@@ -8,9 +8,11 @@ using System.Text.Json;
 namespace HuongVanTra.Service.Sales {
     public class OnlineOrderService : IOnlineOrderService {
         private readonly AppDbContext _db;
+        private readonly IOrderConfirmationService _orderConfirmationService;
 
-        public OnlineOrderService(AppDbContext db) {
+        public OnlineOrderService(AppDbContext db, IOrderConfirmationService orderConfirmationService) {
             _db = db;
+            _orderConfirmationService = orderConfirmationService;
         }
 
         public async Task<OnlineOrderResult> CreateVietQrOrderAsync(CreateOnlineOrderCommand command) {
@@ -181,7 +183,7 @@ namespace HuongVanTra.Service.Sales {
             var snapshot = new List<BomSnapshotEntry>();
             foreach (var item in command.Items.Where(i => i.IsGift == 0)) {
                 var bom = bomHeaders.FirstOrDefault(b => b.FinishedGoodId == item.ProductId);
-                if (bom is not null) {
+                if (bom is not null && bom.BomLines.Count > 0) {
                     var multiplier = item.Quantity / bom.QuantityOutput;
                     foreach (var line in bom.BomLines)
                         snapshot.Add(new BomSnapshotEntry {
@@ -197,6 +199,10 @@ namespace HuongVanTra.Service.Sales {
                         Quantity   = item.Quantity
                     });
                 }
+            }
+
+            if (snapshot.Count == 0) {
+                throw new InvalidOperationException("No inventory items to deduct for this order.");
             }
 
             _db.StockDeductQueues.Add(new StockDeductQueue {
@@ -239,49 +245,14 @@ namespace HuongVanTra.Service.Sales {
         }
 
         public async Task<CodDeliveredResult> MarkCodDeliveredAndPaidAsync(int orderId, int employeeId) {
-            var order = await _db.Orders
-                .FirstOrDefaultAsync(o => o.Id == orderId)
-                ?? throw new ArgumentException($"Order {orderId} does not exist.");
-
-            if (order.PaymentMethod != "COD")
-                throw new InvalidOperationException($"Order {orderId} is not a COD order.");
-
-            if (order.PaymentStatus == "paid")
-                throw new InvalidOperationException($"Order {orderId} has already been marked as paid.");
-
-            if (order.OrderStatus == "cancelled")
-                throw new InvalidOperationException($"Order {orderId} is cancelled and cannot be updated.");
-
-            await using var tx = await _db.Database.BeginTransactionAsync();
-            try {
-                order.PaymentStatus = "paid";
-                order.OrderStatus   = "completed";
-
-                _db.AuditLogs.Add(new AuditLog {
-                    Action     = "cod_delivered_paid",
-                    EntityType = "orders",
-                    EntityId   = order.Id,
-                    UserId     = employeeId,
-                    StoreId    = order.StoreId,
-                    Status     = "SUCCESS",
-                    CreatedAt  = DateTime.UtcNow
-                });
-
-                await _db.SaveChangesAsync();
-                await tx.CommitAsync();
-
-                return new CodDeliveredResult {
-                    OrderId       = order.Id,
-                    OrderCode     = order.OrderCode,
-                    PaymentStatus = order.PaymentStatus,
-                    OrderStatus   = order.OrderStatus,
-                    ConfirmedAt   = DateTime.UtcNow
-                };
-            }
-            catch {
-                await tx.RollbackAsync();
-                throw;
-            }
+            var result = await _orderConfirmationService.ConfirmCodCompletedAsync(orderId, employeeId);
+            return new CodDeliveredResult {
+                OrderId = result.OrderId,
+                OrderCode = result.OrderCode,
+                PaymentStatus = result.PaymentStatus,
+                OrderStatus = result.OrderStatus,
+                ConfirmedAt = result.ConfirmedAt,
+            };
         }
 
         public async Task<List<OverdueCodOrderResult>> GetOverdueCodOrdersAsync() {

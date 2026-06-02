@@ -1,5 +1,9 @@
+using HuongVanTra.API.Extensions;
+using HuongVanTra.API.Models.Sales;
 using HuongVanTra.Core.Authorization;
 using HuongVanTra.Service.Orders;
+using HuongVanTra.Service.Sales;
+using HuongVanTra.Service.Sales.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -8,9 +12,11 @@ namespace HuongVanTra.API.Controllers {
     [Route("api/[controller]")]
     public class OrdersController : ApiControllerBase {
         private readonly IOrderService _orderService;
+        private readonly IOrderConfirmationService _orderConfirmationService;
 
-        public OrdersController(IOrderService orderService) {
+        public OrdersController(IOrderService orderService, IOrderConfirmationService orderConfirmationService) {
             _orderService = orderService;
+            _orderConfirmationService = orderConfirmationService;
         }
 
         [HttpGet]
@@ -117,5 +123,73 @@ namespace HuongVanTra.API.Controllers {
                 return BadRequest(ex.Message);
             }
         }
+
+        /// <summary>
+        /// Xác nhận đã nhận tiền (VietQR, chuyển khoản, POS chờ thanh toán...).
+        /// </summary>
+        [HttpPatch("{id:int}/confirm-payment")]
+        public async Task<ActionResult<OrderConfirmationResponse>> ConfirmPayment(
+            int id,
+            [FromBody] ConfirmPaymentRequest? request,
+            CancellationToken cancellationToken) {
+            var employeeId = User.GetEmployeeId();
+            if (employeeId is null) {
+                return Unauthorized("Employee ID not found in token.");
+            }
+
+            try {
+                var result = await _orderConfirmationService.ConfirmPaymentAsync(new ConfirmPaymentCommand {
+                    OrderId = id,
+                    EmployeeId = employeeId.Value,
+                    PaymentReference = request?.PaymentReference,
+                    Note = request?.Note,
+                }, cancellationToken);
+
+                return Ok(ToConfirmationResponse(result));
+            }
+            catch (ArgumentException ex) {
+                return NotFound(ex.Message);
+            }
+            catch (InvalidOperationException ex) {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Xác nhận COD đã giao và đã thu tiền (hoàn tất đơn).
+        /// </summary>
+        [HttpPatch("{id:int}/confirm-cod")]
+        public async Task<ActionResult<OrderConfirmationResponse>> ConfirmCodCompleted(
+            int id,
+            CancellationToken cancellationToken) {
+            var employeeId = User.GetEmployeeId();
+            if (employeeId is null) {
+                return Unauthorized("Employee ID not found in token.");
+            }
+
+            try {
+                var result = await _orderConfirmationService.ConfirmCodCompletedAsync(
+                    id,
+                    employeeId.Value,
+                    cancellationToken);
+
+                return Ok(ToConfirmationResponse(result));
+            }
+            catch (ArgumentException ex) {
+                return NotFound(ex.Message);
+            }
+            catch (InvalidOperationException ex) {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        private static OrderConfirmationResponse ToConfirmationResponse(OrderConfirmationResult result) => new() {
+            OrderId = result.OrderId,
+            OrderCode = result.OrderCode,
+            PaymentMethod = result.PaymentMethod,
+            PaymentStatus = result.PaymentStatus,
+            OrderStatus = result.OrderStatus,
+            ConfirmedAt = result.ConfirmedAt,
+        };
     }
 }

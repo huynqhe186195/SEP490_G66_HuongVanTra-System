@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import AddCustomerModal from '../components/AddCustomerModal.jsx'
 import OrderOfferModal from '../components/OrderOfferModal.jsx'
 
@@ -41,7 +42,6 @@ const searchResults = [
 const PAYMENT_METHODS = [
   { id: 'CASH', label: 'Tiền mặt', icon: 'payments' },
   { id: 'TRANSFER', label: 'Chuyển khoản', icon: 'account_balance' },
-  { id: 'CARD', label: 'Thẻ', icon: 'credit_card' },
 ]
 
 function Icon({ children, className = '', filled = false }) {
@@ -70,6 +70,7 @@ function getLineTotal(item) {
 }
 
 function PosPage() {
+  const navigate = useNavigate()
   const [tabs, setTabs] = useState([
     { id: 1, label: 'Hóa đơn 1' },
     { id: 2, label: 'Hóa đơn 2' },
@@ -212,8 +213,33 @@ function PosPage() {
     setAmountPaidInput(String(value))
   }
 
-  const showSearchDropdown = searchValue.trim().length > 0 && filteredResults.length > 0
   const hasCartItems = cartItems.length > 0
+  const isTransferPayment = paymentMethod === 'TRANSFER'
+  const canPayCash = total > 0 && amountPaid >= total
+  const canPayTransfer = total > 0 && hasCartItems
+  const canPay = isTransferPayment ? canPayTransfer : canPayCash
+
+  const handlePayment = () => {
+    if (!canPay) {
+      return
+    }
+
+    if (isTransferPayment) {
+      navigate('/pos/payment/qr', {
+        state: {
+          total,
+          orderLabel: activeTab.label,
+          customer: selectedCustomer,
+          paymentMethod: 'TRANSFER',
+        },
+      })
+      return
+    }
+
+    // Tiền mặt: giữ chỗ cho luồng hoàn tất đơn sau.
+  }
+
+  const showSearchDropdown = searchValue.trim().length > 0 && filteredResults.length > 0
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[28px] border border-[#c1c9c0]/40 bg-[#fbf9f1] shadow-[0_10px_30px_rgba(27,28,23,0.04)]">
@@ -484,49 +510,58 @@ function PosPage() {
               ) : null}
             </div>
 
-            <div className="rounded-xl bg-white p-4 shadow-sm">
-              <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[#717971]" htmlFor="amount-paid">
-                Khách trả
-              </label>
-              <input
-                id="amount-paid"
-                type="text"
-                inputMode="numeric"
-                className="w-full rounded-xl border border-[#c1c9c0] bg-[#fbf9f1] px-3 py-2.5 text-2xl font-bold outline-none focus:border-[#356647] focus:ring-2 focus:ring-[#356647]/20"
-                placeholder="0"
-                value={amountPaidInput}
-                onChange={(event) => setAmountPaidInput(event.target.value.replace(/\D/g, ''))}
-              />
-              <div className="mt-2 grid grid-cols-3 gap-1.5">
-                {[50000, 100000, 200000, 500000, 1000000].map((quick) => (
-                  <button
-                    key={quick}
-                    type="button"
-                    onClick={() => handleQuickAmount(quick)}
-                    className="rounded-lg bg-[#e4e3db] py-1.5 text-[10px] font-bold hover:bg-[#356647] hover:text-white"
-                  >
-                    {formatMoney(quick)}
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  onClick={() => handleQuickAmount(total)}
-                  className="rounded-lg bg-[#356647]/15 py-1.5 text-[10px] font-bold text-[#356647] hover:bg-[#356647] hover:text-white"
-                >
-                  Đúng tiền
-                </button>
-              </div>
-            </div>
+            {!isTransferPayment ? (
+              <>
+                <div className="rounded-xl bg-white p-4 shadow-sm">
+                  <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[#717971]" htmlFor="amount-paid">
+                    Khách trả
+                  </label>
+                  <input
+                    id="amount-paid"
+                    type="text"
+                    inputMode="numeric"
+                    className="w-full rounded-xl border border-[#c1c9c0] bg-[#fbf9f1] px-3 py-2.5 text-2xl font-bold outline-none focus:border-[#356647] focus:ring-2 focus:ring-[#356647]/20"
+                    placeholder="0"
+                    value={amountPaidInput}
+                    onChange={(event) => setAmountPaidInput(event.target.value.replace(/\D/g, ''))}
+                  />
+                  <div className="mt-2 grid grid-cols-3 gap-1.5">
+                    {[50000, 100000, 200000, 500000, 1000000].map((quick) => (
+                      <button
+                        key={quick}
+                        type="button"
+                        onClick={() => handleQuickAmount(quick)}
+                        className="rounded-lg bg-[#e4e3db] py-1.5 text-[10px] font-bold hover:bg-[#356647] hover:text-white"
+                      >
+                        {formatMoney(quick)}
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => handleQuickAmount(total)}
+                      className="rounded-lg bg-[#356647]/15 py-1.5 text-[10px] font-bold text-[#356647] hover:bg-[#356647] hover:text-white"
+                    >
+                      Đúng tiền
+                    </button>
+                  </div>
+                </div>
 
-            <div className="rounded-xl bg-white p-4 shadow-sm">
-              <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-[#717971]">Tiền thừa</label>
-              <div className={`text-2xl font-bold ${change > 0 ? 'text-[#356647]' : 'text-[#717971]'}`}>
-                {formatMoney(change)} đ
+                <div className="rounded-xl bg-white p-4 shadow-sm">
+                  <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-[#717971]">Tiền thừa</label>
+                  <div className={`text-2xl font-bold ${change > 0 ? 'text-[#356647]' : 'text-[#717971]'}`}>
+                    {formatMoney(change)} đ
+                  </div>
+                  {amountPaid > 0 && amountPaid < total ? (
+                    <p className="mt-1 text-sm font-medium text-[#ba1a1a]">Thiếu {formatMoney(total - amountPaid)} đ</p>
+                  ) : null}
+                </div>
+              </>
+            ) : (
+              <div className="rounded-xl border border-[#356647]/20 bg-[#356647]/5 p-4 text-sm text-[#414942]">
+                <p className="font-semibold text-[#356647]">Thanh toán chuyển khoản</p>
+                <p className="mt-1 text-[#717971]">Bấm Thanh toán để hiển thị mã QR cho khách quét.</p>
               </div>
-              {amountPaid > 0 && amountPaid < total ? (
-                <p className="mt-1 text-sm font-medium text-[#ba1a1a]">Thiếu {formatMoney(total - amountPaid)} đ</p>
-              ) : null}
-            </div>
+            )}
 
             <div className="rounded-xl bg-white p-4 shadow-sm">
               <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[#717971]">Phương thức thanh toán</label>
@@ -562,11 +597,12 @@ function PosPage() {
             </button>
             <button
               type="button"
-              disabled={total <= 0 || amountPaid < total}
+              disabled={!canPay}
+              onClick={handlePayment}
               className="flex flex-col items-center justify-center rounded-xl bg-[#356647] py-3 text-sm font-bold text-white shadow-md hover:brightness-110 disabled:opacity-50"
             >
               <span className="text-[10px] opacity-70">F12</span>
-              Thanh toán
+              {isTransferPayment ? 'Thanh toán · QR' : 'Thanh toán'}
             </button>
           </div>
         </section>

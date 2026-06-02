@@ -5,6 +5,7 @@ using HuongVanTra.Service.Auth;
 using HuongVanTra.Service.Orders;
 using HuongVanTra.Service.Profile;
 using HuongVanTra.Service.Sales;
+using HuongVanTra.Service.Staff;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
@@ -30,7 +31,9 @@ namespace HuongVanTra.API
                 options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString)));
             builder.Services.AddScoped<IAuthService, AuthService>();
             builder.Services.AddScoped<IProfileService, ProfileService>();
+            builder.Services.AddScoped<IStaffAccountService, StaffAccountService>();
             builder.Services.AddScoped<IOrderService, OrderService>();
+            builder.Services.AddScoped<IOrderConfirmationService, OrderConfirmationService>();
             builder.Services.AddScoped<IPosOrderService, PosOrderService>();
             builder.Services.AddScoped<IOnlineOrderService, OnlineOrderService>();
             builder.Services.AddScoped<IStockDeductQueueService, StockDeductQueueService>();
