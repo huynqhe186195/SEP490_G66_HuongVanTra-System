@@ -3,7 +3,7 @@ namespace HuongVanTra.API.Models.Sales {
         public int StoreId { get; set; }
         public int? CustomerId { get; set; }
         public int? PromotionId { get; set; }
-        public string PaymentMethod { get; set; } = null!; // "VIETQR" | "COD"
+        public string? PaymentMethod { get; set; }
         public string? ShippingAddress { get; set; }
         public List<OrderItemRequest> Items { get; set; } = new();
         public List<PaymentRequest> Payments { get; set; } = new();

@@ -13,6 +13,25 @@ namespace HuongVanTra.Service.Sales {
             _db = db;
         }
 
+        public async Task<IReadOnlyList<StockDeductQueueListItem>> GetWaitingAsync(
+            CancellationToken cancellationToken = default) {
+            return await _db.StockDeductQueues
+                .AsNoTracking()
+                .Where(q => q.Status == "waiting")
+                .OrderByDescending(q => q.CreatedAt)
+                .Select(q => new StockDeductQueueListItem {
+                    QueueId = q.Id,
+                    OrderId = q.Order.Id,
+                    OrderCode = q.Order.OrderCode,
+                    QueueStatus = q.Status,
+                    OrderPaymentStatus = q.Order.PaymentStatus,
+                    OrderStockStatus = q.Order.StockStatus,
+                    TotalAmount = q.Order.TotalAmount,
+                    CreatedAt = q.CreatedAt,
+                })
+                .ToListAsync(cancellationToken);
+        }
+
         public async Task<ConfirmStockDeductResult> ConfirmAsync(int queueId, int confirmedByEmployeeId) {
             var queue = await _db.StockDeductQueues
                 .Include(q => q.Order)

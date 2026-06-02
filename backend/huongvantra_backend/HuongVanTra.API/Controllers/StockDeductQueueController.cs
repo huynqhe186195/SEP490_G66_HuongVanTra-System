@@ -16,6 +16,25 @@ namespace HuongVanTra.API.Controllers {
         }
 
         /// <summary>
+        /// Danh sách hàng chờ trừ kho (status = waiting).
+        /// </summary>
+        [HttpGet("waiting")]
+        public async Task<ActionResult<IReadOnlyList<StockDeductQueueListItemResponse>>> GetWaiting(
+            CancellationToken cancellationToken) {
+            var items = await _stockDeductQueueService.GetWaitingAsync(cancellationToken);
+            return Ok(items.Select(i => new StockDeductQueueListItemResponse {
+                QueueId = i.QueueId,
+                OrderId = i.OrderId,
+                OrderCode = i.OrderCode,
+                QueueStatus = i.QueueStatus,
+                OrderPaymentStatus = i.OrderPaymentStatus,
+                OrderStockStatus = i.OrderStockStatus,
+                TotalAmount = i.TotalAmount,
+                CreatedAt = i.CreatedAt,
+            }).ToList());
+        }
+
+        /// <summary>
         /// Xác nhận trừ kho cho một online order.
         /// Chỉ confirm được queue có status = "waiting".
         /// Trừ kho theo bom_snapshot tại thời điểm bán, không dùng BOM hiện tại.

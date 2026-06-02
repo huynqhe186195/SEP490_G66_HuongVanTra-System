@@ -3,6 +3,7 @@ using HuongVanTra.Core.Entities.System;
 using HuongVanTra.Infrastructure.Data;
 using HuongVanTra.Service.Sales.Models;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace HuongVanTra.Service.Sales {
     public class OrderConfirmationService : IOrderConfirmationService {
@@ -157,7 +158,10 @@ namespace HuongVanTra.Service.Sales {
                 return null;
             }
 
-            return $"ref={paymentReference?.Trim()}; note={note?.Trim()}";
+            return JsonSerializer.Serialize(new {
+                paymentReference = paymentReference?.Trim(),
+                note = note?.Trim(),
+            });
         }
 
         private static OrderConfirmationResult ToResult(Order order) => new() {
