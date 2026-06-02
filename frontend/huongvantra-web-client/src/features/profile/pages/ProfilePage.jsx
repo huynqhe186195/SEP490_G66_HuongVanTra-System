@@ -1,27 +1,99 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { showError, showSuccess } from '../../../app/toast.js'
+import { fetchMyProfile, updateMyProfile } from '../services/profileApi.js'
 
 
 function ProfilePage() {
   const navigate = useNavigate()
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
   const [form, setForm] = useState({
-    fullName: 'Pham Thu Ha',
-    staffCode: 'HVT-STAFF-082',
-    username: 'ha.pham.pos',
-    password: '',
-    phone: '0987 654 321',
-    role: 'staff',
-    branch: 'q1',
-    note: 'Nhan vien xuat sac thang 10. Chuyen trach tra xanh va qua tang cao cap.',
+    userId: null,
+    fullName: '',
+    staffCode: '',
+    username: '',
+    currentPassword: '',
+    newPassword: '',
+    phone: '',
+    role: '',
+    branch: '',
+    note: '',
   })
 
   const handleChange = (field) => (event) => {
     setForm((current) => ({ ...current, [field]: event.target.value }))
   }
 
-  const handleSubmit = (event) => {
+  useEffect(() => {
+    let mounted = true
+
+    const loadProfile = async () => {
+      try {
+        const profile = await fetchMyProfile()
+        if (!mounted) return
+
+        setForm((current) => ({
+          ...current,
+          userId: profile.userId,
+          fullName: profile.fullName || '',
+          staffCode: profile.employeeCode || '',
+          username: profile.username || '',
+          phone: profile.phone || '',
+          role: (profile.roles || []).join(', '),
+          branch: profile.storeName || '',
+          note: profile.note || '',
+        }))
+      } catch (error) {
+        showError(error.message)
+      } finally {
+        if (mounted) setIsLoading(false)
+      }
+    }
+
+    loadProfile()
+
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  const canSubmit = useMemo(() => {
+    if (!form.fullName.trim() || !form.username.trim()) return false
+    if (form.newPassword && !form.currentPassword) return false
+    return true
+  }, [form.fullName, form.username, form.newPassword, form.currentPassword])
+
+  const handleSubmit = async (event) => {
     event.preventDefault()
-    navigate('/staff')
+    if (!canSubmit) {
+      showError('Vui lòng nhập đủ thông tin bắt buộc.')
+      return
+    }
+
+    setIsSaving(true)
+    try {
+      await updateMyProfile({
+        fullName: form.fullName.trim(),
+        username: form.username.trim(),
+        phone: form.phone.trim(),
+        note: form.note,
+        currentPassword: form.currentPassword || null,
+        newPassword: form.newPassword || null,
+      })
+
+      setForm((current) => ({
+        ...current,
+        currentPassword: '',
+        newPassword: '',
+      }))
+      showSuccess('Cập nhật hồ sơ thành công.')
+      navigate('/profile')
+    } catch (error) {
+      showError(error.message)
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   return (
@@ -96,8 +168,20 @@ function ProfilePage() {
                       className="w-full border-none bg-transparent p-0 text-sm text-[#1b1c17] outline-none focus:ring-0"
                       placeholder="••••••••"
                       type="password"
-                      value={form.password}
-                      onChange={handleChange('password')}
+                      value={form.currentPassword}
+                      onChange={handleChange('currentPassword')}
+                    />
+                  </div>
+                </label>
+                <label className="flex flex-col gap-2">
+                  <span className="px-1 text-xs font-semibold text-[#414942]">Mật khẩu mới</span>
+                  <div className="rounded-xl border border-[#e4e3db] bg-[#f6f4ec] px-4 py-3 transition-all focus-within:border-[#356647] focus-within:shadow-[0_0_0_1px_#356647]">
+                    <input
+                      className="w-full border-none bg-transparent p-0 text-sm text-[#1b1c17] outline-none focus:ring-0"
+                      placeholder="Để trống nếu không đổi"
+                      type="password"
+                      value={form.newPassword}
+                      onChange={handleChange('newPassword')}
                     />
                   </div>
                 </label>
@@ -117,32 +201,22 @@ function ProfilePage() {
                 <label className="flex flex-col gap-2">
                   <span className="px-1 text-xs font-semibold text-[#414942]">Vai trò hệ thống</span>
                   <div className="flex items-center rounded-xl border border-[#e4e3db] bg-[#f6f4ec] px-4 py-3 transition-all focus-within:border-[#356647] focus-within:shadow-[0_0_0_1px_#356647]">
-                    <select
+                    <input
                       className="w-full appearance-none border-none bg-transparent p-0 text-sm text-[#1b1c17] outline-none focus:ring-0"
                       value={form.role}
-                      onChange={handleChange('role')}
-                    >
-                      <option value="manager">Quản lý cửa hàng</option>
-                      <option value="staff">Nhân viên bán hàng</option>
-                      <option value="warehouse">Quản lý kho</option>
-                    </select>
-                    <span className="material-symbols-outlined pointer-events-none text-[#414942]">arrow_drop_down</span>
+                      readOnly
+                    />
                   </div>
                 </label>
 
                 <label className="flex flex-col gap-2 md:col-span-2">
                   <span className="px-1 text-xs font-semibold text-[#414942]">Cửa hàng làm việc</span>
                   <div className="flex items-center rounded-xl border border-[#e4e3db] bg-[#f6f4ec] px-4 py-3 transition-all focus-within:border-[#356647] focus-within:shadow-[0_0_0_1px_#356647]">
-                    <select
+                    <input
                       className="w-full appearance-none border-none bg-transparent p-0 text-sm text-[#1b1c17] outline-none focus:ring-0"
                       value={form.branch}
-                      onChange={handleChange('branch')}
-                    >
-                      <option value="q1">Chi nhánh Quận 1</option>
-                      <option value="q3">Chi nhánh Quận 3</option>
-                      <option value="td">Chi nhánh Thủ Đức</option>
-                    </select>
-                    <span className="material-symbols-outlined pointer-events-none text-[#414942]">arrow_drop_down</span>
+                      readOnly
+                    />
                   </div>
                 </label>
 
@@ -169,10 +243,11 @@ function ProfilePage() {
 
                   <button
                     type="submit"
+                    disabled={isSaving || !canSubmit || isLoading}
                     className="inline-flex items-center justify-center gap-2 rounded-full bg-[#356647] px-14 py-3.5 text-[16px] font-medium text-white shadow-[0_10px_25px_rgba(53,102,71,0.2)] transition-all hover:bg-[#4e7f5e] active:scale-[0.98]"
                   >
                     <span className="material-symbols-outlined text-[20px]">save</span>
-                    Lưu thay đổi
+                    {isSaving ? 'Đang lưu...' : 'Lưu thay đổi'}
                   </button>
                 </div>
               </form>

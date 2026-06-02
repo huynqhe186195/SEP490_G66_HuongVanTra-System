@@ -18,6 +18,10 @@ namespace HuongVanTra.Service.Staff {
             AssignStaffRolesDto request,
             CancellationToken cancellationToken = default);
 
+        Task<StaffAccountUpdateResult> CreateAccountAsync(
+            CreateStaffAccountDto request,
+            CancellationToken cancellationToken = default);
+
         Task<List<RoleOptionDto>> GetRoleOptionsAsync(CancellationToken cancellationToken = default);
     }
 }
