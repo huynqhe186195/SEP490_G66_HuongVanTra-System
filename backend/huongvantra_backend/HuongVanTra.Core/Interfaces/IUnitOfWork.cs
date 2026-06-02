@@ -1,7 +1,4 @@
-﻿using System;
-using System.Threading.Tasks;
-
-namespace HuongVanTra.Core.Interfaces {
+﻿namespace HuongVanTra.Core.Interfaces {
     public interface IUnitOfWork : IDisposable {
         IGenericRepository<TEntity> Repository<TEntity>() where TEntity : class;
 

@@ -1,5 +1,4 @@
 ﻿using HuongVanTra.Service.DTOs.Inventory;
-using System.Threading.Tasks;
 
 namespace HuongVanTra.Service.Interfaces {
     public interface IInventoryService {

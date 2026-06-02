@@ -1,6 +1,4 @@
-﻿using System;
-
-namespace HuongVanTra.Service.DTOs.Inventory {
+﻿namespace HuongVanTra.Service.DTOs.Inventory {
     public class TransactionResponseDto {
         public string TxnCode { get; set; } = null!;
         public string TxnType { get; set; } = null!;

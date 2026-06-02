@@ -1,11 +1,8 @@
-﻿using System;
-using System.Linq;
-using System.Threading.Tasks;
-using Microsoft.EntityFrameworkCore;
-using HuongVanTra.Core.Entities.Inventory;
+﻿using HuongVanTra.Core.Entities.Inventory;
 using HuongVanTra.Core.Interfaces;
 using HuongVanTra.Service.DTOs.Inventory;
 using HuongVanTra.Service.Interfaces;
+using Microsoft.EntityFrameworkCore;
 
 namespace HuongVanTra.Service.Implementations {
     public class InventoryService : IInventoryService {

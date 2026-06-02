@@ -3,12 +3,7 @@ using HuongVanTra.Core.Entities.System;
 using HuongVanTra.Core.Interfaces;
 using HuongVanTra.Service.DTO.Customers;
 using HuongVanTra.Service.Interfaces;
-using Microsoft.EntityFrameworkCore;
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Text.Json;
-using System.Threading.Tasks;
 
 namespace HuongVanTra.Service.Implementations {
     public class CustomerService : ICustomerService {

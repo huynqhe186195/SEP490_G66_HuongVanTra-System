@@ -1,6 +1,4 @@
-﻿using System.Collections.Generic;
-
-namespace HuongVanTra.Service.DTOs.Inventory {
+﻿namespace HuongVanTra.Service.DTOs.Inventory {
     public class IssueItemDto {
         public int ProductId { get; set; }
         public decimal Quantity { get; set; }

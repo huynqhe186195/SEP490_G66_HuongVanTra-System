@@ -1,6 +1,4 @@
-﻿using System.Collections.Generic;
-
-namespace HuongVanTra.Service.DTOs.Production {
+﻿namespace HuongVanTra.Service.DTOs.Production {
     public class CreateBomLineDto {
         public int MaterialId { get; set; }
         public decimal Quantity { get; set; }

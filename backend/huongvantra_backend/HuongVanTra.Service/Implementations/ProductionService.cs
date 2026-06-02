@@ -2,9 +2,6 @@
 using HuongVanTra.Core.Interfaces;
 using HuongVanTra.Service.DTOs.Production;
 using HuongVanTra.Service.Interfaces;
-using System;
-using System.Linq;
-using System.Threading.Tasks;
 
 namespace HuongVanTra.Service.Implementations {
     public class ProductionService : IProductionService {

@@ -1,9 +1,6 @@
 ﻿using HuongVanTra.Core.Interfaces;
 using HuongVanTra.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore.Storage;
-using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
 
 namespace HuongVanTra.Infrastructure.Repositories {
     public class UnitOfWork : IUnitOfWork {

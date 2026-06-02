@@ -1,8 +1,6 @@
 ﻿using HuongVanTra.Service.DTOs.Production;
 using HuongVanTra.Service.Interfaces;
 using Microsoft.AspNetCore.Mvc;
-using System;
-using System.Threading.Tasks;
 
 namespace HuongVanTra.API.Controllers {
     [Route("api/[controller]")]
