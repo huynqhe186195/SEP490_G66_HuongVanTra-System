@@ -2,6 +2,8 @@ using HuongVanTra.API.Authorization;
 using HuongVanTra.Core.Authorization;
 using HuongVanTra.Infrastructure.Data;
 using HuongVanTra.Service.Auth;
+using HuongVanTra.Service.Employees;
+using HuongVanTra.Service.Users;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
@@ -20,6 +22,8 @@ namespace HuongVanTra.API {
             builder.Services.AddDbContext<AppDbContext>(options =>
                 options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString)));
             builder.Services.AddScoped<IAuthService, AuthService>();
+            builder.Services.AddScoped<IEmployeeService, EmployeeService>();
+            builder.Services.AddScoped<IUserAccountService, UserAccountService>();
 
             builder.Services.AddCors(options => {
                 options.AddPolicy("Frontend", policy => {
@@ -75,7 +79,7 @@ namespace HuongVanTra.API {
                         ValidIssuer = jwtIssuer,
                         ValidAudience = jwtAudience,
                         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey!)),
-                        RoleClaimType = AppClaims.Role,
+                        RoleClaimType = ClaimTypes.Role,
                         NameClaimType = ClaimTypes.Name,
                     };
                 });

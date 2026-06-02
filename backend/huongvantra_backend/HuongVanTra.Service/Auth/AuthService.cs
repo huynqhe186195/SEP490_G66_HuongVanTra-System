@@ -187,6 +187,7 @@ namespace HuongVanTra.Service.Auth {
             }
 
             foreach (var role in roleNames) {
+                claims.Add(new Claim(ClaimTypes.Role, role));
                 claims.Add(new Claim(AppClaims.Role, role));
             }
 
