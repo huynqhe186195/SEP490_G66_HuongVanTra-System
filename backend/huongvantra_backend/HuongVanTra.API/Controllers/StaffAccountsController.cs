@@ -63,6 +63,32 @@ namespace HuongVanTra.API.Controllers {
             return Ok(MapDetail(account));
         }
 
+        [HttpPost]
+        public async Task<ActionResult<StaffAccountDetailResponse>> CreateAccount(
+            [FromBody] CreateStaffAccountRequest request,
+            CancellationToken cancellationToken) {
+            var result = await _staffAccountService.CreateAccountAsync(new CreateStaffAccountDto {
+                FullName = request.FullName,
+                Username = request.Username,
+                Password = request.Password,
+                Phone = request.Phone,
+                Note = request.Note,
+                IsActive = request.IsActive,
+                StoreId = request.StoreId,
+                DepartmentId = request.DepartmentId,
+                Roles = request.Roles,
+            }, cancellationToken);
+
+            if (!result.Success) {
+                return BadRequest(result.ErrorMessage);
+            }
+
+            return CreatedAtAction(
+                nameof(GetAccount),
+                new { userId = result.Account!.UserId },
+                MapDetail(result.Account));
+        }
+
         [HttpPut("{userId:int}")]
         public async Task<ActionResult<StaffAccountDetailResponse>> UpdateAccount(
             int userId,

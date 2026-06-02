@@ -1,22 +1,32 @@
 using HuongVanTra.API.Authorization;
 using HuongVanTra.Core.Authorization;
+using HuongVanTra.Core.Entities.Identity;
+using HuongVanTra.Core.Interfaces;
 using HuongVanTra.Infrastructure.Data;
+using HuongVanTra.Infrastructure.Repositories;
 using HuongVanTra.Service.Auth;
+using HuongVanTra.Service.Employees;
+using HuongVanTra.Service.Implementations;
+using HuongVanTra.Service.Interfaces;
 using HuongVanTra.Service.Orders;
 using HuongVanTra.Service.Profile;
 using HuongVanTra.Service.Sales;
+using Microsoft.Extensions.DependencyInjection;
 using HuongVanTra.Service.Staff;
-using Microsoft.EntityFrameworkCore;
+using HuongVanTra.Service.Users;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Identity;
-using HuongVanTra.Core.Entities.Identity;
+using CustomerModuleService = HuongVanTra.Service.Customers.ICustomerService;
+using CustomerModuleServiceImpl = HuongVanTra.Service.Customers.CustomerService;
+using MembershipCustomerService = HuongVanTra.Service.Interfaces.ICustomerService;
+using MembershipCustomerServiceImpl = HuongVanTra.Service.Implementations.CustomerService;
 
 namespace HuongVanTra.API
 {
@@ -29,15 +39,24 @@ namespace HuongVanTra.API
             var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
             builder.Services.AddDbContext<AppDbContext>(options =>
                 options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString)));
+
             builder.Services.AddScoped<IAuthService, AuthService>();
             builder.Services.AddScoped<IProfileService, ProfileService>();
             builder.Services.AddScoped<IStaffAccountService, StaffAccountService>();
             builder.Services.AddScoped<IOrderService, OrderService>();
             builder.Services.AddScoped<IOrderConfirmationService, OrderConfirmationService>();
+            builder.Services.Configure<VietQrTransferSettings>(
+                builder.Configuration.GetSection(VietQrTransferSettings.SectionName));
+            builder.Services.AddHttpClient<IVietQrService, VietQrService>();
             builder.Services.AddScoped<IPosOrderService, PosOrderService>();
             builder.Services.AddScoped<IOnlineOrderService, OnlineOrderService>();
             builder.Services.AddScoped<IStockDeductQueueService, StockDeductQueueService>();
             builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
+
+            builder.Services.AddScoped<IEmployeeService, EmployeeService>();
+            builder.Services.AddScoped<IUserAccountService, UserAccountService>();
+            builder.Services.AddScoped<CustomerModuleService, CustomerModuleServiceImpl>();
+            builder.Services.AddScoped<MembershipCustomerService, MembershipCustomerServiceImpl>();
 
             builder.Services.AddCors(options =>
             {
@@ -52,8 +71,12 @@ namespace HuongVanTra.API
                 });
             });
 
+            builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
+            builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
+            builder.Services.AddScoped<IInventoryService, InventoryService>();
+            builder.Services.AddScoped<IProductionService, ProductionService>();
+
             builder.Services.AddControllers();
-            // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen(options =>
             {
@@ -80,7 +103,6 @@ namespace HuongVanTra.API
                 });
             });
 
-            // Configure JWT Authentication
             var jwtKey = builder.Configuration["Jwt:Key"];
             var jwtIssuer = builder.Configuration["Jwt:Issuer"];
             var jwtAudience = builder.Configuration["Jwt:Audience"];
@@ -94,7 +116,6 @@ namespace HuongVanTra.API
             builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 .AddJwtBearer(options =>
                 {
-                    // Keep JWT claim names as-is ("role", "sub") so [Authorize(Roles/Policies)] works.
                     options.MapInboundClaims = false;
                     options.TokenValidationParameters = new TokenValidationParameters
                     {
@@ -114,7 +135,6 @@ namespace HuongVanTra.API
 
             var app = builder.Build();
 
-            // Configure the HTTP request pipeline.
             if (app.Environment.IsDevelopment())
             {
                 app.UseSwagger();
@@ -131,7 +151,6 @@ namespace HuongVanTra.API
             app.UseAuthentication();
             app.UseAuthorization();
 
-            // Middleware: return friendly JSON messages for 401/403 responses
             app.Use(async (context, next) =>
             {
                 await next();

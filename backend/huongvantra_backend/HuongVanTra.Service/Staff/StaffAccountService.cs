@@ -95,11 +95,11 @@ namespace HuongVanTra.Service.Staff {
 
             if (request.Phone is not null) {
                 var phone = request.Phone.Trim();
-                if (phone.Length > 20) {
-                    return StaffAccountUpdateResult.Fail("Số điện thoại tối đa 20 ký tự.");
+                if (string.IsNullOrWhiteSpace(phone) || phone.Length > 20) {
+                    return StaffAccountUpdateResult.Fail("Số điện thoại là bắt buộc và tối đa 20 ký tự.");
                 }
 
-                user.Employee.Phone = string.IsNullOrEmpty(phone) ? null : phone;
+                user.Employee.Phone = phone;
             }
 
             if (request.Note is not null) {
@@ -221,6 +221,125 @@ namespace HuongVanTra.Service.Staff {
             return StaffAccountUpdateResult.Ok(MapDetail(user));
         }
 
+        public async Task<StaffAccountUpdateResult> CreateAccountAsync(
+            CreateStaffAccountDto request,
+            CancellationToken cancellationToken = default) {
+            var fullName = request.FullName?.Trim() ?? string.Empty;
+            var username = request.Username?.Trim() ?? string.Empty;
+            var password = request.Password ?? string.Empty;
+            var phone = request.Phone?.Trim() ?? string.Empty;
+
+            if (string.IsNullOrWhiteSpace(fullName) || fullName.Length > 150) {
+                return StaffAccountUpdateResult.Fail("Họ tên là bắt buộc và tối đa 150 ký tự.");
+            }
+
+            if (username.Length < 3 || username.Length > 50) {
+                return StaffAccountUpdateResult.Fail("Tên đăng nhập phải từ 3–50 ký tự.");
+            }
+
+            if (password.Length < 6) {
+                return StaffAccountUpdateResult.Fail("Mật khẩu phải có ít nhất 6 ký tự.");
+            }
+
+            if (string.IsNullOrWhiteSpace(phone) || phone.Length > 20) {
+                return StaffAccountUpdateResult.Fail("Số điện thoại là bắt buộc và tối đa 20 ký tự.");
+            }
+
+            if (request.Roles is null || request.Roles.Count == 0) {
+                return StaffAccountUpdateResult.Fail("Phải chọn ít nhất một vai trò.");
+            }
+
+            var usernameTaken = await _dbContext.Users
+                .AnyAsync(u => u.Username == username, cancellationToken);
+            if (usernameTaken) {
+                return StaffAccountUpdateResult.Fail("Tên đăng nhập đã được sử dụng.");
+            }
+
+            var normalizedRoleNames = request.Roles
+                .Select(role => role.Trim())
+                .Where(role => !string.IsNullOrWhiteSpace(role))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            var invalidRoles = normalizedRoleNames
+                .Where(role => !AppRoles.All.Contains(role, StringComparer.OrdinalIgnoreCase))
+                .ToList();
+            if (invalidRoles.Count > 0) {
+                return StaffAccountUpdateResult.Fail($"Vai trò không hợp lệ: {string.Join(", ", invalidRoles)}.");
+            }
+
+            var rolesInDb = await _dbContext.Roles
+                .Where(r => normalizedRoleNames.Contains(r.Name))
+                .ToListAsync(cancellationToken);
+            if (rolesInDb.Count != normalizedRoleNames.Count) {
+                return StaffAccountUpdateResult.Fail("Một số vai trò chưa được cấu hình trong hệ thống.");
+            }
+
+            var storeId = request.StoreId;
+            if (!storeId.HasValue) {
+                storeId = await _dbContext.Stores.AsNoTracking()
+                    .OrderBy(s => s.Id)
+                    .Select(s => (int?)s.Id)
+                    .FirstOrDefaultAsync(cancellationToken);
+            }
+            if (!storeId.HasValue) {
+                return StaffAccountUpdateResult.Fail("Không tìm thấy cửa hàng để gán cho nhân viên.");
+            }
+
+            var departmentId = request.DepartmentId;
+            if (!departmentId.HasValue) {
+                departmentId = await _dbContext.Departments.AsNoTracking()
+                    .Where(d => d.StoreId == storeId.Value)
+                    .OrderBy(d => d.Id)
+                    .Select(d => (int?)d.Id)
+                    .FirstOrDefaultAsync(cancellationToken);
+            }
+            if (!departmentId.HasValue) {
+                return StaffAccountUpdateResult.Fail("Không tìm thấy phòng ban để gán cho nhân viên.");
+            }
+
+            var employeeCode = await GenerateEmployeeCodeAsync(cancellationToken);
+            var now = DateTime.UtcNow;
+            var employee = new Employee {
+                EmployeeCode = employeeCode,
+                FullName = fullName,
+                DepartmentId = departmentId.Value,
+                StoreId = storeId.Value,
+                Status = request.IsActive ? "ACTIVE" : "LOCKED",
+                Phone = phone,
+                Notes = string.IsNullOrWhiteSpace(request.Note) ? null : request.Note.Trim(),
+            };
+
+            var user = new User {
+                Username = username,
+                IsActive = request.IsActive ? (byte)1 : (byte)0,
+                Employee = employee,
+            };
+            user.PasswordHash = _passwordHasher.HashPassword(user, password);
+
+            _dbContext.Users.Add(user);
+            await _dbContext.SaveChangesAsync(cancellationToken);
+
+            foreach (var role in rolesInDb) {
+                _dbContext.Set<EmployeeRole>().Add(new EmployeeRole {
+                    EmployeeId = employee.Id,
+                    RoleId = role.Id,
+                    StoreId = employee.StoreId,
+                    AssignedAt = now,
+                });
+            }
+
+            await _dbContext.SaveChangesAsync(cancellationToken);
+
+            var createdUser = await BaseAccountQuery()
+                .FirstOrDefaultAsync(u => u.Id == user.Id, cancellationToken);
+            if (createdUser is null) {
+                return StaffAccountUpdateResult.Fail("Không thể tải dữ liệu tài khoản vừa tạo.");
+            }
+
+            return StaffAccountUpdateResult.Ok(MapDetail(createdUser));
+        }
+
         public async Task<List<RoleOptionDto>> GetRoleOptionsAsync(CancellationToken cancellationToken = default) {
             var roles = await _dbContext.Roles
                 .AsNoTracking()
@@ -295,6 +414,28 @@ namespace HuongVanTra.Service.Staff {
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .OrderBy(role => role, StringComparer.OrdinalIgnoreCase)
                 .ToList();
+        }
+
+        private async Task<string> GenerateEmployeeCodeAsync(CancellationToken cancellationToken) {
+            var today = DateTime.UtcNow.ToString("yyyyMMdd");
+            var prefix = $"NV{today}";
+
+            var lastCode = await _dbContext.Set<Employee>()
+                .AsNoTracking()
+                .Where(e => e.EmployeeCode.StartsWith(prefix))
+                .OrderByDescending(e => e.EmployeeCode)
+                .Select(e => e.EmployeeCode)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            var nextNumber = 1;
+            if (!string.IsNullOrWhiteSpace(lastCode) && lastCode.Length > prefix.Length) {
+                var suffix = lastCode[prefix.Length..];
+                if (int.TryParse(suffix, out var current)) {
+                    nextNumber = current + 1;
+                }
+            }
+
+            return $"{prefix}{nextNumber:D3}";
         }
     }
 }

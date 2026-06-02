@@ -1,10 +1,11 @@
 namespace HuongVanTra.Service.Sales {
+    /// <summary>
+    /// Giữ tương thích cũ — dùng <see cref="IVietQrService"/> thay cho placeholder.
+    /// </summary>
+    [Obsolete("Use IVietQrService instead.")]
     public static class VietQrHelper {
-        // TODO: Replace with real VietQR provider integration when credentials are configured.
-        // Current implementation generates a deterministic placeholder payload from order_code + amount.
+        [Obsolete("Use IVietQrService.GenerateForOrder instead.")]
         public static string GenerateQrPayload(string orderCode, decimal amount) {
-            // Placeholder format: VIETQR|<orderCode>|<amount>
-            // Real integration should call VietQR API with bank account config from IConfiguration.
             return $"VIETQR|{orderCode}|{amount:F0}";
         }
     }

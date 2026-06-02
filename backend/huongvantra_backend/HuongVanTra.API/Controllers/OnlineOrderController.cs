@@ -257,6 +257,8 @@ namespace HuongVanTra.API.Controllers {
             StockStatus   = result.StockStatus,
             OrderStatus   = result.OrderStatus,
             QrPayload     = result.QrPayload,
+            QrImageUrl    = result.QrImageUrl,
+            TransferContent = result.TransferContent,
             CreatedAt     = result.CreatedAt,
             Items         = result.Items.Select(i => new PosOrderItemResponse {
                 ProductId   = i.ProductId,

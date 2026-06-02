@@ -1,6 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
+import { showError, showSuccess } from '../../../app/toast.js'
+import { assignStaffRoles, fetchRoleOptions, fetchStaffAccount, updateStaffAccount } from '../services/staffApi.js'
 
 const loginHistory = [
   { id: '1', channel: 'He thong POS 02', time: '14:20', date: 'Lan cuoi: Hom nay', icon: 'devices', active: true },
@@ -10,24 +12,94 @@ const loginHistory = [
 function StaffDetailPage() {
   const navigate = useNavigate()
   const { id } = useParams()
-
+  const userId = Number(id)
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
+  const [roleOptions, setRoleOptions] = useState([])
   const [form, setForm] = useState({
-    fullName: 'Nguyen Hoang Minh',
-    phone: '0901 234 567',
-    email: 'minh.nh@huongvantra.vn',
-    idCard: '031092000456',
-    address: '45 Tran Hung Dao, Quan 1, TP. Ho Chi Minh',
-    role: 'Chuyen vien ban hang',
-    scope: 'co-ban',
+    fullName: '',
+    phone: '',
+    username: '',
+    employeeCode: '',
+    role: '',
+    note: '',
+    newPassword: '',
     active: true,
   })
+
+  useEffect(() => {
+    if (!Number.isFinite(userId)) {
+      showError('ID nhân viên không hợp lệ.')
+      setIsLoading(false)
+      return
+    }
+
+    let mounted = true
+    const loadData = async () => {
+      try {
+        const [account, roles] = await Promise.all([fetchStaffAccount(userId), fetchRoleOptions()])
+        if (!mounted) return
+
+        setRoleOptions(roles || [])
+        setForm({
+          fullName: account.fullName || '',
+          phone: account.phone || '',
+          username: account.username || '',
+          employeeCode: account.employeeCode || '',
+          role: account.roles?.[0] || '',
+          note: account.note || '',
+          newPassword: '',
+          active: Boolean(account.isActive),
+        })
+      } catch (error) {
+        showError(error.message)
+      } finally {
+        if (mounted) setIsLoading(false)
+      }
+    }
+
+    loadData()
+    return () => { mounted = false }
+  }, [userId])
+
+  const canSave = useMemo(
+    () => Boolean(form.fullName.trim() && form.phone.trim() && form.username.trim()),
+    [form.fullName, form.phone, form.username],
+  )
 
   const handleChange = (field) => (event) => {
     setForm((current) => ({ ...current, [field]: event.target.value }))
   }
 
-  const handleSave = () => {
-    navigate('/staff')
+  const handleSave = async () => {
+    if (!Number.isFinite(userId)) return
+    if (!canSave) {
+      showError('Vui lòng nhập đủ họ tên, số điện thoại và tên đăng nhập.')
+      return
+    }
+
+    setIsSaving(true)
+    try {
+      await updateStaffAccount(userId, {
+        fullName: form.fullName,
+        phone: form.phone,
+        note: form.note,
+        username: form.username,
+        isActive: form.active,
+        newPassword: form.newPassword || null,
+      })
+
+      if (form.role) {
+        await assignStaffRoles(userId, [form.role])
+      }
+
+      showSuccess('Cập nhật nhân viên thành công.')
+      navigate('/staff')
+    } catch (error) {
+      showError(error.message)
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   return (
@@ -60,16 +132,17 @@ function StaffDetailPage() {
               </button>
               <button
                 type="button"
-                className="rounded-lg bg-[#4a6242] px-6 py-2 text-white shadow-[0px_4px_20px_rgba(0,0,0,0.04)] transition-all hover:brightness-110 active:scale-95"
+                className="rounded-lg bg-[#4a6242] px-6 py-2 text-white shadow-[0px_4px_20px_rgba(0,0,0,0.04)] transition-all hover:brightness-110 active:scale-95 disabled:opacity-50"
                 onClick={handleSave}
+                disabled={isLoading || isSaving || !canSave}
               >
-                Luu thay doi
+                {isSaving ? 'Dang luu...' : 'Luu thay doi'}
               </button>
             </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+        <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-4 lg:col-span-8">
             <section className="rounded-xl bg-white p-5 shadow-[0px_4px_20px_rgba(0,0,0,0.04)]">
               <div className="mb-6 flex items-center gap-2 text-[#356647]">
@@ -90,6 +163,7 @@ function StaffDetailPage() {
                 <label className="flex flex-col gap-2">
                   <span className="text-xs font-semibold text-[#414942]">So dien thoai</span>
                   <input
+                    required
                     className="rounded-lg border-none bg-[#f6f4ec] p-3 text-sm shadow-inner outline-none focus:ring-2 focus:ring-[#356647]/30"
                     value={form.phone}
                     onChange={handleChange('phone')}
@@ -97,29 +171,31 @@ function StaffDetailPage() {
                 </label>
 
                 <label className="flex flex-col gap-2">
-                  <span className="text-xs font-semibold text-[#414942]">Email cong viec</span>
+                  <span className="text-xs font-semibold text-[#414942]">Ten dang nhap</span>
                   <input
                     className="rounded-lg border-none bg-[#f6f4ec] p-3 text-sm shadow-inner outline-none focus:ring-2 focus:ring-[#356647]/30"
-                    value={form.email}
-                    onChange={handleChange('email')}
+                    value={form.username}
+                    onChange={handleChange('username')}
                   />
                 </label>
 
                 <label className="flex flex-col gap-2">
-                  <span className="text-xs font-semibold text-[#414942]">So CCCD/ID Card</span>
+                  <span className="text-xs font-semibold text-[#414942]">Mat khau moi</span>
                   <input
+                    type="password"
                     className="rounded-lg border-none bg-[#f6f4ec] p-3 text-sm shadow-inner outline-none focus:ring-2 focus:ring-[#356647]/30"
-                    value={form.idCard}
-                    onChange={handleChange('idCard')}
+                    value={form.newPassword}
+                    onChange={handleChange('newPassword')}
+                    placeholder="De trong neu khong doi"
                   />
                 </label>
 
                 <label className="flex flex-col gap-2 md:col-span-2">
-                  <span className="text-xs font-semibold text-[#414942]">Dia chi thuong tru</span>
+                  <span className="text-xs font-semibold text-[#414942]">Ghi chu</span>
                   <input
                     className="rounded-lg border-none bg-[#f6f4ec] p-3 text-sm shadow-inner outline-none focus:ring-2 focus:ring-[#356647]/30"
-                    value={form.address}
-                    onChange={handleChange('address')}
+                    value={form.note}
+                    onChange={handleChange('note')}
                   />
                 </label>
               </div>
@@ -140,34 +216,15 @@ function StaffDetailPage() {
                       value={form.role}
                       onChange={handleChange('role')}
                     >
-                      <option>Chuyen vien ban hang</option>
-                      <option>Quan ly cua hang</option>
-                      <option>Nhan vien kho</option>
-                      <option>Ke toan</option>
+                      <option value="">Chon vai tro</option>
+                      {roleOptions.map((role) => (
+                        <option key={role.id} value={role.name}>{role.name}</option>
+                      ))}
                     </select>
-                    <span className="material-symbols-outlined pointer-events-none absolute right-3 top-3 text-[#414942]">expand_more</span>
                   </div>
                 </label>
 
-                <div className="flex flex-col gap-2">
-                  <span className="text-xs font-semibold text-[#414942]">Pham vi du lieu</span>
-                  <div className="flex w-fit gap-2 rounded-lg bg-[#f6f4ec] p-1">
-                    <button
-                      type="button"
-                      className={`rounded-md px-6 py-2 text-sm transition-colors ${form.scope === 'co-ban' ? 'bg-[#4a6242] text-white shadow-sm' : 'text-[#414942] hover:bg-[#e4e3db]'}`}
-                      onClick={() => setForm((current) => ({ ...current, scope: 'co-ban' }))}
-                    >
-                      Co ban
-                    </button>
-                    <button
-                      type="button"
-                      className={`rounded-md px-6 py-2 text-sm transition-colors ${form.scope === 'toan-quyen' ? 'bg-[#4a6242] text-white shadow-sm' : 'text-[#414942] hover:bg-[#e4e3db]'}`}
-                      onClick={() => setForm((current) => ({ ...current, scope: 'toan-quyen' }))}
-                    >
-                      Toan quyen
-                    </button>
-                  </div>
-                </div>
+          
               </div>
             </section>
 
@@ -195,84 +252,7 @@ function StaffDetailPage() {
             </section>
           </div>
 
-          <div className="flex flex-col gap-4 lg:col-span-4">
-            <section className="rounded-xl bg-white p-5 text-center shadow-[0px_4px_20px_rgba(0,0,0,0.04)]">
-              <div className="group relative mx-auto mb-4 w-fit">
-                <div className="h-32 w-32 overflow-hidden rounded-full border-4 border-[#356647]/10">
-                  <img
-                    alt="Avatar"
-                    className="h-full w-full object-cover"
-                    src="https://lh3.googleusercontent.com/aida-public/AB6AXuCXJZjMr3qnbmWyT6hu8nzPMkUs-O6i85LL0RuCU_KXm9eUz_QZG1o5mVXm7dZjv8mHKxgyNnwoNg4Yy9lygYF5N7XS5NviFKM_JtjZgrlgKxVjOMw4ddbVNdNw3PazQgiI3PUc3YbSo00UXJt0pL6-AQf5RO3c7bfNBijC-6j046vbmnJA7JuZmNJILpwYUSTXlJdzbjhLbIHHa2Gm6IPFJ7KaT5l4fY18-ajZLMO6Me4HOi4ao3Os3Nys344z-J2ZpHMq_LQ5X_V3"
-                  />
-                </div>
-                <button type="button" className="absolute bottom-4 right-0 rounded-full bg-[#356647] p-2 text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
-                  <span className="material-symbols-outlined">photo_camera</span>
-                </button>
-              </div>
-
-              <h4 className="text-xl font-semibold text-[#356647]">{form.fullName}</h4>
-              <p className="mb-4 text-sm text-[#414942]">Ma NV: {id || 'HV-0082'}</p>
-              <button type="button" className="inline-flex items-center gap-2 text-sm text-[#356647] hover:underline">
-                <span className="material-symbols-outlined text-[18px]">upload</span>
-                Tai anh moi
-              </button>
-            </section>
-
-            <section className="rounded-xl bg-white p-5 shadow-[0px_4px_20px_rgba(0,0,0,0.04)]">
-              <h4 className="mb-4 text-xs font-semibold uppercase tracking-wider text-[#414942]">Hieu suat thang nay</h4>
-
-              <div className="mb-2 flex items-end justify-between">
-                <span className="text-[48px] font-bold leading-none text-[#356647]">94.2%</span>
-                <div className="flex flex-col items-end">
-                  <span className="flex items-center font-bold text-[#356647]">
-                    <span className="material-symbols-outlined text-[16px]">trending_up</span>
-                    2.4%
-                  </span>
-                  <span className="text-xs text-[#414942]">So voi thang truoc</span>
-                </div>
-              </div>
-
-              <div className="mb-6 h-3 w-full overflow-hidden rounded-full bg-[#f0eee6]">
-                <div className="h-full bg-[#356647]" style={{ width: '94.2%' }} />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="rounded-lg bg-[#baefc8] p-3">
-                  <p className="mb-1 text-xs text-[#1f5033]">Don hang</p>
-                  <p className="font-bold text-[#356647]">128</p>
-                </div>
-                <div className="rounded-lg bg-[#ceebc1] p-3">
-                  <p className="mb-1 text-xs text-[#354d2e]">Danh gia</p>
-                  <p className="font-bold text-[#4a6242]">4.9/5.0</p>
-                </div>
-              </div>
-            </section>
-
-            <section className="flex-1 rounded-xl bg-white p-5 shadow-[0px_4px_20px_rgba(0,0,0,0.04)]">
-              <h4 className="mb-4 text-xs font-semibold uppercase tracking-wider text-[#414942]">Lich su dang nhap</h4>
-
-              <div className="space-y-4">
-                {loginHistory.map((item) => (
-                  <div key={item.id} className="flex items-center justify-between border-b border-[#c1c9c0] pb-3">
-                    <div className="flex items-center gap-3">
-                      <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${item.active ? 'bg-[#f0eee6] text-[#356647]' : 'bg-[#f0eee6] text-[#414942]'}`}>
-                        <span className="material-symbols-outlined">{item.icon}</span>
-                      </div>
-                      <div>
-                        <p className="text-sm font-bold text-[#1b1c17]">{item.channel}</p>
-                        <p className="text-xs text-[#414942]">{item.date}</p>
-                      </div>
-                    </div>
-                    <span className={`text-sm font-bold ${item.active ? 'text-[#356647]' : 'text-[#414942]'}`}>{item.time}</span>
-                  </div>
-                ))}
-
-                <button type="button" className="w-full rounded-lg py-2 text-sm text-[#356647] transition-colors hover:bg-[#356647]/5">
-                  Xem tat ca lich su
-                </button>
-              </div>
-            </section>
-          </div>
+         
         </div>
       </section>
     </div>

@@ -1,147 +1,22 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
+import { showError } from '../../../app/toast.js'
+import { fetchCustomers } from '../services/customersApi.js'
+import {
+  CUSTOMER_TYPE_BY_TAB,
+  formatVnd,
+  getInitials,
+  getStatusDisplay,
+  getTierClass,
+} from '../utils/customerDisplay.js'
 
-const corporateStats = [
-  { label: 'Total Corporate', value: '128', note: '+5% this month', noteClass: 'text-[#4a6242]' },
-  { label: 'Active Contracts', value: '94', note: '8 Pending', noteClass: 'text-[#717971]' },
-  { label: 'Total Receivables', value: '482M', note: 'VND', noteClass: 'text-[#7e5700]' },
-  { label: 'Collection Rate', value: '92.4%', note: 'trending_up', noteClass: 'text-[#4a6242]', isIconNote: true },
-]
-
-const corporateRows = [
-  {
-    id: 'C-CORP-001',
-    company: 'VinGroup JSC',
-    email: 'vincorp@vin.com.vn',
-    representative: 'Pham Nhat V.',
-    taxId: '0101234567',
-    debt: '125,000,000 VND',
-    debtTone: 'text-[#7e5700]',
-    status: 'Active',
-    statusClass: 'bg-[#627b59] text-[#f8ffef]',
-    icon: 'corporate_fare',
-    iconClass: 'bg-[#ceebc1] text-[#354d2e]',
-  },
-  {
-    id: 'C-CORP-002',
-    company: 'FPT Software',
-    email: 'contact@fsoft.fpt.vn',
-    representative: 'Truong Gia B.',
-    taxId: '0315987654',
-    debt: '0 VND',
-    debtTone: 'text-[#1b1c17]',
-    status: 'Active',
-    statusClass: 'bg-[#627b59] text-[#f8ffef]',
-    icon: 'business',
-    iconClass: 'bg-[#baefc8] text-[#1f5033]',
-  },
-  {
-    id: 'C-CORP-003',
-    company: 'The Gioi Di Dong',
-    email: 'admin@tgdd.vn',
-    representative: 'Nguyen Duc T.',
-    taxId: '0109988776',
-    debt: '45,200,000 VND',
-    debtTone: 'text-[#ba1a1a]',
-    status: 'Overdue',
-    statusClass: 'bg-[#ffdad6] text-[#93000a]',
-    icon: 'domain',
-    iconClass: 'bg-[#e4e3db] text-[#717971]',
-  },
-  {
-    id: 'C-CORP-004',
-    company: 'Masan Group',
-    email: 'supply@masan.com',
-    representative: 'Nguyen Dang Q.',
-    taxId: '0303322114',
-    debt: '312,800,000 VND',
-    debtTone: 'text-[#7e5700]',
-    status: 'Active',
-    statusClass: 'bg-[#627b59] text-[#f8ffef]',
-    icon: 'factory',
-    iconClass: 'bg-[#ceebc1] text-[#354d2e]',
-  },
-]
-
-const vipStats = [
-  {
-    label: 'Total Customers',
-    value: '1,284',
-    note: '+12% from last month',
-    noteIcon: 'trending_up',
-    icon: 'group',
-    toneClass: 'text-[#356647] bg-[#4e7f5e]/10',
-    glow: 'bg-[#356647]/10',
-  },
-  {
-    label: 'VIP Members',
-    value: '342',
-    note: 'Active Gold & Silver tiers',
-    icon: 'workspace_premium',
-    toneClass: 'text-[#7e5700] bg-[#fec25b]/10',
-    glow: 'bg-[#7e5700]/10',
-  },
-  {
-    label: 'New This Month',
-    value: '87',
-    note: 'Targeted goal: 100',
-    noteIcon: 'person_add',
-    icon: 'new_releases',
-    toneClass: 'text-[#4a6242] bg-[#627b59]/10',
-    glow: 'bg-[#4a6242]/10',
-  },
-]
-
-const vipRows = [
-  {
-    id: 'C-VIP-001',
-    name: 'Pham Thanh Tam',
-    email: 'tam.pham@gmail.com',
-    phone: '090 123 4567',
-    tier: 'VIP GOLD',
-    tierClass: 'bg-[#fec25b] text-[#744f00]',
-    points: '12,450',
-    spending: '45,200,000 VND',
-    initials: 'PT',
-    initialsClass: 'bg-[#ffdead] text-[#281900]',
-  },
-  {
-    id: 'C-VIP-002',
-    name: 'Nguyen Hong Hanh',
-    email: 'hanh.ng@hotmail.com',
-    phone: '098 765 4321',
-    tier: 'VIP SILVER',
-    tierClass: 'bg-[#e4e3db] text-[#414942] border border-[#c1c9c0]',
-    points: '4,200',
-    spending: '18,750,000 VND',
-    initials: 'NH',
-    initialsClass: 'bg-[#c1c9c0] text-[#1b1c17]',
-  },
-  {
-    id: 'C-VIP-003',
-    name: 'Le Van Quan',
-    email: 'quanle88@outlook.com',
-    phone: '091 234 5678',
-    tier: 'VIP GOLD',
-    tierClass: 'bg-[#fec25b] text-[#744f00]',
-    points: '8,900',
-    spending: '32,100,000 VND',
-    initials: 'LV',
-    initialsClass: 'bg-[#baefc8] text-[#00210f]',
-  },
-  {
-    id: 'C-VIP-004',
-    name: 'Tran Thu Ha',
-    email: 'ha.tran@vmail.vn',
-    phone: '097 555 1234',
-    tier: 'VIP SILVER',
-    tierClass: 'bg-[#e4e3db] text-[#414942] border border-[#c1c9c0]',
-    points: '3,150',
-    spending: '12,400,000 VND',
-    initials: 'TH',
-    initialsClass: 'bg-[#ceebc1] text-[#0a2007]',
-  },
+const corporateIcons = ['corporate_fare', 'business', 'domain', 'factory']
+const corporateIconClasses = [
+  'bg-[#ceebc1] text-[#354d2e]',
+  'bg-[#baefc8] text-[#1f5033]',
+  'bg-[#e4e3db] text-[#717971]',
+  'bg-[#ceebc1] text-[#354d2e]',
 ]
 
 const sectorBars = [
@@ -169,22 +44,136 @@ const activityFeed = [
 ]
 
 function CustomersPage() {
-  const [activeTab, setActiveTab] = useState('corporate')
+  const [activeTab, setActiveTab] = useState('general')
+  const [customers, setCustomers] = useState([])
+  const [searchValue, setSearchValue] = useState('')
+  const [isLoading, setIsLoading] = useState(true)
 
   const tabs = useMemo(
     () => [
+      { key: 'general', label: 'Phổ thông' },
       { key: 'vip', label: 'VIP' },
       { key: 'corporate', label: 'Corporate' },
     ],
     [],
   )
 
+  useEffect(() => {
+    let mounted = true
+
+    const timer = setTimeout(async () => {
+      try {
+        setIsLoading(true)
+        const data = await fetchCustomers({
+          keyword: searchValue.trim() || undefined,
+          customerType: CUSTOMER_TYPE_BY_TAB[activeTab],
+        })
+        if (mounted) setCustomers(Array.isArray(data) ? data : [])
+      } catch (error) {
+        if (mounted) {
+          setCustomers([])
+          showError(error.message)
+        }
+      } finally {
+        if (mounted) setIsLoading(false)
+      }
+    }, 250)
+
+    return () => {
+      mounted = false
+      clearTimeout(timer)
+    }
+  }, [activeTab, searchValue])
+
+  const corporateStats = useMemo(() => {
+    const activeCount = customers.filter((item) => item.status?.toUpperCase() === 'ACTIVE').length
+    const totalSpend = customers.reduce((sum, item) => sum + Number(item.totalSpend || 0), 0)
+    return [
+      { label: 'Total Corporate', value: String(customers.length), note: 'from API', noteClass: 'text-[#4a6242]' },
+      { label: 'Active Accounts', value: String(activeCount), note: `${customers.length - activeCount} inactive`, noteClass: 'text-[#717971]' },
+      { label: 'Total Spending', value: formatVnd(totalSpend).replace(' VND', ''), note: 'VND', noteClass: 'text-[#7e5700]' },
+      { label: 'Collection Rate', value: '—', note: 'trending_up', noteClass: 'text-[#4a6242]', isIconNote: true },
+    ]
+  }, [customers])
+
+  const generalStats = useMemo(() => {
+    const withTier = customers.filter((item) => item.tierCode).length
+    const activeCount = customers.filter((item) => item.status?.toUpperCase() === 'ACTIVE').length
+    return [
+      {
+        label: 'Khách phổ thông',
+        value: String(customers.length),
+        note: `${activeCount} active`,
+        noteIcon: 'trending_up',
+        icon: 'group',
+        toneClass: 'text-[#356647] bg-[#4e7f5e]/10',
+        glow: 'bg-[#356647]/10',
+      },
+      {
+        label: 'Đã gán hạng',
+        value: String(withTier),
+        note: 'Bronze / Silver / Gold',
+        icon: 'workspace_premium',
+        toneClass: 'text-[#7e5700] bg-[#fec25b]/10',
+        glow: 'bg-[#7e5700]/10',
+      },
+      {
+        label: 'Total Spending',
+        value: formatVnd(customers.reduce((sum, item) => sum + Number(item.totalSpend || 0), 0)).replace(' VND', ''),
+        note: 'VND',
+        noteIcon: 'payments',
+        icon: 'new_releases',
+        toneClass: 'text-[#4a6242] bg-[#627b59]/10',
+        glow: 'bg-[#4a6242]/10',
+      },
+    ]
+  }, [customers])
+
+  const vipStats = useMemo(() => {
+    const activeCount = customers.filter((item) => item.status?.toUpperCase() === 'ACTIVE').length
+    return [
+      {
+        label: 'Khách VIP',
+        value: String(customers.length),
+        note: `${activeCount} active`,
+        noteIcon: 'trending_up',
+        icon: 'stars',
+        toneClass: 'text-[#356647] bg-[#4e7f5e]/10',
+        glow: 'bg-[#356647]/10',
+      },
+      {
+        label: 'Tổng chi tiêu',
+        value: formatVnd(customers.reduce((sum, item) => sum + Number(item.totalSpend || 0), 0)).replace(' VND', ''),
+        note: 'VND',
+        icon: 'payments',
+        toneClass: 'text-[#7e5700] bg-[#fec25b]/10',
+        glow: 'bg-[#7e5700]/10',
+      },
+      {
+        label: 'Active',
+        value: String(activeCount),
+        note: 'Không dùng hạng B/S/G',
+        icon: 'verified',
+        toneClass: 'text-[#356647] bg-[#baefc8]/30',
+        glow: 'bg-[#356647]/10',
+      },
+    ]
+  }, [customers])
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-6 [font-family:'Manrope',sans-serif]">
       <PageHeader
         title="Khách hàng"
-        description="Quản lý khách VIP và khách doanh nghiệp, theo dõi chi tiêu và hợp đồng"
-        searchPlaceholder="Search customers..."
+        description="Khách phổ thông (hạng Bronze/Silver/Gold), khách VIP và khách doanh nghiệp"
+        rightContent={
+          <input
+            className="h-11 w-full min-w-[240px] rounded-full border border-[#c1c9c0]/90 bg-white px-4 text-sm text-[#1b1c17] outline-none focus:border-[#538463] focus:ring-2 focus:ring-[#356647]/20 lg:min-w-[320px]"
+            placeholder="Tìm khách hàng..."
+            type="search"
+            value={searchValue}
+            onChange={(event) => setSearchValue(event.target.value)}
+          />
+        }
       />
 
       <main className="flex flex-col gap-4">
@@ -218,7 +207,11 @@ function CustomersPage() {
               }`}
             >
               <span className="material-symbols-outlined">add</span>
-              {activeTab === 'corporate' ? 'New Corporate Account' : 'Add Customer'}
+              {activeTab === 'corporate'
+                ? 'New Corporate Account'
+                : activeTab === 'vip'
+                  ? 'Add VIP Customer'
+                  : 'Add Customer'}
             </Link>
           </div>
         </section>
@@ -263,53 +256,68 @@ function CustomersPage() {
                   <thead>
                     <tr className="bg-[#f6f4ec] text-xs uppercase tracking-wider text-[#717971]">
                       <th className="px-6 py-4 font-semibold">Company Name</th>
-                      <th className="px-6 py-4 font-semibold">Representative</th>
-                      <th className="px-6 py-4 font-semibold">Tax ID</th>
-                      <th className="px-6 py-4 font-semibold">Debt (A/R)</th>
+                      <th className="px-6 py-4 font-semibold">NV phụ trách</th>
+                      <th className="px-6 py-4 font-semibold">Mã KH</th>
+                      <th className="px-6 py-4 font-semibold">Tổng chi tiêu</th>
                       <th className="px-6 py-4 font-semibold">Status</th>
                       <th className="px-6 py-4 font-semibold">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#f0eee6] text-[#1b1c17]">
-                    {corporateRows.map((row) => (
-                      <tr key={row.company} className="group transition-colors hover:bg-[#ffffff]">
-                        <td className="px-6 py-5">
-                          <div className="flex items-center gap-3">
-                            <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${row.iconClass}`}>
-                              <span className="material-symbols-outlined">{row.icon}</span>
-                            </div>
-                            <div className="flex flex-col">
-                              <span className="font-bold">{row.company}</span>
-                              <span className="text-xs text-[#717971]">{row.email}</span>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-5">{row.representative}</td>
-                        <td className="px-6 py-5 font-mono text-xs">{row.taxId}</td>
-                        <td className="px-6 py-5">
-                          <span className={`font-bold ${row.debtTone}`}>{row.debt}</span>
-                        </td>
-                        <td className="px-6 py-5">
-                          <span className={`rounded-full px-2 py-1 text-[11px] font-bold uppercase ${row.statusClass}`}>{row.status}</span>
-                        </td>
-                        <td className="px-6 py-5">
-                          <div className="flex items-center gap-2 opacity-0 transition-opacity group-hover:opacity-100">
-                            <Link to={`/customers/${row.id}/edit`} className="p-2 text-[#717971] hover:text-[#356647]">
-                              <span className="material-symbols-outlined text-sm">edit</span>
-                            </Link>
-                            <button type="button" className="p-2 text-[#717971] hover:text-[#356647]">
-                              <span className="material-symbols-outlined text-sm">visibility</span>
-                            </button>
-                          </div>
+                    {isLoading ? (
+                      <tr>
+                        <td className="px-6 py-8 text-center text-[#717971]" colSpan={6}>
+                          Đang tải danh sách khách hàng...
                         </td>
                       </tr>
-                    ))}
+                    ) : customers.length === 0 ? (
+                      <tr>
+                        <td className="px-6 py-8 text-center text-[#717971]" colSpan={6}>
+                          Chưa có khách hàng doanh nghiệp.
+                        </td>
+                      </tr>
+                    ) : (
+                      customers.map((row, index) => {
+                        const status = getStatusDisplay(row.status)
+                        const debtTone = Number(row.totalSpend) > 0 ? 'text-[#7e5700]' : 'text-[#1b1c17]'
+                        return (
+                          <tr key={row.customerId} className="group transition-colors hover:bg-[#ffffff]">
+                            <td className="px-6 py-5">
+                              <div className="flex items-center gap-3">
+                                <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${corporateIconClasses[index % corporateIconClasses.length]}`}>
+                                  <span className="material-symbols-outlined">{corporateIcons[index % corporateIcons.length]}</span>
+                                </div>
+                                <div className="flex flex-col">
+                                  <span className="font-bold">{row.fullName}</span>
+                                  <span className="text-xs text-[#717971]">{row.email || '—'}</span>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-6 py-5">{row.assignedEmployeeName || '—'}</td>
+                            <td className="px-6 py-5 font-mono text-xs">{row.customerCode}</td>
+                            <td className="px-6 py-5">
+                              <span className={`font-bold ${debtTone}`}>{formatVnd(row.totalSpend)}</span>
+                            </td>
+                            <td className="px-6 py-5">
+                              <span className={`rounded-full px-2 py-1 text-[11px] font-bold uppercase ${status.className}`}>{status.label}</span>
+                            </td>
+                            <td className="px-6 py-5">
+                              <div className="flex items-center gap-2 opacity-0 transition-opacity group-hover:opacity-100">
+                                <Link to={`/customers/${row.customerId}/edit`} className="p-2 text-[#717971] hover:text-[#356647]">
+                                  <span className="material-symbols-outlined text-sm">edit</span>
+                                </Link>
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })
+                    )}
                   </tbody>
                 </table>
               </div>
 
               <div className="flex flex-wrap items-center justify-between gap-3 bg-[#f6f4ec] p-6">
-                <span className="text-xs text-[#717971]">Showing 4 of 128 corporate customers</span>
+                <span className="text-xs text-[#717971]">Hiển thị {customers.length} khách hàng doanh nghiệp</span>
                 <div className="flex gap-1">
                   <button type="button" className="flex h-8 w-8 items-center justify-center rounded text-[#717971]" disabled>
                     <span className="material-symbols-outlined text-sm">chevron_left</span>
@@ -374,10 +382,10 @@ function CustomersPage() {
               </article>
             </section>
           </>
-        ) : (
+        ) : activeTab === 'general' ? (
           <>
             <section className="grid grid-cols-1 gap-4 md:grid-cols-3">
-              {vipStats.map((stat) => (
+              {generalStats.map((stat) => (
                 <article key={stat.label} className="group relative overflow-hidden rounded-xl border border-[#eae8e0] bg-white p-5 shadow-[0px_4px_20px_rgba(0,0,0,0.04)] transition-all duration-300 hover:shadow-[0px_8px_24px_rgba(0,0,0,0.08)]">
                   <div className={`absolute -right-4 -top-4 h-24 w-24 rounded-full blur-2xl ${stat.glow}`} />
                   <div className="relative flex items-start justify-between">
@@ -402,8 +410,8 @@ function CustomersPage() {
             <section className="flex flex-col overflow-hidden rounded-xl border border-[#eae8e0] bg-white shadow-[0px_4px_20px_rgba(0,0,0,0.04)]">
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#f0eee6] bg-[#f6f4ec]/30 p-6">
                 <div className="flex items-center gap-4">
-                  <h4 className="text-2xl font-bold text-[#1b1c17]">VIP Customers</h4>
-                  <span className="rounded-full bg-[#627b59]/20 px-3 py-1 text-xs text-[#4a6242]">Filter: VIP Active</span>
+                  <h4 className="text-2xl font-bold text-[#1b1c17]">Khách phổ thông</h4>
+                  <span className="rounded-full bg-[#627b59]/20 px-3 py-1 text-xs text-[#4a6242]">Hạng Bronze / Silver / Gold</span>
                 </div>
 
                 <div className="flex gap-3">
@@ -411,7 +419,7 @@ function CustomersPage() {
                     <span className="material-symbols-outlined text-[20px]">filter_list</span>
                     Filter
                   </button>
-                  <Link to="/customers/create?type=vip" className="inline-flex items-center gap-2 rounded-lg bg-[#4a6242] px-4 py-2 text-sm text-white hover:opacity-90">
+                  <Link to="/customers/create?type=general" className="inline-flex items-center gap-2 rounded-lg bg-[#4a6242] px-4 py-2 text-sm text-white hover:opacity-90">
                     <span className="material-symbols-outlined text-[20px]">add</span>
                     Add Customer
                   </Link>
@@ -425,42 +433,60 @@ function CustomersPage() {
                       <th className="border-b border-[#f0eee6] px-6 py-4 font-semibold">Name</th>
                       <th className="border-b border-[#f0eee6] px-6 py-4 font-semibold">Phone</th>
                       <th className="border-b border-[#f0eee6] px-6 py-4 font-semibold">Tier</th>
-                      <th className="border-b border-[#f0eee6] px-6 py-4 font-semibold">Points</th>
+                      <th className="border-b border-[#f0eee6] px-6 py-4 font-semibold">Mã KH</th>
                       <th className="border-b border-[#f0eee6] px-6 py-4 font-semibold">Total Spending</th>
                       <th className="border-b border-[#f0eee6] px-6 py-4 text-right font-semibold">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="text-sm">
-                    {vipRows.map((row) => (
-                      <tr key={row.email} className="transition-colors hover:bg-[#f6f4ec]">
-                        <td className="border-b border-[#f0eee6] px-6 py-4">
-                          <div className="flex items-center gap-3">
-                            <div className={`flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold ${row.initialsClass}`}>{row.initials}</div>
-                            <div>
-                              <p className="font-bold text-[#1b1c17]">{row.name}</p>
-                              <p className="text-xs text-[#717971]">{row.email}</p>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="border-b border-[#f0eee6] px-6 py-4 text-[#414942]">{row.phone}</td>
-                        <td className="border-b border-[#f0eee6] px-6 py-4">
-                          <span className={`rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-tight ${row.tierClass}`}>{row.tier}</span>
-                        </td>
-                        <td className="border-b border-[#f0eee6] px-6 py-4 font-bold text-[#1b1c17]">{row.points}</td>
-                        <td className="border-b border-[#f0eee6] px-6 py-4 text-lg font-bold text-[#356647]">{row.spending}</td>
-                        <td className="border-b border-[#f0eee6] px-6 py-4 text-right">
-                          <Link to={`/customers/${row.id}/edit`} className="rounded-full p-2 text-[#717971] transition-colors hover:bg-[#e4e3db]">
-                            <span className="material-symbols-outlined">edit</span>
-                          </Link>
+                    {isLoading ? (
+                      <tr>
+                        <td className="border-b border-[#f0eee6] px-6 py-8 text-center text-[#717971]" colSpan={6}>
+                          Đang tải danh sách khách hàng...
                         </td>
                       </tr>
-                    ))}
+                    ) : customers.length === 0 ? (
+                      <tr>
+                        <td className="border-b border-[#f0eee6] px-6 py-8 text-center text-[#717971]" colSpan={6}>
+                          Chưa có khách phổ thông.
+                        </td>
+                      </tr>
+                    ) : (
+                      customers.map((row) => (
+                        <tr key={row.customerId} className="transition-colors hover:bg-[#f6f4ec]">
+                          <td className="border-b border-[#f0eee6] px-6 py-4">
+                            <div className="flex items-center gap-3">
+                              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#ffdead] text-sm font-bold text-[#281900]">
+                                {getInitials(row.fullName)}
+                              </div>
+                              <div>
+                                <p className="font-bold text-[#1b1c17]">{row.fullName}</p>
+                                <p className="text-xs text-[#717971]">{row.email || '—'}</p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="border-b border-[#f0eee6] px-6 py-4 text-[#414942]">{row.phone || '—'}</td>
+                          <td className="border-b border-[#f0eee6] px-6 py-4">
+                            <span className={`rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-tight ${getTierClass(row.tierCode)}`}>
+                              {row.tierCode || 'Chưa có hạng'}
+                            </span>
+                          </td>
+                          <td className="border-b border-[#f0eee6] px-6 py-4 font-bold text-[#1b1c17]">{row.customerCode}</td>
+                          <td className="border-b border-[#f0eee6] px-6 py-4 text-lg font-bold text-[#356647]">{formatVnd(row.totalSpend)}</td>
+                          <td className="border-b border-[#f0eee6] px-6 py-4 text-right">
+                            <Link to={`/customers/${row.customerId}/edit`} className="rounded-full p-2 text-[#717971] transition-colors hover:bg-[#e4e3db]">
+                              <span className="material-symbols-outlined">edit</span>
+                            </Link>
+                          </td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>
 
               <div className="flex flex-wrap items-center justify-between gap-3 p-6 text-sm text-[#414942]">
-                <p>Showing 4 of 342 VIP members</p>
+                <p>Hiển thị {customers.length} khách phổ thông</p>
                 <div className="flex gap-2">
                   <button type="button" className="flex h-10 w-10 items-center justify-center rounded-lg border border-[#c1c9c0] opacity-30" disabled>
                     <span className="material-symbols-outlined">chevron_left</span>
@@ -529,6 +555,117 @@ function CustomersPage() {
                   <p className="mt-3 text-center text-[11px] text-white/70">Next Event: Sunday, Oct 24th</p>
                 </div>
               </article>
+            </section>
+          </>
+        ) : (
+          <>
+            <section className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              {vipStats.map((stat) => (
+                <article key={stat.label} className="group relative overflow-hidden rounded-xl border border-[#eae8e0] bg-white p-5 shadow-[0px_4px_20px_rgba(0,0,0,0.04)] transition-all duration-300 hover:shadow-[0px_8px_24px_rgba(0,0,0,0.08)]">
+                  <div className={`absolute -right-4 -top-4 h-24 w-24 rounded-full blur-2xl ${stat.glow}`} />
+                  <div className="relative flex items-start justify-between">
+                    <div>
+                      <p className="mb-1 text-xs uppercase tracking-widest text-[#414942]">{stat.label}</p>
+                      <h3 className="text-3xl font-bold text-[#1b1c17]">{stat.value}</h3>
+                      <p className="mt-2 inline-flex items-center gap-1 text-sm font-bold text-[#356647]">
+                        {stat.noteIcon ? <span className="material-symbols-outlined text-[18px]">{stat.noteIcon}</span> : null}
+                        {stat.note}
+                      </p>
+                    </div>
+                    <div className={`flex h-12 w-12 items-center justify-center rounded-lg ${stat.toneClass}`}>
+                      <span className="material-symbols-outlined text-[28px]" style={{ fontVariationSettings: "'FILL' 1" }}>
+                        {stat.icon}
+                      </span>
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </section>
+
+            <section className="flex flex-col overflow-hidden rounded-xl border border-[#eae8e0] bg-white shadow-[0px_4px_20px_rgba(0,0,0,0.04)]">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#f0eee6] bg-[#f6f4ec]/30 p-6">
+                <div className="flex items-center gap-4">
+                  <h4 className="text-2xl font-bold text-[#1b1c17]">Khách VIP</h4>
+                  <span className="rounded-full bg-[#7e5700]/15 px-3 py-1 text-xs text-[#7e5700]">Không gán hạng B/S/G</span>
+                </div>
+
+                <div className="flex gap-3">
+                  <button type="button" className="inline-flex items-center gap-2 rounded-lg border border-[#c1c9c0] px-4 py-2 text-sm text-[#414942] hover:bg-[#eae8e0]">
+                    <span className="material-symbols-outlined text-[20px]">filter_list</span>
+                    Filter
+                  </button>
+                  <Link to="/customers/create?type=vip" className="inline-flex items-center gap-2 rounded-lg bg-[#7e5700] px-4 py-2 text-sm text-white hover:opacity-90">
+                    <span className="material-symbols-outlined text-[20px]">add</span>
+                    Add VIP Customer
+                  </Link>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse text-left">
+                  <thead>
+                    <tr className="text-xs uppercase tracking-wider text-[#717971]">
+                      <th className="border-b border-[#f0eee6] px-6 py-4 font-semibold">Name</th>
+                      <th className="border-b border-[#f0eee6] px-6 py-4 font-semibold">Phone</th>
+                      <th className="border-b border-[#f0eee6] px-6 py-4 font-semibold">Mã KH</th>
+                      <th className="border-b border-[#f0eee6] px-6 py-4 font-semibold">Total Spending</th>
+                      <th className="border-b border-[#f0eee6] px-6 py-4 font-semibold">Status</th>
+                      <th className="border-b border-[#f0eee6] px-6 py-4 text-right font-semibold">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-sm">
+                    {isLoading ? (
+                      <tr>
+                        <td className="border-b border-[#f0eee6] px-6 py-8 text-center text-[#717971]" colSpan={6}>
+                          Đang tải danh sách khách hàng...
+                        </td>
+                      </tr>
+                    ) : customers.length === 0 ? (
+                      <tr>
+                        <td className="border-b border-[#f0eee6] px-6 py-8 text-center text-[#717971]" colSpan={6}>
+                          Chưa có khách VIP.
+                        </td>
+                      </tr>
+                    ) : (
+                      customers.map((row) => {
+                        const status = getStatusDisplay(row.status)
+                        return (
+                          <tr key={row.customerId} className="transition-colors hover:bg-[#f6f4ec]">
+                            <td className="border-b border-[#f0eee6] px-6 py-4">
+                              <div className="flex items-center gap-3">
+                                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#fec25b]/30 text-sm font-bold text-[#744f00]">
+                                  {getInitials(row.fullName)}
+                                </div>
+                                <div>
+                                  <p className="font-bold text-[#1b1c17]">{row.fullName}</p>
+                                  <p className="text-xs text-[#717971]">{row.email || '—'}</p>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="border-b border-[#f0eee6] px-6 py-4 text-[#414942]">{row.phone || '—'}</td>
+                            <td className="border-b border-[#f0eee6] px-6 py-4 font-bold text-[#1b1c17]">{row.customerCode}</td>
+                            <td className="border-b border-[#f0eee6] px-6 py-4 text-lg font-bold text-[#356647]">{formatVnd(row.totalSpend)}</td>
+                            <td className="border-b border-[#f0eee6] px-6 py-4">
+                              <span className={`rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-tight ${status.className}`}>
+                                {status.label}
+                              </span>
+                            </td>
+                            <td className="border-b border-[#f0eee6] px-6 py-4 text-right">
+                              <Link to={`/customers/${row.customerId}/edit`} className="rounded-full p-2 text-[#717971] transition-colors hover:bg-[#e4e3db]">
+                                <span className="material-symbols-outlined">edit</span>
+                              </Link>
+                            </td>
+                          </tr>
+                        )
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-3 p-6 text-sm text-[#414942]">
+                <p>Hiển thị {customers.length} khách VIP</p>
+              </div>
             </section>
           </>
         )}
