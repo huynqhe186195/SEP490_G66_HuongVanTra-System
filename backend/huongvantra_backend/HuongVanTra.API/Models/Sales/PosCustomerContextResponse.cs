@@ -8,6 +8,7 @@ namespace HuongVanTra.API.Models.Sales {
         public string? Email { get; set; }
         public string? Address { get; set; }
         public string? TierCode { get; set; }
+        public decimal TierDiscountPercent { get; set; }
         public decimal OutstandingBalance { get; set; }
         public List<PosCustomerOrderHistoryItemResponse> RecentOrders { get; set; } = new();
         public List<PosCustomerDebtOrderItemResponse> UnpaidOrders { get; set; } = new();

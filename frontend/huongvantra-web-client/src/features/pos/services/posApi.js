@@ -43,12 +43,56 @@ async function requestWithAuth(path, options = {}) {
   return response.json()
 }
 
+export function mapPosOrderResult(item) {
+  return {
+    orderId: item.orderId ?? item.OrderId,
+    orderCode: item.orderCode ?? item.OrderCode ?? '',
+    totalAmount: Number(item.totalAmount ?? item.TotalAmount ?? 0),
+    paymentStatus: item.paymentStatus ?? item.PaymentStatus ?? '',
+    stockStatus: item.stockStatus ?? item.StockStatus ?? '',
+    orderStatus: item.orderStatus ?? item.OrderStatus ?? '',
+    qrPayload: item.qrPayload ?? item.QrPayload ?? null,
+    qrImageUrl: item.qrImageUrl ?? item.QrImageUrl ?? null,
+    transferContent: item.transferContent ?? item.TransferContent ?? null,
+    createdAt: item.createdAt ?? item.CreatedAt,
+    items: (item.items ?? item.Items ?? []).map((row) => ({
+      productId: row.productId ?? row.ProductId,
+      productName: row.productName ?? row.ProductName ?? '',
+      sku: row.sku ?? row.Sku ?? '',
+      unitPrice: Number(row.unitPrice ?? row.UnitPrice ?? 0),
+      quantity: Number(row.quantity ?? row.Quantity ?? 0),
+      lineTotal: Number(row.lineTotal ?? row.LineTotal ?? 0),
+      isGift: row.isGift ?? row.IsGift ?? 0,
+    })),
+  }
+}
+
+export function mapPosTransferPaymentInfo(item) {
+  return {
+    bankCode: item.bankCode ?? item.BankCode ?? '',
+    bankBin: item.bankBin ?? item.BankBin ?? '',
+    bankName: item.bankName ?? item.BankName ?? '',
+    accountNumber: item.accountNumber ?? item.AccountNumber ?? '',
+    accountHolder: item.accountHolder ?? item.AccountHolder ?? '',
+  }
+}
+
+/** Ưu tiên URL VietQR từ backend (img.vietqr.io / API v2). */
+export function resolveTransferQrImageUrl({ qrImageUrl, qrPayload } = {}) {
+  if (qrImageUrl) return qrImageUrl
+  if (!qrPayload) return ''
+  if (qrPayload.startsWith('http://') || qrPayload.startsWith('https://')) {
+    return qrPayload
+  }
+  return ''
+}
+
 export function createPosOrderOnline(payload) {
   return requestWithAuth('/api/PosOrder/online', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
-  })
+  }).then(mapPosOrderResult)
 }
 
 export function createPosOrderOffline(payload) {
@@ -56,7 +100,11 @@ export function createPosOrderOffline(payload) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
-  })
+  }).then(mapPosOrderResult)
+}
+
+export function fetchPosTransferPaymentInfo() {
+  return requestWithAuth('/api/PosOrder/payment/transfer-info', { method: 'GET' }).then(mapPosTransferPaymentInfo)
 }
 
 export function confirmOrderPayment(orderId, payload = {}) {
@@ -64,6 +112,24 @@ export function confirmOrderPayment(orderId, payload = {}) {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
+  })
+}
+
+export function fetchPosOrderPaymentStatus(orderId) {
+  return requestWithAuth(`/api/PosOrder/orders/${orderId}/payment-status`, { method: 'GET' })
+}
+
+/** Mô phỏng webhook CK (dev / AllowSimulateWebhook). */
+export function simulatePosPaymentWebhook(orderId, options = {}) {
+  return requestWithAuth('/api/PosOrder/webhooks/simulate-payment', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      orderId,
+      paymentReference: options.paymentReference,
+      note: options.note ?? 'Simulated transfer webhook',
+      secret: options.secret ?? import.meta.env.VITE_POS_WEBHOOK_SECRET ?? 'dev-webhook-secret',
+    }),
   })
 }
 
@@ -83,6 +149,8 @@ export function mapPosCustomer(item) {
     customerCode: item.customerCode ?? item.CustomerCode ?? '',
     fullName: item.fullName ?? item.FullName ?? '',
     phone: item.phone ?? item.Phone ?? '',
+    tierCode: item.tierCode ?? item.TierCode ?? '',
+    tierDiscountPercent: Number(item.tierDiscountPercent ?? item.TierDiscountPercent ?? 0),
   }
 }
 
@@ -96,6 +164,7 @@ export function mapPosCustomerContext(item) {
     email: item.email ?? item.Email ?? '',
     address: item.address ?? item.Address ?? '',
     tierCode: item.tierCode ?? item.TierCode ?? '',
+    tierDiscountPercent: Number(item.tierDiscountPercent ?? item.TierDiscountPercent ?? 0),
     outstandingBalance: Number(item.outstandingBalance ?? item.OutstandingBalance ?? 0),
     recentOrders: (item.recentOrders ?? item.RecentOrders ?? []).map((row) => ({
       orderCode: row.orderCode ?? row.OrderCode ?? '',

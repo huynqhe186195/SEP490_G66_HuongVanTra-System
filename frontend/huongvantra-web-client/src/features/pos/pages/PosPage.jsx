@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { showError, showSuccess } from '../../../app/toast.js'
 import AddCustomerModal from '../components/AddCustomerModal.jsx'
 import CustomerDetailModal from '../components/CustomerDetailModal.jsx'
 import OrderOfferModal from '../components/OrderOfferModal.jsx'
 import PaymentReceiptModal from '../components/PaymentReceiptModal.jsx'
+import ConfirmDialog from '../components/ConfirmDialog.jsx'
+import { vietnamNowLabel } from '../../../utils/vietnamDateTime.js'
 import {
   confirmOrderPayment,
   createPosOrderOffline,
@@ -57,6 +60,8 @@ function createEmptySession() {
 }
 
 function PosPage() {
+  const navigate = useNavigate()
+  const location = useLocation()
   const [tabs, setTabs] = useState([
     { id: 1, label: 'Hóa đơn 1' },
     { id: 2, label: 'Hóa đơn 2' },
@@ -74,6 +79,7 @@ function PosPage() {
   const [searchProducts, setSearchProducts] = useState([])
   const [isSearchLoading, setIsSearchLoading] = useState(false)
   const [receiptModalData, setReceiptModalData] = useState(null)
+  const [tabCloseConfirm, setTabCloseConfirm] = useState(null)
   const [seller, setSeller] = useState({ name: 'Nhân viên POS', role: '—', display: 'Nhân viên POS · —' })
   const discountPopoverRef = useRef(null)
 
@@ -111,10 +117,25 @@ function PosPage() {
     }
   }, [])
 
+  useEffect(() => {
+    if (location.state?.receipt) {
+      setReceiptModalData(location.state.receipt)
+      navigate(location.pathname, { replace: true, state: null })
+    }
+  }, [location.pathname, location.state, navigate])
+
   const formatMoney = (value) =>
     new Intl.NumberFormat('vi-VN', {
       maximumFractionDigits: 0,
     }).format(value)
+
+  const formatStock = (value) => {
+    const n = Number(value) || 0
+    if (Math.abs(n - Math.round(n)) < 0.001) {
+      return new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(Math.round(n))
+    }
+    return new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 2 }).format(n)
+  }
 
   const parseMoneyInput = (value) => {
     const digits = String(value).replace(/\D/g, '')
@@ -125,7 +146,11 @@ function PosPage() {
   const itemDiscountTotal = cartItems.reduce((sum, item) => sum + getLineDiscount(item), 0)
   const subtotalAfterItemDiscount = cartItems.reduce((sum, item) => sum + getLineTotal(item), 0)
   const orderDiscountAmount = Math.round((subtotalAfterItemDiscount * orderDiscountPercent) / 100)
-  const total = Math.max(subtotalAfterItemDiscount - orderDiscountAmount, 0)
+  const totalBeforeTier = Math.max(subtotalAfterItemDiscount - orderDiscountAmount, 0)
+  const tierDiscountPercent = Number(selectedCustomer?.tierDiscountPercent || 0)
+  const membershipDiscountAmount =
+    tierDiscountPercent > 0 ? Math.round((totalBeforeTier * tierDiscountPercent) / 100) : 0
+  const total = Math.max(totalBeforeTier - membershipDiscountAmount, 0)
   const amountPaid = parseMoneyInput(amountPaidInput)
   // Để trống = ghi nợ toàn bộ đơn; nhập đủ = thanh toán hết; nhập thừa = tính tiền thừa
   const cashPaymentAmount = amountPaid >= total ? total : amountPaid
@@ -249,6 +274,18 @@ function PosPage() {
       return next
     })
     setOpenDiscountSku(null)
+  }
+
+  const requestCloseTab = (tabId) => {
+    if (tabs.length <= 1) return
+    const tab = tabs.find((item) => item.id === tabId)
+    setTabCloseConfirm({ tabId, label: tab?.label ?? 'hóa đơn này' })
+  }
+
+  const handleConfirmCloseTab = () => {
+    if (!tabCloseConfirm) return
+    closeTab(tabCloseConfirm.tabId)
+    setTabCloseConfirm(null)
   }
 
   const addToCart = (product) => {
@@ -383,7 +420,7 @@ function PosPage() {
     orderCode: orderCode || activeTab.label,
     customerName: selectedCustomer?.fullName || 'Khách lẻ',
     paymentMethodLabel: method === 'TRANSFER' ? 'Chuyển khoản' : 'Tiền mặt',
-    createdAtLabel: new Date().toLocaleString('vi-VN'),
+    createdAtLabel: vietnamNowLabel(),
     sellerName: seller.name,
     sellerRole: seller.role,
     items: cartItems.map((item) => ({
@@ -394,7 +431,7 @@ function PosPage() {
       total: getLineTotal(item),
     })),
     grossSubtotal,
-    totalDiscount: itemDiscountTotal + orderDiscountAmount,
+    totalDiscount: itemDiscountTotal + orderDiscountAmount + membershipDiscountAmount,
     total,
     amountPaid: method === 'CASH' ? cashPaymentAmount : total,
     customerPaid: method === 'CASH' ? amountPaid : total,
@@ -407,10 +444,6 @@ function PosPage() {
   const resetCheckoutState = () => {
     updateActiveSession(createEmptySession())
     setOpenDiscountSku(null)
-  }
-
-  const handlePrintReceipt = () => {
-    window.print()
   }
 
   const handlePayment = async () => {
@@ -429,9 +462,23 @@ function PosPage() {
         const payload = buildOrderPayload('TRANSFER', total)
         const result = await createPosOrderOnline(payload)
 
-        showSuccess(`Tao don ${result.orderCode} thanh cong.`)
-        setReceiptModalData(buildReceiptData({ orderCode: result.orderCode, method: 'TRANSFER' }))
+        showSuccess(`Đã tạo đơn ${result.orderCode}. Vui lòng quét mã QR để thanh toán.`)
+        const receipt = buildReceiptData({ orderCode: result.orderCode, method: 'TRANSFER' })
         resetCheckoutState()
+        navigate('/pos/payment/qr', {
+          state: {
+            orderId: result.orderId,
+            orderCode: result.orderCode,
+            orderLabel: result.orderCode,
+            total: result.totalAmount || total,
+            qrPayload: result.qrPayload,
+            qrImageUrl: result.qrImageUrl,
+            transferContent: result.transferContent,
+            customer: selectedCustomer?.fullName || '',
+            paymentMethod: 'TRANSFER',
+            receipt,
+          },
+        })
         return
       }
 
@@ -443,12 +490,12 @@ function PosPage() {
           paymentReference: `POS-CASH-${result.orderCode}`,
           note: 'Auto confirm from POS cash payment',
         })
-        showSuccess(`Thanh toan thanh cong. Don: ${result.orderCode}`)
+        showSuccess(`Thanh toán thành công. Đơn: ${result.orderCode}`)
       } else if (isDebtSale) {
-        showSuccess(`Ghi don ${result.orderCode} thanh cong. Du no: ${formatMoney(debtAmount)} d.`)
+        showSuccess(`Ghi đơn ${result.orderCode} thành công. Dư nợ: ${formatMoney(debtAmount)} đ.`)
       } else {
         showSuccess(
-          `Ghi don ${result.orderCode}. Da thu ${formatMoney(cashPaymentAmount)} d, con no ${formatMoney(debtAmount)} d.`,
+          `Ghi đơn ${result.orderCode}. Đã thu ${formatMoney(cashPaymentAmount)} đ, còn nợ ${formatMoney(debtAmount)} đ.`,
         )
       }
       setReceiptModalData(buildReceiptData({ orderCode: result.orderCode, method: 'CASH' }))
@@ -526,7 +573,7 @@ function PosPage() {
                 type="button"
                 onClick={(event) => {
                   event.stopPropagation()
-                  closeTab(tab.id)
+                  requestCloseTab(tab.id)
                 }}
                 className="ml-2 inline-flex items-center justify-center rounded-full p-0.5 hover:bg-black/10"
                 aria-label={`Đóng ${tab.label}`}
@@ -580,7 +627,18 @@ function PosPage() {
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-base font-medium">{item.name}</div>
                       <div className="text-xs text-[#717971]">
-                        {item.sku} · Ton: {formatMoney(item.stockQuantity || 0)}
+                        {item.sku} ·{' '}
+                        <span
+                          className={
+                            Number(item.stockQuantity) <= 0
+                              ? 'font-semibold text-[#ba1a1a]'
+                              : Number(item.stockQuantity) <= 5
+                                ? 'font-semibold text-[#7e5700]'
+                                : ''
+                          }
+                        >
+                          Tồn: {formatStock(item.stockQuantity)}
+                        </span>
                       </div>
                     </div>
                     <div className="shrink-0 text-base font-bold text-[#356647]">{formatMoney(item.price)}</div>
@@ -869,6 +927,14 @@ function PosPage() {
                       <span>-{formatMoney(orderDiscountAmount)} đ</span>
                     </div>
                   ) : null}
+                  {membershipDiscountAmount > 0 ? (
+                    <div className="flex justify-between text-[#356647]">
+                      <span>
+                        CK hạng {selectedCustomer?.tierCode || 'VIP'} ({tierDiscountPercent}%)
+                      </span>
+                      <span>-{formatMoney(membershipDiscountAmount)} đ</span>
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
             </div>
@@ -1013,7 +1079,19 @@ function PosPage() {
         isOpen={Boolean(receiptModalData)}
         receipt={receiptModalData}
         onClose={() => setReceiptModalData(null)}
-        onPrint={handlePrintReceipt}
+      />
+      <ConfirmDialog
+        isOpen={Boolean(tabCloseConfirm)}
+        title="Xóa tab hóa đơn?"
+        message={
+          tabCloseConfirm
+            ? `Bạn có chắc muốn đóng "${tabCloseConfirm.label}"? Giỏ hàng và thông tin khách trên tab này sẽ bị xóa.`
+            : ''
+        }
+        confirmLabel="Xóa tab"
+        cancelLabel="Hủy"
+        onConfirm={handleConfirmCloseTab}
+        onCancel={() => setTabCloseConfirm(null)}
       />
     </div>
   )

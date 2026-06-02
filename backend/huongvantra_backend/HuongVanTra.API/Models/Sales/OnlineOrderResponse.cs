@@ -8,6 +8,8 @@ namespace HuongVanTra.API.Models.Sales {
         public string StockStatus { get; set; } = null!;
         public string OrderStatus { get; set; } = null!;
         public string? QrPayload { get; set; }
+        public string? QrImageUrl { get; set; }
+        public string? TransferContent { get; set; }
         public DateTime CreatedAt { get; set; }
         public List<PosOrderItemResponse> Items { get; set; } = new();
     }

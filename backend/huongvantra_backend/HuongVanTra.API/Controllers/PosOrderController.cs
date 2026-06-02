@@ -7,6 +7,8 @@ using HuongVanTra.Service.Sales.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.Hosting;
 
 namespace HuongVanTra.API.Controllers {
     [Authorize]
@@ -16,14 +18,51 @@ namespace HuongVanTra.API.Controllers {
         private readonly IPosOrderService _posOrderService;
         private readonly AppDbContext _dbContext;
         private readonly ICustomerService _customerService;
+        private readonly IOrderConfirmationService _orderConfirmationService;
+        private readonly IConfiguration _configuration;
+        private readonly IWebHostEnvironment _environment;
 
         public PosOrderController(
             IPosOrderService posOrderService,
             AppDbContext dbContext,
-            ICustomerService customerService) {
+            ICustomerService customerService,
+            IOrderConfirmationService orderConfirmationService,
+            IConfiguration configuration,
+            IWebHostEnvironment environment) {
             _posOrderService = posOrderService;
             _dbContext = dbContext;
             _customerService = customerService;
+            _orderConfirmationService = orderConfirmationService;
+            _configuration = configuration;
+            _environment = environment;
+        }
+
+        [HttpGet("payment/transfer-info")]
+        public ActionResult<PosTransferPaymentInfoResponse> GetTransferPaymentInfo() {
+            var section = _configuration.GetSection("PosTransferPayment");
+            var bankCode = section["BankCode"];
+            var bankBin = section["BankBin"];
+            var bankName = section["BankName"];
+            var accountNumber = section["AccountNumber"];
+            var accountHolder = section["AccountHolder"];
+
+            if (string.IsNullOrWhiteSpace(bankCode) && string.IsNullOrWhiteSpace(bankBin)) {
+                return BadRequest("PosTransferPayment: BankCode or BankBin is required.");
+            }
+
+            if (string.IsNullOrWhiteSpace(bankName) ||
+                string.IsNullOrWhiteSpace(accountNumber) ||
+                string.IsNullOrWhiteSpace(accountHolder)) {
+                return BadRequest("PosTransferPayment is not configured (BankName, AccountNumber, AccountHolder).");
+            }
+
+            return Ok(new PosTransferPaymentInfoResponse {
+                BankCode = (bankCode ?? bankBin)!.Trim(),
+                BankBin = (bankBin ?? bankCode)!.Trim(),
+                BankName = bankName.Trim(),
+                AccountNumber = accountNumber.Trim(),
+                AccountHolder = accountHolder.Trim(),
+            });
         }
 
         [HttpGet("customers")]
@@ -51,15 +90,28 @@ namespace HuongVanTra.API.Controllers {
                 accessContext,
                 forPos: true);
 
-            return Ok(customers
-                .Take(queryLimit)
-                .Select(c => new PosCustomerSearchItemResponse {
+            var limited = customers.Take(queryLimit).ToList();
+            var customerIds = limited.Select(c => c.CustomerId).ToList();
+            var tierByCustomerId = await _dbContext.Customers
+                .AsNoTracking()
+                .Include(c => c.Tier)
+                .Where(c => customerIds.Contains(c.Id))
+                .ToDictionaryAsync(
+                    c => c.Id,
+                    c => (TierCode: c.Tier?.TierCode, DiscountPercent: c.Tier?.DiscountPercent ?? 0),
+                    cancellationToken);
+
+            return Ok(limited.Select(c => {
+                tierByCustomerId.TryGetValue(c.CustomerId, out var tier);
+                return new PosCustomerSearchItemResponse {
                     CustomerId = c.CustomerId,
                     CustomerCode = c.CustomerCode,
                     FullName = c.FullName,
                     Phone = c.Phone,
-                })
-                .ToList());
+                    TierCode = tier.TierCode,
+                    TierDiscountPercent = tier.DiscountPercent,
+                };
+            }).ToList());
         }
 
         [HttpPost("customers")]
@@ -98,6 +150,8 @@ namespace HuongVanTra.API.Controllers {
                 CustomerCode = result.Customer.CustomerCode,
                 FullName = result.Customer.FullName,
                 Phone = result.Customer.Phone,
+                TierCode = result.Customer.Tier?.TierCode,
+                TierDiscountPercent = result.Customer.Tier?.DiscountPercent ?? 0,
             });
         }
 
@@ -192,6 +246,7 @@ namespace HuongVanTra.API.Controllers {
                 Email = customer.Email,
                 Address = customer.Address,
                 TierCode = customer.Tier?.TierCode,
+                TierDiscountPercent = customer.Tier?.DiscountPercent ?? 0,
                 OutstandingBalance = outstandingBalance,
                 RecentOrders = recentOrders,
                 UnpaidOrders = unpaidOrders,
@@ -229,20 +284,36 @@ namespace HuongVanTra.API.Controllers {
                 })
                 .ToListAsync(cancellationToken);
 
-            var productIds = products.Select(p => p.Id).ToList();
-            var stockByProductId = await _dbContext.InventoryBalances
+            var warehouse = await _dbContext.Warehouses
                 .AsNoTracking()
-                .Where(b => productIds.Contains(b.ProductId) && b.Warehouse.StoreId == storeId)
-                .GroupBy(b => b.ProductId)
-                .Select(g => new { ProductId = g.Key, Quantity = g.Sum(x => x.Quantity) })
-                .ToDictionaryAsync(x => x.ProductId, x => x.Quantity, cancellationToken);
+                .FirstOrDefaultAsync(w => w.StoreId == storeId, cancellationToken);
+
+            if (warehouse is null) {
+                return BadRequest($"No warehouse found for store {storeId}.");
+            }
+
+            var productIds = products.Select(p => p.Id).ToList();
+
+            var balanceByProductId = await _dbContext.InventoryBalances
+                .AsNoTracking()
+                .Where(b => b.WarehouseId == warehouse.Id)
+                .ToDictionaryAsync(b => b.ProductId, b => b.Quantity, cancellationToken);
+
+            var bomByFinishedGoodId = await _dbContext.BomHeaders
+                .AsNoTracking()
+                .Include(b => b.BomLines)
+                .Where(b => productIds.Contains(b.FinishedGoodId))
+                .ToDictionaryAsync(b => b.FinishedGoodId, cancellationToken);
 
             return Ok(products.Select(p => new PosProductSearchItemResponse {
                 ProductId = p.Id,
                 Sku = p.Sku,
                 Name = p.Name,
                 Price = p.Price,
-                StockQuantity = stockByProductId.TryGetValue(p.Id, out var qty) ? qty : 0
+                StockQuantity = PosStockCalculator.CalculateSellableQuantity(
+                    p.Id,
+                    balanceByProductId,
+                    bomByFinishedGoodId),
             }).ToList());
         }
 
@@ -324,6 +395,91 @@ namespace HuongVanTra.API.Controllers {
             }
         }
 
+        /// <summary>Poll trạng thái thanh toán (POS QR chờ webhook / simulate).</summary>
+        [HttpGet("orders/{orderId:int}/payment-status")]
+        public async Task<ActionResult<PosOrderPaymentStatusResponse>> GetPaymentStatus(
+            int orderId,
+            CancellationToken cancellationToken = default) {
+            var order = await _dbContext.Orders
+                .AsNoTracking()
+                .Where(o => o.Id == orderId)
+                .Select(o => new { o.Id, o.OrderCode, o.PaymentStatus, o.OrderStatus })
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (order is null) {
+                return NotFound("Order not found.");
+            }
+
+            var isPaid = string.Equals(order.PaymentStatus, "paid", StringComparison.OrdinalIgnoreCase);
+            return Ok(new PosOrderPaymentStatusResponse {
+                OrderId = order.Id,
+                OrderCode = order.OrderCode,
+                PaymentStatus = order.PaymentStatus,
+                OrderStatus = order.OrderStatus,
+                IsPaid = isPaid,
+            });
+        }
+
+        /// <summary>
+        /// Mô phỏng webhook ngân hàng/VietQR: tự xác nhận thanh toán đơn CK.
+        /// Chỉ bật khi Development hoặc PosTransferPayment:AllowSimulateWebhook = true.
+        /// </summary>
+        [HttpPost("webhooks/simulate-payment")]
+        public async Task<ActionResult<PosOrderPaymentStatusResponse>> SimulatePaymentWebhook(
+            [FromBody] SimulatePaymentWebhookRequest request,
+            CancellationToken cancellationToken = default) {
+            if (!IsSimulateWebhookEnabled()) {
+                return NotFound("Simulate webhook is disabled.");
+            }
+
+            if (!ValidateSimulateWebhookSecret(request.Secret)) {
+                return Unauthorized("Invalid webhook secret.");
+            }
+
+            if (request.OrderId <= 0) {
+                return BadRequest("OrderId is required.");
+            }
+
+            var employeeId = User.GetEmployeeId();
+            if (employeeId is null) {
+                return Unauthorized("Employee ID not found in token.");
+            }
+
+            try {
+                await _orderConfirmationService.ConfirmPaymentAsync(new ConfirmPaymentCommand {
+                    OrderId = request.OrderId,
+                    EmployeeId = employeeId.Value,
+                    PaymentReference = request.PaymentReference ?? $"SIM-WEBHOOK-{request.OrderId}",
+                    Note = request.Note ?? "Simulated payment webhook",
+                }, cancellationToken);
+            }
+            catch (ArgumentException ex) {
+                return NotFound(ex.Message);
+            }
+            catch (InvalidOperationException ex) {
+                return BadRequest(ex.Message);
+            }
+
+            return await GetPaymentStatus(request.OrderId, cancellationToken);
+        }
+
+        private bool IsSimulateWebhookEnabled() {
+            if (_environment.IsDevelopment()) {
+                return true;
+            }
+
+            return _configuration.GetValue<bool>($"{VietQrTransferSettings.SectionName}:AllowSimulateWebhook");
+        }
+
+        private bool ValidateSimulateWebhookSecret(string? providedSecret) {
+            var expected = _configuration[$"{VietQrTransferSettings.SectionName}:SimulateWebhookSecret"];
+            if (string.IsNullOrWhiteSpace(expected)) {
+                return true;
+            }
+
+            return string.Equals(expected.Trim(), providedSecret?.Trim(), StringComparison.Ordinal);
+        }
+
         private async Task<string> GenerateCustomerCodeAsync(CancellationToken cancellationToken) {
             var today = DateTime.UtcNow.ToString("yyyyMMdd");
             var prefix = $"KH{today}";
@@ -353,6 +509,9 @@ namespace HuongVanTra.API.Controllers {
             PaymentStatus = result.PaymentStatus,
             StockStatus   = result.StockStatus,
             OrderStatus   = result.OrderStatus,
+            QrPayload     = result.QrPayload,
+            QrImageUrl    = result.QrImageUrl,
+            TransferContent = result.TransferContent,
             CreatedAt     = result.CreatedAt,
             Items         = result.Items.Select(i => new PosOrderItemResponse {
                 ProductId   = i.ProductId,

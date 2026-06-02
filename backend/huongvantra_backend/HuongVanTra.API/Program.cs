@@ -11,6 +11,7 @@ using HuongVanTra.Service.Interfaces;
 using HuongVanTra.Service.Orders;
 using HuongVanTra.Service.Profile;
 using HuongVanTra.Service.Sales;
+using Microsoft.Extensions.DependencyInjection;
 using HuongVanTra.Service.Staff;
 using HuongVanTra.Service.Users;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -44,6 +45,9 @@ namespace HuongVanTra.API
             builder.Services.AddScoped<IStaffAccountService, StaffAccountService>();
             builder.Services.AddScoped<IOrderService, OrderService>();
             builder.Services.AddScoped<IOrderConfirmationService, OrderConfirmationService>();
+            builder.Services.Configure<VietQrTransferSettings>(
+                builder.Configuration.GetSection(VietQrTransferSettings.SectionName));
+            builder.Services.AddHttpClient<IVietQrService, VietQrService>();
             builder.Services.AddScoped<IPosOrderService, PosOrderService>();
             builder.Services.AddScoped<IOnlineOrderService, OnlineOrderService>();
             builder.Services.AddScoped<IStockDeductQueueService, StockDeductQueueService>();

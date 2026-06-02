@@ -9,10 +9,15 @@ namespace HuongVanTra.Service.Sales {
     public class OnlineOrderService : IOnlineOrderService {
         private readonly AppDbContext _db;
         private readonly IOrderConfirmationService _orderConfirmationService;
+        private readonly IVietQrService _vietQrService;
 
-        public OnlineOrderService(AppDbContext db, IOrderConfirmationService orderConfirmationService) {
+        public OnlineOrderService(
+            AppDbContext db,
+            IOrderConfirmationService orderConfirmationService,
+            IVietQrService vietQrService) {
             _db = db;
             _orderConfirmationService = orderConfirmationService;
+            _vietQrService = vietQrService;
         }
 
         public async Task<OnlineOrderResult> CreateVietQrOrderAsync(CreateOnlineOrderCommand command) {
@@ -47,8 +52,8 @@ namespace HuongVanTra.Service.Sales {
                 await _db.SaveChangesAsync();
                 await tx.CommitAsync();
 
-                var qrPayload = VietQrHelper.GenerateQrPayload(order.OrderCode, order.TotalAmount);
-                return ToResult(order, qrPayload);
+                var qr = await _vietQrService.GenerateForOrderAsync(order.OrderCode, order.TotalAmount);
+                return ToResult(order, qr);
             }
             catch {
                 await tx.RollbackAsync();
@@ -407,7 +412,7 @@ namespace HuongVanTra.Service.Sales {
             return $"ONL-{ts}-{suffix}";
         }
 
-        private static OnlineOrderResult ToResult(Order order, string? qrPayload) => new() {
+        private static OnlineOrderResult ToResult(Order order, VietQrGenerateResult? qr) => new() {
             OrderId       = order.Id,
             OrderCode     = order.OrderCode,
             TotalAmount   = order.TotalAmount,
@@ -415,7 +420,9 @@ namespace HuongVanTra.Service.Sales {
             PaymentStatus = order.PaymentStatus,
             StockStatus   = order.StockStatus,
             OrderStatus   = order.OrderStatus,
-            QrPayload     = qrPayload,
+            QrPayload     = qr?.QrPayload,
+            QrImageUrl    = qr?.QrImageUrl,
+            TransferContent = qr?.TransferContent,
             CreatedAt     = order.CreatedAt,
             Items         = order.OrderItems.Select(i => new PosOrderItemResult {
                 ProductId   = i.ProductId,

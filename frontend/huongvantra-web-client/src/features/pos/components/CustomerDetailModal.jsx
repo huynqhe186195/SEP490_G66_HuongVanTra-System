@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { showError } from '../../../app/toast.js'
 import { fetchPosCustomerContext } from '../services/posApi.js'
 import { formatRoleLabel } from '../utils/posSeller.js'
+import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 
 const TABS = [
   { id: 'profile', label: 'Thông tin khách hàng' },
@@ -19,13 +20,6 @@ const CUSTOMER_TYPE_LABELS = {
 
 function formatMoney(value) {
   return new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(Number(value || 0))
-}
-
-function formatDate(value) {
-  if (!value) return '—'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return '—'
-  return date.toLocaleString('vi-VN')
 }
 
 function formatCashierDisplay(name, role) {
@@ -192,7 +186,7 @@ function CustomerDetailModal({ isOpen, customer, onClose }) {
                           {formatCashierDisplay(row.cashierName, row.cashierRole)}
                         </td>
                         <td className="px-4 py-3">{formatPaymentStatus(row.paymentStatus)}</td>
-                        <td className="px-4 py-3">{formatDate(row.createdAt)}</td>
+                        <td className="px-4 py-3">{formatVietnamDateTime(row.createdAt)}</td>
                         <td className={`px-4 py-3 text-right font-semibold ${row.amount < 0 ? 'text-[#ba1a1a]' : 'text-[#356647]'}`}>
                           {row.amount < 0 ? '-' : ''}
                           {formatMoney(Math.abs(row.amount))} đ
@@ -232,7 +226,7 @@ function CustomerDetailModal({ isOpen, customer, onClose }) {
                       {context.unpaidOrders.map((row) => (
                         <tr key={row.orderCode} className="border-t border-[#f0eee6]">
                           <td className="px-4 py-3 font-semibold">{row.orderCode}</td>
-                          <td className="px-4 py-3">{formatDate(row.createdAt)}</td>
+                          <td className="px-4 py-3">{formatVietnamDateTime(row.createdAt)}</td>
                           <td className="px-4 py-3 text-right font-semibold text-[#7e5700]">
                             {formatMoney(row.remainingAmount)} đ
                           </td>
