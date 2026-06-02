@@ -41,6 +41,7 @@ namespace HuongVanTra.Infrastructure.Data {
         public DbSet<OrderItem> OrderItems { get; set; }
         public DbSet<PaymentTransaction> PaymentTransactions { get; set; }
         public DbSet<StockDeductQueue> StockDeductQueues { get; set; }
+        public DbSet<OrderStockShortage> OrderStockShortages { get; set; }
 
         // module: HR
         public DbSet<HuongVanTra.Core.Entities.HR.Department> Departments { get; set; }

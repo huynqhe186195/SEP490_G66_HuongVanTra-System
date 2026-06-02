@@ -202,9 +202,27 @@ namespace HuongVanTra.API.Controllers {
         }
 
         /// <summary>
-        /// Danh sách đơn COD treo: chưa giao thành công, chưa hủy,
-        /// và đã quá 7 ngày kể từ ngày tạo hoặc lần nhắc gần nhất.
+        /// Nhân sự COD hủy đơn khi khách từ chối nhận hàng.
+        /// Nếu kho đã trừ (queue confirmed) thì hoàn kho tự động.
+        /// Nếu kho chưa trừ (queue waiting) thì chỉ hủy đơn và hủy queue.
         /// </summary>
+        [HttpPatch("{id:int}/cod/reject")]
+        public async Task<ActionResult> RejectCodOrder(int id, [FromBody] RejectCodOrderRequest? request) {
+            var employeeId = User.GetEmployeeId();
+            if (employeeId is null)
+                return Unauthorized("Employee ID not found in token.");
+
+            try {
+                var result = await _onlineOrderService.MarkCodRejectedAsync(id, employeeId.Value, request?.Reason);
+                return Ok(result);
+            }
+            catch (ArgumentException ex) {
+                return NotFound(ex.Message);
+            }
+            catch (InvalidOperationException ex) {
+                return BadRequest(ex.Message);
+            }
+        }
         [HttpGet("cod/overdue")]
         public async Task<ActionResult> GetOverdueCodOrders() {
             var results = await _onlineOrderService.GetOverdueCodOrdersAsync();
@@ -239,6 +257,8 @@ namespace HuongVanTra.API.Controllers {
             StockStatus   = result.StockStatus,
             OrderStatus   = result.OrderStatus,
             QrPayload     = result.QrPayload,
+            QrImageUrl    = result.QrImageUrl,
+            TransferContent = result.TransferContent,
             CreatedAt     = result.CreatedAt,
             Items         = result.Items.Select(i => new PosOrderItemResponse {
                 ProductId   = i.ProductId,

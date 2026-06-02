@@ -9,9 +9,11 @@ using System.Text.Json;
 namespace HuongVanTra.Service.Sales {
     public class PosOrderService : IPosOrderService {
         private readonly AppDbContext _db;
+        private readonly IVietQrService _vietQrService;
 
-        public PosOrderService(AppDbContext db) {
+        public PosOrderService(AppDbContext db, IVietQrService vietQrService) {
             _db = db;
+            _vietQrService = vietQrService;
         }
 
         public async Task<PosOrderResult> CreateOnlineOrderAsync(CreatePosOrderCommand command) {
@@ -41,7 +43,15 @@ namespace HuongVanTra.Service.Sales {
                 await _db.SaveChangesAsync();
                 await tx.CommitAsync();
 
-                return ToResult(order);
+                var result = ToResult(order);
+                if (HasTransferPayment(command)) {
+                    var qr = await _vietQrService.GenerateForOrderAsync(order.OrderCode, order.TotalAmount);
+                    result.QrImageUrl = qr.QrImageUrl;
+                    result.QrPayload = qr.QrPayload;
+                    result.TransferContent = qr.TransferContent;
+                }
+
+                return result;
             }
             catch {
                 await tx.RollbackAsync();
@@ -97,11 +107,12 @@ namespace HuongVanTra.Service.Sales {
             if (!storeExists)
                 throw new ArgumentException($"Store {command.StoreId} does not exist.");
 
-            if (command.CustomerId.HasValue) {
-                var customerExists = await _db.Customers.AnyAsync(c => c.Id == command.CustomerId.Value);
-                if (!customerExists)
-                    throw new ArgumentException($"Customer {command.CustomerId.Value} does not exist.");
-            }
+            if (command.CustomerId <= 0)
+                throw new ArgumentException("CustomerId is required for POS orders.");
+
+            var customerExists = await _db.Customers.AnyAsync(c => c.Id == command.CustomerId);
+            if (!customerExists)
+                throw new ArgumentException($"Customer {command.CustomerId} does not exist.");
 
             var productIds = command.Items.Select(i => i.ProductId).Distinct().ToList();
             var products = await _db.Products
@@ -129,11 +140,10 @@ namespace HuongVanTra.Service.Sales {
             return (promo.DiscountType, promo.DiscountValue);
         }
 
-        private async Task<decimal> GetMembershipDiscountAsync(int? customerId) {
-            if (customerId is null) return 0;
+        private async Task<decimal> GetMembershipDiscountAsync(int customerId) {
             var customer = await _db.Customers
                 .Include(c => c.Tier)
-                .FirstOrDefaultAsync(c => c.Id == customerId.Value);
+                .FirstOrDefaultAsync(c => c.Id == customerId);
             return customer?.Tier?.DiscountPercent ?? 0;
         }
 
@@ -172,16 +182,10 @@ namespace HuongVanTra.Service.Sales {
 
             var roundedTotal = Math.Round(totalAmount, 2);
             var paymentsTotal = command.Payments.Sum(p => p.Amount);
-            if (paymentsTotal != roundedTotal)
-                throw new ArgumentException(
-                    $"Total payments amount ({paymentsTotal}) must equal order total ({roundedTotal}).");
+            if (paymentsTotal < 0)
+                throw new ArgumentException("Total payments amount cannot be negative.");
 
-            var payments = command.Payments.Select(p => new PaymentTransaction {
-                PaymentMethod   = p.PaymentMethod,
-                Amount          = p.Amount,
-                Status          = "pending",
-                TransactionDate = DateTime.UtcNow
-            }).ToList();
+            var payments = BuildPaymentTransactions(command.Payments, roundedTotal);
 
             return new Order {
                 OrderCode           = GenerateOrderCode(),
@@ -275,11 +279,9 @@ namespace HuongVanTra.Service.Sales {
             }
         }
 
-        private async Task UpdateCustomerSpendAsync(int? customerId, decimal amount) {
-            if (customerId is null) return;
-
+        private async Task UpdateCustomerSpendAsync(int customerId, decimal amount) {
             var customer = await _db.Customers
-                .FirstOrDefaultAsync(c => c.Id == customerId.Value);
+                .FirstOrDefaultAsync(c => c.Id == customerId);
             if (customer is null) return;
 
             customer.TotalSpend += amount;
@@ -344,6 +346,44 @@ namespace HuongVanTra.Service.Sales {
             var ts     = DateTime.UtcNow.ToString("yyyyMMddHHmmss");
             var suffix = Guid.NewGuid().ToString("N")[..6].ToUpper();
             return $"POS-{ts}-{suffix}";
+        }
+
+        private static bool HasTransferPayment(CreatePosOrderCommand command) {
+            return command.Payments.Any(p =>
+                string.Equals(p.PaymentMethod, "TRANSFER", StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static List<PaymentTransaction> BuildPaymentTransactions(
+            List<PaymentCommand> paymentCommands,
+            decimal orderTotal) {
+            var remaining = orderTotal;
+            var payments = new List<PaymentTransaction>();
+
+            foreach (var payment in paymentCommands) {
+                if (remaining <= 0) {
+                    break;
+                }
+
+                var amount = Math.Min(Math.Max(0, payment.Amount), remaining);
+                if (amount <= 0) {
+                    continue;
+                }
+
+                remaining -= amount;
+                payments.Add(new PaymentTransaction {
+                    PaymentMethod   = payment.PaymentMethod,
+                    Amount          = amount,
+                    Status          = "pending",
+                    TransactionDate = DateTime.UtcNow
+                });
+            }
+
+            if (payments.Count == 0 && orderTotal > 0) {
+                throw new ArgumentException(
+                    $"Total payments amount ({paymentCommands.Sum(p => p.Amount)}) must be greater than 0 for order total ({orderTotal}).");
+            }
+
+            return payments;
         }
 
         private static PosOrderResult ToResult(Order order) => new() {

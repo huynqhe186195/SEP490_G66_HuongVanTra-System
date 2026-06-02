@@ -17,4 +17,8 @@ namespace HuongVanTra.API.Models.Sales {
         public DateTime? LastRemindedAt { get; set; }
         public int DaysPending { get; set; }
     }
+
+    public class RejectCodOrderRequest {
+        public string? Reason { get; set; }
+    }
 }

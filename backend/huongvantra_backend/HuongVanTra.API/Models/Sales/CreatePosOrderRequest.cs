@@ -1,7 +1,7 @@
 namespace HuongVanTra.API.Models.Sales {
     public class CreatePosOrderRequest {
         public int StoreId { get; set; }
-        public int? CustomerId { get; set; }
+        public int CustomerId { get; set; }
         public int? PromotionId { get; set; }
         public List<OrderItemRequest> Items { get; set; } = new();
         public List<PaymentRequest> Payments { get; set; } = new();

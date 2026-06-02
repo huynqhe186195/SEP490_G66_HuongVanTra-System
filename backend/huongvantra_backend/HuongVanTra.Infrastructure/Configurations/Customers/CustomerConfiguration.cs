@@ -9,8 +9,12 @@ namespace HuongVanTra.Infrastructure.Configurations.Customers {
             builder.HasKey(x => x.Id);
 
             builder.Property(x => x.CustomerCode).HasMaxLength(50).IsRequired();
+            builder.Property(x => x.FullName).HasMaxLength(150).IsRequired();
             builder.Property(x => x.CustomerType).HasMaxLength(20).IsRequired();
             builder.Property(x => x.Phone).HasMaxLength(20);
+            builder.Property(x => x.Email).HasMaxLength(100);
+            builder.Property(x => x.Address).HasMaxLength(255);
+            builder.Property(x => x.Status).HasMaxLength(20).IsRequired().HasDefaultValue("ACTIVE");
             builder.Property(x => x.TotalSpend).HasColumnType("decimal(18,2)");
 
             // Quan hệ 1-N: MembershipTier -> Customers

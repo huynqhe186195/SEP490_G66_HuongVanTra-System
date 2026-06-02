@@ -41,6 +41,18 @@ namespace HuongVanTra.Service.Staff {
         public List<string> Roles { get; set; } = new();
     }
 
+    public class CreateStaffAccountDto {
+        public string FullName { get; set; } = string.Empty;
+        public string Username { get; set; } = string.Empty;
+        public string Password { get; set; } = string.Empty;
+        public string? Phone { get; set; }
+        public string? Note { get; set; }
+        public bool IsActive { get; set; } = true;
+        public int? StoreId { get; set; }
+        public int? DepartmentId { get; set; }
+        public List<string> Roles { get; set; } = new();
+    }
+
     public class RoleOptionDto {
         public int Id { get; set; }
         public string Name { get; set; } = string.Empty;

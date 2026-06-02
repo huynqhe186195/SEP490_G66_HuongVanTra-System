@@ -1,9 +1,14 @@
 using HuongVanTra.API.Extensions;
 using HuongVanTra.API.Models.Sales;
+using HuongVanTra.Infrastructure.Data;
+using HuongVanTra.Service.Customers;
 using HuongVanTra.Service.Sales;
 using HuongVanTra.Service.Sales.Models;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.Hosting;
 
 namespace HuongVanTra.API.Controllers {
     [Authorize]
@@ -11,9 +16,305 @@ namespace HuongVanTra.API.Controllers {
     [Route("api/[controller]")]
     public class PosOrderController : ControllerBase {
         private readonly IPosOrderService _posOrderService;
+        private readonly AppDbContext _dbContext;
+        private readonly ICustomerService _customerService;
+        private readonly IOrderConfirmationService _orderConfirmationService;
+        private readonly IConfiguration _configuration;
+        private readonly IWebHostEnvironment _environment;
 
-        public PosOrderController(IPosOrderService posOrderService) {
+        public PosOrderController(
+            IPosOrderService posOrderService,
+            AppDbContext dbContext,
+            ICustomerService customerService,
+            IOrderConfirmationService orderConfirmationService,
+            IConfiguration configuration,
+            IWebHostEnvironment environment) {
             _posOrderService = posOrderService;
+            _dbContext = dbContext;
+            _customerService = customerService;
+            _orderConfirmationService = orderConfirmationService;
+            _configuration = configuration;
+            _environment = environment;
+        }
+
+        [HttpGet("payment/transfer-info")]
+        public ActionResult<PosTransferPaymentInfoResponse> GetTransferPaymentInfo() {
+            var section = _configuration.GetSection("PosTransferPayment");
+            var bankCode = section["BankCode"];
+            var bankBin = section["BankBin"];
+            var bankName = section["BankName"];
+            var accountNumber = section["AccountNumber"];
+            var accountHolder = section["AccountHolder"];
+
+            if (string.IsNullOrWhiteSpace(bankCode) && string.IsNullOrWhiteSpace(bankBin)) {
+                return BadRequest("PosTransferPayment: BankCode or BankBin is required.");
+            }
+
+            if (string.IsNullOrWhiteSpace(bankName) ||
+                string.IsNullOrWhiteSpace(accountNumber) ||
+                string.IsNullOrWhiteSpace(accountHolder)) {
+                return BadRequest("PosTransferPayment is not configured (BankName, AccountNumber, AccountHolder).");
+            }
+
+            return Ok(new PosTransferPaymentInfoResponse {
+                BankCode = (bankCode ?? bankBin)!.Trim(),
+                BankBin = (bankBin ?? bankCode)!.Trim(),
+                BankName = bankName.Trim(),
+                AccountNumber = accountNumber.Trim(),
+                AccountHolder = accountHolder.Trim(),
+            });
+        }
+
+        [HttpGet("customers")]
+        public async Task<ActionResult<List<PosCustomerSearchItemResponse>>> SearchCustomers(
+            [FromQuery] string? search,
+            [FromQuery] int limit = 20,
+            CancellationToken cancellationToken = default) {
+            var userId = User.GetUserId();
+            if (userId is null) {
+                return Unauthorized("User not found in token.");
+            }
+
+            var accessContext = await _customerService.GetAccessContextAsync(userId.Value);
+            if (accessContext is null) {
+                return Unauthorized("User not found.");
+            }
+
+            var queryLimit = Math.Clamp(limit, 1, 50);
+            var customers = await _customerService.GetCustomersAsync(
+                search,
+                customerType: null,
+                status: "ACTIVE",
+                tierId: null,
+                assignedEmployeeId: null,
+                accessContext,
+                forPos: true);
+
+            var limited = customers.Take(queryLimit).ToList();
+            var customerIds = limited.Select(c => c.CustomerId).ToList();
+            var tierByCustomerId = await _dbContext.Customers
+                .AsNoTracking()
+                .Include(c => c.Tier)
+                .Where(c => customerIds.Contains(c.Id))
+                .ToDictionaryAsync(
+                    c => c.Id,
+                    c => (TierCode: c.Tier?.TierCode, DiscountPercent: c.Tier?.DiscountPercent ?? 0),
+                    cancellationToken);
+
+            return Ok(limited.Select(c => {
+                tierByCustomerId.TryGetValue(c.CustomerId, out var tier);
+                return new PosCustomerSearchItemResponse {
+                    CustomerId = c.CustomerId,
+                    CustomerCode = c.CustomerCode,
+                    FullName = c.FullName,
+                    Phone = c.Phone,
+                    TierCode = tier.TierCode,
+                    TierDiscountPercent = tier.DiscountPercent,
+                };
+            }).ToList());
+        }
+
+        [HttpPost("customers")]
+        public async Task<ActionResult<PosCustomerSearchItemResponse>> CreateCustomer(
+            [FromBody] CreateCustomerRequest request,
+            CancellationToken cancellationToken = default) {
+            var userId = User.GetUserId();
+            if (userId is null) {
+                return Unauthorized("User not found in token.");
+            }
+
+            if (string.IsNullOrWhiteSpace(request.FullName)) {
+                return BadRequest("FullName is required.");
+            }
+
+            if (string.IsNullOrWhiteSpace(request.Phone)) {
+                return BadRequest("Phone is required.");
+            }
+
+            var accessContext = await _customerService.GetAccessContextAsync(userId.Value);
+            if (accessContext is null) {
+                return Unauthorized("User not found.");
+            }
+
+            if (string.IsNullOrWhiteSpace(request.CustomerCode)) {
+                request.CustomerCode = await GenerateCustomerCodeAsync(cancellationToken);
+            }
+
+            var result = await _customerService.CreateCustomerAsync(request, accessContext);
+            if (!result.IsSuccess || result.Customer is null) {
+                return BadRequest(result.ErrorMessage ?? "Could not create customer.");
+            }
+
+            return StatusCode(201, new PosCustomerSearchItemResponse {
+                CustomerId = result.Customer.CustomerId,
+                CustomerCode = result.Customer.CustomerCode,
+                FullName = result.Customer.FullName,
+                Phone = result.Customer.Phone,
+                TierCode = result.Customer.Tier?.TierCode,
+                TierDiscountPercent = result.Customer.Tier?.DiscountPercent ?? 0,
+            });
+        }
+
+        [HttpGet("customers/{customerId:int}/context")]
+        public async Task<ActionResult<PosCustomerContextResponse>> GetCustomerContext(
+            int customerId,
+            CancellationToken cancellationToken = default) {
+            var customer = await _dbContext.Customers
+                .AsNoTracking()
+                .Include(c => c.Tier)
+                .FirstOrDefaultAsync(c => c.Id == customerId, cancellationToken);
+
+            if (customer is null) {
+                return NotFound("Customer not found.");
+            }
+
+            var orders = await _dbContext.Orders
+                .AsNoTracking()
+                .Include(o => o.PaymentTransactions)
+                .Include(o => o.Cashier)
+                    .ThenInclude(c => c.EmployeeRoles)
+                    .ThenInclude(er => er.Role)
+                .Where(o => o.CustomerId == customerId)
+                .OrderByDescending(o => o.CreatedAt)
+                .Take(50)
+                .ToListAsync(cancellationToken);
+
+            var unpaidOrders = new List<PosCustomerDebtOrderItemResponse>();
+            decimal outstandingBalance = 0;
+
+            foreach (var order in orders) {
+                if (string.Equals(order.OrderStatus, "cancelled", StringComparison.OrdinalIgnoreCase)) {
+                    continue;
+                }
+
+                if (string.Equals(order.PaymentStatus, "paid", StringComparison.OrdinalIgnoreCase)) {
+                    continue;
+                }
+
+                var paidAmount = order.PaymentTransactions
+                    .Where(t => string.Equals(t.Status, "paid", StringComparison.OrdinalIgnoreCase))
+                    .Sum(t => t.Amount);
+
+                var remaining = Math.Max(0, order.TotalAmount - paidAmount);
+                if (remaining <= 0) {
+                    continue;
+                }
+
+                outstandingBalance += remaining;
+                unpaidOrders.Add(new PosCustomerDebtOrderItemResponse {
+                    OrderCode = order.OrderCode,
+                    TotalAmount = order.TotalAmount,
+                    PaidAmount = paidAmount,
+                    RemainingAmount = remaining,
+                    PaymentStatus = order.PaymentStatus,
+                    CreatedAt = order.CreatedAt,
+                });
+            }
+
+            var recentOrders = orders
+                .Take(20)
+                .Select(o => {
+                    var cashierRoles = o.Cashier.EmployeeRoles
+                        .Select(er => er.Role.Name)
+                        .Where(name => !string.IsNullOrWhiteSpace(name))
+                        .Distinct()
+                        .ToList();
+
+                    return new PosCustomerOrderHistoryItemResponse {
+                        OrderCode = o.OrderCode,
+                        EntryType = string.Equals(o.OrderStatus, "cancelled", StringComparison.OrdinalIgnoreCase)
+                            ? "Trả / hủy"
+                            : "Bán hàng",
+                        Amount = string.Equals(o.OrderStatus, "cancelled", StringComparison.OrdinalIgnoreCase)
+                            ? -o.TotalAmount
+                            : o.TotalAmount,
+                        PaymentStatus = o.PaymentStatus,
+                        OrderStatus = o.OrderStatus,
+                        CashierName = o.Cashier.FullName,
+                        CashierRole = string.Join(", ", cashierRoles),
+                        CreatedAt = o.CreatedAt,
+                    };
+                })
+                .ToList();
+
+            return Ok(new PosCustomerContextResponse {
+                CustomerId = customer.Id,
+                CustomerCode = customer.CustomerCode,
+                FullName = customer.FullName,
+                CustomerType = customer.CustomerType,
+                Phone = customer.Phone,
+                Email = customer.Email,
+                Address = customer.Address,
+                TierCode = customer.Tier?.TierCode,
+                TierDiscountPercent = customer.Tier?.DiscountPercent ?? 0,
+                OutstandingBalance = outstandingBalance,
+                RecentOrders = recentOrders,
+                UnpaidOrders = unpaidOrders,
+            });
+        }
+
+        [HttpGet("products")]
+        public async Task<ActionResult<List<PosProductSearchItemResponse>>> SearchProducts(
+            [FromQuery] int storeId,
+            [FromQuery] string? search,
+            [FromQuery] int limit = 30,
+            CancellationToken cancellationToken = default) {
+            if (storeId <= 0) {
+                return BadRequest("storeId is required.");
+            }
+
+            var queryLimit = Math.Clamp(limit, 1, 100);
+            var query = _dbContext.Products.AsNoTracking();
+
+            if (!string.IsNullOrWhiteSpace(search)) {
+                var term = $"%{search.Trim()}%";
+                query = query.Where(p =>
+                    EF.Functions.Like(p.Name, term) ||
+                    EF.Functions.Like(p.Sku, term));
+            }
+
+            var products = await query
+                .OrderBy(p => p.Name)
+                .Take(queryLimit)
+                .Select(p => new {
+                    p.Id,
+                    p.Sku,
+                    p.Name,
+                    p.Price
+                })
+                .ToListAsync(cancellationToken);
+
+            var warehouse = await _dbContext.Warehouses
+                .AsNoTracking()
+                .FirstOrDefaultAsync(w => w.StoreId == storeId, cancellationToken);
+
+            if (warehouse is null) {
+                return BadRequest($"No warehouse found for store {storeId}.");
+            }
+
+            var productIds = products.Select(p => p.Id).ToList();
+
+            var balanceByProductId = await _dbContext.InventoryBalances
+                .AsNoTracking()
+                .Where(b => b.WarehouseId == warehouse.Id)
+                .ToDictionaryAsync(b => b.ProductId, b => b.Quantity, cancellationToken);
+
+            var bomByFinishedGoodId = await _dbContext.BomHeaders
+                .AsNoTracking()
+                .Include(b => b.BomLines)
+                .Where(b => productIds.Contains(b.FinishedGoodId))
+                .ToDictionaryAsync(b => b.FinishedGoodId, cancellationToken);
+
+            return Ok(products.Select(p => new PosProductSearchItemResponse {
+                ProductId = p.Id,
+                Sku = p.Sku,
+                Name = p.Name,
+                Price = p.Price,
+                StockQuantity = PosStockCalculator.CalculateSellableQuantity(
+                    p.Id,
+                    balanceByProductId,
+                    bomByFinishedGoodId),
+            }).ToList());
         }
 
         /// <summary>
@@ -94,6 +395,113 @@ namespace HuongVanTra.API.Controllers {
             }
         }
 
+        /// <summary>Poll trạng thái thanh toán (POS QR chờ webhook / simulate).</summary>
+        [HttpGet("orders/{orderId:int}/payment-status")]
+        public async Task<ActionResult<PosOrderPaymentStatusResponse>> GetPaymentStatus(
+            int orderId,
+            CancellationToken cancellationToken = default) {
+            var order = await _dbContext.Orders
+                .AsNoTracking()
+                .Where(o => o.Id == orderId)
+                .Select(o => new { o.Id, o.OrderCode, o.PaymentStatus, o.OrderStatus })
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (order is null) {
+                return NotFound("Order not found.");
+            }
+
+            var isPaid = string.Equals(order.PaymentStatus, "paid", StringComparison.OrdinalIgnoreCase);
+            return Ok(new PosOrderPaymentStatusResponse {
+                OrderId = order.Id,
+                OrderCode = order.OrderCode,
+                PaymentStatus = order.PaymentStatus,
+                OrderStatus = order.OrderStatus,
+                IsPaid = isPaid,
+            });
+        }
+
+        /// <summary>
+        /// Mô phỏng webhook ngân hàng/VietQR: tự xác nhận thanh toán đơn CK.
+        /// Chỉ bật khi Development hoặc PosTransferPayment:AllowSimulateWebhook = true.
+        /// </summary>
+        [HttpPost("webhooks/simulate-payment")]
+        public async Task<ActionResult<PosOrderPaymentStatusResponse>> SimulatePaymentWebhook(
+            [FromBody] SimulatePaymentWebhookRequest request,
+            CancellationToken cancellationToken = default) {
+            if (!IsSimulateWebhookEnabled()) {
+                return NotFound("Simulate webhook is disabled.");
+            }
+
+            if (!ValidateSimulateWebhookSecret(request.Secret)) {
+                return Unauthorized("Invalid webhook secret.");
+            }
+
+            if (request.OrderId <= 0) {
+                return BadRequest("OrderId is required.");
+            }
+
+            var employeeId = User.GetEmployeeId();
+            if (employeeId is null) {
+                return Unauthorized("Employee ID not found in token.");
+            }
+
+            try {
+                await _orderConfirmationService.ConfirmPaymentAsync(new ConfirmPaymentCommand {
+                    OrderId = request.OrderId,
+                    EmployeeId = employeeId.Value,
+                    PaymentReference = request.PaymentReference ?? $"SIM-WEBHOOK-{request.OrderId}",
+                    Note = request.Note ?? "Simulated payment webhook",
+                }, cancellationToken);
+            }
+            catch (ArgumentException ex) {
+                return NotFound(ex.Message);
+            }
+            catch (InvalidOperationException ex) {
+                return BadRequest(ex.Message);
+            }
+
+            return await GetPaymentStatus(request.OrderId, cancellationToken);
+        }
+
+        private bool IsSimulateWebhookEnabled() {
+            if (_environment.IsDevelopment()) {
+                return true;
+            }
+
+            return _configuration.GetValue<bool>($"{VietQrTransferSettings.SectionName}:AllowSimulateWebhook");
+        }
+
+        private bool ValidateSimulateWebhookSecret(string? providedSecret) {
+            var expected = _configuration[$"{VietQrTransferSettings.SectionName}:SimulateWebhookSecret"];
+            if (string.IsNullOrWhiteSpace(expected)) {
+                return true;
+            }
+
+            return string.Equals(expected.Trim(), providedSecret?.Trim(), StringComparison.Ordinal);
+        }
+
+        private async Task<string> GenerateCustomerCodeAsync(CancellationToken cancellationToken) {
+            var today = DateTime.UtcNow.ToString("yyyyMMdd");
+            var prefix = $"KH{today}";
+
+            var lastCode = await _dbContext.Customers
+                .AsNoTracking()
+                .Where(c => c.CustomerCode.StartsWith(prefix))
+                .OrderByDescending(c => c.CustomerCode)
+                .Select(c => c.CustomerCode)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            var nextNumber = 1;
+            if (!string.IsNullOrWhiteSpace(lastCode) && lastCode.Length > prefix.Length) {
+                var suffix = lastCode[prefix.Length..];
+                if (int.TryParse(suffix, out var current)) {
+                    nextNumber = current + 1;
+                }
+            }
+
+            return $"{prefix}{nextNumber:D3}";
+        }
+
         private static PosOrderResponse ToResponse(PosOrderResult result) => new() {
             OrderId       = result.OrderId,
             OrderCode     = result.OrderCode,
@@ -101,6 +509,9 @@ namespace HuongVanTra.API.Controllers {
             PaymentStatus = result.PaymentStatus,
             StockStatus   = result.StockStatus,
             OrderStatus   = result.OrderStatus,
+            QrPayload     = result.QrPayload,
+            QrImageUrl    = result.QrImageUrl,
+            TransferContent = result.TransferContent,
             CreatedAt     = result.CreatedAt,
             Items         = result.Items.Select(i => new PosOrderItemResponse {
                 ProductId   = i.ProductId,

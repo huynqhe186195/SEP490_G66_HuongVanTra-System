@@ -8,5 +8,6 @@ namespace HuongVanTra.Service.Sales {
         Task<VietQrPaidResult> MarkVietQrPaidAsync(int orderId, int employeeId);
         Task<List<OverdueCodOrderResult>> GetOverdueCodOrdersAsync();
         Task<CodRemindedResult> MarkCodRemindedAsync(int orderId, int employeeId);
+        Task<CodRejectedResult> MarkCodRejectedAsync(int orderId, int employeeId, string? reason);
     }
 }

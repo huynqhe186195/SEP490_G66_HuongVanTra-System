@@ -1,70 +1,76 @@
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
-
-const staffRows = [
-  {
-    id: 'STF-001',
-    name: 'Tran Minh Tam',
-    role: 'Cua hang truong (Admin)',
-    roleTone: 'text-[#356647]',
-    account: 'tam.tm_admin',
-    phone: '0901 234 567',
-    status: 'Hoat dong',
-    active: true,
-    avatar:
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuBZl0xqSxjzek3rKfylwUIWuQG1Al_z0qMMVR6oagy_9sAimnXNIdXGIll_N8Lov6h7P7YnRCzFybNUL1nG7xF7GPgvo3E2XygdPBf0wXTscvIyGCv3gW9NYteskL9DWfeghVCdZevwRnyv3wlA2Vl2EbNtHGTiSRvqtS0fEDiiMHO6ybh0AVU7SN6wZ72UQ97_62P2P4Mj1Ebnqldcd80YmYH4p9q1nKYVhLJ1uzzbLy9tbex0N6O8jhso4B9pkD2d7ntYFwqVFxK-',
-  },
-  {
-    id: 'STF-002',
-    name: 'Le Thi Mai',
-    role: 'Nhan vien ban hang (Sale)',
-    roleTone: 'text-[#7e5700]',
-    account: 'mai.lt_sale',
-    phone: '0988 776 543',
-    status: 'Hoat dong',
-    active: true,
-    avatar:
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuCDwyOde1WWcd2lhaIXjadFqsmlJDabwvwA4raQKqmSzmHXKE_b0TfDHuh_EZSuxwGp6evdSegAZ3enm5-PP2YRBP6YXU39G87TplzK_VkHiVnTjgID5uHV77COY3HsdLHG0QYMEFGeo35xgM8U9BTq3NIb0efP8_jRWIG00z6Y2V2BcdV6nAXZdGnvAfV1HTmJTwszCf6ioVTwMFcqp5uwEU-RKEzeqb5RiaotFEQIsq8Rba5Brk6BIavMcB0FyYmzxQ6xGUY-p_CE',
-  },
-  {
-    id: 'STF-003',
-    name: 'Nguyen Van Dung',
-    role: 'Kho van (Inventory)',
-    roleTone: 'text-[#414942]',
-    account: 'dung.nv_inv',
-    phone: '0912 333 444',
-    status: 'Da khoa',
-    active: false,
-    avatar:
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuAlUGt_EarYKJWLaHtZcKgO7ewyKJBY4IoH5wZrI0UFn3xCNUBrtrr4lzOJKnkQhC2-rZKItTPR5qiVaq7fJ-VjyJIRFXZFNaMfIDq3lOngd5S4F89lrtI2SQXe-FFN-wiELyvNjPwnd8Aqf9YITR-Lhow4nphbilEPHyXyOLFiPNAWEaLJ4N561Y41JjucctCS0Q3BHR18OryZwA7XXCY568vHsN2eRpEqxNY2rcEgB8v152GMjnQWBQosZA3x4cvTB8IXKogedbsd',
-  },
-  {
-    id: 'STF-004',
-    name: 'Pham Thanh Van',
-    role: 'Ke toan (Accountant)',
-    roleTone: 'text-[#4a6242]',
-    account: 'van.pt_acc',
-    phone: '0944 555 666',
-    status: 'Hoat dong',
-    active: true,
-    avatar:
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuBpgfodiL0bEet7kls7JZvAPrW1X_UbuULkzbAi-UuAcdhFTrUhM6saAfok54n7rf3xZbRj600ysO0Hx05yGU_lPG2sxCOAtOCKbsyX2f7c1lqTy18LBcbH_7nHG8w4OFoqdHRRmWXKXfRlfCGwI1_LKHm6g8HaHB2d53xVxeiZbHBSMMDQVHJEbQGRECdpZE4Ucn2WFz4ooxJYRjQ1_eo6xyEaaxcZsHQLN8YVQVI5mgG6sO8WPWBfsryx-zsfiGAYajjJkSKeuAEB',
-  },
-]
-
-const stats = [
-  { label: 'Tong nhan su', value: '48', icon: 'groups', tone: 'bg-[#4e7f5e]/20 text-[#356647]' },
-  { label: 'Dang hoat dong', value: '42', icon: 'check_circle', tone: 'bg-[#627b59]/20 text-[#4a6242]' },
-  { label: 'Tai khoan khoa', value: '6', icon: 'lock', tone: 'bg-[#ffdad6] text-[#ba1a1a]' },
-]
+import { showError } from '../../../app/toast.js'
+import { fetchRoleOptions, fetchStaffAccounts } from '../services/staffApi.js'
 
 function StaffPage() {
+  const [staffRows, setStaffRows] = useState([])
+  const [roleOptions, setRoleOptions] = useState([])
+  const [searchValue, setSearchValue] = useState('')
+  const [roleFilter, setRoleFilter] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
+  const [page, setPage] = useState(1)
+  const [pageSize] = useState(10)
+  const [totalCount, setTotalCount] = useState(0)
+  const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    let mounted = true
+
+    const timer = setTimeout(async () => {
+      try {
+        setIsLoading(true)
+        const [roles, data] = await Promise.all([
+          fetchRoleOptions(),
+          fetchStaffAccounts({
+            search: searchValue.trim() || undefined,
+            role: roleFilter || undefined,
+            isActive: statusFilter === '' ? undefined : statusFilter === 'active',
+            page,
+            pageSize,
+          }),
+        ])
+
+        if (!mounted) return
+        setRoleOptions(roles || [])
+        setStaffRows(data.items || [])
+        setTotalCount(data.totalCount || 0)
+      } catch (error) {
+        if (mounted) showError(error.message)
+      } finally {
+        if (mounted) setIsLoading(false)
+      }
+    }, 250)
+
+    return () => {
+      mounted = false
+      clearTimeout(timer)
+    }
+  }, [searchValue, roleFilter, statusFilter, page, pageSize])
+
+  const stats = useMemo(() => {
+    const active = staffRows.filter((item) => item.isActive).length
+    const locked = staffRows.filter((item) => !item.isActive).length
+    return [
+      { label: 'Tong nhan su', value: String(totalCount), icon: 'groups', tone: 'bg-[#4e7f5e]/20 text-[#356647]' },
+      { label: 'Dang hoat dong', value: String(active), icon: 'check_circle', tone: 'bg-[#627b59]/20 text-[#4a6242]' },
+      { label: 'Tai khoan khoa', value: String(locked), icon: 'lock', tone: 'bg-[#ffdad6] text-[#ba1a1a]' },
+    ]
+  }, [staffRows, totalCount])
+
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize))
+
+  const handleFilterChange = (setter) => (event) => {
+    setPage(1)
+    setter(event.target.value)
+  }
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-6 [font-family:'Manrope',sans-serif]">
       <PageHeader
         title="Nhân viên"
         description="Quản lý tài khoản nhân sự, trạng thái hoạt động và vai trò trong hệ thống"
-        searchPlaceholder="Tim kiem nhan vien..."
       />
 
       <section className="rounded-[24px] border border-[#c1c9c0]/30 bg-white p-6 shadow-sm">
@@ -111,21 +117,30 @@ function StaffPage() {
                 className="w-full rounded-lg border border-[#c1c9c0] bg-white py-2.5 pl-10 pr-4 text-sm text-[#1b1c17] outline-none focus:border-[#356647] focus:ring-1 focus:ring-[#356647]"
                 placeholder="Ten hoac so dien thoai..."
                 type="text"
+                value={searchValue}
+                onChange={handleFilterChange(setSearchValue)}
               />
             </div>
 
-            <select className="rounded-lg border border-[#c1c9c0] bg-white px-4 py-2.5 text-sm text-[#414942] outline-none focus:border-[#356647]">
-              <option>Tat ca vai tro</option>
-              <option>Quan tri vien</option>
-              <option>Nhan vien ban hang</option>
-              <option>Kho van</option>
-              <option>Ke toan</option>
+            <select
+              className="rounded-lg border border-[#c1c9c0] bg-white px-4 py-2.5 text-sm text-[#414942] outline-none focus:border-[#356647]"
+              value={roleFilter}
+              onChange={handleFilterChange(setRoleFilter)}
+            >
+              <option value="">Tat ca vai tro</option>
+              {roleOptions.map((role) => (
+                <option key={role.id} value={role.name}>{role.name}</option>
+              ))}
             </select>
 
-            <select className="rounded-lg border border-[#c1c9c0] bg-white px-4 py-2.5 text-sm text-[#414942] outline-none focus:border-[#356647]">
-              <option>Trang thai</option>
-              <option>Hoat dong</option>
-              <option>Bi khoa</option>
+            <select
+              className="rounded-lg border border-[#c1c9c0] bg-white px-4 py-2.5 text-sm text-[#414942] outline-none focus:border-[#356647]"
+              value={statusFilter}
+              onChange={handleFilterChange(setStatusFilter)}
+            >
+              <option value="">Trang thai</option>
+              <option value="active">Hoat dong</option>
+              <option value="locked">Bi khoa</option>
             </select>
 
             <button type="button" className="rounded-lg p-2.5 text-[#414942] transition-colors hover:bg-[#eae8e0]">
@@ -146,27 +161,33 @@ function StaffPage() {
               </thead>
 
               <tbody className="divide-y divide-[#c1c9c0]/20">
-                {staffRows.map((staff) => (
+                {isLoading ? (
+                  <tr>
+                    <td className="px-6 py-6 text-sm text-[#414942]" colSpan={5}>Dang tai du lieu...</td>
+                  </tr>
+                ) : staffRows.length === 0 ? (
+                  <tr>
+                    <td className="px-6 py-6 text-sm text-[#414942]" colSpan={5}>Khong co du lieu nhan vien.</td>
+                  </tr>
+                ) : staffRows.map((staff) => (
                   <tr key={staff.id} className="group transition-colors hover:bg-[#356647]/5">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        <img
-                          alt={staff.name}
-                          className={`h-10 w-10 rounded-full object-cover ${staff.active ? 'ring-2 ring-[#4e7f5e]/20' : 'grayscale opacity-60'}`}
-                          src={staff.avatar}
-                        />
+                        <div className={`flex h-10 w-10 items-center justify-center rounded-full bg-[#e7ece4] text-[#356647] ${staff.isActive ? 'ring-2 ring-[#4e7f5e]/20' : 'opacity-60'}`}>
+                          <span className="material-symbols-outlined text-[18px]">person</span>
+                        </div>
                         <div>
-                          <p className={`text-sm font-semibold text-[#1b1c17] ${staff.active ? '' : 'opacity-60'}`}>{staff.name}</p>
-                          <p className={`text-xs ${staff.roleTone} ${staff.active ? '' : 'opacity-70'}`}>{staff.role}</p>
+                          <p className={`text-sm font-semibold text-[#1b1c17] ${staff.isActive ? '' : 'opacity-60'}`}>{staff.fullName}</p>
+                          <p className={`text-xs text-[#356647] ${staff.isActive ? '' : 'opacity-70'}`}>{(staff.roles || []).join(', ') || 'Chua gan vai tro'}</p>
                         </div>
                       </div>
                     </td>
 
-                    <td className={`px-6 py-4 text-sm text-[#414942] ${staff.active ? '' : 'opacity-60'}`}>{staff.account}</td>
-                    <td className={`px-6 py-4 text-sm text-[#414942] ${staff.active ? '' : 'opacity-60'}`}>{staff.phone}</td>
+                    <td className={`px-6 py-4 text-sm text-[#414942] ${staff.isActive ? '' : 'opacity-60'}`}>{staff.username}</td>
+                    <td className={`px-6 py-4 text-sm text-[#414942] ${staff.isActive ? '' : 'opacity-60'}`}>{staff.phone || '-'}</td>
 
                     <td className="px-6 py-4 text-center">
-                      {staff.active ? (
+                      {staff.isActive ? (
                         <span className="inline-flex items-center rounded-full bg-[#baefc8] px-3 py-1 text-xs font-semibold text-[#00210f]">
                           <span className="mr-2 h-1.5 w-1.5 rounded-full bg-[#356647]" />
                           Hoat dong
@@ -181,18 +202,11 @@ function StaffPage() {
 
                     <td className="px-6 py-4 text-right">
                       <div className="flex justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                        <Link to={`/staff/${staff.id}`} className="rounded-full p-2 text-[#356647] transition-colors hover:bg-[#eae8e0]" title="Chinh sua">
+                        <Link to={`/staff/${staff.userId}`} className="rounded-full p-2 text-[#356647] transition-colors hover:bg-[#eae8e0]" title="Chinh sua">
                           <span className="material-symbols-outlined">edit</span>
                         </Link>
                         <button type="button" className="rounded-full p-2 text-[#414942] transition-colors hover:bg-[#eae8e0]" title="Lich su">
                           <span className="material-symbols-outlined">history</span>
-                        </button>
-                        <button
-                          type="button"
-                          className={`rounded-full p-2 transition-colors hover:bg-[#eae8e0] ${staff.active ? 'text-[#ba1a1a]' : 'text-[#356647]'}`}
-                          title={staff.active ? 'Khoa' : 'Mo khoa'}
-                        >
-                          <span className="material-symbols-outlined">{staff.active ? 'lock_open' : 'lock'}</span>
                         </button>
                       </div>
                     </td>
@@ -203,25 +217,25 @@ function StaffPage() {
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#c1c9c0]/30 bg-[#f6f4ec]/50 px-6 py-4">
-            <p className="text-sm text-[#414942]">Hien thi 1-10 cua 48 nhan vien</p>
+            <p className="text-sm text-[#414942]">Hien thi trang {page}/{totalPages} · tong {totalCount} nhan vien</p>
             <div className="flex items-center gap-1">
-              <button type="button" className="flex h-8 w-8 items-center justify-center rounded-lg text-[#414942] hover:bg-[#eae8e0]">
+              <button
+                type="button"
+                disabled={page <= 1}
+                onClick={() => setPage((current) => Math.max(1, current - 1))}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-[#414942] hover:bg-[#eae8e0] disabled:opacity-40"
+              >
                 <span className="material-symbols-outlined">chevron_left</span>
               </button>
-              <button type="button" className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#356647] text-white">
-                1
+              <button type="button" className="flex h-8 min-w-8 items-center justify-center rounded-lg bg-[#356647] px-2 text-white">
+                {page}
               </button>
-              <button type="button" className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-[#eae8e0]">
-                2
-              </button>
-              <button type="button" className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-[#eae8e0]">
-                3
-              </button>
-              <span className="px-2 text-sm text-[#414942]">...</span>
-              <button type="button" className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-[#eae8e0]">
-                5
-              </button>
-              <button type="button" className="flex h-8 w-8 items-center justify-center rounded-lg text-[#414942] hover:bg-[#eae8e0]">
+              <button
+                type="button"
+                disabled={page >= totalPages}
+                onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-[#414942] hover:bg-[#eae8e0] disabled:opacity-40"
+              >
                 <span className="material-symbols-outlined">chevron_right</span>
               </button>
             </div>
