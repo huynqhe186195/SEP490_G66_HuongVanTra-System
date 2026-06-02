@@ -1,15 +1,19 @@
 using HuongVanTra.API.Authorization;
 using HuongVanTra.Core.Authorization;
+using HuongVanTra.Core.Interfaces;
 using HuongVanTra.Infrastructure.Data;
+using HuongVanTra.Infrastructure.Repositories;
 using HuongVanTra.Service.Auth;
-using Microsoft.EntityFrameworkCore;
+using HuongVanTra.Service.Implementations;
+using HuongVanTra.Service.Interfaces;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Http;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
-using Microsoft.AspNetCore.Http;
 
 namespace HuongVanTra.API {
     public class Program {
@@ -19,6 +23,7 @@ namespace HuongVanTra.API {
             var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
             builder.Services.AddDbContext<AppDbContext>(options =>
                 options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString)));
+
             builder.Services.AddScoped<IAuthService, AuthService>();
 
             builder.Services.AddCors(options => {
@@ -31,6 +36,11 @@ namespace HuongVanTra.API {
                         .AllowAnyMethod();
                 });
             });
+
+            builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
+            builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
+            builder.Services.AddScoped<IInventoryService, InventoryService>();
+            builder.Services.AddScoped<IProductionService, ProductionService>();
 
             builder.Services.AddControllers();
             // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
