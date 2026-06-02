@@ -30,7 +30,7 @@ namespace HuongVanTra.API.Authorization {
                     policy.RequireRole(AppRoles.Admin, AppRoles.AgencyManager, AppRoles.InventoryManager));
 
                 options.AddPolicy(AppPolicies.ManageCustomers, policy =>
-                    policy.RequireRole(AppRoles.Admin, AppRoles.AgencyManager));
+                    policy.RequireRole(AppRoles.Admin, AppRoles.AgencyManager, AppRoles.SalesStaff, "Sale"));
 
                 options.AddPolicy(AppPolicies.PosAccess, policy =>
                     policy.RequireRole(AppRoles.Admin, AppRoles.AgencyManager, AppRoles.SalesStaff));

@@ -2,6 +2,7 @@ using HuongVanTra.API.Authorization;
 using HuongVanTra.Core.Authorization;
 using HuongVanTra.Infrastructure.Data;
 using HuongVanTra.Service.Auth;
+using HuongVanTra.Service.Customers;
 using HuongVanTra.Service.Employees;
 using HuongVanTra.Service.Users;
 using Microsoft.EntityFrameworkCore;
@@ -22,6 +23,7 @@ namespace HuongVanTra.API {
             builder.Services.AddDbContext<AppDbContext>(options =>
                 options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString)));
             builder.Services.AddScoped<IAuthService, AuthService>();
+            builder.Services.AddScoped<ICustomerService, CustomerService>();
             builder.Services.AddScoped<IEmployeeService, EmployeeService>();
             builder.Services.AddScoped<IUserAccountService, UserAccountService>();
 
