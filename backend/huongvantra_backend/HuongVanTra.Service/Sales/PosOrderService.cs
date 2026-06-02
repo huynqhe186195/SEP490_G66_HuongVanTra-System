@@ -21,7 +21,7 @@ namespace HuongVanTra.Service.Sales {
             try {
                 var order = BuildOrder(command, productMap, discount, membershipDiscount);
                 order.StockStatus = "pending_deduct";
-                order.PaymentStatus = "paid";
+                order.PaymentStatus = "pending_payment";
                 order.OrderStatus = "confirmed";
 
                 _db.Orders.Add(order);
@@ -60,7 +60,7 @@ namespace HuongVanTra.Service.Sales {
             try {
                 var order = BuildOrder(command, productMap, discount, membershipDiscount);
                 order.StockStatus = "deducted";
-                order.PaymentStatus = "paid";
+                order.PaymentStatus = "pending_payment";
                 order.OrderStatus = "confirmed";
 
                 _db.Orders.Add(order);
@@ -179,7 +179,7 @@ namespace HuongVanTra.Service.Sales {
             var payments = command.Payments.Select(p => new PaymentTransaction {
                 PaymentMethod   = p.PaymentMethod,
                 Amount          = p.Amount,
-                Status          = "confirmed",
+                Status          = "pending",
                 TransactionDate = DateTime.UtcNow
             }).ToList();
 
