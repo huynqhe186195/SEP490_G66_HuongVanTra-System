@@ -55,7 +55,16 @@ export function mapOrderListItem(item) {
     paymentStatus: item.paymentStatus ?? item.PaymentStatus ?? '',
     shippingAddress: item.shippingAddress ?? item.ShippingAddress ?? '',
     totalAmount: Number(item.totalAmount ?? item.TotalAmount ?? 0),
+    cashierId: item.cashierId ?? item.CashierId ?? null,
+    cashierName: item.cashierName ?? item.CashierName ?? '',
     createdAt: item.createdAt ?? item.CreatedAt,
+  }
+}
+
+export function mapOrderCreatorOption(item) {
+  return {
+    id: item.id ?? item.Id,
+    fullName: item.fullName ?? item.FullName ?? '',
   }
 }
 
@@ -126,10 +135,11 @@ export async function fetchOrders(params = {}) {
   if (params.orderStatus) query.set('orderStatus', params.orderStatus)
   if (params.paymentStatus) query.set('paymentStatus', params.paymentStatus)
   if (params.paymentMethod) query.set('paymentMethod', params.paymentMethod)
+  if (params.cashierId) query.set('cashierId', String(params.cashierId))
   if (params.fromDate) query.set('fromDate', params.fromDate)
   if (params.toDate) query.set('toDate', params.toDate)
   query.set('page', String(params.page ?? 1))
-  query.set('pageSize', String(params.pageSize ?? 20))
+  query.set('pageSize', String(params.pageSize ?? 10))
 
   const data = await requestWithAuth(`/api/Orders?${query.toString()}`, { method: 'GET' })
   const items = data?.items ?? data?.Items ?? []
@@ -138,12 +148,27 @@ export async function fetchOrders(params = {}) {
     items: Array.isArray(items) ? items.map(mapOrderListItem) : [],
     totalCount: Number(data?.totalCount ?? data?.TotalCount ?? 0),
     page: Number(data?.page ?? data?.Page ?? 1),
-    pageSize: Number(data?.pageSize ?? data?.PageSize ?? 20),
+    pageSize: Number(data?.pageSize ?? data?.PageSize ?? 10),
   }
 }
 
 export function fetchOrder(idOrCode) {
   return requestWithAuth(`/api/Orders/${encodeURIComponent(idOrCode)}`, { method: 'GET' }).then(mapOrderDetail)
+}
+
+export async function fetchOrderCreators() {
+  const items = await requestWithAuth('/api/Orders/creators', { method: 'GET' })
+  return Array.isArray(items) ? items.map(mapOrderCreatorOption) : []
+}
+
+export async function fetchOrderAccess() {
+  const data = await requestWithAuth('/api/Orders/access', { method: 'GET' })
+  return {
+    mode: data?.mode ?? data?.Mode ?? 'All',
+    canEdit: Boolean(data?.canEdit ?? data?.CanEdit ?? true),
+    storeId: data?.storeId ?? data?.StoreId ?? null,
+    employeeId: data?.employeeId ?? data?.EmployeeId ?? null,
+  }
 }
 
 export async function fetchOverdueCodOrders() {

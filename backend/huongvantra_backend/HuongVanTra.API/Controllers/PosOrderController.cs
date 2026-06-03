@@ -1,5 +1,6 @@
 using HuongVanTra.API.Extensions;
 using HuongVanTra.API.Models.Sales;
+using HuongVanTra.Core.Authorization;
 using HuongVanTra.Infrastructure.Data;
 using HuongVanTra.Service.Customers;
 using HuongVanTra.Service.Sales;
@@ -12,7 +13,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 
 namespace HuongVanTra.API.Controllers {
-    [Authorize]
+    [Authorize(Policy = AppPolicies.PosAccess)]
     [ApiController]
     [Route("api/[controller]")]
     public class PosOrderController : ControllerBase {

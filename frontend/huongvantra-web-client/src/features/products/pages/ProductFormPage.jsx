@@ -5,8 +5,8 @@ function ProductFormPage({ mode }) {
   const isEditMode = mode === 'edit' || Boolean(id)
 
   return (
-    <main className="flex min-h-0 flex-1 flex-col overflow-y-auto p-8">
-      <div className="mb-8 flex items-start justify-between gap-4">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto sm:gap-6">
+      <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-start">
         <div>
           <h1 className="text-2xl font-extrabold text-slate-800">{isEditMode ? 'Sửa sản phẩm' : 'Tạo sản phẩm'}</h1>
           <p className="mt-1 text-sm text-slate-500">Quản lý ảnh, mô tả, biến thể, giá và trạng thái kinh doanh</p>
@@ -22,9 +22,9 @@ function ProductFormPage({ mode }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-12 gap-8">
-        <section className="col-span-8 space-y-6">
-          <div className="rounded-[1rem] bg-white p-8 shadow-sm">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 lg:gap-8">
+        <section className="space-y-6 lg:col-span-8">
+          <div className="rounded-[1rem] bg-white p-4 shadow-sm sm:p-6 lg:p-8">
             <h2 className="mb-6 text-lg font-bold text-slate-800">Thông tin sản phẩm</h2>
 
             <div className="mb-6 grid grid-cols-1 gap-6 md:grid-cols-2">
@@ -95,7 +95,7 @@ function ProductFormPage({ mode }) {
           </div>
         </section>
       </div>
-    </main>
+    </div>
   )
 }
 

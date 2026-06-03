@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
+import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
 import { showError } from '../../../app/toast.js'
 import { fetchCustomers } from '../services/customersApi.js'
 import {
@@ -47,6 +48,7 @@ function CustomersPage() {
   const [activeTab, setActiveTab] = useState('general')
   const [customers, setCustomers] = useState([])
   const [searchValue, setSearchValue] = useState('')
+  const [page, setPage] = useState(1)
   const [isLoading, setIsLoading] = useState(true)
 
   const tabs = useMemo(
@@ -84,6 +86,22 @@ function CustomersPage() {
       clearTimeout(timer)
     }
   }, [activeTab, searchValue])
+
+  useEffect(() => {
+    setPage(1)
+  }, [activeTab, searchValue])
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(customers.length / TABLE_PAGE_SIZE))
+    if (page > totalPages) {
+      setPage(totalPages)
+    }
+  }, [customers.length, page])
+
+  const paginatedCustomers = useMemo(() => {
+    const start = (page - 1) * TABLE_PAGE_SIZE
+    return customers.slice(start, start + TABLE_PAGE_SIZE)
+  }, [customers, page])
 
   const corporateStats = useMemo(() => {
     const activeCount = customers.filter((item) => item.status?.toUpperCase() === 'ACTIVE').length
@@ -161,13 +179,13 @@ function CustomersPage() {
   }, [customers])
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-6 [font-family:'Manrope',sans-serif]">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 sm:gap-6 [font-family:'Manrope',sans-serif]">
       <PageHeader
         title="Khách hàng"
         description="Khách phổ thông (hạng Bronze/Silver/Gold), khách VIP và khách doanh nghiệp"
         rightContent={
           <input
-            className="h-11 w-full min-w-[240px] rounded-full border border-[#c1c9c0]/90 bg-white px-4 text-sm text-[#1b1c17] outline-none focus:border-[#538463] focus:ring-2 focus:ring-[#356647]/20 lg:min-w-[320px]"
+            className="h-11 w-full max-w-full rounded-full border border-[#c1c9c0]/90 bg-white px-4 text-sm text-[#1b1c17] outline-none focus:border-[#538463] focus:ring-2 focus:ring-[#356647]/20 lg:max-w-[320px]"
             placeholder="Tìm khách hàng..."
             type="search"
             value={searchValue}
@@ -177,7 +195,7 @@ function CustomersPage() {
       />
 
       <main className="flex flex-col gap-4">
-        <section className="flex flex-col gap-4 rounded-[24px] border border-[#c1c9c0]/30 bg-white p-6 shadow-sm">
+        <section className="flex flex-col gap-4 rounded-[24px] border border-[#c1c9c0]/30 bg-white p-4 shadow-sm sm:p-6">
           <div className="flex items-center gap-2 text-xs text-[#717971]">
             <span>Customers</span>
             <span className="material-symbols-outlined text-[14px]">chevron_right</span>
@@ -185,12 +203,12 @@ function CustomersPage() {
           </div>
 
           <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
-            <div className="inline-flex w-fit gap-2 rounded-xl bg-[#f6f4ec] p-1 shadow-inner">
+            <div className="inline-flex max-w-full gap-2 overflow-x-auto rounded-xl bg-[#f6f4ec] p-1 shadow-inner no-scrollbar">
               {tabs.map((tab) => (
                 <button
                   key={tab.key}
                   type="button"
-                  className={`rounded-lg px-6 py-2 text-sm transition-all ${
+                  className={`shrink-0 rounded-lg px-4 py-2 text-sm transition-all sm:px-6 ${
                     activeTab === tab.key ? 'bg-[#4a6242] font-bold text-white shadow-sm' : 'text-[#414942] hover:bg-[#e4e3db]'
                   }`}
                   onClick={() => setActiveTab(tab.key)}
@@ -277,7 +295,7 @@ function CustomersPage() {
                         </td>
                       </tr>
                     ) : (
-                      customers.map((row, index) => {
+                      paginatedCustomers.map((row, index) => {
                         const status = getStatusDisplay(row.status)
                         const debtTone = Number(row.totalSpend) > 0 ? 'text-[#7e5700]' : 'text-[#1b1c17]'
                         return (
@@ -316,26 +334,12 @@ function CustomersPage() {
                 </table>
               </div>
 
-              <div className="flex flex-wrap items-center justify-between gap-3 bg-[#f6f4ec] p-6">
-                <span className="text-xs text-[#717971]">Hiển thị {customers.length} khách hàng doanh nghiệp</span>
-                <div className="flex gap-1">
-                  <button type="button" className="flex h-8 w-8 items-center justify-center rounded text-[#717971]" disabled>
-                    <span className="material-symbols-outlined text-sm">chevron_left</span>
-                  </button>
-                  <button type="button" className="flex h-8 w-8 items-center justify-center rounded bg-[#356647] text-xs font-bold text-white">
-                    1
-                  </button>
-                  <button type="button" className="flex h-8 w-8 items-center justify-center rounded text-xs text-[#414942] hover:bg-white">
-                    2
-                  </button>
-                  <button type="button" className="flex h-8 w-8 items-center justify-center rounded text-xs text-[#414942] hover:bg-white">
-                    3
-                  </button>
-                  <button type="button" className="flex h-8 w-8 items-center justify-center rounded text-[#717971] hover:bg-white">
-                    <span className="material-symbols-outlined text-sm">chevron_right</span>
-                  </button>
-                </div>
-              </div>
+              <TablePagination
+                page={page}
+                totalCount={customers.length}
+                itemLabel="khách hàng"
+                onPageChange={setPage}
+              />
             </section>
 
             <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
@@ -452,7 +456,7 @@ function CustomersPage() {
                         </td>
                       </tr>
                     ) : (
-                      customers.map((row) => (
+                      paginatedCustomers.map((row) => (
                         <tr key={row.customerId} className="transition-colors hover:bg-[#f6f4ec]">
                           <td className="border-b border-[#f0eee6] px-6 py-4">
                             <div className="flex items-center gap-3">
@@ -485,30 +489,12 @@ function CustomersPage() {
                 </table>
               </div>
 
-              <div className="flex flex-wrap items-center justify-between gap-3 p-6 text-sm text-[#414942]">
-                <p>Hiển thị {customers.length} khách phổ thông</p>
-                <div className="flex gap-2">
-                  <button type="button" className="flex h-10 w-10 items-center justify-center rounded-lg border border-[#c1c9c0] opacity-30" disabled>
-                    <span className="material-symbols-outlined">chevron_left</span>
-                  </button>
-                  <button type="button" className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#356647] font-bold text-white">
-                    1
-                  </button>
-                  <button type="button" className="flex h-10 w-10 items-center justify-center rounded-lg border border-[#c1c9c0] hover:bg-[#f6f4ec]">
-                    2
-                  </button>
-                  <button type="button" className="flex h-10 w-10 items-center justify-center rounded-lg border border-[#c1c9c0] hover:bg-[#f6f4ec]">
-                    3
-                  </button>
-                  <span className="flex items-center px-2">...</span>
-                  <button type="button" className="flex h-10 w-10 items-center justify-center rounded-lg border border-[#c1c9c0] hover:bg-[#f6f4ec]">
-                    12
-                  </button>
-                  <button type="button" className="flex h-10 w-10 items-center justify-center rounded-lg border border-[#c1c9c0] hover:bg-[#f6f4ec]">
-                    <span className="material-symbols-outlined">chevron_right</span>
-                  </button>
-                </div>
-              </div>
+              <TablePagination
+                page={page}
+                totalCount={customers.length}
+                itemLabel="khách hàng"
+                onPageChange={setPage}
+              />
             </section>
 
             <section className="mt-2 grid grid-cols-1 gap-4 lg:grid-cols-12">
@@ -627,7 +613,7 @@ function CustomersPage() {
                         </td>
                       </tr>
                     ) : (
-                      customers.map((row) => {
+                      paginatedCustomers.map((row) => {
                         const status = getStatusDisplay(row.status)
                         return (
                           <tr key={row.customerId} className="transition-colors hover:bg-[#f6f4ec]">
@@ -663,9 +649,12 @@ function CustomersPage() {
                 </table>
               </div>
 
-              <div className="flex flex-wrap items-center justify-between gap-3 p-6 text-sm text-[#414942]">
-                <p>Hiển thị {customers.length} khách VIP</p>
-              </div>
+              <TablePagination
+                page={page}
+                totalCount={customers.length}
+                itemLabel="khách hàng"
+                onPageChange={setPage}
+              />
             </section>
           </>
         )}

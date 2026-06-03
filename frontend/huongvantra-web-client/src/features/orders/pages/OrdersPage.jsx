@@ -1,9 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
+import PageShell from '../../../components/shared/PageShell.jsx'
+import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
+import SearchableSelect from '../../../components/shared/SearchableSelect.jsx'
+import { canAccessModule } from '../../../app/navigation.js'
+import { loadAuthSession } from '../../auth/services/authSession.js'
 import { showError } from '../../../app/toast.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
-import { fetchOrders } from '../services/ordersApi.js'
+import { fetchOrderAccess, fetchOrderCreators, fetchOrders } from '../services/ordersApi.js'
 import {
   formatVnd,
   getOrderChannelLabel,
@@ -37,17 +42,22 @@ const initialFilters = {
   orderStatus: '',
   paymentStatus: '',
   paymentMethod: '',
+  cashierId: '',
   datePreset: 'all',
 }
 
 function OrdersPage() {
+  const authSession = loadAuthSession()
+  const canManageCod = canAccessModule(authSession, 'cod_ops')
   const [filters, setFilters] = useState(initialFilters)
   const [searchInput, setSearchInput] = useState('')
   const [orders, setOrders] = useState([])
   const [totalCount, setTotalCount] = useState(0)
   const [page, setPage] = useState(1)
   const [isLoading, setIsLoading] = useState(true)
-  const pageSize = 20
+  const [orderCreators, setOrderCreators] = useState([])
+  const [orderAccess, setOrderAccess] = useState({ canEdit: true, mode: 'All' })
+  const showCreatorFilter = orderAccess.mode !== 'Own'
 
   const queryParams = useMemo(() => {
     const params = {
@@ -55,8 +65,9 @@ function OrdersPage() {
       orderStatus: filters.orderStatus || undefined,
       paymentStatus: filters.paymentStatus || undefined,
       paymentMethod: filters.paymentMethod || undefined,
+      cashierId: filters.cashierId ? Number(filters.cashierId) : undefined,
       page,
-      pageSize,
+      pageSize: TABLE_PAGE_SIZE,
     }
     if (filters.datePreset === 'today') {
       const today = getTodayIsoDate()
@@ -73,6 +84,30 @@ function OrdersPage() {
     }, 300)
     return () => clearTimeout(timer)
   }, [searchInput])
+
+  useEffect(() => {
+    let mounted = true
+
+    const loadMeta = async () => {
+      try {
+        const [creators, access] = await Promise.all([fetchOrderCreators(), fetchOrderAccess()])
+        if (mounted) {
+          setOrderCreators(creators)
+          setOrderAccess(access)
+        }
+      } catch {
+        if (mounted) {
+          setOrderCreators([])
+          setOrderAccess({ canEdit: true, mode: 'All' })
+        }
+      }
+    }
+
+    loadMeta()
+    return () => {
+      mounted = false
+    }
+  }, [])
 
   useEffect(() => {
     let mounted = true
@@ -102,11 +137,11 @@ function OrdersPage() {
     }
   }, [queryParams])
 
-  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize))
   const hasActiveFilters =
     filters.orderStatus ||
     filters.paymentStatus ||
     filters.paymentMethod ||
+    filters.cashierId ||
     filters.datePreset !== 'all' ||
     filters.search
 
@@ -117,7 +152,8 @@ function OrdersPage() {
   }
 
   return (
-    <main className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-[#fbf9f1] p-8">
+    <PageShell className="min-h-0 flex-1 overflow-hidden">
+      <div className="shrink-0">
       <PageHeader
         title="Đơn hàng"
         description="Xem và chỉnh sửa đơn tạo từ POS. Tạo đơn mới tại màn hình POS bán hàng."
@@ -133,8 +169,9 @@ function OrdersPage() {
           </Link>
         }
       />
+      </div>
 
-      <section className="mb-6 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
+      <section className="mb-4 shrink-0 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm sm:mb-6">
         <div className="flex flex-wrap items-end gap-3">
           <label className="min-w-[160px] flex-1">
             <span className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-400">Trạng thái đơn</span>
@@ -190,6 +227,23 @@ function OrdersPage() {
             </select>
           </label>
 
+          {showCreatorFilter ? (
+            <SearchableSelect
+              className="min-w-[200px] flex-1"
+              label="Người tạo đơn"
+              placeholder="Gõ tên nhân viên..."
+              emptyLabel="Tất cả nhân viên"
+              value={filters.cashierId}
+              options={orderCreators}
+              getOptionValue={(creator) => String(creator.id)}
+              getOptionLabel={(creator) => creator.fullName}
+              onChange={(cashierId) => {
+                setFilters((prev) => ({ ...prev, cashierId }))
+                setPage(1)
+              }}
+            />
+          ) : null}
+
           <label className="min-w-[140px]">
             <span className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-400">Ngày tạo</span>
             <select
@@ -215,30 +269,33 @@ function OrdersPage() {
             </button>
           ) : null}
 
-          <Link
-            className="ml-auto inline-flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm font-bold text-amber-800 hover:bg-amber-100"
-            to="/orders/cod"
-          >
-            Đơn COD
-          </Link>
+          {canManageCod ? (
+            <Link
+              className="ml-auto inline-flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm font-bold text-amber-800 hover:bg-amber-100"
+              to="/orders/cod"
+            >
+              Quản lý COD
+            </Link>
+          ) : null}
         </div>
       </section>
 
-      <section className="min-h-[400px] overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-50 p-6">
+      <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-sm">
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-slate-50 p-4 sm:p-6">
           <h2 className="text-xl font-bold text-slate-800">
             Danh sách đơn hàng
             <span className="ml-2 text-sm font-normal text-slate-500">({totalCount} đơn)</span>
           </h2>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead className="bg-[#fbf9f1]/50 text-xs font-bold uppercase tracking-wider text-slate-400">
+        <div className="custom-scrollbar min-h-0 flex-1 overflow-auto">
+          <table className="w-full min-w-[960px] text-left">
+            <thead className="sticky top-0 z-10 bg-[#f6f4ec] text-xs font-bold uppercase tracking-wider text-slate-400 shadow-[0_1px_0_#e8e6de]">
               <tr>
                 <th className="px-6 py-4">Mã đơn</th>
                 <th className="px-4 py-4">Khách hàng</th>
                 <th className="px-4 py-4">Kênh</th>
+                <th className="px-4 py-4">Người tạo đơn</th>
                 <th className="px-4 py-4">Thanh toán</th>
                 <th className="px-4 py-4">Trạng thái</th>
                 <th className="px-4 py-4">Ngày tạo</th>
@@ -249,14 +306,14 @@ function OrdersPage() {
             <tbody className="divide-y divide-slate-50">
               {isLoading ? (
                 <tr>
-                  <td className="px-6 py-10 text-slate-500" colSpan={8}>
+                  <td className="px-6 py-10 text-slate-500" colSpan={9}>
                     Đang tải...
                   </td>
                 </tr>
               ) : null}
               {!isLoading && orders.length === 0 ? (
                 <tr>
-                  <td className="px-6 py-10 text-slate-500" colSpan={8}>
+                  <td className="px-6 py-10 text-slate-500" colSpan={9}>
                     Không có đơn phù hợp bộ lọc.
                   </td>
                 </tr>
@@ -286,6 +343,9 @@ function OrdersPage() {
                         <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
                           {getOrderChannelLabel(order.orderCode)}
                         </span>
+                      </td>
+                      <td className="px-4 py-4 text-sm font-medium text-slate-700">
+                        {order.cashierName || '—'}
                       </td>
                       <td className="px-4 py-4 text-sm text-slate-600">
                         {getPaymentMethodLabel(order.paymentMethod)}
@@ -323,31 +383,9 @@ function OrdersPage() {
           </table>
         </div>
 
-        {totalPages > 1 ? (
-          <div className="flex items-center justify-between border-t border-slate-50 px-6 py-4">
-            <button
-              type="button"
-              disabled={page <= 1}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold disabled:opacity-40"
-            >
-              Trước
-            </button>
-            <span className="text-sm text-slate-600">
-              Trang {page} / {totalPages}
-            </span>
-            <button
-              type="button"
-              disabled={page >= totalPages}
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold disabled:opacity-40"
-            >
-              Sau
-            </button>
-          </div>
-        ) : null}
+        <TablePagination page={page} totalCount={totalCount} itemLabel="đơn" onPageChange={setPage} />
       </section>
-    </main>
+    </PageShell>
   )
 }
 

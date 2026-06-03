@@ -18,7 +18,7 @@ const pricingRules = [
 
 function ProductsPricingPage() {
   return (
-    <main className="flex min-h-0 flex-1 flex-col overflow-y-auto p-8">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto sm:gap-6">
       <PageHeader
         title="Danh mục &amp; bảng giá"
         description="Cây danh mục, quy tắc giá lẻ, giá đại lý và giá theo kênh"
@@ -32,11 +32,11 @@ function ProductsPricingPage() {
         </Link>
       </div>
 
-      <div className="flex flex-1 gap-8 overflow-y-auto pb-6">
-        <section className="flex-[3] rounded-[1rem] bg-white p-8 shadow-sm" data-purpose="category-tree">
+      <div className="flex flex-1 flex-col gap-6 overflow-y-auto pb-2 lg:flex-row lg:gap-8 lg:pb-6">
+        <section className="rounded-[1rem] bg-white p-4 shadow-sm sm:p-6 lg:flex-[3] lg:p-8" data-purpose="category-tree">
           <h2 className="mb-6 text-lg font-bold text-gray-800">Cây danh mục</h2>
 
-          <div className="grid grid-cols-2 content-start gap-4">
+          <div className="grid grid-cols-1 content-start gap-4 sm:grid-cols-2">
             {categoryCards.map((item) => (
               <div key={item.name} className="cursor-pointer rounded-xl border border-gray-100 p-5 transition hover:border-[#538463]/30">
                 <span className="text-xs font-medium text-gray-400">{item.name}</span>
@@ -53,7 +53,7 @@ function ProductsPricingPage() {
           </div>
         </section>
 
-        <section className="flex-[1.5] rounded-[1rem] bg-white p-8 shadow-sm" data-purpose="pricing-rules">
+        <section className="rounded-[1rem] bg-white p-4 shadow-sm sm:p-6 lg:flex-[1.5] lg:p-8" data-purpose="pricing-rules">
           <h2 className="mb-6 text-lg font-bold text-gray-800">Quy tắc bảng giá</h2>
 
           <div className="space-y-4">
@@ -66,7 +66,7 @@ function ProductsPricingPage() {
           </div>
         </section>
       </div>
-    </main>
+    </div>
   )
 }
 

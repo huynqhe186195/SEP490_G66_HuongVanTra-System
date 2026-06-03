@@ -67,7 +67,7 @@ function StaffPage() {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-6 [font-family:'Manrope',sans-serif]">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 sm:gap-6 [font-family:'Manrope',sans-serif]">
       <PageHeader
         title="Nhân viên"
         description="Quản lý tài khoản nhân sự, trạng thái hoạt động và vai trò trong hệ thống"

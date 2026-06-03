@@ -97,7 +97,7 @@ function ProfilePage() {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-6 [font-family:'Manrope',sans-serif]">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 sm:gap-6 [font-family:'Manrope',sans-serif]">
       <div className="mb-2 flex flex-col gap-1">
         <nav className="mb-2 flex items-center gap-2 text-[13px] text-[#707a72]">
           <span>Nhân sự</span>

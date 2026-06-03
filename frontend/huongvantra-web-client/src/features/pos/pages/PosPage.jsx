@@ -898,7 +898,7 @@ function PosPage() {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[28px] border border-[#c1c9c0]/40 bg-[#fbf9f1] shadow-[0_10px_30px_rgba(27,28,23,0.04)]">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-[#c1c9c0]/40 bg-[#fbf9f1] shadow-[0_10px_30px_rgba(27,28,23,0.04)] lg:rounded-[28px]">
       <header className="border-b border-[#c1c9c0]/60 bg-[#f6f4ec] px-4 py-3">
         <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
           {tabs.map((tab) => {
@@ -963,7 +963,7 @@ function PosPage() {
         </div>
       </header>
 
-      <div className="flex min-h-0 flex-1 overflow-hidden">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden xl:flex-row">
         {/* Left: search + cart lines (larger touch targets) */}
         <section className="order-1 flex min-w-0 flex-1 flex-col bg-white text-base">
           <div className="relative z-30 shrink-0 overflow-visible border-b border-[#c1c9c0]/60 bg-[#f6f4ec] p-5">
@@ -1172,7 +1172,7 @@ function PosPage() {
         </section>
 
         {/* Right: customer, discount, payment */}
-        <section className="order-2 flex w-[420px] shrink-0 flex-col border-l border-[#c1c9c0] bg-[#f6f4ec] shadow-[-4px_0_20px_rgba(0,0,0,0.04)]">
+        <section className="order-2 flex max-h-[min(52vh,520px)] w-full shrink-0 flex-col border-t border-[#c1c9c0] bg-[#f6f4ec] xl:max-h-none xl:w-[min(100%,420px)] xl:border-l xl:border-t-0 xl:shadow-[-4px_0_20px_rgba(0,0,0,0.04)]">
           <div className="custom-scrollbar flex-1 space-y-4 overflow-y-auto p-4">
             <div className="relative rounded-xl bg-white p-3 shadow-sm">
               <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[#717971]">Khách hàng</label>

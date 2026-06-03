@@ -16,7 +16,14 @@ namespace HuongVanTra.Service.Orders {
         public string PaymentStatus { get; set; } = string.Empty;
         public string? ShippingAddress { get; set; }
         public decimal TotalAmount { get; set; }
+        public int CashierId { get; set; }
+        public string CashierName { get; set; } = string.Empty;
         public DateTime CreatedAt { get; set; }
+    }
+
+    public class OrderCreatorOptionDto {
+        public int Id { get; set; }
+        public string FullName { get; set; } = string.Empty;
     }
 
     public class OrderItemDto {

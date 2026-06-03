@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { canAccessModule } from '../../../app/navigation.js'
 import { showError, showSuccess } from '../../../app/toast.js'
+import { loadAuthSession } from '../../auth/services/authSession.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import {
   confirmCodCompleted,
   confirmOrderPayment,
   fetchOrder,
+  fetchOrderAccess,
   fetchOrderPaymentQr,
   markCodReminded,
   rejectCodOrder,
@@ -36,9 +39,11 @@ const EDIT_PAYMENT_STATUS_OPTIONS = PAYMENT_STATUS_OPTIONS.filter((o) => o.value
 
 function OrderDetailPage() {
   const { id } = useParams()
+  const canManageCod = canAccessModule(loadAuthSession(), 'cod_ops')
   const [order, setOrder] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+  const [orderAccess, setOrderAccess] = useState({ canEdit: true, mode: 'All' })
 
   const [orderStatus, setOrderStatus] = useState('')
   const [paymentStatus, setPaymentStatus] = useState('')
@@ -56,7 +61,11 @@ function OrderDetailPage() {
   const [isLoadingPaymentQr, setIsLoadingPaymentQr] = useState(false)
   const [paymentQrCooldownUntil, setPaymentQrCooldownUntil] = useState(0)
 
-  const itemsEditable = useMemo(() => canEditOrderItems(order), [order])
+  const canEditOrder = orderAccess.canEdit !== false
+  const itemsEditable = useMemo(
+    () => canEditOrder && canEditOrderItems(order),
+    [order, canEditOrder],
+  )
 
   const syncEditLinesFromOrder = (data) => {
     setEditLines(
@@ -103,6 +112,20 @@ function OrderDetailPage() {
   useEffect(() => {
     loadOrder()
   }, [loadOrder])
+
+  useEffect(() => {
+    let mounted = true
+    fetchOrderAccess()
+      .then((access) => {
+        if (mounted) setOrderAccess(access)
+      })
+      .catch(() => {
+        if (mounted) setOrderAccess({ canEdit: true, mode: 'All' })
+      })
+    return () => {
+      mounted = false
+    }
+  }, [])
 
   useEffect(() => {
     if (!itemsEditable) {
@@ -297,8 +320,9 @@ function OrderDetailPage() {
   }
 
   const cod = order && isCodOrder(order)
-  const showCodActions = order && cod && canConfirmCod(order)
+  const showCodActions = order && cod && canManageCod && canConfirmCod(order)
   const canConfirmPayment =
+    canEditOrder &&
     order &&
     !cod &&
     String(order.paymentStatus).toLowerCase() !== 'paid' &&
@@ -314,7 +338,7 @@ function OrderDetailPage() {
     : ''
 
   return (
-    <main className="flex h-full flex-1 flex-col overflow-y-auto p-8">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto sm:gap-6">
       <div className="mb-8 flex flex-col justify-between gap-4 md:flex-row md:items-center">
         <div>
           <h1 className="text-2xl font-extrabold text-slate-800">
@@ -336,12 +360,12 @@ function OrderDetailPage() {
           >
             Danh sách đơn
           </Link>
-          {cod ? (
+          {cod && canManageCod ? (
             <Link
               className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-2.5 text-sm font-semibold text-amber-800 hover:bg-amber-100"
               to="/orders/cod"
             >
-              Đơn COD
+              Quản lý COD
             </Link>
           ) : null}
         </div>
@@ -352,8 +376,14 @@ function OrderDetailPage() {
 
       {!isLoading && order ? (
         <div className="grid flex-1 grid-cols-1 gap-6 lg:grid-cols-3">
-          <section className="rounded-[1.5rem] bg-white p-8 shadow-sm lg:col-span-2">
+          <section className="rounded-[1.5rem] bg-white p-4 shadow-sm sm:p-6 lg:col-span-2 lg:p-8">
             <h2 className="mb-6 text-xl font-extrabold text-slate-800">Thông tin &amp; sản phẩm</h2>
+
+            {!canEditOrder ? (
+              <p className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                Bạn chỉ được xem đơn hàng do mình tạo. Liên hệ quản lý chi nhánh nếu cần chỉnh sửa.
+              </p>
+            ) : null}
 
             <div className="mb-6 flex flex-wrap gap-2">
               <span className={`rounded-full px-3 py-1 text-xs font-semibold ${getOrderStatusClass(order.orderStatus)}`}>
@@ -779,7 +809,7 @@ function OrderDetailPage() {
           </div>
         </div>
       ) : null}
-    </main>
+    </div>
   )
 }
 

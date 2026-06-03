@@ -574,12 +574,18 @@ namespace HuongVanTra.Service.Sales {
             }
         }
 
-        public async Task<List<OverdueCodOrderResult>> GetOverdueCodOrdersAsync() {
+        public async Task<List<OverdueCodOrderResult>> GetOverdueCodOrdersAsync(int? storeId = null) {
             var cutoff = DateTime.UtcNow.AddDays(-7);
 
             // Đơn COD treo: là COD, chưa paid, chưa cancelled, và đã quá 7 ngày
             // kể từ ngày tạo hoặc từ lần nhắc gần nhất
-            var orders = await _db.Orders
+            var ordersQuery = _db.Orders.AsQueryable();
+
+            if (storeId.HasValue) {
+                ordersQuery = ordersQuery.Where(o => o.StoreId == storeId.Value);
+            }
+
+            var orders = await ordersQuery
                 .Where(o => o.PaymentMethod == "COD"
                          && o.PaymentStatus != "paid"
                          && o.OrderStatus   != "cancelled"

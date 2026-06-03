@@ -10,6 +10,7 @@ namespace HuongVanTra.Core.Authorization {
         public const string ViewReports = "ViewReports";
         public const string ManageInventory = "ManageInventory";
         public const string ManageOrders = "ManageOrders";
+        public const string ManageCodOps = "ManageCodOps";
         public const string ManageProducts = "ManageProducts";
         public const string ManageCustomers = "ManageCustomers";
         public const string PosAccess = "PosAccess";

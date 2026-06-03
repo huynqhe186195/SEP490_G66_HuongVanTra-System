@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
+import PageShell from '../../../components/shared/PageShell.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import {
@@ -122,7 +123,7 @@ function CodOrdersPage() {
         : pendingOrders
 
   return (
-    <main className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-[#fbf9f1] p-8">
+    <PageShell>
       <PageHeader
         title="Đơn COD"
         description="Theo dõi giao hàng thu tiền mặt, đơn treo và xác nhận hoàn tất"
@@ -291,7 +292,7 @@ function CodOrdersPage() {
           </table>
         </div>
       </section>
-    </main>
+    </PageShell>
   )
 }
 

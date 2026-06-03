@@ -9,7 +9,7 @@ const products = [
 
 function ProductsListPage() {
   return (
-    <main className="flex min-h-0 flex-1 flex-col overflow-y-auto p-8">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto sm:gap-6">
       <PageHeader
         title="Sản phẩm"
         description="Quản lý danh sách sản phẩm, trạng thái và giá bán"
@@ -66,7 +66,7 @@ function ProductsListPage() {
           </tbody>
         </table>
       </div>
-    </main>
+    </div>
   )
 }
 

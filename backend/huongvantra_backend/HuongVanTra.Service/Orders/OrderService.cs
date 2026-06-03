@@ -1,5 +1,6 @@
 using System.Text.Json;
 using HuongVanTra.Core.Constants;
+using HuongVanTra.Core.Entities.Identity;
 using HuongVanTra.Core.Entities.Inventory;
 using HuongVanTra.Core.Entities.Sales;
 using HuongVanTra.Core.Sales;
@@ -31,11 +32,16 @@ namespace HuongVanTra.Service.Orders {
             var page = query.Page < 1 ? 1 : query.Page;
             var pageSize = query.PageSize < 1 ? 20 : Math.Min(query.PageSize, 100);
 
+            var access = query.Access ?? OrderAccessScope.AllOrders();
+
             var ordersQuery = _dbContext.Orders
                 .AsNoTracking()
                 .Include(o => o.Customer)
+                .Include(o => o.Cashier)
                 .Include(o => o.PaymentTransactions)
                 .AsQueryable();
+
+            ordersQuery = OrderAccessScope.ApplyFilter(ordersQuery, access);
 
             if (!string.IsNullOrWhiteSpace(query.Search)) {
                 var term = query.Search.Trim();
@@ -60,6 +66,12 @@ namespace HuongVanTra.Service.Orders {
                 ordersQuery = ordersQuery.Where(o => o.PaymentMethod.ToUpper() == method);
             }
 
+            if (access.Mode == OrderAccessMode.Own && access.EmployeeId.HasValue) {
+                ordersQuery = ordersQuery.Where(o => o.CashierId == access.EmployeeId.Value);
+            } else if (query.CashierId.HasValue) {
+                ordersQuery = ordersQuery.Where(o => o.CashierId == query.CashierId.Value);
+            }
+
             if (query.FromDate.HasValue) {
                 ordersQuery = ordersQuery.Where(o => o.CreatedAt >= query.FromDate.Value);
             }
@@ -78,13 +90,17 @@ namespace HuongVanTra.Service.Orders {
                 .Select(o => new OrderListItemDto {
                     Id = o.Id,
                     OrderCode = o.OrderCode,
-                    CustomerName = o.Customer != null ? o.Customer.CustomerCode : "Khách lẻ",
+                    CustomerName = o.Customer != null
+                        ? (string.IsNullOrWhiteSpace(o.Customer.FullName) ? o.Customer.CustomerCode : o.Customer.FullName)
+                        : "Khách lẻ",
                     CustomerPhone = o.Customer != null ? o.Customer.Phone : null,
                     PaymentMethod = o.PaymentMethod,
                     OrderStatus = o.OrderStatus,
                     PaymentStatus = o.PaymentStatus,
                     ShippingAddress = o.ShippingAddress,
                     TotalAmount = o.TotalAmount,
+                    CashierId = o.CashierId,
+                    CashierName = o.Cashier.FullName,
                     CreatedAt = o.CreatedAt,
                 })
                 .ToListAsync(cancellationToken);
@@ -97,18 +113,47 @@ namespace HuongVanTra.Service.Orders {
             };
         }
 
-        public async Task<OrderDetailDto?> GetOrderAsync(string idOrCode, CancellationToken cancellationToken = default) {
-            var order = await ResolveOrderAsync(idOrCode, cancellationToken);
-            return order is null ? null : MapToDetail(order);
+        public async Task<List<OrderCreatorOptionDto>> GetOrderCreatorsAsync(
+            OrderAccessScope access,
+            CancellationToken cancellationToken = default) {
+            var ordersQuery = OrderAccessScope.ApplyFilter(_dbContext.Orders.AsNoTracking(), access);
+
+            return await _dbContext.Set<Employee>()
+                .AsNoTracking()
+                .Where(e => ordersQuery.Any(o => o.CashierId == e.Id))
+                .OrderBy(e => e.FullName)
+                .Select(e => new OrderCreatorOptionDto {
+                    Id = e.Id,
+                    FullName = e.FullName,
+                })
+                .ToListAsync(cancellationToken);
         }
 
-        public async Task<OrderDetailDto?> UpdateOrderStatusAsync(int id, UpdateOrderStatusRequest request, CancellationToken cancellationToken = default) {
+        public async Task<OrderDetailDto?> GetOrderAsync(
+            string idOrCode,
+            OrderAccessScope access,
+            CancellationToken cancellationToken = default) {
+            var order = await ResolveOrderAsync(idOrCode, cancellationToken);
+            if (order is null || !OrderAccessScope.CanAccess(order, access)) {
+                return null;
+            }
+
+            return MapToDetail(order);
+        }
+
+        public async Task<OrderDetailDto?> UpdateOrderStatusAsync(
+            int id,
+            UpdateOrderStatusRequest request,
+            OrderAccessScope access,
+            CancellationToken cancellationToken = default) {
+            access.EnsureCanEdit();
+
             if (!OrderStatuses.IsValid(request.OrderStatus)) {
                 throw new ArgumentException("Invalid order status.");
             }
 
             var order = await LoadOrderGraphAsync(id, cancellationToken, tracking: true);
-            if (order is null) {
+            if (order is null || !OrderAccessScope.CanAccess(order, access)) {
                 return null;
             }
 
@@ -128,13 +173,19 @@ namespace HuongVanTra.Service.Orders {
             return MapToDetail(order);
         }
 
-        public async Task<OrderDetailDto?> ApplyCouponAsync(int id, ApplyCouponRequest request, CancellationToken cancellationToken = default) {
+        public async Task<OrderDetailDto?> ApplyCouponAsync(
+            int id,
+            ApplyCouponRequest request,
+            OrderAccessScope access,
+            CancellationToken cancellationToken = default) {
+            access.EnsureCanEdit();
+
             if (string.IsNullOrWhiteSpace(request.PromoCode)) {
                 throw new ArgumentException("Promo code is required.");
             }
 
             var order = await LoadOrderGraphAsync(id, cancellationToken, tracking: true);
-            if (order is null) {
+            if (order is null || !OrderAccessScope.CanAccess(order, access)) {
                 return null;
             }
 
@@ -155,13 +206,19 @@ namespace HuongVanTra.Service.Orders {
             return MapToDetail(order);
         }
 
-        public async Task<OrderDetailDto?> AddGiftItemAsync(int id, AddGiftItemRequest request, CancellationToken cancellationToken = default) {
+        public async Task<OrderDetailDto?> AddGiftItemAsync(
+            int id,
+            AddGiftItemRequest request,
+            OrderAccessScope access,
+            CancellationToken cancellationToken = default) {
+            access.EnsureCanEdit();
+
             if (request.ProductId <= 0 || request.Quantity <= 0) {
                 throw new ArgumentException("Invalid gift item.");
             }
 
             var order = await LoadOrderGraphAsync(id, cancellationToken, tracking: true);
-            if (order is null) {
+            if (order is null || !OrderAccessScope.CanAccess(order, access)) {
                 return null;
             }
 
@@ -190,9 +247,15 @@ namespace HuongVanTra.Service.Orders {
             return order is null ? null : MapToDetail(order);
         }
 
-        public async Task<OrderDetailDto?> UpdateAdjustmentsAsync(int id, UpdateOrderAdjustmentsRequest request, CancellationToken cancellationToken = default) {
+        public async Task<OrderDetailDto?> UpdateAdjustmentsAsync(
+            int id,
+            UpdateOrderAdjustmentsRequest request,
+            OrderAccessScope access,
+            CancellationToken cancellationToken = default) {
+            access.EnsureCanEdit();
+
             var order = await LoadOrderGraphAsync(id, cancellationToken, tracking: true);
-            if (order is null) {
+            if (order is null || !OrderAccessScope.CanAccess(order, access)) {
                 return null;
             }
 
@@ -242,13 +305,16 @@ namespace HuongVanTra.Service.Orders {
         public async Task<OrderDetailDto?> UpdateOrderItemsAsync(
             int id,
             UpdateOrderItemsRequest request,
+            OrderAccessScope access,
             CancellationToken cancellationToken = default) {
+            access.EnsureCanEdit();
+
             if (request.Items is null || request.Items.Count == 0) {
                 throw new ArgumentException("At least one order line is required.");
             }
 
             var order = await LoadOrderGraphAsync(id, cancellationToken, tracking: true);
-            if (order is null) {
+            if (order is null || !OrderAccessScope.CanAccess(order, access)) {
                 return null;
             }
 
@@ -370,12 +436,15 @@ namespace HuongVanTra.Service.Orders {
 
         public async Task<OrderPaymentQrDto?> GetOrderPaymentQrAsync(
             int id,
+            OrderAccessScope access,
             bool forceRegenerate = false,
             CancellationToken cancellationToken = default) {
+            access.EnsureCanEdit();
+
             var order = await _dbContext.Orders
                 .FirstOrDefaultAsync(o => o.Id == id, cancellationToken);
 
-            if (order is null) {
+            if (order is null || !OrderAccessScope.CanAccess(order, access)) {
                 return null;
             }
 
