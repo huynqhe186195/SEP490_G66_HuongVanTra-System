@@ -9,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 
 namespace HuongVanTra.API.Controllers {
     [Authorize]
@@ -19,6 +20,8 @@ namespace HuongVanTra.API.Controllers {
         private readonly AppDbContext _dbContext;
         private readonly ICustomerService _customerService;
         private readonly IOrderConfirmationService _orderConfirmationService;
+        private readonly IPaymentWebhookService _paymentWebhookService;
+        private readonly SepaySettings _sepaySettings;
         private readonly IConfiguration _configuration;
         private readonly IWebHostEnvironment _environment;
 
@@ -27,12 +30,16 @@ namespace HuongVanTra.API.Controllers {
             AppDbContext dbContext,
             ICustomerService customerService,
             IOrderConfirmationService orderConfirmationService,
+            IPaymentWebhookService paymentWebhookService,
+            IOptions<SepaySettings> sepayOptions,
             IConfiguration configuration,
             IWebHostEnvironment environment) {
             _posOrderService = posOrderService;
             _dbContext = dbContext;
             _customerService = customerService;
             _orderConfirmationService = orderConfirmationService;
+            _paymentWebhookService = paymentWebhookService;
+            _sepaySettings = sepayOptions.Value;
             _configuration = configuration;
             _environment = environment;
         }
@@ -51,9 +58,8 @@ namespace HuongVanTra.API.Controllers {
             }
 
             if (string.IsNullOrWhiteSpace(bankName) ||
-                string.IsNullOrWhiteSpace(accountNumber) ||
-                string.IsNullOrWhiteSpace(accountHolder)) {
-                return BadRequest("PosTransferPayment is not configured (BankName, AccountNumber, AccountHolder).");
+                string.IsNullOrWhiteSpace(accountNumber)) {
+                return BadRequest("PosTransferPayment is not configured (BankName, AccountNumber).");
             }
 
             return Ok(new PosTransferPaymentInfoResponse {
@@ -403,21 +409,38 @@ namespace HuongVanTra.API.Controllers {
             var order = await _dbContext.Orders
                 .AsNoTracking()
                 .Where(o => o.Id == orderId)
-                .Select(o => new { o.Id, o.OrderCode, o.PaymentStatus, o.OrderStatus })
+                .Select(o => new { o.Id, o.OrderCode, o.PaymentStatus, o.OrderStatus, o.TotalAmount })
                 .FirstOrDefaultAsync(cancellationToken);
 
             if (order is null) {
                 return NotFound("Order not found.");
             }
 
+            var invoiceCode = await _dbContext.Invoices
+                .AsNoTracking()
+                .Where(i => i.OrderId == orderId)
+                .OrderByDescending(i => i.Id)
+                .Select(i => i.InvoiceCode)
+                .FirstOrDefaultAsync(cancellationToken);
+
             var isPaid = string.Equals(order.PaymentStatus, "paid", StringComparison.OrdinalIgnoreCase);
+            var expectedContent = BuildExpectedTransferContent(order.OrderCode);
             return Ok(new PosOrderPaymentStatusResponse {
                 OrderId = order.Id,
                 OrderCode = order.OrderCode,
                 PaymentStatus = order.PaymentStatus,
                 OrderStatus = order.OrderStatus,
                 IsPaid = isPaid,
+                InvoiceCode = invoiceCode,
+                ExpectedTransferContent = expectedContent,
+                ExpectedAmount = order.TotalAmount,
             });
+        }
+
+        private static string BuildExpectedTransferContent(string orderCode) {
+            var cleaned = orderCode.Trim().ToUpperInvariant();
+            cleaned = new string(cleaned.Where(ch => char.IsLetterOrDigit(ch) || ch == '-').ToArray());
+            return cleaned.Length <= 25 ? cleaned : cleaned[..25];
         }
 
         /// <summary>
@@ -440,24 +463,38 @@ namespace HuongVanTra.API.Controllers {
                 return BadRequest("OrderId is required.");
             }
 
-            var employeeId = User.GetEmployeeId();
-            if (employeeId is null) {
-                return Unauthorized("Employee ID not found in token.");
+            var order = await _dbContext.Orders
+                .AsNoTracking()
+                .Where(o => o.Id == request.OrderId)
+                .Select(o => new { o.Id, o.OrderCode, o.TotalAmount, o.PaymentStatus })
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (order is null) {
+                return NotFound("Order not found.");
             }
 
-            try {
-                await _orderConfirmationService.ConfirmPaymentAsync(new ConfirmPaymentCommand {
-                    OrderId = request.OrderId,
-                    EmployeeId = employeeId.Value,
-                    PaymentReference = request.PaymentReference ?? $"SIM-WEBHOOK-{request.OrderId}",
-                    Note = request.Note ?? "Simulated payment webhook",
-                }, cancellationToken);
+            if (string.Equals(order.PaymentStatus, "paid", StringComparison.OrdinalIgnoreCase)) {
+                return await GetPaymentStatus(request.OrderId, cancellationToken);
             }
-            catch (ArgumentException ex) {
-                return NotFound(ex.Message);
-            }
-            catch (InvalidOperationException ex) {
-                return BadRequest(ex.Message);
+
+            var transferContent = BuildExpectedTransferContent(order.OrderCode);
+            var webhookResult = await _paymentWebhookService.ProcessSepayWebhookAsync(
+                new SepayWebhookCommand {
+                    TransactionId = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                    TransferType = "in",
+                    TransferAmount = order.TotalAmount,
+                    Content = transferContent,
+                    Code = order.OrderCode,
+                    AccountNumber = _sepaySettings.AccountNumber,
+                    ReferenceCode = request.PaymentReference ?? $"SIM-{order.OrderCode}",
+                },
+                cancellationToken);
+
+            if (!webhookResult.Success || webhookResult.Skipped) {
+                return BadRequest(new {
+                    message = webhookResult.Message,
+                    webhookResult.Skipped,
+                });
             }
 
             return await GetPaymentStatus(request.OrderId, cancellationToken);
@@ -512,6 +549,7 @@ namespace HuongVanTra.API.Controllers {
             QrPayload     = result.QrPayload,
             QrImageUrl    = result.QrImageUrl,
             TransferContent = result.TransferContent,
+            InvoiceCode     = result.InvoiceCode,
             CreatedAt     = result.CreatedAt,
             Items         = result.Items.Select(i => new PosOrderItemResponse {
                 ProductId   = i.ProductId,

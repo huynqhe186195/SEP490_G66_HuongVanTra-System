@@ -54,6 +54,7 @@ export function mapPosOrderResult(item) {
     qrPayload: item.qrPayload ?? item.QrPayload ?? null,
     qrImageUrl: item.qrImageUrl ?? item.QrImageUrl ?? null,
     transferContent: item.transferContent ?? item.TransferContent ?? null,
+    invoiceCode: item.invoiceCode ?? item.InvoiceCode ?? null,
     createdAt: item.createdAt ?? item.CreatedAt,
     items: (item.items ?? item.Items ?? []).map((row) => ({
       productId: row.productId ?? row.ProductId,
@@ -107,30 +108,23 @@ export function fetchPosTransferPaymentInfo() {
   return requestWithAuth('/api/PosOrder/payment/transfer-info', { method: 'GET' }).then(mapPosTransferPaymentInfo)
 }
 
-export function confirmOrderPayment(orderId, payload = {}) {
-  return requestWithAuth(`/api/Orders/${orderId}/confirm-payment`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  })
+export function mapPosPaymentStatus(item) {
+  return {
+    orderId: item.orderId ?? item.OrderId,
+    orderCode: item.orderCode ?? item.OrderCode ?? '',
+    paymentStatus: item.paymentStatus ?? item.PaymentStatus ?? '',
+    orderStatus: item.orderStatus ?? item.OrderStatus ?? '',
+    isPaid: Boolean(item.isPaid ?? item.IsPaid),
+    invoiceCode: item.invoiceCode ?? item.InvoiceCode ?? null,
+    expectedTransferContent: item.expectedTransferContent ?? item.ExpectedTransferContent ?? null,
+    expectedAmount: Number(item.expectedAmount ?? item.ExpectedAmount ?? 0),
+  }
 }
 
 export function fetchPosOrderPaymentStatus(orderId) {
-  return requestWithAuth(`/api/PosOrder/orders/${orderId}/payment-status`, { method: 'GET' })
-}
-
-/** Mô phỏng webhook CK (dev / AllowSimulateWebhook). */
-export function simulatePosPaymentWebhook(orderId, options = {}) {
-  return requestWithAuth('/api/PosOrder/webhooks/simulate-payment', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      orderId,
-      paymentReference: options.paymentReference,
-      note: options.note ?? 'Simulated transfer webhook',
-      secret: options.secret ?? import.meta.env.VITE_POS_WEBHOOK_SECRET ?? 'dev-webhook-secret',
-    }),
-  })
+  return requestWithAuth(`/api/PosOrder/orders/${orderId}/payment-status`, { method: 'GET' }).then(
+    mapPosPaymentStatus,
+  )
 }
 
 export function mapPosProduct(item) {

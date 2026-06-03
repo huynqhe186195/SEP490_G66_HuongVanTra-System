@@ -24,17 +24,51 @@ namespace HuongVanTra.Service.Sales {
                 return new WebhookProcessResult { Success = true, Skipped = true, Message = "Not an inbound transfer." };
             }
 
-            var orderCode = ExtractOrderCode(command.Content, command.ReferenceCode);
+            var orderCode = TransferContentMatcher.ExtractOrderCode(
+                command.Content,
+                command.ReferenceCode,
+                command.Code);
+
             if (string.IsNullOrWhiteSpace(orderCode)) {
-                return new WebhookProcessResult { Success = true, Skipped = true, Message = "No order code found in transfer content." };
+                return new WebhookProcessResult {
+                    Success = true,
+                    Skipped = true,
+                    Message = "No order code found in transfer content.",
+                };
             }
 
-            var order = await _db.Orders
-                .Include(o => o.PaymentTransactions)
-                .FirstOrDefaultAsync(o => o.OrderCode == orderCode, cancellationToken);
+            var order = await FindOrderAsync(orderCode, command.Content, cancellationToken);
 
             if (order is null) {
-                return new WebhookProcessResult { Success = true, Skipped = true, Message = $"Order {orderCode} not found." };
+                return new WebhookProcessResult {
+                    Success = true,
+                    Skipped = true,
+                    Message = $"Order {orderCode} not found.",
+                };
+            }
+
+            if (_settings.ValidateAccountNumber
+                && !string.IsNullOrWhiteSpace(_settings.AccountNumber)
+                && !string.IsNullOrWhiteSpace(command.AccountNumber)
+                && !AccountNumbersMatch(_settings.AccountNumber, command.AccountNumber)) {
+                return new WebhookProcessResult {
+                    Success = true,
+                    Skipped = true,
+                    Message = "Account number does not match configured Sepay account.",
+                };
+            }
+
+            var amountDiff = Math.Abs(
+                (long)Math.Round(command.TransferAmount, MidpointRounding.AwayFromZero)
+                - (long)Math.Round(order.TotalAmount, MidpointRounding.AwayFromZero));
+            if (amountDiff > _settings.AmountToleranceVnd) {
+                return new WebhookProcessResult {
+                    Success = true,
+                    Skipped = true,
+                    Message = $"Amount mismatch: expected {order.TotalAmount}, received {command.TransferAmount}.",
+                    OrderId = order.Id,
+                    OrderCode = order.OrderCode,
+                };
             }
 
             // Idempotency: đã paid rồi thì bỏ qua, không xử lý lại
@@ -57,6 +91,7 @@ namespace HuongVanTra.Service.Sales {
                 var confirmedAt = DateTime.UtcNow;
 
                 order.PaymentStatus = "paid";
+                order.OrderStatus = "completed";
                 order.UpdatedAt = confirmedAt;
 
                 var paymentTxn = order.PaymentTransactions.FirstOrDefault();
@@ -97,29 +132,65 @@ namespace HuongVanTra.Service.Sales {
             }
         }
 
-        /// <summary>Extract order code từ nội dung chuyển khoản. VD: "POS ONL-20260603-ABC123" → "ONL-20260603-ABC123"</summary>
-        private static string? ExtractOrderCode(string? content, string? referenceCode) {
-            if (!string.IsNullOrWhiteSpace(referenceCode) && referenceCode.Contains('-')) {
-                return referenceCode.Trim();
+        private async Task<Order?> FindOrderAsync(
+            string orderCode,
+            string? transferContent,
+            CancellationToken cancellationToken) {
+            var normalized = orderCode.Trim().ToUpperInvariant();
+
+            var order = await _db.Orders
+                .Include(o => o.PaymentTransactions)
+                .FirstOrDefaultAsync(o => o.OrderCode == normalized, cancellationToken);
+
+            if (order is not null) {
+                return order;
             }
 
-            if (string.IsNullOrWhiteSpace(content)) return null;
+            order = await _db.Orders
+                .Include(o => o.PaymentTransactions)
+                .Where(o =>
+                    IsAwaitingPayment(o.PaymentStatus)
+                    && o.OrderCode.StartsWith(normalized))
+                .OrderByDescending(o => o.Id)
+                .FirstOrDefaultAsync(cancellationToken);
 
-            // Pattern: "POS <ORDER_CODE>" hoặc tìm token có dạng ONL-xxx, ORD-xxx, POS-xxx
-            var parts = content.Trim().ToUpperInvariant().Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            foreach (var part in parts) {
-                if (part.StartsWith("ONL-") || part.StartsWith("ORD-") || part.StartsWith("POS-")) {
-                    return part;
-                }
+            if (order is not null) {
+                return order;
             }
 
-            // Fallback: nếu content là "POS <CODE>", lấy phần sau "POS "
-            var upper = content.Trim().ToUpperInvariant();
-            if (upper.StartsWith("POS ") && upper.Length > 4) {
-                return upper[4..].Trim();
+            if (string.IsNullOrWhiteSpace(transferContent)) {
+                return null;
             }
 
-            return null;
+            var contentKey = TransferContentMatcher.NormalizeMatchKey(transferContent);
+            if (contentKey.Length == 0) {
+                return null;
+            }
+
+            var pendingOrders = await _db.Orders
+                .Include(o => o.PaymentTransactions)
+                .Where(o => IsAwaitingPayment(o.PaymentStatus) && o.OrderCode.StartsWith("POS-"))
+                .OrderByDescending(o => o.Id)
+                .Take(30)
+                .ToListAsync(cancellationToken);
+
+            return pendingOrders.FirstOrDefault(o => {
+                var orderKey = TransferContentMatcher.NormalizeMatchKey(o.OrderCode);
+                return contentKey.Contains(orderKey, StringComparison.Ordinal)
+                    || orderKey.Contains(TransferContentMatcher.NormalizeMatchKey(normalized), StringComparison.Ordinal);
+            });
+        }
+
+        private static bool IsAwaitingPayment(string? paymentStatus) {
+            return string.Equals(paymentStatus, "pending_payment", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(paymentStatus, "unpaid", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool AccountNumbersMatch(string configured, string incoming) {
+            static string Norm(string s) => new string(s.Where(char.IsDigit).ToArray());
+            var a = Norm(configured);
+            var b = Norm(incoming);
+            return a.Length > 0 && a == b;
         }
 
         internal static Invoice CreateInvoice(Order order, int? issuedById, DateTime invoiceDate) {

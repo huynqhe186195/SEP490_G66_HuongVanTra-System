@@ -137,12 +137,10 @@ namespace HuongVanTra.Service.Sales {
         }
 
         private static string NormalizeTransferContent(string orderCode) {
-            var raw = $"POS {orderCode}".Trim().ToUpperInvariant();
-            var cleaned = new string(raw
-                .Where(ch => char.IsLetterOrDigit(ch) || ch == ' ')
-                .ToArray());
-
-            return cleaned.Length <= 25 ? cleaned : cleaned[..25].Trim();
+            // VietQR addInfo tối đa ~25 ký tự — dùng trực tiếp mã đơn (đã có tiền tố POS-).
+            var cleaned = orderCode.Trim().ToUpperInvariant();
+            cleaned = new string(cleaned.Where(ch => char.IsLetterOrDigit(ch) || ch == '-').ToArray());
+            return cleaned.Length <= 25 ? cleaned : cleaned[..25];
         }
 
         private sealed class VietQrApiResponse {

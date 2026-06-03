@@ -8,7 +8,6 @@ import PaymentReceiptModal from '../components/PaymentReceiptModal.jsx'
 import ConfirmDialog from '../components/ConfirmDialog.jsx'
 import { vietnamNowLabel } from '../../../utils/vietnamDateTime.js'
 import {
-  confirmOrderPayment,
   createPosOrderOffline,
   createPosOrderOnline,
   fetchPosCustomers,
@@ -416,8 +415,9 @@ function PosPage() {
     }
   }
 
-  const buildReceiptData = ({ orderCode, method }) => ({
+  const buildReceiptData = ({ orderCode, method, invoiceCode }) => ({
     orderCode: orderCode || activeTab.label,
+    invoiceCode: invoiceCode || undefined,
     customerName: selectedCustomer?.fullName || 'Khách lẻ',
     paymentMethodLabel: method === 'TRANSFER' ? 'Chuyển khoản' : 'Tiền mặt',
     createdAtLabel: vietnamNowLabel(),
@@ -486,11 +486,11 @@ function PosPage() {
       const result = await createPosOrderOffline(payload)
 
       if (cashPaymentAmount >= total) {
-        await confirmOrderPayment(result.orderId, {
-          paymentReference: `POS-CASH-${result.orderCode}`,
-          note: 'Auto confirm from POS cash payment',
-        })
-        showSuccess(`Thanh toán thành công. Đơn: ${result.orderCode}`)
+        showSuccess(
+          result.invoiceCode
+            ? `Thanh toán thành công. Đơn: ${result.orderCode} · Số HĐ: ${result.invoiceCode}`
+            : `Thanh toán thành công. Đơn: ${result.orderCode}`,
+        )
       } else if (isDebtSale) {
         showSuccess(`Ghi đơn ${result.orderCode} thành công. Dư nợ: ${formatMoney(debtAmount)} đ.`)
       } else {
@@ -498,7 +498,13 @@ function PosPage() {
           `Ghi đơn ${result.orderCode}. Đã thu ${formatMoney(cashPaymentAmount)} đ, còn nợ ${formatMoney(debtAmount)} đ.`,
         )
       }
-      setReceiptModalData(buildReceiptData({ orderCode: result.orderCode, method: 'CASH' }))
+      setReceiptModalData(
+        buildReceiptData({
+          orderCode: result.orderCode,
+          method: 'CASH',
+          invoiceCode: result.invoiceCode,
+        }),
+      )
       resetCheckoutState()
     } catch (error) {
       showError(error.message)

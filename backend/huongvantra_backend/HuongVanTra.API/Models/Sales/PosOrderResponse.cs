@@ -9,6 +9,7 @@ namespace HuongVanTra.API.Models.Sales {
         public string? QrPayload { get; set; }
         public string? QrImageUrl { get; set; }
         public string? TransferContent { get; set; }
+        public string? InvoiceCode { get; set; }
         public DateTime CreatedAt { get; set; }
         public List<PosOrderItemResponse> Items { get; set; } = new();
     }

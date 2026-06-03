@@ -80,10 +80,17 @@ namespace HuongVanTra.Service.Sales {
                 await UpdateCustomerSpendAsync(command.CustomerId, order.TotalAmount);
                 await WriteAuditLogAsync("create", "orders", order.Id, command.CashierId, command.StoreId);
 
+                string? invoiceCode = null;
+                if (IsFullCashPayment(command, order.TotalAmount)) {
+                    invoiceCode = ApplyPaidState(order, command.CashierId, $"POS-CASH-{order.OrderCode}");
+                }
+
                 await _db.SaveChangesAsync();
                 await tx.CommitAsync();
 
-                return ToResult(order);
+                var result = ToResult(order);
+                result.InvoiceCode = invoiceCode;
+                return result;
             }
             catch {
                 await tx.RollbackAsync();
@@ -186,6 +193,7 @@ namespace HuongVanTra.Service.Sales {
                 throw new ArgumentException("Total payments amount cannot be negative.");
 
             var payments = BuildPaymentTransactions(command.Payments, roundedTotal);
+            var primaryPaymentMethod = command.Payments.FirstOrDefault()?.PaymentMethod?.Trim() ?? "CASH";
 
             return new Order {
                 OrderCode           = GenerateOrderCode(),
@@ -193,6 +201,7 @@ namespace HuongVanTra.Service.Sales {
                 CustomerId          = command.CustomerId,
                 CashierId           = command.CashierId,
                 PromotionId         = command.PromotionId,
+                PaymentMethod       = primaryPaymentMethod,
                 TotalAmount         = roundedTotal,
                 PaymentStatus       = "unpaid",
                 StockStatus         = "pending_deduct",
@@ -351,6 +360,47 @@ namespace HuongVanTra.Service.Sales {
         private static bool HasTransferPayment(CreatePosOrderCommand command) {
             return command.Payments.Any(p =>
                 string.Equals(p.PaymentMethod, "TRANSFER", StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static bool IsFullCashPayment(CreatePosOrderCommand command, decimal orderTotal) {
+            if (orderTotal <= 0 || HasTransferPayment(command)) {
+                return false;
+            }
+
+            var cashPaid = command.Payments
+                .Where(p => string.Equals(p.PaymentMethod, "CASH", StringComparison.OrdinalIgnoreCase))
+                .Sum(p => p.Amount);
+
+            return cashPaid >= orderTotal;
+        }
+
+        private string ApplyPaidState(Order order, int cashierId, string paymentReference) {
+            var confirmedAt = DateTime.UtcNow;
+            order.PaymentStatus = "paid";
+            order.OrderStatus = "completed";
+            order.UpdatedAt = confirmedAt;
+
+            foreach (var paymentTxn in order.PaymentTransactions) {
+                paymentTxn.Status = "paid";
+                paymentTxn.ConfirmedAt = confirmedAt;
+                paymentTxn.ReferenceCode = paymentReference;
+            }
+
+            var invoice = PaymentWebhookService.CreateInvoice(order, cashierId, confirmedAt);
+            _db.Invoices.Add(invoice);
+
+            _db.AuditLogs.Add(new AuditLog {
+                Action = "confirm_payment",
+                EntityType = "orders",
+                EntityId = order.Id,
+                UserId = cashierId,
+                StoreId = order.StoreId,
+                Status = "SUCCESS",
+                NewValues = paymentReference,
+                CreatedAt = confirmedAt,
+            });
+
+            return invoice.InvoiceCode;
         }
 
         private static List<PaymentTransaction> BuildPaymentTransactions(
