@@ -1,4 +1,5 @@
 using HuongVanTra.API.Authorization;
+using HuongVanTra.API.BackgroundServices;
 using HuongVanTra.Core.Authorization;
 using HuongVanTra.Core.Entities.Identity;
 using HuongVanTra.Core.Interfaces;
@@ -11,11 +12,9 @@ using HuongVanTra.Service.Interfaces;
 using HuongVanTra.Service.Orders;
 using HuongVanTra.Service.Profile;
 using HuongVanTra.Service.Sales;
-using Microsoft.Extensions.DependencyInjection;
 using HuongVanTra.Service.Staff;
 using HuongVanTra.Service.Users;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -28,12 +27,9 @@ using CustomerModuleServiceImpl = HuongVanTra.Service.Customers.CustomerService;
 using MembershipCustomerService = HuongVanTra.Service.Interfaces.ICustomerService;
 using MembershipCustomerServiceImpl = HuongVanTra.Service.Implementations.CustomerService;
 
-namespace HuongVanTra.API
-{
-    public class Program
-    {
-        public static void Main(string[] args)
-        {
+namespace HuongVanTra.API {
+    public class Program {
+        public static void Main(string[] args) {
             var builder = WebApplication.CreateBuilder(args);
 
             var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
@@ -61,11 +57,10 @@ namespace HuongVanTra.API
             builder.Services.AddScoped<IUserAccountService, UserAccountService>();
             builder.Services.AddScoped<CustomerModuleService, CustomerModuleServiceImpl>();
             builder.Services.AddScoped<MembershipCustomerService, MembershipCustomerServiceImpl>();
+            builder.Services.AddHostedService<TierEvaluationHostedService>();
 
-            builder.Services.AddCors(options =>
-            {
-                options.AddPolicy("Frontend", policy =>
-                {
+            builder.Services.AddCors(options => {
+                options.AddPolicy("Frontend", policy => {
                     policy.WithOrigins(
                             "http://localhost:5173",
                             "http://127.0.0.1:5173",
@@ -82,11 +77,9 @@ namespace HuongVanTra.API
 
             builder.Services.AddControllers();
             builder.Services.AddEndpointsApiExplorer();
-            builder.Services.AddSwaggerGen(options =>
-            {
+            builder.Services.AddSwaggerGen(options => {
                 options.SwaggerDoc("v1", new OpenApiInfo { Title = "HuongVanTra.API", Version = "v1" });
-                options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
-                {
+                options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme {
                     Name = "Authorization",
                     Type = SecuritySchemeType.Http,
                     Scheme = "bearer",
@@ -111,18 +104,15 @@ namespace HuongVanTra.API
             var jwtIssuer = builder.Configuration["Jwt:Issuer"];
             var jwtAudience = builder.Configuration["Jwt:Audience"];
 
-            if (string.IsNullOrWhiteSpace(jwtKey) || string.IsNullOrWhiteSpace(jwtIssuer) || string.IsNullOrWhiteSpace(jwtAudience))
-            {
+            if (string.IsNullOrWhiteSpace(jwtKey) || string.IsNullOrWhiteSpace(jwtIssuer) || string.IsNullOrWhiteSpace(jwtAudience)) {
                 throw new InvalidOperationException(
                     "JWT configuration is missing. Add Jwt:Key, Jwt:Issuer, and Jwt:Audience to appsettings.json (or user secrets / environment variables).");
             }
 
             builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-                .AddJwtBearer(options =>
-                {
+                .AddJwtBearer(options => {
                     options.MapInboundClaims = false;
-                    options.TokenValidationParameters = new TokenValidationParameters
-                    {
+                    options.TokenValidationParameters = new TokenValidationParameters {
                         ValidateIssuer = true,
                         ValidateAudience = true,
                         ValidateLifetime = true,
@@ -139,14 +129,12 @@ namespace HuongVanTra.API
 
             var app = builder.Build();
 
-            if (app.Environment.IsDevelopment())
-            {
+            if (app.Environment.IsDevelopment()) {
                 app.UseSwagger();
                 app.UseSwaggerUI();
             }
 
-            if (!app.Environment.IsDevelopment())
-            {
+            if (!app.Environment.IsDevelopment()) {
                 app.UseHttpsRedirection();
             }
 
@@ -155,23 +143,18 @@ namespace HuongVanTra.API
             app.UseAuthentication();
             app.UseAuthorization();
 
-            app.Use(async (context, next) =>
-            {
+            app.Use(async (context, next) => {
                 await next();
 
-                if (context.Response.HasStarted)
-                {
+                if (context.Response.HasStarted) {
                     return;
                 }
 
-                if (context.Response.StatusCode == StatusCodes.Status401Unauthorized)
-                {
+                if (context.Response.StatusCode == StatusCodes.Status401Unauthorized) {
                     context.Response.ContentType = "application/json";
                     var payload = JsonSerializer.Serialize(new { message = "Bạn chưa đăng nhập hoặc token không hợp lệ." });
                     await context.Response.WriteAsync(payload);
-                }
-                else if (context.Response.StatusCode == StatusCodes.Status403Forbidden)
-                {
+                } else if (context.Response.StatusCode == StatusCodes.Status403Forbidden) {
                     context.Response.ContentType = "application/json";
                     var payload = JsonSerializer.Serialize(new { message = "Bạn không có quyền truy cập trang này." });
                     await context.Response.WriteAsync(payload);
