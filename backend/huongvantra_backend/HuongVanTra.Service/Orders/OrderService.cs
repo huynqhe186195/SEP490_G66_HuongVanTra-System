@@ -138,7 +138,9 @@ namespace HuongVanTra.Service.Orders {
                 return null;
             }
 
-            return MapToDetail(order);
+            var dto = MapToDetail(order);
+            dto.StockShortages = await LoadStockShortagesAsync(order.Id, cancellationToken);
+            return dto;
         }
 
         public async Task<OrderDetailDto?> UpdateOrderStatusAsync(
@@ -859,6 +861,26 @@ namespace HuongVanTra.Service.Orders {
             }
 
             order.TotalAmount = Math.Max(0, afterManual - order.CouponDiscount);
+        }
+
+        private async Task<List<OrderStockShortageDto>> LoadStockShortagesAsync(
+            int orderId, CancellationToken cancellationToken) {
+            return await _dbContext.OrderStockShortages
+                .AsNoTracking()
+                .Where(s => s.OrderId == orderId && s.Status == ShortageStatus.WaitingStock)
+                .Join(
+                    _dbContext.Products.AsNoTracking(),
+                    s => s.MaterialId,
+                    p => p.Id,
+                    (s, p) => new OrderStockShortageDto {
+                        MaterialId         = s.MaterialId,
+                        MaterialName       = p.Name,
+                        RequiredQuantity   = s.RequiredQuantity,
+                        AvailableQuantity  = s.AvailableQuantity,
+                        ShortageQuantity   = s.ShortageQuantity,
+                        Status             = s.Status,
+                    })
+                .ToListAsync(cancellationToken);
         }
 
         private static OrderDetailDto MapToDetail(Order order) {

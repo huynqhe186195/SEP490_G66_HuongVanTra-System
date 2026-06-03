@@ -113,6 +113,14 @@ export function mapOrderDetail(item) {
           createdAt: (item.stockDeductQueue ?? item.StockDeductQueue).createdAt ?? (item.stockDeductQueue ?? item.StockDeductQueue).CreatedAt,
         }
       : null,
+    stockShortages: (item.stockShortages ?? item.StockShortages ?? []).map((row) => ({
+      materialId: row.materialId ?? row.MaterialId,
+      materialName: row.materialName ?? row.MaterialName ?? '',
+      requiredQuantity: Number(row.requiredQuantity ?? row.RequiredQuantity ?? 0),
+      availableQuantity: Number(row.availableQuantity ?? row.AvailableQuantity ?? 0),
+      shortageQuantity: Number(row.shortageQuantity ?? row.ShortageQuantity ?? 0),
+      status: row.status ?? row.Status ?? '',
+    })),
     promotion: (() => {
       const raw = item.promotion ?? item.Promotion
       if (!raw || typeof raw !== 'object') return null

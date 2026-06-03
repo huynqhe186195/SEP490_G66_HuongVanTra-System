@@ -109,7 +109,7 @@ namespace HuongVanTra.Service.Sales {
                     TransactionDate = DateTime.UtcNow
                 });
 
-                await DeductStockImmediatelyForCodAsync(command, order, command.CashierId);
+                await CreateStockDeductQueueAsync(command, order.Id);
                 await UpdateCustomerSpendAsync(command.CustomerId, order.TotalAmount);
 
                 // Tạo công nợ cho COD order vì PaymentStatus = unpaid
@@ -252,30 +252,6 @@ namespace HuongVanTra.Service.Sales {
             };
         }
 
-        /// <summary>
-        /// COD: trừ kho ngay khi tạo đơn (giống POS tại quầy). Lưu queue confirmed để hoàn kho khi hủy.
-        /// </summary>
-        private async Task DeductStockImmediatelyForCodAsync(
-            CreateOnlineOrderCommand command,
-            Order order,
-            int cashierId) {
-            var snapshot = await BuildBomSnapshotAsync(command);
-            var warehouse = await _db.Warehouses
-                .FirstOrDefaultAsync(w => w.StoreId == command.StoreId)
-                ?? throw new InvalidOperationException($"No warehouse found for store {command.StoreId}.");
-
-            await DeductInventoryAsync(order, warehouse.Id, cashierId);
-
-            order.StockStatus = OrderStockStatus.Deducted;
-
-            _db.StockDeductQueues.Add(new StockDeductQueue {
-                OrderId     = order.Id,
-                Status      = QueueStatus.Confirmed,
-                BomSnapshot = JsonSerializer.Serialize(snapshot),
-                CreatedAt   = DateTime.UtcNow
-            });
-        }
-
         private async Task CreateStockDeductQueueAsync(CreateOnlineOrderCommand command, int orderId) {
             var snapshot = await BuildBomSnapshotAsync(command);
 
@@ -320,82 +296,6 @@ namespace HuongVanTra.Service.Sales {
             }
 
             return snapshot;
-        }
-
-        private async Task DeductInventoryAsync(Order order, int warehouseId, int cashierId) {
-            var productIds = order.OrderItems
-                .Where(i => i.IsGift == 0)
-                .Select(i => i.ProductId)
-                .Distinct()
-                .ToList();
-
-            var bomHeaders = await _db.BomHeaders
-                .Include(b => b.BomLines)
-                .Where(b => productIds.Contains(b.FinishedGoodId))
-                .ToDictionaryAsync(b => b.FinishedGoodId);
-
-            var deductMap = new Dictionary<int, decimal>();
-            foreach (var item in order.OrderItems.Where(i => i.IsGift == 0)) {
-                if (bomHeaders.TryGetValue(item.ProductId, out var bom) && bom.BomLines.Count > 0) {
-                    var multiplier = item.Quantity / bom.QuantityOutput;
-                    foreach (var line in bom.BomLines) {
-                        deductMap.TryGetValue(line.MaterialId, out var existing);
-                        deductMap[line.MaterialId] = existing + line.Quantity * multiplier;
-                    }
-                }
-                else {
-                    deductMap.TryGetValue(item.ProductId, out var existing);
-                    deductMap[item.ProductId] = existing + item.Quantity;
-                }
-            }
-
-            if (deductMap.Count == 0) {
-                throw new InvalidOperationException("No inventory items to deduct for this order.");
-            }
-
-            var materialIds = deductMap.Keys.ToList();
-            var balances = await _db.InventoryBalances
-                .Where(b => b.WarehouseId == warehouseId && materialIds.Contains(b.ProductId))
-                .ToDictionaryAsync(b => b.ProductId);
-
-            var txnCode = $"TXN-{order.OrderCode}";
-
-            foreach (var (materialId, qty) in deductMap) {
-                if (!balances.TryGetValue(materialId, out var balance)) {
-                    balance = new InventoryBalance {
-                        WarehouseId = warehouseId,
-                        ProductId   = materialId,
-                        Quantity    = 0
-                    };
-                    _db.InventoryBalances.Add(balance);
-                    await _db.SaveChangesAsync();
-                    balances[materialId] = balance;
-                }
-
-                var before = balance.Quantity;
-                var after  = before - qty;
-
-                if (after < 0) {
-                    throw new InvalidOperationException(
-                        $"Insufficient stock for product {materialId}: available {before}, required {qty}.");
-                }
-
-                balance.Quantity = after;
-
-                _db.InventoryTransactions.Add(new InventoryTransaction {
-                    TxnCode        = $"{txnCode}-{materialId}",
-                    WarehouseId    = warehouseId,
-                    ProductId      = materialId,
-                    TxnType        = "OUT",
-                    Quantity       = qty,
-                    QuantityBefore = before,
-                    QuantityAfter  = after,
-                    RefType        = "ORDER",
-                    RefId          = order.Id,
-                    CreatedById    = cashierId,
-                    CreatedAt      = DateTime.UtcNow
-                });
-            }
         }
 
         public async Task<CodRejectedResult> MarkCodRejectedAsync(int orderId, int employeeId, string? reason) {

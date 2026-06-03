@@ -1,5 +1,6 @@
 using HuongVanTra.API.Extensions;
 using HuongVanTra.API.Models.Sales;
+using HuongVanTra.Core.Authorization;
 using HuongVanTra.Service.Sales;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -16,12 +17,15 @@ namespace HuongVanTra.API.Controllers {
         }
 
         /// <summary>
-        /// Danh sách hàng chờ trừ kho (status = waiting).
+        /// Danh sách hàng chờ trừ kho (waiting + insufficient). Có thể lọc theo status hoặc mã đơn.
         /// </summary>
         [HttpGet("waiting")]
+        [Authorize(Policy = AppPolicies.ViewStockDeductOps)]
         public async Task<ActionResult<IReadOnlyList<StockDeductQueueListItemResponse>>> GetWaiting(
+            [FromQuery] string? status,
+            [FromQuery] string? search,
             CancellationToken cancellationToken) {
-            var items = await _stockDeductQueueService.GetWaitingAsync(cancellationToken);
+            var items = await _stockDeductQueueService.GetPendingAsync(status, search, cancellationToken);
             return Ok(items.Select(i => new StockDeductQueueListItemResponse {
                 QueueId            = i.QueueId,
                 OrderId            = i.OrderId,
@@ -39,6 +43,7 @@ namespace HuongVanTra.API.Controllers {
         /// Chỉ đọc dữ liệu, không thay đổi tồn kho, không cập nhật queue/order.
         /// </summary>
         [HttpGet("{id:int}/preview")]
+        [Authorize(Policy = AppPolicies.ViewStockDeductOps)]
         public async Task<ActionResult<PreviewStockDeductResponse>> Preview(
             int id, CancellationToken cancellationToken) {
             try {
@@ -73,9 +78,10 @@ namespace HuongVanTra.API.Controllers {
         /// Xác nhận trừ kho theo BOM snapshot.
         /// - Đủ hàng: trừ kho, queue = confirmed, order.stock_status = deducted.
         /// - Thiếu hàng: không trừ kho, lưu shortage, queue = insufficient, order.stock_status = waiting_stock.
-        /// Confirm lần hai sẽ fail.
+        /// Có thể gọi confirm lại sau khi nhập kho (queue insufficient).
         /// </summary>
         [HttpPatch("{id:int}/confirm")]
+        [Authorize(Policy = AppPolicies.ConfirmStockDeduct)]
         public async Task<ActionResult<ConfirmStockDeductResponse>> Confirm(int id) {
             var employeeId = User.GetEmployeeId();
             if (employeeId is null)
@@ -122,6 +128,7 @@ namespace HuongVanTra.API.Controllers {
         /// Nếu queue đã confirmed thì fail — kho đã trừ thật, cần flow hoàn kho riêng.
         /// </summary>
         [HttpPatch("{id:int}/cancel")]
+        [Authorize(Policy = AppPolicies.ConfirmStockDeduct)]
         public async Task<ActionResult<CancelStockDeductQueueResponse>> Cancel(
             int id, [FromBody] CancelStockDeductQueueRequest? request) {
             var employeeId = User.GetEmployeeId();

@@ -7,6 +7,7 @@ namespace HuongVanTra.Core.Authorization {
         public const string Pos = "pos";
         public const string Orders = "orders";
         public const string CodOps = "cod_ops";
+        public const string StockDeductOps = "stock_deduct_ops";
         public const string Products = "products";
         public const string Inventory = "inventory";
         public const string Customers = "customers";
@@ -22,6 +23,7 @@ namespace HuongVanTra.Core.Authorization {
                 [AppRoles.Admin] = new[] {
                     AppModules.Dashboard,
                     AppModules.Orders,
+                    AppModules.StockDeductOps,
                     AppModules.Products,
                     AppModules.Inventory,
                     AppModules.Customers,
@@ -35,6 +37,7 @@ namespace HuongVanTra.Core.Authorization {
                     AppModules.Pos,
                     AppModules.Orders,
                     AppModules.CodOps,
+                    AppModules.StockDeductOps,
                     AppModules.Products,
                     AppModules.Inventory,
                     AppModules.Customers,
@@ -49,6 +52,7 @@ namespace HuongVanTra.Core.Authorization {
                 [AppRoles.InventoryManager] = new[] {
                     AppModules.Products,
                     AppModules.Inventory,
+                    AppModules.StockDeductOps,
                 },
                 [AppRoles.Accountant] = new[] {
                     AppModules.Dashboard,

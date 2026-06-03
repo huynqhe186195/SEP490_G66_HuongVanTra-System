@@ -94,6 +94,15 @@ namespace HuongVanTra.Service.Orders {
         public DateTime CreatedAt { get; set; }
     }
 
+    public class OrderStockShortageDto {
+        public int MaterialId { get; set; }
+        public string? MaterialName { get; set; }
+        public decimal RequiredQuantity { get; set; }
+        public decimal AvailableQuantity { get; set; }
+        public decimal ShortageQuantity { get; set; }
+        public string Status { get; set; } = string.Empty;
+    }
+
     public class OrderDetailDto {
         public int Id { get; set; }
         public string OrderCode { get; set; } = string.Empty;
@@ -117,6 +126,7 @@ namespace HuongVanTra.Service.Orders {
         public List<OrderItemDto> Items { get; set; } = new();
         public List<PaymentTransactionDto> Payments { get; set; } = new();
         public StockDeductQueueDto? StockDeductQueue { get; set; }
+        public List<OrderStockShortageDto> StockShortages { get; set; } = new();
         public DateTime CreatedAt { get; set; }
         public DateTime? UpdatedAt { get; set; }
     }

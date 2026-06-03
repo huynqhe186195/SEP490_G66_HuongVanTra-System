@@ -137,6 +137,11 @@ namespace HuongVanTra.Service.Sales {
                 await _db.SaveChangesAsync(cancellationToken);
                 await tx.CommitAsync(cancellationToken);
 
+                await _stockDeductQueueService.TryAutoDeductForOrderAsync(
+                    order.Id,
+                    employeeId,
+                    cancellationToken);
+
                 return ToResult(order, invoice.InvoiceCode);
             }
             catch {

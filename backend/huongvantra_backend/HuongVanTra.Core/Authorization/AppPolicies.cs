@@ -15,5 +15,7 @@ namespace HuongVanTra.Core.Authorization {
         public const string ManageCustomers = "ManageCustomers";
         public const string PosAccess = "PosAccess";
         public const string ViewDashboard = "ViewDashboard";
+        public const string ViewStockDeductOps = "ViewStockDeductOps";
+        public const string ConfirmStockDeduct = "ConfirmStockDeduct";
     }
 }

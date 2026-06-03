@@ -83,6 +83,25 @@ export function getStockStatusLabel(status) {
   return map[key] || status || '—'
 }
 
+export function getQueueStatusLabel(status) {
+  const key = String(status || '').toLowerCase()
+  const map = {
+    waiting: 'Chờ trừ',
+    insufficient: 'Thiếu hàng',
+    confirmed: 'Đã trừ',
+    cancelled: 'Đã hủy',
+  }
+  return map[key] || status || '—'
+}
+
+export function getStockStatusClass(status) {
+  const key = String(status || '').toLowerCase()
+  if (key === 'deducted') return 'bg-[#b9d4b0]/30 text-[#538463]'
+  if (key === 'waiting_stock') return 'bg-amber-50 text-amber-700'
+  if (key === 'cancelled') return 'bg-red-50 text-red-600'
+  return 'bg-slate-100 text-slate-600'
+}
+
 export function getOrderChannelLabel(orderCode) {
   const code = String(orderCode || '').toUpperCase()
   if (code.startsWith('POS-')) return 'POS tại quầy'

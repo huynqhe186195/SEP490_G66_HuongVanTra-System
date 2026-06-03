@@ -2,7 +2,10 @@ using HuongVanTra.Service.Sales.Models;
 
 namespace HuongVanTra.Service.Sales {
     public interface IStockDeductQueueService {
-        Task<IReadOnlyList<StockDeductQueueListItem>> GetWaitingAsync(CancellationToken cancellationToken = default);
+        Task<IReadOnlyList<StockDeductQueueListItem>> GetPendingAsync(
+            string? status = null,
+            string? search = null,
+            CancellationToken cancellationToken = default);
         Task<PreviewStockDeductResult> PreviewAsync(int queueId, CancellationToken cancellationToken = default);
         Task<ConfirmStockDeductResult> ConfirmAsync(int queueId, int confirmedByEmployeeId);
         Task<CancelStockDeductResult> CancelAsync(int queueId, int cancelledByEmployeeId, string? reason);

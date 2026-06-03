@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { canAccessModule } from '../../../app/navigation.js'
+import { canAccessModule, canConfirmStockDeduct, canViewStockDeductOps } from '../../../app/navigation.js'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
@@ -20,6 +20,7 @@ import {
 } from '../services/ordersApi.js'
 import { fetchPosProducts, resolvePosStoreId, resolveTransferQrImageUrl } from '../../pos/services/posApi.js'
 import { formatPromotionLabel } from '../../pos/utils/posPromotionUtils.js'
+import StockDeductPreviewModal from '../../inventory/components/StockDeductPreviewModal.jsx'
 import {
   canConfirmCod,
   canEditOrderItems,
@@ -30,6 +31,8 @@ import {
   getPaymentMethodLabel,
   getPaymentStatusClass,
   getPaymentStatusLabel,
+  getQueueStatusLabel,
+  getStockStatusClass,
   getStockStatusLabel,
   isCodOrder,
   ORDER_STATUS_OPTIONS,
@@ -44,6 +47,8 @@ const PAYMENT_POLL_INTERVAL_MS = 5000
 function OrderDetailPage() {
   const { id } = useParams()
   const canManageCod = canAccessModule(loadAuthSession(), 'cod_ops')
+  const canViewStockDeduct = canViewStockDeductOps(loadAuthSession())
+  const canExecuteStockDeduct = canConfirmStockDeduct(loadAuthSession())
   const [order, setOrder] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
@@ -68,6 +73,7 @@ function OrderDetailPage() {
   const paymentConfirmedRef = useRef(false)
   const [promoCodeInput, setPromoCodeInput] = useState('')
   const [isApplyingPromo, setIsApplyingPromo] = useState(false)
+  const [stockPreviewOpen, setStockPreviewOpen] = useState(false)
 
   const canEditOrder = orderAccess.canEdit !== false
   const itemsEditable = useMemo(
@@ -443,6 +449,16 @@ function OrderDetailPage() {
       })
     : ''
 
+  const queueStatus = String(order?.stockDeductQueue?.status || '').toLowerCase()
+  const canOpenStockPreview =
+    canViewStockDeduct &&
+    order?.stockDeductQueue &&
+    (queueStatus === 'waiting' || queueStatus === 'insufficient')
+  const canExecuteStockOnOrder = canOpenStockPreview && canExecuteStockDeduct
+  const showStockDeductBlock =
+    order?.stockDeductQueue ||
+    ['pending_deduct', 'waiting_stock'].includes(String(order?.stockStatus || '').toLowerCase())
+
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto sm:gap-6">
       <div className="mb-8 flex flex-col justify-between gap-4 md:flex-row md:items-center">
@@ -472,6 +488,14 @@ function OrderDetailPage() {
               to="/orders/cod"
             >
               Quản lý COD
+            </Link>
+          ) : null}
+          {canViewStockDeduct ? (
+            <Link
+              className="rounded-xl border border-[#538463]/30 bg-[#538463]/5 px-5 py-2.5 text-sm font-semibold text-[#538463] hover:bg-[#538463]/10"
+              to="/orders/stock-deduct"
+            >
+              Chờ trừ kho
             </Link>
           ) : null}
         </div>
@@ -506,6 +530,11 @@ function OrderDetailPage() {
                   COD
                 </span>
               ) : null}
+              <span
+                className={`rounded-full px-3 py-1 text-xs font-semibold ${getStockStatusClass(order.stockStatus)}`}
+              >
+                {getStockStatusLabel(order.stockStatus)}
+              </span>
             </div>
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -843,6 +872,60 @@ function OrderDetailPage() {
               </div>
             </section>
 
+            {showStockDeductBlock ? (
+              <section className="rounded-[1.5rem] bg-white p-6 shadow-sm">
+                <h2 className="mb-4 text-lg font-bold text-slate-800">Trừ kho</h2>
+                <div className="space-y-3">
+                  <div className="flex flex-wrap gap-2">
+                    <span
+                      className={`rounded-full px-3 py-1 text-xs font-semibold ${getStockStatusClass(order.stockStatus)}`}
+                    >
+                      {getStockStatusLabel(order.stockStatus)}
+                    </span>
+                    {order.stockDeductQueue ? (
+                      <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                        Queue: {getQueueStatusLabel(order.stockDeductQueue.status)}
+                      </span>
+                    ) : null}
+                  </div>
+
+                  {order.stockShortages?.length ? (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                      <p className="text-sm font-semibold text-amber-900">Thiếu nguyên liệu</p>
+                      <ul className="mt-2 space-y-1 text-sm text-amber-900">
+                        {order.stockShortages.map((row) => (
+                          <li key={row.materialId}>
+                            {row.materialName || `NVL #${row.materialId}`}: cần {row.requiredQuantity}, có{' '}
+                            {row.availableQuantity}, thiếu {row.shortageQuantity}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+
+                  {canOpenStockPreview ? (
+                    <button
+                      type="button"
+                      onClick={() => setStockPreviewOpen(true)}
+                      className={`w-full rounded-xl px-4 py-2.5 text-sm font-bold text-white ${
+                        canExecuteStockOnOrder
+                          ? 'bg-[#538463] hover:bg-[#457053]'
+                          : 'bg-slate-500 hover:bg-slate-600'
+                      }`}
+                    >
+                      {canExecuteStockOnOrder ? 'Xem preview & trừ kho' : 'Xem preview trừ kho'}
+                    </button>
+                  ) : (
+                    <p className="text-xs text-slate-500">
+                      {order.stockStatus === 'deducted'
+                        ? 'Đơn đã trừ kho.'
+                        : 'Không có thao tác trừ kho cho đơn này.'}
+                    </p>
+                  )}
+                </div>
+              </section>
+            ) : null}
+
             <section className="rounded-[1.5rem] bg-white p-6 shadow-sm">
               <h2 className="mb-4 text-lg font-bold text-slate-800">Thao tác thanh toán</h2>
 
@@ -965,14 +1048,19 @@ function OrderDetailPage() {
               ) : (
                 <p className="text-sm text-slate-500">Không còn thao tác thanh toán cho đơn này.</p>
               )}
-
-              {order.stockDeductQueue ? (
-                <p className="mt-4 text-xs text-slate-500">
-                </p>
-              ) : null}
             </section>
           </div>
         </div>
+      ) : null}
+
+      {stockPreviewOpen && order?.stockDeductQueue ? (
+        <StockDeductPreviewModal
+          queueId={order.stockDeductQueue.id}
+          orderCode={order.orderCode}
+          readOnly={!canExecuteStockDeduct}
+          onClose={() => setStockPreviewOpen(false)}
+          onConfirmed={loadOrder}
+        />
       ) : null}
     </div>
   )

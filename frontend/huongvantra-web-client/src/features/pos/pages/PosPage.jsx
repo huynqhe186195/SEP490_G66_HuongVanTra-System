@@ -245,11 +245,15 @@ function PosPage() {
     return new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 2 }).format(n)
   }
 
-  const getItemStockLimit = (item) => {
-    if (item?.stockQuantity == null || item?.stockQuantity === '') {
-      return Infinity
+  const formatStockHint = (value) => {
+    const n = Number(value) || 0
+    if (n <= 0) {
+      return 'Tồn: 0 · bán trước, trừ sau'
     }
-    return Math.max(0, Number(item.stockQuantity) || 0)
+    if (n <= 5) {
+      return `Tồn: ${formatStock(n)} · sắp hết`
+    }
+    return `Tồn: ${formatStock(n)}`
   }
 
   const parseQtyInput = (value) => {
@@ -262,10 +266,6 @@ function PosPage() {
       return null
     }
     return Number(parsed.toFixed(2))
-  }
-
-  const showStockLimitError = (item, stockLimit) => {
-    showError(`Số lượng không được vượt tồn kho (${formatStock(stockLimit)}).`)
   }
 
   const parseMoneyInput = (value) => {
@@ -528,20 +528,7 @@ function PosPage() {
   }
 
   const addToCart = (product) => {
-    const stockLimit = Math.max(0, Number(product.stockQuantity) || 0)
-    if (stockLimit <= 0) {
-      showError(`Sản phẩm "${product.name}" đã hết tồn.`)
-      return
-    }
-
-    const existing = cartItems.find((item) => item.sku === product.sku)
-    if (existing) {
-      const nextQty = Number((existing.qty + existing.step).toFixed(2))
-      if (nextQty > stockLimit) {
-        showStockLimitError(existing, stockLimit)
-        return
-      }
-    }
+    const stockOnHand = Math.max(0, Number(product.stockQuantity) || 0)
 
     updateActiveSession((prev) => {
       const currentItems = prev.cartItems
@@ -553,7 +540,7 @@ function PosPage() {
           cartItems: clampCartLineDiscounts(
             currentItems.map((item) =>
               item.sku === product.sku
-                ? { ...item, qty: nextQty, stockQuantity: stockLimit }
+                ? { ...item, qty: nextQty, stockQuantity: stockOnHand }
                 : item,
             ),
           ),
@@ -573,7 +560,7 @@ function PosPage() {
             unit: 'x',
             price: product.price,
             step: 1,
-            stockQuantity: stockLimit,
+            stockQuantity: stockOnHand,
             lineDiscountType: 'percent',
             lineDiscountValue: 0,
           },
@@ -589,16 +576,10 @@ function PosPage() {
       return
     }
 
-    const stockLimit = getItemStockLimit(target)
     const nextQty =
       direction === 'inc'
         ? Number((target.qty + target.step).toFixed(2))
         : Number((target.qty - target.step).toFixed(2))
-
-    if (direction === 'inc' && nextQty > stockLimit) {
-      showStockLimitError(target, stockLimit)
-      return
-    }
 
     updateActiveSession((prev) => ({
       ...prev,
@@ -630,20 +611,6 @@ function PosPage() {
       updateActiveSession((prev) => ({
         ...prev,
         cartItems: clampCartLineDiscounts(prev.cartItems.filter((row) => row.sku !== sku)),
-      }))
-      return
-    }
-
-    const stockLimit = getItemStockLimit(item)
-    if (parsed > stockLimit) {
-      showStockLimitError(item, stockLimit)
-      updateActiveSession((prev) => ({
-        ...prev,
-        cartItems: clampCartLineDiscounts(
-          prev.cartItems.map((row) =>
-            row.sku === sku ? { ...row, qty: stockLimit } : row,
-          ),
-        ),
       }))
       return
     }
@@ -1165,11 +1132,8 @@ function PosPage() {
                   <button
                     key={`${item.productId}-${item.sku}`}
                     type="button"
-                    disabled={outOfStock}
                     onClick={() => addToCart(item)}
-                    className={`flex w-full items-center gap-3 border-b border-[#f0eee6] p-3.5 text-left last:border-b-0 ${
-                      outOfStock ? 'cursor-not-allowed opacity-50' : 'hover:bg-[#f6f4ec]'
-                    }`}
+                    className="flex w-full items-center gap-3 border-b border-[#f0eee6] p-3.5 text-left last:border-b-0 hover:bg-[#f6f4ec]"
                   >
                     <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-[#ceebc1]">
                       <Icon className="text-[24px] text-[#4a6242]">eco</Icon>
@@ -1180,14 +1144,14 @@ function PosPage() {
                         {item.sku} ·{' '}
                         <span
                           className={
-                            Number(item.stockQuantity) <= 0
-                              ? 'font-semibold text-[#ba1a1a]'
+                            outOfStock
+                              ? 'font-semibold text-[#7e5700]'
                               : Number(item.stockQuantity) <= 5
                                 ? 'font-semibold text-[#7e5700]'
                                 : ''
                           }
                         >
-                          Tồn: {formatStock(item.stockQuantity)}
+                          {formatStockHint(item.stockQuantity)}
                         </span>
                       </div>
                     </div>
@@ -1227,8 +1191,6 @@ function PosPage() {
                     : lineGross > 0
                       ? `Tối đa ${formatMoney(lineGross)} đ`
                       : 'Thành tiền dòng: 0 đ'
-                  const stockLimit = getItemStockLimit(item)
-                  const atStockMax = Number.isFinite(stockLimit) && item.qty >= stockLimit
 
                   return (
                     <div
@@ -1241,9 +1203,13 @@ function PosPage() {
                         </p>
                         <p className="mt-0.5 text-sm text-[#717971]">
                           {formatMoney(item.price)} đ
-                          {Number.isFinite(stockLimit) ? (
-                            <span className="ml-1 text-xs">· Tồn {formatStock(stockLimit)}</span>
-                          ) : null}
+                          <span
+                            className={`ml-1 text-xs ${
+                              Number(item.stockQuantity) <= 0 ? 'font-semibold text-[#7e5700]' : ''
+                            }`}
+                          >
+                            · {formatStockHint(item.stockQuantity)}
+                          </span>
                           {discountLabel ? (
                             <span className="ml-1 text-xs font-semibold text-[#7e5700]">{discountLabel}</span>
                           ) : null}
@@ -1268,9 +1234,8 @@ function PosPage() {
                         />
                         <button
                           type="button"
-                          disabled={atStockMax}
                           onClick={() => updateQuantity(item.sku, 'inc')}
-                          className="px-2.5 py-1.5 text-lg font-bold text-[#356647] hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
+                          className="px-2.5 py-1.5 text-lg font-bold text-[#356647] hover:bg-white"
                         >
                           +
                         </button>

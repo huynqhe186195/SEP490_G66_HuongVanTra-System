@@ -15,11 +15,26 @@ namespace HuongVanTra.Service.Sales {
             _db = db;
         }
 
-        public async Task<IReadOnlyList<StockDeductQueueListItem>> GetWaitingAsync(
+        public async Task<IReadOnlyList<StockDeductQueueListItem>> GetPendingAsync(
+            string? status = null,
+            string? search = null,
             CancellationToken cancellationToken = default) {
-            return await _db.StockDeductQueues
-                .AsNoTracking()
-                .Where(q => q.Status == QueueStatus.Waiting)
+            var query = _db.StockDeductQueues.AsNoTracking().AsQueryable();
+
+            if (!string.IsNullOrWhiteSpace(status)) {
+                var normalizedStatus = status.Trim().ToLowerInvariant();
+                query = query.Where(q => q.Status == normalizedStatus);
+            } else {
+                query = query.Where(q =>
+                    q.Status == QueueStatus.Waiting || q.Status == QueueStatus.Insufficient);
+            }
+
+            if (!string.IsNullOrWhiteSpace(search)) {
+                var term = search.Trim();
+                query = query.Where(q => q.Order.OrderCode.Contains(term));
+            }
+
+            return await query
                 .OrderByDescending(q => q.CreatedAt)
                 .Select(q => new StockDeductQueueListItem {
                     QueueId            = q.Id,
@@ -103,11 +118,27 @@ namespace HuongVanTra.Service.Sales {
                 .FirstOrDefaultAsync(q => q.Id == queueId)
                 ?? throw new ArgumentException($"Stock deduct queue {queueId} does not exist.");
 
-            if (queue.Status != QueueStatus.Waiting)
+            if (queue.Status != QueueStatus.Waiting && queue.Status != QueueStatus.Insufficient)
                 throw new InvalidOperationException(
                     $"Queue {queueId} cannot be confirmed: current status is '{queue.Status}'.");
 
             var order = queue.Order;
+
+            if (queue.Status == QueueStatus.Insufficient) {
+                var staleShortages = await _db.OrderStockShortages
+                    .Where(s => s.QueueId == queueId && s.Status == ShortageStatus.WaitingStock)
+                    .ToListAsync();
+                foreach (var shortage in staleShortages) {
+                    shortage.Status = ShortageStatus.Cancelled;
+                    shortage.ResolvedAt = DateTime.UtcNow;
+                    shortage.Note = "Retried stock deduct confirm.";
+                }
+
+                queue.Status = QueueStatus.Waiting;
+                if (string.Equals(order.StockStatus, OrderStockStatus.WaitingStock, StringComparison.OrdinalIgnoreCase)) {
+                    order.StockStatus = OrderStockStatus.PendingDeduct;
+                }
+            }
 
             var snapshot = JsonSerializer.Deserialize<List<BomSnapshotEntry>>(queue.BomSnapshot)
                 ?? throw new InvalidOperationException("BOM snapshot is invalid or empty.");
@@ -273,13 +304,16 @@ namespace HuongVanTra.Service.Sales {
                 return;
             }
 
-            if (!string.Equals(order.StockStatus, OrderStockStatus.PendingDeduct, StringComparison.OrdinalIgnoreCase)) {
+            var stockStatus = order.StockStatus ?? string.Empty;
+            if (!string.Equals(stockStatus, OrderStockStatus.PendingDeduct, StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(stockStatus, OrderStockStatus.WaitingStock, StringComparison.OrdinalIgnoreCase)) {
                 return;
             }
 
             var queueId = await _db.StockDeductQueues
                 .AsNoTracking()
-                .Where(q => q.OrderId == orderId && q.Status == QueueStatus.Waiting)
+                .Where(q => q.OrderId == orderId
+                    && (q.Status == QueueStatus.Waiting || q.Status == QueueStatus.Insufficient))
                 .Select(q => (int?)q.Id)
                 .FirstOrDefaultAsync(cancellationToken);
 

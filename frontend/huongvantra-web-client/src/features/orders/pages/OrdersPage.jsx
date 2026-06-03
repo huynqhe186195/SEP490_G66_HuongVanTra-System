@@ -4,7 +4,7 @@ import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
 import SearchableSelect from '../../../components/shared/SearchableSelect.jsx'
-import { canAccessModule } from '../../../app/navigation.js'
+import { canAccessModule, canViewStockDeductOps } from '../../../app/navigation.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import { showError } from '../../../app/toast.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
@@ -49,6 +49,7 @@ const initialFilters = {
 function OrdersPage() {
   const authSession = loadAuthSession()
   const canManageCod = canAccessModule(authSession, 'cod_ops')
+  const canManageStockDeduct = canViewStockDeductOps(authSession)
   const [filters, setFilters] = useState(initialFilters)
   const [searchInput, setSearchInput] = useState('')
   const [orders, setOrders] = useState([])
@@ -273,6 +274,14 @@ function OrdersPage() {
               to="/orders/cod"
             >
               Quản lý COD
+            </Link>
+          ) : null}
+          {canManageStockDeduct ? (
+            <Link
+              className={`inline-flex items-center gap-2 rounded-xl border border-[#538463]/30 bg-[#538463]/5 px-4 py-2.5 text-sm font-bold text-[#538463] hover:bg-[#538463]/10 ${canManageCod ? '' : 'ml-auto'}`}
+              to="/orders/stock-deduct"
+            >
+              Chờ trừ kho
             </Link>
           ) : null}
         </div>

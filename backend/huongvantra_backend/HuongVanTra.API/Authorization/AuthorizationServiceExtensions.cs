@@ -47,6 +47,15 @@ namespace HuongVanTra.API.Authorization {
                         AppRoles.Admin,
                         AppRoles.AgencyManager,
                         AppRoles.Accountant));
+
+                options.AddPolicy(AppPolicies.ViewStockDeductOps, policy =>
+                    policy.RequireRole(
+                        AppRoles.Admin,
+                        AppRoles.AgencyManager,
+                        AppRoles.InventoryManager));
+
+                options.AddPolicy(AppPolicies.ConfirmStockDeduct, policy =>
+                    policy.RequireRole(AppRoles.Admin, AppRoles.InventoryManager));
             });
 
             return services;

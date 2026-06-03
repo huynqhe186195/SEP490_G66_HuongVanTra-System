@@ -20,6 +20,7 @@ const SIDEBAR_DISABLED_MODULES = new Set([
 const HOME_MODULE_PRIORITY = [
   'pos',
   'cod_ops',
+  'stock_deduct_ops',
   'orders',
   'customers',
   'staff',
@@ -37,6 +38,13 @@ export const navigationItems = [
   { label: 'POS bán hàng', path: '/pos', module: 'pos', icon: 'point_of_sale', roles: ['agencyManager', 'salesStaff', 'customer'] },
   { label: 'Đơn hàng', path: '/orders', module: 'orders', icon: 'receipt_long', roles: ['admin', 'agencyManager', 'salesStaff'] },
   { label: 'Quản lý COD', path: '/orders/cod', module: 'cod_ops', icon: 'local_shipping', roles: ['agencyManager'] },
+  {
+    label: 'Chờ trừ kho',
+    path: '/orders/stock-deduct',
+    module: 'stock_deduct_ops',
+    icon: 'inventory_2',
+    roles: ['admin', 'agencyManager', 'inventoryManager'],
+  },
   { label: 'Khách hàng', path: '/customers', module: 'customers', icon: 'groups', roles: ['admin', 'agencyManager'] },
   { label: 'Nhân sự', path: '/staff', module: 'staff', icon: 'badge', roles: ['admin', 'agencyManager'] },
 ]
@@ -152,6 +160,7 @@ const MODULE_PATH_PREFIXES = [
   { module: 'inventory', prefix: '/inventory' },
   { module: 'products', prefix: '/products' },
   { module: 'cod_ops', prefix: '/orders/cod' },
+  { module: 'stock_deduct_ops', prefix: '/orders/stock-deduct' },
   { module: 'orders', prefix: '/orders' },
   { module: 'pos', prefix: '/pos' },
   { module: 'dashboard', prefix: '/dashboard' },
@@ -179,7 +188,17 @@ export function canAccessModule(session, module) {
   }
 
   if (session?.modules?.length) {
-    return session.modules.some((entry) => entry.toLowerCase() === module)
+    const normalizedModule = String(module).toLowerCase()
+    if (session.modules.some((entry) => entry.toLowerCase() === normalizedModule)) {
+      return true
+    }
+
+    const item = navigationItems.find((entry) => entry.module === normalizedModule)
+    if (item && session?.roles?.length) {
+      return hasAnyRoleGroup(session.roles, item.roles)
+    }
+
+    return false
   }
 
   if (session?.roles?.length) {
@@ -195,10 +214,27 @@ export function canAccessPath(session, pathname) {
   return canAccessModule(session, module)
 }
 
+/** Xem danh sách / preview hàng chờ trừ kho (quản lý chi nhánh + thủ kho). */
+export function canViewStockDeductOps(session) {
+  return canAccessModule(session, 'stock_deduct_ops')
+}
+
+/** Xác nhận trừ kho — chỉ Admin và Thủ kho. */
+export function canConfirmStockDeduct(session) {
+  if (!session?.roles?.length) {
+    return false
+  }
+
+  return hasAnyRoleGroup(session.roles, ['admin', 'inventoryManager'])
+}
+
 export function getAccessDeniedMessage(pathname) {
   const module = getModuleForPath(pathname)
   if (module === 'cod_ops') {
     return 'Chỉ Quản lý chi nhánh mới được truy cập Quản lý COD.'
+  }
+  if (module === 'stock_deduct_ops') {
+    return 'Chỉ Quản lý chi nhánh hoặc Thủ kho mới được xem hàng chờ trừ kho. Thao tác trừ kho do Thủ kho thực hiện.'
   }
   return 'Bạn không có quyền truy cập trang này.'
 }
@@ -216,8 +252,15 @@ export function isNavigationItemActive(pathname, item) {
     return path === target || path.startsWith(`${target}/`)
   }
 
+  if (item.module === 'stock_deduct_ops') {
+    return path === target || path.startsWith(`${target}/`)
+  }
+
   if (item.module === 'orders') {
     if (path === '/orders/cod' || path.startsWith('/orders/cod/')) {
+      return false
+    }
+    if (path === '/orders/stock-deduct' || path.startsWith('/orders/stock-deduct/')) {
       return false
     }
     return path === target || path.startsWith(`${target}/`)
