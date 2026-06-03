@@ -2,6 +2,7 @@ using HuongVanTra.Core.Entities.Sales;
 using HuongVanTra.Core.Entities.System;
 using HuongVanTra.Infrastructure.Data;
 using HuongVanTra.Service.Sales.Models;
+using HuongVanTra.Service.Common;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
 
@@ -285,7 +286,7 @@ namespace HuongVanTra.Service.Sales {
                     UserId     = employeeId,
                     StoreId    = order.StoreId,
                     Status     = "SUCCESS",
-                    NewValues  = reason,
+                    NewValues  = AuditLogJson.Serialize(new { reason }),
                     CreatedAt  = cancelledAt
                 });
 

@@ -3,6 +3,8 @@ namespace HuongVanTra.Service.Sales {
         public long TransactionId { get; set; }
         public string? Gateway { get; set; }
         public string? AccountNumber { get; set; }
+        /// <summary>Số VA (BIDV) khách chuyển vào — field subAccount từ SePay.</summary>
+        public string? SubAccount { get; set; }
         public string? TransferType { get; set; }
         public decimal TransferAmount { get; set; }
         public string? Content { get; set; }

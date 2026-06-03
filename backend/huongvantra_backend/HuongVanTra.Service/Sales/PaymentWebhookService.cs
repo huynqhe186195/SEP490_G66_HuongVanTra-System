@@ -2,6 +2,7 @@ using HuongVanTra.Core.Entities.Sales;
 using HuongVanTra.Core.Entities.System;
 using HuongVanTra.Infrastructure.Data;
 using HuongVanTra.Service.Sales.Models;
+using HuongVanTra.Service.Common;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
@@ -29,21 +30,22 @@ namespace HuongVanTra.Service.Sales {
                 command.ReferenceCode,
                 command.Code);
 
-            if (string.IsNullOrWhiteSpace(orderCode)) {
-                return new WebhookProcessResult {
-                    Success = true,
-                    Skipped = true,
-                    Message = "No order code found in transfer content.",
-                };
+            Order? order = null;
+            if (!string.IsNullOrWhiteSpace(orderCode)) {
+                order = await FindOrderAsync(orderCode, command.Content, cancellationToken);
             }
 
-            var order = await FindOrderAsync(orderCode, command.Content, cancellationToken);
+            if (order is null) {
+                order = await FindOrderBySubAccountAsync(command.SubAccount, cancellationToken);
+            }
 
             if (order is null) {
                 return new WebhookProcessResult {
                     Success = true,
                     Skipped = true,
-                    Message = $"Order {orderCode} not found.",
+                    Message = string.IsNullOrWhiteSpace(orderCode)
+                        ? "No order code found in transfer content."
+                        : $"Order {orderCode} not found.",
                 };
             }
 
@@ -110,7 +112,11 @@ namespace HuongVanTra.Service.Sales {
                     EntityId = order.Id,
                     StoreId = order.StoreId,
                     Status = "SUCCESS",
-                    NewValues = $"sepay_txn_id={command.TransactionId};bank_code={command.Code};amount={command.TransferAmount}",
+                    NewValues = AuditLogJson.Serialize(new {
+                        sepayTxnId = command.TransactionId,
+                        bankCode = command.Code,
+                        amount = command.TransferAmount,
+                    }),
                     CreatedAt = confirmedAt
                 });
 
@@ -130,6 +136,30 @@ namespace HuongVanTra.Service.Sales {
                 await tx.RollbackAsync(cancellationToken);
                 throw;
             }
+        }
+
+        private async Task<Order?> FindOrderBySubAccountAsync(
+            string? subAccount,
+            CancellationToken cancellationToken) {
+            if (string.IsNullOrWhiteSpace(subAccount)) {
+                return null;
+            }
+
+            var vaDigits = SepayOrderNotes.NormalizeDigits(subAccount);
+            if (vaDigits.Length == 0) {
+                return null;
+            }
+
+            var marker = $"{SepayOrderNotes.VaPrefix}{vaDigits}";
+
+            return await _db.Orders
+                .Include(o => o.PaymentTransactions)
+                .Where(o =>
+                    o.Notes != null
+                    && o.Notes.Contains(marker)
+                    && (o.PaymentStatus == "pending_payment" || o.PaymentStatus == "unpaid"))
+                .OrderByDescending(o => o.Id)
+                .FirstOrDefaultAsync(cancellationToken);
         }
 
         private async Task<Order?> FindOrderAsync(

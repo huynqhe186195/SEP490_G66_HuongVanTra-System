@@ -3,11 +3,12 @@ import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { showError, showSuccess } from '../../../app/toast.js'
 import {
   fetchPosOrderPaymentStatus,
+  fetchPosSepaySetup,
   fetchPosTransferPaymentInfo,
   resolveTransferQrImageUrl,
 } from '../services/posApi.js'
 
-const POLL_INTERVAL_MS = 2000
+const POLL_INTERVAL_MS = 5000
 
 function Icon({ children, className = '' }) {
   return <span className={`material-symbols-outlined ${className}`}>{children}</span>
@@ -37,6 +38,7 @@ function PosTransferQrPage() {
   const [pollError, setPollError] = useState('')
   const [expectedTransferContent, setExpectedTransferContent] = useState('')
   const [expectedAmount, setExpectedAmount] = useState(0)
+  const [sepaySetup, setSepaySetup] = useState(null)
   const completedRef = useRef(false)
 
   const finishWithReceipt = useCallback(
@@ -88,6 +90,19 @@ function PosTransferQrPage() {
     }
 
     loadBankInfo()
+
+    fetchPosSepaySetup()
+      .then((data) => {
+        if (mounted) {
+          setSepaySetup(data)
+        }
+      })
+      .catch(() => {
+        if (mounted) {
+          setSepaySetup(null)
+        }
+      })
+
     return () => {
       mounted = false
     }
@@ -156,10 +171,16 @@ function PosTransferQrPage() {
     }
   }
 
-  if (!payment?.total || payment.paymentMethod !== 'TRANSFER' || !payment.orderId) {
+  if (payment?.paymentMethod !== 'TRANSFER' || !payment.orderId) {
     return <Navigate to="/pos" replace />
   }
 
+  const receiveAccount =
+    payment.transferAccountNumber || bankInfo?.accountNumber || '—'
+  const usesSepayVa =
+    payment.paymentMode === 'sepay_order_va' || payment.paymentMode === 'sepay_static_va'
+  const isLegacyMainAccountQr =
+    !usesSepayVa && receiveAccount.replace(/\D/g, '') === (bankInfo?.accountNumber || '').replace(/\D/g, '')
   const statusText = paymentStatusLabel(paymentStatus, isPaid)
 
   return (
@@ -213,19 +234,47 @@ function PosTransferQrPage() {
           </div>
 
           <p className="text-center text-sm text-[#717971]">
-            Khách quét QR hoặc chuyển khoản — hệ thống tự nhận tiền qua SePay (webhook).
+            {usesSepayVa
+              ? 'Chuyển vào số VA bên dưới (BIDV qua SePay). Không chuyển nhầm số tài khoản chính.'
+              : 'Khách quét QR hoặc chuyển khoản — hệ thống tự nhận tiền qua SePay (webhook).'}
           </p>
+
+          {isLegacyMainAccountQr ? (
+            <div className="w-full rounded-xl border border-[#ba1a1a]/40 bg-[#ba1a1a]/10 p-3 text-xs text-[#ba1a1a]">
+              <p className="font-semibold">QR này trỏ tài khoản chính — SePay không ghi nhận</p>
+              <p className="mt-1">
+                {sepaySetup?.setupMessage ||
+                  'Cấu hình Sepay:ApiToken trong appsettings (hoặc StaticVaNumber), restart API, tạo đơn CK mới.'}
+              </p>
+            </div>
+          ) : null}
+          {usesSepayVa ? (
+            <div className="w-full rounded-xl border border-[#7e5700]/40 bg-[#fec25b]/15 p-3 text-xs text-[#604100]">
+              <p className="font-semibold">BIDV + SePay: chuyển vào số VA bên dưới</p>
+              <p className="mt-1">Giao dịch sẽ hiển thị trên lịch sử SePay và tự xác nhận đơn qua webhook.</p>
+            </div>
+          ) : null}
 
           <div className="w-full rounded-xl border border-[#356647]/30 bg-[#356647]/5 p-3 text-xs text-[#414942]">
             <p className="font-semibold text-[#356647]">Khách CK phải khớp:</p>
             <ul className="mt-1 list-inside list-disc space-y-0.5">
-              <li>
-                Nội dung: <strong className="text-[#1b1c17]">{transferNote}</strong> (copy y nguyên)
-              </li>
+              {usesSepayVa ? (
+                <li>
+                  Số VA nhận tiền: <strong className="text-[#1b1c17]">{receiveAccount}</strong>
+                </li>
+              ) : (
+                <li>
+                  TK nhận: <strong>{receiveAccount}</strong> ({bankInfo?.bankName || '—'})
+                </li>
+              )}
               <li>
                 Số tiền: <strong>{formatMoney(displayAmount)} đ</strong>
               </li>
-              <li>TK nhận: {bankInfo?.accountNumber || '—'} ({bankInfo?.bankName || '—'})</li>
+              {!usesSepayVa ? (
+                <li>
+                  Nội dung: <strong className="text-[#1b1c17]">{transferNote}</strong> (copy y nguyên)
+                </li>
+              ) : null}
             </ul>
           </div>
 
@@ -244,9 +293,15 @@ function PosTransferQrPage() {
                 <span className="font-semibold text-[#1b1c17]">{bankInfo?.bankName || '—'}</span>
               </div>
               <div className="flex justify-between gap-4">
-                <span className="text-[#717971]">Số tài khoản</span>
-                <span className="font-semibold text-[#1b1c17]">{bankInfo?.accountNumber || '—'}</span>
+                <span className="text-[#717971]">{usesSepayVa ? 'Số VA (chuyển vào đây)' : 'Số tài khoản'}</span>
+                <span className="break-all text-right font-semibold text-[#1b1c17]">{receiveAccount}</span>
               </div>
+              {usesSepayVa && bankInfo?.accountNumber ? (
+                <div className="flex justify-between gap-4 text-xs text-[#717971]">
+                  <span>TK gốc (không CK vào)</span>
+                  <span>{bankInfo.accountNumber}</span>
+                </div>
+              ) : null}
               {bankInfo?.accountHolder ? (
                 <div className="flex justify-between gap-4">
                   <span className="shrink-0 text-[#717971]">Chủ tài khoản</span>

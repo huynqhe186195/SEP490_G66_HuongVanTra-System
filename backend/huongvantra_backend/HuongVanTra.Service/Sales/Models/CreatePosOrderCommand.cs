@@ -4,6 +4,8 @@ namespace HuongVanTra.Service.Sales.Models {
         public int CashierId { get; set; }
         public int CustomerId { get; set; }
         public int? PromotionId { get; set; }
+        /// <summary>CK thủ công POS (từng dòng + CK đơn), VNĐ.</summary>
+        public decimal ManualDiscount { get; set; }
         public List<OrderItemCommand> Items { get; set; } = new();
         public List<PaymentCommand> Payments { get; set; } = new();
     }

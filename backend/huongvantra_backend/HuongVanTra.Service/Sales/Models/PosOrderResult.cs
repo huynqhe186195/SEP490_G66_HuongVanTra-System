@@ -9,6 +9,8 @@ namespace HuongVanTra.Service.Sales.Models {
         public string? QrPayload { get; set; }
         public string? QrImageUrl { get; set; }
         public string? TransferContent { get; set; }
+        public string? TransferAccountNumber { get; set; }
+        public string PaymentMode { get; set; } = "vietqr_main";
         public string? InvoiceCode { get; set; }
         public DateTime CreatedAt { get; set; }
         public List<PosOrderItemResult> Items { get; set; } = new();
