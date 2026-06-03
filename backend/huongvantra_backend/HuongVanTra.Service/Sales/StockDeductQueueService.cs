@@ -259,6 +259,47 @@ namespace HuongVanTra.Service.Sales {
             }
         }
 
+        public async Task TryAutoDeductForOrderAsync(
+            int orderId,
+            int confirmedByEmployeeId,
+            CancellationToken cancellationToken = default) {
+            var order = await _db.Orders
+                .AsNoTracking()
+                .Where(o => o.Id == orderId)
+                .Select(o => new { o.Id, o.StockStatus, o.CashierId })
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (order is null) {
+                return;
+            }
+
+            if (!string.Equals(order.StockStatus, OrderStockStatus.PendingDeduct, StringComparison.OrdinalIgnoreCase)) {
+                return;
+            }
+
+            var queueId = await _db.StockDeductQueues
+                .AsNoTracking()
+                .Where(q => q.OrderId == orderId && q.Status == QueueStatus.Waiting)
+                .Select(q => (int?)q.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (!queueId.HasValue) {
+                return;
+            }
+
+            var actorId = confirmedByEmployeeId > 0 ? confirmedByEmployeeId : order.CashierId;
+
+            try {
+                await ConfirmAsync(queueId.Value, actorId);
+            }
+            catch (InsufficientStockException) {
+                // Đã thanh toán — ghi thiếu hàng, không chặn luồng thanh toán.
+            }
+            catch (InvalidOperationException) {
+                // Hàng đợi đã xử lý — bỏ qua.
+            }
+        }
+
         public async Task<CancelStockDeductResult> CancelAsync(
             int queueId, int cancelledByEmployeeId, string? reason) {
 

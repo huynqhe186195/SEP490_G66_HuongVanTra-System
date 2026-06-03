@@ -12,14 +12,17 @@ namespace HuongVanTra.Service.Sales {
         private readonly AppDbContext _db;
         private readonly SepaySettings _settings;
         private readonly ICustomerService _customerService;
+        private readonly IStockDeductQueueService _stockDeductQueueService;
 
         public PaymentWebhookService(
             AppDbContext db,
             IOptions<SepaySettings> options,
-            ICustomerService customerService) {
+            ICustomerService customerService,
+            IStockDeductQueueService stockDeductQueueService) {
             _db = db;
             _settings = options.Value;
             _customerService = customerService;
+            _stockDeductQueueService = stockDeductQueueService;
         }
 
         public async Task<WebhookProcessResult> ProcessSepayWebhookAsync(
@@ -139,6 +142,11 @@ namespace HuongVanTra.Service.Sales {
 
                 await _db.SaveChangesAsync(cancellationToken);
                 await tx.CommitAsync(cancellationToken);
+
+                await _stockDeductQueueService.TryAutoDeductForOrderAsync(
+                    order.Id,
+                    order.CashierId,
+                    cancellationToken);
 
                 return new WebhookProcessResult {
                     Success = true,

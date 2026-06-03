@@ -17,10 +17,15 @@ namespace HuongVanTra.Service.Sales {
 
         private readonly AppDbContext _db;
         private readonly ICustomerService _customerService;
+        private readonly IStockDeductQueueService _stockDeductQueueService;
 
-        public OrderConfirmationService(AppDbContext db, ICustomerService customerService) {
+        public OrderConfirmationService(
+            AppDbContext db,
+            ICustomerService customerService,
+            IStockDeductQueueService stockDeductQueueService) {
             _db = db;
             _customerService = customerService;
+            _stockDeductQueueService = stockDeductQueueService;
         }
 
         public async Task<OrderConfirmationResult> ConfirmPaymentAsync(
@@ -70,6 +75,11 @@ namespace HuongVanTra.Service.Sales {
 
                 await _db.SaveChangesAsync(cancellationToken);
                 await tx.CommitAsync(cancellationToken);
+
+                await _stockDeductQueueService.TryAutoDeductForOrderAsync(
+                    order.Id,
+                    command.EmployeeId,
+                    cancellationToken);
 
                 return ToResult(order, invoice.InvoiceCode);
             }

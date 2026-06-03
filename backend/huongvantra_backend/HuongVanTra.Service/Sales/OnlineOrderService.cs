@@ -18,6 +18,7 @@ namespace HuongVanTra.Service.Sales {
         private readonly ISepayOrderVaService _sepayOrderVaService;
         private readonly SepaySettings _sepaySettings;
         private readonly ICustomerService _customerService;
+        private readonly IStockDeductQueueService _stockDeductQueueService;
 
         public OnlineOrderService(
             AppDbContext db,
@@ -25,13 +26,15 @@ namespace HuongVanTra.Service.Sales {
             IVietQrService vietQrService,
             ISepayOrderVaService sepayOrderVaService,
             IOptions<SepaySettings> sepayOptions,
-            ICustomerService customerService) {
+            ICustomerService customerService,
+            IStockDeductQueueService stockDeductQueueService) {
             _db = db;
             _orderConfirmationService = orderConfirmationService;
             _vietQrService = vietQrService;
             _sepayOrderVaService = sepayOrderVaService;
             _sepaySettings = sepayOptions.Value;
             _customerService = customerService;
+            _stockDeductQueueService = stockDeductQueueService;
         }
 
         public async Task<OnlineOrderResult> CreateVietQrOrderAsync(CreateOnlineOrderCommand command) {
@@ -680,6 +683,8 @@ namespace HuongVanTra.Service.Sales {
 
                 await _db.SaveChangesAsync();
                 await tx.CommitAsync();
+
+                await _stockDeductQueueService.TryAutoDeductForOrderAsync(order.Id, employeeId);
 
                 return new VietQrPaidResult {
                     OrderId       = order.Id,
