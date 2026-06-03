@@ -6,5 +6,10 @@ namespace HuongVanTra.Service.Orders {
         Task<OrderDetailDto?> ApplyCouponAsync(int id, ApplyCouponRequest request, CancellationToken cancellationToken = default);
         Task<OrderDetailDto?> AddGiftItemAsync(int id, AddGiftItemRequest request, CancellationToken cancellationToken = default);
         Task<OrderDetailDto?> UpdateAdjustmentsAsync(int id, UpdateOrderAdjustmentsRequest request, CancellationToken cancellationToken = default);
+        Task<OrderDetailDto?> UpdateOrderItemsAsync(int id, UpdateOrderItemsRequest request, CancellationToken cancellationToken = default);
+        Task<OrderPaymentQrDto?> GetOrderPaymentQrAsync(
+            int id,
+            bool forceRegenerate = false,
+            CancellationToken cancellationToken = default);
     }
 }

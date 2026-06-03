@@ -8,18 +8,51 @@ import PaymentReceiptModal from '../components/PaymentReceiptModal.jsx'
 import ConfirmDialog from '../components/ConfirmDialog.jsx'
 import { vietnamNowLabel } from '../../../utils/vietnamDateTime.js'
 import {
+  buildTakeawayOrderPayload,
   createPosOrderOffline,
   createPosOrderOnline,
+  createTakeawayCodOrder,
+  createTakeawayVietQrOrder,
+  fetchPosCustomerContext,
   fetchPosCustomers,
   fetchPosProducts,
   resolvePosStoreId,
 } from '../services/posApi.js'
 import { loadPosSeller } from '../utils/posSeller.js'
 
-const PAYMENT_METHODS = [
+const SALES_MODES = [
+  { id: 'counter', label: 'Bán tại quầy', icon: 'storefront' },
+  { id: 'takeaway', label: 'Bán COD', icon: 'local_shipping' },
+]
+
+const COUNTER_PAYMENT_METHODS = [
   { id: 'CASH', label: 'Tiền mặt', icon: 'payments' },
   { id: 'TRANSFER', label: 'Chuyển khoản', icon: 'account_balance' },
 ]
+
+const TAKEAWAY_PAYMENT_METHODS = [
+  { id: 'COD', label: 'COD — thu khi giao', icon: 'local_shipping' },
+  { id: 'TRANSFER', label: 'Chuyển khoản / VietQR', icon: 'account_balance' },
+]
+
+function createWorkspace(mode = 'counter') {
+  const empty = () => createEmptySession(mode)
+  if (mode === 'takeaway') {
+    return {
+      tabs: [{ id: 1, label: 'Hóa đơn 1' }],
+      activeTabId: 1,
+      sessions: { 1: empty() },
+    }
+  }
+  return {
+    tabs: [
+      { id: 1, label: 'Hóa đơn 1' },
+      { id: 2, label: 'Hóa đơn 2' },
+    ],
+    activeTabId: 1,
+    sessions: { 1: empty(), 2: empty() },
+  }
+}
 
 function Icon({ children, className = '', filled = false }) {
   return (
@@ -68,11 +101,15 @@ function clampCartLineDiscounts(cartItems) {
   return cartItems.map(clampLineDiscountItem)
 }
 
-function computePosTotals(cartItems, orderDiscountPercent, tierDiscountPercent) {
+function computePosTotals(cartItems, orderDiscountPercent, orderDiscountAmountFixed, tierDiscountPercent) {
   const grossSubtotal = cartItems.reduce((sum, item) => sum + getLineGross(item), 0)
   const itemDiscountTotal = cartItems.reduce((sum, item) => sum + getLineDiscount(item), 0)
   const subtotalAfterItemDiscount = cartItems.reduce((sum, item) => sum + getLineTotal(item), 0)
-  const orderDiscountAmount = Math.round((subtotalAfterItemDiscount * orderDiscountPercent) / 100)
+  const fixedOrderDiscount = Math.max(0, Math.round(Number(orderDiscountAmountFixed) || 0))
+  const orderDiscountAmount =
+    fixedOrderDiscount > 0
+      ? Math.min(fixedOrderDiscount, subtotalAfterItemDiscount)
+      : Math.round((subtotalAfterItemDiscount * orderDiscountPercent) / 100)
   const totalBeforeTier = Math.max(subtotalAfterItemDiscount - orderDiscountAmount, 0)
   const membershipDiscountAmount =
     tierDiscountPercent > 0 ? Math.round((totalBeforeTier * tierDiscountPercent) / 100) : 0
@@ -90,29 +127,27 @@ function computePosTotals(cartItems, orderDiscountPercent, tierDiscountPercent) 
   }
 }
 
-function createEmptySession() {
+function createEmptySession(mode = 'counter') {
   return {
     searchValue: '',
     cartItems: [],
     orderDiscountPercent: 0,
+    orderDiscountAmountFixed: 0,
     selectedCustomer: null,
     customerSearchValue: '',
-    paymentMethod: 'CASH',
+    paymentMethod: mode === 'takeaway' ? 'COD' : 'CASH',
     amountPaidInput: '',
+    shippingAddress: '',
   }
 }
 
 function PosPage() {
   const navigate = useNavigate()
   const location = useLocation()
-  const [tabs, setTabs] = useState([
-    { id: 1, label: 'Hóa đơn 1' },
-    { id: 2, label: 'Hóa đơn 2' },
-  ])
-  const [activeTabId, setActiveTabId] = useState(1)
-  const [sessions, setSessions] = useState({
-    1: createEmptySession(),
-    2: createEmptySession(),
+  const [salesMode, setSalesMode] = useState('counter')
+  const [workspaceByMode, setWorkspaceByMode] = useState({
+    counter: createWorkspace('counter'),
+    takeaway: createWorkspace('takeaway'),
   })
   const [customerSearchResults, setCustomerSearchResults] = useState([])
   const [isCustomerSearchLoading, setIsCustomerSearchLoading] = useState(false)
@@ -123,26 +158,43 @@ function PosPage() {
   const [isSearchLoading, setIsSearchLoading] = useState(false)
   const [receiptModalData, setReceiptModalData] = useState(null)
   const [tabCloseConfirm, setTabCloseConfirm] = useState(null)
+  const [savedShippingAddresses, setSavedShippingAddresses] = useState([])
+  const [isLoadingShippingAddresses, setIsLoadingShippingAddresses] = useState(false)
+  const [useCustomShippingAddress, setUseCustomShippingAddress] = useState(false)
   const [seller, setSeller] = useState({ name: 'Nhân viên POS', role: '—', display: 'Nhân viên POS · —' })
   const discountPopoverRef = useRef(null)
 
+  const isTakeaway = salesMode === 'takeaway'
+  const workspace = workspaceByMode[salesMode]
+  const { tabs, activeTabId, sessions } = workspace
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0]
-  const session = sessions[activeTabId] ?? createEmptySession()
+  const session = sessions[activeTabId] ?? createEmptySession(salesMode)
   const {
     searchValue,
     cartItems,
     orderDiscountPercent,
+    orderDiscountAmountFixed,
     selectedCustomer,
     customerSearchValue,
     paymentMethod,
     amountPaidInput,
+    shippingAddress,
   } = session
 
+  const paymentMethods = isTakeaway ? TAKEAWAY_PAYMENT_METHODS : COUNTER_PAYMENT_METHODS
+
+  const patchWorkspace = (patch) => {
+    setWorkspaceByMode((all) => ({
+      ...all,
+      [salesMode]: typeof patch === 'function' ? patch(all[salesMode]) : { ...all[salesMode], ...patch },
+    }))
+  }
+
   const updateActiveSession = (updater) => {
-    setSessions((current) => {
-      const prevSession = current[activeTabId] ?? createEmptySession()
+    patchWorkspace((ws) => {
+      const prevSession = ws.sessions[ws.activeTabId] ?? createEmptySession(salesMode)
       const nextSession = typeof updater === 'function' ? updater(prevSession) : { ...prevSession, ...updater }
-      return { ...current, [activeTabId]: nextSession }
+      return { ...ws, sessions: { ...ws.sessions, [ws.activeTabId]: nextSession } }
     })
   }
 
@@ -194,7 +246,8 @@ function PosPage() {
     membershipDiscountAmount,
     total,
     totalDiscount,
-  } = computePosTotals(cartItems, orderDiscountPercent, tierDiscountPercent)
+  } = computePosTotals(cartItems, orderDiscountPercent, orderDiscountAmountFixed, tierDiscountPercent)
+  const usesFixedOrderDiscount = (orderDiscountAmountFixed || 0) > 0
   const amountPaid = parseMoneyInput(amountPaidInput)
   // Để trống = ghi nợ toàn bộ đơn; nhập đủ = thanh toán hết; nhập thừa = tính tiền thừa
   const cashPaymentAmount = amountPaid >= total ? total : amountPaid
@@ -291,31 +344,86 @@ function PosPage() {
     }
   }, [customerSearchValue, selectedCustomer, activeTabId])
 
+  useEffect(() => {
+    if (!isTakeaway || !selectedCustomer?.customerId) {
+      setSavedShippingAddresses([])
+      setUseCustomShippingAddress(false)
+      return undefined
+    }
+
+    let cancelled = false
+    setIsLoadingShippingAddresses(true)
+
+    fetchPosCustomerContext(selectedCustomer.customerId)
+      .then((context) => {
+        if (cancelled) return
+        const addresses = (context.shippingAddresses ?? [])
+          .map((row) => row.address?.trim())
+          .filter(Boolean)
+        setSavedShippingAddresses(addresses)
+
+        const current = shippingAddress?.trim()
+        if (current && addresses.some((addr) => addr === current)) {
+          setUseCustomShippingAddress(false)
+          return
+        }
+
+        if (addresses.length > 0) {
+          setUseCustomShippingAddress(false)
+          updateActiveSession({ shippingAddress: addresses[0] })
+        } else {
+          setUseCustomShippingAddress(true)
+          if (!current) {
+            updateActiveSession({ shippingAddress: '' })
+          }
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setSavedShippingAddresses([])
+          setUseCustomShippingAddress(true)
+          showError(error.message)
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsLoadingShippingAddresses(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [isTakeaway, selectedCustomer?.customerId])
+
   const addTab = () => {
     const nextId = tabs.length ? Math.max(...tabs.map((tab) => tab.id)) + 1 : 1
     const nextTab = { id: nextId, label: `Hóa đơn ${nextId}` }
-    setTabs((currentTabs) => [...currentTabs, nextTab])
-    setSessions((current) => ({ ...current, [nextId]: createEmptySession() }))
-    setActiveTabId(nextId)
+    patchWorkspace((ws) => ({
+      ...ws,
+      tabs: [...ws.tabs, nextTab],
+      sessions: { ...ws.sessions, [nextId]: createEmptySession(salesMode) },
+      activeTabId: nextId,
+    }))
     setOpenDiscountSku(null)
   }
 
   const closeTab = (tabId) => {
-    setTabs((currentTabs) => {
-      if (currentTabs.length === 1) {
-        return currentTabs
+    patchWorkspace((ws) => {
+      if (ws.tabs.length === 1) {
+        return ws
       }
 
-      const nextTabs = currentTabs.filter((tab) => tab.id !== tabId)
-      if (tabId === activeTabId) {
-        setActiveTabId(nextTabs[0]?.id ?? activeTabId)
+      const nextTabs = ws.tabs.filter((tab) => tab.id !== tabId)
+      const nextSessions = { ...ws.sessions }
+      delete nextSessions[tabId]
+
+      return {
+        ...ws,
+        tabs: nextTabs,
+        sessions: nextSessions,
+        activeTabId: tabId === ws.activeTabId ? (nextTabs[0]?.id ?? ws.activeTabId) : ws.activeTabId,
       }
-      return nextTabs
-    })
-    setSessions((current) => {
-      const next = { ...current }
-      delete next[tabId]
-      return next
     })
     setOpenDiscountSku(null)
   }
@@ -449,10 +557,10 @@ function PosPage() {
     const parsed = Math.max(0, Number(rawValue) || 0)
     if (parsed > 100) {
       showError('Chiết khấu đơn không được vượt 100%.')
-      updateActiveSession({ orderDiscountPercent: 100 })
+      updateActiveSession({ orderDiscountPercent: 100, orderDiscountAmountFixed: 0 })
       return
     }
-    updateActiveSession({ orderDiscountPercent: parsed })
+    updateActiveSession({ orderDiscountPercent: parsed, orderDiscountAmountFixed: 0 })
   }
 
   const validateDiscountsBeforePayment = () => {
@@ -529,11 +637,16 @@ function PosPage() {
 
   const hasCartItems = cartItems.length > 0
   const hasCustomerSelected = Boolean(selectedCustomer?.customerId)
+  const hasShippingAddress = Boolean(shippingAddress?.trim())
   const isTransferPayment = paymentMethod === 'TRANSFER'
   const isZeroAmountSale = total === 0 && grossSubtotal > 0
   const canPayCash = hasCartItems && hasCustomerSelected
   const canPayTransfer = hasCartItems && hasCustomerSelected && total > 0
-  const canPay = (isTransferPayment ? canPayTransfer : canPayCash) && !isSubmitting
+  const canPayTakeaway =
+    hasCartItems && hasCustomerSelected && hasShippingAddress && (isTransferPayment ? total > 0 : true)
+  const canPay = isTakeaway
+    ? canPayTakeaway && !isSubmitting
+    : (isTransferPayment ? canPayTransfer : canPayCash) && !isSubmitting
 
   const buildOrderPayload = (method, amount) => {
     const storeId = resolvePosStoreId()
@@ -557,11 +670,14 @@ function PosPage() {
     }
   }
 
-  const buildReceiptData = ({ orderCode, method, invoiceCode }) => ({
+  const buildReceiptData = ({ orderCode, method, invoiceCode, orderTotal }) => {
+    const receiptTotal = orderTotal ?? total
+    return {
     orderCode: orderCode || activeTab.label,
     invoiceCode: invoiceCode || undefined,
     customerName: selectedCustomer?.fullName || 'Khách lẻ',
-    paymentMethodLabel: method === 'TRANSFER' ? 'Chuyển khoản' : 'Tiền mặt',
+    paymentMethodLabel:
+      method === 'COD' ? 'COD — thu khi giao' : method === 'TRANSFER' ? 'Chuyển khoản' : 'Tiền mặt',
     createdAtLabel: vietnamNowLabel(),
     sellerName: seller.name,
     sellerRole: seller.role,
@@ -574,23 +690,105 @@ function PosPage() {
     })),
     grossSubtotal,
     totalDiscount: itemDiscountTotal + orderDiscountAmount + membershipDiscountAmount,
-    total,
-    amountPaid: method === 'CASH' ? cashPaymentAmount : total,
-    customerPaid: method === 'CASH' ? amountPaid : total,
+    total: receiptTotal,
+    amountPaid: method === 'CASH' ? cashPaymentAmount : receiptTotal,
+    customerPaid: method === 'CASH' ? amountPaid : receiptTotal,
     change: method === 'CASH' ? change : 0,
     debtAmount: method === 'CASH' ? debtAmount : 0,
     isDebtSale: method === 'CASH' && isDebtSale,
     isPartialCashPayment: method === 'CASH' && isPartialCashPayment,
-  })
+  }
+  }
 
   const resetCheckoutState = () => {
-    updateActiveSession(createEmptySession())
+    updateActiveSession(createEmptySession(salesMode))
     setOpenDiscountSku(null)
+  }
+
+  const handleTakeawayPayment = async () => {
+    const address = shippingAddress?.trim()
+    if (!address) {
+      showError('Vui lòng nhập địa chỉ giao hàng cho đơn mang đi.')
+      return
+    }
+
+    if (!validateDiscountsBeforePayment()) {
+      return
+    }
+
+    const manualDiscount = Math.round(itemDiscountTotal + orderDiscountAmount)
+    const payload = buildTakeawayOrderPayload({
+      storeId: resolvePosStoreId(),
+      customerId: selectedCustomer.customerId,
+      shippingAddress: address,
+      cartItems,
+      manualDiscount,
+    })
+
+    if (isTransferPayment) {
+      const result = await createTakeawayVietQrOrder(payload)
+      showSuccess(`Đã tạo đơn mang đi ${result.orderCode}. Khách quét QR để thanh toán.`)
+      const receipt = buildReceiptData({
+        orderCode: result.orderCode,
+        method: 'TRANSFER',
+      })
+      resetCheckoutState()
+      navigate('/pos/payment/qr', {
+        state: {
+          orderId: result.orderId,
+          orderCode: result.orderCode,
+          orderLabel: result.orderCode,
+          total: result.totalAmount || total,
+          qrPayload: result.qrPayload,
+          qrImageUrl: result.qrImageUrl,
+          transferContent: result.transferContent,
+          transferAccountNumber: result.transferAccountNumber,
+          paymentMode: result.paymentMode,
+          qrExpiresAtUtc: result.qrExpiresAtUtc,
+          customer: selectedCustomer?.fullName || '',
+          paymentMethod: 'TRANSFER',
+          receipt,
+        },
+      })
+      return
+    }
+
+    const result = await createTakeawayCodOrder(payload)
+    showSuccess(`Đã tạo đơn COD ${result.orderCode}. Theo dõi tại mục Đơn COD.`)
+    setReceiptModalData(
+      buildReceiptData({
+        orderCode: result.orderCode,
+        method: 'COD',
+        orderTotal: result.totalAmount,
+      }),
+    )
+    resetCheckoutState()
   }
 
   const handlePayment = async () => {
     if (!hasCustomerSelected) {
       showError('Vui long chon hoac them khach hang truoc khi thanh toan.')
+      return
+    }
+
+    if (isTakeaway) {
+      if (!canPay) {
+        if (!hasShippingAddress) {
+          showError('Vui lòng nhập địa chỉ giao hàng.')
+        } else if (isTransferPayment && total <= 0) {
+          showError('Đơn 0 đ không dùng chuyển khoản — chọn COD.')
+        }
+        return
+      }
+
+      setIsSubmitting(true)
+      try {
+        await handleTakeawayPayment()
+      } catch (error) {
+        showError(error.message)
+      } finally {
+        setIsSubmitting(false)
+      }
       return
     }
 
@@ -625,6 +823,7 @@ function PosPage() {
             transferContent: result.transferContent,
             transferAccountNumber: result.transferAccountNumber,
             paymentMode: result.paymentMode,
+            qrExpiresAtUtc: result.qrExpiresAtUtc,
             customer: selectedCustomer?.fullName || '',
             paymentMethod: 'TRANSFER',
             receipt,
@@ -681,8 +880,21 @@ function PosPage() {
     updateActiveSession({
       selectedCustomer: customer,
       customerSearchValue: '',
+      shippingAddress: '',
     })
     setCustomerSearchResults([])
+    setSavedShippingAddresses([])
+    setUseCustomShippingAddress(false)
+  }
+
+  const handleSavedShippingAddressChange = (value) => {
+    if (value === '__custom__') {
+      setUseCustomShippingAddress(true)
+      updateActiveSession({ shippingAddress: '' })
+      return
+    }
+    setUseCustomShippingAddress(false)
+    updateActiveSession({ shippingAddress: value })
   }
 
   return (
@@ -699,11 +911,11 @@ function PosPage() {
               key={tab.id}
               role="button"
               tabIndex={0}
-              onClick={() => setActiveTabId(tab.id)}
+              onClick={() => patchWorkspace({ activeTabId: tab.id })}
               onKeyDown={(event) => {
                 if (event.key === 'Enter' || event.key === ' ') {
                   event.preventDefault()
-                  setActiveTabId(tab.id)
+                  patchWorkspace({ activeTabId: tab.id })
                 }
               }}
               className={`flex items-center gap-1.5 rounded-t-lg px-4 py-1.5 text-sm font-medium transition-colors ${
@@ -1040,10 +1252,48 @@ function PosPage() {
               ) : null}
               {!hasCustomerSelected ? (
                 <p className="mt-2 text-xs font-medium text-[#ba1a1a]">
-                  Bắt buộc chọn hoặc tạo khách hàng trước khi thanh toán.
                 </p>
               ) : null}
             </div>
+
+            {isTakeaway ? (
+              <div className="rounded-xl bg-white p-3 shadow-sm">
+                <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[#717971]" htmlFor="shipping-address">
+                  Địa chỉ giao hàng
+                </label>
+                {isLoadingShippingAddresses ? (
+                  <p className="text-xs text-[#717971]">Đang tải địa chỉ đã giao...</p>
+                ) : null}
+                {!isLoadingShippingAddresses && savedShippingAddresses.length > 0 ? (
+                  <select
+                    id="shipping-address-select"
+                    className="mb-2 w-full rounded-lg border border-[#c1c9c0] bg-[#fbf9f1] px-3 py-2 text-sm outline-none focus:border-[#356647] focus:ring-2 focus:ring-[#356647]/20"
+                    value={useCustomShippingAddress ? '__custom__' : shippingAddress}
+                    onChange={(event) => handleSavedShippingAddressChange(event.target.value)}
+                  >
+                    {savedShippingAddresses.map((addr) => (
+                      <option key={addr} value={addr}>
+                        {addr.length > 72 ? `${addr.slice(0, 72)}…` : addr}
+                      </option>
+                    ))}
+                    <option value="__custom__">Nhập địa chỉ khác...</option>
+                  </select>
+                ) : null}
+                {(useCustomShippingAddress || savedShippingAddresses.length === 0) && !isLoadingShippingAddresses ? (
+                  <textarea
+                    id="shipping-address"
+                    rows={3}
+                    className="w-full resize-none rounded-lg border border-[#c1c9c0] bg-[#fbf9f1] px-3 py-2 text-sm outline-none focus:border-[#356647] focus:ring-2 focus:ring-[#356647]/20"
+                    placeholder="Số nhà, phường, quận, tỉnh..."
+                    value={shippingAddress}
+                    onChange={(event) => updateActiveSession({ shippingAddress: event.target.value })}
+                  />
+                ) : null}
+                {!hasShippingAddress && !isLoadingShippingAddresses ? (
+                  <p className="mt-2 text-xs font-medium text-[#ba1a1a]">Vui lòng chọn hoặc nhập địa chỉ giao.</p>
+                ) : null}
+              </div>
+            ) : null}
 
             <div className="rounded-xl bg-white p-3 shadow-sm">
               <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[#717971]">Chiết khấu đơn</label>
@@ -1053,10 +1303,11 @@ function PosPage() {
                     type="number"
                     min={0}
                     max={100}
-                    className="w-full rounded-lg border border-[#c1c9c0] py-2 pl-3 pr-7 text-sm outline-none focus:border-[#356647]"
-                    value={orderDiscountPercent || ''}
+                    disabled={usesFixedOrderDiscount}
+                    className="w-full rounded-lg border border-[#c1c9c0] py-2 pl-3 pr-7 text-sm outline-none focus:border-[#356647] disabled:bg-slate-50 disabled:text-slate-400"
+                    value={usesFixedOrderDiscount ? '' : orderDiscountPercent || ''}
                     onChange={(event) => updateOrderDiscountPercent(event.target.value)}
-                    placeholder="0"
+                    placeholder={usesFixedOrderDiscount ? '—' : '0'}
                   />
                   <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-[#717971]">%</span>
                 </div>
@@ -1068,6 +1319,16 @@ function PosPage() {
                   Tùy chỉnh
                 </button>
               </div>
+              {usesFixedOrderDiscount ? (
+                <p className="mt-2 text-xs font-semibold text-[#356647]">
+                  CK cố định: -{formatMoney(orderDiscountAmount)} đ
+                </p>
+              ) : null}
+              {isTakeaway ? (
+                <p className="mt-2 text-xs text-[#717971]">
+                  Bấm thành tiền từng SP để CK dòng. Tổng đơn gửi COD/VietQR đã trừ CK.
+                </p>
+              ) : null}
             </div>
 
             <div className="rounded-xl bg-white p-4 shadow-sm">
@@ -1092,7 +1353,9 @@ function PosPage() {
                   ) : null}
                   {orderDiscountAmount > 0 ? (
                     <div className="flex justify-between text-[#356647]">
-                      <span>CK đơn ({orderDiscountPercent}%)</span>
+                      <span>
+                        {usesFixedOrderDiscount ? 'CK đơn (VNĐ)' : `CK đơn (${orderDiscountPercent}%)`}
+                      </span>
                       <span>-{formatMoney(orderDiscountAmount)} đ</span>
                     </div>
                   ) : null}
@@ -1108,7 +1371,16 @@ function PosPage() {
               ) : null}
             </div>
 
-            {!isTransferPayment ? (
+            {isTakeaway && paymentMethod === 'COD' ? (
+              <div className="rounded-xl border border-orange-200 bg-orange-50 p-4 text-sm text-[#414942]">
+                <p className="font-semibold text-orange-800">Thanh toán COD</p>
+                <p className="mt-1 text-[#717971]">
+                  Khách thanh toán khi nhận hàng. Đơn xuất hiện tại mục Đơn COD để nhân viên giao và xác nhận thu tiền.
+                </p>
+              </div>
+            ) : null}
+
+            {!isTakeaway && !isTransferPayment ? (
               <>
                 <div className="rounded-xl bg-white p-4 shadow-sm">
                   <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[#717971]" htmlFor="amount-paid">
@@ -1171,17 +1443,17 @@ function PosPage() {
                   ) : null}
                 </div>
               </>
-            ) : (
+            ) : isTransferPayment ? (
               <div className="rounded-xl border border-[#356647]/20 bg-[#356647]/5 p-4 text-sm text-[#414942]">
                 <p className="font-semibold text-[#356647]">Thanh toán chuyển khoản</p>
                 <p className="mt-1 text-[#717971]">Bấm Thanh toán để hiển thị mã QR cho khách quét.</p>
               </div>
-            )}
+            ) : null}
 
             <div className="rounded-xl bg-white p-4 shadow-sm">
               <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[#717971]">Phương thức thanh toán</label>
               <div className="space-y-1.5">
-                {PAYMENT_METHODS.map((method) => (
+                {paymentMethods.map((method) => (
                   <button
                     key={method.id}
                     type="button"
@@ -1202,14 +1474,8 @@ function PosPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-2 border-t border-[#c1c9c0] p-3">
-            <button
-              type="button"
-              className="flex flex-col items-center justify-center rounded-xl bg-[#ffdead] py-3 text-sm font-bold text-[#604100] shadow-sm hover:brightness-95"
-            >
-              <span className="text-[10px] opacity-70">F10</span>
-              Lưu tạm
-            </button>
+          <div className="grid grid-cols-1 gap-2 border-t border-[#c1c9c0] p-3">
+        
             <button
               type="button"
               disabled={!canPay}
@@ -1217,11 +1483,44 @@ function PosPage() {
               className="flex flex-col items-center justify-center rounded-xl bg-[#356647] py-3 text-sm font-bold text-white shadow-md hover:brightness-110 disabled:opacity-50"
             >
               <span className="text-[10px] opacity-70">F12</span>
-              {isSubmitting ? 'Dang xu ly...' : isTransferPayment ? 'Thanh toán · QR' : 'Thanh toán'}
+              {isSubmitting
+                ? 'Dang xu ly...'
+                : isTakeaway
+                  ? paymentMethod === 'TRANSFER'
+                    ? 'Tạo đơn · QR'
+                    : 'Tạo đơn COD'
+                  : isTransferPayment
+                    ? 'Thanh toán · QR'
+                    : 'Thanh toán'}
             </button>
           </div>
         </section>
       </div>
+
+      <footer className="shrink-0 border-t border-[#c1c9c0]/60 bg-[#f6f4ec] px-4 py-3">
+        <div className="grid grid-cols-2 gap-2">
+          {SALES_MODES.map((mode) => (
+            <button
+              key={mode.id}
+              type="button"
+              onClick={() => {
+                setSalesMode(mode.id)
+                setOpenDiscountSku(null)
+              }}
+              className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-bold transition-colors ${
+                salesMode === mode.id
+                  ? 'bg-[#356647] text-white shadow-md shadow-[#356647]/25'
+                  : 'border border-[#c1c9c0] bg-white text-[#414942] hover:bg-[#e4e3db]'
+              }`}
+            >
+              <Icon className="text-[22px]" filled={salesMode === mode.id}>
+                {mode.icon}
+              </Icon>
+              {mode.label}
+            </button>
+          ))}
+        </div>
+      </footer>
 
       <AddCustomerModal
         isOpen={openModal === 'customer'}
@@ -1233,9 +1532,19 @@ function PosPage() {
       />
       <OrderOfferModal
         isOpen={openModal === 'offer'}
+        initialPercent={orderDiscountPercent}
+        initialFixedAmount={orderDiscountAmountFixed}
         onClose={() => setOpenModal(null)}
-        onConfirm={(percent) => {
-          updateActiveSession({ orderDiscountPercent: percent })
+        onConfirm={({ percent, fixedAmount }) => {
+          const fixed = Math.max(0, Math.round(Number(fixedAmount) || 0))
+          if (fixed > 0) {
+            updateActiveSession({ orderDiscountPercent: 0, orderDiscountAmountFixed: fixed })
+          } else {
+            updateActiveSession({
+              orderDiscountPercent: Math.min(100, Math.max(0, Number(percent) || 0)),
+              orderDiscountAmountFixed: 0,
+            })
+          }
           setOpenModal(null)
         }}
       />

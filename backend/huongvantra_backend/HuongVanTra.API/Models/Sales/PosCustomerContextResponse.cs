@@ -12,6 +12,13 @@ namespace HuongVanTra.API.Models.Sales {
         public decimal OutstandingBalance { get; set; }
         public List<PosCustomerOrderHistoryItemResponse> RecentOrders { get; set; } = new();
         public List<PosCustomerDebtOrderItemResponse> UnpaidOrders { get; set; } = new();
+        public List<PosCustomerShippingAddressResponse> ShippingAddresses { get; set; } = new();
+    }
+
+    public class PosCustomerShippingAddressResponse {
+        public string Address { get; set; } = string.Empty;
+        public DateTime? LastUsedAt { get; set; }
+        public bool IsProfileAddress { get; set; }
     }
 
     public class PosCustomerOrderHistoryItemResponse {

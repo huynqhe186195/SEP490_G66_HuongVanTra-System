@@ -379,13 +379,16 @@ namespace HuongVanTra.Service.Sales {
         }
 
         private async Task ApplyTransferQrAsync(Order order, PosOrderResult result) {
+            var posDuration = _sepaySettings.PosVaDurationSeconds > 0 ? _sepaySettings.PosVaDurationSeconds : 300;
             var sepayVa = await _sepayOrderVaService.CreateOrderVaForTransferAsync(
                 order.OrderCode,
-                order.TotalAmount);
+                order.TotalAmount,
+                posDuration);
 
-            order.Notes = SepayOrderNotes.Build(sepayVa.VaNumber, sepayVa.SepayOrderId);
+            order.Notes = SepayOrderNotes.Build(sepayVa.VaNumber, order.TotalAmount, sepayVa.SepayOrderId, posDuration);
             result.TransferAccountNumber = sepayVa.VaNumber;
             result.PaymentMode = sepayVa.PaymentMode;
+            result.QrExpiresAtUtc = sepayVa.ExpiresAtUtc;
 
             if (!string.IsNullOrWhiteSpace(sepayVa.QrImageUrl)) {
                 result.QrImageUrl = sepayVa.QrImageUrl;

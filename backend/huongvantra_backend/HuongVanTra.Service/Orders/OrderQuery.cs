@@ -3,6 +3,7 @@ namespace HuongVanTra.Service.Orders {
         public string? Search { get; set; }
         public string? OrderStatus { get; set; }
         public string? PaymentStatus { get; set; }
+        public string? PaymentMethod { get; set; }
         public DateTime? FromDate { get; set; }
         public DateTime? ToDate { get; set; }
         public int Page { get; set; } = 1;

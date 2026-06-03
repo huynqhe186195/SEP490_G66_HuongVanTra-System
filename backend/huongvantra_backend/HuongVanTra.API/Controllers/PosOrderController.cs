@@ -230,6 +230,8 @@ namespace HuongVanTra.API.Controllers {
                 });
             }
 
+            var shippingAddresses = BuildCustomerShippingAddresses(customer, orders);
+
             var recentOrders = orders
                 .Take(20)
                 .Select(o => {
@@ -269,7 +271,44 @@ namespace HuongVanTra.API.Controllers {
                 OutstandingBalance = outstandingBalance,
                 RecentOrders = recentOrders,
                 UnpaidOrders = unpaidOrders,
+                ShippingAddresses = shippingAddresses,
             });
+        }
+
+        private static List<PosCustomerShippingAddressResponse> BuildCustomerShippingAddresses(
+            HuongVanTra.Core.Entities.Customers.Customer customer,
+            IReadOnlyList<HuongVanTra.Core.Entities.Sales.Order> orders) {
+            var lastUsedByAddress = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var order in orders) {
+                var address = order.ShippingAddress?.Trim();
+                if (string.IsNullOrWhiteSpace(address)) {
+                    continue;
+                }
+
+                if (!lastUsedByAddress.TryGetValue(address, out var lastUsed) || order.CreatedAt > lastUsed) {
+                    lastUsedByAddress[address] = order.CreatedAt;
+                }
+            }
+
+            var profileAddress = customer.Address?.Trim();
+            var hasProfileInOrders = !string.IsNullOrWhiteSpace(profileAddress)
+                && lastUsedByAddress.ContainsKey(profileAddress);
+
+            if (!string.IsNullOrWhiteSpace(profileAddress) && !hasProfileInOrders) {
+                lastUsedByAddress[profileAddress] = DateTime.MinValue;
+            }
+
+            return lastUsedByAddress
+                .OrderByDescending(kv => kv.Value == DateTime.MinValue ? DateTime.MinValue : kv.Value)
+                .Take(20)
+                .Select(kv => new PosCustomerShippingAddressResponse {
+                    Address = kv.Key,
+                    LastUsedAt = kv.Value == DateTime.MinValue ? null : kv.Value,
+                    IsProfileAddress = !string.IsNullOrWhiteSpace(profileAddress)
+                        && string.Equals(kv.Key, profileAddress, StringComparison.OrdinalIgnoreCase),
+                })
+                .ToList();
         }
 
         [HttpGet("products")]
@@ -576,6 +615,7 @@ namespace HuongVanTra.API.Controllers {
             TransferContent = result.TransferContent,
             TransferAccountNumber = result.TransferAccountNumber,
             PaymentMode = result.PaymentMode,
+            QrExpiresAtUtc = result.QrExpiresAtUtc,
             InvoiceCode     = result.InvoiceCode,
             CreatedAt     = result.CreatedAt,
             Items         = result.Items.Select(i => new PosOrderItemResponse {

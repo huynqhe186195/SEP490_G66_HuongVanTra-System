@@ -236,6 +236,7 @@ namespace HuongVanTra.API.Controllers {
             CashierId       = cashierId,
             CustomerId      = request.CustomerId,
             PromotionId     = request.PromotionId,
+            ManualDiscount  = request.ManualDiscount,
             PaymentMethod   = paymentMethod,
             ShippingAddress = request.ShippingAddress,
             Items           = request.Items.Select(i => new OrderItemCommand {
@@ -260,6 +261,9 @@ namespace HuongVanTra.API.Controllers {
             QrPayload     = result.QrPayload,
             QrImageUrl    = result.QrImageUrl,
             TransferContent = result.TransferContent,
+            TransferAccountNumber = result.TransferAccountNumber,
+            PaymentMode = result.PaymentMode,
+            QrExpiresAtUtc = result.QrExpiresAtUtc,
             CreatedAt     = result.CreatedAt,
             Items         = result.Items.Select(i => new PosOrderItemResponse {
                 ProductId   = i.ProductId,

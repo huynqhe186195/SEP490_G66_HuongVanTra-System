@@ -24,6 +24,7 @@ namespace HuongVanTra.API.Controllers {
             [FromQuery] string? search,
             [FromQuery] string? orderStatus,
             [FromQuery] string? paymentStatus,
+            [FromQuery] string? paymentMethod,
             [FromQuery] DateTime? fromDate,
             [FromQuery] DateTime? toDate,
             [FromQuery] int page = 1,
@@ -33,6 +34,7 @@ namespace HuongVanTra.API.Controllers {
                 Search = search,
                 OrderStatus = orderStatus,
                 PaymentStatus = paymentStatus,
+                PaymentMethod = paymentMethod,
                 FromDate = fromDate,
                 ToDate = toDate,
                 Page = page,
@@ -102,6 +104,48 @@ namespace HuongVanTra.API.Controllers {
                 return Ok(order);
             }
             catch (ArgumentException ex) {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Tạo QR/VietQR theo tổng tiền hiện tại (sau khi sửa sản phẩm).
+        /// </summary>
+        [HttpGet("{id:int}/payment-qr")]
+        public async Task<ActionResult<OrderPaymentQrDto>> GetPaymentQr(
+            int id,
+            [FromQuery] bool force = false,
+            CancellationToken cancellationToken = default) {
+            try {
+                var qr = await _orderService.GetOrderPaymentQrAsync(id, force, cancellationToken);
+                if (qr is null) {
+                    return NotFound("Order not found.");
+                }
+
+                return Ok(qr);
+            }
+            catch (InvalidOperationException ex) {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        [HttpPut("{id:int}/items")]
+        public async Task<ActionResult<OrderDetailDto>> UpdateItems(
+            int id,
+            [FromBody] UpdateOrderItemsRequest request,
+            CancellationToken cancellationToken) {
+            try {
+                var order = await _orderService.UpdateOrderItemsAsync(id, request, cancellationToken);
+                if (order is null) {
+                    return NotFound("Order not found.");
+                }
+
+                return Ok(order);
+            }
+            catch (ArgumentException ex) {
+                return BadRequest(ex.Message);
+            }
+            catch (InvalidOperationException ex) {
                 return BadRequest(ex.Message);
             }
         }

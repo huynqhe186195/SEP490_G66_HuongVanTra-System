@@ -14,6 +14,7 @@ namespace HuongVanTra.Service.Orders {
         public string? PaymentMethod { get; set; }
         public string OrderStatus { get; set; } = string.Empty;
         public string PaymentStatus { get; set; } = string.Empty;
+        public string? ShippingAddress { get; set; }
         public decimal TotalAmount { get; set; }
         public DateTime CreatedAt { get; set; }
     }
@@ -21,10 +22,38 @@ namespace HuongVanTra.Service.Orders {
     public class OrderItemDto {
         public int Id { get; set; }
         public int ProductId { get; set; }
+        public string ProductName { get; set; } = string.Empty;
         public string ProductSku { get; set; } = string.Empty;
+        public decimal UnitPrice { get; set; }
         public decimal Quantity { get; set; }
         public decimal LineTotal { get; set; }
         public bool IsGift { get; set; }
+    }
+
+    public class UpdateOrderItemLineRequest {
+        public int ProductId { get; set; }
+        public decimal Quantity { get; set; }
+        public byte IsGift { get; set; }
+    }
+
+    public class UpdateOrderItemsRequest {
+        public List<UpdateOrderItemLineRequest> Items { get; set; } = new();
+    }
+
+    public class OrderPaymentQrDto {
+        public int OrderId { get; set; }
+        public string OrderCode { get; set; } = string.Empty;
+        public decimal TotalAmount { get; set; }
+        public string PaymentMethod { get; set; } = string.Empty;
+        public string? QrPayload { get; set; }
+        public string? QrImageUrl { get; set; }
+        public string? TransferContent { get; set; }
+        public string? TransferAccountNumber { get; set; }
+        public string PaymentMode { get; set; } = "vietqr_main";
+        public bool ReusedExistingVa { get; set; }
+        public bool CreatedNewVa { get; set; }
+        public string? Hint { get; set; }
+        public DateTime? QrExpiresAtUtc { get; set; }
     }
 
     public class OrderPromotionDto {
@@ -57,6 +86,8 @@ namespace HuongVanTra.Service.Orders {
         public string CashierName { get; set; } = string.Empty;
         public string OrderStatus { get; set; } = string.Empty;
         public string PaymentStatus { get; set; } = string.Empty;
+        public string PaymentMethod { get; set; } = string.Empty;
+        public string? ShippingAddress { get; set; }
         public string StockStatus { get; set; } = string.Empty;
         public decimal SubTotal { get; set; }
         public decimal CouponDiscount { get; set; }
@@ -91,6 +122,7 @@ namespace HuongVanTra.Service.Orders {
         public decimal? ManualDiscount { get; set; }
         public decimal? DeductAmount { get; set; }
         public string? Notes { get; set; }
+        public string? ShippingAddress { get; set; }
         public bool RequestStockDeduct { get; set; }
     }
 }

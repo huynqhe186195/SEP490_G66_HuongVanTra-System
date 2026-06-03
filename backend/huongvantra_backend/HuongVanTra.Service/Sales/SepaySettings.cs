@@ -27,7 +27,11 @@ namespace HuongVanTra.Service.Sales {
         /// <summary>VA cố định tạo sẵn trên dashboard (fallback nếu chưa bật API).</summary>
         public string StaticVaNumber { get; set; } = "";
 
+        /// <summary>Thời hạn VA khi xem lại QR / đơn online (giây).</summary>
         public int VaDurationSeconds { get; set; } = 86400;
+
+        /// <summary>POS / mang đi — khách quét tại quầy (mặc định 5 phút).</summary>
+        public int PosVaDurationSeconds { get; set; } = 300;
 
         /// <summary>Không dùng QR VietQR vào TK chính — bắt buộc VA SePay (BIDV).</summary>
         public bool RequireSepayVaForTransfer { get; set; } = true;
