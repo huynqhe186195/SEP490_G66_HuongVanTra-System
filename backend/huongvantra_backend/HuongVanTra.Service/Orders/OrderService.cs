@@ -159,6 +159,8 @@ namespace HuongVanTra.Service.Orders {
                 return null;
             }
 
+            OrderAccessScope.EnsureEditable(order);
+
             order.OrderStatus = request.OrderStatus.Trim().ToLowerInvariant();
 
             if (!string.IsNullOrWhiteSpace(request.PaymentStatus)) {
@@ -190,6 +192,8 @@ namespace HuongVanTra.Service.Orders {
             if (order is null || !OrderAccessScope.CanAccess(order, access)) {
                 return null;
             }
+
+            OrderAccessScope.EnsureEditable(order);
 
             if (string.Equals(order.PaymentStatus, PaymentStatus.Paid, StringComparison.OrdinalIgnoreCase)) {
                 throw new InvalidOperationException("Cannot apply coupon after payment is completed.");
@@ -228,6 +232,8 @@ namespace HuongVanTra.Service.Orders {
                 return null;
             }
 
+            OrderAccessScope.EnsureEditable(order);
+
             var product = await _dbContext.Products
                 .FirstOrDefaultAsync(p => p.Id == request.ProductId, cancellationToken);
             if (product is null) {
@@ -264,6 +270,8 @@ namespace HuongVanTra.Service.Orders {
             if (order is null || !OrderAccessScope.CanAccess(order, access)) {
                 return null;
             }
+
+            OrderAccessScope.EnsureEditable(order);
 
             if (request.ManualDiscount.HasValue) {
                 if (request.ManualDiscount.Value < 0) {
@@ -408,14 +416,7 @@ namespace HuongVanTra.Service.Orders {
         }
 
         private static void EnsureOrderItemsEditable(Order order) {
-            var status = order.OrderStatus.Trim().ToLowerInvariant();
-            if (status is "cancelled" or "completed") {
-                throw new InvalidOperationException("Cannot change items on a cancelled or completed order.");
-            }
-
-            if (string.Equals(order.PaymentStatus, PaymentStatus.Paid, StringComparison.OrdinalIgnoreCase)) {
-                throw new InvalidOperationException("Cannot change items after payment is completed.");
-            }
+            OrderAccessScope.EnsureEditable(order);
         }
 
         private static List<UpdateOrderItemLineRequest> NormalizeItemLines(List<UpdateOrderItemLineRequest> items) {
@@ -458,6 +459,8 @@ namespace HuongVanTra.Service.Orders {
             if (order is null || !OrderAccessScope.CanAccess(order, access)) {
                 return null;
             }
+
+            OrderAccessScope.EnsureEditable(order);
 
             if (string.Equals(order.PaymentStatus, PaymentStatus.Paid, StringComparison.OrdinalIgnoreCase)) {
                 throw new InvalidOperationException("Order is already paid.");

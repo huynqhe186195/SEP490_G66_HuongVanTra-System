@@ -136,11 +136,20 @@ export function canConfirmCod(order) {
   return payment !== 'paid' && orderStatus !== 'cancelled' && orderStatus !== 'completed'
 }
 
-export function canEditOrderItems(order) {
-  if (!order) return false
-  const payment = String(order.paymentStatus || '').toLowerCase()
+export function isOrderLockedForEditing(order) {
+  if (!order) return true
   const orderStatus = String(order.orderStatus || '').toLowerCase()
-  if (payment === 'paid') return false
-  if (orderStatus === 'cancelled' || orderStatus === 'completed') return false
+  const paymentStatus = String(order.paymentStatus || '').toLowerCase()
+  const stockStatus = String(order.stockStatus || '').toLowerCase()
+  if (orderStatus === 'cancelled') return true
+  return orderStatus === 'completed' && paymentStatus === 'paid' && stockStatus === 'deducted'
+}
+
+export function canEditOrderItems(order) {
+  if (!order || isOrderLockedForEditing(order)) return false
   return true
+}
+
+export function canModifyOrder(order, hasEditPermission = true) {
+  return Boolean(hasEditPermission && order && !isOrderLockedForEditing(order))
 }

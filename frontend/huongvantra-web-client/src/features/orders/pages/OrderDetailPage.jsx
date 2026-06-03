@@ -24,6 +24,7 @@ import StockDeductPreviewModal from '../../inventory/components/StockDeductPrevi
 import {
   canConfirmCod,
   canEditOrderItems,
+  canModifyOrder,
   formatVnd,
   getOrderChannelLabel,
   getOrderStatusClass,
@@ -35,6 +36,7 @@ import {
   getStockStatusClass,
   getStockStatusLabel,
   isCodOrder,
+  isOrderLockedForEditing,
   ORDER_STATUS_OPTIONS,
   PAYMENT_STATUS_OPTIONS,
   STOCK_STATUS_OPTIONS,
@@ -76,9 +78,13 @@ function OrderDetailPage() {
   const [stockPreviewOpen, setStockPreviewOpen] = useState(false)
 
   const canEditOrder = orderAccess.canEdit !== false
-  const itemsEditable = useMemo(
-    () => canEditOrder && canEditOrderItems(order),
+  const canModifyOrderFields = useMemo(
+    () => canModifyOrder(order, canEditOrder),
     [order, canEditOrder],
+  )
+  const itemsEditable = useMemo(
+    () => canModifyOrderFields && canEditOrderItems(order),
+    [order, canModifyOrderFields],
   )
 
   const syncEditLinesFromOrder = (data) => {
@@ -392,14 +398,14 @@ function OrderDetailPage() {
   const cod = order && isCodOrder(order)
   const showCodActions = order && cod && canManageCod && canConfirmCod(order)
   const canConfirmPayment =
-    canEditOrder &&
+    canModifyOrderFields &&
     order &&
     !cod &&
     String(order.paymentStatus).toLowerCase() !== 'paid' &&
     String(order.orderStatus).toLowerCase() !== 'cancelled'
 
   const canApplyCoupon =
-    canEditOrder &&
+    canModifyOrderFields &&
     order &&
     String(order.paymentStatus).toLowerCase() !== 'paid' &&
     String(order.orderStatus).toLowerCase() !== 'cancelled'
@@ -511,7 +517,12 @@ function OrderDetailPage() {
 
             {!canEditOrder ? (
               <p className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                Bạn chỉ được xem đơn hàng do mình tạo. Liên hệ quản lý chi nhánh nếu cần chỉnh sửa.
+                Quản lý chi nhánh chỉ được xem đơn hàng, không được chỉnh sửa.
+              </p>
+            ) : null}
+            {canEditOrder && isOrderLockedForEditing(order) ? (
+              <p className="mb-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                Đơn đã hoàn tất, đã thu tiền và đã xuất kho — không thể chỉnh sửa.
               </p>
             ) : null}
 
@@ -689,9 +700,14 @@ function OrderDetailPage() {
                     ))}
                   </tbody>
                 </table>
-                {!itemsEditable && order?.paymentStatus?.toLowerCase() === 'paid' ? (
+                {!itemsEditable && isOrderLockedForEditing(order) ? (
                   <p className="mt-2 px-1 text-xs text-slate-500">
-                    Đơn đã thu tiền — không thể đổi sản phẩm tại đây. Tạo đơn mới tại POS nếu cần bổ sung.
+                    Đơn đã hoàn tất — không thể đổi sản phẩm. Tạo đơn mới tại POS nếu cần bổ sung.
+                  </p>
+                ) : null}
+                {!itemsEditable && !isOrderLockedForEditing(order) && order?.paymentStatus?.toLowerCase() === 'paid' ? (
+                  <p className="mt-2 px-1 text-xs text-slate-500">
+                    Đơn đã thu tiền — chỉnh sửa sản phẩm sẽ khóa khi đơn hoàn tất và đã xuất kho.
                   </p>
                 ) : null}
               </div>
@@ -717,6 +733,8 @@ function OrderDetailPage() {
           </section>
 
           <div className="space-y-6">
+            {canModifyOrderFields ? (
+            <>
             <section className="rounded-[1.5rem] bg-white p-6 shadow-sm">
               <h2 className="mb-4 text-lg font-bold text-slate-800">Chỉnh sửa trạng thái</h2>
               <div className="space-y-3">
@@ -871,6 +889,8 @@ function OrderDetailPage() {
                 </button>
               </div>
             </section>
+            </>
+            ) : null}
 
             {showStockDeductBlock ? (
               <section className="rounded-[1.5rem] bg-white p-6 shadow-sm">

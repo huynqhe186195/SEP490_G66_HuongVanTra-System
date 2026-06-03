@@ -42,7 +42,7 @@ namespace HuongVanTra.Service.Orders {
                     Mode = OrderAccessMode.Store,
                     StoreId = storeId,
                     EmployeeId = employeeId,
-                    CanEdit = true,
+                    CanEdit = false,
                 };
             }
 
@@ -50,7 +50,7 @@ namespace HuongVanTra.Service.Orders {
                 return new OrderAccessScope {
                     Mode = OrderAccessMode.Own,
                     EmployeeId = employeeId,
-                    CanEdit = false,
+                    CanEdit = true,
                 };
             }
 
