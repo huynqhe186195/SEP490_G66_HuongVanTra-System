@@ -44,7 +44,7 @@ function Cart({ items, total, onAddCustomerClick, onAddOfferClick }) {
         </div>
         <input
           type="text"
-          placeholder="Tìm kiếm khách hàng...."
+          placeholder="Tìm kiếm khách hàng..."
           className="w-full rounded-xl border-none bg-gray-50 py-3 pl-10 pr-10 text-sm focus:ring-[#B5D5B0]"
         />
         <button

@@ -60,9 +60,9 @@ const topProducts = [
 ]
 
 const channelRows = [
-  { icon: 'store', label: 'Tai cua hang', percent: 52, colorClass: 'bg-[#7e5700]', textClass: 'text-[#7e5700]' },
+  { icon: 'store', label: 'Tại cửa hàng', percent: 52, colorClass: 'bg-[#7e5700]', textClass: 'text-[#7e5700]' },
   { icon: 'chat', label: 'Zalo / Facebook', percent: 34, colorClass: 'bg-[#356647]', textClass: 'text-[#356647]' },
-  { icon: 'phone_in_talk', label: 'Goi dien', percent: 14, colorClass: 'bg-[#4a6242]', textClass: 'text-[#4a6242]' },
+  { icon: 'phone_in_talk', label: 'Gọi điện', percent: 14, colorClass: 'bg-[#4a6242]', textClass: 'text-[#4a6242]' },
 ]
 
 const revenueBars = ['h-2/3', 'h-3/4', 'h-1/2', 'h-full', 'h-4/5', 'h-2/3']
@@ -74,32 +74,32 @@ function ReportsOverviewPage() {
       <PageHeader
         title="Báo cáo doanh thu"
         description="Tổng quan doanh thu, lợi nhuận, kênh bán và top sản phẩm"
-        searchPlaceholder="Search reports, sales..."
+        searchPlaceholder="Tìm báo cáo, doanh số..."
       />
 
       <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-[#c1c9c0]/30 bg-white p-3 shadow-sm">
         <Link to="/reports" className="rounded-full bg-[#356647] px-4 py-2 text-xs font-semibold text-white">
-          Tong quan
+          Tổng quan
         </Link>
         <Link to="/reports/customers" className="rounded-full bg-[#eae8e0] px-4 py-2 text-xs font-semibold text-[#414942]">
-          Khach hang
+          Khách hàng
         </Link>
       </div>
 
       <section className="rounded-[24px] border border-[#c1c9c0]/30 bg-white p-6 shadow-sm">
         <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-4">
           <article className="md:col-span-2 rounded-xl border-l-4 border-[#356647] bg-[#ffffff] p-5 shadow-sm">
-            <p className="text-sm text-[#414942]">Tong Doanh Thu (Thang nay)</p>
+            <p className="text-sm text-[#414942]">Tổng doanh thu (tháng này)</p>
             <h2 className="mt-2 text-4xl font-bold text-[#356647]">1.284.500.000d</h2>
             <div className="mt-4 flex items-center gap-2 text-sm">
               <span className="material-symbols-outlined text-[#356647]">trending_up</span>
               <span className="font-bold text-[#356647]">+12.5%</span>
-              <span className="text-[#717971]">so voi thang truoc</span>
+              <span className="text-[#717971]">so với tháng trước</span>
             </div>
           </article>
 
           <article className="rounded-xl border-l-4 border-[#4a6242] bg-[#ffffff] p-5 shadow-sm">
-            <p className="text-sm text-[#414942]">Bien Loi Nhuan</p>
+            <p className="text-sm text-[#414942]">Biên lợi nhuận</p>
             <div className="relative mx-auto mt-3 h-24 w-24">
               <svg className="h-full w-full -rotate-90" viewBox="0 0 100 100">
                 <circle cx="50" cy="50" r="40" fill="none" stroke="currentColor" strokeWidth="8" className="text-[#e4e3db]" />
@@ -122,23 +122,23 @@ function ReportsOverviewPage() {
           <article className="rounded-xl bg-[#627b59] p-5 text-[#f8ffef] shadow-sm">
             <div className="mb-3 flex items-center gap-2">
               <span className="material-symbols-outlined">receipt_long</span>
-              <span className="text-sm font-semibold">Don hang moi</span>
+              <span className="text-sm font-semibold">Đơn hàng mới</span>
             </div>
             <p className="text-3xl font-bold">4,832</p>
-            <p className="mt-1 text-xs opacity-85">Dang xu ly: 42 don</p>
+            <p className="mt-1 text-xs opacity-85">Đang xử lý: 42 đơn</p>
           </article>
         </div>
 
         <div className="mb-6 grid grid-cols-1 gap-4 xl:grid-cols-3">
           <section className="xl:col-span-2 rounded-xl bg-[#ffffff] p-5 shadow-sm">
             <div className="mb-6 flex items-center justify-between">
-              <h3 className="text-xl font-semibold text-[#1b1c17]">Xu Huong Doanh Thu</h3>
+              <h3 className="text-xl font-semibold text-[#1b1c17]">Xu hướng doanh thu</h3>
               <div className="flex gap-2 text-xs font-semibold">
                 <button type="button" className="rounded-full bg-[#4e7f5e] px-3 py-1 text-white">
-                  Tuan
+                  Tuần
                 </button>
                 <button type="button" className="rounded-full bg-[#f0eee6] px-3 py-1 text-[#717971]">
-                  Thang
+                  Tháng
                 </button>
               </div>
             </div>
@@ -169,7 +169,7 @@ function ReportsOverviewPage() {
           </section>
 
           <section className="rounded-xl bg-[#ffffff] p-5 shadow-sm">
-            <h3 className="mb-5 text-xl font-semibold text-[#1b1c17]">Kenh Ban Hang</h3>
+            <h3 className="mb-5 text-xl font-semibold text-[#1b1c17]">Kênh bán hàng</h3>
             <div className="space-y-5">
               {channelRows.map((channel) => (
                 <div key={channel.label} className="space-y-2">
@@ -187,16 +187,16 @@ function ReportsOverviewPage() {
               ))}
             </div>
             <div className="mt-6 rounded-lg border border-[#fec25b]/30 bg-[#fec25b]/15 p-3 text-xs italic text-[#744f00]">
-              Luot mua qua Zalo tang 12% so voi tuan truoc nho chien dich Tra Thu.
+              Lượt mua qua Zalo tăng 12% so với tuần trước nhờ chiến dịch Trà Thu.
             </div>
           </section>
         </div>
 
         <section className="overflow-hidden rounded-xl bg-[#ffffff] p-5 shadow-sm">
           <div className="mb-5 flex items-center justify-between">
-            <h3 className="text-xl font-semibold text-[#1b1c17]">Top 5 San Pham Ban Chay</h3>
+            <h3 className="text-xl font-semibold text-[#1b1c17]">Top 5 sản phẩm bán chạy</h3>
             <Link to="/products" className="text-sm font-semibold text-[#356647] hover:underline">
-              Xem tat ca
+              Xem tất cả
             </Link>
           </div>
 
@@ -204,11 +204,11 @@ function ReportsOverviewPage() {
             <table className="w-full border-collapse text-left text-sm">
               <thead>
                 <tr className="border-b border-[#c1c9c0] text-xs uppercase tracking-wide text-[#717971]">
-                  <th className="pb-4 pl-2">San pham</th>
-                  <th className="pb-4">Phan loai</th>
-                  <th className="pb-4 text-center">So luong</th>
+                  <th className="pb-4 pl-2">Sản phẩm</th>
+                  <th className="pb-4">Phân loại</th>
+                  <th className="pb-4 text-center">Số lượng</th>
                   <th className="pb-4 text-right">Doanh thu</th>
-                  <th className="pb-4 pr-2 text-right">Xu huong</th>
+                  <th className="pb-4 pr-2 text-right">Xu hướng</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#e4e3db]">

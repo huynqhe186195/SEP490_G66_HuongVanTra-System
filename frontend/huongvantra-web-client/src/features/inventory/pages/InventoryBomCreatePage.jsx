@@ -121,7 +121,7 @@ function InventoryBomCreatePage() {
       <PageHeader
         title={isEditMode ? `Chỉnh sửa BOM ${bomId}` : 'Tạo BOM mới'}
         description="Định nghĩa công thức, nguyên liệu và quy trình pha chế cho sản phẩm"
-        searchPlaceholder={isEditMode ? `Edit BOM ${bomId}` : 'Recipe Definition (BOM)'}
+        searchPlaceholder={isEditMode ? `Sửa BOM ${bomId}` : 'Định nghĩa công thức (BOM)'}
       />
 
       <div className="grid flex-1 grid-cols-1 gap-4 lg:grid-cols-[1fr_380px]">
@@ -132,14 +132,14 @@ function InventoryBomCreatePage() {
                 <span className="material-symbols-outlined">liquor</span>
               </div>
               <div>
-                <h3 className="text-xl font-semibold text-[#1b1c17]">Target Product</h3>
-                <p className="text-sm text-[#414942]">Select the final beverage to define its recipe</p>
+                <h3 className="text-xl font-semibold text-[#1b1c17]">Sản phẩm đích</h3>
+                <p className="text-sm text-[#414942]">Chọn đồ uống thành phẩm để định nghĩa công thức</p>
               </div>
             </div>
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <label className="space-y-2">
-                <span className="ml-1 text-xs font-semibold text-[#717971]">Product Name</span>
+                <span className="ml-1 text-xs font-semibold text-[#717971]">Tên sản phẩm</span>
                 <select
                   className="w-full rounded-xl border-none bg-[#f0eee6] p-4 text-base font-bold focus:ring-2 focus:ring-[#356647]/20"
                   value={productName}
@@ -153,7 +153,7 @@ function InventoryBomCreatePage() {
               </label>
 
               <label className="space-y-2">
-                <span className="ml-1 text-xs font-semibold text-[#717971]">BOM Version</span>
+                <span className="ml-1 text-xs font-semibold text-[#717971]">Phiên bản BOM</span>
                 <input
                   className="w-full rounded-xl border-none bg-[#f0eee6] p-4 text-base focus:ring-2 focus:ring-[#356647]/20"
                   value={bomVersion}
@@ -170,7 +170,7 @@ function InventoryBomCreatePage() {
                 <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#fec25b] text-[#744f00]">
                   <span className="material-symbols-outlined">cooking</span>
                 </div>
-                <h3 className="text-xl font-semibold text-[#1b1c17]">Ingredients List</h3>
+                <h3 className="text-xl font-semibold text-[#1b1c17]">Danh sách nguyên liệu</h3>
               </div>
 
               <button
@@ -179,7 +179,7 @@ function InventoryBomCreatePage() {
                 onClick={addIngredient}
               >
                 <span className="material-symbols-outlined text-[20px]">add</span>
-                <span className="text-xs">Add Item</span>
+                <span className="text-xs">Thêm dòng</span>
               </button>
             </div>
 
@@ -187,7 +187,7 @@ function InventoryBomCreatePage() {
               {ingredientRows.map((row, index) => (
                 <div key={`${row.ingredient}-${index}`} className="group flex items-center gap-4 rounded-xl border border-transparent bg-[#f6f4ec] p-4 transition-all hover:border-[#c1c9c0]">
                   <div className="min-w-0 flex-1">
-                    <label className="mb-1 block text-xs font-semibold text-[#717971]">Ingredient</label>
+                    <label className="mb-1 block text-xs font-semibold text-[#717971]">Nguyên liệu</label>
                     <select
                       className="w-full rounded-lg border-none bg-[#eae8e0]/70 p-2 text-sm font-bold focus:ring-1 focus:ring-[#356647]"
                       value={row.ingredient}
@@ -200,7 +200,7 @@ function InventoryBomCreatePage() {
                   </div>
 
                   <div className="w-24">
-                    <label className="mb-1 block text-xs font-semibold text-[#717971]">Qty</label>
+                    <label className="mb-1 block text-xs font-semibold text-[#717971]">SL</label>
                     <input
                       className="w-full rounded-lg border-none bg-[#eae8e0]/70 p-2 text-center text-sm focus:ring-1 focus:ring-[#356647]"
                       min="0"
@@ -211,7 +211,7 @@ function InventoryBomCreatePage() {
                   </div>
 
                   <div className="w-20">
-                    <label className="mb-1 block text-xs font-semibold text-[#717971]">Unit</label>
+                    <label className="mb-1 block text-xs font-semibold text-[#717971]">ĐVT</label>
                     <select
                       className="w-full rounded-lg border-none bg-[#eae8e0]/70 p-2 text-center text-sm focus:ring-1 focus:ring-[#356647]"
                       value={row.unit}
@@ -224,7 +224,7 @@ function InventoryBomCreatePage() {
                   </div>
 
                   <div className="w-32 text-right">
-                    <label className="mb-1 block text-xs font-semibold text-[#717971]">Est. Cost</label>
+                    <label className="mb-1 block text-xs font-semibold text-[#717971]">Chi phí dự kiến</label>
                     <p className="py-2 text-sm font-bold">{formatVnd(row.cost)}</p>
                   </div>
 
@@ -241,14 +241,14 @@ function InventoryBomCreatePage() {
 
             <div className="mt-6 flex items-end justify-between border-t border-[#c1c9c0] pt-6">
               <div>
-                <p className="text-xs font-semibold text-[#717971]">Total Ingredients Cost</p>
+                <p className="text-xs font-semibold text-[#717971]">Tổng chi phí nguyên liệu</p>
                 <p className="mt-1 text-2xl font-bold text-[#356647]">
                   {formatVnd(totalCost)} <span className="text-sm font-medium text-[#414942]">/ unit</span>
                 </p>
               </div>
 
               <div className="rounded-full bg-[#eae8e0] px-3 py-1 text-xs font-bold text-[#414942]">
-                Recommended SRP: 45,000 VND
+                Giá bán đề xuất: 45.000 VND
               </div>
             </div>
           </section>
@@ -258,7 +258,7 @@ function InventoryBomCreatePage() {
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#ceebc1] text-[#0a2007]">
                 <span className="material-symbols-outlined">format_list_numbered</span>
               </div>
-              <h3 className="text-xl font-semibold text-[#1b1c17]">Instruction Steps</h3>
+              <h3 className="text-xl font-semibold text-[#1b1c17]">Các bước pha chế</h3>
             </div>
 
             <div className="space-y-4">
@@ -267,7 +267,7 @@ function InventoryBomCreatePage() {
                   <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#c1c9c0] font-bold text-[#1b1c17]">{index + 1}</div>
                   <textarea
                     className="w-full rounded-xl border-none bg-[#f0eee6] p-4 text-sm focus:ring-2 focus:ring-[#356647]/20"
-                    placeholder="Describe this preparation step..."
+                    placeholder="Mô tả bước pha chế này..."
                     rows={2}
                     value={step}
                     onChange={(event) => updateStep(index, event.target.value)}
@@ -277,7 +277,7 @@ function InventoryBomCreatePage() {
 
               <button type="button" className="ml-12 inline-flex items-center gap-2 text-sm font-bold text-[#356647] hover:underline" onClick={addStep}>
                 <span className="material-symbols-outlined text-[20px]">add_circle</span>
-                Add New Step
+                Thêm bước
               </button>
             </div>
           </section>

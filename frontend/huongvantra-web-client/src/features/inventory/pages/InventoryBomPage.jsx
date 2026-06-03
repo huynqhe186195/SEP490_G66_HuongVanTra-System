@@ -46,7 +46,7 @@ function InventoryBomPage() {
       <PageHeader
         title="BOM / Công thức"
         description="Quản lý công thức sản phẩm, trạng thái và lần cập nhật gần nhất"
-        searchPlaceholder="Search BOM by code or product name..."
+        searchPlaceholder="Tìm BOM theo mã hoặc tên sản phẩm..."
       />
 
       <section className="rounded-[24px] border border-[#c1c9c0]/30 bg-white p-6 shadow-sm">
@@ -153,13 +153,13 @@ function InventoryBomPage() {
                     </td>
                     <td className="px-6 py-5 text-right">
                       <div className="flex justify-end gap-2">
-                        <button type="button" className="rounded-lg p-2 transition-colors hover:bg-[#eae8e0]" title="View Details">
+                        <button type="button" className="rounded-lg p-2 transition-colors hover:bg-[#eae8e0]" title="Xem chi tiết">
                           <span className="material-symbols-outlined text-[#414942]">visibility</span>
                         </button>
-                        <Link to={`/inventory/bom/${row.code}/edit`} className="rounded-lg p-2 transition-colors hover:bg-[#eae8e0]" title="Edit BOM">
+                        <Link to={`/inventory/bom/${row.code}/edit`} className="rounded-lg p-2 transition-colors hover:bg-[#eae8e0]" title="Sửa BOM">
                           <span className="material-symbols-outlined text-[#414942]">edit</span>
                         </Link>
-                        <button type="button" className="rounded-lg p-2 text-[#ba1a1a] transition-colors hover:bg-[#ffdad6]" title="Delete">
+                        <button type="button" className="rounded-lg p-2 text-[#ba1a1a] transition-colors hover:bg-[#ffdad6]" title="Xóa">
                           <span className="material-symbols-outlined">delete</span>
                         </button>
                       </div>

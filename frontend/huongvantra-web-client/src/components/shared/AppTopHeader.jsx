@@ -4,7 +4,7 @@ import { enrichSessionWithAccess, me, refresh } from '../../features/auth/servic
 import { loadAuthSession, saveAuthSession } from '../../features/auth/services/authSession.js'
 import PageHeader from './PageHeader.jsx'
 
-function AppTopHeader({ searchPlaceholder = 'Tim kiem...', rightContent = null }) {
+function AppTopHeader({ searchPlaceholder = 'Tìm kiếm...', rightContent = null }) {
   const navigate = useNavigate()
   const [authSession, setAuthSession] = useState(() => loadAuthSession())
   const [currentUser, setCurrentUser] = useState(null)

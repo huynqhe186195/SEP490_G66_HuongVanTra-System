@@ -35,7 +35,7 @@ function ModuleRouteGuard({ session, isLoadingAccess, children }) {
   if (isLoadingAccess) {
     return (
       <div className="flex flex-1 items-center justify-center text-sm text-[#707a72]">
-        Dang kiem tra quyen truy cap...
+        Đang kiểm tra quyền truy cập...
       </div>
     )
   }

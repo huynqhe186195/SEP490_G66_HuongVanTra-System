@@ -19,13 +19,13 @@ async function parseResponseError(response) {
   }
 
   const text = await response.text().catch(() => '')
-  return text.trim() || 'Co loi xay ra.'
+  return text.trim() || 'Có lỗi xảy ra.'
 }
 
 async function requestWithAuth(path, options = {}) {
   const session = loadAuthSession()
   if (!session?.accessToken) {
-    throw new Error('Phien dang nhap da het han. Vui long dang nhap lai.')
+    throw new Error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.')
   }
 
   const response = await fetch(`${getApiBaseUrl()}${path}`, {
