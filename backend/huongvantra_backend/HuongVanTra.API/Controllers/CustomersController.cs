@@ -20,7 +20,11 @@ namespace HuongVanTra.API.Controllers {
             [FromQuery] string? customerType,
             [FromQuery] string? status,
             [FromQuery] int? tierId,
-            [FromQuery] int? assignedEmployeeId) {
+            [FromQuery] int? assignedEmployeeId,
+            [FromQuery] bool? hasDebt,
+            [FromQuery] decimal? minDebt,
+            [FromQuery] string? sortBy,
+            [FromQuery] string? sortOrder) {
             var accessContext = await GetAccessContextAsync();
             if (accessContext is null) {
                 return Unauthorized("User not found.");
@@ -32,7 +36,11 @@ namespace HuongVanTra.API.Controllers {
                 status,
                 tierId,
                 assignedEmployeeId,
-                accessContext);
+                accessContext,
+                hasDebt: hasDebt,
+                minDebt: minDebt,
+                sortBy: sortBy,
+                sortOrder: sortOrder);
 
             return Ok(customers);
         }
@@ -185,6 +193,45 @@ namespace HuongVanTra.API.Controllers {
 
         private static bool CanManageCustomerStatus(CustomerAccessContext accessContext) {
             return accessContext.IsAdmin || accessContext.IsAgencyManager;
+        }
+
+        [HttpGet("with-debt")]
+        public async Task<ActionResult<List<CustomerListItemResponse>>> GetCustomersWithDebt(
+            [FromQuery] decimal minDebt = 0,
+            [FromQuery] string? sortOrder = "desc") {
+            var accessContext = await GetAccessContextAsync();
+            if (accessContext is null) {
+                return Unauthorized("User not found.");
+            }
+
+            var customers = await _customerService.GetCustomersAsync(
+                keyword: null,
+                customerType: null,
+                status: "ACTIVE",
+                tierId: null,
+                assignedEmployeeId: null,
+                accessContext,
+                hasDebt: true,
+                minDebt: minDebt,
+                sortBy: "debt",
+                sortOrder: sortOrder ?? "desc");
+
+            return Ok(customers);
+        }
+
+        [HttpPost("{id:int}/reconcile-debt")]
+        public async Task<ActionResult> ReconcileCustomerDebt(int id) {
+            var accessContext = await GetAccessContextAsync();
+            if (accessContext is null) {
+                return Unauthorized("User not found.");
+            }
+
+            if (!accessContext.IsAdmin) {
+                return Forbid();
+            }
+
+            await _customerService.RecalculateCustomerDebtAsync(id);
+            return Ok(new { message = "Debt reconciled successfully." });
         }
     }
 }

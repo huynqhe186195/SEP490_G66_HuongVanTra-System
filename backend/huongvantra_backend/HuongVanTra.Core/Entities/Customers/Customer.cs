@@ -17,6 +17,7 @@ namespace HuongVanTra.Core.Entities.Customers {
         public int? AssignedEmployeeId { get; set; }
 
         public decimal TotalSpend { get; set; } = 0;
+        public decimal CurrentDebt { get; set; } = 0;
 
         public MembershipTier? Tier { get; set; }
         public Employee? AssignedEmployee { get; set; }

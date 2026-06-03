@@ -1,6 +1,7 @@
 using HuongVanTra.Core.Entities.Sales;
 using HuongVanTra.Core.Entities.System;
 using HuongVanTra.Infrastructure.Data;
+using HuongVanTra.Service.Customers;
 using HuongVanTra.Service.Sales.Models;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
@@ -15,9 +16,11 @@ namespace HuongVanTra.Service.Sales {
         };
 
         private readonly AppDbContext _db;
+        private readonly ICustomerService _customerService;
 
-        public OrderConfirmationService(AppDbContext db) {
+        public OrderConfirmationService(AppDbContext db, ICustomerService customerService) {
             _db = db;
+            _customerService = customerService;
         }
 
         public async Task<OrderConfirmationResult> ConfirmPaymentAsync(
@@ -48,6 +51,11 @@ namespace HuongVanTra.Service.Sales {
 
                 var invoice = PaymentWebhookService.CreateInvoice(order, command.EmployeeId, confirmedAt);
                 _db.Invoices.Add(invoice);
+
+                // Giảm công nợ khi confirm payment
+                if (order.CustomerId.HasValue) {
+                    await _customerService.UpdateCustomerDebtAsync(order.CustomerId.Value, -order.TotalAmount, _db);
+                }
 
                 _db.AuditLogs.Add(new AuditLog {
                     Action = "confirm_payment",
@@ -100,6 +108,11 @@ namespace HuongVanTra.Service.Sales {
 
                 var invoice = PaymentWebhookService.CreateInvoice(order, employeeId, confirmedAt);
                 _db.Invoices.Add(invoice);
+
+                // Giảm công nợ khi COD hoàn tất
+                if (order.CustomerId.HasValue) {
+                    await _customerService.UpdateCustomerDebtAsync(order.CustomerId.Value, -order.TotalAmount, _db);
+                }
 
                 _db.AuditLogs.Add(new AuditLog {
                     Action = "confirm_cod_completed",

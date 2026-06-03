@@ -12,5 +12,6 @@ namespace HuongVanTra.Service.Customers {
         public int? AssignedEmployeeId { get; set; }
         public string? AssignedEmployeeName { get; set; }
         public decimal TotalSpend { get; set; }
+        public decimal CurrentDebt { get; set; }
     }
 }

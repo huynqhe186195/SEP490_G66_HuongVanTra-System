@@ -3,6 +3,7 @@ using HuongVanTra.Core.Entities.Inventory;
 using HuongVanTra.Core.Entities.Sales;
 using HuongVanTra.Core.Entities.System;
 using HuongVanTra.Infrastructure.Data;
+using HuongVanTra.Service.Customers;
 using HuongVanTra.Service.Sales.Models;
 using HuongVanTra.Service.Common;
 using Microsoft.EntityFrameworkCore;
@@ -16,18 +17,21 @@ namespace HuongVanTra.Service.Sales {
         private readonly IVietQrService _vietQrService;
         private readonly ISepayOrderVaService _sepayOrderVaService;
         private readonly SepaySettings _sepaySettings;
+        private readonly ICustomerService _customerService;
 
         public OnlineOrderService(
             AppDbContext db,
             IOrderConfirmationService orderConfirmationService,
             IVietQrService vietQrService,
             ISepayOrderVaService sepayOrderVaService,
-            IOptions<SepaySettings> sepayOptions) {
+            IOptions<SepaySettings> sepayOptions,
+            ICustomerService customerService) {
             _db = db;
             _orderConfirmationService = orderConfirmationService;
             _vietQrService = vietQrService;
             _sepayOrderVaService = sepayOrderVaService;
             _sepaySettings = sepayOptions.Value;
+            _customerService = customerService;
         }
 
         public async Task<OnlineOrderResult> CreateVietQrOrderAsync(CreateOnlineOrderCommand command) {
@@ -57,6 +61,12 @@ namespace HuongVanTra.Service.Sales {
 
                 await CreateStockDeductQueueAsync(command, order.Id);
                 await UpdateCustomerSpendAsync(command.CustomerId, order.TotalAmount);
+
+                // Tạo công nợ cho VietQR order vì PaymentStatus = pending_payment
+                if (command.CustomerId.HasValue) {
+                    await _customerService.UpdateCustomerDebtAsync(command.CustomerId.Value, order.TotalAmount, _db);
+                }
+
                 await WriteAuditLogAsync("create", "orders", order.Id, command.CashierId, command.StoreId);
 
                 var result = ToResult(order);
@@ -97,6 +107,12 @@ namespace HuongVanTra.Service.Sales {
 
                 await DeductStockImmediatelyForCodAsync(command, order, command.CashierId);
                 await UpdateCustomerSpendAsync(command.CustomerId, order.TotalAmount);
+
+                // Tạo công nợ cho COD order vì PaymentStatus = unpaid
+                if (command.CustomerId.HasValue) {
+                    await _customerService.UpdateCustomerDebtAsync(command.CustomerId.Value, order.TotalAmount, _db);
+                }
+
                 await WriteAuditLogAsync("create", "orders", order.Id, command.CashierId, command.StoreId);
 
                 await _db.SaveChangesAsync();
@@ -411,6 +427,12 @@ namespace HuongVanTra.Service.Sales {
                 order.StockStatus  = "cancelled";
                 order.UpdatedAt    = cancelledAt;
 
+                // Giảm công nợ nếu đơn chưa thanh toán
+                if (order.CustomerId.HasValue &&
+                    (order.PaymentStatus == "unpaid" || order.PaymentStatus == "pending_payment")) {
+                    await _customerService.UpdateCustomerDebtAsync(order.CustomerId.Value, -order.TotalAmount, _db);
+                }
+
                 _db.AuditLogs.Add(new AuditLog {
                     Action     = "cod_rejected",
                     EntityType = "orders",
@@ -638,6 +660,11 @@ namespace HuongVanTra.Service.Sales {
 
                 var invoice = PaymentWebhookService.CreateInvoice(order, employeeId, confirmedAt);
                 _db.Invoices.Add(invoice);
+
+                // Giảm công nợ khi VietQR được đánh dấu đã thanh toán
+                if (order.CustomerId.HasValue) {
+                    await _customerService.UpdateCustomerDebtAsync(order.CustomerId.Value, -order.TotalAmount, _db);
+                }
 
                 _db.AuditLogs.Add(new AuditLog {
                     Action     = "vietqr_mark_paid",

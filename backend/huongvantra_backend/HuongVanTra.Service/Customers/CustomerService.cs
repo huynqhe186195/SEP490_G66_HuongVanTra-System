@@ -2,6 +2,7 @@ using HuongVanTra.Core.Entities.Customers;
 using HuongVanTra.Core.Entities.Identity;
 using HuongVanTra.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace HuongVanTra.Service.Customers {
     public class CustomerService : ICustomerService {
@@ -49,7 +50,11 @@ namespace HuongVanTra.Service.Customers {
             int? tierId,
             int? assignedEmployeeId,
             CustomerAccessContext accessContext,
-            bool forPos = false) {
+            bool forPos = false,
+            bool? hasDebt = null,
+            decimal? minDebt = null,
+            string? sortBy = null,
+            string? sortOrder = null) {
             var query = _dbContext.Customers
                 .AsNoTracking()
                 .Include(c => c.Tier)
@@ -92,8 +97,25 @@ namespace HuongVanTra.Service.Customers {
                 query = query.Where(c => c.AssignedEmployeeId == assignedEmployeeId.Value);
             }
 
-            return await query
-                .OrderBy(c => c.FullName)
+            if (hasDebt.HasValue && hasDebt.Value) {
+                query = query.Where(c => c.CurrentDebt > 0);
+            }
+
+            if (minDebt.HasValue) {
+                query = query.Where(c => c.CurrentDebt >= minDebt.Value);
+            }
+
+            IOrderedQueryable<Customer> orderedQuery = sortBy?.ToLowerInvariant() switch {
+                "debt" => sortOrder?.ToLowerInvariant() == "desc"
+                    ? query.OrderByDescending(c => c.CurrentDebt)
+                    : query.OrderBy(c => c.CurrentDebt),
+                "totalspend" => sortOrder?.ToLowerInvariant() == "desc"
+                    ? query.OrderByDescending(c => c.TotalSpend)
+                    : query.OrderBy(c => c.TotalSpend),
+                _ => query.OrderBy(c => c.FullName)
+            };
+
+            return await orderedQuery
                 .Select(c => new CustomerListItemResponse {
                     CustomerId = c.Id,
                     CustomerCode = c.CustomerCode,
@@ -106,7 +128,8 @@ namespace HuongVanTra.Service.Customers {
                     TierCode = c.Tier != null ? c.Tier.TierCode : null,
                     AssignedEmployeeId = c.AssignedEmployeeId,
                     AssignedEmployeeName = c.AssignedEmployee != null ? c.AssignedEmployee.FullName : null,
-                    TotalSpend = c.TotalSpend
+                    TotalSpend = c.TotalSpend,
+                    CurrentDebt = c.CurrentDebt
                 })
                 .ToListAsync();
         }
@@ -227,6 +250,10 @@ namespace HuongVanTra.Service.Customers {
                 if (hasUnfinishedOrders) {
                     return CustomerResult.Failure("Cannot deactivate customer because there are unfinished orders.");
                 }
+
+                if (customer.CurrentDebt > 0) {
+                    return CustomerResult.Failure($"Cannot deactivate customer because they have outstanding debt of {customer.CurrentDebt:N0} VNĐ.");
+                }
             }
 
             customer.Status = status;
@@ -234,6 +261,33 @@ namespace HuongVanTra.Service.Customers {
 
             var updatedCustomer = await GetCustomerEntityAsync(customer.Id);
             return CustomerResult.Success(MapDetail(updatedCustomer!));
+        }
+
+        public async Task UpdateCustomerDebtAsync(int customerId, decimal debtChange, AppDbContext? transactionContext = null) {
+            var context = transactionContext ?? _dbContext;
+            var customer = await context.Customers.FirstOrDefaultAsync(c => c.Id == customerId);
+            if (customer is null) return;
+
+            customer.CurrentDebt += debtChange;
+            if (customer.CurrentDebt < 0)
+                customer.CurrentDebt = 0;
+
+            if (transactionContext is null)
+                await _dbContext.SaveChangesAsync();
+        }
+
+        public async Task RecalculateCustomerDebtAsync(int customerId) {
+            var totalDebt = await _dbContext.Orders
+                .Where(o => o.CustomerId == customerId
+                    && (o.PaymentStatus == "pending_payment" || o.PaymentStatus == "unpaid")
+                    && o.OrderStatus != "cancelled")
+                .SumAsync(o => (decimal?)o.TotalAmount) ?? 0;
+
+            var customer = await _dbContext.Customers.FirstOrDefaultAsync(c => c.Id == customerId);
+            if (customer is null) return;
+
+            customer.CurrentDebt = totalDebt;
+            await _dbContext.SaveChangesAsync();
         }
 
         public async Task<CustomerPurchaseHistoryResult> GetPurchaseHistoryAsync(int id, CustomerAccessContext accessContext) {
@@ -338,7 +392,8 @@ namespace HuongVanTra.Service.Customers {
                         EmployeeCode = customer.AssignedEmployee.EmployeeCode,
                         FullName = customer.AssignedEmployee.FullName
                     },
-                TotalSpend = customer.TotalSpend
+                TotalSpend = customer.TotalSpend,
+                CurrentDebt = customer.CurrentDebt
             };
         }
 

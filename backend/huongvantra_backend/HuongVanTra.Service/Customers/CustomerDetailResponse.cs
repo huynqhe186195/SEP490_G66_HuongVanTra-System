@@ -11,6 +11,7 @@ namespace HuongVanTra.Service.Customers {
         public CustomerTierResponse? Tier { get; set; }
         public CustomerAssignedEmployeeResponse? AssignedEmployee { get; set; }
         public decimal TotalSpend { get; set; }
+        public decimal CurrentDebt { get; set; }
     }
 
     public class CustomerTierResponse {

@@ -16,6 +16,7 @@ namespace HuongVanTra.Infrastructure.Configurations.Customers {
             builder.Property(x => x.Address).HasMaxLength(255);
             builder.Property(x => x.Status).HasMaxLength(20).IsRequired().HasDefaultValue("ACTIVE");
             builder.Property(x => x.TotalSpend).HasColumnType("decimal(18,2)");
+            builder.Property(x => x.CurrentDebt).HasColumnType("decimal(18,2)").HasDefaultValue(0);
 
             // Quan hệ 1-N: MembershipTier -> Customers
             builder.HasOne(c => c.Tier)

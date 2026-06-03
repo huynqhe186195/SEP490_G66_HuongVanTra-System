@@ -12,8 +12,8 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace HuongVanTra.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260602181423_AddInvoiceTable")]
-    partial class AddInvoiceTable
+    [Migration("20260603154427_AddCustomerCurrentDebt")]
+    partial class AddCustomerCurrentDebt
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
