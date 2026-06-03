@@ -33,6 +33,16 @@ export function getInitials(name) {
     .join('')
 }
 
+export function isVipCustomerType(customerType) {
+  const normalized = String(customerType || '').toUpperCase()
+  return normalized === 'VIP' || normalized === 'VVIP'
+}
+
+export function supportsMembershipTierForCustomerType(customerType) {
+  const normalized = String(customerType || '').toUpperCase()
+  return normalized === 'GENERAL' || normalized === 'RETAIL'
+}
+
 export function getTierClass(tierCode) {
   const code = (tierCode || '').toUpperCase()
   if (code.includes('GOLD')) return 'bg-[#fec25b] text-[#744f00]'

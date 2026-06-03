@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
+import PageShell from '../../../components/shared/PageShell.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { assignStaffRoles, fetchRoleOptions, fetchStaffAccount, updateStaffAccount } from '../services/staffApi.js'
 
@@ -103,7 +104,7 @@ function StaffDetailPage() {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-6 [font-family:'Manrope',sans-serif]">
+    <PageShell className="[font-family:'Manrope',sans-serif]">
       <PageHeader
         title="Chi tiết nhân viên"
         description="Xem và chỉnh sửa thông tin tài khoản, quyền truy cập và lịch sử đăng nhập"
@@ -255,7 +256,7 @@ function StaffDetailPage() {
          
         </div>
       </section>
-    </div>
+    </PageShell>
   )
 }
 

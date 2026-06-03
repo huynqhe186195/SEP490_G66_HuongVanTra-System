@@ -1,3 +1,4 @@
+using HuongVanTra.Core.Entities.Customers;
 using HuongVanTra.Core.Entities.Inventory;
 using HuongVanTra.Core.Entities.Sales;
 using HuongVanTra.Core.Entities.System;
@@ -178,7 +179,11 @@ namespace HuongVanTra.Service.Sales {
             var customer = await _db.Customers
                 .Include(c => c.Tier)
                 .FirstOrDefaultAsync(c => c.Id == customerId);
-            return customer?.Tier?.DiscountPercent ?? 0;
+            if (customer is null || !CustomerTypeRules.SupportsMembershipTier(customer.CustomerType)) {
+                return 0;
+            }
+
+            return customer.Tier?.DiscountPercent ?? 0;
         }
 
         private static Order BuildOrder(
@@ -337,7 +342,11 @@ namespace HuongVanTra.Service.Sales {
 
             customer.TotalSpend += amount;
 
-            // Auto-upgrade to highest qualifying tier
+            if (!CustomerTypeRules.SupportsMembershipTier(customer.CustomerType)) {
+                return;
+            }
+
+            // Auto-upgrade to highest qualifying tier (chỉ khách phổ thông)
             var bestTier = await _db.MembershipTiers
                 .Where(t => t.MinTotalSpend <= customer.TotalSpend)
                 .OrderByDescending(t => t.MinTotalSpend)

@@ -1,6 +1,7 @@
 using HuongVanTra.API.Extensions;
 using HuongVanTra.API.Models.Sales;
 using HuongVanTra.Core.Authorization;
+using HuongVanTra.Core.Entities.Customers;
 using HuongVanTra.Infrastructure.Data;
 using HuongVanTra.Service.Customers;
 using HuongVanTra.Service.Sales;
@@ -116,9 +117,12 @@ namespace HuongVanTra.API.Controllers {
                 CustomerId = c.CustomerId,
                 CustomerCode = c.CustomerCode,
                 FullName = c.FullName,
+                CustomerType = c.CustomerType,
                 Phone = c.Phone,
-                TierCode = c.TierCode,
-                TierDiscountPercent = c.TierDiscountPercent,
+                TierCode = CustomerTypeRules.SupportsMembershipTier(c.CustomerType) ? c.TierCode : null,
+                TierDiscountPercent = CustomerTypeRules.SupportsMembershipTier(c.CustomerType)
+                    ? c.TierDiscountPercent
+                    : 0,
                 CurrentDebt = c.CurrentDebt,
             }).ToList());
         }
@@ -158,9 +162,14 @@ namespace HuongVanTra.API.Controllers {
                 CustomerId = result.Customer.CustomerId,
                 CustomerCode = result.Customer.CustomerCode,
                 FullName = result.Customer.FullName,
+                CustomerType = result.Customer.CustomerType,
                 Phone = result.Customer.Phone,
-                TierCode = result.Customer.Tier?.TierCode,
-                TierDiscountPercent = result.Customer.Tier?.DiscountPercent ?? 0,
+                TierCode = CustomerTypeRules.SupportsMembershipTier(result.Customer.CustomerType)
+                    ? result.Customer.Tier?.TierCode
+                    : null,
+                TierDiscountPercent = CustomerTypeRules.SupportsMembershipTier(result.Customer.CustomerType)
+                    ? result.Customer.Tier?.DiscountPercent ?? 0
+                    : 0,
                 CurrentDebt = result.Customer.CurrentDebt,
             });
         }
@@ -257,9 +266,15 @@ namespace HuongVanTra.API.Controllers {
                 Phone = customer.Phone,
                 Email = customer.Email,
                 Address = customer.Address,
-                TierCode = customer.Tier?.TierCode,
-                TierId = customer.TierId,
-                TierDiscountPercent = customer.Tier?.DiscountPercent ?? 0,
+                TierCode = CustomerTypeRules.SupportsMembershipTier(customer.CustomerType)
+                    ? customer.Tier?.TierCode
+                    : null,
+                TierId = CustomerTypeRules.SupportsMembershipTier(customer.CustomerType)
+                    ? customer.TierId
+                    : null,
+                TierDiscountPercent = CustomerTypeRules.SupportsMembershipTier(customer.CustomerType)
+                    ? customer.Tier?.DiscountPercent ?? 0
+                    : 0,
                 TotalSpend = customer.TotalSpend,
                 CurrentDebt = customer.CurrentDebt,
                 OutstandingBalance = outstandingBalance,

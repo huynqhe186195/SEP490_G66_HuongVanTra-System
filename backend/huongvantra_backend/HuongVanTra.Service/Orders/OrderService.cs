@@ -189,6 +189,10 @@ namespace HuongVanTra.Service.Orders {
                 return null;
             }
 
+            if (string.Equals(order.PaymentStatus, PaymentStatus.Paid, StringComparison.OrdinalIgnoreCase)) {
+                throw new InvalidOperationException("Cannot apply coupon after payment is completed.");
+            }
+
             var promoCode = request.PromoCode.Trim().ToUpperInvariant();
             var promotion = await _dbContext.OrderPromotions
                 .FirstOrDefaultAsync(p => p.PromoCode.ToUpper() == promoCode, cancellationToken);
@@ -845,15 +849,16 @@ namespace HuongVanTra.Service.Orders {
         private static void RecalculateTotals(Order order) {
             order.SubTotal = order.OrderItems.Sum(i => i.LineTotal);
 
+            var afterManual = Math.Max(0, order.SubTotal - order.ManualDiscount - order.DeductAmount);
+
             order.CouponDiscount = 0;
             if (order.Promotion is not null) {
                 order.CouponDiscount = order.Promotion.DiscountType.Equals("FIXED", StringComparison.OrdinalIgnoreCase)
-                    ? order.Promotion.DiscountValue
-                    : Math.Round(order.SubTotal * order.Promotion.DiscountValue / 100m, 2);
+                    ? Math.Min(order.Promotion.DiscountValue, afterManual)
+                    : Math.Round(afterManual * order.Promotion.DiscountValue / 100m, 2);
             }
 
-            var total = order.SubTotal - order.CouponDiscount - order.ManualDiscount - order.DeductAmount;
-            order.TotalAmount = total < 0 ? 0 : total;
+            order.TotalAmount = Math.Max(0, afterManual - order.CouponDiscount);
         }
 
         private static OrderDetailDto MapToDetail(Order order) {

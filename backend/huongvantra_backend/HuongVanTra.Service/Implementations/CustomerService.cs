@@ -27,7 +27,7 @@ namespace HuongVanTra.Service.Implementations {
             }).ToList();
         }
 
-        // put: upgrade membership tier manually (VIP)
+        // put: manual tier upgrade — chỉ khách phổ thông; VIP không được gán hạng.
         public async Task<bool> UpgradeTierManuallyAsync(UpgradeTierRequestDto dto) {
             await _unitOfWork.BeginTransactionAsync();
             try {
@@ -39,6 +39,10 @@ namespace HuongVanTra.Service.Implementations {
                 if (customer == null)
                     throw new Exception("Không tìm thấy khách hàng.");
 
+                if (CustomerTypeRules.IsVip(customer.CustomerType) || !CustomerTypeRules.SupportsMembershipTier(customer.CustomerType)) {
+                    throw new InvalidOperationException("Khách VIP không được gán hạng thành viên.");
+                }
+
                 var newTier = await tierRepo.GetByIdAsync(dto.NewTierId);
                 if (newTier == null)
                     throw new Exception("Hạng thẻ không tồn tại.");
@@ -46,7 +50,6 @@ namespace HuongVanTra.Service.Implementations {
                 var oldTierId = customer.TierId;
 
                 customer.TierId = dto.NewTierId;
-                customer.CustomerType = "VIP";
                 customerRepo.Update(customer);
 
                 var auditLog = new AuditLog {
@@ -54,8 +57,8 @@ namespace HuongVanTra.Service.Implementations {
                     Action = "MANUAL_UPGRADE_TIER",
                     EntityType = "Customer",
                     EntityId = customer.Id,
-                    OldValues = JsonSerializer.Serialize(new { TierId = oldTierId, CustomerType = "RETAIL" }),
-                    NewValues = JsonSerializer.Serialize(new { TierId = dto.NewTierId, CustomerType = "VIP" }),
+                    OldValues = JsonSerializer.Serialize(new { TierId = oldTierId }),
+                    NewValues = JsonSerializer.Serialize(new { TierId = dto.NewTierId }),
                     Status = "SUCCESS",
                     CreatedAt = DateTime.UtcNow.AddHours(7)
                 };
@@ -81,7 +84,9 @@ namespace HuongVanTra.Service.Implementations {
                     .OrderByDescending(t => t.MinTotalSpend)
                     .ToListAsync();
 
-                var normalCustomers = await customerRepo.FindAsync(c => c.CustomerType != "VIP" && c.Status == "ACTIVE");
+                var normalCustomers = await customerRepo.FindAsync(c =>
+                    c.Status == "ACTIVE" &&
+                    (c.CustomerType == "GENERAL" || c.CustomerType == "RETAIL"));
 
                 var oneYearAgo = DateTime.UtcNow.AddHours(7).AddYears(-1);
 

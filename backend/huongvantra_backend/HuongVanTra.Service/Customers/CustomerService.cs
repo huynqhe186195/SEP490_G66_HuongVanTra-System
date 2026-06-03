@@ -135,9 +135,13 @@ namespace HuongVanTra.Service.Customers {
                     Phone = c.Phone,
                     Email = c.Email,
                     Status = c.Status,
-                    TierId = c.TierId,
-                    TierCode = c.Tier != null ? c.Tier.TierCode : null,
-                    TierDiscountPercent = c.Tier != null ? c.Tier.DiscountPercent : 0,
+                    TierId = CustomerTypeRules.SupportsMembershipTier(c.CustomerType) ? c.TierId : null,
+                    TierCode = CustomerTypeRules.SupportsMembershipTier(c.CustomerType) && c.Tier != null
+                        ? c.Tier.TierCode
+                        : null,
+                    TierDiscountPercent = CustomerTypeRules.SupportsMembershipTier(c.CustomerType) && c.Tier != null
+                        ? c.Tier.DiscountPercent
+                        : 0,
                     AssignedEmployeeId = c.AssignedEmployeeId,
                     AssignedEmployeeName = c.AssignedEmployee != null ? c.AssignedEmployee.FullName : null,
                     TotalSpend = c.TotalSpend,
@@ -238,6 +242,9 @@ namespace HuongVanTra.Service.Customers {
             customer.Email = NormalizeOptional(request.Email);
             customer.Address = NormalizeOptional(request.Address);
             customer.TierId = tierResolution.TierId;
+            if (!CustomerTypeRules.SupportsMembershipTier(customerType) && customer.TierId.HasValue) {
+                customer.TierId = null;
+            }
             customer.AssignedEmployeeId = request.AssignedEmployeeId;
 
             await _dbContext.SaveChangesAsync();
@@ -389,14 +396,14 @@ namespace HuongVanTra.Service.Customers {
                 Email = customer.Email,
                 Address = customer.Address,
                 Status = customer.Status,
-                Tier = customer.Tier is null
-                    ? null
-                    : new CustomerTierResponse {
+                Tier = CustomerTypeRules.SupportsMembershipTier(customer.CustomerType) && customer.Tier is not null
+                    ? new CustomerTierResponse {
                         TierId = customer.Tier.Id,
                         TierCode = customer.Tier.TierCode,
                         MinTotalSpend = customer.Tier.MinTotalSpend,
                         DiscountPercent = customer.Tier.DiscountPercent
-                    },
+                    }
+                    : null,
                 AssignedEmployee = customer.AssignedEmployee is null
                     ? null
                     : new CustomerAssignedEmployeeResponse {
@@ -421,8 +428,7 @@ namespace HuongVanTra.Service.Customers {
         }
 
         private static bool SupportsMembershipTier(string customerType) {
-            var normalized = customerType.Trim().ToUpperInvariant();
-            return normalized is "GENERAL" or "RETAIL";
+            return CustomerTypeRules.SupportsMembershipTier(customerType);
         }
 
         private async Task<(bool Success, int? TierId, string? ErrorMessage)> ResolveTierIdForCustomerTypeAsync(

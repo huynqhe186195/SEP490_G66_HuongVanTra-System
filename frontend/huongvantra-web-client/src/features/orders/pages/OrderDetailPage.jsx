@@ -5,6 +5,7 @@ import { showError, showSuccess } from '../../../app/toast.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import {
+  applyOrderCoupon,
   confirmCodCompleted,
   confirmOrderPayment,
   fetchOrder,
@@ -18,6 +19,7 @@ import {
   updateOrderStatus,
 } from '../services/ordersApi.js'
 import { fetchPosProducts, resolvePosStoreId, resolveTransferQrImageUrl } from '../../pos/services/posApi.js'
+import { formatPromotionLabel } from '../../pos/utils/posPromotionUtils.js'
 import {
   canConfirmCod,
   canEditOrderItems,
@@ -64,6 +66,8 @@ function OrderDetailPage() {
   const [paymentQrCooldownUntil, setPaymentQrCooldownUntil] = useState(0)
   const [paymentPollError, setPaymentPollError] = useState('')
   const paymentConfirmedRef = useRef(false)
+  const [promoCodeInput, setPromoCodeInput] = useState('')
+  const [isApplyingPromo, setIsApplyingPromo] = useState(false)
 
   const canEditOrder = orderAccess.canEdit !== false
   const itemsEditable = useMemo(
@@ -93,6 +97,7 @@ function OrderDetailPage() {
     setShippingAddress(data.shippingAddress || '')
     setManualDiscount(String(data.manualDiscount ?? ''))
     setDeductAmount(String(data.deductAmount ?? ''))
+    setPromoCodeInput(data.promotion?.promoCode || '')
   }
 
   const loadOrder = useCallback(async () => {
@@ -356,12 +361,40 @@ function OrderDetailPage() {
     }
   }
 
+  const handleApplyPromoCode = async () => {
+    if (!order?.id) return
+    const code = promoCodeInput.trim()
+    if (!code) {
+      showError('Vui lòng nhập mã giảm giá.')
+      return
+    }
+
+    setIsApplyingPromo(true)
+    try {
+      const updated = await applyOrderCoupon(order.id, code)
+      setOrder(updated)
+      syncForm(updated)
+      setPromoCodeInput(updated.promotion?.promoCode || code.toUpperCase())
+      showSuccess(`Đã áp dụng mã ${updated.promotion?.promoCode || code}.`)
+    } catch (error) {
+      showError(error.message)
+    } finally {
+      setIsApplyingPromo(false)
+    }
+  }
+
   const cod = order && isCodOrder(order)
   const showCodActions = order && cod && canManageCod && canConfirmCod(order)
   const canConfirmPayment =
     canEditOrder &&
     order &&
     !cod &&
+    String(order.paymentStatus).toLowerCase() !== 'paid' &&
+    String(order.orderStatus).toLowerCase() !== 'cancelled'
+
+  const canApplyCoupon =
+    canEditOrder &&
+    order &&
     String(order.paymentStatus).toLowerCase() !== 'paid' &&
     String(order.orderStatus).toLowerCase() !== 'cancelled'
 
@@ -646,7 +679,8 @@ function OrderDetailPage() {
               ) : null}
               {order.couponDiscount > 0 ? (
                 <p className="text-slate-500">
-                  Giảm mã: <span className="font-semibold text-slate-800">-{formatVnd(order.couponDiscount)}</span>
+                  Giảm mã{order.promotion?.promoCode ? ` (${order.promotion.promoCode})` : ''}:{' '}
+                  <span className="font-semibold text-slate-800">-{formatVnd(order.couponDiscount)}</span>
                 </p>
               ) : null}
               <p className="text-lg font-bold text-[#538463]">Tổng: {formatVnd(order.totalAmount)}</p>
@@ -708,6 +742,53 @@ function OrderDetailPage() {
                   Lưu trạng thái
                 </button>
               </div>
+            </section>
+
+            <section className="rounded-[1.5rem] bg-white p-6 shadow-sm">
+              <h2 className="mb-4 text-lg font-bold text-slate-800">Mã giảm giá</h2>
+              {order.promotion ? (
+                <div className="mb-3 rounded-xl border border-[#538463]/30 bg-[#538463]/5 px-4 py-3">
+                  <p className="text-sm font-semibold text-[#538463]">
+                    {formatPromotionLabel(order.promotion)}
+                  </p>
+                  {order.couponDiscount > 0 ? (
+                    <p className="mt-1 text-xs text-slate-500">
+                      Giảm thực tế: {formatVnd(order.couponDiscount)}
+                    </p>
+                  ) : null}
+                </div>
+              ) : (
+                <p className="mb-3 text-sm text-slate-500">Chưa áp mã giảm giá.</p>
+              )}
+              {canApplyCoupon ? (
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    className="min-w-0 flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm uppercase"
+                    placeholder="VD: SALE10"
+                    value={promoCodeInput}
+                    onChange={(e) => setPromoCodeInput(e.target.value.toUpperCase())}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        handleApplyPromoCode()
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    disabled={isApplyingPromo || isSaving || !promoCodeInput.trim()}
+                    onClick={handleApplyPromoCode}
+                    className="shrink-0 rounded-lg bg-[#538463] px-4 py-2 text-sm font-semibold text-white hover:bg-[#457053] disabled:opacity-50"
+                  >
+                    {isApplyingPromo ? '...' : 'Áp dụng'}
+                  </button>
+                </div>
+              ) : (
+                <p className="text-xs text-slate-500">
+                  Không thể đổi mã sau khi đơn đã thanh toán hoặc bị hủy.
+                </p>
+              )}
             </section>
 
             <section className="rounded-[1.5rem] bg-white p-6 shadow-sm">

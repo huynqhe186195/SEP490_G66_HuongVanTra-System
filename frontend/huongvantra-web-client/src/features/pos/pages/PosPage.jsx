@@ -16,6 +16,7 @@ import {
   fetchPosCustomerContext,
   fetchPosCustomers,
   fetchPosProducts,
+  fetchPromotionByCode,
   resolvePosStoreId,
 } from '../services/posApi.js'
 import { loadPosSeller } from '../utils/posSeller.js'
@@ -23,6 +24,8 @@ import {
   normalizeOrderDiscountInput,
   validatePosDiscountsBeforePayment,
 } from '../utils/posDiscountValidation.js'
+import { computeCouponDiscount, formatPromotionLabel } from '../utils/posPromotionUtils.js'
+import { isVipCustomerType } from '../../customers/utils/customerDisplay.js'
 
 const SALES_MODES = [
   { id: 'counter', label: 'Bán tại quầy', icon: 'storefront' },
@@ -102,7 +105,13 @@ function clampCartLineDiscounts(cartItems) {
   return (Array.isArray(cartItems) ? cartItems : []).map(clampLineDiscountItem)
 }
 
-function computePosTotals(cartItems, orderDiscountPercent, orderDiscountAmountFixed, tierDiscountPercent) {
+function computePosTotals(
+  cartItems,
+  orderDiscountPercent,
+  orderDiscountAmountFixed,
+  tierDiscountPercent,
+  appliedPromotion = null,
+) {
   const items = Array.isArray(cartItems) ? cartItems : []
   const grossSubtotal = items.reduce((sum, item) => sum + getLineGross(item), 0)
   const itemDiscountTotal = items.reduce((sum, item) => sum + getLineDiscount(item), 0)
@@ -112,17 +121,21 @@ function computePosTotals(cartItems, orderDiscountPercent, orderDiscountAmountFi
     fixedOrderDiscount > 0
       ? Math.min(fixedOrderDiscount, subtotalAfterItemDiscount)
       : Math.round((subtotalAfterItemDiscount * orderDiscountPercent) / 100)
-  const totalBeforeTier = Math.max(subtotalAfterItemDiscount - orderDiscountAmount, 0)
+  const totalBeforeCoupon = Math.max(subtotalAfterItemDiscount - orderDiscountAmount, 0)
+  const couponDiscountAmount = computeCouponDiscount(totalBeforeCoupon, appliedPromotion)
+  const totalBeforeTier = Math.max(totalBeforeCoupon - couponDiscountAmount, 0)
   const membershipDiscountAmount =
     tierDiscountPercent > 0 ? Math.round((totalBeforeTier * tierDiscountPercent) / 100) : 0
   const total = Math.max(totalBeforeTier - membershipDiscountAmount, 0)
-  const totalDiscount = itemDiscountTotal + orderDiscountAmount + membershipDiscountAmount
+  const totalDiscount =
+    itemDiscountTotal + orderDiscountAmount + couponDiscountAmount + membershipDiscountAmount
 
   return {
     grossSubtotal,
     itemDiscountTotal,
     subtotalAfterItemDiscount,
     orderDiscountAmount,
+    couponDiscountAmount,
     membershipDiscountAmount,
     total,
     totalDiscount,
@@ -135,6 +148,8 @@ function createEmptySession(mode = 'counter') {
     cartItems: [],
     orderDiscountPercent: 0,
     orderDiscountAmountFixed: 0,
+    promoCodeInput: '',
+    appliedPromotion: null,
     selectedCustomer: null,
     customerSearchValue: '',
     paymentMethod: mode === 'takeaway' ? 'COD' : 'CASH',
@@ -155,6 +170,7 @@ function PosPage() {
   const [openModal, setOpenModal] = useState(null)
   const [openDiscountSku, setOpenDiscountSku] = useState(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isApplyingPromo, setIsApplyingPromo] = useState(false)
   const [searchProducts, setSearchProducts] = useState([])
   const [isSearchLoading, setIsSearchLoading] = useState(false)
   const [tabCloseConfirm, setTabCloseConfirm] = useState(null)
@@ -174,6 +190,8 @@ function PosPage() {
     cartItems = [],
     orderDiscountPercent = 0,
     orderDiscountAmountFixed = 0,
+    promoCodeInput = '',
+    appliedPromotion = null,
     selectedCustomer = null,
     customerSearchValue = '',
     paymentMethod: sessionPaymentMethod,
@@ -255,17 +273,29 @@ function PosPage() {
     return digits ? Number(digits) : 0
   }
 
-  const tierDiscountPercent = Number(selectedCustomer?.tierDiscountPercent || 0)
+  const tierDiscountPercent = isVipCustomerType(selectedCustomer?.customerType)
+    ? 0
+    : Number(selectedCustomer?.tierDiscountPercent || 0)
+  const canUseOrderDiscount = isVipCustomerType(selectedCustomer?.customerType)
+  const effectiveOrderDiscountPercent = canUseOrderDiscount ? orderDiscountPercent : 0
+  const effectiveOrderDiscountAmountFixed = canUseOrderDiscount ? orderDiscountAmountFixed : 0
   const {
     grossSubtotal,
     itemDiscountTotal,
     subtotalAfterItemDiscount,
     orderDiscountAmount,
+    couponDiscountAmount,
     membershipDiscountAmount,
     total,
     totalDiscount,
-  } = computePosTotals(cartItems, orderDiscountPercent, orderDiscountAmountFixed, tierDiscountPercent)
-  const usesFixedOrderDiscount = (orderDiscountAmountFixed || 0) > 0
+  } = computePosTotals(
+    cartItems,
+    effectiveOrderDiscountPercent,
+    effectiveOrderDiscountAmountFixed,
+    tierDiscountPercent,
+    appliedPromotion,
+  )
+  const usesFixedOrderDiscount = canUseOrderDiscount && (orderDiscountAmountFixed || 0) > 0
   const amountPaid = parseMoneyInput(amountPaidInput)
   // Để trống = ghi nợ toàn bộ đơn; nhập đủ = thanh toán hết; nhập thừa = tính tiền thừa
   const cashPaymentAmount = amountPaid >= total ? total : amountPaid
@@ -376,6 +406,7 @@ function PosPage() {
             ...prev,
             selectedCustomer: {
               ...prev.selectedCustomer,
+              customerType: context.customerType || prev.selectedCustomer.customerType,
               currentDebt: context.currentDebt,
               tierCode: context.tierCode || prev.selectedCustomer.tierCode,
               tierId: context.tierId ?? prev.selectedCustomer.tierId,
@@ -691,6 +722,28 @@ function PosPage() {
     updateActiveSession({ orderDiscountPercent: parsed, orderDiscountAmountFixed: 0 })
   }
 
+  const handleApplyPromoCode = async () => {
+    const code = promoCodeInput.trim()
+    if (!code) {
+      showError('Vui lòng nhập mã giảm giá.')
+      return
+    }
+    setIsApplyingPromo(true)
+    try {
+      const promotion = await fetchPromotionByCode(code)
+      updateActiveSession({ appliedPromotion: promotion, promoCodeInput: promotion.promoCode })
+      showSuccess(`Đã áp dụng mã ${promotion.promoCode}.`)
+    } catch (error) {
+      showError(error.message)
+    } finally {
+      setIsApplyingPromo(false)
+    }
+  }
+
+  const handleClearPromoCode = () => {
+    updateActiveSession({ appliedPromotion: null, promoCodeInput: '' })
+  }
+
   const validateDiscountsBeforePayment = () => {
     const normalizedItems = clampCartLineDiscounts(cartItems)
     const cartBySku = Object.fromEntries(cartItems.map((row) => [row.sku, row]))
@@ -770,7 +823,7 @@ function PosPage() {
     return {
       storeId,
       customerId: selectedCustomer.customerId,
-      promotionId: null,
+      promotionId: appliedPromotion?.id ?? null,
       manualDiscount,
       items: cartItems.map((item) => ({
         productId: item.productId,
@@ -805,7 +858,7 @@ function PosPage() {
       total: getLineTotal(item),
     })),
     grossSubtotal,
-    totalDiscount: itemDiscountTotal + orderDiscountAmount + membershipDiscountAmount,
+    totalDiscount: itemDiscountTotal + orderDiscountAmount + couponDiscountAmount + membershipDiscountAmount,
     total: receiptTotal,
     amountPaid: method === 'CASH' ? cashPaymentAmount : receiptTotal,
     customerPaid: method === 'CASH' ? amountPaid : receiptTotal,
@@ -839,6 +892,7 @@ function PosPage() {
       shippingAddress: address,
       cartItems,
       manualDiscount,
+      promotionId: appliedPromotion?.id ?? null,
     })
 
     if (isTransferPayment) {
@@ -991,10 +1045,12 @@ function PosPage() {
     !selectedCustomer && hasCustomerSearchQuery && !isCustomerSearchLoading && customerSearchResults.length === 0
 
   const selectCustomer = (customer) => {
+    const keepOrderDiscount = isVipCustomerType(customer?.customerType)
     updateActiveSession({
       selectedCustomer: customer,
       customerSearchValue: '',
       shippingAddress: '',
+      ...(keepOrderDiscount ? {} : { orderDiscountPercent: 0, orderDiscountAmountFixed: 0 }),
     })
     setCustomerSearchResults([])
     setSavedShippingAddresses([])
@@ -1327,7 +1383,13 @@ function PosPage() {
                     <p className="truncate text-xs text-[#717971]">
                       {selectedCustomer.phone || '—'} · {selectedCustomer.customerCode}
                     </p>
-                    {selectedCustomer.tierCode ? (
+                    {isVipCustomerType(selectedCustomer.customerType) ? (
+                      <p className="mt-1 inline-flex">
+                        <span className="rounded-full bg-[#fec25b] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#744f00]">
+                          Khách VIP
+                        </span>
+                      </p>
+                    ) : selectedCustomer.tierCode ? (
                       <p className="mt-0.5 text-xs font-semibold text-[#356647]">
                         Hạng {selectedCustomer.tierCode}
                         {tierDiscountPercent > 0 ? ` · CK ${tierDiscountPercent}%` : ''}
@@ -1343,7 +1405,12 @@ function PosPage() {
                     type="button"
                     onClick={(event) => {
                       event.stopPropagation()
-                      updateActiveSession({ selectedCustomer: null, customerSearchValue: '' })
+                      updateActiveSession({
+                        selectedCustomer: null,
+                        customerSearchValue: '',
+                        orderDiscountPercent: 0,
+                        orderDiscountAmountFixed: 0,
+                      })
                     }}
                     className="shrink-0 rounded-lg border border-[#c1c9c0] px-2 py-1 text-xs font-semibold text-[#414942] hover:bg-[#f6f4ec]"
                   >
@@ -1440,6 +1507,7 @@ function PosPage() {
               </div>
             ) : null}
 
+            {canUseOrderDiscount ? (
             <div className="rounded-xl bg-white p-3 shadow-sm">
               <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[#717971]">Chiết khấu đơn</label>
               <div className="flex items-center gap-2">
@@ -1475,6 +1543,56 @@ function PosPage() {
                 </p>
               ) : null}
             </div>
+            ) : null}
+
+            <div className="rounded-xl bg-white p-3 shadow-sm">
+              <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[#717971]">
+                Mã giảm giá
+              </label>
+              {appliedPromotion ? (
+                <div className="flex items-center justify-between gap-2 rounded-lg border border-[#356647]/30 bg-[#356647]/5 px-3 py-2">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-[#356647]">
+                      {formatPromotionLabel(appliedPromotion)}
+                    </p>
+                    {couponDiscountAmount > 0 ? (
+                      <p className="text-xs text-[#717971]">Giảm {formatMoney(couponDiscountAmount)} đ</p>
+                    ) : null}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleClearPromoCode}
+                    className="shrink-0 text-xs font-semibold text-[#717971] hover:text-[#ba1a1a]"
+                  >
+                    Gỡ
+                  </button>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    className="min-w-0 flex-1 rounded-lg border border-[#c1c9c0] bg-[#fbf9f1] px-3 py-2 text-sm uppercase outline-none focus:border-[#356647] focus:ring-2 focus:ring-[#356647]/20"
+                    placeholder="VD: SALE10"
+                    value={promoCodeInput}
+                    onChange={(event) => updateActiveSession({ promoCodeInput: event.target.value.toUpperCase() })}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault()
+                        handleApplyPromoCode()
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    disabled={isApplyingPromo || !promoCodeInput.trim()}
+                    onClick={handleApplyPromoCode}
+                    className="shrink-0 rounded-lg bg-[#356647] px-3 py-2 text-xs font-bold text-white hover:bg-[#4e7f5e] disabled:opacity-50"
+                  >
+                    {isApplyingPromo ? '...' : 'Áp dụng'}
+                  </button>
+                </div>
+              )}
+            </div>
 
             <div className="rounded-xl bg-white p-4 shadow-sm">
               <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[#717971]">Tổng tiền</label>
@@ -1496,12 +1614,18 @@ function PosPage() {
                       <span>-{formatMoney(itemDiscountTotal)} đ</span>
                     </div>
                   ) : null}
-                  {orderDiscountAmount > 0 ? (
+                  {canUseOrderDiscount && orderDiscountAmount > 0 ? (
                     <div className="flex justify-between text-[#356647]">
                       <span>
                         {usesFixedOrderDiscount ? 'CK đơn (VNĐ)' : `CK đơn (${orderDiscountPercent}%)`}
                       </span>
                       <span>-{formatMoney(orderDiscountAmount)} đ</span>
+                    </div>
+                  ) : null}
+                  {couponDiscountAmount > 0 ? (
+                    <div className="flex justify-between text-[#356647]">
+                      <span>Mã {appliedPromotion?.promoCode || 'giảm giá'}</span>
+                      <span>-{formatMoney(couponDiscountAmount)} đ</span>
                     </div>
                   ) : null}
                   {membershipDiscountAmount > 0 ? (

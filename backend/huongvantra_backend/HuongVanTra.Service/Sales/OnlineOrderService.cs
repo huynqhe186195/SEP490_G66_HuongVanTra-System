@@ -1,4 +1,5 @@
 using HuongVanTra.Core.Constants;
+using HuongVanTra.Core.Entities.Customers;
 using HuongVanTra.Core.Entities.Inventory;
 using HuongVanTra.Core.Entities.Sales;
 using HuongVanTra.Core.Entities.System;
@@ -183,7 +184,11 @@ namespace HuongVanTra.Service.Sales {
             var customer = await _db.Customers
                 .Include(c => c.Tier)
                 .FirstOrDefaultAsync(c => c.Id == customerId.Value);
-            return customer?.Tier?.DiscountPercent ?? 0;
+            if (customer is null || !CustomerTypeRules.SupportsMembershipTier(customer.CustomerType)) {
+                return 0;
+            }
+
+            return customer.Tier?.DiscountPercent ?? 0;
         }
 
         private static Order BuildOrder(

@@ -113,6 +113,16 @@ export function mapOrderDetail(item) {
           createdAt: (item.stockDeductQueue ?? item.StockDeductQueue).createdAt ?? (item.stockDeductQueue ?? item.StockDeductQueue).CreatedAt,
         }
       : null,
+    promotion: (() => {
+      const raw = item.promotion ?? item.Promotion
+      if (!raw || typeof raw !== 'object') return null
+      return {
+        id: raw.id ?? raw.Id,
+        promoCode: raw.promoCode ?? raw.PromoCode ?? '',
+        discountType: String(raw.discountType ?? raw.DiscountType ?? 'PERCENTAGE').toUpperCase(),
+        discountValue: Number(raw.discountValue ?? raw.DiscountValue ?? 0),
+      }
+    })(),
   }
 }
 
@@ -273,6 +283,14 @@ export function updateOrderAdjustments(orderId, payload) {
       shippingAddress: payload.shippingAddress,
       requestStockDeduct: Boolean(payload.requestStockDeduct),
     }),
+  }).then(mapOrderDetail)
+}
+
+export function applyOrderCoupon(orderId, promoCode) {
+  return requestWithAuth(`/api/Orders/${orderId}/coupon`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ promoCode: promoCode.trim() }),
   }).then(mapOrderDetail)
 }
 

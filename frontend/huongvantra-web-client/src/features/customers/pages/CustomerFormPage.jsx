@@ -10,9 +10,7 @@ import {
   fetchMembershipTiers,
   reconcileCustomerDebt,
   updateCustomer,
-  upgradeCustomerTierManual,
 } from '../services/customersApi.js'
-import { fetchMyProfile } from '../../profile/services/profileApi.js'
 import { TIER_AUTO_UPGRADE_HINT } from '../utils/membershipTierUtils.js'
 import {
   customerTypeFromTab,
@@ -39,8 +37,6 @@ function CustomerFormPage() {
   const [totalSpend, setTotalSpend] = useState(0)
   const [currentTierCode, setCurrentTierCode] = useState('')
   const [currentTierDiscount, setCurrentTierDiscount] = useState(0)
-  const [isUpgradingTier, setIsUpgradingTier] = useState(false)
-  const [vipManualTierId, setVipManualTierId] = useState('')
   const isAdmin = isAdminSession(loadAuthSession())
   const [form, setForm] = useState({
     type: ['general', 'vip', 'corporate'].includes(searchParams.get('type'))
@@ -135,36 +131,6 @@ function CustomerFormPage() {
       type,
       tierId: supportsMembershipTierForTab(type) ? current.tierId : '',
     }))
-  }
-
-  const handleManualVipTierUpgrade = async () => {
-    if (!customerId || !isAdmin || !vipManualTierId) {
-      showError('Chọn hạng cần gán cho khách VIP.')
-      return
-    }
-    setIsUpgradingTier(true)
-    try {
-      const profile = await fetchMyProfile()
-      const empId = profile?.employeeId ?? profile?.EmployeeId
-      if (!empId) {
-        showError('Không xác định được mã nhân viên. Vui lòng đăng nhập lại.')
-        return
-      }
-      await upgradeCustomerTierManual({
-        customerId: Number(customerId),
-        newTierId: Number(vipManualTierId),
-        updatedByEmpId: Number(empId),
-      })
-      const customer = await fetchCustomerById(customerId)
-      setForm((prev) => ({ ...prev, type: 'vip' }))
-      setCurrentTierCode(customer.tier?.tierCode || '')
-      setCurrentTierDiscount(Number(customer.tier?.discountPercent ?? 0))
-      showSuccess('Đã nâng hạng thủ công và chuyển khách sang VIP.')
-    } catch (error) {
-      showError(error.message)
-    } finally {
-      setIsUpgradingTier(false)
-    }
   }
 
   const handleReconcileDebt = async () => {
@@ -329,33 +295,9 @@ function CustomerFormPage() {
                   </select>
                   <p className="text-xs leading-relaxed text-[#717971]">{TIER_AUTO_UPGRADE_HINT}</p>
                 </div>
-              ) : form.type === 'vip' && isEditMode && isAdmin ? (
-                <div className="space-y-2 md:col-span-2">
-                  <span className="text-xs font-semibold text-[#717971]">Nâng hạng VIP thủ công (Admin)</span>
-                  <select
-                    className="w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20"
-                    value={vipManualTierId}
-                    onChange={(event) => setVipManualTierId(event.target.value)}
-                  >
-                    <option value="">Chọn hạng</option>
-                    {tiers.map((tier) => (
-                      <option key={tier.id} value={tier.id}>
-                        {tier.tierCode}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    type="button"
-                    className="rounded-xl border border-[#356647] px-4 py-2 text-sm font-semibold text-[#356647] hover:bg-[#356647]/5 disabled:opacity-50"
-                    disabled={isUpgradingTier || !vipManualTierId}
-                    onClick={handleManualVipTierUpgrade}
-                  >
-                    {isUpgradingTier ? 'Đang nâng hạng...' : 'Áp dụng nâng hạng VIP'}
-                  </button>
-                </div>
               ) : (
-                <div className="rounded-xl bg-[#f6f4ec] p-3 text-sm text-[#717971] md:col-span-2">
-                  Khách VIP / doanh nghiệp không dùng hạng B/S/G tự động. Admin có thể nâng hạng VIP khi sửa khách VIP.
+                <div className="rounded-xl bg-[#fff8e8] p-3 text-sm leading-relaxed text-[#744f00] md:col-span-2">
+                  Khách VIP không dùng hạng B/S/G và không gán chiết khấu hạng. Ưu đãi (nếu có) qua mã giảm giá, quà tặng hoặc chính sách riêng tại quầy.
                 </div>
               )}
 

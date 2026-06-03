@@ -122,11 +122,18 @@ export function createPosOrderOnline(payload) {
   }).then(mapPosOrderResult)
 }
 
-export function buildTakeawayOrderPayload({ storeId, customerId, shippingAddress, cartItems, manualDiscount = 0 }) {
+export function buildTakeawayOrderPayload({
+  storeId,
+  customerId,
+  shippingAddress,
+  cartItems,
+  manualDiscount = 0,
+  promotionId = null,
+}) {
   return {
     storeId,
     customerId,
-    promotionId: null,
+    promotionId: promotionId || null,
     manualDiscount: Math.max(0, Math.round(Number(manualDiscount) || 0)),
     shippingAddress: shippingAddress?.trim() || null,
     items: cartItems.map((item) => ({
@@ -201,6 +208,7 @@ export function mapPosCustomer(item) {
     customerCode: item.customerCode ?? item.CustomerCode ?? '',
     fullName: item.fullName ?? item.FullName ?? '',
     phone: item.phone ?? item.Phone ?? '',
+    customerType: item.customerType ?? item.CustomerType ?? '',
     tierCode: item.tierCode ?? item.TierCode ?? '',
     tierId: item.tierId ?? item.TierId ?? null,
     tierDiscountPercent: Number(item.tierDiscountPercent ?? item.TierDiscountPercent ?? 0),
@@ -275,6 +283,18 @@ export function createPosCustomer(payload) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   }).then(mapPosCustomer)
+}
+
+export async function fetchPromotionByCode(code) {
+  const query = new URLSearchParams()
+  query.set('code', String(code || '').trim())
+  const data = await requestWithAuth(`/api/promotions/lookup?${query.toString()}`, { method: 'GET' })
+  return {
+    id: data.id ?? data.Id,
+    promoCode: data.promoCode ?? data.PromoCode ?? '',
+    discountType: String(data.discountType ?? data.DiscountType ?? 'PERCENTAGE').toUpperCase(),
+    discountValue: Number(data.discountValue ?? data.DiscountValue ?? 0),
+  }
 }
 
 export async function fetchPosProducts({ storeId, search, limit = 30 }) {

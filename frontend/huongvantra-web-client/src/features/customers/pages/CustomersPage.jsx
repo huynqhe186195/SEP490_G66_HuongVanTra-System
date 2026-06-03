@@ -626,7 +626,7 @@ function CustomersPage() {
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#f0eee6] bg-[#f6f4ec]/30 p-6">
                 <div className="flex items-center gap-4">
                   <h4 className="text-2xl font-bold text-[#1b1c17]">Khách VIP</h4>
-                  <span className="rounded-full bg-[#7e5700]/15 px-3 py-1 text-xs text-[#7e5700]">Không gán hạng B/S/G</span>
+                  <span className="rounded-full bg-[#7e5700]/15 px-3 py-1 text-xs text-[#7e5700]">Không hạng B/S/G · không CK hạng</span>
                 </div>
 
                 <div className="flex gap-3">

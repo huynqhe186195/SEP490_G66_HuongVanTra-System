@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { showError } from '../../../app/toast.js'
 import MembershipTierProgress from '../../customers/components/MembershipTierProgress.jsx'
+import { isVipCustomerType, supportsMembershipTierForCustomerType } from '../../customers/utils/customerDisplay.js'
 import { fetchMembershipTiers } from '../../customers/services/customersApi.js'
 import { fetchPosCustomerContext } from '../services/posApi.js'
 import { formatRoleLabel } from '../utils/posSeller.js'
@@ -157,9 +158,16 @@ function CustomerDetailModal({ isOpen, customer, onClose }) {
               </div>
               <div className="rounded-xl bg-white p-4">
                 <p className="text-xs text-[#717971]">Nhóm khách</p>
-                <p className="mt-1 font-semibold text-[#1b1c17]">{customerTypeLabel}</p>
+                {isVipCustomerType(context?.customerType) ? (
+                  <span className="mt-1 inline-flex rounded-full bg-[#fec25b] px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-[#744f00]">
+                    Khách VIP
+                  </span>
+                ) : (
+                  <p className="mt-1 font-semibold text-[#1b1c17]">{customerTypeLabel}</p>
+                )}
               </div>
-              {context?.tierCode || membershipTiers.length > 0 ? (
+              {supportsMembershipTierForCustomerType(context?.customerType) &&
+              (context?.tierCode || membershipTiers.length > 0) ? (
                 <div className="rounded-xl bg-white p-4 md:col-span-2">
                   <p className="mb-2 text-xs text-[#717971]">Hạng thành viên</p>
                   {membershipTiers.length > 0 ? (
