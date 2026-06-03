@@ -134,6 +134,12 @@ namespace HuongVanTra.Service.Sales {
             string? paymentReference,
             CancellationToken cancellationToken) {
             if (order.PaymentTransactions.Count > 0) {
+                foreach (var txn in order.PaymentTransactions) {
+                    if (!string.Equals(txn.Status, "paid", StringComparison.OrdinalIgnoreCase)) {
+                        txn.Amount = order.TotalAmount;
+                    }
+                }
+
                 return;
             }
 

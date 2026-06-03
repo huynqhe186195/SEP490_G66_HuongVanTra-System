@@ -18,6 +18,34 @@ function formatMoney(value) {
   return new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(value)
 }
 
+function useQrExpiryCountdown(expiresAtUtc) {
+  const [label, setLabel] = useState('')
+
+  useEffect(() => {
+    if (!expiresAtUtc) {
+      setLabel('')
+      return undefined
+    }
+
+    const tick = () => {
+      const remainingMs = new Date(expiresAtUtc).getTime() - Date.now()
+      if (remainingMs <= 0) {
+        setLabel('QR đã hết hạn. Quay POS để tạo đơn thanh toán mới.')
+        return
+      }
+      const minutes = Math.floor(remainingMs / 60000)
+      const seconds = Math.floor((remainingMs % 60000) / 1000)
+      setLabel(`QR hết hạn sau ${minutes}:${String(seconds).padStart(2, '0')}`)
+    }
+
+    tick()
+    const timerId = setInterval(tick, 1000)
+    return () => clearInterval(timerId)
+  }, [expiresAtUtc])
+
+  return label
+}
+
 function paymentStatusLabel(status, isPaid) {
   if (isPaid) return 'Đã thanh toán'
   const normalized = String(status || '').toLowerCase()
@@ -40,6 +68,8 @@ function PosTransferQrPage() {
   const [expectedAmount, setExpectedAmount] = useState(0)
   const [sepaySetup, setSepaySetup] = useState(null)
   const completedRef = useRef(false)
+  const qrExpiryLabel = useQrExpiryCountdown(payment?.qrExpiresAtUtc)
+  const isQrExpired = payment?.qrExpiresAtUtc && new Date(payment.qrExpiresAtUtc).getTime() <= Date.now()
 
   const finishWithReceipt = useCallback(
     (status) => {
@@ -202,6 +232,15 @@ function PosTransferQrPage() {
           <h1 className="mt-1 text-3xl font-bold text-[#356647]">{formatMoney(displayAmount)} đ</h1>
           {payment.orderCode ? <p className="mt-1 text-sm text-[#414942]">Mã đơn: {payment.orderCode}</p> : null}
           {payment.customer ? <p className="mt-0.5 text-xs text-[#717971]">{payment.customer}</p> : null}
+          {qrExpiryLabel ? (
+            <p
+              className={`mt-2 text-xs font-semibold ${
+                isQrExpired ? 'text-red-600' : 'text-[#7e5700]'
+              }`}
+            >
+              {qrExpiryLabel}
+            </p>
+          ) : null}
 
           <div
             className={`mx-auto mt-3 inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${

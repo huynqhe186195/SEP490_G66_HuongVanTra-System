@@ -1,8 +1,11 @@
-﻿using HuongVanTra.Service.DTOs.Inventory;
+﻿using HuongVanTra.Core.Authorization;
+using HuongVanTra.Service.DTOs.Inventory;
 using HuongVanTra.Service.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace HuongVanTra.API.Controllers {
+    [Authorize(Policy = AppPolicies.ManageInventory)]
     [Route("api/[controller]")]
     [ApiController]
     public class InventoryController : ControllerBase {

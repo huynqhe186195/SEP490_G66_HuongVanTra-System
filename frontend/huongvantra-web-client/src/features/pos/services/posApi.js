@@ -57,6 +57,7 @@ export function mapPosOrderResult(item) {
     transferContent: item.transferContent ?? item.TransferContent ?? null,
     transferAccountNumber: item.transferAccountNumber ?? item.TransferAccountNumber ?? null,
     paymentMode: item.paymentMode ?? item.PaymentMode ?? 'vietqr_main',
+    qrExpiresAtUtc: item.qrExpiresAtUtc ?? item.QrExpiresAtUtc ?? null,
     invoiceCode: item.invoiceCode ?? item.InvoiceCode ?? null,
     createdAt: item.createdAt ?? item.CreatedAt,
     items: (item.items ?? item.Items ?? []).map((row) => ({
@@ -115,6 +116,38 @@ export function resolveTransferQrImageUrl({ qrImageUrl, qrPayload } = {}) {
 
 export function createPosOrderOnline(payload) {
   return requestWithAuth('/api/PosOrder/online', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).then(mapPosOrderResult)
+}
+
+export function buildTakeawayOrderPayload({ storeId, customerId, shippingAddress, cartItems, manualDiscount = 0 }) {
+  return {
+    storeId,
+    customerId,
+    promotionId: null,
+    manualDiscount: Math.max(0, Math.round(Number(manualDiscount) || 0)),
+    shippingAddress: shippingAddress?.trim() || null,
+    items: cartItems.map((item) => ({
+      productId: item.productId,
+      quantity: item.qty,
+      isGift: 0,
+    })),
+    payments: [],
+  }
+}
+
+export function createTakeawayCodOrder(payload) {
+  return requestWithAuth('/api/online-orders/cod', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).then(mapPosOrderResult)
+}
+
+export function createTakeawayVietQrOrder(payload) {
+  return requestWithAuth('/api/online-orders/vietqr', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -202,6 +235,11 @@ export function mapPosCustomerContext(item) {
       remainingAmount: Number(row.remainingAmount ?? row.RemainingAmount ?? 0),
       paymentStatus: row.paymentStatus ?? row.PaymentStatus ?? '',
       createdAt: row.createdAt ?? row.CreatedAt,
+    })),
+    shippingAddresses: (item.shippingAddresses ?? item.ShippingAddresses ?? []).map((row) => ({
+      address: row.address ?? row.Address ?? '',
+      lastUsedAt: row.lastUsedAt ?? row.LastUsedAt ?? null,
+      isProfileAddress: Boolean(row.isProfileAddress ?? row.IsProfileAddress),
     })),
   }
 }

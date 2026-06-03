@@ -1,9 +1,12 @@
+using HuongVanTra.Core.Constants;
+using HuongVanTra.Core.Entities.Inventory;
 using HuongVanTra.Core.Entities.Sales;
 using HuongVanTra.Core.Entities.System;
 using HuongVanTra.Infrastructure.Data;
 using HuongVanTra.Service.Sales.Models;
 using HuongVanTra.Service.Common;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using System.Text.Json;
 
 namespace HuongVanTra.Service.Sales {
@@ -11,14 +14,20 @@ namespace HuongVanTra.Service.Sales {
         private readonly AppDbContext _db;
         private readonly IOrderConfirmationService _orderConfirmationService;
         private readonly IVietQrService _vietQrService;
+        private readonly ISepayOrderVaService _sepayOrderVaService;
+        private readonly SepaySettings _sepaySettings;
 
         public OnlineOrderService(
             AppDbContext db,
             IOrderConfirmationService orderConfirmationService,
-            IVietQrService vietQrService) {
+            IVietQrService vietQrService,
+            ISepayOrderVaService sepayOrderVaService,
+            IOptions<SepaySettings> sepayOptions) {
             _db = db;
             _orderConfirmationService = orderConfirmationService;
             _vietQrService = vietQrService;
+            _sepayOrderVaService = sepayOrderVaService;
+            _sepaySettings = sepayOptions.Value;
         }
 
         public async Task<OnlineOrderResult> CreateVietQrOrderAsync(CreateOnlineOrderCommand command) {
@@ -50,11 +59,13 @@ namespace HuongVanTra.Service.Sales {
                 await UpdateCustomerSpendAsync(command.CustomerId, order.TotalAmount);
                 await WriteAuditLogAsync("create", "orders", order.Id, command.CashierId, command.StoreId);
 
+                var result = ToResult(order);
+                await ApplyTransferQrAsync(order, result);
+
                 await _db.SaveChangesAsync();
                 await tx.CommitAsync();
 
-                var qr = await _vietQrService.GenerateForOrderAsync(order.OrderCode, order.TotalAmount);
-                return ToResult(order, qr);
+                return result;
             }
             catch {
                 await tx.RollbackAsync();
@@ -70,7 +81,6 @@ namespace HuongVanTra.Service.Sales {
                 var order = BuildOrder(command, productMap, discount, membershipDiscount);
                 order.PaymentMethod = "COD";
                 order.PaymentStatus = "unpaid";
-                order.StockStatus   = "pending_deduct";
                 order.OrderStatus   = "confirmed";
 
                 _db.Orders.Add(order);
@@ -85,14 +95,14 @@ namespace HuongVanTra.Service.Sales {
                     TransactionDate = DateTime.UtcNow
                 });
 
-                await CreateStockDeductQueueAsync(command, order.Id);
+                await DeductStockImmediatelyForCodAsync(command, order, command.CashierId);
                 await UpdateCustomerSpendAsync(command.CustomerId, order.TotalAmount);
                 await WriteAuditLogAsync("create", "orders", order.Id, command.CashierId, command.StoreId);
 
                 await _db.SaveChangesAsync();
                 await tx.CommitAsync();
 
-                return ToResult(order, null);
+                return ToResult(order);
             }
             catch {
                 await tx.RollbackAsync();
@@ -109,6 +119,9 @@ namespace HuongVanTra.Service.Sales {
 
             if (command.Items.Count == 0)
                 throw new ArgumentException("Order must have at least one item.");
+
+            if (command.ManualDiscount < 0)
+                throw new ArgumentException("Manual discount cannot be negative.");
 
             var storeExists = await _db.Stores.AnyAsync(s => s.Id == command.StoreId);
             if (!storeExists)
@@ -174,11 +187,21 @@ namespace HuongVanTra.Service.Sales {
             }).ToList();
 
             var subtotal = items.Sum(i => i.LineTotal);
-            var afterPromo = discount.type switch {
-                "PERCENTAGE" => subtotal * (1 - discount.value / 100),
-                "FIXED"      => Math.Max(0, subtotal - discount.value),
-                _            => subtotal
+            var manualDiscount = Math.Min(Math.Max(0, command.ManualDiscount), subtotal);
+            var afterManual = subtotal - manualDiscount;
+
+            var couponDiscount = discount.type switch {
+                "PERCENTAGE" => afterManual * (discount.value / 100),
+                "FIXED"      => Math.Min(discount.value, afterManual),
+                _            => 0m
             };
+
+            var afterPromo = discount.type switch {
+                "PERCENTAGE" => afterManual * (1 - discount.value / 100),
+                "FIXED"      => Math.Max(0, afterManual - discount.value),
+                _            => afterManual
+            };
+
             var totalAmount = membershipDiscountPercent > 0
                 ? afterPromo * (1 - membershipDiscountPercent / 100)
                 : afterPromo;
@@ -189,6 +212,9 @@ namespace HuongVanTra.Service.Sales {
                 CustomerId          = command.CustomerId,
                 CashierId           = command.CashierId,
                 PromotionId         = command.PromotionId,
+                SubTotal            = Math.Round(subtotal, 2),
+                ManualDiscount      = Math.Round(manualDiscount, 2),
+                CouponDiscount      = Math.Round(couponDiscount, 2),
                 TotalAmount         = Math.Round(totalAmount, 2),
                 PaymentMethod       = command.PaymentMethod,
                 PaymentStatus       = "unpaid",
@@ -200,7 +226,42 @@ namespace HuongVanTra.Service.Sales {
             };
         }
 
+        /// <summary>
+        /// COD: trừ kho ngay khi tạo đơn (giống POS tại quầy). Lưu queue confirmed để hoàn kho khi hủy.
+        /// </summary>
+        private async Task DeductStockImmediatelyForCodAsync(
+            CreateOnlineOrderCommand command,
+            Order order,
+            int cashierId) {
+            var snapshot = await BuildBomSnapshotAsync(command);
+            var warehouse = await _db.Warehouses
+                .FirstOrDefaultAsync(w => w.StoreId == command.StoreId)
+                ?? throw new InvalidOperationException($"No warehouse found for store {command.StoreId}.");
+
+            await DeductInventoryAsync(order, warehouse.Id, cashierId);
+
+            order.StockStatus = OrderStockStatus.Deducted;
+
+            _db.StockDeductQueues.Add(new StockDeductQueue {
+                OrderId     = order.Id,
+                Status      = QueueStatus.Confirmed,
+                BomSnapshot = JsonSerializer.Serialize(snapshot),
+                CreatedAt   = DateTime.UtcNow
+            });
+        }
+
         private async Task CreateStockDeductQueueAsync(CreateOnlineOrderCommand command, int orderId) {
+            var snapshot = await BuildBomSnapshotAsync(command);
+
+            _db.StockDeductQueues.Add(new StockDeductQueue {
+                OrderId     = orderId,
+                Status      = QueueStatus.Waiting,
+                BomSnapshot = JsonSerializer.Serialize(snapshot),
+                CreatedAt   = DateTime.UtcNow
+            });
+        }
+
+        private async Task<List<BomSnapshotEntry>> BuildBomSnapshotAsync(CreateOnlineOrderCommand command) {
             var productIds = command.Items.Select(i => i.ProductId).Distinct().ToList();
             var bomHeaders = await _db.BomHeaders
                 .Include(b => b.BomLines)
@@ -232,12 +293,83 @@ namespace HuongVanTra.Service.Sales {
                 throw new InvalidOperationException("No inventory items to deduct for this order.");
             }
 
-            _db.StockDeductQueues.Add(new StockDeductQueue {
-                OrderId     = orderId,
-                Status      = "waiting",
-                BomSnapshot = JsonSerializer.Serialize(snapshot),
-                CreatedAt   = DateTime.UtcNow
-            });
+            return snapshot;
+        }
+
+        private async Task DeductInventoryAsync(Order order, int warehouseId, int cashierId) {
+            var productIds = order.OrderItems
+                .Where(i => i.IsGift == 0)
+                .Select(i => i.ProductId)
+                .Distinct()
+                .ToList();
+
+            var bomHeaders = await _db.BomHeaders
+                .Include(b => b.BomLines)
+                .Where(b => productIds.Contains(b.FinishedGoodId))
+                .ToDictionaryAsync(b => b.FinishedGoodId);
+
+            var deductMap = new Dictionary<int, decimal>();
+            foreach (var item in order.OrderItems.Where(i => i.IsGift == 0)) {
+                if (bomHeaders.TryGetValue(item.ProductId, out var bom) && bom.BomLines.Count > 0) {
+                    var multiplier = item.Quantity / bom.QuantityOutput;
+                    foreach (var line in bom.BomLines) {
+                        deductMap.TryGetValue(line.MaterialId, out var existing);
+                        deductMap[line.MaterialId] = existing + line.Quantity * multiplier;
+                    }
+                }
+                else {
+                    deductMap.TryGetValue(item.ProductId, out var existing);
+                    deductMap[item.ProductId] = existing + item.Quantity;
+                }
+            }
+
+            if (deductMap.Count == 0) {
+                throw new InvalidOperationException("No inventory items to deduct for this order.");
+            }
+
+            var materialIds = deductMap.Keys.ToList();
+            var balances = await _db.InventoryBalances
+                .Where(b => b.WarehouseId == warehouseId && materialIds.Contains(b.ProductId))
+                .ToDictionaryAsync(b => b.ProductId);
+
+            var txnCode = $"TXN-{order.OrderCode}";
+
+            foreach (var (materialId, qty) in deductMap) {
+                if (!balances.TryGetValue(materialId, out var balance)) {
+                    balance = new InventoryBalance {
+                        WarehouseId = warehouseId,
+                        ProductId   = materialId,
+                        Quantity    = 0
+                    };
+                    _db.InventoryBalances.Add(balance);
+                    await _db.SaveChangesAsync();
+                    balances[materialId] = balance;
+                }
+
+                var before = balance.Quantity;
+                var after  = before - qty;
+
+                if (after < 0) {
+                    throw new InvalidOperationException(
+                        $"Insufficient stock for product {materialId}: available {before}, required {qty}.");
+                }
+
+                balance.Quantity = after;
+
+                _db.InventoryTransactions.Add(new InventoryTransaction {
+                    TxnCode        = $"{txnCode}-{materialId}",
+                    WarehouseId    = warehouseId,
+                    ProductId      = materialId,
+                    TxnType        = "OUT",
+                    Quantity       = qty,
+                    QuantityBefore = before,
+                    QuantityAfter  = after,
+                    RefType        = "ORDER",
+                    RefId          = order.Id,
+                    CreatedById    = cashierId,
+                    CreatedAt      = DateTime.UtcNow
+                });
+            }
         }
 
         public async Task<CodRejectedResult> MarkCodRejectedAsync(int orderId, int employeeId, string? reason) {
@@ -263,7 +395,7 @@ namespace HuongVanTra.Service.Sales {
             try {
                 var cancelledAt = DateTime.UtcNow;
 
-                if (queue is not null && queue.Status == "confirmed") {
+                if (queue is not null && queue.Status == QueueStatus.Confirmed) {
                     var warehouse = await _db.Warehouses
                         .FirstOrDefaultAsync(w => w.StoreId == order.StoreId)
                         ?? throw new InvalidOperationException($"No warehouse found for store {order.StoreId}.");
@@ -272,8 +404,8 @@ namespace HuongVanTra.Service.Sales {
                     stockReversed = true;
                 }
 
-                if (queue is not null && queue.Status != "cancelled")
-                    queue.Status = "cancelled";
+                if (queue is not null && queue.Status != QueueStatus.Cancelled)
+                    queue.Status = QueueStatus.Cancelled;
 
                 order.OrderStatus  = "cancelled";
                 order.StockStatus  = "cancelled";
@@ -442,12 +574,18 @@ namespace HuongVanTra.Service.Sales {
             }
         }
 
-        public async Task<List<OverdueCodOrderResult>> GetOverdueCodOrdersAsync() {
+        public async Task<List<OverdueCodOrderResult>> GetOverdueCodOrdersAsync(int? storeId = null) {
             var cutoff = DateTime.UtcNow.AddDays(-7);
 
             // Đơn COD treo: là COD, chưa paid, chưa cancelled, và đã quá 7 ngày
             // kể từ ngày tạo hoặc từ lần nhắc gần nhất
-            var orders = await _db.Orders
+            var ordersQuery = _db.Orders.AsQueryable();
+
+            if (storeId.HasValue) {
+                ordersQuery = ordersQuery.Where(o => o.StoreId == storeId.Value);
+            }
+
+            var orders = await ordersQuery
                 .Where(o => o.PaymentMethod == "COD"
                          && o.PaymentStatus != "paid"
                          && o.OrderStatus   != "cancelled"
@@ -534,7 +672,35 @@ namespace HuongVanTra.Service.Sales {
             return $"ONL-{ts}-{suffix}";
         }
 
-        private static OnlineOrderResult ToResult(Order order, VietQrGenerateResult? qr) => new() {
+        private async Task ApplyTransferQrAsync(Order order, OnlineOrderResult result) {
+            var posDuration = _sepaySettings.PosVaDurationSeconds > 0 ? _sepaySettings.PosVaDurationSeconds : 300;
+            var sepayVa = await _sepayOrderVaService.CreateOrderVaForTransferAsync(
+                order.OrderCode,
+                order.TotalAmount,
+                posDuration);
+
+            order.Notes = SepayOrderNotes.Build(sepayVa.VaNumber, order.TotalAmount, sepayVa.SepayOrderId, posDuration);
+            result.TransferAccountNumber = sepayVa.VaNumber;
+            result.PaymentMode = sepayVa.PaymentMode;
+            result.QrExpiresAtUtc = sepayVa.ExpiresAtUtc;
+
+            if (!string.IsNullOrWhiteSpace(sepayVa.QrImageUrl)) {
+                result.QrImageUrl = sepayVa.QrImageUrl;
+                result.QrPayload = sepayVa.QrPayload;
+                result.TransferContent = order.OrderCode;
+                return;
+            }
+
+            var qr = _vietQrService.GenerateForAccount(
+                sepayVa.VaNumber,
+                order.OrderCode,
+                order.TotalAmount);
+            result.QrImageUrl = qr.QrImageUrl;
+            result.QrPayload = qr.QrPayload;
+            result.TransferContent = qr.TransferContent;
+        }
+
+        private static OnlineOrderResult ToResult(Order order) => new() {
             OrderId       = order.Id,
             OrderCode     = order.OrderCode,
             TotalAmount   = order.TotalAmount,
@@ -542,9 +708,6 @@ namespace HuongVanTra.Service.Sales {
             PaymentStatus = order.PaymentStatus,
             StockStatus   = order.StockStatus,
             OrderStatus   = order.OrderStatus,
-            QrPayload     = qr?.QrPayload,
-            QrImageUrl    = qr?.QrImageUrl,
-            TransferContent = qr?.TransferContent,
             CreatedAt     = order.CreatedAt,
             Items         = order.OrderItems.Select(i => new PosOrderItemResult {
                 ProductId   = i.ProductId,

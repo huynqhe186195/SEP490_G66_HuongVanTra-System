@@ -1,5 +1,7 @@
 using HuongVanTra.API.Extensions;
 using HuongVanTra.API.Models.Sales;
+using HuongVanTra.Core.Authorization;
+using HuongVanTra.Service.Orders;
 using HuongVanTra.Service.Sales;
 using HuongVanTra.Service.Sales.Models;
 using Microsoft.AspNetCore.Authorization;
@@ -12,12 +14,18 @@ namespace HuongVanTra.API.Controllers {
     public class OnlineOrderController : ControllerBase {
         private readonly IOnlineOrderService _onlineOrderService;
         private readonly IOrderConfirmationService _orderConfirmationService;
+        private readonly IOrderService _orderService;
+        private readonly IOrderAccessResolver _orderAccessResolver;
 
         public OnlineOrderController(
             IOnlineOrderService onlineOrderService,
-            IOrderConfirmationService orderConfirmationService) {
+            IOrderConfirmationService orderConfirmationService,
+            IOrderService orderService,
+            IOrderAccessResolver orderAccessResolver) {
             _onlineOrderService = onlineOrderService;
             _orderConfirmationService = orderConfirmationService;
+            _orderService = orderService;
+            _orderAccessResolver = orderAccessResolver;
         }
 
         /// <summary>
@@ -25,6 +33,7 @@ namespace HuongVanTra.API.Controllers {
         /// Response trả qr_payload để khách quét thanh toán.
         /// Nội dung chuyển khoản bắt buộc là order_code.
         /// </summary>
+        [Authorize(Policy = AppPolicies.PosAccess)]
         [HttpPost("vietqr")]
         public async Task<ActionResult<OnlineOrderResponse>> CreateVietQrOrder(
             [FromBody] CreateOnlineOrderRequest request) {
@@ -51,6 +60,7 @@ namespace HuongVanTra.API.Controllers {
         /// Tạo đơn online thanh toán COD.
         /// Nhân sự COD phụ trách theo dõi và tick thủ công khi giao thành công.
         /// </summary>
+        [Authorize(Policy = AppPolicies.PosAccess)]
         [HttpPost("cod")]
         public async Task<ActionResult<OnlineOrderResponse>> CreateCodOrder(
             [FromBody] CreateOnlineOrderRequest request) {
@@ -78,6 +88,7 @@ namespace HuongVanTra.API.Controllers {
         /// Cập nhật payment_status = paid, PaymentTransaction.Status = paid, ghi audit log.
         /// Chỉ áp dụng cho đơn VIETQR chưa paid, chưa cancelled.
         /// </summary>
+        [Authorize(Policy = AppPolicies.ManageOrders)]
         [HttpPatch("{id:int}/vietqr/mark-paid")]
         public async Task<ActionResult> MarkVietQrPaid(int id) {
             var employeeId = User.GetEmployeeId();
@@ -105,22 +116,29 @@ namespace HuongVanTra.API.Controllers {
         /// Nhân sự COD tick thủ công "Đã giao hàng và Đã nhận tiền".
         /// Cập nhật payment_status = paid, order_status = completed, ghi audit log.
         /// </summary>
+        [Authorize(Policy = AppPolicies.ManageCodOps)]
         [HttpPatch("{id:int}/cod/mark-delivered-and-paid")]
-        public Task<ActionResult<OrderConfirmationResponse>> MarkCodDeliveredAndPaid(int id) {
-            return ConfirmCodCompletedInternal(id);
+        public Task<ActionResult<OrderConfirmationResponse>> MarkCodDeliveredAndPaid(
+            int id,
+            CancellationToken cancellationToken) {
+            return ConfirmCodCompletedInternal(id, cancellationToken);
         }
 
         /// <summary>
         /// Xác nhận COD đã giao và đã thu tiền (alias rõ nghĩa hơn).
         /// </summary>
+        [Authorize(Policy = AppPolicies.ManageCodOps)]
         [HttpPatch("{id:int}/cod/confirm-completed")]
-        public Task<ActionResult<OrderConfirmationResponse>> ConfirmCodCompleted(int id) {
-            return ConfirmCodCompletedInternal(id);
+        public Task<ActionResult<OrderConfirmationResponse>> ConfirmCodCompleted(
+            int id,
+            CancellationToken cancellationToken) {
+            return ConfirmCodCompletedInternal(id, cancellationToken);
         }
 
         /// <summary>
         /// Xác nhận khách đã chuyển khoản / VietQR (đơn online không phải COD).
         /// </summary>
+        [Authorize(Policy = AppPolicies.ManageOrders)]
         [HttpPatch("{id:int}/confirm-payment")]
         public async Task<ActionResult<OrderConfirmationResponse>> ConfirmPayment(
             int id,
@@ -148,7 +166,13 @@ namespace HuongVanTra.API.Controllers {
             }
         }
 
-        private async Task<ActionResult<OrderConfirmationResponse>> ConfirmCodCompletedInternal(int id) {
+        private async Task<ActionResult<OrderConfirmationResponse>> ConfirmCodCompletedInternal(
+            int id,
+            CancellationToken cancellationToken = default) {
+            if (!await CanAccessOrderAsync(id, cancellationToken)) {
+                return NotFound("Order not found.");
+            }
+
             var employeeId = User.GetEmployeeId();
             if (employeeId is null) {
                 return Unauthorized("Employee ID not found in token.");
@@ -180,8 +204,13 @@ namespace HuongVanTra.API.Controllers {
         /// Nhân sự COD đánh dấu đã nhắc đơn treo.
         /// Cập nhật last_reminded_at để đơn không xuất hiện lại trong overdue list cho đến sau 7 ngày.
         /// </summary>
+        [Authorize(Policy = AppPolicies.ManageCodOps)]
         [HttpPatch("{id:int}/cod/mark-reminded")]
-        public async Task<ActionResult> MarkCodReminded(int id) {
+        public async Task<ActionResult> MarkCodReminded(int id, CancellationToken cancellationToken) {
+            if (!await CanAccessOrderAsync(id, cancellationToken)) {
+                return NotFound("Order not found.");
+            }
+
             var employeeId = User.GetEmployeeId();
             if (employeeId is null)
                 return Unauthorized("Employee ID not found in token.");
@@ -207,8 +236,16 @@ namespace HuongVanTra.API.Controllers {
         /// Nếu kho đã trừ (queue confirmed) thì hoàn kho tự động.
         /// Nếu kho chưa trừ (queue waiting) thì chỉ hủy đơn và hủy queue.
         /// </summary>
+        [Authorize(Policy = AppPolicies.ManageCodOps)]
         [HttpPatch("{id:int}/cod/reject")]
-        public async Task<ActionResult> RejectCodOrder(int id, [FromBody] RejectCodOrderRequest? request) {
+        public async Task<ActionResult> RejectCodOrder(
+            int id,
+            [FromBody] RejectCodOrderRequest? request,
+            CancellationToken cancellationToken) {
+            if (!await CanAccessOrderAsync(id, cancellationToken)) {
+                return NotFound("Order not found.");
+            }
+
             var employeeId = User.GetEmployeeId();
             if (employeeId is null)
                 return Unauthorized("Employee ID not found in token.");
@@ -224,10 +261,26 @@ namespace HuongVanTra.API.Controllers {
                 return BadRequest(ex.Message);
             }
         }
+        [Authorize(Policy = AppPolicies.ManageCodOps)]
         [HttpGet("cod/overdue")]
-        public async Task<ActionResult> GetOverdueCodOrders() {
-            var results = await _onlineOrderService.GetOverdueCodOrdersAsync();
+        public async Task<ActionResult> GetOverdueCodOrders(CancellationToken cancellationToken) {
+            var access = await ResolveOrderAccessAsync(cancellationToken);
+            var storeId = access.Mode == OrderAccessMode.Store ? access.StoreId : null;
+            var results = await _onlineOrderService.GetOverdueCodOrdersAsync(storeId);
             return Ok(results);
+        }
+
+        private async Task<OrderAccessScope> ResolveOrderAccessAsync(CancellationToken cancellationToken) {
+            return await _orderAccessResolver.ResolveAsync(
+                User.GetRoles(),
+                User.GetEmployeeId(),
+                cancellationToken);
+        }
+
+        private async Task<bool> CanAccessOrderAsync(int orderId, CancellationToken cancellationToken) {
+            var access = await ResolveOrderAccessAsync(cancellationToken);
+            var order = await _orderService.GetOrderAsync(orderId.ToString(), access, cancellationToken);
+            return order is not null;
         }
 
         private static CreateOnlineOrderCommand MapToCommand(
@@ -236,6 +289,7 @@ namespace HuongVanTra.API.Controllers {
             CashierId       = cashierId,
             CustomerId      = request.CustomerId,
             PromotionId     = request.PromotionId,
+            ManualDiscount  = request.ManualDiscount,
             PaymentMethod   = paymentMethod,
             ShippingAddress = request.ShippingAddress,
             Items           = request.Items.Select(i => new OrderItemCommand {
@@ -260,6 +314,9 @@ namespace HuongVanTra.API.Controllers {
             QrPayload     = result.QrPayload,
             QrImageUrl    = result.QrImageUrl,
             TransferContent = result.TransferContent,
+            TransferAccountNumber = result.TransferAccountNumber,
+            PaymentMode = result.PaymentMode,
+            QrExpiresAtUtc = result.QrExpiresAtUtc,
             CreatedAt     = result.CreatedAt,
             Items         = result.Items.Select(i => new PosOrderItemResponse {
                 ProductId   = i.ProductId,

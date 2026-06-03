@@ -2,6 +2,8 @@ function PageHeader({
   title,
   description,
   searchPlaceholder,
+  searchValue,
+  onSearchChange,
   searchDropdown = null,
   rightContent = null,
 }) {
@@ -14,6 +16,8 @@ function PageHeader({
       <input
         type="text"
         placeholder={searchPlaceholder}
+        value={searchValue ?? undefined}
+        onChange={onSearchChange ? (e) => onSearchChange(e.target.value) : undefined}
         className="h-11 w-full rounded-full border border-[#c1c9c0]/90 bg-white pl-12 pr-4 text-sm text-[#1b1c17] shadow-[0_1px_0_rgba(255,255,255,0.8),0_8px_20px_rgba(0,0,0,0.03)] outline-none transition focus:border-[#538463] focus:ring-2 focus:ring-[#356647]/20"
       />
 
@@ -26,7 +30,7 @@ function PageHeader({
   ) : null
 
   return (
-    <header className="rounded-[28px] border border-[#c1c9c0]/40 bg-[linear-gradient(180deg,#fdfcf6_0%,#fbf9f1_100%)] px-6 py-6 shadow-[0_10px_30px_rgba(27,28,23,0.04)]">
+    <header className="rounded-2xl border border-[#c1c9c0]/40 bg-[linear-gradient(180deg,#fdfcf6_0%,#fbf9f1_100%)] px-4 py-4 shadow-[0_10px_30px_rgba(27,28,23,0.04)] sm:rounded-[28px] sm:px-6 sm:py-6">
       <div className="flex flex-col gap-5">
         {hasTitle ? (
           <div className="min-w-0">
@@ -36,7 +40,7 @@ function PageHeader({
                 <span className="text-[11px] font-semibold uppercase tracking-[0.28em] text-[#7b847c]">Trang quản trị</span>
               </div>
               <div>
-                <h1 className="text-[1.75rem] font-semibold leading-tight tracking-[-0.03em] text-[#1f241f] lg:text-[2rem]">{title}</h1>
+                <h1 className="text-xl font-semibold leading-tight tracking-[-0.03em] text-[#1f241f] sm:text-[1.75rem] lg:text-[2rem]">{title}</h1>
                 {description ? <p className="mt-2 max-w-3xl text-[0.95rem] leading-7 text-[#707a72]">{description}</p> : null}
               </div>
             </div>

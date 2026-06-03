@@ -44,6 +44,7 @@ namespace HuongVanTra.API
             builder.Services.AddScoped<IProfileService, ProfileService>();
             builder.Services.AddScoped<IStaffAccountService, StaffAccountService>();
             builder.Services.AddScoped<IOrderService, OrderService>();
+            builder.Services.AddScoped<IOrderAccessResolver, OrderAccessResolver>();
             builder.Services.AddScoped<IOrderConfirmationService, OrderConfirmationService>();
             builder.Services.Configure<VietQrTransferSettings>(
                 builder.Configuration.GetSection(VietQrTransferSettings.SectionName));

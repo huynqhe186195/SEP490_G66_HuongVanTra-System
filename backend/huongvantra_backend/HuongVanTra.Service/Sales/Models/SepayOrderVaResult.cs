@@ -8,5 +8,6 @@ namespace HuongVanTra.Service.Sales.Models {
         public decimal Amount { get; set; }
         public string? BankName { get; set; }
         public string PaymentMode { get; set; } = "sepay_order_va";
+        public DateTime? ExpiresAtUtc { get; set; }
     }
 }

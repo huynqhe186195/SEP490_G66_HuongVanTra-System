@@ -73,16 +73,38 @@ namespace HuongVanTra.Service.Sales {
             return diagnostics;
         }
 
+        public SepayOrderVaResult ResolveQrForExistingVa(
+            string orderCode,
+            string vaNumber,
+            decimal amount,
+            string? sepayOrderId = null) {
+            if (_settings.HasStaticVa) {
+                var duration = _settings.PosVaDurationSeconds > 0 ? _settings.PosVaDurationSeconds : 300;
+                return BuildStaticVaResult(orderCode, amount, duration);
+            }
+
+            return new SepayOrderVaResult {
+                SepayOrderId = sepayOrderId ?? string.Empty,
+                OrderCode = orderCode,
+                VaNumber = vaNumber.Trim(),
+                Amount = amount,
+                PaymentMode = "sepay_order_va_reuse",
+            };
+        }
+
         public async Task<SepayOrderVaResult> CreateOrderVaForTransferAsync(
             string orderCode,
             decimal amount,
+            int? vaDurationSeconds = null,
             CancellationToken cancellationToken = default) {
+            var duration = ResolveDurationSeconds(vaDurationSeconds);
+
             if (_settings.HasStaticVa) {
-                return BuildStaticVaResult(orderCode, amount);
+                return BuildStaticVaResult(orderCode, amount, duration);
             }
 
             if (!string.IsNullOrWhiteSpace(_settings.ApiToken)) {
-                var created = await TryCreateOrderVaViaApiAsync(orderCode, amount, cancellationToken);
+                var created = await TryCreateOrderVaViaApiAsync(orderCode, amount, duration, cancellationToken);
                 if (created is not null) {
                     return created;
                 }
@@ -99,7 +121,15 @@ namespace HuongVanTra.Service.Sales {
             throw new SepayVaSetupException("Chưa cấu hình SePay VA và không cho phép QR tài khoản chính.");
         }
 
-        private SepayOrderVaResult BuildStaticVaResult(string orderCode, decimal amount) {
+        private int ResolveDurationSeconds(int? vaDurationSeconds) {
+            if (vaDurationSeconds is > 0) {
+                return vaDurationSeconds.Value;
+            }
+
+            return _settings.VaDurationSeconds > 0 ? _settings.VaDurationSeconds : 86400;
+        }
+
+        private SepayOrderVaResult BuildStaticVaResult(string orderCode, decimal amount, int durationSeconds) {
             var va = _settings.StaticVaNumber.Trim();
             return new SepayOrderVaResult {
                 OrderCode = orderCode,
@@ -107,12 +137,14 @@ namespace HuongVanTra.Service.Sales {
                 Amount = amount,
                 BankName = "BIDV",
                 PaymentMode = "sepay_static_va",
+                ExpiresAtUtc = DateTime.UtcNow.AddSeconds(durationSeconds),
             };
         }
 
         private async Task<SepayOrderVaResult?> TryCreateOrderVaViaApiAsync(
             string orderCode,
             decimal amount,
+            int durationSeconds,
             CancellationToken cancellationToken) {
             var bankAccountUuid = await ResolveBankAccountUuidAsync(cancellationToken);
             if (string.IsNullOrWhiteSpace(bankAccountUuid)) {
@@ -128,7 +160,7 @@ namespace HuongVanTra.Service.Sales {
             request.Content = JsonContent.Create(new {
                 order_code = sepayOrderCode,
                 amount = (long)Math.Round(amount, MidpointRounding.AwayFromZero),
-                duration = _settings.VaDurationSeconds > 0 ? _settings.VaDurationSeconds : 86400,
+                duration = durationSeconds,
                 with_qrcode = "1",
                 qrcode_template = "compact",
             });
@@ -175,6 +207,7 @@ namespace HuongVanTra.Service.Sales {
                 Amount = parsed.Data.Amount ?? amount,
                 BankName = parsed.Data.BankName,
                 PaymentMode = "sepay_order_va",
+                ExpiresAtUtc = DateTime.UtcNow.AddSeconds(durationSeconds),
             };
         }
 

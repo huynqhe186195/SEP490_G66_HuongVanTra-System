@@ -6,6 +6,7 @@ namespace HuongVanTra.Core.Authorization {
         public const string Dashboard = "dashboard";
         public const string Pos = "pos";
         public const string Orders = "orders";
+        public const string CodOps = "cod_ops";
         public const string Products = "products";
         public const string Inventory = "inventory";
         public const string Customers = "customers";
@@ -20,7 +21,6 @@ namespace HuongVanTra.Core.Authorization {
             new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase) {
                 [AppRoles.Admin] = new[] {
                     AppModules.Dashboard,
-                    AppModules.Pos,
                     AppModules.Orders,
                     AppModules.Products,
                     AppModules.Inventory,
@@ -34,6 +34,7 @@ namespace HuongVanTra.Core.Authorization {
                     AppModules.Dashboard,
                     AppModules.Pos,
                     AppModules.Orders,
+                    AppModules.CodOps,
                     AppModules.Products,
                     AppModules.Inventory,
                     AppModules.Customers,

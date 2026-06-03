@@ -1,25 +1,47 @@
+using System.Text.Json;
+using HuongVanTra.Core.Constants;
+using HuongVanTra.Core.Entities.Identity;
+using HuongVanTra.Core.Entities.Inventory;
 using HuongVanTra.Core.Entities.Sales;
 using HuongVanTra.Core.Sales;
 using HuongVanTra.Infrastructure.Data;
+using HuongVanTra.Service.Sales;
+using HuongVanTra.Service.Sales.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace HuongVanTra.Service.Orders {
     public class OrderService : IOrderService {
         private readonly AppDbContext _dbContext;
+        private readonly IVietQrService _vietQrService;
+        private readonly ISepayOrderVaService _sepayOrderVaService;
+        private readonly SepaySettings _sepaySettings;
 
-        public OrderService(AppDbContext dbContext) {
+        public OrderService(
+            AppDbContext dbContext,
+            IVietQrService vietQrService,
+            ISepayOrderVaService sepayOrderVaService,
+            IOptions<SepaySettings> sepayOptions) {
             _dbContext = dbContext;
+            _vietQrService = vietQrService;
+            _sepayOrderVaService = sepayOrderVaService;
+            _sepaySettings = sepayOptions.Value;
         }
 
         public async Task<PagedResult<OrderListItemDto>> GetOrdersAsync(OrderQuery query, CancellationToken cancellationToken = default) {
             var page = query.Page < 1 ? 1 : query.Page;
             var pageSize = query.PageSize < 1 ? 20 : Math.Min(query.PageSize, 100);
 
+            var access = query.Access ?? OrderAccessScope.AllOrders();
+
             var ordersQuery = _dbContext.Orders
                 .AsNoTracking()
                 .Include(o => o.Customer)
+                .Include(o => o.Cashier)
                 .Include(o => o.PaymentTransactions)
                 .AsQueryable();
+
+            ordersQuery = OrderAccessScope.ApplyFilter(ordersQuery, access);
 
             if (!string.IsNullOrWhiteSpace(query.Search)) {
                 var term = query.Search.Trim();
@@ -30,11 +52,24 @@ namespace HuongVanTra.Service.Orders {
             }
 
             if (!string.IsNullOrWhiteSpace(query.OrderStatus)) {
-                ordersQuery = ordersQuery.Where(o => o.OrderStatus == query.OrderStatus);
+                var status = query.OrderStatus.Trim().ToLowerInvariant();
+                ordersQuery = ordersQuery.Where(o => o.OrderStatus.ToLower() == status);
             }
 
             if (!string.IsNullOrWhiteSpace(query.PaymentStatus)) {
-                ordersQuery = ordersQuery.Where(o => o.PaymentStatus == query.PaymentStatus);
+                var paymentStatus = query.PaymentStatus.Trim().ToLowerInvariant();
+                ordersQuery = ordersQuery.Where(o => o.PaymentStatus.ToLower() == paymentStatus);
+            }
+
+            if (!string.IsNullOrWhiteSpace(query.PaymentMethod)) {
+                var method = query.PaymentMethod.Trim().ToUpperInvariant();
+                ordersQuery = ordersQuery.Where(o => o.PaymentMethod.ToUpper() == method);
+            }
+
+            if (access.Mode == OrderAccessMode.Own && access.EmployeeId.HasValue) {
+                ordersQuery = ordersQuery.Where(o => o.CashierId == access.EmployeeId.Value);
+            } else if (query.CashierId.HasValue) {
+                ordersQuery = ordersQuery.Where(o => o.CashierId == query.CashierId.Value);
             }
 
             if (query.FromDate.HasValue) {
@@ -55,15 +90,17 @@ namespace HuongVanTra.Service.Orders {
                 .Select(o => new OrderListItemDto {
                     Id = o.Id,
                     OrderCode = o.OrderCode,
-                    CustomerName = o.Customer != null ? o.Customer.CustomerCode : "Khách lẻ",
+                    CustomerName = o.Customer != null
+                        ? (string.IsNullOrWhiteSpace(o.Customer.FullName) ? o.Customer.CustomerCode : o.Customer.FullName)
+                        : "Khách lẻ",
                     CustomerPhone = o.Customer != null ? o.Customer.Phone : null,
-                    PaymentMethod = o.PaymentTransactions
-                        .OrderByDescending(p => p.TransactionDate)
-                        .Select(p => p.PaymentMethod)
-                        .FirstOrDefault(),
+                    PaymentMethod = o.PaymentMethod,
                     OrderStatus = o.OrderStatus,
                     PaymentStatus = o.PaymentStatus,
+                    ShippingAddress = o.ShippingAddress,
                     TotalAmount = o.TotalAmount,
+                    CashierId = o.CashierId,
+                    CashierName = o.Cashier.FullName,
                     CreatedAt = o.CreatedAt,
                 })
                 .ToListAsync(cancellationToken);
@@ -76,29 +113,58 @@ namespace HuongVanTra.Service.Orders {
             };
         }
 
-        public async Task<OrderDetailDto?> GetOrderAsync(string idOrCode, CancellationToken cancellationToken = default) {
-            var order = await ResolveOrderAsync(idOrCode, cancellationToken);
-            return order is null ? null : MapToDetail(order);
+        public async Task<List<OrderCreatorOptionDto>> GetOrderCreatorsAsync(
+            OrderAccessScope access,
+            CancellationToken cancellationToken = default) {
+            var ordersQuery = OrderAccessScope.ApplyFilter(_dbContext.Orders.AsNoTracking(), access);
+
+            return await _dbContext.Set<Employee>()
+                .AsNoTracking()
+                .Where(e => ordersQuery.Any(o => o.CashierId == e.Id))
+                .OrderBy(e => e.FullName)
+                .Select(e => new OrderCreatorOptionDto {
+                    Id = e.Id,
+                    FullName = e.FullName,
+                })
+                .ToListAsync(cancellationToken);
         }
 
-        public async Task<OrderDetailDto?> UpdateOrderStatusAsync(int id, UpdateOrderStatusRequest request, CancellationToken cancellationToken = default) {
+        public async Task<OrderDetailDto?> GetOrderAsync(
+            string idOrCode,
+            OrderAccessScope access,
+            CancellationToken cancellationToken = default) {
+            var order = await ResolveOrderAsync(idOrCode, cancellationToken);
+            if (order is null || !OrderAccessScope.CanAccess(order, access)) {
+                return null;
+            }
+
+            return MapToDetail(order);
+        }
+
+        public async Task<OrderDetailDto?> UpdateOrderStatusAsync(
+            int id,
+            UpdateOrderStatusRequest request,
+            OrderAccessScope access,
+            CancellationToken cancellationToken = default) {
+            access.EnsureCanEdit();
+
             if (!OrderStatuses.IsValid(request.OrderStatus)) {
                 throw new ArgumentException("Invalid order status.");
             }
 
             var order = await LoadOrderGraphAsync(id, cancellationToken, tracking: true);
-            if (order is null) {
+            if (order is null || !OrderAccessScope.CanAccess(order, access)) {
                 return null;
             }
 
-            order.OrderStatus = request.OrderStatus.ToUpperInvariant();
+            order.OrderStatus = request.OrderStatus.Trim().ToLowerInvariant();
 
             if (!string.IsNullOrWhiteSpace(request.PaymentStatus)) {
-                order.PaymentStatus = request.PaymentStatus.Trim().ToUpperInvariant();
+                order.PaymentStatus = request.PaymentStatus.Trim().ToLowerInvariant();
             }
 
             if (!string.IsNullOrWhiteSpace(request.StockStatus)) {
-                order.StockStatus = request.StockStatus.Trim().ToUpperInvariant();
+                order.StockStatus = request.StockStatus.Trim().ToLowerInvariant();
             }
 
             order.UpdatedAt = DateTime.UtcNow;
@@ -107,13 +173,19 @@ namespace HuongVanTra.Service.Orders {
             return MapToDetail(order);
         }
 
-        public async Task<OrderDetailDto?> ApplyCouponAsync(int id, ApplyCouponRequest request, CancellationToken cancellationToken = default) {
+        public async Task<OrderDetailDto?> ApplyCouponAsync(
+            int id,
+            ApplyCouponRequest request,
+            OrderAccessScope access,
+            CancellationToken cancellationToken = default) {
+            access.EnsureCanEdit();
+
             if (string.IsNullOrWhiteSpace(request.PromoCode)) {
                 throw new ArgumentException("Promo code is required.");
             }
 
             var order = await LoadOrderGraphAsync(id, cancellationToken, tracking: true);
-            if (order is null) {
+            if (order is null || !OrderAccessScope.CanAccess(order, access)) {
                 return null;
             }
 
@@ -134,23 +206,33 @@ namespace HuongVanTra.Service.Orders {
             return MapToDetail(order);
         }
 
-        public async Task<OrderDetailDto?> AddGiftItemAsync(int id, AddGiftItemRequest request, CancellationToken cancellationToken = default) {
+        public async Task<OrderDetailDto?> AddGiftItemAsync(
+            int id,
+            AddGiftItemRequest request,
+            OrderAccessScope access,
+            CancellationToken cancellationToken = default) {
+            access.EnsureCanEdit();
+
             if (request.ProductId <= 0 || request.Quantity <= 0) {
                 throw new ArgumentException("Invalid gift item.");
             }
 
             var order = await LoadOrderGraphAsync(id, cancellationToken, tracking: true);
-            if (order is null) {
+            if (order is null || !OrderAccessScope.CanAccess(order, access)) {
                 return null;
             }
 
-            var productExists = await _dbContext.Products.AnyAsync(p => p.Id == request.ProductId, cancellationToken);
-            if (!productExists) {
+            var product = await _dbContext.Products
+                .FirstOrDefaultAsync(p => p.Id == request.ProductId, cancellationToken);
+            if (product is null) {
                 throw new ArgumentException("Product not found.");
             }
 
             order.OrderItems.Add(new OrderItem {
-                ProductId = request.ProductId,
+                ProductId = product.Id,
+                ProductName = product.Name,
+                Sku = product.Sku,
+                UnitPrice = product.Price,
                 Quantity = request.Quantity,
                 LineTotal = 0,
                 IsGift = 1,
@@ -165,9 +247,15 @@ namespace HuongVanTra.Service.Orders {
             return order is null ? null : MapToDetail(order);
         }
 
-        public async Task<OrderDetailDto?> UpdateAdjustmentsAsync(int id, UpdateOrderAdjustmentsRequest request, CancellationToken cancellationToken = default) {
+        public async Task<OrderDetailDto?> UpdateAdjustmentsAsync(
+            int id,
+            UpdateOrderAdjustmentsRequest request,
+            OrderAccessScope access,
+            CancellationToken cancellationToken = default) {
+            access.EnsureCanEdit();
+
             var order = await LoadOrderGraphAsync(id, cancellationToken, tracking: true);
-            if (order is null) {
+            if (order is null || !OrderAccessScope.CanAccess(order, access)) {
                 return null;
             }
 
@@ -191,6 +279,12 @@ namespace HuongVanTra.Service.Orders {
                 order.Notes = request.Notes.Trim();
             }
 
+            if (request.ShippingAddress is not null) {
+                order.ShippingAddress = string.IsNullOrWhiteSpace(request.ShippingAddress)
+                    ? null
+                    : request.ShippingAddress.Trim();
+            }
+
             if (request.RequestStockDeduct && order.StockDeductQueue is null) {
                 order.StockDeductQueue = new StockDeductQueue {
                     OrderId = order.Id,
@@ -206,6 +300,451 @@ namespace HuongVanTra.Service.Orders {
 
             await _dbContext.SaveChangesAsync(cancellationToken);
             return MapToDetail(order);
+        }
+
+        public async Task<OrderDetailDto?> UpdateOrderItemsAsync(
+            int id,
+            UpdateOrderItemsRequest request,
+            OrderAccessScope access,
+            CancellationToken cancellationToken = default) {
+            access.EnsureCanEdit();
+
+            if (request.Items is null || request.Items.Count == 0) {
+                throw new ArgumentException("At least one order line is required.");
+            }
+
+            var order = await LoadOrderGraphAsync(id, cancellationToken, tracking: true);
+            if (order is null || !OrderAccessScope.CanAccess(order, access)) {
+                return null;
+            }
+
+            EnsureOrderItemsEditable(order);
+            var normalizedLines = NormalizeItemLines(request.Items);
+
+            var productIds = normalizedLines.Select(l => l.ProductId).Distinct().ToList();
+            var products = await _dbContext.Products
+                .Where(p => productIds.Contains(p.Id))
+                .ToDictionaryAsync(p => p.Id, cancellationToken);
+
+            if (products.Count != productIds.Count) {
+                throw new ArgumentException("One or more products were not found.");
+            }
+
+            await using var tx = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+            try {
+                var warehouse = await _dbContext.Warehouses
+                    .FirstOrDefaultAsync(w => w.StoreId == order.StoreId, cancellationToken)
+                    ?? throw new InvalidOperationException($"No warehouse found for store {order.StoreId}.");
+
+                var queue = order.StockDeductQueue;
+                var wasStockDeducted = string.Equals(order.StockStatus, OrderStockStatus.Deducted, StringComparison.OrdinalIgnoreCase)
+                    || (queue is not null && queue.Status == QueueStatus.Confirmed);
+
+                if (wasStockDeducted && queue is not null && queue.Status == QueueStatus.Confirmed) {
+                    await ReverseInventoryAsync(order, queue, warehouse.Id, order.CashierId, cancellationToken);
+                }
+
+                _dbContext.OrderItems.RemoveRange(order.OrderItems);
+                order.OrderItems.Clear();
+
+                foreach (var line in normalizedLines) {
+                    var product = products[line.ProductId];
+                    var isGift = line.IsGift != 0;
+                    var unitPrice = product.Price;
+                    order.OrderItems.Add(new OrderItem {
+                        ProductId = product.Id,
+                        ProductName = product.Name,
+                        Sku = product.Sku,
+                        UnitPrice = unitPrice,
+                        Quantity = line.Quantity,
+                        LineTotal = isGift ? 0 : unitPrice * line.Quantity,
+                        IsGift = isGift ? (byte)1 : (byte)0,
+                    });
+                }
+
+                var totalBeforeItems = order.TotalAmount;
+                RecalculateTotals(order);
+                SyncPendingPaymentAmounts(order);
+
+                if (Math.Round(order.TotalAmount, 0, MidpointRounding.AwayFromZero)
+                    != Math.Round(totalBeforeItems, 0, MidpointRounding.AwayFromZero)) {
+                    order.Notes = SepayOrderNotes.StripPaymentMetadata(order.Notes);
+                }
+
+                if (wasStockDeducted) {
+                    var snapshot = await BuildBomSnapshotAsync(order.OrderItems, cancellationToken);
+                    if (queue is not null) {
+                        queue.BomSnapshot = JsonSerializer.Serialize(snapshot);
+                        queue.Status = QueueStatus.Confirmed;
+                    }
+
+                    await DeductInventoryAsync(order, warehouse.Id, order.CashierId, cancellationToken);
+                    order.StockStatus = OrderStockStatus.Deducted;
+                } else if (queue is not null && queue.Status == QueueStatus.Waiting) {
+                    var snapshot = await BuildBomSnapshotAsync(order.OrderItems, cancellationToken);
+                    queue.BomSnapshot = JsonSerializer.Serialize(snapshot);
+                }
+
+                order.UpdatedAt = DateTime.UtcNow;
+                await _dbContext.SaveChangesAsync(cancellationToken);
+                await tx.CommitAsync(cancellationToken);
+
+                return MapToDetail(order);
+            } catch {
+                await tx.RollbackAsync(cancellationToken);
+                throw;
+            }
+        }
+
+        private static void EnsureOrderItemsEditable(Order order) {
+            var status = order.OrderStatus.Trim().ToLowerInvariant();
+            if (status is "cancelled" or "completed") {
+                throw new InvalidOperationException("Cannot change items on a cancelled or completed order.");
+            }
+
+            if (string.Equals(order.PaymentStatus, PaymentStatus.Paid, StringComparison.OrdinalIgnoreCase)) {
+                throw new InvalidOperationException("Cannot change items after payment is completed.");
+            }
+        }
+
+        private static List<UpdateOrderItemLineRequest> NormalizeItemLines(List<UpdateOrderItemLineRequest> items) {
+            foreach (var item in items) {
+                if (item.ProductId <= 0 || item.Quantity <= 0) {
+                    throw new ArgumentException("Each line must have a valid product and positive quantity.");
+                }
+            }
+
+            return items
+                .GroupBy(i => (i.ProductId, i.IsGift))
+                .Select(g => new UpdateOrderItemLineRequest {
+                    ProductId = g.Key.ProductId,
+                    IsGift = g.Key.IsGift,
+                    Quantity = g.Sum(x => x.Quantity),
+                })
+                .ToList();
+        }
+
+        private static void SyncPendingPaymentAmounts(Order order) {
+            foreach (var txn in order.PaymentTransactions) {
+                if (!string.Equals(txn.Status, PaymentStatus.Paid, StringComparison.OrdinalIgnoreCase)) {
+                    txn.Amount = order.TotalAmount;
+                }
+            }
+        }
+
+        private const int PaymentQrCooldownSeconds = 30;
+
+        public async Task<OrderPaymentQrDto?> GetOrderPaymentQrAsync(
+            int id,
+            OrderAccessScope access,
+            bool forceRegenerate = false,
+            CancellationToken cancellationToken = default) {
+            access.EnsureCanEdit();
+
+            var order = await _dbContext.Orders
+                .FirstOrDefaultAsync(o => o.Id == id, cancellationToken);
+
+            if (order is null || !OrderAccessScope.CanAccess(order, access)) {
+                return null;
+            }
+
+            if (string.Equals(order.PaymentStatus, PaymentStatus.Paid, StringComparison.OrdinalIgnoreCase)) {
+                throw new InvalidOperationException("Order is already paid.");
+            }
+
+            if (string.Equals(order.OrderStatus, OrderStatus.Cancelled, StringComparison.OrdinalIgnoreCase)) {
+                throw new InvalidOperationException("Cancelled orders cannot generate payment QR.");
+            }
+
+            var method = order.PaymentMethod.Trim().ToUpperInvariant();
+            if (method is not "VIETQR" and not "TRANSFER") {
+                throw new InvalidOperationException(
+                    $"Payment QR is only available for VietQR/transfer orders (current: {order.PaymentMethod}).");
+            }
+
+            if (order.TotalAmount <= 0) {
+                throw new InvalidOperationException("Order total must be greater than zero.");
+            }
+
+            var parsed = SepayOrderNotes.TryParse(order.Notes);
+            var canReuseVa = parsed is not null && SepayOrderNotes.CanReuseVa(parsed, order.TotalAmount);
+            var qrWasExpired = parsed is not null && SepayOrderNotes.IsQrExpired(parsed);
+            var orderDuration = _sepaySettings.VaDurationSeconds > 0 ? _sepaySettings.VaDurationSeconds : 86400;
+
+            if (canReuseVa && !forceRegenerate && parsed!.QrGeneratedAt.HasValue) {
+                var elapsed = DateTime.UtcNow - parsed.QrGeneratedAt.Value;
+                if (elapsed.TotalSeconds < PaymentQrCooldownSeconds) {
+                    return PopulatePaymentQrDto(
+                        order,
+                        _sepayOrderVaService.ResolveQrForExistingVa(
+                            order.OrderCode,
+                            parsed.VaNumber,
+                            order.TotalAmount,
+                            parsed.SepayOrderId),
+                        parsed,
+                        reusedExistingVa: true,
+                        createdNewVa: false,
+                        hint: $"Đang dùng VA hiện tại. Thử lại sau {PaymentQrCooldownSeconds - (int)elapsed.TotalSeconds} giây nếu cần làm mới ảnh QR.");
+                }
+            }
+
+            SepayOrderVaResult sepayVa;
+            var createdNewVa = false;
+            var reusedExistingVa = false;
+
+            if (canReuseVa && parsed is not null) {
+                sepayVa = _sepayOrderVaService.ResolveQrForExistingVa(
+                    order.OrderCode,
+                    parsed.VaNumber,
+                    order.TotalAmount,
+                    parsed.SepayOrderId);
+                reusedExistingVa = true;
+            } else {
+                sepayVa = await _sepayOrderVaService.CreateOrderVaForTransferAsync(
+                    order.OrderCode,
+                    order.TotalAmount,
+                    orderDuration,
+                    cancellationToken);
+                createdNewVa = true;
+            }
+
+            if (createdNewVa) {
+                var remainingNote = SepayOrderNotes.StripPaymentMetadata(order.Notes);
+                var paymentNote = SepayOrderNotes.Build(
+                    sepayVa.VaNumber,
+                    order.TotalAmount,
+                    sepayVa.SepayOrderId,
+                    orderDuration);
+                order.Notes = string.IsNullOrWhiteSpace(remainingNote)
+                    ? paymentNote
+                    : $"{remainingNote}; {paymentNote}";
+
+                order.UpdatedAt = DateTime.UtcNow;
+                await _dbContext.SaveChangesAsync(cancellationToken);
+            }
+
+            var refreshedParsed = SepayOrderNotes.TryParse(order.Notes) ?? parsed;
+
+            return PopulatePaymentQrDto(
+                order,
+                sepayVa,
+                refreshedParsed,
+                reusedExistingVa,
+                createdNewVa,
+                qrWasExpired && createdNewVa
+                    ? "QR/VA đã hết hạn. Đã tạo VA mới."
+                    : reusedExistingVa
+                        ? "Dùng lại VA đã tạo cho đơn này (không tạo thêm trên SePay)."
+                        : createdNewVa
+                            ? "Đã tạo VA mới vì tổng tiền thay đổi, hết hạn hoặc chưa có VA."
+                            : null);
+        }
+
+        private OrderPaymentQrDto PopulatePaymentQrDto(
+            Order order,
+            SepayOrderVaResult sepayVa,
+            SepayOrderNotes.Parsed? parsedNotes,
+            bool reusedExistingVa,
+            bool createdNewVa,
+            string? hint) {
+            var dto = new OrderPaymentQrDto {
+                OrderId = order.Id,
+                OrderCode = order.OrderCode,
+                TotalAmount = order.TotalAmount,
+                PaymentMethod = order.PaymentMethod,
+                TransferAccountNumber = sepayVa.VaNumber,
+                PaymentMode = sepayVa.PaymentMode,
+                ReusedExistingVa = reusedExistingVa,
+                CreatedNewVa = createdNewVa,
+                Hint = hint,
+                QrExpiresAtUtc = parsedNotes?.QrExpiresAt ?? sepayVa.ExpiresAtUtc,
+            };
+
+            if (!string.IsNullOrWhiteSpace(sepayVa.QrImageUrl)) {
+                dto.QrImageUrl = sepayVa.QrImageUrl;
+                dto.QrPayload = sepayVa.QrPayload;
+                dto.TransferContent = order.OrderCode;
+                return dto;
+            }
+
+            var qr = _vietQrService.GenerateForAccount(
+                sepayVa.VaNumber,
+                order.OrderCode,
+                order.TotalAmount);
+            dto.QrImageUrl = qr.QrImageUrl;
+            dto.QrPayload = qr.QrPayload;
+            dto.TransferContent = qr.TransferContent;
+            return dto;
+        }
+
+        private async Task<List<BomSnapshotEntry>> BuildBomSnapshotAsync(
+            ICollection<OrderItem> items,
+            CancellationToken cancellationToken) {
+            var productIds = items.Where(i => i.IsGift == 0).Select(i => i.ProductId).Distinct().ToList();
+            var bomHeaders = await _dbContext.BomHeaders
+                .Include(b => b.BomLines)
+                .Where(b => productIds.Contains(b.FinishedGoodId))
+                .ToListAsync(cancellationToken);
+
+            var snapshot = new List<BomSnapshotEntry>();
+            foreach (var item in items.Where(i => i.IsGift == 0)) {
+                var bom = bomHeaders.FirstOrDefault(b => b.FinishedGoodId == item.ProductId);
+                if (bom is not null && bom.BomLines.Count > 0) {
+                    var multiplier = item.Quantity / bom.QuantityOutput;
+                    foreach (var line in bom.BomLines) {
+                        snapshot.Add(new BomSnapshotEntry {
+                            ProductId = item.ProductId,
+                            MaterialId = line.MaterialId,
+                            Quantity = line.Quantity * multiplier,
+                        });
+                    }
+                } else {
+                    snapshot.Add(new BomSnapshotEntry {
+                        ProductId = item.ProductId,
+                        MaterialId = item.ProductId,
+                        Quantity = item.Quantity,
+                    });
+                }
+            }
+
+            if (snapshot.Count == 0) {
+                throw new InvalidOperationException("No inventory items to deduct for this order.");
+            }
+
+            return snapshot;
+        }
+
+        private async Task DeductInventoryAsync(
+            Order order,
+            int warehouseId,
+            int cashierId,
+            CancellationToken cancellationToken) {
+            var productIds = order.OrderItems
+                .Where(i => i.IsGift == 0)
+                .Select(i => i.ProductId)
+                .Distinct()
+                .ToList();
+
+            var bomHeaders = await _dbContext.BomHeaders
+                .Include(b => b.BomLines)
+                .Where(b => productIds.Contains(b.FinishedGoodId))
+                .ToDictionaryAsync(b => b.FinishedGoodId, cancellationToken);
+
+            var deductMap = new Dictionary<int, decimal>();
+            foreach (var item in order.OrderItems.Where(i => i.IsGift == 0)) {
+                if (bomHeaders.TryGetValue(item.ProductId, out var bom) && bom.BomLines.Count > 0) {
+                    var multiplier = item.Quantity / bom.QuantityOutput;
+                    foreach (var line in bom.BomLines) {
+                        deductMap.TryGetValue(line.MaterialId, out var existing);
+                        deductMap[line.MaterialId] = existing + line.Quantity * multiplier;
+                    }
+                } else {
+                    deductMap.TryGetValue(item.ProductId, out var existing);
+                    deductMap[item.ProductId] = existing + item.Quantity;
+                }
+            }
+
+            if (deductMap.Count == 0) {
+                throw new InvalidOperationException("No inventory items to deduct for this order.");
+            }
+
+            var materialIds = deductMap.Keys.ToList();
+            var balances = await _dbContext.InventoryBalances
+                .Where(b => b.WarehouseId == warehouseId && materialIds.Contains(b.ProductId))
+                .ToDictionaryAsync(b => b.ProductId, cancellationToken);
+
+            var txnCode = $"TXN-{order.OrderCode}";
+
+            foreach (var (materialId, qty) in deductMap) {
+                if (!balances.TryGetValue(materialId, out var balance)) {
+                    balance = new InventoryBalance {
+                        WarehouseId = warehouseId,
+                        ProductId = materialId,
+                        Quantity = 0,
+                    };
+                    _dbContext.InventoryBalances.Add(balance);
+                    await _dbContext.SaveChangesAsync(cancellationToken);
+                    balances[materialId] = balance;
+                }
+
+                var before = balance.Quantity;
+                var after = before - qty;
+
+                if (after < 0) {
+                    throw new InvalidOperationException(
+                        $"Insufficient stock for product {materialId}: available {before}, required {qty}.");
+                }
+
+                balance.Quantity = after;
+
+                _dbContext.InventoryTransactions.Add(new InventoryTransaction {
+                    TxnCode = $"{txnCode}-{materialId}",
+                    WarehouseId = warehouseId,
+                    ProductId = materialId,
+                    TxnType = "OUT",
+                    Quantity = qty,
+                    QuantityBefore = before,
+                    QuantityAfter = after,
+                    RefType = "ORDER",
+                    RefId = order.Id,
+                    CreatedById = cashierId,
+                    CreatedAt = DateTime.UtcNow,
+                });
+            }
+        }
+
+        private async Task ReverseInventoryAsync(
+            Order order,
+            StockDeductQueue queue,
+            int warehouseId,
+            int employeeId,
+            CancellationToken cancellationToken) {
+            var snapshot = JsonSerializer.Deserialize<List<BomSnapshotEntry>>(queue.BomSnapshot) ?? new();
+
+            var deductMap = snapshot
+                .GroupBy(e => e.MaterialId)
+                .ToDictionary(g => g.Key, g => g.Sum(e => e.Quantity));
+
+            if (deductMap.Count == 0) {
+                return;
+            }
+
+            var materialIds = deductMap.Keys.ToList();
+            var balances = await _dbContext.InventoryBalances
+                .Where(b => b.WarehouseId == warehouseId && materialIds.Contains(b.ProductId))
+                .ToDictionaryAsync(b => b.ProductId, cancellationToken);
+
+            var txnCode = $"REV-{order.OrderCode}";
+            foreach (var (materialId, qty) in deductMap) {
+                if (!balances.TryGetValue(materialId, out var balance)) {
+                    balance = new InventoryBalance {
+                        WarehouseId = warehouseId,
+                        ProductId = materialId,
+                        Quantity = 0,
+                    };
+                    _dbContext.InventoryBalances.Add(balance);
+                    await _dbContext.SaveChangesAsync(cancellationToken);
+                    balances[materialId] = balance;
+                }
+
+                var before = balance.Quantity;
+                var after = before + qty;
+                balance.Quantity = after;
+
+                _dbContext.InventoryTransactions.Add(new InventoryTransaction {
+                    TxnCode = $"{txnCode}-{materialId}",
+                    WarehouseId = warehouseId,
+                    ProductId = materialId,
+                    TxnType = "IN",
+                    Quantity = qty,
+                    QuantityBefore = before,
+                    QuantityAfter = after,
+                    RefType = "ORDER_ADJUST",
+                    RefId = order.Id,
+                    CreatedById = employeeId,
+                    CreatedAt = DateTime.UtcNow,
+                });
+            }
         }
 
         private async Task<Order?> ResolveOrderAsync(string idOrCode, CancellationToken cancellationToken, bool tracking = false) {
@@ -268,6 +807,8 @@ namespace HuongVanTra.Service.Orders {
                 CashierName = order.Cashier.FullName,
                 OrderStatus = order.OrderStatus,
                 PaymentStatus = order.PaymentStatus,
+                PaymentMethod = order.PaymentMethod,
+                ShippingAddress = order.ShippingAddress,
                 StockStatus = order.StockStatus,
                 SubTotal = order.SubTotal,
                 CouponDiscount = order.CouponDiscount,
@@ -284,7 +825,9 @@ namespace HuongVanTra.Service.Orders {
                 Items = order.OrderItems.Select(i => new OrderItemDto {
                     Id = i.Id,
                     ProductId = i.ProductId,
-                    ProductSku = i.Product.Sku,
+                    ProductName = i.ProductName,
+                    ProductSku = string.IsNullOrEmpty(i.Sku) ? i.Product.Sku : i.Sku,
+                    UnitPrice = i.UnitPrice,
                     Quantity = i.Quantity,
                     LineTotal = i.LineTotal,
                     IsGift = i.IsGift == 1,
@@ -305,6 +848,12 @@ namespace HuongVanTra.Service.Orders {
                 CreatedAt = order.CreatedAt,
                 UpdatedAt = order.UpdatedAt,
             };
+        }
+
+        private class BomSnapshotEntry {
+            public int ProductId { get; set; }
+            public int MaterialId { get; set; }
+            public decimal Quantity { get; set; }
         }
     }
 }
