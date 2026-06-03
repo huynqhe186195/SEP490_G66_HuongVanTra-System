@@ -3,13 +3,17 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
+import MembershipTierProgress from '../components/MembershipTierProgress.jsx'
 import {
   createCustomer,
   fetchCustomerById,
   fetchMembershipTiers,
   reconcileCustomerDebt,
   updateCustomer,
+  upgradeCustomerTierManual,
 } from '../services/customersApi.js'
+import { fetchMyProfile } from '../../profile/services/profileApi.js'
+import { TIER_AUTO_UPGRADE_HINT } from '../utils/membershipTierUtils.js'
 import {
   customerTypeFromTab,
   customerTypeLabel,
@@ -33,6 +37,10 @@ function CustomerFormPage() {
   const [isReconcilingDebt, setIsReconcilingDebt] = useState(false)
   const [currentDebt, setCurrentDebt] = useState(0)
   const [totalSpend, setTotalSpend] = useState(0)
+  const [currentTierCode, setCurrentTierCode] = useState('')
+  const [currentTierDiscount, setCurrentTierDiscount] = useState(0)
+  const [isUpgradingTier, setIsUpgradingTier] = useState(false)
+  const [vipManualTierId, setVipManualTierId] = useState('')
   const isAdmin = isAdminSession(loadAuthSession())
   const [form, setForm] = useState({
     type: ['general', 'vip', 'corporate'].includes(searchParams.get('type'))
@@ -86,6 +94,9 @@ function CustomerFormPage() {
         })
         setCurrentDebt(Number(customer.currentDebt || 0))
         setTotalSpend(Number(customer.totalSpend || 0))
+        setCurrentTierCode(customer.tier?.tierCode || customer.tierCode || '')
+        setCurrentTierDiscount(Number(customer.tier?.discountPercent ?? 0))
+        setVipManualTierId(customer.tier?.tierId ? String(customer.tier.tierId) : '')
       } catch (error) {
         if (mounted) showError(error.message)
       } finally {
@@ -124,6 +135,36 @@ function CustomerFormPage() {
       type,
       tierId: supportsMembershipTierForTab(type) ? current.tierId : '',
     }))
+  }
+
+  const handleManualVipTierUpgrade = async () => {
+    if (!customerId || !isAdmin || !vipManualTierId) {
+      showError('Chọn hạng cần gán cho khách VIP.')
+      return
+    }
+    setIsUpgradingTier(true)
+    try {
+      const profile = await fetchMyProfile()
+      const empId = profile?.employeeId ?? profile?.EmployeeId
+      if (!empId) {
+        showError('Không xác định được mã nhân viên. Vui lòng đăng nhập lại.')
+        return
+      }
+      await upgradeCustomerTierManual({
+        customerId: Number(customerId),
+        newTierId: Number(vipManualTierId),
+        updatedByEmpId: Number(empId),
+      })
+      const customer = await fetchCustomerById(customerId)
+      setForm((prev) => ({ ...prev, type: 'vip' }))
+      setCurrentTierCode(customer.tier?.tierCode || '')
+      setCurrentTierDiscount(Number(customer.tier?.discountPercent ?? 0))
+      showSuccess('Đã nâng hạng thủ công và chuyển khách sang VIP.')
+    } catch (error) {
+      showError(error.message)
+    } finally {
+      setIsUpgradingTier(false)
+    }
   }
 
   const handleReconcileDebt = async () => {
@@ -271,7 +312,7 @@ function CustomerFormPage() {
               </label>
 
               {supportsMembershipTierForTab(form.type) ? (
-                <label className="space-y-2">
+                <div className="space-y-2 md:col-span-2">
                   <span className="text-xs font-semibold text-[#717971]">Hạng thành viên (Bronze / Silver / Gold)</span>
                   <select
                     className="w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20"
@@ -281,14 +322,40 @@ function CustomerFormPage() {
                     <option value="">Tự gán Bronze (mặc định)</option>
                     {tiers.map((tier) => (
                       <option key={tier.id} value={tier.id}>
+                        {tier.tierCode} — ngưỡng {tier.minTotalSpend.toLocaleString('vi-VN')} đ
+                        {tier.discountPercent > 0 ? ` · CK ${tier.discountPercent}%` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs leading-relaxed text-[#717971]">{TIER_AUTO_UPGRADE_HINT}</p>
+                </div>
+              ) : form.type === 'vip' && isEditMode && isAdmin ? (
+                <div className="space-y-2 md:col-span-2">
+                  <span className="text-xs font-semibold text-[#717971]">Nâng hạng VIP thủ công (Admin)</span>
+                  <select
+                    className="w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20"
+                    value={vipManualTierId}
+                    onChange={(event) => setVipManualTierId(event.target.value)}
+                  >
+                    <option value="">Chọn hạng</option>
+                    {tiers.map((tier) => (
+                      <option key={tier.id} value={tier.id}>
                         {tier.tierCode}
                       </option>
                     ))}
                   </select>
-                </label>
+                  <button
+                    type="button"
+                    className="rounded-xl border border-[#356647] px-4 py-2 text-sm font-semibold text-[#356647] hover:bg-[#356647]/5 disabled:opacity-50"
+                    disabled={isUpgradingTier || !vipManualTierId}
+                    onClick={handleManualVipTierUpgrade}
+                  >
+                    {isUpgradingTier ? 'Đang nâng hạng...' : 'Áp dụng nâng hạng VIP'}
+                  </button>
+                </div>
               ) : (
                 <div className="rounded-xl bg-[#f6f4ec] p-3 text-sm text-[#717971] md:col-span-2">
-                  Khách VIP / doanh nghiệp không gán hạng Bronze, Silver, Gold.
+                  Khách VIP / doanh nghiệp không dùng hạng B/S/G tự động. Admin có thể nâng hạng VIP khi sửa khách VIP.
                 </div>
               )}
 
@@ -335,10 +402,24 @@ function CustomerFormPage() {
                   <p className="text-xs text-[#717971]">Công nợ hiện tại</p>
                   <p className="text-lg font-bold text-[#7e5700]">{formatDebtVnd(currentDebt)}</p>
                 </div>
-                <div className="rounded-xl bg-[#f6f4ec] p-4">
-                  <p className="text-xs text-[#717971]">Tổng chi tiêu tích lũy</p>
-                  <p className="text-sm font-bold text-[#356647]">{formatVnd(totalSpend)}</p>
-                </div>
+                {supportsMembershipTierForTab(form.type) && tiers.length > 0 ? (
+                  <div className="rounded-xl border border-[#356647]/15 bg-[#f8ffef] p-4">
+                    <p className="mb-3 text-xs font-bold uppercase tracking-wider text-[#356647]">Hạng & tiến độ tự động</p>
+                    <MembershipTierProgress
+                      totalSpend={totalSpend}
+                      tierId={form.tierId ? Number(form.tierId) : null}
+                      tierCode={currentTierCode}
+                      tierDiscountPercent={currentTierDiscount}
+                      tiers={tiers}
+                      showHint={false}
+                    />
+                  </div>
+                ) : (
+                  <div className="rounded-xl bg-[#f6f4ec] p-4">
+                    <p className="text-xs text-[#717971]">Tổng chi tiêu tích lũy</p>
+                    <p className="text-sm font-bold text-[#356647]">{formatVnd(totalSpend)}</p>
+                  </div>
+                )}
                 {isAdmin ? (
                   <button
                     type="button"

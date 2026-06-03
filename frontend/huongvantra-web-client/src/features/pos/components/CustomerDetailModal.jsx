@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { showError } from '../../../app/toast.js'
+import MembershipTierProgress from '../../customers/components/MembershipTierProgress.jsx'
+import { fetchMembershipTiers } from '../../customers/services/customersApi.js'
 import { fetchPosCustomerContext } from '../services/posApi.js'
 import { formatRoleLabel } from '../utils/posSeller.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
@@ -60,6 +62,7 @@ function TabButton({ tab, activeTab, onChange }) {
 function CustomerDetailModal({ isOpen, customer, onClose }) {
   const [activeTab, setActiveTab] = useState('profile')
   const [context, setContext] = useState(null)
+  const [membershipTiers, setMembershipTiers] = useState([])
   const [isLoading, setIsLoading] = useState(false)
 
   useEffect(() => {
@@ -73,9 +76,13 @@ function CustomerDetailModal({ isOpen, customer, onClose }) {
     async function loadContext() {
       setIsLoading(true)
       try {
-        const data = await fetchPosCustomerContext(customer.customerId)
+        const [data, tiers] = await Promise.all([
+          fetchPosCustomerContext(customer.customerId),
+          fetchMembershipTiers().catch(() => []),
+        ])
         if (!cancelled) {
           setContext(data)
+          setMembershipTiers(Array.isArray(tiers) ? tiers : [])
         }
       } catch (error) {
         if (!cancelled) {
@@ -152,10 +159,22 @@ function CustomerDetailModal({ isOpen, customer, onClose }) {
                 <p className="text-xs text-[#717971]">Nhóm khách</p>
                 <p className="mt-1 font-semibold text-[#1b1c17]">{customerTypeLabel}</p>
               </div>
-              {context?.tierCode ? (
+              {context?.tierCode || membershipTiers.length > 0 ? (
                 <div className="rounded-xl bg-white p-4 md:col-span-2">
-                  <p className="text-xs text-[#717971]">Hạng thành viên</p>
-                  <p className="mt-1 font-semibold text-[#1b1c17]">{context.tierCode}</p>
+                  <p className="mb-2 text-xs text-[#717971]">Hạng thành viên</p>
+                  {membershipTiers.length > 0 ? (
+                    <MembershipTierProgress
+                      totalSpend={context?.totalSpend ?? customer.totalSpend ?? 0}
+                      tierId={context?.tierId ?? customer.tierId ?? null}
+                      tierCode={context?.tierCode || customer.tierCode}
+                      tierDiscountPercent={context?.tierDiscountPercent ?? customer.tierDiscountPercent ?? 0}
+                      tiers={membershipTiers}
+                      compact
+                      showHint
+                    />
+                  ) : (
+                    <p className="font-semibold text-[#1b1c17]">{context?.tierCode || '—'}</p>
+                  )}
                 </div>
               ) : null}
               <div className="rounded-xl bg-white p-4 md:col-span-2">

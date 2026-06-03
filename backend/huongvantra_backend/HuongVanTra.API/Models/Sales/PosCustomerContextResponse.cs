@@ -8,7 +8,9 @@ namespace HuongVanTra.API.Models.Sales {
         public string? Email { get; set; }
         public string? Address { get; set; }
         public string? TierCode { get; set; }
+        public int? TierId { get; set; }
         public decimal TierDiscountPercent { get; set; }
+        public decimal TotalSpend { get; set; }
         /// <summary>Tổng công nợ lưu trên khách (customers.CurrentDebt).</summary>
         public decimal CurrentDebt { get; set; }
         /// <summary>Còn phải thu theo từng đơn (tính từ orders chưa paid).</summary>

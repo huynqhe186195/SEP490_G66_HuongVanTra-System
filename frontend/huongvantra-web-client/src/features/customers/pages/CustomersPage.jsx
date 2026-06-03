@@ -4,7 +4,8 @@ import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
 import { showError } from '../../../app/toast.js'
-import { fetchCustomers } from '../services/customersApi.js'
+import { fetchCustomers, fetchMembershipTiers } from '../services/customersApi.js'
+import { TIER_AUTO_UPGRADE_HINT } from '../utils/membershipTierUtils.js'
 import {
   CUSTOMER_TYPE_BY_TAB,
   formatDebtVnd,
@@ -54,6 +55,7 @@ function CustomersPage() {
   const [debtFilterOnly, setDebtFilterOnly] = useState(false)
   const [page, setPage] = useState(1)
   const [isLoading, setIsLoading] = useState(true)
+  const [membershipTiers, setMembershipTiers] = useState([])
 
   const tabs = useMemo(
     () => [
@@ -63,6 +65,20 @@ function CustomersPage() {
     ],
     [],
   )
+
+  useEffect(() => {
+    let mounted = true
+    fetchMembershipTiers()
+      .then((data) => {
+        if (mounted) setMembershipTiers(Array.isArray(data) ? data : [])
+      })
+      .catch(() => {
+        if (mounted) setMembershipTiers([])
+      })
+    return () => {
+      mounted = false
+    }
+  }, [])
 
   useEffect(() => {
     let mounted = true
@@ -436,6 +452,9 @@ function CustomersPage() {
                 <div className="flex items-center gap-4">
                   <h4 className="text-2xl font-bold text-[#1b1c17]">Khách phổ thông</h4>
                   <span className="rounded-full bg-[#627b59]/20 px-3 py-1 text-xs text-[#4a6242]">Hạng Bronze / Silver / Gold</span>
+                  <span className="hidden max-w-md text-xs text-[#717971] lg:inline" title={TIER_AUTO_UPGRADE_HINT}>
+                    Tự lên hạng theo chi tiêu
+                  </span>
                 </div>
 
                 <div className="flex gap-3">
@@ -495,6 +514,17 @@ function CustomersPage() {
                             <span className={`rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-tight ${getTierClass(row.tierCode)}`}>
                               {row.tierCode || 'Chưa có hạng'}
                             </span>
+                            {row.tierDiscountPercent > 0 ? (
+                              <p className="mt-1 text-xs text-[#356647]">CK {row.tierDiscountPercent}%</p>
+                            ) : null}
+                            {membershipTiers.length > 0 && row.tierId ? (
+                              <p className="mt-0.5 text-[10px] text-[#717971]">
+                                Ngưỡng{' '}
+                                {membershipTiers.find((t) => t.id === row.tierId)?.minTotalSpend?.toLocaleString('vi-VN') ??
+                                  '—'}{' '}
+                                đ
+                              </p>
+                            ) : null}
                           </td>
                           <td className="border-b border-[#f0eee6] px-6 py-4 font-bold text-[#1b1c17]">{row.customerCode}</td>
                           <td className="border-b border-[#f0eee6] px-6 py-4 text-lg font-bold text-[#356647]">{formatVnd(row.totalSpend)}</td>

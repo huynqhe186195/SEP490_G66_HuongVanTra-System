@@ -1,4 +1,5 @@
 import { loadAuthSession } from '../../auth/services/authSession.js'
+import { mapMembershipTier } from '../utils/membershipTierUtils.js'
 
 const DEFAULT_API_BASE_URL = 'http://localhost:5249'
 
@@ -55,6 +56,7 @@ export function mapCustomer(item) {
     status: item.status ?? item.Status ?? '',
     tierId: item.tierId ?? item.TierId ?? null,
     tierCode: item.tierCode ?? item.TierCode ?? null,
+    tierDiscountPercent: Number(item.tierDiscountPercent ?? item.TierDiscountPercent ?? 0),
     assignedEmployeeId: item.assignedEmployeeId ?? item.AssignedEmployeeId ?? null,
     assignedEmployeeName: item.assignedEmployeeName ?? item.AssignedEmployeeName ?? null,
     totalSpend: Number(item.totalSpend ?? item.TotalSpend ?? 0),
@@ -144,6 +146,20 @@ export async function reconcileCustomerDebt(customerId) {
   })
 }
 
-export function fetchMembershipTiers() {
-  return requestWithAuth('/api/customer/tiers', { method: 'GET' })
+export async function fetchMembershipTiers() {
+  const data = await requestWithAuth('/api/customer/tiers', { method: 'GET' })
+  return Array.isArray(data) ? data.map(mapMembershipTier).filter(Boolean) : []
+}
+
+/** Nâng hạng thủ công (API VIP) — đổi TierId và chuyển loại khách sang VIP. */
+export function upgradeCustomerTierManual({ customerId, newTierId, updatedByEmpId }) {
+  return requestWithAuth('/api/customer/upgrade-tier', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      customerId,
+      newTierId,
+      updatedByEmpId,
+    }),
+  })
 }

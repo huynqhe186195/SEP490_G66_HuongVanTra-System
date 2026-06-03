@@ -88,7 +88,7 @@ namespace HuongVanTra.Service.Implementations {
                 foreach (var customer in normalCustomers) {
                     var totalSpend12Months = await orderRepo.GetQueryable()
                         .Where(o => o.CustomerId == customer.Id &&
-                                    o.OrderStatus == "COMPLETED" &&
+                                    o.OrderStatus.ToLower() == "completed" &&
                                     o.CreatedAt >= oneYearAgo)
                         .SumAsync(o => o.TotalAmount);
 

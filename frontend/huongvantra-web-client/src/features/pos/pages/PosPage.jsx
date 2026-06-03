@@ -355,7 +355,9 @@ function PosPage() {
               ...prev.selectedCustomer,
               currentDebt: context.currentDebt,
               tierCode: context.tierCode || prev.selectedCustomer.tierCode,
+              tierId: context.tierId ?? prev.selectedCustomer.tierId,
               tierDiscountPercent: context.tierDiscountPercent ?? prev.selectedCustomer.tierDiscountPercent,
+              totalSpend: context.totalSpend ?? prev.selectedCustomer.totalSpend,
             },
           }
         })
@@ -1213,6 +1215,12 @@ function PosPage() {
                     <p className="truncate text-xs text-[#717971]">
                       {selectedCustomer.phone || '—'} · {selectedCustomer.customerCode}
                     </p>
+                    {selectedCustomer.tierCode ? (
+                      <p className="mt-0.5 text-xs font-semibold text-[#356647]">
+                        Hạng {selectedCustomer.tierCode}
+                        {tierDiscountPercent > 0 ? ` · CK ${tierDiscountPercent}%` : ''}
+                      </p>
+                    ) : null}
                     {Number(selectedCustomer.currentDebt) > 0 ? (
                       <p className="mt-0.5 text-xs font-semibold text-[#7e5700]">
                         Công nợ: {formatMoney(selectedCustomer.currentDebt)} đ

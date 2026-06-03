@@ -202,7 +202,9 @@ export function mapPosCustomer(item) {
     fullName: item.fullName ?? item.FullName ?? '',
     phone: item.phone ?? item.Phone ?? '',
     tierCode: item.tierCode ?? item.TierCode ?? '',
+    tierId: item.tierId ?? item.TierId ?? null,
     tierDiscountPercent: Number(item.tierDiscountPercent ?? item.TierDiscountPercent ?? 0),
+    totalSpend: Number(item.totalSpend ?? item.TotalSpend ?? 0),
     currentDebt: Number(item.currentDebt ?? item.CurrentDebt ?? 0),
   }
 }
@@ -217,7 +219,9 @@ export function mapPosCustomerContext(item) {
     email: item.email ?? item.Email ?? '',
     address: item.address ?? item.Address ?? '',
     tierCode: item.tierCode ?? item.TierCode ?? '',
+    tierId: item.tierId ?? item.TierId ?? null,
     tierDiscountPercent: Number(item.tierDiscountPercent ?? item.TierDiscountPercent ?? 0),
+    totalSpend: Number(item.totalSpend ?? item.TotalSpend ?? 0),
     currentDebt: Number(item.currentDebt ?? item.CurrentDebt ?? 0),
     outstandingBalance: Number(item.outstandingBalance ?? item.OutstandingBalance ?? 0),
     recentOrders: (item.recentOrders ?? item.RecentOrders ?? []).map((row) => ({
