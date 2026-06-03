@@ -83,24 +83,24 @@ const bomUsageRows = [
 
 function statusBadge(status) {
   if (status === 'On dinh') {
-    return <span className="inline-flex rounded-full bg-[#4e7f5e]/20 px-3 py-1 text-[11px] font-bold text-[#1f5033]">On dinh</span>
+    return <span className="inline-flex rounded-full bg-[#4e7f5e]/20 px-3 py-1 text-[11px] font-bold text-[#1f5033]">Ổn định</span>
   }
 
   if (status === 'Can nhap') {
-    return <span className="inline-flex rounded-full bg-[#fec25b]/30 px-3 py-1 text-[11px] font-bold text-[#744f00]">Can nhap</span>
+    return <span className="inline-flex rounded-full bg-[#fec25b]/30 px-3 py-1 text-[11px] font-bold text-[#744f00]">Cần nhập</span>
   }
 
   if (status === 'Can han') {
-    return <span className="inline-flex rounded-full bg-[#ffdead] px-3 py-1 text-[11px] font-bold text-[#7e5700]">Can han</span>
+    return <span className="inline-flex rounded-full bg-[#ffdead] px-3 py-1 text-[11px] font-bold text-[#7e5700]">Cận hạn</span>
   }
 
-  return <span className="inline-flex rounded-full bg-[#ffdad6] px-3 py-1 text-[11px] font-bold text-[#93000a]">Sap het</span>
+  return <span className="inline-flex rounded-full bg-[#ffdad6] px-3 py-1 text-[11px] font-bold text-[#93000a]">Sắp hết</span>
 }
 
 function ReportsPage() {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-6 [font-family:'Manrope',sans-serif]">
-      <PageHeader title="Báo cáo kho hàng" description="Theo dõi tồn kho, định mức nguyên vật liệu và biến động hàng hóa" searchPlaceholder="Tim kiem bao cao..." />
+      <PageHeader title="Báo cáo kho hàng" description="Theo dõi tồn kho, định mức nguyên vật liệu và biến động hàng hóa" searchPlaceholder="Tìm kiếm báo cáo..." />
 
       <div className="rounded-2xl border border-[#c1c9c0]/30 bg-white p-3 shadow-sm">
         <div className="flex flex-wrap items-center justify-end gap-3">
@@ -109,7 +109,7 @@ function ReportsPage() {
             className="inline-flex items-center gap-2 rounded-lg bg-[#4a6242] px-6 py-2.5 text-sm font-semibold text-white transition-all hover:shadow-lg active:scale-95"
           >
             <span className="material-symbols-outlined">download</span>
-            Xuat bao cao (Excel)
+            Xuất báo cáo (Excel)
           </button>
         </div>
       </div>
@@ -121,7 +121,7 @@ function ReportsPage() {
               <div className="rounded-lg bg-[#ffdad6] p-3 text-[#93000a]">
                 <span className="material-symbols-outlined">warning</span>
               </div>
-              <span className="text-xs font-bold text-[#ba1a1a]">Can nhap gap</span>
+              <span className="text-xs font-bold text-[#ba1a1a]">Cần nhập gấp</span>
             </div>
             <p className="text-2xl font-bold text-[#1b1c17]">12 Mat hang</p>
             <p className="text-sm text-[#414942]">Duoi muc ton toi thieu</p>
@@ -132,7 +132,7 @@ function ReportsPage() {
               <div className="rounded-lg bg-[#fec25b]/25 p-3 text-[#744f00]">
                 <span className="material-symbols-outlined">history_toggle_off</span>
               </div>
-              <span className="text-xs font-bold text-[#7e5700]">Can han</span>
+              <span className="text-xs font-bold text-[#7e5700]">Cận hạn</span>
             </div>
             <p className="text-2xl font-bold text-[#1b1c17]">05 Lo hang</p>
             <p className="text-sm text-[#414942]">Het han trong 7 ngay toi</p>
@@ -143,10 +143,10 @@ function ReportsPage() {
               <div className="rounded-lg bg-[#4e7f5e] p-3 text-[#f6fff5]">
                 <span className="material-symbols-outlined">inventory</span>
               </div>
-              <span className="text-xs font-bold text-[#356647]">Tong gia tri</span>
+              <span className="text-xs font-bold text-[#356647]">Tổng giá trị</span>
             </div>
             <p className="text-2xl font-bold text-[#1b1c17]">1.240.000.000d</p>
-            <p className="text-sm text-[#414942]">Tong von ton kho hien tai</p>
+            <p className="text-sm text-[#414942]">Tổng vốn tồn kho hiện tại</p>
           </article>
         </div>
 
@@ -164,15 +164,15 @@ function ReportsPage() {
                   <select className="w-full rounded-lg border border-[#c1c9c0] bg-white px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-[#356647]/30">
                     <option>Bao cao Ton kho hien tai</option>
                     <option>Bao cao Tieu hao Nguyen vat lieu (BOM)</option>
-                    <option>So nhat ky bien dong kho</option>
+                    <option>Sổ nhật ký biến động kho</option>
                     <option>Phan tich hang cham luan chuyen</option>
                   </select>
                 </div>
 
                 <div>
-                  <label className="mb-2 block text-xs font-semibold text-[#414942]">Danh muc san pham</label>
+                  <label className="mb-2 block text-xs font-semibold text-[#414942]">Danh mục sản phẩm</label>
                   <div className="flex flex-wrap gap-2">
-                    <button type="button" className="rounded-full bg-[#627b59] px-4 py-1.5 text-xs font-semibold text-white">Tat ca</button>
+                    <button type="button" className="rounded-full bg-[#627b59] px-4 py-1.5 text-xs font-semibold text-white">Tất cả</button>
                     <button type="button" className="rounded-full border border-[#c1c9c0] px-4 py-1.5 text-xs font-semibold text-[#414942] transition-colors hover:bg-[#e4e3db]">Tra xanh</button>
                     <button type="button" className="rounded-full border border-[#c1c9c0] px-4 py-1.5 text-xs font-semibold text-[#414942] transition-colors hover:bg-[#e4e3db]">Tra den</button>
                     <button type="button" className="rounded-full border border-[#c1c9c0] px-4 py-1.5 text-xs font-semibold text-[#414942] transition-colors hover:bg-[#e4e3db]">Dung cu pha tra</button>
@@ -188,11 +188,11 @@ function ReportsPage() {
                     </label>
                     <label className="flex items-center gap-3">
                       <input className="h-4 w-4 rounded border-[#717971] text-[#356647] focus:ring-[#356647]" type="checkbox" />
-                      Hang can han/Het han
+                      Hàng cận hạn / hết hạn
                     </label>
                     <label className="flex items-center gap-3">
                       <input className="h-4 w-4 rounded border-[#717971] text-[#356647] focus:ring-[#356647]" type="checkbox" />
-                      Kho khong bien dong (&gt;30 ngay)
+                      Kho không biến động (&gt;30 ngày)
                     </label>
                   </div>
                 </div>
@@ -209,7 +209,7 @@ function ReportsPage() {
                   type="button"
                   className="mt-2 w-full rounded-lg bg-[#356647] px-4 py-3 text-sm font-semibold text-white transition-all hover:shadow-lg active:scale-95"
                 >
-                  Cap nhat ket qua
+                  Cập nhật kết quả
                 </button>
               </div>
             </section>
@@ -230,12 +230,12 @@ function ReportsPage() {
           <div className="space-y-6 xl:col-span-8">
             <section className="overflow-hidden rounded-xl border border-[#c1c9c0] bg-white shadow-sm">
               <div className="flex items-center justify-between border-b border-[#c1c9c0] bg-[#f6f4ec] px-5 py-4">
-                <h3 className="text-xl font-semibold text-[#356647]">Xem truoc du lieu</h3>
+                <h3 className="text-xl font-semibold text-[#356647]">Xem trước dữ liệu</h3>
                 <div className="flex gap-2">
-                  <button type="button" className="rounded-lg p-2 transition-colors hover:bg-[#e4e3db]" title="Print">
+                  <button type="button" className="rounded-lg p-2 transition-colors hover:bg-[#e4e3db]" title="In">
                     <span className="material-symbols-outlined text-[#414942]">print</span>
                   </button>
-                  <button type="button" className="rounded-lg p-2 transition-colors hover:bg-[#e4e3db]" title="Fullscreen">
+                  <button type="button" className="rounded-lg p-2 transition-colors hover:bg-[#e4e3db]" title="Toàn màn hình">
                     <span className="material-symbols-outlined text-[#414942]">fullscreen</span>
                   </button>
                 </div>
@@ -246,7 +246,7 @@ function ReportsPage() {
                   <thead>
                     <tr className="bg-[#eae8e0]/60 text-xs uppercase tracking-wide text-[#414942]">
                       <th className="p-4 font-semibold">Ma hang</th>
-                      <th className="p-4 font-semibold">Ten san pham/NVL</th>
+                      <th className="p-4 font-semibold">Tên sản phẩm / NVL</th>
                       <th className="p-4 font-semibold">DVT</th>
                       <th className="p-4 text-right font-semibold">Ton hien tai</th>
                       <th className="p-4 text-right font-semibold">Dinh muc toi thieu</th>
@@ -327,7 +327,7 @@ function ReportsPage() {
       </section>
 
       <footer className="pb-2 text-center text-xs text-[#717971] opacity-70">
-        Copyright 2024 Huong Van Tra - He thong quan ly kho thong minh.
+        Copyright 2024 Hương Vân Trà — Hệ thống quản lý kho thông minh.
       </footer>
     </div>
   )

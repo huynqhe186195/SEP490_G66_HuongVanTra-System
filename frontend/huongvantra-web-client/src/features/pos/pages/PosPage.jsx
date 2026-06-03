@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { showError, showSuccess } from '../../../app/toast.js'
 import AddCustomerModal from '../components/AddCustomerModal.jsx'
 import CustomerDetailModal from '../components/CustomerDetailModal.jsx'
 import OrderOfferModal from '../components/OrderOfferModal.jsx'
-import PaymentReceiptModal from '../components/PaymentReceiptModal.jsx'
 import ConfirmDialog from '../components/ConfirmDialog.jsx'
+import { printReceiptFromData } from '../utils/printReceipt.js'
 import { vietnamNowLabel } from '../../../utils/vietnamDateTime.js'
 import {
   buildTakeawayOrderPayload,
@@ -45,12 +45,9 @@ function createWorkspace(mode = 'counter') {
     }
   }
   return {
-    tabs: [
-      { id: 1, label: 'Hóa đơn 1' },
-      { id: 2, label: 'Hóa đơn 2' },
-    ],
+    tabs: [{ id: 1, label: 'Hóa đơn 1' }],
     activeTabId: 1,
-    sessions: { 1: empty(), 2: empty() },
+    sessions: { 1: empty() },
   }
 }
 
@@ -143,7 +140,6 @@ function createEmptySession(mode = 'counter') {
 
 function PosPage() {
   const navigate = useNavigate()
-  const location = useLocation()
   const [salesMode, setSalesMode] = useState('counter')
   const [workspaceByMode, setWorkspaceByMode] = useState({
     counter: createWorkspace('counter'),
@@ -156,7 +152,6 @@ function PosPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [searchProducts, setSearchProducts] = useState([])
   const [isSearchLoading, setIsSearchLoading] = useState(false)
-  const [receiptModalData, setReceiptModalData] = useState(null)
   const [tabCloseConfirm, setTabCloseConfirm] = useState(null)
   const [savedShippingAddresses, setSavedShippingAddresses] = useState([])
   const [isLoadingShippingAddresses, setIsLoadingShippingAddresses] = useState(false)
@@ -211,13 +206,6 @@ function PosPage() {
       mounted = false
     }
   }, [])
-
-  useEffect(() => {
-    if (location.state?.receipt) {
-      setReceiptModalData(location.state.receipt)
-      navigate(location.pathname, { replace: true, state: null })
-    }
-  }, [location.pathname, location.state, navigate])
 
   const formatMoney = (value) =>
     new Intl.NumberFormat('vi-VN', {
@@ -430,6 +418,14 @@ function PosPage() {
 
   const requestCloseTab = (tabId) => {
     if (tabs.length <= 1) return
+
+    const tabSession = sessions[tabId]
+    const tabItemCount = tabSession?.cartItems?.length ?? 0
+    if (tabItemCount === 0) {
+      closeTab(tabId)
+      return
+    }
+
     const tab = tabs.find((item) => item.id === tabId)
     setTabCloseConfirm({ tabId, label: tab?.label ?? 'hóa đơn này' })
   }
@@ -755,19 +751,18 @@ function PosPage() {
 
     const result = await createTakeawayCodOrder(payload)
     showSuccess(`Đã tạo đơn COD ${result.orderCode}. Theo dõi tại mục Đơn COD.`)
-    setReceiptModalData(
-      buildReceiptData({
-        orderCode: result.orderCode,
-        method: 'COD',
-        orderTotal: result.totalAmount,
-      }),
-    )
+    const receipt = buildReceiptData({
+      orderCode: result.orderCode,
+      method: 'COD',
+      orderTotal: result.totalAmount,
+    })
     resetCheckoutState()
+    printReceiptFromData(receipt)
   }
 
   const handlePayment = async () => {
     if (!hasCustomerSelected) {
-      showError('Vui long chon hoac them khach hang truoc khi thanh toan.')
+      showError('Vui lòng chọn hoặc thêm khách hàng trước khi thanh toán.')
       return
     }
 
@@ -852,14 +847,13 @@ function PosPage() {
           `Ghi đơn ${result.orderCode}. Đã thu ${formatMoney(cashPaymentAmount)} đ, còn nợ ${formatMoney(debtAmount)} đ.`,
         )
       }
-      setReceiptModalData(
-        buildReceiptData({
-          orderCode: result.orderCode,
-          method: 'CASH',
-          invoiceCode: result.invoiceCode,
-        }),
-      )
+      const receipt = buildReceiptData({
+        orderCode: result.orderCode,
+        method: 'CASH',
+        invoiceCode: result.invoiceCode,
+      })
       resetCheckoutState()
+      printReceiptFromData(receipt)
     } catch (error) {
       showError(error.message)
     } finally {
@@ -942,17 +936,19 @@ function PosPage() {
                   person
                 </span>
               ) : null}
-              <button
-                type="button"
-                onClick={(event) => {
-                  event.stopPropagation()
-                  requestCloseTab(tab.id)
-                }}
-                className="ml-2 inline-flex items-center justify-center rounded-full p-0.5 hover:bg-black/10"
-                aria-label={`Đóng ${tab.label}`}
-              >
-                <Icon className="text-[16px] opacity-80">close</Icon>
-              </button>
+              {tabs.length > 1 ? (
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    requestCloseTab(tab.id)
+                  }}
+                  className="ml-2 inline-flex items-center justify-center rounded-full p-0.5 hover:bg-black/10"
+                  aria-label={`Đóng ${tab.label}`}
+                >
+                  <Icon className="text-[16px] opacity-80">close</Icon>
+                </button>
+              ) : null}
             </div>
             )
           })}
@@ -982,7 +978,7 @@ function PosPage() {
 
             {hasSearchQuery && isSearchLoading ? (
               <div className="absolute left-5 right-5 top-full z-30 mt-2 rounded-xl border border-[#c1c9c0] bg-white p-3 text-sm text-[#717971] shadow-2xl">
-                Dang tim san pham...
+                Đang tìm sản phẩm...
               </div>
             ) : null}
             {showSearchDropdown ? (
@@ -1021,7 +1017,7 @@ function PosPage() {
             ) : null}
             {showSearchEmpty ? (
               <div className="absolute left-5 right-5 top-full z-30 mt-2 rounded-xl border border-[#c1c9c0] bg-white p-3 text-sm text-[#717971] shadow-2xl">
-                Khong tim thay san pham.
+                Không tìm thấy sản phẩm.
               </div>
             ) : null}
           </div>
@@ -1484,7 +1480,7 @@ function PosPage() {
             >
               <span className="text-[10px] opacity-70">F12</span>
               {isSubmitting
-                ? 'Dang xu ly...'
+                ? 'Đang xử lý...'
                 : isTakeaway
                   ? paymentMethod === 'TRANSFER'
                     ? 'Tạo đơn · QR'
@@ -1552,11 +1548,6 @@ function PosPage() {
         isOpen={openModal === 'customer-detail'}
         customer={selectedCustomer}
         onClose={() => setOpenModal(null)}
-      />
-      <PaymentReceiptModal
-        isOpen={Boolean(receiptModalData)}
-        receipt={receiptModalData}
-        onClose={() => setReceiptModalData(null)}
       />
       <ConfirmDialog
         isOpen={Boolean(tabCloseConfirm)}

@@ -53,9 +53,9 @@ function StaffPage() {
     const active = staffRows.filter((item) => item.isActive).length
     const locked = staffRows.filter((item) => !item.isActive).length
     return [
-      { label: 'Tong nhan su', value: String(totalCount), icon: 'groups', tone: 'bg-[#4e7f5e]/20 text-[#356647]' },
-      { label: 'Dang hoat dong', value: String(active), icon: 'check_circle', tone: 'bg-[#627b59]/20 text-[#4a6242]' },
-      { label: 'Tai khoan khoa', value: String(locked), icon: 'lock', tone: 'bg-[#ffdad6] text-[#ba1a1a]' },
+      { label: 'Tổng nhân sự', value: String(totalCount), icon: 'groups', tone: 'bg-[#4e7f5e]/20 text-[#356647]' },
+      { label: 'Đang hoạt động', value: String(active), icon: 'check_circle', tone: 'bg-[#627b59]/20 text-[#4a6242]' },
+      { label: 'Tài khoản khóa', value: String(locked), icon: 'lock', tone: 'bg-[#ffdad6] text-[#ba1a1a]' },
     ]
   }, [staffRows, totalCount])
 
@@ -77,11 +77,11 @@ function StaffPage() {
         <div className="mb-8 flex flex-col justify-between gap-4 md:flex-row md:items-end">
           <div>
             <div className="mb-2 flex items-center gap-2 text-sm text-[#414942]">
-              <span>He thong</span>
+              <span>Hệ thống</span>
               <span>/</span>
-              <span className="font-semibold text-[#356647]">Nhan vien</span>
+              <span className="font-semibold text-[#356647]">Nhân viên</span>
             </div>
-            <h1 className="text-3xl font-bold text-[#356647]">Quan ly nhan su</h1>
+            <h1 className="text-3xl font-bold text-[#356647]">Quản lý nhân sự</h1>
           </div>
 
           <Link
@@ -89,7 +89,7 @@ function StaffPage() {
             className="inline-flex items-center gap-2 self-start rounded-xl bg-[#356647] px-5 py-3 text-sm font-semibold text-white transition-all hover:shadow-lg active:scale-95"
           >
             <span className="material-symbols-outlined text-[20px]">person_add</span>
-            + Them tai khoan
+            + Thêm tài khoản
           </Link>
         </div>
 
@@ -115,7 +115,7 @@ function StaffPage() {
               <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[#414942] text-[20px]">search</span>
               <input
                 className="w-full rounded-lg border border-[#c1c9c0] bg-white py-2.5 pl-10 pr-4 text-sm text-[#1b1c17] outline-none focus:border-[#356647] focus:ring-1 focus:ring-[#356647]"
-                placeholder="Ten hoac so dien thoai..."
+                placeholder="Tên hoặc số điện thoại..."
                 type="text"
                 value={searchValue}
                 onChange={handleFilterChange(setSearchValue)}
@@ -127,7 +127,7 @@ function StaffPage() {
               value={roleFilter}
               onChange={handleFilterChange(setRoleFilter)}
             >
-              <option value="">Tat ca vai tro</option>
+              <option value="">Tất cả vai trò</option>
               {roleOptions.map((role) => (
                 <option key={role.id} value={role.name}>{role.name}</option>
               ))}
@@ -138,9 +138,9 @@ function StaffPage() {
               value={statusFilter}
               onChange={handleFilterChange(setStatusFilter)}
             >
-              <option value="">Trang thai</option>
-              <option value="active">Hoat dong</option>
-              <option value="locked">Bi khoa</option>
+              <option value="">Trạng thái</option>
+              <option value="active">Hoạt động</option>
+              <option value="locked">Bị khóa</option>
             </select>
 
             <button type="button" className="rounded-lg p-2.5 text-[#414942] transition-colors hover:bg-[#eae8e0]">
@@ -152,22 +152,22 @@ function StaffPage() {
             <table className="w-full border-collapse text-left">
               <thead>
                 <tr className="bg-[#f0eee6] text-xs uppercase tracking-wider text-[#414942]">
-                  <th className="px-6 py-4 font-semibold">Nhan vien va vai tro</th>
-                  <th className="px-6 py-4 font-semibold">Tai khoan</th>
-                  <th className="px-6 py-4 font-semibold">So dien thoai</th>
-                  <th className="px-6 py-4 text-center font-semibold">Trang thai</th>
-                  <th className="px-6 py-4 text-right font-semibold">Thao tac</th>
+                  <th className="px-6 py-4 font-semibold">Nhân viên và vai trò</th>
+                  <th className="px-6 py-4 font-semibold">Tài khoản</th>
+                  <th className="px-6 py-4 font-semibold">Số điện thoại</th>
+                  <th className="px-6 py-4 text-center font-semibold">Trạng thái</th>
+                  <th className="px-6 py-4 text-right font-semibold">Thao tác</th>
                 </tr>
               </thead>
 
               <tbody className="divide-y divide-[#c1c9c0]/20">
                 {isLoading ? (
                   <tr>
-                    <td className="px-6 py-6 text-sm text-[#414942]" colSpan={5}>Dang tai du lieu...</td>
+                    <td className="px-6 py-6 text-sm text-[#414942]" colSpan={5}>Đang tải dữ liệu...</td>
                   </tr>
                 ) : staffRows.length === 0 ? (
                   <tr>
-                    <td className="px-6 py-6 text-sm text-[#414942]" colSpan={5}>Khong co du lieu nhan vien.</td>
+                    <td className="px-6 py-6 text-sm text-[#414942]" colSpan={5}>Không có dữ liệu nhân viên.</td>
                   </tr>
                 ) : staffRows.map((staff) => (
                   <tr key={staff.id} className="group transition-colors hover:bg-[#356647]/5">
@@ -178,7 +178,7 @@ function StaffPage() {
                         </div>
                         <div>
                           <p className={`text-sm font-semibold text-[#1b1c17] ${staff.isActive ? '' : 'opacity-60'}`}>{staff.fullName}</p>
-                          <p className={`text-xs text-[#356647] ${staff.isActive ? '' : 'opacity-70'}`}>{(staff.roles || []).join(', ') || 'Chua gan vai tro'}</p>
+                          <p className={`text-xs text-[#356647] ${staff.isActive ? '' : 'opacity-70'}`}>{(staff.roles || []).join(', ') || 'Chưa gán vai trò'}</p>
                         </div>
                       </div>
                     </td>
@@ -190,22 +190,22 @@ function StaffPage() {
                       {staff.isActive ? (
                         <span className="inline-flex items-center rounded-full bg-[#baefc8] px-3 py-1 text-xs font-semibold text-[#00210f]">
                           <span className="mr-2 h-1.5 w-1.5 rounded-full bg-[#356647]" />
-                          Hoat dong
+                          Đang hoạt động
                         </span>
                       ) : (
                         <span className="inline-flex items-center rounded-full bg-[#ffdad6] px-3 py-1 text-xs font-semibold text-[#93000a]">
                           <span className="mr-2 h-1.5 w-1.5 rounded-full bg-[#ba1a1a]" />
-                          Da khoa
+                          Đã khóa
                         </span>
                       )}
                     </td>
 
                     <td className="px-6 py-4 text-right">
                       <div className="flex justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                        <Link to={`/staff/${staff.userId}`} className="rounded-full p-2 text-[#356647] transition-colors hover:bg-[#eae8e0]" title="Chinh sua">
+                        <Link to={`/staff/${staff.userId}`} className="rounded-full p-2 text-[#356647] transition-colors hover:bg-[#eae8e0]" title="Chỉnh sửa">
                           <span className="material-symbols-outlined">edit</span>
                         </Link>
-                        <button type="button" className="rounded-full p-2 text-[#414942] transition-colors hover:bg-[#eae8e0]" title="Lich su">
+                        <button type="button" className="rounded-full p-2 text-[#414942] transition-colors hover:bg-[#eae8e0]" title="Lịch sử">
                           <span className="material-symbols-outlined">history</span>
                         </button>
                       </div>
@@ -217,7 +217,7 @@ function StaffPage() {
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#c1c9c0]/30 bg-[#f6f4ec]/50 px-6 py-4">
-            <p className="text-sm text-[#414942]">Hien thi trang {page}/{totalPages} · tong {totalCount} nhan vien</p>
+            <p className="text-sm text-[#414942]">Hiển thị trang {page}/{totalPages} · tổng {totalCount} nhân viên</p>
             <div className="flex items-center gap-1">
               <button
                 type="button"

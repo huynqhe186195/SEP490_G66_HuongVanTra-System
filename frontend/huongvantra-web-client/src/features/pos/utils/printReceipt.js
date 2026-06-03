@@ -1,11 +1,8 @@
+import { buildReceiptPaperHtml } from './buildReceiptPaperHtml.js'
 import { RECEIPT_PRINT_CSS } from './receiptPrintStyles.js'
 
-/**
- * In biên lai trong iframe riêng — tránh lệch khổ khi window.print() trên cả trang POS.
- * @param {HTMLElement} paperElement — phần tử .receipt-paper
- */
-export function printReceipt(paperElement) {
-  if (!paperElement) return
+function printReceiptHtml(paperHtml) {
+  if (!paperHtml) return
 
   const iframe = document.createElement('iframe')
   iframe.setAttribute('title', 'In hóa đơn')
@@ -29,7 +26,7 @@ export function printReceipt(paperElement) {
   <title>Hóa đơn</title>
   <style>${RECEIPT_PRINT_CSS}</style>
 </head>
-<body>${paperElement.outerHTML}</body>
+<body>${paperHtml}</body>
 </html>`,
   )
   doc.close()
@@ -53,4 +50,19 @@ export function printReceipt(paperElement) {
   iframe.onload = () => {
     setTimeout(doPrint, 50)
   }
+  setTimeout(doPrint, 120)
+}
+
+/**
+ * In biên lai trong iframe riêng — tránh lệch khổ khi window.print() trên cả trang POS.
+ * @param {HTMLElement} paperElement — phần tử .receipt-paper
+ */
+export function printReceipt(paperElement) {
+  if (!paperElement) return
+  printReceiptHtml(paperElement.outerHTML)
+}
+
+/** Mở hộp thoại in trình duyệt từ object hóa đơn (không cần route / trang riêng). */
+export function printReceiptFromData(receipt) {
+  printReceiptHtml(buildReceiptPaperHtml(receipt))
 }

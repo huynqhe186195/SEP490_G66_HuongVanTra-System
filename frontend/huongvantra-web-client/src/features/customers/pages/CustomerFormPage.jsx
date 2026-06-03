@@ -185,7 +185,7 @@ function CustomerFormPage() {
                 className={`rounded-full px-4 py-1 text-xs font-semibold ${form.type === 'corporate' ? 'bg-[#7e5700] text-white' : 'text-[#414942]'}`}
                 onClick={() => handleTypeChange('corporate')}
               >
-                Corporate
+                Doanh nghiệp
               </button>
             </div>
           </div>
@@ -262,7 +262,7 @@ function CustomerFormPage() {
                 </label>
               ) : (
                 <div className="rounded-xl bg-[#f6f4ec] p-3 text-sm text-[#717971] md:col-span-2">
-                  Khách VIP / Corporate không gán hạng Bronze, Silver, Gold.
+                  Khách VIP / doanh nghiệp không gán hạng Bronze, Silver, Gold.
                 </div>
               )}
 
@@ -274,8 +274,8 @@ function CustomerFormPage() {
                   onChange={updateField('status')}
                   disabled={!isEditMode}
                 >
-                  <option value="active">Active</option>
-                  <option value="inactive">Inactive</option>
+                  <option value="active">Đang hoạt động</option>
+                  <option value="inactive">Ngừng hoạt động</option>
                 </select>
               </label>
             </div>

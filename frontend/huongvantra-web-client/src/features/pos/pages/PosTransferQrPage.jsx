@@ -7,6 +7,7 @@ import {
   fetchPosTransferPaymentInfo,
   resolveTransferQrImageUrl,
 } from '../services/posApi.js'
+import { printReceiptFromData } from '../utils/printReceipt.js'
 
 const POLL_INTERVAL_MS = 5000
 
@@ -90,10 +91,10 @@ function PosTransferQrPage() {
           : `Đã thanh toán · Đơn ${payment?.orderCode || payment?.orderId}`,
       )
 
-      navigate('/pos', {
-        replace: true,
-        state: receipt ? { receipt } : undefined,
-      })
+      navigate('/pos', { replace: true })
+      if (receipt) {
+        printReceiptFromData(receipt)
+      }
     },
     [navigate, payment?.orderCode, payment?.orderId, payment?.receipt, invoiceCode],
   )

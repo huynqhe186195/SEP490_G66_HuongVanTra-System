@@ -34,7 +34,7 @@ function InventoryStockPage() {
         </div>
 
         <Link to="/inventory/bom" className="flex items-center rounded-lg bg-[#c3dbbc] px-5 py-2 text-sm font-bold text-[#446e52]">
-          <span className="mr-1.5">+</span> Tao moi BOM
+          <span className="mr-1.5">+</span> Tạo mới BOM
         </Link>
       </div>
 

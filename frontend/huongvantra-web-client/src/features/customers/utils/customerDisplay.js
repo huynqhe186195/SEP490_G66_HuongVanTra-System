@@ -31,9 +31,9 @@ export function getTierClass(tierCode) {
 export function getStatusDisplay(status) {
   const normalized = (status || '').toUpperCase()
   if (normalized === 'ACTIVE') {
-    return { label: 'Active', className: 'bg-[#627b59] text-[#f8ffef]' }
+    return { label: 'Đang hoạt động', className: 'bg-[#627b59] text-[#f8ffef]' }
   }
-  return { label: 'Inactive', className: 'bg-[#ffdad6] text-[#93000a]' }
+  return { label: 'Ngừng hoạt động', className: 'bg-[#ffdad6] text-[#93000a]' }
 }
 
 export function customerTypeFromTab(tabKey) {

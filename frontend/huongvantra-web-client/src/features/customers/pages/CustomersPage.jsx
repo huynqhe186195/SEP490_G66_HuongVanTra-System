@@ -21,10 +21,10 @@ const corporateIconClasses = [
 ]
 
 const sectorBars = [
-  { label: 'IT Services', value: 65, color: 'bg-[#9ed3ad] hover:bg-[#4e7f5e]' },
-  { label: 'Retail', value: 40, color: 'bg-[#b3cea7] hover:bg-[#627b59]' },
-  { label: 'Banking', value: 85, color: 'bg-[#f8bc56] hover:bg-[#fec25b]' },
-  { label: 'Hospitality', value: 55, color: 'bg-[#9ed3ad] hover:bg-[#4e7f5e]' },
+  { label: 'CNTT', value: 65, color: 'bg-[#9ed3ad] hover:bg-[#4e7f5e]' },
+  { label: 'Bán lẻ', value: 40, color: 'bg-[#b3cea7] hover:bg-[#627b59]' },
+  { label: 'Ngân hàng', value: 85, color: 'bg-[#f8bc56] hover:bg-[#fec25b]' },
+  { label: 'Khách sạn & F&B', value: 55, color: 'bg-[#9ed3ad] hover:bg-[#4e7f5e]' },
 ]
 
 const growthBars = [
@@ -38,10 +38,10 @@ const growthBars = [
 ]
 
 const activityFeed = [
-  { title: 'New Contract Signed', sub: 'FPT Software • 2 mins ago', dot: 'bg-[#4a6242]' },
-  { title: 'Debt Reminder Sent', sub: 'TG Di Dong • 1 hour ago', dot: 'bg-[#7e5700]' },
-  { title: 'Account Rep Updated', sub: 'VinGroup JSC • 3 hours ago', dot: 'bg-[#356647]' },
-  { title: 'Payment Confirmed', sub: 'Masan Group • Yesterday', dot: 'bg-[#4a6242]' },
+  { title: 'Ký hợp đồng mới', sub: 'FPT Software • 2 phút trước', dot: 'bg-[#4a6242]' },
+  { title: 'Đã gửi nhắc nợ', sub: 'TG Di Động • 1 giờ trước', dot: 'bg-[#7e5700]' },
+  { title: 'Cập nhật NV phụ trách', sub: 'VinGroup JSC • 3 giờ trước', dot: 'bg-[#356647]' },
+  { title: 'Xác nhận thanh toán', sub: 'Masan Group • Hôm qua', dot: 'bg-[#4a6242]' },
 ]
 
 function CustomersPage() {
@@ -55,7 +55,7 @@ function CustomersPage() {
     () => [
       { key: 'general', label: 'Phổ thông' },
       { key: 'vip', label: 'VIP' },
-      { key: 'corporate', label: 'Corporate' },
+      { key: 'corporate', label: 'Doanh nghiệp' },
     ],
     [],
   )
@@ -107,10 +107,10 @@ function CustomersPage() {
     const activeCount = customers.filter((item) => item.status?.toUpperCase() === 'ACTIVE').length
     const totalSpend = customers.reduce((sum, item) => sum + Number(item.totalSpend || 0), 0)
     return [
-      { label: 'Total Corporate', value: String(customers.length), note: 'from API', noteClass: 'text-[#4a6242]' },
-      { label: 'Active Accounts', value: String(activeCount), note: `${customers.length - activeCount} inactive`, noteClass: 'text-[#717971]' },
-      { label: 'Total Spending', value: formatVnd(totalSpend).replace(' VND', ''), note: 'VND', noteClass: 'text-[#7e5700]' },
-      { label: 'Collection Rate', value: '—', note: 'trending_up', noteClass: 'text-[#4a6242]', isIconNote: true },
+      { label: 'Tổng KH doanh nghiệp', value: String(customers.length), note: 'từ hệ thống', noteClass: 'text-[#4a6242]' },
+      { label: 'Đang hoạt động', value: String(activeCount), note: `${customers.length - activeCount} ngừng HĐ`, noteClass: 'text-[#717971]' },
+      { label: 'Tổng chi tiêu', value: formatVnd(totalSpend).replace(' VND', ''), note: 'VND', noteClass: 'text-[#7e5700]' },
+      { label: 'Tỷ lệ thu hồi', value: '—', note: 'trending_up', noteClass: 'text-[#4a6242]', isIconNote: true },
     ]
   }, [customers])
 
@@ -121,7 +121,7 @@ function CustomersPage() {
       {
         label: 'Khách phổ thông',
         value: String(customers.length),
-        note: `${activeCount} active`,
+        note: `${activeCount} đang hoạt động`,
         noteIcon: 'trending_up',
         icon: 'group',
         toneClass: 'text-[#356647] bg-[#4e7f5e]/10',
@@ -136,7 +136,7 @@ function CustomersPage() {
         glow: 'bg-[#7e5700]/10',
       },
       {
-        label: 'Total Spending',
+        label: 'Tổng chi tiêu',
         value: formatVnd(customers.reduce((sum, item) => sum + Number(item.totalSpend || 0), 0)).replace(' VND', ''),
         note: 'VND',
         noteIcon: 'payments',
@@ -153,7 +153,7 @@ function CustomersPage() {
       {
         label: 'Khách VIP',
         value: String(customers.length),
-        note: `${activeCount} active`,
+        note: `${activeCount} đang hoạt động`,
         noteIcon: 'trending_up',
         icon: 'stars',
         toneClass: 'text-[#356647] bg-[#4e7f5e]/10',
@@ -168,7 +168,7 @@ function CustomersPage() {
         glow: 'bg-[#7e5700]/10',
       },
       {
-        label: 'Active',
+        label: 'Đang hoạt động',
         value: String(activeCount),
         note: 'Không dùng hạng B/S/G',
         icon: 'verified',
@@ -197,9 +197,9 @@ function CustomersPage() {
       <main className="flex flex-col gap-4">
         <section className="flex flex-col gap-4 rounded-[24px] border border-[#c1c9c0]/30 bg-white p-4 shadow-sm sm:p-6">
           <div className="flex items-center gap-2 text-xs text-[#717971]">
-            <span>Customers</span>
+            <span>Khách hàng</span>
             <span className="material-symbols-outlined text-[14px]">chevron_right</span>
-            <span className="font-semibold text-[#356647]">Management</span>
+            <span className="font-semibold text-[#356647]">Quản lý</span>
           </div>
 
           <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
@@ -226,10 +226,10 @@ function CustomersPage() {
             >
               <span className="material-symbols-outlined">add</span>
               {activeTab === 'corporate'
-                ? 'New Corporate Account'
+                ? 'Thêm khách doanh nghiệp'
                 : activeTab === 'vip'
-                  ? 'Add VIP Customer'
-                  : 'Add Customer'}
+                  ? 'Thêm khách VIP'
+                  : 'Thêm khách hàng'}
             </Link>
           </div>
         </section>
@@ -256,15 +256,15 @@ function CustomersPage() {
 
             <section className="overflow-hidden rounded-2xl border border-[#f0eee6] bg-white shadow-[0px_4px_20px_rgba(0,0,0,0.04)]">
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#f0eee6] p-6">
-                <h3 className="text-xl font-semibold text-[#1b1c17]">Corporate Customer List</h3>
+                <h3 className="text-xl font-semibold text-[#1b1c17]">Danh sách khách doanh nghiệp</h3>
                 <div className="flex items-center gap-3">
                   <button type="button" className="inline-flex items-center gap-1 rounded-lg border border-[#c1c9c0] px-3 py-1.5 text-xs text-[#717971] hover:bg-[#f6f4ec]">
                     <span className="material-symbols-outlined text-sm">filter_list</span>
-                    Filter
+                    Lọc
                   </button>
                   <button type="button" className="inline-flex items-center gap-1 rounded-lg border border-[#c1c9c0] px-3 py-1.5 text-xs text-[#717971] hover:bg-[#f6f4ec]">
                     <span className="material-symbols-outlined text-sm">download</span>
-                    Export
+                    Xuất Excel
                   </button>
                 </div>
               </div>
@@ -273,12 +273,12 @@ function CustomersPage() {
                 <table className="w-full border-collapse text-left text-sm">
                   <thead>
                     <tr className="bg-[#f6f4ec] text-xs uppercase tracking-wider text-[#717971]">
-                      <th className="px-6 py-4 font-semibold">Company Name</th>
+                      <th className="px-6 py-4 font-semibold">Tên công ty</th>
                       <th className="px-6 py-4 font-semibold">NV phụ trách</th>
                       <th className="px-6 py-4 font-semibold">Mã KH</th>
                       <th className="px-6 py-4 font-semibold">Tổng chi tiêu</th>
-                      <th className="px-6 py-4 font-semibold">Status</th>
-                      <th className="px-6 py-4 font-semibold">Actions</th>
+                      <th className="px-6 py-4 font-semibold">Trạng thái</th>
+                      <th className="px-6 py-4 font-semibold">Thao tác</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#f0eee6] text-[#1b1c17]">
@@ -345,7 +345,7 @@ function CustomersPage() {
             <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
               <article className="rounded-2xl border border-[#f0eee6] bg-white p-5 shadow-[0px_4px_20px_rgba(0,0,0,0.04)] lg:col-span-2">
                 <div className="mb-6 flex items-center justify-between">
-                  <h4 className="font-bold text-[#1b1c17]">Revenue by Corporate Sector</h4>
+                  <h4 className="font-bold text-[#1b1c17]">Doanh thu theo ngành</h4>
                   <span className="material-symbols-outlined cursor-pointer text-[#717971]">more_horiz</span>
                 </div>
 
@@ -367,7 +367,7 @@ function CustomersPage() {
               </article>
 
               <article className="flex flex-col gap-4 rounded-2xl bg-[#f0eee6] p-5">
-                <h4 className="font-bold text-[#1b1c17]">Recent Activity</h4>
+                <h4 className="font-bold text-[#1b1c17]">Hoạt động gần đây</h4>
                 <div className="custom-scrollbar flex max-h-64 flex-col gap-4 overflow-y-auto">
                   {activityFeed.map((item) => (
                     <div key={item.title} className="flex gap-3">
@@ -380,7 +380,7 @@ function CustomersPage() {
                   ))}
                 </div>
                 <button type="button" className="mt-auto inline-flex items-center gap-1 text-xs font-bold text-[#356647] hover:underline">
-                  View All Activities
+                  Xem tất cả hoạt động
                   <span className="material-symbols-outlined text-xs">arrow_forward</span>
                 </button>
               </article>
@@ -421,11 +421,11 @@ function CustomersPage() {
                 <div className="flex gap-3">
                   <button type="button" className="inline-flex items-center gap-2 rounded-lg border border-[#c1c9c0] px-4 py-2 text-sm text-[#414942] hover:bg-[#eae8e0]">
                     <span className="material-symbols-outlined text-[20px]">filter_list</span>
-                    Filter
+                    Lọc
                   </button>
                   <Link to="/customers/create?type=general" className="inline-flex items-center gap-2 rounded-lg bg-[#4a6242] px-4 py-2 text-sm text-white hover:opacity-90">
                     <span className="material-symbols-outlined text-[20px]">add</span>
-                    Add Customer
+                    Thêm khách hàng
                   </Link>
                 </div>
               </div>
@@ -434,12 +434,12 @@ function CustomersPage() {
                 <table className="w-full border-collapse text-left">
                   <thead>
                     <tr className="text-xs uppercase tracking-wider text-[#717971]">
-                      <th className="border-b border-[#f0eee6] px-6 py-4 font-semibold">Name</th>
-                      <th className="border-b border-[#f0eee6] px-6 py-4 font-semibold">Phone</th>
-                      <th className="border-b border-[#f0eee6] px-6 py-4 font-semibold">Tier</th>
+                      <th className="border-b border-[#f0eee6] px-6 py-4 font-semibold">Tên</th>
+                      <th className="border-b border-[#f0eee6] px-6 py-4 font-semibold">Số điện thoại</th>
+                      <th className="border-b border-[#f0eee6] px-6 py-4 font-semibold">Hạng</th>
                       <th className="border-b border-[#f0eee6] px-6 py-4 font-semibold">Mã KH</th>
-                      <th className="border-b border-[#f0eee6] px-6 py-4 font-semibold">Total Spending</th>
-                      <th className="border-b border-[#f0eee6] px-6 py-4 text-right font-semibold">Actions</th>
+                      <th className="border-b border-[#f0eee6] px-6 py-4 font-semibold">Tổng chi tiêu</th>
+                      <th className="border-b border-[#f0eee6] px-6 py-4 text-right font-semibold">Thao tác</th>
                     </tr>
                   </thead>
                   <tbody className="text-sm">
@@ -500,15 +500,15 @@ function CustomersPage() {
             <section className="mt-2 grid grid-cols-1 gap-4 lg:grid-cols-12">
               <article className="flex min-h-[300px] flex-col rounded-xl border border-[#eae8e0] bg-white p-5 shadow-[0px_4px_20px_rgba(0,0,0,0.04)] lg:col-span-8">
                 <div className="mb-6 flex items-center justify-between">
-                  <h5 className="text-xl font-semibold text-[#1b1c17]">Customer Growth &amp; Loyalty</h5>
+                  <h5 className="text-xl font-semibold text-[#1b1c17]">Tăng trưởng &amp; gắn kết khách hàng</h5>
                   <div className="flex items-center gap-2 text-xs text-[#414942]">
                     <span className="flex items-center gap-1">
                       <span className="h-3 w-3 rounded-full bg-[#356647]" />
-                      New Members
+                      Thành viên mới
                     </span>
                     <span className="flex items-center gap-1">
                       <span className="h-3 w-3 rounded-full bg-[#7e5700]" />
-                      VIP Conversions
+                      Chuyển VIP
                     </span>
                   </div>
                 </div>
@@ -528,17 +528,17 @@ function CustomersPage() {
               <article className="relative flex flex-col justify-between overflow-hidden rounded-xl bg-[#356647] p-5 text-white shadow-lg lg:col-span-4">
                 <div className="absolute -bottom-10 -right-10 h-40 w-40 rounded-full bg-white/10 blur-3xl" />
                 <div className="relative">
-                  <h5 className="mb-2 text-xl font-semibold">Exclusive VIP Tea Tasting</h5>
+                  <h5 className="mb-2 text-xl font-semibold">Thử trà VIP riêng tư</h5>
                   <p className="text-sm leading-relaxed text-white/90">
-                    Schedule a private session for your Gold Tier customers this weekend. Strengthen brand loyalty through premium experience.
+                    Đặt buổi trải nghiệm cho khách hạng Gold cuối tuần này — tăng gắn kết thương hiệu qua trải nghiệm cao cấp.
                   </p>
                 </div>
 
                 <div className="relative mt-6">
                   <button type="button" className="w-full rounded-lg bg-white py-3 font-bold text-[#356647] shadow-sm transition-colors hover:bg-[#f6f4ec]">
-                    Create Event
+                    Tạo sự kiện
                   </button>
-                  <p className="mt-3 text-center text-[11px] text-white/70">Next Event: Sunday, Oct 24th</p>
+                  <p className="mt-3 text-center text-[11px] text-white/70">Sự kiện tiếp: Chủ nhật, 24/10</p>
                 </div>
               </article>
             </section>
@@ -578,11 +578,11 @@ function CustomersPage() {
                 <div className="flex gap-3">
                   <button type="button" className="inline-flex items-center gap-2 rounded-lg border border-[#c1c9c0] px-4 py-2 text-sm text-[#414942] hover:bg-[#eae8e0]">
                     <span className="material-symbols-outlined text-[20px]">filter_list</span>
-                    Filter
+                    Lọc
                   </button>
                   <Link to="/customers/create?type=vip" className="inline-flex items-center gap-2 rounded-lg bg-[#7e5700] px-4 py-2 text-sm text-white hover:opacity-90">
                     <span className="material-symbols-outlined text-[20px]">add</span>
-                    Add VIP Customer
+                    Thêm khách VIP
                   </Link>
                 </div>
               </div>
@@ -591,12 +591,12 @@ function CustomersPage() {
                 <table className="w-full border-collapse text-left">
                   <thead>
                     <tr className="text-xs uppercase tracking-wider text-[#717971]">
-                      <th className="border-b border-[#f0eee6] px-6 py-4 font-semibold">Name</th>
-                      <th className="border-b border-[#f0eee6] px-6 py-4 font-semibold">Phone</th>
+                      <th className="border-b border-[#f0eee6] px-6 py-4 font-semibold">Tên</th>
+                      <th className="border-b border-[#f0eee6] px-6 py-4 font-semibold">Số điện thoại</th>
                       <th className="border-b border-[#f0eee6] px-6 py-4 font-semibold">Mã KH</th>
-                      <th className="border-b border-[#f0eee6] px-6 py-4 font-semibold">Total Spending</th>
-                      <th className="border-b border-[#f0eee6] px-6 py-4 font-semibold">Status</th>
-                      <th className="border-b border-[#f0eee6] px-6 py-4 text-right font-semibold">Actions</th>
+                      <th className="border-b border-[#f0eee6] px-6 py-4 font-semibold">Tổng chi tiêu</th>
+                      <th className="border-b border-[#f0eee6] px-6 py-4 font-semibold">Trạng thái</th>
+                      <th className="border-b border-[#f0eee6] px-6 py-4 text-right font-semibold">Thao tác</th>
                     </tr>
                   </thead>
                   <tbody className="text-sm">

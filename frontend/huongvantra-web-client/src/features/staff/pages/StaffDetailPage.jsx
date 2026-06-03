@@ -107,7 +107,7 @@ function StaffDetailPage() {
       <PageHeader
         title="Chi tiết nhân viên"
         description="Xem và chỉnh sửa thông tin tài khoản, quyền truy cập và lịch sử đăng nhập"
-        searchPlaceholder="Tim kiem he thong..."
+        searchPlaceholder="Tìm kiếm hệ thống..."
       />
 
       <section className="rounded-[24px] border border-[#c1c9c0]/30 bg-white p-6 shadow-sm">
@@ -121,7 +121,7 @@ function StaffDetailPage() {
           </nav>
 
           <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
-            <h1 className="text-3xl font-bold text-[#356647]">Chi tiet &amp; Chinh sua nhan vien</h1>
+            <h1 className="text-3xl font-bold text-[#356647]">Chi tiết &amp; chỉnh sửa nhân viên</h1>
             <div className="flex items-center gap-3">
               <button
                 type="button"
@@ -136,7 +136,7 @@ function StaffDetailPage() {
                 onClick={handleSave}
                 disabled={isLoading || isSaving || !canSave}
               >
-                {isSaving ? 'Dang luu...' : 'Luu thay doi'}
+                {isSaving ? 'Đang lưu...' : 'Lưu thay đổi'}
               </button>
             </div>
           </div>
@@ -171,7 +171,7 @@ function StaffDetailPage() {
                 </label>
 
                 <label className="flex flex-col gap-2">
-                  <span className="text-xs font-semibold text-[#414942]">Ten dang nhap</span>
+                  <span className="text-xs font-semibold text-[#414942]">Tên đăng nhập</span>
                   <input
                     className="rounded-lg border-none bg-[#f6f4ec] p-3 text-sm shadow-inner outline-none focus:ring-2 focus:ring-[#356647]/30"
                     value={form.username}
@@ -186,7 +186,7 @@ function StaffDetailPage() {
                     className="rounded-lg border-none bg-[#f6f4ec] p-3 text-sm shadow-inner outline-none focus:ring-2 focus:ring-[#356647]/30"
                     value={form.newPassword}
                     onChange={handleChange('newPassword')}
-                    placeholder="De trong neu khong doi"
+                    placeholder="Để trống nếu không đổi"
                   />
                 </label>
 
@@ -204,7 +204,7 @@ function StaffDetailPage() {
             <section className="rounded-xl bg-white p-5 shadow-[0px_4px_20px_rgba(0,0,0,0.04)]">
               <div className="mb-6 flex items-center gap-2 text-[#356647]">
                 <span className="material-symbols-outlined">admin_panel_settings</span>
-                <h3 className="text-xl font-semibold">Gan quyen</h3>
+                <h3 className="text-xl font-semibold">Gán quyền</h3>
               </div>
 
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
@@ -216,7 +216,7 @@ function StaffDetailPage() {
                       value={form.role}
                       onChange={handleChange('role')}
                     >
-                      <option value="">Chon vai tro</option>
+                      <option value="">Chọn vai trò</option>
                       {roleOptions.map((role) => (
                         <option key={role.id} value={role.name}>{role.name}</option>
                       ))}
@@ -236,7 +236,7 @@ function StaffDetailPage() {
                 </div>
 
                 <div className="flex items-center gap-4">
-                  <span className={`text-sm font-bold ${form.active ? 'text-[#356647]' : 'text-[#414942]'}`}>{form.active ? 'Dang hoat dong' : 'Ngung hoat dong'}</span>
+                  <span className={`text-sm font-bold ${form.active ? 'text-[#356647]' : 'text-[#414942]'}`}>{form.active ? 'Đang hoạt động' : 'Ngừng hoạt động'}</span>
                   <button
                     type="button"
                     className={`relative h-6 w-12 rounded-full transition-colors ${form.active ? 'bg-[#356647]' : 'bg-[#dcdad2]'}`}

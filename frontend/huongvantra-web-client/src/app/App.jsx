@@ -43,6 +43,7 @@ function App() {
         <Route index element={<HomeRedirect />} />
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/pos" element={<PosPage />} />
+        <Route path="/pos/receipt/print" element={<Navigate to="/pos" replace />} />
         <Route path="/pos/payment/qr" element={<PosTransferQrPage />} />
         <Route path="/orders" element={<OrdersPage />} />
         <Route path="/orders/cod" element={<CodOrdersPage />} />

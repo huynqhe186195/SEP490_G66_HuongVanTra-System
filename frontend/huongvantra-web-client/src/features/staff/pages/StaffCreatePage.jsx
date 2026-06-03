@@ -50,7 +50,7 @@ function StaffCreatePage() {
 
   const handleSave = async () => {
     if (!canSubmit) {
-      showError('Vui lòng nhập đủ họ tên, số điện thoại, username, mật khẩu (>=6) và vai trò.')
+      showError('Vui lòng nhập đủ họ tên, số điện thoại, tên đăng nhập, mật khẩu (≥6) và vai trò.')
       return
     }
 
@@ -88,11 +88,11 @@ function StaffCreatePage() {
             <span className="material-symbols-outlined text-[16px]">chevron_right</span>
             <span>Nhan vien</span>
             <span className="material-symbols-outlined text-[16px]">chevron_right</span>
-            <span className="font-semibold text-[#356647]">Them moi</span>
+            <span className="font-semibold text-[#356647]">Thêm mới</span>
           </nav>
 
           <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
-            <h1 className="text-3xl font-bold text-[#356647]">Them tai khoan nhan su</h1>
+            <h1 className="text-3xl font-bold text-[#356647]">Thêm tài khoản nhân sự</h1>
             <div className="flex items-center gap-3">
               <button
                 type="button"
@@ -107,7 +107,7 @@ function StaffCreatePage() {
                 onClick={handleSave}
                 disabled={isSaving || !canSubmit}
               >
-                {isSaving ? 'Dang tao...' : 'Tao tai khoan'}
+                {isSaving ? 'Đang tạo...' : 'Tạo tài khoản'}
               </button>
             </div>
           </div>
@@ -133,7 +133,7 @@ function StaffCreatePage() {
                 </label>
 
                 <label className="flex flex-col gap-2">
-                  <span className="text-xs font-semibold text-[#414942]">Ten dang nhap</span>
+                  <span className="text-xs font-semibold text-[#414942]">Tên đăng nhập</span>
                   <input className="rounded-lg border-none bg-[#f6f4ec] p-3 text-sm shadow-inner outline-none focus:ring-2 focus:ring-[#356647]/30" value={form.username} onChange={handleChange('username')} />
                 </label>
 
@@ -152,7 +152,7 @@ function StaffCreatePage() {
             <section className="rounded-xl bg-white p-5 shadow-[0px_4px_20px_rgba(0,0,0,0.04)]">
               <div className="mb-6 flex items-center gap-2 text-[#356647]">
                 <span className="material-symbols-outlined">admin_panel_settings</span>
-                <h3 className="text-xl font-semibold">Gan quyen</h3>
+                <h3 className="text-xl font-semibold">Gán quyền</h3>
               </div>
 
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
@@ -160,7 +160,7 @@ function StaffCreatePage() {
                   <span className="text-xs font-semibold text-[#414942]">Vai tro nhan vien</span>
                   <div className="relative">
                     <select className="w-full appearance-none rounded-lg border-none bg-[#f6f4ec] p-3 text-sm shadow-inner outline-none focus:ring-2 focus:ring-[#356647]/30" value={form.role} onChange={handleChange('role')}>
-                      <option value="">Chon vai tro</option>
+                      <option value="">Chọn vai trò</option>
                       {roleOptions.map((role) => (
                         <option key={role.id} value={role.name}>{role.name}</option>
                       ))}
@@ -181,7 +181,7 @@ function StaffCreatePage() {
                 </div>
 
                 <div className="flex items-center gap-4">
-                  <span className={`text-sm font-bold ${form.active ? 'text-[#356647]' : 'text-[#414942]'}`}>{form.active ? 'Dang hoat dong' : 'Ngung hoat dong'}</span>
+                  <span className={`text-sm font-bold ${form.active ? 'text-[#356647]' : 'text-[#414942]'}`}>{form.active ? 'Đang hoạt động' : 'Ngừng hoạt động'}</span>
                   <button type="button" className={`relative h-6 w-12 rounded-full transition-colors ${form.active ? 'bg-[#356647]' : 'bg-[#dcdad2]'}`} onClick={() => setForm((current) => ({ ...current, active: !current.active }))} aria-label="Toggle status">
                     <span className={`absolute top-[2px] h-5 w-5 rounded-full bg-white transition-transform ${form.active ? 'translate-x-6' : 'translate-x-0.5'}`} />
                   </button>
