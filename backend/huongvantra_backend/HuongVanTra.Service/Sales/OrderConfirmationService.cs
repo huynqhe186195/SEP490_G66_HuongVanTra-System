@@ -39,11 +39,15 @@ namespace HuongVanTra.Service.Sales {
 
             await using var tx = await _db.Database.BeginTransactionAsync(cancellationToken);
             try {
+                var confirmedAt = DateTime.UtcNow;
                 order.PaymentStatus = "paid";
                 order.OrderStatus = "completed";
-                order.UpdatedAt = DateTime.UtcNow;
+                order.UpdatedAt = confirmedAt;
 
                 await EnsurePaymentTransactionAsync(order, command.PaymentReference, cancellationToken);
+
+                var invoice = PaymentWebhookService.CreateInvoice(order, command.EmployeeId, confirmedAt);
+                _db.Invoices.Add(invoice);
 
                 _db.AuditLogs.Add(new AuditLog {
                     Action = "confirm_payment",
@@ -53,13 +57,13 @@ namespace HuongVanTra.Service.Sales {
                     StoreId = order.StoreId,
                     Status = "SUCCESS",
                     NewValues = BuildAuditNote(command.PaymentReference, command.Note),
-                    CreatedAt = DateTime.UtcNow,
+                    CreatedAt = confirmedAt,
                 });
 
                 await _db.SaveChangesAsync(cancellationToken);
                 await tx.CommitAsync(cancellationToken);
 
-                return ToResult(order);
+                return ToResult(order, invoice.InvoiceCode);
             }
             catch {
                 await tx.RollbackAsync(cancellationToken);
@@ -87,11 +91,15 @@ namespace HuongVanTra.Service.Sales {
 
             await using var tx = await _db.Database.BeginTransactionAsync(cancellationToken);
             try {
+                var confirmedAt = DateTime.UtcNow;
                 order.PaymentStatus = "paid";
                 order.OrderStatus = "completed";
-                order.UpdatedAt = DateTime.UtcNow;
+                order.UpdatedAt = confirmedAt;
 
                 await EnsurePaymentTransactionAsync(order, paymentReference: "COD", cancellationToken);
+
+                var invoice = PaymentWebhookService.CreateInvoice(order, employeeId, confirmedAt);
+                _db.Invoices.Add(invoice);
 
                 _db.AuditLogs.Add(new AuditLog {
                     Action = "confirm_cod_completed",
@@ -100,13 +108,13 @@ namespace HuongVanTra.Service.Sales {
                     UserId = employeeId,
                     StoreId = order.StoreId,
                     Status = "SUCCESS",
-                    CreatedAt = DateTime.UtcNow,
+                    CreatedAt = confirmedAt,
                 });
 
                 await _db.SaveChangesAsync(cancellationToken);
                 await tx.CommitAsync(cancellationToken);
 
-                return ToResult(order);
+                return ToResult(order, invoice.InvoiceCode);
             }
             catch {
                 await tx.RollbackAsync(cancellationToken);
@@ -164,12 +172,13 @@ namespace HuongVanTra.Service.Sales {
             });
         }
 
-        private static OrderConfirmationResult ToResult(Order order) => new() {
+        private static OrderConfirmationResult ToResult(Order order, string? invoiceCode = null) => new() {
             OrderId = order.Id,
             OrderCode = order.OrderCode,
             PaymentMethod = order.PaymentMethod,
             PaymentStatus = order.PaymentStatus,
             OrderStatus = order.OrderStatus,
+            InvoiceCode = invoiceCode,
             ConfirmedAt = DateTime.UtcNow,
         };
     }

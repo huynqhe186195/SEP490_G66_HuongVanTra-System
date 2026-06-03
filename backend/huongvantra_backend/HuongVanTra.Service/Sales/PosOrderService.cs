@@ -3,6 +3,7 @@ using HuongVanTra.Core.Entities.Sales;
 using HuongVanTra.Core.Entities.System;
 using HuongVanTra.Infrastructure.Data;
 using HuongVanTra.Service.Sales.Models;
+using HuongVanTra.Service.Common;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
 
@@ -10,10 +11,18 @@ namespace HuongVanTra.Service.Sales {
     public class PosOrderService : IPosOrderService {
         private readonly AppDbContext _db;
         private readonly IVietQrService _vietQrService;
+        private readonly ISepayOrderVaService _sepayOrderVaService;
+        private readonly SepaySettings _sepaySettings;
 
-        public PosOrderService(AppDbContext db, IVietQrService vietQrService) {
+        public PosOrderService(
+            AppDbContext db,
+            IVietQrService vietQrService,
+            ISepayOrderVaService sepayOrderVaService,
+            Microsoft.Extensions.Options.IOptions<SepaySettings> sepayOptions) {
             _db = db;
             _vietQrService = vietQrService;
+            _sepayOrderVaService = sepayOrderVaService;
+            _sepaySettings = sepayOptions.Value;
         }
 
         public async Task<PosOrderResult> CreateOnlineOrderAsync(CreatePosOrderCommand command) {
@@ -37,19 +46,16 @@ namespace HuongVanTra.Service.Sales {
                     CreatedAt = DateTime.UtcNow
                 });
 
+                var result = ToResult(order);
+                if (HasTransferPayment(command)) {
+                    await ApplyTransferQrAsync(order, result);
+                }
+
                 await UpdateCustomerSpendAsync(command.CustomerId, order.TotalAmount);
                 await WriteAuditLogAsync("create", "orders", order.Id, command.CashierId, command.StoreId);
 
                 await _db.SaveChangesAsync();
                 await tx.CommitAsync();
-
-                var result = ToResult(order);
-                if (HasTransferPayment(command)) {
-                    var qr = await _vietQrService.GenerateForOrderAsync(order.OrderCode, order.TotalAmount);
-                    result.QrImageUrl = qr.QrImageUrl;
-                    result.QrPayload = qr.QrPayload;
-                    result.TransferContent = qr.TransferContent;
-                }
 
                 return result;
             }
@@ -80,10 +86,17 @@ namespace HuongVanTra.Service.Sales {
                 await UpdateCustomerSpendAsync(command.CustomerId, order.TotalAmount);
                 await WriteAuditLogAsync("create", "orders", order.Id, command.CashierId, command.StoreId);
 
+                string? invoiceCode = null;
+                if (IsFullCashPayment(command, order.TotalAmount)) {
+                    invoiceCode = ApplyPaidState(order, command.CashierId, $"POS-CASH-{order.OrderCode}");
+                }
+
                 await _db.SaveChangesAsync();
                 await tx.CommitAsync();
 
-                return ToResult(order);
+                var result = ToResult(order);
+                result.InvoiceCode = invoiceCode;
+                return result;
             }
             catch {
                 await tx.RollbackAsync();
@@ -102,6 +115,8 @@ namespace HuongVanTra.Service.Sales {
                 throw new ArgumentException("Order must have at least one item.");
             if (command.Payments.Count == 0)
                 throw new ArgumentException("Order must have at least one payment.");
+            if (command.ManualDiscount < 0)
+                throw new ArgumentException("Manual discount cannot be negative.");
 
             var storeExists = await _db.Stores.AnyAsync(s => s.Id == command.StoreId);
             if (!storeExists)
@@ -167,25 +182,36 @@ namespace HuongVanTra.Service.Sales {
             }).ToList();
 
             var subtotal = items.Sum(i => i.LineTotal);
+            var manualDiscount = Math.Min(Math.Max(0, command.ManualDiscount), subtotal);
+            var afterManual = subtotal - manualDiscount;
 
-            // Apply promotion discount first
-            var afterPromo = discount.type switch {
-                "PERCENTAGE" => subtotal * (1 - discount.value / 100),
-                "FIXED"      => Math.Max(0, subtotal - discount.value),
-                _            => subtotal
+            var couponDiscount = discount.type switch {
+                "PERCENTAGE" => afterManual * (discount.value / 100),
+                "FIXED"      => Math.Min(discount.value, afterManual),
+                _            => 0m
             };
 
-            // Then apply membership tier discount on top
+            var afterPromo = discount.type switch {
+                "PERCENTAGE" => afterManual * (1 - discount.value / 100),
+                "FIXED"      => Math.Max(0, afterManual - discount.value),
+                _            => afterManual
+            };
+
             var totalAmount = membershipDiscountPercent > 0
                 ? afterPromo * (1 - membershipDiscountPercent / 100)
                 : afterPromo;
 
             var roundedTotal = Math.Round(totalAmount, 2);
+            var roundedSubtotal = Math.Round(subtotal, 2);
+            var roundedManualDiscount = Math.Round(manualDiscount, 2);
+            var roundedCouponDiscount = Math.Round(couponDiscount, 2);
+
             var paymentsTotal = command.Payments.Sum(p => p.Amount);
             if (paymentsTotal < 0)
                 throw new ArgumentException("Total payments amount cannot be negative.");
 
             var payments = BuildPaymentTransactions(command.Payments, roundedTotal);
+            var primaryPaymentMethod = command.Payments.FirstOrDefault()?.PaymentMethod?.Trim() ?? "CASH";
 
             return new Order {
                 OrderCode           = GenerateOrderCode(),
@@ -193,6 +219,10 @@ namespace HuongVanTra.Service.Sales {
                 CustomerId          = command.CustomerId,
                 CashierId           = command.CashierId,
                 PromotionId         = command.PromotionId,
+                SubTotal            = roundedSubtotal,
+                ManualDiscount      = roundedManualDiscount,
+                CouponDiscount      = roundedCouponDiscount,
+                PaymentMethod       = primaryPaymentMethod,
                 TotalAmount         = roundedTotal,
                 PaymentStatus       = "unpaid",
                 StockStatus         = "pending_deduct",
@@ -348,9 +378,82 @@ namespace HuongVanTra.Service.Sales {
             return $"POS-{ts}-{suffix}";
         }
 
+        private async Task ApplyTransferQrAsync(Order order, PosOrderResult result) {
+            var sepayVa = await _sepayOrderVaService.CreateOrderVaForTransferAsync(
+                order.OrderCode,
+                order.TotalAmount);
+
+            order.Notes = SepayOrderNotes.Build(sepayVa.VaNumber, sepayVa.SepayOrderId);
+            result.TransferAccountNumber = sepayVa.VaNumber;
+            result.PaymentMode = sepayVa.PaymentMode;
+
+            if (!string.IsNullOrWhiteSpace(sepayVa.QrImageUrl)) {
+                result.QrImageUrl = sepayVa.QrImageUrl;
+                result.QrPayload = sepayVa.QrPayload;
+                result.TransferContent = order.OrderCode;
+                return;
+            }
+
+            var qr = _vietQrService.GenerateForAccount(
+                sepayVa.VaNumber,
+                order.OrderCode,
+                order.TotalAmount);
+            result.QrImageUrl = qr.QrImageUrl;
+            result.QrPayload = qr.QrPayload;
+            result.TransferContent = qr.TransferContent;
+        }
+
         private static bool HasTransferPayment(CreatePosOrderCommand command) {
             return command.Payments.Any(p =>
                 string.Equals(p.PaymentMethod, "TRANSFER", StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static bool IsFullCashPayment(CreatePosOrderCommand command, decimal orderTotal) {
+            if (HasTransferPayment(command)) {
+                return false;
+            }
+
+            var hasCashPayment = command.Payments.Any(p =>
+                string.Equals(p.PaymentMethod, "CASH", StringComparison.OrdinalIgnoreCase));
+
+            if (orderTotal <= 0) {
+                return hasCashPayment;
+            }
+
+            var cashPaid = command.Payments
+                .Where(p => string.Equals(p.PaymentMethod, "CASH", StringComparison.OrdinalIgnoreCase))
+                .Sum(p => p.Amount);
+
+            return cashPaid >= orderTotal;
+        }
+
+        private string ApplyPaidState(Order order, int cashierId, string paymentReference) {
+            var confirmedAt = DateTime.UtcNow;
+            order.PaymentStatus = "paid";
+            order.OrderStatus = "completed";
+            order.UpdatedAt = confirmedAt;
+
+            foreach (var paymentTxn in order.PaymentTransactions) {
+                paymentTxn.Status = "paid";
+                paymentTxn.ConfirmedAt = confirmedAt;
+                paymentTxn.ReferenceCode = paymentReference;
+            }
+
+            var invoice = PaymentWebhookService.CreateInvoice(order, cashierId, confirmedAt);
+            _db.Invoices.Add(invoice);
+
+            _db.AuditLogs.Add(new AuditLog {
+                Action = "confirm_payment",
+                EntityType = "orders",
+                EntityId = order.Id,
+                UserId = cashierId,
+                StoreId = order.StoreId,
+                Status = "SUCCESS",
+                NewValues = AuditLogJson.Serialize(new { paymentReference }),
+                CreatedAt = confirmedAt,
+            });
+
+            return invoice.InvoiceCode;
         }
 
         private static List<PaymentTransaction> BuildPaymentTransactions(
@@ -378,9 +481,9 @@ namespace HuongVanTra.Service.Sales {
                 });
             }
 
+            // Cho phép ghi nợ / chưa thu tiền: không có dòng thanh toán khi tổng đơn > 0.
             if (payments.Count == 0 && orderTotal > 0) {
-                throw new ArgumentException(
-                    $"Total payments amount ({paymentCommands.Sum(p => p.Amount)}) must be greater than 0 for order total ({orderTotal}).");
+                return payments;
             }
 
             return payments;

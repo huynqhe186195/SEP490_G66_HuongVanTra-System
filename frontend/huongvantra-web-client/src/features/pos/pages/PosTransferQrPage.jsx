@@ -1,17 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { showError, showSuccess } from '../../../app/toast.js'
 import {
-  confirmOrderPayment,
   fetchPosOrderPaymentStatus,
+  fetchPosSepaySetup,
   fetchPosTransferPaymentInfo,
   resolveTransferQrImageUrl,
-  simulatePosPaymentWebhook,
 } from '../services/posApi.js'
 
-const POLL_INTERVAL_MS = 3000
-const showSimulateWebhook =
-  import.meta.env.DEV || import.meta.env.VITE_POS_ALLOW_SIMULATE_WEBHOOK === 'true'
+const POLL_INTERVAL_MS = 5000
 
 function Icon({ children, className = '' }) {
   return <span className={`material-symbols-outlined ${className}`}>{children}</span>
@@ -21,12 +18,12 @@ function formatMoney(value) {
   return new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(value)
 }
 
-function buildTransferNote(orderLabel, customer) {
-  const parts = ['POS', orderLabel?.replace(/\s+/g, '') || 'HD'].filter(Boolean)
-  if (customer?.trim()) {
-    parts.push(customer.trim().slice(0, 24))
-  }
-  return parts.join(' ').toUpperCase()
+function paymentStatusLabel(status, isPaid) {
+  if (isPaid) return 'Đã thanh toán'
+  const normalized = String(status || '').toLowerCase()
+  if (normalized === 'pending_payment') return 'Chờ chuyển khoản'
+  if (normalized === 'paid') return 'Đã thanh toán'
+  return status || 'Đang chờ'
 }
 
 function PosTransferQrPage() {
@@ -35,20 +32,41 @@ function PosTransferQrPage() {
   const payment = location.state
   const [bankInfo, setBankInfo] = useState(null)
   const [isLoadingBank, setIsLoadingBank] = useState(true)
-  const [isConfirming, setIsConfirming] = useState(false)
-  const [isSimulating, setIsSimulating] = useState(false)
   const [paymentStatus, setPaymentStatus] = useState('')
+  const [isPaid, setIsPaid] = useState(false)
+  const [invoiceCode, setInvoiceCode] = useState('')
+  const [pollError, setPollError] = useState('')
+  const [expectedTransferContent, setExpectedTransferContent] = useState('')
+  const [expectedAmount, setExpectedAmount] = useState(0)
+  const [sepaySetup, setSepaySetup] = useState(null)
   const completedRef = useRef(false)
 
-  const completeCheckout = useCallback(() => {
-    if (completedRef.current) return
-    completedRef.current = true
-    showSuccess(`Đã xác nhận thanh toán đơn ${payment?.orderCode || payment?.orderId}.`)
-    navigate('/pos', {
-      replace: true,
-      state: payment?.receipt ? { receipt: payment.receipt } : undefined,
-    })
-  }, [navigate, payment?.orderCode, payment?.orderId, payment?.receipt])
+  const finishWithReceipt = useCallback(
+    (status) => {
+      if (completedRef.current) return
+      completedRef.current = true
+
+      const receipt = payment?.receipt
+        ? {
+            ...payment.receipt,
+            invoiceCode: status?.invoiceCode || invoiceCode || payment.receipt.invoiceCode,
+            orderCode: status?.orderCode || payment.orderCode || payment.receipt.orderCode,
+          }
+        : undefined
+
+      showSuccess(
+        status?.invoiceCode
+          ? `Đã thanh toán · Số HĐ: ${status.invoiceCode}`
+          : `Đã thanh toán · Đơn ${payment?.orderCode || payment?.orderId}`,
+      )
+
+      navigate('/pos', {
+        replace: true,
+        state: receipt ? { receipt } : undefined,
+      })
+    },
+    [navigate, payment?.orderCode, payment?.orderId, payment?.receipt, invoiceCode],
+  )
 
   useEffect(() => {
     let mounted = true
@@ -72,92 +90,98 @@ function PosTransferQrPage() {
     }
 
     loadBankInfo()
+
+    fetchPosSepaySetup()
+      .then((data) => {
+        if (mounted) {
+          setSepaySetup(data)
+        }
+      })
+      .catch(() => {
+        if (mounted) {
+          setSepaySetup(null)
+        }
+      })
+
     return () => {
       mounted = false
     }
   }, [])
+
+  const pollPaymentStatus = useCallback(async () => {
+    if (!payment?.orderId || completedRef.current) return
+
+    try {
+      const status = await fetchPosOrderPaymentStatus(payment.orderId)
+      setPollError('')
+
+      setPaymentStatus(status.paymentStatus || '')
+      setIsPaid(status.isPaid)
+      if (status.invoiceCode) {
+        setInvoiceCode(status.invoiceCode)
+      }
+      if (status.expectedTransferContent) {
+        setExpectedTransferContent(status.expectedTransferContent)
+      }
+      if (status.expectedAmount > 0) {
+        setExpectedAmount(status.expectedAmount)
+      }
+
+      if (status.isPaid) {
+        finishWithReceipt(status)
+      }
+    } catch (error) {
+      setPollError(error.message || 'Không kiểm tra được trạng thái thanh toán.')
+    }
+  }, [payment?.orderId, finishWithReceipt])
 
   useEffect(() => {
     if (!payment?.orderId || completedRef.current) {
       return undefined
     }
 
-    let cancelled = false
-
-    async function pollStatus() {
-      try {
-        const status = await fetchPosOrderPaymentStatus(payment.orderId)
-        if (cancelled || completedRef.current) return
-
-        setPaymentStatus(status.paymentStatus || '')
-        if (status.isPaid) {
-          completeCheckout()
-        }
-      } catch {
-        // Bỏ qua lỗi poll tạm thời
-      }
-    }
-
-    pollStatus()
-    const timerId = setInterval(pollStatus, POLL_INTERVAL_MS)
-    return () => {
-      cancelled = true
-      clearInterval(timerId)
-    }
-  }, [payment?.orderId, completeCheckout])
+    pollPaymentStatus()
+    const timerId = setInterval(pollPaymentStatus, POLL_INTERVAL_MS)
+    return () => clearInterval(timerId)
+  }, [payment?.orderId, pollPaymentStatus])
 
   const transferNote = useMemo(() => {
+    if (expectedTransferContent) {
+      return expectedTransferContent
+    }
     if (payment?.transferContent) {
       return payment.transferContent
     }
-    return buildTransferNote(payment?.orderCode || payment?.orderLabel, payment?.customer)
-  }, [payment?.transferContent, payment?.orderCode, payment?.orderLabel, payment?.customer])
+    return (payment?.orderCode || payment?.orderLabel || '').trim().toUpperCase()
+  }, [expectedTransferContent, payment?.transferContent, payment?.orderCode, payment?.orderLabel])
+
+  const displayAmount = expectedAmount > 0 ? expectedAmount : payment?.total || 0
 
   const qrImageUrl = resolveTransferQrImageUrl({
     qrImageUrl: payment?.qrImageUrl,
     qrPayload: payment?.qrPayload,
   })
 
-  const handleConfirmReceived = async () => {
-    if (!payment?.orderId) {
-      showError('Không tìm thấy mã đơn hàng để xác nhận.')
-      return
-    }
-
-    setIsConfirming(true)
+  const handleCopyTransferNote = async () => {
     try {
-      await confirmOrderPayment(payment.orderId, {
-        paymentReference: `POS-TRANSFER-${payment.orderCode || payment.orderId}`,
-        note: 'Xác nhận chuyển khoản từ POS',
-      })
-      completeCheckout()
-    } catch (error) {
-      showError(error.message)
-    } finally {
-      setIsConfirming(false)
+      await navigator.clipboard.writeText(transferNote)
+      showSuccess('Đã sao chép nội dung chuyển khoản.')
+    } catch {
+      showError('Không sao chép được. Vui lòng chọn và copy thủ công.')
     }
   }
 
-  const handleSimulateWebhook = async () => {
-    if (!payment?.orderId) return
-
-    setIsSimulating(true)
-    try {
-      await simulatePosPaymentWebhook(payment.orderId, {
-        paymentReference: `SIM-${payment.orderCode || payment.orderId}`,
-        note: 'Mô phỏng webhook chuyển khoản',
-      })
-      completeCheckout()
-    } catch (error) {
-      showError(error.message)
-    } finally {
-      setIsSimulating(false)
-    }
-  }
-
-  if (!payment?.total || payment.paymentMethod !== 'TRANSFER' || !payment.orderId) {
+  if (payment?.paymentMethod !== 'TRANSFER' || !payment.orderId) {
     return <Navigate to="/pos" replace />
   }
+
+  const receiveAccount =
+    payment.transferAccountNumber || bankInfo?.accountNumber || '—'
+  const usesSepayVa =
+    payment.paymentMode === 'sepay_order_va' || payment.paymentMode === 'sepay_static_va'
+  const isLegacyMainAccountQr =
+    !usesSepayVa && receiveAccount.replace(/\D/g, '') === (bankInfo?.accountNumber || '').replace(/\D/g, '')
+  const statusText = paymentStatusLabel(paymentStatus, isPaid)
 
   return (
     <div className="mx-auto flex min-h-0 w-full max-w-lg flex-1 flex-col">
@@ -174,15 +198,27 @@ function PosTransferQrPage() {
 
       <div className="flex flex-1 flex-col overflow-hidden rounded-[28px] border border-[#c1c9c0]/40 bg-white shadow-[0_10px_30px_rgba(27,28,23,0.06)]">
         <header className="border-b border-[#c1c9c0]/60 bg-[#f6f4ec] px-6 py-5 text-center">
-          <p className="text-xs font-bold uppercase tracking-wider text-[#717971]">Thanh toán chuyển khoản</p>
-          <h1 className="mt-1 text-3xl font-bold text-[#356647]">{formatMoney(payment.total)} đ</h1>
-          {payment.orderCode ? <p className="mt-1 text-sm text-[#414942]">{payment.orderCode}</p> : null}
+          <p className="text-xs font-bold uppercase tracking-wider text-[#717971]">Thanh toán chuyển khoản · SePay</p>
+          <h1 className="mt-1 text-3xl font-bold text-[#356647]">{formatMoney(displayAmount)} đ</h1>
+          {payment.orderCode ? <p className="mt-1 text-sm text-[#414942]">Mã đơn: {payment.orderCode}</p> : null}
           {payment.customer ? <p className="mt-0.5 text-xs text-[#717971]">{payment.customer}</p> : null}
-          {paymentStatus ? (
-            <p className="mt-2 text-xs text-[#717971]">
-              Trạng thái: <span className="font-semibold text-[#356647]">{paymentStatus}</span>
-              <span className="ml-1">(đang chờ webhook / xác nhận)</span>
-            </p>
+
+          <div
+            className={`mx-auto mt-3 inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${
+              isPaid ? 'bg-[#356647]/15 text-[#356647]' : 'bg-[#fec25b]/25 text-[#7e5700]'
+            }`}
+          >
+            {!isPaid ? (
+              <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-[#7e5700]" aria-hidden />
+            ) : (
+              <Icon className="text-[16px]">check_circle</Icon>
+            )}
+            {statusText}
+            {!isPaid ? <span className="font-normal text-[#717971]">· chờ SePay</span> : null}
+          </div>
+
+          {invoiceCode ? (
+            <p className="mt-2 text-sm font-semibold text-[#356647]">Số HĐ: {invoiceCode}</p>
           ) : null}
         </header>
 
@@ -197,7 +233,56 @@ function PosTransferQrPage() {
             )}
           </div>
 
-          <p className="text-center text-sm text-[#717971]">Quét mã bằng app ngân hàng hoặc chuyển khoản thủ công</p>
+          <p className="text-center text-sm text-[#717971]">
+            {usesSepayVa
+              ? 'Chuyển vào số VA bên dưới (BIDV qua SePay). Không chuyển nhầm số tài khoản chính.'
+              : 'Khách quét QR hoặc chuyển khoản — hệ thống tự nhận tiền qua SePay (webhook).'}
+          </p>
+
+          {isLegacyMainAccountQr ? (
+            <div className="w-full rounded-xl border border-[#ba1a1a]/40 bg-[#ba1a1a]/10 p-3 text-xs text-[#ba1a1a]">
+              <p className="font-semibold">QR này trỏ tài khoản chính — SePay không ghi nhận</p>
+              <p className="mt-1">
+                {sepaySetup?.setupMessage ||
+                  'Cấu hình Sepay:ApiToken trong appsettings (hoặc StaticVaNumber), restart API, tạo đơn CK mới.'}
+              </p>
+            </div>
+          ) : null}
+          {usesSepayVa ? (
+            <div className="w-full rounded-xl border border-[#7e5700]/40 bg-[#fec25b]/15 p-3 text-xs text-[#604100]">
+              <p className="font-semibold">BIDV + SePay: chuyển vào số VA bên dưới</p>
+              <p className="mt-1">Giao dịch sẽ hiển thị trên lịch sử SePay và tự xác nhận đơn qua webhook.</p>
+            </div>
+          ) : null}
+
+          <div className="w-full rounded-xl border border-[#356647]/30 bg-[#356647]/5 p-3 text-xs text-[#414942]">
+            <p className="font-semibold text-[#356647]">Khách CK phải khớp:</p>
+            <ul className="mt-1 list-inside list-disc space-y-0.5">
+              {usesSepayVa ? (
+                <li>
+                  Số VA nhận tiền: <strong className="text-[#1b1c17]">{receiveAccount}</strong>
+                </li>
+              ) : (
+                <li>
+                  TK nhận: <strong>{receiveAccount}</strong> ({bankInfo?.bankName || '—'})
+                </li>
+              )}
+              <li>
+                Số tiền: <strong>{formatMoney(displayAmount)} đ</strong>
+              </li>
+              {!usesSepayVa ? (
+                <li>
+                  Nội dung: <strong className="text-[#1b1c17]">{transferNote}</strong> (copy y nguyên)
+                </li>
+              ) : null}
+            </ul>
+          </div>
+
+          {pollError ? (
+            <p className="w-full rounded-lg bg-[#ba1a1a]/10 px-3 py-2 text-xs font-medium text-[#ba1a1a]">
+              {pollError}
+            </p>
+          ) : null}
 
           {isLoadingBank ? (
             <p className="text-sm text-[#717971]">Đang tải thông tin tài khoản...</p>
@@ -208,58 +293,50 @@ function PosTransferQrPage() {
                 <span className="font-semibold text-[#1b1c17]">{bankInfo?.bankName || '—'}</span>
               </div>
               <div className="flex justify-between gap-4">
-                <span className="text-[#717971]">Số tài khoản</span>
-                <span className="font-semibold text-[#1b1c17]">{bankInfo?.accountNumber || '—'}</span>
+                <span className="text-[#717971]">{usesSepayVa ? 'Số VA (chuyển vào đây)' : 'Số tài khoản'}</span>
+                <span className="break-all text-right font-semibold text-[#1b1c17]">{receiveAccount}</span>
               </div>
-              <div className="flex justify-between gap-4">
-                <span className="shrink-0 text-[#717971]">Chủ tài khoản</span>
-                <span className="text-right font-semibold text-[#1b1c17]">{bankInfo?.accountHolder || '—'}</span>
-              </div>
+              {usesSepayVa && bankInfo?.accountNumber ? (
+                <div className="flex justify-between gap-4 text-xs text-[#717971]">
+                  <span>TK gốc (không CK vào)</span>
+                  <span>{bankInfo.accountNumber}</span>
+                </div>
+              ) : null}
+              {bankInfo?.accountHolder ? (
+                <div className="flex justify-between gap-4">
+                  <span className="shrink-0 text-[#717971]">Chủ tài khoản</span>
+                  <span className="text-right font-semibold text-[#1b1c17]">{bankInfo.accountHolder}</span>
+                </div>
+              ) : null}
               <div className="flex justify-between gap-4 border-t border-[#c1c9c0]/60 pt-3">
                 <span className="text-[#717971]">Nội dung CK</span>
-                <span className="text-right font-semibold text-[#356647]">{transferNote}</span>
+                <button
+                  type="button"
+                  onClick={handleCopyTransferNote}
+                  className="inline-flex max-w-[60%] items-center gap-1 text-right font-semibold text-[#356647] hover:underline"
+                  title="Sao chép nội dung CK"
+                >
+                  <span className="break-all">{transferNote}</span>
+                  <Icon className="shrink-0 text-[18px]">content_copy</Icon>
+                </button>
               </div>
               <div className="flex justify-between gap-4">
                 <span className="text-[#717971]">Số tiền</span>
-                <span className="font-bold text-[#356647]">{formatMoney(payment.total)} đ</span>
+                <span className="font-bold text-[#356647]">{formatMoney(displayAmount)} đ</span>
               </div>
             </div>
           )}
-
-          {showSimulateWebhook ? (
-            <div className="w-full rounded-xl border border-dashed border-[#7e5700]/40 bg-[#fec25b]/10 p-4 text-sm">
-              <p className="font-semibold text-[#7e5700]">Dev: mô phỏng webhook</p>
-              <p className="mt-1 text-xs text-[#717971]">
-                Giả lập ngân hàng đã báo tiền về — đơn sẽ tự chuyển sang đã thanh toán (giống webhook thật).
-              </p>
-              <button
-                type="button"
-                disabled={isSimulating || isConfirming}
-                onClick={handleSimulateWebhook}
-                className="mt-3 w-full rounded-lg border border-[#7e5700] bg-white py-2.5 text-sm font-bold text-[#7e5700] hover:bg-[#fec25b]/20 disabled:opacity-50"
-              >
-                {isSimulating ? 'Đang mô phỏng...' : 'Mô phỏng webhook (khách đã CK)'}
-              </button>
-            </div>
-          ) : null}
         </div>
 
-        {/* <footer className="grid grid-cols-2 gap-3 border-t border-[#c1c9c0] p-4">
-          <Link
-            to="/pos"
-            className="flex items-center justify-center rounded-xl border border-[#c1c9c0] bg-white py-3 text-sm font-bold text-[#414942] hover:bg-[#f6f4ec]"
-          >
-            Hủy
-          </Link>
+        <footer className="border-t border-[#c1c9c0] p-4">
           <button
             type="button"
-            disabled={isConfirming || isSimulating}
-            className="flex items-center justify-center rounded-xl bg-[#356647] py-3 text-sm font-bold text-white shadow-md hover:brightness-110 disabled:opacity-50"
-            onClick={handleConfirmReceived}
+            onClick={() => navigate('/pos')}
+            className="flex w-full items-center justify-center rounded-xl border border-[#c1c9c0] bg-white py-3 text-sm font-bold text-[#414942] hover:bg-[#f6f4ec]"
           >
-            {isConfirming ? 'Đang xác nhận...' : 'Đã nhận tiền'}
+            Quay lại POS
           </button>
-        </footer> */}
+        </footer>
       </div>
     </div>
   )

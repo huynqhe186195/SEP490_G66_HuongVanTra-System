@@ -48,9 +48,13 @@ namespace HuongVanTra.API
             builder.Services.Configure<VietQrTransferSettings>(
                 builder.Configuration.GetSection(VietQrTransferSettings.SectionName));
             builder.Services.AddHttpClient<IVietQrService, VietQrService>();
+            builder.Services.AddHttpClient<ISepayOrderVaService, SepayOrderVaService>();
             builder.Services.AddScoped<IPosOrderService, PosOrderService>();
             builder.Services.AddScoped<IOnlineOrderService, OnlineOrderService>();
             builder.Services.AddScoped<IStockDeductQueueService, StockDeductQueueService>();
+            builder.Services.Configure<SepaySettings>(
+                builder.Configuration.GetSection(SepaySettings.SectionName));
+            builder.Services.AddScoped<IPaymentWebhookService, PaymentWebhookService>();
             builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
 
             builder.Services.AddScoped<IEmployeeService, EmployeeService>();

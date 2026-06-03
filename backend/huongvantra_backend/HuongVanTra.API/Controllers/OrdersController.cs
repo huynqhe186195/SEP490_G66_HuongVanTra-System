@@ -190,6 +190,7 @@ namespace HuongVanTra.API.Controllers {
             PaymentStatus = result.PaymentStatus,
             OrderStatus = result.OrderStatus,
             ConfirmedAt = result.ConfirmedAt,
+            InvoiceCode = result.InvoiceCode,
         };
     }
 }

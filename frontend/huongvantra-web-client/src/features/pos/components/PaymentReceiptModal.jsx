@@ -35,7 +35,10 @@ function PaymentReceiptModal({ isOpen, receipt, onClose }) {
           <div ref={paperRef} className="receipt-paper">
             <div className="receipt-brand">HƯƠNG VÂN TRÀ</div>
             <div className="receipt-title">HÓA ĐƠN BÁN HÀNG</div>
-            <div className="receipt-meta">Mã: {receipt.orderCode || '—'}</div>
+            {receipt.invoiceCode ? (
+              <div className="receipt-meta receipt-highlight">Số HĐ: {receipt.invoiceCode}</div>
+            ) : null}
+            <div className="receipt-meta">Mã đơn: {receipt.orderCode || '—'}</div>
             <div className="receipt-meta">{receipt.createdAtLabel}</div>
 
             <div className="receipt-divider" />
