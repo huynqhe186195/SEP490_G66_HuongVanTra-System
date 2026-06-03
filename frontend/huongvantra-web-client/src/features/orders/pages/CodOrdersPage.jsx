@@ -175,14 +175,14 @@ function CodOrdersPage() {
         ))}
       </section>
 
-      <section className="min-h-[400px] overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-sm">
+      <section className="rounded-3xl border border-slate-100 bg-white shadow-sm">
         <div className="border-b border-slate-50 p-6">
           <h2 className="text-xl font-bold text-slate-800">
             {TABS.find((t) => t.key === activeTab)?.label}
           </h2>
         </div>
 
-        <div className="overflow-x-auto">
+        <div className="custom-scrollbar overflow-x-auto">
           <table className="w-full text-left">
             <thead className="bg-[#fbf9f1]/50 text-xs font-bold uppercase tracking-wider text-slate-400">
               <tr>
