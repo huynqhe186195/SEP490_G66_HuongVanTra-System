@@ -111,26 +111,15 @@ namespace HuongVanTra.API.Controllers {
                 forPos: true);
 
             var limited = customers.Take(queryLimit).ToList();
-            var customerIds = limited.Select(c => c.CustomerId).ToList();
-            var tierByCustomerId = await _dbContext.Customers
-                .AsNoTracking()
-                .Include(c => c.Tier)
-                .Where(c => customerIds.Contains(c.Id))
-                .ToDictionaryAsync(
-                    c => c.Id,
-                    c => (TierCode: c.Tier?.TierCode, DiscountPercent: c.Tier?.DiscountPercent ?? 0),
-                    cancellationToken);
 
-            return Ok(limited.Select(c => {
-                tierByCustomerId.TryGetValue(c.CustomerId, out var tier);
-                return new PosCustomerSearchItemResponse {
-                    CustomerId = c.CustomerId,
-                    CustomerCode = c.CustomerCode,
-                    FullName = c.FullName,
-                    Phone = c.Phone,
-                    TierCode = tier.TierCode,
-                    TierDiscountPercent = tier.DiscountPercent,
-                };
+            return Ok(limited.Select(c => new PosCustomerSearchItemResponse {
+                CustomerId = c.CustomerId,
+                CustomerCode = c.CustomerCode,
+                FullName = c.FullName,
+                Phone = c.Phone,
+                TierCode = c.TierCode,
+                TierDiscountPercent = c.TierDiscountPercent,
+                CurrentDebt = c.CurrentDebt,
             }).ToList());
         }
 
@@ -172,6 +161,7 @@ namespace HuongVanTra.API.Controllers {
                 Phone = result.Customer.Phone,
                 TierCode = result.Customer.Tier?.TierCode,
                 TierDiscountPercent = result.Customer.Tier?.DiscountPercent ?? 0,
+                CurrentDebt = result.Customer.CurrentDebt,
             });
         }
 
@@ -269,6 +259,7 @@ namespace HuongVanTra.API.Controllers {
                 Address = customer.Address,
                 TierCode = customer.Tier?.TierCode,
                 TierDiscountPercent = customer.Tier?.DiscountPercent ?? 0,
+                CurrentDebt = customer.CurrentDebt,
                 OutstandingBalance = outstandingBalance,
                 RecentOrders = recentOrders,
                 UnpaidOrders = unpaidOrders,

@@ -2,16 +2,21 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
+import { loadAuthSession } from '../../auth/services/authSession.js'
 import {
   createCustomer,
   fetchCustomerById,
   fetchMembershipTiers,
+  reconcileCustomerDebt,
   updateCustomer,
 } from '../services/customersApi.js'
 import {
   customerTypeFromTab,
   customerTypeLabel,
+  formatDebtVnd,
+  formatVnd,
   generateCustomerCode,
+  isAdminSession,
   supportsMembershipTierForTab,
   tabKeyFromCustomerType,
 } from '../utils/customerDisplay.js'
@@ -25,6 +30,10 @@ function CustomerFormPage() {
   const [tiers, setTiers] = useState([])
   const [isLoading, setIsLoading] = useState(isEditMode)
   const [isSaving, setIsSaving] = useState(false)
+  const [isReconcilingDebt, setIsReconcilingDebt] = useState(false)
+  const [currentDebt, setCurrentDebt] = useState(0)
+  const [totalSpend, setTotalSpend] = useState(0)
+  const isAdmin = isAdminSession(loadAuthSession())
   const [form, setForm] = useState({
     type: ['general', 'vip', 'corporate'].includes(searchParams.get('type'))
       ? searchParams.get('type')
@@ -75,6 +84,8 @@ function CustomerFormPage() {
           tierId: customer.tier?.tierId ? String(customer.tier.tierId) : '',
           status: customer.status?.toLowerCase() === 'inactive' ? 'inactive' : 'active',
         })
+        setCurrentDebt(Number(customer.currentDebt || 0))
+        setTotalSpend(Number(customer.totalSpend || 0))
       } catch (error) {
         if (mounted) showError(error.message)
       } finally {
@@ -113,6 +124,21 @@ function CustomerFormPage() {
       type,
       tierId: supportsMembershipTierForTab(type) ? current.tierId : '',
     }))
+  }
+
+  const handleReconcileDebt = async () => {
+    if (!customerId || !isAdmin) return
+    setIsReconcilingDebt(true)
+    try {
+      await reconcileCustomerDebt(customerId)
+      const customer = await fetchCustomerById(customerId)
+      setCurrentDebt(Number(customer.currentDebt || 0))
+      showSuccess('Đã đối soát công nợ từ các đơn chưa thanh toán.')
+    } catch (error) {
+      showError(error.message)
+    } finally {
+      setIsReconcilingDebt(false)
+    }
   }
 
   const handleSubmit = async () => {
@@ -302,6 +328,29 @@ function CustomerFormPage() {
               <p className="text-xs text-[#717971]">Tên</p>
               <p className="text-sm font-bold text-[#1b1c17]">{form.name || '—'}</p>
             </div>
+
+            {isEditMode ? (
+              <>
+                <div className="rounded-xl bg-[#fff8e8] p-4">
+                  <p className="text-xs text-[#717971]">Công nợ hiện tại</p>
+                  <p className="text-lg font-bold text-[#7e5700]">{formatDebtVnd(currentDebt)}</p>
+                </div>
+                <div className="rounded-xl bg-[#f6f4ec] p-4">
+                  <p className="text-xs text-[#717971]">Tổng chi tiêu tích lũy</p>
+                  <p className="text-sm font-bold text-[#356647]">{formatVnd(totalSpend)}</p>
+                </div>
+                {isAdmin ? (
+                  <button
+                    type="button"
+                    className="w-full rounded-xl border border-[#7e5700] px-4 py-2 text-sm font-semibold text-[#7e5700] hover:bg-[#fec25b]/20 disabled:opacity-50"
+                    disabled={isReconcilingDebt}
+                    onClick={handleReconcileDebt}
+                  >
+                    {isReconcilingDebt ? 'Đang đối soát...' : 'Đối soát công nợ (Admin)'}
+                  </button>
+                ) : null}
+              </>
+            ) : null}
 
             <div className="rounded-xl bg-[#f6f4ec] p-4">
               <p className="text-xs text-[#717971]">Loại</p>

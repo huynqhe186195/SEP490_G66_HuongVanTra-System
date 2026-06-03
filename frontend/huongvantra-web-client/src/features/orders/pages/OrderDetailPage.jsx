@@ -260,10 +260,24 @@ function OrderDetailPage() {
 
   const handleSaveAdjustments = async () => {
     if (!order?.id) return
+
+    const parsedManual = manualDiscount === '' ? null : Number(manualDiscount)
+    if (parsedManual !== null) {
+      if (parsedManual < 0) {
+        showError('Chiết khấu thủ công không được âm.')
+        return
+      }
+      const subtotal = Number(order.subTotal ?? 0)
+      if (parsedManual > subtotal) {
+        showError('Chiết khấu thủ công không được vượt tạm tính đơn hàng.')
+        return
+      }
+    }
+
     setIsSaving(true)
     try {
       const updated = await updateOrderAdjustments(order.id, {
-        manualDiscount: manualDiscount === '' ? undefined : Number(manualDiscount),
+        manualDiscount: parsedManual === null ? undefined : parsedManual,
         deductAmount: deductAmount === '' ? undefined : Number(deductAmount),
         notes,
         shippingAddress,

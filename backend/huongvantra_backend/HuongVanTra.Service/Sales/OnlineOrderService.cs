@@ -203,6 +203,8 @@ namespace HuongVanTra.Service.Sales {
             }).ToList();
 
             var subtotal = items.Sum(i => i.LineTotal);
+            if (command.ManualDiscount > subtotal)
+                throw new ArgumentException("Manual discount cannot exceed order subtotal.");
             var manualDiscount = Math.Min(Math.Max(0, command.ManualDiscount), subtotal);
             var afterManual = subtotal - manualDiscount;
 

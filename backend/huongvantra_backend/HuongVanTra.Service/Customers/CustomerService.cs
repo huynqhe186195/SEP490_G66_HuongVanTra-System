@@ -81,7 +81,18 @@ namespace HuongVanTra.Service.Customers {
 
             if (!string.IsNullOrWhiteSpace(customerType)) {
                 var customerTypeValue = customerType.Trim();
-                query = query.Where(c => c.CustomerType == customerTypeValue);
+                if (string.Equals(customerTypeValue, "GENERAL", StringComparison.OrdinalIgnoreCase)) {
+                    // Phổ thông: GENERAL (app) + RETAIL (dữ liệu seed / legacy)
+                    query = query.Where(c =>
+                        c.CustomerType == "GENERAL" || c.CustomerType == "RETAIL");
+                }
+                else if (string.Equals(customerTypeValue, "VIP", StringComparison.OrdinalIgnoreCase)) {
+                    query = query.Where(c =>
+                        c.CustomerType == "VIP" || c.CustomerType == "VVIP");
+                }
+                else {
+                    query = query.Where(c => c.CustomerType == customerTypeValue);
+                }
             }
 
             if (!string.IsNullOrWhiteSpace(status)) {
@@ -126,6 +137,7 @@ namespace HuongVanTra.Service.Customers {
                     Status = c.Status,
                     TierId = c.TierId,
                     TierCode = c.Tier != null ? c.Tier.TierCode : null,
+                    TierDiscountPercent = c.Tier != null ? c.Tier.DiscountPercent : 0,
                     AssignedEmployeeId = c.AssignedEmployeeId,
                     AssignedEmployeeName = c.AssignedEmployee != null ? c.AssignedEmployee.FullName : null,
                     TotalSpend = c.TotalSpend,

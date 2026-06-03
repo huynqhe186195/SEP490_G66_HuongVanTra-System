@@ -9,6 +9,20 @@ export function formatVnd(value) {
   return `${amount.toLocaleString('vi-VN')} VND`
 }
 
+export function formatDebtVnd(value) {
+  const amount = Number(value) || 0
+  if (amount <= 0) return '0 VND'
+  return `${amount.toLocaleString('vi-VN')} VND`
+}
+
+export function getDebtClass(amount) {
+  return Number(amount) > 0 ? 'font-bold text-[#7e5700]' : 'text-[#717971]'
+}
+
+export function isAdminSession(session) {
+  return (session?.roles ?? []).some((role) => String(role).toLowerCase() === 'admin')
+}
+
 export function getInitials(name) {
   if (!name) return '--'
   return name
@@ -55,7 +69,8 @@ export function generateCustomerCode(tabKey) {
 export function tabKeyFromCustomerType(customerType) {
   const normalized = String(customerType || '').toUpperCase()
   if (normalized === 'CORPORATE') return 'corporate'
-  if (normalized === 'VIP') return 'vip'
+  if (normalized === 'VIP' || normalized === 'VVIP') return 'vip'
+  // GENERAL, RETAIL và loại lẻ khác → tab phổ thông
   return 'general'
 }
 

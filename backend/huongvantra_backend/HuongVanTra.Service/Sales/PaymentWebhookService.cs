@@ -1,6 +1,7 @@
 using HuongVanTra.Core.Entities.Sales;
 using HuongVanTra.Core.Entities.System;
 using HuongVanTra.Infrastructure.Data;
+using HuongVanTra.Service.Customers;
 using HuongVanTra.Service.Sales.Models;
 using HuongVanTra.Service.Common;
 using Microsoft.EntityFrameworkCore;
@@ -10,10 +11,15 @@ namespace HuongVanTra.Service.Sales {
     public class PaymentWebhookService : IPaymentWebhookService {
         private readonly AppDbContext _db;
         private readonly SepaySettings _settings;
+        private readonly ICustomerService _customerService;
 
-        public PaymentWebhookService(AppDbContext db, IOptions<SepaySettings> options) {
+        public PaymentWebhookService(
+            AppDbContext db,
+            IOptions<SepaySettings> options,
+            ICustomerService customerService) {
             _db = db;
             _settings = options.Value;
+            _customerService = customerService;
         }
 
         public async Task<WebhookProcessResult> ProcessSepayWebhookAsync(
@@ -88,6 +94,10 @@ namespace HuongVanTra.Service.Sales {
                 return new WebhookProcessResult { Success = true, Skipped = true, Message = "Order is cancelled." };
             }
 
+            var wasOutstanding = order.CustomerId.HasValue
+                && (string.Equals(order.PaymentStatus, "unpaid", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(order.PaymentStatus, "pending_payment", StringComparison.OrdinalIgnoreCase));
+
             await using var tx = await _db.Database.BeginTransactionAsync(cancellationToken);
             try {
                 var confirmedAt = DateTime.UtcNow;
@@ -105,6 +115,13 @@ namespace HuongVanTra.Service.Sales {
 
                 var invoice = CreateInvoice(order, issuedById: null, confirmedAt);
                 _db.Invoices.Add(invoice);
+
+                if (wasOutstanding) {
+                    await _customerService.UpdateCustomerDebtAsync(
+                        order.CustomerId!.Value,
+                        -order.TotalAmount,
+                        _db);
+                }
 
                 _db.AuditLogs.Add(new AuditLog {
                     Action = "payment_auto_confirmed_via_webhook",

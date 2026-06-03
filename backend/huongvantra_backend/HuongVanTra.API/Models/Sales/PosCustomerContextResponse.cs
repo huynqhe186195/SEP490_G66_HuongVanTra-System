@@ -9,6 +9,9 @@ namespace HuongVanTra.API.Models.Sales {
         public string? Address { get; set; }
         public string? TierCode { get; set; }
         public decimal TierDiscountPercent { get; set; }
+        /// <summary>Tổng công nợ lưu trên khách (customers.CurrentDebt).</summary>
+        public decimal CurrentDebt { get; set; }
+        /// <summary>Còn phải thu theo từng đơn (tính từ orders chưa paid).</summary>
         public decimal OutstandingBalance { get; set; }
         public List<PosCustomerOrderHistoryItemResponse> RecentOrders { get; set; } = new();
         public List<PosCustomerDebtOrderItemResponse> UnpaidOrders { get; set; } = new();

@@ -203,6 +203,7 @@ export function mapPosCustomer(item) {
     phone: item.phone ?? item.Phone ?? '',
     tierCode: item.tierCode ?? item.TierCode ?? '',
     tierDiscountPercent: Number(item.tierDiscountPercent ?? item.TierDiscountPercent ?? 0),
+    currentDebt: Number(item.currentDebt ?? item.CurrentDebt ?? 0),
   }
 }
 
@@ -217,6 +218,7 @@ export function mapPosCustomerContext(item) {
     address: item.address ?? item.Address ?? '',
     tierCode: item.tierCode ?? item.TierCode ?? '',
     tierDiscountPercent: Number(item.tierDiscountPercent ?? item.TierDiscountPercent ?? 0),
+    currentDebt: Number(item.currentDebt ?? item.CurrentDebt ?? 0),
     outstandingBalance: Number(item.outstandingBalance ?? item.OutstandingBalance ?? 0),
     recentOrders: (item.recentOrders ?? item.RecentOrders ?? []).map((row) => ({
       orderCode: row.orderCode ?? row.OrderCode ?? '',

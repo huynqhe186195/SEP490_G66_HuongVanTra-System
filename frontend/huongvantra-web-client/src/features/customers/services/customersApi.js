@@ -43,21 +43,75 @@ async function requestWithAuth(path, options = {}) {
   return response.json()
 }
 
-export function fetchCustomers(params = {}) {
+export function mapCustomer(item) {
+  if (!item || typeof item !== 'object') return null
+  return {
+    customerId: item.customerId ?? item.CustomerId,
+    customerCode: item.customerCode ?? item.CustomerCode ?? '',
+    fullName: item.fullName ?? item.FullName ?? '',
+    customerType: item.customerType ?? item.CustomerType ?? '',
+    phone: item.phone ?? item.Phone ?? '',
+    email: item.email ?? item.Email ?? '',
+    status: item.status ?? item.Status ?? '',
+    tierId: item.tierId ?? item.TierId ?? null,
+    tierCode: item.tierCode ?? item.TierCode ?? null,
+    assignedEmployeeId: item.assignedEmployeeId ?? item.AssignedEmployeeId ?? null,
+    assignedEmployeeName: item.assignedEmployeeName ?? item.AssignedEmployeeName ?? null,
+    totalSpend: Number(item.totalSpend ?? item.TotalSpend ?? 0),
+    currentDebt: Number(item.currentDebt ?? item.CurrentDebt ?? 0),
+    tier: item.tier ?? item.Tier ?? null,
+    address: item.address ?? item.Address ?? '',
+  }
+}
+
+export function mapCustomerDetail(item) {
+  const base = mapCustomer(item)
+  if (!base) return null
+  const tier = item.tier ?? item.Tier
+  return {
+    ...base,
+    tier: tier
+      ? {
+          tierId: tier.tierId ?? tier.TierId,
+          tierCode: tier.tierCode ?? tier.TierCode ?? '',
+          minTotalSpend: Number(tier.minTotalSpend ?? tier.MinTotalSpend ?? 0),
+          discountPercent: Number(tier.discountPercent ?? tier.DiscountPercent ?? 0),
+        }
+      : null,
+  }
+}
+
+export async function fetchCustomers(params = {}) {
   const search = new URLSearchParams()
   if (params.keyword) search.set('keyword', params.keyword)
   if (params.customerType) search.set('customerType', params.customerType)
   if (params.status) search.set('status', params.status)
   if (params.tierId) search.set('tierId', String(params.tierId))
   if (params.assignedEmployeeId) search.set('assignedEmployeeId', String(params.assignedEmployeeId))
+  if (params.hasDebt) search.set('hasDebt', 'true')
+  if (params.minDebt != null) search.set('minDebt', String(params.minDebt))
+  if (params.sortBy) search.set('sortBy', params.sortBy)
+  if (params.sortOrder) search.set('sortOrder', params.sortOrder)
 
   const query = search.toString()
   const path = query ? `/api/customers?${query}` : '/api/customers'
-  return requestWithAuth(path, { method: 'GET' })
+  const data = await requestWithAuth(path, { method: 'GET' })
+  return Array.isArray(data) ? data.map(mapCustomer).filter(Boolean) : []
 }
 
-export function fetchCustomerById(customerId) {
-  return requestWithAuth(`/api/customers/${customerId}`, { method: 'GET' })
+export async function fetchCustomersWithDebt(params = {}) {
+  const search = new URLSearchParams()
+  if (params.minDebt != null) search.set('minDebt', String(params.minDebt))
+  if (params.sortOrder) search.set('sortOrder', params.sortOrder)
+  const query = search.toString()
+  const path = query ? `/api/customers/with-debt?${query}` : '/api/customers/with-debt'
+  const data = await requestWithAuth(path, { method: 'GET' })
+  return Array.isArray(data) ? data.map(mapCustomer).filter(Boolean) : []
+}
+
+export async function fetchCustomerById(customerId) {
+  const data = await requestWithAuth(`/api/customers/${customerId}`, { method: 'GET' })
+  return mapCustomerDetail(data)
 }
 
 export function createCustomer(payload) {
@@ -65,7 +119,7 @@ export function createCustomer(payload) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
-  })
+  }).then(mapCustomerDetail)
 }
 
 export function updateCustomer(customerId, payload) {
@@ -73,7 +127,7 @@ export function updateCustomer(customerId, payload) {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
-  })
+  }).then(mapCustomerDetail)
 }
 
 export function changeCustomerStatus(customerId, status) {
@@ -81,6 +135,12 @@ export function changeCustomerStatus(customerId, status) {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ status }),
+  }).then(mapCustomerDetail)
+}
+
+export async function reconcileCustomerDebt(customerId) {
+  return requestWithAuth(`/api/customers/${customerId}/reconcile-debt`, {
+    method: 'POST',
   })
 }
 

@@ -7,7 +7,9 @@ import { showError } from '../../../app/toast.js'
 import { fetchCustomers } from '../services/customersApi.js'
 import {
   CUSTOMER_TYPE_BY_TAB,
+  formatDebtVnd,
   formatVnd,
+  getDebtClass,
   getInitials,
   getStatusDisplay,
   getTierClass,
@@ -49,6 +51,7 @@ function CustomersPage() {
   const [activeTab, setActiveTab] = useState('general')
   const [customers, setCustomers] = useState([])
   const [searchValue, setSearchValue] = useState('')
+  const [debtFilterOnly, setDebtFilterOnly] = useState(false)
   const [page, setPage] = useState(1)
   const [isLoading, setIsLoading] = useState(true)
 
@@ -70,6 +73,9 @@ function CustomersPage() {
         const data = await fetchCustomers({
           keyword: searchValue.trim() || undefined,
           customerType: CUSTOMER_TYPE_BY_TAB[activeTab],
+          hasDebt: debtFilterOnly ? true : undefined,
+          sortBy: debtFilterOnly ? 'debt' : undefined,
+          sortOrder: debtFilterOnly ? 'desc' : undefined,
         })
         if (mounted) setCustomers(Array.isArray(data) ? data : [])
       } catch (error) {
@@ -86,11 +92,11 @@ function CustomersPage() {
       mounted = false
       clearTimeout(timer)
     }
-  }, [activeTab, searchValue])
+  }, [activeTab, searchValue, debtFilterOnly])
 
   useEffect(() => {
     setPage(1)
-  }, [activeTab, searchValue])
+  }, [activeTab, searchValue, debtFilterOnly])
 
   useEffect(() => {
     const totalPages = Math.max(1, Math.ceil(customers.length / TABLE_PAGE_SIZE))
@@ -107,11 +113,13 @@ function CustomersPage() {
   const corporateStats = useMemo(() => {
     const activeCount = customers.filter((item) => item.status?.toUpperCase() === 'ACTIVE').length
     const totalSpend = customers.reduce((sum, item) => sum + Number(item.totalSpend || 0), 0)
+    const totalDebt = customers.reduce((sum, item) => sum + Number(item.currentDebt || 0), 0)
+    const withDebt = customers.filter((item) => Number(item.currentDebt) > 0).length
     return [
       { label: 'Tổng KH doanh nghiệp', value: String(customers.length), note: 'từ hệ thống', noteClass: 'text-[#4a6242]' },
       { label: 'Đang hoạt động', value: String(activeCount), note: `${customers.length - activeCount} ngừng HĐ`, noteClass: 'text-[#717971]' },
-      { label: 'Tổng chi tiêu', value: formatVnd(totalSpend).replace(' VND', ''), note: 'VND', noteClass: 'text-[#7e5700]' },
-      { label: 'Tỷ lệ thu hồi', value: '—', note: 'trending_up', noteClass: 'text-[#4a6242]', isIconNote: true },
+      { label: 'Tổng công nợ', value: formatDebtVnd(totalDebt).replace(' VND', ''), note: `${withDebt} KH đang nợ`, noteClass: 'text-[#7e5700]', highlight: true },
+      { label: 'Tổng chi tiêu', value: formatVnd(totalSpend).replace(' VND', ''), note: 'VND', noteClass: 'text-[#356647]' },
     ]
   }, [customers])
 
@@ -137,13 +145,13 @@ function CustomersPage() {
         glow: 'bg-[#7e5700]/10',
       },
       {
-        label: 'Tổng chi tiêu',
-        value: formatVnd(customers.reduce((sum, item) => sum + Number(item.totalSpend || 0), 0)).replace(' VND', ''),
-        note: 'VND',
-        noteIcon: 'payments',
-        icon: 'new_releases',
-        toneClass: 'text-[#4a6242] bg-[#627b59]/10',
-        glow: 'bg-[#4a6242]/10',
+        label: 'Tổng công nợ',
+        value: formatDebtVnd(customers.reduce((sum, item) => sum + Number(item.currentDebt || 0), 0)).replace(' VND', ''),
+        note: `${customers.filter((item) => Number(item.currentDebt) > 0).length} khách còn nợ`,
+        noteIcon: 'account_balance_wallet',
+        icon: 'payments',
+        toneClass: 'text-[#7e5700] bg-[#fec25b]/10',
+        glow: 'bg-[#7e5700]/10',
       },
     ]
   }, [customers])
@@ -161,10 +169,10 @@ function CustomersPage() {
         glow: 'bg-[#356647]/10',
       },
       {
-        label: 'Tổng chi tiêu',
-        value: formatVnd(customers.reduce((sum, item) => sum + Number(item.totalSpend || 0), 0)).replace(' VND', ''),
-        note: 'VND',
-        icon: 'payments',
+        label: 'Tổng công nợ',
+        value: formatDebtVnd(customers.reduce((sum, item) => sum + Number(item.currentDebt || 0), 0)).replace(' VND', ''),
+        note: 'đơn chưa thu đủ',
+        icon: 'account_balance_wallet',
         toneClass: 'text-[#7e5700] bg-[#fec25b]/10',
         glow: 'bg-[#7e5700]/10',
       },
@@ -219,6 +227,16 @@ function CustomersPage() {
               ))}
             </div>
 
+            <label className="inline-flex cursor-pointer items-center gap-2 self-start rounded-full border border-[#c1c9c0] bg-white px-4 py-2 text-sm text-[#414942]">
+              <input
+                type="checkbox"
+                className="accent-[#4a6242]"
+                checked={debtFilterOnly}
+                onChange={(event) => setDebtFilterOnly(event.target.checked)}
+              />
+              Chỉ khách có công nợ
+            </label>
+
             <Link
               to={`/customers/create?type=${activeTab}`}
               className={`inline-flex items-center gap-2 self-start rounded-full px-6 py-2.5 text-sm font-bold transition-all active:scale-95 ${
@@ -242,7 +260,7 @@ function CustomersPage() {
                 <article key={stat.label} className="flex flex-col gap-1 rounded-2xl border border-[#f0eee6] bg-white p-5 shadow-[0px_4px_20px_rgba(0,0,0,0.04)]">
                   <span className="text-xs uppercase tracking-wider text-[#717971]">{stat.label}</span>
                   <div className="flex items-baseline gap-2">
-                    <span className={`text-2xl font-bold ${stat.label === 'Total Receivables' ? 'text-[#7e5700]' : 'text-[#356647]'}`}>{stat.value}</span>
+                    <span className={`text-2xl font-bold ${stat.highlight ? 'text-[#7e5700]' : 'text-[#356647]'}`}>{stat.value}</span>
                     {stat.isIconNote ? (
                       <span className={`inline-flex items-center gap-1 text-xs font-bold ${stat.noteClass}`}>
                         <span className="material-symbols-outlined text-[16px]">{stat.note}</span>
@@ -278,6 +296,7 @@ function CustomersPage() {
                       <th className="px-6 py-4 font-semibold">NV phụ trách</th>
                       <th className="px-6 py-4 font-semibold">Mã KH</th>
                       <th className="px-6 py-4 font-semibold">Tổng chi tiêu</th>
+                      <th className="px-6 py-4 font-semibold">Công nợ</th>
                       <th className="px-6 py-4 font-semibold">Trạng thái</th>
                       <th className="px-6 py-4 font-semibold">Thao tác</th>
                     </tr>
@@ -285,20 +304,19 @@ function CustomersPage() {
                   <tbody className="divide-y divide-[#f0eee6] text-[#1b1c17]">
                     {isLoading ? (
                       <tr>
-                        <td className="px-6 py-8 text-center text-[#717971]" colSpan={6}>
+                        <td className="px-6 py-8 text-center text-[#717971]" colSpan={7}>
                           Đang tải danh sách khách hàng...
                         </td>
                       </tr>
                     ) : customers.length === 0 ? (
                       <tr>
-                        <td className="px-6 py-8 text-center text-[#717971]" colSpan={6}>
+                        <td className="px-6 py-8 text-center text-[#717971]" colSpan={7}>
                           Chưa có khách hàng doanh nghiệp.
                         </td>
                       </tr>
                     ) : (
                       paginatedCustomers.map((row, index) => {
                         const status = getStatusDisplay(row.status)
-                        const debtTone = Number(row.totalSpend) > 0 ? 'text-[#7e5700]' : 'text-[#1b1c17]'
                         return (
                           <tr key={row.customerId} className="group transition-colors hover:bg-[#ffffff]">
                             <td className="px-6 py-5">
@@ -314,8 +332,9 @@ function CustomersPage() {
                             </td>
                             <td className="px-6 py-5">{row.assignedEmployeeName || '—'}</td>
                             <td className="px-6 py-5 font-mono text-xs">{row.customerCode}</td>
+                            <td className="px-6 py-5 font-bold text-[#356647]">{formatVnd(row.totalSpend)}</td>
                             <td className="px-6 py-5">
-                              <span className={`font-bold ${debtTone}`}>{formatVnd(row.totalSpend)}</span>
+                              <span className={getDebtClass(row.currentDebt)}>{formatDebtVnd(row.currentDebt)}</span>
                             </td>
                             <td className="px-6 py-5">
                               <span className={`rounded-full px-2 py-1 text-[11px] font-bold uppercase ${status.className}`}>{status.label}</span>
@@ -440,19 +459,20 @@ function CustomersPage() {
                       <th className="border-b border-[#f0eee6] px-6 py-4 font-semibold">Hạng</th>
                       <th className="border-b border-[#f0eee6] px-6 py-4 font-semibold">Mã KH</th>
                       <th className="border-b border-[#f0eee6] px-6 py-4 font-semibold">Tổng chi tiêu</th>
+                      <th className="border-b border-[#f0eee6] px-6 py-4 font-semibold">Công nợ</th>
                       <th className="border-b border-[#f0eee6] px-6 py-4 text-right font-semibold">Thao tác</th>
                     </tr>
                   </thead>
                   <tbody className="text-sm">
                     {isLoading ? (
                       <tr>
-                        <td className="border-b border-[#f0eee6] px-6 py-8 text-center text-[#717971]" colSpan={6}>
+                        <td className="border-b border-[#f0eee6] px-6 py-8 text-center text-[#717971]" colSpan={7}>
                           Đang tải danh sách khách hàng...
                         </td>
                       </tr>
                     ) : customers.length === 0 ? (
                       <tr>
-                        <td className="border-b border-[#f0eee6] px-6 py-8 text-center text-[#717971]" colSpan={6}>
+                        <td className="border-b border-[#f0eee6] px-6 py-8 text-center text-[#717971]" colSpan={7}>
                           Chưa có khách phổ thông.
                         </td>
                       </tr>
@@ -478,6 +498,9 @@ function CustomersPage() {
                           </td>
                           <td className="border-b border-[#f0eee6] px-6 py-4 font-bold text-[#1b1c17]">{row.customerCode}</td>
                           <td className="border-b border-[#f0eee6] px-6 py-4 text-lg font-bold text-[#356647]">{formatVnd(row.totalSpend)}</td>
+                          <td className="border-b border-[#f0eee6] px-6 py-4">
+                            <span className={getDebtClass(row.currentDebt)}>{formatDebtVnd(row.currentDebt)}</span>
+                          </td>
                           <td className="border-b border-[#f0eee6] px-6 py-4 text-right">
                             <Link to={`/customers/${row.customerId}/edit`} className="rounded-full p-2 text-[#717971] transition-colors hover:bg-[#e4e3db]">
                               <span className="material-symbols-outlined">edit</span>
@@ -498,7 +521,7 @@ function CustomersPage() {
               />
             </section>
 
-            <section className="mt-2 grid grid-cols-1 gap-4 lg:grid-cols-12">
+            {/* <section className="mt-2 grid grid-cols-1 gap-4 lg:grid-cols-12">
               <article className="flex min-h-[300px] flex-col rounded-xl border border-[#eae8e0] bg-white p-5 shadow-[0px_4px_20px_rgba(0,0,0,0.04)] lg:col-span-8">
                 <div className="mb-6 flex items-center justify-between">
                   <h5 className="text-xl font-semibold text-[#1b1c17]">Tăng trưởng &amp; gắn kết khách hàng</h5>
@@ -542,7 +565,7 @@ function CustomersPage() {
                   <p className="mt-3 text-center text-[11px] text-white/70">Sự kiện tiếp: Chủ nhật, 24/10</p>
                 </div>
               </article>
-            </section>
+            </section> */}
           </>
         ) : (
           <>
@@ -596,6 +619,7 @@ function CustomersPage() {
                       <th className="border-b border-[#f0eee6] px-6 py-4 font-semibold">Số điện thoại</th>
                       <th className="border-b border-[#f0eee6] px-6 py-4 font-semibold">Mã KH</th>
                       <th className="border-b border-[#f0eee6] px-6 py-4 font-semibold">Tổng chi tiêu</th>
+                      <th className="border-b border-[#f0eee6] px-6 py-4 font-semibold">Công nợ</th>
                       <th className="border-b border-[#f0eee6] px-6 py-4 font-semibold">Trạng thái</th>
                       <th className="border-b border-[#f0eee6] px-6 py-4 text-right font-semibold">Thao tác</th>
                     </tr>
@@ -603,13 +627,13 @@ function CustomersPage() {
                   <tbody className="text-sm">
                     {isLoading ? (
                       <tr>
-                        <td className="border-b border-[#f0eee6] px-6 py-8 text-center text-[#717971]" colSpan={6}>
+                        <td className="border-b border-[#f0eee6] px-6 py-8 text-center text-[#717971]" colSpan={7}>
                           Đang tải danh sách khách hàng...
                         </td>
                       </tr>
                     ) : customers.length === 0 ? (
                       <tr>
-                        <td className="border-b border-[#f0eee6] px-6 py-8 text-center text-[#717971]" colSpan={6}>
+                        <td className="border-b border-[#f0eee6] px-6 py-8 text-center text-[#717971]" colSpan={7}>
                           Chưa có khách VIP.
                         </td>
                       </tr>
@@ -632,6 +656,9 @@ function CustomersPage() {
                             <td className="border-b border-[#f0eee6] px-6 py-4 text-[#414942]">{row.phone || '—'}</td>
                             <td className="border-b border-[#f0eee6] px-6 py-4 font-bold text-[#1b1c17]">{row.customerCode}</td>
                             <td className="border-b border-[#f0eee6] px-6 py-4 text-lg font-bold text-[#356647]">{formatVnd(row.totalSpend)}</td>
+                            <td className="border-b border-[#f0eee6] px-6 py-4">
+                              <span className={getDebtClass(row.currentDebt)}>{formatDebtVnd(row.currentDebt)}</span>
+                            </td>
                             <td className="border-b border-[#f0eee6] px-6 py-4">
                               <span className={`rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-tight ${status.className}`}>
                                 {status.label}

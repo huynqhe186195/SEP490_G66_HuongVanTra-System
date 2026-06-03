@@ -6,5 +6,6 @@ namespace HuongVanTra.API.Models.Sales {
         public string? Phone { get; set; }
         public string? TierCode { get; set; }
         public decimal TierDiscountPercent { get; set; }
+        public decimal CurrentDebt { get; set; }
     }
 }

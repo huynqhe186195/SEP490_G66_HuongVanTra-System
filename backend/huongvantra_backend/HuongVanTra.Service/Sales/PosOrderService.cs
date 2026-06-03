@@ -2,6 +2,7 @@ using HuongVanTra.Core.Entities.Inventory;
 using HuongVanTra.Core.Entities.Sales;
 using HuongVanTra.Core.Entities.System;
 using HuongVanTra.Infrastructure.Data;
+using HuongVanTra.Service.Customers;
 using HuongVanTra.Service.Sales.Models;
 using HuongVanTra.Service.Common;
 using Microsoft.EntityFrameworkCore;
@@ -13,16 +14,19 @@ namespace HuongVanTra.Service.Sales {
         private readonly IVietQrService _vietQrService;
         private readonly ISepayOrderVaService _sepayOrderVaService;
         private readonly SepaySettings _sepaySettings;
+        private readonly ICustomerService _customerService;
 
         public PosOrderService(
             AppDbContext db,
             IVietQrService vietQrService,
             ISepayOrderVaService sepayOrderVaService,
-            Microsoft.Extensions.Options.IOptions<SepaySettings> sepayOptions) {
+            Microsoft.Extensions.Options.IOptions<SepaySettings> sepayOptions,
+            ICustomerService customerService) {
             _db = db;
             _vietQrService = vietQrService;
             _sepayOrderVaService = sepayOrderVaService;
             _sepaySettings = sepayOptions.Value;
+            _customerService = customerService;
         }
 
         public async Task<PosOrderResult> CreateOnlineOrderAsync(CreatePosOrderCommand command) {
@@ -52,6 +56,12 @@ namespace HuongVanTra.Service.Sales {
                 }
 
                 await UpdateCustomerSpendAsync(command.CustomerId, order.TotalAmount);
+
+                // VietQR/chuyển khoản tại quầy: chờ thanh toán → cộng công nợ
+                if (command.CustomerId > 0) {
+                    await _customerService.UpdateCustomerDebtAsync(command.CustomerId, order.TotalAmount, _db);
+                }
+
                 await WriteAuditLogAsync("create", "orders", order.Id, command.CashierId, command.StoreId);
 
                 await _db.SaveChangesAsync();
@@ -89,6 +99,15 @@ namespace HuongVanTra.Service.Sales {
                 string? invoiceCode = null;
                 if (IsFullCashPayment(command, order.TotalAmount)) {
                     invoiceCode = ApplyPaidState(order, command.CashierId, $"POS-CASH-{order.OrderCode}");
+                }
+                else if (command.CustomerId > 0) {
+                    var cashPaid = command.Payments
+                        .Where(p => string.Equals(p.PaymentMethod, "CASH", StringComparison.OrdinalIgnoreCase))
+                        .Sum(p => p.Amount);
+                    var remaining = Math.Max(0, order.TotalAmount - cashPaid);
+                    if (remaining > 0) {
+                        await _customerService.UpdateCustomerDebtAsync(command.CustomerId, remaining, _db);
+                    }
                 }
 
                 await _db.SaveChangesAsync();
@@ -182,6 +201,8 @@ namespace HuongVanTra.Service.Sales {
             }).ToList();
 
             var subtotal = items.Sum(i => i.LineTotal);
+            if (command.ManualDiscount > subtotal)
+                throw new ArgumentException("Manual discount cannot exceed order subtotal.");
             var manualDiscount = Math.Min(Math.Max(0, command.ManualDiscount), subtotal);
             var afterManual = subtotal - manualDiscount;
 

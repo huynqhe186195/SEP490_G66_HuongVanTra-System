@@ -7,7 +7,7 @@ import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 const TABS = [
   { id: 'profile', label: 'Thông tin khách hàng' },
   { id: 'history', label: 'Lịch sử bán / trả hàng' },
-  { id: 'debt', label: 'Dư nợ' },
+  { id: 'debt', label: 'Công nợ' },
   { id: 'invoice', label: 'Thông tin xuất hóa đơn' },
 ]
 
@@ -158,6 +158,10 @@ function CustomerDetailModal({ isOpen, customer, onClose }) {
                   <p className="mt-1 font-semibold text-[#1b1c17]">{context.tierCode}</p>
                 </div>
               ) : null}
+              <div className="rounded-xl bg-white p-4 md:col-span-2">
+                <p className="text-xs text-[#717971]">Công nợ (hệ thống)</p>
+                <p className="mt-1 text-lg font-bold text-[#7e5700]">{formatMoney(context?.currentDebt ?? 0)} đ</p>
+              </div>
             </section>
           ) : null}
 
@@ -202,30 +206,36 @@ function CustomerDetailModal({ isOpen, customer, onClose }) {
           {!isLoading && activeTab === 'debt' ? (
             <section className="space-y-3">
               <div className="rounded-xl bg-white p-4">
-                <p className="text-xs text-[#717971]">Dư nợ hiện tại</p>
-                <p className="mt-1 text-2xl font-bold text-[#7e5700]">{formatMoney(context?.outstandingBalance ?? 0)} đ</p>
+                <p className="text-xs text-[#717971]">Công nợ hiện tại</p>
+                <p className="mt-1 text-2xl font-bold text-[#7e5700]">{formatMoney(context?.currentDebt ?? 0)} đ</p>
                 <p className="mt-2 text-xs leading-relaxed text-[#717971]">
-                  Tổng tiền khách còn phải trả từ các đơn chưa thanh toán đủ (ví dụ: chuyển khoản chờ xác nhận, bán ghi nợ).
-                  Khách thanh toán đủ tại quầy thường có dư nợ bằng 0.
+
                 </p>
               </div>
 
+              <div className="rounded-xl border border-[#e5e7eb] bg-white p-4">
+                <p className="text-xs text-[#717971]">Chi tiết theo đơn (chưa thanh toán đủ)</p>
+                <p className="mt-1 text-lg font-semibold text-[#1b1c17]">{formatMoney(context?.outstandingBalance ?? 0)} đ</p>
+              </div>
+
               {(context?.unpaidOrders?.length ?? 0) === 0 ? (
-                <div className="rounded-xl bg-white p-4 text-sm text-[#717971]">Khách hàng không có đơn nợ.</div>
+                <div className="rounded-xl bg-white p-4 text-sm text-[#717971]">Không có đơn chưa thanh toán đủ trong 50 đơn gần nhất.</div>
               ) : (
                 <div className="overflow-hidden rounded-xl border border-[#e5e7eb] bg-white">
                   <table className="w-full border-collapse text-left text-sm">
                     <thead className="bg-[#f6f4ec] text-xs uppercase text-[#717971]">
                       <tr>
                         <th className="px-4 py-3">Mã đơn</th>
+                        <th className="px-4 py-3">Trạng thái TT</th>
                         <th className="px-4 py-3">Ngày</th>
-                        <th className="px-4 py-3 text-right">Còn nợ</th>
+                        <th className="px-4 py-3 text-right">Còn phải thu</th>
                       </tr>
                     </thead>
                     <tbody>
                       {context.unpaidOrders.map((row) => (
                         <tr key={row.orderCode} className="border-t border-[#f0eee6]">
                           <td className="px-4 py-3 font-semibold">{row.orderCode}</td>
+                          <td className="px-4 py-3">{formatPaymentStatus(row.paymentStatus)}</td>
                           <td className="px-4 py-3">{formatVietnamDateTime(row.createdAt)}</td>
                           <td className="px-4 py-3 text-right font-semibold text-[#7e5700]">
                             {formatMoney(row.remainingAmount)} đ

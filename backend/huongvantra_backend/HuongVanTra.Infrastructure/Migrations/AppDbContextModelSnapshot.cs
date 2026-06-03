@@ -73,6 +73,11 @@ namespace HuongVanTra.Infrastructure.Migrations
                     b.Property<decimal>("TotalSpend")
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<decimal>("CurrentDebt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(18,2)")
+                        .HasDefaultValue(0m);
+
                     b.HasKey("Id");
 
                     b.HasIndex("AssignedEmployeeId");

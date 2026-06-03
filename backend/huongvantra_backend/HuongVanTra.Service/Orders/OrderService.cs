@@ -264,6 +264,11 @@ namespace HuongVanTra.Service.Orders {
                     throw new ArgumentException("Manual discount cannot be negative.");
                 }
 
+                var subtotal = order.OrderItems.Sum(i => i.LineTotal);
+                if (request.ManualDiscount.Value > subtotal) {
+                    throw new ArgumentException("Manual discount cannot exceed order subtotal.");
+                }
+
                 order.ManualDiscount = request.ManualDiscount.Value;
             }
 

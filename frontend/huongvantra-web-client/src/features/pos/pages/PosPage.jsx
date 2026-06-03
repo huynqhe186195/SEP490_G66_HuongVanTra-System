@@ -19,6 +19,10 @@ import {
   resolvePosStoreId,
 } from '../services/posApi.js'
 import { loadPosSeller } from '../utils/posSeller.js'
+import {
+  normalizeOrderDiscountInput,
+  validatePosDiscountsBeforePayment,
+} from '../utils/posDiscountValidation.js'
 
 const SALES_MODES = [
   { id: 'counter', label: 'Bán tại quầy', icon: 'storefront' },
@@ -95,13 +99,14 @@ function clampLineDiscountItem(item) {
 }
 
 function clampCartLineDiscounts(cartItems) {
-  return cartItems.map(clampLineDiscountItem)
+  return (Array.isArray(cartItems) ? cartItems : []).map(clampLineDiscountItem)
 }
 
 function computePosTotals(cartItems, orderDiscountPercent, orderDiscountAmountFixed, tierDiscountPercent) {
-  const grossSubtotal = cartItems.reduce((sum, item) => sum + getLineGross(item), 0)
-  const itemDiscountTotal = cartItems.reduce((sum, item) => sum + getLineDiscount(item), 0)
-  const subtotalAfterItemDiscount = cartItems.reduce((sum, item) => sum + getLineTotal(item), 0)
+  const items = Array.isArray(cartItems) ? cartItems : []
+  const grossSubtotal = items.reduce((sum, item) => sum + getLineGross(item), 0)
+  const itemDiscountTotal = items.reduce((sum, item) => sum + getLineDiscount(item), 0)
+  const subtotalAfterItemDiscount = items.reduce((sum, item) => sum + getLineTotal(item), 0)
   const fixedOrderDiscount = Math.max(0, Math.round(Number(orderDiscountAmountFixed) || 0))
   const orderDiscountAmount =
     fixedOrderDiscount > 0
@@ -165,16 +170,18 @@ function PosPage() {
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0]
   const session = sessions[activeTabId] ?? createEmptySession(salesMode)
   const {
-    searchValue,
-    cartItems,
-    orderDiscountPercent,
-    orderDiscountAmountFixed,
-    selectedCustomer,
-    customerSearchValue,
-    paymentMethod,
-    amountPaidInput,
-    shippingAddress,
-  } = session
+    searchValue = '',
+    cartItems = [],
+    orderDiscountPercent = 0,
+    orderDiscountAmountFixed = 0,
+    selectedCustomer = null,
+    customerSearchValue = '',
+    paymentMethod: sessionPaymentMethod,
+    amountPaidInput = '',
+    shippingAddress = '',
+  } = session ?? createEmptySession(salesMode)
+
+  const paymentMethod = sessionPaymentMethod ?? (isTakeaway ? 'COD' : 'CASH')
 
   const paymentMethods = isTakeaway ? TAKEAWAY_PAYMENT_METHODS : COUNTER_PAYMENT_METHODS
 
@@ -331,6 +338,34 @@ function PosPage() {
       clearTimeout(timerId)
     }
   }, [customerSearchValue, selectedCustomer, activeTabId])
+
+  useEffect(() => {
+    const customerId = selectedCustomer?.customerId
+    if (!customerId) return undefined
+
+    let cancelled = false
+    fetchPosCustomerContext(customerId)
+      .then((context) => {
+        if (cancelled || !context) return
+        updateActiveSession((prev) => {
+          if (prev.selectedCustomer?.customerId !== customerId) return prev
+          return {
+            ...prev,
+            selectedCustomer: {
+              ...prev.selectedCustomer,
+              currentDebt: context.currentDebt,
+              tierCode: context.tierCode || prev.selectedCustomer.tierCode,
+              tierDiscountPercent: context.tierDiscountPercent ?? prev.selectedCustomer.tierDiscountPercent,
+            },
+          }
+        })
+      })
+      .catch(() => {})
+
+    return () => {
+      cancelled = true
+    }
+  }, [selectedCustomer?.customerId])
 
   useEffect(() => {
     if (!isTakeaway || !selectedCustomer?.customerId) {
@@ -573,34 +608,22 @@ function PosPage() {
       return false
     }
 
-    for (const row of normalizedItems) {
-      const gross = getLineGross(row)
-      const value = row.lineDiscountValue || 0
-      if (!value) {
-        continue
-      }
-      if (row.lineDiscountType === 'amount' && value > gross) {
-        showError(`Chiết khấu "${row.name}" vượt thành tiền cần thanh toán của dòng.`)
-        return false
-      }
-      if (row.lineDiscountType !== 'amount' && value > 100) {
-        showError(`Chiết khấu % của "${row.name}" không hợp lệ.`)
-        return false
-      }
-    }
+    const paymentCheck = validatePosDiscountsBeforePayment({
+      cartItems: normalizedItems,
+      orderDiscountPercent,
+      orderDiscountAmountFixed,
+      grossSubtotal,
+      subtotalAfterItemDiscount,
+      orderDiscountAmount,
+      totalDiscount,
+      total,
+    })
 
-    if (orderDiscountPercent > 100) {
-      showError('Chiết khấu đơn không được vượt 100%.')
-      return false
-    }
-
-    if (totalDiscount > grossSubtotal) {
-      showError('Tổng chiết khấu không được lớn hơn số tiền cần thanh toán.')
-      return false
-    }
-
-    if (total < 0) {
-      showError('Số tiền cần thanh toán không hợp lệ.')
+    if (!paymentCheck.ok) {
+      if (paymentCheck.clampOrderDiscount) {
+        updateActiveSession(paymentCheck.clampOrderDiscount)
+      }
+      showError(paymentCheck.error)
       return false
     }
 
@@ -1190,6 +1213,11 @@ function PosPage() {
                     <p className="truncate text-xs text-[#717971]">
                       {selectedCustomer.phone || '—'} · {selectedCustomer.customerCode}
                     </p>
+                    {Number(selectedCustomer.currentDebt) > 0 ? (
+                      <p className="mt-0.5 text-xs font-semibold text-[#7e5700]">
+                        Công nợ: {formatMoney(selectedCustomer.currentDebt)} đ
+                      </p>
+                    ) : null}
                   </div>
                   <button
                     type="button"
@@ -1238,6 +1266,7 @@ function PosPage() {
                       <span className="text-sm font-semibold text-[#1b1c17]">{customer.fullName}</span>
                       <span className="text-xs text-[#717971]">
                         {customer.phone || '—'} · {customer.customerCode}
+                        {Number(customer.currentDebt) > 0 ? ` · Nợ ${formatMoney(customer.currentDebt)} đ` : ''}
                       </span>
                     </button>
                   ))}
@@ -1530,16 +1559,24 @@ function PosPage() {
         isOpen={openModal === 'offer'}
         initialPercent={orderDiscountPercent}
         initialFixedAmount={orderDiscountAmountFixed}
+        maxFixedAmount={subtotalAfterItemDiscount}
         onClose={() => setOpenModal(null)}
-        onConfirm={({ percent, fixedAmount }) => {
-          const fixed = Math.max(0, Math.round(Number(fixedAmount) || 0))
-          if (fixed > 0) {
-            updateActiveSession({ orderDiscountPercent: 0, orderDiscountAmountFixed: fixed })
-          } else {
-            updateActiveSession({
-              orderDiscountPercent: Math.min(100, Math.max(0, Number(percent) || 0)),
-              orderDiscountAmountFixed: 0,
-            })
+        onConfirm={({ percent, fixedAmount, warning }) => {
+          const result = normalizeOrderDiscountInput({
+            percent,
+            fixedAmount,
+            subtotalAfterItemDiscount,
+          })
+          if (!result.ok) {
+            showError(result.error)
+            return
+          }
+          updateActiveSession({
+            orderDiscountPercent: result.orderDiscountPercent,
+            orderDiscountAmountFixed: result.orderDiscountAmountFixed,
+          })
+          if (warning || result.warning) {
+            showError(warning || result.warning)
           }
           setOpenModal(null)
         }}
