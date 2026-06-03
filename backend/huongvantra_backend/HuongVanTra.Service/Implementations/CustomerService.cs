@@ -1,8 +1,10 @@
 ﻿using HuongVanTra.Core.Entities.Customers;
+using HuongVanTra.Core.Entities.Sales;
 using HuongVanTra.Core.Entities.System;
 using HuongVanTra.Core.Interfaces;
 using HuongVanTra.Service.DTO.Customers;
 using HuongVanTra.Service.Interfaces;
+using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
 
 namespace HuongVanTra.Service.Implementations {
@@ -25,7 +27,7 @@ namespace HuongVanTra.Service.Implementations {
             }).ToList();
         }
 
-        // put: upgrade membership tier manually
+        // put: upgrade membership tier manually (VIP)
         public async Task<bool> UpgradeTierManuallyAsync(UpgradeTierRequestDto dto) {
             await _unitOfWork.BeginTransactionAsync();
             try {
@@ -44,6 +46,7 @@ namespace HuongVanTra.Service.Implementations {
                 var oldTierId = customer.TierId;
 
                 customer.TierId = dto.NewTierId;
+                customer.CustomerType = "VIP";
                 customerRepo.Update(customer);
 
                 var auditLog = new AuditLog {
@@ -51,10 +54,10 @@ namespace HuongVanTra.Service.Implementations {
                     Action = "MANUAL_UPGRADE_TIER",
                     EntityType = "Customer",
                     EntityId = customer.Id,
-                    OldValues = JsonSerializer.Serialize(new { TierId = oldTierId }),
-                    NewValues = JsonSerializer.Serialize(new { TierId = dto.NewTierId }),
+                    OldValues = JsonSerializer.Serialize(new { TierId = oldTierId, CustomerType = "RETAIL" }),
+                    NewValues = JsonSerializer.Serialize(new { TierId = dto.NewTierId, CustomerType = "VIP" }),
                     Status = "SUCCESS",
-                    CreatedAt = DateTime.UtcNow.AddHours(7) // shift to UTC/GMT +7
+                    CreatedAt = DateTime.UtcNow.AddHours(7)
                 };
                 await auditRepo.AddAsync(auditLog);
 
@@ -64,6 +67,44 @@ namespace HuongVanTra.Service.Implementations {
             catch (Exception) {
                 await _unitOfWork.RollbackTransactionAsync();
                 throw;
+            }
+        }
+
+        // auto task: evaluate and auto upgrade membership tier (normal)
+        public async Task EvaluateAndAutoUpgradeTiersAsync() {
+            try {
+                var customerRepo = _unitOfWork.Repository<Customer>();
+                var tierRepo = _unitOfWork.Repository<MembershipTier>();
+                var orderRepo = _unitOfWork.Repository<Order>();
+
+                var allTiers = await tierRepo.GetQueryable()
+                    .OrderByDescending(t => t.MinTotalSpend)
+                    .ToListAsync();
+
+                var normalCustomers = await customerRepo.FindAsync(c => c.CustomerType != "VIP" && c.Status == "ACTIVE");
+
+                var oneYearAgo = DateTime.UtcNow.AddHours(7).AddYears(-1);
+
+                foreach (var customer in normalCustomers) {
+                    var totalSpend12Months = await orderRepo.GetQueryable()
+                        .Where(o => o.CustomerId == customer.Id &&
+                                    o.OrderStatus == "COMPLETED" &&
+                                    o.CreatedAt >= oneYearAgo)
+                        .SumAsync(o => o.TotalAmount);
+
+                    var qualifiedTier = allTiers.FirstOrDefault(t => totalSpend12Months >= t.MinTotalSpend);
+
+                    if (qualifiedTier != null && customer.TierId != qualifiedTier.Id) {
+                        customer.TierId = qualifiedTier.Id;
+                        customer.TotalSpend = totalSpend12Months;
+                        customerRepo.Update(customer);
+                    }
+                }
+
+                await _unitOfWork.SaveChangesAsync();
+            }
+            catch (Exception ex) {
+                Console.WriteLine($"Lỗi chạy Auto Upgrade Tier: {ex.Message}");
             }
         }
     }
