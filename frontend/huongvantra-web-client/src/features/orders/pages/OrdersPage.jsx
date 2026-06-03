@@ -152,8 +152,7 @@ function OrdersPage() {
   }
 
   return (
-    <PageShell className="min-h-0 flex-1 overflow-hidden">
-      <div className="shrink-0">
+    <PageShell>
       <PageHeader
         title="Đơn hàng"
         description="Xem và chỉnh sửa đơn tạo từ POS. Tạo đơn mới tại màn hình POS bán hàng."
@@ -169,9 +168,8 @@ function OrdersPage() {
           </Link>
         }
       />
-      </div>
 
-      <section className="mb-4 shrink-0 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm sm:mb-6">
+      <section className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-end gap-3">
           <label className="min-w-[160px] flex-1">
             <span className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-400">Trạng thái đơn</span>
@@ -280,17 +278,17 @@ function OrdersPage() {
         </div>
       </section>
 
-      <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-sm">
-        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-slate-50 p-4 sm:p-6">
+      <section className="rounded-3xl border border-slate-100 bg-white shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-50 p-4 sm:p-6">
           <h2 className="text-xl font-bold text-slate-800">
             Danh sách đơn hàng
             <span className="ml-2 text-sm font-normal text-slate-500">({totalCount} đơn)</span>
           </h2>
         </div>
 
-        <div className="custom-scrollbar min-h-0 flex-1 overflow-auto">
+        <div className="custom-scrollbar overflow-x-auto">
           <table className="w-full min-w-[960px] text-left">
-            <thead className="sticky top-0 z-10 bg-[#f6f4ec] text-xs font-bold uppercase tracking-wider text-slate-400 shadow-[0_1px_0_#e8e6de]">
+            <thead className="bg-[#f6f4ec] text-xs font-bold uppercase tracking-wider text-slate-400">
               <tr>
                 <th className="px-6 py-4">Mã đơn</th>
                 <th className="px-4 py-4">Khách hàng</th>

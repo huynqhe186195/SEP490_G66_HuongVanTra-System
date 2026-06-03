@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
+import PageShell from '../../../components/shared/PageShell.jsx'
 import { showError } from '../../../app/toast.js'
 import { fetchRoleOptions, fetchStaffAccounts } from '../services/staffApi.js'
 
@@ -67,7 +68,7 @@ function StaffPage() {
   }
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 sm:gap-6 [font-family:'Manrope',sans-serif]">
+    <PageShell className="[font-family:'Manrope',sans-serif]">
       <PageHeader
         title="Nhân viên"
         description="Quản lý tài khoản nhân sự, trạng thái hoạt động và vai trò trong hệ thống"
@@ -109,7 +110,7 @@ function StaffPage() {
           ))}
         </div>
 
-        <div className="overflow-hidden rounded-xl border border-[#c1c9c0]/30 shadow-[0px_8px_24px_rgba(0,0,0,0.06)]">
+        <div className="rounded-xl border border-[#c1c9c0]/30 shadow-[0px_8px_24px_rgba(0,0,0,0.06)]">
           <div className="flex flex-wrap items-center gap-3 border-b border-[#c1c9c0]/30 bg-[#f6f4ec]/70 p-4">
             <div className="relative min-w-[260px] flex-1">
               <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[#414942] text-[20px]">search</span>
@@ -148,7 +149,7 @@ function StaffPage() {
             </button>
           </div>
 
-          <div className="overflow-x-auto">
+          <div className="custom-scrollbar overflow-x-auto">
             <table className="w-full border-collapse text-left">
               <thead>
                 <tr className="bg-[#f0eee6] text-xs uppercase tracking-wider text-[#414942]">
@@ -243,8 +244,8 @@ function StaffPage() {
         </div>
       </section>
 
-      <footer className="pb-2 text-center text-xs text-[#414942]/60">© 2024 Huong Van Tra Management System. All Rights Reserved.</footer>
-    </div>
+      <footer className="pb-2 text-center text-xs text-[#414942]/60">© 2024 Hương Vân Trà — Hệ thống quản lý</footer>
+    </PageShell>
   )
 }
 

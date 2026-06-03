@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
+import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
 import { showError } from '../../../app/toast.js'
 import { fetchCustomers } from '../services/customersApi.js'
@@ -179,7 +180,7 @@ function CustomersPage() {
   }, [customers])
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 sm:gap-6 [font-family:'Manrope',sans-serif]">
+    <PageShell className="[font-family:'Manrope',sans-serif]">
       <PageHeader
         title="Khách hàng"
         description="Khách phổ thông (hạng Bronze/Silver/Gold), khách VIP và khách doanh nghiệp"
@@ -669,7 +670,7 @@ function CustomersPage() {
           Support Center
         </span>
       </button>
-    </div>
+    </PageShell>
   )
 }
 
