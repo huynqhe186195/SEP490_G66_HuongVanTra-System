@@ -7,5 +7,8 @@ namespace HuongVanTra.Service.Sales.Models {
         public string? QrPayload { get; set; }
 
         public string TransferContent { get; set; } = null!;
+
+        /// <summary>Số TK/VA khách cần chuyển vào (nếu khác TK chính).</summary>
+        public string? TransferAccountNumber { get; set; }
     }
 }

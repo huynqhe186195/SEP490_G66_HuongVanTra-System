@@ -39,11 +39,55 @@ function getLineDiscount(item) {
   if (item.lineDiscountType === 'amount') {
     return Math.min(gross, value)
   }
-  return Math.min(gross, Math.round((gross * value) / 100))
+  const percent = Math.min(100, Math.max(0, value))
+  return Math.min(gross, Math.round((gross * percent) / 100))
 }
 
 function getLineTotal(item) {
   return Math.max(getLineGross(item) - getLineDiscount(item), 0)
+}
+
+/** Chuẩn hóa CK dòng — không vượt thành tiền dòng. */
+function clampLineDiscountItem(item) {
+  const gross = getLineGross(item)
+  const value = item.lineDiscountValue || 0
+  if (!value) {
+    return item
+  }
+
+  if (item.lineDiscountType === 'amount') {
+    const capped = Math.min(Math.max(0, value), gross)
+    return capped === value ? item : { ...item, lineDiscountValue: capped }
+  }
+
+  const cappedPercent = Math.min(100, Math.max(0, value))
+  return cappedPercent === value ? item : { ...item, lineDiscountValue: cappedPercent }
+}
+
+function clampCartLineDiscounts(cartItems) {
+  return cartItems.map(clampLineDiscountItem)
+}
+
+function computePosTotals(cartItems, orderDiscountPercent, tierDiscountPercent) {
+  const grossSubtotal = cartItems.reduce((sum, item) => sum + getLineGross(item), 0)
+  const itemDiscountTotal = cartItems.reduce((sum, item) => sum + getLineDiscount(item), 0)
+  const subtotalAfterItemDiscount = cartItems.reduce((sum, item) => sum + getLineTotal(item), 0)
+  const orderDiscountAmount = Math.round((subtotalAfterItemDiscount * orderDiscountPercent) / 100)
+  const totalBeforeTier = Math.max(subtotalAfterItemDiscount - orderDiscountAmount, 0)
+  const membershipDiscountAmount =
+    tierDiscountPercent > 0 ? Math.round((totalBeforeTier * tierDiscountPercent) / 100) : 0
+  const total = Math.max(totalBeforeTier - membershipDiscountAmount, 0)
+  const totalDiscount = itemDiscountTotal + orderDiscountAmount + membershipDiscountAmount
+
+  return {
+    grossSubtotal,
+    itemDiscountTotal,
+    subtotalAfterItemDiscount,
+    orderDiscountAmount,
+    membershipDiscountAmount,
+    total,
+    totalDiscount,
+  }
 }
 
 function createEmptySession() {
@@ -141,15 +185,16 @@ function PosPage() {
     return digits ? Number(digits) : 0
   }
 
-  const grossSubtotal = cartItems.reduce((sum, item) => sum + getLineGross(item), 0)
-  const itemDiscountTotal = cartItems.reduce((sum, item) => sum + getLineDiscount(item), 0)
-  const subtotalAfterItemDiscount = cartItems.reduce((sum, item) => sum + getLineTotal(item), 0)
-  const orderDiscountAmount = Math.round((subtotalAfterItemDiscount * orderDiscountPercent) / 100)
-  const totalBeforeTier = Math.max(subtotalAfterItemDiscount - orderDiscountAmount, 0)
   const tierDiscountPercent = Number(selectedCustomer?.tierDiscountPercent || 0)
-  const membershipDiscountAmount =
-    tierDiscountPercent > 0 ? Math.round((totalBeforeTier * tierDiscountPercent) / 100) : 0
-  const total = Math.max(totalBeforeTier - membershipDiscountAmount, 0)
+  const {
+    grossSubtotal,
+    itemDiscountTotal,
+    subtotalAfterItemDiscount,
+    orderDiscountAmount,
+    membershipDiscountAmount,
+    total,
+    totalDiscount,
+  } = computePosTotals(cartItems, orderDiscountPercent, tierDiscountPercent)
   const amountPaid = parseMoneyInput(amountPaidInput)
   // Để trống = ghi nợ toàn bộ đơn; nhập đủ = thanh toán hết; nhập thừa = tính tiền thừa
   const cashPaymentAmount = amountPaid >= total ? total : amountPaid
@@ -294,10 +339,12 @@ function PosPage() {
       if (existing) {
         return {
           ...prev,
-          cartItems: currentItems.map((item) =>
-            item.sku === product.sku
-              ? { ...item, qty: Number((item.qty + item.step).toFixed(2)) }
-              : item,
+          cartItems: clampCartLineDiscounts(
+            currentItems.map((item) =>
+              item.sku === product.sku
+                ? { ...item, qty: Number((item.qty + item.step).toFixed(2)) }
+                : item,
+            ),
           ),
           searchValue: '',
         }
@@ -327,16 +374,18 @@ function PosPage() {
   const updateQuantity = (sku, direction) => {
     updateActiveSession((prev) => ({
       ...prev,
-      cartItems: prev.cartItems
-        .map((item) => {
-          if (item.sku !== sku) {
-            return item
-          }
+      cartItems: clampCartLineDiscounts(
+        prev.cartItems
+          .map((item) => {
+            if (item.sku !== sku) {
+              return item
+            }
 
-          const nextQty = direction === 'inc' ? item.qty + item.step : item.qty - item.step
-          return { ...item, qty: Number(nextQty.toFixed(2)) }
-        })
-        .filter((item) => item.qty > 0),
+            const nextQty = direction === 'inc' ? item.qty + item.step : item.qty - item.step
+            return { ...item, qty: Number(nextQty.toFixed(2)) }
+          })
+          .filter((item) => item.qty > 0),
+      ),
     }))
   }
 
@@ -350,20 +399,108 @@ function PosPage() {
   }
 
   const updateLineDiscountValue = (sku, rawValue) => {
+    const item = cartItems.find((row) => row.sku === sku)
+    if (!item) {
+      return
+    }
+
+    const gross = getLineGross(item)
+
+    if (item.lineDiscountType === 'amount') {
+      const parsed = parseMoneyInput(rawValue)
+      if (parsed > gross) {
+        showError(
+          gross > 0
+            ? `Chiết khấu không được vượt thành tiền dòng (${formatMoney(gross)} đ).`
+            : 'Không thể chiết khấu khi thành tiền dòng bằng 0.',
+        )
+        updateActiveSession((prev) => ({
+          ...prev,
+          cartItems: prev.cartItems.map((row) =>
+            row.sku === sku ? { ...row, lineDiscountValue: gross } : row,
+          ),
+        }))
+        return
+      }
+
+      updateActiveSession((prev) => ({
+        ...prev,
+        cartItems: prev.cartItems.map((row) =>
+          row.sku === sku ? { ...row, lineDiscountValue: parsed } : row,
+        ),
+      }))
+      return
+    }
+
+    const parsed = Math.max(0, Number(rawValue) || 0)
+    if (parsed > 100) {
+      showError('Chiết khấu % không được vượt 100%.')
+    }
+
     updateActiveSession((prev) => ({
       ...prev,
-      cartItems: prev.cartItems.map((item) => {
-        if (item.sku !== sku) {
-          return item
-        }
-
-        if (item.lineDiscountType === 'amount') {
-          return { ...item, lineDiscountValue: parseMoneyInput(rawValue) }
-        }
-
-        return { ...item, lineDiscountValue: Math.min(100, Math.max(0, Number(rawValue) || 0)) }
-      }),
+      cartItems: prev.cartItems.map((row) =>
+        row.sku === sku ? { ...row, lineDiscountValue: Math.min(100, parsed) } : row,
+      ),
     }))
+  }
+
+  const updateOrderDiscountPercent = (rawValue) => {
+    const parsed = Math.max(0, Number(rawValue) || 0)
+    if (parsed > 100) {
+      showError('Chiết khấu đơn không được vượt 100%.')
+      updateActiveSession({ orderDiscountPercent: 100 })
+      return
+    }
+    updateActiveSession({ orderDiscountPercent: parsed })
+  }
+
+  const validateDiscountsBeforePayment = () => {
+    const normalizedItems = clampCartLineDiscounts(cartItems)
+    const cartBySku = Object.fromEntries(cartItems.map((row) => [row.sku, row]))
+    const hasStaleLineDiscount = normalizedItems.some((row) => {
+      const current = cartBySku[row.sku]
+      return current && (row.lineDiscountValue || 0) !== (current.lineDiscountValue || 0)
+    })
+
+    if (hasStaleLineDiscount) {
+      updateActiveSession({ cartItems: normalizedItems })
+      showError('Đã điều chỉnh chiết khấu cho khớp thành tiền. Vui lòng kiểm tra lại trước khi thanh toán.')
+      return false
+    }
+
+    for (const row of normalizedItems) {
+      const gross = getLineGross(row)
+      const value = row.lineDiscountValue || 0
+      if (!value) {
+        continue
+      }
+      if (row.lineDiscountType === 'amount' && value > gross) {
+        showError(`Chiết khấu "${row.name}" vượt thành tiền cần thanh toán của dòng.`)
+        return false
+      }
+      if (row.lineDiscountType !== 'amount' && value > 100) {
+        showError(`Chiết khấu % của "${row.name}" không hợp lệ.`)
+        return false
+      }
+    }
+
+    if (orderDiscountPercent > 100) {
+      showError('Chiết khấu đơn không được vượt 100%.')
+      return false
+    }
+
+    if (totalDiscount > grossSubtotal) {
+      showError('Tổng chiết khấu không được lớn hơn số tiền cần thanh toán.')
+      return false
+    }
+
+    if (total < 0) {
+      showError('Số tiền cần thanh toán không hợp lệ.')
+      return false
+    }
+
+    return true
   }
 
   const removeItem = (sku) => {
@@ -381,26 +518,31 @@ function PosPage() {
   }
 
   const formatLineDiscountLabel = (item) => {
-    if (!item.lineDiscountValue) return null
+    const applied = getLineDiscount(item)
+    if (!applied) return null
     if (item.lineDiscountType === 'amount') {
-      return `-${formatMoney(item.lineDiscountValue)}đ`
+      return `-${formatMoney(applied)}đ`
     }
-    return `-${item.lineDiscountValue}%`
+    const percent = Math.min(100, Math.max(0, item.lineDiscountValue || 0))
+    return `-${percent}%`
   }
 
   const hasCartItems = cartItems.length > 0
   const hasCustomerSelected = Boolean(selectedCustomer?.customerId)
   const isTransferPayment = paymentMethod === 'TRANSFER'
-  const canPayCash = hasCartItems && total > 0 && hasCustomerSelected
-  const canPayTransfer = total > 0 && hasCartItems && hasCustomerSelected
+  const isZeroAmountSale = total === 0 && grossSubtotal > 0
+  const canPayCash = hasCartItems && hasCustomerSelected
+  const canPayTransfer = hasCartItems && hasCustomerSelected && total > 0
   const canPay = (isTransferPayment ? canPayTransfer : canPayCash) && !isSubmitting
 
   const buildOrderPayload = (method, amount) => {
     const storeId = resolvePosStoreId()
+    const manualDiscount = Math.round(itemDiscountTotal + orderDiscountAmount)
     return {
       storeId,
       customerId: selectedCustomer.customerId,
       promotionId: null,
+      manualDiscount,
       items: cartItems.map((item) => ({
         productId: item.productId,
         quantity: item.qty,
@@ -452,7 +594,14 @@ function PosPage() {
       return
     }
 
+    if (!validateDiscountsBeforePayment()) {
+      return
+    }
+
     if (!canPay) {
+      if (isTransferPayment && isZeroAmountSale) {
+        showError('Đơn 0 đ vui lòng chọn thanh toán tiền mặt.')
+      }
       return
     }
 
@@ -474,6 +623,8 @@ function PosPage() {
             qrPayload: result.qrPayload,
             qrImageUrl: result.qrImageUrl,
             transferContent: result.transferContent,
+            transferAccountNumber: result.transferAccountNumber,
+            paymentMode: result.paymentMode,
             customer: selectedCustomer?.fullName || '',
             paymentMethod: 'TRANSFER',
             receipt,
@@ -488,8 +639,12 @@ function PosPage() {
       if (cashPaymentAmount >= total) {
         showSuccess(
           result.invoiceCode
-            ? `Thanh toán thành công. Đơn: ${result.orderCode} · Số HĐ: ${result.invoiceCode}`
-            : `Thanh toán thành công. Đơn: ${result.orderCode}`,
+            ? total === 0
+              ? `Hoàn tất đơn 0 đ. Đơn: ${result.orderCode} · Số HĐ: ${result.invoiceCode}`
+              : `Thanh toán thành công. Đơn: ${result.orderCode} · Số HĐ: ${result.invoiceCode}`
+            : total === 0
+              ? `Hoàn tất đơn 0 đ. Đơn: ${result.orderCode}`
+              : `Thanh toán thành công. Đơn: ${result.orderCode}`,
         )
       } else if (isDebtSale) {
         showSuccess(`Ghi đơn ${result.orderCode} thành công. Dư nợ: ${formatMoney(debtAmount)} đ.`)
@@ -672,10 +827,16 @@ function PosPage() {
                   {cartItems.length} SP · {activeTab.label}
                 </p>
                 {cartItems.map((item) => {
+                  const lineGross = getLineGross(item)
                   const lineTotal = getLineTotal(item)
                   const isPercent = item.lineDiscountType !== 'amount'
                   const isDiscountOpen = openDiscountSku === item.sku
                   const discountLabel = formatLineDiscountLabel(item)
+                  const lineDiscountCapHint = isPercent
+                    ? 'Tối đa 100%'
+                    : lineGross > 0
+                      ? `Tối đa ${formatMoney(lineGross)} đ`
+                      : 'Thành tiền dòng: 0 đ'
 
                   return (
                     <div
@@ -777,6 +938,7 @@ function PosPage() {
                                 onChange={(event) => updateLineDiscountValue(item.sku, event.target.value)}
                               />
                             </div>
+                            <p className="mt-2 text-[11px] text-[#717971]">{lineDiscountCapHint}</p>
                           </div>
                         ) : null}
                       </div>
@@ -893,11 +1055,7 @@ function PosPage() {
                     max={100}
                     className="w-full rounded-lg border border-[#c1c9c0] py-2 pl-3 pr-7 text-sm outline-none focus:border-[#356647]"
                     value={orderDiscountPercent || ''}
-                    onChange={(event) =>
-                      updateActiveSession({
-                        orderDiscountPercent: Math.min(100, Math.max(0, Number(event.target.value) || 0)),
-                      })
-                    }
+                    onChange={(event) => updateOrderDiscountPercent(event.target.value)}
                     placeholder="0"
                   />
                   <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-[#717971]">%</span>
@@ -915,6 +1073,11 @@ function PosPage() {
             <div className="rounded-xl bg-white p-4 shadow-sm">
               <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[#717971]">Tổng tiền</label>
               <div className="text-3xl font-bold text-[#356647]">{formatMoney(total)} đ</div>
+              {isZeroAmountSale ? (
+                <p className="mt-1 text-xs font-medium text-[#356647]">
+                  Đơn 0 đ sau chiết khấu — bấm thanh toán tiền mặt (không cần nhập tiền khách trả).
+                </p>
+              ) : null}
               {hasCartItems ? (
                 <div className="mt-2 space-y-1 border-t border-[#f0eee6] pt-2 text-xs text-[#717971]">
                   <div className="flex justify-between">

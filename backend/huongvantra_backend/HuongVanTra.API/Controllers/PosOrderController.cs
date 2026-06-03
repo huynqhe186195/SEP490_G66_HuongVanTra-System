@@ -22,6 +22,7 @@ namespace HuongVanTra.API.Controllers {
         private readonly IOrderConfirmationService _orderConfirmationService;
         private readonly IPaymentWebhookService _paymentWebhookService;
         private readonly SepaySettings _sepaySettings;
+        private readonly ISepayOrderVaService _sepayOrderVaService;
         private readonly IConfiguration _configuration;
         private readonly IWebHostEnvironment _environment;
 
@@ -31,6 +32,7 @@ namespace HuongVanTra.API.Controllers {
             ICustomerService customerService,
             IOrderConfirmationService orderConfirmationService,
             IPaymentWebhookService paymentWebhookService,
+            ISepayOrderVaService sepayOrderVaService,
             IOptions<SepaySettings> sepayOptions,
             IConfiguration configuration,
             IWebHostEnvironment environment) {
@@ -39,9 +41,17 @@ namespace HuongVanTra.API.Controllers {
             _customerService = customerService;
             _orderConfirmationService = orderConfirmationService;
             _paymentWebhookService = paymentWebhookService;
+            _sepayOrderVaService = sepayOrderVaService;
             _sepaySettings = sepayOptions.Value;
             _configuration = configuration;
             _environment = environment;
+        }
+
+        [HttpGet("payment/sepay-setup")]
+        public async Task<ActionResult<SepaySetupDiagnostics>> GetSepaySetupStatus(
+            CancellationToken cancellationToken = default) {
+            var diagnostics = await _sepayOrderVaService.GetSetupDiagnosticsAsync(cancellationToken);
+            return Ok(diagnostics);
         }
 
         [HttpGet("payment/transfer-info")]
@@ -68,6 +78,9 @@ namespace HuongVanTra.API.Controllers {
                 BankName = bankName.Trim(),
                 AccountNumber = accountNumber.Trim(),
                 AccountHolder = accountHolder.Trim(),
+                PaymentMode = _sepayOrderVaService.PaymentMode,
+                SepayOrderVaEnabled = _sepaySettings.IsOrderVaApiEnabled,
+                SepayWebhookEnabled = _sepaySettings.EnableWebhook,
             });
         }
 
@@ -339,6 +352,7 @@ namespace HuongVanTra.API.Controllers {
                 CashierId = cashierId.Value,
                 CustomerId = request.CustomerId,
                 PromotionId = request.PromotionId,
+                ManualDiscount = request.ManualDiscount,
                 Items = request.Items.Select(i => new OrderItemCommand {
                     ProductId = i.ProductId,
                     Quantity = i.Quantity,
@@ -355,10 +369,13 @@ namespace HuongVanTra.API.Controllers {
                 return StatusCode(201, ToResponse(result));
             }
             catch (ArgumentException ex) {
-                return BadRequest(ex.Message);
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (SepayVaSetupException ex) {
+                return BadRequest(new { message = ex.Message });
             }
             catch (InvalidOperationException ex) {
-                return BadRequest(ex.Message);
+                return BadRequest(new { message = ex.Message });
             }
         }
 
@@ -378,6 +395,7 @@ namespace HuongVanTra.API.Controllers {
                 CashierId = cashierId.Value,
                 CustomerId = request.CustomerId,
                 PromotionId = request.PromotionId,
+                ManualDiscount = request.ManualDiscount,
                 Items = request.Items.Select(i => new OrderItemCommand {
                     ProductId = i.ProductId,
                     Quantity = i.Quantity,
@@ -394,10 +412,13 @@ namespace HuongVanTra.API.Controllers {
                 return StatusCode(201, ToResponse(result));
             }
             catch (ArgumentException ex) {
-                return BadRequest(ex.Message);
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (SepayVaSetupException ex) {
+                return BadRequest(new { message = ex.Message });
             }
             catch (InvalidOperationException ex) {
-                return BadRequest(ex.Message);
+                return BadRequest(new { message = ex.Message });
             }
         }
 
@@ -409,19 +430,23 @@ namespace HuongVanTra.API.Controllers {
             var order = await _dbContext.Orders
                 .AsNoTracking()
                 .Where(o => o.Id == orderId)
-                .Select(o => new { o.Id, o.OrderCode, o.PaymentStatus, o.OrderStatus, o.TotalAmount })
+                .Select(o => new {
+                    o.Id,
+                    o.OrderCode,
+                    o.PaymentStatus,
+                    o.OrderStatus,
+                    o.TotalAmount,
+                    InvoiceCode = _dbContext.Invoices
+                        .Where(i => i.OrderId == o.Id)
+                        .OrderByDescending(i => i.Id)
+                        .Select(i => i.InvoiceCode)
+                        .FirstOrDefault(),
+                })
                 .FirstOrDefaultAsync(cancellationToken);
 
             if (order is null) {
                 return NotFound("Order not found.");
             }
-
-            var invoiceCode = await _dbContext.Invoices
-                .AsNoTracking()
-                .Where(i => i.OrderId == orderId)
-                .OrderByDescending(i => i.Id)
-                .Select(i => i.InvoiceCode)
-                .FirstOrDefaultAsync(cancellationToken);
 
             var isPaid = string.Equals(order.PaymentStatus, "paid", StringComparison.OrdinalIgnoreCase);
             var expectedContent = BuildExpectedTransferContent(order.OrderCode);
@@ -431,7 +456,7 @@ namespace HuongVanTra.API.Controllers {
                 PaymentStatus = order.PaymentStatus,
                 OrderStatus = order.OrderStatus,
                 IsPaid = isPaid,
-                InvoiceCode = invoiceCode,
+                InvoiceCode = order.InvoiceCode,
                 ExpectedTransferContent = expectedContent,
                 ExpectedAmount = order.TotalAmount,
             });
@@ -549,6 +574,8 @@ namespace HuongVanTra.API.Controllers {
             QrPayload     = result.QrPayload,
             QrImageUrl    = result.QrImageUrl,
             TransferContent = result.TransferContent,
+            TransferAccountNumber = result.TransferAccountNumber,
+            PaymentMode = result.PaymentMode,
             InvoiceCode     = result.InvoiceCode,
             CreatedAt     = result.CreatedAt,
             Items         = result.Items.Select(i => new PosOrderItemResponse {

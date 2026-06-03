@@ -16,7 +16,7 @@ namespace HuongVanTra.Service.Sales {
         public VietQrGenerateResult GenerateForOrder(string orderCode, decimal amount) {
             ValidateSettings();
             var transferContent = NormalizeTransferContent(orderCode);
-            var imageUrl = BuildQuickLinkImageUrl(amount, transferContent);
+            var imageUrl = BuildQuickLinkImageUrl(_settings.AccountNumber.Trim(), amount, transferContent);
             return new VietQrGenerateResult {
                 QrImageUrl = imageUrl,
                 TransferContent = transferContent,
@@ -38,8 +38,22 @@ namespace HuongVanTra.Service.Sales {
             }
 
             return new VietQrGenerateResult {
-                QrImageUrl = BuildQuickLinkImageUrl(amount, transferContent),
+                QrImageUrl = BuildQuickLinkImageUrl(_settings.AccountNumber.Trim(), amount, transferContent),
                 TransferContent = transferContent,
+            };
+        }
+
+        public VietQrGenerateResult GenerateForAccount(string accountNumber, string orderCode, decimal amount) {
+            ValidateSettings();
+            var transferContent = NormalizeTransferContent(orderCode);
+            var account = string.IsNullOrWhiteSpace(accountNumber)
+                ? _settings.AccountNumber.Trim()
+                : accountNumber.Trim();
+
+            return new VietQrGenerateResult {
+                QrImageUrl = BuildQuickLinkImageUrl(account, amount, transferContent),
+                TransferContent = transferContent,
+                TransferAccountNumber = account,
             };
         }
 
@@ -66,9 +80,9 @@ namespace HuongVanTra.Service.Sales {
                 !string.IsNullOrWhiteSpace(_settings.ApiKey);
         }
 
-        private string BuildQuickLinkImageUrl(decimal amount, string transferContent) {
+        private string BuildQuickLinkImageUrl(string accountNumber, decimal amount, string transferContent) {
             var bankCode = ResolveQuickLinkBankCode();
-            var account = _settings.AccountNumber.Trim();
+            var account = accountNumber.Trim();
             var template = string.IsNullOrWhiteSpace(_settings.Template) ? "compact2" : _settings.Template.Trim();
 
             var query = new List<string>();
@@ -130,7 +144,7 @@ namespace HuongVanTra.Service.Sales {
             return new VietQrGenerateResult {
                 QrImageUrl = !string.IsNullOrWhiteSpace(imageUrl)
                     ? imageUrl
-                    : BuildQuickLinkImageUrl(amount, transferContent),
+                    : BuildQuickLinkImageUrl(_settings.AccountNumber.Trim(), amount, transferContent),
                 QrPayload = body.Data.QrCode,
                 TransferContent = transferContent,
             };

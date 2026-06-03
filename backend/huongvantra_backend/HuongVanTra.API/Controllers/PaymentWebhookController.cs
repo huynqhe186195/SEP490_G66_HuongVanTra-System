@@ -68,6 +68,7 @@ namespace HuongVanTra.API.Controllers {
                 TransactionId = payload.Id,
                 Gateway = payload.Gateway,
                 AccountNumber = payload.AccountNumber,
+                SubAccount = payload.SubAccount,
                 TransferType = payload.TransferType,
                 TransferAmount = payload.TransferAmount,
                 Content = payload.Content,

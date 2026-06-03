@@ -13,6 +13,7 @@ async function parseResponseError(response) {
     const body = await response.json().catch(() => null)
     if (body && typeof body === 'object') {
       if (typeof body.message === 'string' && body.message.trim()) return body.message
+      if (typeof body.detail === 'string' && body.detail.trim()) return body.detail
       if (typeof body.title === 'string' && body.title.trim()) return body.title
     }
   }
@@ -54,6 +55,8 @@ export function mapPosOrderResult(item) {
     qrPayload: item.qrPayload ?? item.QrPayload ?? null,
     qrImageUrl: item.qrImageUrl ?? item.QrImageUrl ?? null,
     transferContent: item.transferContent ?? item.TransferContent ?? null,
+    transferAccountNumber: item.transferAccountNumber ?? item.TransferAccountNumber ?? null,
+    paymentMode: item.paymentMode ?? item.PaymentMode ?? 'vietqr_main',
     invoiceCode: item.invoiceCode ?? item.InvoiceCode ?? null,
     createdAt: item.createdAt ?? item.CreatedAt,
     items: (item.items ?? item.Items ?? []).map((row) => ({
@@ -75,7 +78,29 @@ export function mapPosTransferPaymentInfo(item) {
     bankName: item.bankName ?? item.BankName ?? '',
     accountNumber: item.accountNumber ?? item.AccountNumber ?? '',
     accountHolder: item.accountHolder ?? item.AccountHolder ?? '',
+    paymentMode: item.paymentMode ?? item.PaymentMode ?? 'vietqr_main',
+    sepayOrderVaEnabled: Boolean(item.sepayOrderVaEnabled ?? item.SepayOrderVaEnabled),
+    sepayWebhookEnabled: Boolean(item.sepayWebhookEnabled ?? item.SepayWebhookEnabled),
   }
+}
+
+export function fetchPosSepaySetup() {
+  return requestWithAuth('/api/PosOrder/payment/sepay-setup', { method: 'GET' }).then((item) => ({
+    paymentMode: item.paymentMode ?? item.PaymentMode ?? 'vietqr_main',
+    requireSepayVa: Boolean(item.requireSepayVa ?? item.RequireSepayVa),
+    apiTokenConfigured: Boolean(item.apiTokenConfigured ?? item.ApiTokenConfigured),
+    bankAccountUuidConfigured: Boolean(item.bankAccountUuidConfigured ?? item.BankAccountUuidConfigured),
+    staticVaConfigured: Boolean(item.staticVaConfigured ?? item.StaticVaConfigured),
+    canCreateTransferQr: Boolean(item.canCreateTransferQr ?? item.CanCreateTransferQr),
+    setupMessage: item.setupMessage ?? item.SetupMessage ?? null,
+    bankAccounts: (item.bankAccounts ?? item.BankAccounts ?? []).map((row) => ({
+      id: row.id ?? row.Id ?? '',
+      bankName: row.bankName ?? row.BankName ?? '',
+      accountNumber: row.accountNumber ?? row.AccountNumber ?? '',
+      accountHolderName: row.accountHolderName ?? row.AccountHolderName ?? '',
+      status: row.status ?? row.Status ?? '',
+    })),
+  }))
 }
 
 /** Ưu tiên URL VietQR từ backend (img.vietqr.io / API v2). */
