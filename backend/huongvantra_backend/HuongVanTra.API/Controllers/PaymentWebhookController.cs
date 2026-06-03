@@ -47,13 +47,17 @@ namespace HuongVanTra.API.Controllers {
 
             if (!string.IsNullOrWhiteSpace(_settings.WebhookSecret)) {
                 var authHeader = Request.Headers.Authorization.FirstOrDefault();
-                var token = authHeader?.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase) == true
-                    ? authHeader["Bearer ".Length..].Trim()
-                    : authHeader?.Trim();
+                string? token = null;
+                if (authHeader?.StartsWith("Apikey ", StringComparison.OrdinalIgnoreCase) == true)
+                    token = authHeader["Apikey ".Length..].Trim();
+                else if (authHeader?.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase) == true)
+                    token = authHeader["Bearer ".Length..].Trim();
+                else
+                    token = authHeader?.Trim();
 
                 if (string.IsNullOrWhiteSpace(token)
                     || !string.Equals(token, _settings.WebhookSecret, StringComparison.Ordinal)) {
-                    _logger.LogWarning("Invalid Sepay webhook token.");
+                    _logger.LogWarning("Invalid Sepay webhook token. RawHeader={AuthHeader}", authHeader);
                     return Unauthorized(new { message = "Invalid token." });
                 }
             }
