@@ -231,6 +231,23 @@ export function fetchOrderPaymentQr(orderId, { force = false } = {}) {
   return requestWithAuth(`/api/Orders/${orderId}/payment-qr${query}`, { method: 'GET' }).then(mapOrderPaymentQr)
 }
 
+export function mapOrderPaymentStatus(item) {
+  return {
+    orderId: item.orderId ?? item.OrderId,
+    orderCode: item.orderCode ?? item.OrderCode ?? '',
+    paymentStatus: item.paymentStatus ?? item.PaymentStatus ?? '',
+    orderStatus: item.orderStatus ?? item.OrderStatus ?? '',
+    isPaid: Boolean(item.isPaid ?? item.IsPaid),
+    invoiceCode: item.invoiceCode ?? item.InvoiceCode ?? null,
+    expectedTransferContent: item.expectedTransferContent ?? item.ExpectedTransferContent ?? null,
+    expectedAmount: Number(item.expectedAmount ?? item.ExpectedAmount ?? 0),
+  }
+}
+
+export function fetchOrderPaymentStatus(orderId) {
+  return requestWithAuth(`/api/Orders/${orderId}/payment-status`, { method: 'GET' }).then(mapOrderPaymentStatus)
+}
+
 export function updateOrderItems(orderId, items) {
   return requestWithAuth(`/api/Orders/${orderId}/items`, {
     method: 'PUT',

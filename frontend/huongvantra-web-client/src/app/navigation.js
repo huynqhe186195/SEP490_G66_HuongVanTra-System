@@ -34,11 +34,11 @@ const HOME_MODULE_PRIORITY = [
 // { label: 'Tích hợp', path: '/integrations', module: 'integrations', roles: ['admin'] },
 
 export const navigationItems = [
-  { label: 'POS bán hàng', path: '/pos', module: 'pos', roles: ['agencyManager', 'salesStaff', 'customer'] },
-  { label: 'Đơn hàng', path: '/orders', module: 'orders', roles: ['admin', 'agencyManager', 'salesStaff'] },
-  { label: 'Quản lý COD', path: '/orders/cod', module: 'cod_ops', roles: ['agencyManager'] },
-  { label: 'Khách hàng', path: '/customers', module: 'customers', roles: ['admin', 'agencyManager'] },
-  { label: 'Nhân sự', path: '/staff', module: 'staff', roles: ['admin', 'agencyManager'] },
+  { label: 'POS bán hàng', path: '/pos', module: 'pos', icon: 'point_of_sale', roles: ['agencyManager', 'salesStaff', 'customer'] },
+  { label: 'Đơn hàng', path: '/orders', module: 'orders', icon: 'receipt_long', roles: ['admin', 'agencyManager', 'salesStaff'] },
+  { label: 'Quản lý COD', path: '/orders/cod', module: 'cod_ops', icon: 'local_shipping', roles: ['agencyManager'] },
+  { label: 'Khách hàng', path: '/customers', module: 'customers', icon: 'groups', roles: ['admin', 'agencyManager'] },
+  { label: 'Nhân sự', path: '/staff', module: 'staff', icon: 'badge', roles: ['admin', 'agencyManager'] },
 ]
 
 function isSidebarModuleEnabled(module) {

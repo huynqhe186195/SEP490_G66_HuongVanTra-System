@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { canAccessModule } from '../../../app/navigation.js'
 import { showError, showSuccess } from '../../../app/toast.js'
@@ -10,6 +10,7 @@ import {
   fetchOrder,
   fetchOrderAccess,
   fetchOrderPaymentQr,
+  fetchOrderPaymentStatus,
   markCodReminded,
   rejectCodOrder,
   updateOrderAdjustments,
@@ -36,6 +37,7 @@ import {
 
 const EDIT_ORDER_STATUS_OPTIONS = ORDER_STATUS_OPTIONS.filter((o) => o.value)
 const EDIT_PAYMENT_STATUS_OPTIONS = PAYMENT_STATUS_OPTIONS.filter((o) => o.value)
+const PAYMENT_POLL_INTERVAL_MS = 5000
 
 function OrderDetailPage() {
   const { id } = useParams()
@@ -60,6 +62,8 @@ function OrderDetailPage() {
   const [paymentQr, setPaymentQr] = useState(null)
   const [isLoadingPaymentQr, setIsLoadingPaymentQr] = useState(false)
   const [paymentQrCooldownUntil, setPaymentQrCooldownUntil] = useState(0)
+  const [paymentPollError, setPaymentPollError] = useState('')
+  const paymentConfirmedRef = useRef(false)
 
   const canEditOrder = orderAccess.canEdit !== false
   const itemsEditable = useMemo(
@@ -106,6 +110,25 @@ function OrderDetailPage() {
       showError(error.message)
     } finally {
       setIsLoading(false)
+    }
+  }, [id])
+
+  const refreshOrderAfterPayment = useCallback(async (invoiceCode) => {
+    if (!id) return
+    try {
+      const data = await fetchOrder(id)
+      setOrder(data)
+      syncForm(data)
+      syncEditLinesFromOrder(data)
+      setPaymentQr(null)
+      setPaymentQrCooldownUntil(0)
+      showSuccess(
+        invoiceCode
+          ? `Khách đã thanh toán · Số HĐ: ${invoiceCode}`
+          : 'Khách đã thanh toán. Đơn đã được cập nhật tự động.',
+      )
+    } catch (error) {
+      showError(error.message)
     }
   }, [id])
 
@@ -344,6 +367,42 @@ function OrderDetailPage() {
 
   const paymentMethodKey = String(order?.paymentMethod || '').toUpperCase()
   const needsTransferQr = paymentMethodKey === 'VIETQR' || paymentMethodKey === 'TRANSFER'
+  const shouldPollTransferPayment =
+    Boolean(order?.id) &&
+    canConfirmPayment &&
+    needsTransferQr &&
+    Boolean(paymentQr)
+
+  useEffect(() => {
+    paymentConfirmedRef.current = false
+  }, [order?.id])
+
+  useEffect(() => {
+    if (!shouldPollTransferPayment || paymentConfirmedRef.current) {
+      return undefined
+    }
+
+    const poll = async () => {
+      if (!order?.id || paymentConfirmedRef.current) return
+
+      try {
+        const status = await fetchOrderPaymentStatus(order.id)
+        setPaymentPollError('')
+
+        if (status.isPaid) {
+          paymentConfirmedRef.current = true
+          await refreshOrderAfterPayment(status.invoiceCode)
+        }
+      } catch (error) {
+        setPaymentPollError(error.message || 'Không kiểm tra được trạng thái thanh toán.')
+      }
+    }
+
+    poll()
+    const timerId = setInterval(poll, PAYMENT_POLL_INTERVAL_MS)
+    return () => clearInterval(timerId)
+  }, [order?.id, refreshOrderAfterPayment, shouldPollTransferPayment])
+
   const paymentQrImageUrl = paymentQr
     ? resolveTransferQrImageUrl({
         qrImageUrl: paymentQr.qrImageUrl,
@@ -713,6 +772,7 @@ function OrderDetailPage() {
                   {needsTransferQr ? (
                     <span className="block text-xs text-slate-500 mt-1">
                       POS: QR hết hạn sau 5 phút. Trang đơn: VA 24h. Bấm lại trong 30 giây không tạo thêm VA trên SePay.
+                      Sau khi mở QR, hệ thống tự cập nhật khi khách chuyển khoản (SePay webhook).
                     </span>
                   ) : null}
                   {cod ? (
@@ -769,6 +829,14 @@ function OrderDetailPage() {
                           Hết hạn QR/VA: {formatVietnamDateTime(paymentQr.qrExpiresAtUtc)}
                         </p>
                       ) : null}
+                      {shouldPollTransferPayment ? (
+                        <p className="mt-3 text-xs font-semibold text-[#538463]">
+                          Đang chờ khách quét QR / chuyển khoản — trang sẽ tự cập nhật khi nhận tiền.
+                        </p>
+                      ) : null}
+                      {paymentPollError ? (
+                        <p className="mt-2 text-xs text-red-600">{paymentPollError}</p>
+                      ) : null}
                     </div>
                   ) : null}
                 </div>
@@ -801,6 +869,9 @@ function OrderDetailPage() {
                     Khách từ chối — hủy
                   </button>
                 </div>
+              ) : canConfirmPayment && needsTransferQr ? (
+                <p className="text-sm text-slate-500">
+                </p>
               ) : canConfirmPayment ? (
                 <button
                   type="button"
@@ -816,7 +887,6 @@ function OrderDetailPage() {
 
               {order.stockDeductQueue ? (
                 <p className="mt-4 text-xs text-slate-500">
-                  Hàng đợi trừ kho: <strong>{order.stockDeductQueue.status}</strong>
                 </p>
               ) : null}
             </section>

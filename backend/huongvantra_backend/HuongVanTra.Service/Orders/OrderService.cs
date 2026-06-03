@@ -545,6 +545,61 @@ namespace HuongVanTra.Service.Orders {
                             : null);
         }
 
+        public async Task<OrderPaymentStatusDto?> GetOrderPaymentStatusAsync(
+            int id,
+            OrderAccessScope access,
+            CancellationToken cancellationToken = default) {
+            var order = await _dbContext.Orders
+                .AsNoTracking()
+                .Where(o => o.Id == id)
+                .Select(o => new {
+                    o.Id,
+                    o.OrderCode,
+                    o.PaymentStatus,
+                    o.OrderStatus,
+                    o.TotalAmount,
+                    o.StoreId,
+                    o.CashierId,
+                    InvoiceCode = _dbContext.Invoices
+                        .Where(i => i.OrderId == o.Id)
+                        .OrderByDescending(i => i.Id)
+                        .Select(i => i.InvoiceCode)
+                        .FirstOrDefault(),
+                })
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (order is null) {
+                return null;
+            }
+
+            var scopeOrder = new Order {
+                Id = order.Id,
+                StoreId = order.StoreId,
+                CashierId = order.CashierId,
+            };
+            if (!OrderAccessScope.CanAccess(scopeOrder, access)) {
+                return null;
+            }
+
+            var isPaid = string.Equals(order.PaymentStatus, PaymentStatus.Paid, StringComparison.OrdinalIgnoreCase);
+            return new OrderPaymentStatusDto {
+                OrderId = order.Id,
+                OrderCode = order.OrderCode,
+                PaymentStatus = order.PaymentStatus,
+                OrderStatus = order.OrderStatus,
+                IsPaid = isPaid,
+                InvoiceCode = order.InvoiceCode,
+                ExpectedTransferContent = BuildExpectedTransferContent(order.OrderCode),
+                ExpectedAmount = order.TotalAmount,
+            };
+        }
+
+        private static string BuildExpectedTransferContent(string orderCode) {
+            var cleaned = orderCode.Trim().ToUpperInvariant();
+            cleaned = new string(cleaned.Where(ch => char.IsLetterOrDigit(ch) || ch == '-').ToArray());
+            return cleaned.Length <= 25 ? cleaned : cleaned[..25];
+        }
+
         private OrderPaymentQrDto PopulatePaymentQrDto(
             Order order,
             SepayOrderVaResult sepayVa,

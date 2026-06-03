@@ -6,12 +6,35 @@ import { getNavigationItemsForSession } from '../app/navigation.js'
 import { enrichSessionWithAccess } from '../features/auth/services/authApi.js'
 import { loadAuthSession, saveAuthSession } from '../features/auth/services/authSession.js'
 
+const SIDEBAR_COLLAPSED_KEY = 'hvt-sidebar-collapsed'
+
+function readSidebarCollapsed() {
+  try {
+    return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
 function AdminLayout() {
   const [authSession, setAuthSession] = useState(() => loadAuthSession())
   const [sidebarItems, setSidebarItems] = useState(() => getNavigationItemsForSession(loadAuthSession()))
   const [isLoadingAccess, setIsLoadingAccess] = useState(() => !loadAuthSession()?.modules?.length)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(readSidebarCollapsed)
   const location = useLocation()
+
+  const toggleSidebarCollapsed = () => {
+    setSidebarCollapsed((prev) => {
+      const next = !prev
+      try {
+        localStorage.setItem(SIDEBAR_COLLAPSED_KEY, next ? '1' : '0')
+      } catch {
+        // ignore storage errors
+      }
+      return next
+    })
+  }
 
   useEffect(() => {
     let isMounted = true
@@ -97,6 +120,8 @@ function AdminLayout() {
           items={sidebarItems}
           isLoading={isLoadingAccess}
           mobileOpen={mobileNavOpen}
+          collapsed={sidebarCollapsed}
+          onToggleCollapsed={toggleSidebarCollapsed}
           onNavigate={() => setMobileNavOpen(false)}
         />
 

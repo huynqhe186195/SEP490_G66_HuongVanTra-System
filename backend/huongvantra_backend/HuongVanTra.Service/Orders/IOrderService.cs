@@ -38,5 +38,9 @@ namespace HuongVanTra.Service.Orders {
             OrderAccessScope access,
             bool forceRegenerate = false,
             CancellationToken cancellationToken = default);
+        Task<OrderPaymentStatusDto?> GetOrderPaymentStatusAsync(
+            int id,
+            OrderAccessScope access,
+            CancellationToken cancellationToken = default);
     }
 }

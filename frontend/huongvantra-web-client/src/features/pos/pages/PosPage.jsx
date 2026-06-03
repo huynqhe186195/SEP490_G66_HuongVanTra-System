@@ -227,6 +227,29 @@ function PosPage() {
     return new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 2 }).format(n)
   }
 
+  const getItemStockLimit = (item) => {
+    if (item?.stockQuantity == null || item?.stockQuantity === '') {
+      return Infinity
+    }
+    return Math.max(0, Number(item.stockQuantity) || 0)
+  }
+
+  const parseQtyInput = (value) => {
+    const normalized = String(value).trim().replace(',', '.')
+    if (!normalized) {
+      return null
+    }
+    const parsed = Number(normalized)
+    if (!Number.isFinite(parsed)) {
+      return null
+    }
+    return Number(parsed.toFixed(2))
+  }
+
+  const showStockLimitError = (item, stockLimit) => {
+    showError(`Số lượng không được vượt tồn kho (${formatStock(stockLimit)}).`)
+  }
+
   const parseMoneyInput = (value) => {
     const digits = String(value).replace(/\D/g, '')
     return digits ? Number(digits) : 0
@@ -474,16 +497,32 @@ function PosPage() {
   }
 
   const addToCart = (product) => {
+    const stockLimit = Math.max(0, Number(product.stockQuantity) || 0)
+    if (stockLimit <= 0) {
+      showError(`Sản phẩm "${product.name}" đã hết tồn.`)
+      return
+    }
+
+    const existing = cartItems.find((item) => item.sku === product.sku)
+    if (existing) {
+      const nextQty = Number((existing.qty + existing.step).toFixed(2))
+      if (nextQty > stockLimit) {
+        showStockLimitError(existing, stockLimit)
+        return
+      }
+    }
+
     updateActiveSession((prev) => {
       const currentItems = prev.cartItems
-      const existing = currentItems.find((item) => item.sku === product.sku)
-      if (existing) {
+      const existingLine = currentItems.find((item) => item.sku === product.sku)
+      if (existingLine) {
+        const nextQty = Number((existingLine.qty + existingLine.step).toFixed(2))
         return {
           ...prev,
           cartItems: clampCartLineDiscounts(
             currentItems.map((item) =>
               item.sku === product.sku
-                ? { ...item, qty: Number((item.qty + item.step).toFixed(2)) }
+                ? { ...item, qty: nextQty, stockQuantity: stockLimit }
                 : item,
             ),
           ),
@@ -503,6 +542,7 @@ function PosPage() {
             unit: 'x',
             price: product.price,
             step: 1,
+            stockQuantity: stockLimit,
             lineDiscountType: 'percent',
             lineDiscountValue: 0,
           },
@@ -513,6 +553,22 @@ function PosPage() {
   }
 
   const updateQuantity = (sku, direction) => {
+    const target = cartItems.find((item) => item.sku === sku)
+    if (!target) {
+      return
+    }
+
+    const stockLimit = getItemStockLimit(target)
+    const nextQty =
+      direction === 'inc'
+        ? Number((target.qty + target.step).toFixed(2))
+        : Number((target.qty - target.step).toFixed(2))
+
+    if (direction === 'inc' && nextQty > stockLimit) {
+      showStockLimitError(target, stockLimit)
+      return
+    }
+
     updateActiveSession((prev) => ({
       ...prev,
       cartItems: clampCartLineDiscounts(
@@ -521,11 +577,50 @@ function PosPage() {
             if (item.sku !== sku) {
               return item
             }
-
-            const nextQty = direction === 'inc' ? item.qty + item.step : item.qty - item.step
-            return { ...item, qty: Number(nextQty.toFixed(2)) }
+            return { ...item, qty: nextQty }
           })
           .filter((item) => item.qty > 0),
+      ),
+    }))
+  }
+
+  const setLineQuantity = (sku, rawValue) => {
+    const item = cartItems.find((row) => row.sku === sku)
+    if (!item) {
+      return
+    }
+
+    const parsed = parseQtyInput(rawValue)
+    if (parsed == null) {
+      return
+    }
+
+    if (parsed <= 0) {
+      updateActiveSession((prev) => ({
+        ...prev,
+        cartItems: clampCartLineDiscounts(prev.cartItems.filter((row) => row.sku !== sku)),
+      }))
+      return
+    }
+
+    const stockLimit = getItemStockLimit(item)
+    if (parsed > stockLimit) {
+      showStockLimitError(item, stockLimit)
+      updateActiveSession((prev) => ({
+        ...prev,
+        cartItems: clampCartLineDiscounts(
+          prev.cartItems.map((row) =>
+            row.sku === sku ? { ...row, qty: stockLimit } : row,
+          ),
+        ),
+      }))
+      return
+    }
+
+    updateActiveSession((prev) => ({
+      ...prev,
+      cartItems: clampCartLineDiscounts(
+        prev.cartItems.map((row) => (row.sku === sku ? { ...row, qty: parsed } : row)),
       ),
     }))
   }
@@ -1008,12 +1103,17 @@ function PosPage() {
             ) : null}
             {showSearchDropdown ? (
               <div className="custom-scrollbar absolute left-5 right-5 top-full z-30 mt-2 max-h-[min(45vh,400px)] overflow-y-auto rounded-xl border border-[#c1c9c0] bg-white shadow-2xl">
-                {searchProducts.map((item) => (
+                {searchProducts.map((item) => {
+                  const outOfStock = Number(item.stockQuantity) <= 0
+                  return (
                   <button
                     key={`${item.productId}-${item.sku}`}
                     type="button"
+                    disabled={outOfStock}
                     onClick={() => addToCart(item)}
-                    className="flex w-full items-center gap-3 border-b border-[#f0eee6] p-3.5 text-left last:border-b-0 hover:bg-[#f6f4ec]"
+                    className={`flex w-full items-center gap-3 border-b border-[#f0eee6] p-3.5 text-left last:border-b-0 ${
+                      outOfStock ? 'cursor-not-allowed opacity-50' : 'hover:bg-[#f6f4ec]'
+                    }`}
                   >
                     <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-[#ceebc1]">
                       <Icon className="text-[24px] text-[#4a6242]">eco</Icon>
@@ -1037,7 +1137,8 @@ function PosPage() {
                     </div>
                     <div className="shrink-0 text-base font-bold text-[#356647]">{formatMoney(item.price)}</div>
                   </button>
-                ))}
+                  )
+                })}
               </div>
             ) : null}
             {showSearchEmpty ? (
@@ -1070,6 +1171,8 @@ function PosPage() {
                     : lineGross > 0
                       ? `Tối đa ${formatMoney(lineGross)} đ`
                       : 'Thành tiền dòng: 0 đ'
+                  const stockLimit = getItemStockLimit(item)
+                  const atStockMax = Number.isFinite(stockLimit) && item.qty >= stockLimit
 
                   return (
                     <div
@@ -1082,6 +1185,9 @@ function PosPage() {
                         </p>
                         <p className="mt-0.5 text-sm text-[#717971]">
                           {formatMoney(item.price)} đ
+                          {Number.isFinite(stockLimit) ? (
+                            <span className="ml-1 text-xs">· Tồn {formatStock(stockLimit)}</span>
+                          ) : null}
                           {discountLabel ? (
                             <span className="ml-1 text-xs font-semibold text-[#7e5700]">{discountLabel}</span>
                           ) : null}
@@ -1096,13 +1202,19 @@ function PosPage() {
                         >
                           -
                         </button>
-                        <span className="min-w-[2rem] border-x border-[#c1c9c0] px-2 text-center text-base font-semibold">
-                          {item.qty}
-                        </span>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          aria-label={`Số lượng ${item.name}`}
+                          className="w-[3.25rem] border-x border-[#c1c9c0] bg-white px-1 py-1 text-center text-base font-semibold outline-none focus:bg-[#f6f4ec] focus:ring-1 focus:ring-[#356647]/30"
+                          value={item.qty}
+                          onChange={(event) => setLineQuantity(item.sku, event.target.value)}
+                        />
                         <button
                           type="button"
+                          disabled={atStockMax}
                           onClick={() => updateQuantity(item.sku, 'inc')}
-                          className="px-2.5 py-1.5 text-lg font-bold text-[#356647] hover:bg-white"
+                          className="px-2.5 py-1.5 text-lg font-bold text-[#356647] hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
                         >
                           +
                         </button>
