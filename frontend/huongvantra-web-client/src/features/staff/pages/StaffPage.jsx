@@ -1,81 +1,88 @@
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
-
-const staffRows = [
-  {
-    id: 'STF-001',
-    name: 'Tran Minh Tam',
-    role: 'Cua hang truong (Admin)',
-    roleTone: 'text-[#356647]',
-    account: 'tam.tm_admin',
-    phone: '0901 234 567',
-    status: 'Hoat dong',
-    active: true,
-    avatar:
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuBZl0xqSxjzek3rKfylwUIWuQG1Al_z0qMMVR6oagy_9sAimnXNIdXGIll_N8Lov6h7P7YnRCzFybNUL1nG7xF7GPgvo3E2XygdPBf0wXTscvIyGCv3gW9NYteskL9DWfeghVCdZevwRnyv3wlA2Vl2EbNtHGTiSRvqtS0fEDiiMHO6ybh0AVU7SN6wZ72UQ97_62P2P4Mj1Ebnqldcd80YmYH4p9q1nKYVhLJ1uzzbLy9tbex0N6O8jhso4B9pkD2d7ntYFwqVFxK-',
-  },
-  {
-    id: 'STF-002',
-    name: 'Le Thi Mai',
-    role: 'Nhan vien ban hang (Sale)',
-    roleTone: 'text-[#7e5700]',
-    account: 'mai.lt_sale',
-    phone: '0988 776 543',
-    status: 'Hoat dong',
-    active: true,
-    avatar:
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuCDwyOde1WWcd2lhaIXjadFqsmlJDabwvwA4raQKqmSzmHXKE_b0TfDHuh_EZSuxwGp6evdSegAZ3enm5-PP2YRBP6YXU39G87TplzK_VkHiVnTjgID5uHV77COY3HsdLHG0QYMEFGeo35xgM8U9BTq3NIb0efP8_jRWIG00z6Y2V2BcdV6nAXZdGnvAfV1HTmJTwszCf6ioVTwMFcqp5uwEU-RKEzeqb5RiaotFEQIsq8Rba5Brk6BIavMcB0FyYmzxQ6xGUY-p_CE',
-  },
-  {
-    id: 'STF-003',
-    name: 'Nguyen Van Dung',
-    role: 'Kho van (Inventory)',
-    roleTone: 'text-[#414942]',
-    account: 'dung.nv_inv',
-    phone: '0912 333 444',
-    status: 'Da khoa',
-    active: false,
-    avatar:
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuAlUGt_EarYKJWLaHtZcKgO7ewyKJBY4IoH5wZrI0UFn3xCNUBrtrr4lzOJKnkQhC2-rZKItTPR5qiVaq7fJ-VjyJIRFXZFNaMfIDq3lOngd5S4F89lrtI2SQXe-FFN-wiELyvNjPwnd8Aqf9YITR-Lhow4nphbilEPHyXyOLFiPNAWEaLJ4N561Y41JjucctCS0Q3BHR18OryZwA7XXCY568vHsN2eRpEqxNY2rcEgB8v152GMjnQWBQosZA3x4cvTB8IXKogedbsd',
-  },
-  {
-    id: 'STF-004',
-    name: 'Pham Thanh Van',
-    role: 'Ke toan (Accountant)',
-    roleTone: 'text-[#4a6242]',
-    account: 'van.pt_acc',
-    phone: '0944 555 666',
-    status: 'Hoat dong',
-    active: true,
-    avatar:
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuBpgfodiL0bEet7kls7JZvAPrW1X_UbuULkzbAi-UuAcdhFTrUhM6saAfok54n7rf3xZbRj600ysO0Hx05yGU_lPG2sxCOAtOCKbsyX2f7c1lqTy18LBcbH_7nHG8w4OFoqdHRRmWXKXfRlfCGwI1_LKHm6g8HaHB2d53xVxeiZbHBSMMDQVHJEbQGRECdpZE4Ucn2WFz4ooxJYRjQ1_eo6xyEaaxcZsHQLN8YVQVI5mgG6sO8WPWBfsryx-zsfiGAYajjJkSKeuAEB',
-  },
-]
-
-const stats = [
-  { label: 'Tong nhan su', value: '48', icon: 'groups', tone: 'bg-[#4e7f5e]/20 text-[#356647]' },
-  { label: 'Dang hoat dong', value: '42', icon: 'check_circle', tone: 'bg-[#627b59]/20 text-[#4a6242]' },
-  { label: 'Tai khoan khoa', value: '6', icon: 'lock', tone: 'bg-[#ffdad6] text-[#ba1a1a]' },
-]
+import PageShell from '../../../components/shared/PageShell.jsx'
+import { showError } from '../../../app/toast.js'
+import { fetchRoleOptions, fetchStaffAccounts } from '../services/staffApi.js'
 
 function StaffPage() {
+  const [staffRows, setStaffRows] = useState([])
+  const [roleOptions, setRoleOptions] = useState([])
+  const [searchValue, setSearchValue] = useState('')
+  const [roleFilter, setRoleFilter] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
+  const [page, setPage] = useState(1)
+  const [pageSize] = useState(10)
+  const [totalCount, setTotalCount] = useState(0)
+  const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    let mounted = true
+
+    const timer = setTimeout(async () => {
+      try {
+        setIsLoading(true)
+        const [roles, data] = await Promise.all([
+          fetchRoleOptions(),
+          fetchStaffAccounts({
+            search: searchValue.trim() || undefined,
+            role: roleFilter || undefined,
+            isActive: statusFilter === '' ? undefined : statusFilter === 'active',
+            page,
+            pageSize,
+          }),
+        ])
+
+        if (!mounted) return
+        setRoleOptions(roles || [])
+        setStaffRows(data.items || [])
+        setTotalCount(data.totalCount || 0)
+      } catch (error) {
+        if (mounted) showError(error.message)
+      } finally {
+        if (mounted) setIsLoading(false)
+      }
+    }, 250)
+
+    return () => {
+      mounted = false
+      clearTimeout(timer)
+    }
+  }, [searchValue, roleFilter, statusFilter, page, pageSize])
+
+  const stats = useMemo(() => {
+    const active = staffRows.filter((item) => item.isActive).length
+    const locked = staffRows.filter((item) => !item.isActive).length
+    return [
+      { label: 'Tổng nhân sự', value: String(totalCount), icon: 'groups', tone: 'bg-[#4e7f5e]/20 text-[#356647]' },
+      { label: 'Đang hoạt động', value: String(active), icon: 'check_circle', tone: 'bg-[#627b59]/20 text-[#4a6242]' },
+      { label: 'Tài khoản khóa', value: String(locked), icon: 'lock', tone: 'bg-[#ffdad6] text-[#ba1a1a]' },
+    ]
+  }, [staffRows, totalCount])
+
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize))
+
+  const handleFilterChange = (setter) => (event) => {
+    setPage(1)
+    setter(event.target.value)
+  }
+
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-6 [font-family:'Manrope',sans-serif]">
+    <PageShell className="[font-family:'Manrope',sans-serif]">
       <PageHeader
         title="Nhân viên"
         description="Quản lý tài khoản nhân sự, trạng thái hoạt động và vai trò trong hệ thống"
-        searchPlaceholder="Tim kiem nhan vien..."
       />
 
       <section className="rounded-[24px] border border-[#c1c9c0]/30 bg-white p-6 shadow-sm">
         <div className="mb-8 flex flex-col justify-between gap-4 md:flex-row md:items-end">
           <div>
             <div className="mb-2 flex items-center gap-2 text-sm text-[#414942]">
-              <span>He thong</span>
+              <span>Hệ thống</span>
               <span>/</span>
-              <span className="font-semibold text-[#356647]">Nhan vien</span>
+              <span className="font-semibold text-[#356647]">Nhân viên</span>
             </div>
-            <h1 className="text-3xl font-bold text-[#356647]">Quan ly nhan su</h1>
+            <h1 className="text-3xl font-bold text-[#356647]">Quản lý nhân sự</h1>
           </div>
 
           <Link
@@ -83,7 +90,7 @@ function StaffPage() {
             className="inline-flex items-center gap-2 self-start rounded-xl bg-[#356647] px-5 py-3 text-sm font-semibold text-white transition-all hover:shadow-lg active:scale-95"
           >
             <span className="material-symbols-outlined text-[20px]">person_add</span>
-            + Them tai khoan
+            + Thêm tài khoản
           </Link>
         </div>
 
@@ -103,29 +110,38 @@ function StaffPage() {
           ))}
         </div>
 
-        <div className="overflow-hidden rounded-xl border border-[#c1c9c0]/30 shadow-[0px_8px_24px_rgba(0,0,0,0.06)]">
+        <div className="rounded-xl border border-[#c1c9c0]/30 shadow-[0px_8px_24px_rgba(0,0,0,0.06)]">
           <div className="flex flex-wrap items-center gap-3 border-b border-[#c1c9c0]/30 bg-[#f6f4ec]/70 p-4">
             <div className="relative min-w-[260px] flex-1">
               <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[#414942] text-[20px]">search</span>
               <input
                 className="w-full rounded-lg border border-[#c1c9c0] bg-white py-2.5 pl-10 pr-4 text-sm text-[#1b1c17] outline-none focus:border-[#356647] focus:ring-1 focus:ring-[#356647]"
-                placeholder="Ten hoac so dien thoai..."
+                placeholder="Tên hoặc số điện thoại..."
                 type="text"
+                value={searchValue}
+                onChange={handleFilterChange(setSearchValue)}
               />
             </div>
 
-            <select className="rounded-lg border border-[#c1c9c0] bg-white px-4 py-2.5 text-sm text-[#414942] outline-none focus:border-[#356647]">
-              <option>Tat ca vai tro</option>
-              <option>Quan tri vien</option>
-              <option>Nhan vien ban hang</option>
-              <option>Kho van</option>
-              <option>Ke toan</option>
+            <select
+              className="rounded-lg border border-[#c1c9c0] bg-white px-4 py-2.5 text-sm text-[#414942] outline-none focus:border-[#356647]"
+              value={roleFilter}
+              onChange={handleFilterChange(setRoleFilter)}
+            >
+              <option value="">Tất cả vai trò</option>
+              {roleOptions.map((role) => (
+                <option key={role.id} value={role.name}>{role.name}</option>
+              ))}
             </select>
 
-            <select className="rounded-lg border border-[#c1c9c0] bg-white px-4 py-2.5 text-sm text-[#414942] outline-none focus:border-[#356647]">
-              <option>Trang thai</option>
-              <option>Hoat dong</option>
-              <option>Bi khoa</option>
+            <select
+              className="rounded-lg border border-[#c1c9c0] bg-white px-4 py-2.5 text-sm text-[#414942] outline-none focus:border-[#356647]"
+              value={statusFilter}
+              onChange={handleFilterChange(setStatusFilter)}
+            >
+              <option value="">Trạng thái</option>
+              <option value="active">Hoạt động</option>
+              <option value="locked">Bị khóa</option>
             </select>
 
             <button type="button" className="rounded-lg p-2.5 text-[#414942] transition-colors hover:bg-[#eae8e0]">
@@ -133,66 +149,65 @@ function StaffPage() {
             </button>
           </div>
 
-          <div className="overflow-x-auto">
+          <div className="custom-scrollbar overflow-x-auto">
             <table className="w-full border-collapse text-left">
               <thead>
                 <tr className="bg-[#f0eee6] text-xs uppercase tracking-wider text-[#414942]">
-                  <th className="px-6 py-4 font-semibold">Nhan vien va vai tro</th>
-                  <th className="px-6 py-4 font-semibold">Tai khoan</th>
-                  <th className="px-6 py-4 font-semibold">So dien thoai</th>
-                  <th className="px-6 py-4 text-center font-semibold">Trang thai</th>
-                  <th className="px-6 py-4 text-right font-semibold">Thao tac</th>
+                  <th className="px-6 py-4 font-semibold">Nhân viên và vai trò</th>
+                  <th className="px-6 py-4 font-semibold">Tài khoản</th>
+                  <th className="px-6 py-4 font-semibold">Số điện thoại</th>
+                  <th className="px-6 py-4 text-center font-semibold">Trạng thái</th>
+                  <th className="px-6 py-4 text-right font-semibold">Thao tác</th>
                 </tr>
               </thead>
 
               <tbody className="divide-y divide-[#c1c9c0]/20">
-                {staffRows.map((staff) => (
+                {isLoading ? (
+                  <tr>
+                    <td className="px-6 py-6 text-sm text-[#414942]" colSpan={5}>Đang tải dữ liệu...</td>
+                  </tr>
+                ) : staffRows.length === 0 ? (
+                  <tr>
+                    <td className="px-6 py-6 text-sm text-[#414942]" colSpan={5}>Không có dữ liệu nhân viên.</td>
+                  </tr>
+                ) : staffRows.map((staff) => (
                   <tr key={staff.id} className="group transition-colors hover:bg-[#356647]/5">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        <img
-                          alt={staff.name}
-                          className={`h-10 w-10 rounded-full object-cover ${staff.active ? 'ring-2 ring-[#4e7f5e]/20' : 'grayscale opacity-60'}`}
-                          src={staff.avatar}
-                        />
+                        <div className={`flex h-10 w-10 items-center justify-center rounded-full bg-[#e7ece4] text-[#356647] ${staff.isActive ? 'ring-2 ring-[#4e7f5e]/20' : 'opacity-60'}`}>
+                          <span className="material-symbols-outlined text-[18px]">person</span>
+                        </div>
                         <div>
-                          <p className={`text-sm font-semibold text-[#1b1c17] ${staff.active ? '' : 'opacity-60'}`}>{staff.name}</p>
-                          <p className={`text-xs ${staff.roleTone} ${staff.active ? '' : 'opacity-70'}`}>{staff.role}</p>
+                          <p className={`text-sm font-semibold text-[#1b1c17] ${staff.isActive ? '' : 'opacity-60'}`}>{staff.fullName}</p>
+                          <p className={`text-xs text-[#356647] ${staff.isActive ? '' : 'opacity-70'}`}>{(staff.roles || []).join(', ') || 'Chưa gán vai trò'}</p>
                         </div>
                       </div>
                     </td>
 
-                    <td className={`px-6 py-4 text-sm text-[#414942] ${staff.active ? '' : 'opacity-60'}`}>{staff.account}</td>
-                    <td className={`px-6 py-4 text-sm text-[#414942] ${staff.active ? '' : 'opacity-60'}`}>{staff.phone}</td>
+                    <td className={`px-6 py-4 text-sm text-[#414942] ${staff.isActive ? '' : 'opacity-60'}`}>{staff.username}</td>
+                    <td className={`px-6 py-4 text-sm text-[#414942] ${staff.isActive ? '' : 'opacity-60'}`}>{staff.phone || '-'}</td>
 
                     <td className="px-6 py-4 text-center">
-                      {staff.active ? (
+                      {staff.isActive ? (
                         <span className="inline-flex items-center rounded-full bg-[#baefc8] px-3 py-1 text-xs font-semibold text-[#00210f]">
                           <span className="mr-2 h-1.5 w-1.5 rounded-full bg-[#356647]" />
-                          Hoat dong
+                          Đang hoạt động
                         </span>
                       ) : (
                         <span className="inline-flex items-center rounded-full bg-[#ffdad6] px-3 py-1 text-xs font-semibold text-[#93000a]">
                           <span className="mr-2 h-1.5 w-1.5 rounded-full bg-[#ba1a1a]" />
-                          Da khoa
+                          Đã khóa
                         </span>
                       )}
                     </td>
 
                     <td className="px-6 py-4 text-right">
                       <div className="flex justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                        <Link to={`/staff/${staff.id}`} className="rounded-full p-2 text-[#356647] transition-colors hover:bg-[#eae8e0]" title="Chinh sua">
+                        <Link to={`/staff/${staff.userId}`} className="rounded-full p-2 text-[#356647] transition-colors hover:bg-[#eae8e0]" title="Chỉnh sửa">
                           <span className="material-symbols-outlined">edit</span>
                         </Link>
-                        <button type="button" className="rounded-full p-2 text-[#414942] transition-colors hover:bg-[#eae8e0]" title="Lich su">
+                        <button type="button" className="rounded-full p-2 text-[#414942] transition-colors hover:bg-[#eae8e0]" title="Lịch sử">
                           <span className="material-symbols-outlined">history</span>
-                        </button>
-                        <button
-                          type="button"
-                          className={`rounded-full p-2 transition-colors hover:bg-[#eae8e0] ${staff.active ? 'text-[#ba1a1a]' : 'text-[#356647]'}`}
-                          title={staff.active ? 'Khoa' : 'Mo khoa'}
-                        >
-                          <span className="material-symbols-outlined">{staff.active ? 'lock_open' : 'lock'}</span>
                         </button>
                       </div>
                     </td>
@@ -203,25 +218,25 @@ function StaffPage() {
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#c1c9c0]/30 bg-[#f6f4ec]/50 px-6 py-4">
-            <p className="text-sm text-[#414942]">Hien thi 1-10 cua 48 nhan vien</p>
+            <p className="text-sm text-[#414942]">Hiển thị trang {page}/{totalPages} · tổng {totalCount} nhân viên</p>
             <div className="flex items-center gap-1">
-              <button type="button" className="flex h-8 w-8 items-center justify-center rounded-lg text-[#414942] hover:bg-[#eae8e0]">
+              <button
+                type="button"
+                disabled={page <= 1}
+                onClick={() => setPage((current) => Math.max(1, current - 1))}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-[#414942] hover:bg-[#eae8e0] disabled:opacity-40"
+              >
                 <span className="material-symbols-outlined">chevron_left</span>
               </button>
-              <button type="button" className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#356647] text-white">
-                1
+              <button type="button" className="flex h-8 min-w-8 items-center justify-center rounded-lg bg-[#356647] px-2 text-white">
+                {page}
               </button>
-              <button type="button" className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-[#eae8e0]">
-                2
-              </button>
-              <button type="button" className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-[#eae8e0]">
-                3
-              </button>
-              <span className="px-2 text-sm text-[#414942]">...</span>
-              <button type="button" className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-[#eae8e0]">
-                5
-              </button>
-              <button type="button" className="flex h-8 w-8 items-center justify-center rounded-lg text-[#414942] hover:bg-[#eae8e0]">
+              <button
+                type="button"
+                disabled={page >= totalPages}
+                onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-[#414942] hover:bg-[#eae8e0] disabled:opacity-40"
+              >
                 <span className="material-symbols-outlined">chevron_right</span>
               </button>
             </div>
@@ -229,8 +244,8 @@ function StaffPage() {
         </div>
       </section>
 
-      <footer className="pb-2 text-center text-xs text-[#414942]/60">© 2024 Huong Van Tra Management System. All Rights Reserved.</footer>
-    </div>
+      <footer className="pb-2 text-center text-xs text-[#414942]/60">© 2024 Hương Vân Trà — Hệ thống quản lý</footer>
+    </PageShell>
   )
 }
 

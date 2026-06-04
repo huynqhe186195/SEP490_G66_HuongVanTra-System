@@ -11,6 +11,7 @@ namespace HuongVanTra.Infrastructure.Configurations.Customers {
             builder.Property(x => x.TierCode).HasMaxLength(50).IsRequired();
             builder.Property(x => x.MinTotalSpend).HasColumnType("decimal(18,2)");
             builder.Property(x => x.DiscountPercent).HasColumnType("decimal(5,2)");
+            builder.Property(x => x.IsActive).HasDefaultValue(true);
         }
     }
 }

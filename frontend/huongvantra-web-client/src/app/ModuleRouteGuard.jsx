@@ -1,24 +1,41 @@
 import { Navigate, useLocation } from 'react-router-dom'
-import { useEffect } from 'react'
-import { canAccessPath, resolveHomeRoute } from './navigation.js'
+import { useEffect, useRef } from 'react'
+import { showError } from './toast.js'
+import { canAccessPath, getAccessDeniedMessage, resolveHomeRoute } from './navigation.js'
 
 function ModuleRouteGuard({ session, isLoadingAccess, children }) {
   const location = useLocation()
+  const lastDeniedPathRef = useRef(null)
 
   useEffect(() => {
-    if (isLoadingAccess) return
+    if (isLoadingAccess) {
+      return
+    }
 
-    if (!canAccessPath(session, location.pathname)) {
-      try {
-        window.alert('Bạn không có quyền truy cập trang này.')
-      } catch {}
+    if (canAccessPath(session, location.pathname)) {
+      lastDeniedPathRef.current = null
+      return
+    }
+
+    if (lastDeniedPathRef.current === location.pathname) {
+      return
+    }
+
+    lastDeniedPathRef.current = location.pathname
+    const message = getAccessDeniedMessage(location.pathname)
+    showError(message)
+
+    try {
+      window.alert(message)
+    } catch {
+      // ignore if alert blocked
     }
   }, [isLoadingAccess, session, location.pathname])
 
   if (isLoadingAccess) {
     return (
       <div className="flex flex-1 items-center justify-center text-sm text-[#707a72]">
-        Dang kiem tra quyen truy cap...
+        Đang kiểm tra quyền truy cập...
       </div>
     )
   }

@@ -16,10 +16,13 @@ import InventoryBomCreatePage from '../features/inventory/pages/InventoryBomCrea
 import InventoryPage from '../features/inventory/pages/InventoryPage.jsx'
 import InventoryImportPage from '../features/inventory/pages/InventoryImportPage.jsx'
 import InventoryStockPage from '../features/inventory/pages/InventoryStockPage.jsx'
+import ProfilePage from '../features/profile/pages/ProfilePage.jsx'
 import OrdersPage from '../features/orders/pages/OrdersPage.jsx'
+import CodOrdersPage from '../features/orders/pages/CodOrdersPage.jsx'
+import StockDeductQueuePage from '../features/inventory/pages/StockDeductQueuePage.jsx'
 import OrderDetailPage from '../features/orders/pages/OrderDetailPage.jsx'
-import QuickOrderPage from '../features/orders/pages/QuickOrderPage.jsx'
 import PosPage from '../features/pos/pages/PosPage.jsx'
+import PosTransferQrPage from '../features/pos/pages/PosTransferQrPage.jsx'
 import ProductFormPage from '../features/products/pages/ProductFormPage.jsx'
 import ProductsListPage from '../features/products/pages/ProductsListPage.jsx'
 import ProductsPricingPage from '../features/products/pages/ProductsPricingPage.jsx'
@@ -28,6 +31,8 @@ import ReportsOverviewPage from '../features/reports/pages/ReportsOverviewPage.j
 import StaffCreatePage from '../features/staff/pages/StaffCreatePage.jsx'
 import StaffDetailPage from '../features/staff/pages/StaffDetailPage.jsx'
 import StaffPage from '../features/staff/pages/StaffPage.jsx'
+import MembershipTiersPage from '../features/admin/pages/MembershipTiersPage.jsx'
+import PromotionsPage from '../features/admin/pages/PromotionsPage.jsx'
 
 function App() {
   return (
@@ -41,9 +46,13 @@ function App() {
         <Route index element={<HomeRedirect />} />
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/pos" element={<PosPage />} />
+        <Route path="/pos/receipt/print" element={<Navigate to="/pos" replace />} />
+        <Route path="/pos/payment/qr" element={<PosTransferQrPage />} />
         <Route path="/orders" element={<OrdersPage />} />
+        <Route path="/orders/cod" element={<CodOrdersPage />} />
+        <Route path="/orders/stock-deduct" element={<StockDeductQueuePage />} />
+        <Route path="/orders/create" element={<Navigate to="/pos" replace />} />
         <Route path="/orders/:id" element={<OrderDetailPage />} />
-        <Route path="/orders/create" element={<QuickOrderPage />} />
         <Route path="/products" element={<ProductsListPage />} />
         <Route path="/products/pricing" element={<ProductsPricingPage />} />
         <Route path="/products/create" element={<ProductFormPage mode="create" />} />
@@ -58,9 +67,12 @@ function App() {
         <Route path="/customers" element={<CustomersPage />} />
         <Route path="/customers/create" element={<CustomerFormPage />} />
         <Route path="/customers/:customerId/edit" element={<CustomerFormPage />} />
+        <Route path="/profile" element={<ProfilePage />} />
         <Route path="/staff" element={<StaffPage />} />
         <Route path="/staff/create" element={<StaffCreatePage />} />
         <Route path="/staff/:id" element={<StaffDetailPage />} />
+        <Route path="/admin/membership-tiers" element={<MembershipTiersPage />} />
+        <Route path="/admin/promotions" element={<PromotionsPage />} />
         <Route path="/contracts" element={<ContractsPage />} />
         <Route path="/reports" element={<ReportsOverviewPage />} />
         <Route path="/reports/customers" element={<ReportsCustomersPage />} />

@@ -30,6 +30,10 @@ namespace HuongVanTra.Infrastructure.Migrations
 
                     MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("Address")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
                     b.Property<int?>("AssignedEmployeeId")
                         .HasColumnType("int");
 
@@ -43,15 +47,36 @@ namespace HuongVanTra.Infrastructure.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("varchar(20)");
 
+                    b.Property<string>("Email")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<string>("FullName")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("varchar(150)");
+
                     b.Property<string>("Phone")
                         .HasMaxLength(20)
                         .HasColumnType("varchar(20)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)")
+                        .HasDefaultValue("ACTIVE");
 
                     b.Property<int?>("TierId")
                         .HasColumnType("int");
 
                     b.Property<decimal>("TotalSpend")
                         .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("CurrentDebt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(18,2)")
+                        .HasDefaultValue(0m);
 
                     b.HasKey("Id");
 
@@ -72,6 +97,11 @@ namespace HuongVanTra.Infrastructure.Migrations
 
                     b.Property<decimal>("DiscountPercent")
                         .HasColumnType("decimal(5,2)");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("tinyint(1)")
+                        .HasDefaultValue(true);
 
                     b.Property<decimal>("MinTotalSpend")
                         .HasColumnType("decimal(18,2)");
@@ -231,6 +261,14 @@ namespace HuongVanTra.Infrastructure.Migrations
                         .HasMaxLength(150)
                         .HasColumnType("varchar(150)");
 
+                    b.Property<string>("Notes")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<string>("Phone")
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -242,6 +280,8 @@ namespace HuongVanTra.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("DepartmentId");
+
+                    b.HasIndex("StoreId");
 
                     b.ToTable("employees", (string)null);
                 });
@@ -570,6 +610,11 @@ namespace HuongVanTra.Infrastructure.Migrations
                     b.Property<decimal>("MinStockAlert")
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)");
+
                     b.Property<decimal>("Price")
                         .HasColumnType("decimal(18,2)");
 
@@ -613,6 +658,49 @@ namespace HuongVanTra.Infrastructure.Migrations
                     b.ToTable("product_categories", (string)null);
                 });
 
+            modelBuilder.Entity("HuongVanTra.Core.Entities.Sales.Invoice", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("InvoiceCode")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime>("InvoiceDate")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int?>("IssuedById")
+                        .HasColumnType("int");
+
+                    b.Property<int>("OrderId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("PaymentStatus")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<decimal>("TotalAmount")
+                        .HasColumnType("decimal(65,30)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IssuedById");
+
+                    b.HasIndex("OrderId");
+
+                    b.ToTable("Invoices");
+                });
+
             modelBuilder.Entity("HuongVanTra.Core.Entities.Sales.Order", b =>
                 {
                     b.Property<int>("Id")
@@ -624,11 +712,27 @@ namespace HuongVanTra.Infrastructure.Migrations
                     b.Property<int>("CashierId")
                         .HasColumnType("int");
 
+                    b.Property<decimal>("CouponDiscount")
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
 
                     b.Property<int?>("CustomerId")
                         .HasColumnType("int");
+
+                    b.Property<decimal>("DeductAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime?>("LastRemindedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<decimal>("ManualDiscount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
 
                     b.Property<string>("OrderCode")
                         .IsRequired()
@@ -636,6 +740,11 @@ namespace HuongVanTra.Infrastructure.Migrations
                         .HasColumnType("varchar(50)");
 
                     b.Property<string>("OrderStatus")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)");
+
+                    b.Property<string>("PaymentMethod")
                         .IsRequired()
                         .HasMaxLength(30)
                         .HasColumnType("varchar(30)");
@@ -648,6 +757,10 @@ namespace HuongVanTra.Infrastructure.Migrations
                     b.Property<int?>("PromotionId")
                         .HasColumnType("int");
 
+                    b.Property<string>("ShippingAddress")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
                     b.Property<string>("StockStatus")
                         .IsRequired()
                         .HasMaxLength(30)
@@ -656,14 +769,26 @@ namespace HuongVanTra.Infrastructure.Migrations
                     b.Property<int>("StoreId")
                         .HasColumnType("int");
 
+                    b.Property<decimal>("SubTotal")
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<decimal>("TotalAmount")
                         .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
 
                     b.HasKey("Id");
 
                     b.HasIndex("CashierId");
 
+                    b.HasIndex("CreatedAt");
+
                     b.HasIndex("CustomerId");
+
+                    b.HasIndex("OrderCode");
+
+                    b.HasIndex("OrderStatus");
 
                     b.HasIndex("PromotionId");
 
@@ -692,7 +817,20 @@ namespace HuongVanTra.Infrastructure.Migrations
                     b.Property<int>("ProductId")
                         .HasColumnType("int");
 
+                    b.Property<string>("ProductName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)");
+
                     b.Property<decimal>("Quantity")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("Sku")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<decimal>("UnitPrice")
                         .HasColumnType("decimal(18,2)");
 
                     b.HasKey("Id");
@@ -717,6 +855,11 @@ namespace HuongVanTra.Infrastructure.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("varchar(20)");
 
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("tinyint(1)")
+                        .HasDefaultValue(true);
+
                     b.Property<decimal>("DiscountValue")
                         .HasColumnType("decimal(18,2)");
 
@@ -725,9 +868,74 @@ namespace HuongVanTra.Infrastructure.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("varchar(50)");
 
+                    b.Property<DateTime?>("ValidFromUtc")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<DateTime?>("ValidToUtc")
+                        .HasColumnType("datetime(6)");
+
                     b.HasKey("Id");
 
                     b.ToTable("order_promotions", (string)null);
+                });
+
+            modelBuilder.Entity("HuongVanTra.Core.Entities.Sales.OrderStockShortage", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("AvailableQuantity")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("MaterialId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<int>("OrderId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("OrderItemId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("ProductId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("QueueId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("RequiredQuantity")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime?>("ResolvedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<decimal>("ShortageQuantity")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)");
+
+                    b.Property<int>("WarehouseId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrderId");
+
+                    b.HasIndex("QueueId");
+
+                    b.ToTable("order_stock_shortages", (string)null);
                 });
 
             modelBuilder.Entity("HuongVanTra.Core.Entities.Sales.PaymentTransaction", b =>
@@ -741,10 +949,29 @@ namespace HuongVanTra.Infrastructure.Migrations
                     b.Property<decimal>("Amount")
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<DateTime?>("ConfirmedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int?>("ConfirmedById")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
                     b.Property<int>("OrderId")
                         .HasColumnType("int");
 
                     b.Property<string>("PaymentMethod")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)");
+
+                    b.Property<string>("ReferenceCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(30)
                         .HasColumnType("varchar(30)");
@@ -770,6 +997,9 @@ namespace HuongVanTra.Infrastructure.Migrations
                     b.Property<string>("BomSnapshot")
                         .IsRequired()
                         .HasColumnType("json");
+
+                    b.Property<DateTime?>("ConfirmedAt")
+                        .HasColumnType("datetime(6)");
 
                     b.Property<int?>("ConfirmedById")
                         .HasColumnType("int");
@@ -993,7 +1223,15 @@ namespace HuongVanTra.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("HuongVanTra.Core.Entities.Stores.Store", "Store")
+                        .WithMany()
+                        .HasForeignKey("StoreId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.Navigation("Department");
+
+                    b.Navigation("Store");
                 });
 
             modelBuilder.Entity("HuongVanTra.Core.Entities.Identity.EmployeeRole", b =>
@@ -1185,6 +1423,23 @@ namespace HuongVanTra.Infrastructure.Migrations
                     b.Navigation("ParentCategory");
                 });
 
+            modelBuilder.Entity("HuongVanTra.Core.Entities.Sales.Invoice", b =>
+                {
+                    b.HasOne("HuongVanTra.Core.Entities.Identity.Employee", "IssuedBy")
+                        .WithMany()
+                        .HasForeignKey("IssuedById");
+
+                    b.HasOne("HuongVanTra.Core.Entities.Sales.Order", "Order")
+                        .WithMany()
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("IssuedBy");
+
+                    b.Navigation("Order");
+                });
+
             modelBuilder.Entity("HuongVanTra.Core.Entities.Sales.Order", b =>
                 {
                     b.HasOne("HuongVanTra.Core.Entities.Identity.Employee", "Cashier")
@@ -1235,6 +1490,25 @@ namespace HuongVanTra.Infrastructure.Migrations
                     b.Navigation("Order");
 
                     b.Navigation("Product");
+                });
+
+            modelBuilder.Entity("HuongVanTra.Core.Entities.Sales.OrderStockShortage", b =>
+                {
+                    b.HasOne("HuongVanTra.Core.Entities.Sales.Order", "Order")
+                        .WithMany()
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("HuongVanTra.Core.Entities.Sales.StockDeductQueue", "Queue")
+                        .WithMany()
+                        .HasForeignKey("QueueId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Order");
+
+                    b.Navigation("Queue");
                 });
 
             modelBuilder.Entity("HuongVanTra.Core.Entities.Sales.PaymentTransaction", b =>

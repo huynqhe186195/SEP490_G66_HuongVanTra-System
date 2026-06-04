@@ -1,308 +1,62 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { showError, showSuccess } from '../../../app/toast.js'
 import AddCustomerModal from '../components/AddCustomerModal.jsx'
+import CustomerDetailModal from '../components/CustomerDetailModal.jsx'
 import OrderOfferModal from '../components/OrderOfferModal.jsx'
-
-
-
-const searchResults = [
-
-  {
-
-    group: 'Sản phẩm',
-
-    items: [
-
-      {
-
-        name: 'Trà Xanh Thái Nguyên Thượng Hạng',
-
-        sku: 'TX-TN-001',
-
-        stock: 'Tồn: 15',
-
-        price: 150000,
-
-        image: 'https://images.unsplash.com/photo-1523920290228-4f321a939b4c?q=80&w=800&auto=format&fit=crop',
-
-        featured: true,
-
-      },
-
-      {
-
-        name: 'Hồng Trà Cổ Thụ Hà Giang',
-
-        sku: 'HT-HG-002',
-
-        stock: 'Tồn: 8',
-
-        price: 220000,
-
-        image: 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?q=80&w=800&auto=format&fit=crop',
-
-      },
-
-      {
-
-        name: 'Trà Ô Long Lâm Đồng',
-
-        sku: 'OL-LD-003',
-
-        stock: 'Tồn: 20',
-
-        price: 320000,
-
-        image: 'https://images.unsplash.com/photo-1515823064-d6e0c04616a7?q=80&w=800&auto=format&fit=crop',
-
-      },
-
-      {
-
-        name: 'Trà Sen Tây Hồ',
-
-        sku: 'TS-TH-004',
-
-        stock: 'Tồn: 12',
-
-        price: 450000,
-
-        image: 'https://images.unsplash.com/photo-1544787219-7f47ccb76574?q=80&w=800&auto=format&fit=crop',
-
-      },
-
-      {
-
-        name: 'Trà Nhài Cao Cấp',
-
-        sku: 'TN-CC-005',
-
-        stock: 'Tồn: 18',
-
-        price: 180000,
-
-        image: 'https://images.unsplash.com/photo-1558160074-4d7d8bdf4256?q=80&w=800&auto=format&fit=crop',
-
-      },
-
-      {
-
-        name: 'Trà Phổ Nhĩ Vân Nam',
-
-        sku: 'PN-VN-006',
-
-        stock: 'Tồn: 5',
-
-        price: 520000,
-
-        image: 'https://images.unsplash.com/photo-1509042239860-f550ce710b93?q=80&w=800&auto=format&fit=crop',
-
-      },
-
-      {
-
-        name: 'Trà Gạo Rang Hàn Quốc',
-
-        sku: 'GR-HQ-007',
-
-        stock: 'Tồn: 14',
-
-        price: 130000,
-
-        image: 'https://images.unsplash.com/photo-1461023058943-07fcbe16d735?q=80&w=800&auto=format&fit=crop',
-
-      },
-
-      {
-
-        name: 'Trà Đào Cam Sả',
-
-        sku: 'TD-CS-008',
-
-        stock: 'Tồn: 25',
-
-        price: 85000,
-
-        image: 'https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?q=80&w=800&auto=format&fit=crop',
-
-      },
-
-      {
-
-        name: 'Trà Vải Hoa Hồng',
-
-        sku: 'TV-HH-009',
-
-        stock: 'Tồn: 11',
-
-        price: 95000,
-
-        image: 'https://images.unsplash.com/photo-1517701604599-bb29b565090c?q=80&w=800&auto=format&fit=crop',
-
-      },
-
-      {
-
-        name: 'Matcha Latte Nhật Bản',
-
-        sku: 'ML-NB-010',
-
-        stock: 'Tồn: 17',
-
-        price: 110000,
-
-        image: 'https://images.unsplash.com/photo-1512568400610-62da28bc8a13?q=80&w=800&auto=format&fit=crop',
-
-      },
-
-      {
-
-        name: 'Trà Sữa Ô Long',
-
-        sku: 'TS-OL-011',
-
-        stock: 'Tồn: 30',
-
-        price: 65000,
-
-        image: 'https://images.unsplash.com/photo-1558857563-b371033873b8?q=80&w=800&auto=format&fit=crop',
-
-      },
-
-      {
-
-        name: 'Trà Sữa Matcha',
-
-        sku: 'TS-MA-012',
-
-        stock: 'Tồn: 26',
-
-        price: 70000,
-
-        image: 'https://images.unsplash.com/photo-1576092768241-dec231879fc3?q=80&w=800&auto=format&fit=crop',
-
-      },
-
-      {
-
-        name: 'Cold Brew Trà Đen',
-
-        sku: 'CB-TD-013',
-
-        stock: 'Tồn: 9',
-
-        price: 120000,
-
-        image: 'https://images.unsplash.com/photo-1511920170033-f8396924c348?q=80&w=800&auto=format&fit=crop',
-
-      },
-
-      {
-
-        name: 'Trà Atiso Đỏ',
-
-        sku: 'AT-DO-014',
-
-        stock: 'Tồn: 16',
-
-        price: 140000,
-
-        image: 'https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?q=80&w=800&auto=format&fit=crop',
-
-      },
-
-      {
-
-        name: 'Trà Hoa Cúc Mật Ong',
-
-        sku: 'HC-MO-015',
-
-        stock: 'Tồn: 21',
-
-        price: 125000,
-
-        image: 'https://images.unsplash.com/photo-1499636136210-6f4ee915583e?q=80&w=800&auto=format&fit=crop',
-
-      },
-
-      {
-
-        name: 'Trà Chanh Giã Tay',
-
-        sku: 'TC-GT-016',
-
-        stock: 'Tồn: 40',
-
-        price: 45000,
-
-        image: 'https://images.unsplash.com/photo-1461023058943-07fcbe16d735?q=80&w=800&auto=format&fit=crop',
-
-      },
-
-      {
-
-        name: 'Bánh Mochi Matcha',
-
-        sku: 'BM-MA-017',
-
-        stock: 'Tồn: 10',
-
-        price: 90000,
-
-        image: 'https://images.unsplash.com/photo-1578985545062-69928b1d9587?q=80&w=800&auto=format&fit=crop',
-
-      },
-
-      {
-
-        name: 'Set Quà Tặng Trà Premium',
-
-        sku: 'QT-PR-018',
-
-        stock: 'Tồn: 6',
-
-        price: 890000,
-
-        image: 'https://images.unsplash.com/photo-1514228742587-6b1558fcf93a?q=80&w=800&auto=format&fit=crop',
-
-      },
-
-      {
-
-        name: 'Bình Pha Trà Thủy Tinh',
-
-        sku: 'BP-TT-019',
-
-        stock: 'Tồn: 13',
-
-        price: 350000,
-
-        image: 'https://images.unsplash.com/photo-1514228742587-6b1558fcf93a?q=80&w=800&auto=format&fit=crop',
-
-      },
-
-      {
-
-        name: 'Ly Sứ Matcha Nhật',
-
-        sku: 'LS-MN-020',
-
-        stock: 'Tồn: 22',
-
-        price: 175000,
-
-        image: 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?q=80&w=800&auto=format&fit=crop',
-
-      },
-
-    ],
-
-  },
-
+import ConfirmDialog from '../components/ConfirmDialog.jsx'
+import { printReceiptFromData } from '../utils/printReceipt.js'
+import { vietnamNowLabel } from '../../../utils/vietnamDateTime.js'
+import {
+  buildTakeawayOrderPayload,
+  createPosOrderOffline,
+  createPosOrderOnline,
+  createTakeawayCodOrder,
+  createTakeawayVietQrOrder,
+  fetchPosCustomerContext,
+  fetchPosCustomers,
+  fetchPosProducts,
+  fetchPromotionByCode,
+  resolvePosStoreId,
+} from '../services/posApi.js'
+import { loadPosSeller } from '../utils/posSeller.js'
+import {
+  normalizeOrderDiscountInput,
+  validatePosDiscountsBeforePayment,
+} from '../utils/posDiscountValidation.js'
+import { computeCouponDiscount, formatPromotionLabel } from '../utils/posPromotionUtils.js'
+import { isVipCustomerType } from '../../customers/utils/customerDisplay.js'
+
+const SALES_MODES = [
+  { id: 'counter', label: 'Bán tại quầy', icon: 'storefront' },
+  { id: 'takeaway', label: 'Bán COD', icon: 'local_shipping' },
 ]
 
+const COUNTER_PAYMENT_METHODS = [
+  { id: 'CASH', label: 'Tiền mặt', icon: 'payments' },
+  { id: 'TRANSFER', label: 'Chuyển khoản', icon: 'account_balance' },
+]
 
+const TAKEAWAY_PAYMENT_METHODS = [
+  { id: 'COD', label: 'COD — thu khi giao', icon: 'local_shipping' },
+  { id: 'TRANSFER', label: 'Chuyển khoản / VietQR', icon: 'account_balance' },
+]
 
-// const categories = ['Tất cả', 'Trà Xanh', 'Hồng Trà', 'Trà Ô Long', 'Dụng Cụ', 'Quà Tặng']
+function createWorkspace(mode = 'counter') {
+  const empty = () => createEmptySession(mode)
+  if (mode === 'takeaway') {
+    return {
+      tabs: [{ id: 1, label: 'Hóa đơn 1' }],
+      activeTabId: 1,
+      sessions: { 1: empty() },
+    }
+  }
+  return {
+    tabs: [{ id: 1, label: 'Hóa đơn 1' }],
+    activeTabId: 1,
+    sessions: { 1: empty() },
+  }
+}
 
 function Icon({ children, className = '', filled = false }) {
   return (
@@ -312,174 +66,1035 @@ function Icon({ children, className = '', filled = false }) {
   )
 }
 
-function PosPage() {
-  const [tabs, setTabs] = useState([
-    { id: 1, label: 'Hóa đơn 1' },
-    { id: 2, label: 'Hóa đơn 2' },
-  ])
-  const [activeTabId, setActiveTabId] = useState(1)
-//   const [activeCategory, setActiveCategory] = useState('Tất cả')
-  const [searchValue, setSearchValue] = useState('')
-  const [selectedCustomer, setSelectedCustomer] = useState('Tìm hoặc thêm khách hàng')
-  const [discountPercent, setDiscountPercent] = useState(0)
-  const [openModal, setOpenModal] = useState(null)
-  const [cartItems, setCartItems] = useState([
-    { name: 'Trà Xanh Thái Nguyên Thượng Hạng', qty: 2, unit: 'x', price: 150000, step: 1 },
-    { name: 'Hồng Trà Cổ Thụ Hà Giang', qty: 1, unit: 'x', price: 220000, step: 1 },
-    { name: 'Bột Matcha Uji Nguyên Chất', qty: 0.5, unit: 'kg x', price: 450000, step: 0.5 },
-  ])
+function getLineGross(item) {
+  return item.qty * item.price
+}
 
+function getLineDiscount(item) {
+  const gross = getLineGross(item)
+  const value = item.lineDiscountValue || 0
+  if (item.lineDiscountType === 'amount') {
+    return Math.min(gross, value)
+  }
+  const percent = Math.min(100, Math.max(0, value))
+  return Math.min(gross, Math.round((gross * percent) / 100))
+}
+
+function getLineTotal(item) {
+  return Math.max(getLineGross(item) - getLineDiscount(item), 0)
+}
+
+/** Chuẩn hóa CK dòng — không vượt thành tiền dòng. */
+function clampLineDiscountItem(item) {
+  const gross = getLineGross(item)
+  const value = item.lineDiscountValue || 0
+  if (!value) {
+    return item
+  }
+
+  if (item.lineDiscountType === 'amount') {
+    const capped = Math.min(Math.max(0, value), gross)
+    return capped === value ? item : { ...item, lineDiscountValue: capped }
+  }
+
+  const cappedPercent = Math.min(100, Math.max(0, value))
+  return cappedPercent === value ? item : { ...item, lineDiscountValue: cappedPercent }
+}
+
+function clampCartLineDiscounts(cartItems) {
+  return (Array.isArray(cartItems) ? cartItems : []).map(clampLineDiscountItem)
+}
+
+function computePosTotals(
+  cartItems,
+  orderDiscountPercent,
+  orderDiscountAmountFixed,
+  tierDiscountPercent,
+  appliedPromotion = null,
+) {
+  const items = Array.isArray(cartItems) ? cartItems : []
+  const grossSubtotal = items.reduce((sum, item) => sum + getLineGross(item), 0)
+  const itemDiscountTotal = items.reduce((sum, item) => sum + getLineDiscount(item), 0)
+  const subtotalAfterItemDiscount = items.reduce((sum, item) => sum + getLineTotal(item), 0)
+  const fixedOrderDiscount = Math.max(0, Math.round(Number(orderDiscountAmountFixed) || 0))
+  const orderDiscountAmount =
+    fixedOrderDiscount > 0
+      ? Math.min(fixedOrderDiscount, subtotalAfterItemDiscount)
+      : Math.round((subtotalAfterItemDiscount * orderDiscountPercent) / 100)
+  const totalBeforeCoupon = Math.max(subtotalAfterItemDiscount - orderDiscountAmount, 0)
+  const couponDiscountAmount = computeCouponDiscount(totalBeforeCoupon, appliedPromotion)
+  const totalBeforeTier = Math.max(totalBeforeCoupon - couponDiscountAmount, 0)
+  const membershipDiscountAmount =
+    tierDiscountPercent > 0 ? Math.round((totalBeforeTier * tierDiscountPercent) / 100) : 0
+  const total = Math.max(totalBeforeTier - membershipDiscountAmount, 0)
+  const totalDiscount =
+    itemDiscountTotal + orderDiscountAmount + couponDiscountAmount + membershipDiscountAmount
+
+  return {
+    grossSubtotal,
+    itemDiscountTotal,
+    subtotalAfterItemDiscount,
+    orderDiscountAmount,
+    couponDiscountAmount,
+    membershipDiscountAmount,
+    total,
+    totalDiscount,
+  }
+}
+
+function createEmptySession(mode = 'counter') {
+  return {
+    searchValue: '',
+    cartItems: [],
+    orderDiscountPercent: 0,
+    orderDiscountAmountFixed: 0,
+    promoCodeInput: '',
+    appliedPromotion: null,
+    selectedCustomer: null,
+    customerSearchValue: '',
+    paymentMethod: mode === 'takeaway' ? 'COD' : 'CASH',
+    amountPaidInput: '',
+    shippingAddress: '',
+  }
+}
+
+function PosPage() {
+  const navigate = useNavigate()
+  const [salesMode, setSalesMode] = useState('counter')
+  const [workspaceByMode, setWorkspaceByMode] = useState({
+    counter: createWorkspace('counter'),
+    takeaway: createWorkspace('takeaway'),
+  })
+  const [customerSearchResults, setCustomerSearchResults] = useState([])
+  const [isCustomerSearchLoading, setIsCustomerSearchLoading] = useState(false)
+  const [openModal, setOpenModal] = useState(null)
+  const [openDiscountSku, setOpenDiscountSku] = useState(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isApplyingPromo, setIsApplyingPromo] = useState(false)
+  const [searchProducts, setSearchProducts] = useState([])
+  const [isSearchLoading, setIsSearchLoading] = useState(false)
+  const [tabCloseConfirm, setTabCloseConfirm] = useState(null)
+  const [savedShippingAddresses, setSavedShippingAddresses] = useState([])
+  const [isLoadingShippingAddresses, setIsLoadingShippingAddresses] = useState(false)
+  const [useCustomShippingAddress, setUseCustomShippingAddress] = useState(false)
+  const [seller, setSeller] = useState({ name: 'Nhân viên POS', role: '—', display: 'Nhân viên POS · —' })
+  const discountPopoverRef = useRef(null)
+
+  const isTakeaway = salesMode === 'takeaway'
+  const workspace = workspaceByMode[salesMode]
+  const { tabs, activeTabId, sessions } = workspace
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0]
+  const session = sessions[activeTabId] ?? createEmptySession(salesMode)
+  const {
+    searchValue = '',
+    cartItems = [],
+    orderDiscountPercent = 0,
+    orderDiscountAmountFixed = 0,
+    promoCodeInput = '',
+    appliedPromotion = null,
+    selectedCustomer = null,
+    customerSearchValue = '',
+    paymentMethod: sessionPaymentMethod,
+    amountPaidInput = '',
+    shippingAddress = '',
+  } = session ?? createEmptySession(salesMode)
+
+  const paymentMethod = sessionPaymentMethod ?? (isTakeaway ? 'COD' : 'CASH')
+
+  const paymentMethods = isTakeaway ? TAKEAWAY_PAYMENT_METHODS : COUNTER_PAYMENT_METHODS
+
+  const patchWorkspace = (patch) => {
+    setWorkspaceByMode((all) => ({
+      ...all,
+      [salesMode]: typeof patch === 'function' ? patch(all[salesMode]) : { ...all[salesMode], ...patch },
+    }))
+  }
+
+  const updateActiveSession = (updater) => {
+    patchWorkspace((ws) => {
+      const prevSession = ws.sessions[ws.activeTabId] ?? createEmptySession(salesMode)
+      const nextSession = typeof updater === 'function' ? updater(prevSession) : { ...prevSession, ...updater }
+      return { ...ws, sessions: { ...ws.sessions, [ws.activeTabId]: nextSession } }
+    })
+  }
+
+  useEffect(() => {
+    let mounted = true
+
+    loadPosSeller().then((info) => {
+      if (mounted) {
+        setSeller(info)
+      }
+    })
+
+    return () => {
+      mounted = false
+    }
+  }, [])
 
   const formatMoney = (value) =>
     new Intl.NumberFormat('vi-VN', {
       maximumFractionDigits: 0,
     }).format(value)
 
-  const subtotal = cartItems.reduce((sum, item) => sum + item.qty * item.price, 0)
-  const discountAmount = Math.round((subtotal * discountPercent) / 100)
-  const total = Math.max(subtotal - discountAmount, 0)
+  const formatStock = (value) => {
+    const n = Number(value) || 0
+    if (Math.abs(n - Math.round(n)) < 0.001) {
+      return new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(Math.round(n))
+    }
+    return new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 2 }).format(n)
+  }
+
+  const formatStockHint = (value) => {
+    const n = Number(value) || 0
+    if (n <= 0) {
+      return 'Tồn: 0 · bán trước, trừ sau'
+    }
+    if (n <= 5) {
+      return `Tồn: ${formatStock(n)} · sắp hết`
+    }
+    return `Tồn: ${formatStock(n)}`
+  }
+
+  const parseQtyInput = (value) => {
+    const normalized = String(value).trim().replace(',', '.')
+    if (!normalized) {
+      return null
+    }
+    const parsed = Number(normalized)
+    if (!Number.isFinite(parsed)) {
+      return null
+    }
+    return Number(parsed.toFixed(2))
+  }
+
+  const parseMoneyInput = (value) => {
+    const digits = String(value).replace(/\D/g, '')
+    return digits ? Number(digits) : 0
+  }
+
+  const tierDiscountPercent = isVipCustomerType(selectedCustomer?.customerType)
+    ? 0
+    : Number(selectedCustomer?.tierDiscountPercent || 0)
+  const canUseOrderDiscount = isVipCustomerType(selectedCustomer?.customerType)
+  const effectiveOrderDiscountPercent = canUseOrderDiscount ? orderDiscountPercent : 0
+  const effectiveOrderDiscountAmountFixed = canUseOrderDiscount ? orderDiscountAmountFixed : 0
+  const {
+    grossSubtotal,
+    itemDiscountTotal,
+    subtotalAfterItemDiscount,
+    orderDiscountAmount,
+    couponDiscountAmount,
+    membershipDiscountAmount,
+    total,
+    totalDiscount,
+  } = computePosTotals(
+    cartItems,
+    effectiveOrderDiscountPercent,
+    effectiveOrderDiscountAmountFixed,
+    tierDiscountPercent,
+    appliedPromotion,
+  )
+  const usesFixedOrderDiscount = canUseOrderDiscount && (orderDiscountAmountFixed || 0) > 0
+  const amountPaid = parseMoneyInput(amountPaidInput)
+  // Để trống = ghi nợ toàn bộ đơn; nhập đủ = thanh toán hết; nhập thừa = tính tiền thừa
+  const cashPaymentAmount = amountPaid >= total ? total : amountPaid
+  const debtAmount = Math.max(total - cashPaymentAmount, 0)
+  const change = Math.max(amountPaid - total, 0)
+  const isDebtSale = paymentMethod !== 'TRANSFER' && amountPaid === 0 && total > 0
+  const isPartialCashPayment = paymentMethod !== 'TRANSFER' && amountPaid > 0 && amountPaid < total
+
+  useEffect(() => {
+    let cancelled = false
+
+    const timerId = setTimeout(async () => {
+      setIsSearchLoading(true)
+      try {
+        const items = await fetchPosProducts({
+          storeId: resolvePosStoreId(),
+          search: searchValue.trim(),
+          limit: 30,
+        })
+        if (!cancelled) {
+          setSearchProducts(items)
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setSearchProducts([])
+          showError(error.message)
+        }
+      } finally {
+        if (!cancelled) {
+          setIsSearchLoading(false)
+        }
+      }
+    }, searchValue.trim() ? 250 : 0)
+
+    return () => {
+      cancelled = true
+      clearTimeout(timerId)
+    }
+  }, [searchValue, activeTabId])
+
+  useEffect(() => {
+    setOpenDiscountSku(null)
+  }, [activeTabId])
+
+  useEffect(() => {
+    if (!openDiscountSku) return undefined
+
+    const handlePointerDown = (event) => {
+      if (discountPopoverRef.current?.contains(event.target)) {
+        return
+      }
+      setOpenDiscountSku(null)
+    }
+
+    document.addEventListener('mousedown', handlePointerDown)
+    return () => document.removeEventListener('mousedown', handlePointerDown)
+  }, [openDiscountSku])
+
+  useEffect(() => {
+    if (selectedCustomer) {
+      setCustomerSearchResults([])
+      return undefined
+    }
+
+    const query = customerSearchValue.trim()
+    if (!query) {
+      setCustomerSearchResults([])
+      return undefined
+    }
+
+    let cancelled = false
+    const timerId = setTimeout(async () => {
+      setIsCustomerSearchLoading(true)
+      try {
+        const items = await fetchPosCustomers({ search: query, limit: 20 })
+        if (!cancelled) {
+          setCustomerSearchResults(items)
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setCustomerSearchResults([])
+          showError(error.message)
+        }
+      } finally {
+        if (!cancelled) {
+          setIsCustomerSearchLoading(false)
+        }
+      }
+    }, 250)
+
+    return () => {
+      cancelled = true
+      clearTimeout(timerId)
+    }
+  }, [customerSearchValue, selectedCustomer, activeTabId])
+
+  useEffect(() => {
+    const customerId = selectedCustomer?.customerId
+    if (!customerId) return undefined
+
+    let cancelled = false
+    fetchPosCustomerContext(customerId)
+      .then((context) => {
+        if (cancelled || !context) return
+        updateActiveSession((prev) => {
+          if (prev.selectedCustomer?.customerId !== customerId) return prev
+          return {
+            ...prev,
+            selectedCustomer: {
+              ...prev.selectedCustomer,
+              customerType: context.customerType || prev.selectedCustomer.customerType,
+              currentDebt: context.currentDebt,
+              tierCode: context.tierCode || prev.selectedCustomer.tierCode,
+              tierId: context.tierId ?? prev.selectedCustomer.tierId,
+              tierDiscountPercent: context.tierDiscountPercent ?? prev.selectedCustomer.tierDiscountPercent,
+              totalSpend: context.totalSpend ?? prev.selectedCustomer.totalSpend,
+            },
+          }
+        })
+      })
+      .catch(() => {})
+
+    return () => {
+      cancelled = true
+    }
+  }, [selectedCustomer?.customerId])
+
+  useEffect(() => {
+    if (!isTakeaway || !selectedCustomer?.customerId) {
+      setSavedShippingAddresses([])
+      setUseCustomShippingAddress(false)
+      return undefined
+    }
+
+    let cancelled = false
+    setIsLoadingShippingAddresses(true)
+
+    fetchPosCustomerContext(selectedCustomer.customerId)
+      .then((context) => {
+        if (cancelled) return
+        const addresses = (context.shippingAddresses ?? [])
+          .map((row) => row.address?.trim())
+          .filter(Boolean)
+        setSavedShippingAddresses(addresses)
+
+        const current = shippingAddress?.trim()
+        if (current && addresses.some((addr) => addr === current)) {
+          setUseCustomShippingAddress(false)
+          return
+        }
+
+        if (addresses.length > 0) {
+          setUseCustomShippingAddress(false)
+          updateActiveSession({ shippingAddress: addresses[0] })
+        } else {
+          setUseCustomShippingAddress(true)
+          if (!current) {
+            updateActiveSession({ shippingAddress: '' })
+          }
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setSavedShippingAddresses([])
+          setUseCustomShippingAddress(true)
+          showError(error.message)
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsLoadingShippingAddresses(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [isTakeaway, selectedCustomer?.customerId])
 
   const addTab = () => {
     const nextId = tabs.length ? Math.max(...tabs.map((tab) => tab.id)) + 1 : 1
     const nextTab = { id: nextId, label: `Hóa đơn ${nextId}` }
-    setTabs((currentTabs) => [...currentTabs, nextTab])
-    setActiveTabId(nextId)
+    patchWorkspace((ws) => ({
+      ...ws,
+      tabs: [...ws.tabs, nextTab],
+      sessions: { ...ws.sessions, [nextId]: createEmptySession(salesMode) },
+      activeTabId: nextId,
+    }))
+    setOpenDiscountSku(null)
   }
 
   const closeTab = (tabId) => {
-    setTabs((currentTabs) => {
-      if (currentTabs.length === 1) {
-        return currentTabs
+    patchWorkspace((ws) => {
+      if (ws.tabs.length === 1) {
+        return ws
       }
 
-      const nextTabs = currentTabs.filter((tab) => tab.id !== tabId)
+      const nextTabs = ws.tabs.filter((tab) => tab.id !== tabId)
+      const nextSessions = { ...ws.sessions }
+      delete nextSessions[tabId]
 
-      if (tabId === activeTabId) {
-        setActiveTabId(nextTabs[0]?.id ?? activeTabId)
+      return {
+        ...ws,
+        tabs: nextTabs,
+        sessions: nextSessions,
+        activeTabId: tabId === ws.activeTabId ? (nextTabs[0]?.id ?? ws.activeTabId) : ws.activeTabId,
+      }
+    })
+    setOpenDiscountSku(null)
+  }
+
+  const requestCloseTab = (tabId) => {
+    if (tabs.length <= 1) return
+
+    const tabSession = sessions[tabId]
+    const tabItemCount = tabSession?.cartItems?.length ?? 0
+    if (tabItemCount === 0) {
+      closeTab(tabId)
+      return
+    }
+
+    const tab = tabs.find((item) => item.id === tabId)
+    setTabCloseConfirm({ tabId, label: tab?.label ?? 'hóa đơn này' })
+  }
+
+  const handleConfirmCloseTab = () => {
+    if (!tabCloseConfirm) return
+    closeTab(tabCloseConfirm.tabId)
+    setTabCloseConfirm(null)
+  }
+
+  const addToCart = (product) => {
+    const stockOnHand = Math.max(0, Number(product.stockQuantity) || 0)
+
+    updateActiveSession((prev) => {
+      const currentItems = prev.cartItems
+      const existingLine = currentItems.find((item) => item.sku === product.sku)
+      if (existingLine) {
+        const nextQty = Number((existingLine.qty + existingLine.step).toFixed(2))
+        return {
+          ...prev,
+          cartItems: clampCartLineDiscounts(
+            currentItems.map((item) =>
+              item.sku === product.sku
+                ? { ...item, qty: nextQty, stockQuantity: stockOnHand }
+                : item,
+            ),
+          ),
+          searchValue: '',
+        }
       }
 
-      return nextTabs
+      return {
+        ...prev,
+        cartItems: [
+          ...currentItems,
+          {
+            productId: product.productId,
+            sku: product.sku,
+            name: product.name,
+            qty: 1,
+            unit: 'x',
+            price: product.price,
+            step: 1,
+            stockQuantity: stockOnHand,
+            lineDiscountType: 'percent',
+            lineDiscountValue: 0,
+          },
+        ],
+        searchValue: '',
+      }
     })
   }
 
-  const updateQuantity = (itemName, direction) => {
-    setCartItems((currentItems) =>
-      currentItems.map((item) => {
-        if (item.name !== itemName) {
-          return item
-        }
+  const updateQuantity = (sku, direction) => {
+    const target = cartItems.find((item) => item.sku === sku)
+    if (!target) {
+      return
+    }
 
-        const nextQty = direction === 'inc' ? item.qty + item.step : Math.max(item.step, item.qty - item.step)
-        return {
-          ...item,
-          qty: Number(nextQty.toFixed(2)),
-        }
-      }),
-    )
+    const nextQty =
+      direction === 'inc'
+        ? Number((target.qty + target.step).toFixed(2))
+        : Number((target.qty - target.step).toFixed(2))
+
+    updateActiveSession((prev) => ({
+      ...prev,
+      cartItems: clampCartLineDiscounts(
+        prev.cartItems
+          .map((item) => {
+            if (item.sku !== sku) {
+              return item
+            }
+            return { ...item, qty: nextQty }
+          })
+          .filter((item) => item.qty > 0),
+      ),
+    }))
   }
 
-  const handleAddCustomer = () => {
-    setOpenModal('customer')
+  const setLineQuantity = (sku, rawValue) => {
+    const item = cartItems.find((row) => row.sku === sku)
+    if (!item) {
+      return
+    }
+
+    const parsed = parseQtyInput(rawValue)
+    if (parsed == null) {
+      return
+    }
+
+    if (parsed <= 0) {
+      updateActiveSession((prev) => ({
+        ...prev,
+        cartItems: clampCartLineDiscounts(prev.cartItems.filter((row) => row.sku !== sku)),
+      }))
+      return
+    }
+
+    updateActiveSession((prev) => ({
+      ...prev,
+      cartItems: clampCartLineDiscounts(
+        prev.cartItems.map((row) => (row.sku === sku ? { ...row, qty: parsed } : row)),
+      ),
+    }))
   }
 
-  const handleAddDiscount = () => {
-    setOpenModal('offer')
+  const updateLineDiscountType = (sku, discountType) => {
+    updateActiveSession((prev) => ({
+      ...prev,
+      cartItems: prev.cartItems.map((item) =>
+        item.sku === sku ? { ...item, lineDiscountType: discountType, lineDiscountValue: 0 } : item,
+      ),
+    }))
+  }
+
+  const updateLineDiscountValue = (sku, rawValue) => {
+    const item = cartItems.find((row) => row.sku === sku)
+    if (!item) {
+      return
+    }
+
+    const gross = getLineGross(item)
+
+    if (item.lineDiscountType === 'amount') {
+      const parsed = parseMoneyInput(rawValue)
+      if (parsed > gross) {
+        showError(
+          gross > 0
+            ? `Chiết khấu không được vượt thành tiền dòng (${formatMoney(gross)} đ).`
+            : 'Không thể chiết khấu khi thành tiền dòng bằng 0.',
+        )
+        updateActiveSession((prev) => ({
+          ...prev,
+          cartItems: prev.cartItems.map((row) =>
+            row.sku === sku ? { ...row, lineDiscountValue: gross } : row,
+          ),
+        }))
+        return
+      }
+
+      updateActiveSession((prev) => ({
+        ...prev,
+        cartItems: prev.cartItems.map((row) =>
+          row.sku === sku ? { ...row, lineDiscountValue: parsed } : row,
+        ),
+      }))
+      return
+    }
+
+    const parsed = Math.max(0, Number(rawValue) || 0)
+    if (parsed > 100) {
+      showError('Chiết khấu % không được vượt 100%.')
+    }
+
+    updateActiveSession((prev) => ({
+      ...prev,
+      cartItems: prev.cartItems.map((row) =>
+        row.sku === sku ? { ...row, lineDiscountValue: Math.min(100, parsed) } : row,
+      ),
+    }))
+  }
+
+  const updateOrderDiscountPercent = (rawValue) => {
+    const parsed = Math.max(0, Number(rawValue) || 0)
+    if (parsed > 100) {
+      showError('Chiết khấu đơn không được vượt 100%.')
+      updateActiveSession({ orderDiscountPercent: 100, orderDiscountAmountFixed: 0 })
+      return
+    }
+    updateActiveSession({ orderDiscountPercent: parsed, orderDiscountAmountFixed: 0 })
+  }
+
+  const handleApplyPromoCode = async () => {
+    const code = promoCodeInput.trim()
+    if (!code) {
+      showError('Vui lòng nhập mã giảm giá.')
+      return
+    }
+    setIsApplyingPromo(true)
+    try {
+      const promotion = await fetchPromotionByCode(code)
+      updateActiveSession({ appliedPromotion: promotion, promoCodeInput: promotion.promoCode })
+      showSuccess(`Đã áp dụng mã ${promotion.promoCode}.`)
+    } catch (error) {
+      showError(error.message)
+    } finally {
+      setIsApplyingPromo(false)
+    }
+  }
+
+  const handleClearPromoCode = () => {
+    updateActiveSession({ appliedPromotion: null, promoCodeInput: '' })
+  }
+
+  const validateDiscountsBeforePayment = () => {
+    const normalizedItems = clampCartLineDiscounts(cartItems)
+    const cartBySku = Object.fromEntries(cartItems.map((row) => [row.sku, row]))
+    const hasStaleLineDiscount = normalizedItems.some((row) => {
+      const current = cartBySku[row.sku]
+      return current && (row.lineDiscountValue || 0) !== (current.lineDiscountValue || 0)
+    })
+
+    if (hasStaleLineDiscount) {
+      updateActiveSession({ cartItems: normalizedItems })
+      showError('Đã điều chỉnh chiết khấu cho khớp thành tiền. Vui lòng kiểm tra lại trước khi thanh toán.')
+      return false
+    }
+
+    const paymentCheck = validatePosDiscountsBeforePayment({
+      cartItems: normalizedItems,
+      orderDiscountPercent,
+      orderDiscountAmountFixed,
+      grossSubtotal,
+      subtotalAfterItemDiscount,
+      orderDiscountAmount,
+      totalDiscount,
+      total,
+    })
+
+    if (!paymentCheck.ok) {
+      if (paymentCheck.clampOrderDiscount) {
+        updateActiveSession(paymentCheck.clampOrderDiscount)
+      }
+      showError(paymentCheck.error)
+      return false
+    }
+
+    return true
+  }
+
+  const removeItem = (sku) => {
+    updateActiveSession((prev) => ({
+      ...prev,
+      cartItems: prev.cartItems.filter((item) => item.sku !== sku),
+    }))
+    if (openDiscountSku === sku) {
+      setOpenDiscountSku(null)
+    }
+  }
+
+  const handleQuickAmount = (value) => {
+    updateActiveSession({ amountPaidInput: String(value) })
+  }
+
+  const formatLineDiscountLabel = (item) => {
+    const applied = getLineDiscount(item)
+    if (!applied) return null
+    if (item.lineDiscountType === 'amount') {
+      return `-${formatMoney(applied)}đ`
+    }
+    const percent = Math.min(100, Math.max(0, item.lineDiscountValue || 0))
+    return `-${percent}%`
+  }
+
+  const hasCartItems = cartItems.length > 0
+  const hasCustomerSelected = Boolean(selectedCustomer?.customerId)
+  const hasShippingAddress = Boolean(shippingAddress?.trim())
+  const isTransferPayment = paymentMethod === 'TRANSFER'
+  const isZeroAmountSale = total === 0 && grossSubtotal > 0
+  const canPayCash = hasCartItems && hasCustomerSelected
+  const canPayTransfer = hasCartItems && hasCustomerSelected && total > 0
+  const canPayTakeaway =
+    hasCartItems && hasCustomerSelected && hasShippingAddress && (isTransferPayment ? total > 0 : true)
+  const canPay = isTakeaway
+    ? canPayTakeaway && !isSubmitting
+    : (isTransferPayment ? canPayTransfer : canPayCash) && !isSubmitting
+
+  const buildOrderPayload = (method, amount) => {
+    const storeId = resolvePosStoreId()
+    const manualDiscount = Math.round(itemDiscountTotal + orderDiscountAmount)
+    return {
+      storeId,
+      customerId: selectedCustomer.customerId,
+      promotionId: appliedPromotion?.id ?? null,
+      manualDiscount,
+      items: cartItems.map((item) => ({
+        productId: item.productId,
+        quantity: item.qty,
+        isGift: 0,
+      })),
+      payments: [
+        {
+          paymentMethod: method,
+          amount,
+        },
+      ],
+    }
+  }
+
+  const buildReceiptData = ({ orderCode, method, invoiceCode, orderTotal }) => {
+    const receiptTotal = orderTotal ?? total
+    return {
+    orderCode: orderCode || activeTab.label,
+    invoiceCode: invoiceCode || undefined,
+    customerName: selectedCustomer?.fullName || 'Khách lẻ',
+    paymentMethodLabel:
+      method === 'COD' ? 'COD — thu khi giao' : method === 'TRANSFER' ? 'Chuyển khoản' : 'Tiền mặt',
+    createdAtLabel: vietnamNowLabel(),
+    sellerName: seller.name,
+    sellerRole: seller.role,
+    items: cartItems.map((item) => ({
+      sku: item.sku,
+      name: item.name,
+      qty: item.qty,
+      price: item.price,
+      total: getLineTotal(item),
+    })),
+    grossSubtotal,
+    totalDiscount: itemDiscountTotal + orderDiscountAmount + couponDiscountAmount + membershipDiscountAmount,
+    total: receiptTotal,
+    amountPaid: method === 'CASH' ? cashPaymentAmount : receiptTotal,
+    customerPaid: method === 'CASH' ? amountPaid : receiptTotal,
+    change: method === 'CASH' ? change : 0,
+    debtAmount: method === 'CASH' ? debtAmount : 0,
+    isDebtSale: method === 'CASH' && isDebtSale,
+    isPartialCashPayment: method === 'CASH' && isPartialCashPayment,
+  }
+  }
+
+  const resetCheckoutState = () => {
+    updateActiveSession(createEmptySession(salesMode))
+    setOpenDiscountSku(null)
+  }
+
+  const handleTakeawayPayment = async () => {
+    const address = shippingAddress?.trim()
+    if (!address) {
+      showError('Vui lòng nhập địa chỉ giao hàng cho đơn mang đi.')
+      return
+    }
+
+    if (!validateDiscountsBeforePayment()) {
+      return
+    }
+
+    const manualDiscount = Math.round(itemDiscountTotal + orderDiscountAmount)
+    const payload = buildTakeawayOrderPayload({
+      storeId: resolvePosStoreId(),
+      customerId: selectedCustomer.customerId,
+      shippingAddress: address,
+      cartItems,
+      manualDiscount,
+      promotionId: appliedPromotion?.id ?? null,
+    })
+
+    if (isTransferPayment) {
+      const result = await createTakeawayVietQrOrder(payload)
+      showSuccess(`Đã tạo đơn mang đi ${result.orderCode}. Khách quét QR để thanh toán.`)
+      const receipt = buildReceiptData({
+        orderCode: result.orderCode,
+        method: 'TRANSFER',
+      })
+      resetCheckoutState()
+      navigate('/pos/payment/qr', {
+        state: {
+          orderId: result.orderId,
+          orderCode: result.orderCode,
+          orderLabel: result.orderCode,
+          total: result.totalAmount || total,
+          qrPayload: result.qrPayload,
+          qrImageUrl: result.qrImageUrl,
+          transferContent: result.transferContent,
+          transferAccountNumber: result.transferAccountNumber,
+          paymentMode: result.paymentMode,
+          qrExpiresAtUtc: result.qrExpiresAtUtc,
+          customer: selectedCustomer?.fullName || '',
+          paymentMethod: 'TRANSFER',
+          receipt,
+        },
+      })
+      return
+    }
+
+    const result = await createTakeawayCodOrder(payload)
+    showSuccess(`Đã tạo đơn COD ${result.orderCode}. Theo dõi tại mục Đơn COD.`)
+    const receipt = buildReceiptData({
+      orderCode: result.orderCode,
+      method: 'COD',
+      orderTotal: result.totalAmount,
+    })
+    resetCheckoutState()
+    printReceiptFromData(receipt)
+  }
+
+  const handlePayment = async () => {
+    if (!hasCustomerSelected) {
+      showError('Vui lòng chọn hoặc thêm khách hàng trước khi thanh toán.')
+      return
+    }
+
+    if (isTakeaway) {
+      if (!canPay) {
+        if (!hasShippingAddress) {
+          showError('Vui lòng nhập địa chỉ giao hàng.')
+        } else if (isTransferPayment && total <= 0) {
+          showError('Đơn 0 đ không dùng chuyển khoản — chọn COD.')
+        }
+        return
+      }
+
+      setIsSubmitting(true)
+      try {
+        await handleTakeawayPayment()
+      } catch (error) {
+        showError(error.message)
+      } finally {
+        setIsSubmitting(false)
+      }
+      return
+    }
+
+    if (!validateDiscountsBeforePayment()) {
+      return
+    }
+
+    if (!canPay) {
+      if (isTransferPayment && isZeroAmountSale) {
+        showError('Đơn 0 đ vui lòng chọn thanh toán tiền mặt.')
+      }
+      return
+    }
+
+    setIsSubmitting(true)
+    try {
+      if (isTransferPayment) {
+        const payload = buildOrderPayload('TRANSFER', total)
+        const result = await createPosOrderOnline(payload)
+
+        showSuccess(`Đã tạo đơn ${result.orderCode}. Vui lòng quét mã QR để thanh toán.`)
+        const receipt = buildReceiptData({ orderCode: result.orderCode, method: 'TRANSFER' })
+        resetCheckoutState()
+        navigate('/pos/payment/qr', {
+          state: {
+            orderId: result.orderId,
+            orderCode: result.orderCode,
+            orderLabel: result.orderCode,
+            total: result.totalAmount || total,
+            qrPayload: result.qrPayload,
+            qrImageUrl: result.qrImageUrl,
+            transferContent: result.transferContent,
+            transferAccountNumber: result.transferAccountNumber,
+            paymentMode: result.paymentMode,
+            qrExpiresAtUtc: result.qrExpiresAtUtc,
+            customer: selectedCustomer?.fullName || '',
+            paymentMethod: 'TRANSFER',
+            receipt,
+          },
+        })
+        return
+      }
+
+      const payload = buildOrderPayload('CASH', cashPaymentAmount)
+      const result = await createPosOrderOffline(payload)
+
+      if (cashPaymentAmount >= total) {
+        showSuccess(
+          result.invoiceCode
+            ? total === 0
+              ? `Hoàn tất đơn 0 đ. Đơn: ${result.orderCode} · Số HĐ: ${result.invoiceCode}`
+              : `Thanh toán thành công. Đơn: ${result.orderCode} · Số HĐ: ${result.invoiceCode}`
+            : total === 0
+              ? `Hoàn tất đơn 0 đ. Đơn: ${result.orderCode}`
+              : `Thanh toán thành công. Đơn: ${result.orderCode}`,
+        )
+      } else if (isDebtSale) {
+        showSuccess(`Ghi đơn ${result.orderCode} thành công. Dư nợ: ${formatMoney(debtAmount)} đ.`)
+      } else {
+        showSuccess(
+          `Ghi đơn ${result.orderCode}. Đã thu ${formatMoney(cashPaymentAmount)} đ, còn nợ ${formatMoney(debtAmount)} đ.`,
+        )
+      }
+      const receipt = buildReceiptData({
+        orderCode: result.orderCode,
+        method: 'CASH',
+        invoiceCode: result.invoiceCode,
+      })
+      resetCheckoutState()
+      printReceiptFromData(receipt)
+    } catch (error) {
+      showError(error.message)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const hasSearchQuery = searchValue.trim().length > 0
+  const showSearchDropdown = hasSearchQuery && searchProducts.length > 0
+  const showSearchEmpty = hasSearchQuery && !isSearchLoading && searchProducts.length === 0
+
+  const hasCustomerSearchQuery = customerSearchValue.trim().length > 0
+  const showCustomerDropdown = !selectedCustomer && hasCustomerSearchQuery && customerSearchResults.length > 0
+  const showCustomerSearchEmpty =
+    !selectedCustomer && hasCustomerSearchQuery && !isCustomerSearchLoading && customerSearchResults.length === 0
+
+  const selectCustomer = (customer) => {
+    const keepOrderDiscount = isVipCustomerType(customer?.customerType)
+    updateActiveSession({
+      selectedCustomer: customer,
+      customerSearchValue: '',
+      shippingAddress: '',
+      ...(keepOrderDiscount ? {} : { orderDiscountPercent: 0, orderDiscountAmountFixed: 0 }),
+    })
+    setCustomerSearchResults([])
+    setSavedShippingAddresses([])
+    setUseCustomShippingAddress(false)
+  }
+
+  const handleSavedShippingAddressChange = (value) => {
+    if (value === '__custom__') {
+      setUseCustomShippingAddress(true)
+      updateActiveSession({ shippingAddress: '' })
+      return
+    }
+    setUseCustomShippingAddress(false)
+    updateActiveSession({ shippingAddress: value })
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[28px] border border-[#c1c9c0]/40 bg-[#fbf9f1] shadow-[0_10px_30px_rgba(27,28,23,0.04)]">
-      <header className="space-y-3 bg-[#f6f4ec] px-4 py-3">
-        <div className="flex items-center gap-4">
-          <div className="group relative flex-1" id="search-container">
-            <Icon className="absolute left-3 top-1/2 -translate-y-1/2 text-[#717971]">search</Icon>
-            <input
-              className="w-full rounded-full border-none bg-[#e4e3db] py-2 pl-10 pr-10 text-sm text-[#1b1c17] outline-none transition focus:ring-2 focus:ring-[#356647]"
-              placeholder="Tìm sản phẩm (Barcode support)..."
-              type="text"
-              value={searchValue}
-              onChange={(event) => setSearchValue(event.target.value)}
-            />
-
-            <div className="absolute left-0 right-0 top-full z-[60] mt-2 hidden max-h-[60vh] overflow-y-auto rounded-xl border border-[#c1c9c0] bg-white shadow-2xl group-focus-within:block custom-scrollbar">
-              {searchResults.map((section, sectionIndex) => (
-                <div key={section.group} className="p-2">
-                  <div className="px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-[#717971]">{section.group}</div>
-                  <div className="space-y-1">
-                    {section.items
-                      .filter((item) => {
-                        const query = searchValue.trim().toLowerCase()
-                        if (!query) {
-                          return true
-                        }
-
-                        return item.name.toLowerCase().includes(query) || item.sku.toLowerCase().includes(query)
-                      })
-                      .map((item) => (
-                        <button
-                          key={item.sku}
-                          type="button"
-                          className={`flex w-full items-center gap-3 rounded-lg p-3 text-left transition-colors ${
-                            item.featured ? 'border border-[#356647]/20 bg-[#4e7f5e]/10' : 'hover:bg-[#f6f4ec]'
-                          }`}
-                        >
-                          {item.image ? (
-                            <img className="h-12 w-12 rounded-md object-cover" src={item.image} alt={item.name} />
-                          ) : (
-                            <div className="flex h-12 w-12 items-center justify-center rounded-md bg-[#ceebc1]">
-                              <Icon className="text-[#4a6242]">eco</Icon>
-                            </div>
-                          )}
-                          <div className="min-w-0 flex-1">
-                            <div className="truncate text-sm font-medium text-[#1b1c17]">{item.name}</div>
-                            <div className="text-[11px] text-[#717971]">
-                              SKU: {item.sku} • {item.stock}
-                            </div>
-                          </div>
-                          <div className="text-right font-bold text-[#356647]">{formatMoney(item.price)}</div>
-                        </button>
-                      ))}
-                  </div>
-                  {sectionIndex < searchResults.length - 1 ? <div className="mx-2 mt-2 h-px bg-[#c1c9c0]" /> : null}
-                </div>
-              ))}
-            </div>
-
-            <Icon className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer text-[#717971] hover:text-[#356647]">barcode_scanner</Icon>
-          </div>
-        </div>
-
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-[#c1c9c0]/40 bg-[#fbf9f1] shadow-[0_10px_30px_rgba(27,28,23,0.04)] lg:rounded-[28px]">
+      <header className="border-b border-[#c1c9c0]/60 bg-[#f6f4ec] px-4 py-3">
         <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
-          {tabs.map((tab) => (
+          {tabs.map((tab) => {
+            const tabSession = sessions[tab.id]
+            const tabItemCount = tabSession?.cartItems?.length ?? 0
+            const tabHasCustomer = Boolean(tabSession?.selectedCustomer?.customerId)
+
+            return (
             <div
               key={tab.id}
               role="button"
               tabIndex={0}
-              onClick={() => setActiveTabId(tab.id)}
+              onClick={() => patchWorkspace({ activeTabId: tab.id })}
               onKeyDown={(event) => {
                 if (event.key === 'Enter' || event.key === ' ') {
                   event.preventDefault()
-                  setActiveTabId(tab.id)
+                  patchWorkspace({ activeTabId: tab.id })
                 }
               }}
-              className={`flex items-center rounded-t-lg px-4 py-1.5 text-sm font-medium transition-colors ${
+              className={`flex items-center gap-1.5 rounded-t-lg px-4 py-1.5 text-sm font-medium transition-colors ${
                 activeTabId === tab.id ? 'bg-[#356647] text-white shadow-sm' : 'bg-[#eae8e0] text-[#414942] hover:bg-[#e4e3db]'
               }`}
             >
               <span>{tab.label}</span>
-              <button
-                type="button"
-                onClick={(event) => {
-                  event.stopPropagation()
-                  closeTab(tab.id)
-                }}
-                className="ml-2 inline-flex items-center justify-center rounded-full p-0.5 hover:bg-black/10"
-                aria-label={`Đóng ${tab.label}`}
-              >
-                <Icon className="text-[16px] opacity-80">close</Icon>
-              </button>
+              {tabItemCount > 0 ? (
+                <span
+                  className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
+                    activeTabId === tab.id ? 'bg-white/20 text-white' : 'bg-[#356647]/15 text-[#356647]'
+                  }`}
+                >
+                  {tabItemCount}
+                </span>
+              ) : null}
+              {tabHasCustomer ? (
+                <span
+                  className={`material-symbols-outlined text-[14px] ${
+                    activeTabId === tab.id ? 'text-white/90' : 'text-[#356647]'
+                  }`}
+                  title="Đã chọn khách"
+                >
+                  person
+                </span>
+              ) : null}
+              {tabs.length > 1 ? (
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    requestCloseTab(tab.id)
+                  }}
+                  className="ml-2 inline-flex items-center justify-center rounded-full p-0.5 hover:bg-black/10"
+                  aria-label={`Đóng ${tab.label}`}
+                >
+                  <Icon className="text-[16px] opacity-80">close</Icon>
+                </button>
+              ) : null}
             </div>
-          ))}
+            )
+          })}
 
           <button type="button" onClick={addTab} className="rounded-lg px-3 py-1.5 text-[#356647] transition-colors hover:bg-[#356647]/10">
             <Icon>add</Icon>
@@ -487,132 +1102,711 @@ function PosPage() {
         </div>
       </header>
 
-      <div className="flex min-h-0 flex-1 overflow-hidden">
-        <section className="flex min-w-0 flex-1 flex-col border-r border-[#c1c9c0]">
-          <div className="custom-scrollbar flex-1 overflow-y-auto p-4">
-            <div className="flex h-full flex-col items-center justify-center p-8 text-center opacity-40">
-              <Icon className="mb-4 text-[80px] text-[#717971]">search_check</Icon>
-              <p className="font-display-md text-[#414942]">{activeTab.label} - nhập tên hoặc mã để tìm kiếm sản phẩm &amp; nguyên liệu</p>
-              <p className="mt-2 text-sm text-[#717971]">Sử dụng máy quét barcode hoặc nhập từ bàn phím</p>
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden xl:flex-row">
+        {/* Left: search + cart lines (larger touch targets) */}
+        <section className="order-1 flex min-w-0 flex-1 flex-col bg-white text-base">
+          <div className="relative z-30 shrink-0 overflow-visible border-b border-[#c1c9c0]/60 bg-[#f6f4ec] p-5">
+            <div className="relative">
+              <Icon className="absolute left-4 top-1/2 -translate-y-1/2 text-[22px] text-[#717971]">search</Icon>
+              <input
+                className="w-full rounded-full border border-[#c1c9c0] bg-white py-3.5 pl-12 pr-12 text-base outline-none focus:border-[#356647] focus:ring-2 focus:ring-[#356647]/20"
+                placeholder="Tìm sản phẩm, SKU, barcode..."
+                type="text"
+                value={searchValue}
+                onChange={(event) => updateActiveSession({ searchValue: event.target.value })}
+                autoFocus
+              />
+              <Icon className="absolute right-4 top-1/2 -translate-y-1/2 text-[22px] text-[#717971]">barcode_scanner</Icon>
             </div>
+
+            {hasSearchQuery && isSearchLoading ? (
+              <div className="absolute left-5 right-5 top-full z-30 mt-2 rounded-xl border border-[#c1c9c0] bg-white p-3 text-sm text-[#717971] shadow-2xl">
+                Đang tìm sản phẩm...
+              </div>
+            ) : null}
+            {showSearchDropdown ? (
+              <div className="custom-scrollbar absolute left-5 right-5 top-full z-30 mt-2 max-h-[min(45vh,400px)] overflow-y-auto rounded-xl border border-[#c1c9c0] bg-white shadow-2xl">
+                {searchProducts.map((item) => {
+                  const outOfStock = Number(item.stockQuantity) <= 0
+                  return (
+                  <button
+                    key={`${item.productId}-${item.sku}`}
+                    type="button"
+                    onClick={() => addToCart(item)}
+                    className="flex w-full items-center gap-3 border-b border-[#f0eee6] p-3.5 text-left last:border-b-0 hover:bg-[#f6f4ec]"
+                  >
+                    <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-[#ceebc1]">
+                      <Icon className="text-[24px] text-[#4a6242]">eco</Icon>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-base font-medium">{item.name}</div>
+                      <div className="text-xs text-[#717971]">
+                        {item.sku} ·{' '}
+                        <span
+                          className={
+                            outOfStock
+                              ? 'font-semibold text-[#7e5700]'
+                              : Number(item.stockQuantity) <= 5
+                                ? 'font-semibold text-[#7e5700]'
+                                : ''
+                          }
+                        >
+                          {formatStockHint(item.stockQuantity)}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="shrink-0 text-base font-bold text-[#356647]">{formatMoney(item.price)}</div>
+                  </button>
+                  )
+                })}
+              </div>
+            ) : null}
+            {showSearchEmpty ? (
+              <div className="absolute left-5 right-5 top-full z-30 mt-2 rounded-xl border border-[#c1c9c0] bg-white p-3 text-sm text-[#717971] shadow-2xl">
+                Không tìm thấy sản phẩm.
+              </div>
+            ) : null}
           </div>
 
-          {/* <footer className="flex items-center gap-2 overflow-x-auto border-t border-[#c1c9c0] bg-[#f0eee6] p-4 no-scrollbar">
-            {categories.map((category) => (
-              <button
-                key={category}
-                type="button"
-                onClick={() => setActiveCategory(category)}
-                className={`whitespace-nowrap rounded-full px-4 py-2 text-sm transition-all ${
-                  activeCategory === category
-                    ? 'bg-[#356647] text-white shadow-sm'
-                    : 'bg-[#e4e3db] text-[#414942] hover:bg-[#627b59] hover:text-white'
-                }`}
-              >
-                {category}
-              </button>
-            ))}
-          </footer> */}
+          <div className="custom-scrollbar flex-1 overflow-y-auto p-4 md:p-5">
+            {!hasCartItems ? (
+              <div className="flex h-full min-h-[320px] flex-col items-center justify-center rounded-2xl border border-dashed border-[#c1c9c0]/80 bg-[#f6f4ec]/40 p-8 text-center">
+                <Icon className="mb-4 text-[72px] text-[#717971]/50">shopping_cart</Icon>
+                <p className="text-lg font-semibold text-[#414942]">Chưa có sản phẩm</p>
+                <p className="mt-2 text-base text-[#717971]">Tìm và chọn sản phẩm ở ô phía trên.</p>
+              </div>
+            ) : (
+              <div className="space-y-2.5">
+                <p className="mb-3 px-1 text-xs font-bold uppercase tracking-wider text-[#717971]">
+                  {cartItems.length} SP · {activeTab.label}
+                </p>
+                {cartItems.map((item) => {
+                  const lineGross = getLineGross(item)
+                  const lineTotal = getLineTotal(item)
+                  const isPercent = item.lineDiscountType !== 'amount'
+                  const isDiscountOpen = openDiscountSku === item.sku
+                  const discountLabel = formatLineDiscountLabel(item)
+                  const lineDiscountCapHint = isPercent
+                    ? 'Tối đa 100%'
+                    : lineGross > 0
+                      ? `Tối đa ${formatMoney(lineGross)} đ`
+                      : 'Thành tiền dòng: 0 đ'
+
+                  return (
+                    <div
+                      key={item.sku}
+                      className="relative flex items-center gap-3 rounded-xl border border-[#c1c9c0]/50 bg-[#fbf9f1] px-3 py-3"
+                    >
+                      <div className="min-w-0 flex-[1.2]">
+                        <p className="truncate text-base font-semibold leading-snug text-[#1b1c17]" title={item.name}>
+                          {item.name}
+                        </p>
+                        <p className="mt-0.5 text-sm text-[#717971]">
+                          {formatMoney(item.price)} đ
+                          <span
+                            className={`ml-1 text-xs ${
+                              Number(item.stockQuantity) <= 0 ? 'font-semibold text-[#7e5700]' : ''
+                            }`}
+                          >
+                            · {formatStockHint(item.stockQuantity)}
+                          </span>
+                          {discountLabel ? (
+                            <span className="ml-1 text-xs font-semibold text-[#7e5700]">{discountLabel}</span>
+                          ) : null}
+                        </p>
+                      </div>
+
+                      <div className="flex shrink-0 items-center overflow-hidden rounded-lg border border-[#c1c9c0] text-base">
+                        <button
+                          type="button"
+                          onClick={() => updateQuantity(item.sku, 'dec')}
+                          className="px-2.5 py-1.5 text-lg font-bold text-[#356647] hover:bg-white"
+                        >
+                          -
+                        </button>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          aria-label={`Số lượng ${item.name}`}
+                          className="w-[3.25rem] border-x border-[#c1c9c0] bg-white px-1 py-1 text-center text-base font-semibold outline-none focus:bg-[#f6f4ec] focus:ring-1 focus:ring-[#356647]/30"
+                          value={item.qty}
+                          onChange={(event) => setLineQuantity(item.sku, event.target.value)}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => updateQuantity(item.sku, 'inc')}
+                          className="px-2.5 py-1.5 text-lg font-bold text-[#356647] hover:bg-white"
+                        >
+                          +
+                        </button>
+                      </div>
+
+                      <div className="relative w-[5.5rem] shrink-0">
+                        <button
+                          type="button"
+                          onMouseDown={(event) => event.stopPropagation()}
+                          onClick={() => setOpenDiscountSku(isDiscountOpen ? null : item.sku)}
+                          className={`w-full rounded-lg px-1 py-1 text-right text-base font-bold transition-colors ${
+                            isDiscountOpen
+                              ? 'bg-[#356647] text-white'
+                              : 'text-[#356647] hover:bg-[#356647]/10'
+                          }`}
+                          title="Bấm để chỉnh chiết khấu"
+                        >
+                          {formatMoney(lineTotal)} đ
+                        </button>
+
+                        {isDiscountOpen ? (
+                          <div
+                            ref={discountPopoverRef}
+                            onMouseDown={(event) => event.stopPropagation()}
+                            className="absolute right-0 top-full z-20 mt-1 w-56 rounded-xl border border-[#c1c9c0] bg-white p-3 shadow-xl"
+                          >
+                            <p className="mb-2 text-xs font-bold uppercase tracking-wider text-[#717971]">
+                              Chiết khấu dòng
+                            </p>
+                            <div className="flex overflow-hidden rounded-lg border border-[#c1c9c0]">
+                              <div className="flex shrink-0 border-r border-[#c1c9c0]">
+                                <button
+                                  type="button"
+                                  onClick={() => updateLineDiscountType(item.sku, 'percent')}
+                                  className={`px-3 py-2 text-xs font-bold ${
+                                    isPercent ? 'bg-[#356647] text-white' : 'text-[#717971] hover:bg-[#f6f4ec]'
+                                  }`}
+                                >
+                                  %
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => updateLineDiscountType(item.sku, 'amount')}
+                                  className={`px-3 py-2 text-xs font-bold ${
+                                    !isPercent ? 'bg-[#356647] text-white' : 'text-[#717971] hover:bg-[#f6f4ec]'
+                                  }`}
+                                >
+                                  VNĐ
+                                </button>
+                              </div>
+                              <input
+                                type={isPercent ? 'number' : 'text'}
+                                inputMode="numeric"
+                                min={isPercent ? 0 : undefined}
+                                max={isPercent ? 100 : undefined}
+                                className="min-w-0 flex-1 px-3 py-2 text-sm outline-none"
+                                placeholder={isPercent ? 'Nhập %' : 'Nhập VNĐ'}
+                                autoFocus
+                                value={
+                                  isPercent
+                                    ? item.lineDiscountValue || ''
+                                    : item.lineDiscountValue
+                                      ? formatMoney(item.lineDiscountValue)
+                                      : ''
+                                }
+                                onChange={(event) => updateLineDiscountValue(item.sku, event.target.value)}
+                              />
+                            </div>
+                            <p className="mt-2 text-[11px] text-[#717971]">{lineDiscountCapHint}</p>
+                          </div>
+                        ) : null}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => removeItem(item.sku)}
+                        className="shrink-0 p-1 text-[#ba1a1a] opacity-60 hover:opacity-100"
+                        aria-label="Xóa"
+                      >
+                        <Icon className="text-[22px]">close</Icon>
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
         </section>
 
-        <section className="z-10 flex w-[380px] flex-col bg-[#fbf9f1] shadow-[-4px_0_20px_rgba(0,0,0,0.02)]">
-          <div className="border-b border-[#c1c9c0] p-4">
-            <div className="flex items-center gap-2 rounded-lg border border-[#c1c9c0]/50 bg-[#f6f4ec] px-3 py-2 transition-all focus-within:border-[#356647]">
-              <Icon className="text-[#717971]">person_add</Icon>
-              <input className="w-full border-none bg-transparent text-sm outline-none focus:ring-0" placeholder="Tìm hoặc thêm khách hàng" type="text" value={selectedCustomer} readOnly />
-              <button
-                type="button"
-                onClick={handleAddCustomer}
-                className="rounded-full bg-[#356647] px-3 py-1 text-xs font-bold text-white transition-colors hover:bg-[#4e7f5e]"
-              >
-                Thêm khách hàng
-              </button>
-            </div>
-          </div>
-
+        {/* Right: customer, discount, payment */}
+        <section className="order-2 flex max-h-[min(52vh,520px)] w-full shrink-0 flex-col border-t border-[#c1c9c0] bg-[#f6f4ec] xl:max-h-none xl:w-[min(100%,420px)] xl:border-l xl:border-t-0 xl:shadow-[-4px_0_20px_rgba(0,0,0,0.04)]">
           <div className="custom-scrollbar flex-1 space-y-4 overflow-y-auto p-4">
-            {cartItems.map((item) => (
-              <div key={item.name} className="group flex gap-3 rounded-lg bg-[#f6f4ec] p-2">
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-bold text-[#1b1c17]">{item.name}</div>
-                  <div className="mt-1 flex items-center gap-2">
-                    <div className="flex items-center overflow-hidden rounded-md border border-[#c1c9c0]">
-                      <button type="button" onClick={() => updateQuantity(item.name, 'dec')} className="px-2 py-0.5 font-bold text-[#356647] transition-colors hover:bg-[#e4e3db]">
-                        -
-                      </button>
-                      <input
-                        type="text"
-                        value={item.qty}
-                        readOnly
-                        className={`${String(item.qty).length > 2 ? 'w-12' : 'w-10'} border-none bg-transparent p-0 text-center text-sm outline-none focus:ring-0`}
-                      />
-                      <button type="button" onClick={() => updateQuantity(item.name, 'inc')} className="px-2 py-0.5 font-bold text-[#356647] transition-colors hover:bg-[#e4e3db]">
-                        +
-                      </button>
+            <div className="relative rounded-xl bg-white p-3 shadow-sm">
+              <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[#717971]">Khách hàng</label>
+              {selectedCustomer ? (
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setOpenModal('customer-detail')}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault()
+                      setOpenModal('customer-detail')
+                    }
+                  }}
+                  className="flex w-full items-center gap-2 rounded-lg border border-[#356647]/30 bg-[#356647]/5 px-3 py-2 text-left"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-[#1b1c17]">{selectedCustomer.fullName}</p>
+                    <p className="truncate text-xs text-[#717971]">
+                      {selectedCustomer.phone || '—'} · {selectedCustomer.customerCode}
+                    </p>
+                    {isVipCustomerType(selectedCustomer.customerType) ? (
+                      <p className="mt-1 inline-flex">
+                        <span className="rounded-full bg-[#fec25b] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#744f00]">
+                          Khách VIP
+                        </span>
+                      </p>
+                    ) : selectedCustomer.tierCode ? (
+                      <p className="mt-0.5 text-xs font-semibold text-[#356647]">
+                        Hạng {selectedCustomer.tierCode}
+                        {tierDiscountPercent > 0 ? ` · CK ${tierDiscountPercent}%` : ''}
+                      </p>
+                    ) : null}
+                    {Number(selectedCustomer.currentDebt) > 0 ? (
+                      <p className="mt-0.5 text-xs font-semibold text-[#7e5700]">
+                        Công nợ: {formatMoney(selectedCustomer.currentDebt)} đ
+                      </p>
+                    ) : null}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      updateActiveSession({
+                        selectedCustomer: null,
+                        customerSearchValue: '',
+                        orderDiscountPercent: 0,
+                        orderDiscountAmountFixed: 0,
+                      })
+                    }}
+                    className="shrink-0 rounded-lg border border-[#c1c9c0] px-2 py-1 text-xs font-semibold text-[#414942] hover:bg-[#f6f4ec]"
+                  >
+                    Đổi
+                  </button>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <div className="relative min-w-0 flex-1">
+                    <Icon className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[18px] text-[#717971]">person</Icon>
+                    <input
+                      className="w-full rounded-lg border border-[#c1c9c0]/60 bg-[#fbf9f1] py-2 pl-9 pr-2 text-sm outline-none focus:border-[#356647] focus:ring-2 focus:ring-[#356647]/20"
+                      placeholder="Tìm tên, SĐT, mã KH..."
+                      value={customerSearchValue}
+                      onChange={(event) => updateActiveSession({ customerSearchValue: event.target.value })}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setOpenModal('customer')}
+                    className="shrink-0 rounded-lg bg-[#356647] px-3 py-2 text-xs font-bold text-white hover:bg-[#4e7f5e]"
+                  >
+                    Thêm KH
+                  </button>
+                </div>
+              )}
+
+              {!selectedCustomer && isCustomerSearchLoading ? (
+                <p className="mt-2 text-xs text-[#717971]">Đang tìm khách hàng...</p>
+              ) : null}
+              {showCustomerDropdown ? (
+                <div className="custom-scrollbar absolute left-3 right-3 top-full z-40 mt-1 max-h-52 overflow-y-auto rounded-xl border border-[#c1c9c0] bg-white shadow-2xl">
+                  {customerSearchResults.map((customer) => (
+                    <button
+                      key={customer.customerId}
+                      type="button"
+                      onClick={() => selectCustomer(customer)}
+                      className="flex w-full flex-col border-b border-[#f0eee6] px-3 py-2.5 text-left last:border-b-0 hover:bg-[#f6f4ec]"
+                    >
+                      <span className="text-sm font-semibold text-[#1b1c17]">{customer.fullName}</span>
+                      <span className="text-xs text-[#717971]">
+                        {customer.phone || '—'} · {customer.customerCode}
+                        {Number(customer.currentDebt) > 0 ? ` · Nợ ${formatMoney(customer.currentDebt)} đ` : ''}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+              {showCustomerSearchEmpty ? (
+                <p className="mt-2 text-xs text-[#717971]">Không tìm thấy khách hàng.</p>
+              ) : null}
+              {!hasCustomerSelected ? (
+                <p className="mt-2 text-xs font-medium text-[#ba1a1a]">
+                </p>
+              ) : null}
+            </div>
+
+            {isTakeaway ? (
+              <div className="rounded-xl bg-white p-3 shadow-sm">
+                <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[#717971]" htmlFor="shipping-address">
+                  Địa chỉ giao hàng
+                </label>
+                {isLoadingShippingAddresses ? (
+                  <p className="text-xs text-[#717971]">Đang tải địa chỉ đã giao...</p>
+                ) : null}
+                {!isLoadingShippingAddresses && savedShippingAddresses.length > 0 ? (
+                  <select
+                    id="shipping-address-select"
+                    className="mb-2 w-full rounded-lg border border-[#c1c9c0] bg-[#fbf9f1] px-3 py-2 text-sm outline-none focus:border-[#356647] focus:ring-2 focus:ring-[#356647]/20"
+                    value={useCustomShippingAddress ? '__custom__' : shippingAddress}
+                    onChange={(event) => handleSavedShippingAddressChange(event.target.value)}
+                  >
+                    {savedShippingAddresses.map((addr) => (
+                      <option key={addr} value={addr}>
+                        {addr.length > 72 ? `${addr.slice(0, 72)}…` : addr}
+                      </option>
+                    ))}
+                    <option value="__custom__">Nhập địa chỉ khác...</option>
+                  </select>
+                ) : null}
+                {(useCustomShippingAddress || savedShippingAddresses.length === 0) && !isLoadingShippingAddresses ? (
+                  <textarea
+                    id="shipping-address"
+                    rows={3}
+                    className="w-full resize-none rounded-lg border border-[#c1c9c0] bg-[#fbf9f1] px-3 py-2 text-sm outline-none focus:border-[#356647] focus:ring-2 focus:ring-[#356647]/20"
+                    placeholder="Số nhà, phường, quận, tỉnh..."
+                    value={shippingAddress}
+                    onChange={(event) => updateActiveSession({ shippingAddress: event.target.value })}
+                  />
+                ) : null}
+                {!hasShippingAddress && !isLoadingShippingAddresses ? (
+                  <p className="mt-2 text-xs font-medium text-[#ba1a1a]">Vui lòng chọn hoặc nhập địa chỉ giao.</p>
+                ) : null}
+              </div>
+            ) : null}
+
+            {canUseOrderDiscount ? (
+            <div className="rounded-xl bg-white p-3 shadow-sm">
+              <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[#717971]">Chiết khấu đơn</label>
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    disabled={usesFixedOrderDiscount}
+                    className="w-full rounded-lg border border-[#c1c9c0] py-2 pl-3 pr-7 text-sm outline-none focus:border-[#356647] disabled:bg-slate-50 disabled:text-slate-400"
+                    value={usesFixedOrderDiscount ? '' : orderDiscountPercent || ''}
+                    onChange={(event) => updateOrderDiscountPercent(event.target.value)}
+                    placeholder={usesFixedOrderDiscount ? '—' : '0'}
+                  />
+                  <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-[#717971]">%</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setOpenModal('offer')}
+                  className="shrink-0 rounded-lg border border-[#356647]/40 px-3 py-2 text-xs font-semibold text-[#356647] hover:bg-[#356647]/5"
+                >
+                  Tùy chỉnh
+                </button>
+              </div>
+              {usesFixedOrderDiscount ? (
+                <p className="mt-2 text-xs font-semibold text-[#356647]">
+                  CK cố định: -{formatMoney(orderDiscountAmount)} đ
+                </p>
+              ) : null}
+              {isTakeaway ? (
+                <p className="mt-2 text-xs text-[#717971]">
+                  Bấm thành tiền từng SP để CK dòng. Tổng đơn gửi COD/VietQR đã trừ CK.
+                </p>
+              ) : null}
+            </div>
+            ) : null}
+
+            <div className="rounded-xl bg-white p-3 shadow-sm">
+              <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[#717971]">
+                Mã giảm giá
+              </label>
+              {appliedPromotion ? (
+                <div className="flex items-center justify-between gap-2 rounded-lg border border-[#356647]/30 bg-[#356647]/5 px-3 py-2">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-[#356647]">
+                      {formatPromotionLabel(appliedPromotion)}
+                    </p>
+                    {couponDiscountAmount > 0 ? (
+                      <p className="text-xs text-[#717971]">Giảm {formatMoney(couponDiscountAmount)} đ</p>
+                    ) : null}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleClearPromoCode}
+                    className="shrink-0 text-xs font-semibold text-[#717971] hover:text-[#ba1a1a]"
+                  >
+                    Gỡ
+                  </button>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    className="min-w-0 flex-1 rounded-lg border border-[#c1c9c0] bg-[#fbf9f1] px-3 py-2 text-sm uppercase outline-none focus:border-[#356647] focus:ring-2 focus:ring-[#356647]/20"
+                    placeholder="VD: SALE10"
+                    value={promoCodeInput}
+                    onChange={(event) => updateActiveSession({ promoCodeInput: event.target.value.toUpperCase() })}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault()
+                        handleApplyPromoCode()
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    disabled={isApplyingPromo || !promoCodeInput.trim()}
+                    onClick={handleApplyPromoCode}
+                    className="shrink-0 rounded-lg bg-[#356647] px-3 py-2 text-xs font-bold text-white hover:bg-[#4e7f5e] disabled:opacity-50"
+                  >
+                    {isApplyingPromo ? '...' : 'Áp dụng'}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-xl bg-white p-4 shadow-sm">
+              <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[#717971]">Tổng tiền</label>
+              <div className="text-3xl font-bold text-[#356647]">{formatMoney(total)} đ</div>
+              {isZeroAmountSale ? (
+                <p className="mt-1 text-xs font-medium text-[#356647]">
+                  Đơn 0 đ sau chiết khấu — bấm thanh toán tiền mặt (không cần nhập tiền khách trả).
+                </p>
+              ) : null}
+              {hasCartItems ? (
+                <div className="mt-2 space-y-1 border-t border-[#f0eee6] pt-2 text-xs text-[#717971]">
+                  <div className="flex justify-between">
+                    <span>Tạm tính</span>
+                    <span>{formatMoney(grossSubtotal)} đ</span>
+                  </div>
+                  {itemDiscountTotal > 0 ? (
+                    <div className="flex justify-between text-[#356647]">
+                      <span>CK từng SP</span>
+                      <span>-{formatMoney(itemDiscountTotal)} đ</span>
                     </div>
-                    <div className="text-[11px] text-[#717971]">
-                      {item.unit} {formatMoney(item.price)}
+                  ) : null}
+                  {canUseOrderDiscount && orderDiscountAmount > 0 ? (
+                    <div className="flex justify-between text-[#356647]">
+                      <span>
+                        {usesFixedOrderDiscount ? 'CK đơn (VNĐ)' : `CK đơn (${orderDiscountPercent}%)`}
+                      </span>
+                      <span>-{formatMoney(orderDiscountAmount)} đ</span>
                     </div>
+                  ) : null}
+                  {couponDiscountAmount > 0 ? (
+                    <div className="flex justify-between text-[#356647]">
+                      <span>Mã {appliedPromotion?.promoCode || 'giảm giá'}</span>
+                      <span>-{formatMoney(couponDiscountAmount)} đ</span>
+                    </div>
+                  ) : null}
+                  {membershipDiscountAmount > 0 ? (
+                    <div className="flex justify-between text-[#356647]">
+                      <span>
+                        CK hạng {selectedCustomer?.tierCode || 'VIP'} ({tierDiscountPercent}%)
+                      </span>
+                      <span>-{formatMoney(membershipDiscountAmount)} đ</span>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+
+            {isTakeaway && paymentMethod === 'COD' ? (
+              <div className="rounded-xl border border-orange-200 bg-orange-50 p-4 text-sm text-[#414942]">
+                <p className="font-semibold text-orange-800">Thanh toán COD</p>
+                <p className="mt-1 text-[#717971]">
+                  Khách thanh toán khi nhận hàng. Đơn xuất hiện tại mục Đơn COD để nhân viên giao và xác nhận thu tiền.
+                </p>
+              </div>
+            ) : null}
+
+            {!isTakeaway && !isTransferPayment ? (
+              <>
+                <div className="rounded-xl bg-white p-4 shadow-sm">
+                  <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[#717971]" htmlFor="amount-paid">
+                    Khách trả
+                  </label>
+                  <input
+                    id="amount-paid"
+                    type="text"
+                    inputMode="numeric"
+                    className="w-full rounded-xl border border-[#c1c9c0] bg-[#fbf9f1] px-3 py-2.5 text-2xl font-bold outline-none focus:border-[#356647] focus:ring-2 focus:ring-[#356647]/20"
+                    
+                    value={amountPaidInput}
+                    onChange={(event) =>
+                      updateActiveSession({ amountPaidInput: event.target.value.replace(/\D/g, '') })
+                    }
+                  />
+                  <p className="mt-1.5 text-xs text-[#717971]">
+                    Để trống: ghi nợ {formatMoney(total)} đ. Nhập {formatMoney(total)} đ hoặc bấm Đúng tiền để thanh toán hết.
+                  </p>
+                  <div className="mt-2 flex items-center justify-between rounded-lg bg-[#f6f4ec] px-3 py-2 text-sm">
+                    <span className="text-[#717971]">Khách trả</span>
+                    <span className="font-bold text-[#1b1c17]">{formatMoney(amountPaid)} đ</span>
+                  </div>
+                  {debtAmount > 0 ? (
+                    <div className="mt-2 flex items-center justify-between rounded-lg bg-[#fec25b]/20 px-3 py-2 text-sm">
+                      <span className="font-semibold text-[#7e5700]">Dư nợ (đơn này)</span>
+                      <span className="font-bold text-[#7e5700]">{formatMoney(debtAmount)} đ</span>
+                    </div>
+                  ) : null}
+                  <div className="mt-2 grid grid-cols-3 gap-1.5">
+                    {[50000, 100000, 200000, 500000, 1000000].map((quick) => (
+                      <button
+                        key={quick}
+                        type="button"
+                        onClick={() => handleQuickAmount(quick)}
+                        className="rounded-lg bg-[#e4e3db] py-1.5 text-[10px] font-bold hover:bg-[#356647] hover:text-white"
+                      >
+                        {formatMoney(quick)}
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => handleQuickAmount(total)}
+                      className="rounded-lg bg-[#356647]/15 py-1.5 text-[10px] font-bold text-[#356647] hover:bg-[#356647] hover:text-white"
+                    >
+                      Đúng tiền
+                    </button>
                   </div>
                 </div>
 
-                <div className="shrink-0 text-right">
-                  <div className="font-bold text-[#1b1c17]">{formatMoney(item.qty * item.price)}</div>
-                  <Icon className="cursor-pointer text-[18px] text-[#ba1a1a] opacity-0 transition-opacity group-hover:opacity-100">delete</Icon>
+                <div className="rounded-xl bg-white p-4 shadow-sm">
+                  <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-[#717971]">Tiền thừa</label>
+                  <div className={`text-2xl font-bold ${change > 0 ? 'text-[#356647]' : 'text-[#717971]'}`}>
+                    {change > 0 ? `${formatMoney(change)} đ` : '—'}
+                  </div>
+                  {isDebtSale ? (
+                    <p className="mt-1 text-xs font-medium text-[#7e5700]">Bán ghi nợ — chưa thu tiền mặt</p>
+                  ) : isPartialCashPayment ? (
+                    <p className="mt-1 text-xs text-[#717971]">Thanh toán một phần, phần còn lại ghi vào dư nợ</p>
+                  ) : null}
                 </div>
+              </>
+            ) : isTransferPayment ? (
+              <div className="rounded-xl border border-[#356647]/20 bg-[#356647]/5 p-4 text-sm text-[#414942]">
+                <p className="font-semibold text-[#356647]">Thanh toán chuyển khoản</p>
+                <p className="mt-1 text-[#717971]">Bấm Thanh toán để hiển thị mã QR cho khách quét.</p>
               </div>
-            ))}
+            ) : null}
+
+            <div className="rounded-xl bg-white p-4 shadow-sm">
+              <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[#717971]">Phương thức thanh toán</label>
+              <div className="space-y-1.5">
+                {paymentMethods.map((method) => (
+                  <button
+                    key={method.id}
+                    type="button"
+                    onClick={() => updateActiveSession({ paymentMethod: method.id })}
+                    className={`flex w-full items-center gap-2 rounded-lg border-2 px-3 py-2.5 text-left text-sm transition-all ${
+                      paymentMethod === method.id
+                        ? 'border-[#356647] bg-[#356647]/10 font-semibold text-[#356647]'
+                        : 'border-transparent bg-[#fbf9f1] hover:border-[#c1c9c0]'
+                    }`}
+                  >
+                    <Icon className="text-[20px]" filled={paymentMethod === method.id}>
+                      {method.icon}
+                    </Icon>
+                    {method.label}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
 
-          <div className="space-y-4 border-t border-[#c1c9c0] bg-[#f6f4ec] p-6">
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm text-[#414942]">
-                <span>Tổng tiền hàng</span>
-                <span>{formatMoney(subtotal)}</span>
-              </div>
-              <div className="flex items-center justify-between text-sm text-[#414942]">
-                <span>Giảm giá</span>
-                <button type="button" onClick={handleAddDiscount} className="flex items-center border-b border-[#717971] font-bold text-[#356647] transition-colors hover:border-[#356647]">
-                  Thêm chiết khấu
-                </button>
-              </div>
-              <div className="flex justify-between text-sm text-[#414942]">
-                <span>Tiền giảm</span>
-                <span>-{formatMoney(discountAmount)}</span>
-              </div>
-              <div className="flex items-center justify-between border-t border-[#c1c9c0]/50 pt-2">
-                <span className="font-bold text-[#1b1c17]">Khách cần trả</span>
-                <span className="text-2xl font-display-md text-[#356647]">{formatMoney(total)}</span>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 pt-2">
-              <button type="button" className="flex flex-col items-center justify-center rounded-xl bg-[#ffdead] py-3 font-body-md font-bold text-[#604100] shadow-sm transition-all hover:brightness-95 active:scale-95">
-                <span className="text-[10px] opacity-70">F10</span>
-                <span>Lưu tạm</span>
-              </button>
-              <button type="button" className="flex flex-col items-center justify-center rounded-xl bg-[#356647] py-3 font-body-md font-bold text-white shadow-md transition-all hover:brightness-110 active:scale-95">
-                <span className="text-[10px] opacity-70">F12</span>
-                <span>Thanh toán</span>
-              </button>
-            </div>
+          <div className="grid grid-cols-1 gap-2 border-t border-[#c1c9c0] p-3">
+        
+            <button
+              type="button"
+              disabled={!canPay}
+              onClick={handlePayment}
+              className="flex flex-col items-center justify-center rounded-xl bg-[#356647] py-3 text-sm font-bold text-white shadow-md hover:brightness-110 disabled:opacity-50"
+            >
+              <span className="text-[10px] opacity-70">F12</span>
+              {isSubmitting
+                ? 'Đang xử lý...'
+                : isTakeaway
+                  ? paymentMethod === 'TRANSFER'
+                    ? 'Tạo đơn · QR'
+                    : 'Tạo đơn COD'
+                  : isTransferPayment
+                    ? 'Thanh toán · QR'
+                    : 'Thanh toán'}
+            </button>
           </div>
         </section>
       </div>
 
+      <footer className="shrink-0 border-t border-[#c1c9c0]/60 bg-[#f6f4ec] px-4 py-3">
+        <div className="grid grid-cols-2 gap-2">
+          {SALES_MODES.map((mode) => (
+            <button
+              key={mode.id}
+              type="button"
+              onClick={() => {
+                setSalesMode(mode.id)
+                setOpenDiscountSku(null)
+              }}
+              className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-bold transition-colors ${
+                salesMode === mode.id
+                  ? 'bg-[#356647] text-white shadow-md shadow-[#356647]/25'
+                  : 'border border-[#c1c9c0] bg-white text-[#414942] hover:bg-[#e4e3db]'
+              }`}
+            >
+              <Icon className="text-[22px]" filled={salesMode === mode.id}>
+                {mode.icon}
+              </Icon>
+              {mode.label}
+            </button>
+          ))}
+        </div>
+      </footer>
+
       <AddCustomerModal
         isOpen={openModal === 'customer'}
-        onClose={() => {
+        onClose={() => setOpenModal(null)}
+        onSaved={(customer) => {
+          selectCustomer(customer)
           setOpenModal(null)
-          setSelectedCustomer('Tìm hoặc thêm khách hàng')
         }}
       />
       <OrderOfferModal
         isOpen={openModal === 'offer'}
-        onClose={() => {
+        initialPercent={orderDiscountPercent}
+        initialFixedAmount={orderDiscountAmountFixed}
+        maxFixedAmount={subtotalAfterItemDiscount}
+        onClose={() => setOpenModal(null)}
+        onConfirm={({ percent, fixedAmount, warning }) => {
+          const result = normalizeOrderDiscountInput({
+            percent,
+            fixedAmount,
+            subtotalAfterItemDiscount,
+          })
+          if (!result.ok) {
+            showError(result.error)
+            return
+          }
+          updateActiveSession({
+            orderDiscountPercent: result.orderDiscountPercent,
+            orderDiscountAmountFixed: result.orderDiscountAmountFixed,
+          })
+          if (warning || result.warning) {
+            showError(warning || result.warning)
+          }
           setOpenModal(null)
-          setDiscountPercent(0)
         }}
+      />
+      <CustomerDetailModal
+        isOpen={openModal === 'customer-detail'}
+        customer={selectedCustomer}
+        onClose={() => setOpenModal(null)}
+      />
+      <ConfirmDialog
+        isOpen={Boolean(tabCloseConfirm)}
+        title="Xóa tab hóa đơn?"
+        message={
+          tabCloseConfirm
+            ? `Bạn có chắc muốn đóng "${tabCloseConfirm.label}"? Giỏ hàng và thông tin khách trên tab này sẽ bị xóa.`
+            : ''
+        }
+        confirmLabel="Xóa tab"
+        cancelLabel="Hủy"
+        onConfirm={handleConfirmCloseTab}
+        onCancel={() => setTabCloseConfirm(null)}
       />
     </div>
   )

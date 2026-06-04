@@ -5,9 +5,10 @@ namespace HuongVanTra.Core.Entities.Sales {
     public class StockDeductQueue {
         public int Id { get; set; }
         public int OrderId { get; set; }
-        public string Status { get; set; } = "PENDING";
+        public string Status { get; set; } = "waiting";
         public string BomSnapshot { get; set; } = "{}";
         public int? ConfirmedById { get; set; }
+        public DateTime? ConfirmedAt { get; set; }
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 

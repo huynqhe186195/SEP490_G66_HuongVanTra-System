@@ -10,6 +10,9 @@ namespace HuongVanTra.Infrastructure.Configurations.Sales {
 
             builder.Property(x => x.PaymentMethod).HasMaxLength(30).IsRequired();
             builder.Property(x => x.Amount).HasColumnType("decimal(18,2)");
+            builder.Property(x => x.Status).HasMaxLength(30).IsRequired();
+            builder.Property(x => x.ReferenceCode).HasMaxLength(100);
+            builder.Property(x => x.Note).HasMaxLength(500);
 
             builder.HasOne(pt => pt.Order)
                    .WithMany(o => o.PaymentTransactions)

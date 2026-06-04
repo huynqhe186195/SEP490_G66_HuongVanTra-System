@@ -9,6 +9,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
+using Microsoft.AspNetCore.Identity;
 
 namespace HuongVanTra.Service.Auth {
     public class AuthService : IAuthService {
@@ -16,10 +17,12 @@ namespace HuongVanTra.Service.Auth {
 
         private readonly AppDbContext _dbContext;
         private readonly IConfiguration _configuration;
+        private readonly IPasswordHasher<HuongVanTra.Core.Entities.Identity.User> _passwordHasher;
 
-        public AuthService(AppDbContext dbContext, IConfiguration configuration) {
+        public AuthService(AppDbContext dbContext, IConfiguration configuration, IPasswordHasher<HuongVanTra.Core.Entities.Identity.User> passwordHasher) {
             _dbContext = dbContext;
             _configuration = configuration;
+            _passwordHasher = passwordHasher;
         }
 
         public async Task<AuthResult?> LoginAsync(string username, string password) {
@@ -29,8 +32,33 @@ namespace HuongVanTra.Service.Auth {
                         .ThenInclude(er => er.Role)
                 .FirstOrDefaultAsync(u => u.Username == username && u.IsActive == 1);
 
-            if (user is null || !string.Equals(user.PasswordHash, password, StringComparison.Ordinal)) {
+            if (user is null) {
                 return null;
+            }
+
+            // Verify password: support existing hashed passwords and legacy plaintext values.
+            var verification = PasswordVerificationResult.Failed;
+            try {
+                verification = _passwordHasher.VerifyHashedPassword(user, user.PasswordHash, password);
+            }
+            catch {
+                verification = PasswordVerificationResult.Failed;
+            }
+
+            if (verification == PasswordVerificationResult.Failed) {
+                // Fallback: some existing records may have stored plaintext in PasswordHash.
+                if (!string.Equals(user.PasswordHash, password, StringComparison.Ordinal)) {
+                    return null;
+                }
+
+                // Legacy plaintext matched; rehash and persist.
+                user.PasswordHash = _passwordHasher.HashPassword(user, password);
+                await _dbContext.SaveChangesAsync();
+            }
+            else if (verification == PasswordVerificationResult.SuccessRehashNeeded) {
+                // Rehash to current format
+                user.PasswordHash = _passwordHasher.HashPassword(user, password);
+                await _dbContext.SaveChangesAsync();
             }
 
             var roleNames = GetRoleNames(user);
@@ -187,7 +215,9 @@ namespace HuongVanTra.Service.Auth {
             }
 
             foreach (var role in roleNames) {
+                claims.Add(new Claim(ClaimTypes.Role, role));
                 claims.Add(new Claim(AppClaims.Role, role));
+                claims.Add(new Claim(ClaimTypes.Role, role));
             }
 
             var signingCredentials = new SigningCredentials(

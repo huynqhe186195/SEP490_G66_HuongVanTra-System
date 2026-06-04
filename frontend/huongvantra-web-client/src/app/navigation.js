@@ -7,31 +7,65 @@ const ROLE_GROUPS = {
   customer: ['customer', 'khach hang', 'khách hàng'],
 }
 
-const HOME_MODULE_PRIORITY = [
+/** Tạm ẩn trên sidebar — bật lại khi backend sẵn sàng. */
+const SIDEBAR_DISABLED_MODULES = new Set([
   'dashboard',
-  'pos',
-  'inventory',
   'products',
+  'inventory',
+  'contracts',
+  'reports',
+  'integrations',
+])
+
+const HOME_MODULE_PRIORITY = [
+  'pos',
+  'cod_ops',
+  'stock_deduct_ops',
   'orders',
   'customers',
-  'reports',
   'staff',
-  'contracts',
-  'integrations',
 ]
 
+// --- Tạm ẩn (chưa xử lý backend) ---
+// { label: 'Dashboard', path: '/dashboard', module: 'dashboard', roles: ['admin', 'agencyManager', 'accountant'] },
+// { label: 'Sản phẩm', path: '/products', module: 'products', roles: ['admin', 'agencyManager', 'inventoryManager'] },
+// { label: 'Kho', path: '/inventory', module: 'inventory', roles: ['admin', 'agencyManager', 'inventoryManager'] },
+// { label: 'Hợp đồng', path: '/contracts', module: 'contracts', roles: ['admin', 'agencyManager'] },
+// { label: 'Báo cáo', path: '/reports', module: 'reports', roles: ['admin', 'agencyManager', 'accountant'] },
+// { label: 'Tích hợp', path: '/integrations', module: 'integrations', roles: ['admin'] },
+
 export const navigationItems = [
-  { label: 'Dashboard', path: '/dashboard', module: 'dashboard', roles: ['admin', 'agencyManager', 'accountant'] },
-  { label: 'POS bán hàng', path: '/pos', module: 'pos', roles: ['admin', 'agencyManager', 'salesStaff', 'customer'] },
-  { label: 'Đơn hàng', path: '/orders', module: 'orders', roles: ['admin', 'agencyManager'] },
-  { label: 'Sản phẩm', path: '/products', module: 'products', roles: ['admin', 'agencyManager', 'inventoryManager'] },
-  { label: 'Kho', path: '/inventory', module: 'inventory', roles: ['admin', 'agencyManager', 'inventoryManager'] },
-  { label: 'Khách hàng', path: '/customers', module: 'customers', roles: ['admin', 'agencyManager'] },
-  { label: 'Nhân sự', path: '/staff', module: 'staff', roles: ['admin', 'agencyManager'] },
-  { label: 'Hợp đồng', path: '/contracts', module: 'contracts', roles: ['admin', 'agencyManager'] },
-  { label: 'Báo cáo', path: '/reports', module: 'reports', roles: ['admin', 'agencyManager', 'accountant'] },
-  { label: 'Tích hợp', path: '/integrations', module: 'integrations', roles: ['admin'] },
+  { label: 'POS bán hàng', path: '/pos', module: 'pos', icon: 'point_of_sale', roles: ['agencyManager', 'salesStaff', 'customer'] },
+  { label: 'Đơn hàng', path: '/orders', module: 'orders', icon: 'receipt_long', roles: ['admin', 'agencyManager', 'salesStaff'] },
+  { label: 'Quản lý COD', path: '/orders/cod', module: 'cod_ops', icon: 'local_shipping', roles: ['agencyManager'] },
+  {
+    label: 'Chờ trừ kho',
+    path: '/orders/stock-deduct',
+    module: 'stock_deduct_ops',
+    icon: 'inventory_2',
+    roles: ['admin', 'agencyManager', 'inventoryManager'],
+  },
+  { label: 'Khách hàng', path: '/customers', module: 'customers', icon: 'groups', roles: ['admin', 'agencyManager'] },
+  { label: 'Nhân sự', path: '/staff', module: 'staff', icon: 'badge', roles: ['admin', 'agencyManager'] },
+  {
+    label: 'Hạng thẻ',
+    path: '/admin/membership-tiers',
+    module: 'membership_tiers_admin',
+    icon: 'military_tech',
+    roles: ['admin'],
+  },
+  {
+    label: 'Mã giảm giá',
+    path: '/admin/promotions',
+    module: 'promotions_admin',
+    icon: 'sell',
+    roles: ['admin'],
+  },
 ]
+
+function isSidebarModuleEnabled(module) {
+  return !SIDEBAR_DISABLED_MODULES.has(String(module || '').toLowerCase())
+}
 
 function normalizeRole(role) {
   return role.trim().toLowerCase().replace(/[._-]+/g, ' ').replace(/\s+/g, ' ')
@@ -55,7 +89,9 @@ export function getNavigationItemsForModules(modules = []) {
     return []
   }
 
-  const allowed = new Set(modules.map((module) => module.toLowerCase()))
+  const allowed = new Set(
+    modules.map((module) => module.toLowerCase()).filter(isSidebarModuleEnabled),
+  )
   return navigationItems.filter((item) => allowed.has(item.module))
 }
 
@@ -80,7 +116,9 @@ export function getHomeRouteForModules(modules = []) {
     return '/login'
   }
 
-  const allowed = new Set(modules.map((module) => module.toLowerCase()))
+  const allowed = new Set(
+    modules.map((module) => module.toLowerCase()).filter(isSidebarModuleEnabled),
+  )
 
   for (const module of HOME_MODULE_PRIORITY) {
     if (!allowed.has(module)) {
@@ -98,37 +136,16 @@ export function getHomeRouteForModules(modules = []) {
 }
 
 export function getHomeRouteForRoles(roles = []) {
+  const items = getNavigationItemsForRoles(roles)
+  if (items.length) {
+    return items[0].path
+  }
+
   if (!roles.length) {
     return '/login'
   }
 
-  const normalizedRoles = roles.map(normalizeRole)
-
-  if (normalizedRoles.some((role) => ROLE_GROUPS.admin.includes(role))) {
-    return '/dashboard'
-  }
-
-  if (normalizedRoles.some((role) => ROLE_GROUPS.agencyManager.includes(role))) {
-    return '/dashboard'
-  }
-
-  if (normalizedRoles.some((role) => ROLE_GROUPS.inventoryManager.includes(role))) {
-    return '/inventory'
-  }
-
-  if (normalizedRoles.some((role) => ROLE_GROUPS.salesStaff.includes(role))) {
-    return '/pos'
-  }
-
-  if (normalizedRoles.some((role) => ROLE_GROUPS.accountant.includes(role))) {
-    return '/reports'
-  }
-
-  if (normalizedRoles.some((role) => ROLE_GROUPS.customer.includes(role))) {
-    return '/pos'
-  }
-
-  return '/dashboard'
+  return '/profile'
 }
 
 export function resolveHomeRoute(authSession) {
@@ -140,7 +157,12 @@ export function resolveHomeRoute(authSession) {
     ? getHomeRouteForModules(authSession.modules)
     : getHomeRouteForRoles(authSession.roles ?? [])
 
-  return homeRoute === '/login' ? '/dashboard' : homeRoute
+  if (homeRoute === '/login') {
+    const items = getNavigationItemsForSession(authSession)
+    return items[0]?.path ?? '/profile'
+  }
+
+  return homeRoute
 }
 
 const MODULE_PATH_PREFIXES = [
@@ -148,9 +170,13 @@ const MODULE_PATH_PREFIXES = [
   { module: 'reports', prefix: '/reports' },
   { module: 'contracts', prefix: '/contracts' },
   { module: 'staff', prefix: '/staff' },
+  { module: 'membership_tiers_admin', prefix: '/admin/membership-tiers' },
+  { module: 'promotions_admin', prefix: '/admin/promotions' },
   { module: 'customers', prefix: '/customers' },
   { module: 'inventory', prefix: '/inventory' },
   { module: 'products', prefix: '/products' },
+  { module: 'cod_ops', prefix: '/orders/cod' },
+  { module: 'stock_deduct_ops', prefix: '/orders/stock-deduct' },
   { module: 'orders', prefix: '/orders' },
   { module: 'pos', prefix: '/pos' },
   { module: 'dashboard', prefix: '/dashboard' },
@@ -173,8 +199,22 @@ export function canAccessModule(session, module) {
     return true
   }
 
+  if (!isSidebarModuleEnabled(module)) {
+    return false
+  }
+
   if (session?.modules?.length) {
-    return session.modules.some((entry) => entry.toLowerCase() === module)
+    const normalizedModule = String(module).toLowerCase()
+    if (session.modules.some((entry) => entry.toLowerCase() === normalizedModule)) {
+      return true
+    }
+
+    const item = navigationItems.find((entry) => entry.module === normalizedModule)
+    if (item && session?.roles?.length) {
+      return hasAnyRoleGroup(session.roles, item.roles)
+    }
+
+    return false
   }
 
   if (session?.roles?.length) {
@@ -188,4 +228,62 @@ export function canAccessModule(session, module) {
 export function canAccessPath(session, pathname) {
   const module = getModuleForPath(pathname)
   return canAccessModule(session, module)
+}
+
+/** Xem danh sách / preview hàng chờ trừ kho (quản lý chi nhánh + thủ kho). */
+export function canViewStockDeductOps(session) {
+  return canAccessModule(session, 'stock_deduct_ops')
+}
+
+/** Xác nhận trừ kho — chỉ Admin và Thủ kho. */
+export function canConfirmStockDeduct(session) {
+  if (!session?.roles?.length) {
+    return false
+  }
+
+  return hasAnyRoleGroup(session.roles, ['admin', 'inventoryManager'])
+}
+
+export function getAccessDeniedMessage(pathname) {
+  const module = getModuleForPath(pathname)
+  if (module === 'cod_ops') {
+    return 'Chỉ Quản lý chi nhánh mới được truy cập Quản lý COD.'
+  }
+  if (module === 'stock_deduct_ops') {
+    return 'Chỉ Quản lý chi nhánh hoặc Thủ kho mới được xem hàng chờ trừ kho. Thao tác trừ kho do Thủ kho thực hiện.'
+  }
+  if (module === 'promotions_admin' || module === 'membership_tiers_admin') {
+    return 'Chỉ Admin mới được quản lý hạng thẻ và mã giảm giá.'
+  }
+  return 'Bạn không có quyền truy cập trang này.'
+}
+
+/** Sidebar highlight: /orders/cod must not activate the /orders item. */
+export function isNavigationItemActive(pathname, item) {
+  const path = (pathname || '').toLowerCase()
+  const target = (item?.path || '').toLowerCase()
+
+  if (!target) {
+    return false
+  }
+
+  if (item.module === 'cod_ops') {
+    return path === target || path.startsWith(`${target}/`)
+  }
+
+  if (item.module === 'stock_deduct_ops') {
+    return path === target || path.startsWith(`${target}/`)
+  }
+
+  if (item.module === 'orders') {
+    if (path === '/orders/cod' || path.startsWith('/orders/cod/')) {
+      return false
+    }
+    if (path === '/orders/stock-deduct' || path.startsWith('/orders/stock-deduct/')) {
+      return false
+    }
+    return path === target || path.startsWith(`${target}/`)
+  }
+
+  return path === target || path.startsWith(`${target}/`)
 }

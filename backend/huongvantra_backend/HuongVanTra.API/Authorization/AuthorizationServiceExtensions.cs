@@ -24,7 +24,14 @@ namespace HuongVanTra.API.Authorization {
                     policy.RequireRole(AppRoles.Admin, AppRoles.AgencyManager, AppRoles.InventoryManager));
 
                 options.AddPolicy(AppPolicies.ManageOrders, policy =>
-                    policy.RequireRole(AppRoles.Admin, AppRoles.AgencyManager));
+                    policy.RequireRole(
+                        AppRoles.Admin,
+                        AppRoles.AgencyManager,
+                        AppRoles.SalesStaff,
+                        "Sale"));
+
+                options.AddPolicy(AppPolicies.ManageCodOps, policy =>
+                    policy.RequireRole(AppRoles.AgencyManager));
 
                 options.AddPolicy(AppPolicies.ManageProducts, policy =>
                     policy.RequireRole(AppRoles.Admin, AppRoles.AgencyManager, AppRoles.InventoryManager));
@@ -33,13 +40,22 @@ namespace HuongVanTra.API.Authorization {
                     policy.RequireRole(AppRoles.Admin, AppRoles.AgencyManager));
 
                 options.AddPolicy(AppPolicies.PosAccess, policy =>
-                    policy.RequireRole(AppRoles.Admin, AppRoles.AgencyManager, AppRoles.SalesStaff));
+                    policy.RequireRole(AppRoles.AgencyManager, AppRoles.SalesStaff, "Sale"));
 
                 options.AddPolicy(AppPolicies.ViewDashboard, policy =>
                     policy.RequireRole(
                         AppRoles.Admin,
                         AppRoles.AgencyManager,
                         AppRoles.Accountant));
+
+                options.AddPolicy(AppPolicies.ViewStockDeductOps, policy =>
+                    policy.RequireRole(
+                        AppRoles.Admin,
+                        AppRoles.AgencyManager,
+                        AppRoles.InventoryManager));
+
+                options.AddPolicy(AppPolicies.ConfirmStockDeduct, policy =>
+                    policy.RequireRole(AppRoles.Admin, AppRoles.InventoryManager));
             });
 
             return services;
