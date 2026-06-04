@@ -1,4 +1,4 @@
-﻿using HuongVanTra.Service.Interfaces;
+﻿using HuongVanTra.Service.Customers;
 
 namespace HuongVanTra.API.BackgroundServices {
     public class TierEvaluationHostedService : BackgroundService {

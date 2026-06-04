@@ -16,5 +16,8 @@ namespace HuongVanTra.Service.Customers {
         Task<CustomerResult> UpdateCustomerAsync(int id, UpdateCustomerRequest request, CustomerAccessContext accessContext);
         Task<CustomerResult> ChangeStatusAsync(int id, ChangeCustomerStatusRequest request);
         Task<CustomerPurchaseHistoryResult> GetPurchaseHistoryAsync(int id, CustomerAccessContext accessContext);
+        Task<List<MembershipTierResponseDto>> GetMembershipTiersAsync();
+        Task<bool> UpgradeTierManuallyAsync(UpgradeTierRequestDto dto);
+        Task EvaluateAndAutoUpgradeTiersAsync();
     }
 }

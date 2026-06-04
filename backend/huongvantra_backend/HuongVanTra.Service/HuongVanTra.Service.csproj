@@ -20,4 +20,8 @@
     <ProjectReference Include="..\HuongVanTra.Infrastructure\HuongVanTra.Infrastructure.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="DTO\Customers\" />
+  </ItemGroup>
+
 </Project>

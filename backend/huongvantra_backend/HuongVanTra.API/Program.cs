@@ -6,6 +6,7 @@ using HuongVanTra.Core.Interfaces;
 using HuongVanTra.Infrastructure.Data;
 using HuongVanTra.Infrastructure.Repositories;
 using HuongVanTra.Service.Auth;
+using HuongVanTra.Service.Customers;
 using HuongVanTra.Service.Employees;
 using HuongVanTra.Service.Implementations;
 using HuongVanTra.Service.Interfaces;
@@ -22,10 +23,6 @@ using Microsoft.OpenApi.Models;
 using System.IdentityModel.Tokens.Jwt;
 using System.Text;
 using System.Text.Json;
-using CustomerModuleService = HuongVanTra.Service.Customers.ICustomerService;
-using CustomerModuleServiceImpl = HuongVanTra.Service.Customers.CustomerService;
-using MembershipCustomerService = HuongVanTra.Service.Interfaces.ICustomerService;
-using MembershipCustomerServiceImpl = HuongVanTra.Service.Implementations.CustomerService;
 
 namespace HuongVanTra.API {
     public class Program {
@@ -55,9 +52,13 @@ namespace HuongVanTra.API {
 
             builder.Services.AddScoped<IEmployeeService, EmployeeService>();
             builder.Services.AddScoped<IUserAccountService, UserAccountService>();
-            builder.Services.AddScoped<CustomerModuleService, CustomerModuleServiceImpl>();
-            builder.Services.AddScoped<MembershipCustomerService, MembershipCustomerServiceImpl>();
+            builder.Services.AddScoped<ICustomerService, CustomerService>();
             builder.Services.AddHostedService<TierEvaluationHostedService>();
+
+            builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
+            builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
+            builder.Services.AddScoped<IInventoryService, InventoryService>();
+            builder.Services.AddScoped<IProductionService, ProductionService>();
 
             builder.Services.AddCors(options => {
                 options.AddPolicy("Frontend", policy => {
@@ -69,11 +70,6 @@ namespace HuongVanTra.API {
                         .AllowAnyMethod();
                 });
             });
-
-            builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
-            builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
-            builder.Services.AddScoped<IInventoryService, InventoryService>();
-            builder.Services.AddScoped<IProductionService, ProductionService>();
 
             builder.Services.AddControllers();
             builder.Services.AddEndpointsApiExplorer();
