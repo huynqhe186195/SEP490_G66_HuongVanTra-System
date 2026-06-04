@@ -9,6 +9,7 @@ namespace HuongVanTra.Core.Entities.Sales {
         public decimal DiscountValue { get; set; }
         public DateTime? ValidFromUtc { get; set; }
         public DateTime? ValidToUtc { get; set; }
+        public bool IsActive { get; set; } = true;
 
         public ICollection<Order> Orders { get; set; } = new List<Order>();
     }

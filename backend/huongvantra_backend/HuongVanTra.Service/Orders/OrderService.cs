@@ -207,7 +207,7 @@ namespace HuongVanTra.Service.Orders {
                 throw new ArgumentException("Coupon not found.");
             }
 
-            PromotionValidity.EnsureActive(promotion);
+            PromotionValidity.EnsureUsable(promotion);
 
             order.PromotionId = promotion.Id;
             order.Promotion = promotion;

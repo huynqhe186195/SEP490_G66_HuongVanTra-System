@@ -32,8 +32,12 @@ namespace HuongVanTra.API.Controllers {
                 return NotFound(new { message = "Mã giảm giá không tồn tại hoặc không hợp lệ." });
             }
 
-            if (!PromotionValidity.IsActive(promotion)) {
-                var status = PromotionValidity.GetStatus(promotion.ValidFromUtc, promotion.ValidToUtc);
+            if (!promotion.IsActive) {
+                return BadRequest(new { message = "Mã giảm giá đã ngừng hoạt động." });
+            }
+
+            if (!PromotionValidity.IsWithinDateRange(promotion.ValidFromUtc, promotion.ValidToUtc)) {
+                var status = PromotionValidity.GetValidityStatus(promotion.ValidFromUtc, promotion.ValidToUtc);
                 var message = status switch {
                     PromotionValidity.StatusNotStarted => "Mã giảm giá chưa có hiệu lực.",
                     PromotionValidity.StatusExpired      => "Mã giảm giá đã hết hạn.",

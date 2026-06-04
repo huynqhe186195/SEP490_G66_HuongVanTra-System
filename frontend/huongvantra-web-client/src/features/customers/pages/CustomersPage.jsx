@@ -242,7 +242,7 @@ function CustomersPage() {
                 </button>
               ))}
             </div>
-
+{/* 
             <label className="inline-flex cursor-pointer items-center gap-2 self-start rounded-full border border-[#c1c9c0] bg-white px-4 py-2 text-sm text-[#414942]">
               <input
                 type="checkbox"
@@ -251,9 +251,9 @@ function CustomersPage() {
                 onChange={(event) => setDebtFilterOnly(event.target.checked)}
               />
               Chỉ khách có công nợ
-            </label>
+            </label> */}
 
-            <Link
+            {/* <Link
               to={`/customers/create?type=${activeTab}`}
               className={`inline-flex items-center gap-2 self-start rounded-full px-6 py-2.5 text-sm font-bold transition-all active:scale-95 ${
                 activeTab === 'corporate' ? 'bg-[#7e5700] text-white hover:opacity-90' : 'bg-[#4a6242] text-white hover:opacity-90'
@@ -265,7 +265,7 @@ function CustomersPage() {
                 : activeTab === 'vip'
                   ? 'Thêm khách VIP'
                   : 'Thêm khách hàng'}
-            </Link>
+            </Link> */}
           </div>
         </section>
 

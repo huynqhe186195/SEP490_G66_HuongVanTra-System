@@ -1,3 +1,4 @@
+using HuongVanTra.Core.Constants;
 using HuongVanTra.Core.Entities.Customers;
 using HuongVanTra.Core.Entities.Identity;
 using HuongVanTra.Infrastructure.Data;
@@ -231,7 +232,7 @@ namespace HuongVanTra.Service.Customers {
                 return CustomerResult.Failure(tierResolution.ErrorMessage!);
             }
 
-            var referenceValidation = await ValidateReferencesAsync(tierResolution.TierId, request.AssignedEmployeeId);
+            var referenceValidation = await ValidateReferencesAsync(tierResolution.TierId, request.AssignedEmployeeId, customer.TierId);
             if (referenceValidation is not null) {
                 return CustomerResult.Failure(referenceValidation);
             }
@@ -263,15 +264,15 @@ namespace HuongVanTra.Service.Customers {
             if (string.Equals(status, "INACTIVE", StringComparison.Ordinal)) {
                 var hasUnfinishedOrders = await _dbContext.Orders.AnyAsync(o =>
                     o.CustomerId == id &&
-                    o.OrderStatus != "COMPLETED" &&
-                    o.OrderStatus != "CANCELLED");
+                    o.OrderStatus != OrderStatus.Completed &&
+                    o.OrderStatus != OrderStatus.Cancelled);
 
                 if (hasUnfinishedOrders) {
-                    return CustomerResult.Failure("Cannot deactivate customer because there are unfinished orders.");
+                    return CustomerResult.Failure("Không thể ngừng hoạt động vì khách còn đơn chưa hoàn tất hoặc chưa hủy.");
                 }
 
                 if (customer.CurrentDebt > 0) {
-                    return CustomerResult.Failure($"Cannot deactivate customer because they have outstanding debt of {customer.CurrentDebt:N0} VNĐ.");
+                    return CustomerResult.Failure($"Không thể ngừng hoạt động vì khách còn công nợ {customer.CurrentDebt:N0} đ.");
                 }
             }
 
@@ -363,9 +364,10 @@ namespace HuongVanTra.Service.Customers {
                 .FirstOrDefaultAsync(c => c.Id == id);
         }
 
-        private async Task<string?> ValidateReferencesAsync(int? tierId, int? assignedEmployeeId) {
-            if (tierId.HasValue && !await _dbContext.MembershipTiers.AnyAsync(t => t.Id == tierId.Value)) {
-                return "MembershipTier not found.";
+        private async Task<string?> ValidateReferencesAsync(int? tierId, int? assignedEmployeeId, int? currentTierId = null) {
+            if (tierId.HasValue && !await _dbContext.MembershipTiers.AnyAsync(
+                    t => t.Id == tierId.Value && (t.IsActive || t.Id == currentTierId))) {
+                return "MembershipTier not found or inactive.";
             }
 
             if (assignedEmployeeId.HasValue &&
@@ -448,6 +450,7 @@ namespace HuongVanTra.Service.Customers {
 
             var defaultTierId = await _dbContext.MembershipTiers
                 .AsNoTracking()
+                .Where(t => t.IsActive)
                 .OrderBy(t => t.MinTotalSpend)
                 .Select(t => (int?)t.Id)
                 .FirstOrDefaultAsync();

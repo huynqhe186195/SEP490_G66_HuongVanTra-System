@@ -19,7 +19,9 @@ namespace HuongVanTra.Service.Implementations {
         public async Task<List<MembershipTierResponseDto>> GetMembershipTiersAsync() {
             var tiers = await _unitOfWork.Repository<MembershipTier>().GetAllAsync();
 
-            return tiers.Select(t => new MembershipTierResponseDto {
+            return tiers
+                .Where(t => t.IsActive)
+                .Select(t => new MembershipTierResponseDto {
                 Id = t.Id,
                 TierCode = t.TierCode,
                 MinTotalSpend = t.MinTotalSpend,
@@ -44,8 +46,8 @@ namespace HuongVanTra.Service.Implementations {
                 }
 
                 var newTier = await tierRepo.GetByIdAsync(dto.NewTierId);
-                if (newTier == null)
-                    throw new Exception("Hạng thẻ không tồn tại.");
+                if (newTier == null || !newTier.IsActive)
+                    throw new Exception("Hạng thẻ không tồn tại hoặc đã ngừng hoạt động.");
 
                 var oldTierId = customer.TierId;
 

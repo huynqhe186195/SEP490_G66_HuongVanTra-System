@@ -12,6 +12,7 @@ namespace HuongVanTra.Infrastructure.Configurations.Sales {
             builder.Property(x => x.DiscountValue).HasColumnType("decimal(18,2)");
             builder.Property(x => x.ValidFromUtc).HasColumnType("datetime(6)");
             builder.Property(x => x.ValidToUtc).HasColumnType("datetime(6)");
+            builder.Property(x => x.IsActive).HasDefaultValue(true);
         }
     }
 }

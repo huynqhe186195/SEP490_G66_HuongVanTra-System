@@ -5,8 +5,9 @@ import { showError, showSuccess } from '../../../app/toast.js'
 import { TIER_AUTO_UPGRADE_HINT } from '../../customers/utils/membershipTierUtils.js'
 import {
   createAdminMembershipTier,
-  deleteAdminMembershipTier,
+  deactivateAdminMembershipTier,
   fetchAdminMembershipTiers,
+  reactivateAdminMembershipTier,
   updateAdminMembershipTier,
 } from '../services/tiersAdminApi.js'
 
@@ -87,11 +88,21 @@ function MembershipTiersPage() {
     }
   }
 
-  const handleDelete = async (tier) => {
-    if (!window.confirm(`Xóa hạng "${tier.tierCode}"?`)) return
+  const handleDeactivate = async (tier) => {
+    if (!window.confirm(`Ngừng hoạt động hạng "${tier.tierCode}"?`)) return
     try {
-      await deleteAdminMembershipTier(tier.id)
-      showSuccess('Đã xóa hạng thẻ.')
+      await deactivateAdminMembershipTier(tier.id)
+      showSuccess('Đã ngừng hoạt động hạng thẻ.')
+      await loadData()
+    } catch (error) {
+      showError(error.message)
+    }
+  }
+
+  const handleReactivate = async (tier) => {
+    try {
+      await reactivateAdminMembershipTier(tier.id)
+      showSuccess('Đã kích hoạt lại hạng thẻ.')
       await loadData()
     } catch (error) {
       showError(error.message)
@@ -115,7 +126,7 @@ function MembershipTiersPage() {
       />
 
       <p className="mb-6 rounded-xl border border-[#538463]/20 bg-[#538463]/5 px-4 py-3 text-sm text-slate-600">
-        {TIER_AUTO_UPGRADE_HINT}
+        {TIER_AUTO_UPGRADE_HINT} Ngừng hoạt động thay vì xóa cứng — khách/đơn cũ vẫn giữ dữ liệu liên quan.
       </p>
 
       <section className="rounded-3xl border border-slate-100 bg-white shadow-sm">
@@ -126,6 +137,7 @@ function MembershipTiersPage() {
                 <th className="px-8 py-4">Mã hạng</th>
                 <th className="px-4 py-4">Ngưỡng chi tiêu</th>
                 <th className="px-4 py-4">Chiết khấu</th>
+                <th className="px-4 py-4">Trạng thái</th>
                 <th className="px-4 py-4">Số khách</th>
                 <th className="px-8 py-4 text-right">Thao tác</th>
               </tr>
@@ -133,26 +145,37 @@ function MembershipTiersPage() {
             <tbody className="divide-y divide-slate-50">
               {isLoading ? (
                 <tr>
-                  <td className="px-8 py-10 text-slate-500" colSpan={5}>
+                  <td className="px-8 py-10 text-slate-500" colSpan={6}>
                     Đang tải...
                   </td>
                 </tr>
               ) : null}
               {!isLoading && tiers.length === 0 ? (
                 <tr>
-                  <td className="px-8 py-10 text-slate-500" colSpan={5}>
+                  <td className="px-8 py-10 text-slate-500" colSpan={6}>
                     Chưa có hạng thẻ. Bấm &quot;Thêm hạng&quot; để tạo.
                   </td>
                 </tr>
               ) : null}
               {!isLoading
                 ? tiers.map((tier) => (
-                    <tr key={tier.id} className="hover:bg-[#fbf9f1]/30">
+                    <tr key={tier.id} className={`hover:bg-[#fbf9f1]/30 ${!tier.isActive ? 'opacity-60' : ''}`}>
                       <td className="px-8 py-5 font-bold text-slate-800">{tier.tierCode}</td>
                       <td className="px-4 py-5 text-slate-700">
                         {tier.minTotalSpend.toLocaleString('vi-VN')} đ
                       </td>
                       <td className="px-4 py-5 text-slate-700">{tier.discountPercent}%</td>
+                      <td className="px-4 py-5">
+                        <span
+                          className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${
+                            tier.isActive
+                              ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                              : 'border-slate-200 bg-slate-50 text-slate-600'
+                          }`}
+                        >
+                          {tier.isActive ? 'Đang hoạt động' : 'Ngừng hoạt động'}
+                        </span>
+                      </td>
                       <td className="px-4 py-5 text-slate-600">{tier.customerCount}</td>
                       <td className="px-8 py-5">
                         <div className="flex justify-end gap-2">
@@ -163,13 +186,23 @@ function MembershipTiersPage() {
                           >
                             Sửa
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDelete(tier)}
-                            className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50"
-                          >
-                            Xóa
-                          </button>
+                          {tier.isActive ? (
+                            <button
+                              type="button"
+                              onClick={() => handleDeactivate(tier)}
+                              className="rounded-lg border border-amber-200 px-3 py-1.5 text-xs font-semibold text-amber-700 hover:bg-amber-50"
+                            >
+                              Ngừng HĐ
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleReactivate(tier)}
+                              className="rounded-lg border border-emerald-200 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
+                            >
+                              Kích hoạt
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

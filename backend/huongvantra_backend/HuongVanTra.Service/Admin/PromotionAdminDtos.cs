@@ -8,6 +8,7 @@ namespace HuongVanTra.Service.Admin {
         public DateTime? ValidToUtc { get; set; }
         public string ValidityStatus { get; set; } = string.Empty;
         public int OrderCount { get; set; }
+        public bool IsActive { get; set; }
     }
 
     public class UpsertPromotionRequest {

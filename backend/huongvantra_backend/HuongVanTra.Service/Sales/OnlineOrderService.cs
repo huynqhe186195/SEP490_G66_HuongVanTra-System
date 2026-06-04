@@ -176,7 +176,7 @@ namespace HuongVanTra.Service.Sales {
             if (promotionId is null) return ("NONE", 0);
             var promo = await _db.OrderPromotions.FindAsync(promotionId.Value)
                 ?? throw new ArgumentException($"Promotion {promotionId.Value} does not exist.");
-            PromotionValidity.EnsureActive(promo);
+            PromotionValidity.EnsureUsable(promo);
             return (promo.DiscountType, promo.DiscountValue);
         }
 
@@ -430,7 +430,7 @@ namespace HuongVanTra.Service.Sales {
             customer.TotalSpend += amount;
 
             var bestTier = await _db.MembershipTiers
-                .Where(t => t.MinTotalSpend <= customer.TotalSpend)
+                .Where(t => t.IsActive && t.MinTotalSpend <= customer.TotalSpend)
                 .OrderByDescending(t => t.MinTotalSpend)
                 .FirstOrDefaultAsync();
 

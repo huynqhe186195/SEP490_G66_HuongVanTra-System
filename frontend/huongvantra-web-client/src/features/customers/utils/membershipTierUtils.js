@@ -6,6 +6,7 @@ export function mapMembershipTier(item) {
     tierCode: item.tierCode ?? item.TierCode ?? '',
     minTotalSpend: Number(item.minTotalSpend ?? item.MinTotalSpend ?? 0),
     discountPercent: Number(item.discountPercent ?? item.DiscountPercent ?? 0),
+    isActive: item.isActive ?? item.IsActive ?? true,
   }
 }
 

@@ -49,6 +49,7 @@ function mapPromotionAdminItem(item) {
     ...base,
     orderCount: Number(item.orderCount ?? item.OrderCount ?? 0),
     validityStatus: item.validityStatus ?? item.ValidityStatus ?? base.validityStatus,
+    isActive: base.isActive,
   }
 }
 
@@ -83,6 +84,12 @@ export async function updateAdminPromotion(id, payload) {
   return mapPromotionAdminItem(item)
 }
 
-export async function deleteAdminPromotion(id) {
-  return requestWithAuth(`/api/admin/promotions/${id}`, { method: 'DELETE' })
+export async function deactivateAdminPromotion(id) {
+  const item = await requestWithAuth(`/api/admin/promotions/${id}`, { method: 'DELETE' })
+  return mapPromotionAdminItem(item)
+}
+
+export async function reactivateAdminPromotion(id) {
+  const item = await requestWithAuth(`/api/admin/promotions/${id}/reactivate`, { method: 'POST' })
+  return mapPromotionAdminItem(item)
 }

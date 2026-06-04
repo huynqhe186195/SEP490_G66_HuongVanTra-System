@@ -6,11 +6,17 @@ namespace HuongVanTra.Service.Sales {
         public const string StatusNotStarted = "not_started";
         public const string StatusExpired = "expired";
         public const string StatusUnlimited = "unlimited";
+        public const string StatusDeactivated = "deactivated";
 
-        public static bool IsActive(OrderPromotion promotion, DateTime? atUtc = null) =>
-            IsActive(promotion.ValidFromUtc, promotion.ValidToUtc, atUtc);
+        public static bool IsUsable(OrderPromotion promotion, DateTime? atUtc = null) {
+            if (!promotion.IsActive) {
+                return false;
+            }
 
-        public static bool IsActive(DateTime? validFromUtc, DateTime? validToUtc, DateTime? atUtc = null) {
+            return IsWithinDateRange(promotion.ValidFromUtc, promotion.ValidToUtc, atUtc);
+        }
+
+        public static bool IsWithinDateRange(DateTime? validFromUtc, DateTime? validToUtc, DateTime? atUtc = null) {
             var now = atUtc ?? DateTime.UtcNow;
             if (validFromUtc.HasValue && now < validFromUtc.Value) {
                 return false;
@@ -23,7 +29,15 @@ namespace HuongVanTra.Service.Sales {
             return true;
         }
 
-        public static string GetStatus(DateTime? validFromUtc, DateTime? validToUtc, DateTime? atUtc = null) {
+        public static string GetDisplayStatus(OrderPromotion promotion, DateTime? atUtc = null) {
+            if (!promotion.IsActive) {
+                return StatusDeactivated;
+            }
+
+            return GetValidityStatus(promotion.ValidFromUtc, promotion.ValidToUtc, atUtc);
+        }
+
+        public static string GetValidityStatus(DateTime? validFromUtc, DateTime? validToUtc, DateTime? atUtc = null) {
             if (!validFromUtc.HasValue && !validToUtc.HasValue) {
                 return StatusUnlimited;
             }
@@ -40,12 +54,16 @@ namespace HuongVanTra.Service.Sales {
             return StatusActive;
         }
 
-        public static void EnsureActive(OrderPromotion promotion, DateTime? atUtc = null) {
-            if (IsActive(promotion, atUtc)) {
+        public static void EnsureUsable(OrderPromotion promotion, DateTime? atUtc = null) {
+            if (!promotion.IsActive) {
+                throw new InvalidOperationException("Mã giảm giá đã ngừng hoạt động.");
+            }
+
+            if (IsWithinDateRange(promotion.ValidFromUtc, promotion.ValidToUtc, atUtc)) {
                 return;
             }
 
-            var status = GetStatus(promotion.ValidFromUtc, promotion.ValidToUtc, atUtc);
+            var status = GetValidityStatus(promotion.ValidFromUtc, promotion.ValidToUtc, atUtc);
             throw status switch {
                 StatusNotStarted => new InvalidOperationException("Mã giảm giá chưa có hiệu lực."),
                 StatusExpired      => new InvalidOperationException("Mã giảm giá đã hết hạn."),

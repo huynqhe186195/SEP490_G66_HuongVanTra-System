@@ -8,6 +8,7 @@ export function mapPromotion(item) {
     validFromUtc: item.validFromUtc ?? item.ValidFromUtc ?? null,
     validToUtc: item.validToUtc ?? item.ValidToUtc ?? null,
     validityStatus: item.validityStatus ?? item.ValidityStatus ?? null,
+    isActive: item.isActive ?? item.IsActive ?? true,
   }
 }
 
@@ -40,6 +41,7 @@ export const PROMOTION_VALIDITY_LABELS = {
   not_started: 'Chưa bắt đầu',
   expired: 'Đã hết hạn',
   unlimited: 'Không giới hạn',
+  deactivated: 'Ngừng hoạt động',
 }
 
 export function getPromotionValidityLabel(status) {

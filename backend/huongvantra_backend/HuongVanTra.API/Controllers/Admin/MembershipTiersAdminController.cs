@@ -62,10 +62,23 @@ namespace HuongVanTra.API.Controllers.Admin {
         }
 
         [HttpDelete("{id:int}")]
-        public async Task<IActionResult> Delete(int id, CancellationToken cancellationToken) {
+        public async Task<ActionResult<MembershipTierAdminItemDto>> Deactivate(
+            int id, CancellationToken cancellationToken) {
             try {
-                await _service.DeleteAsync(id, cancellationToken);
-                return NoContent();
+                var item = await _service.DeactivateAsync(id, cancellationToken);
+                return Ok(item);
+            }
+            catch (ArgumentException ex) {
+                return NotFound(new { message = ex.Message });
+            }
+        }
+
+        [HttpPost("{id:int}/reactivate")]
+        public async Task<ActionResult<MembershipTierAdminItemDto>> Reactivate(
+            int id, CancellationToken cancellationToken) {
+            try {
+                var item = await _service.ReactivateAsync(id, cancellationToken);
+                return Ok(item);
             }
             catch (ArgumentException ex) {
                 return NotFound(new { message = ex.Message });

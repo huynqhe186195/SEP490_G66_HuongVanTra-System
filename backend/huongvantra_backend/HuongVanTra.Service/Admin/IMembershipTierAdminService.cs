@@ -4,6 +4,7 @@ namespace HuongVanTra.Service.Admin {
         Task<MembershipTierAdminItemDto?> GetAsync(int id, CancellationToken cancellationToken = default);
         Task<MembershipTierAdminItemDto> CreateAsync(UpsertMembershipTierRequest request, CancellationToken cancellationToken = default);
         Task<MembershipTierAdminItemDto?> UpdateAsync(int id, UpsertMembershipTierRequest request, CancellationToken cancellationToken = default);
-        Task DeleteAsync(int id, CancellationToken cancellationToken = default);
+        Task<MembershipTierAdminItemDto> DeactivateAsync(int id, CancellationToken cancellationToken = default);
+        Task<MembershipTierAdminItemDto> ReactivateAsync(int id, CancellationToken cancellationToken = default);
     }
 }

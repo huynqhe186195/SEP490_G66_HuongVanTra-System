@@ -5,6 +5,7 @@ import { showError, showSuccess } from '../../../app/toast.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import MembershipTierProgress from '../components/MembershipTierProgress.jsx'
 import {
+  changeCustomerStatus,
   createCustomer,
   fetchCustomerById,
   fetchMembershipTiers,
@@ -37,6 +38,7 @@ function CustomerFormPage() {
   const [totalSpend, setTotalSpend] = useState(0)
   const [currentTierCode, setCurrentTierCode] = useState('')
   const [currentTierDiscount, setCurrentTierDiscount] = useState(0)
+  const [initialStatus, setInitialStatus] = useState('active')
   const isAdmin = isAdminSession(loadAuthSession())
   const [form, setForm] = useState({
     type: ['general', 'vip', 'corporate'].includes(searchParams.get('type'))
@@ -92,7 +94,8 @@ function CustomerFormPage() {
         setTotalSpend(Number(customer.totalSpend || 0))
         setCurrentTierCode(customer.tier?.tierCode || customer.tierCode || '')
         setCurrentTierDiscount(Number(customer.tier?.discountPercent ?? 0))
-        setVipManualTierId(customer.tier?.tierId ? String(customer.tier.tierId) : '')
+        const loadedStatus = customer.status?.toLowerCase() === 'inactive' ? 'inactive' : 'active'
+        setInitialStatus(loadedStatus)
       } catch (error) {
         if (mounted) showError(error.message)
       } finally {
@@ -167,6 +170,14 @@ function CustomerFormPage() {
           address: payload.address,
           tierId: payload.tierId,
         })
+
+        if (form.status !== initialStatus) {
+          await changeCustomerStatus(
+            customerId,
+            form.status === 'inactive' ? 'INACTIVE' : 'ACTIVE',
+          )
+        }
+
         showSuccess('Cập nhật khách hàng thành công.')
       } else {
         await createCustomer({

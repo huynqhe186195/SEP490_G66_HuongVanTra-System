@@ -80,6 +80,12 @@ export async function updateAdminMembershipTier(id, payload) {
   return mapTierAdminItem(item)
 }
 
-export async function deleteAdminMembershipTier(id) {
-  return requestWithAuth(`/api/admin/membership-tiers/${id}`, { method: 'DELETE' })
+export async function deactivateAdminMembershipTier(id) {
+  const item = await requestWithAuth(`/api/admin/membership-tiers/${id}`, { method: 'DELETE' })
+  return mapTierAdminItem(item)
+}
+
+export async function reactivateAdminMembershipTier(id) {
+  const item = await requestWithAuth(`/api/admin/membership-tiers/${id}/reactivate`, { method: 'POST' })
+  return mapTierAdminItem(item)
 }

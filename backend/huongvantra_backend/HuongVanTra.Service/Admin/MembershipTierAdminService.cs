@@ -14,14 +14,16 @@ namespace HuongVanTra.Service.Admin {
             CancellationToken cancellationToken = default) {
             return await _db.MembershipTiers
                 .AsNoTracking()
-                .OrderBy(t => t.MinTotalSpend)
+                .OrderByDescending(t => t.IsActive)
+                .ThenBy(t => t.MinTotalSpend)
                 .ThenBy(t => t.TierCode)
                 .Select(t => new MembershipTierAdminItemDto {
-                    Id               = t.Id,
-                    TierCode         = t.TierCode,
-                    MinTotalSpend    = t.MinTotalSpend,
-                    DiscountPercent  = t.DiscountPercent,
-                    CustomerCount    = t.Customers.Count,
+                    Id              = t.Id,
+                    TierCode        = t.TierCode,
+                    MinTotalSpend   = t.MinTotalSpend,
+                    DiscountPercent = t.DiscountPercent,
+                    CustomerCount   = t.Customers.Count,
+                    IsActive        = t.IsActive,
                 })
                 .ToListAsync(cancellationToken);
         }
@@ -32,11 +34,12 @@ namespace HuongVanTra.Service.Admin {
                 .AsNoTracking()
                 .Where(t => t.Id == id)
                 .Select(t => new MembershipTierAdminItemDto {
-                    Id               = t.Id,
-                    TierCode         = t.TierCode,
-                    MinTotalSpend    = t.MinTotalSpend,
-                    DiscountPercent  = t.DiscountPercent,
-                    CustomerCount    = t.Customers.Count,
+                    Id              = t.Id,
+                    TierCode        = t.TierCode,
+                    MinTotalSpend   = t.MinTotalSpend,
+                    DiscountPercent = t.DiscountPercent,
+                    CustomerCount   = t.Customers.Count,
+                    IsActive        = t.IsActive,
                 })
                 .FirstOrDefaultAsync(cancellationToken);
         }
@@ -50,6 +53,7 @@ namespace HuongVanTra.Service.Admin {
                 TierCode        = normalized.TierCode,
                 MinTotalSpend   = normalized.MinTotalSpend,
                 DiscountPercent = normalized.DiscountPercent,
+                IsActive        = true,
             };
 
             _db.MembershipTiers.Add(entity);
@@ -76,19 +80,33 @@ namespace HuongVanTra.Service.Admin {
             return await GetAsync(id, cancellationToken);
         }
 
-        public async Task DeleteAsync(int id, CancellationToken cancellationToken = default) {
-            var entity = await _db.MembershipTiers
-                .Include(t => t.Customers)
-                .FirstOrDefaultAsync(t => t.Id == id, cancellationToken)
+        public async Task<MembershipTierAdminItemDto> DeactivateAsync(
+            int id, CancellationToken cancellationToken = default) {
+            var entity = await _db.MembershipTiers.FirstOrDefaultAsync(t => t.Id == id, cancellationToken)
                 ?? throw new ArgumentException("Hạng thẻ không tồn tại.");
 
-            if (entity.Customers.Any()) {
-                throw new InvalidOperationException(
-                    $"Không thể xóa hạng \"{entity.TierCode}\" vì còn {entity.Customers.Count} khách hàng đang gán.");
+            if (!entity.IsActive) {
+                return (await GetAsync(id, cancellationToken))!;
             }
 
-            _db.MembershipTiers.Remove(entity);
+            entity.IsActive = false;
             await _db.SaveChangesAsync(cancellationToken);
+            return (await GetAsync(id, cancellationToken))!;
+        }
+
+        public async Task<MembershipTierAdminItemDto> ReactivateAsync(
+            int id, CancellationToken cancellationToken = default) {
+            var entity = await _db.MembershipTiers.FirstOrDefaultAsync(t => t.Id == id, cancellationToken)
+                ?? throw new ArgumentException("Hạng thẻ không tồn tại.");
+
+            if (entity.IsActive) {
+                return (await GetAsync(id, cancellationToken))!;
+            }
+
+            await EnsureUniqueTierCodeAsync(entity.TierCode, excludeId: id, cancellationToken);
+            entity.IsActive = true;
+            await _db.SaveChangesAsync(cancellationToken);
+            return (await GetAsync(id, cancellationToken))!;
         }
 
         private static UpsertMembershipTierRequest NormalizeRequest(UpsertMembershipTierRequest request) {
@@ -115,7 +133,9 @@ namespace HuongVanTra.Service.Admin {
         private async Task EnsureUniqueTierCodeAsync(
             string tierCode, int? excludeId, CancellationToken cancellationToken) {
             var exists = await _db.MembershipTiers.AnyAsync(
-                t => t.TierCode.ToUpper() == tierCode && (!excludeId.HasValue || t.Id != excludeId.Value),
+                t => t.IsActive
+                     && t.TierCode.ToUpper() == tierCode
+                     && (!excludeId.HasValue || t.Id != excludeId.Value),
                 cancellationToken);
 
             if (exists) {

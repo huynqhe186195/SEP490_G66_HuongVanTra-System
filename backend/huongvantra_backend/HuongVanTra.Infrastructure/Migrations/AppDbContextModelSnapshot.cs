@@ -98,6 +98,11 @@ namespace HuongVanTra.Infrastructure.Migrations
                     b.Property<decimal>("DiscountPercent")
                         .HasColumnType("decimal(5,2)");
 
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("tinyint(1)")
+                        .HasDefaultValue(true);
+
                     b.Property<decimal>("MinTotalSpend")
                         .HasColumnType("decimal(18,2)");
 
@@ -849,6 +854,11 @@ namespace HuongVanTra.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("varchar(20)");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("tinyint(1)")
+                        .HasDefaultValue(true);
 
                     b.Property<decimal>("DiscountValue")
                         .HasColumnType("decimal(18,2)");
