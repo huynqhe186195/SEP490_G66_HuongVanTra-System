@@ -55,3 +55,21 @@ export function formatVietnamDateTime(value) {
 export function vietnamNowLabel() {
   return formatVietnamDateTime(new Date())
 }
+
+/** Chỉ ngày theo giờ Việt Nam (dd/mm/yyyy). */
+export function formatVietnamDate(value) {
+  const vn = addUtcPlus7(value)
+  if (!vn) return '—'
+
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${pad(vn.getUTCDate())}/${pad(vn.getUTCMonth() + 1)}/${vn.getUTCFullYear()}`
+}
+
+/** Giá trị cho input type="date" theo lịch VN. */
+export function toVietnamDateInputValue(value) {
+  const vn = addUtcPlus7(value)
+  if (!vn) return ''
+
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${vn.getUTCFullYear()}-${pad(vn.getUTCMonth() + 1)}-${pad(vn.getUTCDate())}`
+}

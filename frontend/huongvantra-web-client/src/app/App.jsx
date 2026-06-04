@@ -31,6 +31,8 @@ import ReportsOverviewPage from '../features/reports/pages/ReportsOverviewPage.j
 import StaffCreatePage from '../features/staff/pages/StaffCreatePage.jsx'
 import StaffDetailPage from '../features/staff/pages/StaffDetailPage.jsx'
 import StaffPage from '../features/staff/pages/StaffPage.jsx'
+import MembershipTiersPage from '../features/admin/pages/MembershipTiersPage.jsx'
+import PromotionsPage from '../features/admin/pages/PromotionsPage.jsx'
 
 function App() {
   return (
@@ -69,6 +71,8 @@ function App() {
         <Route path="/staff" element={<StaffPage />} />
         <Route path="/staff/create" element={<StaffCreatePage />} />
         <Route path="/staff/:id" element={<StaffDetailPage />} />
+        <Route path="/admin/membership-tiers" element={<MembershipTiersPage />} />
+        <Route path="/admin/promotions" element={<PromotionsPage />} />
         <Route path="/contracts" element={<ContractsPage />} />
         <Route path="/reports" element={<ReportsOverviewPage />} />
         <Route path="/reports/customers" element={<ReportsCustomersPage />} />

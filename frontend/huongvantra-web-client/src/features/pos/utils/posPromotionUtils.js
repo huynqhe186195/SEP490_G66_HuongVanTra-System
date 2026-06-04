@@ -5,6 +5,9 @@ export function mapPromotion(item) {
     promoCode: item.promoCode ?? item.PromoCode ?? '',
     discountType: String(item.discountType ?? item.DiscountType ?? 'PERCENTAGE').toUpperCase(),
     discountValue: Number(item.discountValue ?? item.DiscountValue ?? 0),
+    validFromUtc: item.validFromUtc ?? item.ValidFromUtc ?? null,
+    validToUtc: item.validToUtc ?? item.ValidToUtc ?? null,
+    validityStatus: item.validityStatus ?? item.ValidityStatus ?? null,
   }
 }
 
@@ -30,4 +33,16 @@ export function formatPromotionLabel(promotion) {
     return `${promotion.promoCode} (−${Number(promotion.discountValue).toLocaleString('vi-VN')} đ)`
   }
   return `${promotion.promoCode} (−${promotion.discountValue}%)`
+}
+
+export const PROMOTION_VALIDITY_LABELS = {
+  active: 'Còn hiệu lực',
+  not_started: 'Chưa bắt đầu',
+  expired: 'Đã hết hạn',
+  unlimited: 'Không giới hạn',
+}
+
+export function getPromotionValidityLabel(status) {
+  if (!status) return PROMOTION_VALIDITY_LABELS.unlimited
+  return PROMOTION_VALIDITY_LABELS[status] ?? status
 }

@@ -186,6 +186,7 @@ namespace HuongVanTra.Service.Sales {
             if (promotionId is null) return ("NONE", 0);
             var promo = await _db.OrderPromotions.FindAsync(promotionId.Value)
                 ?? throw new ArgumentException($"Promotion {promotionId.Value} does not exist.");
+            PromotionValidity.EnsureActive(promo);
             return (promo.DiscountType, promo.DiscountValue);
         }
 

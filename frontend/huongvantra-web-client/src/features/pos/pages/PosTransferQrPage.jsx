@@ -69,8 +69,33 @@ function PosTransferQrPage() {
   const [expectedAmount, setExpectedAmount] = useState(0)
   const [sepaySetup, setSepaySetup] = useState(null)
   const completedRef = useRef(false)
+  const expiredHandledRef = useRef(false)
   const qrExpiryLabel = useQrExpiryCountdown(payment?.qrExpiresAtUtc)
   const isQrExpired = payment?.qrExpiresAtUtc && new Date(payment.qrExpiresAtUtc).getTime() <= Date.now()
+
+  useEffect(() => {
+    if (!payment?.qrExpiresAtUtc || completedRef.current) {
+      return undefined
+    }
+
+    const redirectOnExpiry = () => {
+      if (completedRef.current || expiredHandledRef.current) {
+        return
+      }
+      expiredHandledRef.current = true
+      showError('QR đã hết hạn. Vui lòng tạo đơn thanh toán mới tại POS.')
+      navigate('/pos', { replace: true })
+    }
+
+    const remainingMs = new Date(payment.qrExpiresAtUtc).getTime() - Date.now()
+    if (remainingMs <= 0) {
+      redirectOnExpiry()
+      return undefined
+    }
+
+    const timerId = setTimeout(redirectOnExpiry, remainingMs)
+    return () => clearTimeout(timerId)
+  }, [payment?.qrExpiresAtUtc, navigate])
 
   const finishWithReceipt = useCallback(
     (status) => {
@@ -140,7 +165,7 @@ function PosTransferQrPage() {
   }, [])
 
   const pollPaymentStatus = useCallback(async () => {
-    if (!payment?.orderId || completedRef.current) return
+    if (!payment?.orderId || completedRef.current || expiredHandledRef.current) return
 
     try {
       const status = await fetchPosOrderPaymentStatus(payment.orderId)
@@ -167,7 +192,7 @@ function PosTransferQrPage() {
   }, [payment?.orderId, finishWithReceipt])
 
   useEffect(() => {
-    if (!payment?.orderId || completedRef.current) {
+    if (!payment?.orderId || completedRef.current || expiredHandledRef.current) {
       return undefined
     }
 

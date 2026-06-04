@@ -5,6 +5,7 @@ using HuongVanTra.Core.Entities.Identity;
 using HuongVanTra.Core.Interfaces;
 using HuongVanTra.Infrastructure.Data;
 using HuongVanTra.Infrastructure.Repositories;
+using HuongVanTra.Service.Admin;
 using HuongVanTra.Service.Auth;
 using HuongVanTra.Service.Employees;
 using HuongVanTra.Service.Implementations;
@@ -58,6 +59,8 @@ namespace HuongVanTra.API {
             builder.Services.AddScoped<IUserAccountService, UserAccountService>();
             builder.Services.AddScoped<CustomerModuleService, CustomerModuleServiceImpl>();
             builder.Services.AddScoped<MembershipCustomerService, MembershipCustomerServiceImpl>();
+            builder.Services.AddScoped<IMembershipTierAdminService, MembershipTierAdminService>();
+            builder.Services.AddScoped<IPromotionAdminService, PromotionAdminService>();
             builder.Services.AddHostedService<TierEvaluationHostedService>();
 
             builder.Services.AddCors(options => {

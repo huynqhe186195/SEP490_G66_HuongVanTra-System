@@ -79,6 +79,8 @@ namespace HuongVanTra.Service.Orders {
         public string PromoCode { get; set; } = string.Empty;
         public string DiscountType { get; set; } = string.Empty;
         public decimal DiscountValue { get; set; }
+        public DateTime? ValidFromUtc { get; set; }
+        public DateTime? ValidToUtc { get; set; }
     }
 
     public class PaymentTransactionDto {

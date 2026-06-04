@@ -858,6 +858,12 @@ namespace HuongVanTra.Infrastructure.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("varchar(50)");
 
+                    b.Property<DateTime?>("ValidFromUtc")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<DateTime?>("ValidToUtc")
+                        .HasColumnType("datetime(6)");
+
                     b.HasKey("Id");
 
                     b.ToTable("order_promotions", (string)null);

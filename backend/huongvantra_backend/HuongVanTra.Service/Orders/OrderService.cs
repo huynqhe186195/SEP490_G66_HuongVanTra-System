@@ -207,6 +207,8 @@ namespace HuongVanTra.Service.Orders {
                 throw new ArgumentException("Coupon not found.");
             }
 
+            PromotionValidity.EnsureActive(promotion);
+
             order.PromotionId = promotion.Id;
             order.Promotion = promotion;
             RecalculateTotals(order);
@@ -911,6 +913,8 @@ namespace HuongVanTra.Service.Orders {
                     PromoCode = order.Promotion.PromoCode,
                     DiscountType = order.Promotion.DiscountType,
                     DiscountValue = order.Promotion.DiscountValue,
+                    ValidFromUtc = order.Promotion.ValidFromUtc,
+                    ValidToUtc = order.Promotion.ValidToUtc,
                 },
                 Items = order.OrderItems.Select(i => new OrderItemDto {
                     Id = i.Id,

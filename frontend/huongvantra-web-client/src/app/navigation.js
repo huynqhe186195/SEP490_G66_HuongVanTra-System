@@ -47,6 +47,20 @@ export const navigationItems = [
   },
   { label: 'Khách hàng', path: '/customers', module: 'customers', icon: 'groups', roles: ['admin', 'agencyManager'] },
   { label: 'Nhân sự', path: '/staff', module: 'staff', icon: 'badge', roles: ['admin', 'agencyManager'] },
+  {
+    label: 'Hạng thẻ',
+    path: '/admin/membership-tiers',
+    module: 'membership_tiers_admin',
+    icon: 'military_tech',
+    roles: ['admin'],
+  },
+  {
+    label: 'Mã giảm giá',
+    path: '/admin/promotions',
+    module: 'promotions_admin',
+    icon: 'sell',
+    roles: ['admin'],
+  },
 ]
 
 function isSidebarModuleEnabled(module) {
@@ -156,6 +170,8 @@ const MODULE_PATH_PREFIXES = [
   { module: 'reports', prefix: '/reports' },
   { module: 'contracts', prefix: '/contracts' },
   { module: 'staff', prefix: '/staff' },
+  { module: 'membership_tiers_admin', prefix: '/admin/membership-tiers' },
+  { module: 'promotions_admin', prefix: '/admin/promotions' },
   { module: 'customers', prefix: '/customers' },
   { module: 'inventory', prefix: '/inventory' },
   { module: 'products', prefix: '/products' },
@@ -235,6 +251,9 @@ export function getAccessDeniedMessage(pathname) {
   }
   if (module === 'stock_deduct_ops') {
     return 'Chỉ Quản lý chi nhánh hoặc Thủ kho mới được xem hàng chờ trừ kho. Thao tác trừ kho do Thủ kho thực hiện.'
+  }
+  if (module === 'promotions_admin' || module === 'membership_tiers_admin') {
+    return 'Chỉ Admin mới được quản lý hạng thẻ và mã giảm giá.'
   }
   return 'Bạn không có quyền truy cập trang này.'
 }

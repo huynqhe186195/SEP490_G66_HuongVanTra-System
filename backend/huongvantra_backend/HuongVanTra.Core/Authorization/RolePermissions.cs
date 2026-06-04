@@ -15,6 +15,8 @@ namespace HuongVanTra.Core.Authorization {
         public const string Contracts = "contracts";
         public const string Reports = "reports";
         public const string Integrations = "integrations";
+        public const string MembershipTiersAdmin = "membership_tiers_admin";
+        public const string PromotionsAdmin = "promotions_admin";
     }
 
     public static class RolePermissions {
@@ -31,6 +33,8 @@ namespace HuongVanTra.Core.Authorization {
                     AppModules.Contracts,
                     AppModules.Reports,
                     AppModules.Integrations,
+                    AppModules.MembershipTiersAdmin,
+                    AppModules.PromotionsAdmin,
                 },
                 [AppRoles.AgencyManager] = new[] {
                     AppModules.Dashboard,
