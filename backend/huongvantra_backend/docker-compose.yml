@@ -11,7 +11,7 @@ services:
       MYSQL_USER: ${MYSQL_USER:-hvtuser}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:-hvtpass123}
     ports:
-      - "3306:3306"
+      - "3307:3306"
     volumes:
       - mysql_data:/var/lib/mysql
       - ./Scripts/init-databases.sql:/docker-entrypoint-initdb.d/init.sql:ro
@@ -68,6 +68,27 @@ services:
       mysql:
         condition: service_healthy
       rabbitmq:
+        condition: service_healthy
+
+  user-service:
+    build:
+      context: .
+      dockerfile: services/UserService/UserService.WebAPI/Dockerfile
+    container_name: hvt-user-service
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__DefaultConnection: "Server=mysql;Port=3306;Database=hvt_user_db;User=${MYSQL_USER:-hvtuser};Password=${MYSQL_PASSWORD:-hvtpass123};CharSet=utf8mb4;"
+      Jwt__Secret: ${JWT_SECRET:-your-super-secret-key-at-least-32-chars!!}
+      Jwt__Issuer: HuongVanTra
+      Jwt__Audience: HuongVanTra
+    ports:
+      - "5002:8080"
+    networks:
+      - hvt-network
+    depends_on:
+      mysql:
         condition: service_healthy
 
   # ─── API Gateway ──────────────────────────────────────────────────────────────
