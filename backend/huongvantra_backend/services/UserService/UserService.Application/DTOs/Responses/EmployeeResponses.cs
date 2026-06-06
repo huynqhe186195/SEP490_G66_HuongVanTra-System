@@ -1,0 +1,12 @@
+namespace UserService.Application.DTOs.Responses;
+
+public record EmployeeDetailResponse(
+    long Id,
+    Guid UserId,
+    string Username,
+    string FullName,
+    string? Department,
+    decimal ActualSalary,
+    string? BankAccountInfo,
+    string Status,
+    bool IsUserActive);

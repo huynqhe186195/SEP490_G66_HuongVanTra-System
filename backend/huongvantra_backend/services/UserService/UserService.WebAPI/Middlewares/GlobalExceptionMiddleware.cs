@@ -23,10 +23,17 @@ public class GlobalExceptionMiddleware(RequestDelegate next)
         var (statusCode, message) = ex switch
         {
             UserNotFoundException e => (StatusCodes.Status404NotFound, e.Message),
+            UserNotFoundByUsernameException e => (StatusCodes.Status404NotFound, e.Message),
             RoleNotFoundException e => (StatusCodes.Status404NotFound, e.Message),
+            PermissionNotFoundException e => (StatusCodes.Status404NotFound, e.Message),
+            EmployeeNotFoundException e => (StatusCodes.Status404NotFound, e.Message),
             InvalidCredentialsException e => (StatusCodes.Status401Unauthorized, e.Message),
+            InvalidRefreshTokenException e => (StatusCodes.Status401Unauthorized, e.Message),
             UserInactiveException e => (StatusCodes.Status403Forbidden, e.Message),
+            ForbiddenException e => (StatusCodes.Status403Forbidden, e.Message),
             DuplicateUsernameException e => (StatusCodes.Status409Conflict, e.Message),
+            DuplicatePermissionException e => (StatusCodes.Status409Conflict, e.Message),
+            RoleInUseException e => (StatusCodes.Status409Conflict, e.Message),
             _ => (StatusCodes.Status500InternalServerError, "An unexpected error occurred.")
         };
 

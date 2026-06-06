@@ -1,3 +1,5 @@
+using UserService.Domain.Enums;
+
 namespace UserService.Domain.Entities;
 
 public class Employee : BaseEntity
@@ -8,6 +10,7 @@ public class Employee : BaseEntity
     public string? Department { get; set; }
     public decimal ActualSalary { get; set; }
     public string? BankAccountInfo { get; set; }
+    public EmployeeStatus Status { get; set; } = EmployeeStatus.Active;
 
     public User User { get; set; } = null!;
 }

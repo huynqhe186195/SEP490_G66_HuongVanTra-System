@@ -5,9 +5,12 @@ namespace UserService.Application.Interfaces;
 public interface IRoleRepository
 {
     Task<Role?> GetByIdAsync(int id);
-    Task<IEnumerable<Role>> GetAllAsync();
+    Task<IEnumerable<Role>> GetAllAsync(bool onlyDeleted = false);
     Task<IEnumerable<Role>> GetByUserIdAsync(Guid userId);
+    Task<bool> IsAssignedToUsersAsync(int roleId);
     Task AddAsync(Role role);
     void Update(Role role);
+    Task SoftDeleteAsync(int id);
+    Task RestoreAsync(int id);
     Task SaveChangesAsync();
 }

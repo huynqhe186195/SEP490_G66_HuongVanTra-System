@@ -1,9 +1,12 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
+using UserService.Application.Authorization;
 using UserService.Application.Interfaces;
 using UserService.Application.UseCases;
+using UserService.Domain.Constants;
 using UserService.Infrastructure.Data;
 using UserService.Infrastructure.Repositories;
 using UserService.WebAPI.Middlewares;
@@ -25,9 +28,13 @@ builder.Services.AddDbContext<UserDbContext>(options =>
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IRoleRepository, RoleRepository>();
 builder.Services.AddScoped<IEmployeeRepository, EmployeeRepository>();
+builder.Services.AddScoped<IPermissionRepository, PermissionRepository>();
+builder.Services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
 builder.Services.AddScoped<AuthLogic>();
 builder.Services.AddScoped<UserLogic>();
 builder.Services.AddScoped<RoleLogic>();
+builder.Services.AddScoped<PermissionLogic>();
+builder.Services.AddScoped<EmployeeLogic>();
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -45,22 +52,45 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
+builder.Services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
+builder.Services.AddAuthorization(options =>
+{
+    foreach (var permission in PermissionNames.All)
+    {
+        options.AddPolicy(permission, policy =>
+            policy.Requirements.Add(new PermissionRequirement(permission)));
+    }
+});
+
 var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
     var retries = 0;
     while (retries < 10)
     {
-        try { db.Database.Migrate(); break; }
+        try
+        {
+            db.Database.Migrate();
+            break;
+        }
         catch (Exception ex)
         {
             retries++;
-            var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
             logger.LogWarning("Migration attempt {Retry}/10 failed: {Message}. Retrying in 5s...", retries, ex.Message);
             Thread.Sleep(5000);
         }
+    }
+
+    try
+    {
+        await DataSeeder.SeedAsync(db);
+    }
+    catch (Exception ex)
+    {
+        logger.LogWarning(ex, "Data seeding skipped or partially failed; service will still start.");
     }
 }
 
@@ -73,6 +103,7 @@ if (app.Environment.IsDevelopment())
 app.UseMiddleware<GlobalExceptionMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
+app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
 app.MapControllers();
 
 app.Run();

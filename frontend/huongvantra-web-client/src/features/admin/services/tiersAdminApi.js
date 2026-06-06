@@ -1,49 +1,14 @@
-import { loadAuthSession } from '../../auth/services/authSession.js'
+import { apiRequestAuth } from '../../../lib/apiClient.js'
 import { mapMembershipTier } from '../../customers/utils/membershipTierUtils.js'
 
-const DEFAULT_API_BASE_URL = 'http://localhost:5249'
-
-function getApiBaseUrl() {
-  return import.meta.env.VITE_API_BASE_URL || DEFAULT_API_BASE_URL
-}
-
-async function parseResponseError(response) {
-  const contentType = response.headers.get('content-type') || ''
-  if (contentType.includes('application/json')) {
-    const body = await response.json().catch(() => null)
-    if (body && typeof body === 'object') {
-      if (typeof body.message === 'string' && body.message.trim()) return body.message
-    }
-  }
-  const text = await response.text().catch(() => '')
-  return text.trim() || 'Có lỗi xảy ra.'
-}
-
-async function requestWithAuth(path, options = {}) {
-  const session = loadAuthSession()
-  if (!session?.accessToken) {
-    throw new Error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.')
-  }
-
-  const response = await fetch(`${getApiBaseUrl()}${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(options.headers || {}),
-      Authorization: `Bearer ${session.accessToken}`,
-    },
-  })
-
-  if (!response.ok) {
-    throw new Error(await parseResponseError(response))
-  }
-
-  if (response.status === 204) return null
-  return response.json()
-}
-
 function mapTierAdminItem(item) {
-  const base = mapMembershipTier(item)
+  const base = mapMembershipTier({
+    id: item.id ?? item.Id,
+    tierCode: item.tierName ?? item.TierName,
+    minTotalSpend: item.minSpendingThreshold ?? item.MinSpendingThreshold,
+    discountPercent: item.discountPercent ?? item.DiscountPercent,
+    isActive: true,
+  })
   if (!base) return null
   return {
     ...base,
@@ -52,40 +17,40 @@ function mapTierAdminItem(item) {
 }
 
 export async function fetchAdminMembershipTiers() {
-  const items = await requestWithAuth('/api/admin/membership-tiers', { method: 'GET' })
+  const items = await apiRequestAuth('/api/customer-tiers', { method: 'GET' })
   return Array.isArray(items) ? items.map(mapTierAdminItem).filter(Boolean) : []
 }
 
 export async function createAdminMembershipTier(payload) {
-  const item = await requestWithAuth('/api/admin/membership-tiers', {
+  const item = await apiRequestAuth('/api/customer-tiers', {
     method: 'POST',
     body: JSON.stringify({
-      tierCode: payload.tierCode,
-      minTotalSpend: Number(payload.minTotalSpend ?? 0),
+      tierName: payload.tierCode ?? payload.tierName,
+      minSpendingThreshold: Number(payload.minTotalSpend ?? payload.minSpendingThreshold ?? 0),
       discountPercent: Number(payload.discountPercent ?? 0),
+      validityMonths: payload.validityMonths ?? null,
     }),
   })
   return mapTierAdminItem(item)
 }
 
 export async function updateAdminMembershipTier(id, payload) {
-  const item = await requestWithAuth(`/api/admin/membership-tiers/${id}`, {
+  const item = await apiRequestAuth(`/api/customer-tiers/${id}`, {
     method: 'PUT',
     body: JSON.stringify({
-      tierCode: payload.tierCode,
-      minTotalSpend: Number(payload.minTotalSpend ?? 0),
+      tierName: payload.tierCode ?? payload.tierName,
+      minSpendingThreshold: Number(payload.minTotalSpend ?? payload.minSpendingThreshold ?? 0),
       discountPercent: Number(payload.discountPercent ?? 0),
+      validityMonths: payload.validityMonths ?? null,
     }),
   })
   return mapTierAdminItem(item)
 }
 
-export async function deactivateAdminMembershipTier(id) {
-  const item = await requestWithAuth(`/api/admin/membership-tiers/${id}`, { method: 'DELETE' })
-  return mapTierAdminItem(item)
+export async function deactivateAdminMembershipTier(_id) {
+  throw new Error('API chưa hỗ trợ vô hiệu hóa hạng thẻ.')
 }
 
-export async function reactivateAdminMembershipTier(id) {
-  const item = await requestWithAuth(`/api/admin/membership-tiers/${id}/reactivate`, { method: 'POST' })
-  return mapTierAdminItem(item)
+export async function reactivateAdminMembershipTier(_id) {
+  throw new Error('API chưa hỗ trợ kích hoạt lại hạng thẻ.')
 }

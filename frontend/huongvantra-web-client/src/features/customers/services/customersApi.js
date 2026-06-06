@@ -1,66 +1,40 @@
-import { loadAuthSession } from '../../auth/services/authSession.js'
-import { mapMembershipTier } from '../utils/membershipTierUtils.js'
+import { apiRequestAuth, toPagedResult } from '../../../lib/apiClient.js'
 
-const DEFAULT_API_BASE_URL = 'http://localhost:5249'
-
-function getApiBaseUrl() {
-  return import.meta.env.VITE_API_BASE_URL || DEFAULT_API_BASE_URL
+const CUSTOMER_GROUP_TO_TYPE = {
+  phothong: 'GENERAL',
+  doingoai: 'VIP',
+  doanhnghiep: 'CORPORATE',
 }
 
-async function parseResponseError(response) {
-  const contentType = response.headers.get('content-type') || ''
-
-  if (contentType.includes('application/json')) {
-    const body = await response.json().catch(() => null)
-    if (body && typeof body === 'object') {
-      if (typeof body.message === 'string' && body.message.trim()) return body.message
-      if (typeof body.title === 'string' && body.title.trim()) return body.title
-    }
-  }
-
-  const text = await response.text().catch(() => '')
-  return text.trim() || 'Có lỗi xảy ra.'
-}
-
-async function requestWithAuth(path, options = {}) {
-  const session = loadAuthSession()
-  if (!session?.accessToken) {
-    throw new Error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.')
-  }
-
-  const response = await fetch(`${getApiBaseUrl()}${path}`, {
-    ...options,
-    headers: {
-      ...(options.headers || {}),
-      Authorization: `Bearer ${session.accessToken}`,
-    },
-  })
-
-  if (!response.ok) {
-    throw new Error(await parseResponseError(response))
-  }
-
-  if (response.status === 204) return null
-  return response.json()
+function normalizeCustomerGroup(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
 }
 
 export function mapCustomer(item) {
   if (!item || typeof item !== 'object') return null
+
+  const customerGroup = item.customerGroup ?? item.CustomerGroup ?? ''
+  const normalizedGroup = normalizeCustomerGroup(customerGroup)
+
   return {
-    customerId: item.customerId ?? item.CustomerId,
-    customerCode: item.customerCode ?? item.CustomerCode ?? '',
+    customerId: item.id ?? item.Id ?? item.customerId ?? item.CustomerId,
+    customerCode: item.phoneNumber ?? item.PhoneNumber ?? '',
     fullName: item.fullName ?? item.FullName ?? '',
-    customerType: item.customerType ?? item.CustomerType ?? '',
-    phone: item.phone ?? item.Phone ?? '',
+    customerType: CUSTOMER_GROUP_TO_TYPE[normalizedGroup] ?? String(customerGroup).toUpperCase(),
+    phone: item.phoneNumber ?? item.PhoneNumber ?? item.phone ?? item.Phone ?? '',
     email: item.email ?? item.Email ?? '',
-    status: item.status ?? item.Status ?? '',
+    status: item.isDeleted ? 'INACTIVE' : 'ACTIVE',
     tierId: item.tierId ?? item.TierId ?? null,
-    tierCode: item.tierCode ?? item.TierCode ?? null,
-    tierDiscountPercent: Number(item.tierDiscountPercent ?? item.TierDiscountPercent ?? 0),
-    assignedEmployeeId: item.assignedEmployeeId ?? item.AssignedEmployeeId ?? null,
-    assignedEmployeeName: item.assignedEmployeeName ?? item.AssignedEmployeeName ?? null,
-    totalSpend: Number(item.totalSpend ?? item.TotalSpend ?? 0),
+    tierCode: item.tierName ?? item.TierName ?? null,
+    tierDiscountPercent: 0,
+    assignedEmployeeId: item.assignedSaleId ?? item.AssignedSaleId ?? null,
+    assignedEmployeeName: null,
+    totalSpend: Number(item.totalSpending ?? item.TotalSpending ?? item.totalSpend ?? item.TotalSpend ?? 0),
     currentDebt: Number(item.currentDebt ?? item.CurrentDebt ?? 0),
+    taxCode: item.taxCode ?? item.TaxCode ?? '',
     tier: item.tier ?? item.Tier ?? null,
     address: item.address ?? item.Address ?? '',
   }
@@ -69,97 +43,143 @@ export function mapCustomer(item) {
 export function mapCustomerDetail(item) {
   const base = mapCustomer(item)
   if (!base) return null
+
   const tier = item.tier ?? item.Tier
   return {
     ...base,
+    addresses: item.addresses ?? item.Addresses ?? [],
     tier: tier
       ? {
-          tierId: tier.tierId ?? tier.TierId,
-          tierCode: tier.tierCode ?? tier.TierCode ?? '',
-          minTotalSpend: Number(tier.minTotalSpend ?? tier.MinTotalSpend ?? 0),
+          tierId: tier.id ?? tier.Id,
+          tierCode: tier.tierName ?? tier.TierName ?? '',
+          minTotalSpend: Number(tier.minSpendingThreshold ?? tier.MinSpendingThreshold ?? 0),
           discountPercent: Number(tier.discountPercent ?? tier.DiscountPercent ?? 0),
         }
-      : null,
+      : base.tier,
   }
 }
 
-export async function fetchCustomers(params = {}) {
-  const search = new URLSearchParams()
-  if (params.keyword) search.set('keyword', params.keyword)
-  if (params.customerType) search.set('customerType', params.customerType)
-  if (params.status) search.set('status', params.status)
-  if (params.tierId) search.set('tierId', String(params.tierId))
-  if (params.assignedEmployeeId) search.set('assignedEmployeeId', String(params.assignedEmployeeId))
-  if (params.hasDebt) search.set('hasDebt', 'true')
-  if (params.minDebt != null) search.set('minDebt', String(params.minDebt))
-  if (params.sortBy) search.set('sortBy', params.sortBy)
-  if (params.sortOrder) search.set('sortOrder', params.sortOrder)
+function applyClientFilters(items, params = {}) {
+  let result = items
 
-  const query = search.toString()
-  const path = query ? `/api/customers?${query}` : '/api/customers'
-  const data = await requestWithAuth(path, { method: 'GET' })
-  return Array.isArray(data) ? data.map(mapCustomer).filter(Boolean) : []
+  if (params.keyword) {
+    const keyword = params.keyword.toLowerCase()
+    result = result.filter(
+      (item) =>
+        item.fullName.toLowerCase().includes(keyword) ||
+        item.phone.toLowerCase().includes(keyword),
+    )
+  }
+
+  if (params.customerType) {
+    result = result.filter((item) => item.customerType === params.customerType)
+  }
+
+  if (params.hasDebt) {
+    result = result.filter((item) => item.currentDebt > 0)
+  }
+
+  if (params.sortBy === 'debt') {
+    result = [...result].sort((a, b) => b.currentDebt - a.currentDebt)
+  }
+
+  return result
+}
+
+export async function fetchCustomers(params = {}) {
+  const data = await apiRequestAuth('/api/customers?page=1&pageSize=500', { method: 'GET' })
+  const paged = toPagedResult(data)
+  return applyClientFilters(paged.items.map(mapCustomer).filter(Boolean), params)
 }
 
 export async function fetchCustomersWithDebt(params = {}) {
-  const search = new URLSearchParams()
-  if (params.minDebt != null) search.set('minDebt', String(params.minDebt))
-  if (params.sortOrder) search.set('sortOrder', params.sortOrder)
-  const query = search.toString()
-  const path = query ? `/api/customers/with-debt?${query}` : '/api/customers/with-debt'
-  const data = await requestWithAuth(path, { method: 'GET' })
-  return Array.isArray(data) ? data.map(mapCustomer).filter(Boolean) : []
+  return fetchCustomers({ ...params, hasDebt: true, sortBy: 'debt', sortOrder: 'desc' })
 }
 
 export async function fetchCustomerById(customerId) {
-  const data = await requestWithAuth(`/api/customers/${customerId}`, { method: 'GET' })
+  const data = await apiRequestAuth(`/api/customers/${customerId}`, { method: 'GET' })
   return mapCustomerDetail(data)
 }
 
 export function createCustomer(payload) {
-  return requestWithAuth('/api/customers', {
+  return apiRequestAuth('/api/customers', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({
+      fullName: payload.fullName,
+      phoneNumber: payload.phone ?? payload.phoneNumber,
+      customerGroup: payload.customerGroup ?? mapTypeToCustomerGroup(payload.customerType),
+      taxCode: payload.taxCode ?? null,
+      assignedSaleId: payload.assignedEmployeeId ?? payload.assignedSaleId ?? null,
+    }),
   }).then(mapCustomerDetail)
 }
 
 export function updateCustomer(customerId, payload) {
-  return requestWithAuth(`/api/customers/${customerId}`, {
+  return apiRequestAuth(`/api/customers/${customerId}`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({
+      fullName: payload.fullName,
+      phoneNumber: payload.phone ?? payload.phoneNumber,
+      customerGroup: payload.customerGroup ?? mapTypeToCustomerGroup(payload.customerType),
+      taxCode: payload.taxCode ?? null,
+      tierId: payload.tierId ?? null,
+      assignedSaleId: payload.assignedEmployeeId ?? payload.assignedSaleId ?? null,
+    }),
   }).then(mapCustomerDetail)
 }
 
-export function changeCustomerStatus(customerId, status) {
-  return requestWithAuth(`/api/customers/${customerId}/status`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ status }),
-  }).then(mapCustomerDetail)
-}
-
-export async function reconcileCustomerDebt(customerId) {
-  return requestWithAuth(`/api/customers/${customerId}/reconcile-debt`, {
-    method: 'POST',
-  })
+function mapTypeToCustomerGroup(customerType) {
+  const normalized = String(customerType || '').toUpperCase()
+  if (normalized === 'CORPORATE') return 'DoanhNghiep'
+  if (normalized === 'VIP') return 'DoiNgoai'
+  return 'PhoThong'
 }
 
 export async function fetchMembershipTiers() {
-  const data = await requestWithAuth('/api/customer/tiers', { method: 'GET' })
-  return Array.isArray(data) ? data.map(mapMembershipTier).filter(Boolean) : []
+  const data = await apiRequestAuth('/api/customer-tiers', { method: 'GET' })
+  return Array.isArray(data)
+    ? data.map((item) => ({
+        id: item.id ?? item.Id,
+        tierCode: item.tierName ?? item.TierName ?? '',
+        minTotalSpend: Number(item.minSpendingThreshold ?? item.MinSpendingThreshold ?? 0),
+        discountPercent: Number(item.discountPercent ?? item.DiscountPercent ?? 0),
+        isActive: true,
+      }))
+    : []
 }
 
-/** Nâng hạng thủ công (API VIP) — đổi TierId và chuyển loại khách sang VIP. */
-export function upgradeCustomerTierManual({ customerId, newTierId, updatedByEmpId }) {
-  return requestWithAuth('/api/customer/upgrade-tier', {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      customerId,
-      newTierId,
-      updatedByEmpId,
-    }),
+export function fetchCustomerAddresses(customerId) {
+  return apiRequestAuth(`/api/customers/${customerId}/addresses`, { method: 'GET' })
+}
+
+export function createCustomerAddress(customerId, payload) {
+  return apiRequestAuth(`/api/customers/${customerId}/addresses`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
   })
+}
+
+export function updateCustomerAddress(customerId, addressId, payload) {
+  return apiRequestAuth(`/api/customers/${customerId}/addresses/${addressId}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function deleteCustomerAddress(customerId, addressId) {
+  return apiRequestAuth(`/api/customers/${customerId}/addresses/${addressId}`, {
+    method: 'DELETE',
+  })
+}
+
+export async function changeCustomerStatus(_customerId, _status) {
+  throw new Error('API chưa hỗ trợ đổi trạng thái khách hàng.')
+}
+
+export async function reconcileCustomerDebt(_customerId) {
+  throw new Error('API chưa hỗ trợ đối soát công nợ khách hàng.')
+}
+
+export async function upgradeCustomerTierManual(_payload) {
+  throw new Error('API chưa hỗ trợ nâng hạng thủ công.')
 }
