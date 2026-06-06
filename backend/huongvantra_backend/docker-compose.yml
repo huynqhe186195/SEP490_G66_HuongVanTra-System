@@ -1,0 +1,104 @@
+services:
+
+  # ─── Infrastructure ───────────────────────────────────────────────────────────
+
+  mysql:
+    image: mysql:8.0
+    container_name: hvt-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-hvtroot123}
+      MYSQL_USER: ${MYSQL_USER:-hvtuser}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-hvtpass123}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./Scripts/init-databases.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - hvt-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-hvtroot123}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: hvt-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-hvt}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:-hvtrabbit123}
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - hvt-network
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ─── Services ─────────────────────────────────────────────────────────────────
+
+  customer-service:
+    build:
+      context: .
+      dockerfile: services/CustomerService/CustomerService.WebAPI/Dockerfile
+    container_name: hvt-customer-service
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__DefaultConnection: "Server=mysql;Port=3306;Database=hvt_customer_db;User=${MYSQL_USER:-hvtuser};Password=${MYSQL_PASSWORD:-hvtpass123};CharSet=utf8mb4;"
+      RabbitMQ__Host: amqp://rabbitmq
+      RabbitMQ__Username: ${RABBITMQ_USER:-hvt}
+      RabbitMQ__Password: ${RABBITMQ_PASS:-hvtrabbit123}
+    ports:
+      - "5001:8080"
+    networks:
+      - hvt-network
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  # ─── API Gateway ──────────────────────────────────────────────────────────────
+
+  gateway:
+    build:
+      context: .
+      dockerfile: API_Gateway/HuongVanTra.Gateway/Dockerfile
+    container_name: hvt-gateway
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+      ASPNETCORE_URLS: http://+:8080
+      Jwt__Secret: ${JWT_SECRET:-your-super-secret-key-at-least-32-chars!!}
+      Jwt__Issuer: HuongVanTra
+      Jwt__Audience: HuongVanTra
+      Cors__AllowedOrigins__0: ${FRONTEND_URL:-http://localhost:3000}
+      ReverseProxy__Clusters__customer-cluster__Destinations__destination1__Address: http://customer-service:8080
+    ports:
+      - "5000:8080"
+    networks:
+      - hvt-network
+    depends_on:
+      - customer-service
+
+# ─── Volumes & Networks ───────────────────────────────────────────────────────
+
+volumes:
+  mysql_data:
+  rabbitmq_data:
+
+networks:
+  hvt-network:
+    driver: bridge
