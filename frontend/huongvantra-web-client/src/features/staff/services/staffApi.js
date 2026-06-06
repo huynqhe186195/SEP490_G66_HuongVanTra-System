@@ -1,89 +1,180 @@
-import { loadAuthSession } from '../../auth/services/authSession.js'
+import {
+  createEmployee,
+  deactivateEmployee,
+  fetchEmployeeById,
+  fetchEmployees,
+  mapEmployee,
+  updateEmployee,
+} from '../../iam/services/employeesApi.js'
+import { assignUserRoles, fetchUserById, updateUser } from '../../iam/services/usersApi.js'
+import { fetchRoles, mapRole } from '../../iam/services/rolesApi.js'
+import { resetPassword } from '../../auth/services/authApi.js'
 
-const DEFAULT_API_BASE_URL = 'http://localhost:5249'
+function mapStaffRow(employee) {
+  const mapped = mapEmployee(employee)
+  if (!mapped) return null
 
-function getApiBaseUrl() {
-  return import.meta.env.VITE_API_BASE_URL || DEFAULT_API_BASE_URL
+  return {
+    employeeId: mapped.employeeId,
+    userId: mapped.employeeId,
+    userGuid: mapped.userId,
+    fullName: mapped.fullName,
+    phone: mapped.bankAccountInfo || '',
+    username: mapped.username,
+    department: mapped.department,
+    roles: [],
+    isActive: mapped.isActive,
+    status: mapped.status,
+  }
 }
 
-async function parseResponseError(response) {
-  const contentType = response.headers.get('content-type') || ''
+function filterStaffRows(rows, params = {}) {
+  let result = rows
 
-  if (contentType.includes('application/json')) {
-    const body = await response.json().catch(() => null)
-    if (body && typeof body === 'object') {
-      if (typeof body.message === 'string' && body.message.trim()) return body.message
-      if (typeof body.title === 'string' && body.title.trim()) return body.title
-    }
+  if (params.search) {
+    const keyword = params.search.toLowerCase()
+    result = result.filter(
+      (item) =>
+        item.fullName.toLowerCase().includes(keyword) ||
+        item.username.toLowerCase().includes(keyword) ||
+        item.phone.toLowerCase().includes(keyword),
+    )
   }
 
-  const text = await response.text().catch(() => '')
-  return text.trim() || 'Có lỗi xảy ra.'
-}
-
-async function requestWithAuth(path, options = {}) {
-  const session = loadAuthSession()
-  if (!session?.accessToken) {
-    throw new Error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.')
+  if (typeof params.isActive === 'boolean') {
+    result = result.filter((item) => item.isActive === params.isActive)
   }
 
-  const response = await fetch(`${getApiBaseUrl()}${path}`, {
-    ...options,
-    headers: {
-      ...(options.headers || {}),
-      Authorization: `Bearer ${session.accessToken}`,
-    },
-  })
-
-  if (!response.ok) {
-    throw new Error(await parseResponseError(response))
+  if (params.role) {
+    const roleName = String(params.role).toLowerCase()
+    result = result.filter((item) =>
+      (item.roles || []).some((role) => String(role).toLowerCase() === roleName),
+    )
   }
 
-  if (response.status === 204) return null
-  return response.json()
+  return result
 }
 
-export function fetchStaffAccount(userId) {
-  return requestWithAuth(`/api/staff-accounts/${userId}`, { method: 'GET' })
+export async function fetchRoleOptions() {
+  const roles = await fetchRoles()
+  return (Array.isArray(roles) ? roles : [])
+    .map(mapRole)
+    .filter(Boolean)
+    .map((role) => ({
+      id: role.id,
+      name: role.roleName,
+      label: role.roleName,
+    }))
 }
 
-export function fetchStaffAccounts(params = {}) {
-  const search = new URLSearchParams()
-  if (params.search) search.set('search', params.search)
-  if (params.role) search.set('role', params.role)
-  if (typeof params.isActive === 'boolean') search.set('isActive', String(params.isActive))
-  if (params.page) search.set('page', String(params.page))
-  if (params.pageSize) search.set('pageSize', String(params.pageSize))
+export async function fetchStaffAccounts(params = {}) {
+  const page = params.page ?? 1
+  const pageSize = params.pageSize ?? 10
+  const data = await fetchEmployees({ page: 1, pageSize: 200 })
+  const rows = data.items.map(mapStaffRow).filter(Boolean)
 
-  const query = search.toString()
-  const path = query ? `/api/staff-accounts?${query}` : '/api/staff-accounts'
-  return requestWithAuth(path, { method: 'GET' })
+  const enriched = await Promise.all(
+    rows.map(async (row) => {
+      try {
+        const user = await fetchUserById(row.userGuid)
+        return {
+          ...row,
+          roles: user.roles ?? user.Roles ?? [],
+          isActive: user.isActive ?? user.IsActive ?? row.isActive,
+        }
+      } catch {
+        return row
+      }
+    }),
+  )
+
+  const filtered = filterStaffRows(enriched, params)
+  const start = (page - 1) * pageSize
+
+  return {
+    items: filtered.slice(start, start + pageSize),
+    totalCount: filtered.length,
+    page,
+    pageSize,
+  }
 }
 
-export function updateStaffAccount(userId, payload) {
-  return requestWithAuth(`/api/staff-accounts/${userId}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
+export async function fetchStaffAccount(employeeId) {
+  const employee = await fetchEmployeeById(employeeId)
+  const mapped = mapEmployee(employee)
+  const user = await fetchUserById(mapped.userId)
+
+  return {
+    employeeId: mapped.employeeId,
+    userId: mapped.employeeId,
+    userGuid: mapped.userId,
+    fullName: mapped.fullName,
+    phone: mapped.bankAccountInfo || '',
+    username: mapped.username,
+    employeeCode: String(mapped.employeeId),
+    department: mapped.department,
+    roles: user.roles ?? user.Roles ?? [],
+    note: '',
+    isActive: user.isActive ?? user.IsActive ?? mapped.isActive,
+    status: mapped.status,
+  }
+}
+
+export async function createStaffAccount(payload) {
+  const roles = await fetchRoleOptions()
+  const role = roles.find((item) => item.name === payload.roles?.[0])
+  if (!role) {
+    throw new Error('Vai trò không hợp lệ.')
+  }
+
+  return createEmployee({
+    username: payload.username,
+    password: payload.password,
+    roleIds: [role.id],
+    fullName: payload.fullName,
+    department: payload.note || null,
+    actualSalary: 0,
+    bankAccountInfo: payload.phone || null,
   })
 }
 
-export function fetchRoleOptions() {
-  return requestWithAuth('/api/staff-accounts/roles', { method: 'GET' })
+export async function updateStaffAccount(employeeId, payload) {
+  const current = await fetchStaffAccount(employeeId)
+  const options = await fetchRoleOptions()
+
+  await updateEmployee(employeeId, {
+    fullName: payload.fullName,
+    department: payload.note || current.department || null,
+    actualSalary: current.actualSalary || 0,
+    bankAccountInfo: payload.phone || current.phone || null,
+  })
+
+  const roleIds = (current.roles || [])
+    .map((name) => options.find((item) => item.name === name)?.id)
+    .filter(Boolean)
+
+  await updateUser(current.userGuid, {
+    isActive: payload.isActive ?? payload.active ?? current.isActive,
+    roleIds,
+  })
+
+  if (payload.newPassword?.trim()) {
+    await resetPassword(current.username, payload.newPassword.trim())
+  }
 }
 
-export function assignStaffRoles(userId, roles) {
-  return requestWithAuth(`/api/staff-accounts/${userId}/roles`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ roles }),
-  })
+export async function assignStaffRoles(employeeId, roles) {
+  const current = await fetchStaffAccount(employeeId)
+  const options = await fetchRoleOptions()
+  const roleIds = roles
+    .map((name) => options.find((item) => item.name === name)?.id)
+    .filter(Boolean)
+
+  if (!roleIds.length) {
+    throw new Error('Vai trò không hợp lệ.')
+  }
+
+  return assignUserRoles(current.userGuid, roleIds)
 }
 
-export function createStaffAccount(payload) {
-  return requestWithAuth('/api/staff-accounts', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  })
-}
+export { deactivateEmployee as deactivateStaffAccount }
