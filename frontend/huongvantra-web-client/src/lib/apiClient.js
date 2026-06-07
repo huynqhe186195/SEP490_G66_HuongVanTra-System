@@ -7,27 +7,38 @@ export function getApiBaseUrl() {
   return import.meta.env.VITE_API_BASE_URL || DEFAULT_API_BASE_URL
 }
 
-export async function parseResponseError(response) {
+export async function parseApiErrorBody(response) {
   const contentType = response.headers.get('content-type') || ''
-
-  if (contentType.includes('application/json')) {
-    const body = await response.json().catch(() => null)
-    if (body && typeof body === 'object') {
-      if (typeof body.message === 'string' && body.message.trim()) return body.message
-      if (typeof body.title === 'string' && body.title.trim()) return body.title
-      if (body.errors && typeof body.errors === 'object') {
-        const messages = Object.values(body.errors).flat().filter(Boolean)
-        if (messages.length) return messages.join(' ')
-      }
-      if (typeof body.error === 'string' && body.error.trim()) return body.error
-      if (Array.isArray(body.errors) && body.errors.length) {
-        return body.errors.filter(Boolean).join(' ')
-      }
-    }
+  if (!contentType.includes('application/json')) {
+    const text = await response.text().catch(() => '')
+    return { message: text.trim() || 'Có lỗi xảy ra.', errors: [], statusCode: response.status }
   }
 
-  const text = await response.text().catch(() => '')
-  return text.trim() || 'Có lỗi xảy ra.'
+  const body = await response.json().catch(() => null)
+  if (!body || typeof body !== 'object') {
+    return { message: 'Có lỗi xảy ra.', errors: [], statusCode: response.status }
+  }
+
+  let errors = []
+  if (Array.isArray(body.errors)) {
+    errors = body.errors.filter(Boolean).map(String)
+  } else if (body.errors && typeof body.errors === 'object') {
+    errors = Object.values(body.errors).flat().filter(Boolean).map(String)
+  }
+
+  const message =
+    errors.join(' ') ||
+    (typeof body.error === 'string' && body.error.trim()) ||
+    (typeof body.message === 'string' && body.message.trim()) ||
+    (typeof body.title === 'string' && body.title.trim()) ||
+    'Có lỗi xảy ra.'
+
+  return { message, errors, statusCode: body.statusCode ?? response.status }
+}
+
+export async function parseResponseError(response) {
+  const { message } = await parseApiErrorBody(response)
+  return message
 }
 
 function decodeJwtPayload(token) {
@@ -151,11 +162,14 @@ export async function apiRequestAuth(path, options = {}, retry = true) {
   }
 
   if (!response.ok) {
-    const message = await parseResponseError(response)
+    const { message, errors } = await parseApiErrorBody(response)
     if (response.status === 401 || response.status === 403) {
       handleAuthFailure(message, response.status)
     }
-    throw new Error(message)
+    const error = new Error(message)
+    error.apiErrors = errors
+    error.statusCode = response.status
+    throw error
   }
 
   if (response.status === 204) return null

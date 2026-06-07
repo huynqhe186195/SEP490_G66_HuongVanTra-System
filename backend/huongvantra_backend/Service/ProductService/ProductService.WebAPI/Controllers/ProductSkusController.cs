@@ -8,11 +8,9 @@ namespace ProductService.WebAPI.Controllers;
 
 [ApiController]
 [Route("api/v1/skus")]
-[Authorize]
 public class ProductSkusController(ProductSkuLogic _skuLogic) : ControllerBase
 {
     [HttpGet]
-    [AllowAnonymous]
     public async Task<IActionResult> GetPaged(
         [FromQuery] string? search,
         [FromQuery] Guid? productId,
@@ -22,17 +20,14 @@ public class ProductSkusController(ProductSkuLogic _skuLogic) : ControllerBase
         Ok(await _skuLogic.GetPagedAsync(new GetProductSkusRequest(search, productId, isActive, page, pageSize)));
 
     [HttpGet("{id:guid}")]
-    [AllowAnonymous]
     public async Task<IActionResult> GetById(Guid id) =>
         Ok(await _skuLogic.GetByIdAsync(id));
 
     [HttpGet("by-code/{skuCode}")]
-    [AllowAnonymous]
     public async Task<IActionResult> GetBySkuCode(string skuCode) =>
         Ok(await _skuLogic.GetBySkuCodeAsync(skuCode));
 
     [HttpGet("by-product/{productId:guid}")]
-    [AllowAnonymous]
     public async Task<IActionResult> GetByProductId(Guid productId) =>
         Ok(await _skuLogic.GetByProductIdAsync(productId));
 

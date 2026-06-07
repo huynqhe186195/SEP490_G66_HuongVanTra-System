@@ -8,16 +8,38 @@ const ROLE_MODULE_MAP = {
     'cod_ops',
     'stock_deduct_ops',
     'customers',
+    'products',
     'staff',
     'membership_tiers_admin',
     'promotions_admin',
     'users_admin',
     'phan_quyen_admin',
   ],
-  manager: ['pos', 'orders', 'cod_ops', 'stock_deduct_ops', 'customers', 'staff'],
+  manager: ['pos', 'orders', 'cod_ops', 'stock_deduct_ops', 'customers', 'products', 'staff'],
   sale: ['pos', 'orders', 'customers'],
-  warehouse: ['stock_deduct_ops', 'orders'],
+  warehouse: ['stock_deduct_ops', 'orders', 'products'],
   accountant: ['orders', 'customers', 'reports'],
+}
+
+const ROLE_ALIAS_TO_MAP_KEY = {
+  agencymanager: 'manager',
+  branchmanager: 'manager',
+  owner: 'manager',
+  manager: 'manager',
+  salesstaff: 'sale',
+  sale: 'sale',
+  inventorymanager: 'warehouse',
+  warehousemanager: 'warehouse',
+  thukho: 'warehouse',
+  warehouse: 'warehouse',
+  accountant: 'accountant',
+  admin: 'admin',
+}
+
+function resolveRoleMapKey(role) {
+  const key = normalizeRoleKey(role)
+  if (ROLE_MODULE_MAP[key]) return key
+  return ROLE_ALIAS_TO_MAP_KEY[key] || null
 }
 
 function normalizeRoleKey(role) {
@@ -31,8 +53,8 @@ function deriveModulesFromRoles(roles = []) {
   const modules = new Set()
 
   for (const role of roles) {
-    const key = normalizeRoleKey(role)
-    const mapped = ROLE_MODULE_MAP[key]
+    const key = resolveRoleMapKey(role)
+    const mapped = key ? ROLE_MODULE_MAP[key] : null
     if (mapped) {
       mapped.forEach((module) => modules.add(module))
     }

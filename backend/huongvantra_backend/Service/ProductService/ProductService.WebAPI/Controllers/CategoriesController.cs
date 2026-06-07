@@ -8,16 +8,13 @@ namespace ProductService.WebAPI.Controllers;
 
 [ApiController]
 [Route("api/v1/categories")]
-[Authorize]
 public class CategoriesController(CategoryLogic _categoryLogic) : ControllerBase
 {
     [HttpGet]
-    [AllowAnonymous]
     public async Task<IActionResult> GetAll() =>
         Ok(await _categoryLogic.GetAllAsync());
 
     [HttpGet("{id:int}")]
-    [AllowAnonymous]
     public async Task<IActionResult> GetById(int id) =>
         Ok(await _categoryLogic.GetByIdAsync(id));
 

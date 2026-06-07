@@ -51,16 +51,25 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<ProductDbContext>();
     var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
-    var retries = 0;
-    while (retries < 10)
+    var migrated = false;
+    for (var retry = 1; retry <= 10; retry++)
     {
-        try { db.Database.Migrate(); break; }
+        try
+        {
+            db.Database.Migrate();
+            migrated = true;
+            break;
+        }
         catch (Exception ex)
         {
-            retries++;
-            logger.LogWarning("Migration attempt {Retry}/10 failed: {Message}. Retrying in 5s...", retries, ex.Message);
+            logger.LogWarning(ex, "Migration attempt {Retry}/10 failed. Retrying in 5s...", retry);
             Thread.Sleep(5000);
         }
+    }
+
+    if (!migrated)
+    {
+        throw new InvalidOperationException("Product database migration failed after 10 attempts.");
     }
 }
 

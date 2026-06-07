@@ -24,6 +24,26 @@ services:
       retries: 5
       start_period: 30s
 
+  # Re-apply CREATE DATABASE + GRANT on every compose up (fixes old mysql volumes).
+  mysql-bootstrap:
+    image: mysql:8.0
+    container_name: hvt-mysql-bootstrap
+    restart: "no"
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-hvtroot123}
+    volumes:
+      - ./Scripts/ensure-databases.sql:/bootstrap.sql:ro
+    networks:
+      - hvt-network
+    depends_on:
+      mysql:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - >
+        mysql -hmysql -uroot -p$$MYSQL_ROOT_PASSWORD < /bootstrap.sql &&
+        echo "MySQL databases ensured."
+
   rabbitmq:
     image: rabbitmq:3.13-management
     container_name: hvt-rabbitmq
@@ -68,6 +88,8 @@ services:
     networks:
       - hvt-network
     depends_on:
+      mysql-bootstrap:
+        condition: service_completed_successfully
       mysql:
         condition: service_healthy
       rabbitmq:
@@ -97,6 +119,8 @@ services:
     networks:
       - hvt-network
     depends_on:
+      mysql-bootstrap:
+        condition: service_completed_successfully
       mysql:
         condition: service_healthy
     healthcheck:
@@ -119,11 +143,16 @@ services:
       RabbitMQ__Host: rabbitmq
       RabbitMQ__Username: ${RABBITMQ_USER:-hvt}
       RabbitMQ__Password: ${RABBITMQ_PASS:-hvtrabbit123}
+      Jwt__Secret: ${JWT_SECRET:-your-super-secret-key-at-least-32-chars!!}
+      Jwt__Issuer: HuongVanTra
+      Jwt__Audience: HuongVanTra
     ports:
       - "5003:8080"
     networks:
       - hvt-network
     depends_on:
+      mysql-bootstrap:
+        condition: service_completed_successfully
       mysql:
         condition: service_healthy
       rabbitmq:
@@ -133,7 +162,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 40s
+      start_period: 60s
 
   # ─── API Gateway ──────────────────────────────────────────────────────────────
 
@@ -153,6 +182,7 @@ services:
       Cors__AllowedOrigins__1: http://localhost:5173
       ReverseProxy__Clusters__customer-cluster__Destinations__destination1__Address: http://customer-service:8080
       ReverseProxy__Clusters__user-cluster__Destinations__destination1__Address: http://user-service:8080
+      ReverseProxy__Clusters__product-cluster__Destinations__destination1__Address: http://product-service:8080
     ports:
       - "5000:8080"
     networks:
@@ -161,6 +191,8 @@ services:
       customer-service:
         condition: service_started
       user-service:
+        condition: service_healthy
+      product-service:
         condition: service_healthy
 
   # ─── Frontend ─────────────────────────────────────────────────────────────────

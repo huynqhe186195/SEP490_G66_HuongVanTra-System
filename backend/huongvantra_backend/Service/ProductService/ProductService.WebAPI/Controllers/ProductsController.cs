@@ -8,11 +8,9 @@ namespace ProductService.WebAPI.Controllers;
 
 [ApiController]
 [Route("api/v1/products")]
-[Authorize]
 public class ProductsController(ProductLogic _productLogic) : ControllerBase
 {
     [HttpGet]
-    [AllowAnonymous]
     public async Task<IActionResult> GetPaged(
         [FromQuery] string? search,
         [FromQuery] int? categoryId,
@@ -22,7 +20,6 @@ public class ProductsController(ProductLogic _productLogic) : ControllerBase
         Ok(await _productLogic.GetPagedAsync(new GetProductsRequest(search, categoryId, isActive, page, pageSize)));
 
     [HttpGet("{id:guid}")]
-    [AllowAnonymous]
     public async Task<IActionResult> GetById(Guid id) =>
         Ok(await _productLogic.GetByIdAsync(id));
 
