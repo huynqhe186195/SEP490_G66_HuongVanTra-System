@@ -20,6 +20,12 @@ public class CustomerRepository : ICustomerRepository
     public async Task<Customer?> GetByPhoneAsync(string phone, CancellationToken ct = default) =>
         await _db.Customers.FirstOrDefaultAsync(c => c.PhoneNumber == phone && !c.IsDeleted, ct);
 
+    public async Task<bool> PhoneExistsAsync(string phone, Guid? excludeCustomerId = null, CancellationToken ct = default) =>
+        await _db.Customers.AnyAsync(c =>
+            c.PhoneNumber == phone &&
+            !c.IsDeleted &&
+            (!excludeCustomerId.HasValue || c.Id != excludeCustomerId.Value), ct);
+
     public async Task<IEnumerable<Customer>> GetAllAsync(int page, int pageSize, CancellationToken ct = default) =>
         await _db.Customers
             .Include(c => c.Tier)
@@ -28,6 +34,9 @@ public class CustomerRepository : ICustomerRepository
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync(ct);
+
+    public async Task<int> CountAsync(CancellationToken ct = default) =>
+        await _db.Customers.CountAsync(c => !c.IsDeleted, ct);
 
     public async Task AddAsync(Customer customer, CancellationToken ct = default) =>
         await _db.Customers.AddAsync(customer, ct);
