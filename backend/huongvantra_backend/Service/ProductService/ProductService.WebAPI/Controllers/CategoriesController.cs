@@ -1,0 +1,36 @@
+using Microsoft.AspNetCore.Mvc;
+using ProductService.Application.DTOs.Requests;
+using ProductService.Application.UseCases;
+
+namespace ProductService.WebAPI.Controllers;
+
+[ApiController]
+[Route("api/v1/categories")]
+public class CategoriesController(CategoryLogic _categoryLogic) : ControllerBase
+{
+    [HttpGet]
+    public async Task<IActionResult> GetAll() =>
+        Ok(await _categoryLogic.GetAllAsync());
+
+    [HttpGet("{id:int}")]
+    public async Task<IActionResult> GetById(int id) =>
+        Ok(await _categoryLogic.GetByIdAsync(id));
+
+    [HttpPost]
+    public async Task<IActionResult> Create([FromBody] CreateCategoryRequest request)
+    {
+        var result = await _categoryLogic.CreateAsync(request);
+        return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
+    }
+
+    [HttpPut("{id:int}")]
+    public async Task<IActionResult> Update(int id, [FromBody] UpdateCategoryRequest request) =>
+        Ok(await _categoryLogic.UpdateAsync(id, request));
+
+    [HttpDelete("{id:int}")]
+    public async Task<IActionResult> Delete(int id)
+    {
+        await _categoryLogic.DeleteAsync(id);
+        return NoContent();
+    }
+}
