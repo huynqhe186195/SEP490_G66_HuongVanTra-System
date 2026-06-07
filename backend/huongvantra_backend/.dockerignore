@@ -25,5 +25,9 @@ docs/
 # Logs
 **/*.log
 
+# Test / coverage
+**/coverage/
+**/*.TestResults/
+
 # Frontend (không liên quan đến backend services)
 ../../frontend/

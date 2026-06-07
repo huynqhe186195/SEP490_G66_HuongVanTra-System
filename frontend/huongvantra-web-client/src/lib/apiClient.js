@@ -15,6 +15,14 @@ export async function parseResponseError(response) {
     if (body && typeof body === 'object') {
       if (typeof body.message === 'string' && body.message.trim()) return body.message
       if (typeof body.title === 'string' && body.title.trim()) return body.title
+      if (body.errors && typeof body.errors === 'object') {
+        const messages = Object.values(body.errors).flat().filter(Boolean)
+        if (messages.length) return messages.join(' ')
+      }
+      if (typeof body.error === 'string' && body.error.trim()) return body.error
+      if (Array.isArray(body.errors) && body.errors.length) {
+        return body.errors.filter(Boolean).join(' ')
+      }
     }
   }
 

@@ -35,10 +35,19 @@ namespace CustomerService.Infrastructure.Migrations
                         .HasColumnType("decimal(18,2)")
                         .HasDefaultValue(0m);
 
+                    b.Property<string>("CustomerCode")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)");
+
                     b.Property<string>("CustomerGroup")
                         .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("varchar(20)");
+
+                    b.Property<string>("Email")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
 
                     b.Property<string>("FullName")
                         .IsRequired()
@@ -72,12 +81,43 @@ namespace CustomerService.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("CustomerCode")
+                        .IsUnique();
+
                     b.HasIndex("PhoneNumber")
                         .IsUnique();
 
                     b.HasIndex("TierId");
 
                     b.ToTable("Customers", (string)null);
+                });
+
+            modelBuilder.Entity("CustomerService.Domain.Entities.CustomerActivity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("ActivityType")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid>("CustomerId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CustomerId");
+
+                    b.ToTable("CustomerActivities", (string)null);
                 });
 
             modelBuilder.Entity("CustomerService.Domain.Entities.CustomerAddress", b =>
@@ -141,6 +181,46 @@ namespace CustomerService.Infrastructure.Migrations
                     b.ToTable("CustomerAddresses", (string)null);
                 });
 
+            modelBuilder.Entity("CustomerService.Domain.Entities.CustomerDebtTransaction", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)");
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("BalanceAfter")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid>("CustomerId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<Guid?>("ReferenceId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("ReferenceType")
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CustomerId");
+
+                    b.ToTable("CustomerDebtTransactions", (string)null);
+                });
+
             modelBuilder.Entity("CustomerService.Domain.Entities.CustomerTier", b =>
                 {
                     b.Property<int>("Id")
@@ -177,6 +257,30 @@ namespace CustomerService.Infrastructure.Migrations
                     b.ToTable("CustomerTiers", (string)null);
                 });
 
+            modelBuilder.Entity("CustomerService.Domain.Entities.ProcessedIntegrationEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)");
+
+                    b.Property<Guid>("CorrelationId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<DateTime>("ProcessedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EventType", "CorrelationId")
+                        .IsUnique();
+
+                    b.ToTable("ProcessedIntegrationEvents", (string)null);
+                });
+
             modelBuilder.Entity("CustomerService.Domain.Entities.Customer", b =>
                 {
                     b.HasOne("CustomerService.Domain.Entities.CustomerTier", "Tier")
@@ -185,6 +289,17 @@ namespace CustomerService.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("Tier");
+                });
+
+            modelBuilder.Entity("CustomerService.Domain.Entities.CustomerActivity", b =>
+                {
+                    b.HasOne("CustomerService.Domain.Entities.Customer", "Customer")
+                        .WithMany("Activities")
+                        .HasForeignKey("CustomerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Customer");
                 });
 
             modelBuilder.Entity("CustomerService.Domain.Entities.CustomerAddress", b =>
@@ -198,9 +313,24 @@ namespace CustomerService.Infrastructure.Migrations
                     b.Navigation("Customer");
                 });
 
+            modelBuilder.Entity("CustomerService.Domain.Entities.CustomerDebtTransaction", b =>
+                {
+                    b.HasOne("CustomerService.Domain.Entities.Customer", "Customer")
+                        .WithMany("DebtTransactions")
+                        .HasForeignKey("CustomerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Customer");
+                });
+
             modelBuilder.Entity("CustomerService.Domain.Entities.Customer", b =>
                 {
+                    b.Navigation("Activities");
+
                     b.Navigation("Addresses");
+
+                    b.Navigation("DebtTransactions");
                 });
 
             modelBuilder.Entity("CustomerService.Domain.Entities.CustomerTier", b =>

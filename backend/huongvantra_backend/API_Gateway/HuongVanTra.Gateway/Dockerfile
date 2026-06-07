@@ -1,6 +1,7 @@
 FROM mcr.microsoft.com/dotnet/sdk:8.0-alpine AS restore
 WORKDIR /src
 
+COPY Shared_Libraries/HuongVanTra.Shared/HuongVanTra.Shared.csproj Shared_Libraries/HuongVanTra.Shared/
 COPY API_Gateway/HuongVanTra.Gateway/HuongVanTra.Gateway.csproj API_Gateway/HuongVanTra.Gateway/
 
 RUN dotnet restore API_Gateway/HuongVanTra.Gateway/HuongVanTra.Gateway.csproj \
@@ -10,6 +11,7 @@ RUN dotnet restore API_Gateway/HuongVanTra.Gateway/HuongVanTra.Gateway.csproj \
 FROM restore AS build
 
 COPY API_Gateway/HuongVanTra.Gateway/ API_Gateway/HuongVanTra.Gateway/
+COPY Shared_Libraries/HuongVanTra.Shared/ Shared_Libraries/HuongVanTra.Shared/
 
 RUN dotnet publish API_Gateway/HuongVanTra.Gateway/HuongVanTra.Gateway.csproj \
     -c Release -o /app/publish \

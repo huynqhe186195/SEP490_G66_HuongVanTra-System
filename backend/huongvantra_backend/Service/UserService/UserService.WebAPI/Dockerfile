@@ -23,7 +23,8 @@ RUN dotnet publish Service/UserService/UserService.WebAPI/UserService.WebAPI.csp
 # ── Stage 3: final (runtime only — no SDK) ────────────────────────────────────
 FROM mcr.microsoft.com/dotnet/aspnet:8.0-alpine AS final
 
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+RUN apk add --no-cache wget \
+    && addgroup -S appgroup && adduser -S appuser -G appgroup
 
 WORKDIR /app
 

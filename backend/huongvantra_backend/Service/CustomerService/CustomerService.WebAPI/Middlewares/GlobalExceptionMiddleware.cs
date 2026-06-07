@@ -33,6 +33,7 @@ public class GlobalExceptionMiddleware
         {
             CustomerNotFoundException => (StatusCodes.Status404NotFound, ex.Message, null),
             DuplicatePhoneNumberException => (StatusCodes.Status409Conflict, ex.Message, null),
+            DuplicateEmailException => (StatusCodes.Status409Conflict, ex.Message, null),
             CustomerValidationException validation => (StatusCodes.Status400BadRequest, validation.Message, validation.Errors),
             _ => (StatusCodes.Status500InternalServerError, "An unexpected error occurred.", null)
         };

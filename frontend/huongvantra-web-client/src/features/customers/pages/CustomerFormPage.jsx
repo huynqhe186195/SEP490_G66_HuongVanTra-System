@@ -1,12 +1,17 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import MembershipTierProgress from '../components/MembershipTierProgress.jsx'
+import CustomerAddressesPanel from '../components/CustomerAddressesPanel.jsx'
+import CustomerDebtHistory from '../components/CustomerDebtHistory.jsx'
+import CustomerActivityFeed from '../components/CustomerActivityFeed.jsx'
+import SimulateOrderCompletedPanel from '../components/SimulateOrderCompletedPanel.jsx'
 import {
   changeCustomerStatus,
   createCustomer,
+  deleteCustomer,
   fetchCustomerById,
   fetchMembershipTiers,
   reconcileCustomerDebt,
@@ -18,11 +23,16 @@ import {
   customerTypeLabel,
   formatDebtVnd,
   formatVnd,
-  generateCustomerCode,
   isAdminSession,
   supportsMembershipTierForTab,
   tabKeyFromCustomerType,
 } from '../utils/customerDisplay.js'
+import { mapCustomerApiError, normalizeNameInput, normalizePhoneInput, validateCustomerForm } from '../utils/customerValidation.js'
+
+function FieldError({ message }) {
+  if (!message) return null
+  return <p className="text-xs text-[#b42318]">{message}</p>
+}
 
 function CustomerFormPage() {
   const navigate = useNavigate()
@@ -38,17 +48,25 @@ function CustomerFormPage() {
   const [totalSpend, setTotalSpend] = useState(0)
   const [currentTierCode, setCurrentTierCode] = useState('')
   const [currentTierDiscount, setCurrentTierDiscount] = useState(0)
+  const [currentTierId, setCurrentTierId] = useState(null)
   const [initialStatus, setInitialStatus] = useState('active')
+  const [debtRefreshKey, setDebtRefreshKey] = useState(0)
+  const [activityRefreshKey, setActivityRefreshKey] = useState(0)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [fieldErrors, setFieldErrors] = useState({})
+  const [isNameComposing, setIsNameComposing] = useState(false)
   const isAdmin = isAdminSession(loadAuthSession())
   const [form, setForm] = useState({
     type: ['general', 'vip', 'corporate'].includes(searchParams.get('type'))
       ? searchParams.get('type')
       : 'general',
+    customerCode: '',
     name: '',
     phone: '',
     email: '',
     address: '',
     tierId: '',
+    taxCode: '',
     status: 'active',
   })
 
@@ -80,22 +98,7 @@ function CustomerFormPage() {
         setIsLoading(true)
         const customer = await fetchCustomerById(customerId)
         if (!mounted) return
-
-        setForm({
-          type: tabKeyFromCustomerType(customer.customerType),
-          name: customer.fullName || '',
-          phone: customer.phone || '',
-          email: customer.email || '',
-          address: customer.address || '',
-          tierId: customer.tier?.tierId ? String(customer.tier.tierId) : '',
-          status: customer.status?.toLowerCase() === 'inactive' ? 'inactive' : 'active',
-        })
-        setCurrentDebt(Number(customer.currentDebt || 0))
-        setTotalSpend(Number(customer.totalSpend || 0))
-        setCurrentTierCode(customer.tier?.tierCode || customer.tierCode || '')
-        setCurrentTierDiscount(Number(customer.tier?.discountPercent ?? 0))
-        const loadedStatus = customer.status?.toLowerCase() === 'inactive' ? 'inactive' : 'active'
-        setInitialStatus(loadedStatus)
+        applyCustomerToForm(customer)
       } catch (error) {
         if (mounted) showError(error.message)
       } finally {
@@ -109,22 +112,65 @@ function CustomerFormPage() {
     }
   }, [customerId, isEditMode])
 
-  const formTitle = useMemo(
-    () => (isEditMode ? `Chỉnh sửa khách hàng #${customerId}` : 'Thêm khách hàng mới'),
-    [isEditMode, customerId],
-  )
+  function applyCustomerToForm(customer) {
+    setForm({
+      type: tabKeyFromCustomerType(customer.customerType),
+      customerCode: customer.customerCode || '',
+      name: customer.fullName || '',
+      phone: customer.phone || '',
+      email: customer.email || '',
+      address: customer.address || '',
+      tierId: customer.tier?.tierId ? String(customer.tier.tierId) : '',
+      taxCode: customer.taxCode || '',
+      status: customer.status?.toLowerCase() === 'inactive' ? 'inactive' : 'active',
+    })
+    setCurrentDebt(Number(customer.currentDebt || 0))
+    setTotalSpend(Number(customer.totalSpend || 0))
+    setCurrentTierCode(customer.tier?.tierCode || customer.tierCode || '')
+    setCurrentTierDiscount(Number(customer.tier?.discountPercent ?? 0))
+    setCurrentTierId(customer.tier?.tierId ?? customer.tierId ?? null)
+    const loadedStatus = customer.status?.toLowerCase() === 'inactive' ? 'inactive' : 'active'
+    setInitialStatus(loadedStatus)
+  }
+
+  function handleIntegrationUpdated(customer) {
+    applyCustomerToForm(customer)
+    setDebtRefreshKey((key) => key + 1)
+    setActivityRefreshKey((key) => key + 1)
+  }
 
   const updateField = (field) => (event) => {
-    setForm((current) => ({ ...current, [field]: event.target.value }))
+    const value = event.target.value
+    setForm((current) => ({ ...current, [field]: value }))
+    setFieldErrors((current) => ({ ...current, [field]: undefined }))
+  }
+
+  const handlePhoneChange = (event) => {
+    const value = normalizePhoneInput(event.target.value)
+    setForm((current) => ({ ...current, phone: value }))
+    setFieldErrors((current) => ({ ...current, phone: undefined }))
+  }
+
+  const handleNameChange = (event) => {
+    const raw = event.target.value
+    const value = isNameComposing ? raw : normalizeNameInput(raw)
+    setForm((current) => ({ ...current, name: value }))
+    setFieldErrors((current) => ({ ...current, name: undefined }))
+  }
+
+  const handleNameCompositionEnd = (event) => {
+    setIsNameComposing(false)
+    const value = normalizeNameInput(event.target.value)
+    setForm((current) => ({ ...current, name: value }))
   }
 
   const buildPayload = () => ({
-    customerCode: isEditMode ? undefined : generateCustomerCode(form.type),
     fullName: form.name.trim(),
     customerType: customerTypeFromTab(form.type),
     phone: form.phone.trim() || null,
     email: form.email.trim() || null,
     address: form.address.trim() || null,
+    taxCode: form.type === 'corporate' ? form.taxCode.trim() : null,
     tierId: supportsMembershipTierForTab(form.type) && form.tierId ? Number(form.tierId) : null,
   })
 
@@ -143,7 +189,9 @@ function CustomerFormPage() {
       await reconcileCustomerDebt(customerId)
       const customer = await fetchCustomerById(customerId)
       setCurrentDebt(Number(customer.currentDebt || 0))
-      showSuccess('Đã đối soát công nợ từ các đơn chưa thanh toán.')
+      setDebtRefreshKey((key) => key + 1)
+      setActivityRefreshKey((key) => key + 1)
+      showSuccess('Đã đối soát công nợ (thanh toán toàn bộ dư nợ).')
     } catch (error) {
       showError(error.message)
     } finally {
@@ -151,11 +199,37 @@ function CustomerFormPage() {
     }
   }
 
+  const handleDelete = async () => {
+    if (!customerId || !window.confirm('Ngừng hoạt động khách hàng này? (xóa mềm — có thể khôi phục sau)')) return
+    try {
+      setIsDeleting(true)
+      await deleteCustomer(customerId)
+      showSuccess('Đã ngừng hoạt động khách hàng (xóa mềm).')
+      navigate('/customers')
+    } catch (error) {
+      showError(error.message)
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
   const handleSubmit = async () => {
-    if (!form.name.trim()) {
-      showError('Vui lòng nhập tên khách hàng.')
+    const validation = validateCustomerForm({
+      name: form.name,
+      phone: form.phone,
+      email: form.email,
+      address: form.address,
+      customerType: customerTypeFromTab(form.type),
+      taxCode: form.taxCode,
+    })
+
+    if (!validation.valid) {
+      setFieldErrors(validation.errors)
+      showError(validation.message)
       return
     }
+
+    setFieldErrors({})
 
     try {
       setIsSaving(true)
@@ -168,6 +242,7 @@ function CustomerFormPage() {
           phone: payload.phone,
           email: payload.email,
           address: payload.address,
+          taxCode: payload.taxCode,
           tierId: payload.tierId,
         })
 
@@ -181,12 +256,12 @@ function CustomerFormPage() {
         showSuccess('Cập nhật khách hàng thành công.')
       } else {
         await createCustomer({
-          customerCode: payload.customerCode,
           fullName: payload.fullName,
           customerType: payload.customerType,
           phone: payload.phone,
           email: payload.email,
           address: payload.address,
+          taxCode: payload.taxCode,
           tierId: payload.tierId,
         })
         showSuccess('Tạo khách hàng thành công.')
@@ -194,7 +269,11 @@ function CustomerFormPage() {
 
       navigate('/customers')
     } catch (error) {
-      showError(error.message)
+      const mapped = mapCustomerApiError(error.message)
+      if (mapped.field) {
+        setFieldErrors((current) => ({ ...current, [mapped.field]: mapped.message }))
+      }
+      showError(mapped.message)
     } finally {
       setIsSaving(false)
     }
@@ -205,7 +284,6 @@ function CustomerFormPage() {
       <PageHeader
         title={isEditMode ? 'Chỉnh sửa khách hàng' : 'Thêm khách hàng'}
         description="Cập nhật thông tin liên hệ, hạng thành viên và trạng thái tài khoản"
-        searchPlaceholder={formTitle}
         rightContent={
           <div className="flex items-center gap-2 rounded-full bg-[#f6f4ec] px-3 py-1.5">
             <span className="text-xs text-[#717971]">Loại khách</span>
@@ -245,62 +323,86 @@ function CustomerFormPage() {
           <form className="space-y-4 rounded-[24px] border border-[#c1c9c0]/30 bg-white p-6 shadow-sm" onSubmit={(event) => event.preventDefault()}>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <label className="space-y-2 md:col-span-2">
-                <span className="text-xs font-semibold text-[#717971]">{form.type === 'corporate' ? 'Tên công ty' : 'Họ tên khách hàng'}</span>
+                <span className="text-xs font-semibold text-[#717971]">
+                  {form.type === 'corporate' ? 'Tên công ty *' : 'Họ tên khách hàng *'}
+                </span>
                 <input
-                  className="w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20"
+                  className={`w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20 ${fieldErrors.name ? 'ring-2 ring-[#b42318]/40' : ''}`}
                   placeholder={form.type === 'corporate' ? 'Nhập tên công ty' : 'Nhập họ tên'}
                   type="text"
                   value={form.name}
-                  onChange={updateField('name')}
+                  onChange={handleNameChange}
+                  onCompositionStart={() => setIsNameComposing(true)}
+                  onCompositionEnd={handleNameCompositionEnd}
                 />
+                <FieldError message={fieldErrors.name} />
               </label>
 
               <label className="space-y-2">
-                <span className="text-xs font-semibold text-[#717971]">Số điện thoại</span>
+                <span className="text-xs font-semibold text-[#717971]">Số điện thoại *</span>
                 <input
-                  className="w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20"
-                  placeholder="Số điện thoại"
-                  type="text"
+                  className={`w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20 ${fieldErrors.phone ? 'ring-2 ring-[#b42318]/40' : ''}`}
+                  placeholder="0xxxxxxxxx"
+                  type="tel"
+                  inputMode="numeric"
+                  maxLength={10}
                   value={form.phone}
-                  onChange={updateField('phone')}
+                  onChange={handlePhoneChange}
                 />
+                <FieldError message={fieldErrors.phone} />
               </label>
 
               <label className="space-y-2">
                 <span className="text-xs font-semibold text-[#717971]">Email</span>
                 <input
-                  className="w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20"
-                  placeholder="Email"
+                  className={`w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20 ${fieldErrors.email ? 'ring-2 ring-[#b42318]/40' : ''}`}
+                  placeholder="email@example.com"
                   type="email"
                   value={form.email}
                   onChange={updateField('email')}
                 />
+                <FieldError message={fieldErrors.email} />
               </label>
 
               <label className="space-y-2 md:col-span-2">
-                <span className="text-xs font-semibold text-[#717971]">Địa chỉ</span>
+                <span className="text-xs font-semibold text-[#717971]">Địa chỉ *</span>
                 <input
-                  className="w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20"
-                  placeholder="Địa chỉ"
+                  className={`w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20 ${fieldErrors.address ? 'ring-2 ring-[#b42318]/40' : ''}`}
+                  placeholder="Số nhà, đường, phường/xã, quận/huyện, tỉnh/thành"
                   type="text"
                   value={form.address}
                   onChange={updateField('address')}
                 />
+                <FieldError message={fieldErrors.address} />
               </label>
+
+              {form.type === 'corporate' ? (
+                <label className="space-y-2 md:col-span-2">
+                  <span className="text-xs font-semibold text-[#717971]">Mã số thuế *</span>
+                  <input
+                    className={`w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20 ${fieldErrors.taxCode ? 'ring-2 ring-[#b42318]/40' : ''}`}
+                    placeholder="Mã số thuế doanh nghiệp"
+                    type="text"
+                    value={form.taxCode}
+                    onChange={updateField('taxCode')}
+                  />
+                  <FieldError message={fieldErrors.taxCode} />
+                </label>
+              ) : null}
 
               {supportsMembershipTierForTab(form.type) ? (
                 <div className="space-y-2 md:col-span-2">
-                  <span className="text-xs font-semibold text-[#717971]">Hạng thành viên (Bronze / Silver / Gold)</span>
+                  <span className="text-xs font-semibold text-[#717971]">Hạng thành viên (Member / Silver / Gold / Diamond)</span>
                   <select
                     className="w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20"
                     value={form.tierId}
                     onChange={updateField('tierId')}
                   >
-                    <option value="">Tự gán Bronze (mặc định)</option>
+                    <option value="">Tự gán Member (mặc định)</option>
                     {tiers.map((tier) => (
                       <option key={tier.id} value={tier.id}>
                         {tier.tierCode} — ngưỡng {tier.minTotalSpend.toLocaleString('vi-VN')} đ
-                        {tier.discountPercent > 0 ? ` · CK ${tier.discountPercent}%` : ''}
+                        {tier.discountPercent > 0 ? ` · chiết khấu ${tier.discountPercent}%` : ''}
                       </option>
                     ))}
                   </select>
@@ -326,18 +428,32 @@ function CustomerFormPage() {
               </label>
             </div>
 
-            <div className="flex flex-wrap justify-end gap-3 border-t border-[#c1c9c0]/40 pt-5">
-              <Link to="/customers" className="rounded-xl border border-[#356647] px-5 py-2 text-sm font-semibold text-[#356647] hover:bg-[#356647]/5">
-                Hủy
-              </Link>
-              <button
-                type="button"
-                className="rounded-xl bg-[#4a6242] px-5 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-60"
-                disabled={isSaving}
-                onClick={handleSubmit}
-              >
-                {isSaving ? 'Đang lưu...' : isEditMode ? 'Cập nhật' : 'Tạo khách hàng'}
-              </button>
+            <div className="flex flex-wrap justify-between gap-3 border-t border-[#c1c9c0]/40 pt-5">
+              {isEditMode ? (
+                <button
+                  type="button"
+                  className="rounded-xl border border-[#b42318] px-5 py-2 text-sm font-semibold text-[#b42318] hover:bg-[#b42318]/5 disabled:opacity-60"
+                  disabled={isDeleting || isSaving}
+                  onClick={handleDelete}
+                >
+                  {isDeleting ? 'Đang xử lý...' : 'Ngừng hoạt động'}
+                </button>
+              ) : (
+                <span />
+              )}
+              <div className="flex flex-wrap gap-3">
+                <Link to="/customers" className="rounded-xl border border-[#356647] px-5 py-2 text-sm font-semibold text-[#356647] hover:bg-[#356647]/5">
+                  Hủy
+                </Link>
+                <button
+                  type="button"
+                  className="rounded-xl bg-[#4a6242] px-5 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-60"
+                  disabled={isSaving}
+                  onClick={handleSubmit}
+                >
+                  {isSaving ? 'Đang lưu...' : isEditMode ? 'Cập nhật' : 'Tạo khách hàng'}
+                </button>
+              </div>
             </div>
           </form>
 
@@ -347,6 +463,13 @@ function CustomerFormPage() {
             <div className="rounded-xl bg-[#f6f4ec] p-4">
               <p className="text-xs text-[#717971]">Tên</p>
               <p className="text-sm font-bold text-[#1b1c17]">{form.name || '—'}</p>
+            </div>
+
+            <div className="rounded-xl bg-[#f6f4ec] p-4">
+              <p className="text-xs text-[#717971]">Mã khách hàng</p>
+              <p className="text-sm font-bold text-[#356647]">
+                {form.customerCode || (isEditMode ? '—' : 'Tự động (KH000001, …)')}
+              </p>
             </div>
 
             {isEditMode ? (
@@ -360,7 +483,7 @@ function CustomerFormPage() {
                     <p className="mb-3 text-xs font-bold uppercase tracking-wider text-[#356647]">Hạng & tiến độ tự động</p>
                     <MembershipTierProgress
                       totalSpend={totalSpend}
-                      tierId={form.tierId ? Number(form.tierId) : null}
+                      tierId={currentTierId ?? (form.tierId ? Number(form.tierId) : null)}
                       tierCode={currentTierCode}
                       tierDiscountPercent={currentTierDiscount}
                       tiers={tiers}
@@ -383,6 +506,17 @@ function CustomerFormPage() {
                     {isReconcilingDebt ? 'Đang đối soát...' : 'Đối soát công nợ (Admin)'}
                   </button>
                 ) : null}
+                <SimulateOrderCompletedPanel
+                  customerId={customerId}
+                  customerName={form.name}
+                  snapshot={{
+                    totalSpend,
+                    currentDebt,
+                    tierId: currentTierId,
+                  }}
+                  compact
+                  onUpdated={handleIntegrationUpdated}
+                />
               </>
             ) : null}
 
@@ -399,6 +533,21 @@ function CustomerFormPage() {
           </aside>
         </section>
       )}
+
+      {isEditMode && !isLoading ? (
+        <>
+          <CustomerAddressesPanel customerId={customerId} />
+          <CustomerDebtHistory customerId={customerId} refreshKey={debtRefreshKey} />
+          <section className="rounded-[24px] border border-[#c1c9c0]/30 bg-white p-6 shadow-sm">
+            <h3 className="mb-3 text-lg font-semibold text-[#356647]">Nhật ký hoạt động</h3>
+            <CustomerActivityFeed
+              customerId={customerId}
+              refreshKey={activityRefreshKey}
+              emptyMessage="Chưa có hoạt động ghi nhận cho khách hàng này."
+            />
+          </section>
+        </>
+      ) : null}
     </div>
   )
 }

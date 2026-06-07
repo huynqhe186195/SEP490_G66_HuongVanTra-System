@@ -4,6 +4,24 @@ export const CUSTOMER_TYPE_BY_TAB = {
   corporate: 'CORPORATE',
 }
 
+export const DEFAULT_MEMBERSHIP_TIER = 'Member'
+
+export function customerHasTier(customer) {
+  if (!customer) return false
+  return Boolean(customer.tierId) || Boolean(String(customer.tierCode || '').trim())
+}
+
+export function getMembershipTierLabel(customer) {
+  const code = String(customer?.tierCode || '').trim()
+  return code || DEFAULT_MEMBERSHIP_TIER
+}
+
+export function isMemberTierCustomer(customer) {
+  if (!customer) return false
+  if (!customerHasTier(customer)) return true
+  return getMembershipTierLabel(customer).toLowerCase() === DEFAULT_MEMBERSHIP_TIER.toLowerCase()
+}
+
 export function formatVnd(value) {
   const amount = Number(value) || 0
   return `${amount.toLocaleString('vi-VN')} VND`
@@ -87,5 +105,10 @@ export function tabKeyFromCustomerType(customerType) {
 export function customerTypeLabel(tabKey) {
   if (tabKey === 'corporate') return 'Khách doanh nghiệp'
   if (tabKey === 'vip') return 'Khách VIP'
+  if (tabKey === 'inactive') return 'Khách đã ngừng HĐ'
   return 'Khách phổ thông'
+}
+
+export function customerTypeLabelFromType(customerType) {
+  return customerTypeLabel(tabKeyFromCustomerType(customerType))
 }
