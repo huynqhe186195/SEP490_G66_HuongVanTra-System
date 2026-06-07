@@ -112,3 +112,12 @@ export function customerTypeLabel(tabKey) {
 export function customerTypeLabelFromType(customerType) {
   return customerTypeLabel(tabKeyFromCustomerType(customerType))
 }
+
+export function formatCustomerAddressLine(address) {
+  if (!address) return ''
+  if (typeof address === 'string') return address.trim()
+  return [address.addressLine, address.ward, address.district, address.province]
+    .map((part) => String(part || '').trim())
+    .filter(Boolean)
+    .join(', ')
+}

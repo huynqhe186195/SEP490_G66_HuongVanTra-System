@@ -34,6 +34,9 @@ public record OrderDetailResponse(
 
 public record PaymentResponse(
     Guid Id,
+    Guid OrderId,
+    string? OrderCode,
+    string? CustomerSnapshotName,
     string PaymentMethod,
     decimal Amount,
     string PaymentStatus,

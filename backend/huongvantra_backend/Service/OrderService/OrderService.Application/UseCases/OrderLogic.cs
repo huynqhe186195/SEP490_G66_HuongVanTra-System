@@ -218,7 +218,8 @@ public class OrderLogic(
             d.Id, d.SkuId, d.SkuSnapshotName, d.SkuSnapshotCode,
             d.Quantity, d.UnitPrice, d.SubTotal)).ToList(),
         (o.Payments ?? []).Select(p => new PaymentResponse(
-            p.Id, p.PaymentMethod.ToString(), p.Amount, p.PaymentStatus.ToString(),
+            p.Id, p.OrderId, o.OrderCode, o.CustomerSnapshotName,
+            p.PaymentMethod.ToString(), p.Amount, p.PaymentStatus.ToString(),
             p.TransactionRef, p.IsCodVerified, p.CodWarningDate, p.PaidAt)).ToList()
     );
 

@@ -15,11 +15,23 @@ public class PaymentRepository(OrderDbContext _db) : IPaymentRepository
         await _db.Payments.Where(p => p.OrderId == orderId).ToListAsync(ct);
 
     public async Task<List<Payment>> GetPendingCodAsync(CancellationToken ct = default) =>
-        await _db.Payments.Where(p =>
-            p.PaymentMethod == PaymentMethod.COD &&
-            !p.IsCodVerified &&
-            p.CodWarningDate <= DateTime.UtcNow)
-        .ToListAsync(ct);
+        await _db.Payments
+            .Include(p => p.Order)
+            .Where(p =>
+                p.PaymentMethod == PaymentMethod.COD &&
+                !p.IsCodVerified &&
+                p.CodWarningDate <= DateTime.UtcNow)
+            .OrderByDescending(p => p.CodWarningDate)
+            .ToListAsync(ct);
+
+    public async Task<List<Payment>> GetUnverifiedCodAsync(CancellationToken ct = default) =>
+        await _db.Payments
+            .Include(p => p.Order)
+            .Where(p =>
+                p.PaymentMethod == PaymentMethod.COD &&
+                !p.IsCodVerified)
+            .OrderByDescending(p => p.CreatedAt)
+            .ToListAsync(ct);
 
     public async Task AddAsync(Payment payment, CancellationToken ct = default) =>
         await _db.Payments.AddAsync(payment, ct);

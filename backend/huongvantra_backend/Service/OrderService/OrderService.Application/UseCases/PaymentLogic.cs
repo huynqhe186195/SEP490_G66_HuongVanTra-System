@@ -44,7 +44,22 @@ public class PaymentLogic(IPaymentRepository _paymentRepo, IOrderRepository _ord
         return payments.Select(MapToResponse).ToList();
     }
 
+    public async Task<List<PaymentResponse>> GetUnverifiedCodAsync(CancellationToken ct = default)
+    {
+        var payments = await _paymentRepo.GetUnverifiedCodAsync(ct);
+        return payments.Select(MapToResponse).ToList();
+    }
+
     private static PaymentResponse MapToResponse(Domain.Entities.Payment p) => new(
-        p.Id, p.PaymentMethod.ToString(), p.Amount, p.PaymentStatus.ToString(),
-        p.TransactionRef, p.IsCodVerified, p.CodWarningDate, p.PaidAt);
+        p.Id,
+        p.OrderId,
+        p.Order?.OrderCode,
+        p.Order?.CustomerSnapshotName,
+        p.PaymentMethod.ToString(),
+        p.Amount,
+        p.PaymentStatus.ToString(),
+        p.TransactionRef,
+        p.IsCodVerified,
+        p.CodWarningDate,
+        p.PaidAt);
 }

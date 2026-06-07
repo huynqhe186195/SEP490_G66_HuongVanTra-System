@@ -10,3 +10,11 @@ export function canSimulateOrderCompleted(session) {
 export function canManageProducts(session) {
   return hasPermission(session, 'MANAGE_ROLE')
 }
+
+export function canViewOrders(session) {
+  return hasPermission(session, 'VIEW_ORDER')
+}
+
+export function canCreateOrder(session) {
+  return hasPermission(session, 'CREATE_ORDER')
+}

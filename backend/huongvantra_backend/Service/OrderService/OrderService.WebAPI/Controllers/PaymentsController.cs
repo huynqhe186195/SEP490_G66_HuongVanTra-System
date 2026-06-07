@@ -21,6 +21,11 @@ public class PaymentsController(PaymentLogic _paymentLogic) : ControllerBase
     public async Task<IActionResult> GetPendingCod(CancellationToken ct = default) =>
         Ok(await _paymentLogic.GetPendingCodAsync(ct));
 
+    [HttpGet("cod/unverified")]
+    [Authorize(Policy = PermissionNames.ViewOrder)]
+    public async Task<IActionResult> GetUnverifiedCod(CancellationToken ct = default) =>
+        Ok(await _paymentLogic.GetUnverifiedCodAsync(ct));
+
     [HttpPost("{id:guid}/verify-cod")]
     [Authorize(Policy = PermissionNames.CreateOrder)]
     public async Task<IActionResult> VerifyCod(
