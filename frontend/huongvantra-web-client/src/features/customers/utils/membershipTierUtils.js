@@ -67,4 +67,4 @@ export function computeTierProgress(totalSpend, tiers, currentTierId) {
 }
 
 export const TIER_AUTO_UPGRADE_HINT =
-  'Hạng tự động cập nhật khi tạo đơn POS/online (cộng tổng chi tiêu tích lũy). Hệ thống còn quét 24h/lần theo doanh số 12 tháng cho khách phổ thông.'
+  'Hạng tự động cập nhật khi Order Service gửi OrderCompletedEvent (RabbitMQ) — cộng chi tiêu và nâng hạng theo ngưỡng.'

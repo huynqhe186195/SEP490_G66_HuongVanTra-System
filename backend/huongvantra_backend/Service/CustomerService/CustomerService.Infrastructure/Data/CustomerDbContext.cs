@@ -10,6 +10,9 @@ public class CustomerDbContext : DbContext
     public DbSet<Customer> Customers => Set<Customer>();
     public DbSet<CustomerTier> CustomerTiers => Set<CustomerTier>();
     public DbSet<CustomerAddress> CustomerAddresses => Set<CustomerAddress>();
+    public DbSet<ProcessedIntegrationEvent> ProcessedIntegrationEvents => Set<ProcessedIntegrationEvent>();
+    public DbSet<CustomerDebtTransaction> CustomerDebtTransactions => Set<CustomerDebtTransaction>();
+    public DbSet<CustomerActivity> CustomerActivities => Set<CustomerActivity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

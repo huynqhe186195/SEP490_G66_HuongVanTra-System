@@ -7,10 +7,15 @@ using CustomerService.WebAPI.Middlewares;
 using HuongVanTra.Shared.Auth;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+    });
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
@@ -25,6 +30,9 @@ builder.Services.AddDbContext<CustomerDbContext>(options =>
 builder.Services.AddScoped<ICustomerRepository, CustomerRepository>();
 builder.Services.AddScoped<ICustomerTierRepository, CustomerTierRepository>();
 builder.Services.AddScoped<ICustomerAddressRepository, CustomerAddressRepository>();
+builder.Services.AddScoped<IProcessedIntegrationEventRepository, ProcessedIntegrationEventRepository>();
+builder.Services.AddScoped<ICustomerDebtTransactionRepository, CustomerDebtTransactionRepository>();
+builder.Services.AddScoped<ICustomerActivityRepository, CustomerActivityRepository>();
 builder.Services.AddScoped<CustomerLogic>();
 builder.Services.AddScoped<CustomerTierLogic>();
 
@@ -61,6 +69,7 @@ using (var scope = app.Services.CreateScope())
         try
         {
             db.Database.Migrate();
+            await CustomerDataSeeder.SeedAsync(db);
             break;
         }
         catch (Exception ex)
@@ -82,6 +91,7 @@ if (app.Environment.IsDevelopment())
 app.UseMiddleware<GlobalExceptionMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
+app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
 app.MapControllers();
 
 app.Run();

@@ -1,6 +1,7 @@
 FROM mcr.microsoft.com/dotnet/sdk:8.0-alpine AS restore
 WORKDIR /src
 
+COPY Shared_Libraries/HuongVanTra.Shared/HuongVanTra.Shared.csproj Shared_Libraries/HuongVanTra.Shared/
 COPY Service/CustomerService/CustomerService.Domain/CustomerService.Domain.csproj Service/CustomerService/CustomerService.Domain/
 COPY Service/CustomerService/CustomerService.Application/CustomerService.Application.csproj Service/CustomerService/CustomerService.Application/
 COPY Service/CustomerService/CustomerService.Infrastructure/CustomerService.Infrastructure.csproj Service/CustomerService/CustomerService.Infrastructure/
@@ -13,6 +14,7 @@ RUN dotnet restore Service/CustomerService/CustomerService.WebAPI/CustomerServic
 FROM restore AS build
 
 COPY Service/CustomerService/ Service/CustomerService/
+COPY Shared_Libraries/HuongVanTra.Shared/ Shared_Libraries/HuongVanTra.Shared/
 
 RUN dotnet publish Service/CustomerService/CustomerService.WebAPI/CustomerService.WebAPI.csproj \
     -c Release -o /app/publish \
@@ -23,7 +25,8 @@ RUN dotnet publish Service/CustomerService/CustomerService.WebAPI/CustomerServic
 # ── Stage 3: final (runtime only — no SDK) ────────────────────────────────────
 FROM mcr.microsoft.com/dotnet/aspnet:8.0-alpine AS final
 
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+RUN apk add --no-cache wget \
+    && addgroup -S appgroup && adduser -S appuser -G appgroup
 
 WORKDIR /app
 

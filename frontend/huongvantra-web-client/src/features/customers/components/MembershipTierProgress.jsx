@@ -31,7 +31,7 @@ function MembershipTierProgress({
           {displayCode}
         </span>
         {discount > 0 ? (
-          <span className="text-xs font-semibold text-[#356647]">CK hạng: {discount}%</span>
+          <span className="text-xs font-semibold text-[#356647]">Chiết khấu hạng: {discount}%</span>
         ) : null}
       </div>
 
@@ -52,7 +52,7 @@ function MembershipTierProgress({
           <p className="mt-1 text-xs text-[#717971]">
             Còn <span className="font-semibold text-[#7e5700]">{formatVnd(progress.amountToNext)}</span> để lên{' '}
             <span className="font-semibold">{progress.nextTier?.tierCode}</span>
-            {progress.nextTier?.discountPercent > 0 ? ` (CK ${progress.nextTier.discountPercent}%)` : ''}
+            {progress.nextTier?.discountPercent > 0 ? ` (chiết khấu ${progress.nextTier.discountPercent}%)` : ''}
           </p>
         )}
       </div>

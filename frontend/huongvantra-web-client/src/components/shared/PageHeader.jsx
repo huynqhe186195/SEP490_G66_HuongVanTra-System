@@ -4,21 +4,25 @@ function PageHeader({
   searchPlaceholder,
   searchValue,
   onSearchChange,
+  searchWide = false,
   searchDropdown = null,
   rightContent = null,
 }) {
   const hasTitle = Boolean(title)
   const hasSearch = Boolean(searchPlaceholder)
+  const searchWidthClass = searchWide ? 'min-w-0 w-full lg:flex-1 lg:max-w-none' : 'min-w-0 w-full lg:max-w-xl'
 
   const searchInput = hasSearch ? (
-    <div className={`group relative w-full ${hasTitle ? 'min-w-0 lg:max-w-xl' : 'lg:max-w-xl'}`}>
-      <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-[20px] text-[#58635b]">search</span>
+    <div className={`group relative ${searchWidthClass}`}>
+      <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-[22px] text-[#58635b]">search</span>
       <input
         type="text"
         placeholder={searchPlaceholder}
         value={searchValue ?? undefined}
         onChange={onSearchChange ? (e) => onSearchChange(e.target.value) : undefined}
-        className="h-11 w-full rounded-full border border-[#c1c9c0]/90 bg-white pl-12 pr-4 text-sm text-[#1b1c17] shadow-[0_1px_0_rgba(255,255,255,0.8),0_8px_20px_rgba(0,0,0,0.03)] outline-none transition focus:border-[#538463] focus:ring-2 focus:ring-[#356647]/20"
+        className={`w-full rounded-full border border-[#c1c9c0]/90 bg-white pl-12 pr-5 text-[#1b1c17] shadow-[0_1px_0_rgba(255,255,255,0.8),0_8px_20px_rgba(0,0,0,0.03)] outline-none transition focus:border-[#538463] focus:ring-2 focus:ring-[#356647]/20 ${
+          searchWide ? 'h-12 text-base sm:pl-14' : 'h-11 text-sm'
+        }`}
       />
 
       {searchDropdown ? (
@@ -51,7 +55,7 @@ function PageHeader({
 
         {hasTitle ? (
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="w-full lg:max-w-xl">{searchInput}</div>
+            <div className={searchWide ? 'w-full lg:flex-1' : 'w-full lg:max-w-xl'}>{searchInput}</div>
 
             {rightContent ? (
               <div className="flex flex-wrap items-center gap-3 text-[#356647] lg:justify-end">{rightContent}</div>
