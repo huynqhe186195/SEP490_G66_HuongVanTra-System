@@ -1,20 +1,20 @@
 FROM mcr.microsoft.com/dotnet/sdk:8.0-alpine AS restore
 WORKDIR /src
 
-COPY services/UserService/UserService.Domain/UserService.Domain.csproj services/UserService/UserService.Domain/
-COPY services/UserService/UserService.Application/UserService.Application.csproj services/UserService/UserService.Application/
-COPY services/UserService/UserService.Infrastructure/UserService.Infrastructure.csproj services/UserService/UserService.Infrastructure/
-COPY services/UserService/UserService.WebAPI/UserService.WebAPI.csproj services/UserService/UserService.WebAPI/
+COPY Service/UserService/UserService.Domain/UserService.Domain.csproj Service/UserService/UserService.Domain/
+COPY Service/UserService/UserService.Application/UserService.Application.csproj Service/UserService/UserService.Application/
+COPY Service/UserService/UserService.Infrastructure/UserService.Infrastructure.csproj Service/UserService/UserService.Infrastructure/
+COPY Service/UserService/UserService.WebAPI/UserService.WebAPI.csproj Service/UserService/UserService.WebAPI/
 
-RUN dotnet restore services/UserService/UserService.WebAPI/UserService.WebAPI.csproj \
+RUN dotnet restore Service/UserService/UserService.WebAPI/UserService.WebAPI.csproj \
     --runtime linux-musl-x64
 
 # ── Stage 2: build ────────────────────────────────────────────────────────────
 FROM restore AS build
 
-COPY services/UserService/ services/UserService/
+COPY Service/UserService/ Service/UserService/
 
-RUN dotnet publish services/UserService/UserService.WebAPI/UserService.WebAPI.csproj \
+RUN dotnet publish Service/UserService/UserService.WebAPI/UserService.WebAPI.csproj \
     -c Release -o /app/publish \
     --no-restore \
     --runtime linux-musl-x64 \

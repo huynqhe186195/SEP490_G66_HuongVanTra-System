@@ -1,20 +1,20 @@
 FROM mcr.microsoft.com/dotnet/sdk:8.0-alpine AS restore
 WORKDIR /src
 
-COPY services/CustomerService/CustomerService.Domain/CustomerService.Domain.csproj services/CustomerService/CustomerService.Domain/
-COPY services/CustomerService/CustomerService.Application/CustomerService.Application.csproj services/CustomerService/CustomerService.Application/
-COPY services/CustomerService/CustomerService.Infrastructure/CustomerService.Infrastructure.csproj services/CustomerService/CustomerService.Infrastructure/
-COPY services/CustomerService/CustomerService.WebAPI/CustomerService.WebAPI.csproj services/CustomerService/CustomerService.WebAPI/
+COPY Service/CustomerService/CustomerService.Domain/CustomerService.Domain.csproj Service/CustomerService/CustomerService.Domain/
+COPY Service/CustomerService/CustomerService.Application/CustomerService.Application.csproj Service/CustomerService/CustomerService.Application/
+COPY Service/CustomerService/CustomerService.Infrastructure/CustomerService.Infrastructure.csproj Service/CustomerService/CustomerService.Infrastructure/
+COPY Service/CustomerService/CustomerService.WebAPI/CustomerService.WebAPI.csproj Service/CustomerService/CustomerService.WebAPI/
 
-RUN dotnet restore services/CustomerService/CustomerService.WebAPI/CustomerService.WebAPI.csproj \
+RUN dotnet restore Service/CustomerService/CustomerService.WebAPI/CustomerService.WebAPI.csproj \
     --runtime linux-musl-x64
 
 # ── Stage 2: build ────────────────────────────────────────────────────────────
 FROM restore AS build
 
-COPY services/CustomerService/ services/CustomerService/
+COPY Service/CustomerService/ Service/CustomerService/
 
-RUN dotnet publish services/CustomerService/CustomerService.WebAPI/CustomerService.WebAPI.csproj \
+RUN dotnet publish Service/CustomerService/CustomerService.WebAPI/CustomerService.WebAPI.csproj \
     -c Release -o /app/publish \
     --no-restore \
     --runtime linux-musl-x64 \

@@ -50,7 +50,7 @@ services:
   customer-service:
     build:
       context: .
-      dockerfile: services/CustomerService/CustomerService.WebAPI/Dockerfile
+      dockerfile: Service/CustomerService/CustomerService.WebAPI/Dockerfile
     container_name: hvt-customer-service
     restart: unless-stopped
     environment:
@@ -76,7 +76,7 @@ services:
   user-service:
     build:
       context: .
-      dockerfile: services/UserService/UserService.WebAPI/Dockerfile
+      dockerfile: Service/UserService/UserService.WebAPI/Dockerfile
     container_name: hvt-user-service
     restart: unless-stopped
     environment:
