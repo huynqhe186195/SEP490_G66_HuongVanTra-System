@@ -33,6 +33,8 @@ import StaffDetailPage from '../features/staff/pages/StaffDetailPage.jsx'
 import StaffPage from '../features/staff/pages/StaffPage.jsx'
 import MembershipTiersPage from '../features/admin/pages/MembershipTiersPage.jsx'
 import PromotionsPage from '../features/admin/pages/PromotionsPage.jsx'
+import AccessControlPage from '../features/iam/pages/AccessControlPage.jsx'
+import UsersPage from '../features/iam/pages/UsersPage.jsx'
 
 function App() {
   return (
@@ -73,6 +75,10 @@ function App() {
         <Route path="/staff/:id" element={<StaffDetailPage />} />
         <Route path="/admin/membership-tiers" element={<MembershipTiersPage />} />
         <Route path="/admin/promotions" element={<PromotionsPage />} />
+        <Route path="/admin/users" element={<UsersPage />} />
+        <Route path="/admin/phan-quyen" element={<AccessControlPage />} />
+        <Route path="/admin/roles" element={<Navigate to="/admin/phan-quyen?tab=vai-tro" replace />} />
+        <Route path="/admin/permissions" element={<Navigate to="/admin/phan-quyen?tab=quyen" replace />} />
         <Route path="/contracts" element={<ContractsPage />} />
         <Route path="/reports" element={<ReportsOverviewPage />} />
         <Route path="/reports/customers" element={<ReportsCustomersPage />} />

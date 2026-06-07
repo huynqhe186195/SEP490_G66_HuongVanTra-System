@@ -57,6 +57,9 @@ services:
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
       ASPNETCORE_URLS: http://+:8080
       ConnectionStrings__DefaultConnection: "Server=mysql;Port=3306;Database=hvt_customer_db;User=${MYSQL_USER:-hvtuser};Password=${MYSQL_PASSWORD:-hvtpass123};CharSet=utf8mb4;"
+      Jwt__Secret: ${JWT_SECRET:-your-super-secret-key-at-least-32-chars!!}
+      Jwt__Issuer: HuongVanTra
+      Jwt__Audience: HuongVanTra
       RabbitMQ__Host: rabbitmq
       RabbitMQ__Username: ${RABBITMQ_USER:-hvt}
       RabbitMQ__Password: ${RABBITMQ_PASS:-hvtrabbit123}
@@ -90,6 +93,12 @@ services:
     depends_on:
       mysql:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
 
   # ─── API Gateway ──────────────────────────────────────────────────────────────
 
@@ -106,13 +115,35 @@ services:
       Jwt__Issuer: HuongVanTra
       Jwt__Audience: HuongVanTra
       Cors__AllowedOrigins__0: ${FRONTEND_URL:-http://localhost:3000}
+      Cors__AllowedOrigins__1: http://localhost:5173
       ReverseProxy__Clusters__customer-cluster__Destinations__destination1__Address: http://customer-service:8080
+      ReverseProxy__Clusters__user-cluster__Destinations__destination1__Address: http://user-service:8080
     ports:
       - "5000:8080"
     networks:
       - hvt-network
     depends_on:
-      - customer-service
+      customer-service:
+        condition: service_started
+      user-service:
+        condition: service_healthy
+
+  # ─── Frontend ─────────────────────────────────────────────────────────────────
+
+  web-client:
+    build:
+      context: ../../frontend/huongvantra-web-client
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:5000}
+    container_name: hvt-web-client
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    networks:
+      - hvt-network
+    depends_on:
+      - gateway
 
 # ─── Volumes & Networks ───────────────────────────────────────────────────────
 

@@ -2,12 +2,15 @@ using CustomerService.Application.DTOs.Requests;
 using CustomerService.Application.DTOs.Responses;
 using CustomerService.Application.Interfaces;
 using CustomerService.Domain.Entities;
+using HuongVanTra.Shared.Auth;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace CustomerService.WebAPI.Controllers;
 
 [ApiController]
 [Route("api/customers/{customerId:guid}/addresses")]
+[Authorize]
 public class CustomerAddressesController : ControllerBase
 {
     private readonly ICustomerAddressRepository _addressRepo;
@@ -16,6 +19,7 @@ public class CustomerAddressesController : ControllerBase
         => _addressRepo = addressRepo;
 
     [HttpGet]
+    [Authorize(Policy = PermissionNames.ViewCustomer)]
     public async Task<IActionResult> GetAll(Guid customerId, CancellationToken ct = default)
     {
         var addresses = await _addressRepo.GetByCustomerIdAsync(customerId, ct);
@@ -26,6 +30,7 @@ public class CustomerAddressesController : ControllerBase
     }
 
     [HttpPost]
+    [Authorize(Policy = PermissionNames.CreateCustomer)]
     public async Task<IActionResult> Create(Guid customerId, [FromBody] CreateCustomerAddressRequest request, CancellationToken ct = default)
     {
         var address = new CustomerAddress
@@ -52,6 +57,7 @@ public class CustomerAddressesController : ControllerBase
     }
 
     [HttpPut("{addressId:guid}")]
+    [Authorize(Policy = PermissionNames.CreateCustomer)]
     public async Task<IActionResult> Update(Guid customerId, Guid addressId, [FromBody] UpdateCustomerAddressRequest request, CancellationToken ct = default)
     {
         var address = await _addressRepo.GetByIdAsync(addressId, ct);
@@ -72,6 +78,7 @@ public class CustomerAddressesController : ControllerBase
     }
 
     [HttpDelete("{addressId:guid}")]
+    [Authorize(Policy = PermissionNames.CreateCustomer)]
     public async Task<IActionResult> Delete(Guid customerId, Guid addressId, CancellationToken ct = default)
     {
         var address = await _addressRepo.GetByIdAsync(addressId, ct);

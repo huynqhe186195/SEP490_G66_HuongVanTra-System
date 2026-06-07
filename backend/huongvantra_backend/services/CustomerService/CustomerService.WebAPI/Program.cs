@@ -4,6 +4,7 @@ using CustomerService.Infrastructure.Data;
 using CustomerService.Infrastructure.Messaging;
 using CustomerService.Infrastructure.Repositories;
 using CustomerService.WebAPI.Middlewares;
+using HuongVanTra.Shared.Auth;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
 
@@ -26,6 +27,9 @@ builder.Services.AddScoped<ICustomerTierRepository, CustomerTierRepository>();
 builder.Services.AddScoped<ICustomerAddressRepository, CustomerAddressRepository>();
 builder.Services.AddScoped<CustomerLogic>();
 builder.Services.AddScoped<CustomerTierLogic>();
+
+builder.Services.AddHvtJwtAuthentication(builder.Configuration);
+builder.Services.AddHvtPermissionPolicies();
 
 builder.Services.AddMassTransit(x =>
 {
@@ -76,6 +80,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseMiddleware<GlobalExceptionMiddleware>();
+app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 

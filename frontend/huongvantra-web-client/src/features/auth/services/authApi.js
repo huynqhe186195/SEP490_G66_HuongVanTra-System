@@ -1,123 +1,122 @@
-const DEFAULT_API_BASE_URL = 'http://localhost:5249'
+import { apiRequest, apiRequestAuth, getUserIdFromToken } from '../../../lib/apiClient.js'
+import { loadAuthSession } from './authSession.js'
 
-function getApiBaseUrl() {
-  return import.meta.env.VITE_API_BASE_URL || DEFAULT_API_BASE_URL
+const ROLE_MODULE_MAP = {
+  admin: [
+    'pos',
+    'orders',
+    'cod_ops',
+    'stock_deduct_ops',
+    'customers',
+    'staff',
+    'membership_tiers_admin',
+    'promotions_admin',
+    'users_admin',
+    'phan_quyen_admin',
+  ],
+  manager: ['pos', 'orders', 'cod_ops', 'stock_deduct_ops', 'customers', 'staff'],
+  sale: ['pos', 'orders', 'customers'],
+  warehouse: ['stock_deduct_ops', 'orders'],
+  accountant: ['orders', 'customers', 'reports'],
 }
 
-async function parseResponseError(response) {
-  const contentType = response.headers.get('content-type') || ''
+function normalizeRoleKey(role) {
+  return String(role || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '')
+}
 
-  if (contentType.includes('application/json')) {
-    const body = await response.json().catch(() => null)
+function deriveModulesFromRoles(roles = []) {
+  const modules = new Set()
 
-    if (body && typeof body === 'object') {
-      if (typeof body.title === 'string' && body.title.trim()) {
-        return body.title
-      }
-
-      if (typeof body.message === 'string' && body.message.trim()) {
-        return body.message
-      }
+  for (const role of roles) {
+    const key = normalizeRoleKey(role)
+    const mapped = ROLE_MODULE_MAP[key]
+    if (mapped) {
+      mapped.forEach((module) => modules.add(module))
     }
   }
 
-  const text = await response.text().catch(() => '')
-  return text.trim() || 'Đăng nhập thất bại. Vui lòng thử lại.'
+  return [...modules]
 }
 
-import { showError } from '../../../app/toast'
-
-async function request(path, options) {
-  const response = await fetch(`${getApiBaseUrl()}${path}`, options)
-
-  if (!response.ok) {
-    // handle auth/authorization errors centrally
-    if (response.status === 401 || response.status === 403) {
-      const errMsg = await parseResponseError(response)
-
-      if (response.status === 401) {
-        // not authenticated: show message and redirect to login
-        try { showError(errMsg || 'Bạn chưa đăng nhập hoặc token không hợp lệ.'); } catch {}
-        try { window.location.href = '/login'; } catch {}
-      } else {
-        // forbidden: show message
-        try { showError(errMsg || 'Bạn không có quyền truy cập trang này.'); } catch {}
-      }
-
-      throw new Error(errMsg)
-    }
-
-    throw new Error(await parseResponseError(response))
+export function normalizeAuthSession(data) {
+  const accessToken = data.accessToken ?? data.AccessToken
+  const expiresAt = data.expiresAt ?? data.ExpiresAt
+  return {
+    accessToken,
+    refreshToken: data.refreshToken ?? data.RefreshToken,
+    expiresAt,
+    expiresAtUtc: expiresAt,
+    username: data.username ?? data.Username ?? '',
+    roles: data.roles ?? data.Roles ?? [],
+    permissions: data.permissions ?? data.Permissions ?? [],
+    userId: getUserIdFromToken(accessToken),
   }
-
-  if (response.status === 204) {
-    return null
-  }
-
-  const contentType = response.headers.get('content-type') || ''
-
-  if (contentType.includes('application/json')) {
-    return response.json()
-  }
-
-  return response.text()
 }
 
 export async function login(username, password) {
-  return request('/api/Auth/login', {
+  const data = await apiRequest('/api/auth/login', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
     body: JSON.stringify({ username, password }),
   })
+  return normalizeAuthSession(data)
 }
 
-export async function refresh(accessToken, refreshToken) {
-  return request('/api/Auth/refresh', {
+export async function refresh(_accessToken, refreshToken) {
+  const token = refreshToken ?? _accessToken
+  const data = await apiRequest('/api/auth/refresh-token', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ accessToken, refreshToken }),
+    body: JSON.stringify({ refreshToken: token }),
   })
+  return normalizeAuthSession(data)
+}
+
+export async function me(accessToken) {
+  const session = loadAuthSession()
+  const token = accessToken ?? session?.accessToken
+  const userId = getUserIdFromToken(token) ?? session?.userId
+  if (!userId) {
+    return { username: session?.username ?? '', roles: session?.roles ?? [] }
+  }
+
+  const user = await apiRequestAuth(`/api/users/${userId}`, { method: 'GET' })
+  return {
+    userId: user.id ?? user.Id,
+    username: user.username ?? user.Username ?? session?.username ?? '',
+    roles: user.roles ?? user.Roles ?? session?.roles ?? [],
+    permissions: session?.permissions ?? [],
+  }
 }
 
 export async function logout(accessToken, refreshToken) {
-  return request('/api/Auth/logout', {
+  return apiRequest('/api/auth/logout', {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json',
       Authorization: `Bearer ${accessToken}`,
     },
     body: JSON.stringify({ refreshToken }),
   })
 }
 
-export async function me(accessToken) {
-  return request('/api/Auth/me', {
-    method: 'GET',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
+export async function changePassword(currentPassword, newPassword) {
+  return apiRequestAuth('/api/auth/change-password', {
+    method: 'POST',
+    body: JSON.stringify({ currentPassword, newPassword }),
   })
 }
 
-export async function fetchAccess(accessToken) {
-  return request('/api/access/me', {
-    method: 'GET',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
+export async function resetPassword(username, newPassword) {
+  return apiRequestAuth('/api/auth/reset-password', {
+    method: 'POST',
+    body: JSON.stringify({ username, newPassword }),
   })
 }
 
 export async function enrichSessionWithAccess(session) {
-  const access = await fetchAccess(session.accessToken)
-
   return {
     ...session,
-    roles: access.roles ?? session.roles ?? [],
-    modules: access.modules ?? [],
+    modules: deriveModulesFromRoles(session.roles ?? []),
   }
 }

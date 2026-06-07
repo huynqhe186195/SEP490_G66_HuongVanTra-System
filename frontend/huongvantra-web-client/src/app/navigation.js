@@ -1,8 +1,8 @@
 const ROLE_GROUPS = {
   admin: ['admin'],
-  agencyManager: ['agency manager', 'agencymanager', 'am', 'owner', 'chu co so', 'chủ cơ sở', 'branch manager'],
+  agencyManager: ['agency manager', 'agencymanager', 'am', 'owner', 'chu co so', 'chủ cơ sở', 'branch manager', 'manager'],
   salesStaff: ['sales staff', 'salesstaff', 'sale', 'sales', 'staff sale'],
-  inventoryManager: ['inventory manager', 'inventorymanager', 'warehouse manager', 'thu kho', 'thukho'],
+  inventoryManager: ['inventory manager', 'inventorymanager', 'warehouse manager', 'thu kho', 'thukho', 'warehouse'],
   accountant: ['accountant', 'ke toan', 'kế toán'],
   customer: ['customer', 'khach hang', 'khách hàng'],
 }
@@ -59,6 +59,20 @@ export const navigationItems = [
     path: '/admin/promotions',
     module: 'promotions_admin',
     icon: 'sell',
+    roles: ['admin'],
+  },
+  {
+    label: 'Tài khoản',
+    path: '/admin/users',
+    module: 'users_admin',
+    icon: 'manage_accounts',
+    roles: ['admin'],
+  },
+  {
+    label: 'Phân quyền',
+    path: '/admin/phan-quyen',
+    module: 'phan_quyen_admin',
+    icon: 'shield_person',
     roles: ['admin'],
   },
 ]
@@ -172,6 +186,8 @@ const MODULE_PATH_PREFIXES = [
   { module: 'staff', prefix: '/staff' },
   { module: 'membership_tiers_admin', prefix: '/admin/membership-tiers' },
   { module: 'promotions_admin', prefix: '/admin/promotions' },
+  { module: 'users_admin', prefix: '/admin/users' },
+  { module: 'phan_quyen_admin', prefix: '/admin/phan-quyen' },
   { module: 'customers', prefix: '/customers' },
   { module: 'inventory', prefix: '/inventory' },
   { module: 'products', prefix: '/products' },
@@ -254,6 +270,9 @@ export function getAccessDeniedMessage(pathname) {
   }
   if (module === 'promotions_admin' || module === 'membership_tiers_admin') {
     return 'Chỉ Admin mới được quản lý hạng thẻ và mã giảm giá.'
+  }
+  if (module === 'users_admin' || module === 'phan_quyen_admin') {
+    return 'Chỉ Quản trị viên mới được quản lý tài khoản và phân quyền.'
   }
   return 'Bạn không có quyền truy cập trang này.'
 }

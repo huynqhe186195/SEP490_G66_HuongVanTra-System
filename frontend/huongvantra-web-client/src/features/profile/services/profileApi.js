@@ -1,56 +1,28 @@
 import { loadAuthSession } from '../../auth/services/authSession.js'
+import { fetchUserById } from '../../iam/services/usersApi.js'
+import { changePassword } from '../../auth/services/authApi.js'
 
-const DEFAULT_API_BASE_URL = 'http://localhost:5249'
-
-function getApiBaseUrl() {
-  return import.meta.env.VITE_API_BASE_URL || DEFAULT_API_BASE_URL
-}
-
-async function parseResponseError(response) {
-  const contentType = response.headers.get('content-type') || ''
-
-  if (contentType.includes('application/json')) {
-    const body = await response.json().catch(() => null)
-    if (body && typeof body === 'object') {
-      if (typeof body.message === 'string' && body.message.trim()) return body.message
-      if (typeof body.title === 'string' && body.title.trim()) return body.title
-    }
-  }
-
-  const text = await response.text().catch(() => '')
-  return text.trim() || 'Có lỗi xảy ra.'
-}
-
-async function requestWithAuth(path, options = {}) {
+export async function fetchMyProfile() {
   const session = loadAuthSession()
-  if (!session?.accessToken) {
-    throw new Error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.')
+  if (!session?.userId) {
+    throw new Error('Không tìm thấy thông tin phiên đăng nhập.')
   }
 
-  const response = await fetch(`${getApiBaseUrl()}${path}`, {
-    ...options,
-    headers: {
-      ...(options.headers || {}),
-      Authorization: `Bearer ${session.accessToken}`,
-    },
-  })
-
-  if (!response.ok) {
-    throw new Error(await parseResponseError(response))
+  const user = await fetchUserById(session.userId)
+  return {
+    userId: user.id ?? user.Id,
+    username: user.username ?? user.Username,
+    isActive: user.isActive ?? user.IsActive,
+    roles: user.roles ?? user.Roles ?? [],
+    employee: user.employee ?? user.Employee ?? null,
+    lastLoginAt: user.lastLoginAt ?? user.LastLoginAt ?? null,
   }
-
-  if (response.status === 204) return null
-  return response.json()
 }
 
-export function fetchMyProfile() {
-  return requestWithAuth('/api/profile/me', { method: 'GET' })
+export async function updateMyProfile(_payload) {
+  throw new Error('Cập nhật hồ sơ cá nhân chưa được hỗ trợ qua API hiện tại.')
 }
 
-export function updateMyProfile(payload) {
-  return requestWithAuth('/api/profile/me', {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  })
+export function updateMyPassword(currentPassword, newPassword) {
+  return changePassword(currentPassword, newPassword)
 }

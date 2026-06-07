@@ -1,7 +1,5 @@
 namespace UserService.Application.DTOs.Requests;
 
-public record LoginRequest(string Username, string Password);
-
 public record CreateUserRequest(
     string Username,
     string Password,
@@ -18,3 +16,5 @@ public record UpdateUserRequest(
 public record ChangePasswordRequest(
     string CurrentPassword,
     string NewPassword);
+
+public record AssignRolesRequest(List<int> RoleIds);

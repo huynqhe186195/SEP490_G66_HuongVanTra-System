@@ -112,11 +112,11 @@ function StaffPage() {
 
         <div className="rounded-xl border border-[#c1c9c0]/30 shadow-[0px_8px_24px_rgba(0,0,0,0.06)]">
           <div className="flex flex-wrap items-center gap-3 border-b border-[#c1c9c0]/30 bg-[#f6f4ec]/70 p-4">
-            <div className="relative min-w-[260px] flex-1">
+            <div className="relative w-full max-w-[200px] shrink-0 sm:w-[200px]">
               <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[#414942] text-[20px]">search</span>
               <input
                 className="w-full rounded-lg border border-[#c1c9c0] bg-white py-2.5 pl-10 pr-4 text-sm text-[#1b1c17] outline-none focus:border-[#356647] focus:ring-1 focus:ring-[#356647]"
-                placeholder="Tên hoặc số điện thoại..."
+                placeholder="Tên hoặc SĐT..."
                 type="text"
                 value={searchValue}
                 onChange={handleFilterChange(setSearchValue)}
@@ -124,7 +124,7 @@ function StaffPage() {
             </div>
 
             <select
-              className="rounded-lg border border-[#c1c9c0] bg-white px-4 py-2.5 text-sm text-[#414942] outline-none focus:border-[#356647]"
+              className="min-w-[200px] flex-1 rounded-lg border border-[#c1c9c0] bg-white px-5 py-3 text-sm text-[#414942] outline-none focus:border-[#356647] sm:min-w-[220px] sm:flex-none sm:w-[220px]"
               value={roleFilter}
               onChange={handleFilterChange(setRoleFilter)}
             >
@@ -135,7 +135,7 @@ function StaffPage() {
             </select>
 
             <select
-              className="rounded-lg border border-[#c1c9c0] bg-white px-4 py-2.5 text-sm text-[#414942] outline-none focus:border-[#356647]"
+              className="min-w-[200px] flex-1 rounded-lg border border-[#c1c9c0] bg-white px-5 py-3 text-sm text-[#414942] outline-none focus:border-[#356647] sm:min-w-[220px] sm:flex-none sm:w-[220px]"
               value={statusFilter}
               onChange={handleFilterChange(setStatusFilter)}
             >

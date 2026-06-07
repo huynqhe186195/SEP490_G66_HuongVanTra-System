@@ -12,8 +12,7 @@ const loginHistory = [
 
 function StaffDetailPage() {
   const navigate = useNavigate()
-  const { id } = useParams()
-  const userId = Number(id)
+  const { id: employeeId } = useParams()
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [roleOptions, setRoleOptions] = useState([])
@@ -29,7 +28,7 @@ function StaffDetailPage() {
   })
 
   useEffect(() => {
-    if (!Number.isFinite(userId)) {
+    if (!employeeId) {
       showError('ID nhân viên không hợp lệ.')
       setIsLoading(false)
       return
@@ -38,7 +37,7 @@ function StaffDetailPage() {
     let mounted = true
     const loadData = async () => {
       try {
-        const [account, roles] = await Promise.all([fetchStaffAccount(userId), fetchRoleOptions()])
+        const [account, roles] = await Promise.all([fetchStaffAccount(employeeId), fetchRoleOptions()])
         if (!mounted) return
 
         setRoleOptions(roles || [])
@@ -61,7 +60,7 @@ function StaffDetailPage() {
 
     loadData()
     return () => { mounted = false }
-  }, [userId])
+  }, [employeeId])
 
   const canSave = useMemo(
     () => Boolean(form.fullName.trim() && form.phone.trim() && form.username.trim()),
@@ -73,7 +72,7 @@ function StaffDetailPage() {
   }
 
   const handleSave = async () => {
-    if (!Number.isFinite(userId)) return
+    if (!employeeId) return
     if (!canSave) {
       showError('Vui lòng nhập đủ họ tên, số điện thoại và tên đăng nhập.')
       return
@@ -81,7 +80,7 @@ function StaffDetailPage() {
 
     setIsSaving(true)
     try {
-      await updateStaffAccount(userId, {
+      await updateStaffAccount(employeeId, {
         fullName: form.fullName,
         phone: form.phone,
         note: form.note,
@@ -91,7 +90,7 @@ function StaffDetailPage() {
       })
 
       if (form.role) {
-        await assignStaffRoles(userId, [form.role])
+        await assignStaffRoles(employeeId, [form.role])
       }
 
       showSuccess('Cập nhật nhân viên thành công.')
