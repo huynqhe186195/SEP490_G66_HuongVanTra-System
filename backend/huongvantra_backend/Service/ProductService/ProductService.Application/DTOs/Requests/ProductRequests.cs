@@ -1,5 +1,12 @@
 namespace ProductService.Application.DTOs.Requests;
 
+public record GetProductsRequest(
+    string? Search,
+    int? CategoryId,
+    bool? IsActive,
+    int Page = 1,
+    int PageSize = 20);
+
 public record CreateProductRequest(
     int CategoryId,
     string Name,

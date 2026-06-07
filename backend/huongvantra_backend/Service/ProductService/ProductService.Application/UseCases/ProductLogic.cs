@@ -1,6 +1,7 @@
 using ProductService.Application.DTOs.Requests;
 using ProductService.Application.DTOs.Responses;
 using ProductService.Application.Interfaces;
+using ProductService.Application.Validation;
 using ProductService.Domain.Entities;
 using ProductService.Domain.Exceptions;
 
@@ -8,6 +9,25 @@ namespace ProductService.Application.UseCases;
 
 public class ProductLogic(IProductRepository _productRepository, ICategoryRepository _categoryRepository)
 {
+    public async Task<PagedResponse<ProductResponse>> GetPagedAsync(GetProductsRequest request)
+    {
+        if (request is null)
+            throw new ProductValidationException("Request là bắt buộc.");
+
+        ProductInputValidator.ValidatePagination(request.Page, request.PageSize);
+
+        var (items, total) = await _productRepository.GetPagedAsync(
+            request.Search, request.CategoryId, request.IsActive,
+            request.Page, request.PageSize);
+
+        return new PagedResponse<ProductResponse>(
+            items.Select(MapToResponse).ToList(),
+            request.Page,
+            request.PageSize,
+            total,
+            (int)Math.Ceiling((double)total / request.PageSize));
+    }
+
     public async Task<List<ProductResponse>> GetAllAsync(bool includeInactive = false)
     {
         var products = await _productRepository.GetAllAsync(includeInactive);
@@ -23,17 +43,24 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
 
     public async Task<ProductResponse> CreateAsync(CreateProductRequest request)
     {
-        _ = await _categoryRepository.GetByIdAsync(request.CategoryId)
-            ?? throw new CategoryNotFoundException(request.CategoryId);
+        if (request is null)
+            throw new ProductValidationException("Request body là bắt buộc.");
+
+        var input = ProductInputValidator.ValidateProduct(
+            request.CategoryId, request.Name, request.Origin,
+            request.FlavorProfile, request.BrewingGuide, request.Description);
+
+        _ = await _categoryRepository.GetByIdAsync(input.CategoryId)
+            ?? throw new CategoryNotFoundException(input.CategoryId);
 
         var product = new Product
         {
-            CategoryId = request.CategoryId,
-            Name = request.Name,
-            Origin = request.Origin,
-            FlavorProfile = request.FlavorProfile,
-            BrewingGuide = request.BrewingGuide,
-            Description = request.Description
+            CategoryId = input.CategoryId,
+            Name = input.Name,
+            Origin = input.Origin,
+            FlavorProfile = input.FlavorProfile,
+            BrewingGuide = input.BrewingGuide,
+            Description = input.Description
         };
 
         var created = await _productRepository.CreateAsync(product);
@@ -42,19 +69,27 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
 
     public async Task<ProductResponse> UpdateAsync(Guid id, UpdateProductRequest request)
     {
+        if (request is null)
+            throw new ProductValidationException("Request body là bắt buộc.");
+
         var product = await _productRepository.GetByIdAsync(id)
             ?? throw new ProductNotFoundException(id);
 
-        _ = await _categoryRepository.GetByIdAsync(request.CategoryId)
-            ?? throw new CategoryNotFoundException(request.CategoryId);
+        var input = ProductInputValidator.ValidateProduct(
+            request.CategoryId, request.Name, request.Origin,
+            request.FlavorProfile, request.BrewingGuide, request.Description,
+            request.IsActive);
 
-        product.CategoryId = request.CategoryId;
-        product.Name = request.Name;
-        product.Origin = request.Origin;
-        product.FlavorProfile = request.FlavorProfile;
-        product.BrewingGuide = request.BrewingGuide;
-        product.Description = request.Description;
-        product.IsActive = request.IsActive;
+        _ = await _categoryRepository.GetByIdAsync(input.CategoryId)
+            ?? throw new CategoryNotFoundException(input.CategoryId);
+
+        product.CategoryId = input.CategoryId;
+        product.Name = input.Name;
+        product.Origin = input.Origin;
+        product.FlavorProfile = input.FlavorProfile;
+        product.BrewingGuide = input.BrewingGuide;
+        product.Description = input.Description;
+        product.IsActive = input.IsActive ?? product.IsActive;
         product.UpdatedAt = DateTime.UtcNow;
 
         var updated = await _productRepository.UpdateAsync(product);

@@ -7,6 +7,37 @@ namespace ProductService.Infrastructure.Repositories;
 
 public class ProductRepository(ProductDbContext _db) : IProductRepository
 {
+    public async Task<(List<Product> Items, int TotalCount)> GetPagedAsync(
+        string? search, int? categoryId, bool? isActive,
+        int page, int pageSize)
+    {
+        var query = _db.Products.Include(p => p.Category).Include(p => p.Skus).AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var s = search.Trim().ToLower();
+            query = query.Where(p =>
+                p.Name.ToLower().Contains(s) ||
+                (p.Origin != null && p.Origin.ToLower().Contains(s)) ||
+                (p.Description != null && p.Description.ToLower().Contains(s)));
+        }
+
+        if (categoryId.HasValue)
+            query = query.Where(p => p.CategoryId == categoryId.Value);
+
+        if (isActive.HasValue)
+            query = query.Where(p => p.IsActive == isActive.Value);
+
+        var totalCount = await query.CountAsync();
+        var items = await query
+            .OrderBy(p => p.Name)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        return (items, totalCount);
+    }
+
     public async Task<List<Product>> GetAllAsync(bool includeInactive = false)
     {
         var query = _db.Products.Include(p => p.Category).Include(p => p.Skus).AsQueryable();

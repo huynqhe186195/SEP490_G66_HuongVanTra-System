@@ -14,3 +14,20 @@ public class CategoryNotFoundException(int id)
 
 public class DuplicateSkuCodeException(string skuCode)
     : Exception($"SKU code '{skuCode}' already exists.");
+
+public class ProductValidationException : Exception
+{
+    public ProductValidationException(IEnumerable<string> errors)
+        : base("One or more validation errors occurred.")
+    {
+        Errors = errors.ToArray();
+    }
+
+    public ProductValidationException(string error)
+        : base("One or more validation errors occurred.")
+    {
+        Errors = [error];
+    }
+
+    public IReadOnlyCollection<string> Errors { get; }
+}

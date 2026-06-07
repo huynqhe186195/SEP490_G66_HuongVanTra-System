@@ -1,30 +1,43 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using ProductService.Application.DTOs.Requests;
 using ProductService.Application.UseCases;
+using HuongVanTra.Shared.Auth;
 
 namespace ProductService.WebAPI.Controllers;
 
 [ApiController]
 [Route("api/v1/skus")]
+[Authorize]
 public class ProductSkusController(ProductSkuLogic _skuLogic) : ControllerBase
 {
     [HttpGet]
-    public async Task<IActionResult> GetAll([FromQuery] bool includeInactive = false) =>
-        Ok(await _skuLogic.GetAllAsync(includeInactive));
+    [AllowAnonymous]
+    public async Task<IActionResult> GetPaged(
+        [FromQuery] string? search,
+        [FromQuery] Guid? productId,
+        [FromQuery] bool? isActive,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20) =>
+        Ok(await _skuLogic.GetPagedAsync(new GetProductSkusRequest(search, productId, isActive, page, pageSize)));
 
     [HttpGet("{id:guid}")]
+    [AllowAnonymous]
     public async Task<IActionResult> GetById(Guid id) =>
         Ok(await _skuLogic.GetByIdAsync(id));
 
     [HttpGet("by-code/{skuCode}")]
+    [AllowAnonymous]
     public async Task<IActionResult> GetBySkuCode(string skuCode) =>
         Ok(await _skuLogic.GetBySkuCodeAsync(skuCode));
 
     [HttpGet("by-product/{productId:guid}")]
+    [AllowAnonymous]
     public async Task<IActionResult> GetByProductId(Guid productId) =>
         Ok(await _skuLogic.GetByProductIdAsync(productId));
 
     [HttpPost]
+    [Authorize(Policy = PermissionNames.ManageRole)]
     public async Task<IActionResult> Create([FromBody] CreateProductSkuRequest request)
     {
         var result = await _skuLogic.CreateAsync(request);
@@ -32,10 +45,12 @@ public class ProductSkusController(ProductSkuLogic _skuLogic) : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
+    [Authorize(Policy = PermissionNames.ManageRole)]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateProductSkuRequest request) =>
         Ok(await _skuLogic.UpdateAsync(id, request));
 
     [HttpDelete("{id:guid}")]
+    [Authorize(Policy = PermissionNames.ManageRole)]
     public async Task<IActionResult> Delete(Guid id)
     {
         await _skuLogic.DeleteAsync(id);
