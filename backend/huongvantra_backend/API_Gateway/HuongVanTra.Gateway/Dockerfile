@@ -1,18 +1,33 @@
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:8.0-alpine AS restore
 WORKDIR /src
 
-# Build context = thư mục gốc huongvantra_backend
-COPY . .
+COPY API_Gateway/HuongVanTra.Gateway/HuongVanTra.Gateway.csproj API_Gateway/HuongVanTra.Gateway/
 
-WORKDIR /src/API_Gateway/HuongVanTra.Gateway
+RUN dotnet restore API_Gateway/HuongVanTra.Gateway/HuongVanTra.Gateway.csproj \
+    --runtime linux-musl-x64
 
-RUN dotnet restore
-RUN dotnet publish -c Release -o /app/publish
+# ── Stage 2: build ────────────────────────────────────────────────────────────
+FROM restore AS build
 
-FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS final
+COPY API_Gateway/HuongVanTra.Gateway/ API_Gateway/HuongVanTra.Gateway/
+
+RUN dotnet publish API_Gateway/HuongVanTra.Gateway/HuongVanTra.Gateway.csproj \
+    -c Release -o /app/publish \
+    --no-restore \
+    --runtime linux-musl-x64 \
+    --self-contained false
+
+# ── Stage 3: final (runtime only — no SDK) ────────────────────────────────────
+FROM mcr.microsoft.com/dotnet/aspnet:8.0-alpine AS final
+
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+
 WORKDIR /app
 
 COPY --from=build /app/publish .
+
+RUN chown -R appuser:appgroup /app
+USER appuser
 
 EXPOSE 8080
 

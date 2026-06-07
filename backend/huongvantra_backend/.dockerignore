@@ -1,0 +1,29 @@
+# Git
+.git
+.gitignore
+
+# Docs & Scripts (không cần trong build context)
+docs/
+*.docx
+*.pdf
+
+# Các file môi trường
+.env
+.env.*
+!.env.example
+
+# Build artifacts
+**/bin/
+**/obj/
+
+# IDE & OS
+.vs/
+.vscode/
+**/.DS_Store
+**/Thumbs.db
+
+# Logs
+**/*.log
+
+# Frontend (không liên quan đến backend services)
+../../frontend/
