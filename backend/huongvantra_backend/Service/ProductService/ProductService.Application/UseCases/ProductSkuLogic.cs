@@ -1,6 +1,7 @@
 using ProductService.Application.DTOs.Requests;
 using ProductService.Application.DTOs.Responses;
 using ProductService.Application.Interfaces;
+using ProductService.Application.Validation;
 using ProductService.Domain.Entities;
 using ProductService.Domain.Exceptions;
 
@@ -11,6 +12,25 @@ public class ProductSkuLogic(
     IProductRepository _productRepository,
     IProductEventPublisher _eventPublisher)
 {
+    public async Task<PagedResponse<ProductSkuResponse>> GetPagedAsync(GetProductSkusRequest request)
+    {
+        if (request is null)
+            throw new ProductValidationException("Request là bắt buộc.");
+
+        ProductInputValidator.ValidatePagination(request.Page, request.PageSize);
+
+        var (items, total) = await _skuRepository.GetPagedAsync(
+            request.Search, request.ProductId, request.IsActive,
+            request.Page, request.PageSize);
+
+        return new PagedResponse<ProductSkuResponse>(
+            items.Select(MapToResponse).ToList(),
+            request.Page,
+            request.PageSize,
+            total,
+            (int)Math.Ceiling((double)total / request.PageSize));
+    }
+
     public async Task<List<ProductSkuResponse>> GetAllAsync(bool includeInactive = false)
     {
         var skus = await _skuRepository.GetAllAsync(includeInactive);
@@ -26,39 +46,52 @@ public class ProductSkuLogic(
 
     public async Task<ProductSkuResponse> GetBySkuCodeAsync(string skuCode)
     {
-        var sku = await _skuRepository.GetBySkuCodeAsync(skuCode)
+        if (string.IsNullOrWhiteSpace(skuCode))
+            throw new ProductValidationException("Mã SKU không được để trống.");
+
+        var sku = await _skuRepository.GetBySkuCodeAsync(skuCode.Trim().ToUpperInvariant())
             ?? throw new ProductSkuNotFoundByCodeException(skuCode);
         return MapToResponse(sku);
     }
 
     public async Task<List<ProductSkuResponse>> GetByProductIdAsync(Guid productId)
     {
+        if (productId == Guid.Empty)
+            throw new ProductValidationException("ProductId không hợp lệ.");
+
         _ = await _productRepository.GetByIdAsync(productId)
             ?? throw new ProductNotFoundException(productId);
+
         var skus = await _skuRepository.GetByProductIdAsync(productId);
         return skus.Select(MapToResponse).ToList();
     }
 
     public async Task<ProductSkuResponse> CreateAsync(CreateProductSkuRequest request)
     {
-        _ = await _productRepository.GetByIdAsync(request.ProductId)
-            ?? throw new ProductNotFoundException(request.ProductId);
+        if (request is null)
+            throw new ProductValidationException("Request body là bắt buộc.");
 
-        if (await _skuRepository.ExistsSkuCodeAsync(request.SkuCode))
-            throw new DuplicateSkuCodeException(request.SkuCode);
+        var input = ProductInputValidator.ValidateProductSku(
+            request.ProductId, request.SkuCode, request.PackagingType,
+            request.WeightInGrams, request.BasePrice, request.ImageUrl);
+
+        _ = await _productRepository.GetByIdAsync(input.ProductId)
+            ?? throw new ProductNotFoundException(input.ProductId);
+
+        if (await _skuRepository.ExistsSkuCodeAsync(input.SkuCode))
+            throw new DuplicateSkuCodeException(input.SkuCode);
 
         var sku = new ProductSku
         {
-            ProductId = request.ProductId,
-            SkuCode = request.SkuCode,
-            PackagingType = request.PackagingType,
-            WeightInGrams = request.WeightInGrams,
-            BasePrice = request.BasePrice,
-            ImageUrl = request.ImageUrl
+            ProductId = input.ProductId,
+            SkuCode = input.SkuCode,
+            PackagingType = input.PackagingType,
+            WeightInGrams = input.WeightInGrams,
+            BasePrice = input.BasePrice,
+            ImageUrl = input.ImageUrl
         };
 
         var created = await _skuRepository.CreateAsync(sku);
-
         await _eventPublisher.PublishSkuCreatedAsync(created.Id, created.SkuCode, created.WeightInGrams);
 
         return MapToResponse(created);
@@ -66,18 +99,26 @@ public class ProductSkuLogic(
 
     public async Task<ProductSkuResponse> UpdateAsync(Guid id, UpdateProductSkuRequest request)
     {
+        if (request is null)
+            throw new ProductValidationException("Request body là bắt buộc.");
+
         var sku = await _skuRepository.GetByIdAsync(id)
             ?? throw new ProductSkuNotFoundException(id);
 
-        if (await _skuRepository.ExistsSkuCodeAsync(request.SkuCode, id))
-            throw new DuplicateSkuCodeException(request.SkuCode);
+        var input = ProductInputValidator.ValidateProductSku(
+            sku.ProductId, request.SkuCode, request.PackagingType,
+            request.WeightInGrams, request.BasePrice, request.ImageUrl,
+            request.IsActive);
 
-        sku.SkuCode = request.SkuCode;
-        sku.PackagingType = request.PackagingType;
-        sku.WeightInGrams = request.WeightInGrams;
-        sku.BasePrice = request.BasePrice;
-        sku.ImageUrl = request.ImageUrl;
-        sku.IsActive = request.IsActive;
+        if (await _skuRepository.ExistsSkuCodeAsync(input.SkuCode, id))
+            throw new DuplicateSkuCodeException(input.SkuCode);
+
+        sku.SkuCode = input.SkuCode;
+        sku.PackagingType = input.PackagingType;
+        sku.WeightInGrams = input.WeightInGrams;
+        sku.BasePrice = input.BasePrice;
+        sku.ImageUrl = input.ImageUrl;
+        sku.IsActive = input.IsActive ?? sku.IsActive;
         sku.UpdatedAt = DateTime.UtcNow;
 
         var updated = await _skuRepository.UpdateAsync(sku);

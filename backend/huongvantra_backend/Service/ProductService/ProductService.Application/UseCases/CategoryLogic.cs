@@ -1,6 +1,7 @@
 using ProductService.Application.DTOs.Requests;
 using ProductService.Application.DTOs.Responses;
 using ProductService.Application.Interfaces;
+using ProductService.Application.Validation;
 using ProductService.Domain.Entities;
 using ProductService.Domain.Exceptions;
 
@@ -23,17 +24,23 @@ public class CategoryLogic(ICategoryRepository _categoryRepository)
 
     public async Task<CategoryResponse> CreateAsync(CreateCategoryRequest request)
     {
-        if (request.ParentId.HasValue)
-        {
-            _ = await _categoryRepository.GetByIdAsync(request.ParentId.Value)
-                ?? throw new CategoryNotFoundException(request.ParentId.Value);
-        }
+        if (request is null)
+            throw new ProductValidationException("Request body là bắt buộc.");
+
+        var input = ProductInputValidator.ValidateCategory(request.Name, request.Description, request.ParentId);
+
+        if (await _categoryRepository.ExistsNameAsync(input.Name))
+            throw new ProductValidationException($"Danh mục với tên '{input.Name}' đã tồn tại.");
+
+        if (input.ParentId.HasValue)
+            _ = await _categoryRepository.GetByIdAsync(input.ParentId.Value)
+                ?? throw new CategoryNotFoundException(input.ParentId.Value);
 
         var category = new Category
         {
-            Name = request.Name,
-            Description = request.Description,
-            ParentId = request.ParentId
+            Name = input.Name,
+            Description = input.Description,
+            ParentId = input.ParentId
         };
 
         var created = await _categoryRepository.CreateAsync(category);
@@ -42,18 +49,28 @@ public class CategoryLogic(ICategoryRepository _categoryRepository)
 
     public async Task<CategoryResponse> UpdateAsync(int id, UpdateCategoryRequest request)
     {
+        if (request is null)
+            throw new ProductValidationException("Request body là bắt buộc.");
+
         var category = await _categoryRepository.GetByIdAsync(id)
             ?? throw new CategoryNotFoundException(id);
 
-        if (request.ParentId.HasValue && request.ParentId.Value != id)
+        var input = ProductInputValidator.ValidateCategory(request.Name, request.Description, request.ParentId);
+
+        if (await _categoryRepository.ExistsNameAsync(input.Name, excludeId: id))
+            throw new ProductValidationException($"Danh mục với tên '{input.Name}' đã tồn tại.");
+
+        if (input.ParentId.HasValue)
         {
-            _ = await _categoryRepository.GetByIdAsync(request.ParentId.Value)
-                ?? throw new CategoryNotFoundException(request.ParentId.Value);
+            if (input.ParentId.Value == id)
+                throw new ProductValidationException("Danh mục không thể là cha của chính nó.");
+            _ = await _categoryRepository.GetByIdAsync(input.ParentId.Value)
+                ?? throw new CategoryNotFoundException(input.ParentId.Value);
         }
 
-        category.Name = request.Name;
-        category.Description = request.Description;
-        category.ParentId = request.ParentId;
+        category.Name = input.Name;
+        category.Description = input.Description;
+        category.ParentId = input.ParentId;
         category.UpdatedAt = DateTime.UtcNow;
 
         var updated = await _categoryRepository.UpdateAsync(category);

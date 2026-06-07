@@ -1,3 +1,4 @@
+using HuongVanTra.Shared.Auth;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using ProductService.Application.Interfaces;
@@ -12,6 +13,9 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+
+builder.Services.AddHvtJwtAuthentication(builder.Configuration);
+builder.Services.AddHvtPermissionPolicies();
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 builder.Services.AddDbContext<ProductDbContext>(options =>
@@ -67,6 +71,8 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseMiddleware<GlobalExceptionMiddleware>();
+app.UseAuthentication();
+app.UseAuthorization();
 app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
 app.MapControllers();
 

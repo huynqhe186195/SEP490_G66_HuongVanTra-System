@@ -15,5 +15,6 @@
   <ItemGroup>
     <ProjectReference Include="..\ProductService.Application\ProductService.Application.csproj" />
     <ProjectReference Include="..\ProductService.Infrastructure\ProductService.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\..\Shared_Libraries\HuongVanTra.Shared\HuongVanTra.Shared.csproj" />
   </ItemGroup>
 </Project>

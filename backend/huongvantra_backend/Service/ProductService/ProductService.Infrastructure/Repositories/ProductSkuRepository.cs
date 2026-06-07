@@ -7,6 +7,36 @@ namespace ProductService.Infrastructure.Repositories;
 
 public class ProductSkuRepository(ProductDbContext _db) : IProductSkuRepository
 {
+    public async Task<(List<ProductSku> Items, int TotalCount)> GetPagedAsync(
+        string? search, Guid? productId, bool? isActive,
+        int page, int pageSize)
+    {
+        var query = _db.ProductSkus.AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var s = search.Trim().ToLower();
+            query = query.Where(sku =>
+                sku.SkuCode.ToLower().Contains(s) ||
+                sku.PackagingType.ToLower().Contains(s));
+        }
+
+        if (productId.HasValue)
+            query = query.Where(sku => sku.ProductId == productId.Value);
+
+        if (isActive.HasValue)
+            query = query.Where(sku => sku.IsActive == isActive.Value);
+
+        var totalCount = await query.CountAsync();
+        var items = await query
+            .OrderBy(sku => sku.SkuCode)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        return (items, totalCount);
+    }
+
     public async Task<List<ProductSku>> GetAllAsync(bool includeInactive = false)
     {
         var query = _db.ProductSkus.AsQueryable();
@@ -21,7 +51,7 @@ public class ProductSkuRepository(ProductDbContext _db) : IProductSkuRepository
         await _db.ProductSkus.FirstOrDefaultAsync(s => s.SkuCode == skuCode);
 
     public async Task<List<ProductSku>> GetByProductIdAsync(Guid productId) =>
-        await _db.ProductSkus.Where(s => s.ProductId == productId).ToListAsync();
+        await _db.ProductSkus.Where(s => s.ProductId == productId).OrderBy(s => s.SkuCode).ToListAsync();
 
     public async Task<bool> ExistsSkuCodeAsync(string skuCode, Guid? excludeId = null)
     {
