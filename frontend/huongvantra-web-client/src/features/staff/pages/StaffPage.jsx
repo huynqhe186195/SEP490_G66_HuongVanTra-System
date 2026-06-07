@@ -75,23 +75,13 @@ function StaffPage() {
       />
 
       <section className="rounded-[24px] border border-[#c1c9c0]/30 bg-white p-6 shadow-sm">
-        <div className="mb-8 flex flex-col justify-between gap-4 md:flex-row md:items-end">
-          <div>
-            <div className="mb-2 flex items-center gap-2 text-sm text-[#414942]">
-              <span>Hệ thống</span>
-              <span>/</span>
-              <span className="font-semibold text-[#356647]">Nhân viên</span>
-            </div>
-            <h1 className="text-3xl font-bold text-[#356647]">Quản lý nhân sự</h1>
+        <div className="mb-8">
+          <div className="mb-2 flex items-center gap-2 text-sm text-[#414942]">
+            <span>Hệ thống</span>
+            <span>/</span>
+            <span className="font-semibold text-[#356647]">Nhân viên</span>
           </div>
-
-          <Link
-            to="/staff/create"
-            className="inline-flex items-center gap-2 self-start rounded-xl bg-[#356647] px-5 py-3 text-sm font-semibold text-white transition-all hover:shadow-lg active:scale-95"
-          >
-            <span className="material-symbols-outlined text-[20px]">person_add</span>
-            + Thêm tài khoản
-          </Link>
+          <h1 className="text-2xl font-bold text-[#356647] sm:text-3xl">Quản lý nhân sự</h1>
         </div>
 
         <div className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -111,8 +101,8 @@ function StaffPage() {
         </div>
 
         <div className="rounded-xl border border-[#c1c9c0]/30 shadow-[0px_8px_24px_rgba(0,0,0,0.06)]">
-          <div className="flex flex-wrap items-center gap-3 border-b border-[#c1c9c0]/30 bg-[#f6f4ec]/70 p-4">
-            <div className="relative w-full max-w-[200px] shrink-0 sm:w-[200px]">
+          <div className="flex flex-wrap items-center gap-3 border-b border-[#c1c9c0]/30 bg-[#f6f4ec]/70 p-3 sm:p-4">
+            <div className="relative w-full min-w-0 sm:max-w-[240px] sm:flex-1">
               <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[#414942] text-[20px]">search</span>
               <input
                 className="w-full rounded-lg border border-[#c1c9c0] bg-white py-2.5 pl-10 pr-4 text-sm text-[#1b1c17] outline-none focus:border-[#356647] focus:ring-1 focus:ring-[#356647]"
@@ -124,7 +114,7 @@ function StaffPage() {
             </div>
 
             <select
-              className="min-w-[200px] flex-1 rounded-lg border border-[#c1c9c0] bg-white px-5 py-3 text-sm text-[#414942] outline-none focus:border-[#356647] sm:min-w-[220px] sm:flex-none sm:w-[220px]"
+              className="w-full min-w-0 rounded-lg border border-[#c1c9c0] bg-white px-4 py-2.5 text-sm text-[#414942] outline-none focus:border-[#356647] sm:min-w-[180px] sm:max-w-[220px] sm:flex-1"
               value={roleFilter}
               onChange={handleFilterChange(setRoleFilter)}
             >
@@ -135,7 +125,7 @@ function StaffPage() {
             </select>
 
             <select
-              className="min-w-[200px] flex-1 rounded-lg border border-[#c1c9c0] bg-white px-5 py-3 text-sm text-[#414942] outline-none focus:border-[#356647] sm:min-w-[220px] sm:flex-none sm:w-[220px]"
+              className="w-full min-w-0 rounded-lg border border-[#c1c9c0] bg-white px-4 py-2.5 text-sm text-[#414942] outline-none focus:border-[#356647] sm:min-w-[180px] sm:max-w-[220px] sm:flex-1"
               value={statusFilter}
               onChange={handleFilterChange(setStatusFilter)}
             >
@@ -149,8 +139,8 @@ function StaffPage() {
             </button>
           </div>
 
-          <div className="custom-scrollbar overflow-x-auto">
-            <table className="w-full border-collapse text-left">
+          <div className="custom-scrollbar max-h-[min(70vh,780px)] overflow-auto overscroll-contain">
+            <table className="w-full min-w-[720px] border-collapse text-left">
               <thead>
                 <tr className="bg-[#f0eee6] text-xs uppercase tracking-wider text-[#414942]">
                   <th className="px-6 py-4 font-semibold">Nhân viên và vai trò</th>
@@ -202,7 +192,7 @@ function StaffPage() {
                     </td>
 
                     <td className="px-6 py-4 text-right">
-                      <div className="flex justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                      <div className="flex justify-end gap-1 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100">
                         <Link to={`/staff/${staff.userId}`} className="rounded-full p-2 text-[#356647] transition-colors hover:bg-[#eae8e0]" title="Chỉnh sửa">
                           <span className="material-symbols-outlined">edit</span>
                         </Link>

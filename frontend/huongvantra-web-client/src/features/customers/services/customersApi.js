@@ -226,11 +226,13 @@ export function mapTypeToCustomerGroup(customerType) {
 }
 
 export function buildCreateCustomerBody(payload) {
+  const addressLine = (payload.address ?? payload.addressLine ?? '').trim()
+    || 'Chưa có địa chỉ giao hàng'
   return {
     fullName: payload.fullName,
     phoneNumber: payload.phone ?? payload.phoneNumber,
     email: payload.email?.trim() || null,
-    addressLine: (payload.address ?? payload.addressLine ?? '').trim(),
+    addressLine,
     customerGroup: payload.customerGroup ?? mapTypeToCustomerGroup(payload.customerType),
     taxCode: payload.taxCode?.trim() || null,
     tierId: payload.tierId ?? null,
@@ -239,11 +241,13 @@ export function buildCreateCustomerBody(payload) {
 }
 
 export function buildUpdateCustomerBody(payload) {
+  const addressLine = (payload.address ?? payload.addressLine ?? '').trim()
+    || 'Chưa có địa chỉ giao hàng'
   return {
     fullName: payload.fullName,
     phoneNumber: payload.phone ?? payload.phoneNumber,
     email: payload.email?.trim() || null,
-    addressLine: (payload.address ?? payload.addressLine ?? '').trim(),
+    addressLine,
     customerGroup: payload.customerGroup ?? mapTypeToCustomerGroup(payload.customerType),
     taxCode: payload.taxCode?.trim() || null,
     tierId: payload.tierId ?? null,
@@ -262,11 +266,18 @@ export function restoreCustomer(customerId) {
 export async function fetchCustomerStatistics() {
   const data = await apiRequestAuth('/api/customers/statistics', { method: 'GET' })
   const byTier = data.customersByTier ?? data.CustomersByTier ?? []
+  let topDebtors = (data.topDebtors ?? data.TopDebtors ?? []).map(mapCustomer).filter(Boolean)
+
+  if (topDebtors.length === 0) {
+    const withDebt = await fetchCustomersWithDebt()
+    topDebtors = withDebt.slice(0, 5)
+  }
+
   return {
     totalCustomers: Number(data.totalCustomers ?? data.TotalCustomers ?? 0),
     newCustomersThisMonth: Number(data.newCustomersThisMonth ?? data.NewCustomersThisMonth ?? 0),
     topSpenders: (data.topSpenders ?? data.TopSpenders ?? []).map(mapCustomer).filter(Boolean),
-    topDebtors: (data.topDebtors ?? data.TopDebtors ?? []).map(mapCustomer).filter(Boolean),
+    topDebtors,
     customersByTier: Array.isArray(byTier)
       ? byTier.map((item) => ({
           tierName: item.tierName ?? item.TierName ?? '',

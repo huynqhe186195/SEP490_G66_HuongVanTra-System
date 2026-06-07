@@ -304,5 +304,9 @@ export function isNavigationItemActive(pathname, item) {
     return path === target || path.startsWith(`${target}/`)
   }
 
+  if (item.module === 'customers') {
+    return path === target || path.startsWith(`${target}/`)
+  }
+
   return path === target || path.startsWith(`${target}/`)
 }

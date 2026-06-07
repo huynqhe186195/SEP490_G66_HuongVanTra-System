@@ -1,6 +1,7 @@
 using UserService.Application.DTOs.Requests;
 using UserService.Application.DTOs.Responses;
 using UserService.Application.Interfaces;
+using UserService.Application.Validation;
 using UserService.Domain.Entities;
 using UserService.Domain.Enums;
 using UserService.Domain.Exceptions;
@@ -14,6 +15,9 @@ public class EmployeeLogic(
 {
     public async Task<EmployeeDetailResponse> CreateAsync(CreateEmployeeRequest request)
     {
+        UserInputValidator.ValidateSingleRole(request.RoleIds);
+        UserInputValidator.ValidatePhoneIfProvided(request.BankAccountInfo);
+
         if (await userRepo.ExistsAsync(request.Username))
             throw new DuplicateUsernameException(request.Username);
 

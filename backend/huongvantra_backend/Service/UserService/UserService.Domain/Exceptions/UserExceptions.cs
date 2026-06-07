@@ -35,3 +35,5 @@ public class RoleInUseException(int id)
 
 public class DuplicatePermissionException(string name)
     : Exception($"Permission '{name}' already exists.");
+
+public class UserValidationException(string message) : Exception(message);

@@ -1,6 +1,7 @@
 using CustomerService.Application.DTOs.Requests;
 using CustomerService.Application.DTOs.Responses;
 using CustomerService.Application.Interfaces;
+using CustomerService.Application.Validation;
 using CustomerService.Domain.Entities;
 using HuongVanTra.Shared.Auth;
 using Microsoft.AspNetCore.Authorization;
@@ -33,16 +34,27 @@ public class CustomerAddressesController : ControllerBase
     [Authorize(Policy = PermissionNames.CreateCustomer)]
     public async Task<IActionResult> Create(Guid customerId, [FromBody] CreateCustomerAddressRequest request, CancellationToken ct = default)
     {
+        var validated = CustomerAddressInputValidator.Validate(
+            request.ReceiverName,
+            request.ReceiverPhone,
+            request.AddressLine,
+            request.Ward,
+            request.District,
+            request.Province);
+
+        if (request.IsDefault)
+            await _addressRepo.ClearDefaultForCustomerAsync(customerId, ct: ct);
+
         var address = new CustomerAddress
         {
             Id = Guid.NewGuid(),
             CustomerId = customerId,
-            ReceiverName = request.ReceiverName,
-            ReceiverPhone = request.ReceiverPhone,
-            AddressLine = request.AddressLine,
-            Ward = request.Ward,
-            District = request.District,
-            Province = request.Province,
+            ReceiverName = validated.ReceiverName,
+            ReceiverPhone = validated.ReceiverPhone,
+            AddressLine = validated.AddressLine,
+            Ward = validated.Ward,
+            District = validated.District,
+            Province = validated.Province,
             IsDefault = request.IsDefault,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
@@ -63,12 +75,23 @@ public class CustomerAddressesController : ControllerBase
         var address = await _addressRepo.GetByIdAsync(addressId, ct);
         if (address == null || address.CustomerId != customerId) return NotFound();
 
-        address.ReceiverName = request.ReceiverName;
-        address.ReceiverPhone = request.ReceiverPhone;
-        address.AddressLine = request.AddressLine;
-        address.Ward = request.Ward;
-        address.District = request.District;
-        address.Province = request.Province;
+        if (request.IsDefault)
+            await _addressRepo.ClearDefaultForCustomerAsync(customerId, addressId, ct);
+
+        var validated = CustomerAddressInputValidator.Validate(
+            request.ReceiverName,
+            request.ReceiverPhone,
+            request.AddressLine,
+            request.Ward,
+            request.District,
+            request.Province);
+
+        address.ReceiverName = validated.ReceiverName;
+        address.ReceiverPhone = validated.ReceiverPhone;
+        address.AddressLine = validated.AddressLine;
+        address.Ward = validated.Ward;
+        address.District = validated.District;
+        address.Province = validated.Province;
         address.IsDefault = request.IsDefault;
         address.UpdatedAt = DateTime.UtcNow;
 

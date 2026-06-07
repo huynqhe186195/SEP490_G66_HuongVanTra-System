@@ -13,10 +13,10 @@ function TablePagination({
   const to = Math.min(safePage * pageSize, totalCount)
 
   return (
-    <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-100 bg-[#f6f4ec]/60 px-4 py-3 sm:px-6 sm:py-4">
-      <p className="text-sm text-slate-600">
-        Hiển thị <span className="font-semibold text-slate-800">{from}–{to}</span> / {totalCount} {itemLabel}
-        <span className="mx-2 text-slate-300">·</span>
+    <div className="flex shrink-0 flex-col gap-2 border-t border-slate-100 bg-[#f6f4ec]/60 px-3 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-3 sm:px-6 sm:py-4">
+      <p className="text-xs text-slate-600 sm:text-sm">
+        <span className="font-semibold text-slate-800">{from}–{to}</span> / {totalCount} {itemLabel}
+        <span className="mx-1.5 text-slate-300 sm:mx-2">·</span>
         Trang {safePage}/{totalPages}
       </p>
 

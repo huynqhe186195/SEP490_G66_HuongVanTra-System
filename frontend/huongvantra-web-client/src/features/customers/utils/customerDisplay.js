@@ -105,7 +105,7 @@ export function tabKeyFromCustomerType(customerType) {
 export function customerTypeLabel(tabKey) {
   if (tabKey === 'corporate') return 'Khách doanh nghiệp'
   if (tabKey === 'vip') return 'Khách VIP'
-  if (tabKey === 'inactive') return 'Khách đã ngừng HĐ'
+  if (tabKey === 'inactive') return 'Khách đã ngừng hoạt động'
   return 'Khách phổ thông'
 }
 
