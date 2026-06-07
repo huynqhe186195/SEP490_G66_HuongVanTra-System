@@ -9,4 +9,5 @@ public record EmployeeDetailResponse(
     decimal ActualSalary,
     string? BankAccountInfo,
     string Status,
-    bool IsUserActive);
+    bool IsUserActive,
+    List<string> Roles);

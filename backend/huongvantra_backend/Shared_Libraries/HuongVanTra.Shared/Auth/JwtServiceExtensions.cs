@@ -31,6 +31,16 @@ public static class JwtServiceExtensions
                     ValidateLifetime = true,
                     ClockSkew = TimeSpan.Zero
                 };
+
+                // Invalid/expired token must not break [AllowAnonymous] read endpoints.
+                options.Events = new JwtBearerEvents
+                {
+                    OnAuthenticationFailed = context =>
+                    {
+                        context.NoResult();
+                        return Task.CompletedTask;
+                    },
+                };
             });
 
         return services;

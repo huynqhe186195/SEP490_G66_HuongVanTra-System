@@ -45,14 +45,6 @@ function AdminLayout() {
         return
       }
 
-      if (session.modules?.length) {
-        if (isMounted) {
-          setSidebarItems(getNavigationItemsForSession(session))
-          setIsLoadingAccess(false)
-        }
-        return
-      }
-
       if (isMounted) {
         setIsLoadingAccess(true)
       }

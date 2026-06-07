@@ -27,7 +27,7 @@ public class GlobalExceptionMiddleware(RequestDelegate next, ILogger<GlobalExcep
             ProductSkuNotFoundException e    => (StatusCodes.Status404NotFound,    e.Message, null),
             ProductSkuNotFoundByCodeException e => (StatusCodes.Status404NotFound, e.Message, null),
             CategoryNotFoundException e      => (StatusCodes.Status404NotFound,    e.Message, null),
-            DuplicateSkuCodeException e      => (StatusCodes.Status409Conflict,    e.Message, null),
+            DuplicateSkuCodeException e      => (StatusCodes.Status409Conflict,    e.Message, new[] { e.Message }),
             _                                => (StatusCodes.Status500InternalServerError, "An unexpected error occurred.", null)
         };
 

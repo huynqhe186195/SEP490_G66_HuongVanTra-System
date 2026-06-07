@@ -6,3 +6,7 @@ export function hasPermission(session, permission) {
 export function canSimulateOrderCompleted(session) {
   return hasPermission(session, 'CREATE_ORDER')
 }
+
+export function canManageProducts(session) {
+  return hasPermission(session, 'MANAGE_ROLE')
+}

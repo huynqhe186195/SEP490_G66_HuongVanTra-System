@@ -23,6 +23,8 @@ public class EmployeeRepository(UserDbContext context) : IEmployeeRepository
     {
         var query = context.Employees
             .Include(e => e.User)
+                .ThenInclude(u => u.UserRoles)
+                    .ThenInclude(ur => ur.Role)
             .Where(e => !e.IsDeleted);
 
         var totalCount = await query.CountAsync();

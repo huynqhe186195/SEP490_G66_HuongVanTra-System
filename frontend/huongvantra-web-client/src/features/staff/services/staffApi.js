@@ -6,7 +6,7 @@ import {
   mapEmployee,
   updateEmployee,
 } from '../../iam/services/employeesApi.js'
-import { assignUserRoles, fetchUserById, updateUser } from '../../iam/services/usersApi.js'
+import { assignUserRoles, updateUser } from '../../iam/services/usersApi.js'
 import { fetchRoles, mapRole } from '../../iam/services/rolesApi.js'
 import { resetPassword } from '../../auth/services/authApi.js'
 
@@ -22,7 +22,7 @@ function mapStaffRow(employee) {
     phone: mapped.bankAccountInfo || '',
     username: mapped.username,
     department: mapped.department,
-    roles: [],
+    roles: mapped.roles ?? [],
     isActive: mapped.isActive,
     status: mapped.status,
   }
@@ -72,23 +72,7 @@ export async function fetchStaffAccounts(params = {}) {
   const pageSize = params.pageSize ?? 10
   const data = await fetchEmployees({ page: 1, pageSize: 200 })
   const rows = data.items.map(mapStaffRow).filter(Boolean)
-
-  const enriched = await Promise.all(
-    rows.map(async (row) => {
-      try {
-        const user = await fetchUserById(row.userGuid)
-        return {
-          ...row,
-          roles: user.roles ?? user.Roles ?? [],
-          isActive: user.isActive ?? user.IsActive ?? row.isActive,
-        }
-      } catch {
-        return row
-      }
-    }),
-  )
-
-  const filtered = filterStaffRows(enriched, params)
+  const filtered = filterStaffRows(rows, params)
   const start = (page - 1) * pageSize
 
   return {
@@ -102,7 +86,6 @@ export async function fetchStaffAccounts(params = {}) {
 export async function fetchStaffAccount(employeeId) {
   const employee = await fetchEmployeeById(employeeId)
   const mapped = mapEmployee(employee)
-  const user = await fetchUserById(mapped.userId)
 
   return {
     employeeId: mapped.employeeId,
@@ -113,9 +96,9 @@ export async function fetchStaffAccount(employeeId) {
     username: mapped.username,
     employeeCode: String(mapped.employeeId),
     department: mapped.department,
-    roles: user.roles ?? user.Roles ?? [],
+    roles: mapped.roles ?? [],
     note: '',
-    isActive: user.isActive ?? user.IsActive ?? mapped.isActive,
+    isActive: mapped.isActive,
     status: mapped.status,
   }
 }

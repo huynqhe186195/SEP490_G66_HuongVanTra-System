@@ -10,7 +10,6 @@ const ROLE_GROUPS = {
 /** Tạm ẩn trên sidebar — bật lại khi backend sẵn sàng. */
 const SIDEBAR_DISABLED_MODULES = new Set([
   'dashboard',
-  'products',
   'inventory',
   'contracts',
   'reports',
@@ -23,6 +22,7 @@ const HOME_MODULE_PRIORITY = [
   'stock_deduct_ops',
   'orders',
   'customers',
+  'products',
   'staff',
 ]
 
@@ -46,6 +46,7 @@ export const navigationItems = [
     roles: ['admin', 'agencyManager', 'inventoryManager'],
   },
   { label: 'Khách hàng', path: '/customers', module: 'customers', icon: 'groups', roles: ['admin', 'agencyManager'] },
+  { label: 'Sản phẩm', path: '/products', module: 'products', icon: 'inventory_2', roles: ['admin', 'agencyManager', 'inventoryManager'] },
   { label: 'Nhân sự', path: '/staff', module: 'staff', icon: 'badge', roles: ['admin', 'agencyManager'] },
   {
     label: 'Hạng thẻ',

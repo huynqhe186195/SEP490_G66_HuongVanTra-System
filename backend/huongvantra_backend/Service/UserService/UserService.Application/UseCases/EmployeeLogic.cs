@@ -99,14 +99,25 @@ public class EmployeeLogic(
         await employeeRepo.SaveChangesAsync();
     }
 
-    private static EmployeeDetailResponse MapToDetail(Employee employee) => new(
-        employee.Id,
-        employee.UserId,
-        employee.User?.Username ?? string.Empty,
-        employee.FullName,
-        employee.Department,
-        employee.ActualSalary,
-        employee.BankAccountInfo,
-        employee.Status.ToString(),
-        employee.User?.IsActive ?? false);
+    private static EmployeeDetailResponse MapToDetail(Employee employee)
+    {
+        var roles = employee.User?.UserRoles?
+            .Select(ur => ur.Role?.RoleName)
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Select(name => name!)
+            .Distinct()
+            .ToList() ?? [];
+
+        return new EmployeeDetailResponse(
+            employee.Id,
+            employee.UserId,
+            employee.User?.Username ?? string.Empty,
+            employee.FullName,
+            employee.Department,
+            employee.ActualSalary,
+            employee.BankAccountInfo,
+            employee.Status.ToString(),
+            employee.User?.IsActive ?? false,
+            roles);
+    }
 }
