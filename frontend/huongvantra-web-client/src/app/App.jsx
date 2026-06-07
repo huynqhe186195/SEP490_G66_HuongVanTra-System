@@ -7,6 +7,7 @@ import LoginPage from '../features/auth/pages/LoginPage.jsx'
 import OtpVerificationPage from '../features/auth/pages/OtpVerificationPage.jsx'
 import ContractsPage from '../features/contracts/pages/ContractsPage.jsx'
 import CustomerFormPage from '../features/customers/pages/CustomerFormPage.jsx'
+import CustomerAddressesPage from '../features/customers/pages/CustomerAddressesPage.jsx'
 import CustomersPage from '../features/customers/pages/CustomersPage.jsx'
 import DashboardPage from '../features/dashboard/pages/DashboardPage.jsx'
 import IntegrationsPage from '../features/integrations/pages/IntegrationsPage.jsx'
@@ -67,8 +68,11 @@ function App() {
         <Route path="/inventory/bom/:bomId/edit" element={<InventoryBomCreatePage />} />
         <Route path="/inventory/deduction" element={<InventoryPage />} />
         <Route path="/customers" element={<CustomersPage />} />
+        <Route path="/customers/addresses" element={<CustomerAddressesPage />} />
         <Route path="/customers/create" element={<CustomerFormPage />} />
+        <Route path="/customers/:customerId/addresses" element={<CustomerAddressesPage />} />
         <Route path="/customers/:customerId/edit" element={<CustomerFormPage />} />
+        <Route path="/customer-addresses" element={<Navigate to="/customers/addresses" replace />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/staff" element={<StaffPage />} />
         <Route path="/staff/create" element={<StaffCreatePage />} />

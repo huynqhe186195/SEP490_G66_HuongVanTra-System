@@ -16,14 +16,14 @@ import {
   updateUser,
 } from '../services/usersApi.js'
 import { RESTORE_CONFIRM, SOFT_DELETE_CONFIRM, formatRoleName } from '../utils/iamLabels.js'
+import { normalizePhoneInput, validateCreateAccountForm } from '../utils/accountValidation.js'
 
 const EMPTY_CREATE = {
   username: '',
   password: '',
   fullName: '',
-  department: '',
   phone: '',
-  roleIds: [],
+  roleId: null,
 }
 
 function InfoBox({ children }) {
@@ -71,9 +71,10 @@ function UsersPage() {
   const [createOpen, setCreateOpen] = useState(false)
   const [editUser, setEditUser] = useState(null)
   const [createForm, setCreateForm] = useState(EMPTY_CREATE)
-  const [editRoleIds, setEditRoleIds] = useState([])
+  const [editRoleId, setEditRoleId] = useState(null)
   const [editActive, setEditActive] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+  const [createFieldErrors, setCreateFieldErrors] = useState({})
 
   const loadData = useCallback(async () => {
     setIsLoading(true)
@@ -128,44 +129,39 @@ function UsersPage() {
   const openCreate = () => {
     setCreateForm({
       ...EMPTY_CREATE,
-      roleIds: roles[0]?.id ? [roles[0].id] : [],
+      roleId: roles[0]?.id ?? null,
     })
+    setCreateFieldErrors({})
     setCreateOpen(true)
   }
 
   const openEdit = (user) => {
-    const roleIds = roles.filter((role) => user.roles.includes(role.roleName)).map((role) => role.id)
+    const matchedRole = roles.find((role) => user.roles.includes(role.roleName))
     setEditUser(user)
-    setEditRoleIds(roleIds)
+    setEditRoleId(matchedRole?.id ?? null)
     setEditActive(user.isActive)
   }
 
-  const toggleCreateRoleId = (roleId) => {
-    setCreateForm((current) => ({
-      ...current,
-      roleIds: current.roleIds.includes(roleId)
-        ? current.roleIds.filter((id) => id !== roleId)
-        : [...current.roleIds, roleId],
-    }))
+  const handleCreateFieldChange = (field) => (event) => {
+    const value = field === 'phone' ? normalizePhoneInput(event.target.value) : event.target.value
+    setCreateForm((current) => ({ ...current, [field]: value }))
+    setCreateFieldErrors((current) => ({ ...current, [field]: undefined }))
   }
 
-  const toggleEditRoleId = (roleId) => {
-    setEditRoleIds((current) =>
-      current.includes(roleId) ? current.filter((id) => id !== roleId) : [...current, roleId],
-    )
+  const selectCreateRoleId = (roleId) => {
+    setCreateForm((current) => ({ ...current, roleId }))
+    setCreateFieldErrors((current) => ({ ...current, roleId: undefined }))
+  }
+
+  const selectEditRoleId = (roleId) => {
+    setEditRoleId(roleId)
   }
 
   const handleCreate = async () => {
-    if (!createForm.username.trim() || createForm.password.trim().length < 6) {
-      showError('Vui lòng nhập tên đăng nhập và mật khẩu (ít nhất 6 ký tự).')
-      return
-    }
-    if (!createForm.fullName.trim()) {
-      showError('Vui lòng nhập họ và tên.')
-      return
-    }
-    if (!createForm.roleIds.length) {
-      showError('Vui lòng chọn ít nhất một vai trò.')
+    const validation = validateCreateAccountForm(createForm)
+    if (!validation.valid) {
+      setCreateFieldErrors(validation.errors)
+      showError(validation.message)
       return
     }
 
@@ -174,9 +170,9 @@ function UsersPage() {
       await createUser({
         username: createForm.username.trim(),
         password: createForm.password,
-        roleIds: createForm.roleIds,
+        roleIds: [createForm.roleId],
         fullName: createForm.fullName.trim(),
-        department: createForm.department.trim() || null,
+        department: null,
         actualSalary: 0,
         bankAccountInfo: createForm.phone.trim() || null,
       })
@@ -192,14 +188,14 @@ function UsersPage() {
 
   const handleUpdate = async () => {
     if (!editUser) return
-    if (!editRoleIds.length) {
-      showError('Vui lòng chọn ít nhất một vai trò.')
+    if (!editRoleId) {
+      showError('Vui lòng chọn một vai trò.')
       return
     }
 
     setIsSaving(true)
     try {
-      await updateUser(editUser.id, { isActive: editActive, roleIds: editRoleIds })
+      await updateUser(editUser.id, { isActive: editActive, roleIds: [editRoleId] })
       showSuccess('Đã lưu thay đổi tài khoản.')
       setEditUser(null)
       await loadData()
@@ -407,41 +403,53 @@ function UsersPage() {
             <h2 className="text-2xl font-bold text-[#356647]">Thêm tài khoản mới</h2>
             <div className="mt-6 space-y-4">
               {[
-                ['username', 'Tên đăng nhập', 'text', 'VD: nv01'],
-                ['password', 'Mật khẩu (≥6 ký tự)', 'password', ''],
-                ['fullName', 'Họ và tên', 'text', 'VD: Nguyễn Văn A'],
-                ['department', 'Phòng ban', 'text', 'Tùy chọn'],
-                ['phone', 'Số điện thoại', 'text', 'Tùy chọn'],
-              ].map(([field, label, type, placeholder]) => (
+                ['username', 'Tên đăng nhập', 'text', 'VD: nv01', false],
+                ['password', 'Mật khẩu (≥6 ký tự)', 'password', '', false],
+                ['fullName', 'Họ và tên', 'text', 'VD: Nguyễn Văn A', false],
+                ['phone', 'Số điện thoại', 'tel', '0xxxxxxxxx (tùy chọn)', true],
+              ].map(([field, label, type, placeholder, isPhone]) => (
                 <label key={field} className="block">
                   <span className="text-base font-bold text-[#1b1c17]">{label}</span>
                   <input
                     type={type}
-                    className="mt-2 w-full rounded-2xl border-2 border-[#c1c9c0] px-4 py-3 text-base"
+                    inputMode={isPhone ? 'numeric' : undefined}
+                    maxLength={isPhone ? 10 : undefined}
+                    className={`mt-2 w-full rounded-2xl border-2 px-4 py-3 text-base ${
+                      createFieldErrors[field] ? 'border-[#ba1a1a]' : 'border-[#c1c9c0]'
+                    }`}
                     placeholder={placeholder}
                     value={createForm[field]}
-                    onChange={(e) => setCreateForm((p) => ({ ...p, [field]: e.target.value }))}
+                    onChange={handleCreateFieldChange(field)}
                   />
+                  {createFieldErrors[field] ? (
+                    <p className="mt-1 text-sm text-[#ba1a1a]">{createFieldErrors[field]}</p>
+                  ) : null}
                 </label>
               ))}
               <fieldset>
-                <legend className="text-base font-bold text-[#1b1c17]">Chọn vai trò</legend>
+                <legend className="text-base font-bold text-[#1b1c17]">Chọn vai trò (một vai trò)</legend>
                 <div className="mt-3 space-y-2">
                   {roles.map((role) => (
                     <label
                       key={role.id}
-                      className="flex cursor-pointer items-center gap-3 rounded-2xl border-2 border-[#c1c9c0]/60 p-4"
+                      className={`flex cursor-pointer items-center gap-3 rounded-2xl border-2 p-4 ${
+                        createForm.roleId === role.id ? 'border-[#356647] bg-[#356647]/5' : 'border-[#c1c9c0]/60'
+                      }`}
                     >
                       <input
-                        type="checkbox"
-                        className="h-5 w-5"
-                        checked={createForm.roleIds.includes(role.id)}
-                        onChange={() => toggleCreateRoleId(role.id)}
+                        type="radio"
+                        name="create-role"
+                        className="h-5 w-5 accent-[#356647]"
+                        checked={createForm.roleId === role.id}
+                        onChange={() => selectCreateRoleId(role.id)}
                       />
                       <span className="text-base font-semibold">{formatRoleName(role.roleName)}</span>
                     </label>
                   ))}
                 </div>
+                {createFieldErrors.roleId ? (
+                  <p className="mt-2 text-sm text-[#ba1a1a]">{createFieldErrors.roleId}</p>
+                ) : null}
               </fieldset>
             </div>
             <div className="mt-8 flex flex-wrap justify-end gap-3">
@@ -470,18 +478,21 @@ function UsersPage() {
                 />
               </label>
               <fieldset>
-                <legend className="text-base font-bold text-[#1b1c17]">Vai trò</legend>
+                <legend className="text-base font-bold text-[#1b1c17]">Vai trò (một vai trò)</legend>
                 <div className="mt-3 space-y-2">
                   {roles.map((role) => (
                     <label
                       key={role.id}
-                      className="flex cursor-pointer items-center gap-3 rounded-2xl border-2 border-[#c1c9c0]/60 p-4"
+                      className={`flex cursor-pointer items-center gap-3 rounded-2xl border-2 p-4 ${
+                        editRoleId === role.id ? 'border-[#356647] bg-[#356647]/5' : 'border-[#c1c9c0]/60'
+                      }`}
                     >
                       <input
-                        type="checkbox"
-                        className="h-5 w-5"
-                        checked={editRoleIds.includes(role.id)}
-                        onChange={() => toggleEditRoleId(role.id)}
+                        type="radio"
+                        name="edit-role"
+                        className="h-5 w-5 accent-[#356647]"
+                        checked={editRoleId === role.id}
+                        onChange={() => selectEditRoleId(role.id)}
                       />
                       <span className="text-base font-semibold">{formatRoleName(role.roleName)}</span>
                     </label>

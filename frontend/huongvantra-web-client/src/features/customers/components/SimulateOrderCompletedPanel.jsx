@@ -28,7 +28,7 @@ function SimulateOrderCompletedPanel({
 
   const hint = useMemo(
     () =>
-      'Gửi sự kiện OrderCompleted qua RabbitMQ. Customer Service tự cộng chi tiêu, công nợ và nâng hạng.',
+      'Gửi sự kiện OrderCompleted qua RabbitMQ — chỉ cộng chi tiêu và phát sinh nợ. Để ghi giảm nợ (thanh toán), dùng mục "Ghi nhận công nợ thủ công" bên dưới.',
     [],
   )
 

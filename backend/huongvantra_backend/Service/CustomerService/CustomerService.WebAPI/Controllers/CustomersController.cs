@@ -16,7 +16,7 @@ public class CustomersController : ControllerBase
     public CustomersController(CustomerLogic logic) => _logic = logic;
 
     [HttpGet("statistics")]
-    [Authorize(Policy = PermissionNames.ViewAllCustomers)]
+    [Authorize(Policy = PermissionNames.ViewCustomer)]
     public async Task<IActionResult> GetStatistics(CancellationToken ct = default)
     {
         var result = await _logic.GetStatisticsAsync(ct);

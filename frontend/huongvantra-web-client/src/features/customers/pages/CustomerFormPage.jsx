@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
+import PageShell from '../../../components/shared/PageShell.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import MembershipTierProgress from '../components/MembershipTierProgress.jsx'
-import CustomerAddressesPanel from '../components/CustomerAddressesPanel.jsx'
 import CustomerDebtHistory from '../components/CustomerDebtHistory.jsx'
 import CustomerActivityFeed from '../components/CustomerActivityFeed.jsx'
 import SimulateOrderCompletedPanel from '../components/SimulateOrderCompletedPanel.jsx'
@@ -55,6 +55,7 @@ function CustomerFormPage() {
   const [isDeleting, setIsDeleting] = useState(false)
   const [fieldErrors, setFieldErrors] = useState({})
   const [isNameComposing, setIsNameComposing] = useState(false)
+  const [legacyAddressLine, setLegacyAddressLine] = useState('')
   const isAdmin = isAdminSession(loadAuthSession())
   const [form, setForm] = useState({
     type: ['general', 'vip', 'corporate'].includes(searchParams.get('type'))
@@ -64,7 +65,6 @@ function CustomerFormPage() {
     name: '',
     phone: '',
     email: '',
-    address: '',
     tierId: '',
     taxCode: '',
     status: 'active',
@@ -119,11 +119,11 @@ function CustomerFormPage() {
       name: customer.fullName || '',
       phone: customer.phone || '',
       email: customer.email || '',
-      address: customer.address || '',
       tierId: customer.tier?.tierId ? String(customer.tier.tierId) : '',
       taxCode: customer.taxCode || '',
       status: customer.status?.toLowerCase() === 'inactive' ? 'inactive' : 'active',
     })
+    setLegacyAddressLine(customer.address || '')
     setCurrentDebt(Number(customer.currentDebt || 0))
     setTotalSpend(Number(customer.totalSpend || 0))
     setCurrentTierCode(customer.tier?.tierCode || customer.tierCode || '')
@@ -169,7 +169,7 @@ function CustomerFormPage() {
     customerType: customerTypeFromTab(form.type),
     phone: form.phone.trim() || null,
     email: form.email.trim() || null,
-    address: form.address.trim() || null,
+    address: legacyAddressLine.trim() || null,
     taxCode: form.type === 'corporate' ? form.taxCode.trim() : null,
     tierId: supportsMembershipTierForTab(form.type) && form.tierId ? Number(form.tierId) : null,
   })
@@ -218,7 +218,6 @@ function CustomerFormPage() {
       name: form.name,
       phone: form.phone,
       email: form.email,
-      address: form.address,
       customerType: customerTypeFromTab(form.type),
       taxCode: form.taxCode,
     })
@@ -280,14 +279,14 @@ function CustomerFormPage() {
   }
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 sm:gap-6 [font-family:'Manrope',sans-serif]">
+    <PageShell className="[font-family:'Manrope',sans-serif]">
       <PageHeader
         title={isEditMode ? 'Chỉnh sửa khách hàng' : 'Thêm khách hàng'}
         description="Cập nhật thông tin liên hệ, hạng thành viên và trạng thái tài khoản"
         rightContent={
-          <div className="flex items-center gap-2 rounded-full bg-[#f6f4ec] px-3 py-1.5">
-            <span className="text-xs text-[#717971]">Loại khách</span>
-            <div className="inline-flex flex-wrap gap-1 rounded-full bg-white p-1">
+          <div className="flex w-full flex-col gap-2 sm:w-auto">
+            <span className="text-xs font-medium text-[#717971]">Loại khách</span>
+            <div className="inline-flex max-w-full flex-wrap gap-1 rounded-full bg-[#f6f4ec] p-1">
               <button
                 type="button"
                 className={`rounded-full px-4 py-1 text-xs font-semibold ${form.type === 'general' ? 'bg-[#4a6242] text-white' : 'text-[#414942]'}`}
@@ -319,8 +318,8 @@ function CustomerFormPage() {
           Đang tải thông tin khách hàng...
         </div>
       ) : (
-        <section className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_360px]">
-          <form className="space-y-4 rounded-[24px] border border-[#c1c9c0]/30 bg-white p-6 shadow-sm" onSubmit={(event) => event.preventDefault()}>
+        <section className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
+          <form className="space-y-4 rounded-[24px] border border-[#c1c9c0]/30 bg-white p-4 shadow-sm sm:p-6" onSubmit={(event) => event.preventDefault()}>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <label className="space-y-2 md:col-span-2">
                 <span className="text-xs font-semibold text-[#717971]">
@@ -362,18 +361,6 @@ function CustomerFormPage() {
                   onChange={updateField('email')}
                 />
                 <FieldError message={fieldErrors.email} />
-              </label>
-
-              <label className="space-y-2 md:col-span-2">
-                <span className="text-xs font-semibold text-[#717971]">Địa chỉ *</span>
-                <input
-                  className={`w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20 ${fieldErrors.address ? 'ring-2 ring-[#b42318]/40' : ''}`}
-                  placeholder="Số nhà, đường, phường/xã, quận/huyện, tỉnh/thành"
-                  type="text"
-                  value={form.address}
-                  onChange={updateField('address')}
-                />
-                <FieldError message={fieldErrors.address} />
               </label>
 
               {form.type === 'corporate' ? (
@@ -428,11 +415,11 @@ function CustomerFormPage() {
               </label>
             </div>
 
-            <div className="flex flex-wrap justify-between gap-3 border-t border-[#c1c9c0]/40 pt-5">
+            <div className="flex flex-col-reverse gap-3 border-t border-[#c1c9c0]/40 pt-5 sm:flex-row sm:flex-wrap sm:justify-between">
               {isEditMode ? (
                 <button
                   type="button"
-                  className="rounded-xl border border-[#b42318] px-5 py-2 text-sm font-semibold text-[#b42318] hover:bg-[#b42318]/5 disabled:opacity-60"
+                  className="w-full rounded-xl border border-[#b42318] px-5 py-2.5 text-sm font-semibold text-[#b42318] hover:bg-[#b42318]/5 disabled:opacity-60 sm:w-auto"
                   disabled={isDeleting || isSaving}
                   onClick={handleDelete}
                 >
@@ -441,13 +428,13 @@ function CustomerFormPage() {
               ) : (
                 <span />
               )}
-              <div className="flex flex-wrap gap-3">
-                <Link to="/customers" className="rounded-xl border border-[#356647] px-5 py-2 text-sm font-semibold text-[#356647] hover:bg-[#356647]/5">
+              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:justify-end">
+                <Link to="/customers" className="inline-flex w-full items-center justify-center rounded-xl border border-[#356647] px-5 py-2.5 text-sm font-semibold text-[#356647] hover:bg-[#356647]/5 sm:w-auto">
                   Hủy
                 </Link>
                 <button
                   type="button"
-                  className="rounded-xl bg-[#4a6242] px-5 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-60"
+                  className="inline-flex w-full items-center justify-center rounded-xl bg-[#4a6242] px-5 py-2.5 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-60 sm:w-auto"
                   disabled={isSaving}
                   onClick={handleSubmit}
                 >
@@ -457,7 +444,7 @@ function CustomerFormPage() {
             </div>
           </form>
 
-          <aside className="space-y-4 rounded-[24px] border border-[#c1c9c0]/30 bg-white p-6 shadow-sm">
+          <aside className="space-y-4 rounded-[24px] border border-[#c1c9c0]/30 bg-white p-4 shadow-sm sm:p-6 xl:sticky xl:top-0 xl:max-h-[calc(100vh-8rem)] xl:overflow-y-auto xl:overscroll-contain">
             <h3 className="text-lg font-semibold text-[#356647]">Xem trước</h3>
 
             <div className="rounded-xl bg-[#f6f4ec] p-4">
@@ -536,19 +523,30 @@ function CustomerFormPage() {
 
       {isEditMode && !isLoading ? (
         <>
-          <CustomerAddressesPanel customerId={customerId} />
-          <CustomerDebtHistory customerId={customerId} refreshKey={debtRefreshKey} />
-          <section className="rounded-[24px] border border-[#c1c9c0]/30 bg-white p-6 shadow-sm">
+          <CustomerDebtHistory
+            customerId={customerId}
+            refreshKey={debtRefreshKey}
+            onDebtChanged={() => {
+              setDebtRefreshKey((key) => key + 1)
+              setActivityRefreshKey((key) => key + 1)
+              fetchCustomerById(customerId).then((customer) => {
+                setCurrentDebt(Number(customer.currentDebt || 0))
+              }).catch(() => {})
+            }}
+          />
+          <section className="rounded-[24px] border border-[#c1c9c0]/30 bg-white p-4 shadow-sm sm:p-6">
             <h3 className="mb-3 text-lg font-semibold text-[#356647]">Nhật ký hoạt động</h3>
-            <CustomerActivityFeed
-              customerId={customerId}
-              refreshKey={activityRefreshKey}
-              emptyMessage="Chưa có hoạt động ghi nhận cho khách hàng này."
-            />
+            <div className="custom-scrollbar max-h-[min(50vh,420px)] overflow-y-auto overscroll-contain">
+              <CustomerActivityFeed
+                customerId={customerId}
+                refreshKey={activityRefreshKey}
+                emptyMessage="Chưa có hoạt động ghi nhận cho khách hàng này."
+              />
+            </div>
           </section>
         </>
       ) : null}
-    </div>
+    </PageShell>
   )
 }
 

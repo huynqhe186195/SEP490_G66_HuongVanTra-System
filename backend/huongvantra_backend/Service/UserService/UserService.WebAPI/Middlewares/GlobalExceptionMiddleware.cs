@@ -34,6 +34,7 @@ public class GlobalExceptionMiddleware(RequestDelegate next)
             DuplicateUsernameException e => (StatusCodes.Status409Conflict, e.Message),
             DuplicatePermissionException e => (StatusCodes.Status409Conflict, e.Message),
             RoleInUseException e => (StatusCodes.Status409Conflict, e.Message),
+            UserValidationException e => (StatusCodes.Status400BadRequest, e.Message),
             _ => (StatusCodes.Status500InternalServerError, "An unexpected error occurred.")
         };
 
