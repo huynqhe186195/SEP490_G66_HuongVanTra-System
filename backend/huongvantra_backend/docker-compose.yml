@@ -100,6 +100,35 @@ services:
       retries: 5
       start_period: 40s
 
+  product-service:
+    build:
+      context: .
+      dockerfile: Service/ProductService/ProductService.WebAPI/Dockerfile
+    container_name: hvt-product-service
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__DefaultConnection: "Server=mysql;Port=3306;Database=hvt_product_db;User=${MYSQL_USER:-hvtuser};Password=${MYSQL_PASSWORD:-hvtpass123};CharSet=utf8mb4;"
+      RabbitMQ__Host: rabbitmq
+      RabbitMQ__Username: ${RABBITMQ_USER:-hvt}
+      RabbitMQ__Password: ${RABBITMQ_PASS:-hvtrabbit123}
+    ports:
+      - "5003:8080"
+    networks:
+      - hvt-network
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
   # ─── API Gateway ──────────────────────────────────────────────────────────────
 
   gateway:
