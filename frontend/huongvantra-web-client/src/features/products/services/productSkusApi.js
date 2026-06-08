@@ -21,6 +21,22 @@ export async function fetchSkus(params = {}) {
   }
 }
 
+export async function fetchAllActiveSkus(pageSize = 100) {
+  const items = []
+  let page = 1
+  let totalCount = 0
+
+  do {
+    const result = await fetchSkus({ isActive: true, page, pageSize })
+    items.push(...result.items)
+    totalCount = result.totalCount ?? items.length
+    if (result.items.length < pageSize) break
+    page += 1
+  } while (items.length < totalCount)
+
+  return items
+}
+
 export async function fetchSkusByProductId(productId) {
   const data = await apiRequest(`/api/v1/skus/by-product/${productId}`, { method: 'GET' })
   const items = Array.isArray(data) ? data : data?.items ?? data?.Items ?? []

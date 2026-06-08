@@ -213,7 +213,8 @@ public class PosTransferPaymentLogic(
         }
 
         payment.TransactionRef = payload.ReferenceCode ?? payload.Id.ToString(CultureInfo.InvariantCulture);
-        await orderLogic.CompleteAsync(order.Id, ct);
+        await orderRepo.SaveChangesAsync(ct);
+        await orderLogic.CompleteAsync(order.Id, actorName: "SePay Webhook", ct: ct);
         logger.LogInformation("SePay webhook completed order {OrderCode}.", orderCode);
     }
 

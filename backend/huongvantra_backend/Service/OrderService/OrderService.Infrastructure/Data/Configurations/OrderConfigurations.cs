@@ -64,3 +64,19 @@ public class PaymentConfiguration : IEntityTypeConfiguration<Payment>
         builder.Property(e => e.UpdatedAt).IsRequired();
     }
 }
+
+public class OrderActivityConfiguration : IEntityTypeConfiguration<OrderActivity>
+{
+    public void Configure(EntityTypeBuilder<OrderActivity> builder)
+    {
+        builder.ToTable("OrderActivities");
+        builder.HasKey(e => e.Id);
+        builder.Property(e => e.Id).ValueGeneratedNever();
+        builder.Property(e => e.ActivityType).HasConversion<string>().HasMaxLength(30).IsRequired();
+        builder.Property(e => e.Description).HasMaxLength(500).IsRequired();
+        builder.Property(e => e.ActorName).HasMaxLength(100);
+        builder.Property(e => e.CreatedAt).IsRequired();
+        builder.HasIndex(e => e.OrderId);
+        builder.HasOne(e => e.Order).WithMany().HasForeignKey(e => e.OrderId);
+    }
+}

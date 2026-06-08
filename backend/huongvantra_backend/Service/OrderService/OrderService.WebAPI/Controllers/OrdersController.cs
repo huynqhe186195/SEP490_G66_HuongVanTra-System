@@ -11,6 +11,8 @@ namespace OrderService.WebAPI.Controllers;
 [Authorize]
 public class OrdersController(OrderLogic _orderLogic) : ControllerBase
 {
+    private (Guid? ActorId, string? ActorName) GetActor() =>
+        (User.GetUserId() is var id && id != Guid.Empty ? id : null, User.GetUsername());
     [HttpGet]
     [Authorize(Policy = PermissionNames.ViewOrder)]
     public async Task<IActionResult> GetPaged(
@@ -29,6 +31,11 @@ public class OrdersController(OrderLogic _orderLogic) : ControllerBase
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct = default) =>
         Ok(await _orderLogic.GetByIdAsync(id, ct));
 
+    [HttpGet("{id:guid}/activities")]
+    [Authorize(Policy = PermissionNames.ViewOrder)]
+    public async Task<IActionResult> GetActivities(Guid id, CancellationToken ct = default) =>
+        Ok(await _orderLogic.GetActivitiesAsync(id, ct));
+
     [HttpGet("by-code/{code}")]
     [Authorize(Policy = PermissionNames.ViewOrder)]
     public async Task<IActionResult> GetByCode(string code, CancellationToken ct = default) =>
@@ -39,22 +46,27 @@ public class OrdersController(OrderLogic _orderLogic) : ControllerBase
     public async Task<IActionResult> Create(
         [FromBody] CreateOrderRequest request, CancellationToken ct = default)
     {
-        var result = await _orderLogic.CreateAsync(request, ct);
+        var (actorId, actorName) = GetActor();
+        var result = await _orderLogic.CreateAsync(request, actorId, actorName, ct);
         return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
     }
 
     [HttpPut("{id:guid}")]
     [Authorize(Policy = PermissionNames.CreateOrder)]
     public async Task<IActionResult> Update(
-        Guid id, [FromBody] UpdateOrderRequest request, CancellationToken ct = default) =>
-        Ok(await _orderLogic.UpdateAsync(id, request, ct));
+        Guid id, [FromBody] UpdateOrderRequest request, CancellationToken ct = default)
+    {
+        var (actorId, actorName) = GetActor();
+        return Ok(await _orderLogic.UpdateAsync(id, request, actorId, actorName, ct));
+    }
 
     [HttpPost("{id:guid}/cancel")]
     [Authorize(Policy = PermissionNames.CreateOrder)]
     public async Task<IActionResult> Cancel(
         Guid id, [FromBody] CancelOrderRequest request, CancellationToken ct = default)
     {
-        await _orderLogic.CancelAsync(id, ct);
+        var (actorId, actorName) = GetActor();
+        await _orderLogic.CancelAsync(id, request.Reason, actorId, actorName, ct);
         return NoContent();
     }
 
@@ -62,7 +74,8 @@ public class OrdersController(OrderLogic _orderLogic) : ControllerBase
     [Authorize(Policy = PermissionNames.CreateOrder)]
     public async Task<IActionResult> MarkShipping(Guid id, CancellationToken ct = default)
     {
-        await _orderLogic.MarkShippingAsync(id, ct);
+        var (actorId, actorName) = GetActor();
+        await _orderLogic.MarkShippingAsync(id, actorId, actorName, ct);
         return NoContent();
     }
 
@@ -70,7 +83,8 @@ public class OrdersController(OrderLogic _orderLogic) : ControllerBase
     [Authorize(Policy = PermissionNames.CreateOrder)]
     public async Task<IActionResult> Complete(Guid id, CancellationToken ct = default)
     {
-        await _orderLogic.CompleteAsync(id, ct);
+        var (actorId, actorName) = GetActor();
+        await _orderLogic.CompleteAsync(id, actorId, actorName, ct);
         return NoContent();
     }
 }

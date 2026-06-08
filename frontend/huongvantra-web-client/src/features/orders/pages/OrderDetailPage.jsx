@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
+import PageShell from '../../../components/shared/PageShell.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import { canCreateOrder } from '../../auth/utils/permissions.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
+import OrderTimeline from '../components/OrderTimeline.jsx'
 import {
   cancelOrder,
   completeOrder,
@@ -42,6 +44,7 @@ function OrderDetailPage() {
   const [note, setNote] = useState('')
   const [discountAmount, setDiscountAmount] = useState('')
   const [codRef, setCodRef] = useState('')
+  const [timelineRefreshKey, setTimelineRefreshKey] = useState(0)
 
   const loadOrder = useCallback(async () => {
     if (!id) return
@@ -75,6 +78,7 @@ function OrderDetailPage() {
         discountAmount: Number(discountAmount || 0),
       })
       setOrder(updated)
+      setTimelineRefreshKey((key) => key + 1)
       showSuccess('Đã cập nhật đơn hàng.')
     } catch (error) {
       showError(error.message)
@@ -104,6 +108,7 @@ function OrderDetailPage() {
         showSuccess('Đã xác nhận thu COD.')
       }
       await loadOrder()
+      setTimelineRefreshKey((key) => key + 1)
     } catch (error) {
       showError(error.message)
     } finally {
@@ -113,27 +118,32 @@ function OrderDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="mx-auto max-w-5xl px-4 py-10 text-slate-500">
-        Đang tải đơn hàng...
-      </div>
+      <PageShell>
+        <div className="mx-auto w-full max-w-5xl px-1 py-10 text-slate-500 sm:px-2">
+          Đang tải đơn hàng...
+        </div>
+      </PageShell>
     )
   }
 
   if (!order) {
     return (
-      <div className="mx-auto max-w-5xl px-4 py-10">
-        <p className="text-slate-500">Không tìm thấy đơn hàng.</p>
-        <Link className="mt-4 inline-block text-sm font-semibold text-[#538463]" to="/orders">
-          ← Quay lại danh sách
-        </Link>
-      </div>
+      <PageShell>
+        <div className="mx-auto w-full max-w-5xl px-1 py-10 sm:px-2">
+          <p className="text-slate-500">Không tìm thấy đơn hàng.</p>
+          <Link className="mt-4 inline-block text-sm font-semibold text-[#538463]" to="/orders">
+            ← Quay lại danh sách
+          </Link>
+        </div>
+      </PageShell>
     )
   }
 
   const payment = getPrimaryPayment(order)
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 px-4 py-6 sm:px-6">
+    <PageShell>
+    <div className="mx-auto w-full max-w-5xl space-y-6 px-1 pb-8 sm:px-2">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <Link className="text-sm font-semibold text-[#538463] hover:underline" to="/orders">
@@ -283,6 +293,11 @@ function OrderDetailPage() {
         </aside>
       </div>
 
+      <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+        <h2 className="mb-4 text-lg font-bold text-slate-800">Lịch sử xử lý</h2>
+        <OrderTimeline orderId={order.id} refreshKey={timelineRefreshKey} />
+      </section>
+
       {canManage && canEditOrderMeta(order) ? (
         <form className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm" onSubmit={handleSaveMeta}>
           <h2 className="mb-4 text-lg font-bold text-slate-800">Cập nhật thông tin</h2>
@@ -332,6 +347,7 @@ function OrderDetailPage() {
         </form>
       ) : null}
     </div>
+    </PageShell>
   )
 }
 

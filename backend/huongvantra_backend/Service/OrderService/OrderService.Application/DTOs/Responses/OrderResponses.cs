@@ -2,6 +2,16 @@ using OrderService.Domain.Enums;
 
 namespace OrderService.Application.DTOs.Responses;
 
+public record OrderActivityResponse(
+    Guid Id,
+    Guid OrderId,
+    string ActivityType,
+    string Description,
+    Guid? ActorId,
+    string? ActorName,
+    DateTime CreatedAt
+);
+
 public record OrderResponse(
     Guid Id,
     string OrderCode,

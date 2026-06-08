@@ -8,6 +8,7 @@ public class OrderDbContext(DbContextOptions<OrderDbContext> options) : DbContex
     public DbSet<Order> Orders => Set<Order>();
     public DbSet<OrderDetail> OrderDetails => Set<OrderDetail>();
     public DbSet<Payment> Payments => Set<Payment>();
+    public DbSet<OrderActivity> OrderActivities => Set<OrderActivity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useState } from 'react'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
-import { adjustSkuStock, fetchSkuStocks } from '../services/inventoryStockApi.js'
+import { fetchProducts } from '../../products/services/productsApi.js'
+import { fetchAllActiveSkus } from '../../products/services/productSkusApi.js'
+import {
+  adjustSkuStock,
+  fetchSkuStocks,
+  mergeCatalogSkusWithStocks,
+} from '../services/inventoryStockApi.js'
 
 function formatStock(value) {
   return new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 2 }).format(Number(value) || 0)
@@ -23,8 +29,17 @@ function InventoryStockPage() {
   const loadStocks = useCallback(async () => {
     setIsLoading(true)
     try {
-      const items = await fetchSkuStocks()
-      setRows(items)
+      const [skus, stocks, productsResult] = await Promise.all([
+        fetchAllActiveSkus(),
+        fetchSkuStocks(),
+        fetchProducts({ page: 1, pageSize: 200, isActive: true }).catch(() => ({ items: [] })),
+      ])
+
+      const productNameById = new Map(
+        (productsResult.items || []).map((product) => [product.id, product.name]),
+      )
+
+      setRows(mergeCatalogSkusWithStocks(skus, stocks, productNameById))
     } catch (error) {
       showError(error.message)
       setRows([])
@@ -47,7 +62,19 @@ function InventoryStockPage() {
     setAdjustingSkuId(skuId)
     try {
       const updated = await adjustSkuStock(skuId, delta)
-      setRows((prev) => prev.map((row) => (row.skuId === skuId ? updated : row)))
+      setRows((prev) =>
+        prev.map((row) =>
+          row.skuId === skuId
+            ? {
+                ...row,
+                skuCode: updated.skuCode || row.skuCode,
+                weightInGrams: updated.weightInGrams ?? row.weightInGrams,
+                quantityOnHand: updated.quantityOnHand,
+                updatedAt: updated.updatedAt,
+              }
+            : row,
+        ),
+      )
       setDeltaBySku((prev) => ({ ...prev, [skuId]: '' }))
       showSuccess('Đã cập nhật tồn kho.')
     } catch (error) {
@@ -61,7 +88,7 @@ function InventoryStockPage() {
     <div className="flex min-h-0 flex-1 flex-col gap-6">
       <PageHeader
         title="Tồn kho SKU"
-        description="Theo dõi và điều chỉnh tồn theo SKU (InventoryService MVP)"
+        description="Mỗi SKU (biến thể) có tồn riêng — hiển thị tất cả SKU đang bán, kể cả chưa nhập kho (tồn 0)."
         searchPlaceholder="Tìm mã SKU..."
       />
 
@@ -82,13 +109,14 @@ function InventoryStockPage() {
             <p className="py-8 text-center text-sm text-gray-500">Đang tải tồn kho...</p>
           ) : rows.length === 0 ? (
             <p className="py-8 text-center text-sm text-gray-500">
-              Chưa có dữ liệu tồn. Tạo SKU mới hoặc chạy script đồng bộ tồn.
+              Chưa có SKU nào. Tạo SKU trong mục Sản phẩm trước.
             </p>
           ) : (
-            <table className="w-full min-w-[640px] border-separate border-spacing-y-2 text-left text-sm">
+            <table className="w-full min-w-[760px] border-separate border-spacing-y-2 text-left text-sm">
               <thead>
                 <tr className="bg-[#fefcf3] text-[11px] font-bold uppercase tracking-wider text-gray-400">
-                  <th className="rounded-l-xl px-4 py-3">Mã SKU</th>
+                  <th className="rounded-l-xl px-4 py-3">Sản phẩm</th>
+                  <th className="px-4 py-3">Mã SKU</th>
                   <th className="px-4 py-3">Khối lượng (g)</th>
                   <th className="px-4 py-3">Tồn</th>
                   <th className="px-4 py-3">Cảnh báo</th>
@@ -103,7 +131,8 @@ function InventoryStockPage() {
                       key={row.skuId}
                       className={`${index % 2 === 0 ? 'bg-[#fefcf3]/50' : ''} transition-colors hover:bg-gray-50`}
                     >
-                      <td className="rounded-l-xl px-4 py-3 font-bold text-gray-800">{row.skuCode}</td>
+                      <td className="rounded-l-xl px-4 py-3 text-gray-700">{row.productName}</td>
+                      <td className="px-4 py-3 font-bold text-gray-800">{row.skuCode}</td>
                       <td className="px-4 py-3 text-gray-600">{formatStock(row.weightInGrams)}</td>
                       <td className="px-4 py-3 font-semibold text-gray-800">{formatStock(row.quantityOnHand)}</td>
                       <td className={`px-4 py-3 font-medium ${alert.className}`}>{alert.text}</td>

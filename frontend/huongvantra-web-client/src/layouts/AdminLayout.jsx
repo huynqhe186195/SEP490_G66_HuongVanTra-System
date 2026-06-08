@@ -96,7 +96,10 @@ function AdminLayout() {
     return <Navigate to="/login" replace />
   }
 
-  const isFullPageScroll = location.pathname === '/pos/payment/qr'
+  const isFullPageScroll =
+    location.pathname === '/pos/payment/qr' ||
+    location.pathname === '/orders' ||
+    location.pathname.startsWith('/orders/')
 
   return (
     <div className="min-h-screen bg-[#F8FAF7] text-gray-800">

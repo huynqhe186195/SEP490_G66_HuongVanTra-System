@@ -89,7 +89,7 @@ function OrdersPage() {
   const hasActiveFilters = filters.status || filters.channel || filters.search
 
   return (
-    <PageShell>
+    <PageShell className="pb-8">
       <PageHeader
         title="Đơn hàng"
         description="Theo dõi đơn đã tạo từ POS bán hàng. Tạo đơn mới tại màn POS."

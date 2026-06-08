@@ -95,6 +95,26 @@ export async function fetchOrders(params = {}) {
   }
 }
 
+function mapOrderActivity(item) {
+  if (!item || typeof item !== 'object') return null
+  return {
+    id: item.id ?? item.Id,
+    orderId: item.orderId ?? item.OrderId,
+    activityType: normalizeEnum(item.activityType ?? item.ActivityType),
+    description: item.description ?? item.Description ?? '',
+    actorId: item.actorId ?? item.ActorId ?? null,
+    actorName: item.actorName ?? item.ActorName ?? '',
+    createdAt: item.createdAt ?? item.CreatedAt ?? null,
+  }
+}
+
+export async function fetchOrderActivities(orderId) {
+  const data = await apiRequestAuth(`/api/v1/orders/${encodeURIComponent(orderId)}/activities`, {
+    method: 'GET',
+  })
+  return Array.isArray(data) ? data.map(mapOrderActivity).filter(Boolean) : []
+}
+
 export async function fetchOrder(idOrCode) {
   const value = String(idOrCode || '').trim()
   const isGuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)

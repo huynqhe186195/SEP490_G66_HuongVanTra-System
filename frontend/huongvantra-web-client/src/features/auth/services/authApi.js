@@ -9,15 +9,16 @@ const ROLE_MODULE_MAP = {
     'stock_deduct_ops',
     'customers',
     'products',
+    'inventory',
     'staff',
     'membership_tiers_admin',
     'promotions_admin',
     'users_admin',
     'phan_quyen_admin',
   ],
-  manager: ['pos', 'orders', 'cod_ops', 'stock_deduct_ops', 'customers', 'products', 'staff'],
+  manager: ['pos', 'orders', 'cod_ops', 'stock_deduct_ops', 'customers', 'products', 'inventory', 'staff'],
   sale: ['pos', 'orders', 'customers'],
-  warehouse: ['stock_deduct_ops', 'orders', 'products'],
+  warehouse: ['stock_deduct_ops', 'orders', 'products', 'inventory'],
   accountant: ['orders', 'customers', 'reports'],
 }
 

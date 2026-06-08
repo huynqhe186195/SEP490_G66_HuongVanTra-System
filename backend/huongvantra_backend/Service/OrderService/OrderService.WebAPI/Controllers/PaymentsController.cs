@@ -29,6 +29,15 @@ public class PaymentsController(PaymentLogic _paymentLogic) : ControllerBase
     [HttpPost("{id:guid}/verify-cod")]
     [Authorize(Policy = PermissionNames.CreateOrder)]
     public async Task<IActionResult> VerifyCod(
-        Guid id, [FromBody] VerifyCodPaymentRequest request, CancellationToken ct = default) =>
-        Ok(await _paymentLogic.VerifyCodAsync(id, request, ct));
+        Guid id, [FromBody] VerifyCodPaymentRequest request, CancellationToken ct = default)
+    {
+        var actorId = User.GetUserId();
+        var actorName = User.GetUsername();
+        return Ok(await _paymentLogic.VerifyCodAsync(
+            id,
+            request,
+            actorId == Guid.Empty ? null : actorId,
+            string.IsNullOrWhiteSpace(actorName) ? null : actorName,
+            ct));
+    }
 }

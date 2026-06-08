@@ -1,3 +1,4 @@
+using System.Globalization;
 using OrderService.Application.DTOs.Requests;
 using OrderService.Application.DTOs.Responses;
 using OrderService.Application.Interfaces;
@@ -12,8 +13,11 @@ public class OrderLogic(
     IOrderRepository _orderRepo,
     IPaymentRepository _paymentRepo,
     IOrderCodeGenerator _codeGen,
-    IOrderEventPublisher _eventPublisher)
+    IOrderEventPublisher _eventPublisher,
+    IOrderActivityRepository _activityRepo)
 {
+    private const int MaxActivities = 100;
+
     public async Task<PagedResponse<OrderSummaryResponse>> GetPagedAsync(
         GetOrdersRequest req, CancellationToken ct = default)
     {
@@ -44,7 +48,17 @@ public class OrderLogic(
         return MapToResponse(order);
     }
 
-    public async Task<OrderResponse> CreateAsync(CreateOrderRequest req, CancellationToken ct = default)
+    public async Task<List<OrderActivityResponse>> GetActivitiesAsync(Guid orderId, CancellationToken ct = default)
+    {
+        _ = await _orderRepo.GetByIdAsync(orderId, ct)
+            ?? throw new OrderNotFoundException(orderId);
+
+        var items = await _activityRepo.GetByOrderIdAsync(orderId, MaxActivities, ct);
+        return items.Select(MapActivity).ToList();
+    }
+
+    public async Task<OrderResponse> CreateAsync(
+        CreateOrderRequest req, Guid? actorId = null, string? actorName = null, CancellationToken ct = default)
     {
         var detailInputs = req.Items.Select(i => new CreateOrderDetailInput(
             i.SkuId, i.SkuSnapshotName.Trim(), i.SkuSnapshotCode?.Trim(),
@@ -122,6 +136,47 @@ public class OrderLogic(
         order.Payments = [payment];
 
         await _orderRepo.AddAsync(order, ct);
+
+        await RecordActivityAsync(
+            order.Id,
+            OrderActivityType.Created,
+            $"Tạo đơn {order.OrderCode} qua kênh {GetChannelLabel(order.OrderChannel)}. Thành tiền {FormatVnd(finalAmount)}.",
+            actorId,
+            actorName,
+            ct);
+
+        if (payment.PaymentStatus == PaymentStatus.Success)
+        {
+            await RecordActivityAsync(
+                order.Id,
+                OrderActivityType.PaymentReceived,
+                $"Đã thanh toán {FormatVnd(payment.Amount)} qua {GetPaymentMethodLabel(payment.PaymentMethod)}.",
+                actorId,
+                actorName,
+                ct);
+        }
+        else
+        {
+            await RecordActivityAsync(
+                order.Id,
+                OrderActivityType.PaymentPending,
+                $"Chờ thanh toán qua {GetPaymentMethodLabel(payment.PaymentMethod)}.",
+                actorId,
+                actorName,
+                ct);
+        }
+
+        if (order.OrderStatus == OrderStatus.Completed)
+        {
+            await RecordActivityAsync(
+                order.Id,
+                OrderActivityType.Completed,
+                "Hoàn tất đơn hàng.",
+                actorId,
+                actorName,
+                ct);
+        }
+
         await _orderRepo.SaveChangesAsync(ct);
 
         await _eventPublisher.PublishOrderPlacedAsync(
@@ -135,7 +190,8 @@ public class OrderLogic(
         return MapToResponse(order);
     }
 
-    public async Task<OrderResponse> UpdateAsync(Guid id, UpdateOrderRequest req, CancellationToken ct = default)
+    public async Task<OrderResponse> UpdateAsync(
+        Guid id, UpdateOrderRequest req, Guid? actorId = null, string? actorName = null, CancellationToken ct = default)
     {
         var order = await _orderRepo.GetByIdAsync(id, ct)
             ?? throw new OrderNotFoundException(id);
@@ -149,11 +205,20 @@ public class OrderLogic(
         order.FinalAmount = Math.Max(0, order.TotalAmount - req.DiscountAmount);
         order.UpdatedAt = DateTime.UtcNow;
 
+        await RecordActivityAsync(
+            order.Id,
+            OrderActivityType.Updated,
+            "Cập nhật thông tin đơn (địa chỉ, ghi chú hoặc giảm giá).",
+            actorId,
+            actorName,
+            ct);
+
         await _orderRepo.SaveChangesAsync(ct);
         return MapToResponse(order);
     }
 
-    public async Task CancelAsync(Guid id, CancellationToken ct = default)
+    public async Task CancelAsync(
+        Guid id, string? reason = null, Guid? actorId = null, string? actorName = null, CancellationToken ct = default)
     {
         var order = await _orderRepo.GetByIdAsync(id, ct)
             ?? throw new OrderNotFoundException(id);
@@ -163,6 +228,19 @@ public class OrderLogic(
 
         order.OrderStatus = OrderStatus.Cancelled;
         order.UpdatedAt = DateTime.UtcNow;
+
+        var description = string.IsNullOrWhiteSpace(reason)
+            ? "Hủy đơn hàng."
+            : $"Hủy đơn hàng. Lý do: {reason.Trim()}";
+
+        await RecordActivityAsync(
+            order.Id,
+            OrderActivityType.Cancelled,
+            description,
+            actorId,
+            actorName,
+            ct);
+
         await _orderRepo.SaveChangesAsync(ct);
 
         await _eventPublisher.PublishOrderCancelledAsync(
@@ -171,7 +249,8 @@ public class OrderLogic(
             ct);
     }
 
-    public async Task MarkShippingAsync(Guid id, CancellationToken ct = default)
+    public async Task MarkShippingAsync(
+        Guid id, Guid? actorId = null, string? actorName = null, CancellationToken ct = default)
     {
         var order = await _orderRepo.GetByIdAsync(id, ct)
             ?? throw new OrderNotFoundException(id);
@@ -181,10 +260,20 @@ public class OrderLogic(
 
         order.OrderStatus = OrderStatus.Shipping;
         order.UpdatedAt = DateTime.UtcNow;
+
+        await RecordActivityAsync(
+            order.Id,
+            OrderActivityType.Shipped,
+            "Chuyển sang trạng thái đang giao hàng.",
+            actorId,
+            actorName,
+            ct);
+
         await _orderRepo.SaveChangesAsync(ct);
     }
 
-    public async Task CompleteAsync(Guid id, CancellationToken ct = default)
+    public async Task CompleteAsync(
+        Guid id, Guid? actorId = null, string? actorName = null, CancellationToken ct = default)
     {
         var order = await _orderRepo.GetByIdAsync(id, ct)
             ?? throw new OrderNotFoundException(id);
@@ -206,8 +295,28 @@ public class OrderLogic(
                 payment.Amount = order.FinalAmount;
                 payment.PaidAt = DateTime.UtcNow;
                 payment.UpdatedAt = DateTime.UtcNow;
+
+                var paymentDescription = string.IsNullOrWhiteSpace(payment.TransactionRef)
+                    ? $"Đã thanh toán {FormatVnd(order.FinalAmount)} qua {GetPaymentMethodLabel(payment.PaymentMethod)}."
+                    : $"Đã thanh toán {FormatVnd(order.FinalAmount)} qua {GetPaymentMethodLabel(payment.PaymentMethod)}. Mã GD: {payment.TransactionRef}.";
+
+                await RecordActivityAsync(
+                    order.Id,
+                    OrderActivityType.PaymentReceived,
+                    paymentDescription,
+                    actorId,
+                    actorName,
+                    ct);
             }
         }
+
+        await RecordActivityAsync(
+            order.Id,
+            OrderActivityType.Completed,
+            "Hoàn tất đơn hàng.",
+            actorId,
+            actorName,
+            ct);
 
         await _orderRepo.SaveChangesAsync(ct);
 
@@ -229,8 +338,20 @@ public class OrderLogic(
         var order = await _orderRepo.GetByIdAsync(orderId, ct)
             ?? throw new OrderNotFoundException(orderId);
 
+        if (order.InventorySyncStatus == InventorySyncStatus.Synced)
+            return;
+
         order.InventorySyncStatus = InventorySyncStatus.Synced;
         order.UpdatedAt = DateTime.UtcNow;
+
+        await RecordActivityAsync(
+            order.Id,
+            OrderActivityType.InventorySynced,
+            "Đã trừ tồn kho thành công.",
+            actorId: null,
+            actorName: "Hệ thống",
+            ct);
+
         await _orderRepo.SaveChangesAsync(ct);
     }
 
@@ -247,6 +368,35 @@ public class OrderLogic(
 
     private async Task<List<Payment>> GetPaymentsInternal(Guid orderId, CancellationToken ct)
         => await _paymentRepo.GetByOrderIdAsync(orderId, ct);
+
+    private async Task RecordActivityAsync(
+        Guid orderId,
+        OrderActivityType type,
+        string description,
+        Guid? actorId,
+        string? actorName,
+        CancellationToken ct)
+    {
+        await _activityRepo.AddAsync(new OrderActivity
+        {
+            Id = Guid.NewGuid(),
+            OrderId = orderId,
+            ActivityType = type,
+            Description = description,
+            ActorId = actorId == Guid.Empty ? null : actorId,
+            ActorName = string.IsNullOrWhiteSpace(actorName) ? null : actorName.Trim(),
+            CreatedAt = DateTime.UtcNow
+        }, ct);
+    }
+
+    private static OrderActivityResponse MapActivity(OrderActivity activity) => new(
+        activity.Id,
+        activity.OrderId,
+        activity.ActivityType.ToString(),
+        activity.Description,
+        activity.ActorId,
+        activity.ActorName,
+        activity.CreatedAt);
 
     private static OrderResponse MapToResponse(Order o) => new(
         o.Id, o.OrderCode, o.CustomerId, o.CustomerSnapshotName,
@@ -267,4 +417,37 @@ public class OrderLogic(
         o.OrderChannel.ToString(), o.OrderStatus.ToString(),
         o.InventorySyncStatus.ToString(), o.FinalAmount, o.CreatedAt
     );
+
+    private static string FormatVnd(decimal amount)
+    {
+        var value = Math.Round(amount, 0, MidpointRounding.AwayFromZero);
+        var digits = Math.Abs(value).ToString(CultureInfo.InvariantCulture);
+        var chars = new List<char>(digits.Length + digits.Length / 3);
+        for (var i = 0; i < digits.Length; i++)
+        {
+            if (i > 0 && (digits.Length - i) % 3 == 0) chars.Add('.');
+            chars.Add(digits[i]);
+        }
+
+        var formatted = value < 0 ? "-" + new string(chars.ToArray()) : new string(chars.ToArray());
+        return formatted + " ₫";
+    }
+
+    private static string GetChannelLabel(OrderChannel channel) => channel switch
+    {
+        OrderChannel.POS => "bán tại quầy",
+        OrderChannel.Website => "website",
+        OrderChannel.Zalo => "Zalo",
+        OrderChannel.Phone => "điện thoại",
+        _ => channel.ToString()
+    };
+
+    private static string GetPaymentMethodLabel(PaymentMethod method) => method switch
+    {
+        PaymentMethod.Cash => "tiền mặt",
+        PaymentMethod.VietQR => "VietQR",
+        PaymentMethod.BankTransfer => "chuyển khoản",
+        PaymentMethod.COD => "COD",
+        _ => method.ToString()
+    };
 }
