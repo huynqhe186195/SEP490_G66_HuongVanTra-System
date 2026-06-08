@@ -24,26 +24,6 @@ services:
       retries: 5
       start_period: 30s
 
-  # Re-apply CREATE DATABASE + GRANT on every compose up (fixes old mysql volumes).
-  mysql-bootstrap:
-    image: mysql:8.0
-    container_name: hvt-mysql-bootstrap
-    restart: "no"
-    environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-hvtroot123}
-    volumes:
-      - ./Scripts/ensure-databases.sql:/bootstrap.sql:ro
-    networks:
-      - hvt-network
-    depends_on:
-      mysql:
-        condition: service_healthy
-    entrypoint: ["/bin/bash", "-c"]
-    command:
-      - >
-        mysql -hmysql -uroot -p$$MYSQL_ROOT_PASSWORD < /bootstrap.sql &&
-        echo "MySQL databases ensured."
-
   rabbitmq:
     image: rabbitmq:3.13-management
     container_name: hvt-rabbitmq
@@ -88,8 +68,6 @@ services:
     networks:
       - hvt-network
     depends_on:
-      mysql-bootstrap:
-        condition: service_completed_successfully
       mysql:
         condition: service_healthy
       rabbitmq:
@@ -119,8 +97,6 @@ services:
     networks:
       - hvt-network
     depends_on:
-      mysql-bootstrap:
-        condition: service_completed_successfully
       mysql:
         condition: service_healthy
     healthcheck:
@@ -151,8 +127,6 @@ services:
     networks:
       - hvt-network
     depends_on:
-      mysql-bootstrap:
-        condition: service_completed_successfully
       mysql:
         condition: service_healthy
       rabbitmq:
@@ -185,8 +159,38 @@ services:
     networks:
       - hvt-network
     depends_on:
-      mysql-bootstrap:
-        condition: service_completed_successfully
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+  inventory-service:
+    build:
+      context: .
+      dockerfile: Service/InventoryService/InventoryService.WebAPI/Dockerfile
+    container_name: hvt-inventory-service
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__DefaultConnection: "Server=mysql;Port=3306;Database=hvt_inventory_db;User=${MYSQL_USER:-hvtuser};Password=${MYSQL_PASSWORD:-hvtpass123};CharSet=utf8mb4;"
+      RabbitMQ__Host: rabbitmq
+      RabbitMQ__Username: ${RABBITMQ_USER:-hvt}
+      RabbitMQ__Password: ${RABBITMQ_PASS:-hvtrabbit123}
+      Jwt__Secret: ${JWT_SECRET:-your-super-secret-key-at-least-32-chars!!}
+      Jwt__Issuer: HuongVanTra
+      Jwt__Audience: HuongVanTra
+    ports:
+      - "5005:8080"
+    networks:
+      - hvt-network
+    depends_on:
       mysql:
         condition: service_healthy
       rabbitmq:
@@ -218,6 +222,7 @@ services:
       ReverseProxy__Clusters__user-cluster__Destinations__destination1__Address: http://user-service:8080
       ReverseProxy__Clusters__product-cluster__Destinations__destination1__Address: http://product-service:8080
       ReverseProxy__Clusters__order-cluster__Destinations__destination1__Address: http://order-service:8080
+      ReverseProxy__Clusters__inventory-cluster__Destinations__destination1__Address: http://inventory-service:8080
     ports:
       - "5000:8080"
     networks:
@@ -228,6 +233,10 @@ services:
       user-service:
         condition: service_healthy
       product-service:
+        condition: service_healthy
+      order-service:
+        condition: service_healthy
+      inventory-service:
         condition: service_healthy
 
   # ─── Frontend ─────────────────────────────────────────────────────────────────

@@ -1,50 +1,91 @@
+import { apiRequestAuth, toPagedResult } from '../../../lib/apiClient.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
+import {
+  buildCreateCustomerBody,
+  fetchCustomerById,
+  mapCustomer,
+} from '../../customers/services/customersApi.js'
+import {
+  buildCreateOrderBody,
+  createOrder,
+  fetchOrder,
+  fetchOrders,
+} from '../../orders/services/ordersApi.js'
 
-const DEFAULT_API_BASE_URL = 'http://localhost:5249'
-
-function getApiBaseUrl() {
-  return import.meta.env.VITE_API_BASE_URL || DEFAULT_API_BASE_URL
+function mapPaymentMethod(method) {
+  const value = String(method || '').toUpperCase()
+  if (value === 'CASH') return 'Cash'
+  if (value === 'TRANSFER') return 'VietQR'
+  if (value === 'COD') return 'COD'
+  return 'Cash'
 }
 
-async function parseResponseError(response) {
-  const contentType = response.headers.get('content-type') || ''
-
-  if (contentType.includes('application/json')) {
-    const body = await response.json().catch(() => null)
-    if (body && typeof body === 'object') {
-      if (typeof body.message === 'string' && body.message.trim()) return body.message
-      if (typeof body.detail === 'string' && body.detail.trim()) return body.detail
-      if (typeof body.title === 'string' && body.title.trim()) return body.title
-    }
+function mapPosLineItem(item) {
+  return {
+    productId: item.productId ?? item.skuId,
+    sku: item.sku ?? item.skuSnapshotCode ?? '',
+    name: item.name ?? item.skuSnapshotName ?? '',
+    quantity: Number(item.quantity ?? item.qty ?? 1),
+    unitPrice: Number(item.unitPrice ?? item.price ?? 0),
+    isGift: item.isGift ?? 0,
   }
-
-  const text = await response.text().catch(() => '')
-  return text.trim() || 'Có lỗi xảy ra.'
 }
 
-async function requestWithAuth(path, options = {}) {
-  const session = loadAuthSession()
-  if (!session?.accessToken) {
-    throw new Error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.')
-  }
+function buildOrderRequestFromPosPayload(payload, { orderChannel, shippingAddress, paymentMethod, paidAmount }) {
+  const lines = (payload.items ?? []).map(mapPosLineItem)
+  const payment = payload.payments?.[0]
 
-  const response = await fetch(`${getApiBaseUrl()}${path}`, {
-    ...options,
-    headers: {
-      ...(options.headers || {}),
-      Authorization: `Bearer ${session.accessToken}`,
-    },
+  return buildCreateOrderBody({
+    customerId: payload.customerId,
+    orderChannel,
+    shippingAddress,
+    discountAmount: Number(payload.manualDiscount ?? 0),
+    paidAmount: paidAmount ?? Number(payment?.amount ?? 0),
+    paymentMethod: paymentMethod ?? mapPaymentMethod(payment?.paymentMethod),
+    items: lines.map((line) => ({
+      skuId: line.productId,
+      skuSnapshotName: line.name || line.sku || 'Sản phẩm',
+      skuSnapshotCode: line.sku || null,
+      quantity: Math.max(1, Math.round(line.quantity)),
+      unitPrice: line.unitPrice,
+    })),
   })
+}
 
-  if (!response.ok) {
-    throw new Error(await parseResponseError(response))
+function mapOrderDetailToPosResult(order) {
+  const primaryPayment = order.payments?.[0]
+  return {
+    orderId: order.id,
+    orderCode: order.orderCode,
+    totalAmount: order.finalAmount,
+    paymentStatus: primaryPayment?.paymentStatus ?? '',
+    stockStatus: String(order.inventorySyncStatus || 'PendingDeduction').toLowerCase(),
+    orderStatus: order.orderStatus,
+    qrPayload: null,
+    qrImageUrl: null,
+    transferContent: order.orderCode,
+    transferAccountNumber: null,
+    paymentMode: 'vietqr_main',
+    qrExpiresAtUtc: null,
+    invoiceCode: null,
+    createdAt: order.createdAt,
+    items: (order.items ?? []).map((row) => ({
+      productId: row.skuId,
+      productName: row.skuSnapshotName,
+      sku: row.skuSnapshotCode ?? '',
+      unitPrice: row.unitPrice,
+      quantity: row.quantity,
+      lineTotal: row.subTotal,
+      isGift: 0,
+    })),
   }
-
-  if (response.status === 204) return null
-  return response.json()
 }
 
 export function mapPosOrderResult(item) {
+  if (item?.id && item?.orderCode) {
+    return mapOrderDetailToPosResult(item)
+  }
+
   return {
     orderId: item.orderId ?? item.OrderId,
     orderCode: item.orderCode ?? item.OrderCode ?? '',
@@ -85,26 +126,60 @@ export function mapPosTransferPaymentInfo(item) {
   }
 }
 
-export function fetchPosSepaySetup() {
-  return requestWithAuth('/api/PosOrder/payment/sepay-setup', { method: 'GET' }).then((item) => ({
-    paymentMode: item.paymentMode ?? item.PaymentMode ?? 'vietqr_main',
-    requireSepayVa: Boolean(item.requireSepayVa ?? item.RequireSepayVa),
-    apiTokenConfigured: Boolean(item.apiTokenConfigured ?? item.ApiTokenConfigured),
-    bankAccountUuidConfigured: Boolean(item.bankAccountUuidConfigured ?? item.BankAccountUuidConfigured),
-    staticVaConfigured: Boolean(item.staticVaConfigured ?? item.StaticVaConfigured),
-    canCreateTransferQr: Boolean(item.canCreateTransferQr ?? item.CanCreateTransferQr),
-    setupMessage: item.setupMessage ?? item.SetupMessage ?? null,
-    bankAccounts: (item.bankAccounts ?? item.BankAccounts ?? []).map((row) => ({
+export async function fetchPosSepaySetup() {
+  const data = await apiRequestAuth('/api/pos/sepay-setup', { method: 'GET' })
+  return {
+    paymentMode: data.paymentMode ?? data.PaymentMode ?? 'vietqr_main',
+    requireSepayVa: Boolean(data.requireSepayVa ?? data.RequireSepayVa),
+    apiTokenConfigured: Boolean(data.apiTokenConfigured ?? data.ApiTokenConfigured),
+    bankAccountUuidConfigured: Boolean(data.bankAccountUuidConfigured ?? data.BankAccountUuidConfigured),
+    staticVaConfigured: Boolean(data.staticVaConfigured ?? data.StaticVaConfigured),
+    canCreateTransferQr: Boolean(data.canCreateTransferQr ?? data.CanCreateTransferQr),
+    setupMessage: data.setupMessage ?? data.SetupMessage ?? null,
+    bankAccounts: (data.bankAccounts ?? data.BankAccounts ?? []).map((row) => ({
       id: row.id ?? row.Id ?? '',
       bankName: row.bankName ?? row.BankName ?? '',
       accountNumber: row.accountNumber ?? row.AccountNumber ?? '',
       accountHolderName: row.accountHolderName ?? row.AccountHolderName ?? '',
       status: row.status ?? row.Status ?? '',
     })),
-  }))
+  }
 }
 
-/** Ưu tiên URL VietQR từ backend (img.vietqr.io / API v2). */
+async function attachTransferQr(result) {
+  const base = {
+    ...result,
+    transferContent: result.orderCode,
+    transferAccountNumber: null,
+    qrExpiresAtUtc: null,
+    paymentMode: 'vietqr_main',
+    qrImageUrl: null,
+    qrPayload: null,
+  }
+
+  try {
+    const qr = await apiRequestAuth('/api/pos/transfer-qr', {
+      method: 'POST',
+      body: JSON.stringify({
+        orderCode: result.orderCode,
+        amount: result.totalAmount,
+      }),
+    })
+
+    return {
+      ...base,
+      transferContent: qr.transferContent ?? qr.TransferContent ?? result.orderCode,
+      transferAccountNumber: qr.transferAccountNumber ?? qr.TransferAccountNumber ?? null,
+      qrExpiresAtUtc: qr.qrExpiresAtUtc ?? qr.QrExpiresAtUtc ?? null,
+      paymentMode: qr.paymentMode ?? qr.PaymentMode ?? 'vietqr_main',
+      qrImageUrl: qr.qrImageUrl ?? qr.QrImageUrl ?? null,
+      qrPayload: qr.qrPayload ?? qr.QrPayload ?? qr.qrImageUrl ?? qr.QrImageUrl ?? null,
+    }
+  } catch {
+    return base
+  }
+}
+
 export function resolveTransferQrImageUrl({ qrImageUrl, qrPayload } = {}) {
   if (qrImageUrl) return qrImageUrl
   if (!qrPayload) return ''
@@ -114,12 +189,20 @@ export function resolveTransferQrImageUrl({ qrImageUrl, qrPayload } = {}) {
   return ''
 }
 
-export function createPosOrderOnline(payload) {
-  return requestWithAuth('/api/PosOrder/online', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  }).then(mapPosOrderResult)
+async function submitPosOrder(payload, options) {
+  const body = buildOrderRequestFromPosPayload(payload, options)
+  const order = await createOrder(body)
+  return mapOrderDetailToPosResult(order)
+}
+
+export async function createPosOrderOnline(payload) {
+  const payment = payload.payments?.[0]
+  const result = await submitPosOrder(payload, {
+    orderChannel: 'POS',
+    paymentMethod: mapPaymentMethod(payment?.paymentMethod ?? 'TRANSFER'),
+    paidAmount: 0,
+  })
+  return attachTransferQr(result)
 }
 
 export function buildTakeawayOrderPayload({
@@ -138,7 +221,10 @@ export function buildTakeawayOrderPayload({
     shippingAddress: shippingAddress?.trim() || null,
     items: cartItems.map((item) => ({
       productId: item.productId,
+      sku: item.sku,
+      name: item.name,
       quantity: item.qty,
+      unitPrice: item.price,
       isGift: 0,
     })),
     payments: [],
@@ -146,31 +232,42 @@ export function buildTakeawayOrderPayload({
 }
 
 export function createTakeawayCodOrder(payload) {
-  return requestWithAuth('/api/online-orders/cod', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  }).then(mapPosOrderResult)
+  return submitPosOrder(
+    { ...payload, payments: [{ paymentMethod: 'COD', amount: 0 }] },
+    {
+      orderChannel: 'Phone',
+      shippingAddress: payload.shippingAddress,
+      paymentMethod: 'COD',
+      paidAmount: 0,
+    },
+  )
 }
 
-export function createTakeawayVietQrOrder(payload) {
-  return requestWithAuth('/api/online-orders/vietqr', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  }).then(mapPosOrderResult)
+export async function createTakeawayVietQrOrder(payload) {
+  const result = await submitPosOrder(
+    { ...payload, payments: [{ paymentMethod: 'TRANSFER', amount: 0 }] },
+    {
+      orderChannel: 'Phone',
+      shippingAddress: payload.shippingAddress,
+      paymentMethod: 'VietQR',
+      paidAmount: 0,
+    },
+  )
+  return attachTransferQr(result)
 }
 
 export function createPosOrderOffline(payload) {
-  return requestWithAuth('/api/PosOrder/offline', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  }).then(mapPosOrderResult)
+  const payment = payload.payments?.[0]
+  return submitPosOrder(payload, {
+    orderChannel: 'POS',
+    paymentMethod: mapPaymentMethod(payment?.paymentMethod ?? 'CASH'),
+    paidAmount: Number(payment?.amount ?? 0),
+  })
 }
 
-export function fetchPosTransferPaymentInfo() {
-  return requestWithAuth('/api/PosOrder/payment/transfer-info', { method: 'GET' }).then(mapPosTransferPaymentInfo)
+export async function fetchPosTransferPaymentInfo() {
+  const data = await apiRequestAuth('/api/pos/transfer-payment-info', { method: 'GET' })
+  return mapPosTransferPaymentInfo(data)
 }
 
 export function mapPosPaymentStatus(item) {
@@ -186,10 +283,27 @@ export function mapPosPaymentStatus(item) {
   }
 }
 
-export function fetchPosOrderPaymentStatus(orderId) {
-  return requestWithAuth(`/api/PosOrder/orders/${orderId}/payment-status`, { method: 'GET' }).then(
-    mapPosPaymentStatus,
-  )
+export async function fetchPosOrderPaymentStatus(orderId) {
+  try {
+    const data = await apiRequestAuth(`/api/pos/orders/${orderId}/payment-status`, { method: 'GET' })
+    return mapPosPaymentStatus(data)
+  } catch {
+    const order = await fetchOrder(orderId)
+    const payment = order.payments?.[0]
+    const isPaid =
+      String(payment?.paymentStatus || '').toLowerCase() === 'success'
+      || String(order.orderStatus || '').toLowerCase() === 'completed'
+
+    return mapPosPaymentStatus({
+      orderId: order.id,
+      orderCode: order.orderCode,
+      paymentStatus: payment?.paymentStatus ?? '',
+      orderStatus: order.orderStatus,
+      isPaid,
+      expectedTransferContent: order.orderCode,
+      expectedAmount: order.finalAmount,
+    })
+  }
 }
 
 export function mapPosProduct(item) {
@@ -203,17 +317,33 @@ export function mapPosProduct(item) {
 }
 
 export function mapPosCustomer(item) {
+  const mapped = mapCustomer(item)
+  if (!mapped) {
+    return {
+      customerId: item.customerId ?? item.CustomerId,
+      customerCode: item.customerCode ?? item.CustomerCode ?? '',
+      fullName: item.fullName ?? item.FullName ?? '',
+      phone: item.phone ?? item.Phone ?? '',
+      customerType: item.customerType ?? item.CustomerType ?? '',
+      tierCode: item.tierCode ?? item.TierCode ?? '',
+      tierId: item.tierId ?? item.TierId ?? null,
+      tierDiscountPercent: Number(item.tierDiscountPercent ?? item.TierDiscountPercent ?? 0),
+      totalSpend: Number(item.totalSpend ?? item.TotalSpend ?? 0),
+      currentDebt: Number(item.currentDebt ?? item.CurrentDebt ?? 0),
+    }
+  }
+
   return {
-    customerId: item.customerId ?? item.CustomerId,
-    customerCode: item.customerCode ?? item.CustomerCode ?? '',
-    fullName: item.fullName ?? item.FullName ?? '',
-    phone: item.phone ?? item.Phone ?? '',
-    customerType: item.customerType ?? item.CustomerType ?? '',
-    tierCode: item.tierCode ?? item.TierCode ?? '',
-    tierId: item.tierId ?? item.TierId ?? null,
-    tierDiscountPercent: Number(item.tierDiscountPercent ?? item.TierDiscountPercent ?? 0),
-    totalSpend: Number(item.totalSpend ?? item.TotalSpend ?? 0),
-    currentDebt: Number(item.currentDebt ?? item.CurrentDebt ?? 0),
+    customerId: mapped.customerId,
+    customerCode: mapped.customerCode,
+    fullName: mapped.fullName,
+    phone: mapped.phone,
+    customerType: mapped.customerType,
+    tierCode: mapped.tierCode ?? '',
+    tierId: mapped.tierId,
+    tierDiscountPercent: Number(mapped.tier?.discountPercent ?? mapped.tierDiscountPercent ?? 0),
+    totalSpend: mapped.totalSpend,
+    currentDebt: mapped.currentDebt,
   }
 }
 
@@ -259,36 +389,109 @@ export function mapPosCustomerContext(item) {
 }
 
 export async function fetchPosCustomerContext(customerId) {
-  const data = await requestWithAuth(`/api/PosOrder/customers/${customerId}/context`, {
-    method: 'GET',
+  const [customer, ordersResult] = await Promise.all([
+    fetchCustomerById(customerId),
+    fetchOrders({ customerId, page: 1, pageSize: 10 }),
+  ])
+
+  const tierDiscountPercent = Number(customer.tier?.discountPercent ?? 0)
+  const recentOrders = (ordersResult.items ?? []).map((order) => ({
+    orderCode: order.orderCode,
+    entryType: 'ORDER',
+    amount: order.finalAmount,
+    paymentStatus: '',
+    orderStatus: order.orderStatus,
+    cashierName: '',
+    cashierRole: '',
+    createdAt: order.createdAt,
+  }))
+
+  const unpaidOrders = recentOrders
+    .filter((order) => String(order.orderStatus).toLowerCase() !== 'completed')
+    .map((order) => ({
+      orderCode: order.orderCode,
+      totalAmount: order.amount,
+      paidAmount: 0,
+      remainingAmount: order.amount,
+      paymentStatus: 'Pending',
+      createdAt: order.createdAt,
+    }))
+
+  const shippingAddresses = (customer.addresses ?? []).map((row) => ({
+    address: [row.addressLine, row.ward, row.district, row.province].filter(Boolean).join(', '),
+    lastUsedAt: null,
+    isProfileAddress: Boolean(row.isDefault),
+  }))
+
+  if (customer.address && !shippingAddresses.length) {
+    shippingAddresses.push({
+      address: customer.address,
+      lastUsedAt: null,
+      isProfileAddress: true,
+    })
+  }
+
+  return mapPosCustomerContext({
+    customerId: customer.customerId,
+    customerCode: customer.customerCode,
+    fullName: customer.fullName,
+    customerType: customer.customerType,
+    phone: customer.phone,
+    email: customer.email,
+    address: customer.address,
+    tierCode: customer.tierCode,
+    tierId: customer.tierId,
+    tierDiscountPercent,
+    totalSpend: customer.totalSpend,
+    currentDebt: customer.currentDebt,
+    outstandingBalance: customer.currentDebt,
+    recentOrders,
+    unpaidOrders,
+    shippingAddresses,
   })
-  return mapPosCustomerContext(data)
 }
 
 export async function fetchPosCustomers({ search, limit = 20 }) {
-  const query = new URLSearchParams()
-  if (search?.trim()) query.set('search', search.trim())
-  query.set('limit', String(limit))
+  const data = await apiRequestAuth(`/api/customers?page=1&pageSize=100`, { method: 'GET' })
+  const paged = toPagedResult(data)
+  let items = paged.items.map(mapCustomer).filter(Boolean)
 
-  const items = await requestWithAuth(`/api/PosOrder/customers?${query.toString()}`, {
-    method: 'GET',
-  })
+  const term = search?.trim().toLowerCase()
+  if (term) {
+    const phoneTerm = term.replace(/\D/g, '')
+    items = items.filter((item) => {
+      const name = (item.fullName || '').toLowerCase()
+      const phone = (item.phone || '').replace(/\s+/g, '')
+      const code = (item.customerCode || '').toLowerCase()
+      return (
+        name.includes(term) ||
+        code.includes(term) ||
+        (phoneTerm.length > 0 && phone.includes(phoneTerm))
+      )
+    })
+  }
 
-  return Array.isArray(items) ? items.map(mapPosCustomer) : []
+  return items.slice(0, limit).map(mapPosCustomer)
 }
 
-export function createPosCustomer(payload) {
-  return requestWithAuth('/api/PosOrder/customers', {
+export async function createPosCustomer(payload) {
+  const body = buildCreateCustomerBody({
+    fullName: payload.fullName,
+    phone: payload.phone,
+    address: payload.address,
+    customerType: payload.customerType,
+  })
+  const created = await apiRequestAuth('/api/customers', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  }).then(mapPosCustomer)
+    body: JSON.stringify(body),
+  })
+  return mapPosCustomer(mapCustomer(created))
 }
 
 export async function fetchPromotionByCode(code) {
   const query = new URLSearchParams()
   query.set('code', String(code || '').trim())
-  const data = await requestWithAuth(`/api/promotions/lookup?${query.toString()}`, { method: 'GET' })
+  const data = await apiRequestAuth(`/api/promotions/lookup?${query.toString()}`, { method: 'GET' })
   return {
     id: data.id ?? data.Id,
     promoCode: data.promoCode ?? data.PromoCode ?? '',
@@ -298,16 +501,39 @@ export async function fetchPromotionByCode(code) {
 }
 
 export async function fetchPosProducts({ storeId, search, limit = 30 }) {
+  void storeId
+
   const query = new URLSearchParams()
-  query.set('storeId', String(storeId))
   if (search?.trim()) query.set('search', search.trim())
-  query.set('limit', String(limit))
+  query.set('page', '1')
+  query.set('pageSize', String(limit))
+  query.set('isActive', 'true')
 
-  const items = await requestWithAuth(`/api/PosOrder/products?${query.toString()}`, {
-    method: 'GET',
-  })
+  const data = await apiRequestAuth(`/api/v1/skus?${query.toString()}`, { method: 'GET' })
+  const paged = toPagedResult(data)
+  const skus = paged.items
 
-  return Array.isArray(items) ? items.map(mapPosProduct) : []
+  let stockBySkuId = new Map()
+  try {
+    const stocks = await apiRequestAuth('/api/v1/inventory/sku-stocks', { method: 'GET' })
+    if (Array.isArray(stocks)) {
+      stockBySkuId = new Map(
+        stocks.map((row) => [row.skuId ?? row.SkuId, Number(row.quantityOnHand ?? row.QuantityOnHand ?? 0)]),
+      )
+    }
+  } catch {
+    // Inventory service may be unavailable during local dev.
+  }
+
+  return skus.map((sku) =>
+    mapPosProduct({
+      productId: sku.id,
+      sku: sku.skuCode,
+      name: [sku.skuCode, sku.packagingType].filter(Boolean).join(' — '),
+      price: sku.basePrice,
+      stockQuantity: stockBySkuId.get(sku.id) ?? 0,
+    }),
+  )
 }
 
 export function resolvePosStoreId() {

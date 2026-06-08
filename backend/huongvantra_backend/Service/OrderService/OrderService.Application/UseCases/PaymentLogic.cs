@@ -6,7 +6,10 @@ using OrderService.Domain.Exceptions;
 
 namespace OrderService.Application.UseCases;
 
-public class PaymentLogic(IPaymentRepository _paymentRepo, IOrderRepository _orderRepo)
+public class PaymentLogic(
+    IPaymentRepository _paymentRepo,
+    IOrderRepository _orderRepo,
+    IOrderEventPublisher _eventPublisher)
 {
     public async Task<PaymentResponse> VerifyCodAsync(
         Guid paymentId, VerifyCodPaymentRequest req, CancellationToken ct = default)
@@ -29,6 +32,20 @@ public class PaymentLogic(IPaymentRepository _paymentRepo, IOrderRepository _ord
         order.UpdatedAt = DateTime.UtcNow;
 
         await _paymentRepo.SaveChangesAsync(ct);
+
+        if (order.CustomerId.HasValue)
+        {
+            var payments = await _paymentRepo.GetByOrderIdAsync(order.Id, ct);
+            var paidAmount = payments.Where(p => p.PaymentStatus == PaymentStatus.Success).Sum(p => p.Amount);
+            var debtAmount = Math.Max(0, order.FinalAmount - paidAmount);
+
+            await _eventPublisher.PublishOrderCompletedAsync(
+                order.Id, order.OrderCode, order.CustomerId.Value,
+                order.FinalAmount, debtAmount,
+                (order.OrderDetails ?? []).Select(d => (d.SkuId, d.Quantity)),
+                ct);
+        }
+
         return MapToResponse(payment);
     }
 

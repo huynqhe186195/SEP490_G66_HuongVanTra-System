@@ -55,6 +55,28 @@ public class OrderRepository(OrderDbContext _db) : IOrderRepository
         return (items, total);
     }
 
+    public async Task<Order?> GetSinglePendingTransferByAmountAsync(
+        decimal amount, int toleranceVnd, CancellationToken ct = default)
+    {
+        var tolerance = Math.Max(0, toleranceVnd);
+        var minAmount = amount - tolerance;
+        var maxAmount = amount + tolerance;
+
+        var candidates = await _db.Orders
+            .Include(o => o.Payments)
+            .Where(o =>
+                o.OrderStatus == OrderStatus.PendingPayment
+                && o.FinalAmount >= minAmount
+                && o.FinalAmount <= maxAmount
+                && o.Payments.Any(p =>
+                    (p.PaymentMethod == PaymentMethod.VietQR || p.PaymentMethod == PaymentMethod.BankTransfer)
+                    && p.PaymentStatus == PaymentStatus.Pending))
+            .OrderByDescending(o => o.CreatedAt)
+            .ToListAsync(ct);
+
+        return candidates.Count == 1 ? candidates[0] : null;
+    }
+
     public async Task<List<Order>> GetPendingCodAsync(CancellationToken ct = default) =>
         await _db.Orders
             .Include(o => o.Payments)

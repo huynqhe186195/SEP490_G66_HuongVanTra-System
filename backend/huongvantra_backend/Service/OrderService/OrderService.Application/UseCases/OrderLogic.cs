@@ -59,8 +59,8 @@ public class OrderLogic(
         var finalAmount = totalAmount - req.DiscountAmount;
         if (finalAmount < 0) finalAmount = 0;
 
-        var isPosOrCompleted = req.OrderChannel == OrderChannel.POS
-            && req.PaymentMethod != PaymentMethod.COD;
+        var isPosCashCompleted = req.OrderChannel == OrderChannel.POS
+            && req.PaymentMethod == PaymentMethod.Cash;
 
         var order = new Order
         {
@@ -70,7 +70,7 @@ public class OrderLogic(
             CustomerSnapshotName = req.CustomerSnapshotName?.Trim(),
             EmployeeId = req.EmployeeId,
             OrderChannel = req.OrderChannel,
-            OrderStatus = isPosOrCompleted ? OrderStatus.Completed : OrderStatus.PendingPayment,
+            OrderStatus = isPosCashCompleted ? OrderStatus.Completed : OrderStatus.PendingPayment,
             InventorySyncStatus = InventorySyncStatus.PendingDeduction,
             TotalAmount = totalAmount,
             DiscountAmount = req.DiscountAmount,
@@ -124,14 +124,13 @@ public class OrderLogic(
         await _orderRepo.AddAsync(order, ct);
         await _orderRepo.SaveChangesAsync(ct);
 
+        await _eventPublisher.PublishOrderPlacedAsync(
+            order.Id, order.OrderCode, order.OrderStatus.ToString(), finalAmount,
+            order.OrderDetails.Select(d => (d.SkuId, d.SkuSnapshotName, d.SkuSnapshotCode, d.Quantity)),
+            ct);
+
         if (order.OrderStatus == OrderStatus.Completed && order.CustomerId.HasValue)
-        {
-            await _eventPublisher.PublishOrderCompletedAsync(
-                order.Id, order.OrderCode, order.CustomerId.Value,
-                finalAmount, debtAmount,
-                order.OrderDetails.Select(d => (d.SkuId, d.Quantity)),
-                ct);
-        }
+            await PublishOrderCompletedAsync(order, debtAmount, ct);
 
         return MapToResponse(order);
     }
@@ -165,6 +164,11 @@ public class OrderLogic(
         order.OrderStatus = OrderStatus.Cancelled;
         order.UpdatedAt = DateTime.UtcNow;
         await _orderRepo.SaveChangesAsync(ct);
+
+        await _eventPublisher.PublishOrderCancelledAsync(
+            order.Id, order.OrderCode,
+            (order.OrderDetails ?? []).Select(d => (d.SkuId, d.Quantity)),
+            ct);
     }
 
     public async Task MarkShippingAsync(Guid id, CancellationToken ct = default)
@@ -190,20 +194,50 @@ public class OrderLogic(
 
         order.OrderStatus = OrderStatus.Completed;
         order.UpdatedAt = DateTime.UtcNow;
+
+        var payments = order.Payments ?? await GetPaymentsInternal(order.Id, ct);
+        foreach (var payment in payments)
+        {
+            if (payment.PaymentStatus == PaymentStatus.Success) continue;
+
+            if (payment.PaymentMethod is PaymentMethod.VietQR or PaymentMethod.BankTransfer or PaymentMethod.Cash)
+            {
+                payment.PaymentStatus = PaymentStatus.Success;
+                payment.Amount = order.FinalAmount;
+                payment.PaidAt = DateTime.UtcNow;
+                payment.UpdatedAt = DateTime.UtcNow;
+            }
+        }
+
         await _orderRepo.SaveChangesAsync(ct);
 
         if (order.CustomerId.HasValue)
         {
-            var payments = order.Payments ?? await GetPaymentsInternal(order.Id, ct);
             var paidAmount = payments.Where(p => p.PaymentStatus == PaymentStatus.Success).Sum(p => p.Amount);
             var debtAmount = Math.Max(0, order.FinalAmount - paidAmount);
-
-            await _eventPublisher.PublishOrderCompletedAsync(
-                order.Id, order.OrderCode, order.CustomerId.Value,
-                order.FinalAmount, debtAmount,
-                order.OrderDetails.Select(d => (d.SkuId, d.Quantity)),
-                ct);
+            await PublishOrderCompletedAsync(order, debtAmount, ct);
         }
+    }
+
+    public async Task MarkInventorySyncedAsync(Guid orderId, CancellationToken ct = default)
+    {
+        var order = await _orderRepo.GetByIdAsync(orderId, ct)
+            ?? throw new OrderNotFoundException(orderId);
+
+        order.InventorySyncStatus = InventorySyncStatus.Synced;
+        order.UpdatedAt = DateTime.UtcNow;
+        await _orderRepo.SaveChangesAsync(ct);
+    }
+
+    private async Task PublishOrderCompletedAsync(Order order, decimal debtAmount, CancellationToken ct)
+    {
+        if (!order.CustomerId.HasValue) return;
+
+        await _eventPublisher.PublishOrderCompletedAsync(
+            order.Id, order.OrderCode, order.CustomerId.Value,
+            order.FinalAmount, debtAmount,
+            (order.OrderDetails ?? []).Select(d => (d.SkuId, d.Quantity)),
+            ct);
     }
 
     private async Task<List<Payment>> GetPaymentsInternal(Guid orderId, CancellationToken ct)

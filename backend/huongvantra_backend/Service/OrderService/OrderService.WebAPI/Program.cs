@@ -1,6 +1,7 @@
 using MassTransit;
 using HuongVanTra.Shared.Messages;
 using OrderService.Application.Interfaces;
+using OrderService.Application.Options;
 using OrderService.Application.UseCases;
 using OrderService.Infrastructure.Data;
 using OrderService.Infrastructure.Messaging;
@@ -37,17 +38,30 @@ builder.Services.AddScoped<IOrderDetailRepository, OrderDetailRepository>();
 builder.Services.AddScoped<IPaymentRepository, PaymentRepository>();
 builder.Services.AddScoped<IOrderCodeGenerator, OrderCodeGenerator>();
 builder.Services.AddScoped<IOrderEventPublisher, OrderEventPublisher>();
+builder.Services.Configure<PosTransferPaymentOptions>(
+    builder.Configuration.GetSection(PosTransferPaymentOptions.SectionName));
+builder.Services.Configure<SepayOptions>(
+    builder.Configuration.GetSection(SepayOptions.SectionName));
+
 builder.Services.AddScoped<OrderLogic>();
 builder.Services.AddScoped<PaymentLogic>();
+builder.Services.AddScoped<PosTransferPaymentLogic>();
 
 builder.Services.AddMassTransit(x =>
 {
+    x.AddConsumer<StockDeductedConsumer>();
+
     x.UsingRabbitMq((context, cfg) =>
     {
         cfg.Host(builder.Configuration["RabbitMQ:Host"] ?? "rabbitmq", "/", h =>
         {
             h.Username(builder.Configuration["RabbitMQ:Username"] ?? "hvt");
             h.Password(builder.Configuration["RabbitMQ:Password"] ?? "hvtrabbit123");
+        });
+
+        cfg.ReceiveEndpoint("order-service.stock-deducted", e =>
+        {
+            e.ConfigureConsumer<StockDeductedConsumer>(context);
         });
     });
 });

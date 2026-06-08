@@ -313,7 +313,7 @@ function PosPage() {
         const items = await fetchPosProducts({
           storeId: resolvePosStoreId(),
           search: searchValue.trim(),
-          limit: 30,
+          limit: searchValue.trim() ? 40 : 60,
         })
         if (!cancelled) {
           setSearchProducts(items)
@@ -794,7 +794,10 @@ function PosPage() {
       manualDiscount,
       items: cartItems.map((item) => ({
         productId: item.productId,
+        sku: item.sku,
+        name: item.name,
         quantity: item.qty,
+        unitPrice: item.price,
         isGift: 0,
       })),
       payments: [
@@ -1003,8 +1006,6 @@ function PosPage() {
   }
 
   const hasSearchQuery = searchValue.trim().length > 0
-  const showSearchDropdown = hasSearchQuery && searchProducts.length > 0
-  const showSearchEmpty = hasSearchQuery && !isSearchLoading && searchProducts.length === 0
 
   const hasCustomerSearchQuery = customerSearchValue.trim().length > 0
   const showCustomerDropdown = !selectedCustomer && hasCustomerSearchQuery && customerSearchResults.length > 0
@@ -1103,8 +1104,8 @@ function PosPage() {
       </header>
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden xl:flex-row">
-        {/* Left: search + cart lines (larger touch targets) */}
-        <section className="order-1 flex min-w-0 flex-1 flex-col bg-white text-base">
+        {/* Left: search + product catalog */}
+        <section className="order-1 flex min-h-[38vh] min-w-0 flex-1 flex-col bg-white text-base xl:min-h-0">
           <div className="relative z-30 shrink-0 overflow-visible border-b border-[#c1c9c0]/60 bg-[#f6f4ec] p-5">
             <div className="relative">
               <Icon className="absolute left-4 top-1/2 -translate-y-1/2 text-[22px] text-[#717971]">search</Icon>
@@ -1119,67 +1120,89 @@ function PosPage() {
               <Icon className="absolute right-4 top-1/2 -translate-y-1/2 text-[22px] text-[#717971]">barcode_scanner</Icon>
             </div>
 
-            {hasSearchQuery && isSearchLoading ? (
-              <div className="absolute left-5 right-5 top-full z-30 mt-2 rounded-xl border border-[#c1c9c0] bg-white p-3 text-sm text-[#717971] shadow-2xl">
-                Đang tìm sản phẩm...
-              </div>
-            ) : null}
-            {showSearchDropdown ? (
-              <div className="custom-scrollbar absolute left-5 right-5 top-full z-30 mt-2 max-h-[min(45vh,400px)] overflow-y-auto rounded-xl border border-[#c1c9c0] bg-white shadow-2xl">
-                {searchProducts.map((item) => {
-                  const outOfStock = Number(item.stockQuantity) <= 0
-                  return (
-                  <button
-                    key={`${item.productId}-${item.sku}`}
-                    type="button"
-                    onClick={() => addToCart(item)}
-                    className="flex w-full items-center gap-3 border-b border-[#f0eee6] p-3.5 text-left last:border-b-0 hover:bg-[#f6f4ec]"
-                  >
-                    <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-[#ceebc1]">
-                      <Icon className="text-[24px] text-[#4a6242]">eco</Icon>
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-base font-medium">{item.name}</div>
-                      <div className="text-xs text-[#717971]">
-                        {item.sku} ·{' '}
-                        <span
-                          className={
-                            outOfStock
-                              ? 'font-semibold text-[#7e5700]'
-                              : Number(item.stockQuantity) <= 5
-                                ? 'font-semibold text-[#7e5700]'
-                                : ''
-                          }
-                        >
-                          {formatStockHint(item.stockQuantity)}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="shrink-0 text-base font-bold text-[#356647]">{formatMoney(item.price)}</div>
-                  </button>
-                  )
-                })}
-              </div>
-            ) : null}
-            {showSearchEmpty ? (
-              <div className="absolute left-5 right-5 top-full z-30 mt-2 rounded-xl border border-[#c1c9c0] bg-white p-3 text-sm text-[#717971] shadow-2xl">
-                Không tìm thấy sản phẩm.
-              </div>
-            ) : null}
           </div>
 
-          <div className="custom-scrollbar flex-1 overflow-y-auto p-4 md:p-5">
-            {!hasCartItems ? (
-              <div className="flex h-full min-h-[320px] flex-col items-center justify-center rounded-2xl border border-dashed border-[#c1c9c0]/80 bg-[#f6f4ec]/40 p-8 text-center">
-                <Icon className="mb-4 text-[72px] text-[#717971]/50">shopping_cart</Icon>
-                <p className="text-lg font-semibold text-[#414942]">Chưa có sản phẩm</p>
-                <p className="mt-2 text-base text-[#717971]">Tìm và chọn sản phẩm ở ô phía trên.</p>
-              </div>
-            ) : (
-              <div className="space-y-2.5">
-                <p className="mb-3 px-1 text-xs font-bold uppercase tracking-wider text-[#717971]">
-                  {cartItems.length} SP · {activeTab.label}
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <div className="flex min-h-0 flex-1 flex-col bg-white">
+              <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[#c1c9c0]/40 px-4 py-2.5">
+                <p className="text-xs font-bold uppercase tracking-wider text-[#717971]">
+                  Danh sách sản phẩm
+                  {hasSearchQuery ? (
+                    <span className="ml-1 font-normal normal-case text-[#414942]">· &quot;{searchValue.trim()}&quot;</span>
+                  ) : null}
                 </p>
+                <span className="shrink-0 text-xs text-[#717971]">{searchProducts.length} SP</span>
+              </div>
+
+              <div className="custom-scrollbar flex-1 overflow-y-auto px-3 py-3">
+                {isSearchLoading ? (
+                  <p className="px-1 py-3 text-sm text-[#717971]">Đang tải sản phẩm...</p>
+                ) : searchProducts.length === 0 ? (
+                  <p className="px-1 py-3 text-sm text-[#717971]">
+                    {hasSearchQuery ? 'Không tìm thấy sản phẩm phù hợp.' : 'Chưa có sản phẩm để hiển thị.'}
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2 2xl:grid-cols-3">
+                    {searchProducts.map((item) => {
+                      const outOfStock = Number(item.stockQuantity) <= 0
+                      return (
+                        <button
+                          key={`${item.productId}-${item.sku}`}
+                          type="button"
+                          onClick={() => addToCart(item)}
+                          className="flex w-full items-center gap-2.5 rounded-xl border border-[#c1c9c0]/50 bg-[#fbf9f1] p-2.5 text-left transition-colors hover:border-[#356647]/35 hover:bg-[#f6f4ec]"
+                        >
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#ceebc1]">
+                            <Icon className="text-[20px] text-[#4a6242]">eco</Icon>
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-semibold text-[#1b1c17]">{item.name}</p>
+                            <p className="truncate text-xs text-[#717971]">
+                              {item.sku}
+                              <span className="mx-1">·</span>
+                              <span
+                                className={
+                                  outOfStock || Number(item.stockQuantity) <= 5
+                                    ? 'font-semibold text-[#7e5700]'
+                                    : ''
+                                }
+                              >
+                                {formatStockHint(item.stockQuantity)}
+                              </span>
+                            </p>
+                          </div>
+                          <p className="shrink-0 whitespace-nowrap text-sm font-bold tabular-nums text-[#356647]">
+                            {formatMoney(item.price)} đ
+                          </p>
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Right: cart + customer + payment */}
+        <section className="order-2 flex min-h-[42vh] w-full min-w-0 flex-col border-t border-[#c1c9c0] bg-[#f6f4ec] xl:max-h-none xl:min-h-0 xl:w-[min(100%,520px)] xl:shrink-0 xl:border-l xl:border-t-0 xl:shadow-[-4px_0_20px_rgba(0,0,0,0.04)] 2xl:w-[min(100%,560px)]">
+          <div className="flex min-h-0 flex-[1.15] flex-col border-b border-[#c1c9c0]/60 bg-white">
+            <div className="flex shrink-0 items-center justify-between gap-2 px-4 py-2.5">
+              <p className="text-xs font-bold uppercase tracking-wider text-[#717971]">Giỏ hàng</p>
+              <span className="shrink-0 text-xs text-[#717971]">
+                {cartItems.length} SP · {activeTab.label}
+              </span>
+            </div>
+
+            <div className="custom-scrollbar min-h-[120px] flex-1 overflow-y-auto px-3 pb-3">
+              {!hasCartItems ? (
+                <div className="flex min-h-[140px] flex-col items-center justify-center rounded-xl border border-dashed border-[#c1c9c0]/80 bg-[#f6f4ec]/40 p-5 text-center">
+                  <Icon className="mb-2 text-[44px] text-[#717971]/50">shopping_cart</Icon>
+                  <p className="text-sm font-semibold text-[#414942]">Giỏ hàng trống</p>
+                  <p className="mt-1 text-xs text-[#717971]">Chọn sản phẩm bên trái để thêm.</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
                 {cartItems.map((item) => {
                   const lineGross = getLineGross(item)
                   const lineTotal = getLineTotal(item)
@@ -1195,28 +1218,28 @@ function PosPage() {
                   return (
                     <div
                       key={item.sku}
-                      className="relative flex items-center gap-3 rounded-xl border border-[#c1c9c0]/50 bg-[#fbf9f1] px-3 py-3"
+                      className="relative flex flex-nowrap items-center gap-2 rounded-xl border border-[#c1c9c0]/50 bg-[#fbf9f1] px-2.5 py-2.5 sm:gap-3 sm:px-3 sm:py-3"
                     >
-                      <div className="min-w-0 flex-[1.2]">
-                        <p className="truncate text-base font-semibold leading-snug text-[#1b1c17]" title={item.name}>
+                      <div className="min-w-0 flex-1 overflow-hidden">
+                        <p className="truncate text-sm font-semibold leading-snug text-[#1b1c17] sm:text-base" title={item.name}>
                           {item.name}
                         </p>
-                        <p className="mt-0.5 text-sm text-[#717971]">
+                        <p className="mt-0.5 truncate text-xs text-[#717971] sm:text-sm">
                           {formatMoney(item.price)} đ
                           <span
-                            className={`ml-1 text-xs ${
+                            className={`ml-1 text-[11px] sm:text-xs ${
                               Number(item.stockQuantity) <= 0 ? 'font-semibold text-[#7e5700]' : ''
                             }`}
                           >
                             · {formatStockHint(item.stockQuantity)}
                           </span>
                           {discountLabel ? (
-                            <span className="ml-1 text-xs font-semibold text-[#7e5700]">{discountLabel}</span>
+                            <span className="ml-1 text-[11px] font-semibold text-[#7e5700] sm:text-xs">{discountLabel}</span>
                           ) : null}
                         </p>
                       </div>
 
-                      <div className="flex shrink-0 items-center overflow-hidden rounded-lg border border-[#c1c9c0] text-base">
+                      <div className="flex shrink-0 items-center overflow-hidden rounded-lg border border-[#c1c9c0] text-sm sm:text-base">
                         <button
                           type="button"
                           onClick={() => updateQuantity(item.sku, 'dec')}
@@ -1228,7 +1251,7 @@ function PosPage() {
                           type="text"
                           inputMode="decimal"
                           aria-label={`Số lượng ${item.name}`}
-                          className="w-[3.25rem] border-x border-[#c1c9c0] bg-white px-1 py-1 text-center text-base font-semibold outline-none focus:bg-[#f6f4ec] focus:ring-1 focus:ring-[#356647]/30"
+                          className="w-[2.75rem] border-x border-[#c1c9c0] bg-white px-0.5 py-1 text-center text-sm font-semibold outline-none focus:bg-[#f6f4ec] focus:ring-1 focus:ring-[#356647]/30 sm:w-[3.25rem] sm:px-1 sm:text-base"
                           value={item.qty}
                           onChange={(event) => setLineQuantity(item.sku, event.target.value)}
                         />
@@ -1241,12 +1264,12 @@ function PosPage() {
                         </button>
                       </div>
 
-                      <div className="relative w-[5.5rem] shrink-0">
+                      <div className="relative shrink-0">
                         <button
                           type="button"
                           onMouseDown={(event) => event.stopPropagation()}
                           onClick={() => setOpenDiscountSku(isDiscountOpen ? null : item.sku)}
-                          className={`w-full rounded-lg px-1 py-1 text-right text-base font-bold transition-colors ${
+                          className={`whitespace-nowrap rounded-lg px-1.5 py-1 text-right text-sm font-bold tabular-nums transition-colors sm:text-base ${
                             isDiscountOpen
                               ? 'bg-[#356647] text-white'
                               : 'text-[#356647] hover:bg-[#356647]/10'
@@ -1320,14 +1343,12 @@ function PosPage() {
                     </div>
                   )
                 })}
-              </div>
-            )}
+                </div>
+              )}
+            </div>
           </div>
-        </section>
 
-        {/* Right: customer, discount, payment */}
-        <section className="order-2 flex max-h-[min(52vh,520px)] w-full shrink-0 flex-col border-t border-[#c1c9c0] bg-[#f6f4ec] xl:max-h-none xl:w-[min(100%,420px)] xl:border-l xl:border-t-0 xl:shadow-[-4px_0_20px_rgba(0,0,0,0.04)]">
-          <div className="custom-scrollbar flex-1 space-y-4 overflow-y-auto p-4">
+          <div className="custom-scrollbar min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
             <div className="relative rounded-xl bg-white p-3 shadow-sm">
               <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[#717971]">Khách hàng</label>
               {selectedCustomer ? (

@@ -92,27 +92,20 @@ function OrdersPage() {
     <PageShell>
       <PageHeader
         title="Đơn hàng"
-        description="Quản lý đơn hàng từ POS, Website, Zalo và điện thoại."
+        description="Theo dõi đơn đã tạo từ POS bán hàng. Tạo đơn mới tại màn POS."
         searchPlaceholder="Tìm mã đơn, tên khách..."
         searchValue={searchInput}
         onSearchChange={setSearchInput}
         rightContent={
-          <>
-            {canManage ? (
-              <Link
-                className="inline-flex items-center gap-2 rounded-xl bg-[#538463] px-5 py-2.5 text-sm font-bold text-white shadow-md hover:bg-[#457053]"
-                to="/orders/create"
-              >
-                Tạo đơn
-              </Link>
-            ) : null}
+          canManage ? (
             <Link
-              className="inline-flex items-center gap-2 rounded-xl border border-[#356647]/30 bg-white px-4 py-2.5 text-sm font-semibold text-[#356647] hover:bg-[#356647]/5"
+              className="inline-flex items-center gap-2 rounded-xl bg-[#538463] px-5 py-2.5 text-sm font-bold text-white shadow-md hover:bg-[#457053]"
               to="/pos"
             >
-              Mở POS
+              <span className="material-symbols-outlined text-lg">point_of_sale</span>
+              POS bán hàng
             </Link>
-          </>
+          ) : null
         }
       />
 

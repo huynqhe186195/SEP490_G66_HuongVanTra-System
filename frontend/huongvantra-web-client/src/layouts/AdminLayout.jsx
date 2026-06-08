@@ -96,6 +96,8 @@ function AdminLayout() {
     return <Navigate to="/login" replace />
   }
 
+  const isFullPageScroll = location.pathname === '/pos/payment/qr'
+
   return (
     <div className="min-h-screen bg-[#F8FAF7] text-gray-800">
       <div className="flex h-[100dvh] overflow-hidden">
@@ -133,9 +135,21 @@ function AdminLayout() {
             </div>
           </header>
 
-          <main className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden p-3 sm:p-4 lg:p-6 xl:p-8">
+          <main
+            className={`relative flex min-h-0 min-w-0 flex-1 flex-col p-3 sm:p-4 lg:p-6 xl:p-8 ${
+              isFullPageScroll
+                ? 'custom-scrollbar overflow-y-auto overscroll-contain'
+                : 'overflow-hidden'
+            }`}
+          >
             <ModuleRouteGuard session={authSession} isLoadingAccess={isLoadingAccess}>
-              <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+              <div
+                className={
+                  isFullPageScroll
+                    ? 'flex min-w-0 flex-col'
+                    : 'flex min-h-0 min-w-0 flex-1 flex-col'
+                }
+              >
                 <Outlet />
               </div>
             </ModuleRouteGuard>

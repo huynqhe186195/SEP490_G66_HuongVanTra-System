@@ -6,13 +6,42 @@ namespace OrderService.Infrastructure.Messaging;
 
 public class OrderEventPublisher(IPublishEndpoint _publishEndpoint) : IOrderEventPublisher
 {
-    public async Task PublishOrderCompletedAsync(
+    public Task PublishOrderPlacedAsync(
+        Guid orderId, string orderCode, string orderStatus, decimal totalAmount,
+        IEnumerable<(Guid SkuId, string SkuName, string? SkuCode, int Quantity)> items,
+        CancellationToken ct = default) =>
+        _publishEndpoint.Publish(new OrderPlacedEvent
+        {
+            OrderId = orderId,
+            OrderCode = orderCode,
+            OrderStatus = orderStatus,
+            TotalAmount = totalAmount,
+            Items = items.Select(i => new OrderItemEvent
+            {
+                SkuId = i.SkuId,
+                SkuName = i.SkuName,
+                SkuCode = i.SkuCode,
+                Quantity = i.Quantity
+            })
+        }, ct);
+
+    public Task PublishOrderCancelledAsync(
+        Guid orderId, string orderCode,
+        IEnumerable<(Guid SkuId, int Quantity)> items,
+        CancellationToken ct = default) =>
+        _publishEndpoint.Publish(new OrderCancelledEvent
+        {
+            OrderId = orderId,
+            OrderCode = orderCode,
+            Items = items.Select(i => new OrderItemEvent { SkuId = i.SkuId, Quantity = i.Quantity })
+        }, ct);
+
+    public Task PublishOrderCompletedAsync(
         Guid orderId, string orderCode, Guid customerId,
         decimal totalAmount, decimal debtAmount,
         IEnumerable<(Guid SkuId, int Quantity)> items,
-        CancellationToken ct = default)
-    {
-        await _publishEndpoint.Publish(new OrderCompletedEvent
+        CancellationToken ct = default) =>
+        _publishEndpoint.Publish(new OrderCompletedEvent
         {
             OrderId = orderId,
             OrderCode = orderCode,
@@ -21,5 +50,4 @@ public class OrderEventPublisher(IPublishEndpoint _publishEndpoint) : IOrderEven
             DebtAmount = debtAmount,
             Items = items.Select(i => new OrderItemEvent { SkuId = i.SkuId, Quantity = i.Quantity })
         }, ct);
-    }
 }
