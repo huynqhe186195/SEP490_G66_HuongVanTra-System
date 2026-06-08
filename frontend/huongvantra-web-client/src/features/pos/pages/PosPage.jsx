@@ -155,6 +155,7 @@ function createEmptySession(mode = 'counter') {
     paymentMethod: mode === 'takeaway' ? 'COD' : 'CASH',
     amountPaidInput: '',
     shippingAddress: '',
+    orderNote: '',
   }
 }
 
@@ -197,6 +198,7 @@ function PosPage() {
     paymentMethod: sessionPaymentMethod,
     amountPaidInput = '',
     shippingAddress = '',
+    orderNote = '',
   } = session ?? createEmptySession(salesMode)
 
   const paymentMethod = sessionPaymentMethod ?? (isTakeaway ? 'COD' : 'CASH')
@@ -248,12 +250,12 @@ function PosPage() {
   const formatStockHint = (value) => {
     const n = Number(value) || 0
     if (n <= 0) {
-      return 'Tồn: 0 · bán trước, trừ sau'
+      return 'Số lượng hiện tại: 0 · bán trước, trừ sau'
     }
     if (n <= 5) {
-      return `Tồn: ${formatStock(n)} · sắp hết`
+      return `Số lượng hiện tại: ${formatStock(n)} · sắp hết`
     }
-    return `Tồn: ${formatStock(n)}`
+    return `Số lượng hiện tại: ${formatStock(n)}`
   }
 
   const parseQtyInput = (value) => {
@@ -792,6 +794,7 @@ function PosPage() {
       customerId: selectedCustomer.customerId,
       promotionId: appliedPromotion?.id ?? null,
       manualDiscount,
+      note: orderNote,
       items: cartItems.map((item) => ({
         productId: item.productId,
         sku: item.sku,
@@ -860,6 +863,7 @@ function PosPage() {
       storeId: resolvePosStoreId(),
       customerId: selectedCustomer.customerId,
       shippingAddress: address,
+      note: orderNote,
       cartItems,
       manualDiscount,
       promotionId: appliedPromotion?.id ?? null,
@@ -1578,6 +1582,25 @@ function PosPage() {
                   </button>
                 </div>
               )}
+            </div>
+
+            <div className="rounded-xl bg-white p-4 shadow-sm">
+              <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[#717971]" htmlFor="order-note">
+                Ghi chú đơn hàng
+              </label>
+              <textarea
+                id="order-note"
+                rows={2}
+                maxLength={500}
+                placeholder="VD: Gói quà, giao giờ hành chính, khách dị ứng sữa..."
+                className="w-full resize-none rounded-xl border border-[#c1c9c0] bg-[#fbf9f1] px-3 py-2.5 text-sm outline-none focus:border-[#356647] focus:ring-2 focus:ring-[#356647]/20"
+                value={orderNote}
+                onChange={(event) => updateActiveSession({ orderNote: event.target.value })}
+              />
+              <p className="mt-1 text-[11px] text-[#717971]">
+                Hiển thị trong quản lý đơn hàng. Tối đa 500 ký tự.
+                {orderNote.length > 0 ? ` (${orderNote.length}/500)` : ''}
+              </p>
             </div>
 
             <div className="rounded-xl bg-white p-4 shadow-sm">

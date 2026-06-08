@@ -60,7 +60,7 @@ export function summarizeProductStock(skus = [], stockBySkuId = new Map()) {
 
   return {
     label,
-    title: lines.map((line) => `${line.code}: ${formatStockQuantity(line.qty)}`).join('\n'),
+    title: lines.map((line) => `${line.code}: số lượng hiện tại ${formatStockQuantity(line.qty)}`).join('\n'),
     total,
     isLow: quantities.some((qty) => qty > 0 && qty <= 5),
     isOut: quantities.every((qty) => qty <= 0),

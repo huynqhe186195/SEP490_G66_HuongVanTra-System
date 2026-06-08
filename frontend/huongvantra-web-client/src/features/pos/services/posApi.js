@@ -39,6 +39,7 @@ function buildOrderRequestFromPosPayload(payload, { orderChannel, shippingAddres
     customerId: payload.customerId,
     orderChannel,
     shippingAddress,
+    note: payload.note?.trim() || null,
     discountAmount: Number(payload.manualDiscount ?? 0),
     paidAmount: paidAmount ?? Number(payment?.amount ?? 0),
     paymentMethod: paymentMethod ?? mapPaymentMethod(payment?.paymentMethod),
@@ -209,6 +210,7 @@ export function buildTakeawayOrderPayload({
   storeId,
   customerId,
   shippingAddress,
+  note,
   cartItems,
   manualDiscount = 0,
   promotionId = null,
@@ -219,6 +221,7 @@ export function buildTakeawayOrderPayload({
     promotionId: promotionId || null,
     manualDiscount: Math.max(0, Math.round(Number(manualDiscount) || 0)),
     shippingAddress: shippingAddress?.trim() || null,
+    note: note?.trim() || null,
     items: cartItems.map((item) => ({
       productId: item.productId,
       sku: item.sku,

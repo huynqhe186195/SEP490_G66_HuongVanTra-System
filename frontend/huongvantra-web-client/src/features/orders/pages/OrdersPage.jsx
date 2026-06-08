@@ -187,6 +187,7 @@ function OrdersPage() {
               <tr>
                 <th className="px-6 py-3 text-xs font-bold uppercase tracking-wide text-[#717971]">Mã đơn</th>
                 <th className="px-4 py-3 text-xs font-bold uppercase tracking-wide text-[#717971]">Khách hàng</th>
+                <th className="px-4 py-3 text-xs font-bold uppercase tracking-wide text-[#717971]">Ghi chú</th>
                 <th className="px-4 py-3 text-xs font-bold uppercase tracking-wide text-[#717971]">Kênh</th>
                 <th className="px-4 py-3 text-xs font-bold uppercase tracking-wide text-[#717971]">Trạng thái</th>
                 <th className="px-4 py-3 text-xs font-bold uppercase tracking-wide text-[#717971]">Kho</th>
@@ -198,14 +199,14 @@ function OrdersPage() {
             <tbody className="divide-y divide-slate-100 bg-white">
               {isLoading ? (
                 <tr>
-                  <td className="px-6 py-10 text-slate-500" colSpan={8}>
+                  <td className="px-6 py-10 text-slate-500" colSpan={9}>
                     Đang tải...
                   </td>
                 </tr>
               ) : null}
               {!isLoading && orders.length === 0 ? (
                 <tr>
-                  <td className="px-6 py-10 text-slate-500" colSpan={8}>
+                  <td className="px-6 py-10 text-slate-500" colSpan={9}>
                     Không có đơn phù hợp bộ lọc.
                   </td>
                 </tr>
@@ -219,6 +220,15 @@ function OrdersPage() {
                         </Link>
                       </td>
                       <td className="px-4 py-4 font-medium text-slate-800">{order.customerSnapshotName || 'Khách lẻ'}</td>
+                      <td className="max-w-[200px] px-4 py-4 text-xs text-slate-600">
+                        {order.note?.trim() ? (
+                          <span className="line-clamp-2" title={order.note}>
+                            {order.note}
+                          </span>
+                        ) : (
+                          <span className="text-slate-300">—</span>
+                        )}
+                      </td>
                       <td className="px-4 py-4">
                         <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
                           {getOrderChannelLabel(order.orderChannel)}

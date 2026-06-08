@@ -188,7 +188,7 @@ function ProductsListPage() {
                 <th className={TABLE_HEAD}>Danh mục</th>
                 <th className={TABLE_HEAD}>SKU</th>
                 <th className={TABLE_HEAD}>Giá</th>
-                <th className={TABLE_HEAD}>Tồn kho</th>
+                <th className={TABLE_HEAD}>Số lượng hiện tại</th>
                 <th className={TABLE_HEAD}>Trạng thái</th>
                 <th className={TABLE_HEAD}>Thao tác</th>
               </tr>

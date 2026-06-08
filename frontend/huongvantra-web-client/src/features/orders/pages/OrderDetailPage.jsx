@@ -220,6 +220,13 @@ function OrderDetailPage() {
             ) : null}
           </section>
 
+          {order.note?.trim() ? (
+            <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+              <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-400">Ghi chú</h2>
+              <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-700">{order.note}</p>
+            </section>
+          ) : null}
+
           {payment ? (
             <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
               <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-400">Thanh toán</h2>

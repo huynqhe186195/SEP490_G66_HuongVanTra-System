@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { showError, showSuccess } from '../../../app/toast.js'
+import AdjustSkuStockModal from './AdjustSkuStockModal.jsx'
 import ProductImage, { ProductImagePreview } from './ProductImage.jsx'
 import { buildStockBySkuIdMap, fetchSkuStocks } from '../../inventory/services/inventoryStockApi.js'
 import { createSku, deleteSku, fetchSkusByProductId, updateSku } from '../services/productSkusApi.js'
@@ -20,7 +21,9 @@ function FieldError({ message }) {
   return <p className="text-xs text-[#b42318]">{message}</p>
 }
 
-function ProductSkusPanel({ productId, canManage }) {
+function ProductSkusPanel({ productId, canManage, canAdjustStock = false, layout = 'default' }) {
+  const isColumnLayout = layout === 'column'
+  const formGridClass = isColumnLayout ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2'
   const [skus, setSkus] = useState([])
   const [stockBySkuId, setStockBySkuId] = useState(() => new Map())
   const [isLoading, setIsLoading] = useState(true)
@@ -28,6 +31,7 @@ function ProductSkusPanel({ productId, canManage }) {
   const [editingId, setEditingId] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
   const [fieldErrors, setFieldErrors] = useState({})
+  const [stockModalSku, setStockModalSku] = useState(null)
 
   async function reload() {
     if (!productId) return
@@ -135,18 +139,18 @@ function ProductSkusPanel({ productId, canManage }) {
   }
 
   return (
-    <div className="rounded-[1rem] bg-white p-4 shadow-sm sm:p-6 lg:p-8">
+    <div className={`rounded-[1rem] bg-white p-4 shadow-sm sm:p-6 lg:p-8 ${isColumnLayout ? 'lg:max-h-[calc(100vh-12rem)] lg:overflow-y-auto' : ''}`}>
       <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-lg font-bold text-slate-800">Biến thể &amp; giá (SKU)</h2>
-          <p className="mt-1 text-sm text-slate-500">Mỗi SKU có mã riêng, quy cách, khối lượng và giá bán.</p>
+          <h2 className="text-lg font-bold text-slate-800">Biến thể, giá &amp; số lượng hiện tại</h2>
+          <p className="mt-1 text-sm text-slate-500">Mỗi SKU có mã, giá bán và số lượng hiện tại tại cửa hàng.</p>
         </div>
       </div>
 
       {canManage ? (
         <form className="mb-8 space-y-4 rounded-xl border border-slate-100 bg-[#fbf9f1] p-4" onSubmit={handleSubmit}>
           <p className="text-sm font-semibold text-[#356647]">{editingId ? 'Sửa SKU' : 'Thêm SKU mới'}</p>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className={`grid gap-4 ${formGridClass}`}>
             <label className="space-y-1">
               <span className="text-xs font-semibold text-[#717971]">Mã SKU *</span>
               <input
@@ -193,7 +197,7 @@ function ProductSkusPanel({ productId, canManage }) {
               <FieldError message={fieldErrors.basePrice} />
             </label>
 
-            <label className="space-y-1 md:col-span-2">
+            <label className={`space-y-1 ${isColumnLayout ? '' : 'md:col-span-2'}`}>
               <span className="text-xs font-semibold text-[#717971]">URL ảnh</span>
               <input
                 className={`w-full rounded-xl border-none bg-white p-3 text-sm focus:ring-2 focus:ring-[#356647]/20 ${fieldErrors.imageUrl ? 'ring-2 ring-[#b42318]/40' : ''}`}
@@ -206,7 +210,7 @@ function ProductSkusPanel({ productId, canManage }) {
             </label>
 
             {editingId ? (
-              <label className="flex items-center gap-2 md:col-span-2">
+              <label className={`flex items-center gap-2 ${isColumnLayout ? '' : 'md:col-span-2'}`}>
                 <input
                   type="checkbox"
                   checked={form.isActive}
@@ -275,19 +279,32 @@ function ProductSkusPanel({ productId, canManage }) {
                       quantityOnHand <= 0 ? 'text-[#b42318]' : quantityOnHand <= 5 ? 'text-[#7e5700]' : 'text-[#356647]'
                     }`}
                   >
-                    Tồn: {formatStockQuantity(quantityOnHand)}
+                    Số lượng hiện tại: {formatStockQuantity(quantityOnHand)}
                   </p>
                   </div>
                 </div>
 
-                {canManage ? (
-                  <div className="flex items-center gap-2">
-                    <button type="button" className="rounded-lg px-3 py-2 text-sm font-semibold text-[#356647] hover:bg-[#356647]/5" onClick={() => startEdit(sku)}>
-                      Sửa
-                    </button>
-                    <button type="button" className="rounded-lg px-3 py-2 text-sm font-semibold text-[#b42318] hover:bg-[#fff5f5]" onClick={() => handleDelete(sku)}>
-                      Xóa
-                    </button>
+                {canManage || canAdjustStock ? (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {canAdjustStock ? (
+                      <button
+                        type="button"
+                        className="rounded-lg px-3 py-2 text-sm font-semibold text-[#356647] hover:bg-[#356647]/5"
+                        onClick={() => setStockModalSku(sku)}
+                      >
+                        Cập nhật số lượng
+                      </button>
+                    ) : null}
+                    {canManage ? (
+                      <>
+                        <button type="button" className="rounded-lg px-3 py-2 text-sm font-semibold text-[#356647] hover:bg-[#356647]/5" onClick={() => startEdit(sku)}>
+                          Sửa
+                        </button>
+                        <button type="button" className="rounded-lg px-3 py-2 text-sm font-semibold text-[#b42318] hover:bg-[#fff5f5]" onClick={() => handleDelete(sku)}>
+                          Xóa
+                        </button>
+                      </>
+                    ) : null}
                   </div>
                 ) : null}
               </div>
@@ -295,6 +312,17 @@ function ProductSkusPanel({ productId, canManage }) {
           })}
         </div>
       )}
+
+      {stockModalSku ? (
+        <AdjustSkuStockModal
+          sku={stockModalSku}
+          quantityOnHand={Number(stockBySkuId.get(stockModalSku.id) ?? 0)}
+          onClose={() => setStockModalSku(null)}
+          onAdjusted={(nextQty) => {
+            setStockBySkuId((prev) => new Map(prev).set(stockModalSku.id, nextQty))
+          }}
+        />
+      ) : null}
     </div>
   )
 }

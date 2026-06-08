@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
-import { canManageProducts } from '../../auth/utils/permissions.js'
+import { canAdjustStoreStock, canManageProducts } from '../../auth/utils/permissions.js'
 import ProductSkusPanel from '../components/ProductSkusPanel.jsx'
 import { fetchCategories } from '../services/categoriesApi.js'
 import { createProduct, fetchProductById, updateProduct } from '../services/productsApi.js'
@@ -20,6 +20,7 @@ function ProductFormPage({ mode }) {
   const isEditMode = mode === 'edit' || Boolean(id)
   const session = loadAuthSession()
   const canManage = canManageProducts(session)
+  const canAdjustStock = canAdjustStoreStock(session)
 
   const [categories, setCategories] = useState([])
   const [isLoading, setIsLoading] = useState(isEditMode)
@@ -145,12 +146,88 @@ function ProductFormPage({ mode }) {
     )
   }
 
+  const isSideBySideLayout = isEditMode && Boolean(id)
+  const productFieldGridClass = isSideBySideLayout ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2'
+  const productFieldSpanClass = isSideBySideLayout ? '' : 'md:col-span-2'
+
+  const productFields = (
+    <div className={`grid gap-6 ${productFieldGridClass}`}>
+      <label className={`space-y-2 ${productFieldSpanClass}`}>
+        <span className="text-xs font-semibold text-[#717971]">Tên sản phẩm *</span>
+        <input
+          className={`w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20 ${fieldErrors.name ? 'ring-2 ring-[#b42318]/40' : ''}`}
+          value={form.name}
+          onChange={updateField('name')}
+          disabled={!canManage}
+        />
+        <FieldError message={fieldErrors.name} />
+      </label>
+
+      <label className="space-y-2">
+        <span className="text-xs font-semibold text-[#717971]">Danh mục *</span>
+        <select
+          className={`w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20 ${fieldErrors.categoryId ? 'ring-2 ring-[#b42318]/40' : ''}`}
+          value={form.categoryId}
+          onChange={updateField('categoryId')}
+          disabled={!canManage}
+        >
+          <option value="">Chọn danh mục</option>
+          {categories.map((category) => (
+            <option key={category.id} value={category.id}>
+              {category.name}
+            </option>
+          ))}
+        </select>
+        <FieldError message={fieldErrors.categoryId} />
+      </label>
+
+      {isEditMode ? (
+        <label className="space-y-2">
+          <span className="text-xs font-semibold text-[#717971]">Trạng thái</span>
+          <select
+            className="w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20"
+            value={form.isActive ? 'active' : 'inactive'}
+            onChange={(event) => setForm((prev) => ({ ...prev, isActive: event.target.value === 'active' }))}
+            disabled={!canManage}
+          >
+            <option value="active">Đang bán</option>
+            <option value="inactive">Ngừng kinh doanh</option>
+          </select>
+        </label>
+      ) : null}
+
+      <label className="space-y-2">
+        <span className="text-xs font-semibold text-[#717971]">Xuất xứ</span>
+        <input className="w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20" value={form.origin} onChange={updateField('origin')} disabled={!canManage} />
+        <FieldError message={fieldErrors.origin} />
+      </label>
+
+      <label className={`space-y-2 ${productFieldSpanClass}`}>
+        <span className="text-xs font-semibold text-[#717971]">Hương vị</span>
+        <input className="w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20" value={form.flavorProfile} onChange={updateField('flavorProfile')} disabled={!canManage} />
+        <FieldError message={fieldErrors.flavorProfile} />
+      </label>
+
+      <label className={`space-y-2 ${productFieldSpanClass}`}>
+        <span className="text-xs font-semibold text-[#717971]">Hướng dẫn pha chế</span>
+        <textarea className="min-h-[96px] w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20" value={form.brewingGuide} onChange={updateField('brewingGuide')} disabled={!canManage} />
+        <FieldError message={fieldErrors.brewingGuide} />
+      </label>
+
+      <label className={`space-y-2 ${productFieldSpanClass}`}>
+        <span className="text-xs font-semibold text-[#717971]">Mô tả</span>
+        <textarea className="min-h-[96px] w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20" value={form.description} onChange={updateField('description')} disabled={!canManage} />
+        <FieldError message={fieldErrors.description} />
+      </label>
+    </div>
+  )
+
   return (
     <PageShell>
       <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-start">
         <div>
           <h1 className="text-2xl font-extrabold text-slate-800">{isEditMode ? 'Sửa sản phẩm' : 'Tạo sản phẩm'}</h1>
-          <p className="mt-1 text-sm text-slate-500">Thông tin sản phẩm và quản lý biến thể SKU (mã, giá, khối lượng)</p>
+          <p className="mt-1 text-sm text-slate-500">Thông tin sản phẩm, biến thể SKU và số lượng hiện tại tại cửa hàng</p>
         </div>
 
         <div className="flex items-center gap-3">
@@ -170,97 +247,39 @@ function ProductFormPage({ mode }) {
         </div>
       </div>
 
-      <form className="grid grid-cols-1 gap-6 lg:grid-cols-12 lg:gap-8" onSubmit={handleSubmit}>
-        <section className="space-y-6 lg:col-span-8">
-          <div className="rounded-[1rem] bg-white p-4 shadow-sm sm:p-6 lg:p-8">
-            <h2 className="mb-6 text-lg font-bold text-slate-800">Thông tin sản phẩm</h2>
-
-            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-              <label className="space-y-2 md:col-span-2">
-                <span className="text-xs font-semibold text-[#717971]">Tên sản phẩm *</span>
-                <input
-                  className={`w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20 ${fieldErrors.name ? 'ring-2 ring-[#b42318]/40' : ''}`}
-                  value={form.name}
-                  onChange={updateField('name')}
-                  disabled={!canManage}
-                />
-                <FieldError message={fieldErrors.name} />
-              </label>
-
-              <label className="space-y-2">
-                <span className="text-xs font-semibold text-[#717971]">Danh mục *</span>
-                <select
-                  className={`w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20 ${fieldErrors.categoryId ? 'ring-2 ring-[#b42318]/40' : ''}`}
-                  value={form.categoryId}
-                  onChange={updateField('categoryId')}
-                  disabled={!canManage}
-                >
-                  <option value="">Chọn danh mục</option>
-                  {categories.map((category) => (
-                    <option key={category.id} value={category.id}>
-                      {category.name}
-                    </option>
-                  ))}
-                </select>
-                <FieldError message={fieldErrors.categoryId} />
-              </label>
-
-              {isEditMode ? (
-                <label className="space-y-2">
-                  <span className="text-xs font-semibold text-[#717971]">Trạng thái</span>
-                  <select
-                    className="w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20"
-                    value={form.isActive ? 'active' : 'inactive'}
-                    onChange={(event) => setForm((prev) => ({ ...prev, isActive: event.target.value === 'active' }))}
-                    disabled={!canManage}
-                  >
-                    <option value="active">Đang bán</option>
-                    <option value="inactive">Ngừng kinh doanh</option>
-                  </select>
-                </label>
-              ) : null}
-
-              <label className="space-y-2">
-                <span className="text-xs font-semibold text-[#717971]">Xuất xứ</span>
-                <input className="w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20" value={form.origin} onChange={updateField('origin')} disabled={!canManage} />
-                <FieldError message={fieldErrors.origin} />
-              </label>
-
-              <label className="space-y-2 md:col-span-2">
-                <span className="text-xs font-semibold text-[#717971]">Hương vị</span>
-                <input className="w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20" value={form.flavorProfile} onChange={updateField('flavorProfile')} disabled={!canManage} />
-                <FieldError message={fieldErrors.flavorProfile} />
-              </label>
-
-              <label className="space-y-2 md:col-span-2">
-                <span className="text-xs font-semibold text-[#717971]">Hướng dẫn pha chế</span>
-                <textarea className="min-h-[96px] w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20" value={form.brewingGuide} onChange={updateField('brewingGuide')} disabled={!canManage} />
-                <FieldError message={fieldErrors.brewingGuide} />
-              </label>
-
-              <label className="space-y-2 md:col-span-2">
-                <span className="text-xs font-semibold text-[#717971]">Mô tả</span>
-                <textarea className="min-h-[96px] w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20" value={form.description} onChange={updateField('description')} disabled={!canManage} />
-                <FieldError message={fieldErrors.description} />
-              </label>
+      {isEditMode && id ? (
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:items-start lg:gap-8">
+          <form onSubmit={handleSubmit}>
+            <div className="rounded-[1rem] bg-white p-4 shadow-sm sm:p-6 lg:p-8">
+              <h2 className="mb-6 text-lg font-bold text-slate-800">Thông tin sản phẩm</h2>
+              {productFields}
             </div>
-          </div>
-        </section>
+          </form>
 
-        <section className="lg:col-span-4">
-          <div className="rounded-[1rem] bg-white p-6 shadow-sm">
-            <h3 className="text-sm font-bold uppercase tracking-wide text-[#717971]">Ghi chú</h3>
-            <ul className="mt-3 space-y-2 text-sm text-slate-600">
-              <li>SKU được quản lý riêng với mã unique, tự uppercase khi lưu.</li>
-              <li>Giá: 1 – 1.000.000.000 VND, tối đa 2 chữ số thập phân.</li>
-              <li>Khối lượng: 1 – 100.000 gram.</li>
-              <li>URL ảnh phải bắt đầu bằng http:// hoặc https://</li>
-            </ul>
-          </div>
-        </section>
-      </form>
+          <ProductSkusPanel productId={id} canManage={canManage} canAdjustStock={canAdjustStock} layout="column" />
+        </div>
+      ) : (
+        <form className="grid grid-cols-1 gap-6 lg:grid-cols-12 lg:gap-8" onSubmit={handleSubmit}>
+          <section className="space-y-6 lg:col-span-8">
+            <div className="rounded-[1rem] bg-white p-4 shadow-sm sm:p-6 lg:p-8">
+              <h2 className="mb-6 text-lg font-bold text-slate-800">Thông tin sản phẩm</h2>
+              {productFields}
+            </div>
+          </section>
 
-      {isEditMode && id ? <ProductSkusPanel productId={id} canManage={canManage} /> : null}
+          <section className="lg:col-span-4">
+            <div className="rounded-[1rem] bg-white p-6 shadow-sm">
+              <h3 className="text-sm font-bold uppercase tracking-wide text-[#717971]">Ghi chú</h3>
+              <ul className="mt-3 space-y-2 text-sm text-slate-600">
+                <li>SKU được quản lý riêng với mã unique, tự uppercase khi lưu.</li>
+                <li>Giá: 1 – 1.000.000.000 VND, tối đa 2 chữ số thập phân.</li>
+                <li>Khối lượng: 1 – 100.000 gram.</li>
+                <li>URL ảnh phải bắt đầu bằng http:// hoặc https://</li>
+              </ul>
+            </div>
+          </section>
+        </form>
+      )}
     </PageShell>
   )
 }
