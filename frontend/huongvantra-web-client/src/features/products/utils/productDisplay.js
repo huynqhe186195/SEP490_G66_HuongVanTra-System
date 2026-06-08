@@ -30,6 +30,43 @@ export function pickProductImageUrl(productOrSkus) {
   return anySku?.imageUrl || ''
 }
 
+export function formatStockQuantity(value) {
+  const amount = Number(value) || 0
+  if (Math.abs(amount - Math.round(amount)) < 0.001) {
+    return Math.round(amount).toLocaleString('vi-VN')
+  }
+  return amount.toLocaleString('vi-VN', { maximumFractionDigits: 2 })
+}
+
+export function summarizeProductStock(skus = [], stockBySkuId = new Map()) {
+  if (!skus.length) {
+    return { label: '—', title: '', total: 0, isLow: false, isOut: true }
+  }
+
+  const activeSkus = skus.filter((sku) => sku.isActive)
+  const list = activeSkus.length ? activeSkus : skus
+  const lines = list.map((sku) => ({
+    code: sku.skuCode,
+    qty: Number(stockBySkuId.get(sku.id) ?? 0),
+  }))
+  const quantities = lines.map((line) => line.qty)
+  const total = quantities.reduce((sum, qty) => sum + qty, 0)
+  const min = Math.min(...quantities)
+  const max = Math.max(...quantities)
+  const label =
+    lines.length === 1 || min === max
+      ? formatStockQuantity(total)
+      : `${formatStockQuantity(min)} – ${formatStockQuantity(max)}`
+
+  return {
+    label,
+    title: lines.map((line) => `${line.code}: ${formatStockQuantity(line.qty)}`).join('\n'),
+    total,
+    isLow: quantities.some((qty) => qty > 0 && qty <= 5),
+    isOut: quantities.every((qty) => qty <= 0),
+  }
+}
+
 export function summarizeProductSkus(skus = []) {
   if (!skus.length) {
     return { count: 0, priceLabel: '—', codes: '—', imageUrl: '' }

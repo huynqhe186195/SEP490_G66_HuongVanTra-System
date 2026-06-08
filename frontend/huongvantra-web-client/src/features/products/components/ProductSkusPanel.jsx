@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { showError, showSuccess } from '../../../app/toast.js'
 import ProductImage, { ProductImagePreview } from './ProductImage.jsx'
+import { buildStockBySkuIdMap, fetchSkuStocks } from '../../inventory/services/inventoryStockApi.js'
 import { createSku, deleteSku, fetchSkusByProductId, updateSku } from '../services/productSkusApi.js'
-import { formatProductPrice, formatWeightGrams, getProductStatusMeta } from '../utils/productDisplay.js'
+import { formatProductPrice, formatStockQuantity, formatWeightGrams, getProductStatusMeta } from '../utils/productDisplay.js'
 import { mapProductApiError, normalizeSkuCodeInput, validateSkuForm } from '../utils/productValidation.js'
 
 const EMPTY_FORM = {
@@ -21,6 +22,7 @@ function FieldError({ message }) {
 
 function ProductSkusPanel({ productId, canManage }) {
   const [skus, setSkus] = useState([])
+  const [stockBySkuId, setStockBySkuId] = useState(() => new Map())
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [editingId, setEditingId] = useState(null)
@@ -31,8 +33,12 @@ function ProductSkusPanel({ productId, canManage }) {
     if (!productId) return
     try {
       setIsLoading(true)
-      const items = await fetchSkusByProductId(productId)
+      const [items, stocks] = await Promise.all([
+        fetchSkusByProductId(productId),
+        fetchSkuStocks().catch(() => []),
+      ])
       setSkus(items)
+      setStockBySkuId(buildStockBySkuIdMap(stocks))
     } catch (error) {
       showError(error.message)
       setSkus([])
@@ -238,6 +244,7 @@ function ProductSkusPanel({ productId, canManage }) {
         <div className="space-y-3">
           {skus.map((sku) => {
             const status = getProductStatusMeta(sku.isActive)
+            const quantityOnHand = Number(stockBySkuId.get(sku.id) ?? 0)
             return (
               <div key={sku.id} className="flex flex-col gap-3 rounded-xl border border-slate-100 p-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex min-w-0 items-start gap-3">
@@ -262,6 +269,13 @@ function ProductSkusPanel({ productId, canManage }) {
                   <p className="mt-1 text-sm text-slate-700">{sku.packagingType}</p>
                   <p className="text-xs text-slate-500">
                     {formatWeightGrams(sku.weightInGrams)} · {formatProductPrice(sku.basePrice)}
+                  </p>
+                  <p
+                    className={`mt-1 text-xs font-semibold ${
+                      quantityOnHand <= 0 ? 'text-[#b42318]' : quantityOnHand <= 5 ? 'text-[#7e5700]' : 'text-[#356647]'
+                    }`}
+                  >
+                    Tồn: {formatStockQuantity(quantityOnHand)}
                   </p>
                   </div>
                 </div>

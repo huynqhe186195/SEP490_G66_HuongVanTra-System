@@ -211,6 +211,11 @@ public class OrderLogic(
 
         await _orderRepo.SaveChangesAsync(ct);
 
+        await _eventPublisher.PublishOrderPlacedAsync(
+            order.Id, order.OrderCode, OrderStatus.Completed.ToString(), order.FinalAmount,
+            (order.OrderDetails ?? []).Select(d => (d.SkuId, d.SkuSnapshotName, d.SkuSnapshotCode, d.Quantity)),
+            ct);
+
         if (order.CustomerId.HasValue)
         {
             var paidAmount = payments.Where(p => p.PaymentStatus == PaymentStatus.Success).Sum(p => p.Amount);

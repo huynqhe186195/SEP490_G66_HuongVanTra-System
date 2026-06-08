@@ -7,9 +7,10 @@ import { showError, showSuccess } from '../../../app/toast.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import { canManageProducts } from '../../auth/utils/permissions.js'
 import { fetchCategories } from '../services/categoriesApi.js'
+import { buildStockBySkuIdMap, fetchSkuStocks } from '../../inventory/services/inventoryStockApi.js'
 import { deleteProduct, fetchProducts } from '../services/productsApi.js'
 import ProductImage from '../components/ProductImage.jsx'
-import { getProductStatusMeta, summarizeProductSkus } from '../utils/productDisplay.js'
+import { getProductStatusMeta, summarizeProductSkus, summarizeProductStock } from '../utils/productDisplay.js'
 
 const TABLE_HEAD = 'px-4 py-3 text-left text-xs font-bold uppercase tracking-wide text-[#717971] sm:px-6'
 const TABLE_CELL = 'px-4 py-4 text-sm text-[#414942] sm:px-6'
@@ -28,6 +29,7 @@ function ProductsListPage() {
   const [pageSize] = useState(10)
   const [totalCount, setTotalCount] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
+  const [stockBySkuId, setStockBySkuId] = useState(() => new Map())
   const [deletingId, setDeletingId] = useState(null)
 
   useEffect(() => {
@@ -47,16 +49,28 @@ function ProductsListPage() {
     }
   }, [])
 
+  const loadStocks = useCallback(async () => {
+    try {
+      const stocks = await fetchSkuStocks()
+      setStockBySkuId(buildStockBySkuIdMap(stocks))
+    } catch {
+      setStockBySkuId(new Map())
+    }
+  }, [])
+
   const loadProducts = useCallback(async () => {
     try {
       setIsLoading(true)
-      const result = await fetchProducts({
-        search: search || undefined,
-        categoryId: categoryId ? Number(categoryId) : undefined,
-        isActive: statusFilter === 'all' ? undefined : statusFilter === 'active',
-        page,
-        pageSize,
-      })
+      const [result] = await Promise.all([
+        fetchProducts({
+          search: search || undefined,
+          categoryId: categoryId ? Number(categoryId) : undefined,
+          isActive: statusFilter === 'all' ? undefined : statusFilter === 'active',
+          page,
+          pageSize,
+        }),
+        loadStocks(),
+      ])
       setProducts(result.items)
       setTotalCount(result.totalCount)
     } catch (error) {
@@ -66,7 +80,7 @@ function ProductsListPage() {
     } finally {
       setIsLoading(false)
     }
-  }, [search, categoryId, statusFilter, page, pageSize])
+  }, [search, categoryId, statusFilter, page, pageSize, loadStocks])
 
   useEffect(() => {
     loadCategories()
@@ -174,6 +188,7 @@ function ProductsListPage() {
                 <th className={TABLE_HEAD}>Danh mục</th>
                 <th className={TABLE_HEAD}>SKU</th>
                 <th className={TABLE_HEAD}>Giá</th>
+                <th className={TABLE_HEAD}>Tồn kho</th>
                 <th className={TABLE_HEAD}>Trạng thái</th>
                 <th className={TABLE_HEAD}>Thao tác</th>
               </tr>
@@ -181,13 +196,13 @@ function ProductsListPage() {
             <tbody className="divide-y divide-slate-100 bg-white">
               {isLoading ? (
                 <tr>
-                  <td className="px-6 py-8 text-center text-slate-500" colSpan={7}>
+                  <td className="px-6 py-8 text-center text-slate-500" colSpan={8}>
                     Đang tải...
                   </td>
                 </tr>
               ) : products.length === 0 ? (
                 <tr>
-                  <td className="px-6 py-8 text-center text-slate-500" colSpan={7}>
+                  <td className="px-6 py-8 text-center text-slate-500" colSpan={8}>
                     Không có sản phẩm phù hợp.
                   </td>
                 </tr>
@@ -195,6 +210,7 @@ function ProductsListPage() {
                 products.map((product) => {
                   const status = getProductStatusMeta(product.isActive)
                   const skuSummary = summarizeProductSkus(product.skus)
+                  const stockSummary = summarizeProductStock(product.skus, stockBySkuId)
                   return (
                     <tr key={product.id}>
                       <td className={TABLE_CELL}>
@@ -212,6 +228,22 @@ function ProductsListPage() {
                         {skuSummary.count ? `${skuSummary.count} SKU · ${skuSummary.codes}` : 'Chưa có SKU'}
                       </td>
                       <td className={`${TABLE_CELL} font-semibold text-[#356647]`}>{skuSummary.priceLabel}</td>
+                      <td className={TABLE_CELL} title={stockSummary.title || undefined}>
+                        <span
+                          className={`font-semibold ${
+                            stockSummary.isOut
+                              ? 'text-[#b42318]'
+                              : stockSummary.isLow
+                                ? 'text-[#7e5700]'
+                                : 'text-[#356647]'
+                          }`}
+                        >
+                          {stockSummary.label}
+                        </span>
+                        {skuSummary.count > 1 ? (
+                          <p className="mt-0.5 text-[11px] text-[#717971]">theo SKU</p>
+                        ) : null}
+                      </td>
                       <td className={TABLE_CELL}>
                         <span className={`rounded-full px-3 py-1 text-xs font-semibold ${status.className}`}>{status.label}</span>
                       </td>

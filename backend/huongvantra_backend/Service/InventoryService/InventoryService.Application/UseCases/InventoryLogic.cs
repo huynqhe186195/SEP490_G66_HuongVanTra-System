@@ -46,7 +46,16 @@ public class InventoryLogic(
     public async Task HandleOrderPlacedAsync(OrderPlacedEvent message, CancellationToken ct = default)
     {
         if (await _processedEvents.ExistsAsync(OrderPlacedEventType, message.OrderId, ct))
+        {
+            if (string.Equals(message.OrderStatus, "Completed", StringComparison.OrdinalIgnoreCase))
+            {
+                var existingQueue = await _queueRepo.GetByOrderIdAsync(message.OrderId, ct);
+                if (existingQueue is { IsDeducted: false })
+                    await TryAutoConfirmQueueAsync(existingQueue.Id, ct);
+            }
+
             return;
+        }
 
         if (await _queueRepo.GetByOrderIdAsync(message.OrderId, ct) != null)
         {
