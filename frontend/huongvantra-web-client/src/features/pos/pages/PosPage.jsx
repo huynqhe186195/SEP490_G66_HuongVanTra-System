@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { showError, showSuccess } from '../../../app/toast.js'
 import AddCustomerModal from '../components/AddCustomerModal.jsx'
@@ -26,6 +26,8 @@ import {
 } from '../utils/posDiscountValidation.js'
 import { computeCouponDiscount, formatPromotionLabel } from '../utils/posPromotionUtils.js'
 import { isVipCustomerType } from '../../customers/utils/customerDisplay.js'
+import { fetchCategories } from '../../products/services/categoriesApi.js'
+import ProductImage from '../../products/components/ProductImage.jsx'
 
 const SALES_MODES = [
   { id: 'counter', label: 'Bán tại quầy', icon: 'storefront' },
@@ -173,6 +175,8 @@ function PosPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isApplyingPromo, setIsApplyingPromo] = useState(false)
   const [searchProducts, setSearchProducts] = useState([])
+  const [posCategories, setPosCategories] = useState([])
+  const [selectedCategoryId, setSelectedCategoryId] = useState('')
   const [isSearchLoading, setIsSearchLoading] = useState(false)
   const [tabCloseConfirm, setTabCloseConfirm] = useState(null)
   const [savedShippingAddresses, setSavedShippingAddresses] = useState([])
@@ -228,6 +232,24 @@ function PosPage() {
         setSeller(info)
       }
     })
+
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  useEffect(() => {
+    let mounted = true
+
+    fetchCategories()
+      .then((items) => {
+        if (mounted) {
+          setPosCategories(Array.isArray(items) ? items.filter((item) => item.isActive !== false) : [])
+        }
+      })
+      .catch(() => {
+        if (mounted) setPosCategories([])
+      })
 
     return () => {
       mounted = false
@@ -1013,6 +1035,12 @@ function PosPage() {
 
   const hasSearchQuery = searchValue.trim().length > 0
 
+  const filteredSearchProducts = useMemo(() => {
+    if (!selectedCategoryId) return searchProducts
+    const categoryId = Number(selectedCategoryId)
+    return searchProducts.filter((item) => Number(item.categoryId) === categoryId)
+  }, [searchProducts, selectedCategoryId])
+
   const hasCustomerSearchQuery = customerSearchValue.trim().length > 0
   const showCustomerDropdown = !selectedCustomer && hasCustomerSearchQuery && customerSearchResults.length > 0
   const showCustomerSearchEmpty =
@@ -1137,19 +1165,53 @@ function PosPage() {
                     <span className="ml-1 font-normal normal-case text-[#414942]">· &quot;{searchValue.trim()}&quot;</span>
                   ) : null}
                 </p>
-                <span className="shrink-0 text-xs text-[#717971]">{searchProducts.length} SP</span>
+                <span className="shrink-0 text-xs text-[#717971]">{filteredSearchProducts.length} SP</span>
               </div>
+
+              {posCategories.length > 0 ? (
+                <div className="custom-scrollbar shrink-0 overflow-x-auto border-b border-[#c1c9c0]/30 px-3 py-2">
+                  <div className="flex min-w-max gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedCategoryId('')}
+                      className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
+                        !selectedCategoryId
+                          ? 'bg-[#356647] text-white'
+                          : 'bg-white text-[#414942] hover:bg-[#f0eee6]'
+                      }`}
+                    >
+                      Tất cả
+                    </button>
+                    {posCategories.map((category) => (
+                      <button
+                        key={category.id}
+                        type="button"
+                        onClick={() => setSelectedCategoryId(String(category.id))}
+                        className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
+                          selectedCategoryId === String(category.id)
+                            ? 'bg-[#356647] text-white'
+                            : 'bg-white text-[#414942] hover:bg-[#f0eee6]'
+                        }`}
+                      >
+                        {category.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
 
               <div className="custom-scrollbar flex-1 overflow-y-auto px-3 py-3">
                 {isSearchLoading ? (
                   <p className="px-1 py-3 text-sm text-[#717971]">Đang tải sản phẩm...</p>
-                ) : searchProducts.length === 0 ? (
+                ) : filteredSearchProducts.length === 0 ? (
                   <p className="px-1 py-3 text-sm text-[#717971]">
-                    {hasSearchQuery ? 'Không tìm thấy sản phẩm phù hợp.' : 'Chưa có sản phẩm để hiển thị.'}
+                    {hasSearchQuery || selectedCategoryId
+                      ? 'Không tìm thấy sản phẩm phù hợp.'
+                      : 'Chưa có sản phẩm để hiển thị.'}
                   </p>
                 ) : (
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2 2xl:grid-cols-3">
-                    {searchProducts.map((item) => {
+                    {filteredSearchProducts.map((item) => {
                       const outOfStock = Number(item.stockQuantity) <= 0
                       return (
                         <button
@@ -1158,9 +1220,12 @@ function PosPage() {
                           onClick={() => addToCart(item)}
                           className="flex w-full items-center gap-2.5 rounded-xl border border-[#c1c9c0]/50 bg-[#fbf9f1] p-2.5 text-left transition-colors hover:border-[#356647]/35 hover:bg-[#f6f4ec]"
                         >
-                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#ceebc1]">
-                            <Icon className="text-[20px] text-[#4a6242]">eco</Icon>
-                          </div>
+                          <ProductImage
+                            src={item.imageUrl}
+                            alt={item.name}
+                            className="h-12 w-12 shrink-0 rounded-lg"
+                            iconClassName="text-[20px]"
+                          />
                           <div className="min-w-0 flex-1">
                             <p className="truncate text-sm font-semibold text-[#1b1c17]">{item.name}</p>
                             <p className="truncate text-xs text-[#717971]">
@@ -1191,7 +1256,7 @@ function PosPage() {
         </section>
 
         {/* Right: cart + customer + payment */}
-        <section className="order-2 flex min-h-[42vh] w-full min-w-0 flex-col border-t border-[#c1c9c0] bg-[#f6f4ec] xl:max-h-none xl:min-h-0 xl:w-[min(100%,520px)] xl:shrink-0 xl:border-l xl:border-t-0 xl:shadow-[-4px_0_20px_rgba(0,0,0,0.04)] 2xl:w-[min(100%,560px)]">
+        <section className="order-2 flex min-h-[42vh] w-full min-w-0 flex-col border-t border-[#c1c9c0] bg-[#f6f4ec] xl:max-h-none xl:min-h-0 xl:min-w-[min(100%,300px)] xl:max-w-[min(100%,48%)] xl:flex-[1_1_360px] xl:border-l xl:border-t-0 xl:shadow-[-4px_0_20px_rgba(0,0,0,0.04)]">
           <div className="flex min-h-0 flex-[1.15] flex-col border-b border-[#c1c9c0]/60 bg-white">
             <div className="flex shrink-0 items-center justify-between gap-2 px-4 py-2.5">
               <p className="text-xs font-bold uppercase tracking-wider text-[#717971]">Giỏ hàng</p>

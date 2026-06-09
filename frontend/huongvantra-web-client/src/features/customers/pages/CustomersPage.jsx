@@ -4,12 +4,9 @@ import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
-import { loadAuthSession } from '../../auth/services/authSession.js'
-import { canSimulateOrderCompleted } from '../../auth/utils/permissions.js'
 import CustomerActivityFeed from '../components/CustomerActivityFeed.jsx'
 import CustomersTableShell from '../components/CustomersTableShell.jsx'
 import CustomersMobileCards from '../components/CustomersMobileCards.jsx'
-import SimulateOrderCompletedPanel from '../components/SimulateOrderCompletedPanel.jsx'
 import { useCustomersList } from '../hooks/useCustomersList.js'
 import { fetchMembershipTiers, fetchCustomerStatistics, restoreCustomer } from '../services/customersApi.js'
 import { TIER_READONLY_HINT } from '../utils/membershipTierUtils.js'
@@ -67,10 +64,8 @@ function CustomersPage() {
   const [membershipTiers, setMembershipTiers] = useState([])
   const [statistics, setStatistics] = useState(null)
   const [activityRefreshKey, setActivityRefreshKey] = useState(0)
-  const [simulateCustomer, setSimulateCustomer] = useState(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [restoringId, setRestoringId] = useState(null)
-  const canSimulate = canSimulateOrderCompleted(loadAuthSession())
 
   const { customers, isLoading, reload } = useCustomersList({
     activeTab,
@@ -157,13 +152,6 @@ function CustomersPage() {
     }
   }
 
-  function handleSimulateUpdated() {
-    reload().catch(() => {})
-    loadStatistics().catch(() => {})
-    setActivityRefreshKey((key) => key + 1)
-    setSimulateCustomer(null)
-  }
-
   async function handleRestore(customerId) {
     if (!window.confirm('Khôi phục khách hàng này? Khách sẽ xuất hiện lại trong danh sách đang hoạt động.')) return
     try {
@@ -176,34 +164,6 @@ function CustomersPage() {
     } finally {
       setRestoringId(null)
     }
-  }
-
-  function renderSimulateButton(row) {
-    if (!canSimulate) return null
-    return (
-      <button
-        type="button"
-        title="Giả lập hoàn tất đơn (integration event)"
-        className="rounded-full p-2 text-[#717971] transition-colors hover:bg-[#e4e3db] hover:text-[#356647]"
-        onClick={() =>
-          setSimulateCustomer({
-            customerId: row.customerId,
-            customerName: row.fullName,
-            snapshot: {
-              totalSpend: row.totalSpend,
-              currentDebt: row.currentDebt,
-              tierId: row.tierId,
-            },
-          })
-        }
-      >
-        <span className="material-symbols-outlined text-[20px]">receipt_long</span>
-      </button>
-    )
-  }
-
-  function renderMobileActions(row) {
-    return renderSimulateButton(row)
   }
 
   useEffect(() => {
@@ -569,7 +529,6 @@ function CustomersPage() {
                 rows={paginatedCustomers}
                 isLoading={isLoading}
                 emptyMessage="Chưa có khách hàng doanh nghiệp."
-                renderRowActions={renderMobileActions}
               />
 
               <CustomersTableShell minWidthClass="min-w-[900px]">
@@ -625,7 +584,6 @@ function CustomersPage() {
                             </td>
                             <td className={CORP_TABLE_CELL}>
                               <div className="flex items-center gap-1 sm:gap-2">
-                                {renderSimulateButton(row)}
                                 <Link to={`/customers/${row.customerId}/edit`} className="p-2 text-[#717971] hover:text-[#356647]">
                                   <span className="material-symbols-outlined text-sm">edit</span>
                                 </Link>
@@ -677,7 +635,7 @@ function CustomersPage() {
                 <h4 className="font-bold text-[#1b1c17]">Hoạt động từ đơn hàng (event)</h4>
                 <CustomerActivityFeed
                   refreshKey={activityRefreshKey}
-                  emptyMessage="Chưa có đơn hoàn tất qua integration event. Dùng biểu tượng đơn hàng trên bảng để giả lập."
+                  emptyMessage="Chưa có hoạt động từ đơn hàng hoàn tất."
                 />
               </article>
             </section>
@@ -793,7 +751,6 @@ function CustomersPage() {
                 isLoading={isLoading}
                 emptyMessage="Chưa có khách phổ thông."
                 membershipTiers={membershipTiers}
-                renderRowActions={renderMobileActions}
               />
 
               <CustomersTableShell>
@@ -860,7 +817,6 @@ function CustomersPage() {
                           </td>
                           <td className={TABLE_CELL_RIGHT}>
                             <div className="inline-flex items-center justify-end gap-1">
-                              {renderSimulateButton(row)}
                               <Link to={`/customers/${row.customerId}/edit`} className="rounded-full p-2 text-[#717971] transition-colors hover:bg-[#e4e3db]">
                                 <span className="material-symbols-outlined">edit</span>
                               </Link>
@@ -884,7 +840,7 @@ function CustomersPage() {
                 <h5 className="mb-3 text-sm font-bold text-[#1b1c17]">Hoạt động từ đơn hàng (integration event)</h5>
                 <CustomerActivityFeed
                   refreshKey={activityRefreshKey}
-                  emptyMessage="Chưa có event đơn hàng. Bấm biểu tượng đơn trên bảng để giả lập (cần quyền tạo đơn)."
+                  emptyMessage="Chưa có hoạt động từ đơn hàng hoàn tất."
                 />
               </div>
             </section>
@@ -982,7 +938,6 @@ function CustomersPage() {
                 rows={paginatedCustomers}
                 isLoading={isLoading}
                 emptyMessage="Chưa có khách VIP."
-                renderRowActions={renderMobileActions}
               />
 
               <CustomersTableShell>
@@ -1040,7 +995,6 @@ function CustomersPage() {
                             </td>
                             <td className={TABLE_CELL_RIGHT}>
                               <div className="inline-flex items-center justify-end gap-1">
-                                {renderSimulateButton(row)}
                                 <Link to={`/customers/${row.customerId}/edit`} className="rounded-full p-2 text-[#717971] transition-colors hover:bg-[#e4e3db]">
                                   <span className="material-symbols-outlined">edit</span>
                                 </Link>
@@ -1064,33 +1018,6 @@ function CustomersPage() {
           </>
         )}
       </div>
-
-      {simulateCustomer ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#1b1c17]/40 p-4">
-          <div className="w-full max-w-lg rounded-[24px] border border-[#c1c9c0]/30 bg-white p-6 shadow-2xl">
-            <div className="mb-4 flex items-start justify-between gap-3">
-              <div>
-                <h3 className="text-lg font-bold text-[#1b1c17]">Giả lập hoàn tất đơn</h3>
-                <p className="mt-1 text-sm text-[#717971]">{simulateCustomer.customerName}</p>
-              </div>
-              <button
-                type="button"
-                className="rounded-full p-2 text-[#717971] hover:bg-[#f0eee6]"
-                onClick={() => setSimulateCustomer(null)}
-              >
-                <span className="material-symbols-outlined">close</span>
-              </button>
-            </div>
-            <SimulateOrderCompletedPanel
-              customerId={simulateCustomer.customerId}
-              customerName={simulateCustomer.customerName}
-              snapshot={simulateCustomer.snapshot}
-              compact
-              onUpdated={handleSimulateUpdated}
-            />
-          </div>
-        </div>
-      ) : null}
 
       <button
         type="button"

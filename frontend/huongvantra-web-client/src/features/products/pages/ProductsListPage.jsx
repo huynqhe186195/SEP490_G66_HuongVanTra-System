@@ -5,7 +5,7 @@ import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination from '../../../components/shared/TablePagination.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
-import { canManageProducts } from '../../auth/utils/permissions.js'
+import { canAdjustStoreStock, canManageProducts } from '../../auth/utils/permissions.js'
 import { fetchCategories } from '../services/categoriesApi.js'
 import { buildStockBySkuIdMap, fetchSkuStocks } from '../../inventory/services/inventoryStockApi.js'
 import { fetchProducts, setProductStatus } from '../services/productsApi.js'
@@ -19,6 +19,7 @@ const TABLE_CELL = 'px-4 py-4 text-sm text-[#414942] sm:px-6'
 function ProductsListPage() {
   const session = loadAuthSession()
   const canManage = canManageProducts(session)
+  const canAdjustStock = canAdjustStoreStock(session)
 
   const [products, setProducts] = useState([])
   const [categories, setCategories] = useState([])
@@ -122,8 +123,12 @@ function ProductsListPage() {
   return (
     <PageShell>
       <PageHeader
-        title="Sản phẩm"
-        description="Quản lý sản phẩm, biến thể SKU, danh mục và trạng thái kinh doanh"
+        title="Sản phẩm & số lượng"
+        description={
+          canManage
+            ? 'Xem sản phẩm, cập nhật số lượng tại cửa hàng và quản lý trạng thái kinh doanh'
+            : 'Xem sản phẩm và cập nhật số lượng hiện tại tại cửa hàng'
+        }
         searchPlaceholder="Tìm theo tên, xuất xứ, mô tả..."
         searchValue={searchInput}
         onSearchChange={setSearchInput}
@@ -136,15 +141,6 @@ function ProductsListPage() {
               <span className="material-symbols-outlined text-[18px]">category</span>
               Danh mục
             </Link>
-            {canManage ? (
-              <Link
-                to="/products/create"
-                className="inline-flex items-center gap-2 rounded-xl bg-[#538463] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#457053]"
-              >
-                <span className="material-symbols-outlined text-[18px]">add</span>
-                Tạo sản phẩm
-              </Link>
-            ) : null}
           </>
         }
       />
@@ -295,9 +291,17 @@ function ProductsListPage() {
                               <span className="material-symbols-outlined text-[20px]">inventory_2</span>
                             </button>
                           ) : null}
-                          <Link to={`/products/${product.id}/edit`} className="rounded-full p-2 text-[#717971] hover:bg-[#e4e3db] hover:text-[#356647]">
-                            <span className="material-symbols-outlined text-[20px]">edit</span>
-                          </Link>
+                          {(canManage || canAdjustStock) && skuSummary.count ? (
+                            <Link
+                              to={`/products/${product.id}/edit`}
+                              className="rounded-full p-2 text-[#717971] hover:bg-[#e4e3db] hover:text-[#356647]"
+                              title={canManage ? 'Sửa sản phẩm / số lượng' : 'Cập nhật số lượng'}
+                            >
+                              <span className="material-symbols-outlined text-[20px]">
+                                {canManage ? 'edit' : 'edit_square'}
+                              </span>
+                            </Link>
+                          ) : null}
                           {canManage ? (
                             <button
                               type="button"
@@ -332,7 +336,10 @@ function ProductsListPage() {
         <ProductSkusDetailModal
           product={skuModalProduct}
           stockBySkuId={stockBySkuId}
+          canManage={canManage}
+          canAdjustStock={canAdjustStock}
           onClose={() => setSkuModalProduct(null)}
+          onStockAdjusted={loadStocks}
         />
       ) : null}
     </PageShell>

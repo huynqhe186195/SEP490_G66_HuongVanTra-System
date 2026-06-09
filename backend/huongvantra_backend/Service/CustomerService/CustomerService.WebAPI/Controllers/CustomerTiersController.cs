@@ -17,9 +17,11 @@ public class CustomerTiersController : ControllerBase
 
     [HttpGet]
     [Authorize(Policy = PermissionNames.ViewCustomer)]
-    public async Task<IActionResult> GetAll(CancellationToken ct = default)
+    public async Task<IActionResult> GetAll(
+        [FromQuery] bool includeInactive = false,
+        CancellationToken ct = default)
     {
-        var result = await _logic.GetAllAsync(ct);
+        var result = await _logic.GetAllAsync(includeInactive, ct);
         return Ok(result);
     }
 
@@ -36,6 +38,24 @@ public class CustomerTiersController : ControllerBase
     public async Task<IActionResult> Update(int id, [FromBody] UpdateCustomerTierRequest request, CancellationToken ct = default)
     {
         var result = await _logic.UpdateAsync(id, request, ct);
+        if (result == null) return NotFound();
+        return Ok(result);
+    }
+
+    [HttpPost("{id:int}/deactivate")]
+    [Authorize(Policy = PermissionNames.CreateCustomer)]
+    public async Task<IActionResult> Deactivate(int id, CancellationToken ct = default)
+    {
+        var result = await _logic.DeactivateAsync(id, ct);
+        if (result == null) return NotFound();
+        return Ok(result);
+    }
+
+    [HttpPost("{id:int}/reactivate")]
+    [Authorize(Policy = PermissionNames.CreateCustomer)]
+    public async Task<IActionResult> Reactivate(int id, CancellationToken ct = default)
+    {
+        var result = await _logic.ReactivateAsync(id, ct);
         if (result == null) return NotFound();
         return Ok(result);
     }

@@ -366,6 +366,9 @@ export function mapPosProduct(item) {
     name: displayName,
     price: Number(item.price ?? item.Price ?? 0),
     stockQuantity: Number(item.stockQuantity ?? item.StockQuantity ?? 0),
+    imageUrl: item.imageUrl ?? item.ImageUrl ?? '',
+    categoryId: item.categoryId ?? item.CategoryId ?? null,
+    categoryName: item.categoryName ?? item.CategoryName ?? '',
   }
 }
 
@@ -553,26 +556,46 @@ export async function fetchPromotionByCode(code) {
   }
 }
 
+async function fetchAllActiveProductsForPos() {
+  const pageSize = 100
+  let page = 1
+  let allItems = []
+  let totalCount = 0
+
+  do {
+    const data = await apiRequestAuth(
+      `/api/v1/products?page=${page}&pageSize=${pageSize}&isActive=true`,
+      { method: 'GET' },
+    )
+    const paged = toPagedResult(data)
+    const batch = paged.items ?? []
+    allItems = allItems.concat(batch)
+    totalCount = paged.totalCount ?? 0
+    if (batch.length === 0) break
+    page += 1
+  } while (allItems.length < totalCount && page <= 20)
+
+  return allItems
+}
+
 export async function fetchPosProducts({ storeId, search, limit = 30 }) {
   void storeId
 
+  const skuPageSize = Math.min(100, Math.max(1, Number(limit) || 30))
   const query = new URLSearchParams()
   if (search?.trim()) query.set('search', search.trim())
   query.set('page', '1')
-  query.set('pageSize', String(limit))
+  query.set('pageSize', String(skuPageSize))
   query.set('isActive', 'true')
 
-  const [data, productsData] = await Promise.all([
+  const [data, productItems] = await Promise.all([
     apiRequestAuth(`/api/v1/skus?${query.toString()}`, { method: 'GET' }),
-    apiRequestAuth('/api/v1/products?page=1&pageSize=100&isActive=true', { method: 'GET' }).catch(() => ({ items: [] })),
+    fetchAllActiveProductsForPos().catch(() => []),
   ])
   const paged = toPagedResult(data)
   const skus = paged.items
   const productById = new Map(
-    (productsData?.items ?? productsData?.Items ?? []).map((product) => [
-      product.id ?? product.Id,
-      product,
-    ]),
+    productItems.map((product) => [product.id ?? product.Id, product]),
   )
 
   let stockBySkuId = new Map()
@@ -587,7 +610,9 @@ export async function fetchPosProducts({ storeId, search, limit = 30 }) {
     // Inventory service may be unavailable during local dev.
   }
 
-  return skus.map((sku) => {
+  return skus
+    .filter((sku) => productById.has(sku.productId ?? sku.ProductId))
+    .map((sku) => {
     const product = productById.get(sku.productId ?? sku.ProductId)
     return mapPosProduct({
       productId: sku.id,
@@ -596,6 +621,9 @@ export async function fetchPosProducts({ storeId, search, limit = 30 }) {
       packagingType: sku.packagingType ?? sku.PackagingType ?? '',
       price: sku.basePrice ?? sku.BasePrice,
       stockQuantity: stockBySkuId.get(sku.id ?? sku.Id) ?? 0,
+      imageUrl: sku.imageUrl ?? sku.ImageUrl ?? '',
+      categoryId: product?.categoryId ?? product?.CategoryId ?? null,
+      categoryName: sku.categoryName ?? sku.CategoryName ?? product?.categoryName ?? product?.CategoryName ?? '',
     })
   })
 }

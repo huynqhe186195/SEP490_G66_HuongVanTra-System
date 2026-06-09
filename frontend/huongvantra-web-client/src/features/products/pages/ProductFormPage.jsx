@@ -55,6 +55,16 @@ function ProductFormPage({ mode }) {
   }, [])
 
   useEffect(() => {
+    if (!isEditMode && !canManage) {
+      navigate('/products', { replace: true })
+      return
+    }
+    if (isEditMode && !canManage && !canAdjustStock) {
+      navigate('/products', { replace: true })
+    }
+  }, [isEditMode, canManage, canAdjustStock, navigate])
+
+  useEffect(() => {
     if (!isEditMode || !id) return undefined
 
     let mounted = true
@@ -154,7 +164,8 @@ function ProductFormPage({ mode }) {
     )
   }
 
-  const isSideBySideLayout = isEditMode && Boolean(id)
+  const stockOnlyMode = isEditMode && Boolean(id) && !canManage && canAdjustStock
+  const isSideBySideLayout = isEditMode && Boolean(id) && !stockOnlyMode
   const productFieldGridClass = isSideBySideLayout ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2'
   const productFieldSpanClass = isSideBySideLayout ? '' : 'md:col-span-2'
 
@@ -234,8 +245,14 @@ function ProductFormPage({ mode }) {
     <PageShell>
       <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-start">
         <div>
-          <h1 className="text-2xl font-extrabold text-slate-800">{isEditMode ? 'Sửa sản phẩm' : 'Tạo sản phẩm'}</h1>
-          <p className="mt-1 text-sm text-slate-500">Thông tin sản phẩm, biến thể SKU và số lượng hiện tại tại cửa hàng</p>
+          <h1 className="text-2xl font-extrabold text-slate-800">
+            {stockOnlyMode ? 'Cập nhật số lượng' : isEditMode ? 'Sửa sản phẩm' : 'Tạo sản phẩm'}
+          </h1>
+          <p className="mt-1 text-sm text-slate-500">
+            {stockOnlyMode
+              ? 'Điều chỉnh số lượng hiện tại theo từng SKU tại cửa hàng'
+              : 'Thông tin sản phẩm, biến thể SKU và số lượng hiện tại tại cửa hàng'}
+          </p>
         </div>
 
         <div className="flex items-center gap-3">
@@ -255,7 +272,15 @@ function ProductFormPage({ mode }) {
         </div>
       </div>
 
-      {isEditMode && id ? (
+      {stockOnlyMode ? (
+        <ProductSkusPanel
+          productId={id}
+          canManage={false}
+          canAdjustStock={canAdjustStock}
+          layout="column"
+          stockOnlyMode
+        />
+      ) : isEditMode && id ? (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:items-start lg:gap-8">
           <form onSubmit={handleSubmit}>
             <div className="rounded-[1rem] bg-white p-4 shadow-sm sm:p-6 lg:p-8">

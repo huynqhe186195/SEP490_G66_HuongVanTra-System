@@ -24,8 +24,10 @@ public class ProductSkuRepository(ProductDbContext _db) : IProductSkuRepository
         if (productId.HasValue)
             query = query.Where(sku => sku.ProductId == productId.Value);
 
-        if (isActive.HasValue)
-            query = query.Where(sku => sku.IsActive == isActive.Value);
+        if (isActive == true)
+            query = query.Where(sku => sku.IsActive && sku.Product.IsActive);
+        else if (isActive == false)
+            query = query.Where(sku => !sku.IsActive);
 
         var totalCount = await query.CountAsync();
         var items = await query

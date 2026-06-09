@@ -16,7 +16,7 @@ public class CategoryRepository(ProductDbContext _db) : ICategoryRepository
     public async Task<bool> ExistsNameAsync(string name, int? excludeId = null)
     {
         var normalized = name.Trim().ToLower();
-        var query = _db.Categories.Where(c => c.Name.ToLower() == normalized);
+        var query = _db.Categories.Where(c => c.IsActive && c.Name.ToLower() == normalized);
         if (excludeId.HasValue) query = query.Where(c => c.Id != excludeId.Value);
         return await query.AnyAsync();
     }

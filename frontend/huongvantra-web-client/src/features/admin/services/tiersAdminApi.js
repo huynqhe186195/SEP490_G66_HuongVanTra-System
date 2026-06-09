@@ -1,5 +1,5 @@
 import { apiRequestAuth } from '../../../lib/apiClient.js'
-import { mapMembershipTier } from '../../customers/utils/membershipTierUtils.js'
+import { mapMembershipTier, normalizeTierNameInput } from '../../customers/utils/membershipTierUtils.js'
 
 function mapTierAdminItem(item) {
   const base = mapMembershipTier({
@@ -7,7 +7,7 @@ function mapTierAdminItem(item) {
     tierCode: item.tierName ?? item.TierName,
     minTotalSpend: item.minSpendingThreshold ?? item.MinSpendingThreshold,
     discountPercent: item.discountPercent ?? item.DiscountPercent,
-    isActive: true,
+    isActive: item.isActive ?? item.IsActive ?? true,
   })
   if (!base) return null
   return {
@@ -17,7 +17,7 @@ function mapTierAdminItem(item) {
 }
 
 export async function fetchAdminMembershipTiers() {
-  const items = await apiRequestAuth('/api/customer-tiers', { method: 'GET' })
+  const items = await apiRequestAuth('/api/customer-tiers?includeInactive=true', { method: 'GET' })
   return Array.isArray(items) ? items.map(mapTierAdminItem).filter(Boolean) : []
 }
 
@@ -25,7 +25,7 @@ export async function createAdminMembershipTier(payload) {
   const item = await apiRequestAuth('/api/customer-tiers', {
     method: 'POST',
     body: JSON.stringify({
-      tierName: payload.tierCode ?? payload.tierName,
+      tierName: normalizeTierNameInput(payload.tierCode ?? payload.tierName),
       minSpendingThreshold: Number(payload.minTotalSpend ?? payload.minSpendingThreshold ?? 0),
       discountPercent: Number(payload.discountPercent ?? 0),
       validityMonths: payload.validityMonths ?? null,
@@ -38,7 +38,7 @@ export async function updateAdminMembershipTier(id, payload) {
   const item = await apiRequestAuth(`/api/customer-tiers/${id}`, {
     method: 'PUT',
     body: JSON.stringify({
-      tierName: payload.tierCode ?? payload.tierName,
+      tierName: normalizeTierNameInput(payload.tierCode ?? payload.tierName),
       minSpendingThreshold: Number(payload.minTotalSpend ?? payload.minSpendingThreshold ?? 0),
       discountPercent: Number(payload.discountPercent ?? 0),
       validityMonths: payload.validityMonths ?? null,
@@ -47,10 +47,12 @@ export async function updateAdminMembershipTier(id, payload) {
   return mapTierAdminItem(item)
 }
 
-export async function deactivateAdminMembershipTier(_id) {
-  throw new Error('API chưa hỗ trợ vô hiệu hóa hạng thẻ.')
+export async function deactivateAdminMembershipTier(id) {
+  const item = await apiRequestAuth(`/api/customer-tiers/${id}/deactivate`, { method: 'POST' })
+  return mapTierAdminItem(item)
 }
 
-export async function reactivateAdminMembershipTier(_id) {
-  throw new Error('API chưa hỗ trợ kích hoạt lại hạng thẻ.')
+export async function reactivateAdminMembershipTier(id) {
+  const item = await apiRequestAuth(`/api/customer-tiers/${id}/reactivate`, { method: 'POST' })
+  return mapTierAdminItem(item)
 }

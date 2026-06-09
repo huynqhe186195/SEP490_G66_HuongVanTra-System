@@ -7,14 +7,12 @@ import { loadAuthSession } from '../../auth/services/authSession.js'
 import MembershipTierProgress from '../components/MembershipTierProgress.jsx'
 import CustomerDebtHistory from '../components/CustomerDebtHistory.jsx'
 import CustomerActivityFeed from '../components/CustomerActivityFeed.jsx'
-import SimulateOrderCompletedPanel from '../components/SimulateOrderCompletedPanel.jsx'
 import {
   changeCustomerStatus,
   createCustomer,
   deleteCustomer,
   fetchCustomerById,
   fetchMembershipTiers,
-  reconcileCustomerDebt,
   updateCustomer,
 } from '../services/customersApi.js'
 import { TIER_READONLY_HINT } from '../utils/membershipTierUtils.js'
@@ -44,7 +42,6 @@ function CustomerFormPage() {
   const [tiers, setTiers] = useState([])
   const [isLoading, setIsLoading] = useState(isEditMode)
   const [isSaving, setIsSaving] = useState(false)
-  const [isReconcilingDebt, setIsReconcilingDebt] = useState(false)
   const [currentDebt, setCurrentDebt] = useState(0)
   const [totalSpend, setTotalSpend] = useState(0)
   const [currentTierCode, setCurrentTierCode] = useState('')
@@ -56,7 +53,6 @@ function CustomerFormPage() {
   const [isDeleting, setIsDeleting] = useState(false)
   const [fieldErrors, setFieldErrors] = useState({})
   const [isNameComposing, setIsNameComposing] = useState(false)
-  const [legacyAddressLine, setLegacyAddressLine] = useState('')
   const isAdmin = isAdminSession(loadAuthSession())
   const [form, setForm] = useState({
     type: ['general', 'vip', 'corporate'].includes(searchParams.get('type'))
@@ -66,6 +62,7 @@ function CustomerFormPage() {
     name: '',
     phone: '',
     email: '',
+    address: '',
     taxCode: '',
     status: 'active',
   })
@@ -119,10 +116,10 @@ function CustomerFormPage() {
       name: customer.fullName || '',
       phone: customer.phone || '',
       email: customer.email || '',
+      address: customer.address || '',
       taxCode: customer.taxCode || '',
       status: customer.status?.toLowerCase() === 'inactive' ? 'inactive' : 'active',
     })
-    setLegacyAddressLine(customer.address || '')
     setCurrentDebt(Number(customer.currentDebt || 0))
     setTotalSpend(Number(customer.totalSpend || 0))
     setCurrentTierCode(customer.tier?.tierCode || customer.tierCode || '')
@@ -130,12 +127,6 @@ function CustomerFormPage() {
     setCurrentTierId(customer.tier?.tierId ?? customer.tierId ?? null)
     const loadedStatus = customer.status?.toLowerCase() === 'inactive' ? 'inactive' : 'active'
     setInitialStatus(loadedStatus)
-  }
-
-  function handleIntegrationUpdated(customer) {
-    applyCustomerToForm(customer)
-    setDebtRefreshKey((key) => key + 1)
-    setActivityRefreshKey((key) => key + 1)
   }
 
   const updateField = (field) => (event) => {
@@ -168,7 +159,7 @@ function CustomerFormPage() {
     customerType: customerTypeFromTab(form.type),
     phone: form.phone.trim() || null,
     email: form.email.trim() || null,
-    address: legacyAddressLine.trim() || null,
+    address: form.address.trim(),
     taxCode: form.type === 'corporate' ? form.taxCode.trim() : null,
   })
 
@@ -177,23 +168,6 @@ function CustomerFormPage() {
       ...current,
       type,
     }))
-  }
-
-  const handleReconcileDebt = async () => {
-    if (!customerId || !isAdmin) return
-    setIsReconcilingDebt(true)
-    try {
-      await reconcileCustomerDebt(customerId)
-      const customer = await fetchCustomerById(customerId)
-      setCurrentDebt(Number(customer.currentDebt || 0))
-      setDebtRefreshKey((key) => key + 1)
-      setActivityRefreshKey((key) => key + 1)
-      showSuccess('Đã đối soát công nợ (thanh toán toàn bộ dư nợ).')
-    } catch (error) {
-      showError(error.message)
-    } finally {
-      setIsReconcilingDebt(false)
-    }
   }
 
   const handleDelete = async () => {
@@ -215,6 +189,7 @@ function CustomerFormPage() {
       name: form.name,
       phone: form.phone,
       email: form.email,
+      address: form.address,
       customerType: customerTypeFromTab(form.type),
       taxCode: form.taxCode,
     })
@@ -358,6 +333,18 @@ function CustomerFormPage() {
                 <FieldError message={fieldErrors.email} />
               </label>
 
+              <label className="space-y-2 md:col-span-2">
+                <span className="text-xs font-semibold text-[#717971]">Địa chỉ giao hàng *</span>
+                <input
+                  className={`w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20 ${fieldErrors.address ? 'ring-2 ring-[#b42318]/40' : ''}`}
+                  placeholder="Số nhà, đường, phường/xã, quận/huyện, tỉnh/thành"
+                  type="text"
+                  value={form.address}
+                  onChange={updateField('address')}
+                />
+                <FieldError message={fieldErrors.address} />
+              </label>
+
               {form.type === 'corporate' ? (
                 <label className="space-y-2 md:col-span-2">
                   <span className="text-xs font-semibold text-[#717971]">Mã số thuế *</span>
@@ -475,27 +462,6 @@ function CustomerFormPage() {
                     <p className="text-sm font-bold text-[#356647]">{formatVnd(totalSpend)}</p>
                   </div>
                 )}
-                {isAdmin ? (
-                  <button
-                    type="button"
-                    className="w-full rounded-xl border border-[#7e5700] px-4 py-2 text-sm font-semibold text-[#7e5700] hover:bg-[#fec25b]/20 disabled:opacity-50"
-                    disabled={isReconcilingDebt}
-                    onClick={handleReconcileDebt}
-                  >
-                    {isReconcilingDebt ? 'Đang đối soát...' : 'Đối soát công nợ (Admin)'}
-                  </button>
-                ) : null}
-                <SimulateOrderCompletedPanel
-                  customerId={customerId}
-                  customerName={form.name}
-                  snapshot={{
-                    totalSpend,
-                    currentDebt,
-                    tierId: currentTierId,
-                  }}
-                  compact
-                  onUpdated={handleIntegrationUpdated}
-                />
               </>
             ) : null}
 
@@ -518,6 +484,7 @@ function CustomerFormPage() {
           <CustomerDebtHistory
             customerId={customerId}
             refreshKey={debtRefreshKey}
+            allowManualEntry={isAdmin}
             onDebtChanged={() => {
               setDebtRefreshKey((key) => key + 1)
               setActivityRefreshKey((key) => key + 1)

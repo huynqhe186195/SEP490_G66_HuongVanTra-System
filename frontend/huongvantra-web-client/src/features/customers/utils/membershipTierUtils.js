@@ -66,5 +66,14 @@ export function computeTierProgress(totalSpend, tiers, currentTierId) {
   }
 }
 
+export function normalizeTierNameInput(value) {
+  return String(value || '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ')
+}
+
 export const TIER_READONLY_HINT =
   'Hạng thành viên do hệ thống quản lý — không chỉnh sửa tại màn hình khách hàng. Chi tiêu tích lũy vẫn được cộng khi hoàn tất đơn.'

@@ -28,7 +28,7 @@ function FieldError({ message }) {
   return <p className="text-xs text-[#b42318]">{message}</p>
 }
 
-function ProductSkusPanel({ productId, canManage, canAdjustStock = false, layout = 'default' }) {
+function ProductSkusPanel({ productId, canManage, canAdjustStock = false, layout = 'default', stockOnlyMode = false }) {
   const isColumnLayout = layout === 'column'
   const formGridClass = isColumnLayout ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2'
   const [skus, setSkus] = useState([])
@@ -83,10 +83,13 @@ function ProductSkusPanel({ productId, canManage, canAdjustStock = false, layout
 
   function updateField(key) {
     return (event) => {
-      const value = key === 'skuCode' ? normalizeSkuCodeInput(event.target.value) : event.target.value
-      setForm((prev) => ({ ...prev, [key]: value }))
+      setForm((prev) => ({ ...prev, [key]: event.target.value }))
       setFieldErrors((prev) => ({ ...prev, [key]: undefined }))
     }
+  }
+
+  function handleSkuCodeBlur(event) {
+    setForm((prev) => ({ ...prev, skuCode: normalizeSkuCodeInput(event.target.value) }))
   }
 
   function updatePriceField(event) {
@@ -110,7 +113,7 @@ function ProductSkusPanel({ productId, canManage, canAdjustStock = false, layout
       setIsSaving(true)
       const payload = {
         productId,
-        skuCode: form.skuCode,
+        skuCode: normalizeSkuCodeInput(form.skuCode),
         packagingType: form.packagingType,
         weightInGrams: Number(form.weightInGrams),
         basePrice: parseProductPriceInput(form.basePrice),
@@ -155,8 +158,14 @@ function ProductSkusPanel({ productId, canManage, canAdjustStock = false, layout
     <div className="rounded-[1rem] bg-white p-4 shadow-sm sm:p-6 lg:p-8">
       <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-lg font-bold text-slate-800">Biến thể, giá &amp; số lượng hiện tại</h2>
-          <p className="mt-1 text-sm text-slate-500">Mỗi SKU có mã, giá bán và số lượng hiện tại tại cửa hàng.</p>
+          <h2 className="text-lg font-bold text-slate-800">
+            {stockOnlyMode ? 'Cập nhật số lượng theo SKU' : 'Biến thể, giá & số lượng hiện tại'}
+          </h2>
+          <p className="mt-1 text-sm text-slate-500">
+            {stockOnlyMode
+              ? 'Chọn SKU và nhập số lượng thay đổi (+ nhập kho, − xuất kho).'
+              : 'Mỗi SKU có mã, giá bán và số lượng hiện tại tại cửa hàng.'}
+          </p>
         </div>
       </div>
 
@@ -167,10 +176,11 @@ function ProductSkusPanel({ productId, canManage, canAdjustStock = false, layout
             <label className="space-y-1">
               <span className="text-xs font-semibold text-[#717971]">Mã SKU *</span>
               <input
-                className={`w-full rounded-xl border-none bg-white p-3 text-sm uppercase focus:ring-2 focus:ring-[#356647]/20 ${fieldErrors.skuCode ? 'ring-2 ring-[#b42318]/40' : ''}`}
+                className={`w-full rounded-xl border-none bg-white p-3 font-mono text-sm focus:ring-2 focus:ring-[#356647]/20 ${fieldErrors.skuCode ? 'ring-2 ring-[#b42318]/40' : ''}`}
                 placeholder="TEA-001"
                 value={form.skuCode}
                 onChange={updateField('skuCode')}
+                onBlur={handleSkuCodeBlur}
               />
               <FieldError message={fieldErrors.skuCode} />
             </label>
