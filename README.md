@@ -69,8 +69,6 @@
 
   Lần này bạn sẽ thấy migration chạy thành công thay vì Access denied.
 
-  ✻ Sautéed for 1m 21s
-
   ❯ còn cách khác không?
 
   Có 2 cách khác:
@@ -81,7 +79,7 @@
   -v xóa volume → MySQL khởi động lại từ đầu → init.sql chạy lại → tất cả database và quyền được tạo đúng. Nhược điểm: mất toàn bộ data hiện có trong MySQL.
 
   ---
-  Cách 2: Rebuild chỉ MySQL với volume mới
+  Cách 2: Rebuild chỉ MySQL với volume mới 
   docker compose down
   docker volume rm huongvantra_backend_mysql_data
   docker compose up -d
@@ -89,3 +87,21 @@
 
   ---
   Nếu có data quan trọng cần giữ thì dùng lệnh docker exec mình đã đề xuất ở trên — đó là cách an toàn nhất. Còn nếu đây là môi trường dev và data không quan trọng thì cách 1 (down -v + up) tiện nhất.
+
+  # Nếu muốn build sạch sẽ docker, chạy theo thứ tự sau:
+
+  Bước 1: Dừng và xóa toàn bộ container
+  docker compose down
+
+  Bước 2: Xóa tất cả image, cache build, network không dùng
+  docker system prune -af
+
+  ▎ Flag -a xóa tất cả image (kể cả image còn tag), -f không hỏi xác nhận.
+
+  Bước 3: Rebuild và chạy lại toàn bộ
+  docker compose up -d --build
+
+  ---
+  Lưu ý quan trọng: Data trong DB (MySQL, RabbitMQ) vẫn an toàn vì nằm trong volumes. Nếu muốn xóa luôn cả data DB thì thêm flag --volumes vào bước 1:
+
+  docker compose down --volumes  # XÓA LUÔN DATA DB - cẩn thận!
