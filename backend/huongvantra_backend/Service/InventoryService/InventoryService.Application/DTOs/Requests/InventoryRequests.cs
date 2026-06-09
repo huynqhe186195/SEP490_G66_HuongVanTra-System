@@ -14,3 +14,17 @@ public record CreateStockAdjustmentRequest(
     string? Reason);
 
 public record RejectStockAdjustmentRequest(string? Reason);
+
+public record CreateWarehouseBatchItemRequest(
+    Guid SkuId,
+    string? SkuCode,
+    string? ProductSnapshotName,
+    int Quantity,
+    decimal? UnitCost);
+
+public record CreateWarehouseBatchRequest(
+    string LotCode,
+    string? Supplier,
+    DateTime? ExpiresAt,
+    string? Note,
+    List<CreateWarehouseBatchItemRequest> Items);

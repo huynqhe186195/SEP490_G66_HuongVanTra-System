@@ -7,6 +7,7 @@ import {
   buildWarehouseStockBySkuIdMap,
   fetchSkuStocks,
 } from '../../inventory/services/inventoryStockApi.js'
+import { INVENTORY_STOCK_CHANGED_EVENT } from '../../inventory/utils/inventoryStockEvents.js'
 import { createSku, deleteSku, fetchSkusByProductId, updateSku } from '../services/productSkusApi.js'
 import {
   formatProductPrice,
@@ -74,7 +75,15 @@ function ProductSkusPanel({
 
   useEffect(() => {
     reload()
-  }, [productId])
+  }, [productId, warehouseStockView])
+
+  useEffect(() => {
+    const onStockChanged = () => {
+      reload()
+    }
+    window.addEventListener(INVENTORY_STOCK_CHANGED_EVENT, onStockChanged)
+    return () => window.removeEventListener(INVENTORY_STOCK_CHANGED_EVENT, onStockChanged)
+  }, [productId, warehouseStockView])
 
   function resetForm() {
     setEditingId(null)

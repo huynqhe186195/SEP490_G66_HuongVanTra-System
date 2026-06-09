@@ -18,12 +18,19 @@ import {
   buildWarehouseStockBySkuIdMap,
   fetchSkuStocks,
 } from '../../inventory/services/inventoryStockApi.js'
+import { fetchPendingCatalogSync, syncCatalogToStore } from '../services/catalogSyncApi.js'
 import { deleteProduct, fetchProducts, restoreProduct } from '../services/productsApi.js'
 import ProductImage from '../components/ProductImage.jsx'
 import ProductSkusDetailModal from '../components/ProductSkusDetailModal.jsx'
 import InventorySimulationBanner from '../../inventory/components/InventorySimulationBanner.jsx'
 import { fetchInventorySettings } from '../../inventory/services/inventoryStockApi.js'
-import { getProductStatusMeta, summarizeProductSkus, summarizeProductStock } from '../utils/productDisplay.js'
+import { INVENTORY_STOCK_CHANGED_EVENT } from '../../inventory/utils/inventoryStockEvents.js'
+import {
+  getProductStatusMeta,
+  isSyncedToStore,
+  summarizeProductSkus,
+  summarizeProductStock,
+} from '../utils/productDisplay.js'
 
 const TABLE_HEAD = 'px-4 py-3 text-left text-xs font-bold uppercase tracking-wide text-[#717971] sm:px-6'
 const TABLE_CELL = 'px-4 py-4 text-sm text-[#414942] sm:px-6'
@@ -57,6 +64,7 @@ function ProductsListPage() {
   const [togglingId, setTogglingId] = useState(null)
   const [skuModalProduct, setSkuModalProduct] = useState(null)
   const [simulateWarehouse, setSimulateWarehouse] = useState(true)
+  const [pendingSyncTotal, setPendingSyncTotal] = useState(0)
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -111,14 +119,36 @@ function ProductsListPage() {
     }
   }, [search, categoryId, statusFilter, page, pageSize, loadStocks])
 
+  const loadPendingSync = useCallback(async () => {
+    if (!canSync) {
+      setPendingSyncTotal(0)
+      return
+    }
+    try {
+      const pending = await fetchPendingCatalogSync()
+      setPendingSyncTotal(pending.total)
+    } catch {
+      setPendingSyncTotal(0)
+    }
+  }, [canSync])
+
   useEffect(() => {
     loadCategories()
+    loadPendingSync()
     fetchInventorySettings().then((s) => setSimulateWarehouse(s.simulateWarehouse)).catch(() => {})
-  }, [loadCategories])
+  }, [loadCategories, loadPendingSync])
 
   useEffect(() => {
     loadProducts()
   }, [loadProducts])
+
+  useEffect(() => {
+    const refreshStocks = () => {
+      loadStocks()
+    }
+    window.addEventListener(INVENTORY_STOCK_CHANGED_EVENT, refreshStocks)
+    return () => window.removeEventListener(INVENTORY_STOCK_CHANGED_EVENT, refreshStocks)
+  }, [loadStocks])
 
   async function handleHide(product) {
     if (!canHide || product.isDeleted) return
@@ -138,8 +168,16 @@ function ProductsListPage() {
   async function handleSyncCatalog() {
     setIsSyncing(true)
     try {
-      await Promise.all([loadCategories(), loadProducts()])
-      showSuccess('Đã đồng bộ danh sách sản phẩm và danh mục mới nhất.')
+      const result = await syncCatalogToStore()
+      await Promise.all([loadCategories(), loadProducts(), loadPendingSync()])
+      const total = result.categoriesSynced + result.productsSynced + result.skusSynced
+      if (total === 0) {
+        showSuccess('Không có dữ liệu mới từ kho cần đồng bộ.')
+      } else {
+        showSuccess(
+          `Đã đồng bộ ${result.productsSynced} sản phẩm, ${result.skusSynced} SKU, ${result.categoriesSynced} danh mục từ kho.`,
+        )
+      }
     } catch (error) {
       showError(error.message)
     } finally {
@@ -178,8 +216,8 @@ function ProductsListPage() {
       <PageHeader
         title="Sản phẩm & số lượng"
         description={
-          canCreate
-            ? 'Thủ kho — tạo sản phẩm, danh mục và duyệt yêu cầu điều chỉnh tồn'
+          isWarehouse
+            ? 'Nhập lô tại Kho → cột Tồn kho tổng cập nhật theo lô đã nhập (cửa hàng chỉ nhận hàng sau khi duyệt xuất)'
             : canSync
               ? 'Xem sản phẩm — dùng Đồng bộ để tải dữ liệu mới từ kho'
               : 'Xem sản phẩm và gửi yêu cầu điều chỉnh số lượng (Thủ kho duyệt)'
@@ -207,7 +245,19 @@ function ProductsListPage() {
               >
                 <span className={`material-symbols-outlined text-[18px] ${isSyncing ? 'animate-spin' : ''}`}>sync</span>
                 Đồng bộ dữ liệu
+                {pendingSyncTotal > 0 ? (
+                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-800">{pendingSyncTotal}</span>
+                ) : null}
               </button>
+            ) : null}
+            {isWarehouse ? (
+              <Link
+                to="/inventory/import"
+                className="inline-flex items-center gap-2 rounded-xl border border-[#356647]/30 bg-white px-4 py-2.5 text-sm font-semibold text-[#356647] hover:bg-[#356647]/5"
+              >
+                <span className="material-symbols-outlined text-[18px]">inventory</span>
+                Nhập lô
+              </Link>
             ) : null}
             {canAdjustStock ? (
               <Link
@@ -267,7 +317,7 @@ function ProductsListPage() {
             className="min-h-[44px] shrink-0 rounded-xl border border-[#356647]/30 px-5 py-3 text-sm font-semibold text-[#356647] hover:bg-[#356647]/5 disabled:opacity-50 sm:text-base"
             onClick={handleSyncCatalog}
           >
-            {isSyncing ? 'Đang đồng bộ...' : 'Đồng bộ'}
+            {isSyncing ? 'Đang đồng bộ...' : `Đồng bộ${pendingSyncTotal > 0 ? ` (${pendingSyncTotal})` : ''}`}
           </button>
         ) : (
           <button
@@ -334,7 +384,14 @@ function ProductsListPage() {
                         )}
                       </td>
                       <td className={TABLE_CELL}>
-                        <p className="font-semibold text-slate-900">{product.name}</p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-semibold text-slate-900">{product.name}</p>
+                          {isWarehouse && !isSyncedToStore(product) ? (
+                            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-800">
+                              Chưa đồng bộ CH
+                            </span>
+                          ) : null}
+                        </div>
                         {product.description ? (
                           <p className="mt-1 line-clamp-2 text-xs text-slate-500">{product.description}</p>
                         ) : null}
@@ -359,6 +416,13 @@ function ProductsListPage() {
                               Xem chi tiết
                             </span>
                           </button>
+                        ) : canCreate ? (
+                          <Link
+                            to={`/products/${product.id}/edit`}
+                            className="text-xs font-semibold text-[#356647] hover:underline"
+                          >
+                            Chưa có SKU — thêm ngay
+                          </Link>
                         ) : (
                           'Chưa có biến thể'
                         )}
@@ -378,9 +442,16 @@ function ProductsListPage() {
                         </span>
                         {stockSummary.total <= 0 ? (
                           <p className="mt-0.5 text-[11px] text-amber-700">
-                            {isWarehouse
-                              ? 'Chưa có tồn kho — nhập tại Kho tổng'
-                              : 'Chưa có tồn — gửi yêu cầu điều chỉnh'}
+                            {isWarehouse ? (
+                              <>
+                                Chưa có tồn —{' '}
+                                <Link to="/inventory/import" className="font-semibold hover:underline">
+                                  nhập lô
+                                </Link>
+                              </>
+                            ) : (
+                              'Chưa có tồn — gửi yêu cầu điều chỉnh'
+                            )}
                           </p>
                         ) : skuSummary.count > 1 ? (
                           <p className="mt-0.5 text-[11px] text-[#717971]">theo SKU</p>
@@ -401,11 +472,11 @@ function ProductsListPage() {
                               <span className="material-symbols-outlined text-[20px]">inventory_2</span>
                             </button>
                           ) : null}
-                          {product.isDeleted ? null : canCreate && skuSummary.count ? (
+                          {product.isDeleted ? null : canCreate ? (
                             <Link
                               to={`/products/${product.id}/edit`}
                               className="rounded-full p-2 text-[#717971] hover:bg-[#e4e3db] hover:text-[#356647]"
-                              title="Sửa sản phẩm / SKU"
+                              title={skuSummary.count ? 'Sửa sản phẩm / SKU' : 'Sửa sản phẩm — thêm SKU'}
                             >
                               <span className="material-symbols-outlined text-[20px]">edit</span>
                             </Link>

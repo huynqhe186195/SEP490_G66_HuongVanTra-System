@@ -8,6 +8,7 @@ import { loadAuthSession } from '../../auth/services/authSession.js'
 import { formatStockQuantity } from '../../products/utils/productDisplay.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import InventorySimulationBanner from '../components/InventorySimulationBanner.jsx'
+import { inventoryNavTabs } from '../utils/inventoryNavTabs.js'
 import { fetchInventorySettings } from '../services/inventoryStockApi.js'
 import {
   approveStockAdjustmentRequest,
@@ -142,6 +143,23 @@ function StockAdjustmentRequestsPage() {
         searchPlaceholder="Tìm mã yêu cầu, SKU..."
         searchValue={searchValue}
         onSearchChange={setSearchValue}
+        rightContent={
+          <div className="flex flex-wrap items-center gap-2">
+            {inventoryNavTabs.map((tab) => (
+              <Link
+                key={tab.to}
+                to={tab.to}
+                className={`rounded-xl px-4 py-2 text-sm font-semibold ${
+                  tab.to === '/inventory/stock-requests'
+                    ? 'bg-[#538463] text-white'
+                    : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                {tab.label}
+              </Link>
+            ))}
+          </div>
+        }
       />
 
       <InventorySimulationBanner simulateWarehouse={simulateWarehouse} warehouseView={canReview} />
@@ -161,12 +179,6 @@ function StockAdjustmentRequestsPage() {
             {tab.label}
           </button>
         ))}
-        <Link
-          className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-          to="/inventory/export"
-        >
-          Phiếu xuất kho
-        </Link>
         <Link
           className="ml-auto rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
           to="/products"

@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using ProductService.Application.DTOs.Requests;
 using ProductService.Application.UseCases;
+using ProductService.WebAPI.Extensions;
 using HuongVanTra.Shared.Auth;
 
 namespace ProductService.WebAPI.Controllers;
@@ -18,11 +19,13 @@ public class ProductsController(ProductLogic _productLogic) : ControllerBase
         [FromQuery] bool? isDeleted,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20) =>
-        Ok(await _productLogic.GetPagedAsync(new GetProductsRequest(search, categoryId, isActive, isDeleted, page, pageSize)));
+        Ok(await _productLogic.GetPagedAsync(
+            new GetProductsRequest(search, categoryId, isActive, isDeleted, page, pageSize),
+            User.GetCatalogViewScope()));
 
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetById(Guid id) =>
-        Ok(await _productLogic.GetByIdAsync(id));
+        Ok(await _productLogic.GetByIdAsync(id, User.GetCatalogViewScope()));
 
     [HttpPost]
     [Authorize(Roles = "Warehouse")]

@@ -10,6 +10,8 @@ import {
   formatWeightGrams,
   getProductStatusMeta,
 } from '../utils/productDisplay.js'
+import { fetchSkuStocks, buildWarehouseStockBySkuIdMap, buildStockBySkuIdMap } from '../../inventory/services/inventoryStockApi.js'
+import { INVENTORY_STOCK_CHANGED_EVENT } from '../../inventory/utils/inventoryStockEvents.js'
 
 function ProductSkusDetailModal({
   product,
@@ -29,6 +31,21 @@ function ProductSkusDetailModal({
   useEffect(() => {
     setLocalStockBySkuId(stockBySkuId ?? new Map())
   }, [stockBySkuId])
+
+  useEffect(() => {
+    async function refreshStocks() {
+      try {
+        const stocks = await fetchSkuStocks()
+        setLocalStockBySkuId(
+          warehouseStockView ? buildWarehouseStockBySkuIdMap(stocks) : buildStockBySkuIdMap(stocks),
+        )
+      } catch {
+        /* keep current */
+      }
+    }
+    window.addEventListener(INVENTORY_STOCK_CHANGED_EVENT, refreshStocks)
+    return () => window.removeEventListener(INVENTORY_STOCK_CHANGED_EVENT, refreshStocks)
+  }, [warehouseStockView])
 
   useEffect(() => {
     if (!product?.id) return undefined

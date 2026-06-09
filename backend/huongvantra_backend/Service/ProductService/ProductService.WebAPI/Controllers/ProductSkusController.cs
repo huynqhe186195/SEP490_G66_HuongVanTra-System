@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using ProductService.Application.DTOs.Requests;
 using ProductService.Application.UseCases;
+using ProductService.WebAPI.Extensions;
 using HuongVanTra.Shared.Auth;
 
 namespace ProductService.WebAPI.Controllers;
@@ -17,19 +18,21 @@ public class ProductSkusController(ProductSkuLogic _skuLogic) : ControllerBase
         [FromQuery] bool? isActive,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20) =>
-        Ok(await _skuLogic.GetPagedAsync(new GetProductSkusRequest(search, productId, isActive, page, pageSize)));
+        Ok(await _skuLogic.GetPagedAsync(
+            new GetProductSkusRequest(search, productId, isActive, page, pageSize),
+            User.GetCatalogViewScope()));
 
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetById(Guid id) =>
-        Ok(await _skuLogic.GetByIdAsync(id));
+        Ok(await _skuLogic.GetByIdAsync(id, User.GetCatalogViewScope()));
 
     [HttpGet("by-code/{skuCode}")]
     public async Task<IActionResult> GetBySkuCode(string skuCode) =>
-        Ok(await _skuLogic.GetBySkuCodeAsync(skuCode));
+        Ok(await _skuLogic.GetBySkuCodeAsync(skuCode, User.GetCatalogViewScope()));
 
     [HttpGet("by-product/{productId:guid}")]
     public async Task<IActionResult> GetByProductId(Guid productId) =>
-        Ok(await _skuLogic.GetByProductIdAsync(productId));
+        Ok(await _skuLogic.GetByProductIdAsync(productId, User.GetCatalogViewScope()));
 
     [HttpPost]
     [Authorize(Roles = "Warehouse")]

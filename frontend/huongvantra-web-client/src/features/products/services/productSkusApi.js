@@ -1,4 +1,4 @@
-import { apiRequest, apiRequestAuth, toPagedResult } from '../../../lib/apiClient.js'
+import { apiRequestAuth, toPagedResult } from '../../../lib/apiClient.js'
 import { mapProductSku } from './productsApi.js'
 
 function buildSkuQuery(params = {}) {
@@ -13,7 +13,7 @@ function buildSkuQuery(params = {}) {
 
 export async function fetchSkus(params = {}) {
   const query = buildSkuQuery(params)
-  const data = await apiRequest(`/api/v1/skus?${query}`, { method: 'GET' })
+  const data = await apiRequestAuth(`/api/v1/skus?${query}`, { method: 'GET' })
   const paged = toPagedResult(data)
   return {
     ...paged,
@@ -38,13 +38,13 @@ export async function fetchAllActiveSkus(pageSize = 100) {
 }
 
 export async function fetchSkusByProductId(productId) {
-  const data = await apiRequest(`/api/v1/skus/by-product/${productId}`, { method: 'GET' })
+  const data = await apiRequestAuth(`/api/v1/skus/by-product/${productId}`, { method: 'GET' })
   const items = Array.isArray(data) ? data : data?.items ?? data?.Items ?? []
   return items.map(mapProductSku).filter(Boolean)
 }
 
 export async function fetchSkuById(id) {
-  const data = await apiRequest(`/api/v1/skus/${id}`, { method: 'GET' })
+  const data = await apiRequestAuth(`/api/v1/skus/${id}`, { method: 'GET' })
   return mapProductSku(data)
 }
 

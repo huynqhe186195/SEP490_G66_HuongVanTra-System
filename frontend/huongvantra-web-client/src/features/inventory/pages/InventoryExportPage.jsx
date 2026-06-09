@@ -6,12 +6,7 @@ import { showError } from '../../../app/toast.js'
 import { formatStockQuantity } from '../../products/utils/productDisplay.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import { fetchStockExportSlips, getExportTypeLabel } from '../services/stockExportSlipApi.js'
-
-const navigationTabs = [
-  { label: 'Kho tổng', to: '/inventory' },
-  { label: 'Phiếu xuất kho', to: '/inventory/export' },
-  { label: 'Yêu cầu tồn', to: '/inventory/stock-requests' },
-]
+import { inventoryNavTabs } from '../utils/inventoryNavTabs.js'
 
 function InventoryExportPage() {
   const location = useLocation()
@@ -54,7 +49,7 @@ function InventoryExportPage() {
         onSearchChange={setSearchInput}
         rightContent={
           <div className="flex flex-wrap items-center gap-2">
-            {navigationTabs.map((tab) => (
+            {inventoryNavTabs.map((tab) => (
               <Link
                 key={tab.to}
                 to={tab.to}
@@ -116,6 +111,25 @@ function InventoryExportPage() {
               <DetailField label="Thời gian" value={formatVietnamDateTime(selected.createdAt)} />
               <DetailField label="Kho trước → sau" value={`${formatStockQuantity(selected.warehouseQtyBefore)} → ${formatStockQuantity(selected.warehouseQtyAfter)}`} />
               <DetailField label="Cửa hàng trước → sau" value={`${formatStockQuantity(selected.storeQtyBefore)} → ${formatStockQuantity(selected.storeQtyAfter)}`} />
+              {selected.batchAllocations?.length ? (
+                <div className="rounded-lg border border-slate-200 bg-slate-50/30 p-4 sm:col-span-2">
+                  <label className="mb-2 block text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                    Lô đã trừ (FIFO)
+                  </label>
+                  <ul className="space-y-1 text-sm text-slate-700">
+                    {selected.batchAllocations.map((line) => (
+                      <li key={line.id}>
+                        <span className="font-mono font-semibold text-[#356647]">{line.lotCode}</span>
+                        {line.skuCode ? (
+                          <span className="text-slate-500"> ({line.skuCode})</span>
+                        ) : null}
+                        {' — '}
+                        {formatStockQuantity(line.quantity)}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
               {selected.note ? (
                 <div className="rounded-lg border border-slate-200 bg-slate-50/30 p-4 sm:col-span-2">
                   <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-slate-400">Ghi chú</label>

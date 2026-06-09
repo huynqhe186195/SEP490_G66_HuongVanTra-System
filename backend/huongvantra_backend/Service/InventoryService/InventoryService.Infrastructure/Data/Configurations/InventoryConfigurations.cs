@@ -84,6 +84,67 @@ public class StockExportSlipConfiguration : IEntityTypeConfiguration<StockExport
     }
 }
 
+public class WarehouseBatchConfiguration : IEntityTypeConfiguration<WarehouseBatch>
+{
+    public void Configure(EntityTypeBuilder<WarehouseBatch> builder)
+    {
+        builder.ToTable("WarehouseBatches");
+        builder.HasKey(e => e.Id);
+        builder.Property(e => e.LotCode).HasMaxLength(50).IsRequired();
+        builder.Property(e => e.Supplier).HasMaxLength(200);
+        builder.Property(e => e.Note).HasMaxLength(500);
+        builder.Property(e => e.Status).HasMaxLength(20).IsRequired();
+        builder.HasIndex(e => e.LotCode).IsUnique();
+        builder.HasIndex(e => e.ExpiresAt);
+        builder.HasIndex(e => e.CreatedAt);
+        builder.HasMany(e => e.Items)
+            .WithOne(i => i.Batch)
+            .HasForeignKey(i => i.WarehouseBatchId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
+public class WarehouseBatchItemConfiguration : IEntityTypeConfiguration<WarehouseBatchItem>
+{
+    public void Configure(EntityTypeBuilder<WarehouseBatchItem> builder)
+    {
+        builder.ToTable("WarehouseBatchItems");
+        builder.HasKey(e => e.Id);
+        builder.Property(e => e.SkuCode).HasMaxLength(50).IsRequired();
+        builder.Property(e => e.ProductSnapshotName).HasMaxLength(255);
+        builder.Property(e => e.UnitCost).HasColumnType("decimal(18,2)");
+        builder.HasIndex(e => e.SkuId);
+        builder.HasIndex(e => e.WarehouseBatchId);
+        builder.HasIndex(e => new { e.WarehouseBatchId, e.SkuId }).IsUnique();
+    }
+}
+
+public class StockExportBatchAllocationConfiguration : IEntityTypeConfiguration<StockExportBatchAllocation>
+{
+    public void Configure(EntityTypeBuilder<StockExportBatchAllocation> builder)
+    {
+        builder.ToTable("StockExportBatchAllocations");
+        builder.HasKey(e => e.Id);
+        builder.Property(e => e.LotCode).HasMaxLength(50).IsRequired();
+        builder.Property(e => e.SkuCode).HasMaxLength(50).IsRequired();
+        builder.HasIndex(e => e.StockExportSlipId);
+        builder.HasIndex(e => e.WarehouseBatchId);
+        builder.HasIndex(e => e.WarehouseBatchItemId);
+        builder.HasOne(e => e.ExportSlip)
+            .WithMany(s => s.BatchAllocations)
+            .HasForeignKey(e => e.StockExportSlipId)
+            .OnDelete(DeleteBehavior.Cascade);
+        builder.HasOne(e => e.Batch)
+            .WithMany()
+            .HasForeignKey(e => e.WarehouseBatchId)
+            .OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(e => e.BatchItem)
+            .WithMany()
+            .HasForeignKey(e => e.WarehouseBatchItemId)
+            .OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
 public class ProcessedIntegrationEventConfiguration : IEntityTypeConfiguration<ProcessedIntegrationEvent>
 {
     public void Configure(EntityTypeBuilder<ProcessedIntegrationEvent> builder)

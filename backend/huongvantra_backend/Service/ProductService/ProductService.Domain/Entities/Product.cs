@@ -10,6 +10,8 @@ public class Product : BaseEntity
     public string? BrewingGuide { get; set; }
     public string? Description { get; set; }
     public bool IsActive { get; set; } = true;
+    /// <summary>Thời điểm đồng bộ sang catalog cửa hàng; null = chỉ có ở kho.</summary>
+    public DateTime? SyncedToStoreAt { get; set; }
 
     public Category Category { get; set; } = null!;
     public ICollection<ProductSku> Skus { get; set; } = new List<ProductSku>();

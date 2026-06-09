@@ -4,7 +4,8 @@ import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { AUTH_SESSION_CHANGED_EVENT, loadAuthSession } from '../../auth/services/authSession.js'
-import { canCreateCatalog, canHideCatalog, canSyncCatalog } from '../../auth/utils/permissions.js'
+import { canCreateCatalog, canHideCatalog, canSyncCatalog, isWarehouseRole } from '../../auth/utils/permissions.js'
+import { fetchPendingCatalogSync, syncCatalogToStore } from '../services/catalogSyncApi.js'
 import {
   createCategory,
   deleteCategory,
@@ -12,7 +13,7 @@ import {
   restoreCategory,
   updateCategory,
 } from '../services/categoriesApi.js'
-import { getCategoryStatusMeta } from '../utils/productDisplay.js'
+import { getCategoryStatusMeta, isSyncedToStore } from '../utils/productDisplay.js'
 import { validateCategoryForm } from '../utils/productValidation.js'
 
 function ProductsPricingPage() {
@@ -20,7 +21,9 @@ function ProductsPricingPage() {
   const canCreate = canCreateCatalog(session)
   const canHide = canHideCatalog(session)
   const canSync = canSyncCatalog(session)
+  const isWarehouse = isWarehouseRole(session)
   const [isSyncing, setIsSyncing] = useState(false)
+  const [pendingSyncTotal, setPendingSyncTotal] = useState(0)
 
   useEffect(() => {
     const sync = () => setSession(loadAuthSession())
@@ -52,9 +55,23 @@ function ProductsPricingPage() {
     }
   }, [statusFilter])
 
+  const loadPendingSync = useCallback(async () => {
+    if (!canSync) {
+      setPendingSyncTotal(0)
+      return
+    }
+    try {
+      const pending = await fetchPendingCatalogSync()
+      setPendingSyncTotal(pending.total)
+    } catch {
+      setPendingSyncTotal(0)
+    }
+  }, [canSync])
+
   useEffect(() => {
     loadData()
-  }, [loadData])
+    loadPendingSync()
+  }, [loadData, loadPendingSync])
 
   const filteredCategories = useMemo(() => {
     const keyword = searchInput.trim().toLowerCase()
@@ -148,8 +165,16 @@ function ProductsPricingPage() {
   async function handleSyncCatalog() {
     setIsSyncing(true)
     try {
-      await loadData()
-      showSuccess('Đã đồng bộ danh mục mới nhất từ kho.')
+      const result = await syncCatalogToStore()
+      await Promise.all([loadData(), loadPendingSync()])
+      const total = result.categoriesSynced + result.productsSynced + result.skusSynced
+      if (total === 0) {
+        showSuccess('Không có dữ liệu mới từ kho cần đồng bộ.')
+      } else {
+        showSuccess(
+          `Đã đồng bộ ${result.categoriesSynced} danh mục, ${result.productsSynced} sản phẩm, ${result.skusSynced} SKU từ kho.`,
+        )
+      }
     } catch (error) {
       showError(error.message)
     } finally {
@@ -196,6 +221,9 @@ function ProductsPricingPage() {
               >
                 <span className={`material-symbols-outlined text-[18px] ${isSyncing ? 'animate-spin' : ''}`}>sync</span>
                 Đồng bộ dữ liệu
+                {pendingSyncTotal > 0 ? (
+                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-800">{pendingSyncTotal}</span>
+                ) : null}
               </button>
             ) : null}
             <Link
@@ -294,7 +322,14 @@ function ProductsPricingPage() {
                             onChange={(event) => setEditForm((prev) => ({ ...prev, name: event.target.value }))}
                           />
                         ) : (
-                          category.name
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span>{category.name}</span>
+                            {isWarehouse && !isSyncedToStore(category) ? (
+                              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-800">
+                                Chưa đồng bộ CH
+                              </span>
+                            ) : null}
+                          </div>
                         )}
                       </td>
                       <td className="px-4 py-3 text-slate-600">

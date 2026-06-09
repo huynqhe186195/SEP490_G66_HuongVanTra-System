@@ -26,6 +26,7 @@ import {
 } from '../utils/posDiscountValidation.js'
 import { computeCouponDiscount, formatPromotionLabel } from '../utils/posPromotionUtils.js'
 import { isVipCustomerType } from '../../customers/utils/customerDisplay.js'
+import { fetchPendingCatalogSync, syncCatalogToStore } from '../../products/services/catalogSyncApi.js'
 import { fetchCategories } from '../../products/services/categoriesApi.js'
 import ProductImage from '../../products/components/ProductImage.jsx'
 
@@ -362,8 +363,23 @@ function PosPage() {
   }, [searchValue, activeTabId, catalogReloadKey])
 
   async function handleRefreshCatalog() {
-    setCatalogReloadKey((value) => value + 1)
-    showSuccess('Đang đồng bộ sản phẩm và danh mục mới...')
+    try {
+      const pending = await fetchPendingCatalogSync()
+      const result = await syncCatalogToStore()
+      setCatalogReloadKey((value) => value + 1)
+      const total = result.categoriesSynced + result.productsSynced + result.skusSynced
+      if (total === 0 && pending.total === 0) {
+        showSuccess('Catalog cửa hàng đã đầy đủ — không có DM/SP/SKU mới từ kho.')
+      } else if (total === 0) {
+        showSuccess('Đã kiểm tra đồng bộ — danh sách POS đã được tải lại.')
+      } else {
+        showSuccess(
+          `Đã đồng bộ ${result.categoriesSynced} DM, ${result.productsSynced} SP, ${result.skusSynced} SKU từ kho.`,
+        )
+      }
+    } catch (error) {
+      showError(error.message)
+    }
   }
 
   useEffect(() => {

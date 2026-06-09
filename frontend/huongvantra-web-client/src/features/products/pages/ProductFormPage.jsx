@@ -469,9 +469,9 @@ function ProductFormPage({ mode }) {
           </h1>
 
           <p className="mt-1 text-sm text-slate-500">
-
-            Thông tin sản phẩm, biến thể SKU và số lượng hiện tại tại cửa hàng
-
+            {isEditMode
+              ? 'Sửa thông tin sản phẩm và thêm/chỉnh SKU — lưu SP trước, sau đó thêm SKU bên phải'
+              : 'Tạo sản phẩm trước, sau đó thêm SKU ở màn sửa'}
           </p>
 
         </div>

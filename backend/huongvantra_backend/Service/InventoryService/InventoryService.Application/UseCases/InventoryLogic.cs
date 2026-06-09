@@ -15,6 +15,8 @@ public class InventoryLogic(
     IStockDeductQueueRepository _queueRepo,
     IStockAdjustmentRequestRepository _adjustmentRequestRepo,
     IStockExportSlipRepository _exportSlipRepo,
+    IWarehouseBatchRepository _batchRepo,
+    IStockExportBatchAllocationRepository _exportAllocationRepo,
     IProcessedIntegrationEventRepository _processedEvents,
     IInventoryEventPublisher _eventPublisher,
     IOptions<InventoryOptions> inventoryOptions)
@@ -237,6 +239,22 @@ public class InventoryLogic(
     public async Task<List<SkuStockResponse>> GetSkuStocksAsync(CancellationToken ct = default)
     {
         var stocks = await _skuStockRepo.GetAllAsync(ct);
+        var warehouseQtyBySku = await _batchRepo.GetQuantitySumsBySkuAsync(ct);
+        var now = DateTime.UtcNow;
+        var dirty = false;
+
+        foreach (var stock in stocks)
+        {
+            var fromBatches = warehouseQtyBySku.GetValueOrDefault(stock.SkuId, 0);
+            if (stock.WarehouseQuantityOnHand == fromBatches) continue;
+            stock.WarehouseQuantityOnHand = fromBatches;
+            stock.UpdatedAt = now;
+            dirty = true;
+        }
+
+        if (dirty)
+            await _skuStockRepo.SaveChangesAsync(ct);
+
         return stocks.Select(MapSkuStock).ToList();
     }
 
@@ -278,16 +296,68 @@ public class InventoryLogic(
             throw new InventoryValidationException("Số lượng thay đổi phải khác 0.");
 
         var stock = await GetOrCreateSkuStockAsync(skuId, skuCode, ct);
-        if (quantityDelta < 0 && stock.WarehouseQuantityOnHand + quantityDelta < 0)
+        var resolvedSkuCode = stock.SkuCode;
+
+        if (quantityDelta > 0)
         {
-            throw new InventoryValidationException(
-                $"Tồn kho tổng không đủ. Hiện có {stock.WarehouseQuantityOnHand}, yêu cầu giảm {Math.Abs(quantityDelta)}.");
+            var lotCode = $"DC-{DateTime.UtcNow:yyyyMMddHHmmss}";
+            await CreateWarehouseBatchInternalAsync(
+                lotCode,
+                null,
+                null,
+                "Điều chỉnh thủ công kho tổng",
+                [
+                    new CreateWarehouseBatchItemRequest(
+                        skuId,
+                        resolvedSkuCode,
+                        null,
+                        quantityDelta,
+                        null)
+                ],
+                Guid.Empty,
+                ct);
+        }
+        else
+        {
+            await AllocateAndDeductBatchesFifoAsync(skuId, Math.Abs(quantityDelta), ct);
+            await SyncWarehouseQtyFromBatchesAsync(stock, ct);
         }
 
-        stock.WarehouseQuantityOnHand = Math.Max(0, stock.WarehouseQuantityOnHand + quantityDelta);
-        stock.UpdatedAt = DateTime.UtcNow;
-        await _skuStockRepo.SaveChangesAsync(ct);
         return MapSkuStock(stock);
+    }
+
+    public async Task<WarehouseBatchResponse> CreateWarehouseBatchAsync(
+        CreateWarehouseBatchRequest request,
+        Guid createdBy,
+        CancellationToken ct = default)
+    {
+        if (createdBy == Guid.Empty)
+            throw new InventoryValidationException("Không xác định được người nhập lô.");
+
+        return await CreateWarehouseBatchInternalAsync(
+            request.LotCode,
+            request.Supplier,
+            request.ExpiresAt,
+            request.Note,
+            request.Items,
+            createdBy,
+            ct);
+    }
+
+    public async Task<List<WarehouseBatchResponse>> GetWarehouseBatchesAsync(
+        Guid? skuId,
+        string? search,
+        bool availableOnly,
+        CancellationToken ct = default)
+    {
+        var items = await _batchRepo.GetListAsync(skuId, search, availableOnly, ct);
+        return items.Select(MapWarehouseBatch).ToList();
+    }
+
+    public async Task<WarehouseBatchResponse?> GetWarehouseBatchAsync(Guid id, CancellationToken ct = default)
+    {
+        var batch = await _batchRepo.GetByIdAsync(id, ct);
+        return batch == null ? null : MapWarehouseBatch(batch);
     }
 
     private async Task RestoreStockAsync(StockDeductQueue queue, CancellationToken ct)
@@ -437,17 +507,22 @@ public class InventoryLogic(
                     stock.QuantityOnHand,
                     reviewedBy,
                     "Giả lập — chưa trừ kho tổng (module kho đang phát triển).",
+                    null,
                     ct);
             }
             else
             {
-                if (stock.WarehouseQuantityOnHand < entity.QuantityDelta)
+                var batchTotal = await _batchRepo.SumQuantityOnHandAsync(entity.SkuId, ct);
+                if (batchTotal < entity.QuantityDelta)
                 {
                     throw new InventoryValidationException(
-                        $"Tồn kho tổng không đủ để xuất sang cửa hàng. Kho có {stock.WarehouseQuantityOnHand}, yêu cầu {entity.QuantityDelta}.");
+                        $"Tồn lô trong kho không đủ để xuất. Có {batchTotal} (theo lô), yêu cầu {entity.QuantityDelta}. Hãy nhập lô trước.");
                 }
 
-                stock.WarehouseQuantityOnHand -= entity.QuantityDelta;
+                var allocations = await AllocateAndDeductBatchesFifoAsync(
+                    entity.SkuId, entity.QuantityDelta, ct);
+
+                await SyncWarehouseQtyFromBatchesAsync(stock, ct);
                 stock.QuantityOnHand += entity.QuantityDelta;
                 stock.UpdatedAt = DateTime.UtcNow;
 
@@ -460,6 +535,7 @@ public class InventoryLogic(
                     stock.QuantityOnHand,
                     reviewedBy,
                     entity.Reason,
+                    allocations,
                     ct);
             }
 
@@ -578,6 +654,7 @@ public class InventoryLogic(
         int storeAfter,
         Guid createdBy,
         string? note,
+        List<StockExportBatchAllocation>? batchAllocations,
         CancellationToken ct)
     {
         var today = DateTime.UtcNow.Date;
@@ -603,8 +680,164 @@ public class InventoryLogic(
 
         await _exportSlipRepo.AddAsync(slip, ct);
         await _exportSlipRepo.SaveChangesAsync(ct);
+
+        if (batchAllocations is { Count: > 0 })
+        {
+            foreach (var allocation in batchAllocations)
+                allocation.StockExportSlipId = slip.Id;
+
+            await _exportAllocationRepo.AddRangeAsync(batchAllocations, ct);
+            await _exportAllocationRepo.SaveChangesAsync(ct);
+        }
+
         return slip;
     }
+
+    private async Task<WarehouseBatchResponse> CreateWarehouseBatchInternalAsync(
+        string lotCode,
+        string? supplier,
+        DateTime? expiresAt,
+        string? note,
+        List<CreateWarehouseBatchItemRequest> items,
+        Guid createdBy,
+        CancellationToken ct)
+    {
+        if (items == null || items.Count == 0)
+            throw new InventoryValidationException("Lô phải có ít nhất một dòng SKU.");
+
+        var normalizedLot = NormalizeLotCode(lotCode);
+        if (string.IsNullOrWhiteSpace(normalizedLot))
+            throw new InventoryValidationException("Mã lô là bắt buộc.");
+
+        if (await _batchRepo.ExistsLotCodeAsync(normalizedLot, ct: ct))
+            throw new InventoryValidationException($"Mã lô '{normalizedLot}' đã tồn tại.");
+
+        var skuIds = items.Select(i => i.SkuId).ToList();
+        if (skuIds.Distinct().Count() != skuIds.Count)
+            throw new InventoryValidationException("Mỗi SKU chỉ xuất hiện một lần trong cùng một lô.");
+
+        var now = DateTime.UtcNow;
+        var batch = new WarehouseBatch
+        {
+            Id = Guid.NewGuid(),
+            LotCode = normalizedLot,
+            Supplier = supplier?.Trim(),
+            ExpiresAt = expiresAt,
+            Note = note?.Trim(),
+            Status = "active",
+            CreatedBy = createdBy == Guid.Empty ? Guid.Empty : createdBy,
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+
+        var touchedSkuIds = new HashSet<Guid>();
+        foreach (var line in items)
+        {
+            if (line.Quantity <= 0)
+                throw new InventoryValidationException("Số lượng nhập lô phải lớn hơn 0.");
+            if (line.UnitCost is < 0)
+                throw new InventoryValidationException("Giá vốn không được âm.");
+
+            var stock = await GetOrCreateSkuStockAsync(line.SkuId, line.SkuCode, ct);
+            batch.Items.Add(new WarehouseBatchItem
+            {
+                Id = Guid.NewGuid(),
+                WarehouseBatchId = batch.Id,
+                SkuId = line.SkuId,
+                SkuCode = stock.SkuCode,
+                ProductSnapshotName = line.ProductSnapshotName?.Trim(),
+                QuantityOnHand = line.Quantity,
+                InitialQuantity = line.Quantity,
+                UnitCost = line.UnitCost,
+                CreatedAt = now,
+                UpdatedAt = now,
+            });
+            touchedSkuIds.Add(line.SkuId);
+        }
+
+        await _batchRepo.AddAsync(batch, ct);
+        await _batchRepo.SaveChangesAsync(ct);
+
+        foreach (var skuId in touchedSkuIds)
+        {
+            var stock = await _skuStockRepo.GetBySkuIdAsync(skuId, ct);
+            if (stock != null)
+                await SyncWarehouseQtyFromBatchesAsync(stock, ct);
+        }
+
+        return MapWarehouseBatch(batch);
+    }
+
+    private async Task<List<StockExportBatchAllocation>> AllocateAndDeductBatchesFifoAsync(
+        Guid skuId,
+        int quantity,
+        CancellationToken ct)
+    {
+        if (quantity <= 0)
+            throw new InventoryValidationException("Số lượng xuất lô phải lớn hơn 0.");
+
+        var batchItems = await _batchRepo.GetAvailableItemsForSkuAsync(skuId, ct);
+        var remaining = quantity;
+        var allocations = new List<StockExportBatchAllocation>();
+        var touchedBatchIds = new HashSet<Guid>();
+
+        foreach (var item in batchItems)
+        {
+            if (remaining <= 0) break;
+
+            var take = Math.Min(item.QuantityOnHand, remaining);
+            item.QuantityOnHand -= take;
+            item.UpdatedAt = DateTime.UtcNow;
+
+            allocations.Add(new StockExportBatchAllocation
+            {
+                Id = Guid.NewGuid(),
+                WarehouseBatchId = item.WarehouseBatchId,
+                WarehouseBatchItemId = item.Id,
+                LotCode = item.Batch?.LotCode ?? string.Empty,
+                SkuCode = item.SkuCode,
+                Quantity = take,
+            });
+
+            touchedBatchIds.Add(item.WarehouseBatchId);
+            remaining -= take;
+        }
+
+        if (remaining > 0)
+        {
+            throw new InventoryValidationException(
+                $"Tồn lô không đủ. Thiếu {remaining} đơn vị so với yêu cầu {quantity}.");
+        }
+
+        await _batchRepo.SaveChangesAsync(ct);
+        await RefreshBatchStatusesAsync(touchedBatchIds, ct);
+        return allocations;
+    }
+
+    private async Task RefreshBatchStatusesAsync(IEnumerable<Guid> batchIds, CancellationToken ct)
+    {
+        foreach (var batchId in batchIds.Distinct())
+        {
+            var batch = await _batchRepo.GetByIdAsync(batchId, ct);
+            if (batch == null) continue;
+
+            var hasStock = batch.Items.Any(i => i.QuantityOnHand > 0);
+            batch.Status = hasStock ? "active" : "depleted";
+            batch.UpdatedAt = DateTime.UtcNow;
+        }
+
+        await _batchRepo.SaveChangesAsync(ct);
+    }
+
+    private async Task SyncWarehouseQtyFromBatchesAsync(SkuStock stock, CancellationToken ct)
+    {
+        stock.WarehouseQuantityOnHand = await _batchRepo.SumQuantityOnHandAsync(stock.SkuId, ct);
+        stock.UpdatedAt = DateTime.UtcNow;
+        await _skuStockRepo.SaveChangesAsync(ct);
+    }
+
+    private static string NormalizeLotCode(string lotCode) =>
+        lotCode.Trim().ToUpperInvariant();
 
     private async Task<SkuStock> GetOrCreateSkuStockAsync(
         Guid skuId,
@@ -636,6 +869,35 @@ public class InventoryLogic(
         stock.WarehouseQuantityOnHand,
         stock.UpdatedAt);
 
+    private static WarehouseBatchResponse MapWarehouseBatch(WarehouseBatch batch)
+    {
+        var items = batch.Items
+            .OrderBy(i => i.SkuCode)
+            .Select(i => new WarehouseBatchItemResponse(
+                i.Id,
+                i.SkuId,
+                i.SkuCode,
+                i.ProductSnapshotName,
+                i.QuantityOnHand,
+                i.InitialQuantity,
+                i.UnitCost))
+            .ToList();
+
+        return new WarehouseBatchResponse(
+            batch.Id,
+            batch.LotCode,
+            batch.Supplier,
+            batch.ExpiresAt,
+            batch.Note,
+            batch.Status,
+            items.Sum(i => i.QuantityOnHand),
+            items.Count,
+            batch.CreatedBy,
+            batch.CreatedAt,
+            batch.UpdatedAt,
+            items);
+    }
+
     private static StockExportSlipResponse MapExportSlip(StockExportSlip slip) => new(
         slip.Id,
         slip.ExportCode,
@@ -652,7 +914,9 @@ public class InventoryLogic(
         slip.StoreQtyAfter,
         slip.Note,
         slip.CreatedBy,
-        slip.CreatedAt);
+        slip.CreatedAt,
+        slip.BatchAllocations.Select(a => new StockExportBatchAllocationResponse(
+            a.Id, a.WarehouseBatchId, a.WarehouseBatchItemId, a.LotCode, a.SkuCode, a.Quantity)).ToList());
 
     private static StockAdjustmentRequestResponse MapAdjustmentRequest(StockAdjustmentRequest entity) => new(
         entity.Id,

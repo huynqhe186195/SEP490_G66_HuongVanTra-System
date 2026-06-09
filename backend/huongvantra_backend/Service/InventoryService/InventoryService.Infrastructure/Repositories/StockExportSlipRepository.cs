@@ -8,7 +8,9 @@ namespace InventoryService.Infrastructure.Repositories;
 public class StockExportSlipRepository(InventoryDbContext _db) : IStockExportSlipRepository
 {
     public Task<StockExportSlip?> GetByIdAsync(Guid id, CancellationToken ct = default) =>
-        _db.StockExportSlips.FirstOrDefaultAsync(s => s.Id == id, ct);
+        _db.StockExportSlips
+            .Include(s => s.BatchAllocations)
+            .FirstOrDefaultAsync(s => s.Id == id, ct);
 
     public async Task<List<StockExportSlip>> GetListAsync(string? search, CancellationToken ct = default)
     {

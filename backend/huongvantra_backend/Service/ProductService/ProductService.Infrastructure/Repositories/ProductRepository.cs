@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using ProductService.Application;
 using ProductService.Application.Interfaces;
 using ProductService.Domain.Entities;
 using ProductService.Infrastructure.Data;
@@ -9,7 +10,7 @@ public class ProductRepository(ProductDbContext _db) : IProductRepository
 {
     public async Task<(List<Product> Items, int TotalCount)> GetPagedAsync(
         string? search, int? categoryId, bool? isActive, bool? isDeleted,
-        int page, int pageSize)
+        int page, int pageSize, CatalogViewScope scope = CatalogViewScope.Warehouse)
     {
         IQueryable<Product> query = isDeleted == true
             ? _db.Products.IgnoreQueryFilters().Include(p => p.Category).Include(p => p.Skus)
@@ -35,6 +36,9 @@ public class ProductRepository(ProductDbContext _db) : IProductRepository
         if (isDeleted != true && isActive.HasValue)
             query = query.Where(p => p.IsActive == isActive.Value);
 
+        if (scope == CatalogViewScope.Store)
+            query = query.Where(p => p.SyncedToStoreAt != null);
+
         var totalCount = await query.CountAsync();
         var items = await query
             .OrderBy(p => p.Name)
@@ -45,11 +49,53 @@ public class ProductRepository(ProductDbContext _db) : IProductRepository
         return (items, totalCount);
     }
 
-    public async Task<List<Product>> GetAllAsync(bool includeInactive = false)
+    public async Task<List<Product>> GetAllAsync(bool includeInactive = false, CatalogViewScope scope = CatalogViewScope.Warehouse)
     {
         var query = _db.Products.Include(p => p.Category).Include(p => p.Skus).AsQueryable();
         if (!includeInactive) query = query.Where(p => p.IsActive);
+        if (scope == CatalogViewScope.Store)
+            query = query.Where(p => p.SyncedToStoreAt != null);
         return await query.OrderBy(p => p.Name).ToListAsync();
+    }
+
+    public Task<int> CountPendingStoreSyncAsync(CancellationToken ct = default) =>
+        _db.Products.CountAsync(p => !p.IsDeleted && p.SyncedToStoreAt == null, ct);
+
+    public async Task<int> SyncPendingToStoreAsync(DateTime syncedAt, CancellationToken ct = default)
+    {
+        var pending = await _db.Products
+            .Where(p => !p.IsDeleted && p.SyncedToStoreAt == null)
+            .ToListAsync(ct);
+
+        foreach (var product in pending)
+        {
+            product.SyncedToStoreAt = syncedAt;
+            product.UpdatedAt = syncedAt;
+        }
+
+        if (pending.Count > 0)
+            await _db.SaveChangesAsync(ct);
+
+        return pending.Count;
+    }
+
+    public async Task<int> SyncProductsWithSyncedSkusAsync(DateTime syncedAt, CancellationToken ct = default)
+    {
+        var pending = await _db.Products
+            .Where(p => !p.IsDeleted && p.SyncedToStoreAt == null
+                && p.Skus.Any(s => !s.IsDeleted && s.SyncedToStoreAt != null))
+            .ToListAsync(ct);
+
+        foreach (var product in pending)
+        {
+            product.SyncedToStoreAt = syncedAt;
+            product.UpdatedAt = syncedAt;
+        }
+
+        if (pending.Count > 0)
+            await _db.SaveChangesAsync(ct);
+
+        return pending.Count;
     }
 
     public async Task<bool> ExistsNameAsync(string name, Guid? excludeProductId = null, bool includeDeleted = true)

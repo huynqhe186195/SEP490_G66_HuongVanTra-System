@@ -1,4 +1,4 @@
-import { apiRequest, apiRequestAuth, toPagedResult } from '../../../lib/apiClient.js'
+import { apiRequestAuth, toPagedResult } from '../../../lib/apiClient.js'
 
 export function mapProductSku(item) {
   if (!item || typeof item !== 'object') return null
@@ -14,6 +14,7 @@ export function mapProductSku(item) {
     imageUrl: item.imageUrl ?? item.ImageUrl ?? '',
     isActive: Boolean(item.isActive ?? item.IsActive ?? true),
     createdAt: item.createdAt ?? item.CreatedAt ?? null,
+    syncedToStoreAt: item.syncedToStoreAt ?? item.SyncedToStoreAt ?? null,
   }
 }
 
@@ -33,6 +34,7 @@ export function mapProduct(item) {
     isActive: Boolean(item.isActive ?? item.IsActive ?? true),
     isDeleted: Boolean(item.isDeleted ?? item.IsDeleted ?? false),
     createdAt: item.createdAt ?? item.CreatedAt ?? null,
+    syncedToStoreAt: item.syncedToStoreAt ?? item.SyncedToStoreAt ?? null,
     skus,
   }
 }
@@ -50,7 +52,7 @@ function buildProductQuery(params = {}) {
 
 export async function fetchProducts(params = {}) {
   const query = buildProductQuery(params)
-  const data = await apiRequest(`/api/v1/products?${query}`, { method: 'GET' })
+  const data = await apiRequestAuth(`/api/v1/products?${query}`, { method: 'GET' })
   const paged = toPagedResult(data)
   return {
     ...paged,
@@ -60,7 +62,7 @@ export async function fetchProducts(params = {}) {
 }
 
 export async function fetchProductById(id) {
-  const data = await apiRequest(`/api/v1/products/${id}`, { method: 'GET' })
+  const data = await apiRequestAuth(`/api/v1/products/${id}`, { method: 'GET' })
   return mapProduct(data)
 }
 

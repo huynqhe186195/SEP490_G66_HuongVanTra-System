@@ -12,4 +12,5 @@ public record ProductResponse(
     bool IsActive,
     bool IsDeleted,
     DateTime CreatedAt,
+    DateTime? SyncedToStoreAt,
     List<ProductSkuResponse> Skus);

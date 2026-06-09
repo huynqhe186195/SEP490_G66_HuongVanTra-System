@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using ProductService.Application;
 using ProductService.Application.Interfaces;
 using ProductService.Domain.Entities;
 using ProductService.Infrastructure.Data;
@@ -9,9 +10,12 @@ public class ProductSkuRepository(ProductDbContext _db) : IProductSkuRepository
 {
     public async Task<(List<ProductSku> Items, int TotalCount)> GetPagedAsync(
         string? search, Guid? productId, bool? isActive,
-        int page, int pageSize)
+        int page, int pageSize, CatalogViewScope scope = CatalogViewScope.Warehouse)
     {
         var query = _db.ProductSkus.AsQueryable();
+
+        if (scope == CatalogViewScope.Store)
+            query = query.Where(sku => sku.SyncedToStoreAt != null);
 
         if (!string.IsNullOrWhiteSpace(search))
         {
@@ -41,10 +45,12 @@ public class ProductSkuRepository(ProductDbContext _db) : IProductSkuRepository
         return (items, totalCount);
     }
 
-    public async Task<List<ProductSku>> GetAllAsync(bool includeInactive = false)
+    public async Task<List<ProductSku>> GetAllAsync(bool includeInactive = false, CatalogViewScope scope = CatalogViewScope.Warehouse)
     {
         var query = _db.ProductSkus.AsQueryable();
         if (!includeInactive) query = query.Where(s => s.IsActive);
+        if (scope == CatalogViewScope.Store)
+            query = query.Where(s => s.SyncedToStoreAt != null);
         return await query
             .Include(s => s.Product)
             .ThenInclude(product => product.Category)
@@ -52,25 +58,65 @@ public class ProductSkuRepository(ProductDbContext _db) : IProductSkuRepository
             .ToListAsync();
     }
 
-    public async Task<ProductSku?> GetByIdAsync(Guid id) =>
-        await _db.ProductSkus
+    public async Task<ProductSku?> GetByIdAsync(Guid id, CatalogViewScope scope = CatalogViewScope.Warehouse)
+    {
+        var query = _db.ProductSkus
             .Include(s => s.Product)
             .ThenInclude(product => product.Category)
-            .FirstOrDefaultAsync(s => s.Id == id);
+            .Where(s => s.Id == id);
 
-    public async Task<ProductSku?> GetBySkuCodeAsync(string skuCode) =>
-        await _db.ProductSkus
-            .Include(s => s.Product)
-            .ThenInclude(product => product.Category)
-            .FirstOrDefaultAsync(s => s.SkuCode == skuCode);
+        if (scope == CatalogViewScope.Store)
+            query = query.Where(s => s.SyncedToStoreAt != null);
 
-    public async Task<List<ProductSku>> GetByProductIdAsync(Guid productId) =>
-        await _db.ProductSkus
+        return await query.FirstOrDefaultAsync();
+    }
+
+    public async Task<ProductSku?> GetBySkuCodeAsync(string skuCode, CatalogViewScope scope = CatalogViewScope.Warehouse)
+    {
+        var query = _db.ProductSkus
             .Include(s => s.Product)
             .ThenInclude(product => product.Category)
-            .Where(s => s.ProductId == productId)
-            .OrderBy(s => s.SkuCode)
-            .ToListAsync();
+            .Where(s => s.SkuCode == skuCode);
+
+        if (scope == CatalogViewScope.Store)
+            query = query.Where(s => s.SyncedToStoreAt != null);
+
+        return await query.FirstOrDefaultAsync();
+    }
+
+    public async Task<List<ProductSku>> GetByProductIdAsync(Guid productId, CatalogViewScope scope = CatalogViewScope.Warehouse)
+    {
+        var query = _db.ProductSkus
+            .Include(s => s.Product)
+            .ThenInclude(product => product.Category)
+            .Where(s => s.ProductId == productId);
+
+        if (scope == CatalogViewScope.Store)
+            query = query.Where(s => s.SyncedToStoreAt != null);
+
+        return await query.OrderBy(s => s.SkuCode).ToListAsync();
+    }
+
+    public Task<int> CountPendingStoreSyncAsync(CancellationToken ct = default) =>
+        _db.ProductSkus.CountAsync(s => !s.IsDeleted && s.IsActive && s.SyncedToStoreAt == null, ct);
+
+    public async Task<List<ProductSku>> SyncPendingToStoreAsync(DateTime syncedAt, CancellationToken ct = default)
+    {
+        var pending = await _db.ProductSkus
+            .Where(s => !s.IsDeleted && s.IsActive && s.SyncedToStoreAt == null)
+            .ToListAsync(ct);
+
+        foreach (var sku in pending)
+        {
+            sku.SyncedToStoreAt = syncedAt;
+            sku.UpdatedAt = syncedAt;
+        }
+
+        if (pending.Count > 0)
+            await _db.SaveChangesAsync(ct);
+
+        return pending;
+    }
 
     public async Task<bool> ExistsSkuCodeAsync(string skuCode, Guid? excludeId = null)
     {

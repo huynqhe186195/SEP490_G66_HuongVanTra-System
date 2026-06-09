@@ -2,47 +2,38 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
-import { showError, showSuccess } from '../../../app/toast.js'
-import { canCreateCatalog } from '../../auth/utils/permissions.js'
-import { loadAuthSession } from '../../auth/services/authSession.js'
+import { showError } from '../../../app/toast.js'
 import { fetchAllActiveSkus } from '../../products/services/productSkusApi.js'
 import { fetchProducts } from '../../products/services/productsApi.js'
 import { formatStockQuantity } from '../../products/utils/productDisplay.js'
-import InventorySimulationBanner from '../components/InventorySimulationBanner.jsx'
-import {
-  adjustWarehouseStock,
-  fetchInventorySettings,
-  fetchSkuStocks,
-} from '../services/inventoryStockApi.js'
-
-const navigationTabs = [
-  { label: 'Kho tổng', to: '/inventory' },
-  { label: 'Phiếu xuất kho', to: '/inventory/export' },
-  { label: 'Yêu cầu tồn', to: '/inventory/stock-requests' },
-]
+import { inventoryNavTabs } from '../utils/inventoryNavTabs.js'
+import { fetchSkuStocks } from '../services/inventoryStockApi.js'
+import { fetchWarehouseBatches } from '../services/warehouseBatchApi.js'
 
 function InventoryStockPage() {
-  const canManageWarehouse = canCreateCatalog(loadAuthSession())
-  const [simulateWarehouse, setSimulateWarehouse] = useState(true)
   const [searchInput, setSearchInput] = useState('')
   const [rows, setRows] = useState([])
   const [isLoading, setIsLoading] = useState(true)
-  const [actingSkuId, setActingSkuId] = useState(null)
-  const [adjustSkuId, setAdjustSkuId] = useState('')
-  const [adjustDelta, setAdjustDelta] = useState('')
 
   const loadData = useCallback(async () => {
     setIsLoading(true)
     try {
-      const [settings, stocks, skus, productsResult] = await Promise.all([
-        fetchInventorySettings(),
+      const [stocks, skus, productsResult, batches] = await Promise.all([
         fetchSkuStocks(),
         fetchAllActiveSkus(),
         fetchProducts({ page: 1, pageSize: 100, isActive: true }),
+        fetchWarehouseBatches({ availableOnly: true }),
       ])
-      setSimulateWarehouse(settings.simulateWarehouse)
       const productNameById = new Map(productsResult.items.map((p) => [p.id, p.name]))
       const stockBySkuId = new Map(stocks.map((s) => [s.skuId, s]))
+      const batchCountBySku = batches.reduce((map, batch) => {
+        for (const item of batch.items || []) {
+          if (item.quantityOnHand > 0) {
+            map.set(item.skuId, (map.get(item.skuId) || 0) + 1)
+          }
+        }
+        return map
+      }, new Map())
 
       const merged = skus.map((sku) => {
         const stock = stockBySkuId.get(sku.id)
@@ -52,6 +43,7 @@ function InventoryStockPage() {
           productName: productNameById.get(sku.productId) || '—',
           packagingType: sku.packagingType || '',
           warehouseQuantityOnHand: stock?.warehouseQuantityOnHand ?? 0,
+          activeLotCount: batchCountBySku.get(sku.id) || 0,
         }
       })
 
@@ -77,41 +69,17 @@ function InventoryStockPage() {
     })
   }, [rows, searchInput])
 
-  async function handleAdjustWarehouse(event) {
-    event.preventDefault()
-    if (!canManageWarehouse) return
-    const skuId = adjustSkuId
-    const delta = Number(adjustDelta)
-    if (!skuId || !Number.isFinite(delta) || delta === 0) {
-      showError('Chọn SKU và nhập số lượng thay đổi (khác 0).')
-      return
-    }
-
-    setActingSkuId(skuId)
-    try {
-      await adjustWarehouseStock(skuId, delta)
-      showSuccess('Đã cập nhật tồn kho tổng.')
-      setAdjustSkuId('')
-      setAdjustDelta('')
-      await loadData()
-    } catch (error) {
-      showError(error.message)
-    } finally {
-      setActingSkuId(null)
-    }
-  }
-
   return (
     <PageShell>
       <PageHeader
         title="Kho tổng"
-        description="Thủ kho — chỉ theo dõi và nhập tồn tại kho trung tâm (không hiển thị tồn cửa hàng)"
+        description="Tồn kho tổng = tổng các lô còn hàng — nhập lô tại Nhập lô, xuất theo FIFO khi duyệt yêu cầu"
         searchPlaceholder="Tìm SKU, sản phẩm..."
         searchValue={searchInput}
         onSearchChange={setSearchInput}
         rightContent={
           <div className="flex flex-wrap items-center gap-2">
-            {navigationTabs.map((tab) => (
+            {inventoryNavTabs.map((tab) => (
               <Link
                 key={tab.to}
                 to={tab.to}
@@ -128,52 +96,21 @@ function InventoryStockPage() {
         }
       />
 
-      <InventorySimulationBanner simulateWarehouse={simulateWarehouse} warehouseView />
-
-      {canManageWarehouse ? (
-        <section className="mb-6 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm sm:p-6">
-          <h2 className="text-lg font-bold text-slate-800">Nhập / điều chỉnh tồn kho tổng</h2>
-          <p className="mt-1 text-sm text-slate-500">
-            Cộng hoặc trừ tồn tại kho trung tâm. Tồn cửa hàng do cửa hàng yêu cầu và Thủ kho duyệt riêng.
-          </p>
-          <form className="mt-4 grid gap-4 sm:grid-cols-3" onSubmit={handleAdjustWarehouse}>
-            <label className="space-y-2 sm:col-span-1">
-              <span className="text-xs font-semibold text-[#717971]">SKU</span>
-              <select
-                className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm"
-                value={adjustSkuId}
-                onChange={(event) => setAdjustSkuId(event.target.value)}
-              >
-                <option value="">Chọn SKU</option>
-                {rows.map((row) => (
-                  <option key={row.skuId} value={row.skuId}>
-                    {row.skuCode} — {row.productName} (kho: {row.warehouseQuantityOnHand})
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="space-y-2 sm:col-span-1">
-              <span className="text-xs font-semibold text-[#717971]">Số lượng thay đổi</span>
-              <input
-                type="number"
-                className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm"
-                placeholder="VD: 200 hoặc -10"
-                value={adjustDelta}
-                onChange={(event) => setAdjustDelta(event.target.value)}
-              />
-            </label>
-            <div className="flex items-end sm:col-span-1">
-              <button
-                type="submit"
-                disabled={Boolean(actingSkuId)}
-                className="rounded-xl bg-[#538463] px-5 py-3 text-sm font-bold text-white hover:bg-[#457053] disabled:opacity-50"
-              >
-                {actingSkuId ? 'Đang lưu...' : 'Cập nhật kho tổng'}
-              </button>
-            </div>
-          </form>
-        </section>
-      ) : null}
+      <div className="mb-4 flex flex-wrap gap-3">
+        <Link
+          to="/inventory/import"
+          className="inline-flex items-center gap-2 rounded-xl bg-[#538463] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#457053]"
+        >
+          <span className="material-symbols-outlined text-[18px]">add</span>
+          Nhập lô mới
+        </Link>
+        <Link
+          to="/inventory/batches"
+          className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+        >
+          Xem chi tiết từng lô
+        </Link>
+      </div>
 
       <section className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
         <div className="overflow-x-auto">
@@ -183,18 +120,19 @@ function InventoryStockPage() {
                 <th className="px-6 py-3">SKU</th>
                 <th className="px-4 py-3">Sản phẩm</th>
                 <th className="px-4 py-3">Tồn kho tổng</th>
+                <th className="px-4 py-3">Lô đang còn</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {isLoading ? (
                 <tr>
-                  <td className="px-6 py-8 text-slate-500" colSpan={3}>
+                  <td className="px-6 py-8 text-slate-500" colSpan={4}>
                     Đang tải...
                   </td>
                 </tr>
               ) : filteredRows.length === 0 ? (
                 <tr>
-                  <td className="px-6 py-8 text-slate-500" colSpan={3}>
+                  <td className="px-6 py-8 text-slate-500" colSpan={4}>
                     Chưa có SKU — tạo sản phẩm và biến thể trước.
                   </td>
                 </tr>
@@ -210,6 +148,15 @@ function InventoryStockPage() {
                     </td>
                     <td className="px-4 py-4 font-semibold text-slate-800">
                       {formatStockQuantity(row.warehouseQuantityOnHand)}
+                    </td>
+                    <td className="px-4 py-4 text-slate-600">
+                      {row.activeLotCount > 0 ? (
+                        <Link to="/inventory/batches" className="font-semibold text-[#356647] hover:underline">
+                          {row.activeLotCount} lô
+                        </Link>
+                      ) : (
+                        <span className="text-amber-700">Chưa có lô</span>
+                      )}
                     </td>
                   </tr>
                 ))

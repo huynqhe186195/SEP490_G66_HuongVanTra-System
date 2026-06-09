@@ -11,6 +11,9 @@ public class InventoryDbContext(DbContextOptions<InventoryDbContext> options) : 
     public DbSet<ProcessedIntegrationEvent> ProcessedIntegrationEvents => Set<ProcessedIntegrationEvent>();
     public DbSet<StockAdjustmentRequest> StockAdjustmentRequests => Set<StockAdjustmentRequest>();
     public DbSet<StockExportSlip> StockExportSlips => Set<StockExportSlip>();
+    public DbSet<WarehouseBatch> WarehouseBatches => Set<WarehouseBatch>();
+    public DbSet<WarehouseBatchItem> WarehouseBatchItems => Set<WarehouseBatchItem>();
+    public DbSet<StockExportBatchAllocation> StockExportBatchAllocations => Set<StockExportBatchAllocation>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

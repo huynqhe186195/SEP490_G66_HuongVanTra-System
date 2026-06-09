@@ -10,6 +10,8 @@ public class ProductSku : BaseEntity
     public decimal BasePrice { get; set; }
     public string? ImageUrl { get; set; }
     public bool IsActive { get; set; } = true;
+    /// <summary>Thời điểm đồng bộ sang catalog cửa hàng; null = chưa bán tại quầy.</summary>
+    public DateTime? SyncedToStoreAt { get; set; }
 
     public Product Product { get; set; } = null!;
 }

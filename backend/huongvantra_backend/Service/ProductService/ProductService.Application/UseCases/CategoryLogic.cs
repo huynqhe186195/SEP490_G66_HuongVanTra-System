@@ -1,3 +1,4 @@
+using ProductService.Application;
 using ProductService.Application.DTOs.Requests;
 using ProductService.Application.DTOs.Responses;
 using ProductService.Application.Interfaces;
@@ -9,9 +10,11 @@ namespace ProductService.Application.UseCases;
 
 public class CategoryLogic(ICategoryRepository _categoryRepository)
 {
-    public async Task<List<CategoryResponse>> GetAllAsync(bool? isDeleted = null)
+    public async Task<List<CategoryResponse>> GetAllAsync(
+        bool? isDeleted = null,
+        CatalogViewScope scope = CatalogViewScope.Store)
     {
-        var categories = await _categoryRepository.GetAllAsync(isDeleted);
+        var categories = await _categoryRepository.GetAllAsync(isDeleted, scope);
         return categories.Select(MapToResponse).ToList();
     }
 
@@ -107,5 +110,5 @@ public class CategoryLogic(ICategoryRepository _categoryRepository)
     }
 
     private static CategoryResponse MapToResponse(Category c) =>
-        new(c.Id, c.Name, c.Description, c.ParentId, c.IsActive, c.IsDeleted, c.CreatedAt);
+        new(c.Id, c.Name, c.Description, c.ParentId, c.IsActive, c.IsDeleted, c.CreatedAt, c.SyncedToStoreAt);
 }

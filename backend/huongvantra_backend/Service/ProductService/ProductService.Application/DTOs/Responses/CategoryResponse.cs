@@ -7,4 +7,5 @@ public record CategoryResponse(
     int? ParentId,
     bool IsActive,
     bool IsDeleted,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    DateTime? SyncedToStoreAt);

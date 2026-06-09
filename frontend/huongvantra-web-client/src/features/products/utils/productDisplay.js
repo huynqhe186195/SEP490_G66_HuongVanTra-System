@@ -1,3 +1,7 @@
+export function isSyncedToStore(item) {
+  return Boolean(item?.syncedToStoreAt)
+}
+
 export function formatProductPrice(value) {
   const amount = Number(value)
   if (!Number.isFinite(amount)) return '—'

@@ -18,6 +18,14 @@ function mapExportSlip(row) {
     note: row.note ?? row.Note ?? '',
     createdBy: row.createdBy ?? row.CreatedBy,
     createdAt: row.createdAt ?? row.CreatedAt ?? null,
+    batchAllocations: (row.batchAllocations ?? row.BatchAllocations ?? []).map((a) => ({
+      id: a.id ?? a.Id,
+      warehouseBatchId: a.warehouseBatchId ?? a.WarehouseBatchId,
+      warehouseBatchItemId: a.warehouseBatchItemId ?? a.WarehouseBatchItemId,
+      lotCode: a.lotCode ?? a.LotCode ?? '',
+      skuCode: a.skuCode ?? a.SkuCode ?? '',
+      quantity: Number(a.quantity ?? a.Quantity ?? 0),
+    })),
   }
 }
 
