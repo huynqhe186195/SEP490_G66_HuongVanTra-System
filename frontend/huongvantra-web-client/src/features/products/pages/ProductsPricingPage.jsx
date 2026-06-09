@@ -6,13 +6,11 @@ import { showError, showSuccess } from '../../../app/toast.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import { canManageProducts } from '../../auth/utils/permissions.js'
 import { createCategory, deleteCategory, fetchCategories, updateCategory } from '../services/categoriesApi.js'
-import { getCategoryParentName } from '../utils/productDisplay.js'
 import { mapProductApiError, validateCategoryForm } from '../utils/productValidation.js'
 
 const EMPTY_FORM = {
   name: '',
   description: '',
-  parentId: '',
 }
 
 function FieldError({ message }) {
@@ -71,7 +69,6 @@ function ProductsPricingPage() {
     setForm({
       name: category.name || '',
       description: category.description || '',
-      parentId: category.parentId ? String(category.parentId) : '',
     })
     setFieldErrors({})
   }
@@ -97,7 +94,7 @@ function ProductsPricingPage() {
     const payload = {
       name: form.name,
       description: form.description,
-      parentId: form.parentId ? Number(form.parentId) : null,
+      parentId: null,
     }
 
     try {
@@ -137,13 +134,11 @@ function ProductsPricingPage() {
     }
   }
 
-  const parentOptions = categories.filter((item) => item.id !== editingId)
-
   return (
     <PageShell>
       <PageHeader
         title="Danh mục sản phẩm"
-        description="Quản lý cây danh mục. Tên danh mục không được trùng; danh mục không thể là cha của chính nó."
+        description="Danh mục phẳng (Trà xanh, Trà đen, Phụ kiện...). Tên danh mục không được trùng."
         searchPlaceholder="Tìm danh mục..."
         searchValue={searchInput}
         onSearchChange={setSearchInput}
@@ -171,23 +166,6 @@ function ProductsPricingPage() {
                   onChange={updateField('name')}
                 />
                 <FieldError message={fieldErrors.name} />
-              </label>
-
-              <label className="block space-y-1">
-                <span className="text-xs font-semibold text-[#717971]">Danh mục cha</span>
-                <select
-                  className={`w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20 ${fieldErrors.parentId ? 'ring-2 ring-[#b42318]/40' : ''}`}
-                  value={form.parentId}
-                  onChange={updateField('parentId')}
-                >
-                  <option value="">Không có (gốc)</option>
-                  {parentOptions.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.name}
-                    </option>
-                  ))}
-                </select>
-                <FieldError message={fieldErrors.parentId} />
               </label>
 
               <label className="block space-y-1">
@@ -227,7 +205,6 @@ function ProductsPricingPage() {
                 <thead className="bg-slate-50 text-slate-500">
                   <tr>
                     <th className="px-4 py-3 font-semibold">Tên</th>
-                    <th className="px-4 py-3 font-semibold">Danh mục cha</th>
                     <th className="px-4 py-3 font-semibold">Mô tả</th>
                     {canManage ? <th className="px-4 py-3 font-semibold">Thao tác</th> : null}
                   </tr>
@@ -236,7 +213,6 @@ function ProductsPricingPage() {
                   {filteredCategories.map((category) => (
                     <tr key={category.id}>
                       <td className="px-4 py-3 font-semibold text-slate-900">{category.name}</td>
-                      <td className="px-4 py-3 text-slate-600">{getCategoryParentName(categories, category.parentId)}</td>
                       <td className="px-4 py-3 text-slate-600">{category.description || '—'}</td>
                       {canManage ? (
                         <td className="px-4 py-3">

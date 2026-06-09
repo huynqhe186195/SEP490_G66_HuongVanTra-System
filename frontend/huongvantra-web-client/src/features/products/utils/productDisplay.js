@@ -91,9 +91,7 @@ export function buildCategoryOptions(categories = [], excludeId = null) {
     .filter((item) => item.id !== excludeId)
     .map((item) => ({
       value: String(item.id),
-      label: item.parentId
-        ? `${item.name} (con của ${categories.find((c) => c.id === item.parentId)?.name || '—'})`
-        : item.name,
+      label: item.name,
     }))
 }
 
