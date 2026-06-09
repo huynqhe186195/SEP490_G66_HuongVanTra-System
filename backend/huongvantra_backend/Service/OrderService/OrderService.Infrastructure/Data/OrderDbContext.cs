@@ -1,0 +1,21 @@
+using Microsoft.EntityFrameworkCore;
+using OrderService.Domain.Entities;
+
+namespace OrderService.Infrastructure.Data;
+
+public class OrderDbContext(DbContextOptions<OrderDbContext> options) : DbContext(options)
+{
+    public DbSet<Order> Orders => Set<Order>();
+    public DbSet<OrderDetail> OrderDetails => Set<OrderDetail>();
+    public DbSet<Payment> Payments => Set<Payment>();
+    public DbSet<OrderActivity> OrderActivities => Set<OrderActivity>();
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.ApplyConfigurationsFromAssembly(typeof(OrderDbContext).Assembly);
+
+        modelBuilder.Entity<Order>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<OrderDetail>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<Payment>().HasQueryFilter(e => !e.IsDeleted);
+    }
+}

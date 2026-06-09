@@ -1,6 +1,7 @@
 using UserService.Application.DTOs.Requests;
 using UserService.Application.DTOs.Responses;
 using UserService.Application.Interfaces;
+using UserService.Application.Validation;
 using UserService.Domain.Entities;
 using UserService.Domain.Enums;
 using UserService.Domain.Exceptions;
@@ -14,6 +15,9 @@ public class EmployeeLogic(
 {
     public async Task<EmployeeDetailResponse> CreateAsync(CreateEmployeeRequest request)
     {
+        UserInputValidator.ValidateSingleRole(request.RoleIds);
+        UserInputValidator.ValidatePhoneIfProvided(request.BankAccountInfo);
+
         if (await userRepo.ExistsAsync(request.Username))
             throw new DuplicateUsernameException(request.Username);
 
@@ -95,14 +99,25 @@ public class EmployeeLogic(
         await employeeRepo.SaveChangesAsync();
     }
 
-    private static EmployeeDetailResponse MapToDetail(Employee employee) => new(
-        employee.Id,
-        employee.UserId,
-        employee.User?.Username ?? string.Empty,
-        employee.FullName,
-        employee.Department,
-        employee.ActualSalary,
-        employee.BankAccountInfo,
-        employee.Status.ToString(),
-        employee.User?.IsActive ?? false);
+    private static EmployeeDetailResponse MapToDetail(Employee employee)
+    {
+        var roles = employee.User?.UserRoles?
+            .Select(ur => ur.Role?.RoleName)
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Select(name => name!)
+            .Distinct()
+            .ToList() ?? [];
+
+        return new EmployeeDetailResponse(
+            employee.Id,
+            employee.UserId,
+            employee.User?.Username ?? string.Empty,
+            employee.FullName,
+            employee.Department,
+            employee.ActualSalary,
+            employee.BankAccountInfo,
+            employee.Status.ToString(),
+            employee.User?.IsActive ?? false,
+            roles);
+    }
 }

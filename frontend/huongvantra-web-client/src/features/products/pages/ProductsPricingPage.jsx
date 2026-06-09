@@ -1,72 +1,269 @@
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
+import PageShell from '../../../components/shared/PageShell.jsx'
+import { showError, showSuccess } from '../../../app/toast.js'
+import { loadAuthSession } from '../../auth/services/authSession.js'
+import { canManageProducts } from '../../auth/utils/permissions.js'
+import { createCategory, deleteCategory, fetchCategories, updateCategory } from '../services/categoriesApi.js'
+import { getCategoryParentName } from '../utils/productDisplay.js'
+import { mapProductApiError, validateCategoryForm } from '../utils/productValidation.js'
 
-const categoryCards = [
-  { name: 'Trà xanh', count: '17 sản phẩm' },
-  { name: 'Trà móc câu', count: '14 sản phẩm' },
-  { name: 'Kẹo trà', count: '4 sản phẩm' },
-  { name: 'Dụng cụ trà', count: '22 sản phẩm' },
-  { name: 'Set quà', count: '17 sản phẩm' },
-]
+const EMPTY_FORM = {
+  name: '',
+  description: '',
+  parentId: '',
+}
 
-const pricingRules = [
-  { label: 'Giá POS', value: 'Theo giá lẻ' },
-  { label: 'Giá Website', value: 'Theo khuyến mãi' },
-  { label: 'Giá Đại lý', value: 'Chiết khấu 12%' },
-  { label: 'Hiệu lực', value: '01/05/2026' },
-]
+function FieldError({ message }) {
+  if (!message) return null
+  return <p className="text-xs text-[#b42318]">{message}</p>
+}
 
 function ProductsPricingPage() {
+  const session = loadAuthSession()
+  const canManage = canManageProducts(session)
+
+  const [categories, setCategories] = useState([])
+  const [searchInput, setSearchInput] = useState('')
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
+  const [editingId, setEditingId] = useState(null)
+  const [form, setForm] = useState(EMPTY_FORM)
+  const [fieldErrors, setFieldErrors] = useState({})
+  const [deletingId, setDeletingId] = useState(null)
+
+  const loadData = useCallback(async () => {
+    try {
+      setIsLoading(true)
+      const items = await fetchCategories()
+      setCategories(items)
+    } catch (error) {
+      showError(error.message)
+      setCategories([])
+    } finally {
+      setIsLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadData()
+  }, [loadData])
+
+  const filteredCategories = useMemo(() => {
+    const keyword = searchInput.trim().toLowerCase()
+    if (!keyword) return categories
+    return categories.filter((item) => {
+      const name = String(item.name || '').toLowerCase()
+      const description = String(item.description || '').toLowerCase()
+      return name.includes(keyword) || description.includes(keyword)
+    })
+  }, [categories, searchInput])
+
+  function resetForm() {
+    setEditingId(null)
+    setForm(EMPTY_FORM)
+    setFieldErrors({})
+  }
+
+  function startEdit(category) {
+    setEditingId(category.id)
+    setForm({
+      name: category.name || '',
+      description: category.description || '',
+      parentId: category.parentId ? String(category.parentId) : '',
+    })
+    setFieldErrors({})
+  }
+
+  function updateField(key) {
+    return (event) => {
+      setForm((prev) => ({ ...prev, [key]: event.target.value }))
+      setFieldErrors((prev) => ({ ...prev, [key]: undefined }))
+    }
+  }
+
+  async function handleSubmit(event) {
+    event.preventDefault()
+    if (!canManage) return
+
+    const validation = validateCategoryForm({ ...form, categoryId: editingId })
+    if (!validation.valid) {
+      setFieldErrors(validation.errors)
+      showError(validation.message)
+      return
+    }
+
+    const payload = {
+      name: form.name,
+      description: form.description,
+      parentId: form.parentId ? Number(form.parentId) : null,
+    }
+
+    try {
+      setIsSaving(true)
+      if (editingId) {
+        await updateCategory(editingId, payload)
+        showSuccess('Đã cập nhật danh mục.')
+      } else {
+        await createCategory(payload)
+        showSuccess('Đã thêm danh mục.')
+      }
+      resetForm()
+      await loadData()
+    } catch (error) {
+      const mapped = mapProductApiError(error.message, error.apiErrors)
+      if (Object.keys(mapped.errors).length) setFieldErrors((prev) => ({ ...prev, ...mapped.errors }))
+      else if (mapped.field) setFieldErrors((prev) => ({ ...prev, [mapped.field]: mapped.message }))
+      showError(mapped.message)
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  async function handleDelete(category) {
+    if (!canManage) return
+    if (!window.confirm(`Xóa danh mục "${category.name}"? Danh mục sẽ được ẩn khỏi hệ thống (soft delete).`)) return
+    try {
+      setDeletingId(category.id)
+      await deleteCategory(category.id)
+      showSuccess('Đã xóa danh mục.')
+      if (editingId === category.id) resetForm()
+      await loadData()
+    } catch (error) {
+      showError(error.message)
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
+  const parentOptions = categories.filter((item) => item.id !== editingId)
+
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto sm:gap-6">
+    <PageShell>
       <PageHeader
-        title="Danh mục &amp; bảng giá"
-        description="Cây danh mục, quy tắc giá lẻ, giá đại lý và giá theo kênh"
-        searchPlaceholder="Tìm kiếm nhanh..."
+        title="Danh mục sản phẩm"
+        description="Quản lý cây danh mục. Tên danh mục không được trùng; danh mục không thể là cha của chính nó."
+        searchPlaceholder="Tìm danh mục..."
+        searchValue={searchInput}
+        onSearchChange={setSearchInput}
+        rightContent={
+          <Link
+            to="/products"
+            className="inline-flex items-center gap-2 rounded-xl border border-[#356647]/30 bg-white px-4 py-2.5 text-sm font-semibold text-[#356647] hover:bg-[#356647]/5"
+          >
+            <span className="material-symbols-outlined text-[18px]">inventory_2</span>
+            Danh sách sản phẩm
+          </Link>
+        }
       />
 
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-white p-3 shadow-sm">
-        <div className="text-sm font-medium text-slate-500">Danh mục và quy tắc giá</div>
-        <Link className="rounded-xl bg-[#a3c4ae]/40 px-6 py-2 text-sm font-semibold text-[#3e634a] transition hover:bg-[#a3c4ae]/60" to="/products/create">
-          Lưu nháp
-        </Link>
-      </div>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+        {canManage ? (
+          <section className="rounded-[1rem] bg-white p-4 shadow-sm sm:p-6 lg:col-span-4 lg:p-8">
+            <h2 className="mb-4 text-lg font-bold text-slate-800">{editingId ? 'Sửa danh mục' : 'Thêm danh mục'}</h2>
+            <form className="space-y-4" onSubmit={handleSubmit}>
+              <label className="block space-y-1">
+                <span className="text-xs font-semibold text-[#717971]">Tên danh mục *</span>
+                <input
+                  className={`w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20 ${fieldErrors.name ? 'ring-2 ring-[#b42318]/40' : ''}`}
+                  value={form.name}
+                  onChange={updateField('name')}
+                />
+                <FieldError message={fieldErrors.name} />
+              </label>
 
-      <div className="flex flex-1 flex-col gap-6 overflow-y-auto pb-2 lg:flex-row lg:gap-8 lg:pb-6">
-        <section className="rounded-[1rem] bg-white p-4 shadow-sm sm:p-6 lg:flex-[3] lg:p-8" data-purpose="category-tree">
-          <h2 className="mb-6 text-lg font-bold text-gray-800">Cây danh mục</h2>
+              <label className="block space-y-1">
+                <span className="text-xs font-semibold text-[#717971]">Danh mục cha</span>
+                <select
+                  className={`w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20 ${fieldErrors.parentId ? 'ring-2 ring-[#b42318]/40' : ''}`}
+                  value={form.parentId}
+                  onChange={updateField('parentId')}
+                >
+                  <option value="">Không có (gốc)</option>
+                  {parentOptions.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                    </option>
+                  ))}
+                </select>
+                <FieldError message={fieldErrors.parentId} />
+              </label>
 
-          <div className="grid grid-cols-1 content-start gap-4 sm:grid-cols-2">
-            {categoryCards.map((item) => (
-              <div key={item.name} className="cursor-pointer rounded-xl border border-gray-100 p-5 transition hover:border-[#538463]/30">
-                <span className="text-xs font-medium text-gray-400">{item.name}</span>
-                <p className="mt-1 text-base font-bold text-gray-700">{item.count}</p>
+              <label className="block space-y-1">
+                <span className="text-xs font-semibold text-[#717971]">Mô tả</span>
+                <textarea
+                  className={`min-h-[88px] w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20 ${fieldErrors.description ? 'ring-2 ring-[#b42318]/40' : ''}`}
+                  value={form.description}
+                  onChange={updateField('description')}
+                />
+                <FieldError message={fieldErrors.description} />
+              </label>
+
+              <div className="flex flex-wrap gap-2">
+                <button type="submit" disabled={isSaving} className="rounded-xl bg-[#538463] px-5 py-2.5 text-sm font-bold text-white hover:bg-[#457053] disabled:opacity-50">
+                  {isSaving ? 'Đang lưu...' : editingId ? 'Cập nhật' : 'Thêm danh mục'}
+                </button>
+                {editingId ? (
+                  <button type="button" className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-700" onClick={resetForm}>
+                    Hủy
+                  </button>
+                ) : null}
               </div>
-            ))}
-          </div>
+            </form>
+          </section>
+        ) : null}
 
-          <div className="mt-8 flex justify-center">
-            <button type="button" className="flex items-center space-x-2 rounded-xl bg-[#538463] px-8 py-3 font-medium text-white shadow-md transition hover:bg-[#3e634a]">
-              <span className="text-xl">+</span>
-              <span>Thêm danh mục</span>
-            </button>
-          </div>
-        </section>
+        <section className={`rounded-[1rem] bg-white p-4 shadow-sm sm:p-6 lg:p-8 ${canManage ? 'lg:col-span-8' : 'lg:col-span-12'}`}>
+          <h2 className="mb-4 text-lg font-bold text-slate-800">Danh sách danh mục</h2>
 
-        <section className="rounded-[1rem] bg-white p-4 shadow-sm sm:p-6 lg:flex-[1.5] lg:p-8" data-purpose="pricing-rules">
-          <h2 className="mb-6 text-lg font-bold text-gray-800">Quy tắc bảng giá</h2>
-
-          <div className="space-y-4">
-            {pricingRules.map((rule) => (
-              <div key={rule.label} className="rounded-xl border border-gray-100 p-5">
-                <span className="text-xs font-medium text-gray-400">{rule.label}</span>
-                <p className="mt-1 text-base font-bold text-gray-700">{rule.value}</p>
-              </div>
-            ))}
-          </div>
+          {isLoading ? (
+            <p className="text-sm text-slate-500">Đang tải...</p>
+          ) : filteredCategories.length === 0 ? (
+            <p className="rounded-xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-500">Chưa có danh mục nào.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-slate-100 text-left text-sm">
+                <thead className="bg-slate-50 text-slate-500">
+                  <tr>
+                    <th className="px-4 py-3 font-semibold">Tên</th>
+                    <th className="px-4 py-3 font-semibold">Danh mục cha</th>
+                    <th className="px-4 py-3 font-semibold">Mô tả</th>
+                    {canManage ? <th className="px-4 py-3 font-semibold">Thao tác</th> : null}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filteredCategories.map((category) => (
+                    <tr key={category.id}>
+                      <td className="px-4 py-3 font-semibold text-slate-900">{category.name}</td>
+                      <td className="px-4 py-3 text-slate-600">{getCategoryParentName(categories, category.parentId)}</td>
+                      <td className="px-4 py-3 text-slate-600">{category.description || '—'}</td>
+                      {canManage ? (
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <button type="button" className="text-sm font-semibold text-[#356647] hover:underline" onClick={() => startEdit(category)}>
+                              Sửa
+                            </button>
+                            <button
+                              type="button"
+                              disabled={deletingId === category.id}
+                              className="text-sm font-semibold text-[#b42318] hover:underline disabled:opacity-50"
+                              onClick={() => handleDelete(category)}
+                            >
+                              Xóa
+                            </button>
+                          </div>
+                        </td>
+                      ) : null}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </section>
       </div>
-    </div>
+    </PageShell>
   )
 }
 

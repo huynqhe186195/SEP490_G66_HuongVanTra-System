@@ -44,5 +44,6 @@ export function mapEmployee(item) {
     bankAccountInfo: item.bankAccountInfo ?? item.BankAccountInfo ?? '',
     status: item.status ?? item.Status ?? 'Active',
     isActive: Boolean(item.isUserActive ?? item.IsUserActive ?? true),
+    roles: Array.isArray(item.roles ?? item.Roles) ? (item.roles ?? item.Roles) : [],
   }
 }

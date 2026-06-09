@@ -20,7 +20,16 @@ CREATE DATABASE IF NOT EXISTS `hvt_product_db`
 
 GRANT ALL PRIVILEGES ON `hvt_product_db`.* TO 'hvtuser'@'%';
 
--- Thêm database cho các service sau này
--- CREATE DATABASE IF NOT EXISTS `hvt_order_db` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE IF NOT EXISTS `hvt_order_db`
+  CHARACTER SET utf8mb4
+  COLLATE utf8mb4_unicode_ci;
+
+GRANT ALL PRIVILEGES ON `hvt_order_db`.* TO 'hvtuser'@'%';
+
+CREATE DATABASE IF NOT EXISTS `hvt_inventory_db`
+  CHARACTER SET utf8mb4
+  COLLATE utf8mb4_unicode_ci;
+
+GRANT ALL PRIVILEGES ON `hvt_inventory_db`.* TO 'hvtuser'@'%';
 
 FLUSH PRIVILEGES;

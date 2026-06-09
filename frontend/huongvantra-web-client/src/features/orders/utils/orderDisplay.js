@@ -1,34 +1,194 @@
 export function formatVnd(amount) {
   const value = Number(amount) || 0
-  return `${value.toLocaleString('vi-VN')} đ`
+  return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 2 }).format(value)
+}
+
+export function normalizeOrderKey(value) {
+  return String(value || '').trim()
 }
 
 export const ORDER_STATUS_OPTIONS = [
-  { value: '', label: 'Tất cả trạng thái đơn' },
-  { value: 'confirmed', label: 'Đã xác nhận' },
-  { value: 'completed', label: 'Hoàn tất' },
-  { value: 'cancelled', label: 'Đã hủy' },
-  { value: 'pending', label: 'Chờ xử lý' },
-  { value: 'packing', label: 'Đóng gói' },
-  { value: 'shipping', label: 'Đang giao' },
+  { value: '', label: 'Tất cả trạng thái' },
+  { value: 'PendingPayment', label: 'Chờ thanh toán' },
+  { value: 'Processing', label: 'Đang xử lý' },
+  { value: 'Shipping', label: 'Đang giao' },
+  { value: 'Completed', label: 'Hoàn tất' },
+  { value: 'Cancelled', label: 'Đã hủy' },
 ]
 
-export const PAYMENT_STATUS_OPTIONS = [
-  { value: '', label: 'Tất cả thanh toán' },
-  { value: 'unpaid', label: 'Chưa thu' },
-  { value: 'pending_payment', label: 'Chờ thanh toán' },
-  { value: 'paid', label: 'Đã thu' },
-  { value: 'partial', label: 'Thu một phần' },
+export const ORDER_CHANNEL_OPTIONS = [
+  { value: '', label: 'Tất cả kênh' },
+  { value: 'POS', label: 'Bán trực tiếp tại quầy' },
+  { value: 'Website', label: 'Website' },
+  { value: 'Zalo', label: 'Zalo' },
+  { value: 'Phone', label: 'Điện thoại' },
+]
+
+export const ORDER_CHANNEL_CREATE_OPTIONS = [
+  { value: 'POS', label: 'Bán trực tiếp tại quầy' },
+  { value: 'Phone', label: 'Điện thoại' },
+  { value: 'Zalo', label: 'Zalo' },
+  { value: 'Website', label: 'Website' },
 ]
 
 export const PAYMENT_METHOD_OPTIONS = [
-  { value: '', label: 'Tất cả PT thanh toán' },
-  { value: 'CASH', label: 'Tiền mặt' },
-  { value: 'TRANSFER', label: 'Chuyển khoản' },
-  { value: 'VIETQR', label: 'VietQR' },
-  { value: 'COD', label: 'COD' },
+  { value: 'Cash', label: 'Tiền mặt' },
+  { value: 'VietQR', label: 'VietQR' },
+  { value: 'BankTransfer', label: 'Chuyển khoản' },
+  { value: 'COD', label: 'COD (thu hộ)' },
 ]
 
+export function getOrderStatusLabel(status) {
+  const key = normalizeOrderKey(status)
+  const map = {
+    Draft: 'Nháp',
+    PendingPayment: 'Chờ thanh toán',
+    Processing: 'Đang xử lý',
+    Shipping: 'Đang giao',
+    Completed: 'Hoàn tất',
+    Cancelled: 'Đã hủy',
+  }
+  return map[key] || status || '—'
+}
+
+export function getOrderChannelLabel(channel) {
+  const key = normalizeOrderKey(channel)
+  const map = {
+    POS: 'Bán trực tiếp tại quầy',
+    Website: 'Website',
+    Zalo: 'Zalo',
+    Phone: 'Điện thoại',
+  }
+  return map[key] || channel || '—'
+}
+
+export function getPaymentMethodLabel(method) {
+  const key = normalizeOrderKey(method)
+  const map = {
+    Cash: 'Tiền mặt',
+    VietQR: 'VietQR',
+    BankTransfer: 'Chuyển khoản',
+    COD: 'COD',
+  }
+  return map[key] || method || '—'
+}
+
+export function getPaymentStatusLabel(status) {
+  const key = normalizeOrderKey(status)
+  const map = {
+    Pending: 'Chờ xử lý',
+    Success: 'Thành công',
+    Failed: 'Thất bại',
+  }
+  return map[key] || status || '—'
+}
+
+export function getInventorySyncLabel(status) {
+  const key = normalizeOrderKey(status)
+  const map = {
+    Synced: 'Đã đồng bộ kho',
+    PendingDeduction: 'Chờ trừ kho',
+  }
+  return map[key] || status || '—'
+}
+
+export function getOrderStatusClass(status) {
+  const key = normalizeOrderKey(status)
+  if (key === 'Completed') return 'bg-emerald-50 text-emerald-700'
+  if (key === 'Cancelled') return 'bg-red-50 text-red-600'
+  if (key === 'Shipping' || key === 'Processing') return 'bg-blue-50 text-blue-700'
+  if (key === 'PendingPayment') return 'bg-amber-50 text-amber-700'
+  return 'bg-slate-100 text-slate-600'
+}
+
+export function getPaymentStatusClass(status) {
+  const key = normalizeOrderKey(status)
+  if (key === 'Success') return 'bg-emerald-50 text-emerald-700'
+  if (key === 'Failed') return 'bg-red-50 text-red-600'
+  return 'bg-amber-50 text-amber-700'
+}
+
+export function getInventorySyncClass(status) {
+  const key = normalizeOrderKey(status)
+  if (key === 'Synced') return 'bg-emerald-50 text-emerald-700'
+  return 'bg-slate-100 text-slate-600'
+}
+
+export function isCodOrder(order) {
+  const payment = order?.payments?.[0]
+  return normalizeOrderKey(payment?.paymentMethod) === 'COD'
+}
+
+export function isOrderTerminal(order) {
+  const status = normalizeOrderKey(order?.orderStatus)
+  return status === 'Completed' || status === 'Cancelled'
+}
+
+export function canEditOrderMeta(order) {
+  return Boolean(order && !isOrderTerminal(order))
+}
+
+export function canShipOrder(order) {
+  const status = normalizeOrderKey(order?.orderStatus)
+  return status === 'PendingPayment' || status === 'Processing'
+}
+
+export function canCompleteOrder(order) {
+  const status = normalizeOrderKey(order?.orderStatus)
+  return status !== 'Cancelled' && status !== 'Completed'
+}
+
+export function canCancelOrder(order) {
+  return canEditOrderMeta(order)
+}
+
+export function canVerifyCod(order) {
+  const payment = order?.payments?.find((row) => normalizeOrderKey(row.paymentMethod) === 'COD')
+  return Boolean(payment && !payment.isCodVerified)
+}
+
+export function getPrimaryPayment(order) {
+  return order?.payments?.[0] || null
+}
+
+export function getCodDaysPending(payment) {
+  if (!payment?.codWarningDate) return 0
+  const warning = new Date(payment.codWarningDate)
+  const createdOffset = warning.getTime() - 7 * 24 * 60 * 60 * 1000
+  const days = Math.floor((Date.now() - createdOffset) / (24 * 60 * 60 * 1000))
+  return Math.max(0, days)
+}
+
+export function isCodOverdue(payment) {
+  if (!payment?.codWarningDate) return false
+  return new Date(payment.codWarningDate).getTime() <= Date.now()
+}
+
+export function requiresShippingAddress(channel) {
+  const key = normalizeOrderKey(channel)
+  return key === 'Website' || key === 'Zalo' || key === 'Phone'
+}
+
+export function isPosChannel(channel) {
+  return normalizeOrderKey(channel) === 'POS'
+}
+
+export function getCreateOrderPaymentOptions(channel) {
+  if (isPosChannel(channel)) {
+    return PAYMENT_METHOD_OPTIONS.filter((opt) => opt.value !== 'COD')
+  }
+  return PAYMENT_METHOD_OPTIONS
+}
+
+export function calcOrderLineSubtotal(lines = []) {
+  return lines.reduce((sum, line) => sum + Number(line.quantity || 0) * Number(line.unitPrice || 0), 0)
+}
+
+export function calcOrderFinalAmount(lines = [], discountAmount = 0) {
+  return Math.max(0, calcOrderLineSubtotal(lines) - Number(discountAmount || 0))
+}
+
+// Legacy helpers still used by inventory stock-deduct pages
 export const STOCK_STATUS_OPTIONS = [
   { value: 'pending_deduct', label: 'Chờ trừ kho' },
   { value: 'deducted', label: 'Đã trừ kho' },
@@ -36,47 +196,13 @@ export const STOCK_STATUS_OPTIONS = [
   { value: 'cancelled', label: 'Đã hủy (kho)' },
 ]
 
-export function getOrderStatusLabel(status) {
-  const key = String(status || '').toLowerCase()
-  const map = {
-    confirmed: 'Đã xác nhận',
-    pending: 'Chờ xử lý',
-    packing: 'Đóng gói',
-    shipping: 'Đang giao',
-    processing: 'Đang xử lý',
-    completed: 'Hoàn tất',
-    cancelled: 'Đã hủy',
-  }
-  return map[key] || status || '—'
-}
-
-export function getPaymentStatusLabel(status) {
-  const key = String(status || '').toLowerCase()
-  const map = {
-    unpaid: 'Chưa thu',
-    pending_payment: 'Chờ thanh toán',
-    partial: 'Thu một phần',
-    paid: 'Đã thu',
-  }
-  return map[key] || status || '—'
-}
-
-export function getPaymentMethodLabel(method) {
-  const key = String(method || '').toUpperCase()
-  const map = {
-    CASH: 'Tiền mặt',
-    TRANSFER: 'Chuyển khoản',
-    VIETQR: 'VietQR',
-    COD: 'COD',
-  }
-  return map[key] || method || '—'
-}
-
 export function getStockStatusLabel(status) {
   const key = String(status || '').toLowerCase()
   const map = {
     pending_deduct: 'Chờ trừ kho',
+    pendingdeduction: 'Chờ trừ kho',
     deducted: 'Đã trừ kho',
+    synced: 'Đã trừ kho',
     waiting_stock: 'Chờ hàng',
     cancelled: 'Đã hủy',
   }
@@ -96,60 +222,8 @@ export function getQueueStatusLabel(status) {
 
 export function getStockStatusClass(status) {
   const key = String(status || '').toLowerCase()
-  if (key === 'deducted') return 'bg-[#b9d4b0]/30 text-[#538463]'
-  if (key === 'waiting_stock') return 'bg-amber-50 text-amber-700'
+  if (key === 'deducted' || key === 'synced') return 'bg-[#b9d4b0]/30 text-[#538463]'
+  if (key === 'waiting_stock' || key === 'insufficient') return 'bg-amber-50 text-amber-700'
   if (key === 'cancelled') return 'bg-red-50 text-red-600'
   return 'bg-slate-100 text-slate-600'
-}
-
-export function getOrderChannelLabel(orderCode) {
-  const code = String(orderCode || '').toUpperCase()
-  if (code.startsWith('POS-')) return 'POS tại quầy'
-  if (code.startsWith('ONL-')) return 'Online / mang đi'
-  return 'Khác'
-}
-
-export function getOrderStatusClass(status) {
-  const key = String(status || '').toLowerCase()
-  if (key === 'completed') return 'bg-[#b9d4b0]/30 text-[#538463]'
-  if (key === 'cancelled') return 'bg-red-50 text-red-600'
-  if (key === 'processing' || key === 'confirmed') return 'bg-amber-50 text-amber-700'
-  return 'bg-slate-100 text-slate-600'
-}
-
-export function getPaymentStatusClass(status) {
-  const key = String(status || '').toLowerCase()
-  if (key === 'paid') return 'bg-[#b9d4b0]/30 text-[#538463]'
-  if (key === 'partial') return 'bg-blue-50 text-blue-600'
-  return 'bg-amber-50 text-amber-700'
-}
-
-export function isCodOrder(order) {
-  const method = String(order?.paymentMethod || order?.payments?.[0]?.paymentMethod || '').toUpperCase()
-  return method === 'COD'
-}
-
-export function canConfirmCod(order) {
-  if (!isCodOrder(order)) return false
-  const payment = String(order?.paymentStatus || '').toLowerCase()
-  const orderStatus = String(order?.orderStatus || '').toLowerCase()
-  return payment !== 'paid' && orderStatus !== 'cancelled' && orderStatus !== 'completed'
-}
-
-export function isOrderLockedForEditing(order) {
-  if (!order) return true
-  const orderStatus = String(order.orderStatus || '').toLowerCase()
-  const paymentStatus = String(order.paymentStatus || '').toLowerCase()
-  const stockStatus = String(order.stockStatus || '').toLowerCase()
-  if (orderStatus === 'cancelled') return true
-  return orderStatus === 'completed' && paymentStatus === 'paid' && stockStatus === 'deducted'
-}
-
-export function canEditOrderItems(order) {
-  if (!order || isOrderLockedForEditing(order)) return false
-  return true
-}
-
-export function canModifyOrder(order, hasEditPermission = true) {
-  return Boolean(hasEditPermission && order && !isOrderLockedForEditing(order))
 }

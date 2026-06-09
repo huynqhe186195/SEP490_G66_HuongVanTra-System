@@ -1,6 +1,8 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using ProductService.Application.DTOs.Requests;
 using ProductService.Application.UseCases;
+using HuongVanTra.Shared.Auth;
 
 namespace ProductService.WebAPI.Controllers;
 
@@ -9,8 +11,13 @@ namespace ProductService.WebAPI.Controllers;
 public class ProductSkusController(ProductSkuLogic _skuLogic) : ControllerBase
 {
     [HttpGet]
-    public async Task<IActionResult> GetAll([FromQuery] bool includeInactive = false) =>
-        Ok(await _skuLogic.GetAllAsync(includeInactive));
+    public async Task<IActionResult> GetPaged(
+        [FromQuery] string? search,
+        [FromQuery] Guid? productId,
+        [FromQuery] bool? isActive,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20) =>
+        Ok(await _skuLogic.GetPagedAsync(new GetProductSkusRequest(search, productId, isActive, page, pageSize)));
 
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetById(Guid id) =>
@@ -25,6 +32,7 @@ public class ProductSkusController(ProductSkuLogic _skuLogic) : ControllerBase
         Ok(await _skuLogic.GetByProductIdAsync(productId));
 
     [HttpPost]
+    [Authorize(Policy = PermissionNames.ManageRole)]
     public async Task<IActionResult> Create([FromBody] CreateProductSkuRequest request)
     {
         var result = await _skuLogic.CreateAsync(request);
@@ -32,10 +40,12 @@ public class ProductSkusController(ProductSkuLogic _skuLogic) : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
+    [Authorize(Policy = PermissionNames.ManageRole)]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateProductSkuRequest request) =>
         Ok(await _skuLogic.UpdateAsync(id, request));
 
     [HttpDelete("{id:guid}")]
+    [Authorize(Policy = PermissionNames.ManageRole)]
     public async Task<IActionResult> Delete(Guid id)
     {
         await _skuLogic.DeleteAsync(id);

@@ -6,6 +6,7 @@ import {
   fetchCustomerAddresses,
   updateCustomerAddress,
 } from '../services/customersApi.js'
+import { normalizePhoneInput, validateCustomerAddressForm } from '../utils/customerValidation.js'
 
 const emptyForm = {
   receiverName: '',
@@ -17,12 +18,13 @@ const emptyForm = {
   isDefault: false,
 }
 
-function CustomerAddressesPanel({ customerId }) {
+function CustomerAddressesPanel({ customerId, standalone = false }) {
   const [addresses, setAddresses] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [form, setForm] = useState(emptyForm)
+  const [fieldErrors, setFieldErrors] = useState({})
 
   async function loadAddresses() {
     try {
@@ -45,6 +47,7 @@ function CustomerAddressesPanel({ customerId }) {
   function resetForm() {
     setForm(emptyForm)
     setEditingId(null)
+    setFieldErrors({})
   }
 
   function startEdit(address) {
@@ -61,10 +64,13 @@ function CustomerAddressesPanel({ customerId }) {
   }
 
   async function handleSubmit() {
-    if (!form.receiverName.trim() || !form.addressLine.trim()) {
-      showError('Vui lòng nhập tên người nhận và địa chỉ.')
+    const validation = validateCustomerAddressForm(form)
+    if (!validation.valid) {
+      setFieldErrors(validation.errors)
+      showError(validation.message)
       return
     }
+    setFieldErrors({})
 
     try {
       setIsSaving(true)
@@ -109,11 +115,26 @@ function CustomerAddressesPanel({ customerId }) {
 
   const updateField = (field) => (event) => {
     const value = field === 'isDefault' ? event.target.checked : event.target.value
-    setForm((current) => ({ ...current, [field]: value }))
+    const nextValue = field === 'receiverPhone' ? normalizePhoneInput(value) : value
+    setForm((current) => ({ ...current, [field]: nextValue }))
+    if (fieldErrors[field]) {
+      setFieldErrors((current) => {
+        const next = { ...current }
+        delete next[field]
+        return next
+      })
+    }
   }
 
+  const inputClass = (field) =>
+    `w-full rounded-xl bg-[#f0eee6] p-3 text-sm ${fieldErrors[field] ? 'ring-2 ring-[#b42318]/40' : ''}`
+
+  const shellClass = standalone
+    ? 'space-y-4 rounded-[24px] border border-[#c1c9c0]/30 bg-white p-4 shadow-sm sm:p-6'
+    : 'space-y-4 rounded-[24px] border border-[#c1c9c0]/30 bg-white p-6 shadow-sm'
+
   return (
-    <section className="space-y-4 rounded-[24px] border border-[#c1c9c0]/30 bg-white p-6 shadow-sm">
+    <section className={shellClass}>
       <div className="flex items-center justify-between gap-3">
         <h3 className="text-lg font-semibold text-[#356647]">Địa chỉ giao hàng</h3>
         {editingId ? (
@@ -171,27 +192,33 @@ function CustomerAddressesPanel({ customerId }) {
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <label className="space-y-1 md:col-span-2">
           <span className="text-xs font-semibold text-[#717971]">Tên người nhận *</span>
-          <input className="w-full rounded-xl bg-[#f0eee6] p-3 text-sm" value={form.receiverName} onChange={updateField('receiverName')} />
+          <input className={inputClass('receiverName')} value={form.receiverName} onChange={updateField('receiverName')} />
+          {fieldErrors.receiverName ? <p className="text-xs text-[#b42318]">{fieldErrors.receiverName}</p> : null}
         </label>
         <label className="space-y-1">
           <span className="text-xs font-semibold text-[#717971]">SĐT người nhận</span>
-          <input className="w-full rounded-xl bg-[#f0eee6] p-3 text-sm" value={form.receiverPhone} onChange={updateField('receiverPhone')} />
+          <input className={inputClass('receiverPhone')} value={form.receiverPhone} onChange={updateField('receiverPhone')} placeholder="0xxxxxxxxx" />
+          {fieldErrors.receiverPhone ? <p className="text-xs text-[#b42318]">{fieldErrors.receiverPhone}</p> : null}
         </label>
         <label className="space-y-1">
-          <span className="text-xs font-semibold text-[#717971]">Phường / Xã</span>
-          <input className="w-full rounded-xl bg-[#f0eee6] p-3 text-sm" value={form.ward} onChange={updateField('ward')} />
+          <span className="text-xs font-semibold text-[#717971]">Phường / Xã *</span>
+          <input className={inputClass('ward')} value={form.ward} onChange={updateField('ward')} />
+          {fieldErrors.ward ? <p className="text-xs text-[#b42318]">{fieldErrors.ward}</p> : null}
         </label>
         <label className="space-y-1 md:col-span-2">
-          <span className="text-xs font-semibold text-[#717971]">Địa chỉ *</span>
-          <input className="w-full rounded-xl bg-[#f0eee6] p-3 text-sm" value={form.addressLine} onChange={updateField('addressLine')} />
+          <span className="text-xs font-semibold text-[#717971]">Địa chỉ (số nhà, đường) *</span>
+          <input className={inputClass('addressLine')} value={form.addressLine} onChange={updateField('addressLine')} />
+          {fieldErrors.addressLine ? <p className="text-xs text-[#b42318]">{fieldErrors.addressLine}</p> : null}
         </label>
         <label className="space-y-1">
-          <span className="text-xs font-semibold text-[#717971]">Quận / Huyện</span>
-          <input className="w-full rounded-xl bg-[#f0eee6] p-3 text-sm" value={form.district} onChange={updateField('district')} />
+          <span className="text-xs font-semibold text-[#717971]">Quận / Huyện *</span>
+          <input className={inputClass('district')} value={form.district} onChange={updateField('district')} />
+          {fieldErrors.district ? <p className="text-xs text-[#b42318]">{fieldErrors.district}</p> : null}
         </label>
         <label className="space-y-1">
-          <span className="text-xs font-semibold text-[#717971]">Tỉnh / TP</span>
-          <input className="w-full rounded-xl bg-[#f0eee6] p-3 text-sm" value={form.province} onChange={updateField('province')} />
+          <span className="text-xs font-semibold text-[#717971]">Tỉnh / TP *</span>
+          <input className={inputClass('province')} value={form.province} onChange={updateField('province')} />
+          {fieldErrors.province ? <p className="text-xs text-[#b42318]">{fieldErrors.province}</p> : null}
         </label>
         <label className="flex items-center gap-2 md:col-span-2">
           <input type="checkbox" className="accent-[#4a6242]" checked={form.isDefault} onChange={updateField('isDefault')} />

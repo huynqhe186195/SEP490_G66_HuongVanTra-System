@@ -31,6 +31,21 @@ public class CustomerAddressRepository : ICustomerAddressRepository
         _db.CustomerAddresses.Update(address);
     }
 
+    public async Task ClearDefaultForCustomerAsync(Guid customerId, Guid? exceptAddressId = null, CancellationToken ct = default)
+    {
+        var defaults = await _db.CustomerAddresses
+            .Where(a => a.CustomerId == customerId && !a.IsDeleted && a.IsDefault)
+            .Where(a => exceptAddressId == null || a.Id != exceptAddressId)
+            .ToListAsync(ct);
+
+        foreach (var item in defaults)
+        {
+            item.IsDefault = false;
+            item.UpdatedAt = DateTime.UtcNow;
+            _db.CustomerAddresses.Update(item);
+        }
+    }
+
     public async Task<int> SaveChangesAsync(CancellationToken ct = default) =>
         await _db.SaveChangesAsync(ct);
 }

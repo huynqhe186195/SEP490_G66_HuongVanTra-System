@@ -10,8 +10,6 @@ const ROLE_GROUPS = {
 /** Tạm ẩn trên sidebar — bật lại khi backend sẵn sàng. */
 const SIDEBAR_DISABLED_MODULES = new Set([
   'dashboard',
-  'products',
-  'inventory',
   'contracts',
   'reports',
   'integrations',
@@ -23,13 +21,14 @@ const HOME_MODULE_PRIORITY = [
   'stock_deduct_ops',
   'orders',
   'customers',
+  'products',
+  'inventory',
   'staff',
 ]
 
 // --- Tạm ẩn (chưa xử lý backend) ---
 // { label: 'Dashboard', path: '/dashboard', module: 'dashboard', roles: ['admin', 'agencyManager', 'accountant'] },
 // { label: 'Sản phẩm', path: '/products', module: 'products', roles: ['admin', 'agencyManager', 'inventoryManager'] },
-// { label: 'Kho', path: '/inventory', module: 'inventory', roles: ['admin', 'agencyManager', 'inventoryManager'] },
 // { label: 'Hợp đồng', path: '/contracts', module: 'contracts', roles: ['admin', 'agencyManager'] },
 // { label: 'Báo cáo', path: '/reports', module: 'reports', roles: ['admin', 'agencyManager', 'accountant'] },
 // { label: 'Tích hợp', path: '/integrations', module: 'integrations', roles: ['admin'] },
@@ -46,6 +45,8 @@ export const navigationItems = [
     roles: ['admin', 'agencyManager', 'inventoryManager'],
   },
   { label: 'Khách hàng', path: '/customers', module: 'customers', icon: 'groups', roles: ['admin', 'agencyManager'] },
+  { label: 'Sản phẩm & số lượng', path: '/products', module: 'products', icon: 'inventory_2', roles: ['admin', 'agencyManager', 'inventoryManager'] },
+  { label: 'Kho tổng', path: '/inventory', module: 'inventory', icon: 'warehouse', roles: ['admin', 'agencyManager', 'inventoryManager'] },
   { label: 'Nhân sự', path: '/staff', module: 'staff', icon: 'badge', roles: ['admin', 'agencyManager'] },
   {
     label: 'Hạng thẻ',
@@ -301,6 +302,10 @@ export function isNavigationItemActive(pathname, item) {
     if (path === '/orders/stock-deduct' || path.startsWith('/orders/stock-deduct/')) {
       return false
     }
+    return path === target || path.startsWith(`${target}/`)
+  }
+
+  if (item.module === 'customers') {
     return path === target || path.startsWith(`${target}/`)
   }
 

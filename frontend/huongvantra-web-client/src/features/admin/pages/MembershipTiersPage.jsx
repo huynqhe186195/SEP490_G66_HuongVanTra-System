@@ -130,29 +130,29 @@ function MembershipTiersPage() {
       </p>
 
       <section className="rounded-3xl border border-slate-100 bg-white shadow-sm">
-        <div className="custom-scrollbar overflow-x-auto">
-          <table className="w-full text-left">
+        <div className="-mx-1 custom-scrollbar max-h-[min(65vh,720px)] overflow-auto overscroll-contain px-1 sm:mx-0 sm:max-h-none sm:px-0">
+          <table className="min-w-[640px] w-full text-left text-sm">
             <thead className="bg-[#fbf9f1]/50 text-xs font-bold uppercase tracking-wider text-slate-400">
               <tr>
-                <th className="px-8 py-4">Mã hạng</th>
-                <th className="px-4 py-4">Ngưỡng chi tiêu</th>
-                <th className="px-4 py-4">Chiết khấu</th>
-                <th className="px-4 py-4">Trạng thái</th>
-                <th className="px-4 py-4">Số khách</th>
-                <th className="px-8 py-4 text-right">Thao tác</th>
+                <th className="px-3 py-3 sm:px-6 sm:py-4">Mã hạng</th>
+                <th className="px-3 py-3 sm:px-4 sm:py-4">Ngưỡng chi tiêu</th>
+                <th className="px-3 py-3 sm:px-4 sm:py-4">Chiết khấu</th>
+                <th className="px-3 py-3 sm:px-4 sm:py-4">Trạng thái</th>
+                <th className="px-3 py-3 sm:px-4 sm:py-4">Số khách</th>
+                <th className="px-3 py-3 text-right sm:px-6 sm:py-4">Thao tác</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
               {isLoading ? (
                 <tr>
-                  <td className="px-8 py-10 text-slate-500" colSpan={6}>
+                  <td className="px-3 py-10 text-slate-500 sm:px-6" colSpan={6}>
                     Đang tải...
                   </td>
                 </tr>
               ) : null}
               {!isLoading && tiers.length === 0 ? (
                 <tr>
-                  <td className="px-8 py-10 text-slate-500" colSpan={6}>
+                  <td className="px-3 py-10 text-slate-500 sm:px-6" colSpan={6}>
                     Chưa có hạng thẻ. Bấm &quot;Thêm hạng&quot; để tạo.
                   </td>
                 </tr>
@@ -160,14 +160,14 @@ function MembershipTiersPage() {
               {!isLoading
                 ? tiers.map((tier) => (
                     <tr key={tier.id} className={`hover:bg-[#fbf9f1]/30 ${!tier.isActive ? 'opacity-60' : ''}`}>
-                      <td className="px-8 py-5 font-bold text-slate-800">{tier.tierCode}</td>
-                      <td className="px-4 py-5 text-slate-700">
+                      <td className="px-3 py-4 font-bold text-slate-800 sm:px-6 sm:py-5">{tier.tierCode}</td>
+                      <td className="px-3 py-4 text-slate-700 sm:px-4 sm:py-5">
                         {tier.minTotalSpend.toLocaleString('vi-VN')} đ
                       </td>
-                      <td className="px-4 py-5 text-slate-700">{tier.discountPercent}%</td>
-                      <td className="px-4 py-5">
+                      <td className="px-3 py-4 text-slate-700 sm:px-4 sm:py-5">{tier.discountPercent}%</td>
+                      <td className="px-3 py-4 sm:px-4 sm:py-5">
                         <span
-                          className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${
+                          className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-semibold sm:text-xs ${
                             tier.isActive
                               ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
                               : 'border-slate-200 bg-slate-50 text-slate-600'
@@ -176,13 +176,13 @@ function MembershipTiersPage() {
                           {tier.isActive ? 'Đang hoạt động' : 'Ngừng hoạt động'}
                         </span>
                       </td>
-                      <td className="px-4 py-5 text-slate-600">{tier.customerCount}</td>
-                      <td className="px-8 py-5">
-                        <div className="flex justify-end gap-2">
+                      <td className="px-3 py-4 text-slate-600 sm:px-4 sm:py-5">{tier.customerCount}</td>
+                      <td className="px-3 py-4 sm:px-6 sm:py-5">
+                        <div className="flex flex-wrap justify-end gap-1.5 sm:gap-2">
                           <button
                             type="button"
                             onClick={() => openEdit(tier)}
-                            className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                            className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-[11px] font-semibold text-slate-700 hover:bg-slate-50 sm:px-3 sm:text-xs"
                           >
                             Sửa
                           </button>
@@ -190,15 +190,15 @@ function MembershipTiersPage() {
                             <button
                               type="button"
                               onClick={() => handleDeactivate(tier)}
-                              className="rounded-lg border border-amber-200 px-3 py-1.5 text-xs font-semibold text-amber-700 hover:bg-amber-50"
+                              className="rounded-lg border border-amber-200 px-2.5 py-1.5 text-[11px] font-semibold leading-snug text-amber-700 hover:bg-amber-50 sm:px-3 sm:text-xs"
                             >
-                              Ngừng HĐ
+                              Ngừng hoạt động
                             </button>
                           ) : (
                             <button
                               type="button"
                               onClick={() => handleReactivate(tier)}
-                              className="rounded-lg border border-emerald-200 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
+                              className="rounded-lg border border-emerald-200 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-50 sm:px-3 sm:text-xs"
                             >
                               Kích hoạt
                             </button>

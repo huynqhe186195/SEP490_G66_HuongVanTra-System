@@ -13,5 +13,7 @@ public record OrderCompletedEvent
 public record OrderItemEvent
 {
     public Guid SkuId { get; init; }
+    public string? SkuName { get; init; }
+    public string? SkuCode { get; init; }
     public int Quantity { get; init; }
 }

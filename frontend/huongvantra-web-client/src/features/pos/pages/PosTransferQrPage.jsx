@@ -9,7 +9,7 @@ import {
 } from '../services/posApi.js'
 import { printReceiptFromData } from '../utils/printReceipt.js'
 
-const POLL_INTERVAL_MS = 5000
+const POLL_INTERVAL_MS = 3000
 
 function Icon({ children, className = '' }) {
   return <span className={`material-symbols-outlined ${className}`}>{children}</span>
@@ -240,24 +240,32 @@ function PosTransferQrPage() {
   const statusText = paymentStatusLabel(paymentStatus, isPaid)
 
   return (
-    <div className="mx-auto flex min-h-0 w-full max-w-lg flex-1 flex-col">
-      <div className="mb-6 flex items-center gap-3">
+    <div className="mx-auto w-full max-w-lg pb-6">
+      <div className="mb-3 sm:mb-4">
         <button
           type="button"
           onClick={() => navigate('/pos')}
-          className="inline-flex items-center gap-1 rounded-lg border border-[#c1c9c0] bg-white px-3 py-2 text-sm font-semibold text-[#356647] hover:bg-[#f6f4ec]"
+          className="inline-flex min-h-[44px] items-center gap-1 rounded-lg border border-[#c1c9c0] bg-white px-3 py-2 text-sm font-semibold text-[#356647] hover:bg-[#f6f4ec]"
         >
           <Icon className="text-[20px]">arrow_back</Icon>
           Quay lại POS
         </button>
       </div>
 
-      <div className="flex flex-1 flex-col overflow-hidden rounded-[28px] border border-[#c1c9c0]/40 bg-white shadow-[0_10px_30px_rgba(27,28,23,0.06)]">
-        <header className="border-b border-[#c1c9c0]/60 bg-[#f6f4ec] px-6 py-5 text-center">
-          <p className="text-xs font-bold uppercase tracking-wider text-[#717971]">Thanh toán chuyển khoản · SePay</p>
-          <h1 className="mt-1 text-3xl font-bold text-[#356647]">{formatMoney(displayAmount)} đ</h1>
-          {payment.orderCode ? <p className="mt-1 text-sm text-[#414942]">Mã đơn: {payment.orderCode}</p> : null}
-          {payment.customer ? <p className="mt-0.5 text-xs text-[#717971]">{payment.customer}</p> : null}
+      <div className="flex w-full flex-col rounded-[20px] border border-[#c1c9c0]/40 bg-white shadow-[0_10px_30px_rgba(27,28,23,0.06)] sm:rounded-[28px]">
+        <header className="shrink-0 border-b border-[#c1c9c0]/60 bg-[#f6f4ec] px-4 py-4 text-center sm:px-6 sm:py-5">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-[#717971] sm:text-xs">
+            Thanh toán chuyển khoản · SePay
+          </p>
+          <h1 className="mt-1 text-2xl font-bold text-[#356647] sm:text-3xl">
+            {formatMoney(displayAmount)} đ
+          </h1>
+          {payment.orderCode ? (
+            <p className="mt-1 break-all text-sm text-[#414942]">Mã đơn: {payment.orderCode}</p>
+          ) : null}
+          {payment.customer ? (
+            <p className="mt-0.5 truncate text-xs text-[#717971]">{payment.customer}</p>
+          ) : null}
           {qrExpiryLabel ? (
             <p
               className={`mt-2 text-xs font-semibold ${
@@ -269,7 +277,7 @@ function PosTransferQrPage() {
           ) : null}
 
           <div
-            className={`mx-auto mt-3 inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${
+            className={`mx-auto mt-3 inline-flex max-w-full flex-wrap items-center justify-center gap-x-2 gap-y-1 rounded-full px-3 py-1.5 text-xs font-semibold ${
               isPaid ? 'bg-[#356647]/15 text-[#356647]' : 'bg-[#fec25b]/25 text-[#7e5700]'
             }`}
           >
@@ -278,7 +286,7 @@ function PosTransferQrPage() {
             ) : (
               <Icon className="text-[16px]">check_circle</Icon>
             )}
-            {statusText}
+            <span>{statusText}</span>
             {!isPaid ? <span className="font-normal text-[#717971]">· chờ SePay</span> : null}
           </div>
 
@@ -287,18 +295,22 @@ function PosTransferQrPage() {
           ) : null}
         </header>
 
-        <div className="flex flex-1 flex-col items-center gap-6 p-6">
-          <div className="rounded-2xl border-2 border-[#356647]/20 bg-white p-4 shadow-inner">
+        <div className="flex flex-col items-center gap-4 p-4 sm:gap-6 sm:p-6">
+          <div className="w-full max-w-[min(100%,280px)] rounded-2xl border-2 border-[#356647]/20 bg-white p-3 shadow-inner sm:p-4">
             {qrImageUrl ? (
-              <img src={qrImageUrl} alt="Mã QR chuyển khoản" className="h-[280px] w-[280px] object-contain" />
+              <img
+                src={qrImageUrl}
+                alt="Mã QR chuyển khoản"
+                className="aspect-square w-full object-contain"
+              />
             ) : (
-              <div className="flex h-[280px] w-[280px] items-center justify-center text-sm text-[#717971]">
-                Không có dữ liệu QR
+              <div className="flex aspect-square w-full items-center justify-center px-3 text-center text-sm text-[#717971] sm:px-4">
+                Chưa có QR — kiểm tra PosTransferPayment / Sepay trong appsettings của order-service
               </div>
             )}
           </div>
 
-          <p className="text-center text-sm text-[#717971]">
+          <p className="w-full text-center text-sm leading-relaxed text-[#717971]">
             {usesSepayVa
               ? 'Chuyển vào số VA bên dưới (BIDV qua SePay). Không chuyển nhầm số tài khoản chính.'
               : 'Khách quét QR hoặc chuyển khoản — hệ thống tự nhận tiền qua SePay (webhook).'}
@@ -352,56 +364,51 @@ function PosTransferQrPage() {
           {isLoadingBank ? (
             <p className="text-sm text-[#717971]">Đang tải thông tin tài khoản...</p>
           ) : (
-            <div className="w-full space-y-3 rounded-xl bg-[#f6f4ec] p-4 text-sm">
-              <div className="flex justify-between gap-4">
-                <span className="text-[#717971]">Ngân hàng</span>
-                <span className="font-semibold text-[#1b1c17]">{bankInfo?.bankName || '—'}</span>
+            <div className="w-full space-y-3 rounded-xl bg-[#f6f4ec] p-3 text-sm sm:p-4">
+              <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                <span className="shrink-0 text-[#717971]">Ngân hàng</span>
+                <span className="font-semibold text-[#1b1c17] sm:text-right">{bankInfo?.bankName || '—'}</span>
               </div>
-              <div className="flex justify-between gap-4">
-                <span className="text-[#717971]">{usesSepayVa ? 'Số VA (chuyển vào đây)' : 'Số tài khoản'}</span>
-                <span className="break-all text-right font-semibold text-[#1b1c17]">{receiveAccount}</span>
+              <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                <span className="shrink-0 text-[#717971]">
+                  {usesSepayVa ? 'Số VA (chuyển vào đây)' : 'Số tài khoản'}
+                </span>
+                <span className="break-all font-semibold text-[#1b1c17] sm:text-right">{receiveAccount}</span>
               </div>
               {usesSepayVa && bankInfo?.accountNumber ? (
-                <div className="flex justify-between gap-4 text-xs text-[#717971]">
+                <div className="flex flex-col gap-1 text-xs text-[#717971] sm:flex-row sm:justify-between sm:gap-4">
                   <span>TK gốc (không CK vào)</span>
-                  <span>{bankInfo.accountNumber}</span>
+                  <span className="break-all sm:text-right">{bankInfo.accountNumber}</span>
                 </div>
               ) : null}
               {bankInfo?.accountHolder ? (
-                <div className="flex justify-between gap-4">
+                <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                   <span className="shrink-0 text-[#717971]">Chủ tài khoản</span>
-                  <span className="text-right font-semibold text-[#1b1c17]">{bankInfo.accountHolder}</span>
+                  <span className="break-words font-semibold text-[#1b1c17] sm:text-right">
+                    {bankInfo.accountHolder}
+                  </span>
                 </div>
               ) : null}
-              <div className="flex justify-between gap-4 border-t border-[#c1c9c0]/60 pt-3">
-                <span className="text-[#717971]">Nội dung CK</span>
+              <div className="flex flex-col gap-2 border-t border-[#c1c9c0]/60 pt-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                <span className="shrink-0 text-[#717971]">Nội dung CK</span>
                 <button
                   type="button"
                   onClick={handleCopyTransferNote}
-                  className="inline-flex max-w-[60%] items-center gap-1 text-right font-semibold text-[#356647] hover:underline"
+                  className="inline-flex w-full items-start justify-between gap-2 text-left font-semibold text-[#356647] hover:underline sm:max-w-[65%] sm:justify-end sm:text-right"
                   title="Sao chép nội dung CK"
                 >
-                  <span className="break-all">{transferNote}</span>
+                  <span className="min-w-0 break-all">{transferNote}</span>
                   <Icon className="shrink-0 text-[18px]">content_copy</Icon>
                 </button>
               </div>
-              <div className="flex justify-between gap-4">
+              <div className="flex flex-col gap-1 sm:flex-row sm:justify-between sm:gap-4">
                 <span className="text-[#717971]">Số tiền</span>
-                <span className="font-bold text-[#356647]">{formatMoney(displayAmount)} đ</span>
+                <span className="font-bold text-[#356647] sm:text-right">{formatMoney(displayAmount)} đ</span>
               </div>
             </div>
           )}
         </div>
 
-        <footer className="border-t border-[#c1c9c0] p-4">
-          <button
-            type="button"
-            onClick={() => navigate('/pos')}
-            className="flex w-full items-center justify-center rounded-xl border border-[#c1c9c0] bg-white py-3 text-sm font-bold text-[#414942] hover:bg-[#f6f4ec]"
-          >
-            Quay lại POS
-          </button>
-        </footer>
       </div>
     </div>
   )

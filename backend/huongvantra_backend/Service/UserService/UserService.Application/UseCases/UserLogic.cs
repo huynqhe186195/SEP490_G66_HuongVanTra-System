@@ -1,6 +1,7 @@
 using UserService.Application.DTOs.Requests;
 using UserService.Application.DTOs.Responses;
 using UserService.Application.Interfaces;
+using UserService.Application.Validation;
 using UserService.Domain.Entities;
 using UserService.Domain.Enums;
 using UserService.Domain.Exceptions;
@@ -11,6 +12,9 @@ public class UserLogic(IUserRepository userRepo, IRoleRepository roleRepo, IEmpl
 {
     public async Task<UserResponse> CreateAsync(CreateUserRequest request)
     {
+        UserInputValidator.ValidateSingleRole(request.RoleIds);
+        UserInputValidator.ValidatePhoneIfProvided(request.BankAccountInfo);
+
         if (await userRepo.ExistsAsync(request.Username))
             throw new DuplicateUsernameException(request.Username);
 
@@ -63,6 +67,8 @@ public class UserLogic(IUserRepository userRepo, IRoleRepository roleRepo, IEmpl
 
     public async Task UpdateAsync(Guid id, UpdateUserRequest request)
     {
+        UserInputValidator.ValidateSingleRole(request.RoleIds);
+
         var user = await userRepo.GetByIdAsync(id) ?? throw new UserNotFoundException(id);
 
         user.IsActive = request.IsActive;

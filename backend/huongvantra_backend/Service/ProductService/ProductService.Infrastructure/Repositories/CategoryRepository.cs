@@ -13,6 +13,14 @@ public class CategoryRepository(ProductDbContext _db) : ICategoryRepository
     public async Task<Category?> GetByIdAsync(int id) =>
         await _db.Categories.FirstOrDefaultAsync(c => c.Id == id);
 
+    public async Task<bool> ExistsNameAsync(string name, int? excludeId = null)
+    {
+        var normalized = name.Trim().ToLower();
+        var query = _db.Categories.Where(c => c.Name.ToLower() == normalized);
+        if (excludeId.HasValue) query = query.Where(c => c.Id != excludeId.Value);
+        return await query.AnyAsync();
+    }
+
     public async Task<Category> CreateAsync(Category category)
     {
         _db.Categories.Add(category);

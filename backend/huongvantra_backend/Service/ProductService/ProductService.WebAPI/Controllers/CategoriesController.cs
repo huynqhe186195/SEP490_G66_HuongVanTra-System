@@ -1,6 +1,8 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using ProductService.Application.DTOs.Requests;
 using ProductService.Application.UseCases;
+using HuongVanTra.Shared.Auth;
 
 namespace ProductService.WebAPI.Controllers;
 
@@ -17,6 +19,7 @@ public class CategoriesController(CategoryLogic _categoryLogic) : ControllerBase
         Ok(await _categoryLogic.GetByIdAsync(id));
 
     [HttpPost]
+    [Authorize(Policy = PermissionNames.ManageRole)]
     public async Task<IActionResult> Create([FromBody] CreateCategoryRequest request)
     {
         var result = await _categoryLogic.CreateAsync(request);
@@ -24,10 +27,12 @@ public class CategoriesController(CategoryLogic _categoryLogic) : ControllerBase
     }
 
     [HttpPut("{id:int}")]
+    [Authorize(Policy = PermissionNames.ManageRole)]
     public async Task<IActionResult> Update(int id, [FromBody] UpdateCategoryRequest request) =>
         Ok(await _categoryLogic.UpdateAsync(id, request));
 
     [HttpDelete("{id:int}")]
+    [Authorize(Policy = PermissionNames.ManageRole)]
     public async Task<IActionResult> Delete(int id)
     {
         await _categoryLogic.DeleteAsync(id);

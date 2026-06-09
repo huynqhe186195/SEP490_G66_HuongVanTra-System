@@ -9,5 +9,6 @@ public interface ICustomerAddressRepository
     Task AddAsync(CustomerAddress address, CancellationToken ct = default);
     void Update(CustomerAddress address);
     void Delete(CustomerAddress address);
+    Task ClearDefaultForCustomerAsync(Guid customerId, Guid? exceptAddressId = null, CancellationToken ct = default);
     Task<int> SaveChangesAsync(CancellationToken ct = default);
 }

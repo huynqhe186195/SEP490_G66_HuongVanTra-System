@@ -1,6 +1,7 @@
 function PageHeader({
   title,
   description,
+  descriptionClassName = '',
   searchPlaceholder,
   searchValue,
   onSearchChange,
@@ -45,7 +46,7 @@ function PageHeader({
               </div>
               <div>
                 <h1 className="text-xl font-semibold leading-tight tracking-[-0.03em] text-[#1f241f] sm:text-[1.75rem] lg:text-[2rem]">{title}</h1>
-                {description ? <p className="mt-2 max-w-3xl text-[0.95rem] leading-7 text-[#707a72]">{description}</p> : null}
+                {description ? <p className={`mt-2 max-w-3xl text-[0.95rem] leading-7 text-[#707a72] ${descriptionClassName}`.trim()}>{description}</p> : null}
               </div>
             </div>
           </div>
