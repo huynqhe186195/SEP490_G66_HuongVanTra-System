@@ -9,6 +9,8 @@ public class InventoryDbContext(DbContextOptions<InventoryDbContext> options) : 
     public DbSet<StockDeductQueue> StockDeductQueues => Set<StockDeductQueue>();
     public DbSet<StockDeductQueueItem> StockDeductQueueItems => Set<StockDeductQueueItem>();
     public DbSet<ProcessedIntegrationEvent> ProcessedIntegrationEvents => Set<ProcessedIntegrationEvent>();
+    public DbSet<StockAdjustmentRequest> StockAdjustmentRequests => Set<StockAdjustmentRequest>();
+    public DbSet<StockExportSlip> StockExportSlips => Set<StockExportSlip>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

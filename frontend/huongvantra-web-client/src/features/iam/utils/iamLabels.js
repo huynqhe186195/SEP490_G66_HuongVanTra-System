@@ -41,6 +41,10 @@ export const PERMISSION_LABELS = {
     label: 'Quản lý phân quyền',
     hint: 'Thiết lập vai trò và quyền trong hệ thống',
   },
+  MANAGE_CATALOG: {
+    label: 'Quản lý danh mục hàng',
+    hint: 'Tạo và cập nhật sản phẩm, danh mục, biến thể SKU',
+  },
 }
 
 export function formatRoleName(roleName) {

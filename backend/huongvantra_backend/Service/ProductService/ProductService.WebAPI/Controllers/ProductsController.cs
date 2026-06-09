@@ -15,16 +15,17 @@ public class ProductsController(ProductLogic _productLogic) : ControllerBase
         [FromQuery] string? search,
         [FromQuery] int? categoryId,
         [FromQuery] bool? isActive,
+        [FromQuery] bool? isDeleted,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20) =>
-        Ok(await _productLogic.GetPagedAsync(new GetProductsRequest(search, categoryId, isActive, page, pageSize)));
+        Ok(await _productLogic.GetPagedAsync(new GetProductsRequest(search, categoryId, isActive, isDeleted, page, pageSize)));
 
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetById(Guid id) =>
         Ok(await _productLogic.GetByIdAsync(id));
 
     [HttpPost]
-    [Authorize(Policy = PermissionNames.ManageRole)]
+    [Authorize(Roles = "Warehouse")]
     public async Task<IActionResult> Create([FromBody] CreateProductRequest request)
     {
         var result = await _productLogic.CreateAsync(request);
@@ -32,15 +33,20 @@ public class ProductsController(ProductLogic _productLogic) : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
-    [Authorize(Policy = PermissionNames.ManageRole)]
+    [Authorize(Roles = "Warehouse")]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateProductRequest request) =>
         Ok(await _productLogic.UpdateAsync(id, request));
 
     [HttpDelete("{id:guid}")]
-    [Authorize(Policy = PermissionNames.ManageRole)]
+    [Authorize(Roles = "Warehouse")]
     public async Task<IActionResult> Delete(Guid id)
     {
         await _productLogic.DeleteAsync(id);
         return NoContent();
     }
+
+    [HttpPost("{id:guid}/restore")]
+    [Authorize(Roles = "Warehouse")]
+    public async Task<IActionResult> Restore(Guid id) =>
+        Ok(await _productLogic.RestoreAsync(id));
 }

@@ -1,25 +1,47 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { AUTH_SESSION_CHANGED_EVENT, loadAuthSession } from '../../auth/services/authSession.js'
 import { Link } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination from '../../../components/shared/TablePagination.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
-import { loadAuthSession } from '../../auth/services/authSession.js'
-import { canAdjustStoreStock, canManageProducts } from '../../auth/utils/permissions.js'
+import {
+  canAdjustStoreStock,
+  canCreateCatalog,
+  canHideCatalog,
+  canSyncCatalog,
+  isWarehouseRole,
+} from '../../auth/utils/permissions.js'
 import { fetchCategories } from '../services/categoriesApi.js'
-import { buildStockBySkuIdMap, fetchSkuStocks } from '../../inventory/services/inventoryStockApi.js'
-import { fetchProducts, setProductStatus } from '../services/productsApi.js'
+import {
+  buildStockBySkuIdMap,
+  buildWarehouseStockBySkuIdMap,
+  fetchSkuStocks,
+} from '../../inventory/services/inventoryStockApi.js'
+import { deleteProduct, fetchProducts, restoreProduct } from '../services/productsApi.js'
 import ProductImage from '../components/ProductImage.jsx'
 import ProductSkusDetailModal from '../components/ProductSkusDetailModal.jsx'
+import InventorySimulationBanner from '../../inventory/components/InventorySimulationBanner.jsx'
+import { fetchInventorySettings } from '../../inventory/services/inventoryStockApi.js'
 import { getProductStatusMeta, summarizeProductSkus, summarizeProductStock } from '../utils/productDisplay.js'
 
 const TABLE_HEAD = 'px-4 py-3 text-left text-xs font-bold uppercase tracking-wide text-[#717971] sm:px-6'
 const TABLE_CELL = 'px-4 py-4 text-sm text-[#414942] sm:px-6'
 
 function ProductsListPage() {
-  const session = loadAuthSession()
-  const canManage = canManageProducts(session)
+  const [session, setSession] = useState(() => loadAuthSession())
+  const canCreate = canCreateCatalog(session)
+  const canHide = canHideCatalog(session)
+  const canSync = canSyncCatalog(session)
   const canAdjustStock = canAdjustStoreStock(session)
+  const isWarehouse = isWarehouseRole(session)
+  const [isSyncing, setIsSyncing] = useState(false)
+
+  useEffect(() => {
+    const sync = () => setSession(loadAuthSession())
+    window.addEventListener(AUTH_SESSION_CHANGED_EVENT, sync)
+    return () => window.removeEventListener(AUTH_SESSION_CHANGED_EVENT, sync)
+  }, [])
 
   const [products, setProducts] = useState([])
   const [categories, setCategories] = useState([])
@@ -34,6 +56,7 @@ function ProductsListPage() {
   const [stockBySkuId, setStockBySkuId] = useState(() => new Map())
   const [togglingId, setTogglingId] = useState(null)
   const [skuModalProduct, setSkuModalProduct] = useState(null)
+  const [simulateWarehouse, setSimulateWarehouse] = useState(true)
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -55,11 +78,13 @@ function ProductsListPage() {
   const loadStocks = useCallback(async () => {
     try {
       const stocks = await fetchSkuStocks()
-      setStockBySkuId(buildStockBySkuIdMap(stocks))
+      setStockBySkuId(
+        isWarehouse ? buildWarehouseStockBySkuIdMap(stocks) : buildStockBySkuIdMap(stocks),
+      )
     } catch {
       setStockBySkuId(new Map())
     }
-  }, [])
+  }, [isWarehouse])
 
   const loadProducts = useCallback(async () => {
     try {
@@ -68,7 +93,8 @@ function ProductsListPage() {
         fetchProducts({
           search: search || undefined,
           categoryId: categoryId ? Number(categoryId) : undefined,
-          isActive: statusFilter === 'all' ? undefined : statusFilter === 'active',
+          isActive: statusFilter === 'active' ? true : undefined,
+          isDeleted: statusFilter === 'hidden' ? true : undefined,
           page,
           pageSize,
         }),
@@ -87,20 +113,47 @@ function ProductsListPage() {
 
   useEffect(() => {
     loadCategories()
+    fetchInventorySettings().then((s) => setSimulateWarehouse(s.simulateWarehouse)).catch(() => {})
   }, [loadCategories])
 
   useEffect(() => {
     loadProducts()
   }, [loadProducts])
 
-  async function handleToggleStatus(product) {
-    if (!canManage) return
-    const nextActive = !product.isActive
-    if (!window.confirm(`${nextActive ? 'Kích hoạt' : 'Ngừng kinh doanh'} sản phẩm "${product.name}"?`)) return
+  async function handleHide(product) {
+    if (!canHide || product.isDeleted) return
+    if (!window.confirm(`Ẩn sản phẩm "${product.name}"? Sản phẩm sẽ không hiển thị ở POS và có thể kích hoạt lại sau.`)) return
     try {
       setTogglingId(product.id)
-      await setProductStatus(product, nextActive)
-      showSuccess(nextActive ? 'Đã kích hoạt lại sản phẩm.' : 'Đã chuyển sản phẩm sang ngừng kinh doanh.')
+      await deleteProduct(product.id)
+      showSuccess('Đã ẩn sản phẩm.')
+      await loadProducts()
+    } catch (error) {
+      showError(error.message)
+    } finally {
+      setTogglingId(null)
+    }
+  }
+
+  async function handleSyncCatalog() {
+    setIsSyncing(true)
+    try {
+      await Promise.all([loadCategories(), loadProducts()])
+      showSuccess('Đã đồng bộ danh sách sản phẩm và danh mục mới nhất.')
+    } catch (error) {
+      showError(error.message)
+    } finally {
+      setIsSyncing(false)
+    }
+  }
+
+  async function handleRestore(product) {
+    if (!canHide || !product.isDeleted) return
+    if (!window.confirm(`Kích hoạt lại sản phẩm "${product.name}"?`)) return
+    try {
+      setTogglingId(product.id)
+      await restoreProduct(product.id)
+      showSuccess('Đã kích hoạt lại sản phẩm.')
       await loadProducts()
     } catch (error) {
       showError(error.message)
@@ -114,7 +167,7 @@ function ProductsListPage() {
       { value: '', label: 'Tất cả danh mục' },
       ...categories.map((item) => ({
         value: String(item.id),
-        label: item.isActive === false ? `${item.name} (ngừng)` : item.name,
+        label: item.isActive === false || item.isDeleted ? `${item.name} (đã ẩn)` : item.name,
       })),
     ],
     [categories],
@@ -125,15 +178,46 @@ function ProductsListPage() {
       <PageHeader
         title="Sản phẩm & số lượng"
         description={
-          canManage
-            ? 'Xem sản phẩm, cập nhật số lượng tại cửa hàng và quản lý trạng thái kinh doanh'
-            : 'Xem sản phẩm và cập nhật số lượng hiện tại tại cửa hàng'
+          canCreate
+            ? 'Thủ kho — tạo sản phẩm, danh mục và duyệt yêu cầu điều chỉnh tồn'
+            : canSync
+              ? 'Xem sản phẩm — dùng Đồng bộ để tải dữ liệu mới từ kho'
+              : 'Xem sản phẩm và gửi yêu cầu điều chỉnh số lượng (Thủ kho duyệt)'
         }
         searchPlaceholder="Tìm theo tên, xuất xứ, mô tả..."
         searchValue={searchInput}
         onSearchChange={setSearchInput}
         rightContent={
           <>
+            {canCreate ? (
+              <Link
+                to="/products/create"
+                className="inline-flex items-center gap-2 rounded-xl bg-[#538463] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#457053]"
+              >
+                <span className="material-symbols-outlined text-[18px]">add</span>
+                Tạo sản phẩm
+              </Link>
+            ) : null}
+            {canSync ? (
+              <button
+                type="button"
+                disabled={isSyncing}
+                onClick={handleSyncCatalog}
+                className="inline-flex items-center gap-2 rounded-xl border border-[#356647]/30 bg-white px-4 py-2.5 text-sm font-semibold text-[#356647] hover:bg-[#356647]/5 disabled:opacity-50"
+              >
+                <span className={`material-symbols-outlined text-[18px] ${isSyncing ? 'animate-spin' : ''}`}>sync</span>
+                Đồng bộ dữ liệu
+              </button>
+            ) : null}
+            {canAdjustStock ? (
+              <Link
+                to="/inventory/stock-requests"
+                className="inline-flex items-center gap-2 rounded-xl border border-[#356647]/30 bg-white px-4 py-2.5 text-sm font-semibold text-[#356647] hover:bg-[#356647]/5"
+              >
+                <span className="material-symbols-outlined text-[18px]">edit_note</span>
+                Yêu cầu tồn
+              </Link>
+            ) : null}
             <Link
               to="/products/pricing"
               className="inline-flex items-center gap-2 rounded-xl border border-[#356647]/30 bg-white px-4 py-2.5 text-sm font-semibold text-[#356647] hover:bg-[#356647]/5"
@@ -144,6 +228,8 @@ function ProductsListPage() {
           </>
         }
       />
+
+      <InventorySimulationBanner simulateWarehouse={simulateWarehouse} warehouseView={isWarehouse} />
 
       <div className="flex flex-col gap-3 rounded-2xl border border-slate-100 bg-white p-3 shadow-sm sm:flex-row sm:items-center sm:gap-4 sm:p-4">
         <select
@@ -171,16 +257,27 @@ function ProductsListPage() {
         >
           <option value="all">Tất cả trạng thái</option>
           <option value="active">Đang bán</option>
-          <option value="inactive">Ngừng kinh doanh</option>
+          <option value="hidden">Đã ẩn</option>
         </select>
 
-        <button
-          type="button"
-          className="min-h-[44px] shrink-0 rounded-xl border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 sm:text-base"
-          onClick={() => loadProducts()}
-        >
-          Làm mới
-        </button>
+        {canSync ? (
+          <button
+            type="button"
+            disabled={isSyncing}
+            className="min-h-[44px] shrink-0 rounded-xl border border-[#356647]/30 px-5 py-3 text-sm font-semibold text-[#356647] hover:bg-[#356647]/5 disabled:opacity-50 sm:text-base"
+            onClick={handleSyncCatalog}
+          >
+            {isSyncing ? 'Đang đồng bộ...' : 'Đồng bộ'}
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="min-h-[44px] shrink-0 rounded-xl border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 sm:text-base"
+            onClick={() => loadProducts()}
+          >
+            Làm mới
+          </button>
+        )}
       </div>
 
       <div className="overflow-hidden rounded-[1rem] bg-white shadow-sm">
@@ -195,7 +292,7 @@ function ProductsListPage() {
                 <th className={TABLE_HEAD}>Hương vị</th>
                 <th className={TABLE_HEAD}>Biến thể</th>
                 <th className={TABLE_HEAD}>Giá</th>
-                <th className={TABLE_HEAD}>Số lượng hiện tại</th>
+                <th className={TABLE_HEAD}>{isWarehouse ? 'Tồn kho tổng' : 'Tồn cửa hàng'}</th>
                 <th className={TABLE_HEAD}>Trạng thái</th>
                 <th className={TABLE_HEAD}>Thao tác</th>
               </tr>
@@ -215,11 +312,18 @@ function ProductsListPage() {
                 </tr>
               ) : (
                 products.map((product) => {
-                  const status = getProductStatusMeta(product.isActive)
+                  const status = getProductStatusMeta(product.isActive, product.isDeleted)
                   const skuSummary = summarizeProductSkus(product.skus)
-                  const stockSummary = summarizeProductStock(product.skus, stockBySkuId)
+                  const stockSummary = summarizeProductStock(
+                    product.skus,
+                    stockBySkuId,
+                    isWarehouse ? 'tồn kho tổng' : 'tồn cửa hàng',
+                  )
                   return (
-                    <tr key={product.id}>
+                    <tr
+                      key={product.id}
+                      className={product.isDeleted ? 'bg-slate-50/80 opacity-75' : undefined}
+                    >
                       <td className={TABLE_CELL}>
                         {skuSummary.imageUrl ? (
                           <a href={skuSummary.imageUrl} target="_blank" rel="noopener noreferrer" title={`Ảnh ${product.name}`}>
@@ -272,7 +376,13 @@ function ProductsListPage() {
                         >
                           {stockSummary.label}
                         </span>
-                        {skuSummary.count > 1 ? (
+                        {stockSummary.total <= 0 ? (
+                          <p className="mt-0.5 text-[11px] text-amber-700">
+                            {isWarehouse
+                              ? 'Chưa có tồn kho — nhập tại Kho tổng'
+                              : 'Chưa có tồn — gửi yêu cầu điều chỉnh'}
+                          </p>
+                        ) : skuSummary.count > 1 ? (
                           <p className="mt-0.5 text-[11px] text-[#717971]">theo SKU</p>
                         ) : null}
                       </td>
@@ -291,32 +401,35 @@ function ProductsListPage() {
                               <span className="material-symbols-outlined text-[20px]">inventory_2</span>
                             </button>
                           ) : null}
-                          {(canManage || canAdjustStock) && skuSummary.count ? (
+                          {product.isDeleted ? null : canCreate && skuSummary.count ? (
                             <Link
                               to={`/products/${product.id}/edit`}
                               className="rounded-full p-2 text-[#717971] hover:bg-[#e4e3db] hover:text-[#356647]"
-                              title={canManage ? 'Sửa sản phẩm / số lượng' : 'Cập nhật số lượng'}
+                              title="Sửa sản phẩm / SKU"
                             >
-                              <span className="material-symbols-outlined text-[20px]">
-                                {canManage ? 'edit' : 'edit_square'}
-                              </span>
+                              <span className="material-symbols-outlined text-[20px]">edit</span>
                             </Link>
                           ) : null}
-                          {canManage ? (
+                          {canHide && product.isDeleted ? (
                             <button
                               type="button"
                               disabled={togglingId === product.id}
-                              title={product.isActive ? 'Ngừng kinh doanh' : 'Kích hoạt lại'}
-                              className={`rounded-full p-2 disabled:opacity-50 ${
-                                product.isActive
-                                  ? 'text-[#717971] hover:bg-[#fff8e8] hover:text-[#7e5700]'
-                                  : 'text-[#356647] hover:bg-[#356647]/10'
-                              }`}
-                              onClick={() => handleToggleStatus(product)}
+                              title="Kích hoạt lại"
+                              className="rounded-full p-2 text-[#356647] hover:bg-[#356647]/10 disabled:opacity-50"
+                              onClick={() => handleRestore(product)}
                             >
-                              <span className="material-symbols-outlined text-[20px]">
-                                {product.isActive ? 'pause_circle' : 'play_circle'}
-                              </span>
+                              <span className="material-symbols-outlined text-[20px]">restore_from_trash</span>
+                            </button>
+                          ) : null}
+                          {canHide && !product.isDeleted ? (
+                            <button
+                              type="button"
+                              disabled={togglingId === product.id}
+                              title="Ẩn sản phẩm"
+                              className="rounded-full p-2 text-rose-600 hover:bg-rose-50 disabled:opacity-50"
+                              onClick={() => handleHide(product)}
+                            >
+                              <span className="material-symbols-outlined text-[20px]">visibility_off</span>
                             </button>
                           ) : null}
                         </div>
@@ -336,8 +449,9 @@ function ProductsListPage() {
         <ProductSkusDetailModal
           product={skuModalProduct}
           stockBySkuId={stockBySkuId}
-          canManage={canManage}
-          canAdjustStock={canAdjustStock}
+          canManage={canCreate}
+          canAdjustStock={isWarehouse ? false : canAdjustStock}
+          warehouseStockView={isWarehouse}
           onClose={() => setSkuModalProduct(null)}
           onStockAdjusted={loadStocks}
         />

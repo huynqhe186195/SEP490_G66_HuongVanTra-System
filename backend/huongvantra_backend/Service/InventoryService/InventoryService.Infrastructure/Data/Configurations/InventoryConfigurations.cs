@@ -43,6 +43,47 @@ public class StockDeductQueueItemConfiguration : IEntityTypeConfiguration<StockD
     }
 }
 
+public class StockAdjustmentRequestConfiguration : IEntityTypeConfiguration<StockAdjustmentRequest>
+{
+    public void Configure(EntityTypeBuilder<StockAdjustmentRequest> builder)
+    {
+        builder.ToTable("StockAdjustmentRequests");
+        builder.HasKey(e => e.Id);
+        builder.Property(e => e.RequestCode).HasMaxLength(30).IsRequired();
+        builder.Property(e => e.SkuCode).HasMaxLength(50).IsRequired();
+        builder.Property(e => e.SkuSnapshotName).HasMaxLength(255).IsRequired();
+        builder.Property(e => e.Reason).HasMaxLength(500);
+        builder.Property(e => e.ReviewNote).HasMaxLength(500);
+        builder.Property(e => e.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+        builder.HasIndex(e => e.RequestCode).IsUnique();
+        builder.HasIndex(e => e.Status);
+        builder.HasIndex(e => e.RequestedBy);
+        builder.HasIndex(e => e.RequestedAt);
+        builder.HasIndex(e => e.ExportSlipId);
+        builder.HasOne(e => e.ExportSlip)
+            .WithMany()
+            .HasForeignKey(e => e.ExportSlipId)
+            .OnDelete(DeleteBehavior.SetNull);
+    }
+}
+
+public class StockExportSlipConfiguration : IEntityTypeConfiguration<StockExportSlip>
+{
+    public void Configure(EntityTypeBuilder<StockExportSlip> builder)
+    {
+        builder.ToTable("StockExportSlips");
+        builder.HasKey(e => e.Id);
+        builder.Property(e => e.ExportCode).HasMaxLength(30).IsRequired();
+        builder.Property(e => e.ExportType).HasMaxLength(30).IsRequired();
+        builder.Property(e => e.SkuCode).HasMaxLength(50).IsRequired();
+        builder.Property(e => e.SkuSnapshotName).HasMaxLength(255).IsRequired();
+        builder.Property(e => e.Note).HasMaxLength(500);
+        builder.HasIndex(e => e.ExportCode).IsUnique();
+        builder.HasIndex(e => e.StockAdjustmentRequestId);
+        builder.HasIndex(e => e.CreatedAt);
+    }
+}
+
 public class ProcessedIntegrationEventConfiguration : IEntityTypeConfiguration<ProcessedIntegrationEvent>
 {
     public void Configure(EntityTypeBuilder<ProcessedIntegrationEvent> builder)

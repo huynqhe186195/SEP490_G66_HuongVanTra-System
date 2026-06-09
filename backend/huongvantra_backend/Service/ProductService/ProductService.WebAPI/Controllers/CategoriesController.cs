@@ -11,15 +11,15 @@ namespace ProductService.WebAPI.Controllers;
 public class CategoriesController(CategoryLogic _categoryLogic) : ControllerBase
 {
     [HttpGet]
-    public async Task<IActionResult> GetAll() =>
-        Ok(await _categoryLogic.GetAllAsync());
+    public async Task<IActionResult> GetAll([FromQuery] bool? isDeleted) =>
+        Ok(await _categoryLogic.GetAllAsync(isDeleted));
 
     [HttpGet("{id:int}")]
     public async Task<IActionResult> GetById(int id) =>
         Ok(await _categoryLogic.GetByIdAsync(id));
 
     [HttpPost]
-    [Authorize(Policy = PermissionNames.ManageRole)]
+    [Authorize(Roles = "Warehouse")]
     public async Task<IActionResult> Create([FromBody] CreateCategoryRequest request)
     {
         var result = await _categoryLogic.CreateAsync(request);
@@ -27,15 +27,20 @@ public class CategoriesController(CategoryLogic _categoryLogic) : ControllerBase
     }
 
     [HttpPut("{id:int}")]
-    [Authorize(Policy = PermissionNames.ManageRole)]
+    [Authorize(Roles = "Warehouse")]
     public async Task<IActionResult> Update(int id, [FromBody] UpdateCategoryRequest request) =>
         Ok(await _categoryLogic.UpdateAsync(id, request));
 
     [HttpDelete("{id:int}")]
-    [Authorize(Policy = PermissionNames.ManageRole)]
+    [Authorize(Roles = "Warehouse")]
     public async Task<IActionResult> Delete(int id)
     {
         await _categoryLogic.DeleteAsync(id);
         return NoContent();
     }
+
+    [HttpPost("{id:int}/restore")]
+    [Authorize(Roles = "Warehouse")]
+    public async Task<IActionResult> Restore(int id) =>
+        Ok(await _categoryLogic.RestoreAsync(id));
 }

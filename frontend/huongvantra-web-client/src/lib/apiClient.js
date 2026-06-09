@@ -41,7 +41,7 @@ export async function parseResponseError(response) {
   return message
 }
 
-function decodeJwtPayload(token) {
+export function decodeJwtPayload(token) {
   if (!token || typeof token !== 'string') return {}
 
   try {
@@ -52,6 +52,14 @@ function decodeJwtPayload(token) {
   } catch {
     return {}
   }
+}
+
+export function getPermissionsFromAccessToken(accessToken) {
+  const payload = decodeJwtPayload(accessToken)
+  const raw = payload.permission ?? payload.permissions ?? payload.Permission ?? payload.Permissions ?? []
+  if (Array.isArray(raw)) return [...new Set(raw.map(String).filter(Boolean))]
+  if (typeof raw === 'string' && raw.trim()) return [raw.trim()]
+  return []
 }
 
 export function getUserIdFromToken(accessToken) {

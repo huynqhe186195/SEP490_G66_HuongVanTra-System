@@ -6,4 +6,5 @@ public record CategoryResponse(
     string? Description,
     int? ParentId,
     bool IsActive,
+    bool IsDeleted,
     DateTime CreatedAt);

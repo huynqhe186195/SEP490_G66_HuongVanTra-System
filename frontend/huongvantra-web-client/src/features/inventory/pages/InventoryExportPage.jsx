@@ -1,96 +1,140 @@
-import { NavLink } from 'react-router-dom'
+import { useCallback, useEffect, useState } from 'react'
+import { Link, useLocation } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
+import PageShell from '../../../components/shared/PageShell.jsx'
+import { showError } from '../../../app/toast.js'
+import { formatStockQuantity } from '../../products/utils/productDisplay.js'
+import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
+import { fetchStockExportSlips, getExportTypeLabel } from '../services/stockExportSlipApi.js'
 
 const navigationTabs = [
-  { label: 'Nhập kho', to: '/inventory' },
-  { label: 'Xuất kho', to: '/inventory/export' },
-]
-
-const logItems = [
-  { time: '14:30', text: 'Xuất 2 hộp cho #HV1028' },
-  { time: '11:20', text: 'Điều chỉnh +5 do kiểm kê', accent: '+5' },
-  { time: '09:10', text: 'Nhập 200 gói lô A05' },
+  { label: 'Kho tổng', to: '/inventory' },
+  { label: 'Phiếu xuất kho', to: '/inventory/export' },
+  { label: 'Yêu cầu tồn', to: '/inventory/stock-requests' },
 ]
 
 function InventoryExportPage() {
-  return (
-    <div className="flex min-h-0 flex-1 flex-col gap-6">
-      <PageHeader
-        title="Xuất kho &amp; nhật ký kho"
-        description="Xuất theo đơn, luân chuyển nội bộ và xem audit tồn kho"
-        searchPlaceholder="Tìm kiếm nhanh..."
-        rightContent={
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2 rounded-xl bg-white p-1 shadow-sm ring-1 ring-slate-200">
-              {navigationTabs.map((tab) => (
-                <NavLink
-                  key={tab.to}
-                  to={tab.to}
-                  className={({ isActive }) =>
-                    `rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${isActive ? 'bg-secondary/70 text-slate-900' : 'text-slate-500 hover:bg-slate-50'}`
-                  }
-                >
-                  {tab.label}
-                </NavLink>
-              ))}
-            </div>
+  const location = useLocation()
+  const [searchInput, setSearchInput] = useState(location.state?.search ?? '')
+  const [slips, setSlips] = useState([])
+  const [selectedId, setSelectedId] = useState(null)
+  const [isLoading, setIsLoading] = useState(true)
 
-            <button type="button" className="rounded-lg bg-secondary/70 px-6 py-2 text-sm font-bold text-slate-800 transition-all hover:bg-secondary">
-              Lưu nháp
-            </button>
+  const loadData = useCallback(async () => {
+    setIsLoading(true)
+    try {
+      const items = await fetchStockExportSlips({ search: searchInput.trim() || undefined })
+      setSlips(items)
+      setSelectedId((prev) => {
+        if (prev && items.some((item) => item.id === prev)) return prev
+        return items[0]?.id ?? null
+      })
+    } catch (error) {
+      setSlips([])
+      showError(error.message)
+    } finally {
+      setIsLoading(false)
+    }
+  }, [searchInput])
+
+  useEffect(() => {
+    const timer = setTimeout(loadData, 250)
+    return () => clearTimeout(timer)
+  }, [loadData])
+
+  const selected = slips.find((item) => item.id === selectedId) ?? null
+
+  return (
+    <PageShell>
+      <PageHeader
+        title="Phiếu xuất kho"
+        description="Phiếu xuất tự động khi Thủ kho duyệt yêu cầu nhập hàng từ kho tổng sang cửa hàng"
+        searchPlaceholder="Tìm mã phiếu, SKU..."
+        searchValue={searchInput}
+        onSearchChange={setSearchInput}
+        rightContent={
+          <div className="flex flex-wrap items-center gap-2">
+            {navigationTabs.map((tab) => (
+              <Link
+                key={tab.to}
+                to={tab.to}
+                className={`rounded-xl px-4 py-2 text-sm font-semibold ${
+                  tab.to === '/inventory/export'
+                    ? 'bg-[#538463] text-white'
+                    : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                {tab.label}
+              </Link>
+            ))}
           </div>
         }
       />
 
       <div className="grid flex-1 grid-cols-1 gap-6 lg:grid-cols-12">
-        <section className="rounded-xl-custom border border-slate-100 bg-white p-8 shadow-sm lg:col-span-8">
-          <h2 className="mb-6 text-lg font-bold text-slate-800">Phiếu xuất kho</h2>
-
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="rounded-lg border border-slate-200 bg-slate-50/30 p-4">
-              <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-slate-400">Loại xuất</label>
-              <div className="text-sm font-medium text-slate-700">Theo đơn hàng</div>
-            </div>
-            <div className="rounded-lg border border-slate-200 bg-slate-50/30 p-4">
-              <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-slate-400">Mã đơn</label>
-              <div className="text-sm font-medium text-slate-700">#HV1028</div>
-            </div>
-            <div className="rounded-lg border border-slate-200 bg-slate-50/30 p-4">
-              <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-slate-400">Sản phẩm</label>
-              <div className="text-sm font-medium text-slate-700">Trà Ướp Hoa Bưởi</div>
-            </div>
-            <div className="rounded-lg border border-slate-200 bg-slate-50/30 p-4">
-              <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-slate-400">Lô ưu tiên</label>
-              <div className="text-sm font-medium text-slate-700">Lô B02 - gần hết hạn</div>
-            </div>
-            <div className="rounded-lg border border-slate-200 bg-slate-50/30 p-4 sm:col-span-2">
-              <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-slate-400">Số lượng</label>
-              <div className="text-sm font-medium text-slate-700">2 hộp</div>
-            </div>
+        <section className="rounded-2xl border border-slate-100 bg-white shadow-sm lg:col-span-5">
+          <div className="border-b border-slate-50 px-6 py-4">
+            <h2 className="text-lg font-bold text-slate-800">Danh sách phiếu</h2>
+          </div>
+          <div className="max-h-[560px] overflow-y-auto">
+            {isLoading ? (
+              <p className="px-6 py-8 text-sm text-slate-500">Đang tải...</p>
+            ) : slips.length === 0 ? (
+              <p className="px-6 py-8 text-sm text-slate-500">Chưa có phiếu xuất kho.</p>
+            ) : (
+              slips.map((slip) => (
+                <button
+                  key={slip.id}
+                  type="button"
+                  onClick={() => setSelectedId(slip.id)}
+                  className={`block w-full border-b border-slate-50 px-6 py-4 text-left transition-colors hover:bg-[#fbf9f1]/40 ${
+                    selectedId === slip.id ? 'bg-[#fbf9f1]/60' : ''
+                  }`}
+                >
+                  <p className="font-bold text-[#356647]">{slip.exportCode}</p>
+                  <p className="mt-1 text-sm text-slate-700">{slip.skuSnapshotName}</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    SL: {formatStockQuantity(slip.quantity)} · {formatVietnamDateTime(slip.createdAt)}
+                  </p>
+                </button>
+              ))
+            )}
           </div>
         </section>
 
-        <section className="rounded-xl-custom border border-slate-100 bg-white p-8 shadow-sm lg:col-span-4">
-          <h2 className="mb-6 text-lg font-bold text-slate-800">Nhật ký gần nhất</h2>
-
-          <div className="space-y-4">
-            {logItems.map((item) => (
-              <div key={`${item.time}-${item.text}`} className="group cursor-pointer rounded-lg border border-slate-200 p-4 transition-colors hover:border-secondary">
-                <span className="mb-1 block text-[10px] font-bold text-slate-400 group-hover:text-primary">{item.time}</span>
-                <p className="text-sm leading-snug text-slate-700">
-                  {item.accent ? (
-                    <>
-                      Điều chỉnh <span className="font-bold text-emerald-600">{item.accent}</span> do kiểm kê
-                    </>
-                  ) : (
-                    item.text
-                  )}
-                </p>
-              </div>
-            ))}
-          </div>
+        <section className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm sm:p-8 lg:col-span-7">
+          <h2 className="mb-6 text-lg font-bold text-slate-800">Chi tiết phiếu xuất</h2>
+          {!selected ? (
+            <p className="text-sm text-slate-500">Chọn một phiếu để xem chi tiết.</p>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <DetailField label="Mã phiếu" value={selected.exportCode} />
+              <DetailField label="Loại xuất" value={getExportTypeLabel(selected.exportType)} />
+              <DetailField label="SKU" value={selected.skuCode} />
+              <DetailField label="Sản phẩm" value={selected.skuSnapshotName} />
+              <DetailField label="Số lượng xuất" value={formatStockQuantity(selected.quantity)} />
+              <DetailField label="Thời gian" value={formatVietnamDateTime(selected.createdAt)} />
+              <DetailField label="Kho trước → sau" value={`${formatStockQuantity(selected.warehouseQtyBefore)} → ${formatStockQuantity(selected.warehouseQtyAfter)}`} />
+              <DetailField label="Cửa hàng trước → sau" value={`${formatStockQuantity(selected.storeQtyBefore)} → ${formatStockQuantity(selected.storeQtyAfter)}`} />
+              {selected.note ? (
+                <div className="rounded-lg border border-slate-200 bg-slate-50/30 p-4 sm:col-span-2">
+                  <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-slate-400">Ghi chú</label>
+                  <div className="text-sm text-slate-700">{selected.note}</div>
+                </div>
+              ) : null}
+            </div>
+          )}
         </section>
       </div>
+    </PageShell>
+  )
+}
+
+function DetailField({ label, value }) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-slate-50/30 p-4">
+      <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-slate-400">{label}</label>
+      <div className="text-sm font-medium text-slate-700">{value}</div>
     </div>
   )
 }

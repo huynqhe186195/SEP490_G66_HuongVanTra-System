@@ -10,5 +10,6 @@ public record ProductResponse(
     string? BrewingGuide,
     string? Description,
     bool IsActive,
+    bool IsDeleted,
     DateTime CreatedAt,
     List<ProductSkuResponse> Skus);

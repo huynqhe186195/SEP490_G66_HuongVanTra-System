@@ -16,9 +16,11 @@ function ProductSkusDetailModal({
   stockBySkuId,
   canManage = false,
   canAdjustStock = false,
+  warehouseStockView = false,
   onClose,
   onStockAdjusted,
 }) {
+  const stockLabel = warehouseStockView ? 'Tồn kho tổng' : 'Tồn cửa hàng'
   const [skus, setSkus] = useState(() => product?.skus ?? [])
   const [isLoading, setIsLoading] = useState(false)
   const [stockModalSku, setStockModalSku] = useState(null)
@@ -124,7 +126,7 @@ function ProductSkusDetailModal({
                                   : 'text-[#356647]'
                             }`}
                           >
-                            Số lượng hiện tại: {formatStockQuantity(quantityOnHand)}
+                            {stockLabel}: {formatStockQuantity(quantityOnHand)}
                           </p>
                         </div>
                       </div>
@@ -134,7 +136,7 @@ function ProductSkusDetailModal({
                           className="shrink-0 rounded-lg bg-[#538463] px-4 py-2 text-sm font-semibold text-white hover:bg-[#457053]"
                           onClick={() => setStockModalSku(sku)}
                         >
-                          Cập nhật số lượng
+                          Gửi yêu cầu điều chỉnh
                         </button>
                       ) : null}
                     </div>
@@ -160,14 +162,6 @@ function ProductSkusDetailModal({
               >
                 Sửa sản phẩm / SKU
               </Link>
-            ) : canAdjustStock ? (
-              <Link
-                to={`/products/${product.id}/edit`}
-                className="rounded-xl bg-[#538463] px-5 py-2.5 text-sm font-bold text-white hover:bg-[#457053]"
-                onClick={onClose}
-              >
-                Cập nhật số lượng
-              </Link>
             ) : null}
           </div>
         </div>
@@ -176,12 +170,9 @@ function ProductSkusDetailModal({
       {stockModalSku ? (
         <AdjustSkuStockModal
           sku={stockModalSku}
+          productName={product?.name}
           quantityOnHand={Number(localStockBySkuId.get(stockModalSku.id) ?? 0)}
           onClose={() => setStockModalSku(null)}
-          onAdjusted={(nextQty) => {
-            setLocalStockBySkuId((prev) => new Map(prev).set(stockModalSku.id, nextQty))
-            onStockAdjusted?.()
-          }}
         />
       ) : null}
     </>

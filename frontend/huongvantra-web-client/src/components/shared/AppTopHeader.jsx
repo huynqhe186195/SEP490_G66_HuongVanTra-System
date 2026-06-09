@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { enrichSessionWithAccess, me, refresh } from '../../features/auth/services/authApi.js'
+import { me, refresh, syncSessionFromServer } from '../../features/auth/services/authApi.js'
 import { loadAuthSession, saveAuthSession } from '../../features/auth/services/authSession.js'
 import PageHeader from './PageHeader.jsx'
 
@@ -77,7 +77,7 @@ function AppTopHeader({ searchPlaceholder = 'Tìm kiếm...', rightContent = nul
           let sessionToSave = refreshedSession
 
           try {
-            sessionToSave = await enrichSessionWithAccess(refreshedSession)
+            sessionToSave = await syncSessionFromServer(refreshedSession)
           } catch {
             sessionToSave = {
               ...refreshedSession,

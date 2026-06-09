@@ -45,6 +45,7 @@ public class GlobalExceptionMiddleware(RequestDelegate next, ILogger<GlobalExcep
         var (statusCode, message) = ex switch
         {
             InventoryNotFoundException e => (StatusCodes.Status404NotFound, e.Message),
+            InventoryValidationException e => (StatusCodes.Status400BadRequest, e.Message),
             _ => (StatusCodes.Status500InternalServerError, "An unexpected error occurred.")
         };
 

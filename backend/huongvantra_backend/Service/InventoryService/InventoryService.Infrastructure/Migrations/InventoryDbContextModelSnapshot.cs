@@ -55,6 +55,9 @@ namespace InventoryService.Infrastructure.Migrations
                     b.Property<int>("QuantityOnHand")
                         .HasColumnType("int");
 
+                    b.Property<int>("WarehouseQuantityOnHand")
+                        .HasColumnType("int");
+
                     b.Property<string>("SkuCode")
                         .IsRequired()
                         .HasMaxLength(50)
@@ -168,6 +171,163 @@ namespace InventoryService.Infrastructure.Migrations
             modelBuilder.Entity("InventoryService.Domain.Entities.StockDeductQueue", b =>
                 {
                     b.Navigation("Items");
+                });
+
+            modelBuilder.Entity("InventoryService.Domain.Entities.StockExportSlip", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("ExportCode")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)");
+
+                    b.Property<string>("ExportType")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("int");
+
+                    b.Property<string>("SkuCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<Guid>("SkuId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("SkuSnapshotName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<int>("StoreQtyAfter")
+                        .HasColumnType("int");
+
+                    b.Property<int>("StoreQtyBefore")
+                        .HasColumnType("int");
+
+                    b.Property<Guid?>("StockAdjustmentRequestId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<int>("WarehouseQtyAfter")
+                        .HasColumnType("int");
+
+                    b.Property<int>("WarehouseQtyBefore")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("ExportCode")
+                        .IsUnique();
+
+                    b.HasIndex("StockAdjustmentRequestId");
+
+                    b.ToTable("StockExportSlips");
+                });
+
+            modelBuilder.Entity("InventoryService.Domain.Entities.StockAdjustmentRequest", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)");
+
+                    b.Property<Guid?>("ExportSlipId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<int>("QuantityDelta")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("QuantityOnHandAfter")
+                        .HasColumnType("int");
+
+                    b.Property<int>("QuantityOnHandSnapshot")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("WarehouseQuantityOnHandAfter")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<string>("RequestCode")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)");
+
+                    b.Property<DateTime>("RequestedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid>("RequestedBy")
+                        .HasColumnType("char(36)");
+
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid?>("ReviewedBy")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("ReviewNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<string>("SkuCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<Guid>("SkuId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("SkuSnapshotName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RequestCode")
+                        .IsUnique();
+
+                    b.HasIndex("RequestedAt");
+
+                    b.HasIndex("RequestedBy");
+
+                    b.HasIndex("Status");
+
+                    b.HasIndex("ExportSlipId");
+
+                    b.ToTable("StockAdjustmentRequests");
+                });
+
+            modelBuilder.Entity("InventoryService.Domain.Entities.StockAdjustmentRequest", b =>
+                {
+                    b.HasOne("InventoryService.Domain.Entities.StockExportSlip", "ExportSlip")
+                        .WithMany()
+                        .HasForeignKey("ExportSlipId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("ExportSlip");
                 });
 #pragma warning restore 612, 618
         }

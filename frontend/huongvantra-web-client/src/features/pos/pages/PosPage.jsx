@@ -178,6 +178,7 @@ function PosPage() {
   const [posCategories, setPosCategories] = useState([])
   const [selectedCategoryId, setSelectedCategoryId] = useState('')
   const [isSearchLoading, setIsSearchLoading] = useState(false)
+  const [catalogReloadKey, setCatalogReloadKey] = useState(0)
   const [tabCloseConfirm, setTabCloseConfirm] = useState(null)
   const [savedShippingAddresses, setSavedShippingAddresses] = useState([])
   const [isLoadingShippingAddresses, setIsLoadingShippingAddresses] = useState(false)
@@ -254,7 +255,7 @@ function PosPage() {
     return () => {
       mounted = false
     }
-  }, [])
+  }, [catalogReloadKey])
 
   const formatMoney = (value) =>
     new Intl.NumberFormat('vi-VN', {
@@ -358,7 +359,12 @@ function PosPage() {
       cancelled = true
       clearTimeout(timerId)
     }
-  }, [searchValue, activeTabId])
+  }, [searchValue, activeTabId, catalogReloadKey])
+
+  async function handleRefreshCatalog() {
+    setCatalogReloadKey((value) => value + 1)
+    showSuccess('Đang đồng bộ sản phẩm và danh mục mới...')
+  }
 
   useEffect(() => {
     setOpenDiscountSku(null)
@@ -1165,7 +1171,19 @@ function PosPage() {
                     <span className="ml-1 font-normal normal-case text-[#414942]">· &quot;{searchValue.trim()}&quot;</span>
                   ) : null}
                 </p>
-                <span className="shrink-0 text-xs text-[#717971]">{filteredSearchProducts.length} SP</span>
+                <div className="flex shrink-0 items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleRefreshCatalog}
+                    disabled={isSearchLoading}
+                    className="inline-flex items-center gap-1 rounded-lg border border-[#c1c9c0] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#356647] hover:bg-[#f0eee6] disabled:opacity-50"
+                    title="Tải lại sản phẩm và danh mục mới từ kho"
+                  >
+                    <Icon className="text-[16px]">sync</Icon>
+                    Đồng bộ
+                  </button>
+                  <span className="text-xs text-[#717971]">{filteredSearchProducts.length} SP</span>
+                </div>
               </div>
 
               {posCategories.length > 0 ? (

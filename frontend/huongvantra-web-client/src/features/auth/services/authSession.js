@@ -13,8 +13,11 @@ export function formatDisplayName(value) {
     .join(' ')
 }
 
+export const AUTH_SESSION_CHANGED_EVENT = 'hv-auth-session-changed'
+
 export function saveAuthSession(session) {
   localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(session))
+  window.dispatchEvent(new CustomEvent(AUTH_SESSION_CHANGED_EVENT))
 }
 
 export function loadAuthSession() {

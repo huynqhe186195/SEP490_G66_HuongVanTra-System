@@ -186,6 +186,7 @@ services:
       Jwt__Secret: ${JWT_SECRET:-your-super-secret-key-at-least-32-chars!!}
       Jwt__Issuer: HuongVanTra
       Jwt__Audience: HuongVanTra
+      Inventory__SimulateWarehouse: "true"
     ports:
       - "5005:8080"
     networks:

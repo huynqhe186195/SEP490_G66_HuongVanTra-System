@@ -52,18 +52,18 @@ export function formatWeightGrams(value) {
   return `${grams.toLocaleString('vi-VN')} g`
 }
 
-export function getProductStatusMeta(isActive) {
-  if (isActive) {
-    return { label: 'Đang bán', className: 'bg-emerald-50 text-emerald-700' }
+export function getProductStatusMeta(isActive, isDeleted = false) {
+  if (isDeleted || isActive === false) {
+    return { label: 'Đã ẩn', className: 'bg-slate-100 text-slate-500' }
   }
-  return { label: 'Ngừng kinh doanh', className: 'bg-slate-100 text-slate-500' }
+  return { label: 'Đang bán', className: 'bg-emerald-50 text-emerald-700' }
 }
 
-export function getCategoryStatusMeta(isActive) {
-  if (isActive) {
-    return { label: 'Đang hoạt động', className: 'bg-emerald-50 text-emerald-700' }
+export function getCategoryStatusMeta(isActive, isDeleted = false) {
+  if (isDeleted || isActive === false) {
+    return { label: 'Đã ẩn', className: 'bg-slate-100 text-slate-500' }
   }
-  return { label: 'Ngừng hoạt động', className: 'bg-slate-100 text-slate-500' }
+  return { label: 'Đang hoạt động', className: 'bg-emerald-50 text-emerald-700' }
 }
 
 export function pickProductImageUrl(productOrSkus) {
@@ -86,7 +86,7 @@ export function formatStockQuantity(value) {
   return amount.toLocaleString('vi-VN', { maximumFractionDigits: 2 })
 }
 
-export function summarizeProductStock(skus = [], stockBySkuId = new Map()) {
+export function summarizeProductStock(skus = [], stockBySkuId = new Map(), stockLabel = 'số lượng hiện tại') {
   if (!skus.length) {
     return { label: '—', title: '', total: 0, isLow: false, isOut: true }
   }
@@ -108,7 +108,7 @@ export function summarizeProductStock(skus = [], stockBySkuId = new Map()) {
 
   return {
     label,
-    title: lines.map((line) => `${line.code}: số lượng hiện tại ${formatStockQuantity(line.qty)}`).join('\n'),
+    title: lines.map((line) => `${line.code}: ${stockLabel} ${formatStockQuantity(line.qty)}`).join('\n'),
     total,
     isLow: quantities.some((qty) => qty > 0 && qty <= 5),
     isOut: quantities.every((qty) => qty <= 0),

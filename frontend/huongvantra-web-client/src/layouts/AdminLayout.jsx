@@ -3,7 +3,7 @@ import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import ModuleRouteGuard from '../app/ModuleRouteGuard.jsx'
 import Sidebar from '../components/shared/Sidebar.jsx'
 import { getNavigationItemsForSession } from '../app/navigation.js'
-import { enrichSessionWithAccess } from '../features/auth/services/authApi.js'
+import { syncSessionFromServer } from '../features/auth/services/authApi.js'
 import { loadAuthSession, saveAuthSession } from '../features/auth/services/authSession.js'
 
 const SIDEBAR_COLLAPSED_KEY = 'hvt-sidebar-collapsed'
@@ -50,7 +50,7 @@ function AdminLayout() {
       }
 
       try {
-        const enrichedSession = await enrichSessionWithAccess(session)
+        const enrichedSession = await syncSessionFromServer(session)
         saveAuthSession(enrichedSession)
 
         if (isMounted) {

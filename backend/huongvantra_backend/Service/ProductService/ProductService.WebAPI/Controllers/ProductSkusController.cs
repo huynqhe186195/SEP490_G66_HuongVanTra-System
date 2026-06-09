@@ -32,7 +32,7 @@ public class ProductSkusController(ProductSkuLogic _skuLogic) : ControllerBase
         Ok(await _skuLogic.GetByProductIdAsync(productId));
 
     [HttpPost]
-    [Authorize(Policy = PermissionNames.ManageRole)]
+    [Authorize(Roles = "Warehouse")]
     public async Task<IActionResult> Create([FromBody] CreateProductSkuRequest request)
     {
         var result = await _skuLogic.CreateAsync(request);
@@ -40,12 +40,12 @@ public class ProductSkusController(ProductSkuLogic _skuLogic) : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
-    [Authorize(Policy = PermissionNames.ManageRole)]
+    [Authorize(Roles = "Warehouse")]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateProductSkuRequest request) =>
         Ok(await _skuLogic.UpdateAsync(id, request));
 
     [HttpDelete("{id:guid}")]
-    [Authorize(Policy = PermissionNames.ManageRole)]
+    [Authorize(Roles = "Warehouse")]
     public async Task<IActionResult> Delete(Guid id)
     {
         await _skuLogic.DeleteAsync(id);

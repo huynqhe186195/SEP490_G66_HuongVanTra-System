@@ -10,6 +10,10 @@ public static class PermissionNames
     public const string ManageEmployee = "MANAGE_EMPLOYEE";
     public const string ManageUser = "MANAGE_USER";
     public const string ManageRole = "MANAGE_ROLE";
+    public const string ManageCatalog = "MANAGE_CATALOG";
+
+    /// <summary>Admin hoặc Thủ kho — tạo/sửa sản phẩm, danh mục, SKU.</summary>
+    public const string CatalogManagement = "CATALOG_MANAGEMENT";
 
     public static readonly string[] All =
     [
@@ -20,6 +24,7 @@ public static class PermissionNames
         ViewAllCustomers,
         ManageEmployee,
         ManageUser,
-        ManageRole
+        ManageRole,
+        ManageCatalog
     ];
 }
