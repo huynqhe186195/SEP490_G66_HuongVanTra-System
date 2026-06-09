@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
@@ -138,6 +138,14 @@ function ProductFormPage({ mode }) {
     }
   }
 
+  const selectableCategories = useMemo(
+    () =>
+      categories.filter(
+        (category) => category.isActive !== false || String(category.id) === String(form.categoryId),
+      ),
+    [categories, form.categoryId],
+  )
+
   if (isLoading) {
     return (
       <PageShell>
@@ -172,9 +180,9 @@ function ProductFormPage({ mode }) {
           disabled={!canManage}
         >
           <option value="">Chọn danh mục</option>
-          {categories.map((category) => (
+          {selectableCategories.map((category) => (
             <option key={category.id} value={category.id}>
-              {category.name}
+              {category.isActive === false ? `${category.name} (ngừng hoạt động)` : category.name}
             </option>
           ))}
         </select>

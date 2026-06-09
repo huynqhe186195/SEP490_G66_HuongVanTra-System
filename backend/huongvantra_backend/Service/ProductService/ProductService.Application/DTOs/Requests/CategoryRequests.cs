@@ -8,4 +8,5 @@ public record CreateCategoryRequest(
 public record UpdateCategoryRequest(
     string Name,
     string? Description,
-    int? ParentId);
+    int? ParentId,
+    bool? IsActive);

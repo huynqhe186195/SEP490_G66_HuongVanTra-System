@@ -16,6 +16,7 @@ public class CategoryConfiguration : IEntityTypeConfiguration<Category>
         builder.Property(c => c.ParentId).IsRequired(false);
         builder.Property(c => c.CreatedAt).IsRequired();
         builder.Property(c => c.UpdatedAt).IsRequired(false);
+        builder.Property(c => c.IsActive).HasDefaultValue(true);
         builder.Property(c => c.IsDeleted).HasDefaultValue(false);
 
         builder.HasOne(c => c.Parent)

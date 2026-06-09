@@ -8,7 +8,7 @@ import { loadAuthSession } from '../../auth/services/authSession.js'
 import { canManageProducts } from '../../auth/utils/permissions.js'
 import { fetchCategories } from '../services/categoriesApi.js'
 import { buildStockBySkuIdMap, fetchSkuStocks } from '../../inventory/services/inventoryStockApi.js'
-import { deleteProduct, fetchProducts } from '../services/productsApi.js'
+import { fetchProducts, setProductStatus } from '../services/productsApi.js'
 import ProductImage from '../components/ProductImage.jsx'
 import ProductSkusDetailModal from '../components/ProductSkusDetailModal.jsx'
 import { getProductStatusMeta, summarizeProductSkus, summarizeProductStock } from '../utils/productDisplay.js'
@@ -31,7 +31,7 @@ function ProductsListPage() {
   const [totalCount, setTotalCount] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
   const [stockBySkuId, setStockBySkuId] = useState(() => new Map())
-  const [deletingId, setDeletingId] = useState(null)
+  const [togglingId, setTogglingId] = useState(null)
   const [skuModalProduct, setSkuModalProduct] = useState(null)
 
   useEffect(() => {
@@ -92,23 +92,30 @@ function ProductsListPage() {
     loadProducts()
   }, [loadProducts])
 
-  async function handleDelete(product) {
+  async function handleToggleStatus(product) {
     if (!canManage) return
-    if (!window.confirm(`Xóa sản phẩm "${product.name}"? Sản phẩm sẽ được ẩn khỏi hệ thống (soft delete).`)) return
+    const nextActive = !product.isActive
+    if (!window.confirm(`${nextActive ? 'Kích hoạt' : 'Ngừng kinh doanh'} sản phẩm "${product.name}"?`)) return
     try {
-      setDeletingId(product.id)
-      await deleteProduct(product.id)
-      showSuccess('Đã xóa sản phẩm.')
+      setTogglingId(product.id)
+      await setProductStatus(product, nextActive)
+      showSuccess(nextActive ? 'Đã kích hoạt lại sản phẩm.' : 'Đã chuyển sản phẩm sang ngừng kinh doanh.')
       await loadProducts()
     } catch (error) {
       showError(error.message)
     } finally {
-      setDeletingId(null)
+      setTogglingId(null)
     }
   }
 
   const categoryOptions = useMemo(
-    () => [{ value: '', label: 'Tất cả danh mục' }, ...categories.map((item) => ({ value: String(item.id), label: item.name }))],
+    () => [
+      { value: '', label: 'Tất cả danh mục' },
+      ...categories.map((item) => ({
+        value: String(item.id),
+        label: item.isActive === false ? `${item.name} (ngừng)` : item.name,
+      })),
+    ],
     [categories],
   )
 
@@ -294,11 +301,18 @@ function ProductsListPage() {
                           {canManage ? (
                             <button
                               type="button"
-                              disabled={deletingId === product.id}
-                              className="rounded-full p-2 text-[#717971] hover:bg-[#fff5f5] hover:text-[#b42318] disabled:opacity-50"
-                              onClick={() => handleDelete(product)}
+                              disabled={togglingId === product.id}
+                              title={product.isActive ? 'Ngừng kinh doanh' : 'Kích hoạt lại'}
+                              className={`rounded-full p-2 disabled:opacity-50 ${
+                                product.isActive
+                                  ? 'text-[#717971] hover:bg-[#fff8e8] hover:text-[#7e5700]'
+                                  : 'text-[#356647] hover:bg-[#356647]/10'
+                              }`}
+                              onClick={() => handleToggleStatus(product)}
                             >
-                              <span className="material-symbols-outlined text-[20px]">delete</span>
+                              <span className="material-symbols-outlined text-[20px]">
+                                {product.isActive ? 'pause_circle' : 'play_circle'}
+                              </span>
                             </button>
                           ) : null}
                         </div>

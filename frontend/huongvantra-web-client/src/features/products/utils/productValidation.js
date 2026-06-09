@@ -14,12 +14,22 @@ export function normalizeSkuCodeInput(value) {
     .slice(0, 50)
 }
 
-export function validateCategoryForm({ name, description, parentId, categoryId }) {
+export function validateCategoryForm({ name, description, parentId, categoryId, existingCategories = [] }) {
   const errors = {}
   const nameValue = normalizeText(name)
   if (!nameValue) errors.name = 'Tên danh mục là bắt buộc.'
   else if (nameValue.length < 2) errors.name = 'Tên danh mục phải có ít nhất 2 ký tự.'
   else if (nameValue.length > 100) errors.name = 'Tên danh mục tối đa 100 ký tự.'
+  else {
+    const normalized = nameValue.toLowerCase()
+    const duplicate = existingCategories.some(
+      (item) =>
+        String(item?.name || '')
+          .trim()
+          .toLowerCase() === normalized && Number(item?.id) !== Number(categoryId),
+    )
+    if (duplicate) errors.name = 'Tên danh mục đã tồn tại.'
+  }
 
   const descriptionValue = normalizeText(description)
   if (descriptionValue.length > 500) errors.description = 'Mô tả danh mục tối đa 500 ký tự.'

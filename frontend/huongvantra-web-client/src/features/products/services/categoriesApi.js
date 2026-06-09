@@ -7,6 +7,7 @@ export function mapCategory(item) {
     name: item.name ?? item.Name ?? '',
     description: item.description ?? item.Description ?? '',
     parentId: item.parentId ?? item.ParentId ?? null,
+    isActive: Boolean(item.isActive ?? item.IsActive ?? true),
     createdAt: item.createdAt ?? item.CreatedAt ?? null,
   }
 }
@@ -35,17 +36,27 @@ export async function createCategory(payload) {
 }
 
 export async function updateCategory(id, payload) {
+  const body = {
+    name: payload.name?.trim(),
+    description: payload.description?.trim() || null,
+    parentId: payload.parentId ?? null,
+  }
+  if (payload.isActive === true || payload.isActive === false) {
+    body.isActive = payload.isActive
+  }
+
   const data = await apiRequestAuth(`/api/v1/categories/${id}`, {
     method: 'PUT',
-    body: JSON.stringify({
-      name: payload.name?.trim(),
-      description: payload.description?.trim() || null,
-      parentId: payload.parentId ?? null,
-    }),
+    body: JSON.stringify(body),
   })
   return mapCategory(data)
 }
 
-export async function deleteCategory(id) {
-  return apiRequestAuth(`/api/v1/categories/${id}`, { method: 'DELETE' })
+export async function setCategoryStatus(category, isActive) {
+  return updateCategory(category.id, {
+    name: category.name,
+    description: category.description || '',
+    parentId: category.parentId ?? null,
+    isActive,
+  })
 }

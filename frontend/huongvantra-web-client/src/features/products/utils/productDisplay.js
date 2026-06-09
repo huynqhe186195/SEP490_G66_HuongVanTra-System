@@ -59,6 +59,13 @@ export function getProductStatusMeta(isActive) {
   return { label: 'Ngừng kinh doanh', className: 'bg-slate-100 text-slate-500' }
 }
 
+export function getCategoryStatusMeta(isActive) {
+  if (isActive) {
+    return { label: 'Đang hoạt động', className: 'bg-emerald-50 text-emerald-700' }
+  }
+  return { label: 'Ngừng hoạt động', className: 'bg-slate-100 text-slate-500' }
+}
+
 export function pickProductImageUrl(productOrSkus) {
   const skus = Array.isArray(productOrSkus) ? productOrSkus : productOrSkus?.skus
   if (!Array.isArray(skus) || !skus.length) return ''

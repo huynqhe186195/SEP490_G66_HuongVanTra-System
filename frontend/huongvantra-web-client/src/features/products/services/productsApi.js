@@ -99,3 +99,15 @@ export async function updateProduct(id, payload) {
 export async function deleteProduct(id) {
   return apiRequestAuth(`/api/v1/products/${id}`, { method: 'DELETE' })
 }
+
+export async function setProductStatus(product, isActive) {
+  return updateProduct(product.id, {
+    categoryId: product.categoryId,
+    name: product.name,
+    origin: product.origin || '',
+    flavorProfile: product.flavorProfile || '',
+    brewingGuide: product.brewingGuide || '',
+    description: product.description || '',
+    isActive,
+  })
+}

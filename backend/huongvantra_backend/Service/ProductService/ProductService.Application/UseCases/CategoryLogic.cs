@@ -71,6 +71,8 @@ public class CategoryLogic(ICategoryRepository _categoryRepository)
         category.Name = input.Name;
         category.Description = input.Description;
         category.ParentId = input.ParentId;
+        if (request.IsActive.HasValue)
+            category.IsActive = request.IsActive.Value;
         category.UpdatedAt = DateTime.UtcNow;
 
         var updated = await _categoryRepository.UpdateAsync(category);
@@ -81,9 +83,11 @@ public class CategoryLogic(ICategoryRepository _categoryRepository)
     {
         var category = await _categoryRepository.GetByIdAsync(id)
             ?? throw new CategoryNotFoundException(id);
-        await _categoryRepository.DeleteAsync(category);
+        category.IsActive = false;
+        category.UpdatedAt = DateTime.UtcNow;
+        await _categoryRepository.UpdateAsync(category);
     }
 
     private static CategoryResponse MapToResponse(Category c) =>
-        new(c.Id, c.Name, c.Description, c.ParentId, c.CreatedAt);
+        new(c.Id, c.Name, c.Description, c.ParentId, c.IsActive, c.CreatedAt);
 }

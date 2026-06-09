@@ -5,7 +5,8 @@ import PageShell from '../../../components/shared/PageShell.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import { canManageProducts } from '../../auth/utils/permissions.js'
-import { createCategory, deleteCategory, fetchCategories, updateCategory } from '../services/categoriesApi.js'
+import { createCategory, fetchCategories, setCategoryStatus, updateCategory } from '../services/categoriesApi.js'
+import { getCategoryStatusMeta } from '../utils/productDisplay.js'
 import { mapProductApiError, validateCategoryForm } from '../utils/productValidation.js'
 
 const EMPTY_FORM = {
@@ -29,7 +30,8 @@ function ProductsPricingPage() {
   const [editingId, setEditingId] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
   const [fieldErrors, setFieldErrors] = useState({})
-  const [deletingId, setDeletingId] = useState(null)
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [togglingId, setTogglingId] = useState(null)
 
   const loadData = useCallback(async () => {
     try {
@@ -50,13 +52,15 @@ function ProductsPricingPage() {
 
   const filteredCategories = useMemo(() => {
     const keyword = searchInput.trim().toLowerCase()
-    if (!keyword) return categories
     return categories.filter((item) => {
+      if (statusFilter === 'active' && item.isActive === false) return false
+      if (statusFilter === 'inactive' && item.isActive !== false) return false
+      if (!keyword) return true
       const name = String(item.name || '').toLowerCase()
       const description = String(item.description || '').toLowerCase()
       return name.includes(keyword) || description.includes(keyword)
     })
-  }, [categories, searchInput])
+  }, [categories, searchInput, statusFilter])
 
   function resetForm() {
     setEditingId(null)
@@ -84,7 +88,7 @@ function ProductsPricingPage() {
     event.preventDefault()
     if (!canManage) return
 
-    const validation = validateCategoryForm({ ...form, categoryId: editingId })
+    const validation = validateCategoryForm({ ...form, categoryId: editingId, existingCategories: categories })
     if (!validation.valid) {
       setFieldErrors(validation.errors)
       showError(validation.message)
@@ -118,19 +122,21 @@ function ProductsPricingPage() {
     }
   }
 
-  async function handleDelete(category) {
+  async function handleToggleStatus(category) {
     if (!canManage) return
-    if (!window.confirm(`Xóa danh mục "${category.name}"? Danh mục sẽ được ẩn khỏi hệ thống (soft delete).`)) return
+    const nextActive = category.isActive === false
+    if (!window.confirm(`${nextActive ? 'Kích hoạt' : 'Ngừng hoạt động'} danh mục "${category.name}"?`)) return
     try {
-      setDeletingId(category.id)
-      await deleteCategory(category.id)
-      showSuccess('Đã xóa danh mục.')
-      if (editingId === category.id) resetForm()
+      setTogglingId(category.id)
+      await setCategoryStatus(category, nextActive)
+      showSuccess(nextActive ? 'Đã kích hoạt lại danh mục.' : 'Đã ngừng hoạt động danh mục.')
+      if (editingId === category.id && !nextActive) resetForm()
       await loadData()
     } catch (error) {
-      showError(error.message)
+      const mapped = mapProductApiError(error.message, error.apiErrors)
+      showError(mapped.message)
     } finally {
-      setDeletingId(null)
+      setTogglingId(null)
     }
   }
 
@@ -193,7 +199,18 @@ function ProductsPricingPage() {
         ) : null}
 
         <section className={`rounded-[1rem] bg-white p-4 shadow-sm sm:p-6 lg:p-8 ${canManage ? 'lg:col-span-8' : 'lg:col-span-12'}`}>
-          <h2 className="mb-4 text-lg font-bold text-slate-800">Danh sách danh mục</h2>
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <h2 className="text-lg font-bold text-slate-800">Danh sách danh mục</h2>
+            <select
+              className="min-h-[40px] rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 outline-none focus:border-[#356647]"
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value)}
+            >
+              <option value="all">Tất cả trạng thái</option>
+              <option value="active">Đang hoạt động</option>
+              <option value="inactive">Ngừng hoạt động</option>
+            </select>
+          </div>
 
           {isLoading ? (
             <p className="text-sm text-slate-500">Đang tải...</p>
@@ -206,14 +223,20 @@ function ProductsPricingPage() {
                   <tr>
                     <th className="px-4 py-3 font-semibold">Tên</th>
                     <th className="px-4 py-3 font-semibold">Mô tả</th>
+                    <th className="px-4 py-3 font-semibold">Trạng thái</th>
                     {canManage ? <th className="px-4 py-3 font-semibold">Thao tác</th> : null}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {filteredCategories.map((category) => (
+                  {filteredCategories.map((category) => {
+                    const status = getCategoryStatusMeta(category.isActive !== false)
+                    return (
                     <tr key={category.id}>
                       <td className="px-4 py-3 font-semibold text-slate-900">{category.name}</td>
                       <td className="px-4 py-3 text-slate-600">{category.description || '—'}</td>
+                      <td className="px-4 py-3">
+                        <span className={`rounded-full px-3 py-1 text-xs font-semibold ${status.className}`}>{status.label}</span>
+                      </td>
                       {canManage ? (
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
@@ -222,17 +245,20 @@ function ProductsPricingPage() {
                             </button>
                             <button
                               type="button"
-                              disabled={deletingId === category.id}
-                              className="text-sm font-semibold text-[#b42318] hover:underline disabled:opacity-50"
-                              onClick={() => handleDelete(category)}
+                              disabled={togglingId === category.id}
+                              className={`text-sm font-semibold hover:underline disabled:opacity-50 ${
+                                category.isActive !== false ? 'text-[#7e5700]' : 'text-[#356647]'
+                              }`}
+                              onClick={() => handleToggleStatus(category)}
                             >
-                              Xóa
+                              {category.isActive !== false ? 'Ngừng hoạt động' : 'Kích hoạt lại'}
                             </button>
                           </div>
                         </td>
                       ) : null}
                     </tr>
-                  ))}
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
