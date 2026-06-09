@@ -22,8 +22,19 @@ public class PosPaymentController(PosTransferPaymentLogic _posPaymentLogic) : Co
 
     [HttpPost("transfer-qr")]
     [Authorize(Policy = PermissionNames.CreateOrder)]
-    public IActionResult BuildTransferQr([FromBody] BuildTransferQrRequest request) =>
-        Ok(_posPaymentLogic.BuildTransferQr(request));
+    public async Task<IActionResult> BuildTransferQr(
+        [FromBody] BuildTransferQrRequest request, CancellationToken ct) =>
+        Ok(await _posPaymentLogic.BuildTransferQrAsync(request, ct));
+
+    [HttpGet("orders/{orderId:guid}/transfer-qr")]
+    [Authorize(Policy = PermissionNames.ViewOrder)]
+    public async Task<IActionResult> GetTransferQr(Guid orderId, CancellationToken ct) =>
+        Ok(await _posPaymentLogic.GetTransferQrForOrderAsync(orderId, ct));
+
+    [HttpPost("orders/{orderId:guid}/transfer-qr/refresh")]
+    [Authorize(Policy = PermissionNames.CreateOrder)]
+    public async Task<IActionResult> RefreshTransferQr(Guid orderId, CancellationToken ct) =>
+        Ok(await _posPaymentLogic.RefreshTransferQrForOrderAsync(orderId, ct));
 
     [HttpGet("orders/{orderId:guid}/payment-status")]
     [Authorize(Policy = PermissionNames.ViewOrder)]

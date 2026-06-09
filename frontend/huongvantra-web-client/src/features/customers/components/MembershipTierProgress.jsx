@@ -59,7 +59,7 @@ function MembershipTierProgress({
 
       {showHint && !compact ? (
         <p className="text-xs leading-relaxed text-[#717971]">
-          Hạng được tính tự động theo ngưỡng chi tiêu; có thể gán tay khi tạo/sửa khách phổ thông.
+          Hạng không chỉnh sửa tại đây. Thanh tiến độ chỉ tham khảo ngưỡng chi tiêu tích lũy.
         </p>
       ) : null}
     </div>

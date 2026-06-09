@@ -108,7 +108,8 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
         p.Name, p.Origin, p.FlavorProfile, p.BrewingGuide, p.Description,
         p.IsActive, p.CreatedAt,
         p.Skus.Select(s => new ProductSkuResponse(
-            s.Id, s.ProductId, s.SkuCode, s.PackagingType,
+            s.Id, s.ProductId, p.Name, p.Category?.Name ?? string.Empty,
+            s.SkuCode, s.PackagingType,
             s.WeightInGrams, s.BasePrice, s.ImageUrl, s.IsActive, s.CreatedAt))
         .ToList());
 }

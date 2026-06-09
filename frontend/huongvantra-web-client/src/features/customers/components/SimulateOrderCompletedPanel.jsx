@@ -56,25 +56,18 @@ function SimulateOrderCompletedPanel({
 
       const updated = await waitForCustomerAfterIntegrationEvent(customerId, snapshot)
 
-      const tierUpgraded =
-        (updated.tier?.tierId ?? updated.tierId ?? null) !== (snapshot?.tierId ?? null)
-
       pushCustomerIntegrationActivity({
         customerId,
         customerName: customerName || updated.fullName,
         orderCode: accepted?.orderCode ?? accepted?.OrderCode ?? '—',
         totalAmount: amount,
         debtAmount: debt,
-        tierUpgraded,
+        tierUpgraded: false,
         tierName: updated.tier?.tierCode ?? updated.tierCode ?? null,
       })
 
       onUpdated?.(updated)
-      showSuccess(
-        tierUpgraded
-          ? `Đã cập nhật — khách lên hạng ${updated.tier?.tierCode ?? updated.tierCode ?? 'mới'}`
-          : 'Đã cập nhật chi tiêu và công nợ từ integration event.',
-      )
+      showSuccess('Đã cập nhật chi tiêu và công nợ từ integration event.')
     } catch (error) {
       showError(error.message)
     } finally {

@@ -27,7 +27,7 @@ public record SepaySetupResponse(
     string? SetupMessage,
     IReadOnlyList<SepayBankAccountResponse> BankAccounts);
 
-public record BuildTransferQrRequest(string OrderCode, decimal Amount);
+public record BuildTransferQrRequest(string OrderCode, decimal Amount, Guid? OrderId = null);
 
 public record TransferQrResponse(
     string QrImageUrl,
@@ -35,7 +35,8 @@ public record TransferQrResponse(
     string TransferContent,
     string TransferAccountNumber,
     string PaymentMode,
-    DateTime QrExpiresAtUtc);
+    DateTime QrExpiresAtUtc,
+    bool IsExpired);
 
 public record PosOrderPaymentStatusResponse(
     Guid OrderId,

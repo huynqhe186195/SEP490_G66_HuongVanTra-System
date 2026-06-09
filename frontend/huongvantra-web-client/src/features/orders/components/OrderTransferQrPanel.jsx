@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { showError, showSuccess } from '../../../app/toast.js'
 import {
-  fetchOrderTransferQr,
+  fetchOrderTransferQrByOrderId,
   fetchPosOrderPaymentStatus,
   fetchPosSepaySetup,
   fetchPosTransferPaymentInfo,
+  refreshOrderTransferQr,
   resolveTransferQrImageUrl,
 } from '../../pos/services/posApi.js'
 
@@ -22,7 +23,7 @@ function paymentStatusLabel(status, isPaid) {
   return status || 'Đang chờ'
 }
 
-function useQrExpiryCountdown(expiresAtUtc) {
+function useQrExpiryCountdown(expiresAtUtc, isExpired) {
   const [label, setLabel] = useState('')
 
   useEffect(() => {
@@ -33,8 +34,8 @@ function useQrExpiryCountdown(expiresAtUtc) {
 
     const tick = () => {
       const remainingMs = new Date(expiresAtUtc).getTime() - Date.now()
-      if (remainingMs <= 0) {
-        setLabel('QR đã hết hạn. Tạo lại QR hoặc hủy đơn nếu khách không thanh toán.')
+      if (remainingMs <= 0 || isExpired) {
+        setLabel('Mã QR đã hết hạn. Bấm「Tạo mã QR mới」hoặc hủy đơn nếu khách không thanh toán.')
         return
       }
       const minutes = Math.floor(remainingMs / 60000)
@@ -45,7 +46,7 @@ function useQrExpiryCountdown(expiresAtUtc) {
     tick()
     const timerId = setInterval(tick, 1000)
     return () => clearInterval(timerId)
-  }, [expiresAtUtc])
+  }, [expiresAtUtc, isExpired])
 
   return label
 }
@@ -55,6 +56,7 @@ function OrderTransferQrPanel({ orderId, orderCode, total, customerName, onPaid 
   const [bankInfo, setBankInfo] = useState(null)
   const [sepaySetup, setSepaySetup] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [isRefreshing, setIsRefreshing] = useState(false)
   const [paymentStatus, setPaymentStatus] = useState('')
   const [isPaid, setIsPaid] = useState(false)
   const [invoiceCode, setInvoiceCode] = useState('')
@@ -62,36 +64,33 @@ function OrderTransferQrPanel({ orderId, orderCode, total, customerName, onPaid 
   const [expectedTransferContent, setExpectedTransferContent] = useState('')
   const [expectedAmount, setExpectedAmount] = useState(0)
   const completedRef = useRef(false)
-  const qrExpiryLabel = useQrExpiryCountdown(qrData?.qrExpiresAtUtc)
-  const isQrExpired = qrData?.qrExpiresAtUtc && new Date(qrData.qrExpiresAtUtc).getTime() <= Date.now()
+  const isQrExpired =
+    Boolean(qrData?.isExpired) ||
+    (qrData?.qrExpiresAtUtc && new Date(qrData.qrExpiresAtUtc).getTime() <= Date.now())
+  const qrExpiryLabel = useQrExpiryCountdown(qrData?.qrExpiresAtUtc, isQrExpired)
+
+  const loadQr = useCallback(async () => {
+    if (!orderId) return
+    try {
+      setIsLoading(true)
+      const [qr, bank, setup] = await Promise.all([
+        fetchOrderTransferQrByOrderId(orderId),
+        fetchPosTransferPaymentInfo(),
+        fetchPosSepaySetup().catch(() => null),
+      ])
+      setQrData(qr)
+      setBankInfo(bank)
+      setSepaySetup(setup)
+    } catch (error) {
+      showError(error.message)
+    } finally {
+      setIsLoading(false)
+    }
+  }, [orderId])
 
   useEffect(() => {
-    let mounted = true
-
-    async function load() {
-      try {
-        setIsLoading(true)
-        const [qr, bank, setup] = await Promise.all([
-          fetchOrderTransferQr({ orderCode, amount: total }),
-          fetchPosTransferPaymentInfo(),
-          fetchPosSepaySetup().catch(() => null),
-        ])
-        if (!mounted) return
-        setQrData(qr)
-        setBankInfo(bank)
-        setSepaySetup(setup)
-      } catch (error) {
-        if (mounted) showError(error.message)
-      } finally {
-        if (mounted) setIsLoading(false)
-      }
-    }
-
-    load()
-    return () => {
-      mounted = false
-    }
-  }, [orderCode, total])
+    loadQr()
+  }, [loadQr])
 
   const finishPaid = useCallback(
     (status) => {
@@ -142,10 +141,12 @@ function OrderTransferQrPanel({ orderId, orderCode, total, customerName, onPaid 
   }, [expectedTransferContent, qrData?.transferContent, orderCode])
 
   const displayAmount = expectedAmount > 0 ? expectedAmount : total || 0
-  const qrImageUrl = resolveTransferQrImageUrl({
-    qrImageUrl: qrData?.qrImageUrl,
-    qrPayload: qrData?.qrPayload,
-  })
+  const qrImageUrl = !isQrExpired
+    ? resolveTransferQrImageUrl({
+        qrImageUrl: qrData?.qrImageUrl,
+        qrPayload: qrData?.qrPayload,
+      })
+    : ''
   const receiveAccount = qrData?.transferAccountNumber || bankInfo?.accountNumber || '—'
   const usesSepayVa =
     qrData?.paymentMode === 'sepay_order_va' || qrData?.paymentMode === 'sepay_static_va'
@@ -162,12 +163,30 @@ function OrderTransferQrPanel({ orderId, orderCode, total, customerName, onPaid 
     }
   }
 
+  async function handleRefreshQr() {
+    if (!orderId || isRefreshing) return
+    try {
+      setIsRefreshing(true)
+      const qr = await refreshOrderTransferQr(orderId)
+      setQrData(qr)
+      showSuccess('Đã tạo mã QR mới.')
+    } catch (error) {
+      showError(error.message)
+    } finally {
+      setIsRefreshing(false)
+    }
+  }
+
   return (
     <section className="rounded-2xl border border-[#356647]/25 bg-white p-5 shadow-sm">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-sm font-bold uppercase tracking-wide text-[#356647]">Thanh toán chuyển khoản</h2>
-          <p className="mt-1 text-2xl font-bold text-[#356647]">{formatMoney(displayAmount)} đ</p>
+          <h2 className="text-sm font-bold uppercase tracking-wide text-[#356647]">
+            Thanh toán chuyển khoản
+          </h2>
+          <p className="mt-1 text-2xl font-bold text-[#356647]">
+            {formatMoney(displayAmount)} đ
+          </p>
           {customerName ? <p className="mt-1 text-sm text-slate-600">{customerName}</p> : null}
         </div>
         <div
@@ -183,13 +202,17 @@ function OrderTransferQrPanel({ orderId, orderCode, total, customerName, onPaid 
       </div>
 
       {qrExpiryLabel ? (
-        <p className={`mb-3 text-xs font-semibold ${isQrExpired ? 'text-red-600' : 'text-[#7e5700]'}`}>
+        <p
+          className={`mb-3 text-xs font-semibold ${isQrExpired ? 'text-red-600' : 'text-[#7e5700]'}`}
+        >
           {qrExpiryLabel}
         </p>
       ) : null}
 
       {invoiceCode ? (
-        <p className="mb-3 text-sm font-semibold text-[#356647]">Số HĐ: {invoiceCode}</p>
+        <p className="mb-3 text-sm font-semibold text-[#356647]">
+          Số HĐ: {invoiceCode}
+        </p>
       ) : null}
 
       {isLoading ? (
@@ -197,7 +220,13 @@ function OrderTransferQrPanel({ orderId, orderCode, total, customerName, onPaid 
       ) : (
         <div className="space-y-4">
           <div className="mx-auto w-full max-w-[220px] rounded-2xl border-2 border-[#356647]/20 bg-white p-3">
-            {qrImageUrl ? (
+            {isQrExpired ? (
+              <div className="flex aspect-square w-full flex-col items-center justify-center gap-2 px-3 text-center text-xs text-slate-500">
+                <span className="material-symbols-outlined text-4xl text-red-400">qr_code_2</span>
+                <p className="font-semibold text-red-600">QR đã hết hạn</p>
+                <p>Không dùng mã cũ để tránh nhầm lẫn thời gian thanh toán.</p>
+              </div>
+            ) : qrImageUrl ? (
               <img src={qrImageUrl} alt="Mã QR chuyển khoản" className="aspect-square w-full object-contain" />
             ) : (
               <div className="flex aspect-square w-full items-center justify-center px-2 text-center text-xs text-slate-500">
@@ -206,11 +235,27 @@ function OrderTransferQrPanel({ orderId, orderCode, total, customerName, onPaid 
             )}
           </div>
 
-          <p className="text-center text-xs leading-relaxed text-slate-500">
-            Khách quét QR hoặc chuyển khoản — hệ thống tự xác nhận qua SePay (webhook).
-          </p>
+          {isQrExpired ? (
+            <div className="flex flex-col items-center gap-2">
+              <button
+                type="button"
+                disabled={isRefreshing}
+                onClick={handleRefreshQr}
+                className="rounded-xl bg-[#538463] px-5 py-2.5 text-sm font-bold text-white hover:bg-[#457053] disabled:opacity-50"
+              >
+                {isRefreshing ? 'Đang tạo...' : 'Tạo mã QR mới'}
+              </button>
+              <p className="text-center text-xs text-slate-500">
+                Vẫn có thể chuyển khoản thủ công theo thông tin bên dưới — hệ thống tự xác nhận qua SePay.
+              </p>
+            </div>
+          ) : (
+            <p className="text-center text-xs leading-relaxed text-slate-500">
+              Khách quét QR hoặc chuyển khoản — hệ thống tự xác nhận qua SePay (webhook).
+            </p>
+          )}
 
-          {isLegacyMainAccountQr ? (
+          {isLegacyMainAccountQr && !isQrExpired ? (
             <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700">
               <p className="font-semibold">QR trỏ tài khoản chính — SePay có thể không ghi nhận</p>
               <p className="mt-1">

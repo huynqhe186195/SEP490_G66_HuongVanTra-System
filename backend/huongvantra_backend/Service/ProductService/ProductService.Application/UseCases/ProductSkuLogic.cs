@@ -133,6 +133,16 @@ public class ProductSkuLogic(
     }
 
     private static ProductSkuResponse MapToResponse(ProductSku s) =>
-        new(s.Id, s.ProductId, s.SkuCode, s.PackagingType,
-            s.WeightInGrams, s.BasePrice, s.ImageUrl, s.IsActive, s.CreatedAt);
+        new(
+            s.Id,
+            s.ProductId,
+            s.Product?.Name ?? string.Empty,
+            s.Product?.Category?.Name ?? string.Empty,
+            s.SkuCode,
+            s.PackagingType,
+            s.WeightInGrams,
+            s.BasePrice,
+            s.ImageUrl,
+            s.IsActive,
+            s.CreatedAt);
 }

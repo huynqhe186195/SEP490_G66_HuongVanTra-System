@@ -235,7 +235,6 @@ export function buildCreateCustomerBody(payload) {
     addressLine,
     customerGroup: payload.customerGroup ?? mapTypeToCustomerGroup(payload.customerType),
     taxCode: payload.taxCode?.trim() || null,
-    tierId: payload.tierId ?? null,
     assignedSaleId: payload.assignedEmployeeId ?? payload.assignedSaleId ?? null,
   }
 }
@@ -250,7 +249,6 @@ export function buildUpdateCustomerBody(payload) {
     addressLine,
     customerGroup: payload.customerGroup ?? mapTypeToCustomerGroup(payload.customerType),
     taxCode: payload.taxCode?.trim() || null,
-    tierId: payload.tierId ?? null,
     assignedSaleId: payload.assignedEmployeeId ?? payload.assignedSaleId ?? null,
   }
 }
@@ -392,5 +390,5 @@ export async function reconcileCustomerDebt(customerId, amount) {
 }
 
 export async function upgradeCustomerTierManual(_payload) {
-  throw new Error('Hạng thành viên được nâng tự động theo chi tiêu tích lũy.')
+  throw new Error('Hạng thành viên không được phép chỉnh sửa.')
 }

@@ -184,9 +184,11 @@ function ProductsListPage() {
             <thead className="bg-slate-50">
               <tr>
                 <th className={TABLE_HEAD}>Ảnh</th>
-                <th className={TABLE_HEAD}>Tên sản phẩm</th>
+                <th className={TABLE_HEAD}>Sản phẩm</th>
                 <th className={TABLE_HEAD}>Danh mục</th>
-                <th className={TABLE_HEAD}>SKU</th>
+                <th className={TABLE_HEAD}>Xuất xứ</th>
+                <th className={TABLE_HEAD}>Hương vị</th>
+                <th className={TABLE_HEAD}>Biến thể</th>
                 <th className={TABLE_HEAD}>Giá</th>
                 <th className={TABLE_HEAD}>Số lượng hiện tại</th>
                 <th className={TABLE_HEAD}>Trạng thái</th>
@@ -196,13 +198,13 @@ function ProductsListPage() {
             <tbody className="divide-y divide-slate-100 bg-white">
               {isLoading ? (
                 <tr>
-                  <td className="px-6 py-8 text-center text-slate-500" colSpan={8}>
+                  <td className="px-6 py-8 text-center text-slate-500" colSpan={10}>
                     Đang tải...
                   </td>
                 </tr>
               ) : products.length === 0 ? (
                 <tr>
-                  <td className="px-6 py-8 text-center text-slate-500" colSpan={8}>
+                  <td className="px-6 py-8 text-center text-slate-500" colSpan={10}>
                     Không có sản phẩm phù hợp.
                   </td>
                 </tr>
@@ -222,10 +224,26 @@ function ProductsListPage() {
                           <ProductImage src="" alt={product.name} className="h-12 w-12 rounded-lg" iconClassName="text-[22px]" />
                         )}
                       </td>
-                      <td className={`${TABLE_CELL} font-semibold text-slate-900`}>{product.name}</td>
+                      <td className={TABLE_CELL}>
+                        <p className="font-semibold text-slate-900">{product.name}</p>
+                        {product.description ? (
+                          <p className="mt-1 line-clamp-2 text-xs text-slate-500">{product.description}</p>
+                        ) : null}
+                      </td>
                       <td className={TABLE_CELL}>{product.categoryName || '—'}</td>
-                      <td className={`${TABLE_CELL} font-mono text-xs`}>
-                        {skuSummary.count ? `${skuSummary.count} SKU · ${skuSummary.codes}` : 'Chưa có SKU'}
+                      <td className={TABLE_CELL}>{product.origin || '—'}</td>
+                      <td className={TABLE_CELL}>{product.flavorProfile || '—'}</td>
+                      <td className={TABLE_CELL}>
+                        {skuSummary.count ? (
+                          <>
+                            <p className="text-sm text-slate-700">{skuSummary.variantsLabel}</p>
+                            <p className="mt-0.5 font-mono text-[11px] text-slate-500">
+                              {skuSummary.count} SKU · {skuSummary.codes}
+                            </p>
+                          </>
+                        ) : (
+                          'Chưa có biến thể'
+                        )}
                       </td>
                       <td className={`${TABLE_CELL} font-semibold text-[#356647]`}>{skuSummary.priceLabel}</td>
                       <td className={TABLE_CELL} title={stockSummary.title || undefined}>

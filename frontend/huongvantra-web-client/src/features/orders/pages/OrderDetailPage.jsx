@@ -1,12 +1,14 @@
-import { useCallback, useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link, useParams } from 'react-router-dom'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import { canCreateOrder } from '../../auth/utils/permissions.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
+import OrderProductsSection from '../components/OrderProductsSection.jsx'
 import OrderTimeline from '../components/OrderTimeline.jsx'
 import OrderTransferQrPanel from '../components/OrderTransferQrPanel.jsx'
+import OrderUpdateMetaModal from '../components/OrderUpdateMetaModal.jsx'
 import {
   cancelOrder,
   completeOrder,
@@ -21,6 +23,7 @@ import {
   canEditOrderMeta,
   canShipOrder,
   canVerifyCod,
+  isPendingPaymentOrder,
   isPendingTransferPayment,
   formatVnd,
   resolveInventorySyncMeta,
@@ -32,19 +35,19 @@ import {
   getPaymentStatusLabel,
   getPrimaryPayment,
 } from '../utils/orderDisplay.js'
-
+import { fetchAllActiveSkus } from '../../products/services/productSkusApi.js'
+import { fetchProducts } from '../../products/services/productsApi.js'
+import { buildProductCatalogLookups, resolveOrderLineDisplay } from '../../products/utils/productDisplay.js'
 function OrderDetailPage() {
   const { id } = useParams()
-  const navigate = useNavigate()
   const canManage = canCreateOrder(loadAuthSession())
 
   const [order, setOrder] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
-  const [shippingAddress, setShippingAddress] = useState('')
-  const [note, setNote] = useState('')
-  const [discountAmount, setDiscountAmount] = useState('')
+  const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false)
   const [timelineRefreshKey, setTimelineRefreshKey] = useState(0)
+  const [catalogLookups, setCatalogLookups] = useState(() => buildProductCatalogLookups())
 
   const loadOrder = useCallback(async () => {
     if (!id) return
@@ -52,9 +55,6 @@ function OrderDetailPage() {
     try {
       const data = await fetchOrder(id)
       setOrder(data)
-      setShippingAddress(data.shippingAddress || '')
-      setNote(data.note || '')
-      setDiscountAmount(String(data.discountAmount ?? ''))
     } catch (error) {
       setOrder(null)
       showError(error.message)
@@ -67,18 +67,37 @@ function OrderDetailPage() {
     loadOrder()
   }, [loadOrder])
 
-  async function handleSaveMeta(event) {
-    event.preventDefault()
+  useEffect(() => {
+    let mounted = true
+
+    async function loadCatalog() {
+      try {
+        const [productsResult, skus] = await Promise.all([
+          fetchProducts({ isActive: true, page: 1, pageSize: 100 }),
+          fetchAllActiveSkus(100),
+        ])
+        if (mounted) {
+          setCatalogLookups(buildProductCatalogLookups({ products: productsResult.items, skus }))
+        }
+      } catch {
+        if (mounted) setCatalogLookups(buildProductCatalogLookups())
+      }
+    }
+
+    loadCatalog()
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  async function handleSaveMeta(values) {
     if (!canManage || !order) return
     try {
       setIsSaving(true)
-      const updated = await updateOrder(order.id, {
-        shippingAddress,
-        note,
-        discountAmount: Number(discountAmount || 0),
-      })
+      const updated = await updateOrder(order.id, values)
       setOrder(updated)
       setTimelineRefreshKey((key) => key + 1)
+      setIsUpdateModalOpen(false)
       showSuccess('Đã cập nhật đơn hàng.')
     } catch (error) {
       showError(error.message)
@@ -86,6 +105,14 @@ function OrderDetailPage() {
       setIsSaving(false)
     }
   }
+
+  const orderLines = useMemo(() => {
+    if (!order?.items?.length) return []
+    return order.items.map((line) => ({
+      line,
+      display: resolveOrderLineDisplay(line, catalogLookups),
+    }))
+  }, [order?.items, catalogLookups])
 
   async function runAction(action) {
     if (!canManage || !order) return
@@ -141,6 +168,7 @@ function OrderDetailPage() {
 
   const payment = getPrimaryPayment(order)
   const showTransferQr = isPendingTransferPayment(order)
+  const compactProducts = isPendingPaymentOrder(order)
   const inventorySyncMeta = resolveInventorySyncMeta(order)
 
   return (
@@ -156,7 +184,17 @@ function OrderDetailPage() {
             {getOrderChannelLabel(order.orderChannel)} · Tạo lúc {formatVietnamDateTime(order.createdAt)}
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {canManage && canEditOrderMeta(order) ? (
+            <button
+              type="button"
+              onClick={() => setIsUpdateModalOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-[#538463]/30 bg-white px-3 py-2 text-sm font-semibold text-[#356647] shadow-sm hover:bg-[#f6f4ec]"
+            >
+              <span className="material-symbols-outlined text-[18px]">edit</span>
+              Cập nhật thông tin
+            </button>
+          ) : null}
           <span className={`rounded-full px-3 py-1 text-xs font-semibold ${getOrderStatusClass(order.orderStatus)}`}>
             {getOrderStatusLabel(order.orderStatus)}
           </span>
@@ -167,51 +205,13 @@ function OrderDetailPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <section className="space-y-4 rounded-2xl border border-slate-100 bg-white p-5 shadow-sm lg:col-span-2">
-          <h2 className="text-lg font-bold text-slate-800">Sản phẩm</h2>
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
-              <thead className="text-xs uppercase text-slate-400">
-                <tr>
-                  <th className="pb-3 pr-4">SKU / Tên</th>
-                  <th className="pb-3 pr-4">SL</th>
-                  <th className="pb-3 pr-4">Đơn giá</th>
-                  <th className="pb-3 text-right">Thành tiền</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50">
-                {order.items.map((line) => (
-                  <tr key={line.id}>
-                    <td className="py-3 pr-4">
-                      <p className="font-medium text-slate-800">{line.skuSnapshotName}</p>
-                      {line.skuSnapshotCode ? (
-                        <p className="font-mono text-xs text-slate-500">{line.skuSnapshotCode}</p>
-                      ) : null}
-                    </td>
-                    <td className="py-3 pr-4">{line.quantity}</td>
-                    <td className="py-3 pr-4">{formatVnd(line.unitPrice)}</td>
-                    <td className="py-3 text-right font-semibold">{formatVnd(line.subTotal)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="border-t border-slate-100 pt-4 text-sm">
-            <div className="flex justify-between py-1">
-              <span className="text-slate-500">Tạm tính</span>
-              <span>{formatVnd(order.totalAmount)}</span>
-            </div>
-            <div className="flex justify-between py-1">
-              <span className="text-slate-500">Giảm giá</span>
-              <span>-{formatVnd(order.discountAmount)}</span>
-            </div>
-            <div className="flex justify-between py-2 text-base font-bold text-[#356647]">
-              <span>Thành tiền</span>
-              <span>{formatVnd(order.finalAmount)}</span>
-            </div>
-          </div>
-        </section>
+        <OrderProductsSection
+          order={order}
+          orderLines={orderLines}
+          constrained={compactProducts}
+          orderId={compactProducts ? order.id : undefined}
+          timelineRefreshKey={compactProducts ? timelineRefreshKey : undefined}
+        />
 
         <aside className="space-y-4">
           <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
@@ -242,19 +242,14 @@ function OrderDetailPage() {
             />
           ) : null}
 
-          {payment ? (
+          {payment && !showTransferQr ? (
             <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
               <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-400">Thanh toán</h2>
               <p className="text-sm text-slate-700">{getPaymentMethodLabel(payment.paymentMethod)}</p>
-              <p className="mt-1 text-sm font-semibold">
-                {showTransferQr ? formatVnd(order.finalAmount) : formatVnd(payment.amount)}
-              </p>
+              <p className="mt-1 text-sm font-semibold">{formatVnd(payment.amount)}</p>
               <span className={`mt-2 inline-block rounded-full px-3 py-1 text-xs font-semibold ${getPaymentStatusClass(payment.paymentStatus)}`}>
                 {getPaymentStatusLabel(payment.paymentStatus)}
               </span>
-              {showTransferQr ? (
-                <p className="mt-2 text-xs text-amber-700">Đang chờ khách chuyển khoản — hệ thống tự xác nhận khi nhận tiền.</p>
-              ) : null}
               {payment.isCodVerified ? (
                 <p className="mt-2 text-xs text-emerald-700">COD đã xác nhận</p>
               ) : null}
@@ -311,59 +306,21 @@ function OrderDetailPage() {
         </aside>
       </div>
 
-      <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
-        <h2 className="mb-4 text-lg font-bold text-slate-800">Lịch sử xử lý</h2>
-        <OrderTimeline orderId={order.id} refreshKey={timelineRefreshKey} />
-      </section>
-
-      {canManage && canEditOrderMeta(order) ? (
-        <form className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm" onSubmit={handleSaveMeta}>
-          <h2 className="mb-4 text-lg font-bold text-slate-800">Cập nhật thông tin</h2>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <label className="space-y-1 md:col-span-2">
-              <span className="text-xs font-semibold text-slate-500">Địa chỉ giao hàng</span>
-              <textarea
-                className="min-h-[80px] w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#538463]"
-                value={shippingAddress}
-                onChange={(e) => setShippingAddress(e.target.value)}
-              />
-            </label>
-            <label className="space-y-1 md:col-span-2">
-              <span className="text-xs font-semibold text-slate-500">Ghi chú</span>
-              <textarea
-                className="min-h-[80px] w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#538463]"
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-              />
-            </label>
-            <label className="space-y-1">
-              <span className="text-xs font-semibold text-slate-500">Giảm giá (VND)</span>
-              <input
-                className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#538463]"
-                inputMode="decimal"
-                value={discountAmount}
-                onChange={(e) => setDiscountAmount(e.target.value)}
-              />
-            </label>
-          </div>
-          <div className="mt-4 flex gap-2">
-            <button
-              type="submit"
-              disabled={isSaving}
-              className="rounded-xl bg-[#538463] px-5 py-2.5 text-sm font-bold text-white hover:bg-[#457053] disabled:opacity-50"
-            >
-              {isSaving ? 'Đang lưu...' : 'Lưu thay đổi'}
-            </button>
-            <button
-              type="button"
-              className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-700"
-              onClick={() => navigate('/orders')}
-            >
-              Quay lại
-            </button>
-          </div>
-        </form>
+      {!compactProducts ? (
+        <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+          <h2 className="mb-4 text-lg font-bold text-slate-800">Lịch sử xử lý</h2>
+          <OrderTimeline orderId={order.id} refreshKey={timelineRefreshKey} />
+        </section>
       ) : null}
+
+      <OrderUpdateMetaModal
+        isOpen={isUpdateModalOpen}
+        order={order}
+        isSaving={isSaving}
+        onClose={() => setIsUpdateModalOpen(false)}
+        onSave={handleSaveMeta}
+      />
+
     </div>
     </PageShell>
   )

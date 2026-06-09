@@ -154,6 +154,10 @@ export function isTransferPaymentMethod(method) {
   return key === 'VietQR' || key === 'BankTransfer'
 }
 
+export function isPendingPaymentOrder(order) {
+  return normalizeOrderKey(order?.orderStatus) === 'PendingPayment'
+}
+
 export function isPendingTransferPayment(order) {
   const payment = getPrimaryPayment(order)
   const orderStatus = normalizeOrderKey(order?.orderStatus)

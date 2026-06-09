@@ -557,6 +557,8 @@ function PosPage() {
           {
             productId: product.productId,
             sku: product.sku,
+            productName: product.productName,
+            packagingType: product.packagingType,
             name: product.name,
             qty: 1,
             unit: 'x',

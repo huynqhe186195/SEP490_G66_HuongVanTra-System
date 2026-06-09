@@ -17,7 +17,8 @@ import {
   reconcileCustomerDebt,
   updateCustomer,
 } from '../services/customersApi.js'
-import { TIER_AUTO_UPGRADE_HINT } from '../utils/membershipTierUtils.js'
+import { TIER_READONLY_HINT } from '../utils/membershipTierUtils.js'
+import { DEFAULT_MEMBERSHIP_TIER } from '../utils/customerDisplay.js'
 import {
   customerTypeFromTab,
   customerTypeLabel,
@@ -65,7 +66,6 @@ function CustomerFormPage() {
     name: '',
     phone: '',
     email: '',
-    tierId: '',
     taxCode: '',
     status: 'active',
   })
@@ -119,7 +119,6 @@ function CustomerFormPage() {
       name: customer.fullName || '',
       phone: customer.phone || '',
       email: customer.email || '',
-      tierId: customer.tier?.tierId ? String(customer.tier.tierId) : '',
       taxCode: customer.taxCode || '',
       status: customer.status?.toLowerCase() === 'inactive' ? 'inactive' : 'active',
     })
@@ -171,14 +170,12 @@ function CustomerFormPage() {
     email: form.email.trim() || null,
     address: legacyAddressLine.trim() || null,
     taxCode: form.type === 'corporate' ? form.taxCode.trim() : null,
-    tierId: supportsMembershipTierForTab(form.type) && form.tierId ? Number(form.tierId) : null,
   })
 
   const handleTypeChange = (type) => {
     setForm((current) => ({
       ...current,
       type,
-      tierId: supportsMembershipTierForTab(type) ? current.tierId : '',
     }))
   }
 
@@ -242,7 +239,6 @@ function CustomerFormPage() {
           email: payload.email,
           address: payload.address,
           taxCode: payload.taxCode,
-          tierId: payload.tierId,
         })
 
         if (form.status !== initialStatus) {
@@ -261,7 +257,6 @@ function CustomerFormPage() {
           email: payload.email,
           address: payload.address,
           taxCode: payload.taxCode,
-          tierId: payload.tierId,
         })
         showSuccess('Tạo khách hàng thành công.')
       }
@@ -379,21 +374,18 @@ function CustomerFormPage() {
 
               {supportsMembershipTierForTab(form.type) ? (
                 <div className="space-y-2 md:col-span-2">
-                  <span className="text-xs font-semibold text-[#717971]">Hạng thành viên (Member / Silver / Gold / Diamond)</span>
-                  <select
-                    className="w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20"
-                    value={form.tierId}
-                    onChange={updateField('tierId')}
-                  >
-                    <option value="">Tự gán Member (mặc định)</option>
-                    {tiers.map((tier) => (
-                      <option key={tier.id} value={tier.id}>
-                        {tier.tierCode} — ngưỡng {tier.minTotalSpend.toLocaleString('vi-VN')} đ
-                        {tier.discountPercent > 0 ? ` · chiết khấu ${tier.discountPercent}%` : ''}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="text-xs leading-relaxed text-[#717971]">{TIER_AUTO_UPGRADE_HINT}</p>
+                  <span className="text-xs font-semibold text-[#717971]">Hạng thành viên</span>
+                  <div className="rounded-xl border border-[#c1c9c0]/40 bg-[#f0eee6] px-3 py-2.5">
+                    <p className="text-sm font-semibold text-[#356647]">
+                      {isEditMode
+                        ? currentTierCode || DEFAULT_MEMBERSHIP_TIER
+                        : tiers[0]?.tierCode || DEFAULT_MEMBERSHIP_TIER}
+                      {!isEditMode ? (
+                        <span className="ml-1 text-xs font-normal text-[#717971]">(mặc định khi tạo)</span>
+                      ) : null}
+                    </p>
+                    <p className="mt-1 text-xs leading-relaxed text-[#717971]">{TIER_READONLY_HINT}</p>
+                  </div>
                 </div>
               ) : (
                 <div className="rounded-xl bg-[#fff8e8] p-3 text-sm leading-relaxed text-[#744f00] md:col-span-2">
@@ -467,10 +459,10 @@ function CustomerFormPage() {
                 </div>
                 {supportsMembershipTierForTab(form.type) && tiers.length > 0 ? (
                   <div className="rounded-xl border border-[#356647]/15 bg-[#f8ffef] p-4">
-                    <p className="mb-3 text-xs font-bold uppercase tracking-wider text-[#356647]">Hạng & tiến độ tự động</p>
+                    <p className="mb-3 text-xs font-bold uppercase tracking-wider text-[#356647]">Hạng & chi tiêu tích lũy</p>
                     <MembershipTierProgress
                       totalSpend={totalSpend}
-                      tierId={currentTierId ?? (form.tierId ? Number(form.tierId) : null)}
+                      tierId={currentTierId}
                       tierCode={currentTierCode}
                       tierDiscountPercent={currentTierDiscount}
                       tiers={tiers}

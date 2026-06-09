@@ -29,6 +29,8 @@ public class ProductSkuRepository(ProductDbContext _db) : IProductSkuRepository
 
         var totalCount = await query.CountAsync();
         var items = await query
+            .Include(sku => sku.Product)
+            .ThenInclude(product => product.Category)
             .OrderBy(sku => sku.SkuCode)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
@@ -41,17 +43,32 @@ public class ProductSkuRepository(ProductDbContext _db) : IProductSkuRepository
     {
         var query = _db.ProductSkus.AsQueryable();
         if (!includeInactive) query = query.Where(s => s.IsActive);
-        return await query.OrderBy(s => s.SkuCode).ToListAsync();
+        return await query
+            .Include(s => s.Product)
+            .ThenInclude(product => product.Category)
+            .OrderBy(s => s.SkuCode)
+            .ToListAsync();
     }
 
     public async Task<ProductSku?> GetByIdAsync(Guid id) =>
-        await _db.ProductSkus.FirstOrDefaultAsync(s => s.Id == id);
+        await _db.ProductSkus
+            .Include(s => s.Product)
+            .ThenInclude(product => product.Category)
+            .FirstOrDefaultAsync(s => s.Id == id);
 
     public async Task<ProductSku?> GetBySkuCodeAsync(string skuCode) =>
-        await _db.ProductSkus.FirstOrDefaultAsync(s => s.SkuCode == skuCode);
+        await _db.ProductSkus
+            .Include(s => s.Product)
+            .ThenInclude(product => product.Category)
+            .FirstOrDefaultAsync(s => s.SkuCode == skuCode);
 
     public async Task<List<ProductSku>> GetByProductIdAsync(Guid productId) =>
-        await _db.ProductSkus.Where(s => s.ProductId == productId).OrderBy(s => s.SkuCode).ToListAsync();
+        await _db.ProductSkus
+            .Include(s => s.Product)
+            .ThenInclude(product => product.Category)
+            .Where(s => s.ProductId == productId)
+            .OrderBy(s => s.SkuCode)
+            .ToListAsync();
 
     public async Task<bool> ExistsSkuCodeAsync(string skuCode, Guid? excludeId = null)
     {

@@ -24,6 +24,8 @@ function mapPosLineItem(item) {
   return {
     productId: item.productId ?? item.skuId,
     sku: item.sku ?? item.skuSnapshotCode ?? '',
+    productName: item.productName ?? '',
+    packagingType: item.packagingType ?? '',
     name: item.name ?? item.skuSnapshotName ?? '',
     quantity: Number(item.quantity ?? item.qty ?? 1),
     unitPrice: Number(item.unitPrice ?? item.price ?? 0),
@@ -45,7 +47,10 @@ function buildOrderRequestFromPosPayload(payload, { orderChannel, shippingAddres
     paymentMethod: paymentMethod ?? mapPaymentMethod(payment?.paymentMethod),
     items: lines.map((line) => ({
       skuId: line.productId,
-      skuSnapshotName: line.name || line.sku || 'Sản phẩm',
+      skuSnapshotName:
+        line.productName && line.packagingType
+          ? `${line.productName} — ${line.packagingType}`
+          : line.name || line.sku || 'Sản phẩm',
       skuSnapshotCode: line.sku || null,
       quantity: Math.max(1, Math.round(line.quantity)),
       unitPrice: line.unitPrice,
@@ -147,7 +152,30 @@ export async function fetchPosSepaySetup() {
   }
 }
 
-export async function fetchOrderTransferQr({ orderCode, amount }) {
+function mapTransferQrResponse(qr, fallbackOrderCode = '') {
+  const qrImageUrl = qr.qrImageUrl ?? qr.QrImageUrl ?? null
+  return {
+    transferContent: qr.transferContent ?? qr.TransferContent ?? fallbackOrderCode,
+    transferAccountNumber: qr.transferAccountNumber ?? qr.TransferAccountNumber ?? null,
+    qrExpiresAtUtc: qr.qrExpiresAtUtc ?? qr.QrExpiresAtUtc ?? null,
+    paymentMode: qr.paymentMode ?? qr.PaymentMode ?? 'vietqr_main',
+    qrImageUrl,
+    qrPayload: qr.qrPayload ?? qr.QrPayload ?? qrImageUrl,
+    isExpired: Boolean(qr.isExpired ?? qr.IsExpired),
+  }
+}
+
+export async function fetchOrderTransferQrByOrderId(orderId) {
+  const qr = await apiRequestAuth(`/api/pos/orders/${orderId}/transfer-qr`, { method: 'GET' })
+  return mapTransferQrResponse(qr)
+}
+
+export async function refreshOrderTransferQr(orderId) {
+  const qr = await apiRequestAuth(`/api/pos/orders/${orderId}/transfer-qr/refresh`, { method: 'POST' })
+  return mapTransferQrResponse(qr)
+}
+
+export async function fetchOrderTransferQr({ orderCode, amount, orderId }) {
   const base = {
     transferContent: orderCode,
     transferAccountNumber: null,
@@ -155,6 +183,15 @@ export async function fetchOrderTransferQr({ orderCode, amount }) {
     paymentMode: 'vietqr_main',
     qrImageUrl: null,
     qrPayload: null,
+    isExpired: false,
+  }
+
+  if (orderId) {
+    try {
+      return await fetchOrderTransferQrByOrderId(orderId)
+    } catch {
+      return base
+    }
   }
 
   try {
@@ -165,16 +202,7 @@ export async function fetchOrderTransferQr({ orderCode, amount }) {
         amount,
       }),
     })
-
-    return {
-      ...base,
-      transferContent: qr.transferContent ?? qr.TransferContent ?? orderCode,
-      transferAccountNumber: qr.transferAccountNumber ?? qr.TransferAccountNumber ?? null,
-      qrExpiresAtUtc: qr.qrExpiresAtUtc ?? qr.QrExpiresAtUtc ?? null,
-      paymentMode: qr.paymentMode ?? qr.PaymentMode ?? 'vietqr_main',
-      qrImageUrl: qr.qrImageUrl ?? qr.QrImageUrl ?? null,
-      qrPayload: qr.qrPayload ?? qr.QrPayload ?? qr.qrImageUrl ?? qr.QrImageUrl ?? null,
-    }
+    return mapTransferQrResponse(qr, orderCode)
   } catch {
     return base
   }
@@ -184,6 +212,7 @@ async function attachTransferQr(result) {
   const qr = await fetchOrderTransferQr({
     orderCode: result.orderCode,
     amount: result.totalAmount,
+    orderId: result.orderId,
   })
   return {
     ...result,
@@ -320,10 +349,21 @@ export async function fetchPosOrderPaymentStatus(orderId) {
 }
 
 export function mapPosProduct(item) {
+  const productName = item.productName ?? item.ProductName ?? ''
+  const packagingType = item.packagingType ?? item.PackagingType ?? ''
+  const sku = item.sku ?? item.Sku ?? ''
+  const fallbackName = item.name ?? item.Name ?? ''
+  const displayName =
+    productName && packagingType
+      ? `${productName} — ${packagingType}`
+      : fallbackName || sku
+
   return {
     productId: item.productId ?? item.ProductId,
-    sku: item.sku ?? item.Sku ?? '',
-    name: item.name ?? item.Name ?? '',
+    sku,
+    productName,
+    packagingType,
+    name: displayName,
     price: Number(item.price ?? item.Price ?? 0),
     stockQuantity: Number(item.stockQuantity ?? item.StockQuantity ?? 0),
   }
@@ -522,9 +562,18 @@ export async function fetchPosProducts({ storeId, search, limit = 30 }) {
   query.set('pageSize', String(limit))
   query.set('isActive', 'true')
 
-  const data = await apiRequestAuth(`/api/v1/skus?${query.toString()}`, { method: 'GET' })
+  const [data, productsData] = await Promise.all([
+    apiRequestAuth(`/api/v1/skus?${query.toString()}`, { method: 'GET' }),
+    apiRequestAuth('/api/v1/products?page=1&pageSize=100&isActive=true', { method: 'GET' }).catch(() => ({ items: [] })),
+  ])
   const paged = toPagedResult(data)
   const skus = paged.items
+  const productById = new Map(
+    (productsData?.items ?? productsData?.Items ?? []).map((product) => [
+      product.id ?? product.Id,
+      product,
+    ]),
+  )
 
   let stockBySkuId = new Map()
   try {
@@ -538,15 +587,17 @@ export async function fetchPosProducts({ storeId, search, limit = 30 }) {
     // Inventory service may be unavailable during local dev.
   }
 
-  return skus.map((sku) =>
-    mapPosProduct({
+  return skus.map((sku) => {
+    const product = productById.get(sku.productId ?? sku.ProductId)
+    return mapPosProduct({
       productId: sku.id,
-      sku: sku.skuCode,
-      name: [sku.skuCode, sku.packagingType].filter(Boolean).join(' — '),
-      price: sku.basePrice,
-      stockQuantity: stockBySkuId.get(sku.id) ?? 0,
-    }),
-  )
+      sku: sku.skuCode ?? sku.SkuCode,
+      productName: sku.productName ?? sku.ProductName ?? product?.name ?? product?.Name ?? '',
+      packagingType: sku.packagingType ?? sku.PackagingType ?? '',
+      price: sku.basePrice ?? sku.BasePrice,
+      stockQuantity: stockBySkuId.get(sku.id ?? sku.Id) ?? 0,
+    })
+  })
 }
 
 export function resolvePosStoreId() {

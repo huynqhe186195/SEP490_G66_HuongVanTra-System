@@ -78,12 +78,76 @@ public class PosTransferPaymentLogic(
             bankAccounts);
     }
 
-    public TransferQrResponse BuildTransferQr(BuildTransferQrRequest request)
+    public async Task<TransferQrResponse> BuildTransferQrAsync(
+        BuildTransferQrRequest request, CancellationToken ct = default)
     {
+        if (request.OrderId.HasValue)
+            return await ResolveTransferQrForOrderAsync(request.OrderId.Value, issueOnCreate: true, ct);
+
         if (string.IsNullOrWhiteSpace(request.OrderCode))
             throw new OrderValidationException("Mã đơn hàng không được để trống.");
 
-        var transferContent = request.OrderCode.Trim().ToUpperInvariant();
+        var expiresAt = DateTime.UtcNow.AddMinutes(GetExpiryMinutes());
+        return CreateTransferQrResponse(request.OrderCode, request.Amount, expiresAt);
+    }
+
+    public async Task<TransferQrResponse> GetTransferQrForOrderAsync(
+        Guid orderId, CancellationToken ct = default) =>
+        await ResolveTransferQrForOrderAsync(orderId, issueOnCreate: false, ct);
+
+    public async Task<TransferQrResponse> RefreshTransferQrForOrderAsync(
+        Guid orderId, CancellationToken ct = default)
+    {
+        var order = await orderRepo.GetByIdAsync(orderId, ct)
+            ?? throw new OrderNotFoundException(orderId);
+        var payment = GetTransferPayment(order)
+            ?? throw new OrderValidationException("Đơn không có thanh toán chuyển khoản.");
+
+        EnsureTransferPaymentPending(order, payment);
+
+        var expiresAt = payment.TransferQrExpiresAtUtc ?? order.CreatedAt.AddMinutes(GetExpiryMinutes());
+        if (DateTime.UtcNow < expiresAt)
+            throw new OrderValidationException("Mã QR còn hiệu lực. Chỉ tạo lại khi đã hết hạn.");
+
+        payment.TransferQrExpiresAtUtc = DateTime.UtcNow.AddMinutes(GetExpiryMinutes());
+        payment.UpdatedAt = DateTime.UtcNow;
+        await orderRepo.SaveChangesAsync(ct);
+
+        return CreateTransferQrResponse(order.OrderCode, order.FinalAmount, payment.TransferQrExpiresAtUtc.Value);
+    }
+
+    private async Task<TransferQrResponse> ResolveTransferQrForOrderAsync(
+        Guid orderId, bool issueOnCreate, CancellationToken ct)
+    {
+        var order = await orderRepo.GetByIdAsync(orderId, ct)
+            ?? throw new OrderNotFoundException(orderId);
+        var payment = GetTransferPayment(order)
+            ?? throw new OrderValidationException("Đơn không có thanh toán chuyển khoản.");
+
+        EnsureTransferPaymentPending(order, payment);
+
+        if (!payment.TransferQrExpiresAtUtc.HasValue)
+        {
+            payment.TransferQrExpiresAtUtc = issueOnCreate
+                ? DateTime.UtcNow.AddMinutes(GetExpiryMinutes())
+                : order.CreatedAt.AddMinutes(GetExpiryMinutes());
+            payment.UpdatedAt = DateTime.UtcNow;
+            await orderRepo.SaveChangesAsync(ct);
+        }
+
+        return CreateTransferQrResponse(
+            order.OrderCode,
+            order.FinalAmount,
+            payment.TransferQrExpiresAtUtc.Value);
+    }
+
+    private TransferQrResponse CreateTransferQrResponse(
+        string orderCode, decimal amount, DateTime expiresAtUtc)
+    {
+        if (string.IsNullOrWhiteSpace(orderCode))
+            throw new OrderValidationException("Mã đơn hàng không được để trống.");
+
+        var transferContent = orderCode.Trim().ToUpperInvariant();
         var (paymentMode, receiveAccount) = ResolveReceiveAccount();
 
         if (!CanBuildQr(receiveAccount))
@@ -93,13 +157,11 @@ public class PosTransferPaymentLogic(
             _pos.BankBin,
             receiveAccount,
             _pos.AccountHolder,
-            request.Amount,
+            amount,
             transferContent,
             _pos.Template);
 
-        var expiryMinutes = _sepay.PosVaDurationSeconds > 0
-            ? Math.Max(1, _sepay.PosVaDurationSeconds / 60)
-            : 15;
+        var isExpired = DateTime.UtcNow >= expiresAtUtc;
 
         return new TransferQrResponse(
             qrImageUrl,
@@ -107,8 +169,27 @@ public class PosTransferPaymentLogic(
             transferContent,
             receiveAccount,
             paymentMode,
-            DateTime.UtcNow.AddMinutes(expiryMinutes));
+            expiresAtUtc,
+            isExpired);
     }
+
+    private static Payment? GetTransferPayment(Order order) =>
+        order.Payments?.FirstOrDefault(p =>
+            p.PaymentMethod is PaymentMethod.VietQR or PaymentMethod.BankTransfer);
+
+    private static void EnsureTransferPaymentPending(Order order, Payment payment)
+    {
+        if (payment.PaymentStatus == PaymentStatus.Success
+            || order.OrderStatus is OrderStatus.Completed or OrderStatus.Cancelled)
+        {
+            throw new OrderValidationException("Đơn đã thanh toán hoặc không còn chờ chuyển khoản.");
+        }
+    }
+
+    private int GetExpiryMinutes() =>
+        _sepay.PosVaDurationSeconds > 0
+            ? Math.Max(1, _sepay.PosVaDurationSeconds / 60)
+            : 15;
 
     public async Task<PosOrderPaymentStatusResponse> GetOrderPaymentStatusAsync(
         Guid orderId, CancellationToken ct = default)

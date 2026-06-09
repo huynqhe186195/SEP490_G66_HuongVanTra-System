@@ -96,10 +96,7 @@ function AdminLayout() {
     return <Navigate to="/login" replace />
   }
 
-  const isFullPageScroll =
-    location.pathname === '/pos/payment/qr' ||
-    location.pathname === '/orders' ||
-    location.pathname.startsWith('/orders/')
+  const isViewportLocked = location.pathname === '/pos'
 
   return (
     <div className="min-h-screen bg-[#F8FAF7] text-gray-800">
@@ -140,17 +137,17 @@ function AdminLayout() {
 
           <main
             className={`relative flex min-h-0 min-w-0 flex-1 flex-col p-3 sm:p-4 lg:p-6 xl:p-8 ${
-              isFullPageScroll
-                ? 'custom-scrollbar overflow-y-auto overscroll-contain'
-                : 'overflow-hidden'
+              isViewportLocked
+                ? 'overflow-hidden'
+                : 'custom-scrollbar overflow-y-auto overscroll-contain'
             }`}
           >
             <ModuleRouteGuard session={authSession} isLoadingAccess={isLoadingAccess}>
               <div
                 className={
-                  isFullPageScroll
-                    ? 'flex min-w-0 flex-col'
-                    : 'flex min-h-0 min-w-0 flex-1 flex-col'
+                  isViewportLocked
+                    ? 'flex min-h-0 min-w-0 flex-1 flex-col'
+                    : 'flex min-w-0 flex-col'
                 }
               >
                 <Outlet />

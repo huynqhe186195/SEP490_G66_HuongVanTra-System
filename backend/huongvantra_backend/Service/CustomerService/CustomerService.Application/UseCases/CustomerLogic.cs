@@ -46,10 +46,8 @@ public class CustomerLogic
         if (!string.IsNullOrWhiteSpace(input.Email) && await _customerRepo.EmailExistsAsync(input.Email, ct: ct))
             throw new DuplicateEmailException(input.Email);
 
-        if (input.TierId.HasValue && await _tierRepo.GetByIdAsync(input.TierId.Value, ct) is null)
-            throw new CustomerValidationException([$"CustomerTier with id '{input.TierId.Value}' does not exist."]);
-
         var customerCode = await _customerRepo.GenerateNextCustomerCodeAsync(ct);
+        var initialTierId = await ResolveInitialTierIdAsync(input.CustomerGroup, ct);
 
         var customer = new Customer
         {
@@ -60,7 +58,7 @@ public class CustomerLogic
             Email = input.Email,
             CustomerGroup = input.CustomerGroup,
             TaxCode = input.TaxCode,
-            TierId = input.TierId,
+            TierId = initialTierId,
             AssignedSaleId = input.AssignedSaleId,
             TotalSpending = 0,
             CurrentDebt = 0,
@@ -82,7 +80,6 @@ public class CustomerLogic
         var customer = await _customerRepo.GetByIdAsync(id, ct)
             ?? throw new CustomerNotFoundException(id);
 
-        var previousTierId = customer.TierId;
         var input = ValidateCustomerRequest(request);
 
         if (await _customerRepo.PhoneExistsAsync(input.PhoneNumber, id, ct))
@@ -91,27 +88,17 @@ public class CustomerLogic
         if (!string.IsNullOrWhiteSpace(input.Email) && await _customerRepo.EmailExistsAsync(input.Email, id, ct))
             throw new DuplicateEmailException(input.Email);
 
-        if (input.TierId.HasValue && await _tierRepo.GetByIdAsync(input.TierId.Value, ct) is null)
-            throw new CustomerValidationException([$"CustomerTier with id '{input.TierId.Value}' does not exist."]);
-
         customer.FullName = input.FullName;
         customer.PhoneNumber = input.PhoneNumber;
         customer.Email = input.Email;
         customer.CustomerGroup = input.CustomerGroup;
         customer.TaxCode = input.TaxCode;
-        customer.TierId = input.TierId;
         customer.AssignedSaleId = input.AssignedSaleId;
         customer.UpdatedAt = DateTime.UtcNow;
 
         _customerRepo.Update(customer);
         await UpsertPrimaryAddressAsync(id, input.FullName, input.PhoneNumber, input.AddressLine, ct);
         await RecordActivityAsync(id, CustomerActivityType.Updated, $"Cập nhật thông tin khách {customer.FullName}", ct);
-
-        if (previousTierId != customer.TierId)
-        {
-            var tierName = customer.Tier?.TierName ?? (customer.TierId.HasValue ? "hạng mới" : "không hạng");
-            await RecordActivityAsync(id, CustomerActivityType.TierChanged, $"Thay đổi hạng thành {tierName}", ct);
-        }
 
         await _customerRepo.SaveChangesAsync(ct);
         customer = await _customerRepo.GetByIdAsync(id, ct) ?? customer;
@@ -170,8 +157,6 @@ public class CustomerLogic
                 TotalSpending: 0, CurrentDebt: 0, TierId: null, TierName: null, TierUpgraded: false);
         }
 
-        var previousTierId = customer.TierId;
-
         if (amountSpent > 0)
             customer.TotalSpending += amountSpent;
 
@@ -186,21 +171,11 @@ public class CustomerLogic
 
         customer.UpdatedAt = DateTime.UtcNow;
 
-        var newTier = await _tierRepo.GetTierForSpendingAsync(customer.TotalSpending, ct);
-        if (newTier != null && customer.TierId != newTier.Id)
-            customer.TierId = newTier.Id;
-
         _customerRepo.Update(customer);
         await _processedEvents.AddAsync(OrderCompletedEventType, orderId, ct);
 
         await RecordActivityAsync(customerId, CustomerActivityType.OrderCreated,
             $"Hoàn tất đơn {orderCode}: chi tiêu +{amountSpent:N0}", ct);
-
-        if (previousTierId != customer.TierId)
-        {
-            await RecordActivityAsync(customerId, CustomerActivityType.TierChanged,
-                $"Tự động lên hạng {newTier?.TierName ?? "mới"}", ct);
-        }
 
         await _customerRepo.SaveChangesAsync(ct);
 
@@ -212,8 +187,8 @@ public class CustomerLogic
             TotalSpending: customer.TotalSpending,
             CurrentDebt: customer.CurrentDebt,
             TierId: customer.TierId,
-            TierName: newTier?.TierName ?? customer.Tier?.TierName,
-            TierUpgraded: previousTierId != customer.TierId);
+            TierName: customer.Tier?.TierName,
+            TierUpgraded: false);
     }
 
     public async Task<CustomerDebtTransactionResponse> RecordDebtTransactionAsync(
@@ -398,6 +373,15 @@ public class CustomerLogic
         primary.AddressLine = addressLine;
         primary.UpdatedAt = DateTime.UtcNow;
         _addressRepo.Update(primary);
+    }
+
+    private async Task<int?> ResolveInitialTierIdAsync(CustomerGroup customerGroup, CancellationToken ct)
+    {
+        if (customerGroup != CustomerGroup.PhoThong)
+            return null;
+
+        var defaultTier = await _tierRepo.GetDefaultTierAsync(ct);
+        return defaultTier?.Id;
     }
 
     private static ValidatedCustomerInput ValidateCustomerRequest(CreateCustomerRequest request)

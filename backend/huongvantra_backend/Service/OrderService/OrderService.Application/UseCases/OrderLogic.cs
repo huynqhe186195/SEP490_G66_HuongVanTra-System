@@ -1,7 +1,9 @@
 using System.Globalization;
+using Microsoft.Extensions.Options;
 using OrderService.Application.DTOs.Requests;
 using OrderService.Application.DTOs.Responses;
 using OrderService.Application.Interfaces;
+using OrderService.Application.Options;
 using OrderService.Application.Validation;
 using OrderService.Domain.Entities;
 using OrderService.Domain.Enums;
@@ -14,8 +16,10 @@ public class OrderLogic(
     IPaymentRepository _paymentRepo,
     IOrderCodeGenerator _codeGen,
     IOrderEventPublisher _eventPublisher,
-    IOrderActivityRepository _activityRepo)
+    IOrderActivityRepository _activityRepo,
+    IOptions<SepayOptions> sepayOptions)
 {
+    private readonly SepayOptions _sepay = sepayOptions.Value;
     private const int MaxActivities = 100;
 
     public async Task<PagedResponse<OrderSummaryResponse>> GetPagedAsync(
@@ -132,6 +136,15 @@ public class OrderLogic(
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
+
+        if (payment.PaymentMethod is PaymentMethod.VietQR or PaymentMethod.BankTransfer
+            && payment.PaymentStatus == PaymentStatus.Pending)
+        {
+            var expiryMinutes = _sepay.PosVaDurationSeconds > 0
+                ? Math.Max(1, _sepay.PosVaDurationSeconds / 60)
+                : 15;
+            payment.TransferQrExpiresAtUtc = DateTime.UtcNow.AddMinutes(expiryMinutes);
+        }
 
         order.Payments = [payment];
 

@@ -2,9 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { showError, showSuccess } from '../../../app/toast.js'
 import {
+  fetchOrderTransferQrByOrderId,
   fetchPosOrderPaymentStatus,
   fetchPosSepaySetup,
   fetchPosTransferPaymentInfo,
+  refreshOrderTransferQr,
   resolveTransferQrImageUrl,
 } from '../services/posApi.js'
 import { printReceiptFromData } from '../utils/printReceipt.js'
@@ -19,7 +21,7 @@ function formatMoney(value) {
   return new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(value)
 }
 
-function useQrExpiryCountdown(expiresAtUtc) {
+function useQrExpiryCountdown(expiresAtUtc, isExpired) {
   const [label, setLabel] = useState('')
 
   useEffect(() => {
@@ -30,8 +32,8 @@ function useQrExpiryCountdown(expiresAtUtc) {
 
     const tick = () => {
       const remainingMs = new Date(expiresAtUtc).getTime() - Date.now()
-      if (remainingMs <= 0) {
-        setLabel('QR đã hết hạn. Quay POS để tạo đơn thanh toán mới.')
+      if (remainingMs <= 0 || isExpired) {
+        setLabel('Mã QR đã hết hạn. Bấm「Tạo mã QR mới」hoặc quay POS nếu khách không thanh toán.')
         return
       }
       const minutes = Math.floor(remainingMs / 60000)
@@ -42,7 +44,7 @@ function useQrExpiryCountdown(expiresAtUtc) {
     tick()
     const timerId = setInterval(tick, 1000)
     return () => clearInterval(timerId)
-  }, [expiresAtUtc])
+  }, [expiresAtUtc, isExpired])
 
   return label
 }
@@ -68,34 +70,29 @@ function PosTransferQrPage() {
   const [expectedTransferContent, setExpectedTransferContent] = useState('')
   const [expectedAmount, setExpectedAmount] = useState(0)
   const [sepaySetup, setSepaySetup] = useState(null)
+  const [qrData, setQrData] = useState(null)
+  const [isRefreshing, setIsRefreshing] = useState(false)
   const completedRef = useRef(false)
-  const expiredHandledRef = useRef(false)
-  const qrExpiryLabel = useQrExpiryCountdown(payment?.qrExpiresAtUtc)
-  const isQrExpired = payment?.qrExpiresAtUtc && new Date(payment.qrExpiresAtUtc).getTime() <= Date.now()
+  const qrExpiresAtUtc = qrData?.qrExpiresAtUtc ?? payment?.qrExpiresAtUtc
+  const isQrExpired =
+    Boolean(qrData?.isExpired) ||
+    (qrExpiresAtUtc && new Date(qrExpiresAtUtc).getTime() <= Date.now())
+  const qrExpiryLabel = useQrExpiryCountdown(qrExpiresAtUtc, isQrExpired)
 
   useEffect(() => {
-    if (!payment?.qrExpiresAtUtc || completedRef.current) {
-      return undefined
-    }
+    if (!payment?.orderId) return undefined
 
-    const redirectOnExpiry = () => {
-      if (completedRef.current || expiredHandledRef.current) {
-        return
-      }
-      expiredHandledRef.current = true
-      showError('QR đã hết hạn. Vui lòng tạo đơn thanh toán mới tại POS.')
-      navigate('/pos', { replace: true })
-    }
+    let mounted = true
+    fetchOrderTransferQrByOrderId(payment.orderId)
+      .then((qr) => {
+        if (mounted) setQrData(qr)
+      })
+      .catch(() => {})
 
-    const remainingMs = new Date(payment.qrExpiresAtUtc).getTime() - Date.now()
-    if (remainingMs <= 0) {
-      redirectOnExpiry()
-      return undefined
+    return () => {
+      mounted = false
     }
-
-    const timerId = setTimeout(redirectOnExpiry, remainingMs)
-    return () => clearTimeout(timerId)
-  }, [payment?.qrExpiresAtUtc, navigate])
+  }, [payment?.orderId])
 
   const finishWithReceipt = useCallback(
     (status) => {
@@ -165,7 +162,7 @@ function PosTransferQrPage() {
   }, [])
 
   const pollPaymentStatus = useCallback(async () => {
-    if (!payment?.orderId || completedRef.current || expiredHandledRef.current) return
+    if (!payment?.orderId || completedRef.current) return
 
     try {
       const status = await fetchPosOrderPaymentStatus(payment.orderId)
@@ -192,7 +189,7 @@ function PosTransferQrPage() {
   }, [payment?.orderId, finishWithReceipt])
 
   useEffect(() => {
-    if (!payment?.orderId || completedRef.current || expiredHandledRef.current) {
+    if (!payment?.orderId || completedRef.current) {
       return undefined
     }
 
@@ -205,18 +202,37 @@ function PosTransferQrPage() {
     if (expectedTransferContent) {
       return expectedTransferContent
     }
+    if (qrData?.transferContent) {
+      return qrData.transferContent
+    }
     if (payment?.transferContent) {
       return payment.transferContent
     }
     return (payment?.orderCode || payment?.orderLabel || '').trim().toUpperCase()
-  }, [expectedTransferContent, payment?.transferContent, payment?.orderCode, payment?.orderLabel])
+  }, [expectedTransferContent, qrData?.transferContent, payment?.transferContent, payment?.orderCode, payment?.orderLabel])
 
   const displayAmount = expectedAmount > 0 ? expectedAmount : payment?.total || 0
 
-  const qrImageUrl = resolveTransferQrImageUrl({
-    qrImageUrl: payment?.qrImageUrl,
-    qrPayload: payment?.qrPayload,
-  })
+  const qrImageUrl = !isQrExpired
+    ? resolveTransferQrImageUrl({
+        qrImageUrl: qrData?.qrImageUrl ?? payment?.qrImageUrl,
+        qrPayload: qrData?.qrPayload ?? payment?.qrPayload,
+      })
+    : ''
+
+  async function handleRefreshQr() {
+    if (!payment?.orderId || isRefreshing) return
+    try {
+      setIsRefreshing(true)
+      const qr = await refreshOrderTransferQr(payment.orderId)
+      setQrData(qr)
+      showSuccess('Đã tạo mã QR mới.')
+    } catch (error) {
+      showError(error.message)
+    } finally {
+      setIsRefreshing(false)
+    }
+  }
 
   const handleCopyTransferNote = async () => {
     try {
@@ -232,9 +248,10 @@ function PosTransferQrPage() {
   }
 
   const receiveAccount =
-    payment.transferAccountNumber || bankInfo?.accountNumber || '—'
+    qrData?.transferAccountNumber || payment.transferAccountNumber || bankInfo?.accountNumber || '—'
+  const paymentMode = qrData?.paymentMode ?? payment.paymentMode
   const usesSepayVa =
-    payment.paymentMode === 'sepay_order_va' || payment.paymentMode === 'sepay_static_va'
+    paymentMode === 'sepay_order_va' || paymentMode === 'sepay_static_va'
   const isLegacyMainAccountQr =
     !usesSepayVa && receiveAccount.replace(/\D/g, '') === (bankInfo?.accountNumber || '').replace(/\D/g, '')
   const statusText = paymentStatusLabel(paymentStatus, isPaid)
@@ -297,7 +314,13 @@ function PosTransferQrPage() {
 
         <div className="flex flex-col items-center gap-4 p-4 sm:gap-6 sm:p-6">
           <div className="w-full max-w-[min(100%,280px)] rounded-2xl border-2 border-[#356647]/20 bg-white p-3 shadow-inner sm:p-4">
-            {qrImageUrl ? (
+            {isQrExpired ? (
+              <div className="flex aspect-square w-full flex-col items-center justify-center gap-2 px-3 text-center text-xs text-[#717971]">
+                <Icon className="text-4xl text-red-400">qr_code_2</Icon>
+                <p className="font-semibold text-red-600">QR đã hết hạn</p>
+                <p>Không dùng mã cũ để tránh nhầm lẫn thời gian thanh toán.</p>
+              </div>
+            ) : qrImageUrl ? (
               <img
                 src={qrImageUrl}
                 alt="Mã QR chuyển khoản"
@@ -309,6 +332,17 @@ function PosTransferQrPage() {
               </div>
             )}
           </div>
+
+          {isQrExpired ? (
+            <button
+              type="button"
+              disabled={isRefreshing}
+              onClick={handleRefreshQr}
+              className="rounded-xl bg-[#538463] px-5 py-2.5 text-sm font-bold text-white hover:bg-[#457053] disabled:opacity-50"
+            >
+              {isRefreshing ? 'Đang tạo...' : 'Tạo mã QR mới'}
+            </button>
+          ) : null}
 
           <p className="w-full text-center text-sm leading-relaxed text-[#717971]">
             {usesSepayVa

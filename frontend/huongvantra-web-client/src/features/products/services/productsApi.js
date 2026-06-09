@@ -5,6 +5,8 @@ export function mapProductSku(item) {
   return {
     id: item.id ?? item.Id,
     productId: item.productId ?? item.ProductId,
+    productName: item.productName ?? item.ProductName ?? '',
+    categoryName: item.categoryName ?? item.CategoryName ?? '',
     skuCode: item.skuCode ?? item.SkuCode ?? '',
     packagingType: item.packagingType ?? item.PackagingType ?? '',
     weightInGrams: Number(item.weightInGrams ?? item.WeightInGrams ?? 0),

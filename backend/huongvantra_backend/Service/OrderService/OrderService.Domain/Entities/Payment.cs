@@ -13,6 +13,7 @@ public class Payment : BaseEntity
     public bool IsCodVerified { get; set; }
     public DateTime? CodWarningDate { get; set; }
     public DateTime? PaidAt { get; set; }
+    public DateTime? TransferQrExpiresAtUtc { get; set; }
 
     public Order Order { get; set; } = null!;
 }

@@ -66,5 +66,5 @@ export function computeTierProgress(totalSpend, tiers, currentTierId) {
   }
 }
 
-export const TIER_AUTO_UPGRADE_HINT =
-  'Hạng tự động cập nhật khi Order Service gửi OrderCompletedEvent (RabbitMQ) — cộng chi tiêu và nâng hạng theo ngưỡng.'
+export const TIER_READONLY_HINT =
+  'Hạng thành viên do hệ thống quản lý — không chỉnh sửa tại màn hình khách hàng. Chi tiêu tích lũy vẫn được cộng khi hoàn tất đơn.'

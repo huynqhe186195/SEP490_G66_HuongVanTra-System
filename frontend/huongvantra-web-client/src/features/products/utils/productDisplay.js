@@ -110,7 +110,7 @@ export function summarizeProductStock(skus = [], stockBySkuId = new Map()) {
 
 export function summarizeProductSkus(skus = []) {
   if (!skus.length) {
-    return { count: 0, priceLabel: '—', codes: '—', imageUrl: '' }
+    return { count: 0, priceLabel: '—', codes: '—', variantsLabel: '—', imageUrl: '' }
   }
   const activeSkus = skus.filter((sku) => sku.isActive)
   const list = activeSkus.length ? activeSkus : skus
@@ -119,11 +119,51 @@ export function summarizeProductSkus(skus = []) {
   const max = Math.max(...prices)
   const priceLabel = min === max ? formatProductPrice(min) : `${formatProductPrice(min)} – ${formatProductPrice(max)}`
   const codes = list.map((sku) => sku.skuCode).slice(0, 3).join(', ')
+  const variants = list
+    .map((sku) => sku.packagingType || sku.skuCode)
+    .filter(Boolean)
+    .slice(0, 3)
+    .join(', ')
   return {
     count: skus.length,
     priceLabel,
     codes: skus.length > 3 ? `${codes}…` : codes,
+    variantsLabel: list.length > 3 ? `${variants}…` : variants || codes,
     imageUrl: pickProductImageUrl(skus),
+  }
+}
+
+export function buildProductCatalogLookups({ products = [], skus = [] } = {}) {
+  const productById = new Map(products.map((product) => [product.id, product]))
+  const skuById = new Map(skus.map((sku) => [sku.id, sku]))
+  return { productById, skuById }
+}
+
+export function formatProductSnapshotName(productName, packagingType) {
+  const name = String(productName || '').trim()
+  const packaging = String(packagingType || '').trim()
+  if (name && packaging) return `${name} — ${packaging}`
+  return name || packaging || 'Sản phẩm'
+}
+
+export function resolveOrderLineDisplay(line, { skuById = new Map(), productById = new Map() } = {}) {
+  const sku = skuById.get(line.skuId)
+  const product = sku ? productById.get(sku.productId) : null
+  const snapshotName = String(line.skuSnapshotName || '').trim()
+  const snapshotParts = snapshotName.includes(' — ') ? snapshotName.split(' — ') : []
+  const productName = product?.name || snapshotParts[0]?.trim() || snapshotName || 'Sản phẩm'
+  const packagingType = sku?.packagingType || snapshotParts.slice(1).join(' — ').trim() || ''
+  const skuCode = line.skuSnapshotCode || sku?.skuCode || ''
+  return {
+    productName,
+    categoryName: product?.categoryName || sku?.categoryName || '',
+    origin: product?.origin || '',
+    flavorProfile: product?.flavorProfile || '',
+    description: product?.description || '',
+    packagingType,
+    skuCode,
+    weightLabel: sku?.weightInGrams ? formatWeightGrams(sku.weightInGrams) : '',
+    imageUrl: sku?.imageUrl || '',
   }
 }
 

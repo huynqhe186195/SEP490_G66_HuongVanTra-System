@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
-import { TIER_AUTO_UPGRADE_HINT } from '../../customers/utils/membershipTierUtils.js'
+import { TIER_READONLY_HINT } from '../../customers/utils/membershipTierUtils.js'
 import {
   createAdminMembershipTier,
   deactivateAdminMembershipTier,
@@ -126,7 +126,7 @@ function MembershipTiersPage() {
       />
 
       <p className="mb-6 rounded-xl border border-[#538463]/20 bg-[#538463]/5 px-4 py-3 text-sm text-slate-600">
-        {TIER_AUTO_UPGRADE_HINT} Ngừng hoạt động thay vì xóa cứng — khách/đơn cũ vẫn giữ dữ liệu liên quan.
+        {TIER_READONLY_HINT} Ngừng hoạt động thay vì xóa cứng — khách/đơn cũ vẫn giữ dữ liệu liên quan.
       </p>
 
       <section className="rounded-3xl border border-slate-100 bg-white shadow-sm">

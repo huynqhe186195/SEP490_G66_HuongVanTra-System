@@ -12,7 +12,7 @@ import CustomersMobileCards from '../components/CustomersMobileCards.jsx'
 import SimulateOrderCompletedPanel from '../components/SimulateOrderCompletedPanel.jsx'
 import { useCustomersList } from '../hooks/useCustomersList.js'
 import { fetchMembershipTiers, fetchCustomerStatistics, restoreCustomer } from '../services/customersApi.js'
-import { TIER_AUTO_UPGRADE_HINT } from '../utils/membershipTierUtils.js'
+import { TIER_READONLY_HINT } from '../utils/membershipTierUtils.js'
 import {
   formatDebtVnd,
   formatVnd,
@@ -774,8 +774,8 @@ function CustomersPage() {
                   <span className="w-fit rounded-full bg-[#627b59]/20 px-2.5 py-1 text-[10px] text-[#4a6242] sm:px-3 sm:text-xs">
                     Hạng Member / Silver / Gold / Diamond
                   </span>
-                  <span className="hidden max-w-md text-xs text-[#717971] xl:inline" title={TIER_AUTO_UPGRADE_HINT}>
-                    Tự lên hạng theo chi tiêu
+                  <span className="hidden max-w-md text-xs text-[#717971] xl:inline" title={TIER_READONLY_HINT}>
+                    Hạng do hệ thống quản lý
                   </span>
                 </div>
 

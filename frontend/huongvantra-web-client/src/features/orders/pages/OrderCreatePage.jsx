@@ -192,7 +192,9 @@ function OrderCreatePage() {
 
       skuId: sku.id,
 
-      skuSnapshotName: sku.packagingType || sku.skuCode,
+      skuSnapshotName: sku.productName
+        ? `${sku.productName}${sku.packagingType ? ` — ${sku.packagingType}` : ''}`
+        : sku.packagingType || sku.skuCode,
 
       skuSnapshotCode: sku.skuCode,
 
@@ -466,7 +468,7 @@ function OrderCreatePage() {
 
                       <option key={sku.id} value={sku.id}>
 
-                        {sku.skuCode} · {sku.packagingType} · {formatVnd(sku.basePrice)}
+                        {[sku.productName, sku.packagingType || sku.skuCode].filter(Boolean).join(' — ')} · {formatVnd(sku.basePrice)}
 
                       </option>
 

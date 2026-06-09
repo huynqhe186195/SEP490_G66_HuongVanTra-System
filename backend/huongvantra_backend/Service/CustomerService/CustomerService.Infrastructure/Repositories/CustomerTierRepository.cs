@@ -23,6 +23,12 @@ public class CustomerTierRepository : ICustomerTierRepository
             .OrderByDescending(t => t.MinSpendingThreshold)
             .FirstOrDefaultAsync(ct);
 
+    public async Task<CustomerTier?> GetDefaultTierAsync(CancellationToken ct = default) =>
+        await _db.CustomerTiers
+            .Where(t => !t.IsDeleted)
+            .OrderBy(t => t.MinSpendingThreshold)
+            .FirstOrDefaultAsync(ct);
+
     public async Task AddAsync(CustomerTier tier, CancellationToken ct = default) =>
         await _db.CustomerTiers.AddAsync(tier, ct);
 
