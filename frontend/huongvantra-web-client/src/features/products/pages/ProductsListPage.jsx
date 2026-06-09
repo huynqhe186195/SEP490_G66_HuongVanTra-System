@@ -10,6 +10,7 @@ import { fetchCategories } from '../services/categoriesApi.js'
 import { buildStockBySkuIdMap, fetchSkuStocks } from '../../inventory/services/inventoryStockApi.js'
 import { deleteProduct, fetchProducts } from '../services/productsApi.js'
 import ProductImage from '../components/ProductImage.jsx'
+import ProductSkusDetailModal from '../components/ProductSkusDetailModal.jsx'
 import { getProductStatusMeta, summarizeProductSkus, summarizeProductStock } from '../utils/productDisplay.js'
 
 const TABLE_HEAD = 'px-4 py-3 text-left text-xs font-bold uppercase tracking-wide text-[#717971] sm:px-6'
@@ -31,6 +32,7 @@ function ProductsListPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [stockBySkuId, setStockBySkuId] = useState(() => new Map())
   const [deletingId, setDeletingId] = useState(null)
+  const [skuModalProduct, setSkuModalProduct] = useState(null)
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -235,12 +237,21 @@ function ProductsListPage() {
                       <td className={TABLE_CELL}>{product.flavorProfile || '—'}</td>
                       <td className={TABLE_CELL}>
                         {skuSummary.count ? (
-                          <>
-                            <p className="text-sm text-slate-700">{skuSummary.variantsLabel}</p>
-                            <p className="mt-0.5 font-mono text-[11px] text-slate-500">
+                          <button
+                            type="button"
+                            className="group text-left"
+                            onClick={() => setSkuModalProduct(product)}
+                            title="Xem chi tiết SKU"
+                          >
+                            <p className="text-sm text-slate-700 group-hover:text-[#356647]">{skuSummary.variantsLabel}</p>
+                            <p className="mt-0.5 font-mono text-[11px] text-slate-500 group-hover:text-[#356647]">
                               {skuSummary.count} SKU · {skuSummary.codes}
                             </p>
-                          </>
+                            <span className="mt-1 inline-flex items-center gap-0.5 text-[11px] font-semibold text-[#356647] opacity-0 transition-opacity group-hover:opacity-100">
+                              <span className="material-symbols-outlined text-[14px]">visibility</span>
+                              Xem chi tiết
+                            </span>
+                          </button>
                         ) : (
                           'Chưa có biến thể'
                         )}
@@ -267,6 +278,16 @@ function ProductsListPage() {
                       </td>
                       <td className={TABLE_CELL}>
                         <div className="flex items-center gap-2">
+                          {skuSummary.count ? (
+                            <button
+                              type="button"
+                              className="rounded-full p-2 text-[#717971] hover:bg-[#e4e3db] hover:text-[#356647]"
+                              title="Xem chi tiết SKU"
+                              onClick={() => setSkuModalProduct(product)}
+                            >
+                              <span className="material-symbols-outlined text-[20px]">inventory_2</span>
+                            </button>
+                          ) : null}
                           <Link to={`/products/${product.id}/edit`} className="rounded-full p-2 text-[#717971] hover:bg-[#e4e3db] hover:text-[#356647]">
                             <span className="material-symbols-outlined text-[20px]">edit</span>
                           </Link>
@@ -292,6 +313,14 @@ function ProductsListPage() {
 
         <TablePagination page={page} pageSize={pageSize} totalCount={totalCount} onPageChange={setPage} itemLabel="sản phẩm" />
       </div>
+
+      {skuModalProduct ? (
+        <ProductSkusDetailModal
+          product={skuModalProduct}
+          stockBySkuId={stockBySkuId}
+          onClose={() => setSkuModalProduct(null)}
+        />
+      ) : null}
     </PageShell>
   )
 }

@@ -6,7 +6,7 @@ import {
   mapEmployee,
   updateEmployee,
 } from '../../iam/services/employeesApi.js'
-import { assignUserRoles, updateUser } from '../../iam/services/usersApi.js'
+import { assignUserRoles, lockUser, unlockUser, updateUser } from '../../iam/services/usersApi.js'
 import { fetchRoles, mapRole } from '../../iam/services/rolesApi.js'
 import { resetPassword } from '../../auth/services/authApi.js'
 
@@ -121,25 +121,41 @@ export async function createStaffAccount(payload) {
   })
 }
 
+function resolveRoleIds(options, roleNames) {
+  const names = (Array.isArray(roleNames) ? roleNames : [roleNames]).filter(Boolean)
+  return names.map((name) => options.find((item) => item.name === name)?.id).filter(Boolean)
+}
+
 export async function updateStaffAccount(employeeId, payload) {
   const current = await fetchStaffAccount(employeeId)
   const options = await fetchRoleOptions()
+  const nextActive = payload.isActive ?? payload.active ?? current.isActive
 
   await updateEmployee(employeeId, {
-    fullName: payload.fullName,
-    department: payload.note || current.department || null,
+    fullName: payload.fullName ?? current.fullName,
+    department: payload.note ?? current.department ?? null,
     actualSalary: current.actualSalary || 0,
-    bankAccountInfo: payload.phone || current.phone || null,
+    bankAccountInfo: payload.phone ?? current.phone ?? null,
   })
 
-  const roleIds = (current.roles || [])
-    .map((name) => options.find((item) => item.name === name)?.id)
-    .filter(Boolean)
+  if (!nextActive) {
+    await lockUser(current.userGuid)
+  } else {
+    const roleNames = payload.role ? [payload.role] : current.roles?.length ? current.roles : []
+    const roleIds = resolveRoleIds(options, roleNames)
+    if (!roleIds.length) {
+      throw new Error('Vui lòng chọn vai trò nhân viên.')
+    }
 
-  await updateUser(current.userGuid, {
-    isActive: payload.isActive ?? payload.active ?? current.isActive,
-    roleIds,
-  })
+    if (!current.isActive) {
+      await unlockUser(current.userGuid)
+    }
+
+    await updateUser(current.userGuid, {
+      isActive: true,
+      roleIds,
+    })
+  }
 
   if (payload.newPassword?.trim()) {
     await resetPassword(current.username, payload.newPassword.trim())

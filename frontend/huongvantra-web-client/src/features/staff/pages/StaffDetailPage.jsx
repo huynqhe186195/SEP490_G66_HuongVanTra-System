@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
-import { assignStaffRoles, fetchRoleOptions, fetchStaffAccount, updateStaffAccount } from '../services/staffApi.js'
+import { fetchRoleOptions, fetchStaffAccount, updateStaffAccount } from '../services/staffApi.js'
 
 const loginHistory = [
   { id: '1', channel: 'He thong POS 02', time: '14:20', date: 'Lan cuoi: Hom nay', icon: 'devices', active: true },
@@ -62,10 +62,10 @@ function StaffDetailPage() {
     return () => { mounted = false }
   }, [employeeId])
 
-  const canSave = useMemo(
-    () => Boolean(form.fullName.trim() && form.phone.trim() && form.username.trim()),
-    [form.fullName, form.phone, form.username],
-  )
+  const canSave = useMemo(() => {
+    if (!form.active) return true
+    return Boolean(form.fullName.trim() && form.phone.trim() && form.username.trim())
+  }, [form.active, form.fullName, form.phone, form.username])
 
   const handleChange = (field) => (event) => {
     setForm((current) => ({ ...current, [field]: event.target.value }))
@@ -73,9 +73,18 @@ function StaffDetailPage() {
 
   const handleSave = async () => {
     if (!employeeId) return
-    if (!canSave) {
-      showError('Vui lòng nhập đủ họ tên, số điện thoại và tên đăng nhập.')
-      return
+
+    const isDeactivating = !form.active
+
+    if (!isDeactivating) {
+      if (!canSave) {
+        showError('Vui lòng nhập đủ họ tên, số điện thoại và tên đăng nhập.')
+        return
+      }
+      if (!form.role) {
+        showError('Vui lòng chọn vai trò nhân viên.')
+        return
+      }
     }
 
     setIsSaving(true)
@@ -86,14 +95,11 @@ function StaffDetailPage() {
         note: form.note,
         username: form.username,
         isActive: form.active,
-        newPassword: form.newPassword || null,
+        role: form.role || undefined,
+        newPassword: isDeactivating ? null : form.newPassword || null,
       })
 
-      if (form.role) {
-        await assignStaffRoles(employeeId, [form.role])
-      }
-
-      showSuccess('Cập nhật nhân viên thành công.')
+      showSuccess(isDeactivating ? 'Đã ngừng hoạt động nhân viên.' : 'Cập nhật nhân viên thành công.')
       navigate('/staff')
     } catch (error) {
       showError(error.message)
