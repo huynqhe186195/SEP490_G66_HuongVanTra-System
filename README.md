@@ -47,3 +47,45 @@
 
   # Xóa triệt để kể cả volumes (NGUY HIỂM — mất data mysql/rabbitmq)
   docker system prune -f --volumes
+
+  # Script SQL đã có hvt_inventory_db và grant đủ quyền. Vấn đề là MySQL volume đã được khởi tạo từ trước — file init.sql chỉ chạy một lần duy nhất khi volume còn mới, nên database hvt_inventory_db và quyền cho hvtuser chưa được tạo trong lần này. (lỗi khi chạy migration)
+
+  Cách fix: chạy thủ công lệnh SQL vào container MySQL đang chạy:
+
+  docker exec -it hvt-mysql mysql -uroot -phvtroot123 -e "
+  CREATE DATABASE IF NOT EXISTS \`hvt_inventory_db\`
+    CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+  GRANT ALL PRIVILEGES ON \`hvt_inventory_db\`.* TO 'hvtuser'@'%';
+  FLUSH PRIVILEGES;
+  "
+
+  Sau đó restart inventory-service để nó chạy lại migration:
+
+  docker compose restart inventory-service
+
+  Rồi kiểm tra log:
+
+  docker compose logs -f inventory-service
+
+  Lần này bạn sẽ thấy migration chạy thành công thay vì Access denied.
+
+  ✻ Sautéed for 1m 21s
+
+  ❯ còn cách khác không?
+
+  Có 2 cách khác:
+
+  Cách 1: Xóa volume MySQL và khởi động lại từ đầu
+  docker compose down -v
+  docker compose up -d
+  -v xóa volume → MySQL khởi động lại từ đầu → init.sql chạy lại → tất cả database và quyền được tạo đúng. Nhược điểm: mất toàn bộ data hiện có trong MySQL.
+
+  ---
+  Cách 2: Rebuild chỉ MySQL với volume mới
+  docker compose down
+  docker volume rm huongvantra_backend_mysql_data
+  docker compose up -d
+  Tương tự cách 1 nhưng xóa volume tường minh hơn. Cũng mất data.
+
+  ---
+  Nếu có data quan trọng cần giữ thì dùng lệnh docker exec mình đã đề xuất ở trên — đó là cách an toàn nhất. Còn nếu đây là môi trường dev và data không quan trọng thì cách 1 (down -v + up) tiện nhất.
