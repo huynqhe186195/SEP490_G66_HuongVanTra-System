@@ -97,11 +97,9 @@ function CodOrdersPage() {
 
   async function handleVerify(payment) {
     if (!canManage) return
-    const transactionRef = window.prompt('Mã tham chiếu giao dịch (tuỳ chọn):') ?? ''
-    if (transactionRef === null) return
     setActionPaymentId(payment.id)
     try {
-      await verifyCodPayment(payment.id, transactionRef)
+      await verifyCodPayment(payment.id)
       showSuccess(`Đã xác nhận thu COD cho đơn ${payment.orderCode}.`)
       await loadData()
     } catch (error) {

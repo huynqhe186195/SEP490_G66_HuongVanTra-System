@@ -227,6 +227,7 @@ public class OrderLogic(
             throw new OrderCannotBeCancelledException(id, order.OrderStatus.ToString());
 
         order.OrderStatus = OrderStatus.Cancelled;
+        order.InventorySyncStatus = InventorySyncStatus.Cancelled;
         order.UpdatedAt = DateTime.UtcNow;
 
         var description = string.IsNullOrWhiteSpace(reason)
@@ -257,6 +258,13 @@ public class OrderLogic(
 
         if (order.OrderStatus != OrderStatus.Processing && order.OrderStatus != OrderStatus.PendingPayment)
             throw new OrderCannotBeModifiedException(id, order.OrderStatus.ToString());
+
+        var payments = order.Payments ?? [];
+        var pendingTransfer = payments.FirstOrDefault(p =>
+            p.PaymentMethod is PaymentMethod.VietQR or PaymentMethod.BankTransfer
+            && p.PaymentStatus != PaymentStatus.Success);
+        if (pendingTransfer is not null)
+            throw new OrderValidationException("Đơn chuyển khoản phải thanh toán trước khi chuyển sang đang giao.");
 
         order.OrderStatus = OrderStatus.Shipping;
         order.UpdatedAt = DateTime.UtcNow;
@@ -439,6 +447,7 @@ public class OrderLogic(
         OrderChannel.Website => "website",
         OrderChannel.Zalo => "Zalo",
         OrderChannel.Phone => "điện thoại",
+        OrderChannel.COD => "COD",
         _ => channel.ToString()
     };
 

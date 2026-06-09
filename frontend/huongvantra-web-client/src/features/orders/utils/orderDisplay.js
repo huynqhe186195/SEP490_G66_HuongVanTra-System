@@ -19,6 +19,7 @@ export const ORDER_STATUS_OPTIONS = [
 export const ORDER_CHANNEL_OPTIONS = [
   { value: '', label: 'Tất cả kênh' },
   { value: 'POS', label: 'Bán trực tiếp tại quầy' },
+  { value: 'COD', label: 'COD (giao hàng thu tiền)' },
   { value: 'Website', label: 'Website' },
   { value: 'Zalo', label: 'Zalo' },
   { value: 'Phone', label: 'Điện thoại' },
@@ -55,6 +56,7 @@ export function getOrderChannelLabel(channel) {
   const key = normalizeOrderKey(channel)
   const map = {
     POS: 'Bán trực tiếp tại quầy',
+    COD: 'COD (giao hàng thu tiền)',
     Website: 'Website',
     Zalo: 'Zalo',
     Phone: 'Điện thoại',
@@ -88,8 +90,26 @@ export function getInventorySyncLabel(status) {
   const map = {
     Synced: 'Đã đồng bộ kho',
     PendingDeduction: 'Chờ trừ kho',
+    Cancelled: 'Không trừ kho (đã hủy)',
   }
   return map[key] || status || '—'
+}
+
+export function resolveInventorySyncMeta(order) {
+  const orderStatus = normalizeOrderKey(order?.orderStatus)
+  const syncStatus = normalizeOrderKey(order?.inventorySyncStatus)
+
+  if (orderStatus === 'Cancelled' || syncStatus === 'Cancelled') {
+    return {
+      label: 'Không trừ kho (đã hủy)',
+      className: 'bg-slate-100 text-slate-500',
+    }
+  }
+
+  return {
+    label: getInventorySyncLabel(order?.inventorySyncStatus),
+    className: getInventorySyncClass(order?.inventorySyncStatus),
+  }
 }
 
 export function getOrderStatusClass(status) {
@@ -111,6 +131,7 @@ export function getPaymentStatusClass(status) {
 export function getInventorySyncClass(status) {
   const key = normalizeOrderKey(status)
   if (key === 'Synced') return 'bg-emerald-50 text-emerald-700'
+  if (key === 'Cancelled') return 'bg-slate-100 text-slate-500'
   return 'bg-slate-100 text-slate-600'
 }
 
@@ -128,14 +149,40 @@ export function canEditOrderMeta(order) {
   return Boolean(order && !isOrderTerminal(order))
 }
 
+export function isTransferPaymentMethod(method) {
+  const key = normalizeOrderKey(method)
+  return key === 'VietQR' || key === 'BankTransfer'
+}
+
+export function isPendingTransferPayment(order) {
+  const payment = getPrimaryPayment(order)
+  const orderStatus = normalizeOrderKey(order?.orderStatus)
+  const paymentStatus = normalizeOrderKey(payment?.paymentStatus)
+  return (
+    orderStatus === 'PendingPayment'
+    && isTransferPaymentMethod(payment?.paymentMethod)
+    && paymentStatus !== 'Success'
+  )
+}
+
+export function requiresDelivery(order) {
+  if (isPosChannel(order?.orderChannel)) return false
+  const channel = normalizeOrderKey(order?.orderChannel)
+  return requiresShippingAddress(channel) || Boolean(String(order?.shippingAddress || '').trim())
+}
+
 export function canShipOrder(order) {
+  if (!requiresDelivery(order)) return false
+  if (isPendingTransferPayment(order)) return false
   const status = normalizeOrderKey(order?.orderStatus)
   return status === 'PendingPayment' || status === 'Processing'
 }
 
 export function canCompleteOrder(order) {
   const status = normalizeOrderKey(order?.orderStatus)
-  return status !== 'Cancelled' && status !== 'Completed'
+  if (status === 'Cancelled' || status === 'Completed') return false
+  if (isPendingTransferPayment(order)) return false
+  return true
 }
 
 export function canCancelOrder(order) {
@@ -166,7 +213,7 @@ export function isCodOverdue(payment) {
 
 export function requiresShippingAddress(channel) {
   const key = normalizeOrderKey(channel)
-  return key === 'Website' || key === 'Zalo' || key === 'Phone'
+  return key === 'Website' || key === 'Zalo' || key === 'Phone' || key === 'COD'
 }
 
 export function isPosChannel(channel) {

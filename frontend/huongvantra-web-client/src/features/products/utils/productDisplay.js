@@ -4,6 +4,47 @@ export function formatProductPrice(value) {
   return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 2 }).format(amount)
 }
 
+export function parseProductPriceInput(raw) {
+  const text = String(raw || '')
+    .trim()
+    .replace(/\s*(đ|vnđ|vnd)\s*$/i, '')
+    .replace(/\s/g, '')
+  if (!text) return NaN
+
+  const commaPos = text.indexOf(',')
+  if (commaPos !== -1) {
+    const whole = text.slice(0, commaPos).replace(/\./g, '').replace(/[^\d]/g, '')
+    const frac = text.slice(commaPos + 1).replace(/[^\d]/g, '').slice(0, 2)
+    if (!whole && !frac) return NaN
+    return Number(frac !== '' ? `${whole || '0'}.${frac}` : whole)
+  }
+
+  const digits = text.replace(/\./g, '').replace(/[^\d]/g, '')
+  return digits ? Number(digits) : NaN
+}
+
+export function formatProductPriceInput(raw) {
+  const text = String(raw || '')
+    .trim()
+    .replace(/\s*(đ|vnđ|vnd)\s*$/i, '')
+    .replace(/\s/g, '')
+  if (!text) return ''
+
+  const endsWithComma = text.endsWith(',')
+  const commaPos = text.indexOf(',')
+  if (commaPos !== -1) {
+    const whole = text.slice(0, commaPos).replace(/\./g, '').replace(/[^\d]/g, '')
+    const frac = text.slice(commaPos + 1).replace(/[^\d]/g, '').slice(0, 2)
+    const formattedWhole = whole ? Number(whole).toLocaleString('vi-VN') : ''
+    if (endsWithComma && !frac) return `${formattedWhole},`
+    return frac || endsWithComma ? `${formattedWhole || '0'},${frac}` : formattedWhole
+  }
+
+  const digits = text.replace(/\./g, '').replace(/[^\d]/g, '')
+  if (!digits) return ''
+  return Number(digits).toLocaleString('vi-VN')
+}
+
 export function formatWeightGrams(value) {
   const grams = Number(value)
   if (!Number.isFinite(grams) || grams <= 0) return '—'

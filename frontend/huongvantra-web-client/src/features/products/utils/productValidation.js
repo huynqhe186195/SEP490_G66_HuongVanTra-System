@@ -1,15 +1,10 @@
+import { parseProductPriceInput } from './productDisplay.js'
+
 const SKU_CODE_REGEX = /^[A-Z0-9\-_]{3,50}$/
 const URL_REGEX = /^https?:\/\/[^\s/$.?#].[^\s]*$/i
 
 function normalizeText(value) {
   return String(value || '').trim()
-}
-
-function hasMaxTwoDecimals(value) {
-  const text = String(value)
-  const dot = text.indexOf('.')
-  if (dot === -1) return true
-  return text.length - dot - 1 <= 2
 }
 
 export function normalizeSkuCodeInput(value) {
@@ -78,10 +73,10 @@ export function validateSkuForm({ skuCode, packagingType, weightInGrams, basePri
   if (!Number.isInteger(weight) || weight <= 0) errors.weightInGrams = 'Khối lượng phải là số nguyên lớn hơn 0 gram.'
   else if (weight > 100000) errors.weightInGrams = 'Khối lượng tối đa 100,000 gram (100 kg).'
 
-  const price = Number(basePrice)
+  const price = parseProductPriceInput(basePrice)
   if (!Number.isFinite(price) || price <= 0) errors.basePrice = 'Giá bán phải lớn hơn 0.'
-  else if (price > 1000000000) errors.basePrice = 'Giá bán tối đa 1,000,000,000 VNĐ.'
-  else if (!hasMaxTwoDecimals(basePrice)) errors.basePrice = 'Giá bán chỉ được có tối đa 2 chữ số thập phân.'
+  else if (price > 1000000000) errors.basePrice = 'Giá bán tối đa 1.000.000.000 đ.'
+  else if (price !== Math.round(price * 100) / 100) errors.basePrice = 'Giá bán chỉ được có tối đa 2 chữ số thập phân.'
 
   const image = normalizeText(imageUrl)
   if (image) {

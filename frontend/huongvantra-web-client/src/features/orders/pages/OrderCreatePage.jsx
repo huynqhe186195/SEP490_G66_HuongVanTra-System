@@ -282,7 +282,8 @@ function OrderCreatePage() {
 
         customerSnapshotName: form.customerSnapshotName.trim() || null,
 
-        orderChannel: form.orderChannel,
+        orderChannel:
+          form.paymentMethod === 'COD' && !isPosChannel(form.orderChannel) ? 'COD' : form.orderChannel,
 
         shippingAddress: form.shippingAddress,
 

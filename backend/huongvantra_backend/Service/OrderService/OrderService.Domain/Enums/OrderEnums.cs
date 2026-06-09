@@ -15,13 +15,15 @@ public enum OrderChannel
     POS,
     Website,
     Zalo,
-    Phone
+    Phone,
+    COD
 }
 
 public enum InventorySyncStatus
 {
     Synced,
-    PendingDeduction
+    PendingDeduction,
+    Cancelled
 }
 
 public enum PaymentMethod

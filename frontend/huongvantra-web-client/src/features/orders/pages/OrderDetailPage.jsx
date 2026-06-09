@@ -6,6 +6,7 @@ import { loadAuthSession } from '../../auth/services/authSession.js'
 import { canCreateOrder } from '../../auth/utils/permissions.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import OrderTimeline from '../components/OrderTimeline.jsx'
+import OrderTransferQrPanel from '../components/OrderTransferQrPanel.jsx'
 import {
   cancelOrder,
   completeOrder,
@@ -20,9 +21,9 @@ import {
   canEditOrderMeta,
   canShipOrder,
   canVerifyCod,
+  isPendingTransferPayment,
   formatVnd,
-  getInventorySyncClass,
-  getInventorySyncLabel,
+  resolveInventorySyncMeta,
   getOrderChannelLabel,
   getOrderStatusClass,
   getOrderStatusLabel,
@@ -43,7 +44,6 @@ function OrderDetailPage() {
   const [shippingAddress, setShippingAddress] = useState('')
   const [note, setNote] = useState('')
   const [discountAmount, setDiscountAmount] = useState('')
-  const [codRef, setCodRef] = useState('')
   const [timelineRefreshKey, setTimelineRefreshKey] = useState(0)
 
   const loadOrder = useCallback(async () => {
@@ -104,7 +104,7 @@ function OrderDetailPage() {
       } else if (action === 'verify-cod') {
         const payment = getPrimaryPayment(order)
         if (!payment) return
-        await verifyCodPayment(payment.id, codRef)
+        await verifyCodPayment(payment.id)
         showSuccess('Đã xác nhận thu COD.')
       }
       await loadOrder()
@@ -140,6 +140,8 @@ function OrderDetailPage() {
   }
 
   const payment = getPrimaryPayment(order)
+  const showTransferQr = isPendingTransferPayment(order)
+  const inventorySyncMeta = resolveInventorySyncMeta(order)
 
   return (
     <PageShell>
@@ -158,8 +160,8 @@ function OrderDetailPage() {
           <span className={`rounded-full px-3 py-1 text-xs font-semibold ${getOrderStatusClass(order.orderStatus)}`}>
             {getOrderStatusLabel(order.orderStatus)}
           </span>
-          <span className={`rounded-full px-3 py-1 text-xs font-semibold ${getInventorySyncClass(order.inventorySyncStatus)}`}>
-            {getInventorySyncLabel(order.inventorySyncStatus)}
+          <span className={`rounded-full px-3 py-1 text-xs font-semibold ${inventorySyncMeta.className}`}>
+            {inventorySyncMeta.label}
           </span>
         </div>
       </div>
@@ -227,14 +229,32 @@ function OrderDetailPage() {
             </section>
           ) : null}
 
+          {showTransferQr && canManage ? (
+            <OrderTransferQrPanel
+              orderId={order.id}
+              orderCode={order.orderCode}
+              total={order.finalAmount}
+              customerName={order.customerSnapshotName}
+              onPaid={() => {
+                loadOrder()
+                setTimelineRefreshKey((key) => key + 1)
+              }}
+            />
+          ) : null}
+
           {payment ? (
             <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
               <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-400">Thanh toán</h2>
               <p className="text-sm text-slate-700">{getPaymentMethodLabel(payment.paymentMethod)}</p>
-              <p className="mt-1 text-sm font-semibold">{formatVnd(payment.amount)}</p>
+              <p className="mt-1 text-sm font-semibold">
+                {showTransferQr ? formatVnd(order.finalAmount) : formatVnd(payment.amount)}
+              </p>
               <span className={`mt-2 inline-block rounded-full px-3 py-1 text-xs font-semibold ${getPaymentStatusClass(payment.paymentStatus)}`}>
                 {getPaymentStatusLabel(payment.paymentStatus)}
               </span>
+              {showTransferQr ? (
+                <p className="mt-2 text-xs text-amber-700">Đang chờ khách chuyển khoản — hệ thống tự xác nhận khi nhận tiền.</p>
+              ) : null}
               {payment.isCodVerified ? (
                 <p className="mt-2 text-xs text-emerald-700">COD đã xác nhận</p>
               ) : null}
@@ -266,23 +286,14 @@ function OrderDetailPage() {
                   </button>
                 ) : null}
                 {canVerifyCod(order) ? (
-                  <div className="space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
-                    <p className="text-xs font-semibold text-amber-800">Xác nhận thu COD</p>
-                    <input
-                      className="w-full rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm"
-                      placeholder="Mã tham chiếu (tuỳ chọn)"
-                      value={codRef}
-                      onChange={(e) => setCodRef(e.target.value)}
-                    />
-                    <button
-                      type="button"
-                      disabled={isSaving}
-                      onClick={() => runAction('verify-cod')}
-                      className="w-full rounded-lg bg-amber-600 px-3 py-2 text-sm font-bold text-white hover:bg-amber-700 disabled:opacity-50"
-                    >
-                      Đã giao &amp; thu tiền
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    disabled={isSaving}
+                    onClick={() => runAction('verify-cod')}
+                    className="rounded-xl bg-amber-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-amber-700 disabled:opacity-50"
+                  >
+                    Đã giao &amp; thu tiền (COD)
+                  </button>
                 ) : null}
                 {canCancelOrder(order) ? (
                   <button

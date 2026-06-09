@@ -11,8 +11,7 @@ import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import { fetchOrders } from '../services/ordersApi.js'
 import {
   formatVnd,
-  getInventorySyncClass,
-  getInventorySyncLabel,
+  resolveInventorySyncMeta,
   getOrderChannelLabel,
   getOrderStatusClass,
   getOrderStatusLabel,
@@ -212,7 +211,9 @@ function OrdersPage() {
                 </tr>
               ) : null}
               {!isLoading
-                ? orders.map((order) => (
+                ? orders.map((order) => {
+                    const inventorySyncMeta = resolveInventorySyncMeta(order)
+                    return (
                     <tr key={order.id} className="transition-colors hover:bg-[#fbf9f1]/30">
                       <td className="px-6 py-4 font-bold text-slate-700">
                         <Link className="hover:text-[#538463] hover:underline" to={`/orders/${order.id}`}>
@@ -240,8 +241,8 @@ function OrdersPage() {
                         </span>
                       </td>
                       <td className="px-4 py-4">
-                        <span className={`rounded-full px-3 py-1 text-xs font-semibold ${getInventorySyncClass(order.inventorySyncStatus)}`}>
-                          {getInventorySyncLabel(order.inventorySyncStatus)}
+                        <span className={`rounded-full px-3 py-1 text-xs font-semibold ${inventorySyncMeta.className}`}>
+                          {inventorySyncMeta.label}
                         </span>
                       </td>
                       <td className="px-4 py-4 text-xs text-slate-500">{formatVietnamDateTime(order.createdAt)}</td>
@@ -252,7 +253,8 @@ function OrdersPage() {
                         </Link>
                       </td>
                     </tr>
-                  ))
+                    )
+                  })
                 : null}
             </tbody>
           </table>

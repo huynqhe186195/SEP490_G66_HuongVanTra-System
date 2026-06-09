@@ -4,7 +4,14 @@ import AdjustSkuStockModal from './AdjustSkuStockModal.jsx'
 import ProductImage, { ProductImagePreview } from './ProductImage.jsx'
 import { buildStockBySkuIdMap, fetchSkuStocks } from '../../inventory/services/inventoryStockApi.js'
 import { createSku, deleteSku, fetchSkusByProductId, updateSku } from '../services/productSkusApi.js'
-import { formatProductPrice, formatStockQuantity, formatWeightGrams, getProductStatusMeta } from '../utils/productDisplay.js'
+import {
+  formatProductPrice,
+  formatProductPriceInput,
+  formatStockQuantity,
+  formatWeightGrams,
+  getProductStatusMeta,
+  parseProductPriceInput,
+} from '../utils/productDisplay.js'
 import { mapProductApiError, normalizeSkuCodeInput, validateSkuForm } from '../utils/productValidation.js'
 
 const EMPTY_FORM = {
@@ -67,7 +74,7 @@ function ProductSkusPanel({ productId, canManage, canAdjustStock = false, layout
       skuCode: sku.skuCode,
       packagingType: sku.packagingType,
       weightInGrams: String(sku.weightInGrams),
-      basePrice: String(sku.basePrice),
+      basePrice: formatProductPriceInput(String(sku.basePrice)),
       imageUrl: sku.imageUrl || '',
       isActive: sku.isActive,
     })
@@ -80,6 +87,12 @@ function ProductSkusPanel({ productId, canManage, canAdjustStock = false, layout
       setForm((prev) => ({ ...prev, [key]: value }))
       setFieldErrors((prev) => ({ ...prev, [key]: undefined }))
     }
+  }
+
+  function updatePriceField(event) {
+    const value = formatProductPriceInput(event.target.value)
+    setForm((prev) => ({ ...prev, basePrice: value }))
+    setFieldErrors((prev) => ({ ...prev, basePrice: undefined }))
   }
 
   async function handleSubmit(event) {
@@ -100,7 +113,7 @@ function ProductSkusPanel({ productId, canManage, canAdjustStock = false, layout
         skuCode: form.skuCode,
         packagingType: form.packagingType,
         weightInGrams: Number(form.weightInGrams),
-        basePrice: Number(form.basePrice),
+        basePrice: parseProductPriceInput(form.basePrice),
         imageUrl: form.imageUrl,
         isActive: form.isActive,
       }
@@ -139,7 +152,7 @@ function ProductSkusPanel({ productId, canManage, canAdjustStock = false, layout
   }
 
   return (
-    <div className={`rounded-[1rem] bg-white p-4 shadow-sm sm:p-6 lg:p-8 ${isColumnLayout ? 'lg:max-h-[calc(100vh-12rem)] lg:overflow-y-auto' : ''}`}>
+    <div className="rounded-[1rem] bg-white p-4 shadow-sm sm:p-6 lg:p-8">
       <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-lg font-bold text-slate-800">Biến thể, giá &amp; số lượng hiện tại</h2>
@@ -186,14 +199,19 @@ function ProductSkusPanel({ productId, canManage, canAdjustStock = false, layout
             </label>
 
             <label className="space-y-1">
-              <span className="text-xs font-semibold text-[#717971]">Giá bán (VND) *</span>
-              <input
-                className={`w-full rounded-xl border-none bg-white p-3 text-sm focus:ring-2 focus:ring-[#356647]/20 ${fieldErrors.basePrice ? 'ring-2 ring-[#b42318]/40' : ''}`}
-                inputMode="decimal"
-                placeholder="180000"
-                value={form.basePrice}
-                onChange={updateField('basePrice')}
-              />
+              <span className="text-xs font-semibold text-[#717971]">Giá bán *</span>
+              <div className="relative">
+                <input
+                  className={`w-full rounded-xl border-none bg-white p-3 pr-10 text-sm focus:ring-2 focus:ring-[#356647]/20 ${fieldErrors.basePrice ? 'ring-2 ring-[#b42318]/40' : ''}`}
+                  inputMode="decimal"
+                  placeholder="180.000"
+                  value={form.basePrice}
+                  onChange={updatePriceField}
+                />
+                <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs font-semibold text-[#717971]">
+                  đ
+                </span>
+              </div>
               <FieldError message={fieldErrors.basePrice} />
             </label>
 

@@ -147,10 +147,9 @@ export async function fetchPosSepaySetup() {
   }
 }
 
-async function attachTransferQr(result) {
+export async function fetchOrderTransferQr({ orderCode, amount }) {
   const base = {
-    ...result,
-    transferContent: result.orderCode,
+    transferContent: orderCode,
     transferAccountNumber: null,
     qrExpiresAtUtc: null,
     paymentMode: 'vietqr_main',
@@ -162,14 +161,14 @@ async function attachTransferQr(result) {
     const qr = await apiRequestAuth('/api/pos/transfer-qr', {
       method: 'POST',
       body: JSON.stringify({
-        orderCode: result.orderCode,
-        amount: result.totalAmount,
+        orderCode,
+        amount,
       }),
     })
 
     return {
       ...base,
-      transferContent: qr.transferContent ?? qr.TransferContent ?? result.orderCode,
+      transferContent: qr.transferContent ?? qr.TransferContent ?? orderCode,
       transferAccountNumber: qr.transferAccountNumber ?? qr.TransferAccountNumber ?? null,
       qrExpiresAtUtc: qr.qrExpiresAtUtc ?? qr.QrExpiresAtUtc ?? null,
       paymentMode: qr.paymentMode ?? qr.PaymentMode ?? 'vietqr_main',
@@ -178,6 +177,17 @@ async function attachTransferQr(result) {
     }
   } catch {
     return base
+  }
+}
+
+async function attachTransferQr(result) {
+  const qr = await fetchOrderTransferQr({
+    orderCode: result.orderCode,
+    amount: result.totalAmount,
+  })
+  return {
+    ...result,
+    ...qr,
   }
 }
 
@@ -238,7 +248,7 @@ export function createTakeawayCodOrder(payload) {
   return submitPosOrder(
     { ...payload, payments: [{ paymentMethod: 'COD', amount: 0 }] },
     {
-      orderChannel: 'Phone',
+      orderChannel: 'COD',
       shippingAddress: payload.shippingAddress,
       paymentMethod: 'COD',
       paidAmount: 0,

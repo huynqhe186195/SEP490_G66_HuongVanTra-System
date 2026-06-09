@@ -44,10 +44,10 @@ public static class OrderInputValidator
         if (paidAmount < 0)
             errors.Add("Số tiền thanh toán không được âm.");
 
-        if (channel == OrderChannel.Website || channel == OrderChannel.Zalo || channel == OrderChannel.Phone)
+        if (channel is OrderChannel.Website or OrderChannel.Zalo or OrderChannel.Phone or OrderChannel.COD)
         {
             if (string.IsNullOrWhiteSpace(shippingAddress))
-                errors.Add("Đơn hàng online phải có địa chỉ giao hàng.");
+                errors.Add("Đơn hàng giao hàng phải có địa chỉ giao hàng.");
         }
 
         if (errors.Count > 0)

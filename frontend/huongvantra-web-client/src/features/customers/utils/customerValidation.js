@@ -75,6 +75,33 @@ export function normalizePhoneInput(value) {
   return String(value || '').replace(/\D/g, '').slice(0, 10)
 }
 
+export function validatePosCustomerForm({ fullName, phone, address }) {
+  const errors = {}
+  const nameValue = normalizeText(fullName)
+  if (!nameValue) errors.fullName = 'Họ tên là bắt buộc.'
+  else if (nameValue.length < 2) errors.fullName = 'Họ tên phải có ít nhất 2 ký tự.'
+  else if (nameValue.length > 100) errors.fullName = 'Họ tên tối đa 100 ký tự.'
+  else if (!isLettersOnly(nameValue)) errors.fullName = 'Họ tên chỉ được chứa chữ cái và khoảng trắng (hỗ trợ tiếng Việt có dấu).'
+
+  const phoneValue = String(phone || '').trim()
+  if (!phoneValue) errors.phone = 'Số điện thoại là bắt buộc.'
+  else if (!PHONE_REGEX.test(phoneValue)) errors.phone = 'Số điện thoại phải gồm 10 chữ số và bắt đầu bằng 0.'
+
+  const addressValue = normalizeText(address)
+  if (addressValue) {
+    if (addressValue.length < 5) errors.address = 'Địa chỉ phải có ít nhất 5 ký tự.'
+    else if (addressValue.length > 255) errors.address = 'Địa chỉ tối đa 255 ký tự.'
+    else if (isDigitsOnly(addressValue)) errors.address = 'Địa chỉ không được chỉ gồm chữ số.'
+  }
+
+  const messages = Object.values(errors)
+  return {
+    valid: messages.length === 0,
+    errors,
+    message: messages[0] || '',
+  }
+}
+
 export function validateCustomerAddressForm(form) {
   const errors = {}
 

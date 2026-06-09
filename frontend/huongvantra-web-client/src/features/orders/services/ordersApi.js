@@ -196,10 +196,10 @@ export async function fetchOverdueCodPayments() {
   return Array.isArray(data) ? data.map(mapPayment).filter(Boolean) : []
 }
 
-export async function verifyCodPayment(paymentId, transactionRef = '') {
+export async function verifyCodPayment(paymentId) {
   const data = await apiRequestAuth(`/api/v1/payments/${paymentId}/verify-cod`, {
     method: 'POST',
-    body: JSON.stringify({ transactionRef: transactionRef?.trim() || null }),
+    body: JSON.stringify({ transactionRef: null }),
   })
   return mapPayment(data)
 }
