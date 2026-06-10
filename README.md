@@ -1,5 +1,40 @@
 # SEP490 - Hệ thống Quản trị Hương Vân Trà
 
+## Sau khi `git pull` (cho cả team)
+
+Mỗi máy chỉ cần chạy từ thư mục `backend\huongvantra_backend`:
+
+```powershell
+git pull
+docker compose up --build -d
+```
+
+`mysql-bootstrap` sẽ tự tạo/cấp quyền các database (kể cả `hvt_inventory_db` trên volume MySQL cũ). Các service .NET tự chạy EF migration khi khởi động.
+
+Nếu vẫn lỗi 500 (ví dụ cập nhật số lượng sản phẩm):
+
+```powershell
+.\Scripts\sync-after-pull.ps1
+```
+
+Hoặc chỉ tạo DB thủ công:
+
+```powershell
+.\Scripts\bootstrap-databases.ps1
+docker compose restart inventory-service
+```
+
+Kiểm tra:
+
+```powershell
+docker logs hvt-mysql-bootstrap
+docker logs hvt-inventory-service --tail 30
+```
+
+Lỗi thường gặp: `Access denied ... hvt_inventory_db` → chưa có database inventory (chạy script trên).
+
+---
+
 # Hướng dẫn cách build docker 
 1. Build lại images (bắt buộc phải rebuild vì đã thay đổi Dockerfile)
 
