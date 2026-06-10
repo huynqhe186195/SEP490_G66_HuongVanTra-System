@@ -285,19 +285,20 @@ export function buildTakeawayOrderPayload({
   }
 }
 
-export function createTakeawayCodOrder(payload) {
+export function createTakeawayCodOrder(payload, expectedAmount = 0) {
+  const amount = Math.max(0, Number(expectedAmount) || 0)
   return submitPosOrder(
-    { ...payload, payments: [{ paymentMethod: 'COD', amount: 0 }] },
+    { ...payload, payments: [{ paymentMethod: 'COD', amount }] },
     {
       orderChannel: 'COD',
       shippingAddress: payload.shippingAddress,
       paymentMethod: 'COD',
-      paidAmount: 0,
+      paidAmount: amount,
     },
   )
 }
 
-export async function createTakeawayVietQrOrder(payload) {
+export async function createTakeawayVietQrOrder(payload, { qrAmount = 0 } = {}) {
   const result = await submitPosOrder(
     { ...payload, payments: [{ paymentMethod: 'TRANSFER', amount: 0 }] },
     {
@@ -305,9 +306,10 @@ export async function createTakeawayVietQrOrder(payload) {
       shippingAddress: payload.shippingAddress,
       paymentMethod: 'VietQR',
       paidAmount: 0,
+      transferQrAmount: qrAmount > 0 ? qrAmount : 0,
     },
   )
-  return attachTransferQr(result)
+  return attachTransferQr(result, qrAmount)
 }
 
 export function createPosOrderOffline(payload) {

@@ -217,6 +217,8 @@ function PosPage() {
 
   const paymentMethod = sessionPaymentMethod ?? (isTakeaway ? 'COD' : 'CASH')
   const isTransferPayment = paymentMethod === 'TRANSFER'
+  const isCodTakeaway = isTakeaway && paymentMethod === 'COD'
+  const isTransferTakeaway = isTakeaway && isTransferPayment
 
   const paymentMethods = isTakeaway ? TAKEAWAY_PAYMENT_METHODS : COUNTER_PAYMENT_METHODS
 
@@ -351,6 +353,11 @@ function PosPage() {
   const transferQrAmount = isTransferPayment ? (amountPaid > 0 ? amountPaid : total) : 0
   const transferOverpayToDebt =
     isTransferPayment && change > 0 && customerCurrentDebt > 0
+      ? Math.min(change, customerCurrentDebt)
+      : 0
+  const codExpectedAmount = isCodTakeaway ? (amountPaid > 0 ? amountPaid : total) : 0
+  const codOverpayToDebt =
+    isCodTakeaway && change > 0 && customerCurrentDebt > 0
       ? Math.min(change, customerCurrentDebt)
       : 0
   // Tiền mặt: để trống = ghi nợ toàn bộ. CK: để trống = QR đủ tiền; nhập vượt đơn = QR đúng số nhập (trừ nợ).
@@ -1081,8 +1088,23 @@ function PosPage() {
     })
 
     if (isTransferPayment) {
-      const result = await createTakeawayVietQrOrder(payload)
-      showSuccess(`Đã tạo đơn mang đi ${result.orderCode}. Khách quét QR để thanh toán.`)
+      const result = await createTakeawayVietQrOrder(payload, { qrAmount: transferQrAmount })
+      const debtSettlement =
+        transferOverpayToDebt > 0 && selectedCustomer?.customerId
+          ? {
+              customerId: selectedCustomer.customerId,
+              amount: transferOverpayToDebt,
+              balanceBefore: customerCurrentDebt,
+              customerName: selectedCustomer.fullName || '',
+              customerCode: selectedCustomer.customerCode || '',
+            }
+          : null
+
+      showSuccess(
+        debtSettlement
+          ? `Đã tạo đơn mang đi ${result.orderCode}. Quét QR ${formatMoney(transferQrAmount)} đ (gồm trừ nợ ${formatMoney(debtSettlement.amount)} đ).`
+          : `Đã tạo đơn mang đi ${result.orderCode}. Quét QR ${formatMoney(transferQrAmount)} đ để thanh toán.`,
+      )
       const receipt = buildReceiptData({
         orderCode: result.orderCode,
         method: 'TRANSFER',
@@ -1093,7 +1115,7 @@ function PosPage() {
           orderId: result.orderId,
           orderCode: result.orderCode,
           orderLabel: result.orderCode,
-          total: result.totalAmount || total,
+          total: result.qrAmount || transferQrAmount,
           qrPayload: result.qrPayload,
           qrImageUrl: result.qrImageUrl,
           transferContent: result.transferContent,
@@ -1103,13 +1125,19 @@ function PosPage() {
           customer: selectedCustomer?.fullName || '',
           paymentMethod: 'TRANSFER',
           receipt,
+          debtSettlement,
         },
       })
       return
     }
 
-    const result = await createTakeawayCodOrder(payload)
-    showSuccess(`Đã tạo đơn COD ${result.orderCode}. Theo dõi tại mục Đơn COD.`)
+    if (amountPaid > 0 && amountPaid < total) {
+      showError('Số tiền khách trả phải bằng hoặc lớn hơn thành tiền.')
+      return
+    }
+
+    const result = await createTakeawayCodOrder(payload, codExpectedAmount)
+    showSuccess(`Đã tạo đơn COD ${result.orderCode}. Theo dõi tại Quản lý đơn COD.`)
     const receipt = buildReceiptData({
       orderCode: result.orderCode,
       method: 'COD',
@@ -1653,6 +1681,9 @@ function PosPage() {
         paymentMethods={paymentMethods}
         onPaymentMethodChange={(id) => updateActiveSession({ paymentMethod: id })}
         isTransferPayment={isTransferPayment}
+        isCodTakeaway={isCodTakeaway}
+        isTransferTakeaway={isTransferTakeaway}
+        codOverpayToDebt={codOverpayToDebt}
         customerCurrentDebt={customerCurrentDebt}
         amountPaidInput={amountPaidInput}
         onAmountPaidChange={handleAmountPaidChange}

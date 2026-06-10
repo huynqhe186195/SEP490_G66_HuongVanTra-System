@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import { canCreateOrder } from '../../auth/utils/permissions.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
+import CodVerifyModal from '../components/CodVerifyModal.jsx'
 import OrderCustomerCell from '../components/OrderCustomerCell.jsx'
 import OrderProductsSection from '../components/OrderProductsSection.jsx'
 import OrderTimeline from '../components/OrderTimeline.jsx'
@@ -16,7 +17,6 @@ import {
   fetchOrder,
   shipOrder,
   updateOrder,
-  verifyCodPayment,
 } from '../services/ordersApi.js'
 import {
   canCancelOrder,
@@ -24,6 +24,7 @@ import {
   canEditOrderMeta,
   canShipOrder,
   canVerifyCod,
+  isCodChannelOrder,
   isPendingPaymentOrder,
   isPendingTransferPayment,
   formatVnd,
@@ -41,12 +42,15 @@ import { fetchProducts } from '../../products/services/productsApi.js'
 import { buildProductCatalogLookups, resolveOrderLineDisplay } from '../../products/utils/productDisplay.js'
 function OrderDetailPage() {
   const { id } = useParams()
+  const [searchParams] = useSearchParams()
+  const fromCod = searchParams.get('from') === 'cod'
   const canManage = canCreateOrder(loadAuthSession())
 
   const [order, setOrder] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false)
+  const [isCodVerifyOpen, setIsCodVerifyOpen] = useState(false)
   const [timelineRefreshKey, setTimelineRefreshKey] = useState(0)
   const [catalogLookups, setCatalogLookups] = useState(() => buildProductCatalogLookups())
 
@@ -129,11 +133,6 @@ function OrderDetailPage() {
         if (!window.confirm('Hủy đơn hàng này?')) return
         await cancelOrder(order.id)
         showSuccess('Đã hủy đơn hàng.')
-      } else if (action === 'verify-cod') {
-        const payment = getPrimaryPayment(order)
-        if (!payment) return
-        await verifyCodPayment(payment.id)
-        showSuccess('Đã xác nhận thu COD.')
       }
       await loadOrder()
       setTimelineRefreshKey((key) => key + 1)
@@ -159,8 +158,8 @@ function OrderDetailPage() {
       <PageShell>
         <div className="mx-auto w-full max-w-5xl px-1 py-10 sm:px-2">
           <p className="text-slate-500">Không tìm thấy đơn hàng.</p>
-          <Link className="mt-4 inline-block text-sm font-semibold text-[#538463]" to="/orders">
-            ← Quay lại danh sách
+          <Link className="mt-4 inline-block text-sm font-semibold text-[#538463]" to={fromCod ? '/orders/cod' : '/orders'}>
+            ← Quay lại {fromCod ? 'quản lý đơn COD' : 'danh sách'}
           </Link>
         </div>
       </PageShell>
@@ -177,8 +176,11 @@ function OrderDetailPage() {
     <div className="mx-auto w-full max-w-5xl space-y-6 px-1 pb-8 sm:px-2">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <Link className="text-sm font-semibold text-[#538463] hover:underline" to="/orders">
-            ← Danh sách đơn
+          <Link
+            className="text-sm font-semibold text-[#538463] hover:underline"
+            to={fromCod || isCodChannelOrder(order) ? '/orders/cod' : '/orders'}
+          >
+            ← {fromCod || isCodChannelOrder(order) ? 'Quản lý đơn COD' : 'Danh sách đơn'}
           </Link>
           <h1 className="mt-2 text-2xl font-bold text-slate-900">{order.orderCode}</h1>
           <p className="mt-1 text-sm text-slate-500">
@@ -285,7 +287,7 @@ function OrderDetailPage() {
                   <button
                     type="button"
                     disabled={isSaving}
-                    onClick={() => runAction('verify-cod')}
+                    onClick={() => setIsCodVerifyOpen(true)}
                     className="rounded-xl bg-amber-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-amber-700 disabled:opacity-50"
                   >
                     Đã giao &amp; thu tiền (COD)
@@ -313,6 +315,29 @@ function OrderDetailPage() {
           <OrderTimeline orderId={order.id} refreshKey={timelineRefreshKey} />
         </section>
       ) : null}
+
+      <CodVerifyModal
+        isOpen={isCodVerifyOpen}
+        order={
+          order && canVerifyCod(order)
+            ? {
+                orderCode: order.orderCode,
+                finalAmount: order.finalAmount,
+                customerId: order.customerId,
+                customerSnapshotName: order.customerSnapshotName,
+                codPaymentId: order.payments?.find((row) => String(row.paymentMethod).toUpperCase() === 'COD')?.id,
+                codExpectedAmount:
+                  order.payments?.find((row) => String(row.paymentMethod).toUpperCase() === 'COD')?.amount ?? null,
+                payments: order.payments,
+              }
+            : null
+        }
+        onClose={() => setIsCodVerifyOpen(false)}
+        onVerified={() => {
+          loadOrder()
+          setTimelineRefreshKey((key) => key + 1)
+        }}
+      />
 
       <OrderUpdateMetaModal
         isOpen={isUpdateModalOpen}

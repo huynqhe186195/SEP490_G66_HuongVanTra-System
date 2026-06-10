@@ -68,5 +68,9 @@ public record OrderSummaryResponse(
     string OrderStatus,
     string InventorySyncStatus,
     decimal FinalAmount,
-    DateTime CreatedAt
+    DateTime CreatedAt,
+    Guid? CodPaymentId = null,
+    bool? IsCodVerified = null,
+    DateTime? CodWarningDate = null,
+    decimal? CodExpectedAmount = null
 );

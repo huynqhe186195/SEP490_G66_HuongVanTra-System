@@ -20,11 +20,13 @@ public class OrdersController(OrderLogic _orderLogic) : ControllerBase
         [FromQuery] Guid? customerId,
         [FromQuery] string? status,
         [FromQuery] string? channel,
+        [FromQuery] string? excludeChannel,
+        [FromQuery] string? codTab,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20,
         CancellationToken ct = default) =>
         Ok(await _orderLogic.GetPagedAsync(
-            new GetOrdersRequest(search, customerId, status, channel, page, pageSize), ct));
+            new GetOrdersRequest(search, customerId, status, channel, excludeChannel, codTab, page, pageSize), ct));
 
     [HttpGet("{id:guid}")]
     [Authorize(Policy = PermissionNames.ViewOrder)]

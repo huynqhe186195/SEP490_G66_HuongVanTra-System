@@ -34,13 +34,17 @@ public record UpdateOrderRequest(
 
 public record CancelOrderRequest(string? Reason);
 
-public record VerifyCodPaymentRequest(string? TransactionRef);
+public record VerifyCodPaymentRequest(
+    string? TransactionRef,
+    decimal CollectedAmount = 0);
 
 public record GetOrdersRequest(
     string? Search,
     Guid? CustomerId,
     string? Status,
     string? Channel,
+    string? ExcludeChannel = null,
+    string? CodTab = null,
     int Page = 1,
     int PageSize = 20
 );

@@ -32,6 +32,9 @@ export default function PosPaymentSidebar({
   paymentMethods,
   onPaymentMethodChange,
   isTransferPayment,
+  isCodTakeaway,
+  isTransferTakeaway,
+  codOverpayToDebt,
   customerCurrentDebt,
   amountPaidInput,
   onAmountPaidChange,
@@ -86,7 +89,7 @@ export default function PosPaymentSidebar({
     ? 'Đang xử lý...'
     : isTakeaway
       ? paymentMethod === 'TRANSFER'
-        ? 'Tạo đơn · QR'
+        ? `Tạo đơn · QR ${formatMoney(transferQrAmount)} đ`
         : 'Tạo đơn COD'
       : isTransferQrFlow
         ? `Thanh toán · QR ${formatMoney(transferQrAmount)} đ`
@@ -427,16 +430,25 @@ export default function PosPaymentSidebar({
             </div>
           </div>
 
-          {isTakeaway && paymentMethod === 'COD' ? (
+          {isCodTakeaway ? (
             <div className="rounded-xl border border-orange-200 bg-orange-50 p-4 text-sm text-[#414942]">
               <p className="font-semibold text-orange-800">Thanh toán COD</p>
               <p className="mt-1 text-xs text-[#717971]">
-                Khách thanh toán khi nhận hàng. Đơn xuất hiện tại mục Đơn COD.
+                Khách thanh toán khi nhận hàng. Theo dõi tại Quản lý đơn COD.
               </p>
             </div>
           ) : null}
 
-          {!isTakeaway ? (
+          {isTransferTakeaway ? (
+            <div className="rounded-xl border border-[#356647]/20 bg-[#356647]/5 p-4 text-sm text-[#414942]">
+              <p className="font-semibold text-[#356647]">Chuyển khoản (VietQR)</p>
+              <p className="mt-1 text-xs text-[#717971]">
+                Khách quét mã QR để thanh toán trước hoặc khi nhận hàng.
+              </p>
+            </div>
+          ) : null}
+
+          {!isTakeaway || isCodTakeaway || isTransferTakeaway ? (
             <>
               {customerCurrentDebt > 0 ? (
                 <div className="rounded-xl border border-[#7e5700]/30 bg-[#fec25b]/15 px-4 py-3 text-sm">
@@ -447,7 +459,7 @@ export default function PosPaymentSidebar({
 
               <div className="rounded-xl bg-white p-4 shadow-sm">
                 <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[#717971]" htmlFor="sidebar-amount-paid">
-                  {isTransferPayment ? 'Số tiền chuyển khoản' : 'Khách trả'}
+                  {isCodTakeaway ? 'Số tiền khách trả' : isTransferPayment ? 'Số tiền chuyển khoản' : 'Khách trả'}
                 </label>
                 <input
                   id="sidebar-amount-paid"
@@ -458,19 +470,25 @@ export default function PosPaymentSidebar({
                   onChange={(event) => onAmountPaidChange(event.target.value)}
                 />
                 <p className="mt-1.5 text-xs text-[#717971]">
-                  {isTransferPayment
+                  {isCodTakeaway
                     ? amountPaid > 0
-                      ? transferOverpayToDebt > 0
-                        ? `Mã QR ${formatMoney(transferQrAmount)} đ · gồm trừ nợ ${formatMoney(transferOverpayToDebt)} đ.`
-                        : `Mã QR sẽ hiển thị ${formatMoney(transferQrAmount)} đ.`
-                      : `Để trống: mã QR ${formatMoney(total)} đ (thanh toán đủ).`
-                    : `Để trống: ghi nợ ${formatMoney(total)} đ.`}
+                      ? codOverpayToDebt > 0
+                        ? `Dự kiến thu ${formatMoney(amountPaid)} đ · gồm trừ nợ ${formatMoney(codOverpayToDebt)} đ khi giao.`
+                        : `Dự kiến thu ${formatMoney(amountPaid)} đ khi giao hàng.`
+                      : `Để trống: thu đúng ${formatMoney(total)} đ khi giao hàng.`
+                    : isTransferPayment
+                      ? amountPaid > 0
+                        ? transferOverpayToDebt > 0
+                          ? `Mã QR ${formatMoney(transferQrAmount)} đ · gồm trừ nợ ${formatMoney(transferOverpayToDebt)} đ.`
+                          : `Mã QR sẽ hiển thị ${formatMoney(transferQrAmount)} đ.`
+                        : `Để trống: mã QR ${formatMoney(total)} đ (thanh toán đủ).`
+                      : `Để trống: ghi nợ ${formatMoney(total)} đ.`}
                 </p>
                 <div className="mt-2 flex items-center justify-between rounded-lg bg-[#f6f4ec] px-3 py-2 text-sm">
                   <span className="text-[#717971]">Đã nhập</span>
                   <span className="font-bold text-[#1b1c17]">{formatMoney(amountPaid)} đ</span>
                 </div>
-                {debtAmount > 0 ? (
+                {!isCodTakeaway && debtAmount > 0 ? (
                   <div className="mt-2 flex items-center justify-between rounded-lg bg-[#fec25b]/20 px-3 py-2 text-sm">
                     <span className="font-semibold text-[#7e5700]">Dư nợ (đơn này)</span>
                     <span className="font-bold text-[#7e5700]">{formatMoney(debtAmount)} đ</span>
@@ -502,6 +520,18 @@ export default function PosPaymentSidebar({
                 <div className={`text-2xl font-bold ${change > 0 ? 'text-[#356647]' : 'text-[#717971]'}`}>
                   {change > 0 ? `${formatMoney(change)} đ` : '—'}
                 </div>
+                {change > 0 && canApplyOverpayToDebt && isCodTakeaway ? (
+                  <div className="mt-3 rounded-lg border border-orange-200 bg-orange-50 p-3 text-sm">
+                    <p className="font-semibold text-orange-800">Thu thừa — trừ công nợ</p>
+                    <p className="mt-1 text-xs text-[#717971]">
+                      Thừa {formatMoney(change)} đ so với đơn · sẽ trừ nợ{' '}
+                      {formatMoney(codOverpayToDebt)} đ khi xác nhận thu COD
+                      {change > codOverpayToDebt
+                        ? ` · còn ${formatMoney(change - codOverpayToDebt)} đ không trừ được`
+                        : ''}
+                    </p>
+                  </div>
+                ) : null}
                 {change > 0 && canApplyOverpayToDebt && isTransferPayment ? (
                   <div className="mt-3 rounded-lg border border-[#7e5700]/30 bg-[#fec25b]/15 p-3 text-sm">
                     <p className="font-semibold text-[#7e5700]">CK thừa — trừ công nợ</p>
@@ -514,7 +544,7 @@ export default function PosPaymentSidebar({
                     </p>
                   </div>
                 ) : null}
-                {change > 0 && canApplyOverpayToDebt && !isTransferPayment ? (
+                {change > 0 && canApplyOverpayToDebt && !isTransferPayment && !isCodTakeaway ? (
                   <div className="mt-3 space-y-2 rounded-lg border border-[#c1c9c0]/60 bg-[#f6f4ec] p-3">
                     <p className="text-xs font-semibold text-[#414942]">Xử lý tiền thừa</p>
                     <label className="flex cursor-pointer items-start gap-2 text-sm">
@@ -548,11 +578,16 @@ export default function PosPaymentSidebar({
                     </label>
                   </div>
                 ) : null}
-                {isDebtSale ? (
+                {isCodTakeaway && amountPaid > 0 && amountPaid >= total ? (
+                  <p className="mt-1 text-xs text-[#717971]">
+                    Dự kiến thu {formatMoney(amountPaid)} đ khi giao
+                    {codOverpayToDebt > 0 ? ` · trừ nợ ${formatMoney(codOverpayToDebt)} đ` : ''}
+                  </p>
+                ) : isDebtSale ? (
                   <p className="mt-1 text-xs font-medium text-[#7e5700]">Bán ghi nợ — chưa thu tiền</p>
                 ) : isPartialPayment ? (
                   <p className="mt-1 text-xs text-[#717971]">Thanh toán một phần, phần còn lại ghi vào công nợ</p>
-                ) : isTransferQrFlow ? (
+                ) : isTransferQrFlow || isTransferTakeaway ? (
                   <p className="mt-1 text-xs text-[#717971]">
                     Mã QR: {formatMoney(transferQrAmount)} đ
                     {isPartialPayment ? ` · còn nợ ${formatMoney(debtAmount)} đ sau khi CK` : ''}

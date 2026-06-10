@@ -29,6 +29,7 @@ public class OrderLogic(
         OrderInputValidator.ValidatePagination(req.Page, req.PageSize);
         var (items, total) = await _orderRepo.GetPagedAsync(
             req.Search, req.CustomerId, req.Status, req.Channel,
+            req.ExcludeChannel, req.CodTab,
             req.Page, req.PageSize, ct);
 
         var dtos = items.Select(MapToSummary).ToList();
@@ -460,11 +461,20 @@ public class OrderLogic(
             p.TransactionRef, p.IsCodVerified, p.CodWarningDate, p.PaidAt)).ToList()
     );
 
-    private static OrderSummaryResponse MapToSummary(Order o) => new(
-        o.Id, o.OrderCode, o.CustomerId, o.CustomerSnapshotName,
-        o.OrderChannel.ToString(), o.OrderStatus.ToString(),
-        o.InventorySyncStatus.ToString(), o.FinalAmount, o.CreatedAt
-    );
+    private static OrderSummaryResponse MapToSummary(Order o)
+    {
+        var codPayment = o.Payments?.FirstOrDefault(p => p.PaymentMethod == PaymentMethod.COD);
+        return new(
+            o.Id, o.OrderCode, o.CustomerId, o.CustomerSnapshotName,
+            o.OrderChannel.ToString(), o.OrderStatus.ToString(),
+            o.InventorySyncStatus.ToString(), o.FinalAmount, o.CreatedAt,
+            codPayment?.Id,
+            codPayment?.IsCodVerified,
+            codPayment?.CodWarningDate,
+            codPayment is { IsCodVerified: false } && codPayment.Amount > 0
+                ? codPayment.Amount
+                : null);
+    }
 
     private static string FormatVnd(decimal amount)
     {

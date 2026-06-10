@@ -44,6 +44,7 @@ function OrdersPage() {
       search: filters.search.trim() || undefined,
       status: filters.status || undefined,
       channel: filters.channel || undefined,
+      excludeChannel: filters.channel ? undefined : 'COD',
       page,
       pageSize: TABLE_PAGE_SIZE,
     }),
@@ -139,7 +140,7 @@ function OrdersPage() {
                 setPage(1)
               }}
             >
-              {ORDER_CHANNEL_OPTIONS.map((opt) => (
+              {ORDER_CHANNEL_OPTIONS.filter((opt) => opt.value !== 'COD').map((opt) => (
                 <option key={opt.value || 'all-channel'} value={opt.value}>
                   {opt.label}
                 </option>
@@ -166,7 +167,7 @@ function OrdersPage() {
               className="ml-auto inline-flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm font-bold text-amber-800 hover:bg-amber-100"
               to="/orders/cod"
             >
-              Quản lý COD
+              Quản lý đơn COD
             </Link>
           ) : null}
           {canManageStockDeduct ? (
