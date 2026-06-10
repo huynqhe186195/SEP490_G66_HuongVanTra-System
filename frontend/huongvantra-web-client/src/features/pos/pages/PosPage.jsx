@@ -795,6 +795,7 @@ function PosPage() {
       storeId,
       customerId: selectedCustomer.customerId,
       promotionId: appliedPromotion?.id ?? null,
+      promotionCode: appliedPromotion?.promoCode ?? null,
       manualDiscount,
       note: orderNote,
       items: cartItems.map((item) => ({
