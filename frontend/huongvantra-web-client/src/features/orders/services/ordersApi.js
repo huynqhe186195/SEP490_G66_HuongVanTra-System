@@ -53,6 +53,7 @@ export function mapOrderDetail(item) {
   if (!item || typeof item !== 'object') return null
   const rawItems = item.items ?? item.Items ?? []
   const rawPayments = item.payments ?? item.Payments ?? []
+  const rawPromotionSkuScopes = item.promotionSkuScopes ?? item.PromotionSkuScopes ?? []
   return {
     id: item.id ?? item.Id,
     orderCode: item.orderCode ?? item.OrderCode ?? '',
@@ -64,6 +65,19 @@ export function mapOrderDetail(item) {
     inventorySyncStatus: normalizeEnum(item.inventorySyncStatus ?? item.InventorySyncStatus),
     totalAmount: Number(item.totalAmount ?? item.TotalAmount ?? 0),
     discountAmount: Number(item.discountAmount ?? item.DiscountAmount ?? 0),
+    promotionId: item.promotionId ?? item.PromotionId ?? null,
+    promotionCode: item.promotionCode ?? item.PromotionCode ?? null,
+    promotionDiscountAmount: Number(item.promotionDiscountAmount ?? item.PromotionDiscountAmount ?? 0),
+    promotionScopeType: normalizeEnum(item.promotionScopeType ?? item.PromotionScopeType),
+    promotionSkuScopes: Array.isArray(rawPromotionSkuScopes)
+      ? rawPromotionSkuScopes
+          .map((scope) => ({
+            skuId: scope.skuId ?? scope.SkuId ?? '',
+            skuCode: scope.skuCode ?? scope.SkuCode ?? '',
+            skuName: scope.skuName ?? scope.SkuName ?? '',
+          }))
+          .filter((scope) => scope.skuId)
+      : [],
     finalAmount: Number(item.finalAmount ?? item.FinalAmount ?? 0),
     shippingAddress: item.shippingAddress ?? item.ShippingAddress ?? '',
     note: item.note ?? item.Note ?? '',

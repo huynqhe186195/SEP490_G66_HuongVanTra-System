@@ -6,17 +6,18 @@ import CustomerDetailModal from '../components/CustomerDetailModal.jsx'
 import OrderOfferModal from '../components/OrderOfferModal.jsx'
 import ConfirmDialog from '../components/ConfirmDialog.jsx'
 import { printReceiptFromData } from '../utils/printReceipt.js'
-import { vietnamNowLabel } from '../../../utils/vietnamDateTime.js'
+import { formatVietnamDateTimeMinute, vietnamNowLabel } from '../../../utils/vietnamDateTime.js'
 import {
+  applyPromotionPreview,
   buildTakeawayOrderPayload,
   createPosOrderOffline,
   createPosOrderOnline,
   createTakeawayCodOrder,
   createTakeawayVietQrOrder,
+  fetchAvailablePromotions,
   fetchPosCustomerContext,
   fetchPosCustomers,
   fetchPosProducts,
-  fetchPromotionByCode,
   resolvePosStoreId,
 } from '../services/posApi.js'
 import { loadPosSeller } from '../utils/posSeller.js'
@@ -24,7 +25,11 @@ import {
   normalizeOrderDiscountInput,
   validatePosDiscountsBeforePayment,
 } from '../utils/posDiscountValidation.js'
-import { computeCouponDiscount, formatPromotionLabel } from '../utils/posPromotionUtils.js'
+import {
+  computeCouponDiscount,
+  formatPromotionLabel,
+  formatPromotionScopeLabel,
+} from '../utils/posPromotionUtils.js'
 import { isVipCustomerType } from '../../customers/utils/customerDisplay.js'
 
 const SALES_MODES = [
@@ -172,6 +177,10 @@ function PosPage() {
   const [openDiscountSku, setOpenDiscountSku] = useState(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isApplyingPromo, setIsApplyingPromo] = useState(false)
+  const [availablePromotions, setAvailablePromotions] = useState([])
+  const [isPromotionListLoading, setIsPromotionListLoading] = useState(false)
+  const [hasLoadedAvailablePromotions, setHasLoadedAvailablePromotions] = useState(false)
+  const [isPromotionDropdownOpen, setIsPromotionDropdownOpen] = useState(false)
   const [searchProducts, setSearchProducts] = useState([])
   const [isSearchLoading, setIsSearchLoading] = useState(false)
   const [tabCloseConfirm, setTabCloseConfirm] = useState(null)
@@ -180,6 +189,7 @@ function PosPage() {
   const [useCustomShippingAddress, setUseCustomShippingAddress] = useState(false)
   const [seller, setSeller] = useState({ name: 'Nhân viên POS', role: '—', display: 'Nhân viên POS · —' })
   const discountPopoverRef = useRef(null)
+  const promotionCartSignatureRef = useRef('')
 
   const isTakeaway = salesMode === 'takeaway'
   const workspace = workspaceByMode[salesMode]
@@ -693,6 +703,102 @@ function PosPage() {
     updateActiveSession({ orderDiscountPercent: parsed, orderDiscountAmountFixed: 0 })
   }
 
+  const buildPromotionCartSignature = () =>
+    JSON.stringify({
+      items: cartItems.map((item) => ({
+        skuId: item.productId,
+        quantity: item.qty,
+        unitPrice: item.price,
+        lineDiscountType: item.lineDiscountType,
+        lineDiscountValue: item.lineDiscountValue || 0,
+      })),
+      orderDiscountPercent: effectiveOrderDiscountPercent,
+      orderDiscountAmountFixed: effectiveOrderDiscountAmountFixed,
+    })
+
+  const getPromotionManualDiscount = () => Math.round(itemDiscountTotal + orderDiscountAmount)
+
+  const buildPromotionPreviewItems = () =>
+    cartItems.map((item) => ({
+      skuId: item.productId,
+      quantity: item.qty,
+      unitPrice: item.price,
+      subTotal: getLineGross(item),
+    }))
+
+  useEffect(() => {
+    const currentSignature = buildPromotionCartSignature()
+    if (!appliedPromotion) {
+      promotionCartSignatureRef.current = currentSignature
+      return
+    }
+    if (!promotionCartSignatureRef.current) {
+      promotionCartSignatureRef.current = currentSignature
+      return
+    }
+    if (promotionCartSignatureRef.current !== currentSignature) {
+      promotionCartSignatureRef.current = currentSignature
+      updateActiveSession({ appliedPromotion: null, promoCodeInput: '' })
+      showError('Giỏ hàng hoặc chiết khấu đã thay đổi. Vui lòng áp dụng lại mã giảm giá.')
+    }
+  }, [
+    appliedPromotion,
+    cartItems,
+    effectiveOrderDiscountAmountFixed,
+    effectiveOrderDiscountPercent,
+  ])
+
+  const applyPromotionToCurrentCart = async ({ promotion = null, code = '' } = {}) => {
+    const promoCode = (code || promotion?.promoCode || '').trim()
+    if (!promoCode) {
+      showError('Vui lòng nhập mã giảm giá.')
+      return
+    }
+    if (!cartItems.length) {
+      showError('Vui lòng thêm sản phẩm trước khi áp dụng mã giảm giá.')
+      return
+    }
+
+    const nextPromotion = await applyPromotionPreview({
+      promotionId: promotion?.id ?? null,
+      promotionCode: promoCode,
+      items: buildPromotionPreviewItems(),
+      manualDiscount: getPromotionManualDiscount(),
+    })
+    updateActiveSession({ appliedPromotion: nextPromotion, promoCodeInput: nextPromotion.promoCode })
+    promotionCartSignatureRef.current = buildPromotionCartSignature()
+    setIsPromotionDropdownOpen(false)
+    showSuccess(`Đã áp dụng mã ${nextPromotion.promoCode}.`)
+  }
+
+  const loadAvailablePromotions = async () => {
+    setIsPromotionDropdownOpen(true)
+    if (hasLoadedAvailablePromotions || isPromotionListLoading) return
+
+    setIsPromotionListLoading(true)
+    try {
+      const items = await fetchAvailablePromotions()
+      setAvailablePromotions(items)
+      setHasLoadedAvailablePromotions(true)
+    } catch (error) {
+      setAvailablePromotions([])
+      showError(error.message)
+    } finally {
+      setIsPromotionListLoading(false)
+    }
+  }
+
+  const handleSelectPromotion = async (promotion) => {
+    setIsApplyingPromo(true)
+    try {
+      await applyPromotionToCurrentCart({ promotion })
+    } catch (error) {
+      showError(error.message)
+    } finally {
+      setIsApplyingPromo(false)
+    }
+  }
+
   const handleApplyPromoCode = async () => {
     const code = promoCodeInput.trim()
     if (!code) {
@@ -701,9 +807,7 @@ function PosPage() {
     }
     setIsApplyingPromo(true)
     try {
-      const promotion = await fetchPromotionByCode(code)
-      updateActiveSession({ appliedPromotion: promotion, promoCodeInput: promotion.promoCode })
-      showSuccess(`Đã áp dụng mã ${promotion.promoCode}.`)
+      await applyPromotionToCurrentCart({ code })
     } catch (error) {
       showError(error.message)
     } finally {
@@ -787,6 +891,44 @@ function PosPage() {
   const canPay = isTakeaway
     ? canPayTakeaway && !isSubmitting
     : (isTransferPayment ? canPayTransfer : canPayCash) && !isSubmitting
+  const normalizedPromoSearch = promoCodeInput.trim().toUpperCase()
+  const visibleAvailablePromotions = availablePromotions
+    .filter((promotion) =>
+      !normalizedPromoSearch ||
+      promotion.promoCode.toUpperCase().includes(normalizedPromoSearch),
+    )
+    .slice(0, 8)
+
+  const formatPromotionDiscountText = (promotion) =>
+    promotion.discountType === 'FIXED'
+      ? `Giảm ${formatMoney(promotion.discountValue)}đ`
+      : `Giảm ${promotion.discountValue}%`
+
+  const formatPromotionValidityText = (promotion) => {
+    const from = promotion.validFromUtc ? formatVietnamDateTimeMinute(promotion.validFromUtc) : null
+    const to = promotion.validToUtc ? formatVietnamDateTimeMinute(promotion.validToUtc) : null
+    if (from && to) return `HSD ${from} đến ${to}`
+    if (from) return `Từ ${from}`
+    if (to) return `HSD đến ${to}`
+    return ''
+  }
+
+  const appliedPromotionScopeText = (() => {
+    if (!appliedPromotion) return ''
+    if (String(appliedPromotion.scopeType || 'ORDER').toUpperCase() !== 'SKU') {
+      return 'Áp dụng toàn đơn'
+    }
+
+    const skuIds = new Set((appliedPromotion.skuScopes ?? []).map((scope) => scope.skuId))
+    const names = cartItems
+      .filter((item) => skuIds.has(item.productId))
+      .map((item) => item.name || item.productName || item.sku)
+      .filter(Boolean)
+
+    return names.length
+      ? `Áp dụng cho: ${[...new Set(names)].join(', ')}`
+      : 'Áp dụng cho SKU cụ thể'
+  })()
 
   const buildOrderPayload = (method, amount) => {
     const storeId = resolvePosStoreId()
@@ -870,6 +1012,7 @@ function PosPage() {
       cartItems,
       manualDiscount,
       promotionId: appliedPromotion?.id ?? null,
+      promotionCode: appliedPromotion?.promoCode ?? null,
     })
 
     if (isTransferPayment) {
@@ -1546,10 +1689,12 @@ function PosPage() {
                 <div className="flex items-center justify-between gap-2 rounded-lg border border-[#356647]/30 bg-[#356647]/5 px-3 py-2">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold text-[#356647]">
-                      {formatPromotionLabel(appliedPromotion)}
+                      {couponDiscountAmount > 0
+                        ? `Mã ${appliedPromotion.promoCode} - Giảm ${formatMoney(couponDiscountAmount)}đ`
+                        : formatPromotionLabel(appliedPromotion)}
                     </p>
-                    {couponDiscountAmount > 0 ? (
-                      <p className="text-xs text-[#717971]">Giảm {formatMoney(couponDiscountAmount)} đ</p>
+                    {appliedPromotionScopeText ? (
+                      <p className="text-xs text-[#717971]">{appliedPromotionScopeText}</p>
                     ) : null}
                   </div>
                   <button
@@ -1568,6 +1713,9 @@ function PosPage() {
                     placeholder="VD: SALE10"
                     value={promoCodeInput}
                     onChange={(event) => updateActiveSession({ promoCodeInput: event.target.value.toUpperCase() })}
+                    onFocus={loadAvailablePromotions}
+                    onClick={loadAvailablePromotions}
+                    onBlur={() => setTimeout(() => setIsPromotionDropdownOpen(false), 150)}
                     onKeyDown={(event) => {
                       if (event.key === 'Enter') {
                         event.preventDefault()
@@ -1585,6 +1733,70 @@ function PosPage() {
                   </button>
                 </div>
               )}
+              {appliedPromotion ? (
+                <div className="mt-2 flex gap-2">
+                  <input
+                    type="text"
+                    className="min-w-0 flex-1 rounded-lg border border-[#c1c9c0] bg-[#fbf9f1] px-3 py-2 text-sm uppercase outline-none focus:border-[#356647] focus:ring-2 focus:ring-[#356647]/20"
+                    placeholder="VD: SALE10"
+                    value={promoCodeInput}
+                    onChange={(event) => updateActiveSession({ promoCodeInput: event.target.value.toUpperCase() })}
+                    onFocus={loadAvailablePromotions}
+                    onClick={loadAvailablePromotions}
+                    onBlur={() => setTimeout(() => setIsPromotionDropdownOpen(false), 150)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault()
+                        handleApplyPromoCode()
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    disabled={isApplyingPromo || !promoCodeInput.trim()}
+                    onClick={handleApplyPromoCode}
+                    className="shrink-0 rounded-lg bg-[#356647] px-3 py-2 text-xs font-bold text-white hover:bg-[#4e7f5e] disabled:opacity-50"
+                  >
+                    {isApplyingPromo ? '...' : 'Áp dụng'}
+                  </button>
+                </div>
+              ) : null}
+              {isPromotionDropdownOpen ? (
+                <div className="mt-2 max-h-56 overflow-y-auto rounded-lg border border-[#c1c9c0] bg-white shadow-lg">
+                  {isPromotionListLoading ? (
+                    <div className="px-3 py-2 text-xs text-[#717971]">Đang tải mã giảm giá...</div>
+                  ) : null}
+                  {!isPromotionListLoading && visibleAvailablePromotions.length === 0 ? (
+                    <div className="px-3 py-2 text-xs text-[#717971]">Không có mã giảm giá khả dụng.</div>
+                  ) : null}
+                  {!isPromotionListLoading
+                    ? visibleAvailablePromotions.map((promotion) => {
+                        const validityText = formatPromotionValidityText(promotion)
+                        const scopeText = formatPromotionScopeLabel(promotion)
+
+                        return (
+                          <button
+                            key={promotion.id}
+                            type="button"
+                            onMouseDown={(event) => {
+                              event.preventDefault()
+                              handleSelectPromotion(promotion)
+                            }}
+                            className="block w-full px-3 py-2 text-left hover:bg-[#f6f4ec]"
+                          >
+                            <span className="block text-sm font-bold text-[#263528]">
+                              {promotion.promoCode} - {formatPromotionDiscountText(promotion)}
+                            </span>
+                            <span className="block text-xs font-semibold text-[#538463]">{scopeText}</span>
+                            {validityText ? (
+                              <span className="block text-xs text-[#717971]">{validityText}</span>
+                            ) : null}
+                          </button>
+                        )
+                      })
+                    : null}
+                </div>
+              ) : null}
             </div>
 
             <div className="rounded-xl bg-white p-4 shadow-sm">

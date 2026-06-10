@@ -9,23 +9,38 @@ public class PromotionRepository(OrderDbContext _db) : IPromotionRepository
 {
     public async Task<List<Promotion>> GetAllAsync(CancellationToken ct = default) =>
         await _db.Promotions
+            .Include(p => p.Scopes)
             .OrderByDescending(p => p.CreatedAt)
             .ToListAsync(ct);
 
     public async Task<Promotion?> GetByIdAsync(Guid id, CancellationToken ct = default) =>
-        await _db.Promotions.FirstOrDefaultAsync(p => p.Id == id, ct);
+        await _db.Promotions
+            .Include(p => p.Scopes)
+            .FirstOrDefaultAsync(p => p.Id == id, ct);
 
     public async Task<Promotion?> GetByNormalizedCodeAsync(
         string normalizedCode, CancellationToken ct = default) =>
         await _db.Promotions
+            .Include(p => p.Scopes)
             .FirstOrDefaultAsync(p => p.NormalizedPromoCode == normalizedCode, ct);
 
     public async Task<Promotion?> GetActiveByNormalizedCodeAsync(
         string normalizedCode, CancellationToken ct = default) =>
         await _db.Promotions
+            .Include(p => p.Scopes)
             .FirstOrDefaultAsync(p =>
                 p.NormalizedPromoCode == normalizedCode &&
                 p.IsActive, ct);
+
+    public async Task<List<Promotion>> GetAvailableAsync(DateTime nowUtc, CancellationToken ct = default) =>
+        await _db.Promotions
+            .Include(p => p.Scopes)
+            .Where(p =>
+                p.IsActive &&
+                (!p.ValidFromUtc.HasValue || p.ValidFromUtc <= nowUtc) &&
+                (!p.ValidToUtc.HasValue || p.ValidToUtc >= nowUtc))
+            .OrderBy(p => p.PromoCode)
+            .ToListAsync(ct);
 
     public async Task<int> CountOrdersUsingPromotionAsync(
         Guid promotionId, CancellationToken ct = default) =>

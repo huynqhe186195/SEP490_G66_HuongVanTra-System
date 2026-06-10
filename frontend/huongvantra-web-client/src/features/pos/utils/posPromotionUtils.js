@@ -1,5 +1,16 @@
 export function mapPromotion(item) {
   if (!item || typeof item !== 'object') return null
+  const rawSkuScopes = item.skuScopes ?? item.SkuScopes ?? []
+  const skuScopes = Array.isArray(rawSkuScopes)
+    ? rawSkuScopes
+        .map((scope) => ({
+          skuId: scope.skuId ?? scope.SkuId ?? '',
+          skuCode: scope.skuCode ?? scope.SkuCode ?? '',
+          skuName: scope.skuName ?? scope.SkuName ?? scope.skuSnapshotName ?? scope.SkuSnapshotName ?? '',
+        }))
+        .filter((scope) => scope.skuId)
+    : []
+
   return {
     id: item.id ?? item.Id,
     promoCode: item.promoCode ?? item.PromoCode ?? '',
@@ -9,6 +20,12 @@ export function mapPromotion(item) {
     validToUtc: item.validToUtc ?? item.ValidToUtc ?? null,
     validityStatus: item.validityStatus ?? item.ValidityStatus ?? null,
     isActive: item.isActive ?? item.IsActive ?? true,
+    scopeType: String(item.scopeType ?? item.ScopeType ?? 'ORDER').toUpperCase(),
+    skuScopes,
+    promotionDiscountAmount:
+      item.promotionDiscountAmount ?? item.PromotionDiscountAmount ?? null,
+    eligibleSubtotal: item.eligibleSubtotal ?? item.EligibleSubtotal ?? null,
+    message: item.message ?? item.Message ?? null,
   }
 }
 
@@ -16,6 +33,13 @@ export function mapPromotion(item) {
 export function computeCouponDiscount(afterManualDiscount, promotion) {
   const base = Math.max(0, Math.round(Number(afterManualDiscount) || 0))
   if (!promotion || base <= 0) return 0
+
+  if (promotion.promotionDiscountAmount !== null && promotion.promotionDiscountAmount !== undefined) {
+    const previewAmount = Number(promotion.promotionDiscountAmount)
+    if (Number.isFinite(previewAmount)) {
+      return Math.min(Math.max(0, Math.round(previewAmount)), base)
+    }
+  }
 
   const type = String(promotion.discountType || '').toUpperCase()
   const value = Number(promotion.discountValue) || 0
@@ -34,6 +58,27 @@ export function formatPromotionLabel(promotion) {
     return `${promotion.promoCode} (−${Number(promotion.discountValue).toLocaleString('vi-VN')} đ)`
   }
   return `${promotion.promoCode} (−${promotion.discountValue}%)`
+}
+
+export function formatPromotionScopeLabel(promotion) {
+  return String(promotion?.scopeType || 'ORDER').toUpperCase() === 'SKU'
+    ? 'SKU cụ thể'
+    : 'Toàn đơn'
+}
+
+export function formatPromotionScopeSummary(promotion) {
+  if (!promotion) return ''
+  if (String(promotion.scopeType || 'ORDER').toUpperCase() !== 'SKU') {
+    return 'Toàn đơn'
+  }
+
+  const scopes = Array.isArray(promotion.skuScopes) ? promotion.skuScopes : []
+  if (!scopes.length) return 'SKU cụ thể'
+
+  return `SKU: ${scopes
+    .map((scope) => scope.skuCode || scope.skuName || scope.skuId)
+    .filter(Boolean)
+    .join(', ')}`
 }
 
 export const PROMOTION_VALIDITY_LABELS = {
