@@ -18,6 +18,7 @@ export function mapPayment(item) {
     isCodVerified: Boolean(item.isCodVerified ?? item.IsCodVerified),
     codWarningDate: item.codWarningDate ?? item.CodWarningDate ?? null,
     paidAt: item.paidAt ?? item.PaidAt ?? null,
+    codDebtSettlementJson: item.codDebtSettlementJson ?? item.CodDebtSettlementJson ?? null,
   }
 }
 
@@ -46,6 +47,10 @@ export function mapOrderSummary(item) {
     inventorySyncStatus: normalizeEnum(item.inventorySyncStatus ?? item.InventorySyncStatus),
     finalAmount: Number(item.finalAmount ?? item.FinalAmount ?? 0),
     createdAt: item.createdAt ?? item.CreatedAt,
+    codPaymentId: item.codPaymentId ?? item.CodPaymentId ?? null,
+    isCodVerified: item.isCodVerified ?? item.IsCodVerified ?? null,
+    codWarningDate: item.codWarningDate ?? item.CodWarningDate ?? null,
+    codExpectedAmount: Number(item.codExpectedAmount ?? item.CodExpectedAmount ?? 0) || null,
   }
 }
 
@@ -80,6 +85,8 @@ function buildOrdersQuery(params = {}) {
   if (params.customerId) search.set('customerId', String(params.customerId))
   if (params.status) search.set('status', params.status)
   if (params.channel) search.set('channel', params.channel)
+  if (params.excludeChannel) search.set('excludeChannel', params.excludeChannel)
+  if (params.codTab) search.set('codTab', params.codTab)
   search.set('page', String(params.page ?? 1))
   search.set('pageSize', String(Math.min(100, Math.max(1, params.pageSize ?? 20))))
   return search.toString()
@@ -134,8 +141,12 @@ export function buildCreateOrderBody(payload) {
     shippingAddress: payload.shippingAddress?.trim() || null,
     note: payload.note?.trim() || null,
     discountAmount: Number(payload.discountAmount ?? 0),
+    promotionId: payload.promotionId || null,
+    promotionCode: payload.promotionCode?.trim() || null,
     paidAmount: Number(payload.paidAmount ?? 0),
+    transferQrAmount: Number(payload.transferQrAmount ?? 0),
     paymentMethod: payload.paymentMethod,
+    codDebtSettlementJson: payload.codDebtSettlementJson?.trim() || null,
     items: (payload.items || []).map((line) => ({
       skuId: line.skuId,
       skuSnapshotName: line.skuSnapshotName,
@@ -196,10 +207,13 @@ export async function fetchOverdueCodPayments() {
   return Array.isArray(data) ? data.map(mapPayment).filter(Boolean) : []
 }
 
-export async function verifyCodPayment(paymentId) {
+export async function verifyCodPayment(paymentId, { collectedAmount = 0, transactionRef = null } = {}) {
   const data = await apiRequestAuth(`/api/v1/payments/${paymentId}/verify-cod`, {
     method: 'POST',
-    body: JSON.stringify({ transactionRef: null }),
+    body: JSON.stringify({
+      transactionRef,
+      collectedAmount: Number(collectedAmount || 0),
+    }),
   })
   return mapPayment(data)
 }

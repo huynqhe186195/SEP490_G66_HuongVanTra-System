@@ -11,8 +11,10 @@ public class CustomerDebtTransaction
     public decimal BalanceAfter { get; set; }
     public string? ReferenceType { get; set; }
     public Guid? ReferenceId { get; set; }
+    public string? RelatedOrderCode { get; set; }
     public string? Note { get; set; }
     public DateTime CreatedAt { get; set; }
 
     public Customer Customer { get; set; } = null!;
+    public ICollection<CustomerDebtAllocation> Allocations { get; set; } = new List<CustomerDebtAllocation>();
 }

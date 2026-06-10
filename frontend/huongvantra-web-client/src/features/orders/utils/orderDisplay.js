@@ -186,7 +186,12 @@ export function canCompleteOrder(order) {
   const status = normalizeOrderKey(order?.orderStatus)
   if (status === 'Cancelled' || status === 'Completed') return false
   if (isPendingTransferPayment(order)) return false
+  if (canVerifyCod(order)) return false
   return true
+}
+
+export function isCodChannelOrder(order) {
+  return normalizeOrderKey(order?.orderChannel) === 'COD'
 }
 
 export function canCancelOrder(order) {

@@ -14,6 +14,7 @@ public class Payment : BaseEntity
     public DateTime? CodWarningDate { get; set; }
     public DateTime? PaidAt { get; set; }
     public DateTime? TransferQrExpiresAtUtc { get; set; }
+    public string? CodDebtSettlementJson { get; set; }
 
     public Order Order { get; set; } = null!;
 }

@@ -5,8 +5,17 @@ import AddCustomerModal from '../components/AddCustomerModal.jsx'
 import CustomerDetailModal from '../components/CustomerDetailModal.jsx'
 import OrderOfferModal from '../components/OrderOfferModal.jsx'
 import ConfirmDialog from '../components/ConfirmDialog.jsx'
-import { printReceiptFromData } from '../utils/printReceipt.js'
+import PosPaymentSidebar from '../components/PosPaymentSidebar.jsx'
+import { printReceiptFromData, printReceiptSequence } from '../utils/printReceipt.js'
 import { vietnamNowLabel } from '../../../utils/vietnamDateTime.js'
+import {
+  applyCustomerDebtPayment,
+  fetchCustomerOpenDebts,
+} from '../../customers/services/customersApi.js'
+import OverpaymentDebtModal from '../../customers/components/OverpaymentDebtModal.jsx'
+import { clampDebtSettlement } from '../../customers/utils/debtAllocationEditor.js'
+import { serializeCodDebtSettlement } from '../../customers/utils/codDebtSettlementUtils.js'
+import { buildDebtReceiptFromPayment } from '../../customers/utils/debtPaymentUtils.js'
 import {
   buildTakeawayOrderPayload,
   createPosOrderOffline,
@@ -24,14 +33,14 @@ import {
   normalizeOrderDiscountInput,
   validatePosDiscountsBeforePayment,
 } from '../utils/posDiscountValidation.js'
-import { computeCouponDiscount, formatPromotionLabel } from '../utils/posPromotionUtils.js'
-import { isVipCustomerType } from '../../customers/utils/customerDisplay.js'
+import { computeCouponDiscount } from '../utils/posPromotionUtils.js'
+import { formatCustomerOrderSnapshot, isVipCustomerType } from '../../customers/utils/customerDisplay.js'
 import { fetchPendingCatalogSync, syncCatalogToStore } from '../../products/services/catalogSyncApi.js'
 import { fetchCategories } from '../../products/services/categoriesApi.js'
 import ProductImage from '../../products/components/ProductImage.jsx'
 
 const SALES_MODES = [
-  { id: 'counter', label: 'Bán tại quầy', icon: 'storefront' },
+  { id: 'counter', label: 'Bán trực tiếp', icon: 'storefront' },
   { id: 'takeaway', label: 'Bán COD', icon: 'local_shipping' },
 ]
 
@@ -157,6 +166,8 @@ function createEmptySession(mode = 'counter') {
     customerSearchValue: '',
     paymentMethod: mode === 'takeaway' ? 'COD' : 'CASH',
     amountPaidInput: '',
+    overpaymentAction: 'return_change',
+    debtSettlement: null,
     shippingAddress: '',
     orderNote: '',
   }
@@ -187,6 +198,11 @@ function PosPage() {
   const [isLoadingShippingAddresses, setIsLoadingShippingAddresses] = useState(false)
   const [useCustomShippingAddress, setUseCustomShippingAddress] = useState(false)
   const [seller, setSeller] = useState({ name: 'Nhân viên POS', role: '—', display: 'Nhân viên POS · —' })
+  const [isPaymentSidebarOpen, setIsPaymentSidebarOpen] = useState(false)
+  const [customerOpenDebts, setCustomerOpenDebts] = useState([])
+  const [isLoadingOpenDebts, setIsLoadingOpenDebts] = useState(false)
+  const [overpaymentDebtModalOpen, setOverpaymentDebtModalOpen] = useState(false)
+  const [debtModalMode, setDebtModalMode] = useState('configure')
   const discountPopoverRef = useRef(null)
 
   const isTakeaway = salesMode === 'takeaway'
@@ -205,11 +221,16 @@ function PosPage() {
     customerSearchValue = '',
     paymentMethod: sessionPaymentMethod,
     amountPaidInput = '',
+    overpaymentAction = 'return_change',
+    debtSettlement = null,
     shippingAddress = '',
     orderNote = '',
   } = session ?? createEmptySession(salesMode)
 
   const paymentMethod = sessionPaymentMethod ?? (isTakeaway ? 'COD' : 'CASH')
+  const isTransferPayment = paymentMethod === 'TRANSFER'
+  const isCodTakeaway = isTakeaway && paymentMethod === 'COD'
+  const isTransferTakeaway = isTakeaway && isTransferPayment
 
   const paymentMethods = isTakeaway ? TAKEAWAY_PAYMENT_METHODS : COUNTER_PAYMENT_METHODS
 
@@ -339,12 +360,64 @@ function PosPage() {
   )
   const usesFixedOrderDiscount = canUseOrderDiscount && (orderDiscountAmountFixed || 0) > 0
   const amountPaid = parseMoneyInput(amountPaidInput)
-  // Để trống = ghi nợ toàn bộ đơn; nhập đủ = thanh toán hết; nhập thừa = tính tiền thừa
-  const cashPaymentAmount = amountPaid >= total ? total : amountPaid
-  const debtAmount = Math.max(total - cashPaymentAmount, 0)
+  const customerCurrentDebt = Number(selectedCustomer?.currentDebt || 0)
   const change = Math.max(amountPaid - total, 0)
-  const isDebtSale = paymentMethod !== 'TRANSFER' && amountPaid === 0 && total > 0
-  const isPartialCashPayment = paymentMethod !== 'TRANSFER' && amountPaid > 0 && amountPaid < total
+  const transferQrAmount = isTransferPayment ? (amountPaid > 0 ? amountPaid : total) : 0
+  const transferOverpayToDebt =
+    overpaymentAction === 'apply_to_debt' && isTransferPayment && change > 0 && customerCurrentDebt > 0
+      ? Math.min(change, customerCurrentDebt)
+      : 0
+  const codExpectedAmount = isCodTakeaway ? (amountPaid > 0 ? amountPaid : total) : 0
+  const codOverpayToDebt =
+    overpaymentAction === 'apply_to_debt' && isCodTakeaway && change > 0 && customerCurrentDebt > 0
+      ? Math.min(change, customerCurrentDebt)
+      : 0
+  // Tiền mặt: để trống = ghi nợ toàn bộ. CK: để trống = QR đủ tiền; nhập vượt đơn = QR đúng số nhập (trừ nợ).
+  const recordedPaymentAmount = amountPaid >= total ? total : amountPaid
+  const debtAmount = isTransferPayment
+    ? transferQrAmount >= total
+      ? 0
+      : Math.max(total - transferQrAmount, 0)
+    : Math.max(total - recordedPaymentAmount, 0)
+  const debtReductionFromOverpay =
+    overpaymentAction === 'apply_to_debt' && change > 0 && customerCurrentDebt > 0
+      ? Math.min(change, customerCurrentDebt)
+      : 0
+  const displayChange = Math.max(change - debtReductionFromOverpay, 0)
+  const isTransferQrFlow = isTransferPayment && !isTakeaway
+  const isDebtSale = !isTransferPayment && amountPaid === 0 && total > 0
+  const isPartialPayment = amountPaid > 0 && amountPaid < total
+  const canApplyOverpayToDebt = change > 0 && customerCurrentDebt > 0
+  useEffect(() => {
+    if (!selectedCustomer?.customerId || customerCurrentDebt <= 0) {
+      setCustomerOpenDebts([])
+      return undefined
+    }
+
+    let cancelled = false
+    setIsLoadingOpenDebts(true)
+    fetchCustomerOpenDebts(selectedCustomer.customerId)
+      .then((items) => {
+        if (!cancelled) setCustomerOpenDebts(items)
+      })
+      .catch(() => {
+        if (!cancelled) setCustomerOpenDebts([])
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingOpenDebts(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [selectedCustomer?.customerId, customerCurrentDebt])
+
+  useEffect(() => {
+    if (debtSettlement) {
+      updateActiveSession({ debtSettlement: null, overpaymentAction: 'return_change' })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset debt plan when payment inputs change
+  }, [selectedCustomer?.customerId, change, amountPaidInput])
 
   useEffect(() => {
     let cancelled = false
@@ -826,8 +899,17 @@ function PosPage() {
     }
   }
 
+  const handleAmountPaidChange = (rawValue) => {
+    const digits = String(rawValue).replace(/\D/g, '')
+    updateActiveSession({
+      amountPaidInput: digits ? formatMoney(Number(digits)) : '',
+    })
+  }
+
   const handleQuickAmount = (value) => {
-    updateActiveSession({ amountPaidInput: String(value) })
+    updateActiveSession({
+      amountPaidInput: value > 0 ? formatMoney(value) : '',
+    })
   }
 
   const formatLineDiscountLabel = (item) => {
@@ -843,7 +925,6 @@ function PosPage() {
   const hasCartItems = cartItems.length > 0
   const hasCustomerSelected = Boolean(selectedCustomer?.customerId)
   const hasShippingAddress = Boolean(shippingAddress?.trim())
-  const isTransferPayment = paymentMethod === 'TRANSFER'
   const isZeroAmountSale = total === 0 && grossSubtotal > 0
   const canPayCash = hasCartItems && hasCustomerSelected
   const canPayTransfer = hasCartItems && hasCustomerSelected && total > 0
@@ -859,7 +940,9 @@ function PosPage() {
     return {
       storeId,
       customerId: selectedCustomer.customerId,
+      customerSnapshotName: formatCustomerOrderSnapshot(selectedCustomer),
       promotionId: appliedPromotion?.id ?? null,
+      promotionCode: appliedPromotion?.promoCode ?? null,
       manualDiscount,
       note: orderNote,
       items: cartItems.map((item) => ({
@@ -879,42 +962,188 @@ function PosPage() {
     }
   }
 
-  const buildReceiptData = ({ orderCode, method, invoiceCode, orderTotal }) => {
+  const buildReceiptData = ({
+    orderCode,
+    method,
+    invoiceCode,
+    orderTotal,
+    changeAmount = displayChange,
+  }) => {
     const receiptTotal = orderTotal ?? total
+    const isRecordedPayment = method === 'CASH' || method === 'TRANSFER'
     return {
-    orderCode: orderCode || activeTab.label,
-    invoiceCode: invoiceCode || undefined,
-    customerName: selectedCustomer?.fullName || 'Khách lẻ',
-    paymentMethodLabel:
-      method === 'COD' ? 'COD — thu khi giao' : method === 'TRANSFER' ? 'Chuyển khoản' : 'Tiền mặt',
-    createdAtLabel: vietnamNowLabel(),
-    sellerName: seller.name,
-    sellerRole: seller.role,
-    items: cartItems.map((item) => ({
-      sku: item.sku,
-      name: item.name,
-      qty: item.qty,
-      price: item.price,
-      total: getLineTotal(item),
-    })),
-    grossSubtotal,
-    totalDiscount: itemDiscountTotal + orderDiscountAmount + couponDiscountAmount + membershipDiscountAmount,
-    total: receiptTotal,
-    amountPaid: method === 'CASH' ? cashPaymentAmount : receiptTotal,
-    customerPaid: method === 'CASH' ? amountPaid : receiptTotal,
-    change: method === 'CASH' ? change : 0,
-    debtAmount: method === 'CASH' ? debtAmount : 0,
-    isDebtSale: method === 'CASH' && isDebtSale,
-    isPartialCashPayment: method === 'CASH' && isPartialCashPayment,
+      orderCode: orderCode || activeTab.label,
+      invoiceCode: invoiceCode || undefined,
+      customerName: selectedCustomer?.fullName || 'Khách lẻ',
+      paymentMethodLabel:
+        method === 'COD' ? 'COD — thu khi giao' : method === 'TRANSFER' ? 'Chuyển khoản' : 'Tiền mặt',
+      createdAtLabel: vietnamNowLabel(),
+      sellerName: seller.name,
+      sellerRole: seller.role,
+      items: cartItems.map((item) => ({
+        sku: item.sku,
+        name: item.name,
+        qty: item.qty,
+        price: item.price,
+        total: getLineTotal(item),
+      })),
+      grossSubtotal,
+      totalDiscount: itemDiscountTotal + orderDiscountAmount + couponDiscountAmount + membershipDiscountAmount,
+      total: receiptTotal,
+      amountPaid: isRecordedPayment ? recordedPaymentAmount : receiptTotal,
+      customerPaid: isRecordedPayment ? amountPaid : receiptTotal,
+      change: isRecordedPayment ? changeAmount : 0,
+      debtAmount: isRecordedPayment ? debtAmount : 0,
+      isDebtSale: method === 'CASH' && isDebtSale,
+      isPartialCashPayment: isRecordedPayment && isPartialPayment,
+    }
   }
+
+  const applyOverpaymentToDebt = async (customerId, orderCode, orderId, amount, allocations = null) => {
+    if (!customerId || amount <= 0) return null
+    return applyCustomerDebtPayment(customerId, {
+      amount,
+      note: `Trừ từ tiền thừa đơn ${orderCode}`,
+      sourceOrderId: orderId,
+      allocations,
+    })
+  }
+
+  const resolveDebtApplyAmount = (overrideSettlement) => {
+    const settlement = overrideSettlement ?? debtSettlement
+    if (!settlement) {
+      return overpaymentAction === 'apply_to_debt' ? debtReductionFromOverpay : 0
+    }
+    return settlement.payDebtsEnabled ? Number(settlement.allocatedAmount || 0) : 0
+  }
+
+  const resolveChangeAfterDebt = (debtSettlement, debtApplyAmount) => {
+    if (debtSettlement) {
+      return Math.max(change - debtApplyAmount, 0)
+    }
+    return displayChange
+  }
+
+  const buildTransferDebtSettlement = (debtSettlement, orderId) => {
+    const amount = resolveDebtApplyAmount(debtSettlement)
+    if (amount <= 0 || !selectedCustomer?.customerId) return null
+    return {
+      customerId: selectedCustomer.customerId,
+      orderId,
+      amount,
+      allocations: debtSettlement?.allocations ?? null,
+      balanceBefore: customerCurrentDebt,
+      customerName: selectedCustomer.fullName || '',
+      customerCode: selectedCustomer.customerCode || '',
+    }
+  }
+
+  const needsDebtSettlementOnPay =
+    change > 0 && canApplyOverpayToDebt && overpaymentAction === 'apply_to_debt'
+
+  const openDebtAllocationModal = (mode = 'configure') => {
+    if (!canApplyOverpayToDebt) return
+    setDebtModalMode(mode)
+    setOverpaymentDebtModalOpen(true)
+  }
+
+  const handleOpenDebtAllocation = () => {
+    updateActiveSession({ overpaymentAction: 'apply_to_debt' })
+    openDebtAllocationModal('configure')
+  }
+
+  const handleOverpaymentActionChange = (action) => {
+    updateActiveSession({
+      overpaymentAction: action,
+      ...(action === 'return_change' ? { debtSettlement: null } : {}),
+    })
+  }
+
+  const finalizeRecordedPayment = async ({ method, createOrder, debtSettlement = null }) => {
+    const debtApplyAmount = resolveDebtApplyAmount(debtSettlement)
+    const changeAfterDebt = resolveChangeAfterDebt(debtSettlement, debtApplyAmount)
+    const payload = buildOrderPayload(method, recordedPaymentAmount)
+    const result = await createOrder(payload)
+
+    let debtPayment = null
+    if (debtApplyAmount > 0 && selectedCustomer?.customerId) {
+      debtPayment = await applyOverpaymentToDebt(
+        selectedCustomer.customerId,
+        result.orderCode,
+        result.orderId,
+        debtApplyAmount,
+        debtSettlement?.allocations ?? null,
+      )
+    }
+
+    if (recordedPaymentAmount >= total) {
+      const debtNote =
+        debtApplyAmount > 0
+          ? ` · In phiếu thu nợ ${formatMoney(debtApplyAmount)} đ`
+          : changeAfterDebt > 0
+            ? ` · Thừa ${formatMoney(changeAfterDebt)} đ`
+            : ''
+      showSuccess(
+        result.invoiceCode
+          ? total === 0
+            ? `Hoàn tất đơn 0 đ. Đơn: ${result.orderCode} · Số HĐ: ${result.invoiceCode}${debtNote}`
+            : `Thanh toán thành công. Đơn: ${result.orderCode} · Số HĐ: ${result.invoiceCode}${debtNote}`
+          : total === 0
+            ? `Hoàn tất đơn 0 đ. Đơn: ${result.orderCode}${debtNote}`
+            : `Thanh toán thành công. Đơn: ${result.orderCode}${debtNote}`,
+      )
+    } else if (isDebtSale) {
+      showSuccess(`Ghi đơn ${result.orderCode} thành công. Dư nợ: ${formatMoney(debtAmount)} đ.`)
+    } else {
+      showSuccess(
+        `Ghi đơn ${result.orderCode}. Đã thu ${formatMoney(recordedPaymentAmount)} đ, còn nợ ${formatMoney(debtAmount)} đ.`,
+      )
+    }
+
+    const receipts = [
+      buildReceiptData({
+        orderCode: result.orderCode,
+        method,
+        invoiceCode: result.invoiceCode,
+        changeAmount: changeAfterDebt,
+      }),
+    ]
+
+    if (debtPayment && debtApplyAmount > 0) {
+      receipts.push(
+        buildDebtReceiptFromPayment({
+          payment: debtPayment,
+          customerName: selectedCustomer?.fullName,
+          customerCode: selectedCustomer?.customerCode,
+          paymentMethodLabel:
+            method === 'TRANSFER' ? 'Chuyển khoản' : method === 'COD' ? 'COD' : 'Tiền mặt',
+          balanceBefore: customerCurrentDebt,
+          relatedOrderCode: result.orderCode,
+          sellerName: seller.name,
+          sellerRole: seller.role,
+        }),
+      )
+    }
+
+    resetCheckoutState()
+    await printReceiptSequence(receipts)
   }
 
   const resetCheckoutState = () => {
     updateActiveSession(createEmptySession(salesMode))
     setOpenDiscountSku(null)
+    setIsPaymentSidebarOpen(false)
   }
 
-  const handleTakeawayPayment = async () => {
+  const openPaymentSidebar = () => {
+    if (!hasCartItems) {
+      showError('Giỏ hàng trống.')
+      return
+    }
+    setIsPaymentSidebarOpen(true)
+  }
+
+  const handleTakeawayPayment = async (debtSettlement = null) => {
     const address = shippingAddress?.trim()
     if (!address) {
       showError('Vui lòng nhập địa chỉ giao hàng cho đơn mang đi.')
@@ -929,6 +1158,7 @@ function PosPage() {
     const payload = buildTakeawayOrderPayload({
       storeId: resolvePosStoreId(),
       customerId: selectedCustomer.customerId,
+      customerSnapshotName: formatCustomerOrderSnapshot(selectedCustomer),
       shippingAddress: address,
       note: orderNote,
       cartItems,
@@ -937,8 +1167,14 @@ function PosPage() {
     })
 
     if (isTransferPayment) {
-      const result = await createTakeawayVietQrOrder(payload)
-      showSuccess(`Đã tạo đơn mang đi ${result.orderCode}. Khách quét QR để thanh toán.`)
+      const result = await createTakeawayVietQrOrder(payload, { qrAmount: transferQrAmount })
+      const transferDebtSettlement = buildTransferDebtSettlement(debtSettlement, result.orderId)
+
+      showSuccess(
+        transferDebtSettlement
+          ? `Đã tạo đơn mang đi ${result.orderCode}. Quét QR ${formatMoney(transferQrAmount)} đ (gồm trừ nợ ${formatMoney(transferDebtSettlement.amount)} đ).`
+          : `Đã tạo đơn mang đi ${result.orderCode}. Quét QR ${formatMoney(transferQrAmount)} đ để thanh toán.`,
+      )
       const receipt = buildReceiptData({
         orderCode: result.orderCode,
         method: 'TRANSFER',
@@ -949,7 +1185,7 @@ function PosPage() {
           orderId: result.orderId,
           orderCode: result.orderCode,
           orderLabel: result.orderCode,
-          total: result.totalAmount || total,
+          total: result.qrAmount || transferQrAmount,
           qrPayload: result.qrPayload,
           qrImageUrl: result.qrImageUrl,
           transferContent: result.transferContent,
@@ -959,13 +1195,25 @@ function PosPage() {
           customer: selectedCustomer?.fullName || '',
           paymentMethod: 'TRANSFER',
           receipt,
+          debtSettlement: transferDebtSettlement,
         },
       })
       return
     }
 
-    const result = await createTakeawayCodOrder(payload)
-    showSuccess(`Đã tạo đơn COD ${result.orderCode}. Theo dõi tại mục Đơn COD.`)
+    if (amountPaid > 0 && amountPaid < total) {
+      showError('Số tiền khách trả phải bằng hoặc lớn hơn thành tiền.')
+      return
+    }
+
+    const activeSettlement = debtSettlement ?? null
+    const codDebtSettlementJson = serializeCodDebtSettlement(activeSettlement)
+    const result = await createTakeawayCodOrder(payload, codExpectedAmount, { codDebtSettlementJson })
+    const debtNote =
+      activeSettlement?.payDebtsEnabled && Number(activeSettlement.allocatedAmount || 0) > 0
+        ? ` · Dự kiến trừ nợ ${formatMoney(activeSettlement.allocatedAmount)} đ khi thu COD`
+        : ''
+    showSuccess(`Đã tạo đơn COD ${result.orderCode}. Theo dõi tại Quản lý đơn COD.${debtNote}`)
     const receipt = buildReceiptData({
       orderCode: result.orderCode,
       method: 'COD',
@@ -973,6 +1221,52 @@ function PosPage() {
     })
     resetCheckoutState()
     printReceiptFromData(receipt)
+  }
+
+  const executePayment = async (debtSettlement = null) => {
+    if (isTakeaway) {
+      await handleTakeawayPayment(debtSettlement)
+      return
+    }
+
+    if (isTransferPayment) {
+      const payload = buildOrderPayload('TRANSFER', 0)
+      const result = await createPosOrderOnline(payload, { qrAmount: transferQrAmount })
+      const transferDebtSettlement = buildTransferDebtSettlement(debtSettlement, result.orderId)
+
+      showSuccess(
+        transferDebtSettlement
+          ? `Đã tạo đơn ${result.orderCode}. Quét QR ${formatMoney(transferQrAmount)} đ (gồm trừ nợ ${formatMoney(transferDebtSettlement.amount)} đ).`
+          : `Đã tạo đơn ${result.orderCode}. Quét mã QR ${formatMoney(transferQrAmount)} đ để thanh toán.`,
+      )
+      const receipt = buildReceiptData({ orderCode: result.orderCode, method: 'TRANSFER' })
+      resetCheckoutState()
+      navigate('/pos/payment/qr', {
+        state: {
+          orderId: result.orderId,
+          orderCode: result.orderCode,
+          orderLabel: result.orderCode,
+          total: result.qrAmount || transferQrAmount,
+          qrPayload: result.qrPayload,
+          qrImageUrl: result.qrImageUrl,
+          transferContent: result.transferContent,
+          transferAccountNumber: result.transferAccountNumber,
+          paymentMode: result.paymentMode,
+          qrExpiresAtUtc: result.qrExpiresAtUtc,
+          customer: selectedCustomer?.fullName || '',
+          paymentMethod: 'TRANSFER',
+          receipt,
+          debtSettlement: transferDebtSettlement,
+        },
+      })
+      return
+    }
+
+    await finalizeRecordedPayment({
+      method: 'CASH',
+      createOrder: createPosOrderOffline,
+      debtSettlement,
+    })
   }
 
   const handlePayment = async () => {
@@ -990,85 +1284,67 @@ function PosPage() {
         }
         return
       }
-
-      setIsSubmitting(true)
-      try {
-        await handleTakeawayPayment()
-      } catch (error) {
-        showError(error.message)
-      } finally {
-        setIsSubmitting(false)
+    } else {
+      if (!validateDiscountsBeforePayment()) {
+        return
       }
-      return
+
+      if (!canPay) {
+        if (isTransferPayment && isZeroAmountSale) {
+          showError('Đơn 0 đ vui lòng chọn thanh toán tiền mặt.')
+        }
+        return
+      }
     }
 
-    if (!validateDiscountsBeforePayment()) {
-      return
-    }
-
-    if (!canPay) {
-      if (isTransferPayment && isZeroAmountSale) {
-        showError('Đơn 0 đ vui lòng chọn thanh toán tiền mặt.')
-      }
+    if (needsDebtSettlementOnPay && !debtSettlement) {
+      showError('Vui lòng bấm "Tính vào công nợ" để chọn hóa đơn cần trừ.')
+      openDebtAllocationModal('configure')
       return
     }
 
     setIsSubmitting(true)
     try {
-      if (isTransferPayment) {
-        const payload = buildOrderPayload('TRANSFER', total)
-        const result = await createPosOrderOnline(payload)
+      await executePayment(debtSettlement)
+    } catch (error) {
+      showError(error.message)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
 
-        showSuccess(`Đã tạo đơn ${result.orderCode}. Vui lòng quét mã QR để thanh toán.`)
-        const receipt = buildReceiptData({ orderCode: result.orderCode, method: 'TRANSFER' })
-        resetCheckoutState()
-        navigate('/pos/payment/qr', {
-          state: {
-            orderId: result.orderId,
-            orderCode: result.orderCode,
-            orderLabel: result.orderCode,
-            total: result.totalAmount || total,
-            qrPayload: result.qrPayload,
-            qrImageUrl: result.qrImageUrl,
-            transferContent: result.transferContent,
-            transferAccountNumber: result.transferAccountNumber,
-            paymentMode: result.paymentMode,
-            qrExpiresAtUtc: result.qrExpiresAtUtc,
-            customer: selectedCustomer?.fullName || '',
-            paymentMethod: 'TRANSFER',
-            receipt,
-          },
-        })
-        return
-      }
+  const handleOverpaymentDebtConfirm = async (result) => {
+    setOverpaymentDebtModalOpen(false)
+    if (debtModalMode === 'configure') {
+      updateActiveSession({ overpaymentAction: 'apply_to_debt', debtSettlement: result })
+      return
+    }
 
-      const payload = buildOrderPayload('CASH', cashPaymentAmount)
-      const result = await createPosOrderOffline(payload)
+    setIsSubmitting(true)
+    try {
+      await executePayment(result)
+    } catch (error) {
+      showError(error.message)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
 
-      if (cashPaymentAmount >= total) {
-        showSuccess(
-          result.invoiceCode
-            ? total === 0
-              ? `Hoàn tất đơn 0 đ. Đơn: ${result.orderCode} · Số HĐ: ${result.invoiceCode}`
-              : `Thanh toán thành công. Đơn: ${result.orderCode} · Số HĐ: ${result.invoiceCode}`
-            : total === 0
-              ? `Hoàn tất đơn 0 đ. Đơn: ${result.orderCode}`
-              : `Thanh toán thành công. Đơn: ${result.orderCode}`,
-        )
-      } else if (isDebtSale) {
-        showSuccess(`Ghi đơn ${result.orderCode} thành công. Dư nợ: ${formatMoney(debtAmount)} đ.`)
-      } else {
-        showSuccess(
-          `Ghi đơn ${result.orderCode}. Đã thu ${formatMoney(cashPaymentAmount)} đ, còn nợ ${formatMoney(debtAmount)} đ.`,
-        )
-      }
-      const receipt = buildReceiptData({
-        orderCode: result.orderCode,
-        method: 'CASH',
-        invoiceCode: result.invoiceCode,
+  const handleOverpaymentDebtSkip = async () => {
+    setOverpaymentDebtModalOpen(false)
+    if (debtModalMode === 'configure') {
+      handleOverpaymentActionChange('return_change')
+      return
+    }
+
+    setIsSubmitting(true)
+    try {
+      await executePayment({
+        payDebtsEnabled: false,
+        allocations: [],
+        allocatedAmount: 0,
+        creditToCustomer: change,
       })
-      resetCheckoutState()
-      printReceiptFromData(receipt)
     } catch (error) {
       showError(error.message)
     } finally {
@@ -1113,7 +1389,7 @@ function PosPage() {
   }
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-[#c1c9c0]/40 bg-[#fbf9f1] shadow-[0_10px_30px_rgba(27,28,23,0.04)] lg:rounded-[28px]">
+    <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-[#c1c9c0]/40 bg-[#fbf9f1] shadow-[0_10px_30px_rgba(27,28,23,0.04)] lg:rounded-[28px]">
       <header className="border-b border-[#c1c9c0]/60 bg-[#f6f4ec] px-4 py-3">
         <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
           {tabs.map((tab) => {
@@ -1181,143 +1457,9 @@ function PosPage() {
       </header>
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden xl:flex-row">
-        {/* Left: search + product catalog */}
-        <section className="order-1 flex min-h-[38vh] min-w-0 flex-1 flex-col bg-white text-base xl:min-h-0">
-          <div className="relative z-30 shrink-0 overflow-visible border-b border-[#c1c9c0]/60 bg-[#f6f4ec] p-5">
-            <div className="relative">
-              <Icon className="absolute left-4 top-1/2 -translate-y-1/2 text-[22px] text-[#717971]">search</Icon>
-              <input
-                className="w-full rounded-full border border-[#c1c9c0] bg-white py-3.5 pl-12 pr-12 text-base outline-none focus:border-[#356647] focus:ring-2 focus:ring-[#356647]/20"
-                placeholder="Tìm sản phẩm, SKU, barcode..."
-                type="text"
-                value={searchValue}
-                onChange={(event) => updateActiveSession({ searchValue: event.target.value })}
-                autoFocus
-              />
-              <Icon className="absolute right-4 top-1/2 -translate-y-1/2 text-[22px] text-[#717971]">barcode_scanner</Icon>
-            </div>
-
-          </div>
-
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            <div className="flex min-h-0 flex-1 flex-col bg-white">
-              <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[#c1c9c0]/40 px-4 py-2.5">
-                <p className="text-xs font-bold uppercase tracking-wider text-[#717971]">
-                  Danh sách sản phẩm
-                  {hasSearchQuery ? (
-                    <span className="ml-1 font-normal normal-case text-[#414942]">· &quot;{searchValue.trim()}&quot;</span>
-                  ) : null}
-                </p>
-                <div className="flex shrink-0 items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={handleRefreshCatalog}
-                    disabled={isSearchLoading || isCatalogSyncing}
-                    className="inline-flex items-center gap-1 rounded-lg border border-[#c1c9c0] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#356647] hover:bg-[#f0eee6] disabled:opacity-50"
-                    title="Tải DM/SP/SKU mới từ kho sang cửa hàng"
-                  >
-                    <Icon className={`text-[16px] ${isCatalogSyncing ? 'animate-spin' : ''}`}>sync</Icon>
-                    {isCatalogSyncing ? 'Đang đồng bộ...' : 'Đồng bộ'}
-                    {pendingCatalogSync > 0 && !isCatalogSyncing ? (
-                      <span className="rounded-full bg-amber-100 px-1.5 text-[10px] font-bold text-amber-800">
-                        {pendingCatalogSync}
-                      </span>
-                    ) : null}
-                  </button>
-                  <span className="text-xs text-[#717971]">{filteredSearchProducts.length} SP</span>
-                </div>
-              </div>
-
-              {posCategories.length > 0 ? (
-                <div className="custom-scrollbar shrink-0 overflow-x-auto border-b border-[#c1c9c0]/30 px-3 py-2">
-                  <div className="flex min-w-max gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setSelectedCategoryId('')}
-                      className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
-                        !selectedCategoryId
-                          ? 'bg-[#356647] text-white'
-                          : 'bg-white text-[#414942] hover:bg-[#f0eee6]'
-                      }`}
-                    >
-                      Tất cả
-                    </button>
-                    {posCategories.map((category) => (
-                      <button
-                        key={category.id}
-                        type="button"
-                        onClick={() => setSelectedCategoryId(String(category.id))}
-                        className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
-                          selectedCategoryId === String(category.id)
-                            ? 'bg-[#356647] text-white'
-                            : 'bg-white text-[#414942] hover:bg-[#f0eee6]'
-                        }`}
-                      >
-                        {category.name}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-
-              <div className="custom-scrollbar flex-1 overflow-y-auto px-3 py-3">
-                {isSearchLoading ? (
-                  <p className="px-1 py-3 text-sm text-[#717971]">Đang tải sản phẩm...</p>
-                ) : filteredSearchProducts.length === 0 ? (
-                  <p className="px-1 py-3 text-sm text-[#717971]">
-                    {hasSearchQuery || selectedCategoryId
-                      ? 'Không tìm thấy sản phẩm phù hợp.'
-                      : 'Chưa có sản phẩm để hiển thị.'}
-                  </p>
-                ) : (
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2 2xl:grid-cols-3">
-                    {filteredSearchProducts.map((item) => {
-                      const outOfStock = Number(item.stockQuantity) <= 0
-                      return (
-                        <button
-                          key={`${item.productId}-${item.sku}`}
-                          type="button"
-                          onClick={() => addToCart(item)}
-                          className="flex w-full items-center gap-2.5 rounded-xl border border-[#c1c9c0]/50 bg-[#fbf9f1] p-2.5 text-left transition-colors hover:border-[#356647]/35 hover:bg-[#f6f4ec]"
-                        >
-                          <ProductImage
-                            src={item.imageUrl}
-                            alt={item.name}
-                            className="h-12 w-12 shrink-0 rounded-lg"
-                            iconClassName="text-[20px]"
-                          />
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-semibold text-[#1b1c17]">{item.name}</p>
-                            <p className="truncate text-xs text-[#717971]">
-                              {item.sku}
-                              <span className="mx-1">·</span>
-                              <span
-                                className={
-                                  outOfStock || Number(item.stockQuantity) <= 5
-                                    ? 'font-semibold text-[#7e5700]'
-                                    : ''
-                                }
-                              >
-                                {formatStockHint(item.stockQuantity)}
-                              </span>
-                            </p>
-                          </div>
-                          <p className="shrink-0 whitespace-nowrap text-sm font-bold tabular-nums text-[#356647]">
-                            {formatMoney(item.price)} đ
-                          </p>
-                        </button>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Right: cart + customer + payment */}
-        <section className="order-2 flex min-h-[42vh] w-full min-w-0 flex-col border-t border-[#c1c9c0] bg-[#f6f4ec] xl:max-h-none xl:min-h-0 xl:min-w-[min(100%,300px)] xl:max-w-[min(100%,48%)] xl:flex-[1_1_360px] xl:border-l xl:border-t-0 xl:shadow-[-4px_0_20px_rgba(0,0,0,0.04)]">
-          <div className="flex min-h-0 flex-[1.15] flex-col border-b border-[#c1c9c0]/60 bg-white">
+        {/* Left: cart */}
+        <section className="order-1 flex min-h-[42vh] w-full min-w-0 flex-col border-t border-[#c1c9c0] bg-[#f6f4ec] xl:min-h-0 xl:min-w-[min(100%,300px)] xl:max-w-[min(100%,48%)] xl:flex-[1_1_360px] xl:border-r xl:border-t-0 xl:shadow-[4px_0_20px_rgba(0,0,0,0.04)]">
+          <div className="flex min-h-0 flex-1 flex-col bg-white">
             <div className="flex shrink-0 items-center justify-between gap-2 px-4 py-2.5">
               <p className="text-xs font-bold uppercase tracking-wider text-[#717971]">Giỏ hàng</p>
               <span className="shrink-0 text-xs text-[#717971]">
@@ -1330,7 +1472,7 @@ function PosPage() {
                 <div className="flex min-h-[140px] flex-col items-center justify-center rounded-xl border border-dashed border-[#c1c9c0]/80 bg-[#f6f4ec]/40 p-5 text-center">
                   <Icon className="mb-2 text-[44px] text-[#717971]/50">shopping_cart</Icon>
                   <p className="text-sm font-semibold text-[#414942]">Giỏ hàng trống</p>
-                  <p className="mt-1 text-xs text-[#717971]">Chọn sản phẩm bên trái để thêm.</p>
+                  <p className="mt-1 text-xs text-[#717971]">Chọn sản phẩm bên phải để thêm.</p>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -1478,452 +1620,269 @@ function PosPage() {
               )}
             </div>
           </div>
+        </section>
 
-          <div className="custom-scrollbar min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
-            <div className="relative rounded-xl bg-white p-3 shadow-sm">
-              <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[#717971]">Khách hàng</label>
-              {selectedCustomer ? (
-                <div
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => setOpenModal('customer-detail')}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      event.preventDefault()
-                      setOpenModal('customer-detail')
-                    }
-                  }}
-                  className="flex w-full items-center gap-2 rounded-lg border border-[#356647]/30 bg-[#356647]/5 px-3 py-2 text-left"
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-[#1b1c17]">{selectedCustomer.fullName}</p>
-                    <p className="truncate text-xs text-[#717971]">
-                      {selectedCustomer.phone || '—'} · {selectedCustomer.customerCode}
-                    </p>
-                    {isVipCustomerType(selectedCustomer.customerType) ? (
-                      <p className="mt-1 inline-flex">
-                        <span className="rounded-full bg-[#fec25b] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#744f00]">
-                          Khách VIP
-                        </span>
-                      </p>
-                    ) : selectedCustomer.tierCode ? (
-                      <p className="mt-0.5 text-xs font-semibold text-[#356647]">
-                        Hạng {selectedCustomer.tierCode}
-                        {tierDiscountPercent > 0 ? ` · CK ${tierDiscountPercent}%` : ''}
-                      </p>
-                    ) : null}
-                    {Number(selectedCustomer.currentDebt) > 0 ? (
-                      <p className="mt-0.5 text-xs font-semibold text-[#7e5700]">
-                        Công nợ: {formatMoney(selectedCustomer.currentDebt)} đ
-                      </p>
-                    ) : null}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={(event) => {
-                      event.stopPropagation()
-                      updateActiveSession({
-                        selectedCustomer: null,
-                        customerSearchValue: '',
-                        orderDiscountPercent: 0,
-                        orderDiscountAmountFixed: 0,
-                      })
-                    }}
-                    className="shrink-0 rounded-lg border border-[#c1c9c0] px-2 py-1 text-xs font-semibold text-[#414942] hover:bg-[#f6f4ec]"
-                  >
-                    Đổi
-                  </button>
-                </div>
-              ) : (
-                <div className="flex gap-2">
-                  <div className="relative min-w-0 flex-1">
-                    <Icon className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[18px] text-[#717971]">person</Icon>
-                    <input
-                      className="w-full rounded-lg border border-[#c1c9c0]/60 bg-[#fbf9f1] py-2 pl-9 pr-2 text-sm outline-none focus:border-[#356647] focus:ring-2 focus:ring-[#356647]/20"
-                      placeholder="Tìm tên, SĐT, mã KH..."
-                      value={customerSearchValue}
-                      onChange={(event) => updateActiveSession({ customerSearchValue: event.target.value })}
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setOpenModal('customer')}
-                    className="shrink-0 rounded-lg bg-[#356647] px-3 py-2 text-xs font-bold text-white hover:bg-[#4e7f5e]"
-                  >
-                    Thêm KH
-                  </button>
-                </div>
-              )}
-
-              {!selectedCustomer && isCustomerSearchLoading ? (
-                <p className="mt-2 text-xs text-[#717971]">Đang tìm khách hàng...</p>
-              ) : null}
-              {showCustomerDropdown ? (
-                <div className="custom-scrollbar absolute left-3 right-3 top-full z-40 mt-1 max-h-52 overflow-y-auto rounded-xl border border-[#c1c9c0] bg-white shadow-2xl">
-                  {customerSearchResults.map((customer) => (
-                    <button
-                      key={customer.customerId}
-                      type="button"
-                      onClick={() => selectCustomer(customer)}
-                      className="flex w-full flex-col border-b border-[#f0eee6] px-3 py-2.5 text-left last:border-b-0 hover:bg-[#f6f4ec]"
-                    >
-                      <span className="text-sm font-semibold text-[#1b1c17]">{customer.fullName}</span>
-                      <span className="text-xs text-[#717971]">
-                        {customer.phone || '—'} · {customer.customerCode}
-                        {Number(customer.currentDebt) > 0 ? ` · Nợ ${formatMoney(customer.currentDebt)} đ` : ''}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-              {showCustomerSearchEmpty ? (
-                <p className="mt-2 text-xs text-[#717971]">Không tìm thấy khách hàng.</p>
-              ) : null}
-              {!hasCustomerSelected ? (
-                <p className="mt-2 text-xs font-medium text-[#ba1a1a]">
-                </p>
-              ) : null}
-            </div>
-
-            {isTakeaway ? (
-              <div className="rounded-xl bg-white p-3 shadow-sm">
-                <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[#717971]" htmlFor="shipping-address">
-                  Địa chỉ giao hàng
-                </label>
-                {isLoadingShippingAddresses ? (
-                  <p className="text-xs text-[#717971]">Đang tải địa chỉ đã giao...</p>
-                ) : null}
-                {!isLoadingShippingAddresses && savedShippingAddresses.length > 0 ? (
-                  <select
-                    id="shipping-address-select"
-                    className="mb-2 w-full rounded-lg border border-[#c1c9c0] bg-[#fbf9f1] px-3 py-2 text-sm outline-none focus:border-[#356647] focus:ring-2 focus:ring-[#356647]/20"
-                    value={useCustomShippingAddress ? '__custom__' : shippingAddress}
-                    onChange={(event) => handleSavedShippingAddressChange(event.target.value)}
-                  >
-                    {savedShippingAddresses.map((addr) => (
-                      <option key={addr} value={addr}>
-                        {addr.length > 72 ? `${addr.slice(0, 72)}…` : addr}
-                      </option>
-                    ))}
-                    <option value="__custom__">Nhập địa chỉ khác...</option>
-                  </select>
-                ) : null}
-                {(useCustomShippingAddress || savedShippingAddresses.length === 0) && !isLoadingShippingAddresses ? (
-                  <textarea
-                    id="shipping-address"
-                    rows={3}
-                    className="w-full resize-none rounded-lg border border-[#c1c9c0] bg-[#fbf9f1] px-3 py-2 text-sm outline-none focus:border-[#356647] focus:ring-2 focus:ring-[#356647]/20"
-                    placeholder="Số nhà, phường, quận, tỉnh..."
-                    value={shippingAddress}
-                    onChange={(event) => updateActiveSession({ shippingAddress: event.target.value })}
-                  />
-                ) : null}
-                {!hasShippingAddress && !isLoadingShippingAddresses ? (
-                  <p className="mt-2 text-xs font-medium text-[#ba1a1a]">Vui lòng chọn hoặc nhập địa chỉ giao.</p>
-                ) : null}
-              </div>
-            ) : null}
-
-            {canUseOrderDiscount ? (
-            <div className="rounded-xl bg-white p-3 shadow-sm">
-              <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[#717971]">Chiết khấu đơn</label>
-              <div className="flex items-center gap-2">
-                <div className="relative flex-1">
-                  <input
-                    type="number"
-                    min={0}
-                    max={100}
-                    disabled={usesFixedOrderDiscount}
-                    className="w-full rounded-lg border border-[#c1c9c0] py-2 pl-3 pr-7 text-sm outline-none focus:border-[#356647] disabled:bg-slate-50 disabled:text-slate-400"
-                    value={usesFixedOrderDiscount ? '' : orderDiscountPercent || ''}
-                    onChange={(event) => updateOrderDiscountPercent(event.target.value)}
-                    placeholder={usesFixedOrderDiscount ? '—' : '0'}
-                  />
-                  <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-[#717971]">%</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setOpenModal('offer')}
-                  className="shrink-0 rounded-lg border border-[#356647]/40 px-3 py-2 text-xs font-semibold text-[#356647] hover:bg-[#356647]/5"
-                >
-                  Tùy chỉnh
-                </button>
-              </div>
-              {usesFixedOrderDiscount ? (
-                <p className="mt-2 text-xs font-semibold text-[#356647]">
-                  CK cố định: -{formatMoney(orderDiscountAmount)} đ
-                </p>
-              ) : null}
-              {isTakeaway ? (
-                <p className="mt-2 text-xs text-[#717971]">
-                  Bấm thành tiền từng SP để CK dòng. Tổng đơn gửi COD/VietQR đã trừ CK.
-                </p>
-              ) : null}
-            </div>
-            ) : null}
-
-            <div className="rounded-xl bg-white p-3 shadow-sm">
-              <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[#717971]">
-                Mã giảm giá
-              </label>
-              {appliedPromotion ? (
-                <div className="flex items-center justify-between gap-2 rounded-lg border border-[#356647]/30 bg-[#356647]/5 px-3 py-2">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-[#356647]">
-                      {formatPromotionLabel(appliedPromotion)}
-                    </p>
-                    {couponDiscountAmount > 0 ? (
-                      <p className="text-xs text-[#717971]">Giảm {formatMoney(couponDiscountAmount)} đ</p>
-                    ) : null}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleClearPromoCode}
-                    className="shrink-0 text-xs font-semibold text-[#717971] hover:text-[#ba1a1a]"
-                  >
-                    Gỡ
-                  </button>
-                </div>
-              ) : (
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    className="min-w-0 flex-1 rounded-lg border border-[#c1c9c0] bg-[#fbf9f1] px-3 py-2 text-sm uppercase outline-none focus:border-[#356647] focus:ring-2 focus:ring-[#356647]/20"
-                    placeholder="VD: SALE10"
-                    value={promoCodeInput}
-                    onChange={(event) => updateActiveSession({ promoCodeInput: event.target.value.toUpperCase() })}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter') {
-                        event.preventDefault()
-                        handleApplyPromoCode()
-                      }
-                    }}
-                  />
-                  <button
-                    type="button"
-                    disabled={isApplyingPromo || !promoCodeInput.trim()}
-                    onClick={handleApplyPromoCode}
-                    className="shrink-0 rounded-lg bg-[#356647] px-3 py-2 text-xs font-bold text-white hover:bg-[#4e7f5e] disabled:opacity-50"
-                  >
-                    {isApplyingPromo ? '...' : 'Áp dụng'}
-                  </button>
-                </div>
-              )}
-            </div>
-
-            <div className="rounded-xl bg-white p-4 shadow-sm">
-              <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[#717971]" htmlFor="order-note">
-                Ghi chú đơn hàng
-              </label>
-              <textarea
-                id="order-note"
-                rows={2}
-                maxLength={500}
-                placeholder="VD: Gói quà, giao giờ hành chính, khách dị ứng sữa..."
-                className="w-full resize-none rounded-xl border border-[#c1c9c0] bg-[#fbf9f1] px-3 py-2.5 text-sm outline-none focus:border-[#356647] focus:ring-2 focus:ring-[#356647]/20"
-                value={orderNote}
-                onChange={(event) => updateActiveSession({ orderNote: event.target.value })}
+        {/* Right: search + product catalog */}
+        <section className="order-2 flex min-h-[38vh] min-w-0 flex-1 flex-col bg-white text-base xl:min-h-0">
+          <div className="relative z-30 shrink-0 overflow-visible border-b border-[#c1c9c0]/60 bg-[#f6f4ec] p-5">
+            <div className="relative">
+              <Icon className="absolute left-4 top-1/2 -translate-y-1/2 text-[22px] text-[#717971]">search</Icon>
+              <input
+                className="w-full rounded-full border border-[#c1c9c0] bg-white py-3.5 pl-12 pr-12 text-base outline-none focus:border-[#356647] focus:ring-2 focus:ring-[#356647]/20"
+                placeholder="Tìm sản phẩm, SKU, barcode..."
+                type="text"
+                value={searchValue}
+                onChange={(event) => updateActiveSession({ searchValue: event.target.value })}
+                autoFocus
               />
-              <p className="mt-1 text-[11px] text-[#717971]">
-                Hiển thị trong quản lý đơn hàng. Tối đa 500 ký tự.
-                {orderNote.length > 0 ? ` (${orderNote.length}/500)` : ''}
-              </p>
+              <Icon className="absolute right-4 top-1/2 -translate-y-1/2 text-[22px] text-[#717971]">barcode_scanner</Icon>
             </div>
 
-            <div className="rounded-xl bg-white p-4 shadow-sm">
-              <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[#717971]">Tổng tiền</label>
-              <div className="text-3xl font-bold text-[#356647]">{formatMoney(total)} đ</div>
-              {isZeroAmountSale ? (
-                <p className="mt-1 text-xs font-medium text-[#356647]">
-                  Đơn 0 đ sau chiết khấu — bấm thanh toán tiền mặt (không cần nhập tiền khách trả).
+          </div>
+
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <div className="flex min-h-0 flex-1 flex-col bg-white">
+              <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[#c1c9c0]/40 px-4 py-2.5">
+                <p className="text-xs font-bold uppercase tracking-wider text-[#717971]">
+                  Danh sách sản phẩm
+                  {hasSearchQuery ? (
+                    <span className="ml-1 font-normal normal-case text-[#414942]">· &quot;{searchValue.trim()}&quot;</span>
+                  ) : null}
                 </p>
-              ) : null}
-              {hasCartItems ? (
-                <div className="mt-2 space-y-1 border-t border-[#f0eee6] pt-2 text-xs text-[#717971]">
-                  <div className="flex justify-between">
-                    <span>Tạm tính</span>
-                    <span>{formatMoney(grossSubtotal)} đ</span>
-                  </div>
-                  {itemDiscountTotal > 0 ? (
-                    <div className="flex justify-between text-[#356647]">
-                      <span>CK từng SP</span>
-                      <span>-{formatMoney(itemDiscountTotal)} đ</span>
-                    </div>
-                  ) : null}
-                  {canUseOrderDiscount && orderDiscountAmount > 0 ? (
-                    <div className="flex justify-between text-[#356647]">
-                      <span>
-                        {usesFixedOrderDiscount ? 'CK đơn (VNĐ)' : `CK đơn (${orderDiscountPercent}%)`}
+                <div className="flex shrink-0 items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleRefreshCatalog}
+                    disabled={isSearchLoading || isCatalogSyncing}
+                    className="inline-flex items-center gap-1 rounded-lg border border-[#c1c9c0] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#356647] hover:bg-[#f0eee6] disabled:opacity-50"
+                    title="Tải DM/SP/SKU mới từ kho sang cửa hàng"
+                  >
+                    <Icon className={`text-[16px] ${isCatalogSyncing ? 'animate-spin' : ''}`}>sync</Icon>
+                    {isCatalogSyncing ? 'Đang đồng bộ...' : 'Đồng bộ'}
+                    {pendingCatalogSync > 0 && !isCatalogSyncing ? (
+                      <span className="rounded-full bg-amber-100 px-1.5 text-[10px] font-bold text-amber-800">
+                        {pendingCatalogSync}
                       </span>
-                      <span>-{formatMoney(orderDiscountAmount)} đ</span>
-                    </div>
-                  ) : null}
-                  {couponDiscountAmount > 0 ? (
-                    <div className="flex justify-between text-[#356647]">
-                      <span>Mã {appliedPromotion?.promoCode || 'giảm giá'}</span>
-                      <span>-{formatMoney(couponDiscountAmount)} đ</span>
-                    </div>
-                  ) : null}
-                  {membershipDiscountAmount > 0 ? (
-                    <div className="flex justify-between text-[#356647]">
-                      <span>
-                        CK hạng {selectedCustomer?.tierCode || 'VIP'} ({tierDiscountPercent}%)
-                      </span>
-                      <span>-{formatMoney(membershipDiscountAmount)} đ</span>
-                    </div>
-                  ) : null}
+                    ) : null}
+                  </button>
+                  <span className="text-xs text-[#717971]">{filteredSearchProducts.length} SP</span>
                 </div>
-              ) : null}
-            </div>
-
-            {isTakeaway && paymentMethod === 'COD' ? (
-              <div className="rounded-xl border border-orange-200 bg-orange-50 p-4 text-sm text-[#414942]">
-                <p className="font-semibold text-orange-800">Thanh toán COD</p>
-                <p className="mt-1 text-[#717971]">
-                  Khách thanh toán khi nhận hàng. Đơn xuất hiện tại mục Đơn COD để nhân viên giao và xác nhận thu tiền.
-                </p>
               </div>
-            ) : null}
 
-            {!isTakeaway && !isTransferPayment ? (
-              <>
-                <div className="rounded-xl bg-white p-4 shadow-sm">
-                  <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[#717971]" htmlFor="amount-paid">
-                    Khách trả
-                  </label>
-                  <input
-                    id="amount-paid"
-                    type="text"
-                    inputMode="numeric"
-                    className="w-full rounded-xl border border-[#c1c9c0] bg-[#fbf9f1] px-3 py-2.5 text-2xl font-bold outline-none focus:border-[#356647] focus:ring-2 focus:ring-[#356647]/20"
-                    
-                    value={amountPaidInput}
-                    onChange={(event) =>
-                      updateActiveSession({ amountPaidInput: event.target.value.replace(/\D/g, '') })
-                    }
-                  />
-                  <p className="mt-1.5 text-xs text-[#717971]">
-                    Để trống: ghi nợ {formatMoney(total)} đ. Nhập {formatMoney(total)} đ hoặc bấm Đúng tiền để thanh toán hết.
-                  </p>
-                  <div className="mt-2 flex items-center justify-between rounded-lg bg-[#f6f4ec] px-3 py-2 text-sm">
-                    <span className="text-[#717971]">Khách trả</span>
-                    <span className="font-bold text-[#1b1c17]">{formatMoney(amountPaid)} đ</span>
-                  </div>
-                  {debtAmount > 0 ? (
-                    <div className="mt-2 flex items-center justify-between rounded-lg bg-[#fec25b]/20 px-3 py-2 text-sm">
-                      <span className="font-semibold text-[#7e5700]">Dư nợ (đơn này)</span>
-                      <span className="font-bold text-[#7e5700]">{formatMoney(debtAmount)} đ</span>
-                    </div>
-                  ) : null}
-                  <div className="mt-2 grid grid-cols-3 gap-1.5">
-                    {[50000, 100000, 200000, 500000, 1000000].map((quick) => (
+              {posCategories.length > 0 ? (
+                <div className="custom-scrollbar shrink-0 overflow-x-auto border-b border-[#c1c9c0]/30 px-3 py-2">
+                  <div className="flex min-w-max gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedCategoryId('')}
+                      className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
+                        !selectedCategoryId
+                          ? 'bg-[#356647] text-white'
+                          : 'bg-white text-[#414942] hover:bg-[#f0eee6]'
+                      }`}
+                    >
+                      Tất cả
+                    </button>
+                    {posCategories.map((category) => (
                       <button
-                        key={quick}
+                        key={category.id}
                         type="button"
-                        onClick={() => handleQuickAmount(quick)}
-                        className="rounded-lg bg-[#e4e3db] py-1.5 text-[10px] font-bold hover:bg-[#356647] hover:text-white"
+                        onClick={() => setSelectedCategoryId(String(category.id))}
+                        className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
+                          selectedCategoryId === String(category.id)
+                            ? 'bg-[#356647] text-white'
+                            : 'bg-white text-[#414942] hover:bg-[#f0eee6]'
+                        }`}
                       >
-                        {formatMoney(quick)}
+                        {category.name}
                       </button>
                     ))}
-                    <button
-                      type="button"
-                      onClick={() => handleQuickAmount(total)}
-                      className="rounded-lg bg-[#356647]/15 py-1.5 text-[10px] font-bold text-[#356647] hover:bg-[#356647] hover:text-white"
-                    >
-                      Đúng tiền
-                    </button>
                   </div>
                 </div>
+              ) : null}
 
-                <div className="rounded-xl bg-white p-4 shadow-sm">
-                  <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-[#717971]">Tiền thừa</label>
-                  <div className={`text-2xl font-bold ${change > 0 ? 'text-[#356647]' : 'text-[#717971]'}`}>
-                    {change > 0 ? `${formatMoney(change)} đ` : '—'}
+              <div className="custom-scrollbar flex-1 overflow-y-auto px-3 py-3">
+                {isSearchLoading ? (
+                  <p className="px-1 py-3 text-sm text-[#717971]">Đang tải sản phẩm...</p>
+                ) : filteredSearchProducts.length === 0 ? (
+                  <p className="px-1 py-3 text-sm text-[#717971]">
+                    {hasSearchQuery || selectedCategoryId
+                      ? 'Không tìm thấy sản phẩm phù hợp.'
+                      : 'Chưa có sản phẩm để hiển thị.'}
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2 2xl:grid-cols-3">
+                    {filteredSearchProducts.map((item) => {
+                      const outOfStock = Number(item.stockQuantity) <= 0
+                      return (
+                        <button
+                          key={`${item.productId}-${item.sku}`}
+                          type="button"
+                          onClick={() => addToCart(item)}
+                          className="flex w-full items-center gap-2.5 rounded-xl border border-[#c1c9c0]/50 bg-[#fbf9f1] p-2.5 text-left transition-colors hover:border-[#356647]/35 hover:bg-[#f6f4ec]"
+                        >
+                          <ProductImage
+                            src={item.imageUrl}
+                            alt={item.name}
+                            className="h-12 w-12 shrink-0 rounded-lg"
+                            iconClassName="text-[20px]"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-semibold text-[#1b1c17]">{item.name}</p>
+                            <p className="truncate text-xs text-[#717971]">
+                              {item.sku}
+                              <span className="mx-1">·</span>
+                              <span
+                                className={
+                                  outOfStock || Number(item.stockQuantity) <= 5
+                                    ? 'font-semibold text-[#7e5700]'
+                                    : ''
+                                }
+                              >
+                                {formatStockHint(item.stockQuantity)}
+                              </span>
+                            </p>
+                          </div>
+                          <p className="shrink-0 whitespace-nowrap text-sm font-bold tabular-nums text-[#356647]">
+                            {formatMoney(item.price)} đ
+                          </p>
+                        </button>
+                      )
+                    })}
                   </div>
-                  {isDebtSale ? (
-                    <p className="mt-1 text-xs font-medium text-[#7e5700]">Bán ghi nợ — chưa thu tiền mặt</p>
-                  ) : isPartialCashPayment ? (
-                    <p className="mt-1 text-xs text-[#717971]">Thanh toán một phần, phần còn lại ghi vào dư nợ</p>
-                  ) : null}
-                </div>
-              </>
-            ) : isTransferPayment ? (
-              <div className="rounded-xl border border-[#356647]/20 bg-[#356647]/5 p-4 text-sm text-[#414942]">
-                <p className="font-semibold text-[#356647]">Thanh toán chuyển khoản</p>
-                <p className="mt-1 text-[#717971]">Bấm Thanh toán để hiển thị mã QR cho khách quét.</p>
-              </div>
-            ) : null}
-
-            <div className="rounded-xl bg-white p-4 shadow-sm">
-              <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[#717971]">Phương thức thanh toán</label>
-              <div className="space-y-1.5">
-                {paymentMethods.map((method) => (
-                  <button
-                    key={method.id}
-                    type="button"
-                    onClick={() => updateActiveSession({ paymentMethod: method.id })}
-                    className={`flex w-full items-center gap-2 rounded-lg border-2 px-3 py-2.5 text-left text-sm transition-all ${
-                      paymentMethod === method.id
-                        ? 'border-[#356647] bg-[#356647]/10 font-semibold text-[#356647]'
-                        : 'border-transparent bg-[#fbf9f1] hover:border-[#c1c9c0]'
-                    }`}
-                  >
-                    <Icon className="text-[20px]" filled={paymentMethod === method.id}>
-                      {method.icon}
-                    </Icon>
-                    {method.label}
-                  </button>
-                ))}
+                )}
               </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-2 border-t border-[#c1c9c0] p-3">
-        
+          <div className="shrink-0 border-t border-[#c1c9c0] bg-[#f6f4ec] p-4">
             <button
               type="button"
-              disabled={!canPay}
-              onClick={handlePayment}
-              className="flex flex-col items-center justify-center rounded-xl bg-[#356647] py-3 text-sm font-bold text-white shadow-md hover:brightness-110 disabled:opacity-50"
+              disabled={!hasCartItems}
+              onClick={openPaymentSidebar}
+              className="flex w-full flex-col items-center justify-center rounded-xl bg-[#356647] py-3.5 text-sm font-bold text-white shadow-md hover:brightness-110 disabled:opacity-50"
             >
               <span className="text-[10px] opacity-70">F12</span>
-              {isSubmitting
-                ? 'Đang xử lý...'
-                : isTakeaway
-                  ? paymentMethod === 'TRANSFER'
-                    ? 'Tạo đơn · QR'
-                    : 'Tạo đơn COD'
-                  : isTransferPayment
-                    ? 'Thanh toán · QR'
-                    : 'Thanh toán'}
+              Thanh toán
             </button>
           </div>
         </section>
+
       </div>
 
-      <footer className="shrink-0 border-t border-[#c1c9c0]/60 bg-[#f6f4ec] px-4 py-3">
-        <div className="grid grid-cols-2 gap-2">
-          {SALES_MODES.map((mode) => (
-            <button
-              key={mode.id}
-              type="button"
-              onClick={() => {
-                setSalesMode(mode.id)
-                setOpenDiscountSku(null)
-              }}
-              className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-bold transition-colors ${
-                salesMode === mode.id
-                  ? 'bg-[#356647] text-white shadow-md shadow-[#356647]/25'
-                  : 'border border-[#c1c9c0] bg-white text-[#414942] hover:bg-[#e4e3db]'
-              }`}
-            >
-              <Icon className="text-[22px]" filled={salesMode === mode.id}>
-                {mode.icon}
-              </Icon>
-              {mode.label}
-            </button>
-          ))}
+      <PosPaymentSidebar
+        isOpen={isPaymentSidebarOpen}
+        onClose={() => setIsPaymentSidebarOpen(false)}
+        formatMoney={formatMoney}
+        total={total}
+        grossSubtotal={grossSubtotal}
+        itemDiscountTotal={itemDiscountTotal}
+        orderDiscountAmount={orderDiscountAmount}
+        orderDiscountPercent={orderDiscountPercent}
+        couponDiscountAmount={couponDiscountAmount}
+        membershipDiscountAmount={membershipDiscountAmount}
+        appliedPromotion={appliedPromotion}
+        selectedCustomer={selectedCustomer}
+        tierDiscountPercent={tierDiscountPercent}
+        canUseOrderDiscount={canUseOrderDiscount}
+        usesFixedOrderDiscount={usesFixedOrderDiscount}
+        isZeroAmountSale={isZeroAmountSale}
+        hasCartItems={hasCartItems}
+        isTakeaway={isTakeaway}
+        paymentMethod={paymentMethod}
+        paymentMethods={paymentMethods}
+        onPaymentMethodChange={(id) => updateActiveSession({ paymentMethod: id })}
+        isTransferPayment={isTransferPayment}
+        isCodTakeaway={isCodTakeaway}
+        isTransferTakeaway={isTransferTakeaway}
+        customerCurrentDebt={customerCurrentDebt}
+        amountPaidInput={amountPaidInput}
+        onAmountPaidChange={handleAmountPaidChange}
+        transferQrAmount={transferQrAmount}
+        amountPaid={amountPaid}
+        debtAmount={debtAmount}
+        change={change}
+        displayChange={displayChange}
+        canApplyOverpayToDebt={canApplyOverpayToDebt}
+        overpaymentAction={overpaymentAction}
+        onOverpaymentActionChange={handleOverpaymentActionChange}
+        onOpenDebtAllocation={handleOpenDebtAllocation}
+        confirmedDebtAllocationAmount={
+          debtSettlement?.payDebtsEnabled ? Number(debtSettlement.allocatedAmount || 0) : 0
+        }
+        isDebtSale={isDebtSale}
+        isPartialPayment={isPartialPayment}
+        isTransferQrFlow={isTransferQrFlow}
+        onQuickAmount={handleQuickAmount}
+        onConfirm={handlePayment}
+        isSubmitting={isSubmitting}
+        canPay={canPay}
+        customerSearchValue={customerSearchValue}
+        onCustomerSearchChange={(value) => updateActiveSession({ customerSearchValue: value })}
+        customerSearchResults={customerSearchResults}
+        isCustomerSearchLoading={isCustomerSearchLoading}
+        showCustomerDropdown={showCustomerDropdown}
+        showCustomerSearchEmpty={showCustomerSearchEmpty}
+        onSelectCustomer={selectCustomer}
+        onOpenAddCustomer={() => setOpenModal('customer')}
+        onOpenCustomerDetail={() => setOpenModal('customer-detail')}
+        onClearCustomer={() =>
+          updateActiveSession({
+            selectedCustomer: null,
+            customerSearchValue: '',
+            orderDiscountPercent: 0,
+            orderDiscountAmountFixed: 0,
+          })
+        }
+        shippingAddress={shippingAddress}
+        onShippingAddressChange={(value) => updateActiveSession({ shippingAddress: value })}
+        savedShippingAddresses={savedShippingAddresses}
+        useCustomShippingAddress={useCustomShippingAddress}
+        onSavedShippingAddressChange={handleSavedShippingAddressChange}
+        isLoadingShippingAddresses={isLoadingShippingAddresses}
+        hasShippingAddress={hasShippingAddress}
+        orderDiscountPercentInput={orderDiscountPercent}
+        onOrderDiscountPercentChange={updateOrderDiscountPercent}
+        onOpenOfferModal={() => setOpenModal('offer')}
+        promoCodeInput={promoCodeInput}
+        onPromoCodeChange={(value) => updateActiveSession({ promoCodeInput: value })}
+        onApplyPromoCode={handleApplyPromoCode}
+        onClearPromoCode={handleClearPromoCode}
+        isApplyingPromo={isApplyingPromo}
+        orderNote={orderNote}
+        onOrderNoteChange={(value) => updateActiveSession({ orderNote: value })}
+      />
+
+      <footer className="shrink-0 border-t border-[#d8d6ce] bg-white px-4">
+        <div className="flex items-end gap-8">
+          {SALES_MODES.map((mode) => {
+            const isActive = salesMode === mode.id
+            return (
+              <button
+                key={mode.id}
+                type="button"
+                onClick={() => {
+                  setSalesMode(mode.id)
+                  setOpenDiscountSku(null)
+                  setIsPaymentSidebarOpen(false)
+                }}
+                className={`relative flex items-center gap-2 px-1 pb-3 pt-3.5 text-sm font-semibold transition-colors ${
+                  isActive ? 'text-[#356647]' : 'text-[#5c635c] hover:text-[#1b1c17]'
+                }`}
+              >
+                <Icon className="text-[22px]" filled={isActive}>
+                  {mode.icon}
+                </Icon>
+                <span>{mode.label}</span>
+                {isActive ? (
+                  <span
+                    className="absolute inset-x-0 bottom-0 h-[3px] rounded-t-sm bg-[#356647]"
+                    aria-hidden
+                  />
+                ) : null}
+              </button>
+            )
+          })}
         </div>
       </footer>
 
@@ -1965,6 +1924,9 @@ function PosPage() {
         isOpen={openModal === 'customer-detail'}
         customer={selectedCustomer}
         onClose={() => setOpenModal(null)}
+        onCustomerUpdated={(updated) => {
+          updateActiveSession({ selectedCustomer: updated })
+        }}
       />
       <ConfirmDialog
         isOpen={Boolean(tabCloseConfirm)}
@@ -1978,6 +1940,18 @@ function PosPage() {
         cancelLabel="Hủy"
         onConfirm={handleConfirmCloseTab}
         onCancel={() => setTabCloseConfirm(null)}
+      />
+      <OverpaymentDebtModal
+        isOpen={overpaymentDebtModalOpen}
+        excessAmount={change}
+        customerCurrentDebt={customerCurrentDebt}
+        openDebts={customerOpenDebts}
+        isLoading={isLoadingOpenDebts}
+        formatMoney={formatMoney}
+        initialSettlement={debtSettlement}
+        onClose={() => setOverpaymentDebtModalOpen(false)}
+        onSkip={handleOverpaymentDebtSkip}
+        onConfirm={handleOverpaymentDebtConfirm}
       />
     </div>
   )

@@ -17,6 +17,7 @@ public class OrderLogic(
     IOrderCodeGenerator _codeGen,
     IOrderEventPublisher _eventPublisher,
     IOrderActivityRepository _activityRepo,
+    PromotionLogic _promotionLogic,
     IOptions<SepayOptions> sepayOptions)
 {
     private readonly SepayOptions _sepay = sepayOptions.Value;
@@ -28,6 +29,7 @@ public class OrderLogic(
         OrderInputValidator.ValidatePagination(req.Page, req.PageSize);
         var (items, total) = await _orderRepo.GetPagedAsync(
             req.Search, req.CustomerId, req.Status, req.Channel,
+            req.ExcludeChannel, req.CodTab,
             req.Page, req.PageSize, ct);
 
         var dtos = items.Select(MapToSummary).ToList();
@@ -74,11 +76,24 @@ public class OrderLogic(
 
         var orderCode = await _codeGen.GenerateAsync(ct);
         var totalAmount = detailInputs.Sum(i => i.UnitPrice * i.Quantity);
-        var finalAmount = totalAmount - req.DiscountAmount;
-        if (finalAmount < 0) finalAmount = 0;
+        var manualDiscount = req.DiscountAmount;
+        if (manualDiscount > totalAmount)
+            throw new OrderValidationException("Giảm giá thủ công không được lớn hơn tổng tiền đơn hàng.");
+
+        var baseForPromotion = Math.Max(0, totalAmount - manualDiscount);
+        var promotionDiscount = await _promotionLogic.ValidateAndCalculateDiscountAsync(
+            req.PromotionId, req.PromotionCode, baseForPromotion, ct);
+        var totalDiscount = manualDiscount + promotionDiscount.DiscountAmount;
+        var finalAmount = Math.Max(0, totalAmount - totalDiscount);
 
         var isPosCashCompleted = req.OrderChannel == OrderChannel.POS
             && req.PaymentMethod == PaymentMethod.Cash;
+
+        var isPosRecordedTransferCompleted = req.OrderChannel == OrderChannel.POS
+            && req.PaymentMethod is PaymentMethod.VietQR or PaymentMethod.BankTransfer
+            && req.PaidAmount > 0;
+
+        var isPosCompletedOnCreate = isPosCashCompleted || isPosRecordedTransferCompleted;
 
         var order = new Order
         {
@@ -88,10 +103,13 @@ public class OrderLogic(
             CustomerSnapshotName = req.CustomerSnapshotName?.Trim(),
             EmployeeId = req.EmployeeId,
             OrderChannel = req.OrderChannel,
-            OrderStatus = isPosCashCompleted ? OrderStatus.Completed : OrderStatus.PendingPayment,
+            OrderStatus = isPosCompletedOnCreate ? OrderStatus.Completed : OrderStatus.PendingPayment,
             InventorySyncStatus = InventorySyncStatus.PendingDeduction,
             TotalAmount = totalAmount,
-            DiscountAmount = req.DiscountAmount,
+            DiscountAmount = totalDiscount,
+            PromotionId = promotionDiscount.PromotionId,
+            PromotionCode = promotionDiscount.PromotionCode,
+            PromotionDiscountAmount = promotionDiscount.DiscountAmount,
             FinalAmount = finalAmount,
             ShippingAddress = req.ShippingAddress?.Trim(),
             Note = req.Note?.Trim(),
@@ -117,12 +135,20 @@ public class OrderLogic(
             ? finalAmount
             : Math.Max(0, finalAmount - req.PaidAmount);
 
+        var paymentAmount = req.PaidAmount;
+        if (paymentAmount <= 0
+            && req.PaymentMethod is PaymentMethod.VietQR or PaymentMethod.BankTransfer
+            && req.TransferQrAmount > 0)
+        {
+            paymentAmount = req.TransferQrAmount;
+        }
+
         var payment = new Payment
         {
             Id = Guid.NewGuid(),
             OrderId = order.Id,
             PaymentMethod = req.PaymentMethod,
-            Amount = req.PaidAmount,
+            Amount = paymentAmount,
             PaymentStatus = req.PaymentMethod == PaymentMethod.COD
                 ? PaymentStatus.Pending
                 : (req.PaidAmount >= finalAmount ? PaymentStatus.Success : PaymentStatus.Pending),
@@ -130,12 +156,16 @@ public class OrderLogic(
             CodWarningDate = req.PaymentMethod == PaymentMethod.COD
                 ? DateTime.UtcNow.AddDays(7)
                 : null,
-            PaidAt = req.PaymentMethod != PaymentMethod.COD && req.PaidAmount > 0
-                ? DateTime.UtcNow
+            CodDebtSettlementJson = req.PaymentMethod == PaymentMethod.COD
+                ? string.IsNullOrWhiteSpace(req.CodDebtSettlementJson) ? null : req.CodDebtSettlementJson.Trim()
                 : null,
+            PaidAt = null,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
+
+        if (payment.PaymentStatus == PaymentStatus.Success && req.PaymentMethod != PaymentMethod.COD)
+            payment.PaidAt = DateTime.UtcNow;
 
         if (payment.PaymentMethod is PaymentMethod.VietQR or PaymentMethod.BankTransfer
             && payment.PaymentStatus == PaymentStatus.Pending)
@@ -422,7 +452,8 @@ public class OrderLogic(
     private static OrderResponse MapToResponse(Order o) => new(
         o.Id, o.OrderCode, o.CustomerId, o.CustomerSnapshotName,
         o.EmployeeId, o.OrderChannel.ToString(), o.OrderStatus.ToString(),
-        o.InventorySyncStatus.ToString(), o.TotalAmount, o.DiscountAmount, o.FinalAmount,
+        o.InventorySyncStatus.ToString(), o.TotalAmount, o.DiscountAmount,
+        o.PromotionId, o.PromotionCode, o.PromotionDiscountAmount, o.FinalAmount,
         o.ShippingAddress, o.Note, o.CreatedAt, o.UpdatedAt,
         (o.OrderDetails ?? []).Select(d => new OrderDetailResponse(
             d.Id, d.SkuId, d.SkuSnapshotName, d.SkuSnapshotCode,
@@ -430,14 +461,23 @@ public class OrderLogic(
         (o.Payments ?? []).Select(p => new PaymentResponse(
             p.Id, p.OrderId, o.OrderCode, o.CustomerSnapshotName,
             p.PaymentMethod.ToString(), p.Amount, p.PaymentStatus.ToString(),
-            p.TransactionRef, p.IsCodVerified, p.CodWarningDate, p.PaidAt)).ToList()
+            p.TransactionRef, p.IsCodVerified, p.CodWarningDate, p.PaidAt, p.CodDebtSettlementJson)).ToList()
     );
 
-    private static OrderSummaryResponse MapToSummary(Order o) => new(
-        o.Id, o.OrderCode, o.CustomerId, o.CustomerSnapshotName,
-        o.OrderChannel.ToString(), o.OrderStatus.ToString(),
-        o.InventorySyncStatus.ToString(), o.FinalAmount, o.CreatedAt
-    );
+    private static OrderSummaryResponse MapToSummary(Order o)
+    {
+        var codPayment = o.Payments?.FirstOrDefault(p => p.PaymentMethod == PaymentMethod.COD);
+        return new(
+            o.Id, o.OrderCode, o.CustomerId, o.CustomerSnapshotName,
+            o.OrderChannel.ToString(), o.OrderStatus.ToString(),
+            o.InventorySyncStatus.ToString(), o.FinalAmount, o.CreatedAt,
+            codPayment?.Id,
+            codPayment?.IsCodVerified,
+            codPayment?.CodWarningDate,
+            codPayment is { IsCodVerified: false } && codPayment.Amount > 0
+                ? codPayment.Amount
+                : null);
+    }
 
     private static string FormatVnd(decimal amount)
     {

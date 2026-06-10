@@ -12,7 +12,11 @@ public record CreateOrderRequest(
     decimal DiscountAmount,
     List<CreateOrderDetailRequest> Items,
     PaymentMethod PaymentMethod,
-    decimal PaidAmount
+    decimal PaidAmount,
+    decimal TransferQrAmount = 0,
+    Guid? PromotionId = null,
+    string? PromotionCode = null,
+    string? CodDebtSettlementJson = null
 );
 
 public record CreateOrderDetailRequest(
@@ -31,13 +35,17 @@ public record UpdateOrderRequest(
 
 public record CancelOrderRequest(string? Reason);
 
-public record VerifyCodPaymentRequest(string? TransactionRef);
+public record VerifyCodPaymentRequest(
+    string? TransactionRef,
+    decimal CollectedAmount = 0);
 
 public record GetOrdersRequest(
     string? Search,
     Guid? CustomerId,
     string? Status,
     string? Channel,
+    string? ExcludeChannel = null,
+    string? CodTab = null,
     int Page = 1,
     int PageSize = 20
 );

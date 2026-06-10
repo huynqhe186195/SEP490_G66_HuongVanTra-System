@@ -22,6 +22,7 @@ public class OrderRepository(OrderDbContext _db) : IOrderRepository
 
     public async Task<(List<Order> Items, int TotalCount)> GetPagedAsync(
         string? search, Guid? customerId, string? status, string? channel,
+        string? excludeChannel, string? codTab,
         int page, int pageSize, CancellationToken ct = default)
     {
         var query = _db.Orders.AsQueryable();
@@ -45,8 +46,42 @@ public class OrderRepository(OrderDbContext _db) : IOrderRepository
             Enum.TryParse<OrderChannel>(channel, true, out var parsedChannel))
             query = query.Where(o => o.OrderChannel == parsedChannel);
 
+        if (!string.IsNullOrWhiteSpace(excludeChannel) &&
+            Enum.TryParse<OrderChannel>(excludeChannel, true, out var excludedChannel))
+            query = query.Where(o => o.OrderChannel != excludedChannel);
+
+        var codTabKey = codTab?.Trim().ToLowerInvariant();
+        if (!string.IsNullOrWhiteSpace(codTabKey))
+        {
+            query = query.Where(o => o.OrderChannel == OrderChannel.COD);
+
+            if (codTabKey == "pending")
+            {
+                query = query.Where(o =>
+                    o.OrderStatus != OrderStatus.Completed
+                    && o.OrderStatus != OrderStatus.Cancelled
+                    && o.Payments.Any(p =>
+                        p.PaymentMethod == PaymentMethod.COD && !p.IsCodVerified));
+            }
+            else if (codTabKey == "overdue")
+            {
+                var now = DateTime.UtcNow;
+                query = query.Where(o =>
+                    o.Payments.Any(p =>
+                        p.PaymentMethod == PaymentMethod.COD
+                        && !p.IsCodVerified
+                        && p.CodWarningDate != null
+                        && p.CodWarningDate <= now));
+            }
+            else if (codTabKey == "done")
+            {
+                query = query.Where(o => o.OrderStatus == OrderStatus.Completed);
+            }
+        }
+
         var total = await query.CountAsync(ct);
         var items = await query
+            .Include(o => o.Payments)
             .OrderByDescending(o => o.CreatedAt)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
@@ -80,15 +115,19 @@ public class OrderRepository(OrderDbContext _db) : IOrderRepository
     public async Task<List<Order>> GetPendingCodAsync(CancellationToken ct = default) =>
         await _db.Orders
             .Include(o => o.Payments)
-            .Where(o => o.Payments.Any(p =>
-                p.PaymentMethod == PaymentMethod.COD &&
-                !p.IsCodVerified &&
-                p.CodWarningDate <= DateTime.UtcNow))
+            .Where(o =>
+                o.OrderChannel == OrderChannel.COD
+                && o.Payments.Any(p =>
+                    p.PaymentMethod == PaymentMethod.COD
+                    && !p.IsCodVerified
+                    && p.CodWarningDate != null
+                    && p.CodWarningDate <= DateTime.UtcNow))
+            .OrderByDescending(o => o.CreatedAt)
             .ToListAsync(ct);
 
     public async Task AddAsync(Order order, CancellationToken ct = default) =>
         await _db.Orders.AddAsync(order, ct);
 
-    public Task<int> SaveChangesAsync(CancellationToken ct = default) =>
-        _db.SaveChangesAsync(ct);
+    public async Task<int> SaveChangesAsync(CancellationToken ct = default) =>
+        await _db.SaveChangesAsync(ct);
 }

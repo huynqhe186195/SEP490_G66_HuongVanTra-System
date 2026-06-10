@@ -33,18 +33,26 @@ function mapPosLineItem(item) {
   }
 }
 
-function buildOrderRequestFromPosPayload(payload, { orderChannel, shippingAddress, paymentMethod, paidAmount }) {
+function buildOrderRequestFromPosPayload(
+  payload,
+  { orderChannel, shippingAddress, paymentMethod, paidAmount, transferQrAmount, codDebtSettlementJson },
+) {
   const lines = (payload.items ?? []).map(mapPosLineItem)
   const payment = payload.payments?.[0]
 
   return buildCreateOrderBody({
     customerId: payload.customerId,
+    customerSnapshotName: payload.customerSnapshotName?.trim() || null,
     orderChannel,
     shippingAddress,
     note: payload.note?.trim() || null,
     discountAmount: Number(payload.manualDiscount ?? 0),
+    promotionId: payload.promotionId,
+    promotionCode: payload.promotionCode,
     paidAmount: paidAmount ?? Number(payment?.amount ?? 0),
+    transferQrAmount: transferQrAmount ?? 0,
     paymentMethod: paymentMethod ?? mapPaymentMethod(payment?.paymentMethod),
+    codDebtSettlementJson: codDebtSettlementJson ?? null,
     items: lines.map((line) => ({
       skuId: line.productId,
       skuSnapshotName:
@@ -208,15 +216,17 @@ export async function fetchOrderTransferQr({ orderCode, amount, orderId }) {
   }
 }
 
-async function attachTransferQr(result) {
+async function attachTransferQr(result, qrAmount = 0) {
+  const amount = qrAmount > 0 ? qrAmount : result.totalAmount
   const qr = await fetchOrderTransferQr({
     orderCode: result.orderCode,
-    amount: result.totalAmount,
+    amount,
     orderId: result.orderId,
   })
   return {
     ...result,
     ...qr,
+    qrAmount: amount,
   }
 }
 
@@ -235,19 +245,21 @@ async function submitPosOrder(payload, options) {
   return mapOrderDetailToPosResult(order)
 }
 
-export async function createPosOrderOnline(payload) {
+export async function createPosOrderOnline(payload, { qrAmount = 0 } = {}) {
   const payment = payload.payments?.[0]
   const result = await submitPosOrder(payload, {
     orderChannel: 'POS',
     paymentMethod: mapPaymentMethod(payment?.paymentMethod ?? 'TRANSFER'),
     paidAmount: 0,
+    transferQrAmount: qrAmount > 0 ? qrAmount : 0,
   })
-  return attachTransferQr(result)
+  return attachTransferQr(result, qrAmount)
 }
 
 export function buildTakeawayOrderPayload({
   storeId,
   customerId,
+  customerSnapshotName = null,
   shippingAddress,
   note,
   cartItems,
@@ -257,6 +269,7 @@ export function buildTakeawayOrderPayload({
   return {
     storeId,
     customerId,
+    customerSnapshotName: customerSnapshotName?.trim() || null,
     promotionId: promotionId || null,
     manualDiscount: Math.max(0, Math.round(Number(manualDiscount) || 0)),
     shippingAddress: shippingAddress?.trim() || null,
@@ -273,19 +286,21 @@ export function buildTakeawayOrderPayload({
   }
 }
 
-export function createTakeawayCodOrder(payload) {
+export function createTakeawayCodOrder(payload, expectedAmount = 0, { codDebtSettlementJson = null } = {}) {
+  const amount = Math.max(0, Number(expectedAmount) || 0)
   return submitPosOrder(
-    { ...payload, payments: [{ paymentMethod: 'COD', amount: 0 }] },
+    { ...payload, payments: [{ paymentMethod: 'COD', amount }] },
     {
       orderChannel: 'COD',
       shippingAddress: payload.shippingAddress,
       paymentMethod: 'COD',
-      paidAmount: 0,
+      paidAmount: amount,
+      codDebtSettlementJson,
     },
   )
 }
 
-export async function createTakeawayVietQrOrder(payload) {
+export async function createTakeawayVietQrOrder(payload, { qrAmount = 0 } = {}) {
   const result = await submitPosOrder(
     { ...payload, payments: [{ paymentMethod: 'TRANSFER', amount: 0 }] },
     {
@@ -293,9 +308,10 @@ export async function createTakeawayVietQrOrder(payload) {
       shippingAddress: payload.shippingAddress,
       paymentMethod: 'VietQR',
       paidAmount: 0,
+      transferQrAmount: qrAmount > 0 ? qrAmount : 0,
     },
   )
-  return attachTransferQr(result)
+  return attachTransferQr(result, qrAmount)
 }
 
 export function createPosOrderOffline(payload) {
@@ -303,6 +319,16 @@ export function createPosOrderOffline(payload) {
   return submitPosOrder(payload, {
     orderChannel: 'POS',
     paymentMethod: mapPaymentMethod(payment?.paymentMethod ?? 'CASH'),
+    paidAmount: Number(payment?.amount ?? 0),
+  })
+}
+
+/** CK tại quầy đã ghi nhận số tiền khách chuyển (không qua QR). */
+export function createPosOrderTransferRecorded(payload) {
+  const payment = payload.payments?.[0]
+  return submitPosOrder(payload, {
+    orderChannel: 'POS',
+    paymentMethod: mapPaymentMethod(payment?.paymentMethod ?? 'TRANSFER'),
     paidAmount: Number(payment?.amount ?? 0),
   })
 }

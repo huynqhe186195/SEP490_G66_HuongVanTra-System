@@ -27,20 +27,31 @@ public class PaymentLogic(
         if (payment.PaymentMethod != PaymentMethod.COD)
             throw new OrderValidationException("Chỉ có thể xác nhận thanh toán COD.");
 
+        var order = await _orderRepo.GetByIdAsync(payment.OrderId, ct)
+            ?? throw new OrderNotFoundException(payment.OrderId);
+
+        var collected = req.CollectedAmount > 0 ? req.CollectedAmount : order.FinalAmount;
+        if (collected < order.FinalAmount)
+            throw new OrderValidationException(
+                $"Số tiền thu ({FormatVnd(collected)}) không đủ thành tiền đơn ({FormatVnd(order.FinalAmount)}).");
+
+        payment.Amount = collected;
         payment.IsCodVerified = true;
         payment.PaymentStatus = PaymentStatus.Success;
         payment.TransactionRef = req.TransactionRef?.Trim();
         payment.PaidAt = DateTime.UtcNow;
 
-        var order = await _orderRepo.GetByIdAsync(payment.OrderId, ct)
-            ?? throw new OrderNotFoundException(payment.OrderId);
-
         order.OrderStatus = OrderStatus.Completed;
         order.UpdatedAt = DateTime.UtcNow;
 
+        var overpay = Math.Max(collected - order.FinalAmount, 0);
         var codDescription = string.IsNullOrWhiteSpace(payment.TransactionRef)
-            ? $"Xác nhận thu COD {FormatVnd(order.FinalAmount)}."
-            : $"Xác nhận thu COD {FormatVnd(order.FinalAmount)}. Mã tham chiếu: {payment.TransactionRef}.";
+            ? overpay > 0
+                ? $"Xác nhận thu COD {FormatVnd(collected)} (đơn {FormatVnd(order.FinalAmount)}, thừa {FormatVnd(overpay)})."
+                : $"Xác nhận thu COD {FormatVnd(collected)}."
+            : overpay > 0
+                ? $"Xác nhận thu COD {FormatVnd(collected)} (đơn {FormatVnd(order.FinalAmount)}, thừa {FormatVnd(overpay)}). Mã tham chiếu: {payment.TransactionRef}."
+                : $"Xác nhận thu COD {FormatVnd(collected)}. Mã tham chiếu: {payment.TransactionRef}.";
 
         await RecordActivityAsync(
             order.Id,
@@ -62,9 +73,8 @@ public class PaymentLogic(
 
         if (order.CustomerId.HasValue)
         {
-            var payments = await _paymentRepo.GetByOrderIdAsync(order.Id, ct);
-            var paidAmount = payments.Where(p => p.PaymentStatus == PaymentStatus.Success).Sum(p => p.Amount);
-            var debtAmount = Math.Max(0, order.FinalAmount - paidAmount);
+            var paidForOrder = Math.Min(collected, order.FinalAmount);
+            var debtAmount = Math.Max(0, order.FinalAmount - paidForOrder);
 
             await _eventPublisher.PublishOrderCompletedAsync(
                 order.Id, order.OrderCode, order.CustomerId.Value,
@@ -125,7 +135,8 @@ public class PaymentLogic(
         p.TransactionRef,
         p.IsCodVerified,
         p.CodWarningDate,
-        p.PaidAt);
+        p.PaidAt,
+        p.CodDebtSettlementJson);
 
     private static string FormatVnd(decimal amount)
     {

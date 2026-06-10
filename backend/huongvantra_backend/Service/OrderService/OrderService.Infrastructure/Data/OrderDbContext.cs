@@ -9,6 +9,7 @@ public class OrderDbContext(DbContextOptions<OrderDbContext> options) : DbContex
     public DbSet<OrderDetail> OrderDetails => Set<OrderDetail>();
     public DbSet<Payment> Payments => Set<Payment>();
     public DbSet<OrderActivity> OrderActivities => Set<OrderActivity>();
+    public DbSet<Promotion> Promotions => Set<Promotion>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -17,5 +18,6 @@ public class OrderDbContext(DbContextOptions<OrderDbContext> options) : DbContex
         modelBuilder.Entity<Order>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<OrderDetail>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<Payment>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<Promotion>().HasQueryFilter(e => !e.IsDeleted);
     }
 }

@@ -23,6 +23,9 @@ public record OrderResponse(
     string InventorySyncStatus,
     decimal TotalAmount,
     decimal DiscountAmount,
+    Guid? PromotionId,
+    string? PromotionCode,
+    decimal PromotionDiscountAmount,
     decimal FinalAmount,
     string? ShippingAddress,
     string? Note,
@@ -53,7 +56,8 @@ public record PaymentResponse(
     string? TransactionRef,
     bool IsCodVerified,
     DateTime? CodWarningDate,
-    DateTime? PaidAt
+    DateTime? PaidAt,
+    string? CodDebtSettlementJson = null
 );
 
 public record OrderSummaryResponse(
@@ -65,5 +69,9 @@ public record OrderSummaryResponse(
     string OrderStatus,
     string InventorySyncStatus,
     decimal FinalAmount,
-    DateTime CreatedAt
+    DateTime CreatedAt,
+    Guid? CodPaymentId = null,
+    bool? IsCodVerified = null,
+    DateTime? CodWarningDate = null,
+    decimal? CodExpectedAmount = null
 );

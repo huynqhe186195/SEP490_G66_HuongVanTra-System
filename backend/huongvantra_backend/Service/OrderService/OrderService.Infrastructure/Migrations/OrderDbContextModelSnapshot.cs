@@ -70,6 +70,18 @@ namespace OrderService.Infrastructure.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("varchar(20)");
 
+                    b.Property<string>("PromotionCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<decimal>("PromotionDiscountAmount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(18,2)")
+                        .HasDefaultValue(0m);
+
+                    b.Property<Guid?>("PromotionId")
+                        .HasColumnType("char(36)");
+
                     b.Property<string>("ShippingAddress")
                         .HasMaxLength(255)
                         .HasColumnType("varchar(255)");
@@ -86,6 +98,8 @@ namespace OrderService.Infrastructure.Migrations
 
                     b.HasIndex("OrderCode")
                         .IsUnique();
+
+                    b.HasIndex("PromotionId");
 
                     b.ToTable("Orders", (string)null);
                 });
@@ -145,6 +159,10 @@ namespace OrderService.Infrastructure.Migrations
 
                     b.Property<DateTime?>("CodWarningDate")
                         .HasColumnType("datetime(6)");
+
+                    b.Property<string>("CodDebtSettlementJson")
+                        .HasMaxLength(4000)
+                        .HasColumnType("varchar(4000)");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
@@ -221,6 +239,55 @@ namespace OrderService.Infrastructure.Migrations
                     b.HasIndex("OrderId");
 
                     b.ToTable("OrderActivities", (string)null);
+                });
+
+            modelBuilder.Entity("OrderService.Domain.Entities.Promotion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("DiscountType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)");
+
+                    b.Property<decimal>("DiscountValue")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<string>("NormalizedPromoCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<string>("PromoCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<DateTime?>("ValidFromUtc")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<DateTime?>("ValidToUtc")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("NormalizedPromoCode")
+                        .IsUnique();
+
+                    b.ToTable("Promotions", (string)null);
                 });
 
             modelBuilder.Entity("OrderService.Domain.Entities.OrderActivity", b =>

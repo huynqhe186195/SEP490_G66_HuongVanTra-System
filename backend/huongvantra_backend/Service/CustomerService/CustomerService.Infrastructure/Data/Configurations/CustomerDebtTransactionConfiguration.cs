@@ -15,6 +15,7 @@ public class CustomerDebtTransactionConfiguration : IEntityTypeConfiguration<Cus
         builder.Property(t => t.Amount).HasColumnType("decimal(18,2)");
         builder.Property(t => t.BalanceAfter).HasColumnType("decimal(18,2)");
         builder.Property(t => t.ReferenceType).HasMaxLength(50);
+        builder.Property(t => t.RelatedOrderCode).HasMaxLength(50);
         builder.Property(t => t.Note).HasMaxLength(500);
         builder.Property(t => t.CreatedAt).IsRequired();
         builder.HasIndex(t => t.CustomerId);

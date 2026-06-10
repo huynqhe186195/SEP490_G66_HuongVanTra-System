@@ -32,6 +32,7 @@ builder.Services.AddScoped<ICustomerTierRepository, CustomerTierRepository>();
 builder.Services.AddScoped<ICustomerAddressRepository, CustomerAddressRepository>();
 builder.Services.AddScoped<IProcessedIntegrationEventRepository, ProcessedIntegrationEventRepository>();
 builder.Services.AddScoped<ICustomerDebtTransactionRepository, CustomerDebtTransactionRepository>();
+builder.Services.AddScoped<ICustomerDebtAllocationRepository, CustomerDebtAllocationRepository>();
 builder.Services.AddScoped<ICustomerActivityRepository, CustomerActivityRepository>();
 builder.Services.AddScoped<CustomerLogic>();
 builder.Services.AddScoped<CustomerTierLogic>();
