@@ -6,6 +6,7 @@ import { loadAuthSession } from '../../auth/services/authSession.js'
 import { canCreateOrder } from '../../auth/utils/permissions.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import CodVerifyModal from '../components/CodVerifyModal.jsx'
+import { parseCodDebtSettlement } from '../../customers/utils/codDebtSettlementUtils.js'
 import OrderCustomerCell from '../components/OrderCustomerCell.jsx'
 import OrderProductsSection from '../components/OrderProductsSection.jsx'
 import OrderTimeline from '../components/OrderTimeline.jsx'
@@ -320,16 +321,22 @@ function OrderDetailPage() {
         isOpen={isCodVerifyOpen}
         order={
           order && canVerifyCod(order)
-            ? {
-                orderCode: order.orderCode,
-                finalAmount: order.finalAmount,
-                customerId: order.customerId,
-                customerSnapshotName: order.customerSnapshotName,
-                codPaymentId: order.payments?.find((row) => String(row.paymentMethod).toUpperCase() === 'COD')?.id,
-                codExpectedAmount:
-                  order.payments?.find((row) => String(row.paymentMethod).toUpperCase() === 'COD')?.amount ?? null,
-                payments: order.payments,
-              }
+            ? (() => {
+                const codPayment = order.payments?.find(
+                  (row) => String(row.paymentMethod).toUpperCase() === 'COD',
+                )
+                return {
+                  id: order.id,
+                  orderCode: order.orderCode,
+                  finalAmount: order.finalAmount,
+                  customerId: order.customerId,
+                  customerSnapshotName: order.customerSnapshotName,
+                  codPaymentId: codPayment?.id,
+                  codExpectedAmount: codPayment?.amount ?? null,
+                  codDebtSettlement: parseCodDebtSettlement(codPayment?.codDebtSettlementJson),
+                  payments: order.payments,
+                }
+              })()
             : null
         }
         onClose={() => setIsCodVerifyOpen(false)}

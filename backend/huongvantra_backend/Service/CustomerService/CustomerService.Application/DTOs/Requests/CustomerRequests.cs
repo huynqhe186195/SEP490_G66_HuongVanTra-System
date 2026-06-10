@@ -29,3 +29,15 @@ public record RecordDebtTransactionRequest(
     decimal Amount,
     string? Note
 );
+
+public record DebtAllocationItemRequest(
+    Guid OrderId,
+    decimal Amount
+);
+
+public record ApplyDebtPaymentRequest(
+    decimal Amount,
+    string? Note,
+    Guid? SourceOrderId = null,
+    IReadOnlyList<DebtAllocationItemRequest>? Allocations = null
+);

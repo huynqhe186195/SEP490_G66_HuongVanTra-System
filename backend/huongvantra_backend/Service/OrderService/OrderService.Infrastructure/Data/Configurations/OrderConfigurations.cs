@@ -84,6 +84,7 @@ public class PaymentConfiguration : IEntityTypeConfiguration<Payment>
         builder.Property(e => e.PaymentStatus).HasConversion<string>().HasMaxLength(20).IsRequired();
         builder.Property(e => e.Amount).HasColumnType("decimal(18,2)").IsRequired();
         builder.Property(e => e.TransactionRef).HasMaxLength(100);
+        builder.Property(e => e.CodDebtSettlementJson).HasMaxLength(4000);
         builder.Property(e => e.TransferQrExpiresAtUtc);
         builder.Property(e => e.CreatedAt).IsRequired();
         builder.Property(e => e.UpdatedAt).IsRequired();

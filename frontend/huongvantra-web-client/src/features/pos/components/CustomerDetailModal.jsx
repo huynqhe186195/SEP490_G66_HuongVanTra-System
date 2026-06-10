@@ -3,12 +3,15 @@ import { showError, showSuccess } from '../../../app/toast.js'
 import MembershipTierProgress from '../../customers/components/MembershipTierProgress.jsx'
 import { isVipCustomerType, supportsMembershipTierForCustomerType } from '../../customers/utils/customerDisplay.js'
 import {
+  applyCustomerDebtPayment,
   fetchCustomerDebts,
+  fetchCustomerOpenDebts,
   fetchMembershipTiers,
-  recordDebtTransaction,
+  previewCustomerDebtPayment,
 } from '../../customers/services/customersApi.js'
+import CustomerOpenDebtsPanel from '../../customers/components/CustomerOpenDebtsPanel.jsx'
+import { buildDebtReceiptFromPayment } from '../../customers/utils/debtPaymentUtils.js'
 import { fetchPosCustomerContext } from '../services/posApi.js'
-import { buildDebtReceiptCode } from '../utils/buildDebtReceiptPaperHtml.js'
 import { printDebtReceiptFromData } from '../utils/printReceipt.js'
 import { loadPosSeller } from '../utils/posSeller.js'
 import { formatRoleLabel } from '../utils/posSeller.js'
@@ -72,6 +75,8 @@ function CustomerDetailModal({ isOpen, customer, onClose, onCustomerUpdated }) {
   const [context, setContext] = useState(null)
   const [membershipTiers, setMembershipTiers] = useState([])
   const [debtHistory, setDebtHistory] = useState([])
+  const [openDebts, setOpenDebts] = useState([])
+  const [debtPayPreview, setDebtPayPreview] = useState(null)
   const [debtPayAmount, setDebtPayAmount] = useState('')
   const [debtPayNote, setDebtPayNote] = useState('')
   const [isPayingDebt, setIsPayingDebt] = useState(false)
@@ -95,15 +100,17 @@ function CustomerDetailModal({ isOpen, customer, onClose, onCustomerUpdated }) {
     async function loadContext() {
       setIsLoading(true)
       try {
-        const [data, tiers, debts] = await Promise.all([
+        const [data, tiers, debts, openDebtItems] = await Promise.all([
           fetchPosCustomerContext(customer.customerId),
           fetchMembershipTiers().catch(() => []),
           fetchCustomerDebts(customer.customerId).catch(() => []),
+          fetchCustomerOpenDebts(customer.customerId).catch(() => []),
         ])
         if (!cancelled) {
           setContext(data)
           setMembershipTiers(Array.isArray(tiers) ? tiers : [])
           setDebtHistory(Array.isArray(debts) ? debts.slice(0, 10) : [])
+          setOpenDebts(Array.isArray(openDebtItems) ? openDebtItems : [])
         }
       } catch (error) {
         if (!cancelled) {
@@ -122,6 +129,27 @@ function CustomerDetailModal({ isOpen, customer, onClose, onCustomerUpdated }) {
       cancelled = true
     }
   }, [isOpen, customer?.customerId])
+
+  useEffect(() => {
+    const amount = Number(String(debtPayAmount).replace(/\D/g, ''))
+    if (!customer?.customerId || amount <= 0) {
+      setDebtPayPreview(null)
+      return undefined
+    }
+
+    let cancelled = false
+    previewCustomerDebtPayment(customer.customerId, amount)
+      .then((preview) => {
+        if (!cancelled) setDebtPayPreview(preview)
+      })
+      .catch(() => {
+        if (!cancelled) setDebtPayPreview(null)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [customer?.customerId, debtPayAmount])
 
   if (!isOpen || !customer) return null
 
@@ -144,32 +172,33 @@ function CustomerDetailModal({ isOpen, customer, onClose, onCustomerUpdated }) {
 
     try {
       setIsPayingDebt(true)
-      const transaction = await recordDebtTransaction(customer.customerId, {
-        type: 'DecreaseDebt',
+      const payment = await applyCustomerDebtPayment(customer.customerId, {
         amount,
         note: debtPayNote.trim() || 'Thu công nợ tại POS',
       })
       const refreshed = await fetchPosCustomerContext(customer.customerId)
-      const debts = await fetchCustomerDebts(customer.customerId).catch(() => [])
+      const [debts, openDebtItems] = await Promise.all([
+        fetchCustomerDebts(customer.customerId).catch(() => []),
+        fetchCustomerOpenDebts(customer.customerId).catch(() => []),
+      ])
       setContext(refreshed)
       setDebtHistory(Array.isArray(debts) ? debts.slice(0, 10) : [])
+      setOpenDebts(Array.isArray(openDebtItems) ? openDebtItems : [])
       setDebtPayAmount('')
       setDebtPayNote('')
-      showSuccess(`Đã thu ${formatMoney(amount)} đ công nợ. Đang in phiếu thu nợ...`)
-      await printDebtReceiptFromData({
-        kind: 'debt',
-        receiptCode: buildDebtReceiptCode(transaction?.id),
-        customerName: refreshed?.fullName || customer.fullName,
-        customerCode: refreshed?.customerCode || customer.customerCode,
-        paymentMethodLabel: debtPayNote.trim() || 'Thu tại quầy',
-        createdAtLabel: formatVietnamDateTime(transaction?.createdAt || new Date()),
-        sellerName: seller.name,
-        sellerRole: seller.role,
-        amount,
-        balanceBefore: currentDebt,
-        balanceAfter: Number(transaction?.balanceAfter ?? refreshed?.currentDebt ?? 0),
-        note: transaction?.note || debtPayNote.trim() || 'Thu công nợ tại POS',
-      })
+      setDebtPayPreview(null)
+      showSuccess(`Đã thu ${formatMoney(payment?.allocatedAmount ?? amount)} đ công nợ. Đang in phiếu thu nợ...`)
+      await printDebtReceiptFromData(
+        buildDebtReceiptFromPayment({
+          payment,
+          customerName: refreshed?.fullName || customer.fullName,
+          customerCode: refreshed?.customerCode || customer.customerCode,
+          paymentMethodLabel: debtPayNote.trim() || 'Thu tại quầy',
+          balanceBefore: currentDebt,
+          sellerName: seller.name,
+          sellerRole: seller.role,
+        }),
+      )
       onCustomerUpdated?.({
         ...customer,
         currentDebt: Number(refreshed?.currentDebt ?? 0),
@@ -312,6 +341,19 @@ function CustomerDetailModal({ isOpen, customer, onClose, onCustomerUpdated }) {
                   Phát sinh khi bán chưa thu đủ. Có thể thu trả tại đây hoặc trừ từ tiền thừa khi thanh toán đơn.
                 </p>
               </div>
+
+              <CustomerOpenDebtsPanel
+                openDebts={openDebts}
+                formatMoney={formatMoney}
+                allocationPreview={debtPayPreview?.allocations ?? []}
+                highlightAllocations={(debtPayPreview?.allocations?.length ?? 0) > 0}
+                title="Hóa đơn / đơn chưa trả tiền"
+                subtitle={
+                  debtPayPreview?.allocations?.length
+                    ? 'Số tiền thu sẽ trừ theo đơn cũ nhất'
+                    : 'Các đơn mua chịu chưa thu đủ'
+                }
+              />
 
               {Number(context?.currentDebt ?? 0) > 0 ? (
                 <form className="rounded-xl border border-[#356647]/25 bg-white p-4" onSubmit={handleDebtPayment}>

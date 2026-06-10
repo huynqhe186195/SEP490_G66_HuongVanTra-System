@@ -1,8 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { showError, showSuccess } from '../../../app/toast.js'
-import { vietnamNowLabel } from '../../../utils/vietnamDateTime.js'
-import { fetchCustomerById, recordDebtTransaction } from '../../customers/services/customersApi.js'
-import { buildDebtReceiptCode } from '../../pos/utils/buildDebtReceiptPaperHtml.js'
+import OverpaymentDebtModal from '../../customers/components/OverpaymentDebtModal.jsx'
+import {
+  applyCustomerDebtPayment,
+  fetchCustomerById,
+  fetchCustomerOpenDebts,
+} from '../../customers/services/customersApi.js'
+import { clampDebtSettlement } from '../../customers/utils/debtAllocationEditor.js'
+import { buildDebtReceiptFromPayment } from '../../customers/utils/debtPaymentUtils.js'
 import { printReceiptSequence } from '../../pos/utils/printReceipt.js'
 import { verifyCodPayment } from '../services/ordersApi.js'
 import { formatVnd } from '../utils/orderDisplay.js'
@@ -14,8 +19,16 @@ function formatMoneyInput(value) {
 
 export default function CodVerifyModal({ isOpen, order, onClose, onVerified }) {
   const [customerDebt, setCustomerDebt] = useState(0)
+  const [openDebts, setOpenDebts] = useState([])
   const [isLoadingDebt, setIsLoadingDebt] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [overpaymentAction, setOverpaymentAction] = useState('return_change')
+  const [debtAllocationModalOpen, setDebtAllocationModalOpen] = useState(false)
+  const [debtModalMode, setDebtModalMode] = useState('configure')
+  const [confirmedDebtSettlement, setConfirmedDebtSettlement] = useState(null)
+
+  const formatMoney = (value) =>
+    new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(Number(value || 0))
 
   const finalAmount = Number(order?.finalAmount || 0)
   const codPayment = order?.payments?.find((row) => String(row.paymentMethod).toUpperCase() === 'COD')
@@ -23,23 +36,40 @@ export default function CodVerifyModal({ isOpen, order, onClose, onVerified }) {
   const collected =
     expectedFromOrder >= finalAmount && expectedFromOrder > 0 ? expectedFromOrder : finalAmount
   const change = Math.max(collected - finalAmount, 0)
-  const debtReduction = change > 0 && customerDebt > 0 ? Math.min(change, customerDebt) : 0
-  const displayChange = Math.max(change - debtReduction, 0)
+  const canApplyOverpayToDebt = change > 0 && customerDebt > 0
 
   useEffect(() => {
     if (!isOpen || !order) return undefined
     setCustomerDebt(0)
+    setOpenDebts([])
+    setDebtAllocationModalOpen(false)
+
+    const preset = order.codDebtSettlement
+    if (preset?.payDebtsEnabled && Number(preset.allocatedAmount || 0) > 0) {
+      setOverpaymentAction('apply_to_debt')
+      setConfirmedDebtSettlement(preset)
+    } else {
+      setOverpaymentAction('return_change')
+      setConfirmedDebtSettlement(null)
+    }
 
     if (!order.customerId) return undefined
 
     let mounted = true
     setIsLoadingDebt(true)
-    fetchCustomerById(order.customerId)
-      .then((customer) => {
-        if (mounted) setCustomerDebt(Number(customer?.currentDebt || 0))
+    Promise.all([
+      fetchCustomerById(order.customerId),
+      fetchCustomerOpenDebts(order.customerId).catch(() => []),
+    ])
+      .then(([customer, debts]) => {
+        if (!mounted) return
+        setCustomerDebt(Number(customer?.currentDebt || 0))
+        setOpenDebts(Array.isArray(debts) ? debts : [])
       })
       .catch(() => {
-        if (mounted) setCustomerDebt(0)
+        if (!mounted) return
+        setCustomerDebt(0)
+        setOpenDebts([])
       })
       .finally(() => {
         if (mounted) setIsLoadingDebt(false)
@@ -58,39 +88,55 @@ export default function CodVerifyModal({ isOpen, order, onClose, onVerified }) {
 
   if (!isOpen || !order) return null
 
-  async function handleConfirm() {
+  const openDebtAllocationModal = (mode = 'configure') => {
+    if (!canApplyOverpayToDebt) return
+    setDebtModalMode(mode)
+    setDebtAllocationModalOpen(true)
+  }
+
+  async function finalizeCodCollection(debtSettlement = null) {
     if (!order.codPaymentId || !canSubmit) return
+
+    const rawSettlement = debtSettlement ?? confirmedDebtSettlement
+    const maxPayable = Math.min(change, customerDebt)
+    const settlement = clampDebtSettlement(rawSettlement, maxPayable, openDebts, change)
+    const debtApplyAmount = settlement?.payDebtsEnabled
+      ? Number(settlement.allocatedAmount || 0)
+      : 0
+    const displayChange = Math.max(change - debtApplyAmount, 0)
+
     setIsSubmitting(true)
     try {
-      await verifyCodPayment(order.codPaymentId, {
-        collectedAmount: collected,
-      })
+      const codAlreadyVerified = String(codPayment?.paymentStatus).toUpperCase() === 'SUCCESS'
+        || codPayment?.isCodVerified === true
+
+      if (!codAlreadyVerified) {
+        await verifyCodPayment(order.codPaymentId, {
+          collectedAmount: collected,
+        })
+      }
 
       let debtReceipt = null
-      if (debtReduction > 0 && order.customerId) {
-        const transaction = await recordDebtTransaction(order.customerId, {
-          type: 'DecreaseDebt',
-          amount: debtReduction,
+      if (debtApplyAmount > 0 && order.customerId) {
+        const payment = await applyCustomerDebtPayment(order.customerId, {
+          amount: debtApplyAmount,
           note: `Trừ từ tiền thừa đơn COD ${order.orderCode}`,
+          sourceOrderId: order.id,
+          allocations: settlement?.allocations ?? null,
         })
-        debtReceipt = {
-          kind: 'debt',
-          receiptCode: buildDebtReceiptCode(transaction?.id),
+        debtReceipt = buildDebtReceiptFromPayment({
+          payment,
           customerName: order.customerSnapshotName?.split(' · ')[0] || '',
           customerCode: order.customerSnapshotName?.split(' · ')[1] || '',
           paymentMethodLabel: 'COD',
-          createdAtLabel: vietnamNowLabel(),
-          amount: debtReduction,
           balanceBefore: customerDebt,
-          balanceAfter: Number(transaction?.balanceAfter ?? customerDebt - debtReduction),
           relatedOrderCode: order.orderCode,
-          note: transaction?.note || `Trừ từ tiền thừa đơn COD ${order.orderCode}`,
-        }
+        })
       }
 
       const message =
-        debtReduction > 0
-          ? `Đã thu COD ${formatVnd(collected)} · trừ nợ ${formatMoneyInput(debtReduction)} đ`
+        debtApplyAmount > 0
+          ? `Đã thu COD ${formatVnd(collected)} · trừ nợ ${formatMoneyInput(debtApplyAmount)} đ`
           : displayChange > 0
             ? `Đã thu COD ${formatVnd(collected)} · thừa ${formatMoneyInput(displayChange)} đ`
             : `Đã xác nhận thu COD đơn ${order.orderCode}`
@@ -107,6 +153,20 @@ export default function CodVerifyModal({ isOpen, order, onClose, onVerified }) {
     } finally {
       setIsSubmitting(false)
     }
+  }
+
+  function handleConfirm() {
+    if (!canSubmit) return
+    if (canApplyOverpayToDebt && overpaymentAction === 'apply_to_debt') {
+      if (confirmedDebtSettlement?.payDebtsEnabled && Number(confirmedDebtSettlement.allocatedAmount || 0) > 0) {
+        void finalizeCodCollection(confirmedDebtSettlement)
+        return
+      }
+      showError('Vui lòng bấm "Tính vào công nợ" để chọn hóa đơn cần trừ.')
+      openDebtAllocationModal('configure')
+      return
+    }
+    void finalizeCodCollection()
   }
 
   return (
@@ -135,18 +195,66 @@ export default function CodVerifyModal({ isOpen, order, onClose, onVerified }) {
         </div>
 
         {change > 0 ? (
-          <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm">
+          <div className="mt-3 space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm">
             <p className="font-semibold text-amber-900">Tiền thừa: {formatMoneyInput(change)} đ</p>
-            {isLoadingDebt ? (
-              <p className="mt-1 text-xs text-amber-800">Đang tải công nợ...</p>
-            ) : debtReduction > 0 ? (
-              <p className="mt-1 text-xs text-amber-800">
-                Sẽ trừ nợ {formatMoneyInput(debtReduction)} đ
-                {displayChange > 0 ? ` · còn thừa ${formatMoneyInput(displayChange)} đ` : ''}
-              </p>
-            ) : customerDebt <= 0 ? (
-              <p className="mt-1 text-xs text-amber-800">Khách không có công nợ để trừ.</p>
-            ) : null}
+            {canApplyOverpayToDebt ? (
+              <>
+                <label className="flex cursor-pointer items-center gap-2">
+                  <input
+                    type="radio"
+                    name="cod-overpayment-action"
+                    checked={overpaymentAction === 'return_change'}
+                    onChange={() => {
+                      setOverpaymentAction('return_change')
+                      setConfirmedDebtSettlement(null)
+                    }}
+                    className="size-4"
+                  />
+                  <span className="flex flex-1 items-center justify-between gap-2">
+                    <span className="font-semibold text-slate-900">Tiền thừa trả khách</span>
+                    <span className="font-bold tabular-nums text-[#356647]">{formatMoneyInput(change)} đ</span>
+                  </span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOverpaymentAction('apply_to_debt')
+                    openDebtAllocationModal('configure')
+                  }}
+                  className="flex w-full items-center gap-2 text-left"
+                >
+                  <span
+                    className={`size-4 shrink-0 rounded-full border-2 ${
+                      overpaymentAction === 'apply_to_debt'
+                        ? 'border-[#356647] bg-[#356647] shadow-[inset_0_0_0_3px_white]'
+                        : 'border-slate-300 bg-white'
+                    }`}
+                    aria-hidden
+                  />
+                  <span className="font-semibold text-[#356647] underline decoration-[#356647]/35 underline-offset-2 hover:decoration-[#356647]">
+                    Tính vào công nợ
+                  </span>
+                </button>
+                {overpaymentAction === 'apply_to_debt' &&
+                confirmedDebtSettlement?.payDebtsEnabled &&
+                Number(confirmedDebtSettlement.allocatedAmount || 0) > 0 ? (
+                  <p className="pl-6 text-xs text-[#356647]">
+                    Đã chọn trừ {formatMoneyInput(confirmedDebtSettlement.allocatedAmount)} đ ·{' '}
+                    <button
+                      type="button"
+                      onClick={() => openDebtAllocationModal('configure')}
+                      className="font-semibold underline underline-offset-2"
+                    >
+                      Sửa
+                    </button>
+                  </p>
+                ) : null}
+              </>
+            ) : isLoadingDebt ? (
+              <p className="text-xs text-amber-800">Đang tải công nợ...</p>
+            ) : (
+              <p className="text-xs text-amber-800">Khách không có công nợ để trừ.</p>
+            )}
           </div>
         ) : null}
 
@@ -168,6 +276,40 @@ export default function CodVerifyModal({ isOpen, order, onClose, onVerified }) {
           </button>
         </div>
       </div>
+
+      <OverpaymentDebtModal
+        isOpen={debtAllocationModalOpen}
+        excessAmount={change}
+        customerCurrentDebt={customerDebt}
+        openDebts={openDebts}
+        isLoading={isLoadingDebt}
+        formatMoney={formatMoney}
+        initialSettlement={confirmedDebtSettlement}
+        onClose={() => setDebtAllocationModalOpen(false)}
+        onSkip={() => {
+          setDebtAllocationModalOpen(false)
+          if (debtModalMode === 'configure') {
+            setOverpaymentAction('return_change')
+            setConfirmedDebtSettlement(null)
+            return
+          }
+          void finalizeCodCollection({
+            payDebtsEnabled: false,
+            allocations: [],
+            allocatedAmount: 0,
+            creditToCustomer: change,
+          })
+        }}
+        onConfirm={(result) => {
+          setDebtAllocationModalOpen(false)
+          if (debtModalMode === 'configure') {
+            setConfirmedDebtSettlement(result)
+            setOverpaymentAction('apply_to_debt')
+            return
+          }
+          void finalizeCodCollection(result)
+        }}
+      />
     </>
   )
 }

@@ -18,6 +18,7 @@ export function mapPayment(item) {
     isCodVerified: Boolean(item.isCodVerified ?? item.IsCodVerified),
     codWarningDate: item.codWarningDate ?? item.CodWarningDate ?? null,
     paidAt: item.paidAt ?? item.PaidAt ?? null,
+    codDebtSettlementJson: item.codDebtSettlementJson ?? item.CodDebtSettlementJson ?? null,
   }
 }
 
@@ -145,6 +146,7 @@ export function buildCreateOrderBody(payload) {
     paidAmount: Number(payload.paidAmount ?? 0),
     transferQrAmount: Number(payload.transferQrAmount ?? 0),
     paymentMethod: payload.paymentMethod,
+    codDebtSettlementJson: payload.codDebtSettlementJson?.trim() || null,
     items: (payload.items || []).map((line) => ({
       skuId: line.skuId,
       skuSnapshotName: line.skuSnapshotName,

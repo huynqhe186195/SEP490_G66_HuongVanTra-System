@@ -6,10 +6,16 @@ import CustomerDetailModal from '../components/CustomerDetailModal.jsx'
 import OrderOfferModal from '../components/OrderOfferModal.jsx'
 import ConfirmDialog from '../components/ConfirmDialog.jsx'
 import PosPaymentSidebar from '../components/PosPaymentSidebar.jsx'
-import { buildDebtReceiptCode } from '../utils/buildDebtReceiptPaperHtml.js'
 import { printReceiptFromData, printReceiptSequence } from '../utils/printReceipt.js'
 import { vietnamNowLabel } from '../../../utils/vietnamDateTime.js'
-import { recordDebtTransaction } from '../../customers/services/customersApi.js'
+import {
+  applyCustomerDebtPayment,
+  fetchCustomerOpenDebts,
+} from '../../customers/services/customersApi.js'
+import OverpaymentDebtModal from '../../customers/components/OverpaymentDebtModal.jsx'
+import { clampDebtSettlement } from '../../customers/utils/debtAllocationEditor.js'
+import { serializeCodDebtSettlement } from '../../customers/utils/codDebtSettlementUtils.js'
+import { buildDebtReceiptFromPayment } from '../../customers/utils/debtPaymentUtils.js'
 import {
   buildTakeawayOrderPayload,
   createPosOrderOffline,
@@ -34,7 +40,7 @@ import { fetchCategories } from '../../products/services/categoriesApi.js'
 import ProductImage from '../../products/components/ProductImage.jsx'
 
 const SALES_MODES = [
-  { id: 'counter', label: 'Bán tại quầy', icon: 'storefront' },
+  { id: 'counter', label: 'Bán trực tiếp', icon: 'storefront' },
   { id: 'takeaway', label: 'Bán COD', icon: 'local_shipping' },
 ]
 
@@ -161,6 +167,7 @@ function createEmptySession(mode = 'counter') {
     paymentMethod: mode === 'takeaway' ? 'COD' : 'CASH',
     amountPaidInput: '',
     overpaymentAction: 'return_change',
+    debtSettlement: null,
     shippingAddress: '',
     orderNote: '',
   }
@@ -192,6 +199,10 @@ function PosPage() {
   const [useCustomShippingAddress, setUseCustomShippingAddress] = useState(false)
   const [seller, setSeller] = useState({ name: 'Nhân viên POS', role: '—', display: 'Nhân viên POS · —' })
   const [isPaymentSidebarOpen, setIsPaymentSidebarOpen] = useState(false)
+  const [customerOpenDebts, setCustomerOpenDebts] = useState([])
+  const [isLoadingOpenDebts, setIsLoadingOpenDebts] = useState(false)
+  const [overpaymentDebtModalOpen, setOverpaymentDebtModalOpen] = useState(false)
+  const [debtModalMode, setDebtModalMode] = useState('configure')
   const discountPopoverRef = useRef(null)
 
   const isTakeaway = salesMode === 'takeaway'
@@ -211,6 +222,7 @@ function PosPage() {
     paymentMethod: sessionPaymentMethod,
     amountPaidInput = '',
     overpaymentAction = 'return_change',
+    debtSettlement = null,
     shippingAddress = '',
     orderNote = '',
   } = session ?? createEmptySession(salesMode)
@@ -352,12 +364,12 @@ function PosPage() {
   const change = Math.max(amountPaid - total, 0)
   const transferQrAmount = isTransferPayment ? (amountPaid > 0 ? amountPaid : total) : 0
   const transferOverpayToDebt =
-    isTransferPayment && change > 0 && customerCurrentDebt > 0
+    overpaymentAction === 'apply_to_debt' && isTransferPayment && change > 0 && customerCurrentDebt > 0
       ? Math.min(change, customerCurrentDebt)
       : 0
   const codExpectedAmount = isCodTakeaway ? (amountPaid > 0 ? amountPaid : total) : 0
   const codOverpayToDebt =
-    isCodTakeaway && change > 0 && customerCurrentDebt > 0
+    overpaymentAction === 'apply_to_debt' && isCodTakeaway && change > 0 && customerCurrentDebt > 0
       ? Math.min(change, customerCurrentDebt)
       : 0
   // Tiền mặt: để trống = ghi nợ toàn bộ. CK: để trống = QR đủ tiền; nhập vượt đơn = QR đúng số nhập (trừ nợ).
@@ -376,6 +388,36 @@ function PosPage() {
   const isDebtSale = !isTransferPayment && amountPaid === 0 && total > 0
   const isPartialPayment = amountPaid > 0 && amountPaid < total
   const canApplyOverpayToDebt = change > 0 && customerCurrentDebt > 0
+  useEffect(() => {
+    if (!selectedCustomer?.customerId || customerCurrentDebt <= 0) {
+      setCustomerOpenDebts([])
+      return undefined
+    }
+
+    let cancelled = false
+    setIsLoadingOpenDebts(true)
+    fetchCustomerOpenDebts(selectedCustomer.customerId)
+      .then((items) => {
+        if (!cancelled) setCustomerOpenDebts(items)
+      })
+      .catch(() => {
+        if (!cancelled) setCustomerOpenDebts([])
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingOpenDebts(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [selectedCustomer?.customerId, customerCurrentDebt])
+
+  useEffect(() => {
+    if (debtSettlement) {
+      updateActiveSession({ debtSettlement: null, overpaymentAction: 'return_change' })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset debt plan when payment inputs change
+  }, [selectedCustomer?.customerId, change, amountPaidInput])
 
   useEffect(() => {
     let cancelled = false
@@ -920,29 +962,6 @@ function PosPage() {
     }
   }
 
-  const buildDebtReceiptData = ({
-    transaction,
-    method,
-    orderCode,
-    amount,
-    balanceBefore,
-  }) => ({
-    kind: 'debt',
-    receiptCode: buildDebtReceiptCode(transaction?.id),
-    customerName: selectedCustomer?.fullName || 'Khách lẻ',
-    customerCode: selectedCustomer?.customerCode || '',
-    paymentMethodLabel:
-      method === 'TRANSFER' ? 'Chuyển khoản' : method === 'COD' ? 'COD' : 'Tiền mặt',
-    createdAtLabel: vietnamNowLabel(),
-    sellerName: seller.name,
-    sellerRole: seller.role,
-    amount,
-    balanceBefore,
-    balanceAfter: Number(transaction?.balanceAfter ?? balanceBefore - amount),
-    relatedOrderCode: orderCode || undefined,
-    note: transaction?.note || (orderCode ? `Trừ từ tiền thừa đơn ${orderCode}` : 'Thu công nợ tại POS'),
-  })
-
   const buildReceiptData = ({
     orderCode,
     method,
@@ -980,34 +999,89 @@ function PosPage() {
     }
   }
 
-  const applyOverpaymentToDebt = async (customerId, orderCode, amount) => {
+  const applyOverpaymentToDebt = async (customerId, orderCode, orderId, amount, allocations = null) => {
     if (!customerId || amount <= 0) return null
-    return recordDebtTransaction(customerId, {
-      type: 'DecreaseDebt',
+    return applyCustomerDebtPayment(customerId, {
       amount,
       note: `Trừ từ tiền thừa đơn ${orderCode}`,
+      sourceOrderId: orderId,
+      allocations,
     })
   }
 
-  const finalizeRecordedPayment = async ({ method, createOrder }) => {
+  const resolveDebtApplyAmount = (overrideSettlement) => {
+    const settlement = overrideSettlement ?? debtSettlement
+    if (!settlement) {
+      return overpaymentAction === 'apply_to_debt' ? debtReductionFromOverpay : 0
+    }
+    return settlement.payDebtsEnabled ? Number(settlement.allocatedAmount || 0) : 0
+  }
+
+  const resolveChangeAfterDebt = (debtSettlement, debtApplyAmount) => {
+    if (debtSettlement) {
+      return Math.max(change - debtApplyAmount, 0)
+    }
+    return displayChange
+  }
+
+  const buildTransferDebtSettlement = (debtSettlement, orderId) => {
+    const amount = resolveDebtApplyAmount(debtSettlement)
+    if (amount <= 0 || !selectedCustomer?.customerId) return null
+    return {
+      customerId: selectedCustomer.customerId,
+      orderId,
+      amount,
+      allocations: debtSettlement?.allocations ?? null,
+      balanceBefore: customerCurrentDebt,
+      customerName: selectedCustomer.fullName || '',
+      customerCode: selectedCustomer.customerCode || '',
+    }
+  }
+
+  const needsDebtSettlementOnPay =
+    change > 0 && canApplyOverpayToDebt && overpaymentAction === 'apply_to_debt'
+
+  const openDebtAllocationModal = (mode = 'configure') => {
+    if (!canApplyOverpayToDebt) return
+    setDebtModalMode(mode)
+    setOverpaymentDebtModalOpen(true)
+  }
+
+  const handleOpenDebtAllocation = () => {
+    updateActiveSession({ overpaymentAction: 'apply_to_debt' })
+    openDebtAllocationModal('configure')
+  }
+
+  const handleOverpaymentActionChange = (action) => {
+    updateActiveSession({
+      overpaymentAction: action,
+      ...(action === 'return_change' ? { debtSettlement: null } : {}),
+    })
+  }
+
+  const finalizeRecordedPayment = async ({ method, createOrder, debtSettlement = null }) => {
+    const debtApplyAmount = resolveDebtApplyAmount(debtSettlement)
+    const changeAfterDebt = resolveChangeAfterDebt(debtSettlement, debtApplyAmount)
     const payload = buildOrderPayload(method, recordedPaymentAmount)
     const result = await createOrder(payload)
 
-    let debtTransaction = null
-    if (debtReductionFromOverpay > 0 && selectedCustomer?.customerId) {
-      debtTransaction = await applyOverpaymentToDebt(
+    let debtPayment = null
+    if (debtApplyAmount > 0 && selectedCustomer?.customerId) {
+      debtPayment = await applyOverpaymentToDebt(
         selectedCustomer.customerId,
         result.orderCode,
-        debtReductionFromOverpay,
+        result.orderId,
+        debtApplyAmount,
+        debtSettlement?.allocations ?? null,
       )
     }
 
     if (recordedPaymentAmount >= total) {
       const debtNote =
-        debtReductionFromOverpay > 0
-          ? ` · In phiếu thu nợ ${formatMoney(debtReductionFromOverpay)} đ`
-          : displayChange > 0
-            ? ` · Thừa ${formatMoney(displayChange)} đ`
+        debtApplyAmount > 0
+          ? ` · In phiếu thu nợ ${formatMoney(debtApplyAmount)} đ`
+          : changeAfterDebt > 0
+            ? ` · Thừa ${formatMoney(changeAfterDebt)} đ`
             : ''
       showSuccess(
         result.invoiceCode
@@ -1031,17 +1105,22 @@ function PosPage() {
         orderCode: result.orderCode,
         method,
         invoiceCode: result.invoiceCode,
+        changeAmount: changeAfterDebt,
       }),
     ]
 
-    if (debtTransaction && debtReductionFromOverpay > 0) {
+    if (debtPayment && debtApplyAmount > 0) {
       receipts.push(
-        buildDebtReceiptData({
-          transaction: debtTransaction,
-          method,
-          orderCode: result.orderCode,
-          amount: debtReductionFromOverpay,
+        buildDebtReceiptFromPayment({
+          payment: debtPayment,
+          customerName: selectedCustomer?.fullName,
+          customerCode: selectedCustomer?.customerCode,
+          paymentMethodLabel:
+            method === 'TRANSFER' ? 'Chuyển khoản' : method === 'COD' ? 'COD' : 'Tiền mặt',
           balanceBefore: customerCurrentDebt,
+          relatedOrderCode: result.orderCode,
+          sellerName: seller.name,
+          sellerRole: seller.role,
         }),
       )
     }
@@ -1064,7 +1143,7 @@ function PosPage() {
     setIsPaymentSidebarOpen(true)
   }
 
-  const handleTakeawayPayment = async () => {
+  const handleTakeawayPayment = async (debtSettlement = null) => {
     const address = shippingAddress?.trim()
     if (!address) {
       showError('Vui lòng nhập địa chỉ giao hàng cho đơn mang đi.')
@@ -1089,20 +1168,11 @@ function PosPage() {
 
     if (isTransferPayment) {
       const result = await createTakeawayVietQrOrder(payload, { qrAmount: transferQrAmount })
-      const debtSettlement =
-        transferOverpayToDebt > 0 && selectedCustomer?.customerId
-          ? {
-              customerId: selectedCustomer.customerId,
-              amount: transferOverpayToDebt,
-              balanceBefore: customerCurrentDebt,
-              customerName: selectedCustomer.fullName || '',
-              customerCode: selectedCustomer.customerCode || '',
-            }
-          : null
+      const transferDebtSettlement = buildTransferDebtSettlement(debtSettlement, result.orderId)
 
       showSuccess(
-        debtSettlement
-          ? `Đã tạo đơn mang đi ${result.orderCode}. Quét QR ${formatMoney(transferQrAmount)} đ (gồm trừ nợ ${formatMoney(debtSettlement.amount)} đ).`
+        transferDebtSettlement
+          ? `Đã tạo đơn mang đi ${result.orderCode}. Quét QR ${formatMoney(transferQrAmount)} đ (gồm trừ nợ ${formatMoney(transferDebtSettlement.amount)} đ).`
           : `Đã tạo đơn mang đi ${result.orderCode}. Quét QR ${formatMoney(transferQrAmount)} đ để thanh toán.`,
       )
       const receipt = buildReceiptData({
@@ -1125,7 +1195,7 @@ function PosPage() {
           customer: selectedCustomer?.fullName || '',
           paymentMethod: 'TRANSFER',
           receipt,
-          debtSettlement,
+          debtSettlement: transferDebtSettlement,
         },
       })
       return
@@ -1136,8 +1206,14 @@ function PosPage() {
       return
     }
 
-    const result = await createTakeawayCodOrder(payload, codExpectedAmount)
-    showSuccess(`Đã tạo đơn COD ${result.orderCode}. Theo dõi tại Quản lý đơn COD.`)
+    const activeSettlement = debtSettlement ?? null
+    const codDebtSettlementJson = serializeCodDebtSettlement(activeSettlement)
+    const result = await createTakeawayCodOrder(payload, codExpectedAmount, { codDebtSettlementJson })
+    const debtNote =
+      activeSettlement?.payDebtsEnabled && Number(activeSettlement.allocatedAmount || 0) > 0
+        ? ` · Dự kiến trừ nợ ${formatMoney(activeSettlement.allocatedAmount)} đ khi thu COD`
+        : ''
+    showSuccess(`Đã tạo đơn COD ${result.orderCode}. Theo dõi tại Quản lý đơn COD.${debtNote}`)
     const receipt = buildReceiptData({
       orderCode: result.orderCode,
       method: 'COD',
@@ -1145,6 +1221,52 @@ function PosPage() {
     })
     resetCheckoutState()
     printReceiptFromData(receipt)
+  }
+
+  const executePayment = async (debtSettlement = null) => {
+    if (isTakeaway) {
+      await handleTakeawayPayment(debtSettlement)
+      return
+    }
+
+    if (isTransferPayment) {
+      const payload = buildOrderPayload('TRANSFER', 0)
+      const result = await createPosOrderOnline(payload, { qrAmount: transferQrAmount })
+      const transferDebtSettlement = buildTransferDebtSettlement(debtSettlement, result.orderId)
+
+      showSuccess(
+        transferDebtSettlement
+          ? `Đã tạo đơn ${result.orderCode}. Quét QR ${formatMoney(transferQrAmount)} đ (gồm trừ nợ ${formatMoney(transferDebtSettlement.amount)} đ).`
+          : `Đã tạo đơn ${result.orderCode}. Quét mã QR ${formatMoney(transferQrAmount)} đ để thanh toán.`,
+      )
+      const receipt = buildReceiptData({ orderCode: result.orderCode, method: 'TRANSFER' })
+      resetCheckoutState()
+      navigate('/pos/payment/qr', {
+        state: {
+          orderId: result.orderId,
+          orderCode: result.orderCode,
+          orderLabel: result.orderCode,
+          total: result.qrAmount || transferQrAmount,
+          qrPayload: result.qrPayload,
+          qrImageUrl: result.qrImageUrl,
+          transferContent: result.transferContent,
+          transferAccountNumber: result.transferAccountNumber,
+          paymentMode: result.paymentMode,
+          qrExpiresAtUtc: result.qrExpiresAtUtc,
+          customer: selectedCustomer?.fullName || '',
+          paymentMethod: 'TRANSFER',
+          receipt,
+          debtSettlement: transferDebtSettlement,
+        },
+      })
+      return
+    }
+
+    await finalizeRecordedPayment({
+      method: 'CASH',
+      createOrder: createPosOrderOffline,
+      debtSettlement,
+    })
   }
 
   const handlePayment = async () => {
@@ -1162,76 +1284,66 @@ function PosPage() {
         }
         return
       }
-
-      setIsSubmitting(true)
-      try {
-        await handleTakeawayPayment()
-      } catch (error) {
-        showError(error.message)
-      } finally {
-        setIsSubmitting(false)
+    } else {
+      if (!validateDiscountsBeforePayment()) {
+        return
       }
-      return
+
+      if (!canPay) {
+        if (isTransferPayment && isZeroAmountSale) {
+          showError('Đơn 0 đ vui lòng chọn thanh toán tiền mặt.')
+        }
+        return
+      }
     }
 
-    if (!validateDiscountsBeforePayment()) {
-      return
-    }
-
-    if (!canPay) {
-      if (isTransferPayment && isZeroAmountSale) {
-        showError('Đơn 0 đ vui lòng chọn thanh toán tiền mặt.')
-      }
+    if (needsDebtSettlementOnPay && !debtSettlement) {
+      showError('Vui lòng bấm "Tính vào công nợ" để chọn hóa đơn cần trừ.')
+      openDebtAllocationModal('configure')
       return
     }
 
     setIsSubmitting(true)
     try {
-      if (isTransferPayment) {
-        const payload = buildOrderPayload('TRANSFER', 0)
-        const result = await createPosOrderOnline(payload, { qrAmount: transferQrAmount })
-        const debtSettlement =
-          transferOverpayToDebt > 0 && selectedCustomer?.customerId
-            ? {
-                customerId: selectedCustomer.customerId,
-                amount: transferOverpayToDebt,
-                balanceBefore: customerCurrentDebt,
-                customerName: selectedCustomer.fullName || '',
-                customerCode: selectedCustomer.customerCode || '',
-              }
-            : null
+      await executePayment(debtSettlement)
+    } catch (error) {
+      showError(error.message)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
 
-        showSuccess(
-          debtSettlement
-            ? `Đã tạo đơn ${result.orderCode}. Quét QR ${formatMoney(transferQrAmount)} đ (gồm trừ nợ ${formatMoney(debtSettlement.amount)} đ).`
-            : `Đã tạo đơn ${result.orderCode}. Quét mã QR ${formatMoney(transferQrAmount)} đ để thanh toán.`,
-        )
-        const receipt = buildReceiptData({ orderCode: result.orderCode, method: 'TRANSFER' })
-        resetCheckoutState()
-        navigate('/pos/payment/qr', {
-          state: {
-            orderId: result.orderId,
-            orderCode: result.orderCode,
-            orderLabel: result.orderCode,
-            total: result.qrAmount || transferQrAmount,
-            qrPayload: result.qrPayload,
-            qrImageUrl: result.qrImageUrl,
-            transferContent: result.transferContent,
-            transferAccountNumber: result.transferAccountNumber,
-            paymentMode: result.paymentMode,
-            qrExpiresAtUtc: result.qrExpiresAtUtc,
-            customer: selectedCustomer?.fullName || '',
-            paymentMethod: 'TRANSFER',
-            receipt,
-            debtSettlement,
-          },
-        })
-        return
-      }
+  const handleOverpaymentDebtConfirm = async (result) => {
+    setOverpaymentDebtModalOpen(false)
+    if (debtModalMode === 'configure') {
+      updateActiveSession({ overpaymentAction: 'apply_to_debt', debtSettlement: result })
+      return
+    }
 
-      await finalizeRecordedPayment({
-        method: 'CASH',
-        createOrder: createPosOrderOffline,
+    setIsSubmitting(true)
+    try {
+      await executePayment(result)
+    } catch (error) {
+      showError(error.message)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleOverpaymentDebtSkip = async () => {
+    setOverpaymentDebtModalOpen(false)
+    if (debtModalMode === 'configure') {
+      handleOverpaymentActionChange('return_change')
+      return
+    }
+
+    setIsSubmitting(true)
+    try {
+      await executePayment({
+        payDebtsEnabled: false,
+        allocations: [],
+        allocatedAmount: 0,
+        creditToCustomer: change,
       })
     } catch (error) {
       showError(error.message)
@@ -1277,7 +1389,7 @@ function PosPage() {
   }
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-[#c1c9c0]/40 bg-[#fbf9f1] shadow-[0_10px_30px_rgba(27,28,23,0.04)] lg:rounded-[28px]">
+    <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-[#c1c9c0]/40 bg-[#fbf9f1] shadow-[0_10px_30px_rgba(27,28,23,0.04)] lg:rounded-[28px]">
       <header className="border-b border-[#c1c9c0]/60 bg-[#f6f4ec] px-4 py-3">
         <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
           {tabs.map((tab) => {
@@ -1683,20 +1795,21 @@ function PosPage() {
         isTransferPayment={isTransferPayment}
         isCodTakeaway={isCodTakeaway}
         isTransferTakeaway={isTransferTakeaway}
-        codOverpayToDebt={codOverpayToDebt}
         customerCurrentDebt={customerCurrentDebt}
         amountPaidInput={amountPaidInput}
         onAmountPaidChange={handleAmountPaidChange}
         transferQrAmount={transferQrAmount}
-        transferOverpayToDebt={transferOverpayToDebt}
         amountPaid={amountPaid}
         debtAmount={debtAmount}
         change={change}
         displayChange={displayChange}
         canApplyOverpayToDebt={canApplyOverpayToDebt}
         overpaymentAction={overpaymentAction}
-        onOverpaymentActionChange={(action) => updateActiveSession({ overpaymentAction: action })}
-        debtReductionFromOverpay={debtReductionFromOverpay}
+        onOverpaymentActionChange={handleOverpaymentActionChange}
+        onOpenDebtAllocation={handleOpenDebtAllocation}
+        confirmedDebtAllocationAmount={
+          debtSettlement?.payDebtsEnabled ? Number(debtSettlement.allocatedAmount || 0) : 0
+        }
         isDebtSale={isDebtSale}
         isPartialPayment={isPartialPayment}
         isTransferQrFlow={isTransferQrFlow}
@@ -1740,29 +1853,36 @@ function PosPage() {
         onOrderNoteChange={(value) => updateActiveSession({ orderNote: value })}
       />
 
-      <footer className="shrink-0 border-t border-[#c1c9c0]/60 bg-[#f6f4ec] px-4 py-3">
-        <div className="grid grid-cols-2 gap-2">
-          {SALES_MODES.map((mode) => (
-            <button
-              key={mode.id}
-              type="button"
-              onClick={() => {
-                setSalesMode(mode.id)
-                setOpenDiscountSku(null)
-                setIsPaymentSidebarOpen(false)
-              }}
-              className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-bold transition-colors ${
-                salesMode === mode.id
-                  ? 'bg-[#356647] text-white shadow-md shadow-[#356647]/25'
-                  : 'border border-[#c1c9c0] bg-white text-[#414942] hover:bg-[#e4e3db]'
-              }`}
-            >
-              <Icon className="text-[22px]" filled={salesMode === mode.id}>
-                {mode.icon}
-              </Icon>
-              {mode.label}
-            </button>
-          ))}
+      <footer className="shrink-0 border-t border-[#d8d6ce] bg-white px-4">
+        <div className="flex items-end gap-8">
+          {SALES_MODES.map((mode) => {
+            const isActive = salesMode === mode.id
+            return (
+              <button
+                key={mode.id}
+                type="button"
+                onClick={() => {
+                  setSalesMode(mode.id)
+                  setOpenDiscountSku(null)
+                  setIsPaymentSidebarOpen(false)
+                }}
+                className={`relative flex items-center gap-2 px-1 pb-3 pt-3.5 text-sm font-semibold transition-colors ${
+                  isActive ? 'text-[#356647]' : 'text-[#5c635c] hover:text-[#1b1c17]'
+                }`}
+              >
+                <Icon className="text-[22px]" filled={isActive}>
+                  {mode.icon}
+                </Icon>
+                <span>{mode.label}</span>
+                {isActive ? (
+                  <span
+                    className="absolute inset-x-0 bottom-0 h-[3px] rounded-t-sm bg-[#356647]"
+                    aria-hidden
+                  />
+                ) : null}
+              </button>
+            )
+          })}
         </div>
       </footer>
 
@@ -1820,6 +1940,18 @@ function PosPage() {
         cancelLabel="Hủy"
         onConfirm={handleConfirmCloseTab}
         onCancel={() => setTabCloseConfirm(null)}
+      />
+      <OverpaymentDebtModal
+        isOpen={overpaymentDebtModalOpen}
+        excessAmount={change}
+        customerCurrentDebt={customerCurrentDebt}
+        openDebts={customerOpenDebts}
+        isLoading={isLoadingOpenDebts}
+        formatMoney={formatMoney}
+        initialSettlement={debtSettlement}
+        onClose={() => setOverpaymentDebtModalOpen(false)}
+        onSkip={handleOverpaymentDebtSkip}
+        onConfirm={handleOverpaymentDebtConfirm}
       />
     </div>
   )

@@ -135,7 +135,8 @@ public class PaymentLogic(
         p.TransactionRef,
         p.IsCodVerified,
         p.CodWarningDate,
-        p.PaidAt);
+        p.PaidAt,
+        p.CodDebtSettlementJson);
 
     private static string FormatVnd(decimal amount)
     {

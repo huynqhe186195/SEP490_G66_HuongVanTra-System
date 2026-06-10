@@ -15,7 +15,8 @@ public record CreateOrderRequest(
     decimal PaidAmount,
     decimal TransferQrAmount = 0,
     Guid? PromotionId = null,
-    string? PromotionCode = null
+    string? PromotionCode = null,
+    string? CodDebtSettlementJson = null
 );
 
 public record CreateOrderDetailRequest(

@@ -71,6 +71,30 @@ public class CustomersController : ControllerBase
         return Ok(result);
     }
 
+    [HttpGet("{id:guid}/open-debts")]
+    [Authorize(Policy = PermissionNames.ViewCustomer)]
+    public async Task<IActionResult> GetOpenDebts(Guid id, CancellationToken ct = default)
+    {
+        var result = await _logic.GetOpenDebtsAsync(id, ct);
+        return Ok(result);
+    }
+
+    [HttpGet("{id:guid}/debt-payments/preview")]
+    [Authorize(Policy = PermissionNames.ViewCustomer)]
+    public async Task<IActionResult> PreviewDebtPayment(Guid id, [FromQuery] decimal amount, CancellationToken ct = default)
+    {
+        var result = await _logic.PreviewDebtPaymentAsync(id, amount, ct);
+        return Ok(result);
+    }
+
+    [HttpPost("{id:guid}/debt-payments")]
+    [Authorize(Policy = PermissionNames.CreateCustomer)]
+    public async Task<IActionResult> ApplyDebtPayment(Guid id, [FromBody] ApplyDebtPaymentRequest request, CancellationToken ct = default)
+    {
+        var result = await _logic.ApplyDebtPaymentAsync(id, request, ct);
+        return Ok(result);
+    }
+
     [HttpGet("{id:guid}/activities")]
     [Authorize(Policy = PermissionNames.ViewCustomer)]
     public async Task<IActionResult> GetActivities(Guid id, CancellationToken ct = default)

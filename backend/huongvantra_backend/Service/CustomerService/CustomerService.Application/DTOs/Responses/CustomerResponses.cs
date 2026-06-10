@@ -65,6 +65,36 @@ public record CustomerDebtSummaryResponse(
     int TransactionCount
 );
 
+public record CustomerOpenDebtResponse(
+    Guid OrderId,
+    string OrderCode,
+    decimal OriginalDebt,
+    decimal PaidAmount,
+    decimal RemainingDebt,
+    DateTime CreatedAt
+);
+
+public record CustomerDebtAllocationResponse(
+    Guid OrderId,
+    string OrderCode,
+    decimal Amount,
+    decimal RemainingAfter
+);
+
+public record CustomerDebtPaymentPreviewResponse(
+    decimal RequestedAmount,
+    decimal AllocatedAmount,
+    decimal UnallocatedAmount,
+    IReadOnlyList<CustomerDebtAllocationResponse> Allocations
+);
+
+public record CustomerDebtPaymentResponse(
+    CustomerDebtTransactionResponse Transaction,
+    IReadOnlyList<CustomerDebtAllocationResponse> Allocations,
+    decimal AllocatedAmount,
+    decimal UnallocatedAmount
+);
+
 public record CustomerActivityResponse(
     Guid Id,
     Guid CustomerId,

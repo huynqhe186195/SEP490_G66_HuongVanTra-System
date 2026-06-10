@@ -56,7 +56,8 @@ public record PaymentResponse(
     string? TransactionRef,
     bool IsCodVerified,
     DateTime? CodWarningDate,
-    DateTime? PaidAt
+    DateTime? PaidAt,
+    string? CodDebtSettlementJson = null
 );
 
 public record OrderSummaryResponse(

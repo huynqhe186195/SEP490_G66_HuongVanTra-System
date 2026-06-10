@@ -17,6 +17,7 @@ public class CustomerLogic
     private readonly ICustomerTierRepository _tierRepo;
     private readonly IProcessedIntegrationEventRepository _processedEvents;
     private readonly ICustomerDebtTransactionRepository _debtRepo;
+    private readonly ICustomerDebtAllocationRepository _allocationRepo;
     private readonly ICustomerActivityRepository _activityRepo;
     private readonly ICustomerAddressRepository _addressRepo;
 
@@ -25,6 +26,7 @@ public class CustomerLogic
         ICustomerTierRepository tierRepo,
         IProcessedIntegrationEventRepository processedEvents,
         ICustomerDebtTransactionRepository debtRepo,
+        ICustomerDebtAllocationRepository allocationRepo,
         ICustomerActivityRepository activityRepo,
         ICustomerAddressRepository addressRepo)
     {
@@ -32,6 +34,7 @@ public class CustomerLogic
         _tierRepo = tierRepo;
         _processedEvents = processedEvents;
         _debtRepo = debtRepo;
+        _allocationRepo = allocationRepo;
         _activityRepo = activityRepo;
         _addressRepo = addressRepo;
     }
@@ -164,7 +167,7 @@ public class CustomerLogic
         {
             customer.CurrentDebt += debtAmount;
             await RecordDebtAsync(customer, DebtTransactionType.IncreaseDebt, debtAmount, "Order", orderId,
-                $"Mua chịu đơn {orderCode}", ct);
+                $"Mua chịu đơn {orderCode}", orderCode, ct);
             await RecordActivityAsync(customerId, CustomerActivityType.DebtUpdated,
                 $"Công nợ +{debtAmount:N0} từ đơn {orderCode}", ct);
         }
@@ -207,29 +210,141 @@ public class CustomerLogic
         var customer = await _customerRepo.GetByIdAsync(customerId, ct)
             ?? throw new CustomerNotFoundException(customerId);
 
-        if (request.Type == DebtTransactionType.IncreaseDebt)
-            customer.CurrentDebt += request.Amount;
-        else
+        if (request.Type == DebtTransactionType.DecreaseDebt)
         {
-            if (customer.CurrentDebt < request.Amount)
-                throw new CustomerValidationException(["Decrease amount exceeds current debt."]);
-            customer.CurrentDebt -= request.Amount;
+            var payment = await ApplyDebtPaymentAsync(customerId, new ApplyDebtPaymentRequest(
+                request.Amount,
+                request.Note ?? "Thanh toán công nợ"), ct);
+            return payment.Transaction;
         }
 
+        customer.CurrentDebt += request.Amount;
         customer.UpdatedAt = DateTime.UtcNow;
         _customerRepo.Update(customer);
 
         var transaction = await RecordDebtAsync(customer, request.Type, request.Amount, "Manual", null,
-            request.Note ?? (request.Type == DebtTransactionType.DecreaseDebt ? "Thanh toán công nợ" : "Phát sinh nợ"), ct);
+            request.Note ?? "Phát sinh nợ", null, ct);
 
         await RecordActivityAsync(customerId, CustomerActivityType.DebtUpdated,
-            request.Type == DebtTransactionType.DecreaseDebt
-                ? $"Thanh toán -{request.Amount:N0}"
-                : $"Phát sinh nợ +{request.Amount:N0}", ct);
+            $"Phát sinh nợ +{request.Amount:N0}", ct);
 
         await _customerRepo.SaveChangesAsync(ct);
 
         return MapDebt(transaction);
+    }
+
+    public async Task<IReadOnlyList<CustomerOpenDebtResponse>> GetOpenDebtsAsync(
+        Guid customerId,
+        CancellationToken ct = default)
+    {
+        if (!await _customerRepo.ExistsAsync(customerId, ct))
+            throw new CustomerNotFoundException(customerId);
+
+        var items = await BuildOpenDebtItemsAsync(customerId, ct);
+        return items
+            .Select(i => new CustomerOpenDebtResponse(
+                i.OrderId, i.OrderCode, i.OriginalDebt, i.PaidAmount, i.RemainingDebt, i.CreatedAt))
+            .ToList();
+    }
+
+    public async Task<CustomerDebtPaymentPreviewResponse> PreviewDebtPaymentAsync(
+        Guid customerId,
+        decimal amount,
+        CancellationToken ct = default)
+    {
+        if (amount <= 0)
+            throw new CustomerValidationException(["Amount must be greater than zero."]);
+
+        if (!await _customerRepo.ExistsAsync(customerId, ct))
+            throw new CustomerNotFoundException(customerId);
+
+        var openDebts = await BuildOpenDebtItemsAsync(customerId, ct);
+        var allocations = BuildFifoAllocations(amount, openDebts);
+        var allocated = allocations.Sum(a => a.Amount);
+
+        return new CustomerDebtPaymentPreviewResponse(
+            amount,
+            allocated,
+            Math.Max(0, amount - allocated),
+            allocations);
+    }
+
+    public async Task<CustomerDebtPaymentResponse> ApplyDebtPaymentAsync(
+        Guid customerId,
+        ApplyDebtPaymentRequest request,
+        CancellationToken ct = default)
+    {
+        if (request is null)
+            throw new CustomerValidationException(["Request body is required."]);
+
+        if (request.Amount <= 0)
+            throw new CustomerValidationException(["Amount must be greater than zero."]);
+
+        var customer = await _customerRepo.GetByIdAsync(customerId, ct)
+            ?? throw new CustomerNotFoundException(customerId);
+
+        var openDebts = await BuildOpenDebtItemsAsync(customerId, ct);
+        var allocationPlans = request.Allocations is { Count: > 0 }
+            ? BuildExplicitAllocations(request.Allocations, openDebts)
+            : BuildFifoAllocations(request.Amount, openDebts);
+        var allocatedAmount = allocationPlans.Sum(a => a.Amount);
+
+        if (request.Allocations is { Count: > 0 } && allocatedAmount > request.Amount)
+            throw new CustomerValidationException(["Tổng trừ theo hóa đơn vượt số tiền thanh toán."]);
+
+        if (allocatedAmount <= 0)
+            throw new CustomerValidationException(["Khách không có đơn nợ để trừ."]);
+
+        if (allocatedAmount > customer.CurrentDebt)
+        {
+            allocationPlans = TrimAllocationPlans(allocationPlans, customer.CurrentDebt);
+            allocatedAmount = allocationPlans.Sum(a => a.Amount);
+        }
+
+        if (allocatedAmount <= 0)
+            throw new CustomerValidationException(["Khách không có công nợ để trừ."]);
+
+        customer.CurrentDebt -= allocatedAmount;
+        customer.UpdatedAt = DateTime.UtcNow;
+        _customerRepo.Update(customer);
+
+        var note = BuildDebtPaymentNote(request.Note, request.SourceOrderId, allocationPlans);
+        var referenceType = request.SourceOrderId.HasValue ? "OrderPayment" : "DebtPayment";
+        var transaction = await RecordDebtAsync(
+            customer,
+            DebtTransactionType.DecreaseDebt,
+            allocatedAmount,
+            referenceType,
+            request.SourceOrderId,
+            note,
+            null,
+            ct);
+
+        var now = DateTime.UtcNow;
+        var entities = allocationPlans.Select(plan => new CustomerDebtAllocation
+        {
+            Id = Guid.NewGuid(),
+            DebtTransactionId = transaction.Id,
+            CustomerId = customerId,
+            OrderId = plan.OrderId,
+            OrderCode = plan.OrderCode,
+            Amount = plan.Amount,
+            CreatedAt = now
+        }).ToList();
+
+        await _allocationRepo.AddRangeAsync(entities, ct);
+
+        var orderSummary = string.Join(", ", allocationPlans.Select(a => $"{a.OrderCode} {a.Amount:N0}"));
+        await RecordActivityAsync(customerId, CustomerActivityType.DebtUpdated,
+            $"Thanh toán -{allocatedAmount:N0} ({orderSummary})", ct);
+
+        await _customerRepo.SaveChangesAsync(ct);
+
+        return new CustomerDebtPaymentResponse(
+            MapDebt(transaction),
+            allocationPlans,
+            allocatedAmount,
+            Math.Max(0, request.Amount - allocatedAmount));
     }
 
     public async Task<IEnumerable<CustomerDebtTransactionResponse>> GetDebtsAsync(Guid customerId, CancellationToken ct = default)
@@ -306,6 +421,7 @@ public class CustomerLogic
         string referenceType,
         Guid? referenceId,
         string note,
+        string? relatedOrderCode,
         CancellationToken ct)
     {
         var transaction = new CustomerDebtTransaction
@@ -317,12 +433,229 @@ public class CustomerLogic
             BalanceAfter = customer.CurrentDebt,
             ReferenceType = referenceType,
             ReferenceId = referenceId,
+            RelatedOrderCode = relatedOrderCode,
             Note = note,
             CreatedAt = DateTime.UtcNow
         };
 
         await _debtRepo.AddAsync(transaction, ct);
         return transaction;
+    }
+
+    private sealed record OpenDebtItem(
+        Guid OrderId,
+        string OrderCode,
+        decimal OriginalDebt,
+        decimal PaidAmount,
+        decimal RemainingDebt,
+        DateTime CreatedAt);
+
+    private async Task<List<OpenDebtItem>> BuildOpenDebtItemsAsync(Guid customerId, CancellationToken ct)
+    {
+        var customer = await _customerRepo.GetByIdAsync(customerId, ct);
+        var transactions = (await _debtRepo.GetByCustomerIdAsync(customerId, ct)).ToList();
+        var allocations = await _allocationRepo.GetByCustomerIdAsync(customerId, ct);
+
+        var increases = transactions
+            .Where(t => t.Type == DebtTransactionType.IncreaseDebt
+                && t.ReferenceType == "Order"
+                && t.ReferenceId.HasValue)
+            .GroupBy(t => t.ReferenceId!.Value)
+            .Select(g =>
+            {
+                var first = g.OrderBy(x => x.CreatedAt).First();
+                var orderCode = ResolveOrderCode(first);
+                return new
+                {
+                    OrderId = g.Key,
+                    OrderCode = orderCode,
+                    OriginalDebt = g.Sum(x => x.Amount),
+                    CreatedAt = g.Min(x => x.CreatedAt)
+                };
+            })
+            .OrderBy(item => item.CreatedAt)
+            .ToList();
+
+        var paidByOrder = allocations
+            .GroupBy(a => a.OrderId)
+            .ToDictionary(g => g.Key, g => g.Sum(x => x.Amount));
+
+        var unallocatedPool = Math.Max(
+            0,
+            transactions
+                .Where(t => t.Type == DebtTransactionType.DecreaseDebt)
+                .Sum(t => t.Amount) - allocations.Sum(a => a.Amount));
+
+        var items = new List<OpenDebtItem>();
+        foreach (var item in increases)
+        {
+            paidByOrder.TryGetValue(item.OrderId, out var paid);
+            var remaining = Math.Max(0, item.OriginalDebt - paid);
+            if (unallocatedPool > 0 && remaining > 0)
+            {
+                var fromPool = Math.Min(remaining, unallocatedPool);
+                paid += fromPool;
+                remaining -= fromPool;
+                unallocatedPool -= fromPool;
+            }
+
+            if (remaining <= 0) continue;
+
+            items.Add(new OpenDebtItem(
+                item.OrderId,
+                item.OrderCode,
+                item.OriginalDebt,
+                paid,
+                remaining,
+                item.CreatedAt));
+        }
+
+        if (customer is not null)
+            items = CapOpenDebtItemsToBalance(items, customer.CurrentDebt);
+
+        return items;
+    }
+
+    private static List<CustomerDebtAllocationResponse> BuildExplicitAllocations(
+        IReadOnlyList<DebtAllocationItemRequest> allocations,
+        IReadOnlyList<OpenDebtItem> openDebts)
+    {
+        var debtByOrder = openDebts.ToDictionary(d => d.OrderId);
+        var results = new List<CustomerDebtAllocationResponse>();
+
+        foreach (var item in allocations)
+        {
+            if (item.Amount <= 0) continue;
+
+            if (!debtByOrder.TryGetValue(item.OrderId, out var debt))
+                throw new CustomerValidationException([$"Không tìm thấy đơn nợ {item.OrderId}."]);
+
+            if (item.Amount > debt.RemainingDebt)
+                throw new CustomerValidationException([
+                    $"Số tiền trừ đơn {debt.OrderCode} vượt nợ còn lại ({debt.RemainingDebt:N0})."]);
+
+            var remainingAfter = debt.RemainingDebt - item.Amount;
+            results.Add(new CustomerDebtAllocationResponse(
+                debt.OrderId,
+                debt.OrderCode,
+                item.Amount,
+                remainingAfter));
+        }
+
+        return results;
+    }
+
+    private static List<CustomerDebtAllocationResponse> TrimAllocationPlans(
+        List<CustomerDebtAllocationResponse> plans,
+        decimal maxAmount)
+    {
+        var remaining = maxAmount;
+        var results = new List<CustomerDebtAllocationResponse>();
+
+        foreach (var plan in plans)
+        {
+            if (remaining <= 0) break;
+
+            var amount = Math.Min(plan.Amount, remaining);
+            if (amount <= 0) continue;
+
+            results.Add(new CustomerDebtAllocationResponse(
+                plan.OrderId,
+                plan.OrderCode,
+                amount,
+                plan.RemainingAfter + (plan.Amount - amount)));
+
+            remaining -= amount;
+        }
+
+        return results;
+    }
+
+    private static List<OpenDebtItem> CapOpenDebtItemsToBalance(
+        List<OpenDebtItem> items,
+        decimal currentDebt)
+    {
+        var totalRemaining = items.Sum(i => i.RemainingDebt);
+        if (totalRemaining <= currentDebt) return items;
+
+        var excess = totalRemaining - currentDebt;
+        var capped = new List<OpenDebtItem>();
+
+        foreach (var item in items.OrderBy(i => i.CreatedAt))
+        {
+            if (excess <= 0)
+            {
+                capped.Add(item);
+                continue;
+            }
+
+            var reduce = Math.Min(item.RemainingDebt, excess);
+            var newRemaining = item.RemainingDebt - reduce;
+            excess -= reduce;
+            if (newRemaining <= 0) continue;
+
+            capped.Add(item with
+            {
+                PaidAmount = item.OriginalDebt - newRemaining,
+                RemainingDebt = newRemaining
+            });
+        }
+
+        return capped;
+    }
+
+    private static List<CustomerDebtAllocationResponse> BuildFifoAllocations(
+        decimal amount,
+        IReadOnlyList<OpenDebtItem> openDebts)
+    {
+        var remaining = amount;
+        var results = new List<CustomerDebtAllocationResponse>();
+
+        foreach (var debt in openDebts)
+        {
+            if (remaining <= 0) break;
+
+            var allocate = Math.Min(debt.RemainingDebt, remaining);
+            if (allocate <= 0) continue;
+
+            var remainingAfter = debt.RemainingDebt - allocate;
+            results.Add(new CustomerDebtAllocationResponse(
+                debt.OrderId,
+                debt.OrderCode,
+                allocate,
+                remainingAfter));
+
+            remaining -= allocate;
+        }
+
+        return results;
+    }
+
+    private static string ResolveOrderCode(CustomerDebtTransaction transaction)
+    {
+        if (!string.IsNullOrWhiteSpace(transaction.RelatedOrderCode))
+            return transaction.RelatedOrderCode!;
+
+        const string prefix = "Mua chịu đơn ";
+        if (!string.IsNullOrWhiteSpace(transaction.Note) && transaction.Note.StartsWith(prefix, StringComparison.Ordinal))
+            return transaction.Note[prefix.Length..].Trim();
+
+        return "—";
+    }
+
+    private static string BuildDebtPaymentNote(
+        string? requestNote,
+        Guid? sourceOrderId,
+        IReadOnlyList<CustomerDebtAllocationResponse> allocations)
+    {
+        var orderPart = string.Join(" · ", allocations.Select(a => $"{a.OrderCode}: {a.Amount:N0}"));
+        var baseNote = string.IsNullOrWhiteSpace(requestNote)
+            ? $"Trừ nợ theo đơn: {orderPart}"
+            : $"{requestNote.Trim()} · {orderPart}";
+
+        return sourceOrderId.HasValue
+            ? $"{baseNote} (từ đơn thanh toán)"
+            : baseNote;
     }
 
     private async Task RecordActivityAsync(

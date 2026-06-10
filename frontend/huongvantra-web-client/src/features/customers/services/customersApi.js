@@ -308,6 +308,48 @@ export async function recordDebtTransaction(customerId, { type, amount, note }) 
   return mapDebtTransaction(data)
 }
 
+export async function fetchCustomerOpenDebts(customerId) {
+  const data = await apiRequestAuth(`/api/customers/${customerId}/open-debts`, { method: 'GET' })
+  const { mapOpenDebt } = await import('../utils/debtPaymentUtils.js')
+  return Array.isArray(data) ? data.map(mapOpenDebt).filter(Boolean) : []
+}
+
+export async function previewCustomerDebtPayment(customerId, amount) {
+  const normalized = Math.max(0, Math.round(Number(amount) || 0))
+  const data = await apiRequestAuth(
+    `/api/customers/${customerId}/debt-payments/preview?amount=${normalized}`,
+    { method: 'GET' },
+  )
+  const { mapDebtPaymentPreview } = await import('../utils/debtPaymentUtils.js')
+  return mapDebtPaymentPreview(data)
+}
+
+export async function applyCustomerDebtPayment(
+  customerId,
+  { amount, note, sourceOrderId = null, allocations = null },
+) {
+  const normalizedAllocations = Array.isArray(allocations)
+    ? allocations
+        .map((row) => ({
+          orderId: row.orderId,
+          amount: Math.max(0, Math.round(Number(row.amount) || 0)),
+        }))
+        .filter((row) => row.orderId && row.amount > 0)
+    : null
+
+  const data = await apiRequestAuth(`/api/customers/${customerId}/debt-payments`, {
+    method: 'POST',
+    body: JSON.stringify({
+      amount: Math.max(0, Math.round(Number(amount) || 0)),
+      note: note?.trim() || null,
+      sourceOrderId: sourceOrderId || null,
+      allocations: normalizedAllocations?.length ? normalizedAllocations : null,
+    }),
+  })
+  const { mapDebtPaymentResult } = await import('../utils/debtPaymentUtils.js')
+  return mapDebtPaymentResult(data)
+}
+
 export async function fetchCustomerActivities(customerId) {
   const data = await apiRequestAuth(`/api/customers/${customerId}/activities`, { method: 'GET' })
   return Array.isArray(data) ? data.map(mapActivity).filter(Boolean) : []

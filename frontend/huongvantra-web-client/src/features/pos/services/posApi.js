@@ -35,7 +35,7 @@ function mapPosLineItem(item) {
 
 function buildOrderRequestFromPosPayload(
   payload,
-  { orderChannel, shippingAddress, paymentMethod, paidAmount, transferQrAmount },
+  { orderChannel, shippingAddress, paymentMethod, paidAmount, transferQrAmount, codDebtSettlementJson },
 ) {
   const lines = (payload.items ?? []).map(mapPosLineItem)
   const payment = payload.payments?.[0]
@@ -52,6 +52,7 @@ function buildOrderRequestFromPosPayload(
     paidAmount: paidAmount ?? Number(payment?.amount ?? 0),
     transferQrAmount: transferQrAmount ?? 0,
     paymentMethod: paymentMethod ?? mapPaymentMethod(payment?.paymentMethod),
+    codDebtSettlementJson: codDebtSettlementJson ?? null,
     items: lines.map((line) => ({
       skuId: line.productId,
       skuSnapshotName:
@@ -285,7 +286,7 @@ export function buildTakeawayOrderPayload({
   }
 }
 
-export function createTakeawayCodOrder(payload, expectedAmount = 0) {
+export function createTakeawayCodOrder(payload, expectedAmount = 0, { codDebtSettlementJson = null } = {}) {
   const amount = Math.max(0, Number(expectedAmount) || 0)
   return submitPosOrder(
     { ...payload, payments: [{ paymentMethod: 'COD', amount }] },
@@ -294,6 +295,7 @@ export function createTakeawayCodOrder(payload, expectedAmount = 0) {
       shippingAddress: payload.shippingAddress,
       paymentMethod: 'COD',
       paidAmount: amount,
+      codDebtSettlementJson,
     },
   )
 }

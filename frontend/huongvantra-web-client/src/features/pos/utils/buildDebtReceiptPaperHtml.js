@@ -65,6 +65,20 @@ export function buildDebtReceiptPaperHtml(receipt) {
         <span>THU NỢ</span>
         <span>${formatMoney(receipt.amount)} đ</span>
       </div>
+      ${
+        Array.isArray(receipt.allocations) && receipt.allocations.length
+          ? `<div class="receipt-divider"></div>
+      <div class="receipt-meta" style="text-align:left;padding:0 2px;font-weight:600;">Trừ theo đơn:</div>
+      ${receipt.allocations
+        .map(
+          (row) => `<div class="receipt-row">
+        <span class="receipt-label">${escapeHtml(row.orderCode)}</span>
+        <span class="receipt-value">${formatMoney(row.amount)} đ</span>
+      </div>`,
+        )
+        .join('')}`
+          : ''
+      }
       <div class="receipt-total-row">
         <span>Còn nợ</span>
         <span>${formatMoney(receipt.balanceAfter)} đ</span>

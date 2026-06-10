@@ -11,8 +11,8 @@ import {
 } from '../services/posApi.js'
 import { isQrExpired, useQrExpiryCountdown } from '../utils/qrExpiry.js'
 import { vietnamNowLabel } from '../../../utils/vietnamDateTime.js'
-import { recordDebtTransaction } from '../../customers/services/customersApi.js'
-import { buildDebtReceiptCode } from '../utils/buildDebtReceiptPaperHtml.js'
+import { applyCustomerDebtPayment } from '../../customers/services/customersApi.js'
+import { buildDebtReceiptFromPayment } from '../../customers/utils/debtPaymentUtils.js'
 import { printReceiptSequence } from '../utils/printReceipt.js'
 
 const POLL_INTERVAL_MS = 3000
@@ -89,24 +89,21 @@ function PosTransferQrPage() {
 
       if (debtSettlement?.customerId && debtSettlement.amount > 0) {
         try {
-          const transaction = await recordDebtTransaction(debtSettlement.customerId, {
-            type: 'DecreaseDebt',
+          const debtPayment = await applyCustomerDebtPayment(debtSettlement.customerId, {
             amount: debtSettlement.amount,
             note: `Trừ từ tiền thừa đơn ${orderCode}`,
+            sourceOrderId: debtSettlement.orderId || payment?.orderId,
+            allocations: debtSettlement.allocations ?? null,
           })
-          receipts.push({
-            kind: 'debt',
-            receiptCode: buildDebtReceiptCode(transaction?.id),
+          const debtReceipt = buildDebtReceiptFromPayment({
+            payment: debtPayment,
             customerName: debtSettlement.customerName || '',
             customerCode: debtSettlement.customerCode || '',
             paymentMethodLabel: 'Chuyển khoản',
-            createdAtLabel: vietnamNowLabel(),
-            amount: debtSettlement.amount,
             balanceBefore: debtSettlement.balanceBefore,
-            balanceAfter: Number(transaction?.balanceAfter ?? debtSettlement.balanceBefore - debtSettlement.amount),
             relatedOrderCode: orderCode || undefined,
-            note: transaction?.note || `Trừ từ tiền thừa đơn ${orderCode}`,
           })
+          if (debtReceipt) receipts.push(debtReceipt)
         } catch (error) {
           showError(error.message || 'Đơn đã thanh toán nhưng không ghi được trừ nợ.')
         }

@@ -156,6 +156,9 @@ public class OrderLogic(
             CodWarningDate = req.PaymentMethod == PaymentMethod.COD
                 ? DateTime.UtcNow.AddDays(7)
                 : null,
+            CodDebtSettlementJson = req.PaymentMethod == PaymentMethod.COD
+                ? string.IsNullOrWhiteSpace(req.CodDebtSettlementJson) ? null : req.CodDebtSettlementJson.Trim()
+                : null,
             PaidAt = null,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
@@ -458,7 +461,7 @@ public class OrderLogic(
         (o.Payments ?? []).Select(p => new PaymentResponse(
             p.Id, p.OrderId, o.OrderCode, o.CustomerSnapshotName,
             p.PaymentMethod.ToString(), p.Amount, p.PaymentStatus.ToString(),
-            p.TransactionRef, p.IsCodVerified, p.CodWarningDate, p.PaidAt)).ToList()
+            p.TransactionRef, p.IsCodVerified, p.CodWarningDate, p.PaidAt, p.CodDebtSettlementJson)).ToList()
     );
 
     private static OrderSummaryResponse MapToSummary(Order o)

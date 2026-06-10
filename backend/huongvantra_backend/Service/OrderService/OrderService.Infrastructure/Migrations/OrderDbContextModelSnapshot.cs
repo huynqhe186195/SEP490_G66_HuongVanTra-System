@@ -160,6 +160,10 @@ namespace OrderService.Infrastructure.Migrations
                     b.Property<DateTime?>("CodWarningDate")
                         .HasColumnType("datetime(6)");
 
+                    b.Property<string>("CodDebtSettlementJson")
+                        .HasMaxLength(4000)
+                        .HasColumnType("varchar(4000)");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
 
