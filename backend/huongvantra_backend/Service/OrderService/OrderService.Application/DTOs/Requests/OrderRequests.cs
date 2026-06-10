@@ -12,7 +12,9 @@ public record CreateOrderRequest(
     decimal DiscountAmount,
     List<CreateOrderDetailRequest> Items,
     PaymentMethod PaymentMethod,
-    decimal PaidAmount
+    decimal PaidAmount,
+    Guid? PromotionId = null,
+    string? PromotionCode = null
 );
 
 public record CreateOrderDetailRequest(

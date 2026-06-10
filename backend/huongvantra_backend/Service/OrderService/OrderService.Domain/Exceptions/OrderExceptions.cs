@@ -25,6 +25,12 @@ public class OrderValidationException : Exception
     public IReadOnlyCollection<string> Errors { get; }
 }
 
+public class PromotionNotFoundException : Exception
+{
+    public PromotionNotFoundException(Guid id)
+        : base($"Không tìm thấy mã giảm giá '{id}'.") { }
+}
+
 public class OrderCannotBeCancelledException : Exception
 {
     public OrderCannotBeCancelledException(Guid id, string status)

@@ -1,0 +1,15 @@
+using OrderService.Domain.Enums;
+
+namespace OrderService.Domain.Entities;
+
+public class Promotion : BaseEntity
+{
+    public Guid Id { get; set; }
+    public string PromoCode { get; set; } = string.Empty;
+    public string NormalizedPromoCode { get; set; } = string.Empty;
+    public PromotionDiscountType DiscountType { get; set; }
+    public decimal DiscountValue { get; set; }
+    public DateTime? ValidFromUtc { get; set; }
+    public DateTime? ValidToUtc { get; set; }
+    public bool IsActive { get; set; }
+}

@@ -17,6 +17,7 @@ public class OrderLogic(
     IOrderCodeGenerator _codeGen,
     IOrderEventPublisher _eventPublisher,
     IOrderActivityRepository _activityRepo,
+    PromotionLogic _promotionLogic,
     IOptions<SepayOptions> sepayOptions)
 {
     private readonly SepayOptions _sepay = sepayOptions.Value;
@@ -74,8 +75,15 @@ public class OrderLogic(
 
         var orderCode = await _codeGen.GenerateAsync(ct);
         var totalAmount = detailInputs.Sum(i => i.UnitPrice * i.Quantity);
-        var finalAmount = totalAmount - req.DiscountAmount;
-        if (finalAmount < 0) finalAmount = 0;
+        var manualDiscount = req.DiscountAmount;
+        if (manualDiscount > totalAmount)
+            throw new OrderValidationException("Giảm giá thủ công không được lớn hơn tổng tiền đơn hàng.");
+
+        var baseForPromotion = Math.Max(0, totalAmount - manualDiscount);
+        var promotionDiscount = await _promotionLogic.ValidateAndCalculateDiscountAsync(
+            req.PromotionId, req.PromotionCode, baseForPromotion, ct);
+        var totalDiscount = manualDiscount + promotionDiscount.DiscountAmount;
+        var finalAmount = Math.Max(0, totalAmount - totalDiscount);
 
         var isPosCashCompleted = req.OrderChannel == OrderChannel.POS
             && req.PaymentMethod == PaymentMethod.Cash;
@@ -91,7 +99,10 @@ public class OrderLogic(
             OrderStatus = isPosCashCompleted ? OrderStatus.Completed : OrderStatus.PendingPayment,
             InventorySyncStatus = InventorySyncStatus.PendingDeduction,
             TotalAmount = totalAmount,
-            DiscountAmount = req.DiscountAmount,
+            DiscountAmount = totalDiscount,
+            PromotionId = promotionDiscount.PromotionId,
+            PromotionCode = promotionDiscount.PromotionCode,
+            PromotionDiscountAmount = promotionDiscount.DiscountAmount,
             FinalAmount = finalAmount,
             ShippingAddress = req.ShippingAddress?.Trim(),
             Note = req.Note?.Trim(),
@@ -422,7 +433,8 @@ public class OrderLogic(
     private static OrderResponse MapToResponse(Order o) => new(
         o.Id, o.OrderCode, o.CustomerId, o.CustomerSnapshotName,
         o.EmployeeId, o.OrderChannel.ToString(), o.OrderStatus.ToString(),
-        o.InventorySyncStatus.ToString(), o.TotalAmount, o.DiscountAmount, o.FinalAmount,
+        o.InventorySyncStatus.ToString(), o.TotalAmount, o.DiscountAmount,
+        o.PromotionId, o.PromotionCode, o.PromotionDiscountAmount, o.FinalAmount,
         o.ShippingAddress, o.Note, o.CreatedAt, o.UpdatedAt,
         (o.OrderDetails ?? []).Select(d => new OrderDetailResponse(
             d.Id, d.SkuId, d.SkuSnapshotName, d.SkuSnapshotCode,

@@ -37,6 +37,7 @@ builder.Services.AddScoped<IOrderRepository, OrderRepository>();
 builder.Services.AddScoped<IOrderDetailRepository, OrderDetailRepository>();
 builder.Services.AddScoped<IPaymentRepository, PaymentRepository>();
 builder.Services.AddScoped<IOrderActivityRepository, OrderActivityRepository>();
+builder.Services.AddScoped<IPromotionRepository, PromotionRepository>();
 builder.Services.AddScoped<IOrderCodeGenerator, OrderCodeGenerator>();
 builder.Services.AddScoped<IOrderEventPublisher, OrderEventPublisher>();
 builder.Services.Configure<PosTransferPaymentOptions>(
@@ -47,6 +48,7 @@ builder.Services.Configure<SepayOptions>(
 builder.Services.AddScoped<OrderLogic>();
 builder.Services.AddScoped<PaymentLogic>();
 builder.Services.AddScoped<PosTransferPaymentLogic>();
+builder.Services.AddScoped<PromotionLogic>();
 
 builder.Services.AddMassTransit(x =>
 {

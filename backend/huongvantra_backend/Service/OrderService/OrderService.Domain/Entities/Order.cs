@@ -14,6 +14,9 @@ public class Order : BaseEntity
     public InventorySyncStatus InventorySyncStatus { get; set; }
     public decimal TotalAmount { get; set; }
     public decimal DiscountAmount { get; set; }
+    public Guid? PromotionId { get; set; }
+    public string? PromotionCode { get; set; }
+    public decimal PromotionDiscountAmount { get; set; }
     public decimal FinalAmount { get; set; }
     public string? ShippingAddress { get; set; }
     public string? Note { get; set; }
