@@ -556,7 +556,8 @@ export async function fetchPromotionByCode(code) {
   }
 }
 
-async function fetchAllActiveProductsForPos() {
+/** Catalog cửa hàng — gồm cả SP đang ẩn ở kho nhưng đã đồng bộ (để khớp SKU). */
+async function fetchStoreProductsForPos() {
   const pageSize = 100
   let page = 1
   let allItems = []
@@ -564,7 +565,7 @@ async function fetchAllActiveProductsForPos() {
 
   do {
     const data = await apiRequestAuth(
-      `/api/v1/products?page=${page}&pageSize=${pageSize}&isActive=true`,
+      `/api/v1/products?page=${page}&pageSize=${pageSize}`,
       { method: 'GET' },
     )
     const paged = toPagedResult(data)
@@ -590,12 +591,15 @@ export async function fetchPosProducts({ storeId, search, limit = 30 }) {
 
   const [data, productItems] = await Promise.all([
     apiRequestAuth(`/api/v1/skus?${query.toString()}`, { method: 'GET' }),
-    fetchAllActiveProductsForPos().catch(() => []),
+    fetchStoreProductsForPos().catch(() => []),
   ])
   const paged = toPagedResult(data)
   const skus = paged.items
   const productById = new Map(
-    productItems.map((product) => [product.id ?? product.Id, product]),
+    productItems.map((product) => {
+      const id = product.id ?? product.Id
+      return [id, product]
+    }),
   )
 
   let stockBySkuId = new Map()
@@ -611,11 +615,12 @@ export async function fetchPosProducts({ storeId, search, limit = 30 }) {
   }
 
   return skus
-    .filter((sku) => productById.has(sku.productId ?? sku.ProductId))
     .map((sku) => {
-    const product = productById.get(sku.productId ?? sku.ProductId)
-    return mapPosProduct({
-      productId: sku.id,
+      const parentProductId = sku.productId ?? sku.ProductId
+      const product = productById.get(parentProductId)
+      if (!product) return null
+      return mapPosProduct({
+      productId: sku.id ?? sku.Id,
       sku: sku.skuCode ?? sku.SkuCode,
       productName: sku.productName ?? sku.ProductName ?? product?.name ?? product?.Name ?? '',
       packagingType: sku.packagingType ?? sku.PackagingType ?? '',
@@ -625,7 +630,8 @@ export async function fetchPosProducts({ storeId, search, limit = 30 }) {
       categoryId: product?.categoryId ?? product?.CategoryId ?? null,
       categoryName: sku.categoryName ?? sku.CategoryName ?? product?.categoryName ?? product?.CategoryName ?? '',
     })
-  })
+    })
+    .filter(Boolean)
 }
 
 export function resolvePosStoreId() {

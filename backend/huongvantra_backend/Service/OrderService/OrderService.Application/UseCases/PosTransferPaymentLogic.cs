@@ -161,7 +161,8 @@ public class PosTransferPaymentLogic(
             transferContent,
             _pos.Template);
 
-        var isExpired = DateTime.UtcNow >= expiresAtUtc;
+        var expiresAt = EnsureUtc(expiresAtUtc);
+        var isExpired = DateTime.UtcNow >= expiresAt;
 
         return new TransferQrResponse(
             qrImageUrl,
@@ -169,9 +170,17 @@ public class PosTransferPaymentLogic(
             transferContent,
             receiveAccount,
             paymentMode,
-            expiresAtUtc,
+            expiresAt,
             isExpired);
     }
+
+    private static DateTime EnsureUtc(DateTime value) =>
+        value.Kind switch
+        {
+            DateTimeKind.Utc => value,
+            DateTimeKind.Local => value.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(value, DateTimeKind.Utc)
+        };
 
     private static Payment? GetTransferPayment(Order order) =>
         order.Payments?.FirstOrDefault(p =>

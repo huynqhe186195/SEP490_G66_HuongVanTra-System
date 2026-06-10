@@ -1,20 +1,22 @@
 import { loadAuthSession } from '../../auth/services/authSession.js'
-import { fetchUserById } from '../../iam/services/usersApi.js'
 import { changePassword } from '../../auth/services/authApi.js'
+import { apiRequestAuth } from '../../../lib/apiClient.js'
 
 export async function fetchMyProfile() {
   const session = loadAuthSession()
-  if (!session?.userId) {
+  if (!session?.accessToken) {
     throw new Error('Không tìm thấy thông tin phiên đăng nhập.')
   }
 
-  const user = await fetchUserById(session.userId)
+  const user = await apiRequestAuth('/api/auth/me', { method: 'GET' })
+  const employee = user.employee ?? user.Employee ?? null
   return {
-    userId: user.id ?? user.Id,
+    userId: user.id ?? user.Id ?? session.userId,
     username: user.username ?? user.Username,
+    fullName: employee?.fullName ?? employee?.FullName ?? '',
     isActive: user.isActive ?? user.IsActive,
-    roles: user.roles ?? user.Roles ?? [],
-    employee: user.employee ?? user.Employee ?? null,
+    roles: user.roles ?? user.Roles ?? session.roles ?? [],
+    employee,
     lastLoginAt: user.lastLoginAt ?? user.LastLoginAt ?? null,
   }
 }

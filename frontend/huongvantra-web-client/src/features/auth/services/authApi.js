@@ -111,15 +111,16 @@ export async function refresh(_accessToken, refreshToken) {
 export async function me(accessToken) {
   const session = loadAuthSession()
   const token = accessToken ?? session?.accessToken
-  const userId = getUserIdFromToken(token) ?? session?.userId
-  if (!userId) {
+  if (!token) {
     return { username: session?.username ?? '', roles: session?.roles ?? [] }
   }
 
-  const user = await apiRequestAuth(`/api/users/${userId}`, { method: 'GET' })
+  const user = await apiRequestAuth('/api/auth/me', { method: 'GET' })
+  const employee = user.employee ?? user.Employee ?? null
   return {
-    userId: user.id ?? user.Id,
+    userId: user.id ?? user.Id ?? getUserIdFromToken(token) ?? session?.userId,
     username: user.username ?? user.Username ?? session?.username ?? '',
+    fullName: employee?.fullName ?? employee?.FullName ?? '',
     roles: user.roles ?? user.Roles ?? session?.roles ?? [],
     permissions: session?.permissions ?? [],
   }

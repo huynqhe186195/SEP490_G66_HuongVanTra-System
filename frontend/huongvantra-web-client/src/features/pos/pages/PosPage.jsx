@@ -180,6 +180,8 @@ function PosPage() {
   const [selectedCategoryId, setSelectedCategoryId] = useState('')
   const [isSearchLoading, setIsSearchLoading] = useState(false)
   const [catalogReloadKey, setCatalogReloadKey] = useState(0)
+  const [isCatalogSyncing, setIsCatalogSyncing] = useState(false)
+  const [pendingCatalogSync, setPendingCatalogSync] = useState(0)
   const [tabCloseConfirm, setTabCloseConfirm] = useState(null)
   const [savedShippingAddresses, setSavedShippingAddresses] = useState([])
   const [isLoadingShippingAddresses, setIsLoadingShippingAddresses] = useState(false)
@@ -253,6 +255,20 @@ function PosPage() {
         if (mounted) setPosCategories([])
       })
 
+    return () => {
+      mounted = false
+    }
+  }, [catalogReloadKey])
+
+  useEffect(() => {
+    let mounted = true
+    fetchPendingCatalogSync()
+      .then((pending) => {
+        if (mounted) setPendingCatalogSync(pending.total ?? 0)
+      })
+      .catch(() => {
+        if (mounted) setPendingCatalogSync(0)
+      })
     return () => {
       mounted = false
     }
@@ -363,22 +379,27 @@ function PosPage() {
   }, [searchValue, activeTabId, catalogReloadKey])
 
   async function handleRefreshCatalog() {
+    setIsCatalogSyncing(true)
     try {
       const pending = await fetchPendingCatalogSync()
+      setPendingCatalogSync(pending.total ?? 0)
       const result = await syncCatalogToStore()
       setCatalogReloadKey((value) => value + 1)
       const total = result.categoriesSynced + result.productsSynced + result.skusSynced
-      if (total === 0 && pending.total === 0) {
-        showSuccess('Catalog cửa hàng đã đầy đủ — không có DM/SP/SKU mới từ kho.')
-      } else if (total === 0) {
-        showSuccess('Đã kiểm tra đồng bộ — danh sách POS đã được tải lại.')
-      } else {
+      setPendingCatalogSync(0)
+      if (total > 0) {
         showSuccess(
           `Đã đồng bộ ${result.categoriesSynced} DM, ${result.productsSynced} SP, ${result.skusSynced} SKU từ kho.`,
         )
+      } else if ((pending.total ?? 0) > 0) {
+        showSuccess('Đã đồng bộ — danh sách POS đang tải lại.')
+      } else {
+        showSuccess('Catalog đã cập nhật — không có mục mới từ kho.')
       }
     } catch (error) {
-      showError(error.message)
+      showError(error.message || 'Không đồng bộ được catalog. Thử đăng nhập lại.')
+    } finally {
+      setIsCatalogSyncing(false)
     }
   }
 
@@ -1191,12 +1212,17 @@ function PosPage() {
                   <button
                     type="button"
                     onClick={handleRefreshCatalog}
-                    disabled={isSearchLoading}
+                    disabled={isSearchLoading || isCatalogSyncing}
                     className="inline-flex items-center gap-1 rounded-lg border border-[#c1c9c0] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#356647] hover:bg-[#f0eee6] disabled:opacity-50"
-                    title="Tải lại sản phẩm và danh mục mới từ kho"
+                    title="Tải DM/SP/SKU mới từ kho sang cửa hàng"
                   >
-                    <Icon className="text-[16px]">sync</Icon>
-                    Đồng bộ
+                    <Icon className={`text-[16px] ${isCatalogSyncing ? 'animate-spin' : ''}`}>sync</Icon>
+                    {isCatalogSyncing ? 'Đang đồng bộ...' : 'Đồng bộ'}
+                    {pendingCatalogSync > 0 && !isCatalogSyncing ? (
+                      <span className="rounded-full bg-amber-100 px-1.5 text-[10px] font-bold text-amber-800">
+                        {pendingCatalogSync}
+                      </span>
+                    ) : null}
                   </button>
                   <span className="text-xs text-[#717971]">{filteredSearchProducts.length} SP</span>
                 </div>

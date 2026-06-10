@@ -8,8 +8,11 @@ import {
   refreshOrderTransferQr,
   resolveTransferQrImageUrl,
 } from '../../pos/services/posApi.js'
+import { isQrExpired, useQrExpiryCountdown } from '../../pos/utils/qrExpiry.js'
 
 const POLL_INTERVAL_MS = 3000
+const QR_EXPIRED_MESSAGE =
+  'Mã QR đã hết hạn. Bấm「Tạo mã QR mới」hoặc hủy đơn nếu khách không thanh toán.'
 
 function formatMoney(value) {
   return new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(value)
@@ -21,34 +24,6 @@ function paymentStatusLabel(status, isPaid) {
   if (normalized === 'pending_payment') return 'Chờ chuyển khoản'
   if (normalized === 'paid' || normalized === 'success') return 'Đã thanh toán'
   return status || 'Đang chờ'
-}
-
-function useQrExpiryCountdown(expiresAtUtc, isExpired) {
-  const [label, setLabel] = useState('')
-
-  useEffect(() => {
-    if (!expiresAtUtc) {
-      setLabel('')
-      return undefined
-    }
-
-    const tick = () => {
-      const remainingMs = new Date(expiresAtUtc).getTime() - Date.now()
-      if (remainingMs <= 0 || isExpired) {
-        setLabel('Mã QR đã hết hạn. Bấm「Tạo mã QR mới」hoặc hủy đơn nếu khách không thanh toán.')
-        return
-      }
-      const minutes = Math.floor(remainingMs / 60000)
-      const seconds = Math.floor((remainingMs % 60000) / 1000)
-      setLabel(`QR hết hạn sau ${minutes}:${String(seconds).padStart(2, '0')}`)
-    }
-
-    tick()
-    const timerId = setInterval(tick, 1000)
-    return () => clearInterval(timerId)
-  }, [expiresAtUtc, isExpired])
-
-  return label
 }
 
 function OrderTransferQrPanel({ orderId, orderCode, total, customerName, onPaid }) {
@@ -64,10 +39,8 @@ function OrderTransferQrPanel({ orderId, orderCode, total, customerName, onPaid 
   const [expectedTransferContent, setExpectedTransferContent] = useState('')
   const [expectedAmount, setExpectedAmount] = useState(0)
   const completedRef = useRef(false)
-  const isQrExpired =
-    Boolean(qrData?.isExpired) ||
-    (qrData?.qrExpiresAtUtc && new Date(qrData.qrExpiresAtUtc).getTime() <= Date.now())
-  const qrExpiryLabel = useQrExpiryCountdown(qrData?.qrExpiresAtUtc, isQrExpired)
+  const qrExpired = isQrExpired(qrData?.qrExpiresAtUtc, qrData?.isExpired)
+  const qrExpiryLabel = useQrExpiryCountdown(qrData?.qrExpiresAtUtc, qrExpired, QR_EXPIRED_MESSAGE)
 
   const loadQr = useCallback(async () => {
     if (!orderId) return
@@ -141,7 +114,7 @@ function OrderTransferQrPanel({ orderId, orderCode, total, customerName, onPaid 
   }, [expectedTransferContent, qrData?.transferContent, orderCode])
 
   const displayAmount = expectedAmount > 0 ? expectedAmount : total || 0
-  const qrImageUrl = !isQrExpired
+  const qrImageUrl = !qrExpired
     ? resolveTransferQrImageUrl({
         qrImageUrl: qrData?.qrImageUrl,
         qrPayload: qrData?.qrPayload,
@@ -203,7 +176,7 @@ function OrderTransferQrPanel({ orderId, orderCode, total, customerName, onPaid 
 
       {qrExpiryLabel ? (
         <p
-          className={`mb-3 text-xs font-semibold ${isQrExpired ? 'text-red-600' : 'text-[#7e5700]'}`}
+          className={`mb-3 text-xs font-semibold ${qrExpired ? 'text-red-600' : 'text-[#7e5700]'}`}
         >
           {qrExpiryLabel}
         </p>
@@ -220,7 +193,7 @@ function OrderTransferQrPanel({ orderId, orderCode, total, customerName, onPaid 
       ) : (
         <div className="space-y-4">
           <div className="mx-auto w-full max-w-[220px] rounded-2xl border-2 border-[#356647]/20 bg-white p-3">
-            {isQrExpired ? (
+            {qrExpired ? (
               <div className="flex aspect-square w-full flex-col items-center justify-center gap-2 px-3 text-center text-xs text-slate-500">
                 <span className="material-symbols-outlined text-4xl text-red-400">qr_code_2</span>
                 <p className="font-semibold text-red-600">QR đã hết hạn</p>
@@ -235,7 +208,7 @@ function OrderTransferQrPanel({ orderId, orderCode, total, customerName, onPaid 
             )}
           </div>
 
-          {isQrExpired ? (
+          {qrExpired ? (
             <div className="flex flex-col items-center gap-2">
               <button
                 type="button"
@@ -255,7 +228,7 @@ function OrderTransferQrPanel({ orderId, orderCode, total, customerName, onPaid 
             </p>
           )}
 
-          {isLegacyMainAccountQr && !isQrExpired ? (
+          {isLegacyMainAccountQr && !qrExpired ? (
             <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700">
               <p className="font-semibold">QR trỏ tài khoản chính — SePay có thể không ghi nhận</p>
               <p className="mt-1">
