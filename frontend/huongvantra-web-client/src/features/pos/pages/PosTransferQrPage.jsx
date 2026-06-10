@@ -9,9 +9,12 @@ import {
   refreshOrderTransferQr,
   resolveTransferQrImageUrl,
 } from '../services/posApi.js'
+import { isQrExpired, useQrExpiryCountdown } from '../utils/qrExpiry.js'
 import { printReceiptFromData } from '../utils/printReceipt.js'
 
 const POLL_INTERVAL_MS = 3000
+const QR_EXPIRED_MESSAGE =
+  'Mã QR đã hết hạn. Bấm「Tạo mã QR mới」hoặc quay POS nếu khách không thanh toán.'
 
 function Icon({ children, className = '' }) {
   return <span className={`material-symbols-outlined ${className}`}>{children}</span>
@@ -19,34 +22,6 @@ function Icon({ children, className = '' }) {
 
 function formatMoney(value) {
   return new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(value)
-}
-
-function useQrExpiryCountdown(expiresAtUtc, isExpired) {
-  const [label, setLabel] = useState('')
-
-  useEffect(() => {
-    if (!expiresAtUtc) {
-      setLabel('')
-      return undefined
-    }
-
-    const tick = () => {
-      const remainingMs = new Date(expiresAtUtc).getTime() - Date.now()
-      if (remainingMs <= 0 || isExpired) {
-        setLabel('Mã QR đã hết hạn. Bấm「Tạo mã QR mới」hoặc quay POS nếu khách không thanh toán.')
-        return
-      }
-      const minutes = Math.floor(remainingMs / 60000)
-      const seconds = Math.floor((remainingMs % 60000) / 1000)
-      setLabel(`QR hết hạn sau ${minutes}:${String(seconds).padStart(2, '0')}`)
-    }
-
-    tick()
-    const timerId = setInterval(tick, 1000)
-    return () => clearInterval(timerId)
-  }, [expiresAtUtc, isExpired])
-
-  return label
 }
 
 function paymentStatusLabel(status, isPaid) {
@@ -74,10 +49,8 @@ function PosTransferQrPage() {
   const [isRefreshing, setIsRefreshing] = useState(false)
   const completedRef = useRef(false)
   const qrExpiresAtUtc = qrData?.qrExpiresAtUtc ?? payment?.qrExpiresAtUtc
-  const isQrExpired =
-    Boolean(qrData?.isExpired) ||
-    (qrExpiresAtUtc && new Date(qrExpiresAtUtc).getTime() <= Date.now())
-  const qrExpiryLabel = useQrExpiryCountdown(qrExpiresAtUtc, isQrExpired)
+  const qrExpired = isQrExpired(qrExpiresAtUtc, qrData?.isExpired)
+  const qrExpiryLabel = useQrExpiryCountdown(qrExpiresAtUtc, qrExpired, QR_EXPIRED_MESSAGE)
 
   useEffect(() => {
     if (!payment?.orderId) return undefined
@@ -213,7 +186,7 @@ function PosTransferQrPage() {
 
   const displayAmount = expectedAmount > 0 ? expectedAmount : payment?.total || 0
 
-  const qrImageUrl = !isQrExpired
+  const qrImageUrl = !qrExpired
     ? resolveTransferQrImageUrl({
         qrImageUrl: qrData?.qrImageUrl ?? payment?.qrImageUrl,
         qrPayload: qrData?.qrPayload ?? payment?.qrPayload,
@@ -286,7 +259,7 @@ function PosTransferQrPage() {
           {qrExpiryLabel ? (
             <p
               className={`mt-2 text-xs font-semibold ${
-                isQrExpired ? 'text-red-600' : 'text-[#7e5700]'
+                qrExpired ? 'text-red-600' : 'text-[#7e5700]'
               }`}
             >
               {qrExpiryLabel}
@@ -314,7 +287,7 @@ function PosTransferQrPage() {
 
         <div className="flex flex-col items-center gap-4 p-4 sm:gap-6 sm:p-6">
           <div className="w-full max-w-[min(100%,280px)] rounded-2xl border-2 border-[#356647]/20 bg-white p-3 shadow-inner sm:p-4">
-            {isQrExpired ? (
+            {qrExpired ? (
               <div className="flex aspect-square w-full flex-col items-center justify-center gap-2 px-3 text-center text-xs text-[#717971]">
                 <Icon className="text-4xl text-red-400">qr_code_2</Icon>
                 <p className="font-semibold text-red-600">QR đã hết hạn</p>
@@ -333,7 +306,7 @@ function PosTransferQrPage() {
             )}
           </div>
 
-          {isQrExpired ? (
+          {qrExpired ? (
             <button
               type="button"
               disabled={isRefreshing}

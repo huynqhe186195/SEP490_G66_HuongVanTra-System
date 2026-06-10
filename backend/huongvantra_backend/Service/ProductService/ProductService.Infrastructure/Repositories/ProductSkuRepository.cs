@@ -29,7 +29,7 @@ public class ProductSkuRepository(ProductDbContext _db) : IProductSkuRepository
             query = query.Where(sku => sku.ProductId == productId.Value);
 
         if (isActive == true)
-            query = query.Where(sku => sku.IsActive && sku.Product.IsActive);
+            query = query.Where(sku => sku.IsActive);
         else if (isActive == false)
             query = query.Where(sku => !sku.IsActive);
 

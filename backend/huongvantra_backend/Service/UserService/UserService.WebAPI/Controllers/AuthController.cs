@@ -8,7 +8,7 @@ namespace UserService.WebAPI.Controllers;
 
 [ApiController]
 [Route("api/auth")]
-public class AuthController(AuthLogic authLogic) : ControllerBase
+public class AuthController(AuthLogic authLogic, UserLogic userLogic) : ControllerBase
 {
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginRequest request)
@@ -30,6 +30,16 @@ public class AuthController(AuthLogic authLogic) : ControllerBase
     {
         await authLogic.LogoutAsync(request);
         return NoContent();
+    }
+
+    [HttpGet("me")]
+    [Authorize]
+    public async Task<IActionResult> Me()
+    {
+        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? User.FindFirstValue("sub")!);
+        var result = await userLogic.GetByIdAsync(userId);
+        return Ok(result);
     }
 
     [HttpPost("change-password")]

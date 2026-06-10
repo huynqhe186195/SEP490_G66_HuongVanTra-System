@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using UserService.Application.DTOs.Requests;
@@ -20,9 +21,13 @@ public class UsersController(UserLogic userLogic) : ControllerBase
     }
 
     [HttpGet("{id:guid}")]
-    [Authorize(Policy = PermissionNames.ManageUser)]
     public async Task<IActionResult> GetById(Guid id)
     {
+        var currentUserId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? User.FindFirstValue("sub")!);
+        if (id != currentUserId && !User.HasClaim("permission", PermissionNames.ManageUser))
+            return Forbid();
+
         var result = await userLogic.GetByIdAsync(id);
         return Ok(result);
     }
