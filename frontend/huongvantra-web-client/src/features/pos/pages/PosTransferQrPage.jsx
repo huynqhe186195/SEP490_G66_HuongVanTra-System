@@ -10,7 +10,10 @@ import {
   resolveTransferQrImageUrl,
 } from '../services/posApi.js'
 import { isQrExpired, useQrExpiryCountdown } from '../utils/qrExpiry.js'
-import { printReceiptFromData } from '../utils/printReceipt.js'
+import { vietnamNowLabel } from '../../../utils/vietnamDateTime.js'
+import { recordDebtTransaction } from '../../customers/services/customersApi.js'
+import { buildDebtReceiptCode } from '../utils/buildDebtReceiptPaperHtml.js'
+import { printReceiptSequence } from '../utils/printReceipt.js'
 
 const POLL_INTERVAL_MS = 3000
 const QR_EXPIRED_MESSAGE =
@@ -68,30 +71,63 @@ function PosTransferQrPage() {
   }, [payment?.orderId])
 
   const finishWithReceipt = useCallback(
-    (status) => {
+    async (status) => {
       if (completedRef.current) return
       completedRef.current = true
 
+      const orderCode = status?.orderCode || payment?.orderCode || payment?.orderId
       const receipt = payment?.receipt
         ? {
             ...payment.receipt,
             invoiceCode: status?.invoiceCode || invoiceCode || payment.receipt.invoiceCode,
-            orderCode: status?.orderCode || payment.orderCode || payment.receipt.orderCode,
+            orderCode,
           }
         : undefined
 
+      const receipts = receipt ? [receipt] : []
+      const debtSettlement = payment?.debtSettlement
+
+      if (debtSettlement?.customerId && debtSettlement.amount > 0) {
+        try {
+          const transaction = await recordDebtTransaction(debtSettlement.customerId, {
+            type: 'DecreaseDebt',
+            amount: debtSettlement.amount,
+            note: `Trừ từ tiền thừa đơn ${orderCode}`,
+          })
+          receipts.push({
+            kind: 'debt',
+            receiptCode: buildDebtReceiptCode(transaction?.id),
+            customerName: debtSettlement.customerName || '',
+            customerCode: debtSettlement.customerCode || '',
+            paymentMethodLabel: 'Chuyển khoản',
+            createdAtLabel: vietnamNowLabel(),
+            amount: debtSettlement.amount,
+            balanceBefore: debtSettlement.balanceBefore,
+            balanceAfter: Number(transaction?.balanceAfter ?? debtSettlement.balanceBefore - debtSettlement.amount),
+            relatedOrderCode: orderCode || undefined,
+            note: transaction?.note || `Trừ từ tiền thừa đơn ${orderCode}`,
+          })
+        } catch (error) {
+          showError(error.message || 'Đơn đã thanh toán nhưng không ghi được trừ nợ.')
+        }
+      }
+
       showSuccess(
         status?.invoiceCode
-          ? `Đã thanh toán · Số HĐ: ${status.invoiceCode}`
-          : `Đã thanh toán · Đơn ${payment?.orderCode || payment?.orderId}`,
+          ? debtSettlement?.amount > 0
+            ? `Đã thanh toán · Số HĐ: ${status.invoiceCode} · Trừ nợ ${formatMoney(debtSettlement.amount)} đ`
+            : `Đã thanh toán · Số HĐ: ${status.invoiceCode}`
+          : debtSettlement?.amount > 0
+            ? `Đã thanh toán đơn ${orderCode} · Trừ nợ ${formatMoney(debtSettlement.amount)} đ`
+            : `Đã thanh toán · Đơn ${orderCode}`,
       )
 
       navigate('/pos', { replace: true })
-      if (receipt) {
-        printReceiptFromData(receipt)
+      if (receipts.length > 0) {
+        await printReceiptSequence(receipts)
       }
     },
-    [navigate, payment?.orderCode, payment?.orderId, payment?.receipt, invoiceCode],
+    [navigate, payment?.orderCode, payment?.orderId, payment?.receipt, payment?.debtSettlement, invoiceCode],
   )
 
   useEffect(() => {

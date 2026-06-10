@@ -113,6 +113,27 @@ export function customerTypeLabelFromType(customerType) {
   return customerTypeLabel(tabKeyFromCustomerType(customerType))
 }
 
+/** Snapshot lưu trên đơn hàng: "Họ tên · Mã KH" */
+export function formatCustomerOrderSnapshot(customer) {
+  if (!customer) return null
+  const name = String(customer.fullName || '').trim()
+  const code = String(customer.customerCode || '').trim()
+  if (name && code) return `${name} · ${code}`
+  return name || code || null
+}
+
+export function parseCustomerOrderSnapshot(snapshot) {
+  const text = String(snapshot || '').trim()
+  if (!text) return { name: '', code: '' }
+  const separator = ' · '
+  const index = text.indexOf(separator)
+  if (index === -1) return { name: text, code: '' }
+  return {
+    name: text.slice(0, index).trim(),
+    code: text.slice(index + separator.length).trim(),
+  }
+}
+
 export function formatCustomerAddressLine(address) {
   if (!address) return ''
   if (typeof address === 'string') return address.trim()

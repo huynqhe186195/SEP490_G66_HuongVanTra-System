@@ -135,6 +135,7 @@ export function buildCreateOrderBody(payload) {
     note: payload.note?.trim() || null,
     discountAmount: Number(payload.discountAmount ?? 0),
     paidAmount: Number(payload.paidAmount ?? 0),
+    transferQrAmount: Number(payload.transferQrAmount ?? 0),
     paymentMethod: payload.paymentMethod,
     items: (payload.items || []).map((line) => ({
       skuId: line.skuId,

@@ -113,7 +113,10 @@ public class PosTransferPaymentLogic(
         payment.UpdatedAt = DateTime.UtcNow;
         await orderRepo.SaveChangesAsync(ct);
 
-        return CreateTransferQrResponse(order.OrderCode, order.FinalAmount, payment.TransferQrExpiresAtUtc.Value);
+        return CreateTransferQrResponse(
+            order.OrderCode,
+            GetTransferQrAmount(order, payment),
+            payment.TransferQrExpiresAtUtc.Value);
     }
 
     private async Task<TransferQrResponse> ResolveTransferQrForOrderAsync(
@@ -137,9 +140,19 @@ public class PosTransferPaymentLogic(
 
         return CreateTransferQrResponse(
             order.OrderCode,
-            order.FinalAmount,
+            GetTransferQrAmount(order, payment),
             payment.TransferQrExpiresAtUtc.Value);
     }
+
+    private static decimal GetTransferQrAmount(Order order, Payment payment) =>
+        ResolveTransferQrAmount(payment.Amount, order.FinalAmount);
+
+    private static decimal ResolveTransferQrAmount(decimal paymentAmount, decimal orderFinalAmount) =>
+        paymentAmount > 0 ? paymentAmount : orderFinalAmount;
+
+    private static bool IsTransferPaymentMethod(string? paymentMethod) =>
+        string.Equals(paymentMethod, PaymentMethod.VietQR.ToString(), StringComparison.OrdinalIgnoreCase)
+        || string.Equals(paymentMethod, PaymentMethod.BankTransfer.ToString(), StringComparison.OrdinalIgnoreCase);
 
     private TransferQrResponse CreateTransferQrResponse(
         string orderCode, decimal amount, DateTime expiresAtUtc)
@@ -210,6 +223,9 @@ public class PosTransferPaymentLogic(
             || string.Equals(order.OrderStatus, OrderStatus.Completed.ToString(),
                 StringComparison.OrdinalIgnoreCase);
 
+        var transferPayment = order.Payments?.FirstOrDefault(p =>
+            IsTransferPaymentMethod(p.PaymentMethod));
+
         return new PosOrderPaymentStatusResponse(
             order.Id,
             order.OrderCode,
@@ -218,7 +234,9 @@ public class PosTransferPaymentLogic(
             isPaid,
             null,
             order.OrderCode,
-            order.FinalAmount);
+            transferPayment is not null
+                ? ResolveTransferQrAmount(transferPayment.Amount, order.FinalAmount)
+                : order.FinalAmount);
     }
 
     public async Task HandleSepayWebhookAsync(SepayWebhookPayload payload, CancellationToken ct = default)
@@ -290,7 +308,7 @@ public class PosTransferPaymentLogic(
         if (payment.PaymentStatus == PaymentStatus.Success)
             return;
 
-        var expectedAmount = (long)Math.Round(order.FinalAmount, MidpointRounding.AwayFromZero);
+        var expectedAmount = (long)Math.Round(GetTransferQrAmount(order, payment), MidpointRounding.AwayFromZero);
         var tolerance = Math.Max(0, _sepay.AmountToleranceVnd);
         if (Math.Abs(receivedAmount - expectedAmount) > tolerance)
         {

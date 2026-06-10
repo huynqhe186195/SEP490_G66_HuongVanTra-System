@@ -177,6 +177,8 @@ public class CustomerLogic
         await RecordActivityAsync(customerId, CustomerActivityType.OrderCreated,
             $"Hoàn tất đơn {orderCode}: chi tiêu +{amountSpent:N0}", ct);
 
+        var (tierUpgraded, upgradedTierName) = await TryUpgradeMembershipTierAsync(customer, ct);
+
         await _customerRepo.SaveChangesAsync(ct);
 
         return new OrderCompletedHandlingResult(
@@ -187,8 +189,8 @@ public class CustomerLogic
             TotalSpending: customer.TotalSpending,
             CurrentDebt: customer.CurrentDebt,
             TierId: customer.TierId,
-            TierName: customer.Tier?.TierName,
-            TierUpgraded: false);
+            TierName: upgradedTierName ?? customer.Tier?.TierName,
+            TierUpgraded: tierUpgraded);
     }
 
     public async Task<CustomerDebtTransactionResponse> RecordDebtTransactionAsync(
@@ -373,6 +375,36 @@ public class CustomerLogic
         primary.AddressLine = addressLine;
         primary.UpdatedAt = DateTime.UtcNow;
         _addressRepo.Update(primary);
+    }
+
+    private async Task<(bool Upgraded, string? NewTierName)> TryUpgradeMembershipTierAsync(
+        Customer customer, CancellationToken ct)
+    {
+        if (customer.CustomerGroup != CustomerGroup.PhoThong)
+            return (false, null);
+
+        var eligibleTier = await _tierRepo.GetTierForSpendingAsync(customer.TotalSpending, ct);
+        if (eligibleTier is null)
+            return (false, null);
+
+        if (customer.TierId == eligibleTier.Id)
+            return (false, null);
+
+        var currentThreshold = customer.Tier?.MinSpendingThreshold ?? -1m;
+        if (customer.TierId.HasValue && eligibleTier.MinSpendingThreshold <= currentThreshold)
+            return (false, null);
+
+        var oldName = customer.Tier?.TierName ?? "Chưa có hạng";
+        customer.TierId = eligibleTier.Id;
+        customer.Tier = eligibleTier;
+
+        await RecordActivityAsync(
+            customer.Id,
+            CustomerActivityType.TierChanged,
+            $"Tự động nâng hạng: {oldName} → {eligibleTier.TierName} (tổng chi tiêu {customer.TotalSpending:N0} đ)",
+            ct);
+
+        return (true, eligibleTier.TierName);
     }
 
     private async Task<int?> ResolveInitialTierIdAsync(CustomerGroup customerGroup, CancellationToken ct)

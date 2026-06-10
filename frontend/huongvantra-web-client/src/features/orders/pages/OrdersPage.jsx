@@ -8,6 +8,7 @@ import { loadAuthSession } from '../../auth/services/authSession.js'
 import { canCreateOrder } from '../../auth/utils/permissions.js'
 import { showError } from '../../../app/toast.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
+import OrderCustomerCell from '../components/OrderCustomerCell.jsx'
 import { fetchOrders } from '../services/ordersApi.js'
 import {
   formatVnd,
@@ -220,7 +221,12 @@ function OrdersPage() {
                           {order.orderCode}
                         </Link>
                       </td>
-                      <td className="px-4 py-4 font-medium text-slate-800">{order.customerSnapshotName || 'Khách lẻ'}</td>
+                      <td className="px-4 py-4">
+                        <OrderCustomerCell
+                          snapshot={order.customerSnapshotName}
+                          customerId={order.customerId}
+                        />
+                      </td>
                       <td className="max-w-[200px] px-4 py-4 text-xs text-slate-600">
                         {order.note?.trim() ? (
                           <span className="line-clamp-2" title={order.note}>

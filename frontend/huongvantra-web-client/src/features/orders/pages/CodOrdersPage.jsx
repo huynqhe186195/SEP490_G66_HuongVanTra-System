@@ -6,6 +6,7 @@ import { loadAuthSession } from '../../auth/services/authSession.js'
 import { canCreateOrder } from '../../auth/utils/permissions.js'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
+import OrderCustomerCell from '../components/OrderCustomerCell.jsx'
 import {
   fetchOrders,
   fetchOverdueCodPayments,
@@ -135,7 +136,9 @@ function CodOrdersPage() {
               </span>
             ) : null}
           </td>
-          <td className="px-4 py-5 font-medium text-slate-800">{payment.customerSnapshotName || 'Khách lẻ'}</td>
+          <td className="px-4 py-5">
+            <OrderCustomerCell snapshot={payment.customerSnapshotName} customerId={payment.customerId} />
+          </td>
           <td className="px-4 py-5">
             <span className={`rounded-full px-3 py-1 text-xs font-semibold ${getPaymentStatusClass(payment.paymentStatus)}`}>
               {getPaymentStatusLabel(payment.paymentStatus)}
@@ -271,7 +274,9 @@ function CodOrdersPage() {
                           {order.orderCode}
                         </Link>
                       </td>
-                      <td className="px-4 py-5">{order.customerSnapshotName || 'Khách lẻ'}</td>
+                      <td className="px-4 py-5">
+                        <OrderCustomerCell snapshot={order.customerSnapshotName} customerId={order.customerId} />
+                      </td>
                       <td className="px-4 py-5">
                         <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
                           Hoàn tất

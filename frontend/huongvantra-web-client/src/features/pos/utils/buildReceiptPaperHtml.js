@@ -23,7 +23,8 @@ export function buildReceiptPaperHtml(receipt) {
   if (!receipt) return ''
 
   const hasDiscount = Number(receipt.totalDiscount || 0) > 0
-  const isCash = receipt.paymentMethodLabel === 'Tiền mặt'
+  const isRecordedPayment =
+    receipt.paymentMethodLabel === 'Tiền mặt' || receipt.paymentMethodLabel === 'Chuyển khoản'
 
   const itemsHtml = (receipt.items || [])
     .map(
@@ -39,16 +40,16 @@ export function buildReceiptPaperHtml(receipt) {
     )
     .join('')
 
-  const cashRows = isCash
+  const paymentRows = isRecordedPayment
     ? `
       <div class="receipt-total-row">
-        <span>Khách đưa</span>
+        <span>Khách trả</span>
         <span>${formatMoney(receipt.customerPaid ?? receipt.amountPaid ?? 0)}</span>
       </div>
       ${
         (receipt.debtAmount ?? 0) > 0
           ? `<div class="receipt-total-row receipt-debt">
-        <span>Còn nợ</span>
+        <span>Còn nợ (đơn)</span>
         <span>${formatMoney(receipt.debtAmount)}</span>
       </div>`
           : ''
@@ -103,7 +104,7 @@ export function buildReceiptPaperHtml(receipt) {
         <span>TỔNG CỘNG</span>
         <span>${formatMoney(receipt.total)} đ</span>
       </div>
-      ${cashRows}
+      ${paymentRows}
       <div class="receipt-divider"></div>
       <div class="receipt-thanks">Cảm ơn quý khách!</div>
       <div class="receipt-footer-note">Hẹn gặp lại tại Hương Vân Trà</div>

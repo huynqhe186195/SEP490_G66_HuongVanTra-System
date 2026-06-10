@@ -1,9 +1,16 @@
 import { useEffect, useState } from 'react'
-import { showError } from '../../../app/toast.js'
+import { showError, showSuccess } from '../../../app/toast.js'
 import MembershipTierProgress from '../../customers/components/MembershipTierProgress.jsx'
 import { isVipCustomerType, supportsMembershipTierForCustomerType } from '../../customers/utils/customerDisplay.js'
-import { fetchMembershipTiers } from '../../customers/services/customersApi.js'
+import {
+  fetchCustomerDebts,
+  fetchMembershipTiers,
+  recordDebtTransaction,
+} from '../../customers/services/customersApi.js'
 import { fetchPosCustomerContext } from '../services/posApi.js'
+import { buildDebtReceiptCode } from '../utils/buildDebtReceiptPaperHtml.js'
+import { printDebtReceiptFromData } from '../utils/printReceipt.js'
+import { loadPosSeller } from '../utils/posSeller.js'
 import { formatRoleLabel } from '../utils/posSeller.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 
@@ -60,11 +67,22 @@ function TabButton({ tab, activeTab, onChange }) {
   )
 }
 
-function CustomerDetailModal({ isOpen, customer, onClose }) {
+function CustomerDetailModal({ isOpen, customer, onClose, onCustomerUpdated }) {
   const [activeTab, setActiveTab] = useState('profile')
   const [context, setContext] = useState(null)
   const [membershipTiers, setMembershipTiers] = useState([])
+  const [debtHistory, setDebtHistory] = useState([])
+  const [debtPayAmount, setDebtPayAmount] = useState('')
+  const [debtPayNote, setDebtPayNote] = useState('')
+  const [isPayingDebt, setIsPayingDebt] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [seller, setSeller] = useState({ name: 'NV POS', role: '' })
+
+  useEffect(() => {
+    if (!isOpen) return undefined
+    loadPosSeller().then((info) => setSeller(info))
+    return undefined
+  }, [isOpen])
 
   useEffect(() => {
     if (!isOpen || !customer?.customerId) {
@@ -77,13 +95,15 @@ function CustomerDetailModal({ isOpen, customer, onClose }) {
     async function loadContext() {
       setIsLoading(true)
       try {
-        const [data, tiers] = await Promise.all([
+        const [data, tiers, debts] = await Promise.all([
           fetchPosCustomerContext(customer.customerId),
           fetchMembershipTiers().catch(() => []),
+          fetchCustomerDebts(customer.customerId).catch(() => []),
         ])
         if (!cancelled) {
           setContext(data)
           setMembershipTiers(Array.isArray(tiers) ? tiers : [])
+          setDebtHistory(Array.isArray(debts) ? debts.slice(0, 10) : [])
         }
       } catch (error) {
         if (!cancelled) {
@@ -107,6 +127,59 @@ function CustomerDetailModal({ isOpen, customer, onClose }) {
 
   const customerTypeLabel =
     CUSTOMER_TYPE_LABELS[(context?.customerType || '').toUpperCase()] || context?.customerType || '—'
+
+  async function handleDebtPayment(event) {
+    event.preventDefault()
+    const amount = Number(String(debtPayAmount).replace(/\D/g, ''))
+    const currentDebt = Number(context?.currentDebt ?? 0)
+
+    if (!amount || amount <= 0) {
+      showError('Nhập số tiền thu công nợ.')
+      return
+    }
+    if (amount > currentDebt) {
+      showError(`Số tiền vượt công nợ hiện tại (${formatMoney(currentDebt)} đ).`)
+      return
+    }
+
+    try {
+      setIsPayingDebt(true)
+      const transaction = await recordDebtTransaction(customer.customerId, {
+        type: 'DecreaseDebt',
+        amount,
+        note: debtPayNote.trim() || 'Thu công nợ tại POS',
+      })
+      const refreshed = await fetchPosCustomerContext(customer.customerId)
+      const debts = await fetchCustomerDebts(customer.customerId).catch(() => [])
+      setContext(refreshed)
+      setDebtHistory(Array.isArray(debts) ? debts.slice(0, 10) : [])
+      setDebtPayAmount('')
+      setDebtPayNote('')
+      showSuccess(`Đã thu ${formatMoney(amount)} đ công nợ. Đang in phiếu thu nợ...`)
+      await printDebtReceiptFromData({
+        kind: 'debt',
+        receiptCode: buildDebtReceiptCode(transaction?.id),
+        customerName: refreshed?.fullName || customer.fullName,
+        customerCode: refreshed?.customerCode || customer.customerCode,
+        paymentMethodLabel: debtPayNote.trim() || 'Thu tại quầy',
+        createdAtLabel: formatVietnamDateTime(transaction?.createdAt || new Date()),
+        sellerName: seller.name,
+        sellerRole: seller.role,
+        amount,
+        balanceBefore: currentDebt,
+        balanceAfter: Number(transaction?.balanceAfter ?? refreshed?.currentDebt ?? 0),
+        note: transaction?.note || debtPayNote.trim() || 'Thu công nợ tại POS',
+      })
+      onCustomerUpdated?.({
+        ...customer,
+        currentDebt: Number(refreshed?.currentDebt ?? 0),
+      })
+    } catch (error) {
+      showError(error.message)
+    } finally {
+      setIsPayingDebt(false)
+    }
+  }
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm" onClick={onClose}>
@@ -236,14 +309,97 @@ function CustomerDetailModal({ isOpen, customer, onClose }) {
                 <p className="text-xs text-[#717971]">Công nợ hiện tại</p>
                 <p className="mt-1 text-2xl font-bold text-[#7e5700]">{formatMoney(context?.currentDebt ?? 0)} đ</p>
                 <p className="mt-2 text-xs leading-relaxed text-[#717971]">
-
+                  Phát sinh khi bán chưa thu đủ. Có thể thu trả tại đây hoặc trừ từ tiền thừa khi thanh toán đơn.
                 </p>
               </div>
+
+              {Number(context?.currentDebt ?? 0) > 0 ? (
+                <form className="rounded-xl border border-[#356647]/25 bg-white p-4" onSubmit={handleDebtPayment}>
+                  <p className="text-sm font-semibold text-[#356647]">Thu trả công nợ</p>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <label className="mb-1 block text-xs font-semibold text-[#717971]" htmlFor="debt-pay-amount">
+                        Số tiền thu
+                      </label>
+                      <input
+                        id="debt-pay-amount"
+                        type="text"
+                        inputMode="numeric"
+                        value={debtPayAmount}
+                        onChange={(event) => setDebtPayAmount(event.target.value.replace(/\D/g, ''))}
+                        className="w-full rounded-lg border border-[#c1c9c0] px-3 py-2 text-sm outline-none focus:border-[#356647]"
+                        placeholder="VD: 500000"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-semibold text-[#717971]" htmlFor="debt-pay-note">
+                        Ghi chú
+                      </label>
+                      <input
+                        id="debt-pay-note"
+                        type="text"
+                        value={debtPayNote}
+                        onChange={(event) => setDebtPayNote(event.target.value)}
+                        className="w-full rounded-lg border border-[#c1c9c0] px-3 py-2 text-sm outline-none focus:border-[#356647]"
+                        placeholder="Tiền mặt / CK..."
+                      />
+                    </div>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setDebtPayAmount(String(Math.round(Number(context?.currentDebt ?? 0))))}
+                      className="rounded-lg bg-[#f6f4ec] px-3 py-1.5 text-xs font-semibold text-[#414942] hover:bg-[#eae8e0]"
+                    >
+                      Thu hết nợ
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isPayingDebt}
+                      className="rounded-lg bg-[#356647] px-4 py-2 text-sm font-bold text-white hover:brightness-110 disabled:opacity-50"
+                    >
+                      {isPayingDebt ? 'Đang lưu...' : 'Ghi nhận thu nợ'}
+                    </button>
+                  </div>
+                </form>
+              ) : null}
 
               <div className="rounded-xl border border-[#e5e7eb] bg-white p-4">
                 <p className="text-xs text-[#717971]">Chi tiết theo đơn (chưa thanh toán đủ)</p>
                 <p className="mt-1 text-lg font-semibold text-[#1b1c17]">{formatMoney(context?.outstandingBalance ?? 0)} đ</p>
               </div>
+
+              {debtHistory.length > 0 ? (
+                <div className="overflow-hidden rounded-xl border border-[#e5e7eb] bg-white">
+                  <p className="border-b border-[#e5e7eb] bg-[#f6f4ec] px-4 py-2 text-xs font-semibold uppercase text-[#717971]">
+                    Lịch sử công nợ gần đây
+                  </p>
+                  <table className="w-full border-collapse text-left text-sm">
+                    <thead className="bg-white text-xs uppercase text-[#717971]">
+                      <tr>
+                        <th className="px-4 py-2">Loại</th>
+                        <th className="px-4 py-2">Ngày</th>
+                        <th className="px-4 py-2 text-right">Số tiền</th>
+                        <th className="px-4 py-2 text-right">Còn nợ</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {debtHistory.map((row) => (
+                        <tr key={row.id} className="border-t border-[#f0eee6]">
+                          <td className="px-4 py-2">
+                            {row.type === 'DecreaseDebt' ? 'Giảm nợ' : 'Phát sinh nợ'}
+                          </td>
+                          <td className="px-4 py-2">{formatVietnamDateTime(row.createdAt)}</td>
+                          <td className="px-4 py-2 text-right font-semibold">
+                            {formatMoney(row.amount)} đ
+                          </td>
+                          <td className="px-4 py-2 text-right">{formatMoney(row.balanceAfter)} đ</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : null}
 
               {(context?.unpaidOrders?.length ?? 0) === 0 ? (
                 <div className="rounded-xl bg-white p-4 text-sm text-[#717971]">Không có đơn chưa thanh toán đủ trong 50 đơn gần nhất.</div>

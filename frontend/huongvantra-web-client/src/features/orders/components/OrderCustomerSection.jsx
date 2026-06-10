@@ -5,7 +5,11 @@ import {
   fetchCustomerAddresses,
   fetchCustomers,
 } from '../../customers/services/customersApi.js'
-import { formatCustomerAddressLine, getInitials } from '../../customers/utils/customerDisplay.js'
+import {
+  formatCustomerAddressLine,
+  formatCustomerOrderSnapshot,
+  getInitials,
+} from '../../customers/utils/customerDisplay.js'
 import { validateCustomerForm } from '../../customers/utils/customerValidation.js'
 
 const MODES = [
@@ -90,7 +94,8 @@ function OrderCustomerSection({
         setSelectedAddressKey(String(preferred.id))
         onChange({
           customerId: selectedCustomer.customerId,
-          customerSnapshotName: selectedCustomer.fullName,
+          customerSnapshotName:
+            formatCustomerOrderSnapshot(selectedCustomer) || selectedCustomer.fullName,
           shippingAddress: formatted,
         })
       } catch (error) {
@@ -131,7 +136,7 @@ function OrderCustomerSection({
     setSearchResults([])
     onChange({
       customerId: customer.customerId,
-      customerSnapshotName: customer.fullName,
+      customerSnapshotName: formatCustomerOrderSnapshot(customer) || customer.fullName,
       shippingAddress: '',
     })
   }

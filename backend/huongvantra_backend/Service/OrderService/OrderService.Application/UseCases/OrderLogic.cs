@@ -80,6 +80,12 @@ public class OrderLogic(
         var isPosCashCompleted = req.OrderChannel == OrderChannel.POS
             && req.PaymentMethod == PaymentMethod.Cash;
 
+        var isPosRecordedTransferCompleted = req.OrderChannel == OrderChannel.POS
+            && req.PaymentMethod is PaymentMethod.VietQR or PaymentMethod.BankTransfer
+            && req.PaidAmount > 0;
+
+        var isPosCompletedOnCreate = isPosCashCompleted || isPosRecordedTransferCompleted;
+
         var order = new Order
         {
             Id = Guid.NewGuid(),
@@ -88,7 +94,7 @@ public class OrderLogic(
             CustomerSnapshotName = req.CustomerSnapshotName?.Trim(),
             EmployeeId = req.EmployeeId,
             OrderChannel = req.OrderChannel,
-            OrderStatus = isPosCashCompleted ? OrderStatus.Completed : OrderStatus.PendingPayment,
+            OrderStatus = isPosCompletedOnCreate ? OrderStatus.Completed : OrderStatus.PendingPayment,
             InventorySyncStatus = InventorySyncStatus.PendingDeduction,
             TotalAmount = totalAmount,
             DiscountAmount = req.DiscountAmount,
@@ -117,12 +123,20 @@ public class OrderLogic(
             ? finalAmount
             : Math.Max(0, finalAmount - req.PaidAmount);
 
+        var paymentAmount = req.PaidAmount;
+        if (paymentAmount <= 0
+            && req.PaymentMethod is PaymentMethod.VietQR or PaymentMethod.BankTransfer
+            && req.TransferQrAmount > 0)
+        {
+            paymentAmount = req.TransferQrAmount;
+        }
+
         var payment = new Payment
         {
             Id = Guid.NewGuid(),
             OrderId = order.Id,
             PaymentMethod = req.PaymentMethod,
-            Amount = req.PaidAmount,
+            Amount = paymentAmount,
             PaymentStatus = req.PaymentMethod == PaymentMethod.COD
                 ? PaymentStatus.Pending
                 : (req.PaidAmount >= finalAmount ? PaymentStatus.Success : PaymentStatus.Pending),
@@ -130,12 +144,13 @@ public class OrderLogic(
             CodWarningDate = req.PaymentMethod == PaymentMethod.COD
                 ? DateTime.UtcNow.AddDays(7)
                 : null,
-            PaidAt = req.PaymentMethod != PaymentMethod.COD && req.PaidAmount > 0
-                ? DateTime.UtcNow
-                : null,
+            PaidAt = null,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
+
+        if (payment.PaymentStatus == PaymentStatus.Success && req.PaymentMethod != PaymentMethod.COD)
+            payment.PaidAt = DateTime.UtcNow;
 
         if (payment.PaymentMethod is PaymentMethod.VietQR or PaymentMethod.BankTransfer
             && payment.PaymentStatus == PaymentStatus.Pending)

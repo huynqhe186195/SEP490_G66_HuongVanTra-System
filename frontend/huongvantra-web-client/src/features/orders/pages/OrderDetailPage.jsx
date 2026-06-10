@@ -5,6 +5,7 @@ import { showError, showSuccess } from '../../../app/toast.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import { canCreateOrder } from '../../auth/utils/permissions.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
+import OrderCustomerCell from '../components/OrderCustomerCell.jsx'
 import OrderProductsSection from '../components/OrderProductsSection.jsx'
 import OrderTimeline from '../components/OrderTimeline.jsx'
 import OrderTransferQrPanel from '../components/OrderTransferQrPanel.jsx'
@@ -216,7 +217,7 @@ function OrderDetailPage() {
         <aside className="space-y-4">
           <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
             <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-400">Khách hàng</h2>
-            <p className="font-semibold text-slate-800">{order.customerSnapshotName || 'Khách lẻ'}</p>
+            <OrderCustomerCell snapshot={order.customerSnapshotName} customerId={order.customerId} />
             {order.shippingAddress ? (
               <p className="mt-2 text-sm text-slate-600">{order.shippingAddress}</p>
             ) : null}

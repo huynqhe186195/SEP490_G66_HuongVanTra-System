@@ -12,7 +12,8 @@ public record CreateOrderRequest(
     decimal DiscountAmount,
     List<CreateOrderDetailRequest> Items,
     PaymentMethod PaymentMethod,
-    decimal PaidAmount
+    decimal PaidAmount,
+    decimal TransferQrAmount = 0
 );
 
 public record CreateOrderDetailRequest(
