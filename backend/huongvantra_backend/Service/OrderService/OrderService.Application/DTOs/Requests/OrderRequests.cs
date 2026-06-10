@@ -13,7 +13,9 @@ public record CreateOrderRequest(
     List<CreateOrderDetailRequest> Items,
     PaymentMethod PaymentMethod,
     decimal PaidAmount,
-    decimal TransferQrAmount = 0
+    decimal TransferQrAmount = 0,
+    Guid? PromotionId = null,
+    string? PromotionCode = null
 );
 
 public record CreateOrderDetailRequest(

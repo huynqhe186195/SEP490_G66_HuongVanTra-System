@@ -893,6 +893,7 @@ function PosPage() {
       customerId: selectedCustomer.customerId,
       customerSnapshotName: formatCustomerOrderSnapshot(selectedCustomer),
       promotionId: appliedPromotion?.id ?? null,
+      promotionCode: appliedPromotion?.promoCode ?? null,
       manualDiscount,
       note: orderNote,
       items: cartItems.map((item) => ({

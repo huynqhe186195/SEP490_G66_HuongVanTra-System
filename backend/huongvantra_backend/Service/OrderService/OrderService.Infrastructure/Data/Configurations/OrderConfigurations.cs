@@ -21,6 +21,9 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.Property(e => e.InventorySyncStatus).HasConversion<string>().HasMaxLength(30).IsRequired();
         builder.Property(e => e.TotalAmount).HasColumnType("decimal(18,2)").IsRequired();
         builder.Property(e => e.DiscountAmount).HasColumnType("decimal(18,2)").IsRequired();
+        builder.HasIndex(e => e.PromotionId);
+        builder.Property(e => e.PromotionCode).HasMaxLength(50);
+        builder.Property(e => e.PromotionDiscountAmount).HasColumnType("decimal(18,2)").HasDefaultValue(0m).IsRequired();
         builder.Property(e => e.FinalAmount).HasColumnType("decimal(18,2)").IsRequired();
         builder.Property(e => e.ShippingAddress).HasMaxLength(255);
         builder.Property(e => e.Note).HasMaxLength(500);
@@ -29,6 +32,27 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
 
         builder.HasMany(e => e.OrderDetails).WithOne(d => d.Order).HasForeignKey(d => d.OrderId);
         builder.HasMany(e => e.Payments).WithOne(p => p.Order).HasForeignKey(p => p.OrderId);
+    }
+}
+
+public class PromotionConfiguration : IEntityTypeConfiguration<Promotion>
+{
+    public void Configure(EntityTypeBuilder<Promotion> builder)
+    {
+        builder.ToTable("Promotions");
+        builder.HasKey(e => e.Id);
+        builder.Property(e => e.Id).ValueGeneratedNever();
+        builder.Property(e => e.PromoCode).HasMaxLength(50).IsRequired();
+        builder.Property(e => e.NormalizedPromoCode).HasMaxLength(50).IsRequired();
+        builder.HasIndex(e => e.NormalizedPromoCode).IsUnique();
+        builder.Property(e => e.DiscountType).HasConversion<string>().HasMaxLength(20).IsRequired();
+        builder.Property(e => e.DiscountValue).HasColumnType("decimal(18,2)").IsRequired();
+        builder.Property(e => e.ValidFromUtc);
+        builder.Property(e => e.ValidToUtc);
+        builder.Property(e => e.IsActive).IsRequired();
+        builder.Property(e => e.CreatedAt).IsRequired();
+        builder.Property(e => e.UpdatedAt).IsRequired();
+        builder.Property(e => e.IsDeleted).IsRequired();
     }
 }
 

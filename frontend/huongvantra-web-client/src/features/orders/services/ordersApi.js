@@ -134,6 +134,8 @@ export function buildCreateOrderBody(payload) {
     shippingAddress: payload.shippingAddress?.trim() || null,
     note: payload.note?.trim() || null,
     discountAmount: Number(payload.discountAmount ?? 0),
+    promotionId: payload.promotionId || null,
+    promotionCode: payload.promotionCode?.trim() || null,
     paidAmount: Number(payload.paidAmount ?? 0),
     transferQrAmount: Number(payload.transferQrAmount ?? 0),
     paymentMethod: payload.paymentMethod,

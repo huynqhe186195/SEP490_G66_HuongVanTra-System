@@ -47,6 +47,8 @@ function buildOrderRequestFromPosPayload(
     shippingAddress,
     note: payload.note?.trim() || null,
     discountAmount: Number(payload.manualDiscount ?? 0),
+    promotionId: payload.promotionId,
+    promotionCode: payload.promotionCode,
     paidAmount: paidAmount ?? Number(payment?.amount ?? 0),
     transferQrAmount: transferQrAmount ?? 0,
     paymentMethod: paymentMethod ?? mapPaymentMethod(payment?.paymentMethod),
