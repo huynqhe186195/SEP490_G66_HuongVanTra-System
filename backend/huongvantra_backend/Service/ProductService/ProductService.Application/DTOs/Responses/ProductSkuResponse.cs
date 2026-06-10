@@ -11,4 +11,5 @@ public record ProductSkuResponse(
     decimal BasePrice,
     string? ImageUrl,
     bool IsActive,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    DateTime? SyncedToStoreAt);

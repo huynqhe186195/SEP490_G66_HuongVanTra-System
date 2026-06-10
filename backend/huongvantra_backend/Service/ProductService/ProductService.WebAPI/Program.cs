@@ -32,6 +32,7 @@ builder.Services.AddScoped<IProductEventPublisher, ProductEventPublisher>();
 builder.Services.AddScoped<CategoryLogic>();
 builder.Services.AddScoped<ProductLogic>();
 builder.Services.AddScoped<ProductSkuLogic>();
+builder.Services.AddScoped<CatalogSyncLogic>();
 
 builder.Services.AddMassTransit(x =>
 {

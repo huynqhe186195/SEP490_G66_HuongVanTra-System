@@ -1,3 +1,4 @@
+using ProductService.Application;
 using ProductService.Application.DTOs.Requests;
 using ProductService.Application.DTOs.Responses;
 using ProductService.Application.Interfaces;
@@ -9,9 +10,11 @@ namespace ProductService.Application.UseCases;
 
 public class CategoryLogic(ICategoryRepository _categoryRepository)
 {
-    public async Task<List<CategoryResponse>> GetAllAsync()
+    public async Task<List<CategoryResponse>> GetAllAsync(
+        bool? isDeleted = null,
+        CatalogViewScope scope = CatalogViewScope.Store)
     {
-        var categories = await _categoryRepository.GetAllAsync();
+        var categories = await _categoryRepository.GetAllAsync(isDeleted, scope);
         return categories.Select(MapToResponse).ToList();
     }
 
@@ -30,7 +33,8 @@ public class CategoryLogic(ICategoryRepository _categoryRepository)
         var input = ProductInputValidator.ValidateCategory(request.Name, request.Description, request.ParentId);
 
         if (await _categoryRepository.ExistsNameAsync(input.Name))
-            throw new ProductValidationException($"Danh mục với tên '{input.Name}' đã tồn tại.");
+            throw new ProductValidationException(
+                $"Danh mục '{input.Name}' đã tồn tại (kể cả đang ngừng hoặc đã xóa mềm). Hãy kích hoạt lại bản cũ thay vì tạo mới.");
 
         if (input.ParentId.HasValue)
             _ = await _categoryRepository.GetByIdAsync(input.ParentId.Value)
@@ -54,6 +58,8 @@ public class CategoryLogic(ICategoryRepository _categoryRepository)
 
         var category = await _categoryRepository.GetByIdAsync(id)
             ?? throw new CategoryNotFoundException(id);
+        if (category.IsDeleted)
+            throw new ProductValidationException("Không thể sửa danh mục đã xóa mềm. Hãy kích hoạt lại trước.");
 
         var input = ProductInputValidator.ValidateCategory(request.Name, request.Description, request.ParentId);
 
@@ -83,11 +89,26 @@ public class CategoryLogic(ICategoryRepository _categoryRepository)
     {
         var category = await _categoryRepository.GetByIdAsync(id)
             ?? throw new CategoryNotFoundException(id);
-        category.IsActive = false;
-        category.UpdatedAt = DateTime.UtcNow;
-        await _categoryRepository.UpdateAsync(category);
+        if (category.IsDeleted)
+            throw new ProductValidationException("Danh mục đã được xóa mềm.");
+        await _categoryRepository.DeleteAsync(category);
+    }
+
+    public async Task<CategoryResponse> RestoreAsync(int id)
+    {
+        var category = await _categoryRepository.GetByIdAsync(id, includeDeleted: true)
+            ?? throw new CategoryNotFoundException(id);
+        if (!category.IsDeleted)
+            throw new ProductValidationException("Danh mục chưa bị xóa mềm.");
+
+        if (await _categoryRepository.ExistsNameAsync(category.Name, excludeId: id, includeDeleted: false))
+            throw new ProductValidationException(
+                $"Không thể kích hoạt lại — đã có danh mục khác tên '{category.Name}'. Đổi tên bản mới hoặc xóa bản trùng trước.");
+
+        await _categoryRepository.RestoreAsync(category);
+        return MapToResponse((await _categoryRepository.GetByIdAsync(id))!);
     }
 
     private static CategoryResponse MapToResponse(Category c) =>
-        new(c.Id, c.Name, c.Description, c.ParentId, c.IsActive, c.CreatedAt);
+        new(c.Id, c.Name, c.Description, c.ParentId, c.IsActive, c.IsDeleted, c.CreatedAt, c.SyncedToStoreAt);
 }

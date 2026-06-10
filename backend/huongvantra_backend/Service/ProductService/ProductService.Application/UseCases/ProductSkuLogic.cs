@@ -1,3 +1,4 @@
+using ProductService.Application;
 using ProductService.Application.DTOs.Requests;
 using ProductService.Application.DTOs.Responses;
 using ProductService.Application.Interfaces;
@@ -9,10 +10,11 @@ namespace ProductService.Application.UseCases;
 
 public class ProductSkuLogic(
     IProductSkuRepository _skuRepository,
-    IProductRepository _productRepository,
-    IProductEventPublisher _eventPublisher)
+    IProductRepository _productRepository)
 {
-    public async Task<PagedResponse<ProductSkuResponse>> GetPagedAsync(GetProductSkusRequest request)
+    public async Task<PagedResponse<ProductSkuResponse>> GetPagedAsync(
+        GetProductSkusRequest request,
+        CatalogViewScope scope = CatalogViewScope.Store)
     {
         if (request is null)
             throw new ProductValidationException("Request là bắt buộc.");
@@ -21,7 +23,7 @@ public class ProductSkuLogic(
 
         var (items, total) = await _skuRepository.GetPagedAsync(
             request.Search, request.ProductId, request.IsActive,
-            request.Page, request.PageSize);
+            request.Page, request.PageSize, scope);
 
         return new PagedResponse<ProductSkuResponse>(
             items.Select(MapToResponse).ToList(),
@@ -31,30 +33,34 @@ public class ProductSkuLogic(
             (int)Math.Ceiling((double)total / request.PageSize));
     }
 
-    public async Task<List<ProductSkuResponse>> GetAllAsync(bool includeInactive = false)
+    public async Task<List<ProductSkuResponse>> GetAllAsync(
+        bool includeInactive = false,
+        CatalogViewScope scope = CatalogViewScope.Store)
     {
-        var skus = await _skuRepository.GetAllAsync(includeInactive);
+        var skus = await _skuRepository.GetAllAsync(includeInactive, scope);
         return skus.Select(MapToResponse).ToList();
     }
 
-    public async Task<ProductSkuResponse> GetByIdAsync(Guid id)
+    public async Task<ProductSkuResponse> GetByIdAsync(Guid id, CatalogViewScope scope = CatalogViewScope.Store)
     {
-        var sku = await _skuRepository.GetByIdAsync(id)
+        var sku = await _skuRepository.GetByIdAsync(id, scope)
             ?? throw new ProductSkuNotFoundException(id);
         return MapToResponse(sku);
     }
 
-    public async Task<ProductSkuResponse> GetBySkuCodeAsync(string skuCode)
+    public async Task<ProductSkuResponse> GetBySkuCodeAsync(string skuCode, CatalogViewScope scope = CatalogViewScope.Store)
     {
         if (string.IsNullOrWhiteSpace(skuCode))
             throw new ProductValidationException("Mã SKU không được để trống.");
 
-        var sku = await _skuRepository.GetBySkuCodeAsync(skuCode.Trim().ToUpperInvariant())
+        var sku = await _skuRepository.GetBySkuCodeAsync(skuCode.Trim().ToUpperInvariant(), scope)
             ?? throw new ProductSkuNotFoundByCodeException(skuCode);
         return MapToResponse(sku);
     }
 
-    public async Task<List<ProductSkuResponse>> GetByProductIdAsync(Guid productId)
+    public async Task<List<ProductSkuResponse>> GetByProductIdAsync(
+        Guid productId,
+        CatalogViewScope scope = CatalogViewScope.Store)
     {
         if (productId == Guid.Empty)
             throw new ProductValidationException("ProductId không hợp lệ.");
@@ -62,7 +68,7 @@ public class ProductSkuLogic(
         _ = await _productRepository.GetByIdAsync(productId)
             ?? throw new ProductNotFoundException(productId);
 
-        var skus = await _skuRepository.GetByProductIdAsync(productId);
+        var skus = await _skuRepository.GetByProductIdAsync(productId, scope);
         return skus.Select(MapToResponse).ToList();
     }
 
@@ -92,8 +98,6 @@ public class ProductSkuLogic(
         };
 
         var created = await _skuRepository.CreateAsync(sku);
-        await _eventPublisher.PublishSkuCreatedAsync(created.Id, created.SkuCode, created.WeightInGrams);
-
         return MapToResponse(created);
     }
 
@@ -144,5 +148,6 @@ public class ProductSkuLogic(
             s.BasePrice,
             s.ImageUrl,
             s.IsActive,
-            s.CreatedAt);
+            s.CreatedAt,
+            s.SyncedToStoreAt);
 }

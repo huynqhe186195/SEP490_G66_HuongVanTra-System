@@ -1,4 +1,4 @@
-import { apiRequest, apiRequestAuth } from '../../../lib/apiClient.js'
+import { apiRequestAuth } from '../../../lib/apiClient.js'
 
 export function mapCategory(item) {
   if (!item || typeof item !== 'object') return null
@@ -8,18 +8,23 @@ export function mapCategory(item) {
     description: item.description ?? item.Description ?? '',
     parentId: item.parentId ?? item.ParentId ?? null,
     isActive: Boolean(item.isActive ?? item.IsActive ?? true),
+    isDeleted: Boolean(item.isDeleted ?? item.IsDeleted ?? false),
     createdAt: item.createdAt ?? item.CreatedAt ?? null,
+    syncedToStoreAt: item.syncedToStoreAt ?? item.SyncedToStoreAt ?? null,
   }
 }
 
-export async function fetchCategories() {
-  const data = await apiRequest('/api/v1/categories', { method: 'GET' })
+export async function fetchCategories({ isDeleted } = {}) {
+  const params = new URLSearchParams()
+  if (isDeleted === true) params.set('isDeleted', 'true')
+  const query = params.toString()
+  const data = await apiRequestAuth(`/api/v1/categories${query ? `?${query}` : ''}`, { method: 'GET' })
   const items = Array.isArray(data) ? data : data?.items ?? data?.Items ?? []
   return items.map(mapCategory).filter(Boolean)
 }
 
 export async function fetchCategoryById(id) {
-  const data = await apiRequest(`/api/v1/categories/${id}`, { method: 'GET' })
+  const data = await apiRequestAuth(`/api/v1/categories/${id}`, { method: 'GET' })
   return mapCategory(data)
 }
 
@@ -59,4 +64,13 @@ export async function setCategoryStatus(category, isActive) {
     parentId: category.parentId ?? null,
     isActive,
   })
+}
+
+export async function deleteCategory(id) {
+  return apiRequestAuth(`/api/v1/categories/${id}`, { method: 'DELETE' })
+}
+
+export async function restoreCategory(id) {
+  const data = await apiRequestAuth(`/api/v1/categories/${id}/restore`, { method: 'POST' })
+  return mapCategory(data)
 }

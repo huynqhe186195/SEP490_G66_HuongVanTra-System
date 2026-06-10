@@ -1,5 +1,6 @@
 using HuongVanTra.Shared.Auth;
 using InventoryService.Application.Interfaces;
+using InventoryService.Application.Options;
 using InventoryService.Application.UseCases;
 using InventoryService.Infrastructure.Data;
 using InventoryService.Infrastructure.Messaging;
@@ -21,6 +22,7 @@ builder.Services.AddSwaggerGen();
 
 builder.Services.AddHvtJwtAuthentication(builder.Configuration);
 builder.Services.AddHvtPermissionPolicies();
+builder.Services.Configure<InventoryOptions>(builder.Configuration.GetSection(InventoryOptions.SectionName));
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 builder.Services.AddDbContext<InventoryDbContext>(options =>
@@ -32,6 +34,10 @@ builder.Services.AddDbContext<InventoryDbContext>(options =>
 
 builder.Services.AddScoped<ISkuStockRepository, SkuStockRepository>();
 builder.Services.AddScoped<IStockDeductQueueRepository, StockDeductQueueRepository>();
+builder.Services.AddScoped<IStockAdjustmentRequestRepository, StockAdjustmentRequestRepository>();
+builder.Services.AddScoped<IStockExportSlipRepository, StockExportSlipRepository>();
+builder.Services.AddScoped<IWarehouseBatchRepository, WarehouseBatchRepository>();
+builder.Services.AddScoped<IStockExportBatchAllocationRepository, StockExportBatchAllocationRepository>();
 builder.Services.AddScoped<IProcessedIntegrationEventRepository, ProcessedIntegrationEventRepository>();
 builder.Services.AddScoped<IInventoryEventPublisher, InventoryEventPublisher>();
 builder.Services.AddScoped<InventoryLogic>();

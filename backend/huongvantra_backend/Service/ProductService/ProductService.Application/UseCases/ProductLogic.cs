@@ -1,3 +1,4 @@
+using ProductService.Application;
 using ProductService.Application.DTOs.Requests;
 using ProductService.Application.DTOs.Responses;
 using ProductService.Application.Interfaces;
@@ -9,7 +10,9 @@ namespace ProductService.Application.UseCases;
 
 public class ProductLogic(IProductRepository _productRepository, ICategoryRepository _categoryRepository)
 {
-    public async Task<PagedResponse<ProductResponse>> GetPagedAsync(GetProductsRequest request)
+    public async Task<PagedResponse<ProductResponse>> GetPagedAsync(
+        GetProductsRequest request,
+        CatalogViewScope scope = CatalogViewScope.Store)
     {
         if (request is null)
             throw new ProductValidationException("Request là bắt buộc.");
@@ -17,28 +20,34 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
         ProductInputValidator.ValidatePagination(request.Page, request.PageSize);
 
         var (items, total) = await _productRepository.GetPagedAsync(
-            request.Search, request.CategoryId, request.IsActive,
-            request.Page, request.PageSize);
+            request.Search, request.CategoryId, request.IsActive, request.IsDeleted,
+            request.Page, request.PageSize, scope);
 
         return new PagedResponse<ProductResponse>(
-            items.Select(MapToResponse).ToList(),
+            items.Select(p => MapToResponse(p, scope)).ToList(),
             request.Page,
             request.PageSize,
             total,
             (int)Math.Ceiling((double)total / request.PageSize));
     }
 
-    public async Task<List<ProductResponse>> GetAllAsync(bool includeInactive = false)
+    public async Task<List<ProductResponse>> GetAllAsync(
+        bool includeInactive = false,
+        CatalogViewScope scope = CatalogViewScope.Store)
     {
-        var products = await _productRepository.GetAllAsync(includeInactive);
-        return products.Select(MapToResponse).ToList();
+        var products = await _productRepository.GetAllAsync(includeInactive, scope);
+        return products.Select(p => MapToResponse(p, scope)).ToList();
     }
 
-    public async Task<ProductResponse> GetByIdAsync(Guid id)
+    public async Task<ProductResponse> GetByIdAsync(Guid id, CatalogViewScope scope = CatalogViewScope.Store)
     {
         var product = await _productRepository.GetByIdAsync(id)
             ?? throw new ProductNotFoundException(id);
-        return MapToResponse(product);
+
+        if (scope == CatalogViewScope.Store && product.SyncedToStoreAt == null)
+            throw new ProductNotFoundException(id);
+
+        return MapToResponse(product, scope);
     }
 
     public async Task<ProductResponse> CreateAsync(CreateProductRequest request)
@@ -53,6 +62,10 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
         _ = await _categoryRepository.GetByIdAsync(input.CategoryId)
             ?? throw new CategoryNotFoundException(input.CategoryId);
 
+        if (await _productRepository.ExistsNameAsync(input.Name))
+            throw new ProductValidationException(
+                $"Sản phẩm '{input.Name}' đã tồn tại (kể cả đang ngừng kinh doanh hoặc đã xóa mềm). Hãy kích hoạt lại bản cũ thay vì tạo mới.");
+
         var product = new Product
         {
             CategoryId = input.CategoryId,
@@ -64,7 +77,7 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
         };
 
         var created = await _productRepository.CreateAsync(product);
-        return MapToResponse(created);
+        return MapToResponse(created, CatalogViewScope.Warehouse);
     }
 
     public async Task<ProductResponse> UpdateAsync(Guid id, UpdateProductRequest request)
@@ -74,6 +87,8 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
 
         var product = await _productRepository.GetByIdAsync(id)
             ?? throw new ProductNotFoundException(id);
+        if (product.IsDeleted)
+            throw new ProductValidationException("Không thể sửa sản phẩm đã xóa mềm. Hãy kích hoạt lại trước.");
 
         var input = ProductInputValidator.ValidateProduct(
             request.CategoryId, request.Name, request.Origin,
@@ -82,6 +97,9 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
 
         _ = await _categoryRepository.GetByIdAsync(input.CategoryId)
             ?? throw new CategoryNotFoundException(input.CategoryId);
+
+        if (await _productRepository.ExistsNameAsync(input.Name, excludeProductId: id))
+            throw new ProductValidationException($"Sản phẩm với tên '{input.Name}' đã tồn tại.");
 
         product.CategoryId = input.CategoryId;
         product.Name = input.Name;
@@ -93,23 +111,49 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
         product.UpdatedAt = DateTime.UtcNow;
 
         var updated = await _productRepository.UpdateAsync(product);
-        return MapToResponse(updated);
+        return MapToResponse(updated, CatalogViewScope.Warehouse);
     }
 
     public async Task DeleteAsync(Guid id)
     {
         var product = await _productRepository.GetByIdAsync(id)
             ?? throw new ProductNotFoundException(id);
+        if (product.IsDeleted)
+            throw new ProductValidationException("Sản phẩm đã được xóa mềm.");
         await _productRepository.DeleteAsync(product);
     }
 
-    private static ProductResponse MapToResponse(Product p) => new(
+    public async Task<ProductResponse> RestoreAsync(Guid id)
+    {
+        var product = await _productRepository.GetByIdAsync(id, includeDeleted: true)
+            ?? throw new ProductNotFoundException(id);
+        if (!product.IsDeleted)
+            throw new ProductValidationException("Sản phẩm chưa bị xóa mềm.");
+
+        if (await _productRepository.ExistsNameAsync(product.Name, excludeProductId: id, includeDeleted: false))
+            throw new ProductValidationException(
+                $"Không thể kích hoạt lại — đã có sản phẩm khác tên '{product.Name}'. Đổi tên bản mới hoặc xóa bản trùng trước.");
+
+        await _productRepository.RestoreAsync(product);
+        return MapToResponse((await _productRepository.GetByIdAsync(id))!, CatalogViewScope.Warehouse);
+    }
+
+    private static ProductResponse MapToResponse(Product p, CatalogViewScope scope) => new(
         p.Id, p.CategoryId, p.Category?.Name ?? string.Empty,
         p.Name, p.Origin, p.FlavorProfile, p.BrewingGuide, p.Description,
-        p.IsActive, p.CreatedAt,
-        p.Skus.Select(s => new ProductSkuResponse(
-            s.Id, s.ProductId, p.Name, p.Category?.Name ?? string.Empty,
-            s.SkuCode, s.PackagingType,
-            s.WeightInGrams, s.BasePrice, s.ImageUrl, s.IsActive, s.CreatedAt))
-        .ToList());
+        p.IsActive, p.IsDeleted, p.CreatedAt, p.SyncedToStoreAt,
+        FilterSkus(p.Skus, scope).Select(s => MapSku(s, p)).ToList());
+
+    private static IEnumerable<ProductSku> FilterSkus(IEnumerable<ProductSku> skus, CatalogViewScope scope)
+    {
+        var items = skus.Where(s => !s.IsDeleted);
+        return scope == CatalogViewScope.Store
+            ? items.Where(s => s.SyncedToStoreAt != null)
+            : items;
+    }
+
+    private static ProductSkuResponse MapSku(ProductSku s, Product p) => new(
+        s.Id, s.ProductId, p.Name, p.Category?.Name ?? string.Empty,
+        s.SkuCode, s.PackagingType,
+        s.WeightInGrams, s.BasePrice, s.ImageUrl, s.IsActive, s.CreatedAt, s.SyncedToStoreAt);
 }

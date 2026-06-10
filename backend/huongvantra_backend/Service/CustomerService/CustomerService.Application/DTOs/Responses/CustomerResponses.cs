@@ -7,7 +7,9 @@ public record CustomerTierResponse(
     string TierName,
     decimal MinSpendingThreshold,
     decimal DiscountPercent,
-    int? ValidityMonths
+    int? ValidityMonths,
+    bool IsActive = true,
+    int CustomerCount = 0
 );
 
 public record CustomerResponse(

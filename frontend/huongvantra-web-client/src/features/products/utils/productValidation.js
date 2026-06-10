@@ -24,9 +24,11 @@ export function validateCategoryForm({ name, description, parentId, categoryId, 
     const normalized = nameValue.toLowerCase()
     const duplicate = existingCategories.some(
       (item) =>
+        (item?.isActive ?? item?.IsActive ?? true) &&
         String(item?.name || '')
           .trim()
-          .toLowerCase() === normalized && Number(item?.id) !== Number(categoryId),
+          .toLowerCase() === normalized &&
+        Number(item?.id) !== Number(categoryId),
     )
     if (duplicate) errors.name = 'Tên danh mục đã tồn tại.'
   }

@@ -17,7 +17,7 @@ public static class DataSeeder
         ("Sale", "Nhân viên kinh doanh",
         [PermissionNames.CreateOrder, PermissionNames.ViewOrder, PermissionNames.CreateCustomer, PermissionNames.ViewCustomer]),
         ("Warehouse", "Nhân viên kho",
-        [PermissionNames.ViewOrder]),
+        [PermissionNames.ViewOrder, PermissionNames.ManageCatalog]),
         ("Accountant", "Kế toán",
         [PermissionNames.ViewOrder, PermissionNames.ViewAllCustomers]),
         ("Manager", "Quản lý",

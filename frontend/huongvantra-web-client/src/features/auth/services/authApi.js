@@ -1,4 +1,9 @@
-import { apiRequest, apiRequestAuth, getUserIdFromToken } from '../../../lib/apiClient.js'
+import {
+  apiRequest,
+  apiRequestAuth,
+  getPermissionsFromAccessToken,
+  getUserIdFromToken,
+} from '../../../lib/apiClient.js'
 import { loadAuthSession } from './authSession.js'
 
 const ROLE_MODULE_MAP = {
@@ -7,6 +12,7 @@ const ROLE_MODULE_MAP = {
     'orders',
     'cod_ops',
     'stock_deduct_ops',
+    'stock_adjustment_ops',
     'customers',
     'products',
     'inventory',
@@ -16,9 +22,9 @@ const ROLE_MODULE_MAP = {
     'users_admin',
     'phan_quyen_admin',
   ],
-  manager: ['pos', 'orders', 'cod_ops', 'stock_deduct_ops', 'customers', 'products', 'inventory', 'staff'],
+  manager: ['pos', 'orders', 'cod_ops', 'stock_deduct_ops', 'stock_adjustment_ops', 'customers', 'products', 'inventory', 'staff'],
   sale: ['pos', 'orders', 'customers'],
-  warehouse: ['stock_deduct_ops', 'orders', 'products', 'inventory'],
+  warehouse: ['products', 'stock_adjustment_ops', 'inventory'],
   accountant: ['orders', 'customers', 'reports'],
 }
 
@@ -64,6 +70,12 @@ function deriveModulesFromRoles(roles = []) {
   return [...modules]
 }
 
+function mergePermissions(data, accessToken) {
+  const fromResponse = data.permissions ?? data.Permissions ?? []
+  const fromToken = getPermissionsFromAccessToken(accessToken)
+  return [...new Set([...fromResponse, ...fromToken].map(String).filter(Boolean))]
+}
+
 export function normalizeAuthSession(data) {
   const accessToken = data.accessToken ?? data.AccessToken
   const expiresAt = data.expiresAt ?? data.ExpiresAt
@@ -74,7 +86,7 @@ export function normalizeAuthSession(data) {
     expiresAtUtc: expiresAt,
     username: data.username ?? data.Username ?? '',
     roles: data.roles ?? data.Roles ?? [],
-    permissions: data.permissions ?? data.Permissions ?? [],
+    permissions: mergePermissions(data, accessToken),
     userId: getUserIdFromToken(accessToken),
   }
 }
@@ -137,9 +149,40 @@ export async function resetPassword(username, newPassword) {
   })
 }
 
-export async function enrichSessionWithAccess(session) {
+export function isWarehouseUserRole(roles = []) {
+  return (roles ?? []).some((role) => resolveRoleMapKey(role) === 'warehouse')
+}
+
+function hasCatalogPermission(session) {
+  const permissions = session?.permissions ?? []
+  return permissions.includes('MANAGE_CATALOG') || permissions.includes('MANAGE_ROLE')
+}
+
+export function enrichSessionWithAccess(session) {
+  const permissions = mergePermissions(session, session?.accessToken)
   return {
     ...session,
+    permissions,
     modules: deriveModulesFromRoles(session.roles ?? []),
+  }
+}
+
+/** Làm mới quyền từ server (JWT mới) — cần khi role Warehouse vừa được gán MANAGE_CATALOG. */
+export async function syncSessionFromServer(session) {
+  const enriched = enrichSessionWithAccess(session)
+  const shouldRefresh =
+    enriched.refreshToken &&
+    isWarehouseUserRole(enriched.roles) &&
+    !hasCatalogPermission(enriched)
+
+  if (!shouldRefresh) {
+    return enriched
+  }
+
+  try {
+    const refreshed = normalizeAuthSession(await refresh(enriched.accessToken, enriched.refreshToken))
+    return enrichSessionWithAccess(refreshed)
+  } catch {
+    return enriched
   }
 }

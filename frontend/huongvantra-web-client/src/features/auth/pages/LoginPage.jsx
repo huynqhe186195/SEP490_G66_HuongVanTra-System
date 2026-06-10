@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { enrichSessionWithAccess, login } from '../services/authApi.js'
+import { login, syncSessionFromServer } from '../services/authApi.js'
 import { loadAuthSession, saveAuthSession } from '../services/authSession.js'
 import { resolveHomeRoute } from '../../../app/navigation.js'
 
@@ -43,7 +43,7 @@ function LoginPage() {
       let session = authResult
 
       try {
-        session = await enrichSessionWithAccess(authResult)
+        session = await syncSessionFromServer(authResult)
       } catch {
         // Fallback: sidebar uses roles from login response if access API is unavailable.
       }

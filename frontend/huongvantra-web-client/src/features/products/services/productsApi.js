@@ -1,4 +1,4 @@
-import { apiRequest, apiRequestAuth, toPagedResult } from '../../../lib/apiClient.js'
+import { apiRequestAuth, toPagedResult } from '../../../lib/apiClient.js'
 
 export function mapProductSku(item) {
   if (!item || typeof item !== 'object') return null
@@ -14,6 +14,7 @@ export function mapProductSku(item) {
     imageUrl: item.imageUrl ?? item.ImageUrl ?? '',
     isActive: Boolean(item.isActive ?? item.IsActive ?? true),
     createdAt: item.createdAt ?? item.CreatedAt ?? null,
+    syncedToStoreAt: item.syncedToStoreAt ?? item.SyncedToStoreAt ?? null,
   }
 }
 
@@ -31,7 +32,9 @@ export function mapProduct(item) {
     brewingGuide: item.brewingGuide ?? item.BrewingGuide ?? '',
     description: item.description ?? item.Description ?? '',
     isActive: Boolean(item.isActive ?? item.IsActive ?? true),
+    isDeleted: Boolean(item.isDeleted ?? item.IsDeleted ?? false),
     createdAt: item.createdAt ?? item.CreatedAt ?? null,
+    syncedToStoreAt: item.syncedToStoreAt ?? item.SyncedToStoreAt ?? null,
     skus,
   }
 }
@@ -41,6 +44,7 @@ function buildProductQuery(params = {}) {
   if (params.search) search.set('search', params.search)
   if (params.categoryId) search.set('categoryId', String(params.categoryId))
   if (params.isActive === true || params.isActive === false) search.set('isActive', String(params.isActive))
+  if (params.isDeleted === true) search.set('isDeleted', 'true')
   search.set('page', String(params.page ?? 1))
   search.set('pageSize', String(Math.min(100, Math.max(1, params.pageSize ?? 20))))
   return search.toString()
@@ -48,7 +52,7 @@ function buildProductQuery(params = {}) {
 
 export async function fetchProducts(params = {}) {
   const query = buildProductQuery(params)
-  const data = await apiRequest(`/api/v1/products?${query}`, { method: 'GET' })
+  const data = await apiRequestAuth(`/api/v1/products?${query}`, { method: 'GET' })
   const paged = toPagedResult(data)
   return {
     ...paged,
@@ -58,7 +62,7 @@ export async function fetchProducts(params = {}) {
 }
 
 export async function fetchProductById(id) {
-  const data = await apiRequest(`/api/v1/products/${id}`, { method: 'GET' })
+  const data = await apiRequestAuth(`/api/v1/products/${id}`, { method: 'GET' })
   return mapProduct(data)
 }
 
@@ -74,10 +78,11 @@ export function buildCreateProductBody(payload) {
 }
 
 export function buildUpdateProductBody(payload) {
-  return {
-    ...buildCreateProductBody(payload),
-    isActive: Boolean(payload.isActive),
+  const body = buildCreateProductBody(payload)
+  if (payload.isActive === true || payload.isActive === false) {
+    body.isActive = payload.isActive
   }
+  return body
 }
 
 export async function createProduct(payload) {
@@ -98,6 +103,11 @@ export async function updateProduct(id, payload) {
 
 export async function deleteProduct(id) {
   return apiRequestAuth(`/api/v1/products/${id}`, { method: 'DELETE' })
+}
+
+export async function restoreProduct(id) {
+  const data = await apiRequestAuth(`/api/v1/products/${id}/restore`, { method: 'POST' })
+  return mapProduct(data)
 }
 
 export async function setProductStatus(product, isActive) {

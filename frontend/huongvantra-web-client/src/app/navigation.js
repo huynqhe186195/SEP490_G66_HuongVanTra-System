@@ -22,6 +22,7 @@ const HOME_MODULE_PRIORITY = [
   'orders',
   'customers',
   'products',
+  'stock_adjustment_ops',
   'inventory',
   'staff',
 ]
@@ -42,11 +43,18 @@ export const navigationItems = [
     path: '/orders/stock-deduct',
     module: 'stock_deduct_ops',
     icon: 'inventory_2',
-    roles: ['admin', 'agencyManager', 'inventoryManager'],
+    roles: ['admin', 'agencyManager'],
   },
   { label: 'Khách hàng', path: '/customers', module: 'customers', icon: 'groups', roles: ['admin', 'agencyManager'] },
   { label: 'Sản phẩm & số lượng', path: '/products', module: 'products', icon: 'inventory_2', roles: ['admin', 'agencyManager', 'inventoryManager'] },
   { label: 'Kho tổng', path: '/inventory', module: 'inventory', icon: 'warehouse', roles: ['admin', 'agencyManager', 'inventoryManager'] },
+  {
+    label: 'Yêu cầu điều chỉnh tồn',
+    path: '/inventory/stock-requests',
+    module: 'stock_adjustment_ops',
+    icon: 'edit_note',
+    roles: ['admin', 'agencyManager', 'inventoryManager'],
+  },
   { label: 'Nhân sự', path: '/staff', module: 'staff', icon: 'badge', roles: ['admin', 'agencyManager'] },
   {
     label: 'Hạng thẻ',
@@ -190,6 +198,7 @@ const MODULE_PATH_PREFIXES = [
   { module: 'users_admin', prefix: '/admin/users' },
   { module: 'phan_quyen_admin', prefix: '/admin/phan-quyen' },
   { module: 'customers', prefix: '/customers' },
+  { module: 'stock_adjustment_ops', prefix: '/inventory/stock-requests' },
   { module: 'inventory', prefix: '/inventory' },
   { module: 'products', prefix: '/products' },
   { module: 'cod_ops', prefix: '/orders/cod' },
@@ -292,6 +301,17 @@ export function isNavigationItemActive(pathname, item) {
   }
 
   if (item.module === 'stock_deduct_ops') {
+    return path === target || path.startsWith(`${target}/`)
+  }
+
+  if (item.module === 'stock_adjustment_ops') {
+    return path === target || path.startsWith(`${target}/`)
+  }
+
+  if (item.module === 'inventory') {
+    if (path === '/inventory/stock-requests' || path.startsWith('/inventory/stock-requests/')) {
+      return false
+    }
     return path === target || path.startsWith(`${target}/`)
   }
 

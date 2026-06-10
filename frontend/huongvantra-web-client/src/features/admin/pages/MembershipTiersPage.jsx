@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
-import { TIER_READONLY_HINT } from '../../customers/utils/membershipTierUtils.js'
+import { normalizeTierNameInput, TIER_READONLY_HINT } from '../../customers/utils/membershipTierUtils.js'
 import {
   createAdminMembershipTier,
   deactivateAdminMembershipTier,
@@ -60,7 +60,7 @@ function MembershipTiersPage() {
 
   const handleSave = async () => {
     const payload = {
-      tierCode: form.tierCode.trim(),
+      tierCode: normalizeTierNameInput(form.tierCode),
       minTotalSpend: Number(form.minTotalSpend),
       discountPercent: Number(form.discountPercent),
     }
@@ -223,10 +223,11 @@ function MembershipTiersPage() {
               <label className="block">
                 <span className="text-xs font-bold uppercase text-slate-400">Mã hạng</span>
                 <input
-                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm uppercase"
+                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
                   value={form.tierCode}
-                  onChange={(e) => setForm((prev) => ({ ...prev, tierCode: e.target.value.toUpperCase() }))}
-                  placeholder="VD: SILVER"
+                  onChange={(e) => setForm((prev) => ({ ...prev, tierCode: e.target.value }))}
+                  onBlur={(e) => setForm((prev) => ({ ...prev, tierCode: normalizeTierNameInput(e.target.value) }))}
+                  placeholder="VD: Silver"
                 />
               </label>
               <label className="block">

@@ -2,7 +2,12 @@ import { useEffect, useState } from 'react'
 import { showError, showSuccess } from '../../../app/toast.js'
 import AdjustSkuStockModal from './AdjustSkuStockModal.jsx'
 import ProductImage, { ProductImagePreview } from './ProductImage.jsx'
-import { buildStockBySkuIdMap, fetchSkuStocks } from '../../inventory/services/inventoryStockApi.js'
+import {
+  buildStockBySkuIdMap,
+  buildWarehouseStockBySkuIdMap,
+  fetchSkuStocks,
+} from '../../inventory/services/inventoryStockApi.js'
+import { INVENTORY_STOCK_CHANGED_EVENT } from '../../inventory/utils/inventoryStockEvents.js'
 import { createSku, deleteSku, fetchSkusByProductId, updateSku } from '../services/productSkusApi.js'
 import {
   formatProductPrice,
@@ -28,7 +33,15 @@ function FieldError({ message }) {
   return <p className="text-xs text-[#b42318]">{message}</p>
 }
 
-function ProductSkusPanel({ productId, canManage, canAdjustStock = false, layout = 'default' }) {
+function ProductSkusPanel({
+  productId,
+  canManage,
+  canAdjustStock = false,
+  warehouseStockView = false,
+  layout = 'default',
+  stockOnlyMode = false,
+}) {
+  const stockLabel = warehouseStockView ? 'Tồn kho tổng' : 'Tồn cửa hàng'
   const isColumnLayout = layout === 'column'
   const formGridClass = isColumnLayout ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2'
   const [skus, setSkus] = useState([])
@@ -49,7 +62,9 @@ function ProductSkusPanel({ productId, canManage, canAdjustStock = false, layout
         fetchSkuStocks().catch(() => []),
       ])
       setSkus(items)
-      setStockBySkuId(buildStockBySkuIdMap(stocks))
+      setStockBySkuId(
+        warehouseStockView ? buildWarehouseStockBySkuIdMap(stocks) : buildStockBySkuIdMap(stocks),
+      )
     } catch (error) {
       showError(error.message)
       setSkus([])
@@ -60,7 +75,15 @@ function ProductSkusPanel({ productId, canManage, canAdjustStock = false, layout
 
   useEffect(() => {
     reload()
-  }, [productId])
+  }, [productId, warehouseStockView])
+
+  useEffect(() => {
+    const onStockChanged = () => {
+      reload()
+    }
+    window.addEventListener(INVENTORY_STOCK_CHANGED_EVENT, onStockChanged)
+    return () => window.removeEventListener(INVENTORY_STOCK_CHANGED_EVENT, onStockChanged)
+  }, [productId, warehouseStockView])
 
   function resetForm() {
     setEditingId(null)
@@ -83,10 +106,13 @@ function ProductSkusPanel({ productId, canManage, canAdjustStock = false, layout
 
   function updateField(key) {
     return (event) => {
-      const value = key === 'skuCode' ? normalizeSkuCodeInput(event.target.value) : event.target.value
-      setForm((prev) => ({ ...prev, [key]: value }))
+      setForm((prev) => ({ ...prev, [key]: event.target.value }))
       setFieldErrors((prev) => ({ ...prev, [key]: undefined }))
     }
+  }
+
+  function handleSkuCodeBlur(event) {
+    setForm((prev) => ({ ...prev, skuCode: normalizeSkuCodeInput(event.target.value) }))
   }
 
   function updatePriceField(event) {
@@ -110,7 +136,7 @@ function ProductSkusPanel({ productId, canManage, canAdjustStock = false, layout
       setIsSaving(true)
       const payload = {
         productId,
-        skuCode: form.skuCode,
+        skuCode: normalizeSkuCodeInput(form.skuCode),
         packagingType: form.packagingType,
         weightInGrams: Number(form.weightInGrams),
         basePrice: parseProductPriceInput(form.basePrice),
@@ -155,8 +181,14 @@ function ProductSkusPanel({ productId, canManage, canAdjustStock = false, layout
     <div className="rounded-[1rem] bg-white p-4 shadow-sm sm:p-6 lg:p-8">
       <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-lg font-bold text-slate-800">Biến thể, giá &amp; số lượng hiện tại</h2>
-          <p className="mt-1 text-sm text-slate-500">Mỗi SKU có mã, giá bán và số lượng hiện tại tại cửa hàng.</p>
+          <h2 className="text-lg font-bold text-slate-800">
+            {stockOnlyMode ? 'Cập nhật số lượng theo SKU' : 'Biến thể, giá & số lượng hiện tại'}
+          </h2>
+          <p className="mt-1 text-sm text-slate-500">
+            {stockOnlyMode
+              ? 'Chọn SKU và nhập số lượng thay đổi (+ nhập kho, − xuất kho).'
+              : 'Mỗi SKU có mã, giá bán và số lượng hiện tại tại cửa hàng.'}
+          </p>
         </div>
       </div>
 
@@ -167,10 +199,11 @@ function ProductSkusPanel({ productId, canManage, canAdjustStock = false, layout
             <label className="space-y-1">
               <span className="text-xs font-semibold text-[#717971]">Mã SKU *</span>
               <input
-                className={`w-full rounded-xl border-none bg-white p-3 text-sm uppercase focus:ring-2 focus:ring-[#356647]/20 ${fieldErrors.skuCode ? 'ring-2 ring-[#b42318]/40' : ''}`}
+                className={`w-full rounded-xl border-none bg-white p-3 font-mono text-sm focus:ring-2 focus:ring-[#356647]/20 ${fieldErrors.skuCode ? 'ring-2 ring-[#b42318]/40' : ''}`}
                 placeholder="TEA-001"
                 value={form.skuCode}
                 onChange={updateField('skuCode')}
+                onBlur={handleSkuCodeBlur}
               />
               <FieldError message={fieldErrors.skuCode} />
             </label>
@@ -297,20 +330,20 @@ function ProductSkusPanel({ productId, canManage, canAdjustStock = false, layout
                       quantityOnHand <= 0 ? 'text-[#b42318]' : quantityOnHand <= 5 ? 'text-[#7e5700]' : 'text-[#356647]'
                     }`}
                   >
-                    Số lượng hiện tại: {formatStockQuantity(quantityOnHand)}
+                    {stockLabel}: {formatStockQuantity(quantityOnHand)}
                   </p>
                   </div>
                 </div>
 
-                {canManage || canAdjustStock ? (
+                {canManage || (!warehouseStockView && canAdjustStock) ? (
                   <div className="flex flex-wrap items-center gap-2">
-                    {canAdjustStock ? (
+                    {!warehouseStockView && canAdjustStock ? (
                       <button
                         type="button"
                         className="rounded-lg px-3 py-2 text-sm font-semibold text-[#356647] hover:bg-[#356647]/5"
                         onClick={() => setStockModalSku(sku)}
                       >
-                        Cập nhật số lượng
+                        Gửi yêu cầu điều chỉnh
                       </button>
                     ) : null}
                     {canManage ? (
@@ -336,9 +369,6 @@ function ProductSkusPanel({ productId, canManage, canAdjustStock = false, layout
           sku={stockModalSku}
           quantityOnHand={Number(stockBySkuId.get(stockModalSku.id) ?? 0)}
           onClose={() => setStockModalSku(null)}
-          onAdjusted={(nextQty) => {
-            setStockBySkuId((prev) => new Map(prev).set(stockModalSku.id, nextQty))
-          }}
         />
       ) : null}
     </div>

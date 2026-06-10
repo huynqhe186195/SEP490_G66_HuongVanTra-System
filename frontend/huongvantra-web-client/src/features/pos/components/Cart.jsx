@@ -1,6 +1,6 @@
 function Cart({ items, total, onAddCustomerClick, onAddOfferClick }) {
   return (
-    <aside className="flex w-full min-w-0 flex-col rounded-[24px] border border-gray-100 bg-white p-4 shadow-xl ring-1 ring-black/5 sm:p-5 xl:sticky xl:top-6 xl:max-h-[calc(100dvh-3rem)] xl:w-[clamp(320px,28vw,390px)] xl:flex-none xl:self-start xl:overflow-hidden xl:p-6">
+    <aside className="flex h-full w-full min-w-0 flex-col rounded-[24px] border border-gray-100 bg-white p-4 shadow-xl ring-1 ring-black/5 sm:p-5 xl:max-h-[calc(100dvh-3rem)] xl:overflow-hidden xl:p-6">
       <div className="mb-5 flex items-center justify-between gap-3 sm:mb-6">
         <div className="flex items-center space-x-2">
           <h3 className="text-lg font-bold sm:text-xl">Giỏ hàng</h3>

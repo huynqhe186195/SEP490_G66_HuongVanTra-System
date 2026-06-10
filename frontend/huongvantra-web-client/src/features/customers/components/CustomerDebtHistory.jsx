@@ -19,7 +19,7 @@ function parseAmount(value) {
   return normalized ? Number(normalized) : 0
 }
 
-function CustomerDebtHistory({ customerId, refreshKey = 0, onDebtChanged }) {
+function CustomerDebtHistory({ customerId, refreshKey = 0, allowManualEntry = false, onDebtChanged }) {
   const [debts, setDebts] = useState([])
   const [summary, setSummary] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -112,6 +112,7 @@ function CustomerDebtHistory({ customerId, refreshKey = 0, onDebtChanged }) {
         </div>
       ) : null}
 
+      {allowManualEntry ? (
       <form
         className="rounded-xl border border-dashed border-[#356647]/30 bg-[#f8ffef]/60 p-4"
         onSubmit={handleRecordDebt}
@@ -159,6 +160,7 @@ function CustomerDebtHistory({ customerId, refreshKey = 0, onDebtChanged }) {
           {isRecording ? 'Đang lưu...' : debtForm.type === 'DecreaseDebt' ? 'Ghi nhận thanh toán' : 'Ghi nhận phát sinh nợ'}
         </button>
       </form>
+      ) : null}
 
       {debts.length === 0 ? (
         <p className="text-sm text-[#717971]">Chưa có giao dịch công nợ.</p>

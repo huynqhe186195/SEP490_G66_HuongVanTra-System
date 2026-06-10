@@ -20,14 +20,23 @@ export function normalizeNameInput(value) {
   return String(value || '').normalize('NFC')
 }
 
-export function validateCustomerForm({ name, phone, email, customerType, taxCode }) {
+export function validateCustomerForm({ name, phone, email, customerType, taxCode, address }) {
   const errors = {}
+  const isCorporate = String(customerType || '').toUpperCase() === 'CORPORATE'
 
   const fullName = normalizeText(name)
-  if (!fullName) errors.name = 'Họ tên là bắt buộc.'
-  else if (fullName.length < 2) errors.name = 'Họ tên phải có ít nhất 2 ký tự.'
-  else if (fullName.length > 100) errors.name = 'Họ tên tối đa 100 ký tự.'
-  else if (!isLettersOnly(fullName)) errors.name = 'Họ tên chỉ được chứa chữ cái và khoảng trắng (hỗ trợ tiếng Việt có dấu).'
+  if (!fullName) errors.name = isCorporate ? 'Tên công ty là bắt buộc.' : 'Họ tên là bắt buộc.'
+  else if (fullName.length < 2) errors.name = isCorporate ? 'Tên công ty phải có ít nhất 2 ký tự.' : 'Họ tên phải có ít nhất 2 ký tự.'
+  else if (fullName.length > 100) errors.name = isCorporate ? 'Tên công ty tối đa 100 ký tự.' : 'Họ tên tối đa 100 ký tự.'
+  else if (!isCorporate && !isLettersOnly(fullName)) {
+    errors.name = 'Họ tên chỉ được chứa chữ cái và khoảng trắng (hỗ trợ tiếng Việt có dấu).'
+  }
+
+  const addressValue = normalizeText(address)
+  if (!addressValue) errors.address = 'Địa chỉ là bắt buộc.'
+  else if (addressValue.length < 5) errors.address = 'Địa chỉ phải có ít nhất 5 ký tự.'
+  else if (addressValue.length > 255) errors.address = 'Địa chỉ tối đa 255 ký tự.'
+  else if (isDigitsOnly(addressValue)) errors.address = 'Địa chỉ không được chỉ gồm chữ số.'
 
   const phoneValue = String(phone || '').trim()
   if (!phoneValue) errors.phone = 'Số điện thoại là bắt buộc.'
@@ -44,7 +53,7 @@ export function validateCustomerForm({ name, phone, email, customerType, taxCode
     }
   }
 
-  if (String(customerType || '').toUpperCase() === 'CORPORATE' && !String(taxCode || '').trim()) {
+  if (isCorporate && !String(taxCode || '').trim()) {
     errors.taxCode = 'Khách doanh nghiệp cần mã số thuế.'
   }
 

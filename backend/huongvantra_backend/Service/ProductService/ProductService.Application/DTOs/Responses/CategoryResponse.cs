@@ -6,4 +6,6 @@ public record CategoryResponse(
     string? Description,
     int? ParentId,
     bool IsActive,
-    DateTime CreatedAt);
+    bool IsDeleted,
+    DateTime CreatedAt,
+    DateTime? SyncedToStoreAt);

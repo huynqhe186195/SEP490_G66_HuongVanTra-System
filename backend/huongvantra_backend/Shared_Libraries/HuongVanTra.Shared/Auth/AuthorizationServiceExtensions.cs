@@ -8,6 +8,7 @@ public static class AuthorizationServiceExtensions
     public static IServiceCollection AddHvtPermissionPolicies(this IServiceCollection services)
     {
         services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
+        services.AddSingleton<IAuthorizationHandler, AnyPermissionAuthorizationHandler>();
 
         services.AddAuthorization(options =>
         {
@@ -16,6 +17,11 @@ public static class AuthorizationServiceExtensions
                 options.AddPolicy(permission, policy =>
                     policy.Requirements.Add(new PermissionRequirement(permission)));
             }
+
+            options.AddPolicy(PermissionNames.CatalogManagement, policy =>
+                policy.Requirements.Add(new AnyPermissionRequirement(
+                    PermissionNames.ManageRole,
+                    PermissionNames.ManageCatalog)));
         });
 
         return services;

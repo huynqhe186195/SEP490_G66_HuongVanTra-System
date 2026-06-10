@@ -6,6 +6,7 @@ export function mapSkuStock(row) {
     skuCode: row.skuCode ?? row.SkuCode ?? '',
     weightInGrams: Number(row.weightInGrams ?? row.WeightInGrams ?? 0),
     quantityOnHand: Number(row.quantityOnHand ?? row.QuantityOnHand ?? 0),
+    warehouseQuantityOnHand: Number(row.warehouseQuantityOnHand ?? row.WarehouseQuantityOnHand ?? 0),
     updatedAt: row.updatedAt ?? row.UpdatedAt ?? null,
   }
 }
@@ -18,6 +19,10 @@ export async function fetchSkuStocks() {
 
 export function buildStockBySkuIdMap(stocks = []) {
   return new Map(stocks.map((row) => [row.skuId, row.quantityOnHand]))
+}
+
+export function buildWarehouseStockBySkuIdMap(stocks = []) {
+  return new Map(stocks.map((row) => [row.skuId, row.warehouseQuantityOnHand]))
 }
 
 /** Gộp toàn bộ SKU trong danh mục với dòng tồn (SKU chưa có dòng tồn hiển thị 0). */
@@ -34,6 +39,7 @@ export function mergeCatalogSkusWithStocks(skus = [], stocks = [], productNameBy
       skuCode: sku.skuCode,
       weightInGrams: stock?.weightInGrams ?? sku.weightInGrams ?? 0,
       quantityOnHand: stock?.quantityOnHand ?? 0,
+      warehouseQuantityOnHand: stock?.warehouseQuantityOnHand ?? 0,
       updatedAt: stock?.updatedAt ?? null,
     }
   })
@@ -47,6 +53,7 @@ export function mergeCatalogSkusWithStocks(skus = [], stocks = [], productNameBy
       skuCode: stock.skuCode,
       weightInGrams: stock.weightInGrams ?? 0,
       quantityOnHand: stock.quantityOnHand ?? 0,
+      warehouseQuantityOnHand: stock.warehouseQuantityOnHand ?? 0,
       updatedAt: stock.updatedAt ?? null,
     })
   }
@@ -58,8 +65,27 @@ export function mergeCatalogSkusWithStocks(skus = [], stocks = [], productNameBy
   })
 }
 
-export async function adjustSkuStock(skuId, quantityDelta) {
-  const data = await apiRequestAuth(`/api/v1/inventory/sku-stocks/${skuId}/adjust`, {
+export async function fetchInventorySettings() {
+  try {
+    const data = await apiRequestAuth('/api/v1/inventory/settings', { method: 'GET' })
+    return {
+      simulateWarehouse: Boolean(data?.simulateWarehouse ?? data?.SimulateWarehouse ?? true),
+    }
+  } catch {
+    return { simulateWarehouse: true }
+  }
+}
+
+export async function simulateAdjustStoreStock(skuId, quantityDelta) {
+  const data = await apiRequestAuth(`/api/v1/inventory/sku-stocks/${skuId}/simulate-adjust-store`, {
+    method: 'POST',
+    body: JSON.stringify({ quantityDelta: Number(quantityDelta) }),
+  })
+  return mapSkuStock(data)
+}
+
+export async function adjustWarehouseStock(skuId, quantityDelta) {
+  const data = await apiRequestAuth(`/api/v1/inventory/sku-stocks/${skuId}/adjust-warehouse`, {
     method: 'POST',
     body: JSON.stringify({ quantityDelta: Number(quantityDelta) }),
   })

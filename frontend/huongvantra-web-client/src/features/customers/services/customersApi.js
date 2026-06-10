@@ -321,7 +321,7 @@ export async function fetchMembershipTiers() {
         tierCode: item.tierName ?? item.TierName ?? '',
         minTotalSpend: Number(item.minSpendingThreshold ?? item.MinSpendingThreshold ?? 0),
         discountPercent: Number(item.discountPercent ?? item.DiscountPercent ?? 0),
-        isActive: true,
+        isActive: item.isActive ?? item.IsActive ?? true,
       }))
     : []
 }

@@ -19,11 +19,19 @@ public class SkuStockController(InventoryLogic _logic) : ControllerBase
         return Ok(items);
     }
 
-    [HttpPost("{skuId:guid}/adjust")]
-    [Authorize(Policy = PermissionNames.ViewOrder)]
-    public async Task<IActionResult> Adjust(Guid skuId, [FromBody] AdjustSkuStockRequest request, CancellationToken ct)
+    [HttpPost("{skuId:guid}/adjust-warehouse")]
+    [Authorize(Roles = "Warehouse")]
+    public async Task<IActionResult> AdjustWarehouse(Guid skuId, [FromBody] AdjustWarehouseStockRequest request, CancellationToken ct)
     {
-        var result = await _logic.AdjustSkuStockAsync(skuId, request.QuantityDelta, null, ct);
+        var result = await _logic.AdjustWarehouseStockAsync(skuId, request.QuantityDelta, null, ct);
+        return Ok(result);
+    }
+
+    [HttpPost("{skuId:guid}/simulate-adjust-store")]
+    [Authorize(Roles = "Warehouse")]
+    public async Task<IActionResult> SimulateAdjustStore(Guid skuId, [FromBody] AdjustSkuStockRequest request, CancellationToken ct)
+    {
+        var result = await _logic.SimulateAdjustStoreStockAsync(skuId, request.QuantityDelta, null, ct);
         return Ok(result);
     }
 }
