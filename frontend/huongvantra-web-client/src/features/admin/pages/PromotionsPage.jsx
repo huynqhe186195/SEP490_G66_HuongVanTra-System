@@ -32,6 +32,9 @@ const EMPTY_FORM = {
   skuScopes: [],
 }
 
+const MAX_PERCENTAGE_DISCOUNT_VALUE = 90
+const MAX_FIXED_DISCOUNT_VALUE = 10000000
+
 const VALIDITY_BADGE_CLASS = {
   active: 'bg-emerald-50 text-emerald-700 border-emerald-200',
   not_started: 'bg-amber-50 text-amber-700 border-amber-200',
@@ -61,6 +64,18 @@ function addMinutesToDatetimeLocal(value, minutes) {
   if (Number.isNaN(date.getTime())) return ''
   date.setMinutes(date.getMinutes() + minutes)
   return formatDatetimeLocal(date)
+}
+
+function getDiscountValueMax(discountType) {
+  return discountType === 'PERCENTAGE'
+    ? MAX_PERCENTAGE_DISCOUNT_VALUE
+    : MAX_FIXED_DISCOUNT_VALUE
+}
+
+function getDiscountValueHelperText(discountType) {
+  return discountType === 'PERCENTAGE'
+    ? 'Tối đa 90%'
+    : 'Tối đa 10.000.000đ'
 }
 
 function getSkuDisplayName(sku) {
@@ -422,12 +437,13 @@ function PromotionsPage() {
                 <input
                   type="number"
                   min={0}
-                  max={form.discountType === 'PERCENTAGE' ? 100 : undefined}
+                  max={getDiscountValueMax(form.discountType)}
                   className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-50 disabled:text-slate-500"
                   value={form.discountValue}
                   disabled={editingOrderCount > 0}
                   onChange={(e) => setForm((prev) => ({ ...prev, discountValue: e.target.value }))}
                 />
+                <p className="mt-1 text-xs text-slate-500">{getDiscountValueHelperText(form.discountType)}</p>
               </label>
               <label className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700">
                 <input

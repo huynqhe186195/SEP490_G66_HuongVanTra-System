@@ -1,22 +1,11 @@
 import { loadAuthSession } from '../../auth/services/authSession.js'
+import { parseResponseError } from '../../../lib/apiClient.js'
 import { mapPromotion } from '../../pos/utils/posPromotionUtils.js'
 
 const DEFAULT_API_BASE_URL = 'http://localhost:5249'
 
 function getApiBaseUrl() {
   return import.meta.env.VITE_API_BASE_URL || DEFAULT_API_BASE_URL
-}
-
-async function parseResponseError(response) {
-  const contentType = response.headers.get('content-type') || ''
-  if (contentType.includes('application/json')) {
-    const body = await response.json().catch(() => null)
-    if (body && typeof body === 'object') {
-      if (typeof body.message === 'string' && body.message.trim()) return body.message
-    }
-  }
-  const text = await response.text().catch(() => '')
-  return text.trim() || 'Có lỗi xảy ra.'
 }
 
 async function requestWithAuth(path, options = {}) {

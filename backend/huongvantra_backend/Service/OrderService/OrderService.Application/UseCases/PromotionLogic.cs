@@ -10,7 +10,8 @@ namespace OrderService.Application.UseCases;
 
 public class PromotionLogic(IPromotionRepository _promotionRepo)
 {
-    private const decimal MaxDiscountValue = 1_000_000_000m;
+    private const decimal MaxPercentageDiscountValue = 90m;
+    private const decimal MaxFixedDiscountValue = 10_000_000m;
     private const string InvalidLookupMessage = "Mã giảm giá không hợp lệ hoặc đã hết hiệu lực.";
     private const string NotApplicableMessage = "Promotion is not applicable to selected items.";
     private static readonly Regex PromoCodeRegex = new("^[A-Z0-9_-]+$", RegexOptions.Compiled);
@@ -327,11 +328,14 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
 
         if (discountValue <= 0)
             errors.Add("Giá trị giảm giá phải lớn hơn 0.");
-        if (discountValue > MaxDiscountValue)
-            errors.Add("Giá trị giảm giá tối đa 1,000,000,000.");
 
-        if (parsedDiscountType == PromotionDiscountType.PERCENTAGE && discountValue > 100)
-            errors.Add("Giá trị giảm theo phần trăm phải nhỏ hơn hoặc bằng 100.");
+        if (parsedDiscountType == PromotionDiscountType.PERCENTAGE &&
+            discountValue > MaxPercentageDiscountValue)
+            errors.Add("Mã giảm percentage không quá 90%.");
+
+        if (parsedDiscountType == PromotionDiscountType.FIXED &&
+            discountValue > MaxFixedDiscountValue)
+            errors.Add("Mã giảm FIXED không quá 10.000.000đ.");
 
         var validFromUtc = AsNullableUtc(validFrom);
         var validToUtc = AsNullableUtc(validTo);
