@@ -1,10 +1,19 @@
 using OrderService.Domain.Entities;
+using OrderService.Domain.Enums;
 
 namespace OrderService.Application.Interfaces;
 
 public interface IPromotionRepository
 {
     Task<List<Promotion>> GetAllAsync(CancellationToken ct = default);
+    Task<(List<Promotion> Items, int TotalCount)> GetPagedAsync(
+        string? search,
+        PromotionDiscountType? discountType,
+        PromotionScopeType? scopeType,
+        bool? isActive,
+        int page,
+        int pageSize,
+        CancellationToken ct = default);
     Task<Promotion?> GetByIdAsync(Guid id, CancellationToken ct = default);
     Task<Promotion?> GetByNormalizedCodeAsync(string normalizedCode, CancellationToken ct = default);
     Task<Promotion?> GetActiveByNormalizedCodeAsync(string normalizedCode, CancellationToken ct = default);

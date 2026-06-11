@@ -12,13 +12,29 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
 {
     private const decimal MaxPercentageDiscountValue = 90m;
     private const decimal MaxFixedDiscountValue = 10_000_000m;
+    private const int AdminPromotionPageSize = 10;
     private const string InvalidLookupMessage = "Mã giảm giá không hợp lệ hoặc đã hết hiệu lực.";
     private const string NotApplicableMessage = "Promotion is not applicable to selected items.";
+    private static readonly TimeSpan ValidFromPastTolerance = TimeSpan.FromMinutes(2);
     private static readonly Regex PromoCodeRegex = new("^[A-Z0-9_-]+$", RegexOptions.Compiled);
 
-    public async Task<List<PromotionResponse>> GetAdminPromotionsAsync(CancellationToken ct = default)
+    public async Task<PagedResponse<PromotionResponse>> GetAdminPromotionsAsync(
+        GetAdminPromotionsRequest req, CancellationToken ct = default)
     {
-        var promotions = await _promotionRepo.GetAllAsync(ct);
+        var page = req.Page < 1 ? 1 : req.Page;
+        var pageSize = AdminPromotionPageSize;
+        var discountType = ParseAdminDiscountTypeFilter(req.DiscountType);
+        var scopeType = ParseAdminScopeTypeFilter(req.ScopeType);
+        var isActive = ParseAdminStatusFilter(req.Status);
+
+        var (promotions, totalCount) = await _promotionRepo.GetPagedAsync(
+            req.Search,
+            discountType,
+            scopeType,
+            isActive,
+            page,
+            pageSize,
+            ct);
         var result = new List<PromotionResponse>(promotions.Count);
 
         foreach (var promotion in promotions)
@@ -27,7 +43,16 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
             result.Add(MapToResponse(promotion, orderCount));
         }
 
-        return result;
+        var totalPages = totalCount == 0
+            ? 1
+            : (int)Math.Ceiling(totalCount / (double)pageSize);
+
+        return new PagedResponse<PromotionResponse>(
+            result,
+            page,
+            pageSize,
+            totalCount,
+            totalPages);
     }
 
     public async Task<List<PromotionLookupResponse>> GetAvailablePromotionsAsync(CancellationToken ct = default)
@@ -38,22 +63,25 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
 
     public async Task<PromotionResponse> CreateAsync(CreatePromotionRequest req, CancellationToken ct = default)
     {
+        var now = DateTime.UtcNow;
         var input = ValidatePromotionInput(
             req.PromoCode,
             req.DiscountType,
             req.DiscountValue,
+            req.MinimumOrderAmount,
             req.ValidFromUtc ?? req.ValidFrom,
             req.ValidToUtc ?? req.ValidTo,
             req.IsActive,
             req.ScopeType,
             req.SkuIds,
-            req.SkuScopes);
+            req.SkuScopes,
+            validateValidFromNotPast: true,
+            nowUtc: now);
 
         var existing = await _promotionRepo.GetByNormalizedCodeAsync(input.NormalizedPromoCode, ct);
         if (existing is not null)
             throw new OrderValidationException("Mã giảm giá đã tồn tại.");
 
-        var now = DateTime.UtcNow;
         var promotion = new Promotion
         {
             Id = Guid.NewGuid(),
@@ -61,6 +89,7 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
             NormalizedPromoCode = input.NormalizedPromoCode,
             DiscountType = input.DiscountType,
             DiscountValue = input.DiscountValue,
+            MinimumOrderAmount = input.MinimumOrderAmount,
             ScopeType = input.ScopeType,
             ValidFromUtc = input.ValidFromUtc,
             ValidToUtc = input.ValidToUtc,
@@ -84,28 +113,37 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
         var promotion = await _promotionRepo.GetByIdAsync(id, ct)
             ?? throw new PromotionNotFoundException(id);
 
+        var now = DateTime.UtcNow;
+        var requestedValidFromUtc = AsNullableUtc(req.ValidFromUtc ?? req.ValidFrom);
+        var existingValidFromUtc = AsNullableUtc(promotion.ValidFromUtc);
+        var validFromChanged = !SameNullableDateTimeMinute(requestedValidFromUtc, existingValidFromUtc);
+
         var input = ValidatePromotionInput(
             req.PromoCode,
             req.DiscountType,
             req.DiscountValue,
+            req.MinimumOrderAmount,
             req.ValidFromUtc ?? req.ValidFrom,
             req.ValidToUtc ?? req.ValidTo,
             req.IsActive,
             req.ScopeType,
             req.SkuIds,
-            req.SkuScopes);
+            req.SkuScopes,
+            validateValidFromNotPast: validFromChanged,
+            nowUtc: now);
 
         var orderCount = await _promotionRepo.CountOrdersUsingPromotionAsync(promotion.Id, ct);
         var changesImmutableFields =
             promotion.NormalizedPromoCode != input.NormalizedPromoCode ||
             promotion.DiscountType != input.DiscountType ||
             promotion.DiscountValue != input.DiscountValue ||
+            promotion.MinimumOrderAmount != input.MinimumOrderAmount ||
             promotion.ScopeType != input.ScopeType ||
             !SameSkuScopes(promotion.Scopes, input.SkuScopes);
 
         if (orderCount > 0 && changesImmutableFields)
             throw new OrderValidationException(
-                "Mã giảm giá đã được sử dụng nên chỉ được cập nhật thời gian hiệu lực hoặc trạng thái.");
+                "Mã giảm giá đã được sử dụng nên không được đổi cấu hình giảm giá, phạm vi áp dụng hoặc đơn tối thiểu.");
 
         if (promotion.NormalizedPromoCode != input.NormalizedPromoCode)
         {
@@ -120,14 +158,15 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
             promotion.NormalizedPromoCode = input.NormalizedPromoCode;
             promotion.DiscountType = input.DiscountType;
             promotion.DiscountValue = input.DiscountValue;
+            promotion.MinimumOrderAmount = input.MinimumOrderAmount;
             promotion.ScopeType = input.ScopeType;
-            ReplaceScopes(promotion, input.SkuScopes, DateTime.UtcNow);
+            ReplaceScopes(promotion, input.SkuScopes, now);
         }
 
         promotion.ValidFromUtc = input.ValidFromUtc;
         promotion.ValidToUtc = input.ValidToUtc;
         promotion.IsActive = input.IsActive ?? promotion.IsActive;
-        promotion.UpdatedAt = DateTime.UtcNow;
+        promotion.UpdatedAt = now;
 
         await _promotionRepo.SaveChangesAsync(ct);
         return MapToResponse(promotion, orderCount);
@@ -182,6 +221,7 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
             promotion.PromoCode,
             promotion.DiscountType.ToString(),
             promotion.DiscountValue,
+            promotion.MinimumOrderAmount,
             promotion.ScopeType.ToString(),
             MapScopes(promotion),
             result.DiscountAmount,
@@ -209,6 +249,46 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
             promotion.PromoCode,
             result.DiscountAmount,
             result.EligibleSubtotal);
+    }
+
+    private static PromotionDiscountType? ParseAdminDiscountTypeFilter(string? discountType)
+    {
+        if (string.IsNullOrWhiteSpace(discountType) ||
+            string.Equals(discountType.Trim(), "ALL", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        var normalizedType = discountType.Trim().ToUpperInvariant();
+        return normalizedType is "PERCENTAGE" or "FIXED" &&
+            Enum.TryParse<PromotionDiscountType>(normalizedType, out var parsed)
+                ? parsed
+                : null;
+    }
+
+    private static PromotionScopeType? ParseAdminScopeTypeFilter(string? scopeType)
+    {
+        if (string.IsNullOrWhiteSpace(scopeType) ||
+            string.Equals(scopeType.Trim(), "ALL", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        var normalizedType = scopeType.Trim().ToUpperInvariant();
+        return normalizedType is "ORDER" or "SKU" &&
+            Enum.TryParse<PromotionScopeType>(normalizedType, out var parsed)
+                ? parsed
+                : null;
+    }
+
+    private static bool? ParseAdminStatusFilter(string? status)
+    {
+        if (string.IsNullOrWhiteSpace(status) ||
+            string.Equals(status.Trim(), "ALL", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        return status.Trim().ToUpperInvariant() switch
+        {
+            "ACTIVE" => true,
+            "INACTIVE" => false,
+            _ => null
+        };
     }
 
     private async Task<Promotion> ResolvePromotionAsync(
@@ -240,6 +320,11 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
         var totalAmount = itemList.Sum(i => i.SubTotal);
         var safeManualDiscount = Math.Min(Math.Max(0, manualDiscount), totalAmount);
         var baseAfterManualDiscount = Math.Max(0, totalAmount - safeManualDiscount);
+
+        if (promotion.MinimumOrderAmount > 0 &&
+            baseAfterManualDiscount < promotion.MinimumOrderAmount)
+            throw new OrderValidationException(
+                $"Đơn hàng cần tối thiểu {FormatVietnamAmount(promotion.MinimumOrderAmount)}đ để áp dụng mã {promotion.PromoCode}.");
 
         var eligibleSubtotal = promotion.ScopeType == PromotionScopeType.SKU
             ? GetEligibleSkuSubtotal(promotion, itemList)
@@ -314,20 +399,26 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
         string? promoCode,
         string? discountType,
         decimal discountValue,
+        decimal? minimumOrderAmount,
         DateTime? validFrom,
         DateTime? validTo,
         bool? isActive,
         string? scopeType,
         List<Guid>? skuIds,
-        List<PromotionSkuScopeRequest>? skuScopes)
+        List<PromotionSkuScopeRequest>? skuScopes,
+        bool validateValidFromNotPast,
+        DateTime nowUtc)
     {
         var errors = new List<string>();
         var normalizedCode = NormalizePromoCode(promoCode, errors);
         var parsedDiscountType = ParseDiscountType(discountType, errors);
         var parsedScopeType = ParseScopeType(scopeType, errors);
+        var normalizedMinimumOrderAmount = minimumOrderAmount ?? 0m;
 
         if (discountValue <= 0)
             errors.Add("Giá trị giảm giá phải lớn hơn 0.");
+        if (normalizedMinimumOrderAmount < 0)
+            errors.Add("Đơn tối thiểu không được âm.");
 
         if (parsedDiscountType == PromotionDiscountType.PERCENTAGE &&
             discountValue > MaxPercentageDiscountValue)
@@ -337,7 +428,11 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
             discountValue > MaxFixedDiscountValue)
             errors.Add("Mã giảm FIXED không quá 10.000.000đ.");
 
-        var validFromUtc = AsNullableUtc(validFrom);
+        var validFromUtc = NormalizeValidFromUtc(
+            AsNullableUtc(validFrom),
+            validateValidFromNotPast,
+            nowUtc,
+            errors);
         var validToUtc = AsNullableUtc(validTo);
         if (validFromUtc.HasValue && validToUtc.HasValue && validToUtc.Value <= validFromUtc.Value)
             errors.Add("Thời gian kết thúc phải sau thời gian bắt đầu.");
@@ -351,6 +446,7 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
             normalizedCode!,
             parsedDiscountType!.Value,
             discountValue,
+            normalizedMinimumOrderAmount,
             validFromUtc,
             validToUtc,
             isActive,
@@ -468,6 +564,14 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
         };
     }
 
+    private static string FormatVietnamAmount(decimal amount)
+    {
+        var rounded = Math.Round(amount, 0, MidpointRounding.AwayFromZero);
+        return string
+            .Format(System.Globalization.CultureInfo.InvariantCulture, "{0:N0}", rounded)
+            .Replace(",", ".");
+    }
+
     private static bool IsCurrentlyUsable(Promotion promotion, DateTime nowUtc)
     {
         if (promotion.IsDeleted || !promotion.IsActive)
@@ -554,6 +658,7 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
         promotion.PromoCode,
         promotion.DiscountType.ToString(),
         promotion.DiscountValue,
+        promotion.MinimumOrderAmount,
         AsNullableUtc(promotion.ValidFromUtc),
         AsNullableUtc(promotion.ValidToUtc),
         GetValidityStatus(promotion, DateTime.UtcNow),
@@ -567,6 +672,7 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
         promotion.PromoCode,
         promotion.DiscountType.ToString(),
         promotion.DiscountValue,
+        promotion.MinimumOrderAmount,
         AsNullableUtc(promotion.ValidFromUtc),
         AsNullableUtc(promotion.ValidToUtc),
         GetValidityStatus(promotion, DateTime.UtcNow),
@@ -585,6 +691,49 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
                 .ToList()
             : [];
 
+    private static DateTime? NormalizeValidFromUtc(
+        DateTime? validFromUtc,
+        bool validateValidFromNotPast,
+        DateTime nowUtc,
+        List<string> errors)
+    {
+        if (!validFromUtc.HasValue || !validateValidFromNotPast)
+            return validFromUtc;
+
+        var value = validFromUtc.Value;
+        if (value >= nowUtc)
+            return value;
+
+        if (nowUtc - value <= ValidFromPastTolerance)
+            return nowUtc;
+
+        errors.Add("Thời gian bắt đầu không được ở quá khứ.");
+        return value;
+    }
+
+    private static bool SameNullableDateTimeMinute(DateTime? left, DateTime? right)
+    {
+        if (!left.HasValue && !right.HasValue)
+            return true;
+        if (!left.HasValue || !right.HasValue)
+            return false;
+
+        return TruncateToMinute(left.Value) == TruncateToMinute(right.Value);
+    }
+
+    private static DateTime TruncateToMinute(DateTime dateTime)
+    {
+        var utc = AsUtc(dateTime);
+        return new DateTime(
+            utc.Year,
+            utc.Month,
+            utc.Day,
+            utc.Hour,
+            utc.Minute,
+            0,
+            DateTimeKind.Utc);
+    }
+
     private static DateTime? AsNullableUtc(DateTime? dateTime) =>
         dateTime.HasValue ? AsUtc(dateTime.Value) : null;
 
@@ -597,6 +746,7 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
         string NormalizedPromoCode,
         PromotionDiscountType DiscountType,
         decimal DiscountValue,
+        decimal MinimumOrderAmount,
         DateTime? ValidFromUtc,
         DateTime? ValidToUtc,
         bool? IsActive,

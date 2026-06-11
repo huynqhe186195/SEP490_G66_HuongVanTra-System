@@ -1,10 +1,21 @@
 namespace OrderService.Application.DTOs.Requests;
 
+public class GetAdminPromotionsRequest
+{
+    public int Page { get; set; } = 1;
+    public int PageSize { get; set; } = 10;
+    public string? Search { get; set; }
+    public string? DiscountType { get; set; }
+    public string? ScopeType { get; set; }
+    public string? Status { get; set; }
+}
+
 public class CreatePromotionRequest
 {
     public string? PromoCode { get; init; }
     public string? DiscountType { get; init; }
     public decimal DiscountValue { get; init; }
+    public decimal? MinimumOrderAmount { get; init; }
     public DateTime? ValidFrom { get; init; }
     public DateTime? ValidTo { get; init; }
     public DateTime? ValidFromUtc { get; init; }
@@ -20,6 +31,7 @@ public class UpdatePromotionRequest
     public string? PromoCode { get; init; }
     public string? DiscountType { get; init; }
     public decimal DiscountValue { get; init; }
+    public decimal? MinimumOrderAmount { get; init; }
     public DateTime? ValidFrom { get; init; }
     public DateTime? ValidTo { get; init; }
     public DateTime? ValidFromUtc { get; init; }

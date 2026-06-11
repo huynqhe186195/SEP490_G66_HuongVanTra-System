@@ -263,6 +263,11 @@ namespace OrderService.Infrastructure.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("tinyint(1)");
 
+                    b.Property<decimal>("MinimumOrderAmount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(18,2)")
+                        .HasDefaultValue(0m);
+
                     b.Property<string>("NormalizedPromoCode")
                         .IsRequired()
                         .HasMaxLength(50)

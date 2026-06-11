@@ -25,6 +25,7 @@ const EMPTY_FORM = {
   promoCode: '',
   discountType: 'PERCENTAGE',
   discountValue: '',
+  minimumOrderAmount: '',
   validFrom: '',
   validTo: '',
   isActive: true,
@@ -34,6 +35,13 @@ const EMPTY_FORM = {
 
 const MAX_PERCENTAGE_DISCOUNT_VALUE = 90
 const MAX_FIXED_DISCOUNT_VALUE = 10000000
+const PROMOTION_PAGE_SIZE = 10
+const DEFAULT_PAGINATION = {
+  page: 1,
+  pageSize: PROMOTION_PAGE_SIZE,
+  totalItems: 0,
+  totalPages: 1,
+}
 
 const VALIDITY_BADGE_CLASS = {
   active: 'bg-emerald-50 text-emerald-700 border-emerald-200',
@@ -58,12 +66,27 @@ function formatDatetimeLocal(date) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
+function getCurrentDatetimeLocalMinute() {
+  return formatDatetimeLocal(new Date())
+}
+
 function addMinutesToDatetimeLocal(value, minutes) {
   if (!value) return ''
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return ''
   date.setMinutes(date.getMinutes() + minutes)
   return formatDatetimeLocal(date)
+}
+
+function formatCurrencyInput(value) {
+  const digits = String(value ?? '').replace(/\D/g, '')
+  if (!digits) return ''
+  return Number(digits).toLocaleString('vi-VN')
+}
+
+function parseCurrencyInput(value) {
+  const digits = String(value ?? '').replace(/\D/g, '')
+  return digits ? Number(digits) : 0
 }
 
 function getDiscountValueMax(discountType) {
@@ -76,6 +99,11 @@ function getDiscountValueHelperText(discountType) {
   return discountType === 'PERCENTAGE'
     ? 'Tối đa 90%'
     : 'Tối đa 10.000.000đ'
+}
+
+function formatPromotionMinimumOrderSummary(promotion) {
+  const amount = Number(promotion?.minimumOrderAmount || 0)
+  return amount > 0 ? `Từ ${amount.toLocaleString('vi-VN')}đ` : 'Không yêu cầu'
 }
 
 function getSkuDisplayName(sku) {
@@ -103,19 +131,39 @@ function PromotionsPage() {
   const [skuOptions, setSkuOptions] = useState([])
   const [isSkuLoading, setIsSkuLoading] = useState(false)
   const [skuSearchTerm, setSkuSearchTerm] = useState('')
+  const [promotionSearchTerm, setPromotionSearchTerm] = useState('')
+  const [discountTypeFilter, setDiscountTypeFilter] = useState('ALL')
+  const [scopeTypeFilter, setScopeTypeFilter] = useState('ALL')
+  const [statusFilter, setStatusFilter] = useState('ALL')
+  const [page, setPage] = useState(1)
+  const [pagination, setPagination] = useState(DEFAULT_PAGINATION)
 
   const loadData = useCallback(async () => {
     setIsLoading(true)
     try {
-      const items = await fetchAdminPromotions()
-      setPromotions(items)
+      const result = await fetchAdminPromotions({
+        page,
+        pageSize: PROMOTION_PAGE_SIZE,
+        search: promotionSearchTerm,
+        discountType: discountTypeFilter,
+        scopeType: scopeTypeFilter,
+        status: statusFilter,
+      })
+      setPromotions(result.items)
+      setPagination({
+        page: result.page || page,
+        pageSize: result.pageSize || PROMOTION_PAGE_SIZE,
+        totalItems: result.totalItems || 0,
+        totalPages: Math.max(1, result.totalPages || 1),
+      })
     } catch (error) {
       setPromotions([])
+      setPagination(DEFAULT_PAGINATION)
       showError(error.message)
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [discountTypeFilter, page, promotionSearchTerm, scopeTypeFilter, statusFilter])
 
   const loadSkuOptions = useCallback(async () => {
     if (skuOptions.length > 0 || isSkuLoading) return
@@ -151,7 +199,12 @@ function PromotionsPage() {
     setForm({
       promoCode: promotion.promoCode,
       discountType: promotion.discountType,
-      discountValue: String(promotion.discountValue),
+      discountValue: promotion.discountType === 'FIXED'
+        ? formatCurrencyInput(promotion.discountValue)
+        : String(promotion.discountValue),
+      minimumOrderAmount: Number(promotion.minimumOrderAmount || 0) > 0
+        ? formatCurrencyInput(promotion.minimumOrderAmount)
+        : '',
       validFrom: promotion.validFromUtc ? toDatetimeLocalValue(promotion.validFromUtc) : '',
       validTo: promotion.validToUtc ? toDatetimeLocalValue(promotion.validToUtc) : '',
       isActive: promotion.isActive ?? true,
@@ -179,7 +232,10 @@ function PromotionsPage() {
     const payload = {
       promoCode: form.promoCode.trim(),
       discountType: form.discountType,
-      discountValue: Number(form.discountValue),
+      discountValue: form.discountType === 'FIXED'
+        ? parseCurrencyInput(form.discountValue)
+        : Number(form.discountValue),
+      minimumOrderAmount: parseCurrencyInput(form.minimumOrderAmount),
       validFrom: fromDatetimeLocalToUtc(form.validFrom),
       validTo: fromDatetimeLocalToUtc(form.validTo),
       isActive: form.isActive,
@@ -236,6 +292,12 @@ function PromotionsPage() {
     }
   }
 
+  const normalizedPromotionSearch = promotionSearchTerm.trim().toLowerCase()
+  const hasActivePromotionFilter =
+    Boolean(normalizedPromotionSearch) ||
+    discountTypeFilter !== 'ALL' ||
+    scopeTypeFilter !== 'ALL' ||
+    statusFilter !== 'ALL'
   const isImmutableLocked = editingOrderCount > 0
   const selectedSkuIds = new Set((form.skuScopes ?? []).map((scope) => scope.skuId))
   const displaySkuOptions = [
@@ -299,6 +361,55 @@ function PromotionsPage() {
         Thời hạn để trống = không giới hạn. Ngừng hoạt động thay vì xóa cứng — mã đã dùng trên đơn vẫn giữ lịch sử.
       </p>
 
+      <div className="mb-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_180px_180px_180px]">
+        <input
+          type="search"
+          className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-[#538463] focus:ring-2 focus:ring-[#538463]/15"
+          placeholder="Tìm kiếm mã giảm giá..."
+          value={promotionSearchTerm}
+          onChange={(e) => {
+            setPromotionSearchTerm(e.target.value)
+            setPage(1)
+          }}
+        />
+        <select
+          className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-[#538463] focus:ring-2 focus:ring-[#538463]/15"
+          value={discountTypeFilter}
+          onChange={(e) => {
+            setDiscountTypeFilter(e.target.value)
+            setPage(1)
+          }}
+        >
+          <option value="ALL">Tất cả loại giảm</option>
+          <option value="PERCENTAGE">Percentage</option>
+          <option value="FIXED">Fixed</option>
+        </select>
+        <select
+          className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-[#538463] focus:ring-2 focus:ring-[#538463]/15"
+          value={scopeTypeFilter}
+          onChange={(e) => {
+            setScopeTypeFilter(e.target.value)
+            setPage(1)
+          }}
+        >
+          <option value="ALL">Tất cả phạm vi</option>
+          <option value="ORDER">Toàn đơn</option>
+          <option value="SKU">SKU cụ thể</option>
+        </select>
+        <select
+          className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-[#538463] focus:ring-2 focus:ring-[#538463]/15"
+          value={statusFilter}
+          onChange={(e) => {
+            setStatusFilter(e.target.value)
+            setPage(1)
+          }}
+        >
+          <option value="ALL">Tất cả trạng thái</option>
+          <option value="ACTIVE">Đang kích hoạt</option>
+          <option value="INACTIVE">Tạm tắt</option>
+        </select>
+      </div>
+
       <section className="rounded-3xl border border-slate-100 bg-white shadow-sm">
         <div className="custom-scrollbar overflow-x-auto">
           <table className="w-full text-left">
@@ -307,6 +418,7 @@ function PromotionsPage() {
                 <th className="px-8 py-4">Mã</th>
                 <th className="px-4 py-4">Loại</th>
                 <th className="px-4 py-4">Giá trị</th>
+                <th className="px-4 py-4">Đơn tối thiểu</th>
                 <th className="px-4 py-4">Thời hạn</th>
                 <th className="px-4 py-4">Phạm vi</th>
                 <th className="px-4 py-4">Trạng thái</th>
@@ -318,15 +430,17 @@ function PromotionsPage() {
             <tbody className="divide-y divide-slate-50">
               {isLoading ? (
                 <tr>
-                  <td className="px-8 py-10 text-slate-500" colSpan={9}>
+                  <td className="px-8 py-10 text-slate-500" colSpan={10}>
                     Đang tải...
                   </td>
                 </tr>
               ) : null}
               {!isLoading && promotions.length === 0 ? (
                 <tr>
-                  <td className="px-8 py-10 text-slate-500" colSpan={9}>
-                    Chưa có mã giảm giá. Bấm &quot;Thêm mã&quot; để tạo.
+                  <td className="px-8 py-10 text-slate-500" colSpan={10}>
+                    {hasActivePromotionFilter
+                      ? 'Không tìm thấy mã giảm giá phù hợp.'
+                      : 'Chưa có mã giảm giá. Bấm "Thêm mã" để tạo.'}
                   </td>
                 </tr>
               ) : null}
@@ -343,6 +457,9 @@ function PromotionsPage() {
                           {promotion.discountType === 'FIXED'
                             ? `${promotion.discountValue.toLocaleString('vi-VN')} đ`
                             : `${promotion.discountValue}%`}
+                        </td>
+                        <td className="px-4 py-5 text-sm text-slate-600">
+                          {formatPromotionMinimumOrderSummary(promotion)}
                         </td>
                         <td className="px-4 py-5 text-sm text-slate-600">
                           {formatPromotionPeriod(promotion)}
@@ -396,6 +513,30 @@ function PromotionsPage() {
         </div>
       </section>
 
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-slate-600">
+        <span>
+          Trang {pagination.page} / {Math.max(1, pagination.totalPages)}
+        </span>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            disabled={isLoading || pagination.page <= 1}
+            onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+            className="rounded-lg border border-slate-200 px-3 py-1.5 font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Trước
+          </button>
+          <button
+            type="button"
+            disabled={isLoading || pagination.page >= Math.max(1, pagination.totalPages)}
+            onClick={() => setPage((prev) => prev + 1)}
+            className="rounded-lg border border-slate-200 px-3 py-1.5 font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Sau
+          </button>
+        </div>
+      </div>
+
       {modalOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
           <div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-xl">
@@ -424,7 +565,16 @@ function PromotionsPage() {
                   className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-50 disabled:text-slate-500"
                   value={form.discountType}
                   disabled={editingOrderCount > 0}
-                  onChange={(e) => setForm((prev) => ({ ...prev, discountType: e.target.value }))}
+                  onChange={(e) => {
+                    const nextType = e.target.value
+                    setForm((prev) => ({
+                      ...prev,
+                      discountType: nextType,
+                      discountValue: nextType === 'FIXED'
+                        ? formatCurrencyInput(prev.discountValue)
+                        : String(parseCurrencyInput(prev.discountValue) || ''),
+                    }))
+                  }}
                 >
                   <option value="PERCENTAGE">PERCENTAGE — giảm theo %</option>
                   <option value="FIXED">FIXED — giảm số tiền cố định</option>
@@ -435,24 +585,38 @@ function PromotionsPage() {
                   Giá trị {form.discountType === 'FIXED' ? '(đ)' : '(%)'}
                 </span>
                 <input
-                  type="number"
+                  type={form.discountType === 'FIXED' ? 'text' : 'number'}
+                  inputMode={form.discountType === 'FIXED' ? 'numeric' : undefined}
                   min={0}
-                  max={getDiscountValueMax(form.discountType)}
+                  max={form.discountType === 'PERCENTAGE' ? getDiscountValueMax(form.discountType) : undefined}
                   className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-50 disabled:text-slate-500"
                   value={form.discountValue}
                   disabled={editingOrderCount > 0}
-                  onChange={(e) => setForm((prev) => ({ ...prev, discountValue: e.target.value }))}
+                  onChange={(e) => setForm((prev) => ({
+                    ...prev,
+                    discountValue: form.discountType === 'FIXED'
+                      ? formatCurrencyInput(e.target.value)
+                      : e.target.value,
+                  }))}
                 />
                 <p className="mt-1 text-xs text-slate-500">{getDiscountValueHelperText(form.discountType)}</p>
               </label>
-              <label className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700">
+              <label className="block">
+                <span className="text-xs font-bold uppercase text-slate-400">Đơn tối thiểu</span>
                 <input
-                  type="checkbox"
-                  className="h-4 w-4 rounded border-slate-300 text-[#538463] focus:ring-[#538463]"
-                  checked={form.isActive}
-                  onChange={(e) => setForm((prev) => ({ ...prev, isActive: e.target.checked }))}
+                  type="text"
+                  inputMode="numeric"
+                  className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-50 disabled:text-slate-500"
+                  value={form.minimumOrderAmount}
+                  disabled={editingOrderCount > 0}
+                  onChange={(e) => setForm((prev) => ({
+                    ...prev,
+                    minimumOrderAmount: formatCurrencyInput(e.target.value),
+                  }))}
                 />
-                Kích hoạt
+                <p className="mt-1 text-xs text-slate-500">
+                  Để trống hoặc 0 nếu không yêu cầu đơn tối thiểu.
+                </p>
               </label>
               <label className="block">
                 <span className="text-xs font-bold uppercase text-slate-400">Phạm vi áp dụng</span>
@@ -557,6 +721,7 @@ function PromotionsPage() {
                   <span className="block text-xs font-bold uppercase text-slate-400">Thời gian bắt đầu</span>
                   <input
                     type="datetime-local"
+                    min={editingId ? undefined : getCurrentDatetimeLocalMinute()}
                     className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
                     value={form.validFrom}
                     onChange={(e) => {
@@ -586,6 +751,15 @@ function PromotionsPage() {
               <p className="text-xs text-slate-500">
                 Để trống cả hai ô nếu mã không giới hạn thời gian. Ngày tính theo giờ Việt Nam.
               </p>
+              <label className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-slate-300 text-[#538463] focus:ring-[#538463]"
+                  checked={form.isActive}
+                  onChange={(e) => setForm((prev) => ({ ...prev, isActive: e.target.checked }))}
+                />
+                Kích hoạt
+              </label>
             </div>
             <div className="mt-6 flex justify-end gap-2">
               <button

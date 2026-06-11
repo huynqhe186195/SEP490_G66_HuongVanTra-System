@@ -121,6 +121,14 @@ function clampCartLineDiscounts(cartItems) {
   return (Array.isArray(cartItems) ? cartItems : []).map(clampLineDiscountItem)
 }
 
+function getPromotionApplyErrorMessage(error) {
+  const message = String(error?.message || '').trim()
+  if (/Đơn hàng cần tối thiểu|don hang can toi thieu|minimum/i.test(message)) {
+    return 'Đơn hàng chưa đạt giá trị tối thiểu'
+  }
+  return message || 'Có lỗi xảy ra.'
+}
+
 function computePosTotals(
   cartItems,
   orderDiscountPercent,
@@ -930,7 +938,7 @@ function PosPage() {
     try {
       await applyPromotionToCurrentCart({ promotion })
     } catch (error) {
-      showError(error.message)
+      showError(getPromotionApplyErrorMessage(error))
     } finally {
       setIsApplyingPromo(false)
     }
@@ -946,7 +954,7 @@ function PosPage() {
     try {
       await applyPromotionToCurrentCart({ code })
     } catch (error) {
-      showError(error.message)
+      showError(getPromotionApplyErrorMessage(error))
     } finally {
       setIsApplyingPromo(false)
     }

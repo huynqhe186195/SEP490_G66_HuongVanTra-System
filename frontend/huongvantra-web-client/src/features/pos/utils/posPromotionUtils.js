@@ -16,6 +16,7 @@ export function mapPromotion(item) {
     promoCode: item.promoCode ?? item.PromoCode ?? '',
     discountType: String(item.discountType ?? item.DiscountType ?? 'PERCENTAGE').toUpperCase(),
     discountValue: Number(item.discountValue ?? item.DiscountValue ?? 0),
+    minimumOrderAmount: Number(item.minimumOrderAmount ?? item.MinimumOrderAmount ?? 0),
     validFromUtc: item.validFromUtc ?? item.ValidFromUtc ?? null,
     validToUtc: item.validToUtc ?? item.ValidToUtc ?? null,
     validityStatus: item.validityStatus ?? item.ValidityStatus ?? null,
@@ -79,6 +80,12 @@ export function formatPromotionScopeSummary(promotion) {
     .map((scope) => scope.skuCode || scope.skuName || scope.skuId)
     .filter(Boolean)
     .join(', ')}`
+}
+
+export function formatPromotionMinimumOrderText(promotion) {
+  const amount = Number(promotion?.minimumOrderAmount || 0)
+  if (amount <= 0) return ''
+  return `Đơn tối thiểu: ${amount.toLocaleString('vi-VN')}đ`
 }
 
 export const PROMOTION_VALIDITY_LABELS = {

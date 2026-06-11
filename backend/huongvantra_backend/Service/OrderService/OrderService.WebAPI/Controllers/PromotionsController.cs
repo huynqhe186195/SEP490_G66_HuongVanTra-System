@@ -12,8 +12,10 @@ public class PromotionsController(PromotionLogic _promotionLogic) : ControllerBa
 {
     [HttpGet("api/admin/promotions")]
     [Authorize(Policy = PermissionNames.ManageEmployee)]
-    public async Task<IActionResult> GetAdminPromotions(CancellationToken ct = default) =>
-        Ok(await _promotionLogic.GetAdminPromotionsAsync(ct));
+    public async Task<IActionResult> GetAdminPromotions(
+        [FromQuery] GetAdminPromotionsRequest request,
+        CancellationToken ct = default) =>
+        Ok(await _promotionLogic.GetAdminPromotionsAsync(request, ct));
 
     [HttpPost("api/admin/promotions")]
     [Authorize(Policy = PermissionNames.ManageEmployee)]
