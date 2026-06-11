@@ -61,6 +61,30 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
         return promotions.Select(MapToLookupResponse).ToList();
     }
 
+    public async Task<List<PromotionLookupResponse>> GetApplicablePromotionsAsync(
+        PromotionApplyPreviewRequest req,
+        CancellationToken ct = default)
+    {
+        var items = ValidatePreviewItems(req.Items);
+        var promotions = await _promotionRepo.GetAvailableAsync(DateTime.UtcNow, ct);
+        var result = new List<PromotionLookupResponse>();
+
+        foreach (var promotion in promotions)
+        {
+            try
+            {
+                _ = CalculatePromotionDiscount(promotion, items, req.ManualDiscount);
+                result.Add(MapToLookupResponse(promotion));
+            }
+            catch (OrderValidationException)
+            {
+                // A candidate can fail minimum-order or SKU-scope rules for this cart.
+            }
+        }
+
+        return result;
+    }
+
     public async Task<PromotionResponse> CreateAsync(CreatePromotionRequest req, CancellationToken ct = default)
     {
         var now = DateTime.UtcNow;

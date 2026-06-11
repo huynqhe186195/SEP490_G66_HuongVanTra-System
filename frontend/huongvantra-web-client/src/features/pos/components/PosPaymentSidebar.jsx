@@ -366,7 +366,7 @@ export default function PosPaymentSidebar({
                   <div className="px-3 py-2 text-xs text-[#717971]">Đang tải mã giảm giá...</div>
                 ) : null}
                 {!isPromotionListLoading && visibleAvailablePromotions.length === 0 ? (
-                  <div className="px-3 py-2 text-xs text-[#717971]">Không có mã giảm giá khả dụng.</div>
+                  <div className="px-3 py-2 text-xs text-[#717971]">Không có mã giảm giá phù hợp với đơn hàng hiện tại.</div>
                 ) : null}
                 {!isPromotionListLoading
                   ? visibleAvailablePromotions.map((promotion) => {

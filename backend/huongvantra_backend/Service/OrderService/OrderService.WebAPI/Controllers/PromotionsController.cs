@@ -49,6 +49,12 @@ public class PromotionsController(PromotionLogic _promotionLogic) : ControllerBa
     public async Task<IActionResult> GetAvailable(CancellationToken ct = default) =>
         Ok(await _promotionLogic.GetAvailablePromotionsAsync(ct));
 
+    [HttpPost("api/promotions/applicable")]
+    [Authorize(Policy = PermissionNames.CreateOrder)]
+    public async Task<IActionResult> GetApplicable(
+        [FromBody] PromotionApplyPreviewRequest request, CancellationToken ct = default) =>
+        Ok(await _promotionLogic.GetApplicablePromotionsAsync(request, ct));
+
     [HttpPost("api/promotions/apply-preview")]
     [Authorize(Policy = PermissionNames.CreateOrder)]
     public async Task<IActionResult> ApplyPreview(

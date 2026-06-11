@@ -23,7 +23,7 @@ import {
   createPosOrderOnline,
   createTakeawayCodOrder,
   createTakeawayVietQrOrder,
-  fetchAvailablePromotions,
+  fetchApplicablePromotions,
   fetchPosCustomerContext,
   fetchPosCustomers,
   fetchPosProducts,
@@ -122,8 +122,24 @@ function clampCartLineDiscounts(cartItems) {
 }
 
 function getPromotionApplyErrorMessage(error) {
-  const message = String(error?.message || '').trim()
-  if (/Đơn hàng cần tối thiểu|don hang can toi thieu|minimum/i.test(message)) {
+  const messages = [
+    error?.message,
+    ...(Array.isArray(error?.apiErrors) ? error.apiErrors : []),
+  ]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean)
+  const message = messages[0] || ''
+  const normalized = messages
+    .join(' ')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+
+  if (
+    normalized.includes('don hang can toi thieu') ||
+    normalized.includes('don hang chua dat gia tri toi thieu') ||
+    normalized.includes('minimum order')
+  ) {
     return 'Đơn hàng chưa đạt giá trị tối thiểu'
   }
   return message || 'Có lỗi xảy ra.'
@@ -200,7 +216,7 @@ function PosPage() {
   const [isApplyingPromo, setIsApplyingPromo] = useState(false)
   const [availablePromotions, setAvailablePromotions] = useState([])
   const [isPromotionListLoading, setIsPromotionListLoading] = useState(false)
-  const [hasLoadedAvailablePromotions, setHasLoadedAvailablePromotions] = useState(false)
+  const [applicablePromotionsSignature, setApplicablePromotionsSignature] = useState('')
   const [isPromotionDropdownOpen, setIsPromotionDropdownOpen] = useState(false)
   const [searchProducts, setSearchProducts] = useState([])
   const [posCategories, setPosCategories] = useState([])
@@ -893,6 +909,15 @@ function PosPage() {
     effectiveOrderDiscountPercent,
   ])
 
+  useEffect(() => {
+    setAvailablePromotions([])
+    setApplicablePromotionsSignature('')
+  }, [
+    cartItems,
+    effectiveOrderDiscountAmountFixed,
+    effectiveOrderDiscountPercent,
+  ])
+
   const applyPromotionToCurrentCart = async ({ promotion = null, code = '' } = {}) => {
     const promoCode = (code || promotion?.promoCode || '').trim()
     if (!promoCode) {
@@ -917,16 +942,28 @@ function PosPage() {
   }
 
   const loadAvailablePromotions = async () => {
+    if (!cartItems.length) {
+      setAvailablePromotions([])
+      setApplicablePromotionsSignature('')
+      setIsPromotionDropdownOpen(false)
+      return
+    }
+
+    const currentSignature = buildPromotionCartSignature()
     setIsPromotionDropdownOpen(true)
-    if (hasLoadedAvailablePromotions || isPromotionListLoading) return
+    if (applicablePromotionsSignature === currentSignature || isPromotionListLoading) return
 
     setIsPromotionListLoading(true)
     try {
-      const items = await fetchAvailablePromotions()
+      const items = await fetchApplicablePromotions({
+        items: buildPromotionPreviewItems(),
+        manualDiscount: getPromotionManualDiscount(),
+      })
       setAvailablePromotions(items)
-      setHasLoadedAvailablePromotions(true)
+      setApplicablePromotionsSignature(currentSignature)
     } catch (error) {
       setAvailablePromotions([])
+      setApplicablePromotionsSignature('')
       showError(error.message)
     } finally {
       setIsPromotionListLoading(false)
