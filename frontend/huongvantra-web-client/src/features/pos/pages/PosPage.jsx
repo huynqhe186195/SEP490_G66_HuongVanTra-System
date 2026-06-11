@@ -22,10 +22,10 @@ import {
   createPosOrderOnline,
   createTakeawayCodOrder,
   createTakeawayVietQrOrder,
+  fetchAvailablePromotions,
   fetchPosCustomerContext,
   fetchPosCustomers,
   fetchPosProducts,
-  fetchPromotionByCode,
   resolvePosStoreId,
 } from '../services/posApi.js'
 import { loadPosSeller } from '../utils/posSeller.js'
@@ -38,6 +38,12 @@ import { formatCustomerOrderSnapshot, isVipCustomerType } from '../../customers/
 import { fetchPendingCatalogSync, syncCatalogToStore } from '../../products/services/catalogSyncApi.js'
 import { fetchCategories } from '../../products/services/categoriesApi.js'
 import ProductImage from '../../products/components/ProductImage.jsx'
+import {
+  computeCouponDiscount,
+  formatPromotionLabel,
+  formatPromotionScopeLabel,
+} from '../utils/posPromotionUtils.js'
+import { isVipCustomerType } from '../../customers/utils/customerDisplay.js'
 
 const SALES_MODES = [
   { id: 'counter', label: 'Bán trực tiếp', icon: 'storefront' },
@@ -186,6 +192,10 @@ function PosPage() {
   const [openDiscountSku, setOpenDiscountSku] = useState(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isApplyingPromo, setIsApplyingPromo] = useState(false)
+  const [availablePromotions, setAvailablePromotions] = useState([])
+  const [isPromotionListLoading, setIsPromotionListLoading] = useState(false)
+  const [hasLoadedAvailablePromotions, setHasLoadedAvailablePromotions] = useState(false)
+  const [isPromotionDropdownOpen, setIsPromotionDropdownOpen] = useState(false)
   const [searchProducts, setSearchProducts] = useState([])
   const [posCategories, setPosCategories] = useState([])
   const [selectedCategoryId, setSelectedCategoryId] = useState('')
@@ -204,6 +214,7 @@ function PosPage() {
   const [overpaymentDebtModalOpen, setOverpaymentDebtModalOpen] = useState(false)
   const [debtModalMode, setDebtModalMode] = useState('configure')
   const discountPopoverRef = useRef(null)
+  const promotionCartSignatureRef = useRef('')
 
   const isTakeaway = salesMode === 'takeaway'
   const workspace = workspaceByMode[salesMode]
@@ -556,7 +567,7 @@ function PosPage() {
           }
         })
       })
-      .catch(() => {})
+      .catch(() => { })
 
     return () => {
       cancelled = true
@@ -831,6 +842,102 @@ function PosPage() {
     updateActiveSession({ orderDiscountPercent: parsed, orderDiscountAmountFixed: 0 })
   }
 
+  const buildPromotionCartSignature = () =>
+    JSON.stringify({
+      items: cartItems.map((item) => ({
+        skuId: item.productId,
+        quantity: item.qty,
+        unitPrice: item.price,
+        lineDiscountType: item.lineDiscountType,
+        lineDiscountValue: item.lineDiscountValue || 0,
+      })),
+      orderDiscountPercent: effectiveOrderDiscountPercent,
+      orderDiscountAmountFixed: effectiveOrderDiscountAmountFixed,
+    })
+
+  const getPromotionManualDiscount = () => Math.round(itemDiscountTotal + orderDiscountAmount)
+
+  const buildPromotionPreviewItems = () =>
+    cartItems.map((item) => ({
+      skuId: item.productId,
+      quantity: item.qty,
+      unitPrice: item.price,
+      subTotal: getLineGross(item),
+    }))
+
+  useEffect(() => {
+    const currentSignature = buildPromotionCartSignature()
+    if (!appliedPromotion) {
+      promotionCartSignatureRef.current = currentSignature
+      return
+    }
+    if (!promotionCartSignatureRef.current) {
+      promotionCartSignatureRef.current = currentSignature
+      return
+    }
+    if (promotionCartSignatureRef.current !== currentSignature) {
+      promotionCartSignatureRef.current = currentSignature
+      updateActiveSession({ appliedPromotion: null, promoCodeInput: '' })
+      showError('Giỏ hàng hoặc chiết khấu đã thay đổi. Vui lòng áp dụng lại mã giảm giá.')
+    }
+  }, [
+    appliedPromotion,
+    cartItems,
+    effectiveOrderDiscountAmountFixed,
+    effectiveOrderDiscountPercent,
+  ])
+
+  const applyPromotionToCurrentCart = async ({ promotion = null, code = '' } = {}) => {
+    const promoCode = (code || promotion?.promoCode || '').trim()
+    if (!promoCode) {
+      showError('Vui lòng nhập mã giảm giá.')
+      return
+    }
+    if (!cartItems.length) {
+      showError('Vui lòng thêm sản phẩm trước khi áp dụng mã giảm giá.')
+      return
+    }
+
+    const nextPromotion = await applyPromotionPreview({
+      promotionId: promotion?.id ?? null,
+      promotionCode: promoCode,
+      items: buildPromotionPreviewItems(),
+      manualDiscount: getPromotionManualDiscount(),
+    })
+    updateActiveSession({ appliedPromotion: nextPromotion, promoCodeInput: nextPromotion.promoCode })
+    promotionCartSignatureRef.current = buildPromotionCartSignature()
+    setIsPromotionDropdownOpen(false)
+    showSuccess(`Đã áp dụng mã ${nextPromotion.promoCode}.`)
+  }
+
+  const loadAvailablePromotions = async () => {
+    setIsPromotionDropdownOpen(true)
+    if (hasLoadedAvailablePromotions || isPromotionListLoading) return
+
+    setIsPromotionListLoading(true)
+    try {
+      const items = await fetchAvailablePromotions()
+      setAvailablePromotions(items)
+      setHasLoadedAvailablePromotions(true)
+    } catch (error) {
+      setAvailablePromotions([])
+      showError(error.message)
+    } finally {
+      setIsPromotionListLoading(false)
+    }
+  }
+
+  const handleSelectPromotion = async (promotion) => {
+    setIsApplyingPromo(true)
+    try {
+      await applyPromotionToCurrentCart({ promotion })
+    } catch (error) {
+      showError(error.message)
+    } finally {
+      setIsApplyingPromo(false)
+    }
+  }
+
   const handleApplyPromoCode = async () => {
     const code = promoCodeInput.trim()
     if (!code) {
@@ -839,9 +946,7 @@ function PosPage() {
     }
     setIsApplyingPromo(true)
     try {
-      const promotion = await fetchPromotionByCode(code)
-      updateActiveSession({ appliedPromotion: promotion, promoCodeInput: promotion.promoCode })
-      showSuccess(`Đã áp dụng mã ${promotion.promoCode}.`)
+      await applyPromotionToCurrentCart({ code })
     } catch (error) {
       showError(error.message)
     } finally {
@@ -933,6 +1038,44 @@ function PosPage() {
   const canPay = isTakeaway
     ? canPayTakeaway && !isSubmitting
     : (isTransferPayment ? canPayTransfer : canPayCash) && !isSubmitting
+  const normalizedPromoSearch = promoCodeInput.trim().toUpperCase()
+  const visibleAvailablePromotions = availablePromotions
+    .filter((promotion) =>
+      !normalizedPromoSearch ||
+      promotion.promoCode.toUpperCase().includes(normalizedPromoSearch),
+    )
+    .slice(0, 8)
+
+  const formatPromotionDiscountText = (promotion) =>
+    promotion.discountType === 'FIXED'
+      ? `Giảm ${formatMoney(promotion.discountValue)}đ`
+      : `Giảm ${promotion.discountValue}%`
+
+  const formatPromotionValidityText = (promotion) => {
+    const from = promotion.validFromUtc ? formatVietnamDateTimeMinute(promotion.validFromUtc) : null
+    const to = promotion.validToUtc ? formatVietnamDateTimeMinute(promotion.validToUtc) : null
+    if (from && to) return `HSD ${from} đến ${to}`
+    if (from) return `Từ ${from}`
+    if (to) return `HSD đến ${to}`
+    return ''
+  }
+
+  const appliedPromotionScopeText = (() => {
+    if (!appliedPromotion) return ''
+    if (String(appliedPromotion.scopeType || 'ORDER').toUpperCase() !== 'SKU') {
+      return 'Áp dụng toàn đơn'
+    }
+
+    const skuIds = new Set((appliedPromotion.skuScopes ?? []).map((scope) => scope.skuId))
+    const names = cartItems
+      .filter((item) => skuIds.has(item.productId))
+      .map((item) => item.name || item.productName || item.sku)
+      .filter(Boolean)
+
+    return names.length
+      ? `Áp dụng cho: ${[...new Set(names)].join(', ')}`
+      : 'Áp dụng cho SKU cụ thể'
+  })()
 
   const buildOrderPayload = (method, amount) => {
     const storeId = resolvePosStoreId()
@@ -1164,6 +1307,7 @@ function PosPage() {
       cartItems,
       manualDiscount,
       promotionId: appliedPromotion?.id ?? null,
+      promotionCode: appliedPromotion?.promoCode ?? null,
     })
 
     if (isTransferPayment) {
@@ -1398,55 +1542,52 @@ function PosPage() {
             const tabHasCustomer = Boolean(tabSession?.selectedCustomer?.customerId)
 
             return (
-            <div
-              key={tab.id}
-              role="button"
-              tabIndex={0}
-              onClick={() => patchWorkspace({ activeTabId: tab.id })}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' || event.key === ' ') {
-                  event.preventDefault()
-                  patchWorkspace({ activeTabId: tab.id })
-                }
-              }}
-              className={`flex items-center gap-1.5 rounded-t-lg px-4 py-1.5 text-sm font-medium transition-colors ${
-                activeTabId === tab.id ? 'bg-[#356647] text-white shadow-sm' : 'bg-[#eae8e0] text-[#414942] hover:bg-[#e4e3db]'
-              }`}
-            >
-              <span>{tab.label}</span>
-              {tabItemCount > 0 ? (
-                <span
-                  className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
-                    activeTabId === tab.id ? 'bg-white/20 text-white' : 'bg-[#356647]/15 text-[#356647]'
+              <div
+                key={tab.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => patchWorkspace({ activeTabId: tab.id })}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault()
+                    patchWorkspace({ activeTabId: tab.id })
+                  }
+                }}
+                className={`flex items-center gap-1.5 rounded-t-lg px-4 py-1.5 text-sm font-medium transition-colors ${activeTabId === tab.id ? 'bg-[#356647] text-white shadow-sm' : 'bg-[#eae8e0] text-[#414942] hover:bg-[#e4e3db]'
                   }`}
-                >
-                  {tabItemCount}
-                </span>
-              ) : null}
-              {tabHasCustomer ? (
-                <span
-                  className={`material-symbols-outlined text-[14px] ${
-                    activeTabId === tab.id ? 'text-white/90' : 'text-[#356647]'
-                  }`}
-                  title="Đã chọn khách"
-                >
-                  person
-                </span>
-              ) : null}
-              {tabs.length > 1 ? (
-                <button
-                  type="button"
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    requestCloseTab(tab.id)
-                  }}
-                  className="ml-2 inline-flex items-center justify-center rounded-full p-0.5 hover:bg-black/10"
-                  aria-label={`Đóng ${tab.label}`}
-                >
-                  <Icon className="text-[16px] opacity-80">close</Icon>
-                </button>
-              ) : null}
-            </div>
+              >
+                <span>{tab.label}</span>
+                {tabItemCount > 0 ? (
+                  <span
+                    className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${activeTabId === tab.id ? 'bg-white/20 text-white' : 'bg-[#356647]/15 text-[#356647]'
+                      }`}
+                  >
+                    {tabItemCount}
+                  </span>
+                ) : null}
+                {tabHasCustomer ? (
+                  <span
+                    className={`material-symbols-outlined text-[14px] ${activeTabId === tab.id ? 'text-white/90' : 'text-[#356647]'
+                      }`}
+                    title="Đã chọn khách"
+                  >
+                    person
+                  </span>
+                ) : null}
+                {tabs.length > 1 ? (
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      requestCloseTab(tab.id)
+                    }}
+                    className="ml-2 inline-flex items-center justify-center rounded-full p-0.5 hover:bg-black/10"
+                    aria-label={`Đóng ${tab.label}`}
+                  >
+                    <Icon className="text-[16px] opacity-80">close</Icon>
+                  </button>
+                ) : null}
+              </div>
             )
           })}
 
@@ -1476,146 +1617,142 @@ function PosPage() {
                 </div>
               ) : (
                 <div className="space-y-2">
-                {cartItems.map((item) => {
-                  const lineGross = getLineGross(item)
-                  const lineTotal = getLineTotal(item)
-                  const isPercent = item.lineDiscountType !== 'amount'
-                  const isDiscountOpen = openDiscountSku === item.sku
-                  const discountLabel = formatLineDiscountLabel(item)
-                  const lineDiscountCapHint = isPercent
-                    ? 'Tối đa 100%'
-                    : lineGross > 0
-                      ? `Tối đa ${formatMoney(lineGross)} đ`
-                      : 'Thành tiền dòng: 0 đ'
+                  {cartItems.map((item) => {
+                    const lineGross = getLineGross(item)
+                    const lineTotal = getLineTotal(item)
+                    const isPercent = item.lineDiscountType !== 'amount'
+                    const isDiscountOpen = openDiscountSku === item.sku
+                    const discountLabel = formatLineDiscountLabel(item)
+                    const lineDiscountCapHint = isPercent
+                      ? 'Tối đa 100%'
+                      : lineGross > 0
+                        ? `Tối đa ${formatMoney(lineGross)} đ`
+                        : 'Thành tiền dòng: 0 đ'
 
-                  return (
-                    <div
-                      key={item.sku}
-                      className="relative flex flex-nowrap items-center gap-2 rounded-xl border border-[#c1c9c0]/50 bg-[#fbf9f1] px-2.5 py-2.5 sm:gap-3 sm:px-3 sm:py-3"
-                    >
-                      <div className="min-w-0 flex-1 overflow-hidden">
-                        <p className="truncate text-sm font-semibold leading-snug text-[#1b1c17] sm:text-base" title={item.name}>
-                          {item.name}
-                        </p>
-                        <p className="mt-0.5 truncate text-xs text-[#717971] sm:text-sm">
-                          {formatMoney(item.price)} đ
-                          <span
-                            className={`ml-1 text-[11px] sm:text-xs ${
-                              Number(item.stockQuantity) <= 0 ? 'font-semibold text-[#7e5700]' : ''
-                            }`}
-                          >
-                            · {formatStockHint(item.stockQuantity)}
-                          </span>
-                          {discountLabel ? (
-                            <span className="ml-1 text-[11px] font-semibold text-[#7e5700] sm:text-xs">{discountLabel}</span>
-                          ) : null}
-                        </p>
-                      </div>
-
-                      <div className="flex shrink-0 items-center overflow-hidden rounded-lg border border-[#c1c9c0] text-sm sm:text-base">
-                        <button
-                          type="button"
-                          onClick={() => updateQuantity(item.sku, 'dec')}
-                          className="px-2.5 py-1.5 text-lg font-bold text-[#356647] hover:bg-white"
-                        >
-                          -
-                        </button>
-                        <input
-                          type="text"
-                          inputMode="decimal"
-                          aria-label={`Số lượng ${item.name}`}
-                          className="w-[2.75rem] border-x border-[#c1c9c0] bg-white px-0.5 py-1 text-center text-sm font-semibold outline-none focus:bg-[#f6f4ec] focus:ring-1 focus:ring-[#356647]/30 sm:w-[3.25rem] sm:px-1 sm:text-base"
-                          value={item.qty}
-                          onChange={(event) => setLineQuantity(item.sku, event.target.value)}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => updateQuantity(item.sku, 'inc')}
-                          className="px-2.5 py-1.5 text-lg font-bold text-[#356647] hover:bg-white"
-                        >
-                          +
-                        </button>
-                      </div>
-
-                      <div className="relative shrink-0">
-                        <button
-                          type="button"
-                          onMouseDown={(event) => event.stopPropagation()}
-                          onClick={() => setOpenDiscountSku(isDiscountOpen ? null : item.sku)}
-                          className={`whitespace-nowrap rounded-lg px-1.5 py-1 text-right text-sm font-bold tabular-nums transition-colors sm:text-base ${
-                            isDiscountOpen
-                              ? 'bg-[#356647] text-white'
-                              : 'text-[#356647] hover:bg-[#356647]/10'
-                          }`}
-                          title="Bấm để chỉnh chiết khấu"
-                        >
-                          {formatMoney(lineTotal)} đ
-                        </button>
-
-                        {isDiscountOpen ? (
-                          <div
-                            ref={discountPopoverRef}
-                            onMouseDown={(event) => event.stopPropagation()}
-                            className="absolute right-0 top-full z-20 mt-1 w-56 rounded-xl border border-[#c1c9c0] bg-white p-3 shadow-xl"
-                          >
-                            <p className="mb-2 text-xs font-bold uppercase tracking-wider text-[#717971]">
-                              Chiết khấu dòng
-                            </p>
-                            <div className="flex overflow-hidden rounded-lg border border-[#c1c9c0]">
-                              <div className="flex shrink-0 border-r border-[#c1c9c0]">
-                                <button
-                                  type="button"
-                                  onClick={() => updateLineDiscountType(item.sku, 'percent')}
-                                  className={`px-3 py-2 text-xs font-bold ${
-                                    isPercent ? 'bg-[#356647] text-white' : 'text-[#717971] hover:bg-[#f6f4ec]'
-                                  }`}
-                                >
-                                  %
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => updateLineDiscountType(item.sku, 'amount')}
-                                  className={`px-3 py-2 text-xs font-bold ${
-                                    !isPercent ? 'bg-[#356647] text-white' : 'text-[#717971] hover:bg-[#f6f4ec]'
-                                  }`}
-                                >
-                                  VNĐ
-                                </button>
-                              </div>
-                              <input
-                                type={isPercent ? 'number' : 'text'}
-                                inputMode="numeric"
-                                min={isPercent ? 0 : undefined}
-                                max={isPercent ? 100 : undefined}
-                                className="min-w-0 flex-1 px-3 py-2 text-sm outline-none"
-                                placeholder={isPercent ? 'Nhập %' : 'Nhập VNĐ'}
-                                autoFocus
-                                value={
-                                  isPercent
-                                    ? item.lineDiscountValue || ''
-                                    : item.lineDiscountValue
-                                      ? formatMoney(item.lineDiscountValue)
-                                      : ''
-                                }
-                                onChange={(event) => updateLineDiscountValue(item.sku, event.target.value)}
-                              />
-                            </div>
-                            <p className="mt-2 text-[11px] text-[#717971]">{lineDiscountCapHint}</p>
-                          </div>
-                        ) : null}
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => removeItem(item.sku)}
-                        className="shrink-0 p-1 text-[#ba1a1a] opacity-60 hover:opacity-100"
-                        aria-label="Xóa"
+                    return (
+                      <div
+                        key={item.sku}
+                        className="relative flex flex-nowrap items-center gap-2 rounded-xl border border-[#c1c9c0]/50 bg-[#fbf9f1] px-2.5 py-2.5 sm:gap-3 sm:px-3 sm:py-3"
                       >
-                        <Icon className="text-[22px]">close</Icon>
-                      </button>
-                    </div>
-                  )
-                })}
+                        <div className="min-w-0 flex-1 overflow-hidden">
+                          <p className="truncate text-sm font-semibold leading-snug text-[#1b1c17] sm:text-base" title={item.name}>
+                            {item.name}
+                          </p>
+                          <p className="mt-0.5 truncate text-xs text-[#717971] sm:text-sm">
+                            {formatMoney(item.price)} đ
+                            <span
+                              className={`ml-1 text-[11px] sm:text-xs ${Number(item.stockQuantity) <= 0 ? 'font-semibold text-[#7e5700]' : ''
+                                }`}
+                            >
+                              · {formatStockHint(item.stockQuantity)}
+                            </span>
+                            {discountLabel ? (
+                              <span className="ml-1 text-[11px] font-semibold text-[#7e5700] sm:text-xs">{discountLabel}</span>
+                            ) : null}
+                          </p>
+                        </div>
+
+                        <div className="flex shrink-0 items-center overflow-hidden rounded-lg border border-[#c1c9c0] text-sm sm:text-base">
+                          <button
+                            type="button"
+                            onClick={() => updateQuantity(item.sku, 'dec')}
+                            className="px-2.5 py-1.5 text-lg font-bold text-[#356647] hover:bg-white"
+                          >
+                            -
+                          </button>
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            aria-label={`Số lượng ${item.name}`}
+                            className="w-[2.75rem] border-x border-[#c1c9c0] bg-white px-0.5 py-1 text-center text-sm font-semibold outline-none focus:bg-[#f6f4ec] focus:ring-1 focus:ring-[#356647]/30 sm:w-[3.25rem] sm:px-1 sm:text-base"
+                            value={item.qty}
+                            onChange={(event) => setLineQuantity(item.sku, event.target.value)}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => updateQuantity(item.sku, 'inc')}
+                            className="px-2.5 py-1.5 text-lg font-bold text-[#356647] hover:bg-white"
+                          >
+                            +
+                          </button>
+                        </div>
+
+                        <div className="relative shrink-0">
+                          <button
+                            type="button"
+                            onMouseDown={(event) => event.stopPropagation()}
+                            onClick={() => setOpenDiscountSku(isDiscountOpen ? null : item.sku)}
+                            className={`whitespace-nowrap rounded-lg px-1.5 py-1 text-right text-sm font-bold tabular-nums transition-colors sm:text-base ${isDiscountOpen
+                                ? 'bg-[#356647] text-white'
+                                : 'text-[#356647] hover:bg-[#356647]/10'
+                              }`}
+                            title="Bấm để chỉnh chiết khấu"
+                          >
+                            {formatMoney(lineTotal)} đ
+                          </button>
+
+                          {isDiscountOpen ? (
+                            <div
+                              ref={discountPopoverRef}
+                              onMouseDown={(event) => event.stopPropagation()}
+                              className="absolute right-0 top-full z-20 mt-1 w-56 rounded-xl border border-[#c1c9c0] bg-white p-3 shadow-xl"
+                            >
+                              <p className="mb-2 text-xs font-bold uppercase tracking-wider text-[#717971]">
+                                Chiết khấu dòng
+                              </p>
+                              <div className="flex overflow-hidden rounded-lg border border-[#c1c9c0]">
+                                <div className="flex shrink-0 border-r border-[#c1c9c0]">
+                                  <button
+                                    type="button"
+                                    onClick={() => updateLineDiscountType(item.sku, 'percent')}
+                                    className={`px-3 py-2 text-xs font-bold ${isPercent ? 'bg-[#356647] text-white' : 'text-[#717971] hover:bg-[#f6f4ec]'
+                                      }`}
+                                  >
+                                    %
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => updateLineDiscountType(item.sku, 'amount')}
+                                    className={`px-3 py-2 text-xs font-bold ${!isPercent ? 'bg-[#356647] text-white' : 'text-[#717971] hover:bg-[#f6f4ec]'
+                                      }`}
+                                  >
+                                    VNĐ
+                                  </button>
+                                </div>
+                                <input
+                                  type={isPercent ? 'number' : 'text'}
+                                  inputMode="numeric"
+                                  min={isPercent ? 0 : undefined}
+                                  max={isPercent ? 100 : undefined}
+                                  className="min-w-0 flex-1 px-3 py-2 text-sm outline-none"
+                                  placeholder={isPercent ? 'Nhập %' : 'Nhập VNĐ'}
+                                  autoFocus
+                                  value={
+                                    isPercent
+                                      ? item.lineDiscountValue || ''
+                                      : item.lineDiscountValue
+                                        ? formatMoney(item.lineDiscountValue)
+                                        : ''
+                                  }
+                                  onChange={(event) => updateLineDiscountValue(item.sku, event.target.value)}
+                                />
+                              </div>
+                              <p className="mt-2 text-[11px] text-[#717971]">{lineDiscountCapHint}</p>
+                            </div>
+                          ) : null}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => removeItem(item.sku)}
+                          className="shrink-0 p-1 text-[#ba1a1a] opacity-60 hover:opacity-100"
+                          aria-label="Xóa"
+                        >
+                          <Icon className="text-[22px]">close</Icon>
+                        </button>
+                      </div>
+                    )
+                  })}
                 </div>
               )}
             </div>
@@ -1675,11 +1812,10 @@ function PosPage() {
                     <button
                       type="button"
                       onClick={() => setSelectedCategoryId('')}
-                      className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
-                        !selectedCategoryId
+                      className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${!selectedCategoryId
                           ? 'bg-[#356647] text-white'
                           : 'bg-white text-[#414942] hover:bg-[#f0eee6]'
-                      }`}
+                        }`}
                     >
                       Tất cả
                     </button>
@@ -1688,11 +1824,10 @@ function PosPage() {
                         key={category.id}
                         type="button"
                         onClick={() => setSelectedCategoryId(String(category.id))}
-                        className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
-                          selectedCategoryId === String(category.id)
+                        className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${selectedCategoryId === String(category.id)
                             ? 'bg-[#356647] text-white'
                             : 'bg-white text-[#414942] hover:bg-[#f0eee6]'
-                        }`}
+                          }`}
                       >
                         {category.name}
                       </button>
@@ -1866,9 +2001,8 @@ function PosPage() {
                   setOpenDiscountSku(null)
                   setIsPaymentSidebarOpen(false)
                 }}
-                className={`relative flex items-center gap-2 px-1 pb-3 pt-3.5 text-sm font-semibold transition-colors ${
-                  isActive ? 'text-[#356647]' : 'text-[#5c635c] hover:text-[#1b1c17]'
-                }`}
+                className={`relative flex items-center gap-2 px-1 pb-3 pt-3.5 text-sm font-semibold transition-colors ${isActive ? 'text-[#356647]' : 'text-[#5c635c] hover:text-[#1b1c17]'
+                  }`}
               >
                 <Icon className="text-[22px]" filled={isActive}>
                   {mode.icon}

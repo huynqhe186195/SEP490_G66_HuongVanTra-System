@@ -26,6 +26,8 @@ public record OrderResponse(
     Guid? PromotionId,
     string? PromotionCode,
     decimal PromotionDiscountAmount,
+    string? PromotionScopeType,
+    List<PromotionScopeResponse> PromotionSkuScopes,
     decimal FinalAmount,
     string? ShippingAddress,
     string? Note,
