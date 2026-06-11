@@ -7,7 +7,7 @@ import OrderOfferModal from '../components/OrderOfferModal.jsx'
 import ConfirmDialog from '../components/ConfirmDialog.jsx'
 import PosPaymentSidebar from '../components/PosPaymentSidebar.jsx'
 import { printReceiptFromData, printReceiptSequence } from '../utils/printReceipt.js'
-import { vietnamNowLabel } from '../../../utils/vietnamDateTime.js'
+import { formatVietnamDateTimeMinute, vietnamNowLabel } from '../../../utils/vietnamDateTime.js'
 import {
   applyCustomerDebtPayment,
   fetchCustomerOpenDebts,
@@ -17,6 +17,7 @@ import { clampDebtSettlement } from '../../customers/utils/debtAllocationEditor.
 import { serializeCodDebtSettlement } from '../../customers/utils/codDebtSettlementUtils.js'
 import { buildDebtReceiptFromPayment } from '../../customers/utils/debtPaymentUtils.js'
 import {
+  applyPromotionPreview,
   buildTakeawayOrderPayload,
   createPosOrderOffline,
   createPosOrderOnline,
@@ -33,17 +34,14 @@ import {
   normalizeOrderDiscountInput,
   validatePosDiscountsBeforePayment,
 } from '../utils/posDiscountValidation.js'
-import { computeCouponDiscount } from '../utils/posPromotionUtils.js'
 import { formatCustomerOrderSnapshot, isVipCustomerType } from '../../customers/utils/customerDisplay.js'
 import { fetchPendingCatalogSync, syncCatalogToStore } from '../../products/services/catalogSyncApi.js'
 import { fetchCategories } from '../../products/services/categoriesApi.js'
 import ProductImage from '../../products/components/ProductImage.jsx'
 import {
   computeCouponDiscount,
-  formatPromotionLabel,
   formatPromotionScopeLabel,
 } from '../utils/posPromotionUtils.js'
-import { isVipCustomerType } from '../../customers/utils/customerDisplay.js'
 
 const SALES_MODES = [
   { id: 'counter', label: 'Bán trực tiếp', icon: 'storefront' },
@@ -1907,7 +1905,10 @@ function PosPage() {
 
       <PosPaymentSidebar
         isOpen={isPaymentSidebarOpen}
-        onClose={() => setIsPaymentSidebarOpen(false)}
+        onClose={() => {
+          setIsPaymentSidebarOpen(false)
+          setIsPromotionDropdownOpen(false)
+        }}
         formatMoney={formatMoney}
         total={total}
         grossSubtotal={grossSubtotal}
@@ -1984,6 +1985,16 @@ function PosPage() {
         onApplyPromoCode={handleApplyPromoCode}
         onClearPromoCode={handleClearPromoCode}
         isApplyingPromo={isApplyingPromo}
+        visibleAvailablePromotions={visibleAvailablePromotions}
+        isPromotionDropdownOpen={isPromotionDropdownOpen}
+        isPromotionListLoading={isPromotionListLoading}
+        onLoadAvailablePromotions={loadAvailablePromotions}
+        onSelectPromotion={handleSelectPromotion}
+        onClosePromotionDropdown={() => setIsPromotionDropdownOpen(false)}
+        formatPromotionDiscountText={formatPromotionDiscountText}
+        formatPromotionValidityText={formatPromotionValidityText}
+        formatPromotionScopeLabel={formatPromotionScopeLabel}
+        appliedPromotionScopeText={appliedPromotionScopeText}
         orderNote={orderNote}
         onOrderNoteChange={(value) => updateActiveSession({ orderNote: value })}
       />

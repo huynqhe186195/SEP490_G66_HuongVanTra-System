@@ -79,6 +79,16 @@ export default function PosPaymentSidebar({
   onApplyPromoCode,
   onClearPromoCode,
   isApplyingPromo,
+  visibleAvailablePromotions = [],
+  isPromotionDropdownOpen,
+  isPromotionListLoading,
+  onLoadAvailablePromotions,
+  onSelectPromotion,
+  onClosePromotionDropdown,
+  formatPromotionDiscountText,
+  formatPromotionValidityText,
+  formatPromotionScopeLabel,
+  appliedPromotionScopeText,
   orderNote,
   onOrderNoteChange,
 }) {
@@ -294,16 +304,18 @@ export default function PosPaymentSidebar({
             </div>
           ) : null}
 
-          <div className="rounded-xl bg-white p-3 shadow-sm">
+          <div className="relative rounded-xl bg-white p-3 shadow-sm">
             <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[#717971]">Mã giảm giá</label>
             {appliedPromotion ? (
               <div className="flex items-center justify-between gap-2 rounded-lg border border-[#356647]/30 bg-[#356647]/5 px-3 py-2">
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold text-[#356647]">
-                    {formatPromotionLabel(appliedPromotion)}
+                    {couponDiscountAmount > 0
+                      ? `Mã ${appliedPromotion.promoCode} - Giảm ${formatMoney(couponDiscountAmount)}đ`
+                      : formatPromotionLabel(appliedPromotion)}
                   </p>
-                  {couponDiscountAmount > 0 ? (
-                    <p className="text-xs text-[#717971]">Giảm {formatMoney(couponDiscountAmount)} đ</p>
+                  {appliedPromotionScopeText ? (
+                    <p className="text-xs text-[#717971]">{appliedPromotionScopeText}</p>
                   ) : null}
                 </div>
                 <button
@@ -322,6 +334,9 @@ export default function PosPaymentSidebar({
                   placeholder="VD: SALE10"
                   value={promoCodeInput}
                   onChange={(event) => onPromoCodeChange(event.target.value.toUpperCase())}
+                  onFocus={onLoadAvailablePromotions}
+                  onClick={onLoadAvailablePromotions}
+                  onBlur={() => setTimeout(() => onClosePromotionDropdown?.(), 150)}
                   onKeyDown={(event) => {
                     if (event.key === 'Enter') {
                       event.preventDefault()
@@ -339,6 +354,43 @@ export default function PosPaymentSidebar({
                 </button>
               </div>
             )}
+            {isPromotionDropdownOpen ? (
+              <div className="custom-scrollbar absolute left-3 right-3 top-full z-50 mt-1 max-h-56 overflow-y-auto rounded-lg border border-[#c1c9c0] bg-white shadow-2xl">
+                {isPromotionListLoading ? (
+                  <div className="px-3 py-2 text-xs text-[#717971]">Đang tải mã giảm giá...</div>
+                ) : null}
+                {!isPromotionListLoading && visibleAvailablePromotions.length === 0 ? (
+                  <div className="px-3 py-2 text-xs text-[#717971]">Không có mã giảm giá khả dụng.</div>
+                ) : null}
+                {!isPromotionListLoading
+                  ? visibleAvailablePromotions.map((promotion) => {
+                      const validityText = formatPromotionValidityText?.(promotion)
+                      const scopeText = formatPromotionScopeLabel?.(promotion) || ''
+                      const discountText = formatPromotionDiscountText?.(promotion) || ''
+
+                      return (
+                        <button
+                          key={promotion.id}
+                          type="button"
+                          onMouseDown={(event) => {
+                            event.preventDefault()
+                            onSelectPromotion?.(promotion)
+                          }}
+                          className="block w-full border-b border-[#f0eee6] px-3 py-2 text-left last:border-b-0 hover:bg-[#f6f4ec]"
+                        >
+                          <span className="block text-sm font-bold text-[#263528]">
+                            {promotion.promoCode} - {discountText}
+                            {scopeText ? ` - ${scopeText}` : ''}
+                          </span>
+                          {validityText ? (
+                            <span className="block text-xs text-[#717971]">{validityText}</span>
+                          ) : null}
+                        </button>
+                      )
+                    })
+                  : null}
+              </div>
+            ) : null}
           </div>
 
           <div className="rounded-xl bg-white p-3 shadow-sm">
