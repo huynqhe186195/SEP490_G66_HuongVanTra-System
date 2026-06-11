@@ -68,6 +68,26 @@ public class ReportRepository(OrderDbContext dbContext) : IReportRepository
         var returnRate = totalOrders > 0 ? (double)returnedOrdersCount / totalOrders : 0;
         var valueReturnRate = grossRevenue > 0 ? (double)totalRefundAmount / (double)grossRevenue : 0;
 
+        var customerCount = validOrders.Select(o => o.CustomerId).Distinct().Count();
+        
+        int prevCustomerCount = 0;
+        if (year.HasValue && month.HasValue)
+        {
+            var prevMonth = month.Value == 1 ? 12 : month.Value - 1;
+            var prevYear = month.Value == 1 ? year.Value - 1 : year.Value;
+            prevCustomerCount = await dbContext.Orders
+                .Where(o => o.OrderStatus == OrderStatus.Completed && o.CreatedAt.Year == prevYear && o.CreatedAt.Month == prevMonth && o.Payments.Any(p => p.PaymentStatus == PaymentStatus.Success))
+                .Select(o => o.CustomerId).Distinct().CountAsync(ct);
+        }
+        else if (year.HasValue)
+        {
+            prevCustomerCount = await dbContext.Orders
+                .Where(o => o.OrderStatus == OrderStatus.Completed && o.CreatedAt.Year == year.Value - 1 && o.Payments.Any(p => p.PaymentStatus == PaymentStatus.Success))
+                .Select(o => o.CustomerId).Distinct().CountAsync(ct);
+        }
+        
+        var customerGrowthRate = prevCustomerCount == 0 ? (customerCount > 0 ? 1.0 : 0.0) : (double)(customerCount - prevCustomerCount) / prevCustomerCount;
+
         return new SalesStatisticsResponse
         {
             GrossRevenue = grossRevenue,
@@ -78,7 +98,41 @@ public class ReportRepository(OrderDbContext dbContext) : IReportRepository
             PartiallyReturnedOrders = partiallyReturned,
             FullyReturnedOrders = fullyReturned,
             ReturnRate = returnRate,
-            ValueReturnRate = valueReturnRate
+            ValueReturnRate = valueReturnRate,
+            CustomerCount = customerCount,
+            CustomerGrowthRate = customerGrowthRate
         };
+    }
+
+    public async Task<List<TopProductDto>> GetTopSellingProductsAsync(int topCount, int? month, int? year, CancellationToken ct = default)
+    {
+        var query = dbContext.OrderDetails
+            .Where(od => od.Order.OrderStatus == OrderStatus.Completed &&
+                         od.Order.Payments.Any(p => p.PaymentStatus == PaymentStatus.Success));
+
+        if (year.HasValue)
+        {
+            query = query.Where(od => od.Order.CreatedAt.Year == year.Value);
+        }
+
+        if (month.HasValue)
+        {
+            query = query.Where(od => od.Order.CreatedAt.Month == month.Value);
+        }
+
+        var topProducts = await query
+            .GroupBy(od => new { od.SkuId, od.SkuSnapshotName })
+            .Select(g => new TopProductDto
+            {
+                SkuId = g.Key.SkuId,
+                SkuSnapshotName = g.Key.SkuSnapshotName,
+                TotalQuantitySold = g.Sum(od => od.Quantity),
+                TotalRevenue = g.Sum(od => od.SubTotal)
+            })
+            .OrderByDescending(dto => dto.TotalQuantitySold)
+            .Take(topCount)
+            .ToListAsync(ct);
+
+        return topProducts;
     }
 }

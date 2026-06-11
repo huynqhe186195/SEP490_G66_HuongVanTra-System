@@ -16,7 +16,18 @@ public class ReportsController(IReportLogic reportLogic) : ControllerBase
         [FromQuery] int? year,
         CancellationToken ct)
     {
-        var result = await reportLogic.GetSalesStatisticsAsync(month, year, ct);
-        return Ok(result);
+        var stats = await reportLogic.GetSalesStatisticsAsync(month, year, ct);
+        return Ok(stats);
+    }
+
+    [HttpGet("top-products")]
+    public async Task<IActionResult> GetTopSellingProducts(
+        [FromQuery] int topCount = 5,
+        [FromQuery] int? month = null,
+        [FromQuery] int? year = null,
+        CancellationToken ct = default)
+    {
+        var topProducts = await reportLogic.GetTopSellingProductsAsync(topCount, month, year, ct);
+        return Ok(topProducts);
     }
 }

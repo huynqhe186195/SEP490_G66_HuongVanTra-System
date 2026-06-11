@@ -4,6 +4,7 @@ import { dashboardApi } from "../services/dashboardApi.js";
 
 function DashboardPage() {
     const [stats, setStats] = useState(null);
+    const [topProducts, setTopProducts] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(null);
 
@@ -11,8 +12,9 @@ function DashboardPage() {
         const fetchStats = async () => {
             try {
                 setIsLoading(true);
-                const data = await dashboardApi.getSalesStatistics();
-                setStats(data);
+                const [statsData, topProductsData] = await Promise.all([dashboardApi.getSalesStatistics(), dashboardApi.getTopProducts({ topCount: 5 })]);
+                setStats(statsData);
+                setTopProducts(topProductsData);
             } catch (err) {
                 setError("Không thể tải dữ liệu thống kê");
                 console.error(err);
@@ -41,44 +43,84 @@ function DashboardPage() {
     return (
         <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 sm:gap-6">
             <PageHeader title="Thống kê bán hàng" description="Tổng quan hoạt động cửa hàng, doanh thu và chỉ số vận hành quan trọng." searchPlaceholder="Tìm kiếm..." />
-            
+
             {isLoading ?
                 <div className="flex justify-center p-8">
                     <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#356647] border-t-transparent"></div>
                 </div>
             : error ?
                 <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-red-600">{error}</div>
-            :   <div className="grid gap-4 grid-cols-3">
-                    <MetricCard
-                        title="Số đơn bán (Hoàn thành)"
-                        value={stats?.totalCompletedOrders || 0}
-                        icon="receipt_long"
-                        colorClass="text-purple-600"
-                        bgClass="bg-purple-50"
-                    />
-                    <MetricCard title="Doanh thu gộp" value={formatCurrency(stats?.grossRevenue)} icon="payments" colorClass="text-blue-600" bgClass="bg-blue-50" />
-                    <MetricCard
-                        title="Doanh thu thuần"
-                        value={formatCurrency(stats?.netRevenue)}
-                        icon="account_balance_wallet"
-                        colorClass="text-[#356647]"
-                        bgClass="bg-[#eaf4eb]"
-                    />
-                    <MetricCard
-                        title="Số đơn có trả hàng"
-                        value={(stats?.partiallyReturnedOrders || 0) + (stats?.fullyReturnedOrders || 0)}
-                        icon="remove_shopping_cart"
-                        colorClass="text-orange-600"
-                        bgClass="bg-orange-50"
-                    />
-                    <MetricCard
-                        title="Hoàn tiền do trả hàng"
-                        value={formatCurrency(stats?.refundAmount)}
-                        icon="assignment_return"
-                        colorClass="text-red-600"
-                        bgClass="bg-red-50"
-                    />
-                    <MetricCard title="Tỷ lệ đơn trả" value={formatPercent(stats?.returnRate)} icon="percent" colorClass="text-slate-600" bgClass="bg-slate-50" />
+            :   <div className="flex flex-col gap-6">
+                    <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+                        {/* line 1 */}
+                        <MetricCard title="Số đơn bán ra" value={stats?.totalCompletedOrders || 0} icon="receipt_long" colorClass="text-purple-600" bgClass="bg-purple-50" />
+                        <MetricCard title="Doanh thu gộp (Gross)" value={formatCurrency(stats?.grossRevenue)} icon="payments" colorClass="text-blue-600" bgClass="bg-blue-50" />
+                        <MetricCard
+                            title="Doanh thu thuần (Net)"
+                            value={formatCurrency(stats?.netRevenue)}
+                            icon="account_balance_wallet"
+                            colorClass="text-[#356647]"
+                            bgClass="bg-[#eaf4eb]"
+                        />
+                        <MetricCard title="Khách hàng mua sắm" value={stats?.customerCount || 0} icon="group" colorClass="text-teal-600" bgClass="bg-teal-50" />
+
+                        {/* line 2 */}
+                        <MetricCard
+                            title="Số đơn trả hàng"
+                            value={(stats?.partiallyReturnedOrders || 0) + (stats?.fullyReturnedOrders || 0)}
+                            icon="remove_shopping_cart"
+                            colorClass="text-orange-600"
+                            bgClass="bg-orange-50"
+                        />
+                        <MetricCard
+                            title="Tổng tiền hoàn trả"
+                            value={formatCurrency(stats?.refundAmount)}
+                            icon="assignment_return"
+                            colorClass="text-red-600"
+                            bgClass="bg-red-50"
+                        />
+                        <MetricCard title="Tỷ lệ trả hàng" value={formatPercent(stats?.returnRate)} icon="percent" colorClass="text-slate-600" bgClass="bg-slate-50" />
+                        <MetricCard
+                            title="Tăng trưởng khách hàng"
+                            value={formatPercent(stats?.customerGrowthRate)}
+                            icon="trending_up"
+                            colorClass="text-emerald-600"
+                            bgClass="bg-emerald-50"
+                        />
+                    </div>
+
+                    {topProducts && topProducts.length > 0 && (
+                        <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm sm:p-6">
+                            <h3 className="mb-4 text-lg font-bold text-gray-800">Top 5 sản phẩm bán chạy</h3>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left text-sm text-gray-600">
+                                    <thead className="bg-gray-50 text-xs uppercase text-gray-500">
+                                        <tr>
+                                            <th className="px-4 py-3 font-medium">Sản phẩm</th>
+                                            <th className="px-4 py-3 font-medium text-right">Đã bán</th>
+                                            <th className="px-4 py-3 font-medium text-right">Doanh thu</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100">
+                                        {topProducts.map((p, i) => (
+                                            <tr key={p.skuId} className="transition-colors hover:bg-gray-50">
+                                                <td className="px-4 py-3">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-orange-100 font-bold text-orange-600">
+                                                            #{i + 1}
+                                                        </div>
+                                                        <span className="font-medium text-gray-900 line-clamp-1">{p.skuSnapshotName}</span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-4 py-3 text-right font-medium">{p.totalQuantitySold}</td>
+                                                <td className="px-4 py-3 text-right font-medium text-[#356647]">{formatCurrency(p.totalRevenue)}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
                 </div>
             }
         </div>

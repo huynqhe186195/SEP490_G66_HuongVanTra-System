@@ -8,4 +8,9 @@ export const dashboardApi = {
     const path = `/api/reports/sales-statistics${query ? `?${query}` : ''}`
     return await apiRequestAuth(path)
   },
+  getTopProducts: async (params) => {
+    const query = params ? new URLSearchParams(params).toString() : ''
+    const path = `/api/reports/top-products${query ? `?${query}` : ''}`
+    return await apiRequestAuth(path)
+  },
 }

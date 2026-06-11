@@ -13,4 +13,7 @@ public class SalesStatisticsResponse
     
     public double ReturnRate { get; set; }
     public double ValueReturnRate { get; set; }
+
+    public int CustomerCount { get; set; }
+    public double CustomerGrowthRate { get; set; }
 }

@@ -9,4 +9,9 @@ public class ReportLogic(IReportRepository reportRepository) : IReportLogic
     {
         return reportRepository.GetSalesStatisticsAsync(month, year, cancellationToken);
     }
+
+    public Task<List<TopProductDto>> GetTopSellingProductsAsync(int topCount, int? month, int? year, CancellationToken cancellationToken = default)
+    {
+        return reportRepository.GetTopSellingProductsAsync(topCount, month, year, cancellationToken);
+    }
 }
