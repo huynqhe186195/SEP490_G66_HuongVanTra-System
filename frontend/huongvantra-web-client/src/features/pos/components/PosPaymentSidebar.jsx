@@ -54,14 +54,6 @@ export default function PosPaymentSidebar({
   onConfirm,
   isSubmitting,
   canPay,
-  customerSearchValue,
-  onCustomerSearchChange,
-  customerSearchResults,
-  isCustomerSearchLoading,
-  showCustomerDropdown,
-  showCustomerSearchEmpty,
-  onSelectCustomer,
-  onOpenAddCustomer,
   onOpenCustomerDetail,
   onClearCustomer,
   shippingAddress,
@@ -79,8 +71,6 @@ export default function PosPaymentSidebar({
   onApplyPromoCode,
   onClearPromoCode,
   isApplyingPromo,
-  orderNote,
-  onOrderNoteChange,
 }) {
   if (!isOpen) return null
 
@@ -174,49 +164,10 @@ export default function PosPaymentSidebar({
                 </button>
               </div>
             ) : (
-              <div className="flex gap-2">
-                <div className="relative min-w-0 flex-1">
-                  <Icon className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[18px] text-[#717971]">person</Icon>
-                  <input
-                    className="w-full rounded-lg border border-[#c1c9c0]/60 bg-[#fbf9f1] py-2 pl-9 pr-2 text-sm outline-none focus:border-[#356647] focus:ring-2 focus:ring-[#356647]/20"
-                    placeholder="Tìm tên, SĐT, mã KH..."
-                    value={customerSearchValue}
-                    onChange={(event) => onCustomerSearchChange(event.target.value)}
-                  />
-                </div>
-                <button
-                  type="button"
-                  onClick={onOpenAddCustomer}
-                  className="shrink-0 rounded-lg bg-[#356647] px-3 py-2 text-xs font-bold text-white hover:bg-[#4e7f5e]"
-                >
-                  Thêm KH
-                </button>
-              </div>
+              <p className="rounded-lg border border-dashed border-[#c1c9c0] bg-[#fbf9f1] px-3 py-2.5 text-sm text-[#717971]">
+                Chưa chọn khách — tìm hoặc thêm khách ở khu vực phía trên danh sách sản phẩm.
+              </p>
             )}
-            {!selectedCustomer && isCustomerSearchLoading ? (
-              <p className="mt-2 text-xs text-[#717971]">Đang tìm khách hàng...</p>
-            ) : null}
-            {showCustomerDropdown ? (
-              <div className="custom-scrollbar absolute left-3 right-3 top-full z-40 mt-1 max-h-52 overflow-y-auto rounded-xl border border-[#c1c9c0] bg-white shadow-2xl">
-                {customerSearchResults.map((customer) => (
-                  <button
-                    key={customer.customerId}
-                    type="button"
-                    onClick={() => onSelectCustomer(customer)}
-                    className="flex w-full flex-col border-b border-[#f0eee6] px-3 py-2.5 text-left last:border-b-0 hover:bg-[#f6f4ec]"
-                  >
-                    <span className="text-sm font-semibold text-[#1b1c17]">{customer.fullName}</span>
-                    <span className="text-xs text-[#717971]">
-                      {customer.phone || '—'} · {customer.customerCode}
-                      {Number(customer.currentDebt) > 0 ? ` · Nợ ${formatMoney(customer.currentDebt)} đ` : ''}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            ) : null}
-            {showCustomerSearchEmpty ? (
-              <p className="mt-2 text-xs text-[#717971]">Không tìm thấy khách hàng.</p>
-            ) : null}
             {!selectedCustomer ? (
               <p className="mt-2 text-xs font-medium text-[#ba1a1a]">Bắt buộc chọn khách trước khi xác nhận.</p>
             ) : null}
@@ -339,21 +290,6 @@ export default function PosPaymentSidebar({
                 </button>
               </div>
             )}
-          </div>
-
-          <div className="rounded-xl bg-white p-3 shadow-sm">
-            <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[#717971]" htmlFor="sidebar-order-note">
-              Ghi chú đơn hàng
-            </label>
-            <textarea
-              id="sidebar-order-note"
-              rows={2}
-              maxLength={500}
-              placeholder="VD: Gói quà, giao giờ hành chính..."
-              className="w-full resize-none rounded-xl border border-[#c1c9c0] bg-[#fbf9f1] px-3 py-2.5 text-sm outline-none focus:border-[#356647] focus:ring-2 focus:ring-[#356647]/20"
-              value={orderNote}
-              onChange={(event) => onOrderNoteChange(event.target.value)}
-            />
           </div>
 
           {hasCartItems ? (

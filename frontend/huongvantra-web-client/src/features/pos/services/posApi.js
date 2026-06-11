@@ -582,6 +582,38 @@ export async function fetchPromotionByCode(code) {
   }
 }
 
+function matchesPosProductSearch(item, term) {
+  if (!term) return true
+  const haystack = [item.name, item.productName, item.packagingType, item.sku, item.categoryName]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase()
+  return haystack.includes(term)
+}
+
+async function fetchAllSkusForPos() {
+  const pageSize = 100
+  let page = 1
+  let allItems = []
+  let totalCount = 0
+
+  do {
+    const query = new URLSearchParams()
+    query.set('page', String(page))
+    query.set('pageSize', String(pageSize))
+    query.set('isActive', 'true')
+    const data = await apiRequestAuth(`/api/v1/skus?${query.toString()}`, { method: 'GET' })
+    const paged = toPagedResult(data)
+    const batch = paged.items ?? []
+    allItems = allItems.concat(batch)
+    totalCount = paged.totalCount ?? 0
+    if (batch.length === 0) break
+    page += 1
+  } while (allItems.length < totalCount && page <= 20)
+
+  return allItems
+}
+
 /** Catalog cửa hàng — gồm cả SP đang ẩn ở kho nhưng đã đồng bộ (để khớp SKU). */
 async function fetchStoreProductsForPos() {
   const pageSize = 100
@@ -608,11 +640,12 @@ async function fetchStoreProductsForPos() {
 export async function fetchPosProducts({ storeId, search, limit = 30 }) {
   void storeId
 
+  const term = search?.trim().toLowerCase() ?? ''
   const skuPageSize = Math.min(100, Math.max(1, Number(limit) || 30))
   const query = new URLSearchParams()
-  if (search?.trim()) query.set('search', search.trim())
+  if (term) query.set('search', search.trim())
   query.set('page', '1')
-  query.set('pageSize', String(skuPageSize))
+  query.set('pageSize', String(term ? Math.max(skuPageSize, 80) : skuPageSize))
   query.set('isActive', 'true')
 
   const [data, productItems] = await Promise.all([
@@ -620,7 +653,7 @@ export async function fetchPosProducts({ storeId, search, limit = 30 }) {
     fetchStoreProductsForPos().catch(() => []),
   ])
   const paged = toPagedResult(data)
-  const skus = paged.items
+  let skus = paged.items
   const productById = new Map(
     productItems.map((product) => {
       const id = product.id ?? product.Id
@@ -640,24 +673,54 @@ export async function fetchPosProducts({ storeId, search, limit = 30 }) {
     // Inventory service may be unavailable during local dev.
   }
 
-  return skus
+  const mapped = skus
     .map((sku) => {
       const parentProductId = sku.productId ?? sku.ProductId
       const product = productById.get(parentProductId)
       if (!product) return null
       return mapPosProduct({
-      productId: sku.id ?? sku.Id,
-      sku: sku.skuCode ?? sku.SkuCode,
-      productName: sku.productName ?? sku.ProductName ?? product?.name ?? product?.Name ?? '',
-      packagingType: sku.packagingType ?? sku.PackagingType ?? '',
-      price: sku.basePrice ?? sku.BasePrice,
-      stockQuantity: stockBySkuId.get(sku.id ?? sku.Id) ?? 0,
-      imageUrl: sku.imageUrl ?? sku.ImageUrl ?? '',
-      categoryId: product?.categoryId ?? product?.CategoryId ?? null,
-      categoryName: sku.categoryName ?? sku.CategoryName ?? product?.categoryName ?? product?.CategoryName ?? '',
-    })
+        productId: sku.id ?? sku.Id,
+        sku: sku.skuCode ?? sku.SkuCode,
+        productName: sku.productName ?? sku.ProductName ?? product?.name ?? product?.Name ?? '',
+        packagingType: sku.packagingType ?? sku.PackagingType ?? '',
+        price: sku.basePrice ?? sku.BasePrice,
+        stockQuantity: stockBySkuId.get(sku.id ?? sku.Id) ?? 0,
+        imageUrl: sku.imageUrl ?? sku.ImageUrl ?? '',
+        categoryId: product?.categoryId ?? product?.CategoryId ?? null,
+        categoryName: sku.categoryName ?? sku.CategoryName ?? product?.categoryName ?? product?.CategoryName ?? '',
+      })
     })
     .filter(Boolean)
+
+  if (!term) return mapped
+
+  let filtered = mapped.filter((item) => matchesPosProductSearch(item, term))
+  if (filtered.length > 0) return filtered
+
+  const allSkus = await fetchAllSkusForPos().catch(() => [])
+  if (allSkus.length === 0) return filtered
+
+  const fallbackMapped = allSkus
+    .map((sku) => {
+      const parentProductId = sku.productId ?? sku.ProductId
+      const product = productById.get(parentProductId)
+      if (!product) return null
+      return mapPosProduct({
+        productId: sku.id ?? sku.Id,
+        sku: sku.skuCode ?? sku.SkuCode,
+        productName: sku.productName ?? sku.ProductName ?? product?.name ?? product?.Name ?? '',
+        packagingType: sku.packagingType ?? sku.PackagingType ?? '',
+        price: sku.basePrice ?? sku.BasePrice,
+        stockQuantity: stockBySkuId.get(sku.id ?? sku.Id) ?? 0,
+        imageUrl: sku.imageUrl ?? sku.ImageUrl ?? '',
+        categoryId: product?.categoryId ?? product?.CategoryId ?? null,
+        categoryName: sku.categoryName ?? sku.CategoryName ?? product?.categoryName ?? product?.CategoryName ?? '',
+      })
+    })
+    .filter(Boolean)
+
+  filtered = fallbackMapped.filter((item) => matchesPosProductSearch(item, term))
+  return filtered.slice(0, skuPageSize)
 }
 
 export function resolvePosStoreId() {

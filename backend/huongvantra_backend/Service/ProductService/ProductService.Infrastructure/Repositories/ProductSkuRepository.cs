@@ -22,7 +22,9 @@ public class ProductSkuRepository(ProductDbContext _db) : IProductSkuRepository
             var s = search.Trim().ToLower();
             query = query.Where(sku =>
                 sku.SkuCode.ToLower().Contains(s) ||
-                sku.PackagingType.ToLower().Contains(s));
+                sku.PackagingType.ToLower().Contains(s) ||
+                (sku.Product != null && sku.Product.Name.ToLower().Contains(s)) ||
+                (sku.Product != null && sku.Product.Category != null && sku.Product.Category.Name.ToLower().Contains(s)));
         }
 
         if (productId.HasValue)

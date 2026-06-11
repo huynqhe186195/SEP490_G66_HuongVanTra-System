@@ -5,7 +5,12 @@ import AddCustomerModal from '../components/AddCustomerModal.jsx'
 import CustomerDetailModal from '../components/CustomerDetailModal.jsx'
 import OrderOfferModal from '../components/OrderOfferModal.jsx'
 import ConfirmDialog from '../components/ConfirmDialog.jsx'
+import PosCategoryFilterSidebar from '../components/PosCategoryFilterSidebar.jsx'
 import PosPaymentSidebar from '../components/PosPaymentSidebar.jsx'
+import {
+  expandCategoryFilterIds,
+  formatCategoryFilterSummary,
+} from '../../products/utils/categoryTreeUtils.js'
 import { printReceiptFromData, printReceiptSequence } from '../utils/printReceipt.js'
 import { vietnamNowLabel } from '../../../utils/vietnamDateTime.js'
 import {
@@ -52,6 +57,15 @@ const COUNTER_PAYMENT_METHODS = [
 const TAKEAWAY_PAYMENT_METHODS = [
   { id: 'COD', label: 'COD — thu khi giao', icon: 'local_shipping' },
   { id: 'TRANSFER', label: 'Chuyển khoản / VietQR', icon: 'account_balance' },
+]
+
+const PRICE_FILTER_OPTIONS = [
+  { id: '', label: 'Tất cả giá' },
+  { id: 'asc', label: 'Giá thấp → cao' },
+  { id: 'desc', label: 'Giá cao → thấp' },
+  { id: 'under-50k', label: 'Dưới 50.000 đ' },
+  { id: '50k-200k', label: '50.000 – 200.000 đ' },
+  { id: 'over-200k', label: 'Trên 200.000 đ' },
 ]
 
 function createWorkspace(mode = 'counter') {
@@ -188,7 +202,8 @@ function PosPage() {
   const [isApplyingPromo, setIsApplyingPromo] = useState(false)
   const [searchProducts, setSearchProducts] = useState([])
   const [posCategories, setPosCategories] = useState([])
-  const [selectedCategoryId, setSelectedCategoryId] = useState('')
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState([])
+  const [isCategoryFilterSidebarOpen, setIsCategoryFilterSidebarOpen] = useState(false)
   const [isSearchLoading, setIsSearchLoading] = useState(false)
   const [catalogReloadKey, setCatalogReloadKey] = useState(0)
   const [isCatalogSyncing, setIsCatalogSyncing] = useState(false)
@@ -204,6 +219,9 @@ function PosPage() {
   const [overpaymentDebtModalOpen, setOverpaymentDebtModalOpen] = useState(false)
   const [debtModalMode, setDebtModalMode] = useState('configure')
   const discountPopoverRef = useRef(null)
+  const priceFilterRef = useRef(null)
+  const [isPriceFilterOpen, setIsPriceFilterOpen] = useState(false)
+  const [priceFilter, setPriceFilter] = useState('')
 
   const isTakeaway = salesMode === 'takeaway'
   const workspace = workspaceByMode[salesMode]
@@ -428,7 +446,7 @@ function PosPage() {
         const items = await fetchPosProducts({
           storeId: resolvePosStoreId(),
           search: searchValue.trim(),
-          limit: searchValue.trim() ? 40 : 60,
+          limit: searchValue.trim() ? 80 : 60,
         })
         if (!cancelled) {
           setSearchProducts(items)
@@ -493,6 +511,18 @@ function PosPage() {
     document.addEventListener('mousedown', handlePointerDown)
     return () => document.removeEventListener('mousedown', handlePointerDown)
   }, [openDiscountSku])
+
+  useEffect(() => {
+    if (!isPriceFilterOpen) return undefined
+
+    function handlePointerDown(event) {
+      if (priceFilterRef.current?.contains(event.target)) return
+      setIsPriceFilterOpen(false)
+    }
+
+    document.addEventListener('mousedown', handlePointerDown)
+    return () => document.removeEventListener('mousedown', handlePointerDown)
+  }, [isPriceFilterOpen])
 
   useEffect(() => {
     if (selectedCustomer) {
@@ -1355,10 +1385,39 @@ function PosPage() {
   const hasSearchQuery = searchValue.trim().length > 0
 
   const filteredSearchProducts = useMemo(() => {
-    if (!selectedCategoryId) return searchProducts
-    const categoryId = Number(selectedCategoryId)
-    return searchProducts.filter((item) => Number(item.categoryId) === categoryId)
-  }, [searchProducts, selectedCategoryId])
+    let items = searchProducts
+    if (selectedCategoryIds.length > 0) {
+      const allowedCategoryIds = expandCategoryFilterIds(selectedCategoryIds, posCategories)
+      items = items.filter((item) => allowedCategoryIds.has(Number(item.categoryId)))
+    }
+    if (priceFilter === 'under-50k') {
+      items = items.filter((item) => Number(item.price) < 50000)
+    } else if (priceFilter === '50k-200k') {
+      items = items.filter((item) => {
+        const price = Number(item.price)
+        return price >= 50000 && price <= 200000
+      })
+    } else if (priceFilter === 'over-200k') {
+      items = items.filter((item) => Number(item.price) > 200000)
+    }
+    if (priceFilter === 'asc' || priceFilter === 'desc') {
+      items = [...items].sort((a, b) => {
+        const diff = Number(a.price) - Number(b.price)
+        return priceFilter === 'asc' ? diff : -diff
+      })
+    }
+    return items
+  }, [searchProducts, selectedCategoryIds, posCategories, priceFilter])
+
+  const selectedCategorySummary = useMemo(
+    () => formatCategoryFilterSummary(selectedCategoryIds, posCategories),
+    [selectedCategoryIds, posCategories],
+  )
+
+  const selectedPriceFilterLabel = useMemo(
+    () => PRICE_FILTER_OPTIONS.find((option) => option.id === priceFilter)?.label ?? null,
+    [priceFilter],
+  )
 
   const hasCustomerSearchQuery = customerSearchValue.trim().length > 0
   const showCustomerDropdown = !selectedCustomer && hasCustomerSearchQuery && customerSearchResults.length > 0
@@ -1390,8 +1449,21 @@ function PosPage() {
 
   return (
     <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-[#c1c9c0]/40 bg-[#fbf9f1] shadow-[0_10px_30px_rgba(27,28,23,0.04)] lg:rounded-[28px]">
-      <header className="border-b border-[#c1c9c0]/60 bg-[#f6f4ec] px-4 py-3">
-        <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
+      <header className="border-b border-[#c1c9c0]/60 bg-[#f6f4ec] px-4 py-2.5">
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+          <div className="relative w-[min(720px,82%)] shrink-0">
+            <Icon className="absolute left-3 top-1/2 -translate-y-1/2 text-[18px] text-[#717971]">search</Icon>
+            <input
+              className="w-full rounded-full border border-[#c1c9c0] bg-white py-2 pl-9 pr-9 text-sm outline-none focus:border-[#356647] focus:ring-2 focus:ring-[#356647]/20"
+              placeholder="Tìm SP, SKU, barcode..."
+              type="text"
+              value={searchValue}
+              onChange={(event) => updateActiveSession({ searchValue: event.target.value })}
+            />
+            <Icon className="absolute right-3 top-1/2 -translate-y-1/2 text-[18px] text-[#717971]">barcode_scanner</Icon>
+          </div>
+
+          <div className="flex shrink-0 items-center gap-1">
           {tabs.map((tab) => {
             const tabSession = sessions[tab.id]
             const tabItemCount = tabSession?.cartItems?.length ?? 0
@@ -1453,6 +1525,7 @@ function PosPage() {
           <button type="button" onClick={addTab} className="rounded-lg px-3 py-1.5 text-[#356647] transition-colors hover:bg-[#356647]/10">
             <Icon>add</Icon>
           </button>
+          </div>
         </div>
       </header>
 
@@ -1619,25 +1692,176 @@ function PosPage() {
                 </div>
               )}
             </div>
+
+            <div className="shrink-0 border-t border-[#c1c9c0]/50 bg-white px-3 py-2.5">
+              <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-[#717971]" htmlFor="cart-order-note">
+                Ghi chú đơn hàng
+              </label>
+              <textarea
+                id="cart-order-note"
+                rows={2}
+                maxLength={500}
+                placeholder="VD: Gói quà, giao giờ hành chính..."
+                className="w-full resize-none rounded-lg border border-[#c1c9c0] bg-[#fbf9f1] px-3 py-2 text-sm outline-none focus:border-[#356647] focus:ring-2 focus:ring-[#356647]/20"
+                value={orderNote}
+                onChange={(event) => updateActiveSession({ orderNote: event.target.value })}
+              />
+            </div>
           </div>
         </section>
 
-        {/* Right: search + product catalog */}
+        {/* Right: customer + product catalog */}
         <section className="order-2 flex min-h-[38vh] min-w-0 flex-1 flex-col bg-white text-base xl:min-h-0">
-          <div className="relative z-30 shrink-0 overflow-visible border-b border-[#c1c9c0]/60 bg-[#f6f4ec] p-5">
-            <div className="relative">
-              <Icon className="absolute left-4 top-1/2 -translate-y-1/2 text-[22px] text-[#717971]">search</Icon>
-              <input
-                className="w-full rounded-full border border-[#c1c9c0] bg-white py-3.5 pl-12 pr-12 text-base outline-none focus:border-[#356647] focus:ring-2 focus:ring-[#356647]/20"
-                placeholder="Tìm sản phẩm, SKU, barcode..."
-                type="text"
-                value={searchValue}
-                onChange={(event) => updateActiveSession({ searchValue: event.target.value })}
-                autoFocus
-              />
-              <Icon className="absolute right-4 top-1/2 -translate-y-1/2 text-[22px] text-[#717971]">barcode_scanner</Icon>
-            </div>
+          <div className="relative z-30 shrink-0 overflow-visible border-b border-[#c1c9c0]/60 bg-[#f6f4ec] px-4 py-3">
+            <div className="flex items-start gap-2">
+              {selectedCustomer ? (
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setOpenModal('customer-detail')}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault()
+                      setOpenModal('customer-detail')
+                    }
+                  }}
+                  className="flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-[#356647]/30 bg-white px-3 py-2 text-left shadow-sm"
+                >
+                  <Icon className="shrink-0 text-[20px] text-[#356647]">person</Icon>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-[#1b1c17]">{selectedCustomer.fullName}</p>
+                    <p className="truncate text-xs text-[#717971]">
+                      {selectedCustomer.phone || '—'} · {selectedCustomer.customerCode}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      updateActiveSession({
+                        selectedCustomer: null,
+                        customerSearchValue: '',
+                        orderDiscountPercent: 0,
+                        orderDiscountAmountFixed: 0,
+                      })
+                    }}
+                    className="shrink-0 rounded-lg border border-[#c1c9c0] px-2 py-1 text-xs font-semibold text-[#414942] hover:bg-[#f6f4ec]"
+                  >
+                    Đổi
+                  </button>
+                </div>
+              ) : (
+                <div className="relative min-w-0 flex-1">
+                  <div className="relative min-w-0">
+                    <Icon className="absolute left-3 top-1/2 -translate-y-1/2 text-[18px] text-[#717971]">person</Icon>
+                    <input
+                      className="w-full rounded-full border border-[#c1c9c0] bg-white py-2.5 pl-9 pr-11 text-sm outline-none focus:border-[#356647] focus:ring-2 focus:ring-[#356647]/20"
+                      placeholder="Tìm tên, SĐT, mã KH..."
+                      value={customerSearchValue}
+                      onChange={(event) => updateActiveSession({ customerSearchValue: event.target.value })}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setOpenModal('customer')}
+                      className="absolute right-2 top-1/2 flex size-7 -translate-y-1/2 items-center justify-center rounded-full bg-[#356647] text-white hover:bg-[#4e7f5e]"
+                      aria-label="Thêm khách hàng"
+                      title="Thêm khách hàng"
+                    >
+                      <Icon className="text-[18px]">add</Icon>
+                    </button>
+                  </div>
+                  {!selectedCustomer && isCustomerSearchLoading ? (
+                    <p className="mt-1.5 text-xs text-[#717971]">Đang tìm khách hàng...</p>
+                  ) : null}
+                  {showCustomerDropdown ? (
+                    <div className="custom-scrollbar absolute left-0 right-0 top-full z-40 mt-1 max-h-52 overflow-y-auto rounded-xl border border-[#c1c9c0] bg-white shadow-2xl">
+                      {customerSearchResults.map((customer) => (
+                        <button
+                          key={customer.customerId}
+                          type="button"
+                          onClick={() => selectCustomer(customer)}
+                          className="flex w-full flex-col border-b border-[#f0eee6] px-3 py-2.5 text-left last:border-b-0 hover:bg-[#f6f4ec]"
+                        >
+                          <span className="text-sm font-semibold text-[#1b1c17]">{customer.fullName}</span>
+                          <span className="text-xs text-[#717971]">
+                            {customer.phone || '—'} · {customer.customerCode}
+                            {Number(customer.currentDebt) > 0 ? ` · Nợ ${formatMoney(customer.currentDebt)} đ` : ''}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                  {showCustomerSearchEmpty ? (
+                    <p className="mt-1.5 text-xs text-[#717971]">Không tìm thấy khách hàng.</p>
+                  ) : null}
+                </div>
+              )}
 
+              <div ref={priceFilterRef} className="relative shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsPriceFilterOpen((open) => !open)
+                  }}
+                  className={`relative flex h-10 w-10 items-center justify-center rounded-full border transition-colors ${
+                    priceFilter
+                      ? 'border-[#356647] bg-[#356647]/10 text-[#356647]'
+                      : 'border-[#c1c9c0] bg-white text-[#717971] hover:border-[#356647]/40 hover:text-[#356647]'
+                  }`}
+                  title={selectedPriceFilterLabel ? `Giá: ${selectedPriceFilterLabel}` : 'Lọc / sắp xếp theo giá'}
+                  aria-label="Lọc theo giá"
+                >
+                  <Icon className="text-[22px]">sell</Icon>
+                  {priceFilter ? (
+                    <span className="absolute -right-0.5 -top-0.5 size-2.5 rounded-full bg-[#356647] ring-2 ring-[#f6f4ec]" />
+                  ) : null}
+                </button>
+                {isPriceFilterOpen ? (
+                  <div className="custom-scrollbar absolute right-0 top-full z-50 mt-1 w-56 overflow-y-auto rounded-xl border border-[#c1c9c0] bg-white p-2 shadow-2xl">
+                    <p className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-[#717971]">Giá</p>
+                    {PRICE_FILTER_OPTIONS.map((option) => (
+                      <button
+                        key={option.id || 'all'}
+                        type="button"
+                        onClick={() => {
+                          setPriceFilter(option.id)
+                          setIsPriceFilterOpen(false)
+                        }}
+                        className={`mb-0.5 flex w-full rounded-lg px-3 py-2 text-left text-sm font-semibold last:mb-0 ${
+                          priceFilter === option.id
+                            ? 'bg-[#356647] text-white'
+                            : 'text-[#414942] hover:bg-[#f6f4ec]'
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+
+              {posCategories.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsCategoryFilterSidebarOpen(true)
+                    setIsPriceFilterOpen(false)
+                  }}
+                  className={`relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full border transition-colors ${
+                    selectedCategoryIds.length > 0
+                      ? 'border-[#356647] bg-[#356647]/10 text-[#356647]'
+                      : 'border-[#c1c9c0] bg-white text-[#717971] hover:border-[#356647]/40 hover:text-[#356647]'
+                  }`}
+                  title={selectedCategorySummary ? `Lọc: ${selectedCategorySummary}` : 'Lọc theo nhóm hàng'}
+                  aria-label="Lọc theo nhóm hàng"
+                >
+                  <Icon className="text-[22px]">filter_list</Icon>
+                  {selectedCategoryIds.length > 0 ? (
+                    <span className="absolute -right-0.5 -top-0.5 size-2.5 rounded-full bg-[#356647] ring-2 ring-[#f6f4ec]" />
+                  ) : null}
+                </button>
+              ) : null}
+            </div>
           </div>
 
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -1647,6 +1871,12 @@ function PosPage() {
                   Danh sách sản phẩm
                   {hasSearchQuery ? (
                     <span className="ml-1 font-normal normal-case text-[#414942]">· &quot;{searchValue.trim()}&quot;</span>
+                  ) : null}
+                  {selectedCategorySummary ? (
+                    <span className="ml-1 font-normal normal-case text-[#356647]">· {selectedCategorySummary}</span>
+                  ) : null}
+                  {selectedPriceFilterLabel && priceFilter ? (
+                    <span className="ml-1 font-normal normal-case text-[#356647]">· {selectedPriceFilterLabel}</span>
                   ) : null}
                 </p>
                 <div className="flex shrink-0 items-center gap-2">
@@ -1669,44 +1899,12 @@ function PosPage() {
                 </div>
               </div>
 
-              {posCategories.length > 0 ? (
-                <div className="custom-scrollbar shrink-0 overflow-x-auto border-b border-[#c1c9c0]/30 px-3 py-2">
-                  <div className="flex min-w-max gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setSelectedCategoryId('')}
-                      className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
-                        !selectedCategoryId
-                          ? 'bg-[#356647] text-white'
-                          : 'bg-white text-[#414942] hover:bg-[#f0eee6]'
-                      }`}
-                    >
-                      Tất cả
-                    </button>
-                    {posCategories.map((category) => (
-                      <button
-                        key={category.id}
-                        type="button"
-                        onClick={() => setSelectedCategoryId(String(category.id))}
-                        className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
-                          selectedCategoryId === String(category.id)
-                            ? 'bg-[#356647] text-white'
-                            : 'bg-white text-[#414942] hover:bg-[#f0eee6]'
-                        }`}
-                      >
-                        {category.name}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-
               <div className="custom-scrollbar flex-1 overflow-y-auto px-3 py-3">
                 {isSearchLoading ? (
                   <p className="px-1 py-3 text-sm text-[#717971]">Đang tải sản phẩm...</p>
                 ) : filteredSearchProducts.length === 0 ? (
                   <p className="px-1 py-3 text-sm text-[#717971]">
-                    {hasSearchQuery || selectedCategoryId
+                    {hasSearchQuery || selectedCategoryIds.length > 0 || priceFilter
                       ? 'Không tìm thấy sản phẩm phù hợp.'
                       : 'Chưa có sản phẩm để hiển thị.'}
                   </p>
@@ -1817,14 +2015,6 @@ function PosPage() {
         onConfirm={handlePayment}
         isSubmitting={isSubmitting}
         canPay={canPay}
-        customerSearchValue={customerSearchValue}
-        onCustomerSearchChange={(value) => updateActiveSession({ customerSearchValue: value })}
-        customerSearchResults={customerSearchResults}
-        isCustomerSearchLoading={isCustomerSearchLoading}
-        showCustomerDropdown={showCustomerDropdown}
-        showCustomerSearchEmpty={showCustomerSearchEmpty}
-        onSelectCustomer={selectCustomer}
-        onOpenAddCustomer={() => setOpenModal('customer')}
         onOpenCustomerDetail={() => setOpenModal('customer-detail')}
         onClearCustomer={() =>
           updateActiveSession({
@@ -1849,8 +2039,6 @@ function PosPage() {
         onApplyPromoCode={handleApplyPromoCode}
         onClearPromoCode={handleClearPromoCode}
         isApplyingPromo={isApplyingPromo}
-        orderNote={orderNote}
-        onOrderNoteChange={(value) => updateActiveSession({ orderNote: value })}
       />
 
       <footer className="shrink-0 border-t border-[#d8d6ce] bg-white px-4">
@@ -1952,6 +2140,17 @@ function PosPage() {
         onClose={() => setOverpaymentDebtModalOpen(false)}
         onSkip={handleOverpaymentDebtSkip}
         onConfirm={handleOverpaymentDebtConfirm}
+      />
+      <PosCategoryFilterSidebar
+        isOpen={isCategoryFilterSidebarOpen}
+        categories={posCategories}
+        selectedIds={selectedCategoryIds}
+        onClose={() => setIsCategoryFilterSidebarOpen(false)}
+        onSkip={() => setIsCategoryFilterSidebarOpen(false)}
+        onConfirm={(ids) => {
+          setSelectedCategoryIds(ids)
+          setIsCategoryFilterSidebarOpen(false)
+        }}
       />
     </div>
   )

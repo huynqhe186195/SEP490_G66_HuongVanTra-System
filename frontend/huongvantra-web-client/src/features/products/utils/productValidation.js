@@ -1,4 +1,5 @@
 import { parseProductPriceInput } from './productDisplay.js'
+import { collectDescendantIds } from './categoryTreeUtils.js'
 
 const SKU_CODE_REGEX = /^[A-Z0-9\-_]{3,50}$/
 const URL_REGEX = /^https?:\/\/[^\s/$.?#].[^\s]*$/i
@@ -38,6 +39,11 @@ export function validateCategoryForm({ name, description, parentId, categoryId, 
 
   if (parentId && categoryId && Number(parentId) === Number(categoryId)) {
     errors.parentId = 'Danh mục không thể là cha của chính nó.'
+  } else if (parentId && categoryId) {
+    const descendants = collectDescendantIds(categoryId, existingCategories)
+    if (descendants.includes(Number(parentId))) {
+      errors.parentId = 'Không thể chọn danh mục con làm danh mục cha.'
+    }
   }
 
   const messages = Object.values(errors)

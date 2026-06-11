@@ -27,6 +27,7 @@ import OrderDetailPage from '../features/orders/pages/OrderDetailPage.jsx'
 import PosPage from '../features/pos/pages/PosPage.jsx'
 import PosTransferQrPage from '../features/pos/pages/PosTransferQrPage.jsx'
 import ProductFormPage from '../features/products/pages/ProductFormPage.jsx'
+import ProductItemCreatePage from '../features/products/pages/ProductItemCreatePage.jsx'
 import ProductsListPage from '../features/products/pages/ProductsListPage.jsx'
 import ProductsPricingPage from '../features/products/pages/ProductsPricingPage.jsx'
 import ReportsCustomersPage from '../features/reports/pages/ReportsCustomersPage.jsx'
@@ -61,6 +62,7 @@ function App() {
         <Route path="/products" element={<ProductsListPage />} />
         <Route path="/products/pricing" element={<ProductsPricingPage />} />
         <Route path="/products/create" element={<ProductFormPage mode="create" />} />
+        <Route path="/products/item/create" element={<ProductItemCreatePage />} />
         <Route path="/products/:id/edit" element={<ProductFormPage mode="edit" />} />
         <Route path="/inventory" element={<InventoryStockPage />} />
         <Route path="/inventory/stock-requests" element={<StockAdjustmentRequestsPage />} />

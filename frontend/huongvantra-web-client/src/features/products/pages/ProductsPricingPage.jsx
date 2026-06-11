@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { AUTH_SESSION_CHANGED_EVENT, loadAuthSession } from '../../auth/services/authSession.js'
 import { canCreateCatalog, canHideCatalog, canSyncCatalog, isWarehouseRole } from '../../auth/utils/permissions.js'
+import CategoryParentSelect from '../components/CategoryParentSelect.jsx'
+import CategoryTreeTable from '../components/CategoryTreeTable.jsx'
 import { fetchPendingCatalogSync, syncCatalogToStore } from '../services/catalogSyncApi.js'
 import {
   createCategory,
@@ -13,10 +15,17 @@ import {
   restoreCategory,
   updateCategory,
 } from '../services/categoriesApi.js'
-import { getCategoryStatusMeta, isSyncedToStore } from '../utils/productDisplay.js'
+import {
+  buildCategoryTree,
+  collectTreeNodeIds,
+  filterCategoryTree,
+} from '../utils/categoryTreeUtils.js'
 import { validateCategoryForm } from '../utils/productValidation.js'
 
+const EMPTY_FORM = { name: '', description: '', parentId: '' }
+
 function ProductsPricingPage() {
+  const createFormRef = useRef(null)
   const [session, setSession] = useState(() => loadAuthSession())
   const canCreate = canCreateCatalog(session)
   const canHide = canHideCatalog(session)
@@ -30,15 +39,18 @@ function ProductsPricingPage() {
     window.addEventListener(AUTH_SESSION_CHANGED_EVENT, sync)
     return () => window.removeEventListener(AUTH_SESSION_CHANGED_EVENT, sync)
   }, [])
+
   const [categories, setCategories] = useState([])
   const [searchInput, setSearchInput] = useState('')
   const [isLoading, setIsLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState('active')
   const [isSaving, setIsSaving] = useState(false)
-  const [form, setForm] = useState({ name: '', description: '' })
+  const [form, setForm] = useState(EMPTY_FORM)
   const [fieldErrors, setFieldErrors] = useState({})
   const [editingId, setEditingId] = useState(null)
-  const [editForm, setEditForm] = useState({ name: '', description: '' })
+  const [editForm, setEditForm] = useState(EMPTY_FORM)
+  const [editFieldErrors, setEditFieldErrors] = useState({})
+  const [expandedIds, setExpandedIds] = useState(() => new Set())
 
   const loadData = useCallback(async () => {
     try {
@@ -73,24 +85,42 @@ function ProductsPricingPage() {
     loadPendingSync()
   }, [loadData, loadPendingSync])
 
-  const filteredCategories = useMemo(() => {
-    const keyword = searchInput.trim().toLowerCase()
+  const visibleCategories = useMemo(() => {
     return categories.filter((item) => {
       if (statusFilter === 'hidden') return item.isDeleted
       if (item.isDeleted) return false
       if (statusFilter === 'active' && item.isActive === false) return false
-      if (!keyword) return true
-      const name = String(item.name || '').toLowerCase()
-      const description = String(item.description || '').toLowerCase()
-      return name.includes(keyword) || description.includes(keyword)
+      return true
     })
-  }, [categories, searchInput, statusFilter])
+  }, [categories, statusFilter])
+
+  const categoryTree = useMemo(() => buildCategoryTree(visibleCategories), [visibleCategories])
+
+  const visibleTree = useMemo(
+    () => filterCategoryTree(categoryTree, searchInput),
+    [categoryTree, searchInput],
+  )
+
+  useEffect(() => {
+    setExpandedIds(new Set(collectTreeNodeIds(visibleTree)))
+  }, [visibleTree])
+
+  function toggleExpand(categoryId) {
+    setExpandedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(categoryId)) next.delete(categoryId)
+      else next.add(categoryId)
+      return next
+    })
+  }
 
   async function handleCreate(event) {
     event.preventDefault()
+    const parentId = form.parentId ? Number(form.parentId) : null
     const validation = validateCategoryForm({
       name: form.name,
       description: form.description,
+      parentId,
       existingCategories: categories,
     })
     if (!validation.valid) {
@@ -100,9 +130,13 @@ function ProductsPricingPage() {
 
     setIsSaving(true)
     try {
-      await createCategory(form)
+      await createCategory({
+        name: form.name,
+        description: form.description,
+        parentId,
+      })
       showSuccess('Đã tạo danh mục mới.')
-      setForm({ name: '', description: '' })
+      setForm(EMPTY_FORM)
       setFieldErrors({})
       await loadData()
     } catch (error) {
@@ -114,18 +148,42 @@ function ProductsPricingPage() {
 
   function startEdit(category) {
     setEditingId(category.id)
-    setEditForm({ name: category.name || '', description: category.description || '' })
+    setEditForm({
+      name: category.name || '',
+      description: category.description || '',
+      parentId: category.parentId ? String(category.parentId) : '',
+    })
+    setEditFieldErrors({})
+  }
+
+  function cancelEdit() {
+    setEditingId(null)
+    setEditForm(EMPTY_FORM)
+    setEditFieldErrors({})
+  }
+
+  function handleEditFormChange(patch) {
+    setEditForm((prev) => ({ ...prev, ...patch }))
+    if (patch.parentId !== undefined) {
+      setEditFieldErrors((prev) => ({ ...prev, parentId: undefined }))
+    }
+    if (patch.name !== undefined) {
+      setEditFieldErrors((prev) => ({ ...prev, name: undefined }))
+    }
   }
 
   async function handleSaveEdit(category) {
+    const parentId = editForm.parentId ? Number(editForm.parentId) : null
     const validation = validateCategoryForm({
       name: editForm.name,
       description: editForm.description,
+      parentId,
       categoryId: category.id,
       existingCategories: categories,
     })
     if (!validation.valid) {
-      showError(validation.message)
+      setEditFieldErrors(validation.errors)
+      if (validation.message) showError(validation.message)
       return
     }
 
@@ -134,16 +192,27 @@ function ProductsPricingPage() {
       await updateCategory(category.id, {
         name: editForm.name,
         description: editForm.description,
-        parentId: category.parentId ?? null,
+        parentId,
       })
       showSuccess('Đã cập nhật danh mục.')
-      setEditingId(null)
+      cancelEdit()
       await loadData()
     } catch (error) {
       showError(error.message)
     } finally {
       setIsSaving(false)
     }
+  }
+
+  function startAddChild(parentCategory) {
+    setForm({
+      name: '',
+      description: '',
+      parentId: String(parentCategory.id),
+    })
+    setFieldErrors({})
+    setExpandedIds((prev) => new Set([...prev, parentCategory.id]))
+    createFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
   async function handleHide(category) {
@@ -204,7 +273,7 @@ function ProductsPricingPage() {
         title="Danh mục sản phẩm"
         description={
           canCreate
-            ? 'Thủ kho — tạo và quản lý danh mục sản phẩm'
+            ? 'Thủ kho — tạo và quản lý danh mục sản phẩm theo cấu trúc cha — con'
             : 'Xem danh mục — bấm Đồng bộ để tải dữ liệu mới từ kho'
         }
         searchPlaceholder="Tìm danh mục..."
@@ -238,7 +307,10 @@ function ProductsPricingPage() {
       />
 
       {canCreate ? (
-        <section className="mb-6 rounded-[1rem] border border-slate-100 bg-white p-4 shadow-sm sm:p-6">
+        <section
+          ref={createFormRef}
+          className="mb-6 rounded-[1rem] border border-slate-100 bg-white p-4 shadow-sm sm:p-6"
+        >
           <h2 className="text-lg font-bold text-slate-800">Thêm danh mục mới</h2>
           <form className="mt-4 grid gap-4 sm:grid-cols-2" onSubmit={handleCreate}>
             <label className="block space-y-2 sm:col-span-1">
@@ -252,6 +324,15 @@ function ProductsPricingPage() {
               {fieldErrors.name ? <p className="text-xs text-[#b42318]">{fieldErrors.name}</p> : null}
             </label>
             <label className="block space-y-2 sm:col-span-1">
+              <span className="text-xs font-semibold text-[#717971]">Danh mục cha</span>
+              <CategoryParentSelect
+                value={form.parentId}
+                onChange={(parentId) => setForm((prev) => ({ ...prev, parentId }))}
+                categories={categories}
+                error={fieldErrors.parentId}
+              />
+            </label>
+            <label className="block space-y-2 sm:col-span-2">
               <span className="text-xs font-semibold text-[#717971]">Mô tả</span>
               <input
                 className="w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20"
@@ -259,6 +340,7 @@ function ProductsPricingPage() {
                 onChange={(event) => setForm((prev) => ({ ...prev, description: event.target.value }))}
                 placeholder="Tùy chọn"
               />
+              {fieldErrors.description ? <p className="text-xs text-[#b42318]">{fieldErrors.description}</p> : null}
             </label>
             <div className="sm:col-span-2">
               <button
@@ -277,7 +359,7 @@ function ProductsPricingPage() {
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h2 className="text-lg font-bold text-slate-800">Danh sách danh mục</h2>
           <select
-            className="min-h-[40px] rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 outline-none focus:border-[#356647]"
+            className="h-11 min-w-[200px] rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm text-slate-700 outline-none focus:border-[#356647]"
             value={statusFilter}
             onChange={(event) => setStatusFilter(event.target.value)}
           >
@@ -289,129 +371,31 @@ function ProductsPricingPage() {
 
         {isLoading ? (
           <p className="text-sm text-slate-500">Đang tải...</p>
-        ) : filteredCategories.length === 0 ? (
+        ) : visibleTree.length === 0 ? (
           <p className="rounded-xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-500">
-            Chưa có danh mục nào.
+            {searchInput.trim() ? 'Không tìm thấy danh mục phù hợp.' : 'Chưa có danh mục nào.'}
           </p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-100 text-left text-sm">
-              <thead className="bg-slate-50 text-slate-500">
-                <tr>
-                  <th className="px-4 py-3 font-semibold">Tên</th>
-                  <th className="px-4 py-3 font-semibold">Mô tả</th>
-                  <th className="px-4 py-3 font-semibold">Trạng thái</th>
-                  {canCreate || canHide ? <th className="px-4 py-3 font-semibold text-right">Thao tác</th> : null}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filteredCategories.map((category) => {
-                  const status = getCategoryStatusMeta(category.isActive !== false, category.isDeleted)
-                  const isEditing = editingId === category.id
-
-                  return (
-                    <tr
-                      key={category.id}
-                      className={category.isDeleted ? 'bg-slate-50/80 opacity-75' : undefined}
-                    >
-                      <td className="px-4 py-3 font-semibold text-slate-900">
-                        {isEditing ? (
-                          <input
-                            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                            value={editForm.name}
-                            onChange={(event) => setEditForm((prev) => ({ ...prev, name: event.target.value }))}
-                          />
-                        ) : (
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span>{category.name}</span>
-                            {isWarehouse && !isSyncedToStore(category) ? (
-                              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-800">
-                                Chưa đồng bộ CH
-                              </span>
-                            ) : null}
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-slate-600">
-                        {isEditing ? (
-                          <input
-                            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                            value={editForm.description}
-                            onChange={(event) =>
-                              setEditForm((prev) => ({ ...prev, description: event.target.value }))
-                            }
-                          />
-                        ) : (
-                          category.description || '—'
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={`rounded-full px-3 py-1 text-xs font-semibold ${status.className}`}>
-                          {status.label}
-                        </span>
-                      </td>
-                      {canCreate || canHide ? (
-                        <td className="px-4 py-3 text-right">
-                          {isEditing ? (
-                            <div className="flex justify-end gap-2">
-                              <button
-                                type="button"
-                                className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700"
-                                onClick={() => setEditingId(null)}
-                              >
-                                Hủy
-                              </button>
-                              <button
-                                type="button"
-                                disabled={isSaving}
-                                className="rounded-lg bg-[#538463] px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50"
-                                onClick={() => handleSaveEdit(category)}
-                              >
-                                Lưu
-                              </button>
-                            </div>
-                          ) : category.isDeleted ? (
-                            canHide ? (
-                              <button
-                                type="button"
-                                disabled={isSaving}
-                                className="rounded-lg bg-[#538463] px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50"
-                                onClick={() => handleRestore(category)}
-                              >
-                                Kích hoạt lại
-                              </button>
-                            ) : null
-                          ) : (
-                            <div className="flex justify-end gap-2">
-                              {canCreate ? (
-                                <button
-                                  type="button"
-                                  className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700"
-                                  onClick={() => startEdit(category)}
-                                >
-                                  Sửa
-                                </button>
-                              ) : null}
-                              {canHide ? (
-                                <button
-                                  type="button"
-                                  disabled={isSaving}
-                                  className="rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50"
-                                  onClick={() => handleHide(category)}
-                                >
-                                  Ẩn
-                                </button>
-                              ) : null}
-                            </div>
-                          )}
-                        </td>
-                      ) : null}
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
+          <CategoryTreeTable
+            nodes={visibleTree}
+            categories={categories}
+            expandedIds={expandedIds}
+            onToggleExpand={toggleExpand}
+            editingId={editingId}
+            editForm={editForm}
+            onEditFormChange={handleEditFormChange}
+            onStartEdit={startEdit}
+            onCancelEdit={cancelEdit}
+            onSaveEdit={handleSaveEdit}
+            onHide={handleHide}
+            onRestore={handleRestore}
+            onAddChild={startAddChild}
+            editFieldErrors={editFieldErrors}
+            canCreate={canCreate}
+            canHide={canHide}
+            isWarehouse={isWarehouse}
+            isSaving={isSaving}
+          />
         )}
       </section>
     </PageShell>
