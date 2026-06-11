@@ -270,6 +270,13 @@ function ProductsListPage() {
               </Link>
             ) : null}
             <Link
+              to="/products/categories"
+              className="inline-flex items-center gap-2 rounded-xl border border-[#356647]/30 bg-white px-4 py-2.5 text-sm font-semibold text-[#356647] hover:bg-[#356647]/5"
+            >
+              <span className="material-symbols-outlined text-[18px]">category</span>
+              Danh mục
+            </Link>
+            <Link
               to="/products/pricing"
               className="inline-flex items-center gap-2 rounded-xl border border-[#356647]/30 bg-white px-4 py-2.5 text-sm font-semibold text-[#356647] hover:bg-[#356647]/5"
             >

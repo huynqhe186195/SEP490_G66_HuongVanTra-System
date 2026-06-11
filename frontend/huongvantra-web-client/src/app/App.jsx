@@ -29,6 +29,7 @@ import PosTransferQrPage from '../features/pos/pages/PosTransferQrPage.jsx'
 import ProductFormPage from '../features/products/pages/ProductFormPage.jsx'
 import ProductItemCreatePage from '../features/products/pages/ProductItemCreatePage.jsx'
 import ProductsListPage from '../features/products/pages/ProductsListPage.jsx'
+import ProductsCategoriesPage from '../features/products/pages/ProductsCategoriesPage.jsx'
 import ProductsPricingPage from '../features/products/pages/ProductsPricingPage.jsx'
 import ReportsCustomersPage from '../features/reports/pages/ReportsCustomersPage.jsx'
 import ReportsOverviewPage from '../features/reports/pages/ReportsOverviewPage.jsx'
@@ -61,6 +62,7 @@ function App() {
         <Route path="/orders/:id" element={<OrderDetailPage />} />
         <Route path="/products" element={<ProductsListPage />} />
         <Route path="/products/pricing" element={<ProductsPricingPage />} />
+        <Route path="/products/categories" element={<ProductsCategoriesPage />} />
         <Route path="/products/create" element={<ProductFormPage mode="create" />} />
         <Route path="/products/item/create" element={<ProductItemCreatePage />} />
         <Route path="/products/:id/edit" element={<ProductFormPage mode="edit" />} />
