@@ -1,6 +1,17 @@
 import { apiRequestAuth, toPagedResult } from '../../../lib/apiClient.js'
 import { mapProductSku } from './productsApi.js'
 
+function trimOrNull(value) {
+  const text = String(value ?? '').trim()
+  return text || null
+}
+
+function numberOrNull(value) {
+  if (value === null || value === undefined || value === '') return null
+  const number = Number(value)
+  return Number.isFinite(number) ? number : null
+}
+
 function buildSkuQuery(params = {}) {
   const search = new URLSearchParams()
   if (params.search) search.set('search', params.search)
@@ -52,20 +63,34 @@ export function buildCreateSkuBody(payload) {
   return {
     productId: payload.productId,
     skuCode: String(payload.skuCode || '').trim().toUpperCase(),
+    barcode: trimOrNull(payload.barcode),
     packagingType: payload.packagingType?.trim(),
     weightInGrams: Number(payload.weightInGrams),
     basePrice: Number(payload.basePrice),
-    imageUrl: payload.imageUrl?.trim() || null,
+    costPrice: numberOrNull(payload.costPrice),
+    retailPrice: numberOrNull(payload.retailPrice),
+    minStock: numberOrNull(payload.minStock),
+    maxStock: numberOrNull(payload.maxStock),
+    isSellable: payload.isSellable !== false,
+    allowRewardPoints: payload.allowRewardPoints !== false,
+    imageUrl: trimOrNull(payload.imageUrl),
   }
 }
 
 export function buildUpdateSkuBody(payload) {
   return {
     skuCode: String(payload.skuCode || '').trim().toUpperCase(),
+    barcode: trimOrNull(payload.barcode),
     packagingType: payload.packagingType?.trim(),
     weightInGrams: Number(payload.weightInGrams),
     basePrice: Number(payload.basePrice),
-    imageUrl: payload.imageUrl?.trim() || null,
+    costPrice: numberOrNull(payload.costPrice),
+    retailPrice: numberOrNull(payload.retailPrice),
+    minStock: numberOrNull(payload.minStock),
+    maxStock: numberOrNull(payload.maxStock),
+    isSellable: payload.isSellable !== false,
+    allowRewardPoints: payload.allowRewardPoints !== false,
+    imageUrl: trimOrNull(payload.imageUrl),
     isActive: Boolean(payload.isActive),
   }
 }

@@ -132,8 +132,18 @@ function ProductSkusDetailModal({
                           </div>
                           <p className="mt-1 text-sm text-slate-700">{sku.packagingType || '—'}</p>
                           <p className="text-xs text-slate-500">
-                            {formatWeightGrams(sku.weightInGrams)} · {formatProductPrice(sku.basePrice)}
+                            {formatWeightGrams(sku.weightInGrams)} · Niêm yết {formatProductPrice(sku.basePrice)}
                           </p>
+                          <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
+                            {sku.barcode ? <span>Barcode: <span className="font-mono">{sku.barcode}</span></span> : null}
+                            <span>Giá vốn: {formatProductPrice(sku.costPrice)}</span>
+                            <span>Giá bán lẻ: {formatProductPrice(sku.retailPrice)}</span>
+                          </div>
+                          <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
+                            <span>Tồn min/max: {sku.minStock ?? '—'} / {sku.maxStock ?? '—'}</span>
+                            <span>{sku.isSellable ? 'Được bán' : 'Ngừng bán trực tiếp'}</span>
+                            <span>{sku.allowRewardPoints ? 'Có tích điểm' : 'Không tích điểm'}</span>
+                          </div>
                           <p
                             className={`mt-1 text-xs font-semibold ${
                               quantityOnHand <= 0

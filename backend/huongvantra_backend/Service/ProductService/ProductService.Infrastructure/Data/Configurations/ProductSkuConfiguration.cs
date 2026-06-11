@@ -13,9 +13,15 @@ public class ProductSkuConfiguration : IEntityTypeConfiguration<ProductSku>
         builder.Property(s => s.Id).ValueGeneratedNever();
         builder.Property(s => s.SkuCode).IsRequired().HasMaxLength(50);
         builder.HasIndex(s => s.SkuCode).IsUnique();
+        builder.Property(s => s.Barcode).HasMaxLength(100);
+        builder.HasIndex(s => s.Barcode).IsUnique();
         builder.Property(s => s.PackagingType).IsRequired().HasMaxLength(50);
         builder.Property(s => s.WeightInGrams).IsRequired();
         builder.Property(s => s.BasePrice).HasColumnType("decimal(18,2)");
+        builder.Property(s => s.CostPrice).HasColumnType("decimal(18,2)");
+        builder.Property(s => s.RetailPrice).HasColumnType("decimal(18,2)");
+        builder.Property(s => s.IsSellable).HasDefaultValue(true);
+        builder.Property(s => s.AllowRewardPoints).HasDefaultValue(true);
         builder.Property(s => s.ImageUrl).HasMaxLength(500);
         builder.Property(s => s.IsActive).HasDefaultValue(true);
         builder.Property(s => s.CreatedAt).IsRequired();

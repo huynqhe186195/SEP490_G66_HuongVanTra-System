@@ -14,7 +14,15 @@ public record CreateProductRequest(
     string? Origin,
     string? FlavorProfile,
     string? BrewingGuide,
-    string? Description);
+    string? Description,
+    string? BaseUnit,
+    decimal? WeightValue,
+    string? WeightUnit,
+    bool IsVariantParent,
+    List<ProductImageRequest>? Images,
+    List<ProductUnitRequest>? Units,
+    List<ProductVariantRequest>? Variants,
+    GenerateProductVariantsRequest? VariantGenerator);
 
 public record UpdateProductRequest(
     int CategoryId,
@@ -23,4 +31,12 @@ public record UpdateProductRequest(
     string? FlavorProfile,
     string? BrewingGuide,
     string? Description,
-    bool IsActive);
+    string? BaseUnit,
+    decimal? WeightValue,
+    string? WeightUnit,
+    bool IsVariantParent,
+    bool IsActive,
+    List<ProductImageRequest>? Images,
+    List<ProductUnitRequest>? Units,
+    List<ProductVariantRequest>? Variants,
+    GenerateProductVariantsRequest? VariantGenerator);

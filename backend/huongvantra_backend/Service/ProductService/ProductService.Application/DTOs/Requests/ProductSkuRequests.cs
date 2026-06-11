@@ -9,16 +9,30 @@ public record GetProductSkusRequest(
 
 public record CreateProductSkuRequest(
     Guid ProductId,
-    string SkuCode,
+    string? SkuCode,
+    string? Barcode,
     string PackagingType,
     int WeightInGrams,
     decimal BasePrice,
+    decimal? CostPrice,
+    decimal? RetailPrice,
+    int? MinStock,
+    int? MaxStock,
+    bool IsSellable,
+    bool AllowRewardPoints,
     string? ImageUrl);
 
 public record UpdateProductSkuRequest(
     string SkuCode,
+    string? Barcode,
     string PackagingType,
     int WeightInGrams,
     decimal BasePrice,
+    decimal? CostPrice,
+    decimal? RetailPrice,
+    int? MinStock,
+    int? MaxStock,
+    bool IsSellable,
+    bool AllowRewardPoints,
     string? ImageUrl,
     bool IsActive);

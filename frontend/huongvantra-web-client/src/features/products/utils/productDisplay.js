@@ -71,6 +71,16 @@ export function getCategoryStatusMeta(isActive, isDeleted = false) {
 }
 
 export function pickProductImageUrl(productOrSkus) {
+  if (!Array.isArray(productOrSkus)) {
+    const images = productOrSkus?.images
+    if (Array.isArray(images) && images.length) {
+      const thumbnail = images.find((image) => image.isThumbnail && String(image.imageUrl || '').trim())
+      if (thumbnail) return thumbnail.imageUrl
+      const firstImage = images.find((image) => String(image.imageUrl || '').trim())
+      if (firstImage) return firstImage.imageUrl
+    }
+  }
+
   const skus = Array.isArray(productOrSkus) ? productOrSkus : productOrSkus?.skus
   if (!Array.isArray(skus) || !skus.length) return ''
 
@@ -125,7 +135,7 @@ export function summarizeProductSkus(skus = []) {
   }
   const activeSkus = skus.filter((sku) => sku.isActive)
   const list = activeSkus.length ? activeSkus : skus
-  const prices = list.map((sku) => Number(sku.basePrice)).filter(Number.isFinite)
+  const prices = list.map((sku) => Number(sku.retailPrice || sku.basePrice)).filter(Number.isFinite)
   const min = Math.min(...prices)
   const max = Math.max(...prices)
   const priceLabel = min === max ? formatProductPrice(min) : `${formatProductPrice(min)} – ${formatProductPrice(max)}`

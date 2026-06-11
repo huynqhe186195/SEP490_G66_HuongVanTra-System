@@ -33,7 +33,6 @@ import {
   normalizeOrderDiscountInput,
   validatePosDiscountsBeforePayment,
 } from '../utils/posDiscountValidation.js'
-import { computeCouponDiscount } from '../utils/posPromotionUtils.js'
 import { formatCustomerOrderSnapshot, isVipCustomerType } from '../../customers/utils/customerDisplay.js'
 import { fetchPendingCatalogSync, syncCatalogToStore } from '../../products/services/catalogSyncApi.js'
 import { fetchCategories } from '../../products/services/categoriesApi.js'
@@ -43,7 +42,6 @@ import {
   formatPromotionLabel,
   formatPromotionScopeLabel,
 } from '../utils/posPromotionUtils.js'
-import { isVipCustomerType } from '../../customers/utils/customerDisplay.js'
 
 const SALES_MODES = [
   { id: 'counter', label: 'Bán trực tiếp', icon: 'storefront' },

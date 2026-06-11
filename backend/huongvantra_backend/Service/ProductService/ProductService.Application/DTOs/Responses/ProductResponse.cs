@@ -9,8 +9,15 @@ public record ProductResponse(
     string? FlavorProfile,
     string? BrewingGuide,
     string? Description,
+    string BaseUnit,
+    decimal? WeightValue,
+    string? WeightUnit,
+    bool IsVariantParent,
     bool IsActive,
     bool IsDeleted,
     DateTime CreatedAt,
     DateTime? SyncedToStoreAt,
-    List<ProductSkuResponse> Skus);
+    List<ProductSkuResponse> Skus,
+    List<ProductImageResponse> Images,
+    List<ProductUnitResponse> Units,
+    List<ProductVariantResponse> Variants);

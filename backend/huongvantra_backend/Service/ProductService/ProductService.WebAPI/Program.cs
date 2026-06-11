@@ -28,10 +28,12 @@ builder.Services.AddDbContext<ProductDbContext>(options =>
 builder.Services.AddScoped<ICategoryRepository, CategoryRepository>();
 builder.Services.AddScoped<IProductRepository, ProductRepository>();
 builder.Services.AddScoped<IProductSkuRepository, ProductSkuRepository>();
+builder.Services.AddScoped<IPriceBookRepository, PriceBookRepository>();
 builder.Services.AddScoped<IProductEventPublisher, ProductEventPublisher>();
 builder.Services.AddScoped<CategoryLogic>();
 builder.Services.AddScoped<ProductLogic>();
 builder.Services.AddScoped<ProductSkuLogic>();
+builder.Services.AddScoped<PriceBookLogic>();
 builder.Services.AddScoped<CatalogSyncLogic>();
 
 builder.Services.AddMassTransit(x =>
