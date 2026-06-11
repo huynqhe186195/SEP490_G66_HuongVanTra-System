@@ -31,6 +31,8 @@ function mapPosLineItem(item) {
     quantity: Number(item.quantity ?? item.qty ?? 1),
     unitPrice: Number(item.unitPrice ?? item.price ?? 0),
     isGift: item.isGift ?? 0,
+    categoryName: item.categoryName ?? item.CategoryName ?? '',
+    costPrice: Number(item.costPrice ?? (item.unitPrice ?? item.price ?? 0) * 0.7),
   }
 }
 
@@ -61,7 +63,9 @@ function buildOrderRequestFromPosPayload(
           ? `${line.productName} — ${line.packagingType}`
           : line.name || line.sku || 'Sản phẩm',
       skuSnapshotCode: line.sku || null,
+      categorySnapshotName: line.categoryName || null,
       quantity: Math.max(1, Math.round(line.quantity)),
+      costPrice: line.costPrice || 0,
       unitPrice: line.unitPrice,
     })),
   })

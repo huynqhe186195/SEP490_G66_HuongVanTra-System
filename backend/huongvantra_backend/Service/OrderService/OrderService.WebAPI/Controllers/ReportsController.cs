@@ -30,4 +30,14 @@ public class ReportsController(IReportLogic reportLogic) : ControllerBase
         var topProducts = await reportLogic.GetTopSellingProductsAsync(topCount, month, year, ct);
         return Ok(topProducts);
     }
+
+    [HttpGet("sales-by-category")]
+    public async Task<IActionResult> GetSalesByCategory(
+        [FromQuery] int? month = null,
+        [FromQuery] int? year = null,
+        CancellationToken ct = default)
+    {
+        var categorySales = await reportLogic.GetSalesByCategoryAsync(month, year, ct);
+        return Ok(categorySales);
+    }
 }

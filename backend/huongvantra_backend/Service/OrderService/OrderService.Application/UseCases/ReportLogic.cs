@@ -14,4 +14,9 @@ public class ReportLogic(IReportRepository reportRepository) : IReportLogic
     {
         return reportRepository.GetTopSellingProductsAsync(topCount, month, year, cancellationToken);
     }
+
+    public Task<List<CategorySalesDto>> GetSalesByCategoryAsync(int? month, int? year, CancellationToken cancellationToken = default)
+    {
+        return reportRepository.GetSalesByCategoryAsync(month, year, cancellationToken);
+    }
 }

@@ -67,6 +67,8 @@ public record CreateOrderDetailInput(
     Guid SkuId,
     string SkuSnapshotName,
     string? SkuSnapshotCode,
+    string? CategorySnapshotName,
     int Quantity,
+    decimal CostPrice,
     decimal UnitPrice
 );

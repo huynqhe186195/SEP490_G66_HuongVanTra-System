@@ -69,7 +69,7 @@ public class OrderLogic(
     {
         var detailInputs = req.Items.Select(i => new CreateOrderDetailInput(
             i.SkuId, i.SkuSnapshotName.Trim(), i.SkuSnapshotCode?.Trim(),
-            i.Quantity, i.UnitPrice)).ToList();
+            i.CategorySnapshotName?.Trim(), i.Quantity, i.CostPrice, i.UnitPrice)).ToList();
 
         OrderInputValidator.ValidateCreateOrder(
             detailInputs, req.DiscountAmount, req.PaidAmount,
@@ -129,7 +129,9 @@ public class OrderLogic(
             SkuId = i.SkuId,
             SkuSnapshotName = i.SkuSnapshotName,
             SkuSnapshotCode = i.SkuSnapshotCode,
+            CategorySnapshotName = i.CategorySnapshotName,
             Quantity = i.Quantity,
+            CostPrice = i.CostPrice,
             UnitPrice = i.UnitPrice,
             SubTotal = i.UnitPrice * i.Quantity,
             CreatedAt = DateTime.UtcNow,

@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using OrderService.Application.DTOs.Responses;
 using OrderService.Application.Interfaces;
+using OrderService.Domain.Entities;
 using OrderService.Domain.Enums;
 using OrderService.Infrastructure.Data;
 
@@ -65,6 +66,12 @@ public class ReportRepository(OrderDbContext dbContext) : IReportRepository
         var totalOrders = validOrders.Count;
         var returnedOrdersCount = partiallyReturned + fullyReturned;
 
+        // Calculate CostPrice sum for Profit
+        // Summing over OrderDetails of validOrders
+        var totalCost = validOrders.SelectMany(o => o.OrderDetails ?? [])
+                                   .Sum(od => od.CostPrice * od.Quantity);
+        var grossProfit = netRevenue - totalCost;
+
         var returnRate = totalOrders > 0 ? (double)returnedOrdersCount / totalOrders : 0;
         var valueReturnRate = grossRevenue > 0 ? (double)totalRefundAmount / (double)grossRevenue : 0;
 
@@ -100,7 +107,8 @@ public class ReportRepository(OrderDbContext dbContext) : IReportRepository
             ReturnRate = returnRate,
             ValueReturnRate = valueReturnRate,
             CustomerCount = customerCount,
-            CustomerGrowthRate = customerGrowthRate
+            CustomerGrowthRate = customerGrowthRate,
+            GrossProfit = grossProfit
         };
     }
 
@@ -134,5 +142,35 @@ public class ReportRepository(OrderDbContext dbContext) : IReportRepository
             .ToListAsync(ct);
 
         return topProducts;
+    }
+
+    public async Task<List<CategorySalesDto>> GetSalesByCategoryAsync(int? month, int? year, CancellationToken ct = default)
+    {
+        var query = dbContext.OrderDetails
+            .Where(od => od.Order.OrderStatus == OrderStatus.Completed &&
+                         od.Order.Payments.Any(p => p.PaymentStatus == PaymentStatus.Success));
+
+        if (year.HasValue)
+        {
+            query = query.Where(od => od.Order.CreatedAt.Year == year.Value);
+        }
+
+        if (month.HasValue)
+        {
+            query = query.Where(od => od.Order.CreatedAt.Month == month.Value);
+        }
+
+        var categorySales = await query
+            .GroupBy(od => string.IsNullOrEmpty(od.CategorySnapshotName) ? "Chưa phân loại" : od.CategorySnapshotName)
+            .Select(g => new CategorySalesDto
+            {
+                CategoryName = g.Key,
+                TotalQuantitySold = g.Sum(od => od.Quantity),
+                TotalRevenue = g.Sum(od => od.SubTotal)
+            })
+            .OrderByDescending(dto => dto.TotalRevenue)
+            .ToListAsync(ct);
+
+        return categorySales;
     }
 }

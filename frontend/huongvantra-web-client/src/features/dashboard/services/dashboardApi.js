@@ -13,4 +13,9 @@ export const dashboardApi = {
     const path = `/api/reports/top-products${query ? `?${query}` : ''}`
     return await apiRequestAuth(path)
   },
+  getSalesByCategory: async (params) => {
+    const query = params ? new URLSearchParams(params).toString() : ''
+    const path = `/api/reports/sales-by-category${query ? `?${query}` : ''}`
+    return await apiRequestAuth(path)
+  },
 }

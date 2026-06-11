@@ -16,4 +16,6 @@ public class SalesStatisticsResponse
 
     public int CustomerCount { get; set; }
     public double CustomerGrowthRate { get; set; }
+
+    public decimal GrossProfit { get; set; }
 }

@@ -5,6 +5,7 @@ import { dashboardApi } from "../services/dashboardApi.js";
 function DashboardPage() {
     const [stats, setStats] = useState(null);
     const [topProducts, setTopProducts] = useState([]);
+    const [categorySales, setCategorySales] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(null);
 
@@ -12,9 +13,14 @@ function DashboardPage() {
         const fetchStats = async () => {
             try {
                 setIsLoading(true);
-                const [statsData, topProductsData] = await Promise.all([dashboardApi.getSalesStatistics(), dashboardApi.getTopProducts({ topCount: 5 })]);
+                const [statsData, topProductsData, categorySalesData] = await Promise.all([
+                    dashboardApi.getSalesStatistics(), 
+                    dashboardApi.getTopProducts({ topCount: 5 }),
+                    dashboardApi.getSalesByCategory()
+                ]);
                 setStats(statsData);
                 setTopProducts(topProductsData);
+                setCategorySales(categorySalesData);
             } catch (err) {
                 setError("Không thể tải dữ liệu thống kê");
                 console.error(err);
@@ -54,13 +60,20 @@ function DashboardPage() {
                     <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
                         {/* line 1 */}
                         <MetricCard title="Số đơn bán ra" value={stats?.totalCompletedOrders || 0} icon="receipt_long" colorClass="text-purple-600" bgClass="bg-purple-50" />
-                        <MetricCard title="Doanh thu gộp (Gross)" value={formatCurrency(stats?.grossRevenue)} icon="payments" colorClass="text-blue-600" bgClass="bg-blue-50" />
+                        <MetricCard title="Doanh thu gộp (Gross Revenue)" value={formatCurrency(stats?.grossRevenue)} icon="payments" colorClass="text-blue-600" bgClass="bg-blue-50" />
                         <MetricCard
-                            title="Doanh thu thuần (Net)"
+                            title="Doanh thu thuần (Net Revenue)"
                             value={formatCurrency(stats?.netRevenue)}
                             icon="account_balance_wallet"
                             colorClass="text-[#356647]"
                             bgClass="bg-[#eaf4eb]"
+                        />
+                        <MetricCard
+                            title="Lợi nhuận gộp (Gross Profit)"
+                            value={formatCurrency(stats?.grossProfit)}
+                            icon="savings"
+                            colorClass="text-yellow-600"
+                            bgClass="bg-yellow-50"
                         />
                         <MetricCard title="Khách hàng mua sắm" value={stats?.customerCount || 0} icon="group" colorClass="text-teal-600" bgClass="bg-teal-50" />
 
@@ -89,38 +102,73 @@ function DashboardPage() {
                         />
                     </div>
 
-                    {topProducts && topProducts.length > 0 && (
-                        <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm sm:p-6">
-                            <h3 className="mb-4 text-lg font-bold text-gray-800">Top 5 sản phẩm bán chạy</h3>
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-left text-sm text-gray-600">
-                                    <thead className="bg-gray-50 text-xs uppercase text-gray-500">
-                                        <tr>
-                                            <th className="px-4 py-3 font-medium">Sản phẩm</th>
-                                            <th className="px-4 py-3 font-medium text-right">Đã bán</th>
-                                            <th className="px-4 py-3 font-medium text-right">Doanh thu</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-gray-100">
-                                        {topProducts.map((p, i) => (
-                                            <tr key={p.skuId} className="transition-colors hover:bg-gray-50">
-                                                <td className="px-4 py-3">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-orange-100 font-bold text-orange-600">
-                                                            #{i + 1}
-                                                        </div>
-                                                        <span className="font-medium text-gray-900 line-clamp-1">{p.skuSnapshotName}</span>
-                                                    </div>
-                                                </td>
-                                                <td className="px-4 py-3 text-right font-medium">{p.totalQuantitySold}</td>
-                                                <td className="px-4 py-3 text-right font-medium text-[#356647]">{formatCurrency(p.totalRevenue)}</td>
+                    <div className="grid gap-6 lg:grid-cols-2">
+                        {/* Top 5 Sản phẩm */}
+                        {topProducts && topProducts.length > 0 && (
+                            <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm sm:p-6">
+                                <h3 className="mb-4 text-lg font-bold text-gray-800">Top 5 sản phẩm bán chạy</h3>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-left text-sm text-gray-600">
+                                        <thead className="bg-gray-50 text-xs uppercase text-gray-500">
+                                            <tr>
+                                                <th className="px-4 py-3 font-medium">Sản phẩm</th>
+                                                <th className="px-4 py-3 font-medium text-right">Đã bán</th>
+                                                <th className="px-4 py-3 font-medium text-right">Doanh thu</th>
                                             </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-100">
+                                            {topProducts.map((p, i) => (
+                                                <tr key={p.skuId} className="transition-colors hover:bg-gray-50">
+                                                    <td className="px-4 py-3">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-orange-100 font-bold text-orange-600">
+                                                                #{i + 1}
+                                                            </div>
+                                                            <span className="font-medium text-gray-900 line-clamp-1">{p.skuSnapshotName}</span>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-4 py-3 text-right font-medium">{p.totalQuantitySold}</td>
+                                                    <td className="px-4 py-3 text-right font-medium text-[#356647]">{formatCurrency(p.totalRevenue)}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
                             </div>
-                        </div>
-                    )}
+                        )}
+
+                        {/* Doanh thu theo Danh mục */}
+                        {categorySales && categorySales.length > 0 && (
+                            <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm sm:p-6">
+                                <h3 className="mb-4 text-lg font-bold text-gray-800">Báo cáo theo danh mục</h3>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-left text-sm text-gray-600">
+                                        <thead className="bg-gray-50 text-xs uppercase text-gray-500">
+                                            <tr>
+                                                <th className="px-4 py-3 font-medium">Danh mục</th>
+                                                <th className="px-4 py-3 font-medium text-right">Số lượng</th>
+                                                <th className="px-4 py-3 font-medium text-right">Doanh thu</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-100">
+                                            {categorySales.map((c, i) => (
+                                                <tr key={i} className="transition-colors hover:bg-gray-50">
+                                                    <td className="px-4 py-3">
+                                                        <div className="flex items-center gap-3">
+                                                            <span className="material-symbols-outlined text-gray-400">category</span>
+                                                            <span className="font-medium text-gray-900">{c.categoryName}</span>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-4 py-3 text-right font-medium">{c.totalQuantitySold}</td>
+                                                    <td className="px-4 py-3 text-right font-medium text-blue-600">{formatCurrency(c.totalRevenue)}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        )}
+                    </div>
                 </div>
             }
         </div>
