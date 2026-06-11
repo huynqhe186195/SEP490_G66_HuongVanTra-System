@@ -11,6 +11,7 @@ import {
   fetchOrder,
   fetchOrders,
 } from '../../orders/services/ordersApi.js'
+import { mapPromotion } from '../utils/posPromotionUtils.js'
 
 function mapPaymentMethod(method) {
   const value = String(method || '').toUpperCase()
@@ -265,12 +266,14 @@ export function buildTakeawayOrderPayload({
   cartItems,
   manualDiscount = 0,
   promotionId = null,
+  promotionCode = null,
 }) {
   return {
     storeId,
     customerId,
     customerSnapshotName: customerSnapshotName?.trim() || null,
     promotionId: promotionId || null,
+    promotionCode: promotionCode?.trim() || null,
     manualDiscount: Math.max(0, Math.round(Number(manualDiscount) || 0)),
     shippingAddress: shippingAddress?.trim() || null,
     note: note?.trim() || null,
@@ -574,12 +577,36 @@ export async function fetchPromotionByCode(code) {
   const query = new URLSearchParams()
   query.set('code', String(code || '').trim())
   const data = await apiRequestAuth(`/api/promotions/lookup?${query.toString()}`, { method: 'GET' })
-  return {
-    id: data.id ?? data.Id,
-    promoCode: data.promoCode ?? data.PromoCode ?? '',
-    discountType: String(data.discountType ?? data.DiscountType ?? 'PERCENTAGE').toUpperCase(),
-    discountValue: Number(data.discountValue ?? data.DiscountValue ?? 0),
-  }
+  return mapPromotion(data)
+}
+
+export async function applyPromotionPreview({
+  promotionId = null,
+  promotionCode = null,
+  items = [],
+  manualDiscount = 0,
+}) {
+  const data = await apiRequestAuth('/api/promotions/apply-preview', {
+    method: 'POST',
+    body: JSON.stringify({
+      promotionId: promotionId || null,
+      promotionCode: promotionCode?.trim() || null,
+      manualDiscount: Math.max(0, Math.round(Number(manualDiscount) || 0)),
+      items: items.map((item) => ({
+        skuId: item.skuId ?? item.productId,
+        quantity: Math.max(1, Math.round(Number(item.quantity ?? item.qty ?? 1))),
+        unitPrice: Number(item.unitPrice ?? item.price ?? 0),
+        subTotal:
+          item.subTotal ?? item.lineTotal ?? Number(item.unitPrice ?? item.price ?? 0) * Number(item.quantity ?? item.qty ?? 1),
+      })),
+    }),
+  })
+  return mapPromotion(data)
+}
+
+export async function fetchAvailablePromotions() {
+  const data = await apiRequestAuth('/api/promotions/available', { method: 'GET' })
+  return Array.isArray(data) ? data.map(mapPromotion).filter(Boolean) : []
 }
 
 /** Catalog cửa hàng — gồm cả SP đang ẩn ở kho nhưng đã đồng bộ (để khớp SKU). */

@@ -17,6 +17,7 @@ public class OrderLogic(
     IOrderCodeGenerator _codeGen,
     IOrderEventPublisher _eventPublisher,
     IOrderActivityRepository _activityRepo,
+    IPromotionRepository _promotionRepo,
     PromotionLogic _promotionLogic,
     IOptions<SepayOptions> sepayOptions)
 {
@@ -42,7 +43,7 @@ public class OrderLogic(
     {
         var order = await _orderRepo.GetByIdAsync(id, ct)
             ?? throw new OrderNotFoundException(id);
-        return MapToResponse(order);
+        return await MapToResponseAsync(order, ct);
     }
 
     public async Task<OrderResponse> GetByCodeAsync(string code, CancellationToken ct = default)
@@ -51,7 +52,7 @@ public class OrderLogic(
             throw new OrderValidationException("Mã đơn hàng không được để trống.");
         var order = await _orderRepo.GetByCodeAsync(code.Trim().ToUpperInvariant(), ct)
             ?? throw new OrderNotFoundByCodeException(code);
-        return MapToResponse(order);
+        return await MapToResponseAsync(order, ct);
     }
 
     public async Task<List<OrderActivityResponse>> GetActivitiesAsync(Guid orderId, CancellationToken ct = default)
@@ -80,9 +81,13 @@ public class OrderLogic(
         if (manualDiscount > totalAmount)
             throw new OrderValidationException("Giảm giá thủ công không được lớn hơn tổng tiền đơn hàng.");
 
-        var baseForPromotion = Math.Max(0, totalAmount - manualDiscount);
+        var promotionItems = detailInputs.Select(i => new PromotionCalculationItem(
+            i.SkuId,
+            i.Quantity,
+            i.UnitPrice,
+            i.UnitPrice * i.Quantity)).ToList();
         var promotionDiscount = await _promotionLogic.ValidateAndCalculateDiscountAsync(
-            req.PromotionId, req.PromotionCode, baseForPromotion, ct);
+            req.PromotionId, req.PromotionCode, promotionItems, manualDiscount, ct);
         var totalDiscount = manualDiscount + promotionDiscount.DiscountAmount;
         var finalAmount = Math.Max(0, totalAmount - totalDiscount);
 
@@ -230,7 +235,7 @@ public class OrderLogic(
         if (order.OrderStatus == OrderStatus.Completed && order.CustomerId.HasValue)
             await PublishOrderCompletedAsync(order, debtAmount, ct);
 
-        return MapToResponse(order);
+        return await MapToResponseAsync(order, ct);
     }
 
     public async Task<OrderResponse> UpdateAsync(
@@ -257,7 +262,7 @@ public class OrderLogic(
             ct);
 
         await _orderRepo.SaveChangesAsync(ct);
-        return MapToResponse(order);
+        return await MapToResponseAsync(order, ct);
     }
 
     public async Task CancelAsync(
@@ -449,11 +454,22 @@ public class OrderLogic(
         activity.ActorName,
         activity.CreatedAt);
 
-    private static OrderResponse MapToResponse(Order o) => new(
+    private async Task<OrderResponse> MapToResponseAsync(Order o, CancellationToken ct)
+    {
+        Promotion? promotion = null;
+        if (o.PromotionId.HasValue)
+            promotion = await _promotionRepo.GetByIdAsync(o.PromotionId.Value, ct);
+
+        return MapToResponse(o, promotion);
+    }
+
+    private static OrderResponse MapToResponse(Order o, Promotion? promotion = null) => new(
         o.Id, o.OrderCode, o.CustomerId, o.CustomerSnapshotName,
         o.EmployeeId, o.OrderChannel.ToString(), o.OrderStatus.ToString(),
         o.InventorySyncStatus.ToString(), o.TotalAmount, o.DiscountAmount,
-        o.PromotionId, o.PromotionCode, o.PromotionDiscountAmount, o.FinalAmount,
+        o.PromotionId, o.PromotionCode, o.PromotionDiscountAmount,
+        promotion?.ScopeType.ToString(), MapPromotionScopes(promotion),
+        o.FinalAmount,
         o.ShippingAddress, o.Note, o.CreatedAt, o.UpdatedAt,
         (o.OrderDetails ?? []).Select(d => new OrderDetailResponse(
             d.Id, d.SkuId, d.SkuSnapshotName, d.SkuSnapshotCode,
@@ -478,6 +494,17 @@ public class OrderLogic(
                 ? codPayment.Amount
                 : null);
     }
+
+    private static List<PromotionScopeResponse> MapPromotionScopes(Promotion? promotion) =>
+        promotion?.ScopeType == PromotionScopeType.SKU
+            ? promotion.Scopes
+                .Where(s => s.ScopeType == PromotionScopeType.SKU && s.SkuId.HasValue)
+                .Select(s => new PromotionScopeResponse(
+                    s.SkuId!.Value,
+                    s.SkuCode,
+                    s.SkuSnapshotName))
+                .ToList()
+            : [];
 
     private static string FormatVnd(decimal amount)
     {

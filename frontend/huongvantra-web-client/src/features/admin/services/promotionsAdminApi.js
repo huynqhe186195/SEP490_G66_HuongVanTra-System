@@ -60,6 +60,9 @@ function buildPromotionPayload(payload) {
     discountValue: Number(payload.discountValue ?? 0),
     validFrom: payload.validFrom || null,
     validTo: payload.validTo || null,
+    isActive: payload.isActive ?? true,
+    scopeType: payload.scopeType || 'ORDER',
+    skuScopes: Array.isArray(payload.skuScopes) ? payload.skuScopes : [],
   }
 }
 
