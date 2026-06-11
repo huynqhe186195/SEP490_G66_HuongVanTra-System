@@ -11,6 +11,7 @@ public class OrderDbContext(DbContextOptions<OrderDbContext> options) : DbContex
     public DbSet<OrderActivity> OrderActivities => Set<OrderActivity>();
     public DbSet<Promotion> Promotions => Set<Promotion>();
     public DbSet<PromotionScope> PromotionScopes => Set<PromotionScope>();
+    public DbSet<OrderReturn> OrderReturns => Set<OrderReturn>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

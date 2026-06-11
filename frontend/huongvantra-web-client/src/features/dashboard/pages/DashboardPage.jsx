@@ -1,7 +1,102 @@
-import SectionPage from '../../../components/shared/SectionPage.jsx'
+import { useEffect, useState } from "react";
+import PageHeader from "../../../components/shared/PageHeader.jsx";
+import { dashboardApi } from "../services/dashboardApi.js";
 
 function DashboardPage() {
-  return <SectionPage title="Bảng điều khiển" description="Tổng quan hoạt động cửa hàng, doanh thu và chỉ số vận hành quan trọng." />
+    const [stats, setStats] = useState(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState(null);
+
+    useEffect(() => {
+        const fetchStats = async () => {
+            try {
+                setIsLoading(true);
+                const data = await dashboardApi.getSalesStatistics();
+                setStats(data);
+            } catch (err) {
+                setError("Không thể tải dữ liệu thống kê");
+                console.error(err);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        fetchStats();
+    }, []);
+
+    const formatCurrency = (value) => {
+        return new Intl.NumberFormat("vi-VN", {
+            style: "currency",
+            currency: "VND",
+        }).format(value || 0);
+    };
+
+    const formatPercent = (value) => {
+        return new Intl.NumberFormat("vi-VN", {
+            style: "percent",
+            minimumFractionDigits: 1,
+        }).format(value || 0);
+    };
+
+    return (
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 sm:gap-6">
+            <PageHeader title="Thống kê bán hàng" description="Tổng quan hoạt động cửa hàng, doanh thu và chỉ số vận hành quan trọng." searchPlaceholder="Tìm kiếm..." />
+            
+            {isLoading ?
+                <div className="flex justify-center p-8">
+                    <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#356647] border-t-transparent"></div>
+                </div>
+            : error ?
+                <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-red-600">{error}</div>
+            :   <div className="grid gap-4 grid-cols-3">
+                    <MetricCard
+                        title="Số đơn bán (Hoàn thành)"
+                        value={stats?.totalCompletedOrders || 0}
+                        icon="receipt_long"
+                        colorClass="text-purple-600"
+                        bgClass="bg-purple-50"
+                    />
+                    <MetricCard title="Doanh thu gộp" value={formatCurrency(stats?.grossRevenue)} icon="payments" colorClass="text-blue-600" bgClass="bg-blue-50" />
+                    <MetricCard
+                        title="Doanh thu thuần"
+                        value={formatCurrency(stats?.netRevenue)}
+                        icon="account_balance_wallet"
+                        colorClass="text-[#356647]"
+                        bgClass="bg-[#eaf4eb]"
+                    />
+                    <MetricCard
+                        title="Số đơn có trả hàng"
+                        value={(stats?.partiallyReturnedOrders || 0) + (stats?.fullyReturnedOrders || 0)}
+                        icon="remove_shopping_cart"
+                        colorClass="text-orange-600"
+                        bgClass="bg-orange-50"
+                    />
+                    <MetricCard
+                        title="Hoàn tiền do trả hàng"
+                        value={formatCurrency(stats?.refundAmount)}
+                        icon="assignment_return"
+                        colorClass="text-red-600"
+                        bgClass="bg-red-50"
+                    />
+                    <MetricCard title="Tỷ lệ đơn trả" value={formatPercent(stats?.returnRate)} icon="percent" colorClass="text-slate-600" bgClass="bg-slate-50" />
+                </div>
+            }
+        </div>
+    );
 }
 
-export default DashboardPage
+function MetricCard({ title, value, icon, colorClass, bgClass }) {
+    return (
+        <div className="flex flex-col gap-2 rounded-2xl border border-[#c1c9c0]/50 bg-white p-5 shadow-sm transition-all hover:shadow-md">
+            <div className="flex items-center gap-3">
+                <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${bgClass} ${colorClass}`}>
+                    <span className="material-symbols-outlined text-[20px]">{icon}</span>
+                </div>
+                <p className="font-medium text-[#424941]">{title}</p>
+            </div>
+            <p className="mt-2 text-2xl font-bold tracking-tight text-[#1b1c17]">{value}</p>
+        </div>
+    );
+}
+
+export default DashboardPage;

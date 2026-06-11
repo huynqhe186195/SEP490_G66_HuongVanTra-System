@@ -1,10 +1,13 @@
 using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using OrderService.Infrastructure.Data;
 
 #nullable disable
 
 namespace OrderService.Infrastructure.Migrations
 {
-    /// <inheritdoc />
+    [DbContext(typeof(OrderDbContext))]
+    [Migration("20260611120000_AddCodDebtSettlementJson")]
     public partial class AddCodDebtSettlementJson : Migration
     {
         /// <inheritdoc />
