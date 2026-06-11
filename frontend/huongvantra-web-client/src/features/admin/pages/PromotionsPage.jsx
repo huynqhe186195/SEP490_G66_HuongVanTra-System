@@ -8,6 +8,7 @@ import {
   toDatetimeLocalValue,
 } from '../../../utils/vietnamDateTime.js'
 import {
+  formatPromotionDiscountText,
   formatPromotionLabel,
   formatPromotionScopeSummary,
   getPromotionValidityLabel,
@@ -25,6 +26,7 @@ const EMPTY_FORM = {
   promoCode: '',
   discountType: 'PERCENTAGE',
   discountValue: '',
+  maxDiscountAmount: '',
   minimumOrderAmount: '',
   validFrom: '',
   validTo: '',
@@ -35,6 +37,7 @@ const EMPTY_FORM = {
 
 const MAX_PERCENTAGE_DISCOUNT_VALUE = 90
 const MAX_FIXED_DISCOUNT_VALUE = 10000000
+const MAX_PERCENTAGE_DISCOUNT_AMOUNT = 10000000
 const PROMOTION_PAGE_SIZE = 10
 const DEFAULT_PAGINATION = {
   page: 1,
@@ -202,6 +205,9 @@ function PromotionsPage() {
       discountValue: promotion.discountType === 'FIXED'
         ? formatCurrencyInput(promotion.discountValue)
         : String(promotion.discountValue),
+      maxDiscountAmount: Number(promotion.maxDiscountAmount || 0) > 0
+        ? formatCurrencyInput(promotion.maxDiscountAmount)
+        : '',
       minimumOrderAmount: Number(promotion.minimumOrderAmount || 0) > 0
         ? formatCurrencyInput(promotion.minimumOrderAmount)
         : '',
@@ -224,18 +230,41 @@ function PromotionsPage() {
 
     const scopeType = String(form.scopeType || 'ORDER').toUpperCase()
     const skuScopes = scopeType === 'SKU' ? form.skuScopes ?? [] : []
+    const discountType = String(form.discountType || 'PERCENTAGE').toUpperCase()
+    const discountValue = discountType === 'FIXED'
+      ? parseCurrencyInput(form.discountValue)
+      : Number(form.discountValue)
+    const maxDiscountAmount = discountType === 'PERCENTAGE'
+      ? parseCurrencyInput(form.maxDiscountAmount)
+      : null
+    const minimumOrderAmount = parseCurrencyInput(form.minimumOrderAmount)
     if (scopeType === 'SKU' && skuScopes.length === 0) {
       showError('Vui lòng chọn ít nhất 1 SKU cho phạm vi SKU cụ thể.')
       return
     }
 
+    if (discountType === 'PERCENTAGE') {
+      if (maxDiscountAmount <= 0) {
+        showError('Giảm tối đa phải lớn hơn 0.')
+        return
+      }
+      if (maxDiscountAmount > MAX_PERCENTAGE_DISCOUNT_AMOUNT) {
+        showError('Giảm tối đa không quá 10.000.000đ.')
+        return
+      }
+    }
+
+    if (discountType === 'FIXED' && minimumOrderAmount > 0 && discountValue > minimumOrderAmount) {
+      showError('Số tiền giảm cố định không được lớn hơn đơn tối thiểu.')
+      return
+    }
+
     const payload = {
       promoCode: form.promoCode.trim(),
-      discountType: form.discountType,
-      discountValue: form.discountType === 'FIXED'
-        ? parseCurrencyInput(form.discountValue)
-        : Number(form.discountValue),
-      minimumOrderAmount: parseCurrencyInput(form.minimumOrderAmount),
+      discountType,
+      discountValue,
+      maxDiscountAmount,
+      minimumOrderAmount,
       validFrom: fromDatetimeLocalToUtc(form.validFrom),
       validTo: fromDatetimeLocalToUtc(form.validTo),
       isActive: form.isActive,
@@ -454,9 +483,7 @@ function PromotionsPage() {
                         <td className="px-8 py-5 font-bold text-slate-800">{promotion.promoCode}</td>
                         <td className="px-4 py-5 text-slate-600">{promotion.discountType}</td>
                         <td className="px-4 py-5 text-slate-700">
-                          {promotion.discountType === 'FIXED'
-                            ? `${promotion.discountValue.toLocaleString('vi-VN')} đ`
-                            : `${promotion.discountValue}%`}
+                          {formatPromotionDiscountText(promotion)}
                         </td>
                         <td className="px-4 py-5 text-sm text-slate-600">
                           {formatPromotionMinimumOrderSummary(promotion)}
@@ -573,6 +600,9 @@ function PromotionsPage() {
                       discountValue: nextType === 'FIXED'
                         ? formatCurrencyInput(prev.discountValue)
                         : String(parseCurrencyInput(prev.discountValue) || ''),
+                      maxDiscountAmount: nextType === 'PERCENTAGE'
+                        ? prev.maxDiscountAmount
+                        : '',
                     }))
                   }}
                 >
@@ -601,6 +631,25 @@ function PromotionsPage() {
                 />
                 <p className="mt-1 text-xs text-slate-500">{getDiscountValueHelperText(form.discountType)}</p>
               </label>
+              {form.discountType === 'PERCENTAGE' ? (
+                <label className="block">
+                  <span className="text-xs font-bold uppercase text-slate-400">Giảm tối đa</span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-50 disabled:text-slate-500"
+                    value={form.maxDiscountAmount}
+                    disabled={editingOrderCount > 0}
+                    onChange={(e) => setForm((prev) => ({
+                      ...prev,
+                      maxDiscountAmount: formatCurrencyInput(e.target.value),
+                    }))}
+                  />
+                  <p className="mt-1 text-xs text-slate-500">
+                    Bắt buộc với mã giảm phần trăm. Tối đa 10.000.000đ.
+                  </p>
+                </label>
+              ) : null}
               <label className="block">
                 <span className="text-xs font-bold uppercase text-slate-400">Đơn tối thiểu</span>
                 <input

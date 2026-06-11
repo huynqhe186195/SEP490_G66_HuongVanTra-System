@@ -12,6 +12,7 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
 {
     private const decimal MaxPercentageDiscountValue = 90m;
     private const decimal MaxFixedDiscountValue = 10_000_000m;
+    private const decimal MaxPercentageDiscountAmount = 10_000_000m;
     private const int AdminPromotionPageSize = 10;
     private const string InvalidLookupMessage = "Mã giảm giá không hợp lệ hoặc đã hết hiệu lực.";
     private const string NotApplicableMessage = "Promotion is not applicable to selected items.";
@@ -92,6 +93,7 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
             req.PromoCode,
             req.DiscountType,
             req.DiscountValue,
+            req.MaxDiscountAmount,
             req.MinimumOrderAmount,
             req.ValidFromUtc ?? req.ValidFrom,
             req.ValidToUtc ?? req.ValidTo,
@@ -113,6 +115,7 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
             NormalizedPromoCode = input.NormalizedPromoCode,
             DiscountType = input.DiscountType,
             DiscountValue = input.DiscountValue,
+            MaxDiscountAmount = input.MaxDiscountAmount,
             MinimumOrderAmount = input.MinimumOrderAmount,
             ScopeType = input.ScopeType,
             ValidFromUtc = input.ValidFromUtc,
@@ -146,6 +149,7 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
             req.PromoCode,
             req.DiscountType,
             req.DiscountValue,
+            req.MaxDiscountAmount,
             req.MinimumOrderAmount,
             req.ValidFromUtc ?? req.ValidFrom,
             req.ValidToUtc ?? req.ValidTo,
@@ -161,13 +165,14 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
             promotion.NormalizedPromoCode != input.NormalizedPromoCode ||
             promotion.DiscountType != input.DiscountType ||
             promotion.DiscountValue != input.DiscountValue ||
+            promotion.MaxDiscountAmount != input.MaxDiscountAmount ||
             promotion.MinimumOrderAmount != input.MinimumOrderAmount ||
             promotion.ScopeType != input.ScopeType ||
             !SameSkuScopes(promotion.Scopes, input.SkuScopes);
 
         if (orderCount > 0 && changesImmutableFields)
             throw new OrderValidationException(
-                "Mã giảm giá đã được sử dụng nên không được đổi cấu hình giảm giá, phạm vi áp dụng hoặc đơn tối thiểu.");
+                "Mã giảm giá đã được sử dụng nên không được đổi cấu hình giảm giá, giảm tối đa, phạm vi áp dụng hoặc đơn tối thiểu.");
 
         if (promotion.NormalizedPromoCode != input.NormalizedPromoCode)
         {
@@ -182,6 +187,7 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
             promotion.NormalizedPromoCode = input.NormalizedPromoCode;
             promotion.DiscountType = input.DiscountType;
             promotion.DiscountValue = input.DiscountValue;
+            promotion.MaxDiscountAmount = input.MaxDiscountAmount;
             promotion.MinimumOrderAmount = input.MinimumOrderAmount;
             promotion.ScopeType = input.ScopeType;
             ReplaceScopes(promotion, input.SkuScopes, now);
@@ -245,6 +251,7 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
             promotion.PromoCode,
             promotion.DiscountType.ToString(),
             promotion.DiscountValue,
+            promotion.MaxDiscountAmount,
             promotion.MinimumOrderAmount,
             promotion.ScopeType.ToString(),
             MapScopes(promotion),
@@ -423,6 +430,7 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
         string? promoCode,
         string? discountType,
         decimal discountValue,
+        decimal? maxDiscountAmount,
         decimal? minimumOrderAmount,
         DateTime? validFrom,
         DateTime? validTo,
@@ -438,6 +446,7 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
         var parsedDiscountType = ParseDiscountType(discountType, errors);
         var parsedScopeType = ParseScopeType(scopeType, errors);
         var normalizedMinimumOrderAmount = minimumOrderAmount ?? 0m;
+        decimal? normalizedMaxDiscountAmount = null;
 
         if (discountValue <= 0)
             errors.Add("Giá trị giảm giá phải lớn hơn 0.");
@@ -448,9 +457,24 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
             discountValue > MaxPercentageDiscountValue)
             errors.Add("Mã giảm percentage không quá 90%.");
 
+        if (parsedDiscountType == PromotionDiscountType.PERCENTAGE)
+        {
+            if (!maxDiscountAmount.HasValue || maxDiscountAmount.Value <= 0)
+                errors.Add("Giảm tối đa phải lớn hơn 0.");
+            else if (maxDiscountAmount.Value > MaxPercentageDiscountAmount)
+                errors.Add("Giảm tối đa không quá 10.000.000đ.");
+            else
+                normalizedMaxDiscountAmount = maxDiscountAmount.Value;
+        }
+
         if (parsedDiscountType == PromotionDiscountType.FIXED &&
             discountValue > MaxFixedDiscountValue)
             errors.Add("Mã giảm FIXED không quá 10.000.000đ.");
+
+        if (parsedDiscountType == PromotionDiscountType.FIXED &&
+            normalizedMinimumOrderAmount > 0 &&
+            discountValue > normalizedMinimumOrderAmount)
+            errors.Add("Số tiền giảm cố định không được lớn hơn đơn tối thiểu.");
 
         var validFromUtc = NormalizeValidFromUtc(
             AsNullableUtc(validFrom),
@@ -470,6 +494,7 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
             normalizedCode!,
             parsedDiscountType!.Value,
             discountValue,
+            normalizedMaxDiscountAmount,
             normalizedMinimumOrderAmount,
             validFromUtc,
             validToUtc,
@@ -578,15 +603,24 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
         if (baseForPromotion <= 0)
             return 0;
 
-        return promotion.DiscountType switch
+        if (promotion.DiscountType == PromotionDiscountType.FIXED)
+            return Math.Min(promotion.DiscountValue, baseForPromotion);
+
+        if (promotion.DiscountType == PromotionDiscountType.PERCENTAGE &&
+            promotion.MaxDiscountAmount.HasValue)
         {
-            PromotionDiscountType.FIXED => Math.Min(promotion.DiscountValue, baseForPromotion),
-            PromotionDiscountType.PERCENTAGE => Math.Min(
-                Math.Round(baseForPromotion * promotion.DiscountValue / 100m, 0, MidpointRounding.AwayFromZero),
-                baseForPromotion),
-            _ => 0
-        };
+            var raw = baseForPromotion * promotion.DiscountValue / 100m;
+            var capped = Math.Min(raw, promotion.MaxDiscountAmount.Value);
+            var rounded = RoundToNearestThousand(capped);
+            var final = Math.Min(rounded, promotion.MaxDiscountAmount.Value);
+            return Math.Min(final, baseForPromotion);
+        }
+
+        return 0;
     }
+
+    private static decimal RoundToNearestThousand(decimal value) =>
+        Math.Round(value / 1000m, 0, MidpointRounding.AwayFromZero) * 1000m;
 
     private static string FormatVietnamAmount(decimal amount)
     {
@@ -682,6 +716,7 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
         promotion.PromoCode,
         promotion.DiscountType.ToString(),
         promotion.DiscountValue,
+        promotion.MaxDiscountAmount,
         promotion.MinimumOrderAmount,
         AsNullableUtc(promotion.ValidFromUtc),
         AsNullableUtc(promotion.ValidToUtc),
@@ -696,6 +731,7 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
         promotion.PromoCode,
         promotion.DiscountType.ToString(),
         promotion.DiscountValue,
+        promotion.MaxDiscountAmount,
         promotion.MinimumOrderAmount,
         AsNullableUtc(promotion.ValidFromUtc),
         AsNullableUtc(promotion.ValidToUtc),
@@ -770,6 +806,7 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
         string NormalizedPromoCode,
         PromotionDiscountType DiscountType,
         decimal DiscountValue,
+        decimal? MaxDiscountAmount,
         decimal MinimumOrderAmount,
         DateTime? ValidFromUtc,
         DateTime? ValidToUtc,

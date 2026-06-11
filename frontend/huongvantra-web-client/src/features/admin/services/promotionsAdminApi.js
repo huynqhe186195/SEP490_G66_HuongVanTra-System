@@ -47,6 +47,10 @@ function buildPromotionPayload(payload) {
     promoCode: payload.promoCode,
     discountType: payload.discountType || 'PERCENTAGE',
     discountValue: Number(payload.discountValue ?? 0),
+    maxDiscountAmount:
+      payload.discountType === 'PERCENTAGE'
+        ? Number(payload.maxDiscountAmount || 0)
+        : null,
     minimumOrderAmount: Number(payload.minimumOrderAmount || 0),
     validFrom: payload.validFrom || null,
     validTo: payload.validTo || null,

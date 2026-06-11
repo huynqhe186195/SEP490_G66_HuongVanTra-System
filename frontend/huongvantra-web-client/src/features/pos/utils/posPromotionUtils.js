@@ -16,6 +16,7 @@ export function mapPromotion(item) {
     promoCode: item.promoCode ?? item.PromoCode ?? '',
     discountType: String(item.discountType ?? item.DiscountType ?? 'PERCENTAGE').toUpperCase(),
     discountValue: Number(item.discountValue ?? item.DiscountValue ?? 0),
+    maxDiscountAmount: item.maxDiscountAmount ?? item.MaxDiscountAmount ?? null,
     minimumOrderAmount: Number(item.minimumOrderAmount ?? item.MinimumOrderAmount ?? 0),
     validFromUtc: item.validFromUtc ?? item.ValidFromUtc ?? null,
     validToUtc: item.validToUtc ?? item.ValidToUtc ?? null,
@@ -49,16 +50,31 @@ export function computeCouponDiscount(afterManualDiscount, promotion) {
     return Math.min(Math.round(value), base)
   }
 
-  return Math.round((base * Math.min(100, Math.max(0, value))) / 100)
+  const raw = (base * Math.min(100, Math.max(0, value))) / 100
+  const maxDiscountAmount = Number(promotion.maxDiscountAmount || 0)
+  const capped = maxDiscountAmount > 0 ? Math.min(raw, maxDiscountAmount) : raw
+  const rounded = Math.round(capped / 1000) * 1000
+  return Math.min(rounded, maxDiscountAmount > 0 ? maxDiscountAmount : rounded, base)
 }
 
 export function formatPromotionLabel(promotion) {
   if (!promotion) return ''
+  return `${promotion.promoCode} (${formatPromotionDiscountText(promotion)})`
+}
+
+export function formatPromotionDiscountText(promotion) {
+  if (!promotion) return ''
   const type = String(promotion.discountType || '').toUpperCase()
   if (type === 'FIXED') {
-    return `${promotion.promoCode} (−${Number(promotion.discountValue).toLocaleString('vi-VN')} đ)`
+    return `Giảm ${Number(promotion.discountValue || 0).toLocaleString('vi-VN')}đ`
   }
-  return `${promotion.promoCode} (−${promotion.discountValue}%)`
+
+  const maxDiscountAmount = Number(promotion.maxDiscountAmount || 0)
+  if (maxDiscountAmount > 0) {
+    return `Giảm ${promotion.discountValue}% - tối đa ${maxDiscountAmount.toLocaleString('vi-VN')}đ`
+  }
+
+  return `Giảm ${promotion.discountValue}% - chưa cấu hình giảm tối đa`
 }
 
 export function formatPromotionScopeLabel(promotion) {

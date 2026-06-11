@@ -40,6 +40,7 @@ import { fetchCategories } from '../../products/services/categoriesApi.js'
 import ProductImage from '../../products/components/ProductImage.jsx'
 import {
   computeCouponDiscount,
+  formatPromotionDiscountText as formatPromotionDiscountLabel,
   formatPromotionScopeLabel,
 } from '../utils/posPromotionUtils.js'
 
@@ -1090,9 +1091,7 @@ function PosPage() {
     .slice(0, 8)
 
   const formatPromotionDiscountText = (promotion) =>
-    promotion.discountType === 'FIXED'
-      ? `Giảm ${formatMoney(promotion.discountValue)}đ`
-      : `Giảm ${promotion.discountValue}%`
+    formatPromotionDiscountLabel(promotion)
 
   const formatPromotionValidityText = (promotion) => {
     const from = promotion.validFromUtc ? formatVietnamDateTimeMinute(promotion.validFromUtc) : null

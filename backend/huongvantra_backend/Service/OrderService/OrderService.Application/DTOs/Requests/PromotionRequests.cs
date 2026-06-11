@@ -15,6 +15,7 @@ public class CreatePromotionRequest
     public string? PromoCode { get; init; }
     public string? DiscountType { get; init; }
     public decimal DiscountValue { get; init; }
+    public decimal? MaxDiscountAmount { get; init; }
     public decimal? MinimumOrderAmount { get; init; }
     public DateTime? ValidFrom { get; init; }
     public DateTime? ValidTo { get; init; }
@@ -31,6 +32,7 @@ public class UpdatePromotionRequest
     public string? PromoCode { get; init; }
     public string? DiscountType { get; init; }
     public decimal DiscountValue { get; init; }
+    public decimal? MaxDiscountAmount { get; init; }
     public decimal? MinimumOrderAmount { get; init; }
     public DateTime? ValidFrom { get; init; }
     public DateTime? ValidTo { get; init; }
