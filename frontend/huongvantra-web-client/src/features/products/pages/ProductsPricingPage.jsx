@@ -1,38 +1,73 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { AUTH_SESSION_CHANGED_EVENT, loadAuthSession } from '../../auth/services/authSession.js'
-import { canCreateCatalog, canHideCatalog, canSyncCatalog, isWarehouseRole } from '../../auth/utils/permissions.js'
-import CategoryParentSelect from '../components/CategoryParentSelect.jsx'
-import CategoryTreeTable from '../components/CategoryTreeTable.jsx'
-import { fetchPendingCatalogSync, syncCatalogToStore } from '../services/catalogSyncApi.js'
+import { canCreateCatalog } from '../../auth/utils/permissions.js'
+import { fetchProducts } from '../services/productsApi.js'
 import {
-  createCategory,
-  deleteCategory,
-  fetchCategories,
-  restoreCategory,
-  updateCategory,
-} from '../services/categoriesApi.js'
-import {
-  buildCategoryTree,
-  collectTreeNodeIds,
-  filterCategoryTree,
-} from '../utils/categoryTreeUtils.js'
-import { validateCategoryForm } from '../utils/productValidation.js'
+  createPriceBook,
+  deletePriceBook,
+  fetchPriceBooks,
+  updatePriceBook,
+} from '../services/priceBooksApi.js'
+import { formatProductPrice, formatProductPriceInput, parseProductPriceInput } from '../utils/productDisplay.js'
 
-const EMPTY_FORM = { name: '', description: '', parentId: '' }
+const EMPTY_ENTRY = {
+  targetType: 'sku',
+  targetId: '',
+  price: '',
+  startsAt: '',
+  endsAt: '',
+  isActive: true,
+}
+
+const EMPTY_FORM = {
+  code: '',
+  name: '',
+  description: '',
+  startsAt: '',
+  endsAt: '',
+  isActive: true,
+  entries: [{ ...EMPTY_ENTRY }],
+}
+
+function toInputDateTime(value) {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  return date.toISOString().slice(0, 16)
+}
+
+function entryTargetId(entry) {
+  return entry.skuId || entry.variantId || entry.unitId || ''
+}
+
+function entryTargetType(entry) {
+  if (entry.variantId) return 'variant'
+  if (entry.unitId) return 'unit'
+  return 'sku'
+}
+
+function FieldError({ message }) {
+  if (!message) return null
+  return <p className="text-xs text-[#b42318]">{message}</p>
+}
 
 function ProductsPricingPage() {
-  const createFormRef = useRef(null)
   const [session, setSession] = useState(() => loadAuthSession())
-  const canCreate = canCreateCatalog(session)
-  const canHide = canHideCatalog(session)
-  const canSync = canSyncCatalog(session)
-  const isWarehouse = isWarehouseRole(session)
-  const [isSyncing, setIsSyncing] = useState(false)
-  const [pendingSyncTotal, setPendingSyncTotal] = useState(0)
+  const canManage = canCreateCatalog(session)
+  const [priceBooks, setPriceBooks] = useState([])
+  const [products, setProducts] = useState([])
+  const [searchInput, setSearchInput] = useState('')
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState('active')
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
+  const [editingId, setEditingId] = useState(null)
+  const [form, setForm] = useState(EMPTY_FORM)
+  const [fieldErrors, setFieldErrors] = useState({})
 
   useEffect(() => {
     const sync = () => setSession(loadAuthSession())
@@ -40,189 +75,178 @@ function ProductsPricingPage() {
     return () => window.removeEventListener(AUTH_SESSION_CHANGED_EVENT, sync)
   }, [])
 
-  const [categories, setCategories] = useState([])
-  const [searchInput, setSearchInput] = useState('')
-  const [isLoading, setIsLoading] = useState(true)
-  const [statusFilter, setStatusFilter] = useState('active')
-  const [isSaving, setIsSaving] = useState(false)
-  const [form, setForm] = useState(EMPTY_FORM)
-  const [fieldErrors, setFieldErrors] = useState({})
-  const [editingId, setEditingId] = useState(null)
-  const [editForm, setEditForm] = useState(EMPTY_FORM)
-  const [editFieldErrors, setEditFieldErrors] = useState({})
-  const [expandedIds, setExpandedIds] = useState(() => new Set())
+  useEffect(() => {
+    const timer = window.setTimeout(() => setSearch(searchInput.trim()), 300)
+    return () => window.clearTimeout(timer)
+  }, [searchInput])
 
   const loadData = useCallback(async () => {
     try {
       setIsLoading(true)
-      const items = await fetchCategories({
-        isDeleted: statusFilter === 'hidden' ? true : undefined,
-      })
-      setCategories(items)
+      const [books, productResult] = await Promise.all([
+        fetchPriceBooks({
+          search: search || undefined,
+          isActive: statusFilter === 'active' ? true : statusFilter === 'inactive' ? false : undefined,
+          page: 1,
+          pageSize: 100,
+        }),
+        fetchProducts({ page: 1, pageSize: 100, isActive: true }),
+      ])
+      setPriceBooks(books.items)
+      setProducts(productResult.items)
     } catch (error) {
+      setPriceBooks([])
       showError(error.message)
-      setCategories([])
     } finally {
       setIsLoading(false)
     }
-  }, [statusFilter])
-
-  const loadPendingSync = useCallback(async () => {
-    if (!canSync) {
-      setPendingSyncTotal(0)
-      return
-    }
-    try {
-      const pending = await fetchPendingCatalogSync()
-      setPendingSyncTotal(pending.total)
-    } catch {
-      setPendingSyncTotal(0)
-    }
-  }, [canSync])
+  }, [search, statusFilter])
 
   useEffect(() => {
     loadData()
-    loadPendingSync()
-  }, [loadData, loadPendingSync])
+  }, [loadData])
 
-  const visibleCategories = useMemo(() => {
-    return categories.filter((item) => {
-      if (statusFilter === 'hidden') return item.isDeleted
-      if (item.isDeleted) return false
-      if (statusFilter === 'active' && item.isActive === false) return false
-      return true
+  const targetOptions = useMemo(() => {
+    const options = []
+    products.forEach((product) => {
+      ;(product.skus || []).forEach((sku) => {
+        options.push({
+          value: `sku:${sku.id}`,
+          label: `${product.name} — ${sku.packagingType || sku.skuCode} (${sku.skuCode})`,
+        })
+      })
+      ;(product.variants || []).forEach((variant) => {
+        options.push({
+          value: `variant:${variant.id}`,
+          label: `${product.name} — ${variant.variantName} (${variant.skuCode})`,
+        })
+        ;(variant.units || []).forEach((unit) => {
+          options.push({
+            value: `unit:${unit.id}`,
+            label: `${product.name} — ${variant.variantName} / ${unit.unitName}`,
+          })
+        })
+      })
+      ;(product.units || [])
+        .filter((unit) => !unit.variantId)
+        .forEach((unit) => {
+          options.push({
+            value: `unit:${unit.id}`,
+            label: `${product.name} — ${unit.unitName}`,
+          })
+        })
     })
-  }, [categories, statusFilter])
+    return options
+  }, [products])
 
-  const categoryTree = useMemo(() => buildCategoryTree(visibleCategories), [visibleCategories])
-
-  const visibleTree = useMemo(
-    () => filterCategoryTree(categoryTree, searchInput),
-    [categoryTree, searchInput],
+  const targetLabelByValue = useMemo(
+    () => new Map(targetOptions.map((option) => [option.value, option.label])),
+    [targetOptions],
   )
 
-  useEffect(() => {
-    setExpandedIds(new Set(collectTreeNodeIds(visibleTree)))
-  }, [visibleTree])
-
-  function toggleExpand(categoryId) {
-    setExpandedIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(categoryId)) next.delete(categoryId)
-      else next.add(categoryId)
-      return next
+  function validateForm() {
+    const errors = {}
+    if (!form.name.trim()) errors.name = 'Tên bảng giá là bắt buộc.'
+    const filledEntries = form.entries.filter((entry) => entry.targetId || entry.price)
+    filledEntries.forEach((entry, index) => {
+      if (!entry.targetId) errors.entries = `Dòng giá #${index + 1} cần chọn SKU/biến thể/đơn vị.`
+      const price = parseProductPriceInput(entry.price)
+      if (!Number.isFinite(price) || price <= 0) errors.entries = `Giá dòng #${index + 1} phải lớn hơn 0.`
     })
+    const messages = Object.values(errors)
+    return { valid: messages.length === 0, errors, message: messages[0] || '' }
   }
 
-  async function handleCreate(event) {
-    event.preventDefault()
-    const parentId = form.parentId ? Number(form.parentId) : null
-    const validation = validateCategoryForm({
-      name: form.name,
-      description: form.description,
-      parentId,
-      existingCategories: categories,
-    })
-    if (!validation.valid) {
-      setFieldErrors(validation.errors)
-      return
-    }
-
-    setIsSaving(true)
-    try {
-      await createCategory({
-        name: form.name,
-        description: form.description,
-        parentId,
-      })
-      showSuccess('Đã tạo danh mục mới.')
-      setForm(EMPTY_FORM)
-      setFieldErrors({})
-      await loadData()
-    } catch (error) {
-      showError(error.message)
-    } finally {
-      setIsSaving(false)
-    }
-  }
-
-  function startEdit(category) {
-    setEditingId(category.id)
-    setEditForm({
-      name: category.name || '',
-      description: category.description || '',
-      parentId: category.parentId ? String(category.parentId) : '',
-    })
-    setEditFieldErrors({})
-  }
-
-  function cancelEdit() {
+  function resetForm() {
     setEditingId(null)
-    setEditForm(EMPTY_FORM)
-    setEditFieldErrors({})
+    setForm(EMPTY_FORM)
+    setFieldErrors({})
   }
 
-  function handleEditFormChange(patch) {
-    setEditForm((prev) => ({ ...prev, ...patch }))
-    if (patch.parentId !== undefined) {
-      setEditFieldErrors((prev) => ({ ...prev, parentId: undefined }))
-    }
-    if (patch.name !== undefined) {
-      setEditFieldErrors((prev) => ({ ...prev, name: undefined }))
-    }
+  function updateForm(key, value) {
+    setForm((prev) => ({ ...prev, [key]: value }))
+    setFieldErrors((prev) => ({ ...prev, [key]: undefined }))
   }
 
-  async function handleSaveEdit(category) {
-    const parentId = editForm.parentId ? Number(editForm.parentId) : null
-    const validation = validateCategoryForm({
-      name: editForm.name,
-      description: editForm.description,
-      parentId,
-      categoryId: category.id,
-      existingCategories: categories,
-    })
-    if (!validation.valid) {
-      setEditFieldErrors(validation.errors)
-      if (validation.message) showError(validation.message)
-      return
-    }
-
-    setIsSaving(true)
-    try {
-      await updateCategory(category.id, {
-        name: editForm.name,
-        description: editForm.description,
-        parentId,
-      })
-      showSuccess('Đã cập nhật danh mục.')
-      cancelEdit()
-      await loadData()
-    } catch (error) {
-      showError(error.message)
-    } finally {
-      setIsSaving(false)
-    }
+  function updateEntry(index, key, value) {
+    setForm((prev) => ({
+      ...prev,
+      entries: prev.entries.map((entry, entryIndex) => {
+        if (entryIndex !== index) return entry
+        if (key === 'target') {
+          const [targetType, targetId] = String(value).split(':')
+          return { ...entry, targetType: targetType || 'sku', targetId: targetId || '' }
+        }
+        return { ...entry, [key]: value }
+      }),
+    }))
+    setFieldErrors((prev) => ({ ...prev, entries: undefined }))
   }
 
-  function startAddChild(parentCategory) {
+  function addEntry() {
+    setForm((prev) => ({ ...prev, entries: [...prev.entries, { ...EMPTY_ENTRY }] }))
+  }
+
+  function removeEntry(index) {
+    setForm((prev) => ({
+      ...prev,
+      entries: prev.entries.length === 1 ? [{ ...EMPTY_ENTRY }] : prev.entries.filter((_, itemIndex) => itemIndex !== index),
+    }))
+  }
+
+  function startEdit(priceBook) {
+    setEditingId(priceBook.id)
     setForm({
-      name: '',
-      description: '',
-      parentId: String(parentCategory.id),
+      code: priceBook.code || '',
+      name: priceBook.name || '',
+      description: priceBook.description || '',
+      startsAt: toInputDateTime(priceBook.startsAt),
+      endsAt: toInputDateTime(priceBook.endsAt),
+      isActive: priceBook.isActive !== false,
+      entries: priceBook.entries.length
+        ? priceBook.entries.map((entry) => ({
+            targetType: entryTargetType(entry),
+            targetId: entryTargetId(entry),
+            price: formatProductPriceInput(String(entry.price)),
+            startsAt: toInputDateTime(entry.startsAt),
+            endsAt: toInputDateTime(entry.endsAt),
+            isActive: entry.isActive !== false,
+          }))
+        : [{ ...EMPTY_ENTRY }],
     })
     setFieldErrors({})
-    setExpandedIds((prev) => new Set([...prev, parentCategory.id]))
-    createFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
-  async function handleHide(category) {
-    if (category.isDeleted) return
-    if (!window.confirm(`Ẩn danh mục "${category.name}"? Có thể kích hoạt lại sau.`)) return
+  async function handleSubmit(event) {
+    event.preventDefault()
+    if (!canManage) return
+
+    const validation = validateForm()
+    if (!validation.valid) {
+      setFieldErrors(validation.errors)
+      showError(validation.message)
+      return
+    }
 
     setIsSaving(true)
     try {
-      await deleteCategory(category.id)
-      showSuccess('Đã ẩn danh mục.')
+      const payload = {
+        ...form,
+        entries: form.entries
+          .filter((entry) => entry.targetId && entry.price)
+          .map((entry) => ({
+            ...entry,
+            price: parseProductPriceInput(entry.price),
+          })),
+      }
+      if (editingId) {
+        await updatePriceBook(editingId, payload)
+        showSuccess('Đã cập nhật bảng giá.')
+      } else {
+        await createPriceBook(payload)
+        showSuccess('Đã tạo bảng giá mới.')
+      }
+      resetForm()
       await loadData()
     } catch (error) {
       showError(error.message)
@@ -231,34 +255,14 @@ function ProductsPricingPage() {
     }
   }
 
-  async function handleSyncCatalog() {
-    setIsSyncing(true)
-    try {
-      const result = await syncCatalogToStore()
-      await Promise.all([loadData(), loadPendingSync()])
-      const total = result.categoriesSynced + result.productsSynced + result.skusSynced
-      if (total === 0) {
-        showSuccess('Không có dữ liệu mới từ kho cần đồng bộ.')
-      } else {
-        showSuccess(
-          `Đã đồng bộ ${result.categoriesSynced} danh mục, ${result.productsSynced} sản phẩm, ${result.skusSynced} SKU từ kho.`,
-        )
-      }
-    } catch (error) {
-      showError(error.message)
-    } finally {
-      setIsSyncing(false)
-    }
-  }
-
-  async function handleRestore(category) {
-    if (!category.isDeleted) return
-    if (!window.confirm(`Kích hoạt lại danh mục "${category.name}"?`)) return
-
+  async function handleDelete(priceBook) {
+    if (!canManage) return
+    if (!window.confirm(`Xóa bảng giá "${priceBook.name}"?`)) return
     setIsSaving(true)
     try {
-      await restoreCategory(category.id)
-      showSuccess('Đã kích hoạt lại danh mục.')
+      await deletePriceBook(priceBook.id)
+      showSuccess('Đã xóa bảng giá.')
+      if (editingId === priceBook.id) resetForm()
       await loadData()
     } catch (error) {
       showError(error.message)
@@ -270,86 +274,170 @@ function ProductsPricingPage() {
   return (
     <PageShell>
       <PageHeader
-        title="Danh mục sản phẩm"
-        description={
-          canCreate
-            ? 'Thủ kho — tạo và quản lý danh mục sản phẩm theo cấu trúc cha — con'
-            : 'Xem danh mục — bấm Đồng bộ để tải dữ liệu mới từ kho'
-        }
-        searchPlaceholder="Tìm danh mục..."
+        title="Bảng giá sản phẩm"
+        description="Quản lý price_books và price_book_entries cho SKU, biến thể hoặc đơn vị quy đổi."
+        searchPlaceholder="Tìm bảng giá theo mã hoặc tên..."
         searchValue={searchInput}
         onSearchChange={setSearchInput}
         rightContent={
-          <>
-            {canSync ? (
-              <button
-                type="button"
-                disabled={isSyncing}
-                onClick={handleSyncCatalog}
-                className="inline-flex items-center gap-2 rounded-xl border border-[#356647]/30 bg-white px-4 py-2.5 text-sm font-semibold text-[#356647] hover:bg-[#356647]/5 disabled:opacity-50"
-              >
-                <span className={`material-symbols-outlined text-[18px] ${isSyncing ? 'animate-spin' : ''}`}>sync</span>
-                Đồng bộ dữ liệu
-                {pendingSyncTotal > 0 ? (
-                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-800">{pendingSyncTotal}</span>
-                ) : null}
-              </button>
-            ) : null}
-            <Link
-              to="/products"
-              className="inline-flex items-center gap-2 rounded-xl border border-[#356647]/30 bg-white px-4 py-2.5 text-sm font-semibold text-[#356647] hover:bg-[#356647]/5"
-            >
-              <span className="material-symbols-outlined text-[18px]">inventory_2</span>
-              Danh sách sản phẩm
-            </Link>
-          </>
+          <Link
+            to="/products"
+            className="inline-flex items-center gap-2 rounded-xl border border-[#356647]/30 bg-white px-4 py-2.5 text-sm font-semibold text-[#356647] hover:bg-[#356647]/5"
+          >
+            <span className="material-symbols-outlined text-[18px]">inventory_2</span>
+            Danh sách sản phẩm
+          </Link>
         }
       />
 
-      {canCreate ? (
-        <section
-          ref={createFormRef}
-          className="mb-6 rounded-[1rem] border border-slate-100 bg-white p-4 shadow-sm sm:p-6"
-        >
-          <h2 className="text-lg font-bold text-slate-800">Thêm danh mục mới</h2>
-          <form className="mt-4 grid gap-4 sm:grid-cols-2" onSubmit={handleCreate}>
-            <label className="block space-y-2 sm:col-span-1">
-              <span className="text-xs font-semibold text-[#717971]">Tên danh mục *</span>
+      {canManage ? (
+        <section className="mb-6 rounded-[1rem] border border-slate-100 bg-white p-4 shadow-sm sm:p-6">
+          <h2 className="text-lg font-bold text-slate-800">{editingId ? 'Sửa bảng giá' : 'Tạo bảng giá mới'}</h2>
+          <form className="mt-4 space-y-4" onSubmit={handleSubmit}>
+            <div className="grid gap-4 lg:grid-cols-2">
+              <label className="space-y-1">
+                <span className="text-xs font-semibold text-[#717971]">Mã bảng giá</span>
+                <input
+                  className="w-full rounded-xl border-none bg-[#f0eee6] p-3 font-mono text-sm focus:ring-2 focus:ring-[#356647]/20"
+                  value={form.code}
+                  onChange={(event) => updateForm('code', event.target.value.toUpperCase())}
+                  placeholder="Để trống để tự sinh"
+                />
+              </label>
+              <label className="space-y-1">
+                <span className="text-xs font-semibold text-[#717971]">Tên bảng giá *</span>
+                <input
+                  className={`w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20 ${fieldErrors.name ? 'ring-2 ring-[#b42318]/40' : ''}`}
+                  value={form.name}
+                  onChange={(event) => updateForm('name', event.target.value)}
+                  placeholder="Bảng giá bán lẻ / đại lý / khuyến mại"
+                />
+                <FieldError message={fieldErrors.name} />
+              </label>
+              <label className="space-y-1 lg:col-span-2">
+                <span className="text-xs font-semibold text-[#717971]">Mô tả</span>
+                <input
+                  className="w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20"
+                  value={form.description}
+                  onChange={(event) => updateForm('description', event.target.value)}
+                  placeholder="Ghi chú áp dụng bảng giá"
+                />
+              </label>
+              <label className="space-y-1">
+                <span className="text-xs font-semibold text-[#717971]">Hiệu lực từ</span>
+                <input
+                  type="datetime-local"
+                  className="w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20"
+                  value={form.startsAt}
+                  onChange={(event) => updateForm('startsAt', event.target.value)}
+                />
+              </label>
+              <label className="space-y-1">
+                <span className="text-xs font-semibold text-[#717971]">Hiệu lực đến</span>
+                <input
+                  type="datetime-local"
+                  className="w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20"
+                  value={form.endsAt}
+                  onChange={(event) => updateForm('endsAt', event.target.value)}
+                />
+              </label>
+            </div>
+
+            <div className="rounded-xl border border-slate-100 p-4">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="text-sm font-bold text-slate-800">Dòng bảng giá</p>
+                  <p className="text-xs text-slate-500">Chọn một SKU, biến thể hoặc đơn vị quy đổi cho mỗi dòng.</p>
+                </div>
+                <button type="button" className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700" onClick={addEntry}>
+                  Thêm dòng
+                </button>
+              </div>
+              <div className="space-y-3">
+                {form.entries.map((entry, index) => (
+                  <div key={index} className="grid gap-3 rounded-xl bg-[#fbf9f1] p-3 lg:grid-cols-[1.4fr_0.6fr_0.6fr_0.6fr_auto]">
+                    <label className="space-y-1">
+                      <span className="text-xs font-semibold text-[#717971]">Đối tượng</span>
+                      <select
+                        className="w-full rounded-xl border-none bg-white p-3 text-sm focus:ring-2 focus:ring-[#356647]/20"
+                        value={entry.targetId ? `${entry.targetType}:${entry.targetId}` : ''}
+                        onChange={(event) => updateEntry(index, 'target', event.target.value)}
+                      >
+                        <option value="">Chọn SKU/biến thể/đơn vị</option>
+                        {targetOptions.map((option) => (
+                          <option key={option.value} value={option.value}>{option.label}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="space-y-1">
+                      <span className="text-xs font-semibold text-[#717971]">Giá *</span>
+                      <input
+                        className="w-full rounded-xl border-none bg-white p-3 text-sm focus:ring-2 focus:ring-[#356647]/20"
+                        inputMode="decimal"
+                        value={entry.price}
+                        onChange={(event) => updateEntry(index, 'price', formatProductPriceInput(event.target.value))}
+                        placeholder="180.000"
+                      />
+                    </label>
+                    <label className="space-y-1">
+                      <span className="text-xs font-semibold text-[#717971]">Từ</span>
+                      <input
+                        type="datetime-local"
+                        className="w-full rounded-xl border-none bg-white p-3 text-sm focus:ring-2 focus:ring-[#356647]/20"
+                        value={entry.startsAt}
+                        onChange={(event) => updateEntry(index, 'startsAt', event.target.value)}
+                      />
+                    </label>
+                    <label className="space-y-1">
+                      <span className="text-xs font-semibold text-[#717971]">Đến</span>
+                      <input
+                        type="datetime-local"
+                        className="w-full rounded-xl border-none bg-white p-3 text-sm focus:ring-2 focus:ring-[#356647]/20"
+                        value={entry.endsAt}
+                        onChange={(event) => updateEntry(index, 'endsAt', event.target.value)}
+                      />
+                    </label>
+                    <div className="flex items-end gap-2">
+                      <label className="mb-3 flex items-center gap-2 text-xs text-slate-600">
+                        <input
+                          type="checkbox"
+                          checked={entry.isActive}
+                          onChange={(event) => updateEntry(index, 'isActive', event.target.checked)}
+                        />
+                        Bật
+                      </label>
+                      <button type="button" className="mb-1 rounded-lg px-2 py-2 text-rose-600 hover:bg-rose-50" onClick={() => removeEntry(index)}>
+                        <span className="material-symbols-outlined text-[18px]">delete</span>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <FieldError message={fieldErrors.entries} />
+            </div>
+
+            <label className="flex items-center gap-2">
               <input
-                className="w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20"
-                value={form.name}
-                onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
-                placeholder="VD: Trà xanh"
+                type="checkbox"
+                checked={form.isActive}
+                onChange={(event) => updateForm('isActive', event.target.checked)}
               />
-              {fieldErrors.name ? <p className="text-xs text-[#b42318]">{fieldErrors.name}</p> : null}
+              <span className="text-sm text-slate-700">Bảng giá đang hoạt động</span>
             </label>
-            <label className="block space-y-2 sm:col-span-1">
-              <span className="text-xs font-semibold text-[#717971]">Danh mục cha</span>
-              <CategoryParentSelect
-                value={form.parentId}
-                onChange={(parentId) => setForm((prev) => ({ ...prev, parentId }))}
-                categories={categories}
-                error={fieldErrors.parentId}
-              />
-            </label>
-            <label className="block space-y-2 sm:col-span-2">
-              <span className="text-xs font-semibold text-[#717971]">Mô tả</span>
-              <input
-                className="w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20"
-                value={form.description}
-                onChange={(event) => setForm((prev) => ({ ...prev, description: event.target.value }))}
-                placeholder="Tùy chọn"
-              />
-              {fieldErrors.description ? <p className="text-xs text-[#b42318]">{fieldErrors.description}</p> : null}
-            </label>
-            <div className="sm:col-span-2">
+
+            <div className="flex flex-wrap gap-2">
               <button
                 type="submit"
                 disabled={isSaving}
                 className="rounded-xl bg-[#538463] px-5 py-2.5 text-sm font-bold text-white hover:bg-[#457053] disabled:opacity-50"
               >
-                {isSaving ? 'Đang lưu...' : 'Tạo danh mục'}
+                {isSaving ? 'Đang lưu...' : editingId ? 'Cập nhật bảng giá' : 'Tạo bảng giá'}
               </button>
+              {editingId ? (
+                <button type="button" className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-700" onClick={resetForm}>
+                  Hủy
+                </button>
+              ) : null}
             </div>
           </form>
         </section>
@@ -357,7 +445,7 @@ function ProductsPricingPage() {
 
       <section className="rounded-[1rem] bg-white p-4 shadow-sm sm:p-6 lg:p-8">
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <h2 className="text-lg font-bold text-slate-800">Danh sách danh mục</h2>
+          <h2 className="text-lg font-bold text-slate-800">Danh sách bảng giá</h2>
           <select
             className="h-11 min-w-[200px] rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm text-slate-700 outline-none focus:border-[#356647]"
             value={statusFilter}
@@ -365,37 +453,86 @@ function ProductsPricingPage() {
           >
             <option value="all">Tất cả trạng thái</option>
             <option value="active">Đang hoạt động</option>
-            <option value="hidden">Đã ẩn</option>
+            <option value="inactive">Đã tắt</option>
           </select>
         </div>
 
         {isLoading ? (
-          <p className="text-sm text-slate-500">Đang tải...</p>
-        ) : visibleTree.length === 0 ? (
+          <p className="text-sm text-slate-500">Đang tải bảng giá...</p>
+        ) : priceBooks.length === 0 ? (
           <p className="rounded-xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-500">
-            {searchInput.trim() ? 'Không tìm thấy danh mục phù hợp.' : 'Chưa có danh mục nào.'}
+            Chưa có bảng giá nào.
           </p>
         ) : (
-          <CategoryTreeTable
-            nodes={visibleTree}
-            categories={categories}
-            expandedIds={expandedIds}
-            onToggleExpand={toggleExpand}
-            editingId={editingId}
-            editForm={editForm}
-            onEditFormChange={handleEditFormChange}
-            onStartEdit={startEdit}
-            onCancelEdit={cancelEdit}
-            onSaveEdit={handleSaveEdit}
-            onHide={handleHide}
-            onRestore={handleRestore}
-            onAddChild={startAddChild}
-            editFieldErrors={editFieldErrors}
-            canCreate={canCreate}
-            canHide={canHide}
-            isWarehouse={isWarehouse}
-            isSaving={isSaving}
-          />
+          <div className="space-y-4">
+            {priceBooks.map((priceBook) => (
+              <article key={priceBook.id} className="rounded-xl border border-slate-100 p-4">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-base font-bold text-slate-900">{priceBook.name}</p>
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 font-mono text-[11px] font-semibold text-slate-600">{priceBook.code}</span>
+                      <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${priceBook.isActive ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                        {priceBook.isActive ? 'Đang hoạt động' : 'Đã tắt'}
+                      </span>
+                    </div>
+                    {priceBook.description ? <p className="mt-1 text-sm text-slate-500">{priceBook.description}</p> : null}
+                    <p className="mt-1 text-xs text-slate-500">
+                      Hiệu lực: {priceBook.startsAt ? new Date(priceBook.startsAt).toLocaleString('vi-VN') : '—'} → {priceBook.endsAt ? new Date(priceBook.endsAt).toLocaleString('vi-VN') : '—'}
+                    </p>
+                  </div>
+                  {canManage ? (
+                    <div className="flex shrink-0 gap-2">
+                      <button type="button" className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700" onClick={() => startEdit(priceBook)}>
+                        Sửa
+                      </button>
+                      <button type="button" className="rounded-lg border border-rose-200 px-3 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50" onClick={() => handleDelete(priceBook)}>
+                        Xóa
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+
+                {priceBook.entries.length ? (
+                  <div className="mt-4 overflow-x-auto">
+                    <table className="min-w-full divide-y divide-slate-100 text-left text-sm">
+                      <thead className="bg-slate-50 text-slate-500">
+                        <tr>
+                          <th className="px-4 py-3 font-semibold">Đối tượng</th>
+                          <th className="px-4 py-3 font-semibold">Giá</th>
+                          <th className="px-4 py-3 font-semibold">Hiệu lực</th>
+                          <th className="px-4 py-3 font-semibold">Trạng thái</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {priceBook.entries.map((entry) => {
+                          const value = `${entryTargetType(entry)}:${entryTargetId(entry)}`
+                          return (
+                            <tr key={entry.id}>
+                              <td className="px-4 py-3 text-slate-700">{targetLabelByValue.get(value) || value}</td>
+                              <td className="px-4 py-3 font-semibold text-[#356647]">{formatProductPrice(entry.price)}</td>
+                              <td className="px-4 py-3 text-xs text-slate-500">
+                                {entry.startsAt ? new Date(entry.startsAt).toLocaleString('vi-VN') : '—'} → {entry.endsAt ? new Date(entry.endsAt).toLocaleString('vi-VN') : '—'}
+                              </td>
+                              <td className="px-4 py-3">
+                                <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${entry.isActive ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                                  {entry.isActive ? 'Bật' : 'Tắt'}
+                                </span>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <p className="mt-4 rounded-xl border border-dashed border-slate-200 p-4 text-center text-sm text-slate-500">
+                    Bảng giá chưa có dòng giá.
+                  </p>
+                )}
+              </article>
+            ))}
+          </div>
         )}
       </section>
     </PageShell>

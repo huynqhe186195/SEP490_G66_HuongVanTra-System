@@ -28,6 +28,7 @@ import { INVENTORY_STOCK_CHANGED_EVENT } from '../../inventory/utils/inventorySt
 import {
   getProductStatusMeta,
   isSyncedToStore,
+  pickProductImageUrl,
   summarizeProductSkus,
   summarizeProductStock,
 } from '../utils/productDisplay.js'
@@ -272,8 +273,8 @@ function ProductsListPage() {
               to="/products/pricing"
               className="inline-flex items-center gap-2 rounded-xl border border-[#356647]/30 bg-white px-4 py-2.5 text-sm font-semibold text-[#356647] hover:bg-[#356647]/5"
             >
-              <span className="material-symbols-outlined text-[18px]">category</span>
-              Danh mục
+              <span className="material-symbols-outlined text-[18px]">sell</span>
+              Bảng giá
             </Link>
           </>
         }
@@ -364,6 +365,8 @@ function ProductsListPage() {
                 products.map((product) => {
                   const status = getProductStatusMeta(product.isActive, product.isDeleted)
                   const skuSummary = summarizeProductSkus(product.skus)
+                  const imageUrl = pickProductImageUrl(product)
+                  const variantCount = product.variants?.length ?? 0
                   const stockSummary = summarizeProductStock(
                     product.skus,
                     stockBySkuId,
@@ -375,9 +378,9 @@ function ProductsListPage() {
                       className={product.isDeleted ? 'bg-slate-50/80 opacity-75' : undefined}
                     >
                       <td className={TABLE_CELL}>
-                        {skuSummary.imageUrl ? (
-                          <a href={skuSummary.imageUrl} target="_blank" rel="noopener noreferrer" title={`Ảnh ${product.name}`}>
-                            <ProductImage src={skuSummary.imageUrl} alt={product.name} className="h-12 w-12 rounded-lg" />
+                        {imageUrl ? (
+                          <a href={imageUrl} target="_blank" rel="noopener noreferrer" title={`Ảnh ${product.name}`}>
+                            <ProductImage src={imageUrl} alt={product.name} className="h-12 w-12 rounded-lg" />
                           </a>
                         ) : (
                           <ProductImage src="" alt={product.name} className="h-12 w-12 rounded-lg" iconClassName="text-[22px]" />
@@ -409,7 +412,7 @@ function ProductsListPage() {
                           >
                             <p className="text-sm text-slate-700 group-hover:text-[#356647]">{skuSummary.variantsLabel}</p>
                             <p className="mt-0.5 font-mono text-[11px] text-slate-500 group-hover:text-[#356647]">
-                              {skuSummary.count} SKU · {skuSummary.codes}
+                              {skuSummary.count} SKU{variantCount ? ` · ${variantCount} biến thể` : ''} · {skuSummary.codes}
                             </p>
                             <span className="mt-1 inline-flex items-center gap-0.5 text-[11px] font-semibold text-[#356647] opacity-0 transition-opacity group-hover:opacity-100">
                               <span className="material-symbols-outlined text-[14px]">visibility</span>

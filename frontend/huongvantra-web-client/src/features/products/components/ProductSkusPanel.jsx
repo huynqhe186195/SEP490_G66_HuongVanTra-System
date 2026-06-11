@@ -21,9 +21,16 @@ import { mapProductApiError, normalizeSkuCodeInput, validateSkuForm } from '../u
 
 const EMPTY_FORM = {
   skuCode: '',
+  barcode: '',
   packagingType: '',
   weightInGrams: '',
   basePrice: '',
+  costPrice: '',
+  retailPrice: '',
+  minStock: '',
+  maxStock: '',
+  isSellable: true,
+  allowRewardPoints: true,
   imageUrl: '',
   isActive: true,
 }
@@ -95,9 +102,16 @@ function ProductSkusPanel({
     setEditingId(sku.id)
     setForm({
       skuCode: sku.skuCode,
+      barcode: sku.barcode || '',
       packagingType: sku.packagingType,
       weightInGrams: String(sku.weightInGrams),
       basePrice: formatProductPriceInput(String(sku.basePrice)),
+      costPrice: sku.costPrice || sku.costPrice === 0 ? formatProductPriceInput(String(sku.costPrice)) : '',
+      retailPrice: sku.retailPrice || sku.retailPrice === 0 ? formatProductPriceInput(String(sku.retailPrice)) : '',
+      minStock: sku.minStock || sku.minStock === 0 ? String(sku.minStock) : '',
+      maxStock: sku.maxStock || sku.maxStock === 0 ? String(sku.maxStock) : '',
+      isSellable: sku.isSellable !== false,
+      allowRewardPoints: sku.allowRewardPoints !== false,
       imageUrl: sku.imageUrl || '',
       isActive: sku.isActive,
     })
@@ -115,10 +129,12 @@ function ProductSkusPanel({
     setForm((prev) => ({ ...prev, skuCode: normalizeSkuCodeInput(event.target.value) }))
   }
 
-  function updatePriceField(event) {
-    const value = formatProductPriceInput(event.target.value)
-    setForm((prev) => ({ ...prev, basePrice: value }))
-    setFieldErrors((prev) => ({ ...prev, basePrice: undefined }))
+  function updatePriceField(key) {
+    return (event) => {
+      const value = formatProductPriceInput(event.target.value)
+      setForm((prev) => ({ ...prev, [key]: value }))
+      setFieldErrors((prev) => ({ ...prev, [key]: undefined }))
+    }
   }
 
   async function handleSubmit(event) {
@@ -137,9 +153,16 @@ function ProductSkusPanel({
       const payload = {
         productId,
         skuCode: normalizeSkuCodeInput(form.skuCode),
+        barcode: form.barcode,
         packagingType: form.packagingType,
         weightInGrams: Number(form.weightInGrams),
         basePrice: parseProductPriceInput(form.basePrice),
+        costPrice: form.costPrice ? parseProductPriceInput(form.costPrice) : null,
+        retailPrice: form.retailPrice ? parseProductPriceInput(form.retailPrice) : null,
+        minStock: form.minStock === '' ? null : Number(form.minStock),
+        maxStock: form.maxStock === '' ? null : Number(form.maxStock),
+        isSellable: form.isSellable,
+        allowRewardPoints: form.allowRewardPoints,
         imageUrl: form.imageUrl,
         isActive: form.isActive,
       }
@@ -197,15 +220,27 @@ function ProductSkusPanel({
           <p className="text-sm font-semibold text-[#356647]">{editingId ? 'Sửa SKU' : 'Thêm SKU mới'}</p>
           <div className={`grid gap-4 ${formGridClass}`}>
             <label className="space-y-1">
-              <span className="text-xs font-semibold text-[#717971]">Mã SKU *</span>
+              <span className="text-xs font-semibold text-[#717971]">Mã SKU</span>
               <input
                 className={`w-full rounded-xl border-none bg-white p-3 font-mono text-sm focus:ring-2 focus:ring-[#356647]/20 ${fieldErrors.skuCode ? 'ring-2 ring-[#b42318]/40' : ''}`}
-                placeholder="TEA-001"
+                placeholder="Để trống để tự sinh"
                 value={form.skuCode}
                 onChange={updateField('skuCode')}
                 onBlur={handleSkuCodeBlur}
               />
+              <p className="text-[11px] text-slate-500">Nếu bỏ trống, hệ thống tự tạo mã SKU duy nhất.</p>
               <FieldError message={fieldErrors.skuCode} />
+            </label>
+
+            <label className="space-y-1">
+              <span className="text-xs font-semibold text-[#717971]">Barcode</span>
+              <input
+                className={`w-full rounded-xl border-none bg-white p-3 font-mono text-sm focus:ring-2 focus:ring-[#356647]/20 ${fieldErrors.barcode ? 'ring-2 ring-[#b42318]/40' : ''}`}
+                placeholder="893..."
+                value={form.barcode}
+                onChange={updateField('barcode')}
+              />
+              <FieldError message={fieldErrors.barcode} />
             </label>
 
             <label className="space-y-1">
@@ -239,13 +274,71 @@ function ProductSkusPanel({
                   inputMode="decimal"
                   placeholder="180.000"
                   value={form.basePrice}
-                  onChange={updatePriceField}
+                  onChange={updatePriceField('basePrice')}
                 />
                 <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs font-semibold text-[#717971]">
                   đ
                 </span>
               </div>
               <FieldError message={fieldErrors.basePrice} />
+            </label>
+
+            <label className="space-y-1">
+              <span className="text-xs font-semibold text-[#717971]">Giá vốn</span>
+              <div className="relative">
+                <input
+                  className={`w-full rounded-xl border-none bg-white p-3 pr-10 text-sm focus:ring-2 focus:ring-[#356647]/20 ${fieldErrors.costPrice ? 'ring-2 ring-[#b42318]/40' : ''}`}
+                  inputMode="decimal"
+                  placeholder="120.000"
+                  value={form.costPrice}
+                  onChange={updatePriceField('costPrice')}
+                />
+                <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs font-semibold text-[#717971]">
+                  đ
+                </span>
+              </div>
+              <FieldError message={fieldErrors.costPrice} />
+            </label>
+
+            <label className="space-y-1">
+              <span className="text-xs font-semibold text-[#717971]">Giá bán lẻ</span>
+              <div className="relative">
+                <input
+                  className={`w-full rounded-xl border-none bg-white p-3 pr-10 text-sm focus:ring-2 focus:ring-[#356647]/20 ${fieldErrors.retailPrice ? 'ring-2 ring-[#b42318]/40' : ''}`}
+                  inputMode="decimal"
+                  placeholder="180.000"
+                  value={form.retailPrice}
+                  onChange={updatePriceField('retailPrice')}
+                />
+                <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs font-semibold text-[#717971]">
+                  đ
+                </span>
+              </div>
+              <FieldError message={fieldErrors.retailPrice} />
+            </label>
+
+            <label className="space-y-1">
+              <span className="text-xs font-semibold text-[#717971]">Tồn tối thiểu</span>
+              <input
+                className={`w-full rounded-xl border-none bg-white p-3 text-sm focus:ring-2 focus:ring-[#356647]/20 ${fieldErrors.minStock ? 'ring-2 ring-[#b42318]/40' : ''}`}
+                inputMode="numeric"
+                placeholder="5"
+                value={form.minStock}
+                onChange={updateField('minStock')}
+              />
+              <FieldError message={fieldErrors.minStock} />
+            </label>
+
+            <label className="space-y-1">
+              <span className="text-xs font-semibold text-[#717971]">Tồn tối đa</span>
+              <input
+                className={`w-full rounded-xl border-none bg-white p-3 text-sm focus:ring-2 focus:ring-[#356647]/20 ${fieldErrors.maxStock ? 'ring-2 ring-[#b42318]/40' : ''}`}
+                inputMode="numeric"
+                placeholder="100"
+                value={form.maxStock}
+                onChange={updateField('maxStock')}
+              />
+              <FieldError message={fieldErrors.maxStock} />
             </label>
 
             <label className={`space-y-1 ${isColumnLayout ? '' : 'md:col-span-2'}`}>
@@ -259,6 +352,25 @@ function ProductSkusPanel({
               <FieldError message={fieldErrors.imageUrl} />
               <ProductImagePreview src={form.imageUrl} alt={form.skuCode || 'Ảnh SKU'} />
             </label>
+
+            <div className={`grid gap-3 ${isColumnLayout ? '' : 'md:col-span-2 md:grid-cols-2'}`}>
+              <label className="flex items-center gap-2 rounded-xl bg-white p-3">
+                <input
+                  type="checkbox"
+                  checked={form.isSellable}
+                  onChange={(event) => setForm((prev) => ({ ...prev, isSellable: event.target.checked }))}
+                />
+                <span className="text-sm text-slate-700">Cho phép bán trực tiếp</span>
+              </label>
+              <label className="flex items-center gap-2 rounded-xl bg-white p-3">
+                <input
+                  type="checkbox"
+                  checked={form.allowRewardPoints}
+                  onChange={(event) => setForm((prev) => ({ ...prev, allowRewardPoints: event.target.checked }))}
+                />
+                <span className="text-sm text-slate-700">Tích điểm thưởng</span>
+              </label>
+            </div>
 
             {editingId ? (
               <label className={`flex items-center gap-2 ${isColumnLayout ? '' : 'md:col-span-2'}`}>
@@ -323,8 +435,18 @@ function ProductSkusPanel({
                   </div>
                   <p className="mt-1 text-sm text-slate-700">{sku.packagingType}</p>
                   <p className="text-xs text-slate-500">
-                    {formatWeightGrams(sku.weightInGrams)} · {formatProductPrice(sku.basePrice)}
+                    {formatWeightGrams(sku.weightInGrams)} · Niêm yết {formatProductPrice(sku.basePrice)}
                   </p>
+                  <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
+                    {sku.barcode ? <span>Barcode: <span className="font-mono">{sku.barcode}</span></span> : null}
+                    <span>Giá vốn: {formatProductPrice(sku.costPrice)}</span>
+                    <span>Giá bán lẻ: {formatProductPrice(sku.retailPrice)}</span>
+                  </div>
+                  <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
+                    <span>Tồn min/max: {sku.minStock ?? '—'} / {sku.maxStock ?? '—'}</span>
+                    <span>{sku.isSellable ? 'Được bán' : 'Ngừng bán trực tiếp'}</span>
+                    <span>{sku.allowRewardPoints ? 'Có tích điểm' : 'Không tích điểm'}</span>
+                  </div>
                   <p
                     className={`mt-1 text-xs font-semibold ${
                       quantityOnHand <= 0 ? 'text-[#b42318]' : quantityOnHand <= 5 ? 'text-[#7e5700]' : 'text-[#356647]'
