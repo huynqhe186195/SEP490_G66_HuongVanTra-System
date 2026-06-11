@@ -1,5 +1,11 @@
 namespace OrderService.Application.DTOs.Responses;
 
+public record PromotionScopeResponse(
+    Guid SkuId,
+    string? SkuCode,
+    string? SkuName
+);
+
 public record PromotionResponse(
     Guid Id,
     string PromoCode,
@@ -9,6 +15,8 @@ public record PromotionResponse(
     DateTime? ValidToUtc,
     string ValidityStatus,
     bool IsActive,
+    string ScopeType,
+    List<PromotionScopeResponse> SkuScopes,
     int OrderCount
 );
 
@@ -20,5 +28,19 @@ public record PromotionLookupResponse(
     DateTime? ValidFromUtc,
     DateTime? ValidToUtc,
     string ValidityStatus,
-    bool IsActive
+    bool IsActive,
+    string ScopeType,
+    List<PromotionScopeResponse> SkuScopes
+);
+
+public record PromotionApplyPreviewResponse(
+    Guid Id,
+    string PromoCode,
+    string DiscountType,
+    decimal DiscountValue,
+    string ScopeType,
+    List<PromotionScopeResponse> SkuScopes,
+    decimal PromotionDiscountAmount,
+    decimal EligibleSubtotal,
+    string Message
 );
