@@ -17,6 +17,8 @@ public class CreatePromotionRequest
     public decimal DiscountValue { get; init; }
     public decimal? MaxDiscountAmount { get; init; }
     public decimal? MinimumOrderAmount { get; init; }
+    public int? UsageLimitTotal { get; init; }
+    public int? UsageLimitPerCustomer { get; init; }
     public DateTime? ValidFrom { get; init; }
     public DateTime? ValidTo { get; init; }
     public DateTime? ValidFromUtc { get; init; }
@@ -34,6 +36,8 @@ public class UpdatePromotionRequest
     public decimal DiscountValue { get; init; }
     public decimal? MaxDiscountAmount { get; init; }
     public decimal? MinimumOrderAmount { get; init; }
+    public int? UsageLimitTotal { get; init; }
+    public int? UsageLimitPerCustomer { get; init; }
     public DateTime? ValidFrom { get; init; }
     public DateTime? ValidTo { get; init; }
     public DateTime? ValidFromUtc { get; init; }
@@ -53,6 +57,7 @@ public record PromotionSkuScopeRequest(
 public record PromotionApplyPreviewRequest(
     Guid? PromotionId,
     string? PromotionCode,
+    Guid? CustomerId,
     decimal ManualDiscount,
     List<PromotionApplyPreviewItemRequest> Items
 );

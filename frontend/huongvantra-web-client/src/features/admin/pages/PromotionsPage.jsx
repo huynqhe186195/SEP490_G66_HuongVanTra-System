@@ -28,6 +28,8 @@ const EMPTY_FORM = {
   discountValue: '',
   maxDiscountAmount: '',
   minimumOrderAmount: '',
+  usageLimitTotal: '',
+  usageLimitPerCustomer: '',
   validFrom: '',
   validTo: '',
   isActive: true,
@@ -38,6 +40,7 @@ const EMPTY_FORM = {
 const MAX_PERCENTAGE_DISCOUNT_VALUE = 90
 const MAX_FIXED_DISCOUNT_VALUE = 10000000
 const MAX_PERCENTAGE_DISCOUNT_AMOUNT = 10000000
+const MAX_USAGE_LIMIT = 1000000
 const PROMOTION_PAGE_SIZE = 10
 const DEFAULT_PAGINATION = {
   page: 1,
@@ -92,6 +95,15 @@ function parseCurrencyInput(value) {
   return digits ? Number(digits) : 0
 }
 
+function formatIntegerInput(value) {
+  return String(value ?? '').replace(/\D/g, '')
+}
+
+function parseIntegerInput(value) {
+  const digits = formatIntegerInput(value)
+  return digits ? Number(digits) : 0
+}
+
 function getDiscountValueMax(discountType) {
   return discountType === 'PERCENTAGE'
     ? MAX_PERCENTAGE_DISCOUNT_VALUE
@@ -107,6 +119,23 @@ function getDiscountValueHelperText(discountType) {
 function formatPromotionMinimumOrderSummary(promotion) {
   const amount = Number(promotion?.minimumOrderAmount || 0)
   return amount > 0 ? `Từ ${amount.toLocaleString('vi-VN')}đ` : 'Không yêu cầu'
+}
+
+function formatPromotionUsageSummary(promotion) {
+  const totalLimit = Number(promotion?.usageLimitTotal || 0)
+  const perCustomerLimit = Number(promotion?.usageLimitPerCustomer || 0)
+  const used = Number(promotion?.usedCountTotal ?? promotion?.orderCount ?? 0)
+  const lines = [
+    totalLimit > 0
+      ? `Đã dùng ${used.toLocaleString('vi-VN')} / ${totalLimit.toLocaleString('vi-VN')}`
+      : 'Không giới hạn',
+  ]
+
+  if (perCustomerLimit > 0) {
+    lines.push(`Mỗi khách: ${perCustomerLimit.toLocaleString('vi-VN')} lần`)
+  }
+
+  return lines
 }
 
 function getSkuDisplayName(sku) {
@@ -211,6 +240,12 @@ function PromotionsPage() {
       minimumOrderAmount: Number(promotion.minimumOrderAmount || 0) > 0
         ? formatCurrencyInput(promotion.minimumOrderAmount)
         : '',
+      usageLimitTotal: Number(promotion.usageLimitTotal || 0) > 0
+        ? String(promotion.usageLimitTotal)
+        : '',
+      usageLimitPerCustomer: Number(promotion.usageLimitPerCustomer || 0) > 0
+        ? String(promotion.usageLimitPerCustomer)
+        : '',
       validFrom: promotion.validFromUtc ? toDatetimeLocalValue(promotion.validFromUtc) : '',
       validTo: promotion.validToUtc ? toDatetimeLocalValue(promotion.validToUtc) : '',
       isActive: promotion.isActive ?? true,
@@ -238,6 +273,8 @@ function PromotionsPage() {
       ? parseCurrencyInput(form.maxDiscountAmount)
       : null
     const minimumOrderAmount = parseCurrencyInput(form.minimumOrderAmount)
+    const usageLimitTotal = parseIntegerInput(form.usageLimitTotal)
+    const usageLimitPerCustomer = parseIntegerInput(form.usageLimitPerCustomer)
     if (scopeType === 'SKU' && skuScopes.length === 0) {
       showError('Vui lòng chọn ít nhất 1 SKU cho phạm vi SKU cụ thể.')
       return
@@ -259,12 +296,29 @@ function PromotionsPage() {
       return
     }
 
+    if (usageLimitTotal < 0 || usageLimitTotal > MAX_USAGE_LIMIT) {
+      showError('Giới hạn tổng lượt dùng không hợp lệ.')
+      return
+    }
+
+    if (usageLimitPerCustomer < 0 || usageLimitPerCustomer > MAX_USAGE_LIMIT) {
+      showError('Giới hạn lượt dùng mỗi khách không hợp lệ.')
+      return
+    }
+
+    if (usageLimitTotal > 0 && usageLimitPerCustomer > usageLimitTotal) {
+      showError('Giới hạn lượt dùng mỗi khách không được lớn hơn tổng lượt dùng.')
+      return
+    }
+
     const payload = {
       promoCode: form.promoCode.trim(),
       discountType,
       discountValue,
       maxDiscountAmount,
       minimumOrderAmount,
+      usageLimitTotal,
+      usageLimitPerCustomer,
       validFrom: fromDatetimeLocalToUtc(form.validFrom),
       validTo: fromDatetimeLocalToUtc(form.validTo),
       isActive: form.isActive,
@@ -452,7 +506,7 @@ function PromotionsPage() {
                 <th className="px-4 py-4">Phạm vi</th>
                 <th className="px-4 py-4">Trạng thái</th>
                 <th className="px-4 py-4">Mô tả</th>
-                <th className="px-4 py-4">Số đơn</th>
+                <th className="px-4 py-4">Lượt dùng</th>
                 <th className="px-8 py-4 text-right">Thao tác</th>
               </tr>
             </thead>
@@ -502,7 +556,11 @@ function PromotionsPage() {
                         <td className="px-4 py-5 text-sm text-[#538463]">
                           {formatPromotionLabel(promotion)}
                         </td>
-                        <td className="px-4 py-5 text-slate-600">{promotion.orderCount}</td>
+                        <td className="px-4 py-5 text-sm text-slate-600">
+                          {formatPromotionUsageSummary(promotion).map((line) => (
+                            <span key={line} className="block">{line}</span>
+                          ))}
+                        </td>
                         <td className="px-8 py-5">
                           <div className="flex justify-end gap-2">
                             <button
@@ -667,6 +725,42 @@ function PromotionsPage() {
                   Để trống hoặc 0 nếu không yêu cầu đơn tối thiểu.
                 </p>
               </label>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block">
+                  <span className="text-xs font-bold uppercase text-slate-400">Giới hạn tổng lượt dùng</span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-50 disabled:text-slate-500"
+                    value={form.usageLimitTotal}
+                    disabled={editingOrderCount > 0}
+                    onChange={(e) => setForm((prev) => ({
+                      ...prev,
+                      usageLimitTotal: formatIntegerInput(e.target.value),
+                    }))}
+                  />
+                  <p className="mt-1 text-xs text-slate-500">
+                    Để trống hoặc 0 nếu không giới hạn tổng lượt dùng.
+                  </p>
+                </label>
+                <label className="block">
+                  <span className="text-xs font-bold uppercase text-slate-400">Giới hạn mỗi khách</span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-50 disabled:text-slate-500"
+                    value={form.usageLimitPerCustomer}
+                    disabled={editingOrderCount > 0}
+                    onChange={(e) => setForm((prev) => ({
+                      ...prev,
+                      usageLimitPerCustomer: formatIntegerInput(e.target.value),
+                    }))}
+                  />
+                  <p className="mt-1 text-xs text-slate-500">
+                    Để trống hoặc 0 nếu không giới hạn theo từng khách hàng.
+                  </p>
+                </label>
+              </div>
               <label className="block">
                 <span className="text-xs font-bold uppercase text-slate-400">Phạm vi áp dụng</span>
                 <select

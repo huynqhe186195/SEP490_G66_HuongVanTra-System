@@ -18,6 +18,10 @@ export function mapPromotion(item) {
     discountValue: Number(item.discountValue ?? item.DiscountValue ?? 0),
     maxDiscountAmount: item.maxDiscountAmount ?? item.MaxDiscountAmount ?? null,
     minimumOrderAmount: Number(item.minimumOrderAmount ?? item.MinimumOrderAmount ?? 0),
+    usageLimitTotal: item.usageLimitTotal ?? item.UsageLimitTotal ?? null,
+    usageLimitPerCustomer: item.usageLimitPerCustomer ?? item.UsageLimitPerCustomer ?? null,
+    usedCountTotal: Number(item.usedCountTotal ?? item.UsedCountTotal ?? 0),
+    remainingUsageTotal: item.remainingUsageTotal ?? item.RemainingUsageTotal ?? null,
     validFromUtc: item.validFromUtc ?? item.ValidFromUtc ?? null,
     validToUtc: item.validToUtc ?? item.ValidToUtc ?? null,
     validityStatus: item.validityStatus ?? item.ValidityStatus ?? null,
@@ -102,6 +106,23 @@ export function formatPromotionMinimumOrderText(promotion) {
   const amount = Number(promotion?.minimumOrderAmount || 0)
   if (amount <= 0) return ''
   return `Đơn tối thiểu: ${amount.toLocaleString('vi-VN')}đ`
+}
+
+export function formatPromotionUsageText(promotion) {
+  if (!promotion) return ''
+  const parts = []
+  const totalLimit = Number(promotion.usageLimitTotal || 0)
+  if (totalLimit > 0) {
+    const remaining = Number(promotion.remainingUsageTotal ?? Math.max(0, totalLimit - Number(promotion.usedCountTotal || 0)))
+    parts.push(`Còn ${Math.max(0, remaining).toLocaleString('vi-VN')} lượt`)
+  }
+
+  const perCustomer = Number(promotion.usageLimitPerCustomer || 0)
+  if (perCustomer > 0) {
+    parts.push(`Mỗi khách: ${perCustomer.toLocaleString('vi-VN')} lần`)
+  }
+
+  return parts.join(' - ')
 }
 
 export const PROMOTION_VALIDITY_LABELS = {

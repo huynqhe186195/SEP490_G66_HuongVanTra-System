@@ -49,6 +49,8 @@ public class PromotionConfiguration : IEntityTypeConfiguration<Promotion>
         builder.Property(e => e.DiscountValue).HasColumnType("decimal(18,2)").IsRequired();
         builder.Property(e => e.MaxDiscountAmount).HasColumnType("decimal(18,2)");
         builder.Property(e => e.MinimumOrderAmount).HasColumnType("decimal(18,2)").HasDefaultValue(0m).IsRequired();
+        builder.Property(e => e.UsageLimitTotal);
+        builder.Property(e => e.UsageLimitPerCustomer);
         builder.Property(e => e.ScopeType).HasConversion<string>().HasMaxLength(20).HasDefaultValue(PromotionScopeType.ORDER).IsRequired();
         builder.Property(e => e.ValidFromUtc);
         builder.Property(e => e.ValidToUtc);

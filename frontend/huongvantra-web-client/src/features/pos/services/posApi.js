@@ -16,12 +16,14 @@ import { mapPromotion } from '../utils/posPromotionUtils.js'
 function buildPromotionPreviewBody({
   promotionId = null,
   promotionCode = null,
+  customerId = null,
   items = [],
   manualDiscount = 0,
 } = {}) {
   return {
     promotionId: promotionId || null,
     promotionCode: promotionCode?.trim() || null,
+    customerId: customerId || null,
     manualDiscount: Math.max(0, Math.round(Number(manualDiscount) || 0)),
     items: items.map((item) => ({
       skuId: item.skuId ?? item.productId,
@@ -605,6 +607,7 @@ export async function fetchPromotionByCode(code) {
 export async function applyPromotionPreview({
   promotionId = null,
   promotionCode = null,
+  customerId = null,
   items = [],
   manualDiscount = 0,
 }) {
@@ -613,6 +616,7 @@ export async function applyPromotionPreview({
     body: JSON.stringify(buildPromotionPreviewBody({
       promotionId,
       promotionCode,
+      customerId,
       items,
       manualDiscount,
     })),
@@ -620,10 +624,11 @@ export async function applyPromotionPreview({
   return mapPromotion(data)
 }
 
-export async function fetchApplicablePromotions({ items = [], manualDiscount = 0 } = {}) {
+export async function fetchApplicablePromotions({ customerId = null, items = [], manualDiscount = 0 } = {}) {
   const data = await apiRequestAuth('/api/promotions/applicable', {
     method: 'POST',
     body: JSON.stringify(buildPromotionPreviewBody({
+      customerId,
       items,
       manualDiscount,
     })),

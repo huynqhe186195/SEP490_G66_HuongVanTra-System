@@ -2,6 +2,7 @@ import { isVipCustomerType } from '../../customers/utils/customerDisplay.js'
 import {
   formatPromotionLabel,
   formatPromotionMinimumOrderText,
+  formatPromotionUsageText,
 } from '../utils/posPromotionUtils.js'
 
 function Icon({ children, className = '', filled = false }) {
@@ -323,6 +324,9 @@ export default function PosPaymentSidebar({
                   {formatPromotionMinimumOrderText(appliedPromotion) ? (
                     <p className="text-xs text-[#717971]">{formatPromotionMinimumOrderText(appliedPromotion)}</p>
                   ) : null}
+                  {formatPromotionUsageText(appliedPromotion) ? (
+                    <p className="text-xs text-[#717971]">{formatPromotionUsageText(appliedPromotion)}</p>
+                  ) : null}
                 </div>
                 <button
                   type="button"
@@ -374,6 +378,7 @@ export default function PosPaymentSidebar({
                       const scopeText = formatPromotionScopeLabel?.(promotion) || ''
                       const discountText = formatPromotionDiscountText?.(promotion) || ''
                       const minimumText = formatPromotionMinimumOrderText(promotion)
+                      const usageText = formatPromotionUsageText(promotion)
 
                       return (
                         <button
@@ -394,6 +399,9 @@ export default function PosPaymentSidebar({
                           ) : null}
                           {minimumText ? (
                             <span className="block text-xs text-[#717971]">{minimumText}</span>
+                          ) : null}
+                          {usageText ? (
+                            <span className="block text-xs text-[#717971]">{usageText}</span>
                           ) : null}
                         </button>
                       )

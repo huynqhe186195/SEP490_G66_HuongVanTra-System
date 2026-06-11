@@ -288,6 +288,12 @@ namespace OrderService.Infrastructure.Migrations
                         .HasColumnType("varchar(20)")
                         .HasDefaultValue("ORDER");
 
+                    b.Property<int?>("UsageLimitPerCustomer")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("UsageLimitTotal")
+                        .HasColumnType("int");
+
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("datetime(6)");
 

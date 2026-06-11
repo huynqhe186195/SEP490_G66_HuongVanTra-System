@@ -86,7 +86,20 @@ public class PromotionRepository(OrderDbContext _db) : IPromotionRepository
         Guid promotionId, CancellationToken ct = default) =>
         await _db.Orders
             .IgnoreQueryFilters()
-            .CountAsync(o => o.PromotionId == promotionId, ct);
+            .CountAsync(o =>
+                o.PromotionId == promotionId &&
+                !o.IsDeleted &&
+                o.OrderStatus != OrderStatus.Cancelled, ct);
+
+    public async Task<int> CountOrdersUsingPromotionByCustomerAsync(
+        Guid promotionId, Guid customerId, CancellationToken ct = default) =>
+        await _db.Orders
+            .IgnoreQueryFilters()
+            .CountAsync(o =>
+                o.PromotionId == promotionId &&
+                o.CustomerId == customerId &&
+                !o.IsDeleted &&
+                o.OrderStatus != OrderStatus.Cancelled, ct);
 
     public async Task AddAsync(Promotion promotion, CancellationToken ct = default) =>
         await _db.Promotions.AddAsync(promotion, ct);

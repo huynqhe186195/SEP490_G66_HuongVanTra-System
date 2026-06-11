@@ -876,6 +876,7 @@ function PosPage() {
       })),
       orderDiscountPercent: effectiveOrderDiscountPercent,
       orderDiscountAmountFixed: effectiveOrderDiscountAmountFixed,
+      customerId: selectedCustomer?.customerId || null,
     })
 
   const getPromotionManualDiscount = () => Math.round(itemDiscountTotal + orderDiscountAmount)
@@ -908,6 +909,7 @@ function PosPage() {
     cartItems,
     effectiveOrderDiscountAmountFixed,
     effectiveOrderDiscountPercent,
+    selectedCustomer?.customerId,
   ])
 
   useEffect(() => {
@@ -917,6 +919,7 @@ function PosPage() {
     cartItems,
     effectiveOrderDiscountAmountFixed,
     effectiveOrderDiscountPercent,
+    selectedCustomer?.customerId,
   ])
 
   const applyPromotionToCurrentCart = async ({ promotion = null, code = '' } = {}) => {
@@ -933,6 +936,7 @@ function PosPage() {
     const nextPromotion = await applyPromotionPreview({
       promotionId: promotion?.id ?? null,
       promotionCode: promoCode,
+      customerId: selectedCustomer?.customerId || null,
       items: buildPromotionPreviewItems(),
       manualDiscount: getPromotionManualDiscount(),
     })
@@ -957,6 +961,7 @@ function PosPage() {
     setIsPromotionListLoading(true)
     try {
       const items = await fetchApplicablePromotions({
+        customerId: selectedCustomer?.customerId || null,
         items: buildPromotionPreviewItems(),
         manualDiscount: getPromotionManualDiscount(),
       })

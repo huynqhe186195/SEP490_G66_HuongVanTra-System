@@ -87,7 +87,7 @@ public class OrderLogic(
             i.UnitPrice,
             i.UnitPrice * i.Quantity)).ToList();
         var promotionDiscount = await _promotionLogic.ValidateAndCalculateDiscountAsync(
-            req.PromotionId, req.PromotionCode, promotionItems, manualDiscount, ct);
+            req.PromotionId, req.PromotionCode, promotionItems, manualDiscount, req.CustomerId, ct);
         var totalDiscount = manualDiscount + promotionDiscount.DiscountAmount;
         var finalAmount = Math.Max(0, totalAmount - totalDiscount);
 

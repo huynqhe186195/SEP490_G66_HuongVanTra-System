@@ -52,6 +52,8 @@ function buildPromotionPayload(payload) {
         ? Number(payload.maxDiscountAmount || 0)
         : null,
     minimumOrderAmount: Number(payload.minimumOrderAmount || 0),
+    usageLimitTotal: Number(payload.usageLimitTotal || 0),
+    usageLimitPerCustomer: Number(payload.usageLimitPerCustomer || 0),
     validFrom: payload.validFrom || null,
     validTo: payload.validTo || null,
     isActive: payload.isActive ?? true,

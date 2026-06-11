@@ -13,6 +13,7 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
     private const decimal MaxPercentageDiscountValue = 90m;
     private const decimal MaxFixedDiscountValue = 10_000_000m;
     private const decimal MaxPercentageDiscountAmount = 10_000_000m;
+    private const int MaxUsageLimit = 1_000_000;
     private const int AdminPromotionPageSize = 10;
     private const string InvalidLookupMessage = "Mã giảm giá không hợp lệ hoặc đã hết hiệu lực.";
     private const string NotApplicableMessage = "Promotion is not applicable to selected items.";
@@ -59,7 +60,15 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
     public async Task<List<PromotionLookupResponse>> GetAvailablePromotionsAsync(CancellationToken ct = default)
     {
         var promotions = await _promotionRepo.GetAvailableAsync(DateTime.UtcNow, ct);
-        return promotions.Select(MapToLookupResponse).ToList();
+        var result = new List<PromotionLookupResponse>(promotions.Count);
+
+        foreach (var promotion in promotions)
+        {
+            var usedTotal = await _promotionRepo.CountOrdersUsingPromotionAsync(promotion.Id, ct);
+            result.Add(MapToLookupResponse(promotion, usedTotal));
+        }
+
+        return result;
     }
 
     public async Task<List<PromotionLookupResponse>> GetApplicablePromotionsAsync(
@@ -74,8 +83,9 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
         {
             try
             {
+                var usage = await ValidateUsageLimitsAsync(promotion, req.CustomerId, ct);
                 _ = CalculatePromotionDiscount(promotion, items, req.ManualDiscount);
-                result.Add(MapToLookupResponse(promotion));
+                result.Add(MapToLookupResponse(promotion, usage.UsedCountTotal));
             }
             catch (OrderValidationException)
             {
@@ -95,6 +105,8 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
             req.DiscountValue,
             req.MaxDiscountAmount,
             req.MinimumOrderAmount,
+            req.UsageLimitTotal,
+            req.UsageLimitPerCustomer,
             req.ValidFromUtc ?? req.ValidFrom,
             req.ValidToUtc ?? req.ValidTo,
             req.IsActive,
@@ -117,6 +129,8 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
             DiscountValue = input.DiscountValue,
             MaxDiscountAmount = input.MaxDiscountAmount,
             MinimumOrderAmount = input.MinimumOrderAmount,
+            UsageLimitTotal = input.UsageLimitTotal,
+            UsageLimitPerCustomer = input.UsageLimitPerCustomer,
             ScopeType = input.ScopeType,
             ValidFromUtc = input.ValidFromUtc,
             ValidToUtc = input.ValidToUtc,
@@ -151,6 +165,8 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
             req.DiscountValue,
             req.MaxDiscountAmount,
             req.MinimumOrderAmount,
+            req.UsageLimitTotal,
+            req.UsageLimitPerCustomer,
             req.ValidFromUtc ?? req.ValidFrom,
             req.ValidToUtc ?? req.ValidTo,
             req.IsActive,
@@ -167,12 +183,14 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
             promotion.DiscountValue != input.DiscountValue ||
             promotion.MaxDiscountAmount != input.MaxDiscountAmount ||
             promotion.MinimumOrderAmount != input.MinimumOrderAmount ||
+            promotion.UsageLimitTotal != input.UsageLimitTotal ||
+            promotion.UsageLimitPerCustomer != input.UsageLimitPerCustomer ||
             promotion.ScopeType != input.ScopeType ||
             !SameSkuScopes(promotion.Scopes, input.SkuScopes);
 
         if (orderCount > 0 && changesImmutableFields)
             throw new OrderValidationException(
-                "Mã giảm giá đã được sử dụng nên không được đổi cấu hình giảm giá, giảm tối đa, phạm vi áp dụng hoặc đơn tối thiểu.");
+                "Mã giảm giá đã được sử dụng nên không được đổi cấu hình giảm giá, phạm vi áp dụng, đơn tối thiểu hoặc giới hạn lượt dùng.");
 
         if (promotion.NormalizedPromoCode != input.NormalizedPromoCode)
         {
@@ -189,6 +207,8 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
             promotion.DiscountValue = input.DiscountValue;
             promotion.MaxDiscountAmount = input.MaxDiscountAmount;
             promotion.MinimumOrderAmount = input.MinimumOrderAmount;
+            promotion.UsageLimitTotal = input.UsageLimitTotal;
+            promotion.UsageLimitPerCustomer = input.UsageLimitPerCustomer;
             promotion.ScopeType = input.ScopeType;
             ReplaceScopes(promotion, input.SkuScopes, now);
         }
@@ -236,7 +256,8 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
         if (promotion is null || !IsCurrentlyUsable(promotion, DateTime.UtcNow))
             throw new OrderValidationException(InvalidLookupMessage);
 
-        return MapToLookupResponse(promotion);
+        var usedTotal = await _promotionRepo.CountOrdersUsingPromotionAsync(promotion.Id, ct);
+        return MapToLookupResponse(promotion, usedTotal);
     }
 
     public async Task<PromotionApplyPreviewResponse> ApplyPreviewAsync(
@@ -244,6 +265,7 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
     {
         var items = ValidatePreviewItems(req.Items);
         var promotion = await ResolvePromotionAsync(req.PromotionId, req.PromotionCode, ct);
+        var usage = await ValidateUsageLimitsAsync(promotion, req.CustomerId, ct);
         var result = CalculatePromotionDiscount(promotion, items, req.ManualDiscount);
 
         return new PromotionApplyPreviewResponse(
@@ -253,6 +275,10 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
             promotion.DiscountValue,
             promotion.MaxDiscountAmount,
             promotion.MinimumOrderAmount,
+            promotion.UsageLimitTotal,
+            promotion.UsageLimitPerCustomer,
+            usage.UsedCountTotal,
+            GetRemainingUsageTotal(promotion, usage.UsedCountTotal),
             promotion.ScopeType.ToString(),
             MapScopes(promotion),
             result.DiscountAmount,
@@ -265,6 +291,7 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
         string? promotionCode,
         IReadOnlyCollection<PromotionCalculationItem> items,
         decimal manualDiscount,
+        Guid? customerId,
         CancellationToken ct = default)
     {
         var hasPromotionId = promotionId.HasValue && promotionId.Value != Guid.Empty;
@@ -274,6 +301,7 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
             return PromotionDiscountResult.Empty;
 
         var promotion = await ResolvePromotionAsync(promotionId, promotionCode, ct);
+        await ValidateUsageLimitsAsync(promotion, customerId, ct);
         var result = CalculatePromotionDiscount(promotion, items, manualDiscount);
         return new PromotionDiscountResult(
             promotion.Id,
@@ -432,6 +460,8 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
         decimal discountValue,
         decimal? maxDiscountAmount,
         decimal? minimumOrderAmount,
+        int? usageLimitTotal,
+        int? usageLimitPerCustomer,
         DateTime? validFrom,
         DateTime? validTo,
         bool? isActive,
@@ -446,6 +476,14 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
         var parsedDiscountType = ParseDiscountType(discountType, errors);
         var parsedScopeType = ParseScopeType(scopeType, errors);
         var normalizedMinimumOrderAmount = minimumOrderAmount ?? 0m;
+        var normalizedUsageLimitTotal = NormalizeUsageLimit(
+            usageLimitTotal,
+            "Giới hạn tổng lượt dùng không hợp lệ.",
+            errors);
+        var normalizedUsageLimitPerCustomer = NormalizeUsageLimit(
+            usageLimitPerCustomer,
+            "Giới hạn lượt dùng mỗi khách không hợp lệ.",
+            errors);
         decimal? normalizedMaxDiscountAmount = null;
 
         if (discountValue <= 0)
@@ -476,6 +514,11 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
             discountValue > normalizedMinimumOrderAmount)
             errors.Add("Số tiền giảm cố định không được lớn hơn đơn tối thiểu.");
 
+        if (normalizedUsageLimitTotal.HasValue &&
+            normalizedUsageLimitPerCustomer.HasValue &&
+            normalizedUsageLimitPerCustomer.Value > normalizedUsageLimitTotal.Value)
+            errors.Add("Giới hạn lượt dùng mỗi khách không được lớn hơn tổng lượt dùng.");
+
         var validFromUtc = NormalizeValidFromUtc(
             AsNullableUtc(validFrom),
             validateValidFromNotPast,
@@ -496,6 +539,8 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
             discountValue,
             normalizedMaxDiscountAmount,
             normalizedMinimumOrderAmount,
+            normalizedUsageLimitTotal,
+            normalizedUsageLimitPerCustomer,
             validFromUtc,
             validToUtc,
             isActive,
@@ -598,6 +643,20 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
         return null;
     }
 
+    private static int? NormalizeUsageLimit(int? value, string message, List<string> errors)
+    {
+        if (!value.HasValue || value.Value == 0)
+            return null;
+
+        if (value.Value < 0 || value.Value > MaxUsageLimit)
+        {
+            errors.Add(message);
+            return null;
+        }
+
+        return value.Value;
+    }
+
     private static decimal CalculateDiscount(Promotion promotion, decimal baseForPromotion)
     {
         if (baseForPromotion <= 0)
@@ -640,6 +699,45 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
             return false;
 
         return true;
+    }
+
+    private async Task<PromotionUsageSnapshot> ValidateUsageLimitsAsync(
+        Promotion promotion,
+        Guid? customerId,
+        CancellationToken ct)
+    {
+        var usedTotal = await _promotionRepo.CountOrdersUsingPromotionAsync(promotion.Id, ct);
+        var totalLimit = NormalizeConfiguredUsageLimit(promotion.UsageLimitTotal);
+        if (totalLimit.HasValue && usedTotal >= totalLimit.Value)
+            throw new OrderValidationException("Mã giảm giá đã hết lượt sử dụng.");
+
+        var perCustomerLimit = NormalizeConfiguredUsageLimit(promotion.UsageLimitPerCustomer);
+        if (perCustomerLimit.HasValue)
+        {
+            if (!customerId.HasValue || customerId.Value == Guid.Empty)
+                throw new OrderValidationException("Vui lòng chọn khách hàng để áp dụng mã này.");
+
+            var usedByCustomer = await _promotionRepo.CountOrdersUsingPromotionByCustomerAsync(
+                promotion.Id,
+                customerId.Value,
+                ct);
+
+            if (usedByCustomer >= perCustomerLimit.Value)
+                throw new OrderValidationException("Khách hàng đã sử dụng hết lượt cho mã giảm giá này.");
+        }
+
+        return new PromotionUsageSnapshot(usedTotal);
+    }
+
+    private static int? NormalizeConfiguredUsageLimit(int? value) =>
+        value.HasValue && value.Value > 0 ? value.Value : null;
+
+    private static int? GetRemainingUsageTotal(Promotion promotion, int usedTotal)
+    {
+        var totalLimit = NormalizeConfiguredUsageLimit(promotion.UsageLimitTotal);
+        return totalLimit.HasValue
+            ? Math.Max(0, totalLimit.Value - usedTotal)
+            : null;
     }
 
     private static string GetValidityStatus(Promotion promotion, DateTime nowUtc)
@@ -718,6 +816,10 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
         promotion.DiscountValue,
         promotion.MaxDiscountAmount,
         promotion.MinimumOrderAmount,
+        promotion.UsageLimitTotal,
+        promotion.UsageLimitPerCustomer,
+        orderCount,
+        GetRemainingUsageTotal(promotion, orderCount),
         AsNullableUtc(promotion.ValidFromUtc),
         AsNullableUtc(promotion.ValidToUtc),
         GetValidityStatus(promotion, DateTime.UtcNow),
@@ -726,13 +828,17 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
         MapScopes(promotion),
         orderCount);
 
-    private static PromotionLookupResponse MapToLookupResponse(Promotion promotion) => new(
+    private static PromotionLookupResponse MapToLookupResponse(Promotion promotion, int usedCountTotal = 0) => new(
         promotion.Id,
         promotion.PromoCode,
         promotion.DiscountType.ToString(),
         promotion.DiscountValue,
         promotion.MaxDiscountAmount,
         promotion.MinimumOrderAmount,
+        promotion.UsageLimitTotal,
+        promotion.UsageLimitPerCustomer,
+        usedCountTotal,
+        GetRemainingUsageTotal(promotion, usedCountTotal),
         AsNullableUtc(promotion.ValidFromUtc),
         AsNullableUtc(promotion.ValidToUtc),
         GetValidityStatus(promotion, DateTime.UtcNow),
@@ -808,6 +914,8 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
         decimal DiscountValue,
         decimal? MaxDiscountAmount,
         decimal MinimumOrderAmount,
+        int? UsageLimitTotal,
+        int? UsageLimitPerCustomer,
         DateTime? ValidFromUtc,
         DateTime? ValidToUtc,
         bool? IsActive,
@@ -822,6 +930,8 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
     private record PromotionCalculationResult(
         decimal DiscountAmount,
         decimal EligibleSubtotal);
+
+    private record PromotionUsageSnapshot(int UsedCountTotal);
 }
 
 public record PromotionCalculationItem(
