@@ -9,9 +9,7 @@ public class Promotion : BaseEntity
     public string NormalizedPromoCode { get; set; } = string.Empty;
     public PromotionDiscountType DiscountType { get; set; }
     public decimal DiscountValue { get; set; }
-    public PromotionScopeType ScopeType { get; set; } = PromotionScopeType.ORDER;
     public DateTime? ValidFromUtc { get; set; }
     public DateTime? ValidToUtc { get; set; }
     public bool IsActive { get; set; }
-    public ICollection<PromotionScope> Scopes { get; set; } = new List<PromotionScope>();
 }

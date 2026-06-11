@@ -12,7 +12,6 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
 {
     private const decimal MaxDiscountValue = 1_000_000_000m;
     private const string InvalidLookupMessage = "Mã giảm giá không hợp lệ hoặc đã hết hiệu lực.";
-    private const string NotApplicableMessage = "Promotion is not applicable to selected items.";
     private static readonly Regex PromoCodeRegex = new("^[A-Z0-9_-]+$", RegexOptions.Compiled);
 
     public async Task<List<PromotionResponse>> GetAdminPromotionsAsync(CancellationToken ct = default)
@@ -29,24 +28,14 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
         return result;
     }
 
-    public async Task<List<PromotionLookupResponse>> GetAvailablePromotionsAsync(CancellationToken ct = default)
-    {
-        var promotions = await _promotionRepo.GetAvailableAsync(DateTime.UtcNow, ct);
-        return promotions.Select(MapToLookupResponse).ToList();
-    }
-
     public async Task<PromotionResponse> CreateAsync(CreatePromotionRequest req, CancellationToken ct = default)
     {
         var input = ValidatePromotionInput(
             req.PromoCode,
             req.DiscountType,
             req.DiscountValue,
-            req.ValidFromUtc ?? req.ValidFrom,
-            req.ValidToUtc ?? req.ValidTo,
-            req.IsActive,
-            req.ScopeType,
-            req.SkuIds,
-            req.SkuScopes);
+            req.ValidFrom,
+            req.ValidTo);
 
         var existing = await _promotionRepo.GetByNormalizedCodeAsync(input.NormalizedPromoCode, ct);
         if (existing is not null)
@@ -60,16 +49,12 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
             NormalizedPromoCode = input.NormalizedPromoCode,
             DiscountType = input.DiscountType,
             DiscountValue = input.DiscountValue,
-            ScopeType = input.ScopeType,
             ValidFromUtc = input.ValidFromUtc,
             ValidToUtc = input.ValidToUtc,
-            IsActive = input.IsActive ?? true,
+            IsActive = true,
             CreatedAt = now,
             UpdatedAt = now
         };
-
-        foreach (var scope in BuildPromotionScopes(promotion.Id, input.ScopeType, input.SkuScopes, now))
-            promotion.Scopes.Add(scope);
 
         await _promotionRepo.AddAsync(promotion, ct);
         await _promotionRepo.SaveChangesAsync(ct);
@@ -87,20 +72,14 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
             req.PromoCode,
             req.DiscountType,
             req.DiscountValue,
-            req.ValidFromUtc ?? req.ValidFrom,
-            req.ValidToUtc ?? req.ValidTo,
-            req.IsActive,
-            req.ScopeType,
-            req.SkuIds,
-            req.SkuScopes);
+            req.ValidFrom,
+            req.ValidTo);
 
         var orderCount = await _promotionRepo.CountOrdersUsingPromotionAsync(promotion.Id, ct);
         var changesImmutableFields =
             promotion.NormalizedPromoCode != input.NormalizedPromoCode ||
             promotion.DiscountType != input.DiscountType ||
-            promotion.DiscountValue != input.DiscountValue ||
-            promotion.ScopeType != input.ScopeType ||
-            !SameSkuScopes(promotion.Scopes, input.SkuScopes);
+            promotion.DiscountValue != input.DiscountValue;
 
         if (orderCount > 0 && changesImmutableFields)
             throw new OrderValidationException(
@@ -119,13 +98,10 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
             promotion.NormalizedPromoCode = input.NormalizedPromoCode;
             promotion.DiscountType = input.DiscountType;
             promotion.DiscountValue = input.DiscountValue;
-            promotion.ScopeType = input.ScopeType;
-            ReplaceScopes(promotion, input.SkuScopes, DateTime.UtcNow);
         }
 
         promotion.ValidFromUtc = input.ValidFromUtc;
         promotion.ValidToUtc = input.ValidToUtc;
-        promotion.IsActive = input.IsActive ?? promotion.IsActive;
         promotion.UpdatedAt = DateTime.UtcNow;
 
         await _promotionRepo.SaveChangesAsync(ct);
@@ -169,30 +145,10 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
         return MapToLookupResponse(promotion);
     }
 
-    public async Task<PromotionApplyPreviewResponse> ApplyPreviewAsync(
-        PromotionApplyPreviewRequest req, CancellationToken ct = default)
-    {
-        var items = ValidatePreviewItems(req.Items);
-        var promotion = await ResolvePromotionAsync(req.PromotionId, req.PromotionCode, ct);
-        var result = CalculatePromotionDiscount(promotion, items, req.ManualDiscount);
-
-        return new PromotionApplyPreviewResponse(
-            promotion.Id,
-            promotion.PromoCode,
-            promotion.DiscountType.ToString(),
-            promotion.DiscountValue,
-            promotion.ScopeType.ToString(),
-            MapScopes(promotion),
-            result.DiscountAmount,
-            result.EligibleSubtotal,
-            "Promotion applied successfully");
-    }
-
     public async Task<PromotionDiscountResult> ValidateAndCalculateDiscountAsync(
         Guid? promotionId,
         string? promotionCode,
-        IReadOnlyCollection<PromotionCalculationItem> items,
-        decimal manualDiscount,
+        decimal baseForPromotion,
         CancellationToken ct = default)
     {
         var hasPromotionId = promotionId.HasValue && promotionId.Value != Guid.Empty;
@@ -201,22 +157,10 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
         if (!hasPromotionId && !hasPromotionCode)
             return PromotionDiscountResult.Empty;
 
-        var promotion = await ResolvePromotionAsync(promotionId, promotionCode, ct);
-        var result = CalculatePromotionDiscount(promotion, items, manualDiscount);
-        return new PromotionDiscountResult(
-            promotion.Id,
-            promotion.PromoCode,
-            result.DiscountAmount,
-            result.EligibleSubtotal);
-    }
-
-    private async Task<Promotion> ResolvePromotionAsync(
-        Guid? promotionId, string? promotionCode, CancellationToken ct)
-    {
         Promotion? promotion;
-        if (promotionId.HasValue && promotionId.Value != Guid.Empty)
+        if (hasPromotionId)
         {
-            promotion = await _promotionRepo.GetByIdAsync(promotionId.Value, ct);
+            promotion = await _promotionRepo.GetByIdAsync(promotionId!.Value, ct);
         }
         else
         {
@@ -227,103 +171,20 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
         if (promotion is null || !IsCurrentlyUsable(promotion, DateTime.UtcNow))
             throw new OrderValidationException(InvalidLookupMessage);
 
-        return promotion;
-    }
-
-    private static PromotionCalculationResult CalculatePromotionDiscount(
-        Promotion promotion,
-        IReadOnlyCollection<PromotionCalculationItem> items,
-        decimal manualDiscount)
-    {
-        var itemList = items.ToList();
-        var totalAmount = itemList.Sum(i => i.SubTotal);
-        var safeManualDiscount = Math.Min(Math.Max(0, manualDiscount), totalAmount);
-        var baseAfterManualDiscount = Math.Max(0, totalAmount - safeManualDiscount);
-
-        var eligibleSubtotal = promotion.ScopeType == PromotionScopeType.SKU
-            ? GetEligibleSkuSubtotal(promotion, itemList)
-            : totalAmount;
-
-        if (promotion.ScopeType == PromotionScopeType.SKU && eligibleSubtotal <= 0)
-            throw new OrderValidationException(NotApplicableMessage);
-
-        var discountBase = promotion.ScopeType == PromotionScopeType.SKU
-            ? Math.Min(eligibleSubtotal, baseAfterManualDiscount)
-            : baseAfterManualDiscount;
-
-        var discountAmount = CalculateDiscount(promotion, discountBase);
-        return new PromotionCalculationResult(discountAmount, eligibleSubtotal);
-    }
-
-    private static decimal GetEligibleSkuSubtotal(
-        Promotion promotion, IReadOnlyCollection<PromotionCalculationItem> items)
-    {
-        var eligibleSkuIds = promotion.Scopes
-            .Where(s => s.ScopeType == PromotionScopeType.SKU && s.SkuId.HasValue)
-            .Select(s => s.SkuId!.Value)
-            .ToHashSet();
-
-        if (eligibleSkuIds.Count == 0)
-            return 0;
-
-        return items
-            .Where(i => eligibleSkuIds.Contains(i.SkuId))
-            .Sum(i => i.SubTotal);
-    }
-
-    private static List<PromotionCalculationItem> ValidatePreviewItems(
-        List<PromotionApplyPreviewItemRequest>? items)
-    {
-        var errors = new List<string>();
-        if (items is null || items.Count == 0)
-            errors.Add("Đơn hàng phải có ít nhất 1 sản phẩm.");
-
-        var result = new List<PromotionCalculationItem>();
-        if (items is not null)
-        {
-            for (var i = 0; i < items.Count; i++)
-            {
-                var item = items[i];
-                if (item.SkuId == Guid.Empty)
-                    errors.Add($"Sản phẩm [{i + 1}]: SkuId không hợp lệ.");
-                if (item.Quantity < 1)
-                    errors.Add($"Sản phẩm [{i + 1}]: Số lượng phải >= 1.");
-                if (item.UnitPrice < 0)
-                    errors.Add($"Sản phẩm [{i + 1}]: Đơn giá không được âm.");
-
-                var subTotal = item.SubTotal ?? item.UnitPrice * item.Quantity;
-                if (subTotal < 0)
-                    errors.Add($"Sản phẩm [{i + 1}]: Thành tiền không được âm.");
-
-                result.Add(new PromotionCalculationItem(
-                    item.SkuId,
-                    item.Quantity,
-                    item.UnitPrice,
-                    subTotal));
-            }
-        }
-
-        if (errors.Count > 0)
-            throw new OrderValidationException(errors);
-
-        return result;
+        var discountAmount = CalculateDiscount(promotion, Math.Max(0, baseForPromotion));
+        return new PromotionDiscountResult(promotion.Id, promotion.PromoCode, discountAmount);
     }
 
     private static PromotionInput ValidatePromotionInput(
         string? promoCode,
         string? discountType,
         decimal discountValue,
-        DateTime? validFrom,
-        DateTime? validTo,
-        bool? isActive,
-        string? scopeType,
-        List<Guid>? skuIds,
-        List<PromotionSkuScopeRequest>? skuScopes)
+        DateOnly? validFrom,
+        DateOnly? validTo)
     {
         var errors = new List<string>();
         var normalizedCode = NormalizePromoCode(promoCode, errors);
         var parsedDiscountType = ParseDiscountType(discountType, errors);
-        var parsedScopeType = ParseScopeType(scopeType, errors);
 
         if (discountValue <= 0)
             errors.Add("Giá trị giảm giá phải lớn hơn 0.");
@@ -333,12 +194,8 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
         if (parsedDiscountType == PromotionDiscountType.PERCENTAGE && discountValue > 100)
             errors.Add("Giá trị giảm theo phần trăm phải nhỏ hơn hoặc bằng 100.");
 
-        var validFromUtc = AsNullableUtc(validFrom);
-        var validToUtc = AsNullableUtc(validTo);
-        if (validFromUtc.HasValue && validToUtc.HasValue && validToUtc.Value <= validFromUtc.Value)
-            errors.Add("Thời gian kết thúc phải sau thời gian bắt đầu.");
-
-        var normalizedSkuScopes = NormalizeSkuScopes(parsedScopeType, skuIds, skuScopes, errors);
+        if (validFrom.HasValue && validTo.HasValue && validFrom.Value > validTo.Value)
+            errors.Add("Ngày bắt đầu phải nhỏ hơn hoặc bằng ngày kết thúc.");
 
         if (errors.Count > 0)
             throw new OrderValidationException(errors);
@@ -347,60 +204,8 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
             normalizedCode!,
             parsedDiscountType!.Value,
             discountValue,
-            validFromUtc,
-            validToUtc,
-            isActive,
-            parsedScopeType,
-            normalizedSkuScopes);
-    }
-
-    private static PromotionScopeType ParseScopeType(string? scopeType, List<string> errors)
-    {
-        if (string.IsNullOrWhiteSpace(scopeType))
-            return PromotionScopeType.ORDER;
-
-        var normalizedType = scopeType.Trim().ToUpperInvariant();
-        if (normalizedType is "ORDER" or "SKU" &&
-            Enum.TryParse<PromotionScopeType>(normalizedType, out var parsed))
-            return parsed;
-
-        errors.Add("Phạm vi áp dụng chỉ hỗ trợ ORDER hoặc SKU.");
-        return PromotionScopeType.ORDER;
-    }
-
-    private static List<PromotionScopeInput> NormalizeSkuScopes(
-        PromotionScopeType scopeType,
-        List<Guid>? skuIds,
-        List<PromotionSkuScopeRequest>? skuScopes,
-        List<string> errors)
-    {
-        if (scopeType == PromotionScopeType.ORDER)
-            return [];
-
-        var bySkuId = new Dictionary<Guid, PromotionScopeInput>();
-        foreach (var scope in skuScopes ?? [])
-        {
-            if (scope.SkuId == Guid.Empty)
-                continue;
-
-            bySkuId[scope.SkuId] = new PromotionScopeInput(
-                scope.SkuId,
-                string.IsNullOrWhiteSpace(scope.SkuCode) ? null : scope.SkuCode.Trim(),
-                string.IsNullOrWhiteSpace(scope.SkuName) ? null : scope.SkuName.Trim());
-        }
-
-        foreach (var skuId in skuIds ?? [])
-        {
-            if (skuId == Guid.Empty)
-                continue;
-
-            bySkuId.TryAdd(skuId, new PromotionScopeInput(skuId, null, null));
-        }
-
-        if (bySkuId.Count == 0)
-            errors.Add("Promotion áp dụng theo SKU phải chọn ít nhất 1 SKU.");
-
-        return bySkuId.Values.ToList();
+            ToStartOfDayUtc(validFrom),
+            ToEndOfDayUtc(validTo));
     }
 
     private static string? NormalizePromoCode(string? promoCode, List<string> errors)
@@ -490,61 +295,6 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
         return "active";
     }
 
-    private static List<PromotionScope> BuildPromotionScopes(
-        Guid promotionId,
-        PromotionScopeType scopeType,
-        List<PromotionScopeInput> scopes,
-        DateTime now)
-    {
-        if (scopeType == PromotionScopeType.ORDER)
-            return [];
-
-        return scopes.Select(scope => new PromotionScope
-        {
-            Id = Guid.NewGuid(),
-            PromotionId = promotionId,
-            ScopeType = PromotionScopeType.SKU,
-            SkuId = scope.SkuId,
-            SkuCode = scope.SkuCode,
-            SkuSnapshotName = scope.SkuName,
-            CreatedAt = now,
-            UpdatedAt = now
-        }).ToList();
-    }
-
-    private static void ReplaceScopes(
-        Promotion promotion,
-        List<PromotionScopeInput> nextScopes,
-        DateTime now)
-    {
-        foreach (var scope in promotion.Scopes)
-        {
-            scope.IsDeleted = true;
-            scope.UpdatedAt = now;
-        }
-
-        foreach (var scope in BuildPromotionScopes(promotion.Id, promotion.ScopeType, nextScopes, now))
-            promotion.Scopes.Add(scope);
-    }
-
-    private static bool SameSkuScopes(
-        ICollection<PromotionScope> existingScopes,
-        List<PromotionScopeInput> nextScopes)
-    {
-        var existingIds = existingScopes
-            .Where(s => s.ScopeType == PromotionScopeType.SKU && s.SkuId.HasValue)
-            .Select(s => s.SkuId!.Value)
-            .OrderBy(id => id)
-            .ToArray();
-
-        var nextIds = nextScopes
-            .Select(s => s.SkuId)
-            .OrderBy(id => id)
-            .ToArray();
-
-        return existingIds.SequenceEqual(nextIds);
-    }
-
     private static PromotionResponse MapToResponse(Promotion promotion, int orderCount) => new(
         promotion.Id,
         promotion.PromoCode,
@@ -554,8 +304,6 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
         AsNullableUtc(promotion.ValidToUtc),
         GetValidityStatus(promotion, DateTime.UtcNow),
         promotion.IsActive,
-        promotion.ScopeType.ToString(),
-        MapScopes(promotion),
         orderCount);
 
     private static PromotionLookupResponse MapToLookupResponse(Promotion promotion) => new(
@@ -566,20 +314,17 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
         AsNullableUtc(promotion.ValidFromUtc),
         AsNullableUtc(promotion.ValidToUtc),
         GetValidityStatus(promotion, DateTime.UtcNow),
-        promotion.IsActive,
-        promotion.ScopeType.ToString(),
-        MapScopes(promotion));
+        promotion.IsActive);
 
-    private static List<PromotionScopeResponse> MapScopes(Promotion promotion) =>
-        promotion.ScopeType == PromotionScopeType.SKU
-            ? promotion.Scopes
-                .Where(s => s.ScopeType == PromotionScopeType.SKU && s.SkuId.HasValue)
-                .Select(s => new PromotionScopeResponse(
-                    s.SkuId!.Value,
-                    s.SkuCode,
-                    s.SkuSnapshotName))
-                .ToList()
-            : [];
+    private static DateTime? ToStartOfDayUtc(DateOnly? date) =>
+        date.HasValue
+            ? DateTime.SpecifyKind(date.Value.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc)
+            : null;
+
+    private static DateTime? ToEndOfDayUtc(DateOnly? date) =>
+        date.HasValue
+            ? DateTime.SpecifyKind(date.Value.ToDateTime(new TimeOnly(23, 59, 59)), DateTimeKind.Utc)
+            : null;
 
     private static DateTime? AsNullableUtc(DateTime? dateTime) =>
         dateTime.HasValue ? AsUtc(dateTime.Value) : null;
@@ -594,32 +339,13 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
         PromotionDiscountType DiscountType,
         decimal DiscountValue,
         DateTime? ValidFromUtc,
-        DateTime? ValidToUtc,
-        bool? IsActive,
-        PromotionScopeType ScopeType,
-        List<PromotionScopeInput> SkuScopes);
-
-    private record PromotionScopeInput(
-        Guid SkuId,
-        string? SkuCode,
-        string? SkuName);
-
-    private record PromotionCalculationResult(
-        decimal DiscountAmount,
-        decimal EligibleSubtotal);
+        DateTime? ValidToUtc);
 }
-
-public record PromotionCalculationItem(
-    Guid SkuId,
-    int Quantity,
-    decimal UnitPrice,
-    decimal SubTotal);
 
 public record PromotionDiscountResult(
     Guid? PromotionId,
     string? PromotionCode,
-    decimal DiscountAmount,
-    decimal EligibleSubtotal)
+    decimal DiscountAmount)
 {
-    public static PromotionDiscountResult Empty { get; } = new(null, null, 0, 0);
+    public static PromotionDiscountResult Empty { get; } = new(null, null, 0);
 }

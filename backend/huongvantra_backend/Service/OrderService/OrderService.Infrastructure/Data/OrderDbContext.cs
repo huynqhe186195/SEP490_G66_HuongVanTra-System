@@ -10,7 +10,6 @@ public class OrderDbContext(DbContextOptions<OrderDbContext> options) : DbContex
     public DbSet<Payment> Payments => Set<Payment>();
     public DbSet<OrderActivity> OrderActivities => Set<OrderActivity>();
     public DbSet<Promotion> Promotions => Set<Promotion>();
-    public DbSet<PromotionScope> PromotionScopes => Set<PromotionScope>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -20,6 +19,5 @@ public class OrderDbContext(DbContextOptions<OrderDbContext> options) : DbContex
         modelBuilder.Entity<OrderDetail>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<Payment>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<Promotion>().HasQueryFilter(e => !e.IsDeleted);
-        modelBuilder.Entity<PromotionScope>().HasQueryFilter(e => !e.IsDeleted);
     }
 }

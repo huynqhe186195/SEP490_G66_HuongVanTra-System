@@ -120,25 +120,6 @@ function OrderDetailPage() {
     }))
   }, [order?.items, catalogLookups])
 
-  const promotionScopeType = String(
-    order?.promotionScopeType || (order?.promotionCode ? 'ORDER' : ''),
-  ).toUpperCase()
-  const promotionAppliedSkuText = useMemo(() => {
-    if (!order || promotionScopeType !== 'SKU') return ''
-
-    const scopedSkuIds = new Set((order.promotionSkuScopes ?? []).map((scope) => scope.skuId))
-    const orderItemNames = (order.items ?? [])
-      .filter((line) => scopedSkuIds.has(line.skuId))
-      .map((line) => line.skuSnapshotName || line.skuSnapshotCode)
-      .filter(Boolean)
-
-    const scopeNames = (order.promotionSkuScopes ?? [])
-      .map((scope) => scope.skuName || scope.skuCode || scope.skuId)
-      .filter(Boolean)
-
-    return [...new Set(orderItemNames.length ? orderItemNames : scopeNames)].join(', ')
-  }, [order, promotionScopeType])
-
   async function runAction(action) {
     if (!canManage || !order) return
     try {
@@ -249,31 +230,6 @@ function OrderDetailPage() {
             <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
               <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-400">Ghi chú</h2>
               <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-700">{order.note}</p>
-            </section>
-          ) : null}
-
-          {order.promotionCode ? (
-            <section className="rounded-2xl border border-emerald-100 bg-emerald-50/40 p-5 shadow-sm">
-              <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-emerald-700">Mã giảm giá</h2>
-              <div className="space-y-1 text-sm text-slate-700">
-                <p>
-                  <span className="font-semibold text-slate-800">Mã giảm giá:</span> {order.promotionCode}
-                </p>
-                <p>
-                  <span className="font-semibold text-slate-800">Phạm vi:</span>{' '}
-                  {promotionScopeType === 'SKU' ? 'SKU cụ thể' : 'Toàn đơn'}
-                </p>
-                {promotionScopeType === 'SKU' ? (
-                  <p>
-                    <span className="font-semibold text-slate-800">Áp dụng cho:</span>{' '}
-                    {promotionAppliedSkuText || 'SKU cụ thể'}
-                  </p>
-                ) : null}
-                <p>
-                  <span className="font-semibold text-slate-800">Tổng giảm từ mã:</span>{' '}
-                  {formatVnd(order.promotionDiscountAmount)}
-                </p>
-              </div>
             </section>
           ) : null}
 
