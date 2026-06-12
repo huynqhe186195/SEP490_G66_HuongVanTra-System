@@ -131,14 +131,23 @@ export function summarizeProductStock(skus = [], stockBySkuId = new Map(), stock
 
 export function summarizeProductSkus(skus = []) {
   if (!skus.length) {
-    return { count: 0, priceLabel: '—', codes: '—', variantsLabel: '—', imageUrl: '' }
+    return { count: 0, priceLabel: '—', costLabel: '—', codes: '—', variantsLabel: '—', imageUrl: '', primaryCode: '—' }
   }
   const activeSkus = skus.filter((sku) => sku.isActive)
   const list = activeSkus.length ? activeSkus : skus
   const prices = list.map((sku) => Number(sku.retailPrice || sku.basePrice)).filter(Number.isFinite)
+  const costs = list.map((sku) => Number(sku.costPrice ?? sku.basePrice)).filter(Number.isFinite)
   const min = Math.min(...prices)
   const max = Math.max(...prices)
+  const costMin = costs.length ? Math.min(...costs) : 0
+  const costMax = costs.length ? Math.max(...costs) : 0
   const priceLabel = min === max ? formatProductPrice(min) : `${formatProductPrice(min)} – ${formatProductPrice(max)}`
+  const costLabel =
+    !costs.length || (costMin === 0 && costMax === 0)
+      ? '—'
+      : costMin === costMax
+        ? formatProductPrice(costMin)
+        : `${formatProductPrice(costMin)} – ${formatProductPrice(costMax)}`
   const codes = list.map((sku) => sku.skuCode).slice(0, 3).join(', ')
   const variants = list
     .map((sku) => sku.packagingType || sku.skuCode)
@@ -148,10 +157,23 @@ export function summarizeProductSkus(skus = []) {
   return {
     count: skus.length,
     priceLabel,
+    costLabel,
     codes: skus.length > 3 ? `${codes}…` : codes,
     variantsLabel: list.length > 3 ? `${variants}…` : variants || codes,
     imageUrl: pickProductImageUrl(skus),
+    primaryCode: list[0]?.skuCode || '—',
   }
+}
+
+export function getProductBrandLabel(product) {
+  return product?.origin?.trim() || '—'
+}
+
+export function formatProductCreatedAt(value) {
+  if (!value) return '—'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '—'
+  return date.toLocaleDateString('vi-VN')
 }
 
 export function buildProductCatalogLookups({ products = [], skus = [] } = {}) {

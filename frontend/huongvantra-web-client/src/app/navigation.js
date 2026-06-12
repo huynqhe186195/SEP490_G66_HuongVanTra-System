@@ -46,7 +46,7 @@ export const navigationItems = [
     roles: ['admin', 'agencyManager'],
   },
   { label: 'Khách hàng', path: '/customers', module: 'customers', icon: 'groups', roles: ['admin', 'agencyManager'] },
-  { label: 'Sản phẩm & số lượng', path: '/products', module: 'products', icon: 'inventory_2', roles: ['admin', 'agencyManager', 'inventoryManager'] },
+  { label: 'Hàng hóa', path: '/products', module: 'products', icon: 'inventory_2', roles: ['admin', 'agencyManager', 'inventoryManager'] },
   { label: 'Kho tổng', path: '/inventory', module: 'inventory', icon: 'warehouse', roles: ['admin', 'agencyManager', 'inventoryManager'] },
   {
     label: 'Yêu cầu điều chỉnh tồn',
@@ -126,12 +126,25 @@ export function getNavigationItemsForRoles(roles = []) {
   return navigationItems.filter((item) => hasAnyRoleGroup(roles, item.roles))
 }
 
+function withRoleAwareProductLabel(items, roles = []) {
+  const isWarehouse = (roles ?? []).some((role) => {
+    const normalized = String(role || '').toLowerCase().trim()
+    return ['inventory manager', 'inventorymanager', 'warehouse manager', 'thu kho', 'thukho', 'warehouse'].includes(
+      normalized,
+    )
+  })
+
+  return items.map((item) =>
+    item.path === '/products' && isWarehouse ? { ...item, label: 'Sản phẩm & số lượng' } : item,
+  )
+}
+
 export function getNavigationItemsForSession(session) {
   if (session?.modules?.length) {
-    return getNavigationItemsForModules(session.modules)
+    return withRoleAwareProductLabel(getNavigationItemsForModules(session.modules), session?.roles ?? [])
   }
 
-  return getNavigationItemsForRoles(session?.roles ?? [])
+  return withRoleAwareProductLabel(getNavigationItemsForRoles(session?.roles ?? []), session?.roles ?? [])
 }
 
 export function getHomeRouteForModules(modules = []) {
