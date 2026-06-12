@@ -57,21 +57,15 @@ function getPaginationItems(currentPage, totalPages) {
     return Array.from({ length: total }, (_, index) => index + 1)
   }
 
-  const pages = new Set([1, total, current])
-  for (let page = current - 2; page <= current + 2; page += 1) {
-    if (page > 1 && page < total) {
-      pages.add(page)
-    }
+  if (current <= 3) {
+    return [1, 2, 3, 'ellipsis-right']
   }
 
-  const sortedPages = [...pages].sort((left, right) => left - right)
-  return sortedPages.flatMap((page, index) => {
-    const previous = sortedPages[index - 1]
-    if (previous && page - previous > 1) {
-      return [`ellipsis-${previous}-${page}`, page]
-    }
-    return [page]
-  })
+  if (current >= total - 2) {
+    return ['ellipsis-left', total - 2, total - 1, total]
+  }
+
+  return ['ellipsis-left', current - 1, current, current + 1, 'ellipsis-right']
 }
 
 const VALIDITY_BADGE_CLASS = {
@@ -194,6 +188,8 @@ function PromotionsPage() {
   const [statusFilter, setStatusFilter] = useState('ALL')
   const [page, setPage] = useState(1)
   const [pagination, setPagination] = useState(DEFAULT_PAGINATION)
+  const [jumpPopoverKey, setJumpPopoverKey] = useState(null)
+  const [jumpPageInput, setJumpPageInput] = useState('')
 
   const loadData = useCallback(async () => {
     setIsLoading(true)
@@ -240,6 +236,11 @@ function PromotionsPage() {
   useEffect(() => {
     loadData()
   }, [loadData])
+
+  useEffect(() => {
+    setJumpPopoverKey(null)
+    setJumpPageInput('')
+  }, [pagination.page, pagination.totalPages])
 
   const openCreate = () => {
     setEditingId(null)
@@ -434,7 +435,21 @@ function PromotionsPage() {
     })
     .slice(0, 12)
   const selectedSkuScopes = form.skuScopes ?? []
-  const paginationItems = getPaginationItems(pagination.page, pagination.totalPages)
+  const totalPages = Math.max(1, pagination.totalPages)
+  const currentPage = Math.min(totalPages, Math.max(1, pagination.page))
+  const paginationItems = getPaginationItems(currentPage, totalPages)
+  const openJumpPopover = (key) => {
+    setJumpPopoverKey((current) => (current === key ? null : key))
+    setJumpPageInput('')
+  }
+  const submitJumpPage = () => {
+    const nextPage = Number(jumpPageInput)
+    if (!Number.isInteger(nextPage) || nextPage < 1 || nextPage > totalPages) return
+
+    setPage(nextPage)
+    setJumpPopoverKey(null)
+    setJumpPageInput('')
+  }
   const addSkuScope = (sku) => {
     if (isImmutableLocked || selectedSkuIds.has(sku.id)) return
     setForm((prev) => ({
@@ -624,14 +639,19 @@ function PromotionsPage() {
         </div>
       </section>
 
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-slate-600">
-        <span>
-          Trang {pagination.page} / {Math.max(1, pagination.totalPages)}
-        </span>
+      <div className="mt-4 flex flex-wrap items-center justify-end gap-3 text-sm text-slate-600">
         <div className="flex flex-wrap items-center gap-1.5">
           <button
             type="button"
-            disabled={isLoading || pagination.page <= 1}
+            disabled={isLoading || currentPage <= 1}
+            onClick={() => setPage(1)}
+            className="rounded-lg border border-slate-200 px-3 py-1.5 font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Đầu
+          </button>
+          <button
+            type="button"
+            disabled={isLoading || currentPage <= 1}
             onClick={() => setPage((prev) => Math.max(1, prev - 1))}
             className="rounded-lg border border-slate-200 px-3 py-1.5 font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
@@ -640,13 +660,61 @@ function PromotionsPage() {
           {paginationItems.map((item) => {
             if (typeof item === 'string') {
               return (
-                <span key={item} className="px-2 py-1.5 font-semibold text-slate-400">
-                  ...
+                <span key={item} className="relative inline-flex">
+                  <button
+                    type="button"
+                    title="Đi tới trang bất kỳ"
+                    onClick={() => openJumpPopover(item)}
+                    className="rounded-lg px-2 py-1.5 font-semibold text-slate-400 hover:bg-slate-50 hover:text-slate-600"
+                  >
+                    ...
+                  </button>
+                  {jumpPopoverKey === item ? (
+                    <span className="absolute left-1/2 top-full z-30 mt-2 w-44 -translate-x-1/2 rounded-xl border border-slate-200 bg-white p-3 text-left shadow-xl">
+                      <label className="block text-xs font-bold text-slate-500">
+                        Đi tới trang
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={jumpPageInput}
+                          onChange={(event) => setJumpPageInput(event.target.value.replace(/\D/g, ''))}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter') {
+                              event.preventDefault()
+                              submitJumpPage()
+                            }
+                          }}
+                          className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm font-semibold text-slate-700 outline-none focus:border-[#538463] focus:ring-2 focus:ring-[#538463]/15"
+                          placeholder={`1 - ${totalPages}`}
+                          autoFocus
+                        />
+                      </label>
+                      <div className="mt-2 flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setJumpPopoverKey(null)
+                            setJumpPageInput('')
+                          }}
+                          className="rounded-lg px-2 py-1 text-xs font-semibold text-slate-500 hover:bg-slate-50"
+                        >
+                          Hủy
+                        </button>
+                        <button
+                          type="button"
+                          onClick={submitJumpPage}
+                          className="rounded-lg bg-[#538463] px-3 py-1 text-xs font-bold text-white hover:bg-[#457053]"
+                        >
+                          Đi
+                        </button>
+                      </div>
+                    </span>
+                  ) : null}
                 </span>
               )
             }
 
-            const isCurrent = item === pagination.page
+            const isCurrent = item === currentPage
             return (
               <button
                 key={item}
@@ -666,13 +734,24 @@ function PromotionsPage() {
           })}
           <button
             type="button"
-            disabled={isLoading || pagination.page >= Math.max(1, pagination.totalPages)}
-            onClick={() => setPage((prev) => Math.min(Math.max(1, pagination.totalPages), prev + 1))}
+            disabled={isLoading || currentPage >= totalPages}
+            onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
             className="rounded-lg border border-slate-200 px-3 py-1.5 font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Sau
+            Tiếp
+          </button>
+          <button
+            type="button"
+            disabled={isLoading || currentPage >= totalPages}
+            onClick={() => setPage(totalPages)}
+            className="rounded-lg border border-slate-200 px-3 py-1.5 font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Cuối
           </button>
         </div>
+        <span className="font-semibold text-slate-500">
+          Trang {currentPage} / {totalPages}
+        </span>
       </div>
 
       {modalOpen ? (
