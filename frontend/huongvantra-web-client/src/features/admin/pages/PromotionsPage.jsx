@@ -49,6 +49,31 @@ const DEFAULT_PAGINATION = {
   totalPages: 1,
 }
 
+function getPaginationItems(currentPage, totalPages) {
+  const total = Math.max(1, Number(totalPages) || 1)
+  const current = Math.min(total, Math.max(1, Number(currentPage) || 1))
+
+  if (total <= 7) {
+    return Array.from({ length: total }, (_, index) => index + 1)
+  }
+
+  const pages = new Set([1, total, current])
+  for (let page = current - 2; page <= current + 2; page += 1) {
+    if (page > 1 && page < total) {
+      pages.add(page)
+    }
+  }
+
+  const sortedPages = [...pages].sort((left, right) => left - right)
+  return sortedPages.flatMap((page, index) => {
+    const previous = sortedPages[index - 1]
+    if (previous && page - previous > 1) {
+      return [`ellipsis-${previous}-${page}`, page]
+    }
+    return [page]
+  })
+}
+
 const VALIDITY_BADGE_CLASS = {
   active: 'bg-emerald-50 text-emerald-700 border-emerald-200',
   not_started: 'bg-amber-50 text-amber-700 border-amber-200',
@@ -409,6 +434,7 @@ function PromotionsPage() {
     })
     .slice(0, 12)
   const selectedSkuScopes = form.skuScopes ?? []
+  const paginationItems = getPaginationItems(pagination.page, pagination.totalPages)
   const addSkuScope = (sku) => {
     if (isImmutableLocked || selectedSkuIds.has(sku.id)) return
     setForm((prev) => ({
@@ -602,7 +628,7 @@ function PromotionsPage() {
         <span>
           Trang {pagination.page} / {Math.max(1, pagination.totalPages)}
         </span>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-1.5">
           <button
             type="button"
             disabled={isLoading || pagination.page <= 1}
@@ -611,10 +637,37 @@ function PromotionsPage() {
           >
             Trước
           </button>
+          {paginationItems.map((item) => {
+            if (typeof item === 'string') {
+              return (
+                <span key={item} className="px-2 py-1.5 font-semibold text-slate-400">
+                  ...
+                </span>
+              )
+            }
+
+            const isCurrent = item === pagination.page
+            return (
+              <button
+                key={item}
+                type="button"
+                disabled={isLoading || isCurrent}
+                onClick={() => setPage(item)}
+                className={`min-w-9 rounded-lg border px-3 py-1.5 font-semibold ${
+                  isCurrent
+                    ? 'border-[#538463] bg-[#538463] text-white'
+                    : 'border-slate-200 text-slate-700 hover:bg-slate-50'
+                } disabled:cursor-not-allowed disabled:opacity-80`}
+                aria-current={isCurrent ? 'page' : undefined}
+              >
+                {item}
+              </button>
+            )
+          })}
           <button
             type="button"
             disabled={isLoading || pagination.page >= Math.max(1, pagination.totalPages)}
-            onClick={() => setPage((prev) => prev + 1)}
+            onClick={() => setPage((prev) => Math.min(Math.max(1, pagination.totalPages), prev + 1))}
             className="rounded-lg border border-slate-200 px-3 py-1.5 font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Sau
