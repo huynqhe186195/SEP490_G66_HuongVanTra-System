@@ -2133,14 +2133,14 @@ function PosPage() {
       />
       <ConfirmDialog
         isOpen={Boolean(tabCloseConfirm)}
-        title="X├│a tab h├│a ─æãín?"
+        title="Xóa tab hóa đơn?"
         message={
           tabCloseConfirm
-            ? `Bß║ín c├│ chß║»c muß╗æn ─æ├│ng "${tabCloseConfirm.label}"? Giß╗Å h├áng v├á th├┤ng tin kh├ích tr├¬n tab n├áy sß║¢ bß╗ï x├│a.`
+            ? `Bạn có chắc muốn đóng "${tabCloseConfirm.label}"? Giỏ hàng và thông tin khách trên tab này sẽ bị xóa.`
             : ''
         }
-        confirmLabel="X├│a tab"
-        cancelLabel="Hß╗ºy"
+        confirmLabel="Xóa tab"
+        cancelLabel="Hủy"
         onConfirm={handleConfirmCloseTab}
         onCancel={() => setTabCloseConfirm(null)}
       />
