@@ -281,7 +281,7 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
     }
 
     private static ProductSkuResponse MapSku(ProductSku s, Product p) => new(
-        s.Id, s.ProductId, p.Name, p.Category?.Name ?? string.Empty,
+        s.Id, s.ProductId, p.Name, p.CategoryId, p.Category?.Name ?? string.Empty,
         s.SkuCode, s.Barcode, s.PackagingType,
         s.WeightInGrams, s.BasePrice, s.CostPrice, s.RetailPrice,
         s.MinStock, s.MaxStock, s.IsSellable, s.AllowRewardPoints,

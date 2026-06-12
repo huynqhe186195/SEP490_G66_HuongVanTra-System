@@ -197,6 +197,7 @@ public class ProductSkuLogic(
             s.Id,
             s.ProductId,
             s.Product?.Name ?? string.Empty,
+            s.Product?.CategoryId,
             s.Product?.Category?.Name ?? string.Empty,
             s.SkuCode,
             s.Barcode,

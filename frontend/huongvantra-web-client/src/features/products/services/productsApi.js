@@ -70,6 +70,7 @@ export function mapProductSku(item) {
     id: item.id ?? item.Id,
     productId: item.productId ?? item.ProductId,
     productName: item.productName ?? item.ProductName ?? '',
+    categoryId: item.categoryId ?? item.CategoryId ?? null,
     categoryName: item.categoryName ?? item.CategoryName ?? '',
     skuCode: item.skuCode ?? item.SkuCode ?? '',
     barcode: item.barcode ?? item.Barcode ?? '',
