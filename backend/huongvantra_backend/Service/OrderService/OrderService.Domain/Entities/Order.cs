@@ -10,6 +10,7 @@ public class Order : BaseEntity
     public string? CustomerSnapshotName { get; set; }
     public Guid? EmployeeId { get; set; }
     public OrderChannel OrderChannel { get; set; }
+    public OrderKind OrderKind { get; set; } = OrderKind.Sale;
     public OrderStatus OrderStatus { get; set; }
     public InventorySyncStatus InventorySyncStatus { get; set; }
     public decimal TotalAmount { get; set; }

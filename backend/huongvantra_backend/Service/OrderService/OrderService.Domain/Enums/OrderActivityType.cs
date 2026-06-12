@@ -10,5 +10,6 @@ public enum OrderActivityType
     Shipped,
     Completed,
     Cancelled,
-    InventorySynced
+    InventorySynced,
+    Returned
 }

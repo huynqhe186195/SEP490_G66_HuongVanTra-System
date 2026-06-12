@@ -22,7 +22,8 @@ public class OrderRepository(OrderDbContext _db) : IOrderRepository
 
     public async Task<(List<Order> Items, int TotalCount)> GetPagedAsync(
         string? search, Guid? customerId, string? status, string? channel,
-        string? excludeChannel, string? codTab,
+        string? excludeChannel, string? codTab, bool returnableOnly,
+        string? orderKind, string? excludeOrderKind,
         int page, int pageSize, CancellationToken ct = default)
     {
         var query = _db.Orders.AsQueryable();
@@ -77,6 +78,21 @@ public class OrderRepository(OrderDbContext _db) : IOrderRepository
             {
                 query = query.Where(o => o.OrderStatus == OrderStatus.Completed);
             }
+        }
+
+        if (!string.IsNullOrWhiteSpace(orderKind) &&
+            Enum.TryParse<OrderKind>(orderKind, true, out var parsedKind))
+            query = query.Where(o => o.OrderKind == parsedKind);
+
+        if (!string.IsNullOrWhiteSpace(excludeOrderKind) &&
+            Enum.TryParse<OrderKind>(excludeOrderKind, true, out var excludedKind))
+            query = query.Where(o => o.OrderKind != excludedKind);
+
+        if (returnableOnly)
+        {
+            query = query.Where(o =>
+                o.OrderKind == OrderKind.Sale
+                && o.OrderDetails.Any(d => d.ReturnedQuantity < d.Quantity));
         }
 
         var total = await query.CountAsync(ct);

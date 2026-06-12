@@ -13,6 +13,7 @@ namespace OrderService.Application.UseCases;
 
 public class OrderLogic(
     IOrderRepository _orderRepo,
+    IReturnOrderRepository _returnOrderRepo,
     IPaymentRepository _paymentRepo,
     IOrderCodeGenerator _codeGen,
     IOrderEventPublisher _eventPublisher,
@@ -29,7 +30,8 @@ public class OrderLogic(
         OrderInputValidator.ValidatePagination(req.Page, req.PageSize);
         var (items, total) = await _orderRepo.GetPagedAsync(
             req.Search, req.CustomerId, req.Status, req.Channel,
-            req.ExcludeChannel, req.CodTab,
+            req.ExcludeChannel, req.CodTab, req.ReturnableOnly,
+            req.OrderKind, req.ExcludeOrderKind,
             req.Page, req.PageSize, ct);
 
         var dtos = items.Select(MapToSummary).ToList();
@@ -74,7 +76,7 @@ public class OrderLogic(
             detailInputs, req.DiscountAmount, req.PaidAmount,
             req.OrderChannel, req.ShippingAddress);
 
-        var orderCode = await _codeGen.GenerateAsync(ct);
+        var orderCode = await _codeGen.GenerateAsync(req.OrderKind, ct);
         var totalAmount = detailInputs.Sum(i => i.UnitPrice * i.Quantity);
         var manualDiscount = req.DiscountAmount;
         if (manualDiscount > totalAmount)
@@ -103,6 +105,7 @@ public class OrderLogic(
             CustomerSnapshotName = req.CustomerSnapshotName?.Trim(),
             EmployeeId = req.EmployeeId,
             OrderChannel = req.OrderChannel,
+            OrderKind = req.OrderKind,
             OrderStatus = isPosCompletedOnCreate ? OrderStatus.Completed : OrderStatus.PendingPayment,
             InventorySyncStatus = InventorySyncStatus.PendingDeduction,
             TotalAmount = totalAmount,
@@ -183,7 +186,9 @@ public class OrderLogic(
         await RecordActivityAsync(
             order.Id,
             OrderActivityType.Created,
-            $"Tạo đơn {order.OrderCode} qua kênh {GetChannelLabel(order.OrderChannel)}. Thành tiền {FormatVnd(finalAmount)}.",
+            order.OrderKind == OrderKind.Exchange
+                ? $"Tạo đơn đổi hàng {order.OrderCode}. Thành tiền {FormatVnd(finalAmount)}."
+                : $"Tạo đơn {order.OrderCode} qua kênh {GetChannelLabel(order.OrderChannel)}. Thành tiền {FormatVnd(finalAmount)}.",
             actorId,
             actorName,
             ct);
@@ -384,6 +389,175 @@ public class OrderLogic(
         }
     }
 
+    public async Task<ReturnOrderResponse> ReturnAsync(
+        Guid orderId,
+        ReturnOrderRequest req,
+        Guid? actorId = null,
+        string? actorName = null,
+        CancellationToken ct = default)
+    {
+        var order = await _orderRepo.GetByIdAsync(orderId, ct)
+            ?? throw new OrderNotFoundException(orderId);
+
+        if (order.OrderStatus != OrderStatus.Completed)
+            throw new OrderValidationException("Chỉ trả hàng trên hóa đơn đã hoàn tất.");
+
+        var returnInputs = (req.Items ?? []).Where(i => i.ReturnQuantity > 0).ToList();
+        if (returnInputs.Count == 0)
+            throw new OrderValidationException("Chọn ít nhất một dòng hàng để trả.");
+
+        var detailById = (order.OrderDetails ?? []).ToDictionary(d => d.Id);
+        var returnLines = new List<(OrderDetail Detail, int Quantity)>();
+
+        foreach (var input in returnInputs)
+        {
+            if (!detailById.TryGetValue(input.OrderDetailId, out var detail))
+                throw new OrderValidationException($"Dòng hàng không thuộc đơn {order.OrderCode}.");
+
+            var remaining = detail.Quantity - detail.ReturnedQuantity;
+            if (input.ReturnQuantity > remaining)
+                throw new OrderValidationException(
+                    $"Số lượng trả vượt quá còn lại ({remaining}) cho {detail.SkuSnapshotName}.");
+
+            returnLines.Add((detail, input.ReturnQuantity));
+        }
+
+        var returnAmount = returnLines.Sum(x => x.Detail.UnitPrice * x.Quantity);
+        var exchangeItems = (req.ExchangeItems ?? []).Where(i => i.Quantity > 0).ToList();
+        var exchangeAmount = exchangeItems.Sum(i => i.UnitPrice * i.Quantity);
+        var netCustomerPays = exchangeAmount - returnAmount;
+        var refundAmount = netCustomerPays < 0 ? Math.Abs(netCustomerPays) : 0m;
+        var customerPaid = Math.Max(0, req.CustomerPaidAmount);
+
+        if (netCustomerPays > 0 && customerPaid + 0.01m < netCustomerPays)
+            throw new OrderValidationException($"Khách cần trả thêm {FormatVnd(netCustomerPays)}.");
+
+        var refundMethod = MapReturnPaymentMethod(req.PaymentMethod);
+        var returnId = Guid.NewGuid();
+        var returnCode = await _returnOrderRepo.GenerateReturnCodeAsync(ct);
+        var now = DateTime.UtcNow;
+
+        var returnOrder = new ReturnOrder
+        {
+            Id = returnId,
+            ReturnCode = returnCode,
+            SourceOrderId = order.Id,
+            SourceOrderCode = order.OrderCode,
+            CustomerId = order.CustomerId,
+            CustomerSnapshotName = order.CustomerSnapshotName,
+            ReturnAmount = returnAmount,
+            ExchangeAmount = exchangeAmount,
+            NetCustomerPays = netCustomerPays,
+            RefundAmount = refundAmount,
+            CustomerPaidAmount = customerPaid,
+            RefundMethod = refundMethod,
+            Note = req.Note?.Trim(),
+            CreatedAt = now,
+            UpdatedAt = now,
+            Details = returnLines.Select(x => new ReturnOrderDetail
+            {
+                Id = Guid.NewGuid(),
+                ReturnOrderId = returnId,
+                SourceOrderDetailId = x.Detail.Id,
+                SkuId = x.Detail.SkuId,
+                SkuSnapshotName = x.Detail.SkuSnapshotName,
+                SkuSnapshotCode = x.Detail.SkuSnapshotCode,
+                ReturnQuantity = x.Quantity,
+                UnitPrice = x.Detail.UnitPrice,
+                SubTotal = x.Detail.UnitPrice * x.Quantity,
+                CreatedAt = now,
+                UpdatedAt = now
+            }).ToList()
+        };
+
+        foreach (var (detail, qty) in returnLines)
+        {
+            detail.ReturnedQuantity += qty;
+            detail.UpdatedAt = now;
+        }
+
+        await _returnOrderRepo.AddAsync(returnOrder, ct);
+
+        var returnDescription = refundAmount > 0
+            ? $"Trả hàng {returnCode}: hoàn {FormatVnd(refundAmount)} qua {GetPaymentMethodLabel(refundMethod)}."
+            : exchangeAmount > 0
+                ? $"Trả hàng {returnCode}: đổi/mua thêm, khách trả thêm {FormatVnd(netCustomerPays)}."
+                : $"Trả hàng {returnCode}: hoàn {FormatVnd(returnAmount)}.";
+
+        await RecordActivityAsync(
+            order.Id,
+            OrderActivityType.Returned,
+            returnDescription,
+            actorId,
+            actorName,
+            ct);
+
+        await _returnOrderRepo.SaveChangesAsync(ct);
+
+        await _eventPublisher.PublishOrderReturnedAsync(
+            returnId,
+            order.Id,
+            order.OrderCode,
+            returnLines.Select(x => (x.Detail.SkuId, x.Quantity)),
+            ct);
+
+        string? exchangeOrderCode = null;
+        Guid? exchangeOrderId = null;
+
+        if (exchangeItems.Count > 0)
+        {
+            var exchangeDiscount = Math.Min(returnAmount, exchangeAmount);
+            var isExchangeTransferQr = netCustomerPays > 0
+                && refundMethod is PaymentMethod.VietQR or PaymentMethod.BankTransfer;
+            var exchangePaidAmount = isExchangeTransferQr ? 0m : customerPaid;
+            var exchangeTransferQrAmount = isExchangeTransferQr ? netCustomerPays : 0m;
+
+            var exchangeOrder = await CreateAsync(
+                new CreateOrderRequest(
+                    order.CustomerId,
+                    order.CustomerSnapshotName,
+                    order.EmployeeId ?? actorId,
+                    OrderChannel.POS,
+                    null,
+                    $"Đổi hàng từ {order.OrderCode} ({returnCode})",
+                    exchangeDiscount,
+                    exchangeItems.Select(i => new CreateOrderDetailRequest(
+                        i.SkuId,
+                        i.SkuSnapshotName.Trim(),
+                        i.SkuSnapshotCode?.Trim(),
+                        i.Quantity,
+                        i.UnitPrice)).ToList(),
+                    refundMethod,
+                    exchangePaidAmount,
+                    exchangeTransferQrAmount,
+                    null,
+                    null,
+                    null,
+                    OrderKind.Exchange),
+                actorId,
+                actorName,
+                ct);
+
+            exchangeOrderId = exchangeOrder.Id;
+            exchangeOrderCode = exchangeOrder.OrderCode;
+            returnOrder.ExchangeOrderId = exchangeOrderId;
+            returnOrder.UpdatedAt = DateTime.UtcNow;
+            await _returnOrderRepo.SaveChangesAsync(ct);
+        }
+
+        return new ReturnOrderResponse(
+            returnId,
+            returnCode,
+            order.Id,
+            order.OrderCode,
+            returnAmount,
+            exchangeAmount,
+            netCustomerPays,
+            refundAmount,
+            exchangeOrderId,
+            exchangeOrderCode);
+    }
+
     public async Task MarkInventorySyncedAsync(Guid orderId, CancellationToken ct = default)
     {
         var order = await _orderRepo.GetByIdAsync(orderId, ct)
@@ -451,13 +625,13 @@ public class OrderLogic(
 
     private static OrderResponse MapToResponse(Order o) => new(
         o.Id, o.OrderCode, o.CustomerId, o.CustomerSnapshotName,
-        o.EmployeeId, o.OrderChannel.ToString(), o.OrderStatus.ToString(),
+        o.EmployeeId, o.OrderChannel.ToString(), o.OrderKind.ToString(), o.OrderStatus.ToString(),
         o.InventorySyncStatus.ToString(), o.TotalAmount, o.DiscountAmount,
         o.PromotionId, o.PromotionCode, o.PromotionDiscountAmount, o.FinalAmount,
         o.ShippingAddress, o.Note, o.CreatedAt, o.UpdatedAt,
         (o.OrderDetails ?? []).Select(d => new OrderDetailResponse(
             d.Id, d.SkuId, d.SkuSnapshotName, d.SkuSnapshotCode,
-            d.Quantity, d.UnitPrice, d.SubTotal)).ToList(),
+            d.Quantity, d.ReturnedQuantity, d.UnitPrice, d.SubTotal)).ToList(),
         (o.Payments ?? []).Select(p => new PaymentResponse(
             p.Id, p.OrderId, o.OrderCode, o.CustomerSnapshotName,
             p.PaymentMethod.ToString(), p.Amount, p.PaymentStatus.ToString(),
@@ -469,7 +643,7 @@ public class OrderLogic(
         var codPayment = o.Payments?.FirstOrDefault(p => p.PaymentMethod == PaymentMethod.COD);
         return new(
             o.Id, o.OrderCode, o.CustomerId, o.CustomerSnapshotName,
-            o.OrderChannel.ToString(), o.OrderStatus.ToString(),
+            o.OrderChannel.ToString(), o.OrderKind.ToString(), o.OrderStatus.ToString(),
             o.InventorySyncStatus.ToString(), o.FinalAmount, o.CreatedAt,
             codPayment?.Id,
             codPayment?.IsCodVerified,
@@ -503,6 +677,16 @@ public class OrderLogic(
         OrderChannel.COD => "COD",
         _ => channel.ToString()
     };
+
+    private static PaymentMethod MapReturnPaymentMethod(string? raw)
+    {
+        var value = raw?.Trim().ToUpperInvariant() ?? string.Empty;
+        return value switch
+        {
+            "TRANSFER" or "VIETQR" or "BANKTRANSFER" => PaymentMethod.VietQR,
+            _ => PaymentMethod.Cash
+        };
+    }
 
     private static string GetPaymentMethodLabel(PaymentMethod method) => method switch
     {

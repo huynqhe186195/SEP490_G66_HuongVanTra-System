@@ -50,4 +50,16 @@ public class OrderEventPublisher(IPublishEndpoint _publishEndpoint) : IOrderEven
             DebtAmount = debtAmount,
             Items = items.Select(i => new OrderItemEvent { SkuId = i.SkuId, Quantity = i.Quantity })
         }, ct);
+
+    public Task PublishOrderReturnedAsync(
+        Guid returnId, Guid orderId, string orderCode,
+        IEnumerable<(Guid SkuId, int Quantity)> items,
+        CancellationToken ct = default) =>
+        _publishEndpoint.Publish(new OrderReturnedEvent
+        {
+            ReturnId = returnId,
+            OrderId = orderId,
+            OrderCode = orderCode,
+            Items = items.Select(i => new OrderItemEvent { SkuId = i.SkuId, Quantity = i.Quantity })
+        }, ct);
 }

@@ -19,6 +19,7 @@ public record OrderResponse(
     string? CustomerSnapshotName,
     Guid? EmployeeId,
     string OrderChannel,
+    string OrderKind,
     string OrderStatus,
     string InventorySyncStatus,
     decimal TotalAmount,
@@ -41,8 +42,22 @@ public record OrderDetailResponse(
     string SkuSnapshotName,
     string? SkuSnapshotCode,
     int Quantity,
+    int ReturnedQuantity,
     decimal UnitPrice,
     decimal SubTotal
+);
+
+public record ReturnOrderResponse(
+    Guid ReturnId,
+    string ReturnCode,
+    Guid SourceOrderId,
+    string SourceOrderCode,
+    decimal ReturnAmount,
+    decimal ExchangeAmount,
+    decimal NetCustomerPays,
+    decimal RefundAmount,
+    Guid? ExchangeOrderId,
+    string? ExchangeOrderCode
 );
 
 public record PaymentResponse(
@@ -66,6 +81,7 @@ public record OrderSummaryResponse(
     Guid? CustomerId,
     string? CustomerSnapshotName,
     string OrderChannel,
+    string OrderKind,
     string OrderStatus,
     string InventorySyncStatus,
     decimal FinalAmount,

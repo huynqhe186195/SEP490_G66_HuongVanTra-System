@@ -17,6 +17,8 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.HasIndex(e => e.CustomerId);
         builder.Property(e => e.CustomerSnapshotName).HasMaxLength(100);
         builder.Property(e => e.OrderChannel).HasConversion<string>().HasMaxLength(20).IsRequired();
+        builder.Property(e => e.OrderKind).HasConversion<string>().HasMaxLength(20).HasDefaultValue(OrderKind.Sale).IsRequired();
+        builder.HasIndex(e => e.OrderKind);
         builder.Property(e => e.OrderStatus).HasConversion<string>().HasMaxLength(20).IsRequired();
         builder.Property(e => e.InventorySyncStatus).HasConversion<string>().HasMaxLength(30).IsRequired();
         builder.Property(e => e.TotalAmount).HasColumnType("decimal(18,2)").IsRequired();
@@ -66,6 +68,7 @@ public class OrderDetailConfiguration : IEntityTypeConfiguration<OrderDetail>
         builder.Property(e => e.SkuSnapshotName).HasMaxLength(255).IsRequired();
         builder.Property(e => e.SkuSnapshotCode).HasMaxLength(50);
         builder.Property(e => e.Quantity).IsRequired();
+        builder.Property(e => e.ReturnedQuantity).HasDefaultValue(0).IsRequired();
         builder.Property(e => e.UnitPrice).HasColumnType("decimal(18,2)").IsRequired();
         builder.Property(e => e.SubTotal).HasColumnType("decimal(18,2)").IsRequired();
         builder.Property(e => e.CreatedAt).IsRequired();
@@ -86,6 +89,50 @@ public class PaymentConfiguration : IEntityTypeConfiguration<Payment>
         builder.Property(e => e.TransactionRef).HasMaxLength(100);
         builder.Property(e => e.CodDebtSettlementJson).HasMaxLength(4000);
         builder.Property(e => e.TransferQrExpiresAtUtc);
+        builder.Property(e => e.CreatedAt).IsRequired();
+        builder.Property(e => e.UpdatedAt).IsRequired();
+    }
+}
+
+public class ReturnOrderConfiguration : IEntityTypeConfiguration<ReturnOrder>
+{
+    public void Configure(EntityTypeBuilder<ReturnOrder> builder)
+    {
+        builder.ToTable("ReturnOrders");
+        builder.HasKey(e => e.Id);
+        builder.Property(e => e.Id).ValueGeneratedNever();
+        builder.Property(e => e.ReturnCode).HasMaxLength(50).IsRequired();
+        builder.HasIndex(e => e.ReturnCode).IsUnique();
+        builder.Property(e => e.SourceOrderCode).HasMaxLength(50).IsRequired();
+        builder.HasIndex(e => e.SourceOrderId);
+        builder.Property(e => e.CustomerSnapshotName).HasMaxLength(100);
+        builder.Property(e => e.ReturnAmount).HasColumnType("decimal(18,2)").IsRequired();
+        builder.Property(e => e.ExchangeAmount).HasColumnType("decimal(18,2)").IsRequired();
+        builder.Property(e => e.NetCustomerPays).HasColumnType("decimal(18,2)").IsRequired();
+        builder.Property(e => e.RefundAmount).HasColumnType("decimal(18,2)").IsRequired();
+        builder.Property(e => e.CustomerPaidAmount).HasColumnType("decimal(18,2)").IsRequired();
+        builder.Property(e => e.RefundMethod).HasConversion<string>().HasMaxLength(20).IsRequired();
+        builder.Property(e => e.Note).HasMaxLength(500);
+        builder.Property(e => e.CreatedAt).IsRequired();
+        builder.Property(e => e.UpdatedAt).IsRequired();
+
+        builder.HasOne(e => e.SourceOrder).WithMany().HasForeignKey(e => e.SourceOrderId);
+        builder.HasMany(e => e.Details).WithOne(d => d.ReturnOrder).HasForeignKey(d => d.ReturnOrderId);
+    }
+}
+
+public class ReturnOrderDetailConfiguration : IEntityTypeConfiguration<ReturnOrderDetail>
+{
+    public void Configure(EntityTypeBuilder<ReturnOrderDetail> builder)
+    {
+        builder.ToTable("ReturnOrderDetails");
+        builder.HasKey(e => e.Id);
+        builder.Property(e => e.Id).ValueGeneratedNever();
+        builder.Property(e => e.SkuSnapshotName).HasMaxLength(255).IsRequired();
+        builder.Property(e => e.SkuSnapshotCode).HasMaxLength(50);
+        builder.Property(e => e.ReturnQuantity).IsRequired();
+        builder.Property(e => e.UnitPrice).HasColumnType("decimal(18,2)").IsRequired();
+        builder.Property(e => e.SubTotal).HasColumnType("decimal(18,2)").IsRequired();
         builder.Property(e => e.CreatedAt).IsRequired();
         builder.Property(e => e.UpdatedAt).IsRequired();
     }

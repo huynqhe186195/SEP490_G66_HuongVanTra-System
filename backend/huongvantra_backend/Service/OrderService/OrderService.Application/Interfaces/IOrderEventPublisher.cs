@@ -17,4 +17,9 @@ public interface IOrderEventPublisher
         decimal totalAmount, decimal debtAmount,
         IEnumerable<(Guid SkuId, int Quantity)> items,
         CancellationToken ct = default);
+
+    Task PublishOrderReturnedAsync(
+        Guid returnId, Guid orderId, string orderCode,
+        IEnumerable<(Guid SkuId, int Quantity)> items,
+        CancellationToken ct = default);
 }

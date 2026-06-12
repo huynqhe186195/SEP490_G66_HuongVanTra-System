@@ -30,6 +30,7 @@ export function mapOrderItem(item) {
     skuSnapshotName: item.skuSnapshotName ?? item.SkuSnapshotName ?? '',
     skuSnapshotCode: item.skuSnapshotCode ?? item.SkuSnapshotCode ?? '',
     quantity: Number(item.quantity ?? item.Quantity ?? 0),
+    returnedQuantity: Number(item.returnedQuantity ?? item.ReturnedQuantity ?? 0),
     unitPrice: Number(item.unitPrice ?? item.UnitPrice ?? 0),
     subTotal: Number(item.subTotal ?? item.SubTotal ?? 0),
   }
@@ -43,6 +44,7 @@ export function mapOrderSummary(item) {
     customerId: item.customerId ?? item.CustomerId ?? null,
     customerSnapshotName: item.customerSnapshotName ?? item.CustomerSnapshotName ?? 'Khách lẻ',
     orderChannel: normalizeEnum(item.orderChannel ?? item.OrderChannel),
+    orderKind: normalizeEnum(item.orderKind ?? item.OrderKind ?? 'Sale'),
     orderStatus: normalizeEnum(item.orderStatus ?? item.OrderStatus),
     inventorySyncStatus: normalizeEnum(item.inventorySyncStatus ?? item.InventorySyncStatus),
     finalAmount: Number(item.finalAmount ?? item.FinalAmount ?? 0),
@@ -65,6 +67,7 @@ export function mapOrderDetail(item) {
     customerSnapshotName: item.customerSnapshotName ?? item.CustomerSnapshotName ?? 'Khách lẻ',
     employeeId: item.employeeId ?? item.EmployeeId ?? null,
     orderChannel: normalizeEnum(item.orderChannel ?? item.OrderChannel),
+    orderKind: normalizeEnum(item.orderKind ?? item.OrderKind ?? 'Sale'),
     orderStatus: normalizeEnum(item.orderStatus ?? item.OrderStatus),
     inventorySyncStatus: normalizeEnum(item.inventorySyncStatus ?? item.InventorySyncStatus),
     totalAmount: Number(item.totalAmount ?? item.TotalAmount ?? 0),
@@ -87,6 +90,9 @@ function buildOrdersQuery(params = {}) {
   if (params.channel) search.set('channel', params.channel)
   if (params.excludeChannel) search.set('excludeChannel', params.excludeChannel)
   if (params.codTab) search.set('codTab', params.codTab)
+  if (params.returnableOnly) search.set('returnableOnly', 'true')
+  if (params.orderKind) search.set('orderKind', params.orderKind)
+  if (params.excludeOrderKind) search.set('excludeOrderKind', params.excludeOrderKind)
   search.set('page', String(params.page ?? 1))
   search.set('pageSize', String(Math.min(100, Math.max(1, params.pageSize ?? 20))))
   return search.toString()
@@ -190,6 +196,45 @@ export async function shipOrder(id) {
 
 export async function completeOrder(id) {
   return apiRequestAuth(`/api/v1/orders/${id}/complete`, { method: 'POST' })
+}
+
+export function mapReturnOrderResult(item) {
+  if (!item || typeof item !== 'object') return null
+  return {
+    returnId: item.returnId ?? item.ReturnId,
+    returnCode: item.returnCode ?? item.ReturnCode ?? '',
+    sourceOrderId: item.sourceOrderId ?? item.SourceOrderId,
+    sourceOrderCode: item.sourceOrderCode ?? item.SourceOrderCode ?? '',
+    returnAmount: Number(item.returnAmount ?? item.ReturnAmount ?? 0),
+    exchangeAmount: Number(item.exchangeAmount ?? item.ExchangeAmount ?? 0),
+    netCustomerPays: Number(item.netCustomerPays ?? item.NetCustomerPays ?? 0),
+    refundAmount: Number(item.refundAmount ?? item.RefundAmount ?? 0),
+    exchangeOrderId: item.exchangeOrderId ?? item.ExchangeOrderId ?? null,
+    exchangeOrderCode: item.exchangeOrderCode ?? item.ExchangeOrderCode ?? null,
+  }
+}
+
+export async function returnOrder(orderId, payload) {
+  const data = await apiRequestAuth(`/api/v1/orders/${encodeURIComponent(orderId)}/return`, {
+    method: 'POST',
+    body: JSON.stringify({
+      items: (payload.items || []).map((line) => ({
+        orderDetailId: line.orderDetailId,
+        returnQuantity: Number(line.returnQuantity),
+      })),
+      paymentMethod: payload.paymentMethod || 'CASH',
+      customerPaidAmount: Number(payload.customerPaidAmount ?? 0),
+      exchangeItems: (payload.exchangeItems || []).map((line) => ({
+        skuId: line.skuId,
+        skuSnapshotName: line.skuSnapshotName,
+        skuSnapshotCode: line.skuSnapshotCode || null,
+        quantity: Number(line.quantity),
+        unitPrice: Number(line.unitPrice),
+      })),
+      note: payload.note?.trim() || null,
+    }),
+  })
+  return mapReturnOrderResult(data)
 }
 
 export async function fetchPaymentsByOrderId(orderId) {

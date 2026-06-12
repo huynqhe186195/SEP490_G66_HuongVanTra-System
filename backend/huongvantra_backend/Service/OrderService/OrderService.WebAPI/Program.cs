@@ -39,6 +39,7 @@ builder.Services.AddScoped<IPaymentRepository, PaymentRepository>();
 builder.Services.AddScoped<IOrderActivityRepository, OrderActivityRepository>();
 builder.Services.AddScoped<IPromotionRepository, PromotionRepository>();
 builder.Services.AddScoped<IOrderCodeGenerator, OrderCodeGenerator>();
+builder.Services.AddScoped<IReturnOrderRepository, ReturnOrderRepository>();
 builder.Services.AddScoped<IOrderEventPublisher, OrderEventPublisher>();
 builder.Services.Configure<PosTransferPaymentOptions>(
     builder.Configuration.GetSection(PosTransferPaymentOptions.SectionName));

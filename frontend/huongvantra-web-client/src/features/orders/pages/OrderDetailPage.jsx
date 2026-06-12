@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
@@ -31,6 +31,8 @@ import {
   formatVnd,
   resolveInventorySyncMeta,
   getOrderChannelLabel,
+  getOrderKindLabel,
+  isExchangeOrder,
   getOrderStatusClass,
   getOrderStatusLabel,
   getPaymentMethodLabel,
@@ -43,8 +45,10 @@ import { fetchProducts } from '../../products/services/productsApi.js'
 import { buildProductCatalogLookups, resolveOrderLineDisplay } from '../../products/utils/productDisplay.js'
 function OrderDetailPage() {
   const { id } = useParams()
+  const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const fromCod = searchParams.get('from') === 'cod'
+  const fromExchange = searchParams.get('from') === 'exchange'
   const canManage = canCreateOrder(loadAuthSession())
 
   const [order, setOrder] = useState(null)
@@ -72,6 +76,13 @@ function OrderDetailPage() {
   useEffect(() => {
     loadOrder()
   }, [loadOrder])
+
+  useEffect(() => {
+    if (!order || isLoading || fromCod || fromExchange || !id) return
+    if (isExchangeOrder(order)) {
+      navigate(`/orders/${id}?from=exchange`, { replace: true })
+    }
+  }, [order, isLoading, fromCod, fromExchange, id, navigate])
 
   useEffect(() => {
     let mounted = true
@@ -159,8 +170,11 @@ function OrderDetailPage() {
       <PageShell>
         <div className="mx-auto w-full max-w-5xl px-1 py-10 sm:px-2">
           <p className="text-slate-500">Không tìm thấy đơn hàng.</p>
-          <Link className="mt-4 inline-block text-sm font-semibold text-[#538463]" to={fromCod ? '/orders/cod' : '/orders'}>
-            ← Quay lại {fromCod ? 'quản lý đơn COD' : 'danh sách'}
+          <Link
+            className="mt-4 inline-block text-sm font-semibold text-[#538463]"
+            to={fromCod ? '/orders/cod' : fromExchange ? '/orders/exchange' : '/orders'}
+          >
+            ← Quay lại {fromCod ? 'quản lý đơn COD' : fromExchange ? 'đơn đổi hàng' : 'danh sách'}
           </Link>
         </div>
       </PageShell>
@@ -179,13 +193,25 @@ function OrderDetailPage() {
         <div>
           <Link
             className="text-sm font-semibold text-[#538463] hover:underline"
-            to={fromCod || isCodChannelOrder(order) ? '/orders/cod' : '/orders'}
+            to={
+              fromCod || isCodChannelOrder(order)
+                ? '/orders/cod'
+                : fromExchange || isExchangeOrder(order)
+                  ? '/orders/exchange'
+                  : '/orders'
+            }
           >
-            ← {fromCod || isCodChannelOrder(order) ? 'Quản lý đơn COD' : 'Danh sách đơn'}
+            ←{' '}
+            {fromCod || isCodChannelOrder(order)
+              ? 'Quản lý đơn COD'
+              : fromExchange || isExchangeOrder(order)
+                ? 'Đơn đổi hàng'
+                : 'Danh sách đơn'}
           </Link>
           <h1 className="mt-2 text-2xl font-bold text-slate-900">{order.orderCode}</h1>
           <p className="mt-1 text-sm text-slate-500">
-            {getOrderChannelLabel(order.orderChannel)} · Tạo lúc {formatVietnamDateTime(order.createdAt)}
+            {isExchangeOrder(order) ? getOrderKindLabel(order.orderKind) : getOrderChannelLabel(order.orderChannel)} · Tạo lúc{' '}
+            {formatVietnamDateTime(order.createdAt)}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">

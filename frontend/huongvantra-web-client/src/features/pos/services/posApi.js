@@ -473,7 +473,7 @@ export function mapPosCustomerContext(item) {
 export async function fetchPosCustomerContext(customerId) {
   const [customer, ordersResult] = await Promise.all([
     fetchCustomerById(customerId),
-    fetchOrders({ customerId, page: 1, pageSize: 10 }),
+    fetchOrders({ customerId, page: 1, pageSize: 10, excludeOrderKind: 'Exchange' }),
   ])
 
   const tierDiscountPercent = Number(customer.tier?.discountPercent ?? 0)

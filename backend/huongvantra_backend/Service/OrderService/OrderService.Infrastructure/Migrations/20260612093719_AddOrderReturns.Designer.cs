@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using OrderService.Infrastructure.Data;
 
@@ -10,9 +11,11 @@ using OrderService.Infrastructure.Data;
 namespace OrderService.Infrastructure.Migrations
 {
     [DbContext(typeof(OrderDbContext))]
-    partial class OrderDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260612093719_AddOrderReturns")]
+    partial class AddOrderReturns
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -65,13 +68,6 @@ namespace OrderService.Infrastructure.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("varchar(50)");
 
-                    b.Property<string>("OrderKind")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(20)
-                        .HasColumnType("varchar(20)")
-                        .HasDefaultValue("Sale");
-
                     b.Property<string>("OrderStatus")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -105,8 +101,6 @@ namespace OrderService.Infrastructure.Migrations
 
                     b.HasIndex("OrderCode")
                         .IsUnique();
-
-                    b.HasIndex("OrderKind");
 
                     b.HasIndex("PromotionId");
 

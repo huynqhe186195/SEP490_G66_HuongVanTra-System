@@ -28,6 +28,7 @@ public class InventoryLogic(
     public const string SkuCreatedEventType = "SkuCreated";
     public const string OrderPlacedEventType = "OrderPlaced";
     public const string OrderCancelledEventType = "OrderCancelled";
+    public const string OrderReturnedEventType = "OrderReturned";
 
     public async Task HandleSkuCreatedAsync(SkuCreatedEvent message, CancellationToken ct = default)
     {
@@ -145,6 +146,30 @@ public class InventoryLogic(
         queue.ConfirmedAt ??= DateTime.UtcNow;
 
         await _processedEvents.AddAsync(OrderCancelledEventType, message.OrderId, ct);
+        await _queueRepo.SaveChangesAsync(ct);
+    }
+
+    public async Task HandleOrderReturnedAsync(OrderReturnedEvent message, CancellationToken ct = default)
+    {
+        if (await _processedEvents.ExistsAsync(OrderReturnedEventType, message.ReturnId, ct))
+            return;
+
+        var queue = await _queueRepo.GetByOrderIdAsync(message.OrderId, ct);
+        if (queue == null)
+        {
+            await _processedEvents.AddAsync(OrderReturnedEventType, message.ReturnId, ct);
+            await _queueRepo.SaveChangesAsync(ct);
+            return;
+        }
+
+        if (queue.IsDeducted)
+        {
+            await RestorePartialStockAsync(
+                message.Items.Select(i => (i.SkuId, i.Quantity)),
+                ct);
+        }
+
+        await _processedEvents.AddAsync(OrderReturnedEventType, message.ReturnId, ct);
         await _queueRepo.SaveChangesAsync(ct);
     }
 
@@ -362,12 +387,23 @@ public class InventoryLogic(
 
     private async Task RestoreStockAsync(StockDeductQueue queue, CancellationToken ct)
     {
-        foreach (var item in queue.Items)
+        await RestorePartialStockAsync(
+            queue.Items.Select(item => (item.SkuId, item.Quantity)),
+            ct);
+    }
+
+    private async Task RestorePartialStockAsync(
+        IEnumerable<(Guid SkuId, int Quantity)> items,
+        CancellationToken ct)
+    {
+        foreach (var (skuId, quantity) in items)
         {
-            var stock = await _skuStockRepo.GetBySkuIdAsync(item.SkuId, ct);
+            if (quantity <= 0) continue;
+
+            var stock = await _skuStockRepo.GetBySkuIdAsync(skuId, ct);
             if (stock == null) continue;
 
-            stock.QuantityOnHand += item.Quantity;
+            stock.QuantityOnHand += quantity;
             stock.UpdatedAt = DateTime.UtcNow;
         }
     }

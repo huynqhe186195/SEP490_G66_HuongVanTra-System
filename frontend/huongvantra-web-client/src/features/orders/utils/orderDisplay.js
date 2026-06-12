@@ -64,6 +64,19 @@ export function getOrderChannelLabel(channel) {
   return map[key] || channel || '—'
 }
 
+export function getOrderKindLabel(kind) {
+  const key = normalizeOrderKey(kind)
+  const map = {
+    Sale: 'Bán hàng',
+    Exchange: 'Đổi hàng',
+  }
+  return map[key] || kind || '—'
+}
+
+export function isExchangeOrder(order) {
+  return normalizeOrderKey(order?.orderKind) === 'Exchange'
+}
+
 export function getPaymentMethodLabel(method) {
   const key = normalizeOrderKey(method)
   const map = {

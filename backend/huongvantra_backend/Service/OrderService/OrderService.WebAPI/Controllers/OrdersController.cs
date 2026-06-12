@@ -22,11 +22,14 @@ public class OrdersController(OrderLogic _orderLogic) : ControllerBase
         [FromQuery] string? channel,
         [FromQuery] string? excludeChannel,
         [FromQuery] string? codTab,
+        [FromQuery] bool returnableOnly = false,
+        [FromQuery] string? orderKind = null,
+        [FromQuery] string? excludeOrderKind = null,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20,
         CancellationToken ct = default) =>
         Ok(await _orderLogic.GetPagedAsync(
-            new GetOrdersRequest(search, customerId, status, channel, excludeChannel, codTab, page, pageSize), ct));
+            new GetOrdersRequest(search, customerId, status, channel, excludeChannel, codTab, returnableOnly, orderKind, excludeOrderKind, page, pageSize), ct));
 
     [HttpGet("{id:guid}")]
     [Authorize(Policy = PermissionNames.ViewOrder)]
@@ -88,5 +91,15 @@ public class OrdersController(OrderLogic _orderLogic) : ControllerBase
         var (actorId, actorName) = GetActor();
         await _orderLogic.CompleteAsync(id, actorId, actorName, ct);
         return NoContent();
+    }
+
+    [HttpPost("{id:guid}/return")]
+    [Authorize(Policy = PermissionNames.CreateOrder)]
+    public async Task<IActionResult> Return(
+        Guid id, [FromBody] ReturnOrderRequest request, CancellationToken ct = default)
+    {
+        var (actorId, actorName) = GetActor();
+        var result = await _orderLogic.ReturnAsync(id, request, actorId, actorName, ct);
+        return CreatedAtAction(nameof(GetById), new { id }, result);
     }
 }

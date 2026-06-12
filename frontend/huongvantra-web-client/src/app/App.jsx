@@ -20,12 +20,14 @@ import InventoryImportPage from '../features/inventory/pages/InventoryImportPage
 import InventoryStockPage from '../features/inventory/pages/InventoryStockPage.jsx'
 import ProfilePage from '../features/profile/pages/ProfilePage.jsx'
 import OrdersPage from '../features/orders/pages/OrdersPage.jsx'
+import ExchangeOrdersPage from '../features/orders/pages/ExchangeOrdersPage.jsx'
 import CodOrdersPage from '../features/orders/pages/CodOrdersPage.jsx'
 import StockDeductQueuePage from '../features/inventory/pages/StockDeductQueuePage.jsx'
 import StockAdjustmentRequestsPage from '../features/inventory/pages/StockAdjustmentRequestsPage.jsx'
 import OrderDetailPage from '../features/orders/pages/OrderDetailPage.jsx'
 import PosPage from '../features/pos/pages/PosPage.jsx'
 import PosTransferQrPage from '../features/pos/pages/PosTransferQrPage.jsx'
+import ReturnOrderPage from '../features/pos/pages/ReturnOrderPage.jsx'
 import ProductFormPage from '../features/products/pages/ProductFormPage.jsx'
 import ProductItemCreatePage from '../features/products/pages/ProductItemCreatePage.jsx'
 import ProductsListPage from '../features/products/pages/ProductsListPage.jsx'
@@ -55,7 +57,9 @@ function App() {
         <Route path="/pos" element={<PosPage />} />
         <Route path="/pos/receipt/print" element={<Navigate to="/pos" replace />} />
         <Route path="/pos/payment/qr" element={<PosTransferQrPage />} />
+        <Route path="/pos/returns/:orderId" element={<ReturnOrderPage />} />
         <Route path="/orders" element={<OrdersPage />} />
+        <Route path="/orders/exchange" element={<ExchangeOrdersPage />} />
         <Route path="/orders/cod" element={<CodOrdersPage />} />
         <Route path="/orders/stock-deduct" element={<StockDeductQueuePage />} />
         <Route path="/orders/create" element={<Navigate to="/pos" replace />} />

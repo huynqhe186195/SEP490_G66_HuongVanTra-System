@@ -37,6 +37,7 @@ const HOME_MODULE_PRIORITY = [
 export const navigationItems = [
   { label: 'POS bán hàng', path: '/pos', module: 'pos', icon: 'point_of_sale', roles: ['agencyManager', 'salesStaff', 'customer'] },
   { label: 'Đơn hàng', path: '/orders', module: 'orders', icon: 'receipt_long', roles: ['admin', 'agencyManager', 'salesStaff'] },
+  { label: 'Đơn đổi hàng', path: '/orders/exchange', module: 'orders', icon: 'swap_horiz', roles: ['admin', 'agencyManager', 'salesStaff'] },
   { label: 'Quản lý đơn COD', path: '/orders/cod', module: 'cod_ops', icon: 'local_shipping', roles: ['agencyManager'] },
   {
     label: 'Chờ trừ kho',
@@ -300,17 +301,36 @@ export function getAccessDeniedMessage(pathname) {
   return 'Bạn không có quyền truy cập trang này.'
 }
 
+const ORDER_LIST_SUBROUTES = new Set(['cod', 'exchange', 'stock-deduct', 'create'])
+
+function getOrderDetailContext(pathname, search = '') {
+  const path = (pathname || '').toLowerCase()
+  const match = path.match(/^\/orders\/([^/]+)$/)
+  if (!match || ORDER_LIST_SUBROUTES.has(match[1])) {
+    return null
+  }
+
+  const params = new URLSearchParams(search || '')
+  const from = (params.get('from') || '').toLowerCase()
+  if (from === 'exchange' || from === 'cod') {
+    return from
+  }
+
+  return 'sale'
+}
+
 /** Sidebar highlight: /orders/cod must not activate the /orders item. */
-export function isNavigationItemActive(pathname, item) {
+export function isNavigationItemActive(pathname, item, search = '') {
   const path = (pathname || '').toLowerCase()
   const target = (item?.path || '').toLowerCase()
+  const orderDetailContext = getOrderDetailContext(pathname, search)
 
   if (!target) {
     return false
   }
 
   if (item.module === 'cod_ops') {
-    return path === target || path.startsWith(`${target}/`)
+    return path === target || path.startsWith(`${target}/`) || orderDetailContext === 'cod'
   }
 
   if (item.module === 'stock_deduct_ops') {
@@ -329,7 +349,16 @@ export function isNavigationItemActive(pathname, item) {
   }
 
   if (item.module === 'orders') {
+    if (target === '/orders/exchange') {
+      return path === '/orders/exchange' || orderDetailContext === 'exchange'
+    }
     if (path === '/orders/cod' || path.startsWith('/orders/cod/')) {
+      return false
+    }
+    if (path === '/orders/exchange') {
+      return false
+    }
+    if (orderDetailContext === 'exchange') {
       return false
     }
     if (path === '/orders/stock-deduct' || path.startsWith('/orders/stock-deduct/')) {

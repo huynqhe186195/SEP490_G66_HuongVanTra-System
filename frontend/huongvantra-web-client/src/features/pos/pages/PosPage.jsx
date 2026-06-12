@@ -4,6 +4,7 @@ import { showError, showSuccess } from '../../../app/toast.js'
 import AddCustomerModal from '../components/AddCustomerModal.jsx'
 import CustomerDetailModal from '../components/CustomerDetailModal.jsx'
 import OrderOfferModal from '../components/OrderOfferModal.jsx'
+import SelectReturnOrderModal from '../components/SelectReturnOrderModal.jsx'
 import ConfirmDialog from '../components/ConfirmDialog.jsx'
 import PosCategoryFilterSidebar from '../components/PosCategoryFilterSidebar.jsx'
 import PosPaymentSidebar from '../components/PosPaymentSidebar.jsx'
@@ -2035,6 +2036,7 @@ function PosPage() {
       />
 
       <footer className="shrink-0 border-t border-[#d8d6ce] bg-white px-4">
+        <div className="flex items-end justify-between gap-4">
         <div className="flex items-end gap-8">
           {SALES_MODES.map((mode) => {
             const isActive = salesMode === mode.id
@@ -2063,6 +2065,15 @@ function PosPage() {
               </button>
             )
           })}
+        </div>
+        <button
+          type="button"
+          onClick={() => setOpenModal('return-order')}
+          className="mb-2 inline-flex items-center gap-2 rounded-lg border border-[#356647]/30 bg-[#356647]/5 px-4 py-2 text-sm font-semibold text-[#356647] transition hover:bg-[#356647]/10"
+        >
+          <Icon className="text-[20px]">assignment_return</Icon>
+          Trả hàng
+        </button>
         </div>
       </footer>
 
@@ -2132,6 +2143,18 @@ function PosPage() {
         onClose={() => setOverpaymentDebtModalOpen(false)}
         onSkip={handleOverpaymentDebtSkip}
         onConfirm={handleOverpaymentDebtConfirm}
+      />
+      <SelectReturnOrderModal
+        isOpen={openModal === 'return-order'}
+        onClose={() => setOpenModal(null)}
+        onSelectOrder={(order) => {
+          setOpenModal(null)
+          navigate(`/pos/returns/${order.id}`)
+        }}
+        onQuickReturn={() => {
+          setOpenModal(null)
+          showError('Trả nhanh (không chọn hóa đơn) sẽ được bổ sung sau.')
+        }}
       />
       <PosCategoryFilterSidebar
         isOpen={isCategoryFilterSidebarOpen}

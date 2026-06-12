@@ -1,16 +1,18 @@
 using Microsoft.EntityFrameworkCore;
 using OrderService.Application.Interfaces;
-using OrderService.Domain.Entities;
+using OrderService.Domain.Enums;
 using OrderService.Infrastructure.Data;
 
 namespace OrderService.Infrastructure.Services;
 
 public class OrderCodeGenerator(OrderDbContext _db) : IOrderCodeGenerator
 {
-    public async Task<string> GenerateAsync(CancellationToken ct = default)
+    public async Task<string> GenerateAsync(OrderKind kind = OrderKind.Sale, CancellationToken ct = default)
     {
         var today = DateTime.UtcNow.ToString("yyMMdd");
-        var prefix = $"HVT-{today}-";
+        var prefix = kind == OrderKind.Exchange
+            ? $"HVT-DOI-{today}-"
+            : $"HVT-{today}-";
 
         var lastCode = await _db.Orders
             .Where(o => o.OrderCode.StartsWith(prefix))
@@ -22,7 +24,8 @@ public class OrderCodeGenerator(OrderDbContext _db) : IOrderCodeGenerator
         if (lastCode != null)
         {
             var parts = lastCode.Split('-');
-            if (parts.Length == 3 && int.TryParse(parts[2], out var last))
+            var seqPart = parts[^1];
+            if (int.TryParse(seqPart, out var last))
                 seq = last + 1;
         }
 
