@@ -25,6 +25,7 @@ public class GlobalExceptionMiddleware(RequestDelegate next, ILogger<GlobalExcep
             OrderValidationException v          => (StatusCodes.Status400BadRequest,  v.Message, v.Errors),
             OrderNotFoundException e            => (StatusCodes.Status404NotFound,    e.Message, null),
             OrderNotFoundByCodeException e      => (StatusCodes.Status404NotFound,    e.Message, null),
+            ReturnOrderNotFoundException e      => (StatusCodes.Status404NotFound,    e.Message, null),
             PromotionNotFoundException e        => (StatusCodes.Status404NotFound,    e.Message, null),
             PaymentNotFoundException e          => (StatusCodes.Status404NotFound,    e.Message, null),
             OrderCannotBeCancelledException e   => (StatusCodes.Status409Conflict,    e.Message, null),

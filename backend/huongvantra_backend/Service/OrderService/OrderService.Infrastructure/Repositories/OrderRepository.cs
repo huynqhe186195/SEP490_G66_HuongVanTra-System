@@ -8,6 +8,8 @@ namespace OrderService.Infrastructure.Repositories;
 
 public class OrderRepository(OrderDbContext _db) : IOrderRepository
 {
+    private const string ExchangeOrderCodePrefix = "HVT-DOI-";
+
     public async Task<Order?> GetByIdAsync(Guid id, CancellationToken ct = default) =>
         await _db.Orders
             .Include(o => o.OrderDetails)
@@ -82,11 +84,35 @@ public class OrderRepository(OrderDbContext _db) : IOrderRepository
 
         if (!string.IsNullOrWhiteSpace(orderKind) &&
             Enum.TryParse<OrderKind>(orderKind, true, out var parsedKind))
-            query = query.Where(o => o.OrderKind == parsedKind);
+        {
+            if (parsedKind == OrderKind.Exchange)
+            {
+                query = query.Where(o =>
+                    o.OrderKind == OrderKind.Exchange
+                    || o.OrderCode.StartsWith(ExchangeOrderCodePrefix)
+                    || _db.ReturnOrders.Any(r => r.ExchangeOrderId == o.Id));
+            }
+            else
+            {
+                query = query.Where(o => o.OrderKind == parsedKind);
+            }
+        }
 
         if (!string.IsNullOrWhiteSpace(excludeOrderKind) &&
             Enum.TryParse<OrderKind>(excludeOrderKind, true, out var excludedKind))
-            query = query.Where(o => o.OrderKind != excludedKind);
+        {
+            if (excludedKind == OrderKind.Exchange)
+            {
+                query = query.Where(o =>
+                    o.OrderKind != OrderKind.Exchange
+                    && !o.OrderCode.StartsWith(ExchangeOrderCodePrefix)
+                    && !_db.ReturnOrders.Any(r => r.ExchangeOrderId == o.Id));
+            }
+            else
+            {
+                query = query.Where(o => o.OrderKind != excludedKind);
+            }
+        }
 
         if (returnableOnly)
         {

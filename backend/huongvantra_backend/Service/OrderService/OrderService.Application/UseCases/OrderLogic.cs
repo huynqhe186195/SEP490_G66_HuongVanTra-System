@@ -65,6 +65,63 @@ public class OrderLogic(
         return items.Select(MapActivity).ToList();
     }
 
+    public async Task<PagedResponse<ReturnOrderSummaryResponse>> GetReturnsPagedAsync(
+        string? search, string? sourceChannel, int page, int pageSize, CancellationToken ct = default)
+    {
+        OrderInputValidator.ValidatePagination(page, pageSize);
+        var (items, total) = await _returnOrderRepo.GetPagedAsync(search, sourceChannel, page, pageSize, ct);
+        var dtos = new List<ReturnOrderSummaryResponse>(items.Count);
+
+        foreach (var (item, sourceOrderChannel) in items)
+        {
+            string? exchangeCode = null;
+            if (item.ExchangeOrderId.HasValue)
+                exchangeCode = await _returnOrderRepo.GetExchangeOrderCodeAsync(item.ExchangeOrderId.Value, ct);
+
+            dtos.Add(MapReturnSummary(item, sourceOrderChannel, exchangeCode));
+        }
+
+        return new PagedResponse<ReturnOrderSummaryResponse>(
+            dtos, page, pageSize, total,
+            (int)Math.Ceiling((double)total / pageSize));
+    }
+
+    public async Task<ReturnOrderDetailResponse> GetReturnByIdAsync(Guid id, CancellationToken ct = default)
+    {
+        var item = await _returnOrderRepo.GetByIdAsync(id, ct)
+            ?? throw new ReturnOrderNotFoundException(id);
+
+        var sourceOrder = await _orderRepo.GetByIdAsync(item.SourceOrderId, ct);
+        var sourceChannel = sourceOrder?.OrderChannel ?? OrderChannel.POS;
+
+        string? exchangeCode = null;
+        if (item.ExchangeOrderId.HasValue)
+            exchangeCode = await _returnOrderRepo.GetExchangeOrderCodeAsync(item.ExchangeOrderId.Value, ct);
+
+        return MapReturnDetail(item, sourceChannel, exchangeCode);
+    }
+
+    public async Task<List<ReturnOrderSummaryResponse>> GetReturnsByOrderIdAsync(
+        Guid orderId, CancellationToken ct = default)
+    {
+        var sourceOrder = await _orderRepo.GetByIdAsync(orderId, ct)
+            ?? throw new OrderNotFoundException(orderId);
+
+        var items = await _returnOrderRepo.GetBySourceOrderIdAsync(orderId, ct);
+        var dtos = new List<ReturnOrderSummaryResponse>(items.Count);
+
+        foreach (var item in items)
+        {
+            string? exchangeCode = null;
+            if (item.ExchangeOrderId.HasValue)
+                exchangeCode = await _returnOrderRepo.GetExchangeOrderCodeAsync(item.ExchangeOrderId.Value, ct);
+
+            dtos.Add(MapReturnSummary(item, sourceOrder.OrderChannel, exchangeCode));
+        }
+
+        return dtos;
+    }
+
     public async Task<OrderResponse> CreateAsync(
         CreateOrderRequest req, Guid? actorId = null, string? actorName = null, CancellationToken ct = default)
     {
@@ -511,9 +568,14 @@ public class OrderLogic(
         if (exchangeItems.Count > 0)
         {
             var exchangeDiscount = Math.Min(returnAmount, exchangeAmount);
+            var shipExchange = IsCodShipExchange(req.ExchangeFulfillment, refundMethod, order.OrderChannel);
+            var exchangeChannel = shipExchange ? OrderChannel.COD : OrderChannel.POS;
+            var exchangePaymentMethod = shipExchange ? PaymentMethod.COD : refundMethod;
+            var exchangeShipping = shipExchange ? order.ShippingAddress?.Trim() : null;
             var isExchangeTransferQr = netCustomerPays > 0
-                && refundMethod is PaymentMethod.VietQR or PaymentMethod.BankTransfer;
-            var exchangePaidAmount = isExchangeTransferQr ? 0m : customerPaid;
+                && !shipExchange
+                && exchangePaymentMethod is PaymentMethod.VietQR or PaymentMethod.BankTransfer;
+            var exchangePaidAmount = isExchangeTransferQr || shipExchange ? 0m : customerPaid;
             var exchangeTransferQrAmount = isExchangeTransferQr ? netCustomerPays : 0m;
 
             var exchangeOrder = await CreateAsync(
@@ -521,8 +583,8 @@ public class OrderLogic(
                     order.CustomerId,
                     order.CustomerSnapshotName,
                     order.EmployeeId ?? actorId,
-                    OrderChannel.POS,
-                    null,
+                    exchangeChannel,
+                    exchangeShipping,
                     $"Đổi hàng từ {order.OrderCode} ({returnCode})",
                     exchangeDiscount,
                     exchangeItems.Select(i => new CreateOrderDetailRequest(
@@ -531,7 +593,7 @@ public class OrderLogic(
                         i.SkuSnapshotCode?.Trim(),
                         i.Quantity,
                         i.UnitPrice)).ToList(),
-                    refundMethod,
+                    exchangePaymentMethod,
                     exchangePaidAmount,
                     exchangeTransferQrAmount,
                     null,
@@ -544,6 +606,15 @@ public class OrderLogic(
 
             exchangeOrderId = exchangeOrder.Id;
             exchangeOrderCode = exchangeOrder.OrderCode;
+
+            var persistedExchange = await _orderRepo.GetByIdAsync(exchangeOrder.Id, ct);
+            if (persistedExchange != null && persistedExchange.OrderKind != OrderKind.Exchange)
+            {
+                persistedExchange.OrderKind = OrderKind.Exchange;
+                persistedExchange.UpdatedAt = DateTime.UtcNow;
+                await _orderRepo.SaveChangesAsync(ct);
+            }
+
             returnOrder.ExchangeOrderId = exchangeOrderId;
             returnOrder.UpdatedAt = DateTime.UtcNow;
             await _returnOrderRepo.SaveChangesAsync(ct);
@@ -618,6 +689,50 @@ public class OrderLogic(
         }, ct);
     }
 
+    private static ReturnOrderSummaryResponse MapReturnSummary(
+        ReturnOrder item, OrderChannel sourceChannel, string? exchangeCode) => new(
+        item.Id,
+        item.ReturnCode,
+        item.SourceOrderId,
+        item.SourceOrderCode,
+        sourceChannel.ToString(),
+        item.CustomerId,
+        item.CustomerSnapshotName,
+        item.ReturnAmount,
+        item.RefundAmount,
+        item.ExchangeAmount,
+        item.ExchangeOrderId,
+        exchangeCode,
+        item.CreatedAt);
+
+    private static ReturnOrderDetailResponse MapReturnDetail(
+        ReturnOrder item, OrderChannel sourceChannel, string? exchangeCode) => new(
+        item.Id,
+        item.ReturnCode,
+        item.SourceOrderId,
+        item.SourceOrderCode,
+        sourceChannel.ToString(),
+        item.CustomerId,
+        item.CustomerSnapshotName,
+        item.ReturnAmount,
+        item.ExchangeAmount,
+        item.NetCustomerPays,
+        item.RefundAmount,
+        item.CustomerPaidAmount,
+        item.RefundMethod.ToString(),
+        item.ExchangeOrderId,
+        exchangeCode,
+        item.Note,
+        item.CreatedAt,
+        (item.Details ?? []).Select(d => new ReturnOrderLineResponse(
+            d.Id,
+            d.SkuId,
+            d.SkuSnapshotName,
+            d.SkuSnapshotCode,
+            d.ReturnQuantity,
+            d.UnitPrice,
+            d.SubTotal)).ToList());
+
     private static OrderActivityResponse MapActivity(OrderActivity activity) => new(
         activity.Id,
         activity.OrderId,
@@ -649,6 +764,7 @@ public class OrderLogic(
             o.Id, o.OrderCode, o.CustomerId, o.CustomerSnapshotName,
             o.OrderChannel.ToString(), o.OrderKind.ToString(), o.OrderStatus.ToString(),
             o.InventorySyncStatus.ToString(), o.FinalAmount, o.CreatedAt,
+            o.Note,
             codPayment?.Id,
             codPayment?.IsCodVerified,
             codPayment?.CodWarningDate,
@@ -682,12 +798,22 @@ public class OrderLogic(
         _ => channel.ToString()
     };
 
+    private static bool IsCodShipExchange(
+        string? exchangeFulfillment, PaymentMethod refundMethod, OrderChannel sourceChannel)
+    {
+        if (string.Equals(exchangeFulfillment?.Trim(), "CodShip", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        return sourceChannel == OrderChannel.COD && refundMethod == PaymentMethod.COD;
+    }
+
     private static PaymentMethod MapReturnPaymentMethod(string? raw)
     {
         var value = raw?.Trim().ToUpperInvariant() ?? string.Empty;
         return value switch
         {
             "TRANSFER" or "VIETQR" or "BANKTRANSFER" => PaymentMethod.VietQR,
+            "COD" => PaymentMethod.COD,
             _ => PaymentMethod.Cash
         };
     }

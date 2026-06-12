@@ -31,6 +31,21 @@ public class OrdersController(OrderLogic _orderLogic) : ControllerBase
         Ok(await _orderLogic.GetPagedAsync(
             new GetOrdersRequest(search, customerId, status, channel, excludeChannel, codTab, returnableOnly, orderKind, excludeOrderKind, page, pageSize), ct));
 
+    [HttpGet("return-slips")]
+    [Authorize(Policy = PermissionNames.ViewOrder)]
+    public async Task<IActionResult> GetReturnSlips(
+        [FromQuery] string? search,
+        [FromQuery] string? channel,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken ct = default) =>
+        Ok(await _orderLogic.GetReturnsPagedAsync(search, channel, page, pageSize, ct));
+
+    [HttpGet("return-slips/{id:guid}")]
+    [Authorize(Policy = PermissionNames.ViewOrder)]
+    public async Task<IActionResult> GetReturnSlipById(Guid id, CancellationToken ct = default) =>
+        Ok(await _orderLogic.GetReturnByIdAsync(id, ct));
+
     [HttpGet("{id:guid}")]
     [Authorize(Policy = PermissionNames.ViewOrder)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct = default) =>
@@ -40,6 +55,11 @@ public class OrdersController(OrderLogic _orderLogic) : ControllerBase
     [Authorize(Policy = PermissionNames.ViewOrder)]
     public async Task<IActionResult> GetActivities(Guid id, CancellationToken ct = default) =>
         Ok(await _orderLogic.GetActivitiesAsync(id, ct));
+
+    [HttpGet("{id:guid}/returns")]
+    [Authorize(Policy = PermissionNames.ViewOrder)]
+    public async Task<IActionResult> GetReturns(Guid id, CancellationToken ct = default) =>
+        Ok(await _orderLogic.GetReturnsByOrderIdAsync(id, ct));
 
     [HttpGet("by-code/{code}")]
     [Authorize(Policy = PermissionNames.ViewOrder)]

@@ -163,7 +163,13 @@ function ReturnOrderPagination({ page, totalPages, totalCount, pageSize, onPageC
   )
 }
 
+const CHANNEL_TABS = [
+  { id: 'POS', label: 'Tại quầy' },
+  { id: 'COD', label: 'COD (giao hàng)' },
+]
+
 function SelectReturnOrderModal({ isOpen, onClose, onSelectOrder, onQuickReturn }) {
+  const [orderChannel, setOrderChannel] = useState('POS')
   const [filters, setFilters] = useState(() => ({
     ...initialFilters,
     dateFrom: defaultDateFrom(),
@@ -184,7 +190,7 @@ function SelectReturnOrderModal({ isOpen, onClose, onSelectOrder, onQuickReturn 
       const data = await fetchOrders({
         search,
         status: 'Completed',
-        channel: 'POS',
+        channel: orderChannel,
         returnableOnly: true,
         excludeOrderKind: 'Exchange',
         page: hasProductFilter ? 1 : page,
@@ -221,10 +227,11 @@ function SelectReturnOrderModal({ isOpen, onClose, onSelectOrder, onQuickReturn 
     } finally {
       setIsLoading(false)
     }
-  }, [draftFilters, hasProductFilter, page])
+  }, [draftFilters, hasProductFilter, orderChannel, page])
 
   useEffect(() => {
     if (!isOpen) return
+    setOrderChannel('POS')
     setDraftFilters({
       ...initialFilters,
       dateFrom: defaultDateFrom(),
@@ -266,8 +273,30 @@ function SelectReturnOrderModal({ isOpen, onClose, onSelectOrder, onQuickReturn 
         className="flex max-h-[min(92vh,760px)] w-full max-w-[min(1120px,98vw)] flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl"
         onClick={(event) => event.stopPropagation()}
       >
-        <header className="flex shrink-0 items-center justify-between border-b border-slate-200 px-4 py-3">
-          <h2 className="text-base font-bold text-slate-800 sm:text-lg">Chọn hóa đơn trả hàng</h2>
+        <header className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-4 py-3">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
+            <h2 className="text-base font-bold text-slate-800 sm:text-lg">Chọn hóa đơn trả hàng</h2>
+            <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-0.5">
+              {CHANNEL_TABS.map((tab) => {
+                const active = orderChannel === tab.id
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => {
+                      setOrderChannel(tab.id)
+                      setPage(1)
+                    }}
+                    className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+                      active ? 'bg-white text-[#356647] shadow-sm' : 'text-slate-600 hover:text-slate-800'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
           <button
             type="button"
             onClick={onClose}

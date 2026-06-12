@@ -77,6 +77,26 @@ export function isExchangeOrder(order) {
   return normalizeOrderKey(order?.orderKind) === 'Exchange'
 }
 
+export const EXCHANGE_CHANNEL_FILTER_OPTIONS = [
+  { value: '', label: 'Tất cả' },
+  { value: 'POS', label: 'Tại quầy' },
+  { value: 'COD', label: 'COD giao hàng' },
+]
+
+export function getExchangeChannelBadgeClass(channel) {
+  const key = normalizeOrderKey(channel)
+  if (key === 'COD') return 'bg-amber-50 text-amber-800 border border-amber-200'
+  if (key === 'POS') return 'bg-[#538463]/10 text-[#356647] border border-[#538463]/20'
+  return 'bg-slate-100 text-slate-600 border border-slate-200'
+}
+
+export function getExchangeChannelShortLabel(channel) {
+  const key = normalizeOrderKey(channel)
+  if (key === 'COD') return 'COD'
+  if (key === 'POS') return 'Tại quầy'
+  return getOrderChannelLabel(channel)
+}
+
 export function getPaymentMethodLabel(method) {
   const key = normalizeOrderKey(method)
   const map = {
@@ -156,6 +176,13 @@ export function isCodOrder(order) {
 export function isOrderTerminal(order) {
   const status = normalizeOrderKey(order?.orderStatus)
   return status === 'Completed' || status === 'Cancelled'
+}
+
+export function canReturnOrder(order) {
+  if (!order || isExchangeOrder(order)) return false
+  if (normalizeOrderKey(order.orderStatus) !== 'Completed') return false
+  const lines = order.items || []
+  return lines.some((line) => Number(line.returnedQuantity || 0) < Number(line.quantity || 0))
 }
 
 export function canEditOrderMeta(order) {

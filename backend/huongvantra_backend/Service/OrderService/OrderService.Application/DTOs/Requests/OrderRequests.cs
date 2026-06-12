@@ -54,7 +54,8 @@ public record ReturnOrderRequest(
     string PaymentMethod,
     decimal CustomerPaidAmount,
     List<ReturnExchangeItemRequest>? ExchangeItems = null,
-    string? Note = null);
+    string? Note = null,
+    string? ExchangeFulfillment = null);
 
 public record GetOrdersRequest(
     string? Search,

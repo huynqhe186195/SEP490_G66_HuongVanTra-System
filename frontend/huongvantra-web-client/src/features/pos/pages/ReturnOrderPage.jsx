@@ -297,7 +297,15 @@ function ReturnOrderPage() {
     setExchangeCart((prev) => prev.filter((item) => item.sku !== key))
   }
 
+  const isCodOrder = order?.orderChannel === 'COD'
+
   const canSubmit = returnLines.some((line) => line.returnQty > 0)
+
+  const resolveExchangeFulfillment = () => {
+    if (!isCodOrder || totals.customerOwes <= 0 || exchangeCart.length === 0) return null
+    if (paymentMethod === 'COD') return 'CodShip'
+    return 'InStore'
+  }
 
   const handleSubmit = async () => {
     if (!canSubmit) {
@@ -315,7 +323,9 @@ function ReturnOrderPage() {
             returnQuantity: line.returnQty,
           })),
         paymentMethod,
-        customerPaidAmount: totals.customerOwes > 0 ? parseMoneyInput(amountPaidInput) : 0,
+        customerPaidAmount:
+          totals.customerOwes > 0 && paymentMethod !== 'COD' ? parseMoneyInput(amountPaidInput) : 0,
+        exchangeFulfillment: resolveExchangeFulfillment(),
         exchangeItems: exchangeCart.map((item) => ({
           skuId: item.skuId,
           skuSnapshotName: item.name,
@@ -330,6 +340,14 @@ function ReturnOrderPage() {
       const exchangeCode = result?.exchangeOrderCode
       const exchangeOrderId = result?.exchangeOrderId
       const payExtra = totals.customerOwes > 0
+
+      if (payExtra && paymentMethod === 'COD' && exchangeOrderId) {
+        showSuccess(
+          `Phiếu trả ${result.returnCode} · đơn COD đổi ${exchangeCode} chờ giao và thu tiền.`,
+        )
+        navigate(`/orders/exchange?tab=exchange&channel=COD`)
+        return
+      }
 
       if (payExtra && paymentMethod === 'TRANSFER' && exchangeOrderId) {
         const qrAmount = Math.round(totals.customerOwes)
@@ -356,14 +374,25 @@ function ReturnOrderPage() {
         return
       }
 
+      if (exchangeOrderId) {
+        const exchangeListUrl = isCodOrder
+          ? '/orders/exchange?tab=exchange&channel=COD'
+          : '/orders/exchange?tab=exchange'
+        showSuccess(
+          refund > 0
+            ? `Trả hàng ${result.returnCode}: hoàn ${formatMoney(refund)} đ · đơn đổi ${exchangeCode}.`
+            : `Trả hàng ${result.returnCode} · đơn đổi ${exchangeCode}.`,
+        )
+        navigate(exchangeListUrl)
+        return
+      }
+
       showSuccess(
         refund > 0
-          ? `Trả hàng ${result.returnCode}: hoàn ${formatMoney(refund)} đ cho khách.`
-          : exchangeCode
-            ? `Trả hàng ${result.returnCode} · đơn đổi ${exchangeCode}.`
-            : `Trả hàng ${result.returnCode} thành công.`,
+          ? `Phiếu ${result.returnCode}: hoàn ${formatMoney(refund)} đ cho khách.`
+          : `Phiếu ${result.returnCode} đã lưu.`,
       )
-      navigate('/pos')
+      navigate(`/orders/exchange?tab=returns`)
     } catch (error) {
       showError(error.message)
     } finally {
@@ -416,7 +445,12 @@ function ReturnOrderPage() {
 
           <div className="flex items-center gap-1 rounded-lg border border-[#356647] bg-[#356647]/5 px-3 py-1.5 text-sm font-semibold text-[#356647]">
             <Icon className="text-[18px]">assignment_return</Icon>
-            Trả hàng 1
+            Trả hàng
+            {isCodOrder ? (
+              <span className="ml-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-800">
+                COD
+              </span>
+            ) : null}
           </div>
         </div>
       </header>
@@ -503,6 +537,8 @@ function ReturnOrderPage() {
           customerPhone=""
           createdAtLabel={vietnamNowLabel()}
           sourceOrderCode={order.orderCode}
+          isCodOrder={isCodOrder}
+          shippingAddress={order.shippingAddress || ''}
           returnOriginalTotal={totals.returnOriginalTotal}
           returnItemsTotal={totals.returnItemsTotal}
           returnDiscount={totals.returnDiscount}

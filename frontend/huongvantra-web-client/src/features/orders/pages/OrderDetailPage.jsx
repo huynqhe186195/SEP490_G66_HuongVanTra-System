@@ -9,6 +9,7 @@ import CodVerifyModal from '../components/CodVerifyModal.jsx'
 import { parseCodDebtSettlement } from '../../customers/utils/codDebtSettlementUtils.js'
 import OrderCustomerCell from '../components/OrderCustomerCell.jsx'
 import OrderProductsSection from '../components/OrderProductsSection.jsx'
+import OrderReturnsSection from '../components/OrderReturnsSection.jsx'
 import OrderTimeline from '../components/OrderTimeline.jsx'
 import OrderTransferQrPanel from '../components/OrderTransferQrPanel.jsx'
 import OrderUpdateMetaModal from '../components/OrderUpdateMetaModal.jsx'
@@ -16,6 +17,7 @@ import {
   cancelOrder,
   completeOrder,
   fetchOrder,
+  fetchReturnsByOrderId,
   shipOrder,
   updateOrder,
 } from '../services/ordersApi.js'
@@ -23,6 +25,7 @@ import {
   canCancelOrder,
   canCompleteOrder,
   canEditOrderMeta,
+  canReturnOrder,
   canShipOrder,
   canVerifyCod,
   isCodChannelOrder,
@@ -58,6 +61,7 @@ function OrderDetailPage() {
   const [isCodVerifyOpen, setIsCodVerifyOpen] = useState(false)
   const [timelineRefreshKey, setTimelineRefreshKey] = useState(0)
   const [catalogLookups, setCatalogLookups] = useState(() => buildProductCatalogLookups())
+  const [orderReturns, setOrderReturns] = useState([])
 
   const loadOrder = useCallback(async () => {
     if (!id) return
@@ -76,6 +80,25 @@ function OrderDetailPage() {
   useEffect(() => {
     loadOrder()
   }, [loadOrder])
+
+  useEffect(() => {
+    if (!id) return undefined
+    let mounted = true
+
+    async function loadReturns() {
+      try {
+        const data = await fetchReturnsByOrderId(id)
+        if (mounted) setOrderReturns(data)
+      } catch {
+        if (mounted) setOrderReturns([])
+      }
+    }
+
+    loadReturns()
+    return () => {
+      mounted = false
+    }
+  }, [id, timelineRefreshKey])
 
   useEffect(() => {
     if (!order || isLoading || fromCod || fromExchange || !id) return
@@ -205,7 +228,7 @@ function OrderDetailPage() {
             {fromCod || isCodChannelOrder(order)
               ? 'Quản lý đơn COD'
               : fromExchange || isExchangeOrder(order)
-                ? 'Đơn đổi hàng'
+                ? 'Trả / đổi hàng'
                 : 'Danh sách đơn'}
           </Link>
           <h1 className="mt-2 text-2xl font-bold text-slate-900">{order.orderCode}</h1>
@@ -251,6 +274,8 @@ function OrderDetailPage() {
               <p className="mt-2 text-sm text-slate-600">{order.shippingAddress}</p>
             ) : null}
           </section>
+
+          <OrderReturnsSection returns={orderReturns} />
 
           {order.note?.trim() ? (
             <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
@@ -318,6 +343,15 @@ function OrderDetailPage() {
                     className="rounded-xl bg-amber-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-amber-700 disabled:opacity-50"
                   >
                     Đã giao &amp; thu tiền (COD)
+                  </button>
+                ) : null}
+                {canReturnOrder(order) ? (
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/pos/returns/${order.id}`)}
+                    className="rounded-xl border border-[#538463]/40 bg-[#f6f4ec] px-4 py-2.5 text-sm font-bold text-[#356647] hover:bg-[#ebe8dc]"
+                  >
+                    Trả hàng / Đổi
                   </button>
                 ) : null}
                 {canCancelOrder(order) ? (

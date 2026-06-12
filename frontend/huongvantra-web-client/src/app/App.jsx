@@ -21,6 +21,7 @@ import InventoryStockPage from '../features/inventory/pages/InventoryStockPage.j
 import ProfilePage from '../features/profile/pages/ProfilePage.jsx'
 import OrdersPage from '../features/orders/pages/OrdersPage.jsx'
 import ExchangeOrdersPage from '../features/orders/pages/ExchangeOrdersPage.jsx'
+import ReturnOrderDetailPage from '../features/orders/pages/ReturnOrderDetailPage.jsx'
 import CodOrdersPage from '../features/orders/pages/CodOrdersPage.jsx'
 import StockDeductQueuePage from '../features/inventory/pages/StockDeductQueuePage.jsx'
 import StockAdjustmentRequestsPage from '../features/inventory/pages/StockAdjustmentRequestsPage.jsx'
@@ -60,6 +61,8 @@ function App() {
         <Route path="/pos/returns/:orderId" element={<ReturnOrderPage />} />
         <Route path="/orders" element={<OrdersPage />} />
         <Route path="/orders/exchange" element={<ExchangeOrdersPage />} />
+        <Route path="/orders/returns" element={<Navigate to="/orders/exchange?tab=returns" replace />} />
+        <Route path="/orders/returns/:id" element={<ReturnOrderDetailPage />} />
         <Route path="/orders/cod" element={<CodOrdersPage />} />
         <Route path="/orders/stock-deduct" element={<StockDeductQueuePage />} />
         <Route path="/orders/create" element={<Navigate to="/pos" replace />} />

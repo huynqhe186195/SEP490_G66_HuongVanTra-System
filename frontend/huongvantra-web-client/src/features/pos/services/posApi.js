@@ -1,4 +1,4 @@
-﻿import { apiRequestAuth, toPagedResult } from '../../../lib/apiClient.js'
+import { apiRequestAuth, toPagedResult } from '../../../lib/apiClient.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import {
   buildCreateCustomerBody,
@@ -82,8 +82,8 @@ function buildOrderRequestFromPosPayload(
       skuId: line.productId,
       skuSnapshotName:
         line.productName && line.packagingType
-          ? `${line.productName} ÔÇö ${line.packagingType}`
-          : line.name || line.sku || 'Sß║ún phß║®m',
+          ? `${line.productName} — ${line.packagingType}`
+          : line.name || line.sku || 'Sản phẩm',
       skuSnapshotCode: line.sku || null,
       quantity: Math.max(1, Math.round(line.quantity)),
       unitPrice: line.unitPrice,
@@ -350,7 +350,7 @@ export function createPosOrderOffline(payload) {
   })
 }
 
-/** CK tß║íi quß║ºy ─æ├ú ghi nhß║¡n sß╗æ tiß╗ün kh├ích chuyß╗ân (kh├┤ng qua QR). */
+/** CK tại quầy đã ghi nhận số tiền khách chuyển (không qua QR). */
 export function createPosOrderTransferRecorded(payload) {
   const payment = payload.payments?.[0]
   return submitPosOrder(payload, {
@@ -408,7 +408,7 @@ export function mapPosProduct(item) {
   const fallbackName = item.name ?? item.Name ?? ''
   const displayName =
     productName && packagingType
-      ? `${productName} ÔÇö ${packagingType}`
+      ? `${productName} — ${packagingType}`
       : fallbackName || sku
 
   return {
@@ -641,7 +641,7 @@ export async function fetchAvailablePromotions() {
   return Array.isArray(data) ? data.map(mapPromotion).filter(Boolean) : []
 }
 
-/** Catalog cß╗¡a h├áng ÔÇö gß╗ôm cß║ú SP ─æang ß║®n ß╗ƒ kho nhã░ng ─æ├ú ─æß╗ông bß╗Ö (─æß╗â khß╗øp SKU). */
+/** Catalog cửa hàng — gồm cả SP đang ẩn ở kho nhưng đã đồng bộ (để khớp SKU). */
 async function fetchStoreProductsForPos() {
   const pageSize = 100
   let page = 1

@@ -37,7 +37,7 @@ const HOME_MODULE_PRIORITY = [
 export const navigationItems = [
   { label: 'POS bán hàng', path: '/pos', module: 'pos', icon: 'point_of_sale', roles: ['agencyManager', 'salesStaff', 'customer'] },
   { label: 'Đơn hàng', path: '/orders', module: 'orders', icon: 'receipt_long', roles: ['admin', 'agencyManager', 'salesStaff'] },
-  { label: 'Đơn đổi hàng', path: '/orders/exchange', module: 'orders', icon: 'swap_horiz', roles: ['admin', 'agencyManager', 'salesStaff'] },
+  { label: 'Trả / đổi hàng', path: '/orders/exchange', module: 'orders', icon: 'swap_horiz', roles: ['admin', 'agencyManager', 'salesStaff'] },
   { label: 'Quản lý đơn COD', path: '/orders/cod', module: 'cod_ops', icon: 'local_shipping', roles: ['agencyManager'] },
   {
     label: 'Chờ trừ kho',
@@ -350,7 +350,13 @@ export function isNavigationItemActive(pathname, item, search = '') {
 
   if (item.module === 'orders') {
     if (target === '/orders/exchange') {
-      return path === '/orders/exchange' || orderDetailContext === 'exchange'
+      return (
+        path === '/orders/exchange'
+        || path.startsWith('/orders/exchange/')
+        || path === '/orders/returns'
+        || path.startsWith('/orders/returns/')
+        || orderDetailContext === 'exchange'
+      )
     }
     if (path === '/orders/cod' || path.startsWith('/orders/cod/')) {
       return false
@@ -358,7 +364,13 @@ export function isNavigationItemActive(pathname, item, search = '') {
     if (path === '/orders/exchange') {
       return false
     }
+    if (path === '/orders/returns' || path.startsWith('/orders/returns/')) {
+      return false
+    }
     if (orderDetailContext === 'exchange') {
+      return false
+    }
+    if (orderDetailContext === 'cod') {
       return false
     }
     if (path === '/orders/stock-deduct' || path.startsWith('/orders/stock-deduct/')) {

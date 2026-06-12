@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
@@ -80,10 +80,10 @@ function formatPromotionPeriod(promotion) {
   const from = promotion.validFromUtc ? formatVietnamDateTimeMinute(promotion.validFromUtc) : null
   const to = promotion.validToUtc ? formatVietnamDateTimeMinute(promotion.validToUtc) : null
 
-  if (from && to) return `${from} ÔåÆ ${to}`
-  if (from) return `Tß╗½ ${from}`
-  if (to) return `─Éß║┐n ${to}`
-  return 'Kh├┤ng giß╗øi hß║ín'
+  if (from && to) return `${from} → ${to}`
+  if (from) return `Từ ${from}`
+  if (to) return `Đến ${to}`
+  return 'Không giới hạn'
 }
 
 function formatDatetimeLocal(date) {
@@ -131,13 +131,13 @@ function getDiscountValueMax(discountType) {
 
 function getDiscountValueHelperText(discountType) {
   return discountType === 'PERCENTAGE'
-    ? 'Tß╗æi ─æa 90%'
-    : 'Tß╗æi ─æa 10.000.000─æ'
+    ? 'Tối đa 90%'
+    : 'Tối đa 10.000.000đ'
 }
 
 function formatPromotionMinimumOrderSummary(promotion) {
   const amount = Number(promotion?.minimumOrderAmount || 0)
-  return amount > 0 ? `Tß╗½ ${amount.toLocaleString('vi-VN')}─æ` : 'Kh├┤ng y├¬u cß║ºu'
+  return amount > 0 ? `Từ ${amount.toLocaleString('vi-VN')}đ` : 'Không yêu cầu'
 }
 
 function formatPromotionUsageSummary(promotion) {
@@ -146,12 +146,12 @@ function formatPromotionUsageSummary(promotion) {
   const used = Number(promotion?.usedCountTotal ?? promotion?.orderCount ?? 0)
   const lines = [
     totalLimit > 0
-      ? `─É├ú d├╣ng ${used.toLocaleString('vi-VN')} / ${totalLimit.toLocaleString('vi-VN')}`
-      : 'Kh├┤ng giß╗øi hß║ín',
+      ? `Đã dùng ${used.toLocaleString('vi-VN')} / ${totalLimit.toLocaleString('vi-VN')}`
+      : 'Không giới hạn',
   ]
 
   if (perCustomerLimit > 0) {
-    lines.push(`Mß╗ùi kh├ích: ${perCustomerLimit.toLocaleString('vi-VN')} lß║ºn`)
+    lines.push(`Mỗi khách: ${perCustomerLimit.toLocaleString('vi-VN')} lần`)
   }
 
   return lines
@@ -285,7 +285,7 @@ function PromotionsPage() {
 
   const handleSave = async () => {
     if (form.validFrom && form.validTo && form.validTo <= form.validFrom) {
-      showError('Thß╗Øi gian kß║┐t th├║c phß║úi sau thß╗Øi gian bß║»t ─æß║ºu.')
+      showError('Thời gian kết thúc phải sau thời gian bắt đầu.')
       return
     }
 
@@ -302,38 +302,38 @@ function PromotionsPage() {
     const usageLimitTotal = parseIntegerInput(form.usageLimitTotal)
     const usageLimitPerCustomer = parseIntegerInput(form.usageLimitPerCustomer)
     if (scopeType === 'SKU' && skuScopes.length === 0) {
-      showError('Vui l├▓ng chß╗ìn ├¡t nhß║Ñt 1 SKU cho phß║ím vi SKU cß╗Ñ thß╗â.')
+      showError('Vui lòng chọn ít nhất 1 SKU cho phạm vi SKU cụ thể.')
       return
     }
 
     if (discountType === 'PERCENTAGE') {
       if (maxDiscountAmount <= 0) {
-        showError('Giß║úm tß╗æi ─æa phß║úi lß╗øn hãín 0.')
+        showError('Giảm tối đa phải lớn hơn 0.')
         return
       }
       if (maxDiscountAmount > MAX_PERCENTAGE_DISCOUNT_AMOUNT) {
-        showError('Giß║úm tß╗æi ─æa kh├┤ng qu├í 10.000.000─æ.')
+        showError('Giảm tối đa không quá 10.000.000đ.')
         return
       }
     }
 
     if (discountType === 'FIXED' && minimumOrderAmount > 0 && discountValue > minimumOrderAmount) {
-      showError('Sß╗æ tiß╗ün giß║úm cß╗æ ─æß╗ïnh kh├┤ng ─æã░ß╗úc lß╗øn hãín ─æãín tß╗æi thiß╗âu.')
+      showError('Số tiền giảm cố định không được lớn hơn đơn tối thiểu.')
       return
     }
 
     if (usageLimitTotal < 0 || usageLimitTotal > MAX_USAGE_LIMIT) {
-      showError('Giß╗øi hß║ín tß╗òng lã░ß╗út d├╣ng kh├┤ng hß╗úp lß╗ç.')
+      showError('Giới hạn tổng lượt dùng không hợp lệ.')
       return
     }
 
     if (usageLimitPerCustomer < 0 || usageLimitPerCustomer > MAX_USAGE_LIMIT) {
-      showError('Giß╗øi hß║ín lã░ß╗út d├╣ng mß╗ùi kh├ích kh├┤ng hß╗úp lß╗ç.')
+      showError('Giới hạn lượt dùng mỗi khách không hợp lệ.')
       return
     }
 
     if (usageLimitTotal > 0 && usageLimitPerCustomer > usageLimitTotal) {
-      showError('Giß╗øi hß║ín lã░ß╗út d├╣ng mß╗ùi kh├ích kh├┤ng ─æã░ß╗úc lß╗øn hãín tß╗òng lã░ß╗út d├╣ng.')
+      showError('Giới hạn lượt dùng mỗi khách không được lớn hơn tổng lượt dùng.')
       return
     }
 
@@ -353,12 +353,12 @@ function PromotionsPage() {
     }
 
     if (!payload.promoCode) {
-      showError('Vui l├▓ng nhß║¡p m├ú giß║úm gi├í.')
+      showError('Vui lòng nhập mã giảm giá.')
       return
     }
 
     if (payload.validFrom && payload.validTo && payload.validFrom > payload.validTo) {
-      showError('Ng├áy bß║»t ─æß║ºu kh├┤ng ─æã░ß╗úc sau ng├áy kß║┐t th├║c.')
+      showError('Ngày bắt đầu không được sau ngày kết thúc.')
       return
     }
 
@@ -366,10 +366,10 @@ function PromotionsPage() {
     try {
       if (editingId) {
         await updateAdminPromotion(editingId, payload)
-        showSuccess('─É├ú cß║¡p nhß║¡t m├ú giß║úm gi├í.')
+        showSuccess('Đã cập nhật mã giảm giá.')
       } else {
         await createAdminPromotion(payload)
-        showSuccess('─É├ú th├¬m m├ú giß║úm gi├í.')
+        showSuccess('Đã thêm mã giảm giá.')
       }
       setModalOpen(false)
       await loadData()
@@ -381,10 +381,10 @@ function PromotionsPage() {
   }
 
   const handleDeactivate = async (promotion) => {
-    if (!window.confirm(`Ngß╗½ng hoß║ít ─æß╗Öng m├ú "${promotion.promoCode}"?`)) return
+    if (!window.confirm(`Ngừng hoạt động mã "${promotion.promoCode}"?`)) return
     try {
       await deactivateAdminPromotion(promotion.id)
-      showSuccess('─É├ú ngß╗½ng hoß║ít ─æß╗Öng m├ú giß║úm gi├í.')
+      showSuccess('Đã ngừng hoạt động mã giảm giá.')
       await loadData()
     } catch (error) {
       showError(error.message)
@@ -394,7 +394,7 @@ function PromotionsPage() {
   const handleReactivate = async (promotion) => {
     try {
       await reactivateAdminPromotion(promotion.id)
-      showSuccess('─É├ú k├¡ch hoß║ít lß║íi m├ú giß║úm gi├í.')
+      showSuccess('Đã kích hoạt lại mã giảm giá.')
       await loadData()
     } catch (error) {
       showError(error.message)
@@ -467,29 +467,29 @@ function PromotionsPage() {
   return (
     <PageShell>
       <PageHeader
-        title="Quß║ún l├¢ m├ú giß║úm gi├í"
-        description="Tß║ío v├á chß╗ënh sß╗¡a m├ú khuyß║┐n m├úi d├╣ng tß║íi POS v├á tr├¬n ─æãín h├áng"
+        title="Quản lý mã giảm giá"
+        description="Tạo và chỉnh sửa mã khuyến mãi dùng tại POS và trên đơn hàng"
         rightContent={
           <button
             type="button"
             onClick={openCreate}
             className="rounded-xl bg-[#538463] px-5 py-2.5 text-sm font-bold text-white hover:bg-[#457053]"
           >
-            Th├¬m m├ú
+            Thêm mã
           </button>
         }
       />
 
       <p className="mb-6 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-        Loß║íi giß║úm: <strong>PERCENTAGE</strong> (% tr├¬n ─æãín sau CK thß╗º c├┤ng) hoß║Àc <strong>FIXED</strong> (sß╗æ tiß╗ün cß╗æ ─æß╗ïnh).
-        Thß╗Øi hß║ín ─æß╗â trß╗æng = kh├┤ng giß╗øi hß║ín. Ngß╗½ng hoß║ít ─æß╗Öng thay v├¼ x├│a cß╗®ng ÔÇö m├ú ─æ├ú d├╣ng tr├¬n ─æãín vß║½n giß╗» lß╗ïch sß╗¡.
+        Loại giảm: <strong>PERCENTAGE</strong> (% trên đơn sau CK thủ công) hoặc <strong>FIXED</strong> (số tiền cố định).
+        Thời hạn để trống = không giới hạn. Ngừng hoạt động thay vì xóa cứng — mã đã dùng trên đơn vẫn giữ lịch sử.
       </p>
 
       <div className="mb-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_180px_180px_180px]">
         <input
           type="search"
           className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-[#538463] focus:ring-2 focus:ring-[#538463]/15"
-          placeholder="T├¼m kiß║┐m m├ú giß║úm gi├í..."
+          placeholder="Tìm kiếm mã giảm giá..."
           value={promotionSearchTerm}
           onChange={(e) => {
             setPromotionSearchTerm(e.target.value)
@@ -504,7 +504,7 @@ function PromotionsPage() {
             setPage(1)
           }}
         >
-          <option value="ALL">Tß║Ñt cß║ú loß║íi giß║úm</option>
+          <option value="ALL">Tất cả loại giảm</option>
           <option value="PERCENTAGE">Percentage</option>
           <option value="FIXED">Fixed</option>
         </select>
@@ -516,9 +516,9 @@ function PromotionsPage() {
             setPage(1)
           }}
         >
-          <option value="ALL">Tß║Ñt cß║ú phß║ím vi</option>
-          <option value="ORDER">To├án ─æãín</option>
-          <option value="SKU">SKU cß╗Ñ thß╗â</option>
+          <option value="ALL">Tất cả phạm vi</option>
+          <option value="ORDER">Toàn đơn</option>
+          <option value="SKU">SKU cụ thể</option>
         </select>
         <select
           className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-[#538463] focus:ring-2 focus:ring-[#538463]/15"
@@ -528,9 +528,9 @@ function PromotionsPage() {
             setPage(1)
           }}
         >
-          <option value="ALL">Tß║Ñt cß║ú trß║íng th├íi</option>
-          <option value="ACTIVE">─Éang k├¡ch hoß║ít</option>
-          <option value="INACTIVE">Tß║ím tß║»t</option>
+          <option value="ALL">Tất cả trạng thái</option>
+          <option value="ACTIVE">Đang kích hoạt</option>
+          <option value="INACTIVE">Tạm tắt</option>
         </select>
       </div>
 
@@ -539,23 +539,23 @@ function PromotionsPage() {
           <table className="w-full text-left">
             <thead className="bg-[#fbf9f1]/50 text-xs font-bold uppercase tracking-wider text-slate-400">
               <tr>
-                <th className="px-8 py-4">M├ú</th>
-                <th className="px-4 py-4">Loß║íi</th>
-                <th className="px-4 py-4">Gi├í trß╗ï</th>
-                <th className="px-4 py-4">─Éãín tß╗æi thiß╗âu</th>
-                <th className="px-4 py-4">Thß╗Øi hß║ín</th>
-                <th className="px-4 py-4">Phß║ím vi</th>
-                <th className="px-4 py-4">Trß║íng th├íi</th>
-                <th className="px-4 py-4">M├┤ tß║ú</th>
-                <th className="px-4 py-4">Lã░ß╗út d├╣ng</th>
-                <th className="px-8 py-4 text-right">Thao t├íc</th>
+                <th className="px-8 py-4">Mã</th>
+                <th className="px-4 py-4">Loại</th>
+                <th className="px-4 py-4">Giá trị</th>
+                <th className="px-4 py-4">Đơn tối thiểu</th>
+                <th className="px-4 py-4">Thời hạn</th>
+                <th className="px-4 py-4">Phạm vi</th>
+                <th className="px-4 py-4">Trạng thái</th>
+                <th className="px-4 py-4">Mô tả</th>
+                <th className="px-4 py-4">Lượt dùng</th>
+                <th className="px-8 py-4 text-right">Thao tác</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
               {isLoading ? (
                 <tr>
                   <td className="px-8 py-10 text-slate-500" colSpan={10}>
-                    ─Éang tß║úi...
+                    Đang tải...
                   </td>
                 </tr>
               ) : null}
@@ -563,8 +563,8 @@ function PromotionsPage() {
                 <tr>
                   <td className="px-8 py-10 text-slate-500" colSpan={10}>
                     {hasActivePromotionFilter
-                      ? 'Kh├┤ng t├¼m thß║Ñy m├ú giß║úm gi├í ph├╣ hß╗úp.'
-                      : 'Chã░a c├│ m├ú giß║úm gi├í. Bß║Ñm "Th├¬m m├ú" ─æß╗â tß║ío.'}
+                      ? 'Không tìm thấy mã giảm giá phù hợp.'
+                      : 'Chưa có mã giảm giá. Bấm "Thêm mã" để tạo.'}
                   </td>
                 </tr>
               ) : null}
@@ -609,7 +609,7 @@ function PromotionsPage() {
                               onClick={() => openEdit(promotion)}
                               className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
                             >
-                              Sß╗¡a
+                              Sửa
                             </button>
                             {promotion.isActive ? (
                               <button
@@ -617,7 +617,7 @@ function PromotionsPage() {
                                 onClick={() => handleDeactivate(promotion)}
                                 className="rounded-lg border border-amber-200 px-3 py-1.5 text-xs font-semibold text-amber-700 hover:bg-amber-50"
                               >
-                                Ngß╗½ng H─É
+                                Ngừng HĐ
                               </button>
                             ) : (
                               <button
@@ -625,7 +625,7 @@ function PromotionsPage() {
                                 onClick={() => handleReactivate(promotion)}
                                 className="rounded-lg border border-emerald-200 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
                               >
-                                K├¡ch hoß║ít
+                                Kích hoạt
                               </button>
                             )}
                           </div>
@@ -647,7 +647,7 @@ function PromotionsPage() {
             onClick={() => setPage(1)}
             className="rounded-lg border border-slate-200 px-3 py-1.5 font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            ─Éß║ºu
+            Đầu
           </button>
           <button
             type="button"
@@ -655,7 +655,7 @@ function PromotionsPage() {
             onClick={() => setPage((prev) => Math.max(1, prev - 1))}
             className="rounded-lg border border-slate-200 px-3 py-1.5 font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Trã░ß╗øc
+            Trước
           </button>
           {paginationItems.map((item) => {
             if (typeof item === 'string') {
@@ -663,7 +663,7 @@ function PromotionsPage() {
                 <span key={item} className="relative inline-flex">
                   <button
                     type="button"
-                    title="─Éi tß╗øi trang bß║Ñt kß╗│"
+                    title="Đi tới trang bất kỳ"
                     onClick={() => openJumpPopover(item)}
                     className="rounded-lg px-2 py-1.5 font-semibold text-slate-400 hover:bg-slate-50 hover:text-slate-600"
                   >
@@ -672,7 +672,7 @@ function PromotionsPage() {
                   {jumpPopoverKey === item ? (
                     <span className="absolute left-1/2 top-full z-30 mt-2 w-44 -translate-x-1/2 rounded-xl border border-slate-200 bg-white p-3 text-left shadow-xl">
                       <label className="block text-xs font-bold text-slate-500">
-                        ─Éi tß╗øi trang
+                        Đi tới trang
                         <input
                           type="text"
                           inputMode="numeric"
@@ -698,14 +698,14 @@ function PromotionsPage() {
                           }}
                           className="rounded-lg px-2 py-1 text-xs font-semibold text-slate-500 hover:bg-slate-50"
                         >
-                          Hß╗ºy
+                          Hủy
                         </button>
                         <button
                           type="button"
                           onClick={submitJumpPage}
                           className="rounded-lg bg-[#538463] px-3 py-1 text-xs font-bold text-white hover:bg-[#457053]"
                         >
-                          ─Éi
+                          Đi
                         </button>
                       </div>
                     </span>
@@ -738,7 +738,7 @@ function PromotionsPage() {
             onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
             className="rounded-lg border border-slate-200 px-3 py-1.5 font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Tiß║┐p
+            Tiếp
           </button>
           <button
             type="button"
@@ -746,7 +746,7 @@ function PromotionsPage() {
             onClick={() => setPage(totalPages)}
             className="rounded-lg border border-slate-200 px-3 py-1.5 font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Cuß╗æi
+            Cuối
           </button>
         </div>
         <span className="font-semibold text-slate-500">
@@ -758,16 +758,16 @@ function PromotionsPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
           <div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-xl">
             <h2 className="text-lg font-bold text-slate-800">
-              {editingId ? 'Sß╗¡a m├ú giß║úm gi├í' : 'Th├¬m m├ú giß║úm gi├í'}
+              {editingId ? 'Sửa mã giảm giá' : 'Thêm mã giảm giá'}
             </h2>
             <div className="mt-4 space-y-3">
               {editingOrderCount > 0 ? (
                 <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                  M├ú ─æ├ú d├╣ng tr├¬n {editingOrderCount} ─æãín. Chß╗ë c├│ thß╗â chß╗ënh thß╗Øi hß║ín hoß║Àc ngß╗½ng hoß║ít ─æß╗Öng.
+                  Mã đã dùng trên {editingOrderCount} đơn. Chỉ có thể chỉnh thời hạn hoặc ngừng hoạt động.
                 </p>
               ) : null}
               <label className="block">
-                <span className="text-xs font-bold uppercase text-slate-400">M├ú</span>
+                <span className="text-xs font-bold uppercase text-slate-400">Mã</span>
                 <input
                   className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm uppercase disabled:bg-slate-50 disabled:text-slate-500"
                   value={form.promoCode}
@@ -777,7 +777,7 @@ function PromotionsPage() {
                 />
               </label>
               <label className="block">
-                <span className="text-xs font-bold uppercase text-slate-400">Loß║íi giß║úm</span>
+                <span className="text-xs font-bold uppercase text-slate-400">Loại giảm</span>
                 <select
                   className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-50 disabled:text-slate-500"
                   value={form.discountType}
@@ -796,13 +796,13 @@ function PromotionsPage() {
                     }))
                   }}
                 >
-                  <option value="PERCENTAGE">PERCENTAGE ÔÇö giß║úm theo %</option>
-                  <option value="FIXED">FIXED ÔÇö giß║úm sß╗æ tiß╗ün cß╗æ ─æß╗ïnh</option>
+                  <option value="PERCENTAGE">PERCENTAGE — giảm theo %</option>
+                  <option value="FIXED">FIXED — giảm số tiền cố định</option>
                 </select>
               </label>
               <label className="block">
                 <span className="text-xs font-bold uppercase text-slate-400">
-                  Gi├í trß╗ï {form.discountType === 'FIXED' ? '(─æ)' : '(%)'}
+                  Giá trị {form.discountType === 'FIXED' ? '(đ)' : '(%)'}
                 </span>
                 <input
                   type={form.discountType === 'FIXED' ? 'text' : 'number'}
@@ -823,7 +823,7 @@ function PromotionsPage() {
               </label>
               {form.discountType === 'PERCENTAGE' ? (
                 <label className="block">
-                  <span className="text-xs font-bold uppercase text-slate-400">Giß║úm tß╗æi ─æa</span>
+                  <span className="text-xs font-bold uppercase text-slate-400">Giảm tối đa</span>
                   <input
                     type="text"
                     inputMode="numeric"
@@ -836,12 +836,12 @@ function PromotionsPage() {
                     }))}
                   />
                   <p className="mt-1 text-xs text-slate-500">
-                    Bß║»t buß╗Öc vß╗øi m├ú giß║úm phß║ºn tr─âm. Tß╗æi ─æa 10.000.000─æ.
+                    Bắt buộc với mã giảm phần trăm. Tối đa 10.000.000đ.
                   </p>
                 </label>
               ) : null}
               <label className="block">
-                <span className="text-xs font-bold uppercase text-slate-400">─Éãín tß╗æi thiß╗âu</span>
+                <span className="text-xs font-bold uppercase text-slate-400">Đơn tối thiểu</span>
                 <input
                   type="text"
                   inputMode="numeric"
@@ -854,12 +854,12 @@ function PromotionsPage() {
                   }))}
                 />
                 <p className="mt-1 text-xs text-slate-500">
-                  ─Éß╗â trß╗æng hoß║Àc 0 nß║┐u kh├┤ng y├¬u cß║ºu ─æãín tß╗æi thiß╗âu.
+                  Để trống hoặc 0 nếu không yêu cầu đơn tối thiểu.
                 </p>
               </label>
               <div className="grid grid-cols-2 gap-3">
                 <label className="block">
-                  <span className="text-xs font-bold uppercase text-slate-400">Giß╗øi hß║ín tß╗òng lã░ß╗út d├╣ng</span>
+                  <span className="text-xs font-bold uppercase text-slate-400">Giới hạn tổng lượt dùng</span>
                   <input
                     type="text"
                     inputMode="numeric"
@@ -872,11 +872,11 @@ function PromotionsPage() {
                     }))}
                   />
                   <p className="mt-1 text-xs text-slate-500">
-                    ─Éß╗â trß╗æng hoß║Àc 0 nß║┐u kh├┤ng giß╗øi hß║ín tß╗òng lã░ß╗út d├╣ng.
+                    Để trống hoặc 0 nếu không giới hạn tổng lượt dùng.
                   </p>
                 </label>
                 <label className="block">
-                  <span className="text-xs font-bold uppercase text-slate-400">Giß╗øi hß║ín mß╗ùi kh├ích</span>
+                  <span className="text-xs font-bold uppercase text-slate-400">Giới hạn mỗi khách</span>
                   <input
                     type="text"
                     inputMode="numeric"
@@ -889,12 +889,12 @@ function PromotionsPage() {
                     }))}
                   />
                   <p className="mt-1 text-xs text-slate-500">
-                    ─Éß╗â trß╗æng hoß║Àc 0 nß║┐u kh├┤ng giß╗øi hß║ín theo tß╗½ng kh├ích h├áng.
+                    Để trống hoặc 0 nếu không giới hạn theo từng khách hàng.
                   </p>
                 </label>
               </div>
               <label className="block">
-                <span className="text-xs font-bold uppercase text-slate-400">Phß║ím vi ├íp dß╗Ñng</span>
+                <span className="text-xs font-bold uppercase text-slate-400">Phạm vi áp dụng</span>
                 <select
                   className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-50 disabled:text-slate-500"
                   value={form.scopeType}
@@ -908,20 +908,20 @@ function PromotionsPage() {
                     }))
                   }}
                 >
-                  <option value="ORDER">To├án ─æãín</option>
-                  <option value="SKU">SKU cß╗Ñ thß╗â</option>
+                  <option value="ORDER">Toàn đơn</option>
+                  <option value="SKU">SKU cụ thể</option>
                 </select>
               </label>
               {form.scopeType === 'SKU' ? (
                 <div className="rounded-lg border border-slate-200 p-3">
                   <div className="mb-2 flex items-center justify-between gap-2">
-                    <span className="text-xs font-bold uppercase text-slate-400">SKU ├íp dß╗Ñng</span>
-                    <span className="text-xs text-slate-500">{selectedSkuIds.size} ─æ├ú chß╗ìn</span>
+                    <span className="text-xs font-bold uppercase text-slate-400">SKU áp dụng</span>
+                    <span className="text-xs text-slate-500">{selectedSkuIds.size} đã chọn</span>
                   </div>
                   <input
                     type="text"
                     className="mb-3 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#538463] focus:ring-2 focus:ring-[#538463]/15 disabled:bg-slate-50 disabled:text-slate-500"
-                    placeholder="Nhß║¡p m├ú SKU hoß║Àc t├¬n sß║ún phß║®m..."
+                    placeholder="Nhập mã SKU hoặc tên sản phẩm..."
                     value={skuSearchTerm}
                     disabled={isImmutableLocked}
                     onChange={(e) => setSkuSearchTerm(e.target.value)}
@@ -939,27 +939,27 @@ function PromotionsPage() {
                               type="button"
                               className="text-[#356647] hover:text-red-600"
                               onClick={() => removeSkuScope(scope.skuId)}
-                              aria-label={`Gß╗í ${scope.skuCode || scope.skuName || scope.skuId}`}
+                              aria-label={`Gỡ ${scope.skuCode || scope.skuName || scope.skuId}`}
                             >
-                              ├ù
+                              ×
                             </button>
                           ) : null}
                         </span>
                       ))}
                     </div>
                   ) : (
-                    <p className="mb-3 text-xs text-slate-500">Chã░a chß╗ìn SKU n├áo.</p>
+                    <p className="mb-3 text-xs text-slate-500">Chưa chọn SKU nào.</p>
                   )}
                   {isSkuLoading ? (
-                    <p className="text-xs text-slate-500">─Éang tß║úi SKU...</p>
+                    <p className="text-xs text-slate-500">Đang tải SKU...</p>
                   ) : null}
                   {!isSkuLoading && displaySkuOptions.length === 0 ? (
-                    <p className="text-xs text-slate-500">Kh├┤ng c├│ SKU khß║ú dß╗Ñng.</p>
+                    <p className="text-xs text-slate-500">Không có SKU khả dụng.</p>
                   ) : null}
                   {!isSkuLoading && displaySkuOptions.length > 0 ? (
                     <div className="max-h-52 space-y-1 overflow-y-auto pr-1">
                       {visibleSkuOptions.length === 0 ? (
-                        <p className="px-2 py-2 text-xs text-slate-500">Kh├┤ng t├¼m thß║Ñy SKU ph├╣ hß╗úp.</p>
+                        <p className="px-2 py-2 text-xs text-slate-500">Không tìm thấy SKU phù hợp.</p>
                       ) : null}
                       {visibleSkuOptions.map((sku) => {
                         const isSelected = selectedSkuIds.has(sku.id)
@@ -982,7 +982,7 @@ function PromotionsPage() {
                               onClick={() => addSkuScope(sku)}
                               className="shrink-0 rounded-lg border border-[#538463]/30 px-2.5 py-1 text-xs font-semibold text-[#356647] hover:bg-[#538463]/10 disabled:border-slate-200 disabled:text-slate-400"
                             >
-                              {isSelected ? '─É├ú chß╗ìn' : 'Th├¬m'}
+                              {isSelected ? 'Đã chọn' : 'Thêm'}
                             </button>
                           </div>
                         )
@@ -993,7 +993,7 @@ function PromotionsPage() {
               ) : null}
               <div className="grid grid-cols-2 gap-3">
                 <label className="block">
-                  <span className="block text-xs font-bold uppercase text-slate-400">Thß╗Øi gian bß║»t ─æß║ºu</span>
+                  <span className="block text-xs font-bold uppercase text-slate-400">Thời gian bắt đầu</span>
                   <input
                     type="datetime-local"
                     min={editingId ? undefined : getCurrentDatetimeLocalMinute()}
@@ -1013,7 +1013,7 @@ function PromotionsPage() {
                   />
                 </label>
                 <label className="block">
-                  <span className="block text-xs font-bold uppercase text-slate-400">Thß╗Øi gian kß║┐t th├║c</span>
+                  <span className="block text-xs font-bold uppercase text-slate-400">Thời gian kết thúc</span>
                   <input
                     type="datetime-local"
                     min={form.validFrom ? addMinutesToDatetimeLocal(form.validFrom, 1) : undefined}
@@ -1024,7 +1024,7 @@ function PromotionsPage() {
                 </label>
               </div>
               <p className="text-xs text-slate-500">
-                ─Éß╗â trß╗æng cß║ú hai ├┤ nß║┐u m├ú kh├┤ng giß╗øi hß║ín thß╗Øi gian. Ng├áy t├¡nh theo giß╗Ø Viß╗çt Nam.
+                Để trống cả hai ô nếu mã không giới hạn thời gian. Ngày tính theo giờ Việt Nam.
               </p>
               <label className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700">
                 <input
@@ -1033,7 +1033,7 @@ function PromotionsPage() {
                   checked={form.isActive}
                   onChange={(e) => setForm((prev) => ({ ...prev, isActive: e.target.checked }))}
                 />
-                K├¡ch hoß║ít
+                Kích hoạt
               </label>
             </div>
             <div className="mt-6 flex justify-end gap-2">
@@ -1042,7 +1042,7 @@ function PromotionsPage() {
                 onClick={() => setModalOpen(false)}
                 className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700"
               >
-                Hß╗ºy
+                Hủy
               </button>
               <button
                 type="button"
@@ -1050,7 +1050,7 @@ function PromotionsPage() {
                 onClick={handleSave}
                 className="rounded-xl bg-[#538463] px-4 py-2 text-sm font-bold text-white disabled:opacity-50"
               >
-                {isSaving ? '─Éang lã░u...' : 'Lã░u'}
+                {isSaving ? 'Đang lưu...' : 'Lưu'}
               </button>
             </div>
           </div>

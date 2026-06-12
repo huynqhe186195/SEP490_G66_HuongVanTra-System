@@ -49,6 +49,7 @@ export function mapOrderSummary(item) {
     inventorySyncStatus: normalizeEnum(item.inventorySyncStatus ?? item.InventorySyncStatus),
     finalAmount: Number(item.finalAmount ?? item.FinalAmount ?? 0),
     createdAt: item.createdAt ?? item.CreatedAt,
+    note: item.note ?? item.Note ?? '',
     codPaymentId: item.codPaymentId ?? item.CodPaymentId ?? null,
     isCodVerified: item.isCodVerified ?? item.IsCodVerified ?? null,
     codWarningDate: item.codWarningDate ?? item.CodWarningDate ?? null,
@@ -198,6 +199,51 @@ export async function completeOrder(id) {
   return apiRequestAuth(`/api/v1/orders/${id}/complete`, { method: 'POST' })
 }
 
+function mapReturnOrderLine(item) {
+  if (!item || typeof item !== 'object') return null
+  return {
+    id: item.id ?? item.Id,
+    skuId: item.skuId ?? item.SkuId,
+    skuSnapshotName: item.skuSnapshotName ?? item.SkuSnapshotName ?? '',
+    skuSnapshotCode: item.skuSnapshotCode ?? item.SkuSnapshotCode ?? null,
+    returnQuantity: Number(item.returnQuantity ?? item.ReturnQuantity ?? 0),
+    unitPrice: Number(item.unitPrice ?? item.UnitPrice ?? 0),
+    subTotal: Number(item.subTotal ?? item.SubTotal ?? 0),
+  }
+}
+
+export function mapReturnOrderSummary(item) {
+  if (!item || typeof item !== 'object') return null
+  return {
+    id: item.id ?? item.Id,
+    returnCode: item.returnCode ?? item.ReturnCode ?? '',
+    sourceOrderId: item.sourceOrderId ?? item.SourceOrderId,
+    sourceOrderCode: item.sourceOrderCode ?? item.SourceOrderCode ?? '',
+    sourceOrderChannel: normalizeEnum(item.sourceOrderChannel ?? item.SourceOrderChannel ?? ''),
+    customerId: item.customerId ?? item.CustomerId ?? null,
+    customerSnapshotName: item.customerSnapshotName ?? item.CustomerSnapshotName ?? null,
+    returnAmount: Number(item.returnAmount ?? item.ReturnAmount ?? 0),
+    refundAmount: Number(item.refundAmount ?? item.RefundAmount ?? 0),
+    exchangeAmount: Number(item.exchangeAmount ?? item.ExchangeAmount ?? 0),
+    exchangeOrderId: item.exchangeOrderId ?? item.ExchangeOrderId ?? null,
+    exchangeOrderCode: item.exchangeOrderCode ?? item.ExchangeOrderCode ?? null,
+    createdAt: item.createdAt ?? item.CreatedAt ?? null,
+  }
+}
+
+export function mapReturnOrderDetail(item) {
+  if (!item || typeof item !== 'object') return null
+  const items = item.items ?? item.Items ?? []
+  return {
+    ...mapReturnOrderSummary(item),
+    netCustomerPays: Number(item.netCustomerPays ?? item.NetCustomerPays ?? 0),
+    customerPaidAmount: Number(item.customerPaidAmount ?? item.CustomerPaidAmount ?? 0),
+    refundMethod: item.refundMethod ?? item.RefundMethod ?? '',
+    note: item.note ?? item.Note ?? null,
+    items: Array.isArray(items) ? items.map(mapReturnOrderLine).filter(Boolean) : [],
+  }
+}
+
 export function mapReturnOrderResult(item) {
   if (!item || typeof item !== 'object') return null
   return {
@@ -212,6 +258,65 @@ export function mapReturnOrderResult(item) {
     exchangeOrderId: item.exchangeOrderId ?? item.ExchangeOrderId ?? null,
     exchangeOrderCode: item.exchangeOrderCode ?? item.ExchangeOrderCode ?? null,
   }
+}
+
+function buildReturnsQuery(params = {}) {
+  const search = new URLSearchParams()
+  if (params.search) search.set('search', params.search)
+  if (params.channel) search.set('channel', params.channel)
+  search.set('page', String(params.page ?? 1))
+  search.set('pageSize', String(Math.min(100, Math.max(1, params.pageSize ?? 20))))
+  return search.toString()
+}
+
+async function requestReturnsPage(query) {
+  const paths = [`/api/v1/orders/return-slips?${query}`, `/api/v1/returns?${query}`]
+  let lastError = null
+
+  for (const path of paths) {
+    try {
+      return await apiRequestAuth(path, { method: 'GET' })
+    } catch (error) {
+      lastError = error
+    }
+  }
+
+  throw lastError || new Error('Không tải được danh sách phiếu trả.')
+}
+
+export async function fetchReturns(params = {}) {
+  const query = buildReturnsQuery(params)
+  const data = await requestReturnsPage(query)
+  const paged = toPagedResult(data)
+  return {
+    ...paged,
+    items: paged.items.map(mapReturnOrderSummary).filter(Boolean),
+    totalPages: Number(data?.totalPages ?? data?.TotalPages ?? (Math.ceil(paged.totalCount / paged.pageSize) || 1)),
+  }
+}
+
+export async function fetchReturnById(id) {
+  const paths = [
+    `/api/v1/orders/return-slips/${encodeURIComponent(id)}`,
+    `/api/v1/returns/${encodeURIComponent(id)}`,
+  ]
+  let lastError = null
+
+  for (const path of paths) {
+    try {
+      const data = await apiRequestAuth(path, { method: 'GET' })
+      return mapReturnOrderDetail(data)
+    } catch (error) {
+      lastError = error
+    }
+  }
+
+  throw lastError || new Error('Không tìm thấy phiếu trả hàng.')
+}
+
+export async function fetchReturnsByOrderId(orderId) {
+  const data = await apiRequestAuth(`/api/v1/orders/${encodeURIComponent(orderId)}/returns`, { method: 'GET' })
+  return Array.isArray(data) ? data.map(mapReturnOrderSummary).filter(Boolean) : []
 }
 
 export async function returnOrder(orderId, payload) {
@@ -232,6 +337,7 @@ export async function returnOrder(orderId, payload) {
         unitPrice: Number(line.unitPrice),
       })),
       note: payload.note?.trim() || null,
+      exchangeFulfillment: payload.exchangeFulfillment || null,
     }),
   })
   return mapReturnOrderResult(data)

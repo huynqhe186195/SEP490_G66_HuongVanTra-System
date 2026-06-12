@@ -3,6 +3,10 @@ export const VIETNAM_UTC_OFFSET_HOURS = 7
 
 const OFFSET_MS = VIETNAM_UTC_OFFSET_HOURS * 60 * 60 * 1000
 
+function pad(value) {
+  return String(value).padStart(2, '0')
+}
+
 function hasTimezoneSuffix(value) {
   return /[zZ]$|[+-]\d{2}(:?\d{2})?$/.test(value)
 }
@@ -40,7 +44,6 @@ export function formatVietnamDateTime(value) {
   const vn = value == null ? addUtcPlus7(new Date()) : addUtcPlus7(value)
   if (!vn) return '—'
 
-  const pad = (n) => String(n).padStart(2, '0')
   const day = pad(vn.getUTCDate())
   const month = pad(vn.getUTCMonth() + 1)
   const year = vn.getUTCFullYear()
@@ -49,6 +52,14 @@ export function formatVietnamDateTime(value) {
   const second = pad(vn.getUTCSeconds())
 
   return `${day}/${month}/${year}, ${hour}:${minute}:${second}`
+}
+
+/** Hiển thị ngày giờ VN không có giây (dd/mm/yyyy hh:mm). */
+export function formatVietnamDateTimeMinute(value) {
+  const vn = addUtcPlus7(value)
+  if (!vn) return '—'
+
+  return `${pad(vn.getUTCDate())}/${pad(vn.getUTCMonth() + 1)}/${vn.getUTCFullYear()} ${pad(vn.getUTCHours())}:${pad(vn.getUTCMinutes())}`
 }
 
 /** Giờ hiện tại (VN) cho biên lai / UI */
@@ -61,7 +72,6 @@ export function formatVietnamDate(value) {
   const vn = addUtcPlus7(value)
   if (!vn) return '—'
 
-  const pad = (n) => String(n).padStart(2, '0')
   return `${pad(vn.getUTCDate())}/${pad(vn.getUTCMonth() + 1)}/${vn.getUTCFullYear()}`
 }
 
@@ -70,6 +80,20 @@ export function toVietnamDateInputValue(value) {
   const vn = addUtcPlus7(value)
   if (!vn) return ''
 
-  const pad = (n) => String(n).padStart(2, '0')
   return `${vn.getUTCFullYear()}-${pad(vn.getUTCMonth() + 1)}-${pad(vn.getUTCDate())}`
+}
+
+/** Giá trị cho input type="datetime-local" theo giờ VN. */
+export function toDatetimeLocalValue(value) {
+  const vn = addUtcPlus7(value)
+  if (!vn) return ''
+
+  return `${vn.getUTCFullYear()}-${pad(vn.getUTCMonth() + 1)}-${pad(vn.getUTCDate())}T${pad(vn.getUTCHours())}:${pad(vn.getUTCMinutes())}`
+}
+
+/** Chuyển datetime-local (giờ VN) sang UTC ISO cho API. */
+export function fromDatetimeLocalToUtc(value) {
+  if (!value) return null
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? null : date.toISOString()
 }
