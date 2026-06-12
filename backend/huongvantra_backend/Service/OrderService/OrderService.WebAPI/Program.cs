@@ -41,6 +41,11 @@ builder.Services.AddScoped<IPromotionRepository, PromotionRepository>();
 builder.Services.AddScoped<IOrderCodeGenerator, OrderCodeGenerator>();
 builder.Services.AddScoped<IReturnOrderRepository, ReturnOrderRepository>();
 builder.Services.AddScoped<IOrderEventPublisher, OrderEventPublisher>();
+builder.Services.AddHttpClient<IProductCatalogClient, ProductCatalogClient>(client =>
+{
+    var baseUrl = builder.Configuration["ProductService:BaseUrl"] ?? "http://product-service:8080";
+    client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
+});
 builder.Services.Configure<PosTransferPaymentOptions>(
     builder.Configuration.GetSection(PosTransferPaymentOptions.SectionName));
 builder.Services.Configure<SepayOptions>(

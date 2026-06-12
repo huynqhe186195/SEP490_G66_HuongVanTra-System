@@ -25,7 +25,8 @@ public record CreateOrderDetailRequest(
     string SkuSnapshotName,
     string? SkuSnapshotCode,
     int Quantity,
-    decimal UnitPrice
+    decimal UnitPrice,
+    int? CategoryId = null
 );
 
 public record UpdateOrderRequest(

@@ -27,6 +27,8 @@ public class CreatePromotionRequest
     public string? ScopeType { get; init; }
     public List<Guid>? SkuIds { get; init; }
     public List<PromotionSkuScopeRequest>? SkuScopes { get; init; }
+    public List<int>? CategoryIds { get; init; }
+    public List<PromotionCategoryScopeRequest>? CategoryScopes { get; init; }
 }
 
 public class UpdatePromotionRequest
@@ -46,12 +48,19 @@ public class UpdatePromotionRequest
     public string? ScopeType { get; init; }
     public List<Guid>? SkuIds { get; init; }
     public List<PromotionSkuScopeRequest>? SkuScopes { get; init; }
+    public List<int>? CategoryIds { get; init; }
+    public List<PromotionCategoryScopeRequest>? CategoryScopes { get; init; }
 }
 
 public record PromotionSkuScopeRequest(
     Guid SkuId,
     string? SkuCode,
     string? SkuName
+);
+
+public record PromotionCategoryScopeRequest(
+    int CategoryId,
+    string? CategoryName
 );
 
 public record PromotionApplyPreviewRequest(
@@ -66,5 +75,6 @@ public record PromotionApplyPreviewItemRequest(
     Guid SkuId,
     int Quantity,
     decimal UnitPrice,
-    decimal? SubTotal
+    decimal? SubTotal,
+    int? CategoryId = null
 );

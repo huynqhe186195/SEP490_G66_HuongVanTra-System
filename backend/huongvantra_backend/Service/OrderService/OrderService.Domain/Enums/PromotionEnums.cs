@@ -9,5 +9,6 @@ public enum PromotionDiscountType
 public enum PromotionScopeType
 {
     ORDER,
-    SKU
+    SKU,
+    CATEGORY
 }

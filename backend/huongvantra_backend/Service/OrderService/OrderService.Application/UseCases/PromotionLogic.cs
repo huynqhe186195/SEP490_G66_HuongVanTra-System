@@ -17,6 +17,7 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
     private const int AdminPromotionPageSize = 10;
     private const string InvalidLookupMessage = "M├ú giß║úm gi├í kh├┤ng hß╗úp lß╗ç hoß║Àc ─æ├ú hß║┐t hiß╗çu lß╗▒c.";
     private const string NotApplicableMessage = "Promotion is not applicable to selected items.";
+    private const string CategoryNotApplicableMessage = "Mã giảm giá không áp dụng cho danh mục trong đơn hàng.";
     private static readonly TimeSpan ValidFromPastTolerance = TimeSpan.FromMinutes(2);
     private static readonly Regex PromoCodeRegex = new("^[A-Z0-9_-]+$", RegexOptions.Compiled);
 
@@ -113,6 +114,8 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
             req.ScopeType,
             req.SkuIds,
             req.SkuScopes,
+            req.CategoryIds,
+            req.CategoryScopes,
             validateValidFromNotPast: true,
             nowUtc: now);
 
@@ -139,7 +142,12 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
             UpdatedAt = now
         };
 
-        foreach (var scope in BuildPromotionScopes(promotion.Id, input.ScopeType, input.SkuScopes, now))
+        foreach (var scope in BuildPromotionScopes(
+            promotion.Id,
+            input.ScopeType,
+            input.SkuScopes,
+            input.CategoryScopes,
+            now))
             promotion.Scopes.Add(scope);
 
         await _promotionRepo.AddAsync(promotion, ct);
@@ -173,6 +181,8 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
             req.ScopeType,
             req.SkuIds,
             req.SkuScopes,
+            req.CategoryIds,
+            req.CategoryScopes,
             validateValidFromNotPast: validFromChanged,
             nowUtc: now);
 
@@ -186,7 +196,8 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
             promotion.UsageLimitTotal != input.UsageLimitTotal ||
             promotion.UsageLimitPerCustomer != input.UsageLimitPerCustomer ||
             promotion.ScopeType != input.ScopeType ||
-            !SameSkuScopes(promotion.Scopes, input.SkuScopes);
+            !SameSkuScopes(promotion.Scopes, input.SkuScopes) ||
+            !SameCategoryScopes(promotion.Scopes, input.CategoryScopes);
 
         if (orderCount > 0 && changesImmutableFields)
             throw new OrderValidationException(
@@ -210,7 +221,7 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
             promotion.UsageLimitTotal = input.UsageLimitTotal;
             promotion.UsageLimitPerCustomer = input.UsageLimitPerCustomer;
             promotion.ScopeType = input.ScopeType;
-            ReplaceScopes(promotion, input.SkuScopes, now);
+            ReplaceScopes(promotion, input.SkuScopes, input.CategoryScopes, now);
         }
 
         promotion.ValidFromUtc = input.ValidFromUtc;
@@ -281,6 +292,7 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
             GetRemainingUsageTotal(promotion, usage.UsedCountTotal),
             promotion.ScopeType.ToString(),
             MapScopes(promotion),
+            MapCategoryScopes(promotion),
             result.DiscountAmount,
             result.EligibleSubtotal,
             "Promotion applied successfully");
@@ -330,7 +342,7 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
             return null;
 
         var normalizedType = scopeType.Trim().ToUpperInvariant();
-        return normalizedType is "ORDER" or "SKU" &&
+        return normalizedType is "ORDER" or "SKU" or "CATEGORY" &&
             Enum.TryParse<PromotionScopeType>(normalizedType, out var parsed)
                 ? parsed
                 : null;
@@ -385,14 +397,19 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
             throw new OrderValidationException(
                 $"─Éãín h├áng cß║ºn tß╗æi thiß╗âu {FormatVietnamAmount(promotion.MinimumOrderAmount)}─æ ─æß╗â ├íp dß╗Ñng m├ú {promotion.PromoCode}.");
 
-        var eligibleSubtotal = promotion.ScopeType == PromotionScopeType.SKU
-            ? GetEligibleSkuSubtotal(promotion, itemList)
-            : totalAmount;
+        var eligibleSubtotal = promotion.ScopeType switch
+        {
+            PromotionScopeType.SKU => GetEligibleSkuSubtotal(promotion, itemList),
+            PromotionScopeType.CATEGORY => GetEligibleCategorySubtotal(promotion, itemList),
+            _ => totalAmount
+        };
 
         if (promotion.ScopeType == PromotionScopeType.SKU && eligibleSubtotal <= 0)
             throw new OrderValidationException(NotApplicableMessage);
+        if (promotion.ScopeType == PromotionScopeType.CATEGORY && eligibleSubtotal <= 0)
+            throw new OrderValidationException(CategoryNotApplicableMessage);
 
-        var discountBase = promotion.ScopeType == PromotionScopeType.SKU
+        var discountBase = promotion.ScopeType is PromotionScopeType.SKU or PromotionScopeType.CATEGORY
             ? Math.Min(eligibleSubtotal, baseAfterManualDiscount)
             : baseAfterManualDiscount;
 
@@ -413,6 +430,22 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
 
         return items
             .Where(i => eligibleSkuIds.Contains(i.SkuId))
+            .Sum(i => i.SubTotal);
+    }
+
+    private static decimal GetEligibleCategorySubtotal(
+        Promotion promotion, IReadOnlyCollection<PromotionCalculationItem> items)
+    {
+        var eligibleCategoryIds = promotion.Scopes
+            .Where(s => s.ScopeType == PromotionScopeType.CATEGORY && s.CategoryId.HasValue)
+            .Select(s => s.CategoryId!.Value)
+            .ToHashSet();
+
+        if (eligibleCategoryIds.Count == 0)
+            return 0;
+
+        return items
+            .Where(i => i.CategoryId.HasValue && eligibleCategoryIds.Contains(i.CategoryId.Value))
             .Sum(i => i.SubTotal);
     }
 
@@ -444,7 +477,8 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
                     item.SkuId,
                     item.Quantity,
                     item.UnitPrice,
-                    subTotal));
+                    subTotal,
+                    item.CategoryId));
             }
         }
 
@@ -468,6 +502,8 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
         string? scopeType,
         List<Guid>? skuIds,
         List<PromotionSkuScopeRequest>? skuScopes,
+        List<int>? categoryIds,
+        List<PromotionCategoryScopeRequest>? categoryScopes,
         bool validateValidFromNotPast,
         DateTime nowUtc)
     {
@@ -529,6 +565,11 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
             errors.Add("Thß╗Øi gian kß║┐t th├║c phß║úi sau thß╗Øi gian bß║»t ─æß║ºu.");
 
         var normalizedSkuScopes = NormalizeSkuScopes(parsedScopeType, skuIds, skuScopes, errors);
+        var normalizedCategoryScopes = NormalizeCategoryScopes(
+            parsedScopeType,
+            categoryIds,
+            categoryScopes,
+            errors);
 
         if (errors.Count > 0)
             throw new OrderValidationException(errors);
@@ -545,7 +586,8 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
             validToUtc,
             isActive,
             parsedScopeType,
-            normalizedSkuScopes);
+            normalizedSkuScopes,
+            normalizedCategoryScopes);
     }
 
     private static PromotionScopeType ParseScopeType(string? scopeType, List<string> errors)
@@ -554,11 +596,11 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
             return PromotionScopeType.ORDER;
 
         var normalizedType = scopeType.Trim().ToUpperInvariant();
-        if (normalizedType is "ORDER" or "SKU" &&
+        if (normalizedType is "ORDER" or "SKU" or "CATEGORY" &&
             Enum.TryParse<PromotionScopeType>(normalizedType, out var parsed))
             return parsed;
 
-        errors.Add("Phß║ím vi ├íp dß╗Ñng chß╗ë hß╗ù trß╗ú ORDER hoß║Àc SKU.");
+        errors.Add("Phạm vi áp dụng chỉ hỗ trợ ORDER, SKU hoặc CATEGORY.");
         return PromotionScopeType.ORDER;
     }
 
@@ -568,7 +610,7 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
         List<PromotionSkuScopeRequest>? skuScopes,
         List<string> errors)
     {
-        if (scopeType == PromotionScopeType.ORDER)
+        if (scopeType != PromotionScopeType.SKU)
             return [];
 
         var bySkuId = new Dictionary<Guid, PromotionScopeInput>();
@@ -595,6 +637,46 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
             errors.Add("Promotion ├íp dß╗Ñng theo SKU phß║úi chß╗ìn ├¡t nhß║Ñt 1 SKU.");
 
         return bySkuId.Values.ToList();
+    }
+
+    private static List<PromotionCategoryScopeInput> NormalizeCategoryScopes(
+        PromotionScopeType scopeType,
+        List<int>? categoryIds,
+        List<PromotionCategoryScopeRequest>? categoryScopes,
+        List<string> errors)
+    {
+        if (scopeType != PromotionScopeType.CATEGORY)
+            return [];
+
+        var byCategoryId = new Dictionary<int, PromotionCategoryScopeInput>();
+        foreach (var scope in categoryScopes ?? [])
+        {
+            if (scope.CategoryId <= 0)
+            {
+                errors.Add("Danh mục áp dụng không hợp lệ.");
+                continue;
+            }
+
+            byCategoryId[scope.CategoryId] = new PromotionCategoryScopeInput(
+                scope.CategoryId,
+                string.IsNullOrWhiteSpace(scope.CategoryName) ? null : scope.CategoryName.Trim());
+        }
+
+        foreach (var categoryId in categoryIds ?? [])
+        {
+            if (categoryId <= 0)
+            {
+                errors.Add("Danh mục áp dụng không hợp lệ.");
+                continue;
+            }
+
+            byCategoryId.TryAdd(categoryId, new PromotionCategoryScopeInput(categoryId, null));
+        }
+
+        if (byCategoryId.Count == 0)
+            errors.Add("Vui lòng chọn ít nhất một danh mục áp dụng mã giảm giá.");
+
+        return byCategoryId.Values.ToList();
     }
 
     private static string? NormalizePromoCode(string? promoCode, List<string> errors)
@@ -757,20 +839,35 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
     private static List<PromotionScope> BuildPromotionScopes(
         Guid promotionId,
         PromotionScopeType scopeType,
-        List<PromotionScopeInput> scopes,
+        List<PromotionScopeInput> skuScopes,
+        List<PromotionCategoryScopeInput> categoryScopes,
         DateTime now)
     {
         if (scopeType == PromotionScopeType.ORDER)
             return [];
 
-        return scopes.Select(scope => new PromotionScope
+        if (scopeType == PromotionScopeType.SKU)
+        {
+            return skuScopes.Select(scope => new PromotionScope
+            {
+                Id = Guid.NewGuid(),
+                PromotionId = promotionId,
+                ScopeType = PromotionScopeType.SKU,
+                SkuId = scope.SkuId,
+                SkuCode = scope.SkuCode,
+                SkuSnapshotName = scope.SkuName,
+                CreatedAt = now,
+                UpdatedAt = now
+            }).ToList();
+        }
+
+        return categoryScopes.Select(scope => new PromotionScope
         {
             Id = Guid.NewGuid(),
             PromotionId = promotionId,
-            ScopeType = PromotionScopeType.SKU,
-            SkuId = scope.SkuId,
-            SkuCode = scope.SkuCode,
-            SkuSnapshotName = scope.SkuName,
+            ScopeType = PromotionScopeType.CATEGORY,
+            CategoryId = scope.CategoryId,
+            CategorySnapshotName = scope.CategoryName,
             CreatedAt = now,
             UpdatedAt = now
         }).ToList();
@@ -778,7 +875,8 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
 
     private static void ReplaceScopes(
         Promotion promotion,
-        List<PromotionScopeInput> nextScopes,
+        List<PromotionScopeInput> nextSkuScopes,
+        List<PromotionCategoryScopeInput> nextCategoryScopes,
         DateTime now)
     {
         foreach (var scope in promotion.Scopes)
@@ -787,7 +885,12 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
             scope.UpdatedAt = now;
         }
 
-        foreach (var scope in BuildPromotionScopes(promotion.Id, promotion.ScopeType, nextScopes, now))
+        foreach (var scope in BuildPromotionScopes(
+            promotion.Id,
+            promotion.ScopeType,
+            nextSkuScopes,
+            nextCategoryScopes,
+            now))
             promotion.Scopes.Add(scope);
     }
 
@@ -803,6 +906,24 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
 
         var nextIds = nextScopes
             .Select(s => s.SkuId)
+            .OrderBy(id => id)
+            .ToArray();
+
+        return existingIds.SequenceEqual(nextIds);
+    }
+
+    private static bool SameCategoryScopes(
+        ICollection<PromotionScope> existingScopes,
+        List<PromotionCategoryScopeInput> nextScopes)
+    {
+        var existingIds = existingScopes
+            .Where(s => s.ScopeType == PromotionScopeType.CATEGORY && s.CategoryId.HasValue)
+            .Select(s => s.CategoryId!.Value)
+            .OrderBy(id => id)
+            .ToArray();
+
+        var nextIds = nextScopes
+            .Select(s => s.CategoryId)
             .OrderBy(id => id)
             .ToArray();
 
@@ -826,6 +947,7 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
         promotion.IsActive,
         promotion.ScopeType.ToString(),
         MapScopes(promotion),
+        MapCategoryScopes(promotion),
         orderCount);
 
     private static PromotionLookupResponse MapToLookupResponse(Promotion promotion, int usedCountTotal = 0) => new(
@@ -844,7 +966,8 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
         GetValidityStatus(promotion, DateTime.UtcNow),
         promotion.IsActive,
         promotion.ScopeType.ToString(),
-        MapScopes(promotion));
+        MapScopes(promotion),
+        MapCategoryScopes(promotion));
 
     private static List<PromotionScopeResponse> MapScopes(Promotion promotion) =>
         promotion.ScopeType == PromotionScopeType.SKU
@@ -854,6 +977,16 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
                     s.SkuId!.Value,
                     s.SkuCode,
                     s.SkuSnapshotName))
+                .ToList()
+            : [];
+
+    private static List<PromotionCategoryScopeResponse> MapCategoryScopes(Promotion promotion) =>
+        promotion.ScopeType == PromotionScopeType.CATEGORY
+            ? promotion.Scopes
+                .Where(s => s.ScopeType == PromotionScopeType.CATEGORY && s.CategoryId.HasValue)
+                .Select(s => new PromotionCategoryScopeResponse(
+                    s.CategoryId!.Value,
+                    s.CategorySnapshotName))
                 .ToList()
             : [];
 
@@ -920,12 +1053,17 @@ public class PromotionLogic(IPromotionRepository _promotionRepo)
         DateTime? ValidToUtc,
         bool? IsActive,
         PromotionScopeType ScopeType,
-        List<PromotionScopeInput> SkuScopes);
+        List<PromotionScopeInput> SkuScopes,
+        List<PromotionCategoryScopeInput> CategoryScopes);
 
     private record PromotionScopeInput(
         Guid SkuId,
         string? SkuCode,
         string? SkuName);
+
+    private record PromotionCategoryScopeInput(
+        int CategoryId,
+        string? CategoryName);
 
     private record PromotionCalculationResult(
         decimal DiscountAmount,
@@ -938,7 +1076,8 @@ public record PromotionCalculationItem(
     Guid SkuId,
     int Quantity,
     decimal UnitPrice,
-    decimal SubTotal);
+    decimal SubTotal,
+    int? CategoryId = null);
 
 public record PromotionDiscountResult(
     Guid? PromotionId,

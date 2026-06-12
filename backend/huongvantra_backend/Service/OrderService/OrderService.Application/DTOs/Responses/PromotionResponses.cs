@@ -6,6 +6,11 @@ public record PromotionScopeResponse(
     string? SkuName
 );
 
+public record PromotionCategoryScopeResponse(
+    int CategoryId,
+    string? CategoryName
+);
+
 public record PromotionResponse(
     Guid Id,
     string PromoCode,
@@ -23,6 +28,7 @@ public record PromotionResponse(
     bool IsActive,
     string ScopeType,
     List<PromotionScopeResponse> SkuScopes,
+    List<PromotionCategoryScopeResponse> CategoryScopes,
     int OrderCount
 );
 
@@ -42,7 +48,8 @@ public record PromotionLookupResponse(
     string ValidityStatus,
     bool IsActive,
     string ScopeType,
-    List<PromotionScopeResponse> SkuScopes
+    List<PromotionScopeResponse> SkuScopes,
+    List<PromotionCategoryScopeResponse> CategoryScopes
 );
 
 public record PromotionApplyPreviewResponse(
@@ -58,6 +65,7 @@ public record PromotionApplyPreviewResponse(
     int? RemainingUsageTotal,
     string ScopeType,
     List<PromotionScopeResponse> SkuScopes,
+    List<PromotionCategoryScopeResponse> CategoryScopes,
     decimal PromotionDiscountAmount,
     decimal EligibleSubtotal,
     string Message

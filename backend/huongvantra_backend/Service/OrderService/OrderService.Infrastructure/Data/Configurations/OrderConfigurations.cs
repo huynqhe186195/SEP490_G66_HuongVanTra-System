@@ -74,11 +74,13 @@ public class PromotionScopeConfiguration : IEntityTypeConfiguration<PromotionSco
         builder.Property(e => e.ScopeType).HasConversion<string>().HasMaxLength(20).IsRequired();
         builder.Property(e => e.SkuCode).HasMaxLength(50);
         builder.Property(e => e.SkuSnapshotName).HasMaxLength(255);
+        builder.Property(e => e.CategorySnapshotName).HasMaxLength(255);
         builder.Property(e => e.CreatedAt).IsRequired();
         builder.Property(e => e.UpdatedAt).IsRequired();
         builder.Property(e => e.IsDeleted).IsRequired();
         builder.HasIndex(e => e.PromotionId);
         builder.HasIndex(e => e.SkuId);
+        builder.HasIndex(e => e.CategoryId);
     }
 }
 
