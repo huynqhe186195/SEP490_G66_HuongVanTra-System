@@ -412,6 +412,7 @@ function PosPage() {
     appliedPromotion,
   )
   const usesFixedOrderDiscount = canUseOrderDiscount && (orderDiscountAmountFixed || 0) > 0
+  const cartItemQuantity = cartItems.reduce((sum, item) => sum + (Number(item.qty) || 0), 0)
   const amountPaid = parseMoneyInput(amountPaidInput)
   const customerCurrentDebt = Number(selectedCustomer?.currentDebt || 0)
   const change = Math.max(amountPaid - total, 0)
@@ -1878,19 +1879,26 @@ function PosPage() {
               )}
             </div>
 
-            <div className="shrink-0 border-t border-[#c1c9c0]/50 bg-white px-3 py-2.5">
-              <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-[#717971]" htmlFor="cart-order-note">
-                Ghi chú đơn hàng
-              </label>
-              <textarea
-                id="cart-order-note"
-                rows={2}
-                maxLength={500}
-                placeholder="VD: Gói quà, giao giờ hành chính..."
-                className="w-full resize-none rounded-lg border border-[#c1c9c0] bg-[#fbf9f1] px-3 py-2 text-sm outline-none focus:border-[#356647] focus:ring-2 focus:ring-[#356647]/20"
-                value={orderNote}
-                onChange={(event) => updateActiveSession({ orderNote: event.target.value })}
-              />
+            <div className="shrink-0 border-t border-[#c1c9c0]/50 bg-white px-3 py-2">
+              <div className="flex items-center justify-between gap-3">
+                <label className="flex min-w-0 flex-1 items-center gap-2 text-sm text-[#717971]" htmlFor="cart-order-note">
+                  <Icon className="shrink-0 text-[18px]">edit_note</Icon>
+                  <input
+                    id="cart-order-note"
+                    type="text"
+                    maxLength={500}
+                    placeholder="Ghi chú đơn hàng"
+                    className="min-w-0 flex-1 border-0 bg-transparent text-sm text-[#1b1c17] outline-none placeholder:text-[#717971]"
+                    value={orderNote}
+                    onChange={(event) => updateActiveSession({ orderNote: event.target.value })}
+                  />
+                </label>
+                <div className="flex shrink-0 items-center gap-2 text-sm text-[#717971]">
+                  <span>Tổng tiền hàng</span>
+                  <span>{cartItemQuantity}</span>
+                  <span className="font-bold text-[#1b1c17]">{formatMoney(subtotalAfterItemDiscount)}</span>
+                </div>
+              </div>
             </div>
           </div>
         </section>
@@ -2238,43 +2246,45 @@ function PosPage() {
       />
 
       <footer className="shrink-0 border-t border-[#d8d6ce] bg-white px-4">
-        <div className="flex items-end gap-8">
-          {SALES_MODES.map((mode) => {
-            const isActive = salesMode === mode.id
-            return (
-              <button
-                key={mode.id}
-                type="button"
-                onClick={() => {
-                  setSalesMode(mode.id)
-                  setOpenDiscountSku(null)
-                  setIsPaymentSidebarOpen(false)
-                }}
-                className={`relative flex items-center gap-2 px-1 pb-3 pt-3.5 text-sm font-semibold transition-colors ${isActive ? 'text-[#356647]' : 'text-[#5c635c] hover:text-[#1b1c17]'
-                  }`}
-              >
-                <Icon className="text-[22px]" filled={isActive}>
-                  {mode.icon}
-                </Icon>
-                <span>{mode.label}</span>
-                {isActive ? (
-                  <span
-                    className="absolute inset-x-0 bottom-0 h-[3px] rounded-t-sm bg-[#356647]"
-                    aria-hidden
-                  />
-                ) : null}
-              </button>
-            )
-          })}
+        <div className="flex items-end justify-between gap-4">
+          <div className="flex items-end gap-8">
+            {SALES_MODES.map((mode) => {
+              const isActive = salesMode === mode.id
+              return (
+                <button
+                  key={mode.id}
+                  type="button"
+                  onClick={() => {
+                    setSalesMode(mode.id)
+                    setOpenDiscountSku(null)
+                    setIsPaymentSidebarOpen(false)
+                  }}
+                  className={`relative flex items-center gap-2 px-1 pb-3 pt-3.5 text-sm font-semibold transition-colors ${isActive ? 'text-[#356647]' : 'text-[#5c635c] hover:text-[#1b1c17]'
+                    }`}
+                >
+                  <Icon className="text-[22px]" filled={isActive}>
+                    {mode.icon}
+                  </Icon>
+                  <span>{mode.label}</span>
+                  {isActive ? (
+                    <span
+                      className="absolute inset-x-0 bottom-0 h-[3px] rounded-t-sm bg-[#356647]"
+                      aria-hidden
+                    />
+                  ) : null}
+                </button>
+              )
+            })}
+          </div>
+          <button
+            type="button"
+            onClick={() => setOpenModal('return-order')}
+            className="mb-2 inline-flex shrink-0 items-center gap-2 rounded-lg border border-[#356647]/30 bg-[#356647]/5 px-4 py-2 text-sm font-semibold text-[#356647] transition hover:bg-[#356647]/10"
+          >
+            <Icon className="text-[20px]">assignment_return</Icon>
+            Trả hàng
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={() => setOpenModal('return-order')}
-          className="mb-2 inline-flex items-center gap-2 rounded-lg border border-[#356647]/30 bg-[#356647]/5 px-4 py-2 text-sm font-semibold text-[#356647] transition hover:bg-[#356647]/10"
-        >
-          <Icon className="text-[20px]">assignment_return</Icon>
-          Trả hàng
-        </button>
       </footer>
 
       <AddCustomerModal

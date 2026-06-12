@@ -133,8 +133,8 @@ function ExchangeOrdersPage() {
         title="Trả / đổi hàng"
         description={
           viewTab === 'returns'
-            ? 'Danh sách phiếu trả hàng từ đơn COD và bán tại quầy.'
-            : 'Đơn đổi phát sinh khi khách trả hàng và mua/đổi sản phẩm khác — gồm cả COD giao hàng.'
+            ? 'Danh sách phiếu trả hàng — áp dụng chung cho mọi kênh bán.'
+            : 'Đơn đổi phát sinh khi khách trả hàng và mua/đổi sản phẩm khác.'
         }
         searchPlaceholder={viewTab === 'returns' ? 'Tìm TH-..., HVT-..., tên khách...' : 'Tìm mã đơn, tên khách...'}
         searchValue={searchInput}

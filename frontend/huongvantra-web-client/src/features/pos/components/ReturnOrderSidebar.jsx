@@ -7,13 +7,10 @@ const PAYMENT_METHODS = [
   { id: 'TRANSFER', label: 'Chuyển khoản', icon: 'account_balance' },
 ]
 
-const COD_PAY_EXTRA_METHOD = { id: 'COD', label: 'COD giao hàng', icon: 'local_shipping' }
-
-function PaymentMethodPicker({ paymentMethod, onPaymentMethodChange, extraMethods = [] }) {
-  const methods = [...PAYMENT_METHODS, ...extraMethods]
+function PaymentMethodPicker({ paymentMethod, onPaymentMethodChange }) {
   return (
     <div className="flex flex-wrap gap-2">
-      {methods.map((method) => {
+      {PAYMENT_METHODS.map((method) => {
         const active = paymentMethod === method.id
         return (
           <button
@@ -40,8 +37,6 @@ export default function ReturnOrderSidebar({
   customerPhone,
   createdAtLabel,
   sourceOrderCode,
-  isCodOrder = false,
-  shippingAddress = '',
   returnOriginalTotal,
   returnItemsTotal,
   returnDiscount,
@@ -67,7 +62,6 @@ export default function ReturnOrderSidebar({
   const isRefundFlow = displayCustomerRefund > 0
   const isPayFlow = displayCustomerOwes > 0
   const isSettled = !isRefundFlow && !isPayFlow
-  const payExtraMethods = isCodOrder && isPayFlow ? [COD_PAY_EXTRA_METHOD] : []
 
   return (
     <aside className="flex w-full shrink-0 flex-col border-t border-[#c1c9c0] bg-white xl:w-[min(100%,380px)] xl:border-l xl:border-t-0">
@@ -76,19 +70,7 @@ export default function ReturnOrderSidebar({
           <p className="text-sm font-bold text-slate-800">{customerName || 'Khách lẻ'}</p>
           {customerPhone ? <p className="text-xs text-slate-500">{customerPhone}</p> : null}
           <p className="mt-1 text-xs text-slate-500">{createdAtLabel}</p>
-          <p className="mt-1 text-xs font-semibold text-[#356647]">
-            Trả hàng / {sourceOrderCode}
-            {isCodOrder ? (
-              <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-800">
-                COD
-              </span>
-            ) : null}
-          </p>
-          {isCodOrder && shippingAddress ? (
-            <p className="mt-2 text-xs leading-relaxed text-slate-600">
-              <span className="font-semibold text-slate-700">Giao đến:</span> {shippingAddress}
-            </p>
-          ) : null}
+          <p className="mt-1 text-xs font-semibold text-[#356647]">Trả hàng / {sourceOrderCode}</p>
         </div>
 
         <section className="mb-4">
@@ -147,11 +129,6 @@ export default function ReturnOrderSidebar({
           {isSettled ? (
             <p className="mt-2 text-xs text-slate-500">Trả đủ giá trị hàng — không phát sinh tiền mặt/CK.</p>
           ) : null}
-          {isCodOrder && isRefundFlow ? (
-            <p className="mt-2 text-xs text-amber-800">
-              Đơn COD đã hoàn tất — hoàn tiền trực tiếp cho khách (tiền mặt hoặc chuyển khoản tại quầy).
-            </p>
-          ) : null}
         </section>
 
         {isRefundFlow ? (
@@ -183,16 +160,8 @@ export default function ReturnOrderSidebar({
         {isPayFlow ? (
           <section className="mb-4">
             <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-600">Thanh toán thêm</p>
-            <PaymentMethodPicker
-              paymentMethod={paymentMethod}
-              onPaymentMethodChange={onPaymentMethodChange}
-              extraMethods={payExtraMethods}
-            />
-            {paymentMethod === 'COD' ? (
-              <p className="mt-2 text-xs text-slate-500">
-                Tạo <strong>đơn COD mới</strong> giao hàng thu phần chênh lệch. Địa chỉ lấy từ đơn COD gốc.
-              </p>
-            ) : paymentMethod === 'TRANSFER' ? (
+            <PaymentMethodPicker paymentMethod={paymentMethod} onPaymentMethodChange={onPaymentMethodChange} />
+            {paymentMethod === 'TRANSFER' ? (
               <p className="mt-2 text-xs text-slate-500">
                 Sau khi xác nhận trả hàng, hệ thống mở màn <strong>mã QR</strong> để khách quét chuyển khoản (giống bán hàng).
               </p>

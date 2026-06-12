@@ -489,11 +489,13 @@ public class OrderLogic(
         var netCustomerPays = exchangeAmount - returnAmount;
         var refundAmount = netCustomerPays < 0 ? Math.Abs(netCustomerPays) : 0m;
         var customerPaid = Math.Max(0, req.CustomerPaidAmount);
+        var refundMethod = MapReturnPaymentMethod(req.PaymentMethod);
+        var payExtraDeferred = netCustomerPays > 0
+            && refundMethod is PaymentMethod.VietQR or PaymentMethod.BankTransfer;
 
-        if (netCustomerPays > 0 && customerPaid + 0.01m < netCustomerPays)
+        if (netCustomerPays > 0 && !payExtraDeferred && customerPaid + 0.01m < netCustomerPays)
             throw new OrderValidationException($"Khách cần trả thêm {FormatVnd(netCustomerPays)}.");
 
-        var refundMethod = MapReturnPaymentMethod(req.PaymentMethod);
         var returnId = Guid.NewGuid();
         var returnCode = await _returnOrderRepo.GenerateReturnCodeAsync(ct);
         var now = DateTime.UtcNow;
@@ -568,14 +570,11 @@ public class OrderLogic(
         if (exchangeItems.Count > 0)
         {
             var exchangeDiscount = Math.Min(returnAmount, exchangeAmount);
-            var shipExchange = IsCodShipExchange(req.ExchangeFulfillment, refundMethod, order.OrderChannel);
-            var exchangeChannel = shipExchange ? OrderChannel.COD : OrderChannel.POS;
-            var exchangePaymentMethod = shipExchange ? PaymentMethod.COD : refundMethod;
-            var exchangeShipping = shipExchange ? order.ShippingAddress?.Trim() : null;
+            var exchangeChannel = OrderChannel.POS;
+            var exchangePaymentMethod = refundMethod;
             var isExchangeTransferQr = netCustomerPays > 0
-                && !shipExchange
                 && exchangePaymentMethod is PaymentMethod.VietQR or PaymentMethod.BankTransfer;
-            var exchangePaidAmount = isExchangeTransferQr || shipExchange ? 0m : customerPaid;
+            var exchangePaidAmount = isExchangeTransferQr ? 0m : customerPaid;
             var exchangeTransferQrAmount = isExchangeTransferQr ? netCustomerPays : 0m;
 
             var exchangeOrder = await CreateAsync(
@@ -584,7 +583,7 @@ public class OrderLogic(
                     order.CustomerSnapshotName,
                     order.EmployeeId ?? actorId,
                     exchangeChannel,
-                    exchangeShipping,
+                    null,
                     $"Đổi hàng từ {order.OrderCode} ({returnCode})",
                     exchangeDiscount,
                     exchangeItems.Select(i => new CreateOrderDetailRequest(
@@ -797,15 +796,6 @@ public class OrderLogic(
         OrderChannel.COD => "COD",
         _ => channel.ToString()
     };
-
-    private static bool IsCodShipExchange(
-        string? exchangeFulfillment, PaymentMethod refundMethod, OrderChannel sourceChannel)
-    {
-        if (string.Equals(exchangeFulfillment?.Trim(), "CodShip", StringComparison.OrdinalIgnoreCase))
-            return true;
-
-        return sourceChannel == OrderChannel.COD && refundMethod == PaymentMethod.COD;
-    }
 
     private static PaymentMethod MapReturnPaymentMethod(string? raw)
     {

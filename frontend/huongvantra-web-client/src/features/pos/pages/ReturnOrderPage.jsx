@@ -297,20 +297,21 @@ function ReturnOrderPage() {
     setExchangeCart((prev) => prev.filter((item) => item.sku !== key))
   }
 
-  const isCodOrder = order?.orderChannel === 'COD'
-
   const canSubmit = returnLines.some((line) => line.returnQty > 0)
-
-  const resolveExchangeFulfillment = () => {
-    if (!isCodOrder || totals.customerOwes <= 0 || exchangeCart.length === 0) return null
-    if (paymentMethod === 'COD') return 'CodShip'
-    return 'InStore'
-  }
 
   const handleSubmit = async () => {
     if (!canSubmit) {
       showError('Chọn ít nhất một dòng hàng để trả.')
       return
+    }
+
+    const payExtra = totals.customerOwes > 0
+    if (payExtra && paymentMethod === 'CASH') {
+      const paid = parseMoneyInput(amountPaidInput)
+      if (paid + 0.01 < totals.customerOwes) {
+        showError(`Khách cần trả thêm ${formatMoney(Math.round(totals.customerOwes))} đ tại quầy.`)
+        return
+      }
     }
 
     setIsSubmitting(true)
@@ -324,8 +325,7 @@ function ReturnOrderPage() {
           })),
         paymentMethod,
         customerPaidAmount:
-          totals.customerOwes > 0 && paymentMethod !== 'COD' ? parseMoneyInput(amountPaidInput) : 0,
-        exchangeFulfillment: resolveExchangeFulfillment(),
+          totals.customerOwes > 0 && paymentMethod === 'CASH' ? parseMoneyInput(amountPaidInput) : 0,
         exchangeItems: exchangeCart.map((item) => ({
           skuId: item.skuId,
           skuSnapshotName: item.name,
@@ -340,14 +340,6 @@ function ReturnOrderPage() {
       const exchangeCode = result?.exchangeOrderCode
       const exchangeOrderId = result?.exchangeOrderId
       const payExtra = totals.customerOwes > 0
-
-      if (payExtra && paymentMethod === 'COD' && exchangeOrderId) {
-        showSuccess(
-          `Phiếu trả ${result.returnCode} · đơn COD đổi ${exchangeCode} chờ giao và thu tiền.`,
-        )
-        navigate(`/orders/exchange?tab=exchange&channel=COD`)
-        return
-      }
 
       if (payExtra && paymentMethod === 'TRANSFER' && exchangeOrderId) {
         const qrAmount = Math.round(totals.customerOwes)
@@ -375,15 +367,12 @@ function ReturnOrderPage() {
       }
 
       if (exchangeOrderId) {
-        const exchangeListUrl = isCodOrder
-          ? '/orders/exchange?tab=exchange&channel=COD'
-          : '/orders/exchange?tab=exchange'
         showSuccess(
           refund > 0
             ? `Trả hàng ${result.returnCode}: hoàn ${formatMoney(refund)} đ · đơn đổi ${exchangeCode}.`
             : `Trả hàng ${result.returnCode} · đơn đổi ${exchangeCode}.`,
         )
-        navigate(exchangeListUrl)
+        navigate('/orders/exchange?tab=exchange')
         return
       }
 
@@ -392,7 +381,7 @@ function ReturnOrderPage() {
           ? `Phiếu ${result.returnCode}: hoàn ${formatMoney(refund)} đ cho khách.`
           : `Phiếu ${result.returnCode} đã lưu.`,
       )
-      navigate(`/orders/exchange?tab=returns`)
+      navigate('/orders/exchange?tab=returns')
     } catch (error) {
       showError(error.message)
     } finally {
@@ -446,11 +435,6 @@ function ReturnOrderPage() {
           <div className="flex items-center gap-1 rounded-lg border border-[#356647] bg-[#356647]/5 px-3 py-1.5 text-sm font-semibold text-[#356647]">
             <Icon className="text-[18px]">assignment_return</Icon>
             Trả hàng
-            {isCodOrder ? (
-              <span className="ml-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-800">
-                COD
-              </span>
-            ) : null}
           </div>
         </div>
       </header>
@@ -525,7 +509,7 @@ function ReturnOrderPage() {
                 type="text"
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
-                placeholder="Ghi chú đơn hàng"
+                placeholder="Ghi chú (VD: thu hồi/giao qua ship, bưu điện, địa chỉ...)"
                 className="min-w-0 flex-1 border-0 bg-transparent outline-none placeholder:text-slate-400"
               />
             </label>
@@ -537,8 +521,6 @@ function ReturnOrderPage() {
           customerPhone=""
           createdAtLabel={vietnamNowLabel()}
           sourceOrderCode={order.orderCode}
-          isCodOrder={isCodOrder}
-          shippingAddress={order.shippingAddress || ''}
           returnOriginalTotal={totals.returnOriginalTotal}
           returnItemsTotal={totals.returnItemsTotal}
           returnDiscount={totals.returnDiscount}
