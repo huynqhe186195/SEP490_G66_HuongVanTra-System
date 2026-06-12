@@ -82,9 +82,13 @@ public class OrderLogic(
         if (manualDiscount > totalAmount)
             throw new OrderValidationException("Giảm giá thủ công không được lớn hơn tổng tiền đơn hàng.");
 
-        var baseForPromotion = Math.Max(0, totalAmount - manualDiscount);
+        var promotionItems = detailInputs.Select(i => new PromotionCalculationItem(
+            i.SkuId,
+            i.Quantity,
+            i.UnitPrice,
+            i.UnitPrice * i.Quantity)).ToList();
         var promotionDiscount = await _promotionLogic.ValidateAndCalculateDiscountAsync(
-            req.PromotionId, req.PromotionCode, baseForPromotion, ct);
+            req.PromotionId, req.PromotionCode, promotionItems, manualDiscount, req.CustomerId, ct);
         var totalDiscount = manualDiscount + promotionDiscount.DiscountAmount;
         var finalAmount = Math.Max(0, totalAmount - totalDiscount);
 

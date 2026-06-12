@@ -1,4 +1,4 @@
-import { apiRequestAuth, toPagedResult } from '../../../lib/apiClient.js'
+﻿import { apiRequestAuth, toPagedResult } from '../../../lib/apiClient.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import {
   buildCreateCustomerBody,
@@ -11,6 +11,31 @@ import {
   fetchOrder,
   fetchOrders,
 } from '../../orders/services/ordersApi.js'
+import { mapPromotion } from '../utils/posPromotionUtils.js'
+
+function buildPromotionPreviewBody({
+  promotionId = null,
+  promotionCode = null,
+  customerId = null,
+  items = [],
+  manualDiscount = 0,
+} = {}) {
+  return {
+    promotionId: promotionId || null,
+    promotionCode: promotionCode?.trim() || null,
+    customerId: customerId || null,
+    manualDiscount: Math.max(0, Math.round(Number(manualDiscount) || 0)),
+    items: items.map((item) => ({
+      skuId: item.skuId ?? item.productId,
+      quantity: Math.max(1, Math.round(Number(item.quantity ?? item.qty ?? 1))),
+      unitPrice: Number(item.unitPrice ?? item.price ?? 0),
+      subTotal:
+        item.subTotal ??
+        item.lineTotal ??
+        Number(item.unitPrice ?? item.price ?? 0) * Number(item.quantity ?? item.qty ?? 1),
+    })),
+  }
+}
 
 function mapPaymentMethod(method) {
   const value = String(method || '').toUpperCase()
@@ -57,8 +82,8 @@ function buildOrderRequestFromPosPayload(
       skuId: line.productId,
       skuSnapshotName:
         line.productName && line.packagingType
-          ? `${line.productName} — ${line.packagingType}`
-          : line.name || line.sku || 'Sản phẩm',
+          ? `${line.productName} ÔÇö ${line.packagingType}`
+          : line.name || line.sku || 'Sß║ún phß║®m',
       skuSnapshotCode: line.sku || null,
       quantity: Math.max(1, Math.round(line.quantity)),
       unitPrice: line.unitPrice,
@@ -265,12 +290,14 @@ export function buildTakeawayOrderPayload({
   cartItems,
   manualDiscount = 0,
   promotionId = null,
+  promotionCode = null,
 }) {
   return {
     storeId,
     customerId,
     customerSnapshotName: customerSnapshotName?.trim() || null,
     promotionId: promotionId || null,
+    promotionCode: promotionCode?.trim() || null,
     manualDiscount: Math.max(0, Math.round(Number(manualDiscount) || 0)),
     shippingAddress: shippingAddress?.trim() || null,
     note: note?.trim() || null,
@@ -323,7 +350,7 @@ export function createPosOrderOffline(payload) {
   })
 }
 
-/** CK tại quầy đã ghi nhận số tiền khách chuyển (không qua QR). */
+/** CK tß║íi quß║ºy ─æ├ú ghi nhß║¡n sß╗æ tiß╗ün kh├ích chuyß╗ân (kh├┤ng qua QR). */
 export function createPosOrderTransferRecorded(payload) {
   const payment = payload.payments?.[0]
   return submitPosOrder(payload, {
@@ -381,7 +408,7 @@ export function mapPosProduct(item) {
   const fallbackName = item.name ?? item.Name ?? ''
   const displayName =
     productName && packagingType
-      ? `${productName} — ${packagingType}`
+      ? `${productName} ÔÇö ${packagingType}`
       : fallbackName || sku
 
   return {
@@ -473,7 +500,7 @@ export function mapPosCustomerContext(item) {
 export async function fetchPosCustomerContext(customerId) {
   const [customer, ordersResult] = await Promise.all([
     fetchCustomerById(customerId),
-    fetchOrders({ customerId, page: 1, pageSize: 10, excludeOrderKind: 'Exchange' }),
+    fetchOrders({ customerId, page: 1, pageSize: 10 }),
   ])
 
   const tierDiscountPercent = Number(customer.tier?.discountPercent ?? 0)
@@ -574,47 +601,47 @@ export async function fetchPromotionByCode(code) {
   const query = new URLSearchParams()
   query.set('code', String(code || '').trim())
   const data = await apiRequestAuth(`/api/promotions/lookup?${query.toString()}`, { method: 'GET' })
-  return {
-    id: data.id ?? data.Id,
-    promoCode: data.promoCode ?? data.PromoCode ?? '',
-    discountType: String(data.discountType ?? data.DiscountType ?? 'PERCENTAGE').toUpperCase(),
-    discountValue: Number(data.discountValue ?? data.DiscountValue ?? 0),
-  }
+  return mapPromotion(data)
 }
 
-function matchesPosProductSearch(item, term) {
-  if (!term) return true
-  const haystack = [item.name, item.productName, item.packagingType, item.sku, item.categoryName]
-    .filter(Boolean)
-    .join(' ')
-    .toLowerCase()
-  return haystack.includes(term)
+export async function applyPromotionPreview({
+  promotionId = null,
+  promotionCode = null,
+  customerId = null,
+  items = [],
+  manualDiscount = 0,
+}) {
+  const data = await apiRequestAuth('/api/promotions/apply-preview', {
+    method: 'POST',
+    body: JSON.stringify(buildPromotionPreviewBody({
+      promotionId,
+      promotionCode,
+      customerId,
+      items,
+      manualDiscount,
+    })),
+  })
+  return mapPromotion(data)
 }
 
-async function fetchAllSkusForPos() {
-  const pageSize = 100
-  let page = 1
-  let allItems = []
-  let totalCount = 0
-
-  do {
-    const query = new URLSearchParams()
-    query.set('page', String(page))
-    query.set('pageSize', String(pageSize))
-    query.set('isActive', 'true')
-    const data = await apiRequestAuth(`/api/v1/skus?${query.toString()}`, { method: 'GET' })
-    const paged = toPagedResult(data)
-    const batch = paged.items ?? []
-    allItems = allItems.concat(batch)
-    totalCount = paged.totalCount ?? 0
-    if (batch.length === 0) break
-    page += 1
-  } while (allItems.length < totalCount && page <= 20)
-
-  return allItems
+export async function fetchApplicablePromotions({ customerId = null, items = [], manualDiscount = 0 } = {}) {
+  const data = await apiRequestAuth('/api/promotions/applicable', {
+    method: 'POST',
+    body: JSON.stringify(buildPromotionPreviewBody({
+      customerId,
+      items,
+      manualDiscount,
+    })),
+  })
+  return Array.isArray(data) ? data.map(mapPromotion).filter(Boolean) : []
 }
 
-/** Catalog cửa hàng — gồm cả SP đang ẩn ở kho nhưng đã đồng bộ (để khớp SKU). */
+export async function fetchAvailablePromotions() {
+  const data = await apiRequestAuth('/api/promotions/available', { method: 'GET' })
+  return Array.isArray(data) ? data.map(mapPromotion).filter(Boolean) : []
+}
+
+/** Catalog cß╗¡a h├áng ÔÇö gß╗ôm cß║ú SP ─æang ß║®n ß╗ƒ kho nhã░ng ─æ├ú ─æß╗ông bß╗Ö (─æß╗â khß╗øp SKU). */
 async function fetchStoreProductsForPos() {
   const pageSize = 100
   let page = 1
@@ -640,12 +667,11 @@ async function fetchStoreProductsForPos() {
 export async function fetchPosProducts({ storeId, search, limit = 30 }) {
   void storeId
 
-  const term = search?.trim().toLowerCase() ?? ''
   const skuPageSize = Math.min(100, Math.max(1, Number(limit) || 30))
   const query = new URLSearchParams()
-  if (term) query.set('search', search.trim())
+  if (search?.trim()) query.set('search', search.trim())
   query.set('page', '1')
-  query.set('pageSize', String(term ? Math.max(skuPageSize, 80) : skuPageSize))
+  query.set('pageSize', String(skuPageSize))
   query.set('isActive', 'true')
 
   const [data, productItems] = await Promise.all([
@@ -653,7 +679,7 @@ export async function fetchPosProducts({ storeId, search, limit = 30 }) {
     fetchStoreProductsForPos().catch(() => []),
   ])
   const paged = toPagedResult(data)
-  let skus = paged.items
+  const skus = paged.items
   const productById = new Map(
     productItems.map((product) => {
       const id = product.id ?? product.Id
@@ -673,54 +699,24 @@ export async function fetchPosProducts({ storeId, search, limit = 30 }) {
     // Inventory service may be unavailable during local dev.
   }
 
-  const mapped = skus
+  return skus
     .map((sku) => {
       const parentProductId = sku.productId ?? sku.ProductId
       const product = productById.get(parentProductId)
       if (!product) return null
       return mapPosProduct({
-        productId: sku.id ?? sku.Id,
-        sku: sku.skuCode ?? sku.SkuCode,
-        productName: sku.productName ?? sku.ProductName ?? product?.name ?? product?.Name ?? '',
-        packagingType: sku.packagingType ?? sku.PackagingType ?? '',
-        price: sku.basePrice ?? sku.BasePrice,
-        stockQuantity: stockBySkuId.get(sku.id ?? sku.Id) ?? 0,
-        imageUrl: sku.imageUrl ?? sku.ImageUrl ?? '',
-        categoryId: product?.categoryId ?? product?.CategoryId ?? null,
-        categoryName: sku.categoryName ?? sku.CategoryName ?? product?.categoryName ?? product?.CategoryName ?? '',
-      })
+      productId: sku.id ?? sku.Id,
+      sku: sku.skuCode ?? sku.SkuCode,
+      productName: sku.productName ?? sku.ProductName ?? product?.name ?? product?.Name ?? '',
+      packagingType: sku.packagingType ?? sku.PackagingType ?? '',
+      price: sku.basePrice ?? sku.BasePrice,
+      stockQuantity: stockBySkuId.get(sku.id ?? sku.Id) ?? 0,
+      imageUrl: sku.imageUrl ?? sku.ImageUrl ?? '',
+      categoryId: product?.categoryId ?? product?.CategoryId ?? null,
+      categoryName: sku.categoryName ?? sku.CategoryName ?? product?.categoryName ?? product?.CategoryName ?? '',
+    })
     })
     .filter(Boolean)
-
-  if (!term) return mapped
-
-  let filtered = mapped.filter((item) => matchesPosProductSearch(item, term))
-  if (filtered.length > 0) return filtered
-
-  const allSkus = await fetchAllSkusForPos().catch(() => [])
-  if (allSkus.length === 0) return filtered
-
-  const fallbackMapped = allSkus
-    .map((sku) => {
-      const parentProductId = sku.productId ?? sku.ProductId
-      const product = productById.get(parentProductId)
-      if (!product) return null
-      return mapPosProduct({
-        productId: sku.id ?? sku.Id,
-        sku: sku.skuCode ?? sku.SkuCode,
-        productName: sku.productName ?? sku.ProductName ?? product?.name ?? product?.Name ?? '',
-        packagingType: sku.packagingType ?? sku.PackagingType ?? '',
-        price: sku.basePrice ?? sku.BasePrice,
-        stockQuantity: stockBySkuId.get(sku.id ?? sku.Id) ?? 0,
-        imageUrl: sku.imageUrl ?? sku.ImageUrl ?? '',
-        categoryId: product?.categoryId ?? product?.CategoryId ?? null,
-        categoryName: sku.categoryName ?? sku.CategoryName ?? product?.categoryName ?? product?.CategoryName ?? '',
-      })
-    })
-    .filter(Boolean)
-
-  filtered = fallbackMapped.filter((item) => matchesPosProductSearch(item, term))
-  return filtered.slice(0, skuPageSize)
 }
 
 export function resolvePosStoreId() {
