@@ -8,14 +8,6 @@ import ConfirmDialog from "../components/ConfirmDialog.jsx";
 import PosPaymentSidebar from "../components/PosPaymentSidebar.jsx";
 import SelectReturnOrderModal from "../components/SelectReturnOrderModal.jsx";
 import PosCategoryFilterSidebar from "../components/PosCategoryFilterSidebar.jsx";
-import { expandCategoryFilterIds, formatCategoryFilterSummary } from "../../products/utils/categoryTreeUtils.js";
-import { printReceiptFromData, printReceiptSequence } from "../utils/printReceipt.js";
-import { formatVietnamDateTimeMinute, vietnamNowLabel } from "../../../utils/vietnamDateTime.js";
-import { applyCustomerDebtPayment, fetchCustomerOpenDebts } from "../../customers/services/customersApi.js";
-import OverpaymentDebtModal from "../../customers/components/OverpaymentDebtModal.jsx";
-import { clampDebtSettlement } from "../../customers/utils/debtAllocationEditor.js";
-import { serializeCodDebtSettlement } from "../../customers/utils/codDebtSettlementUtils.js";
-import { buildDebtReceiptFromPayment } from "../../customers/utils/debtPaymentUtils.js";
 import {
   expandCategoryFilterIds,
   formatCategoryFilterSummary,
