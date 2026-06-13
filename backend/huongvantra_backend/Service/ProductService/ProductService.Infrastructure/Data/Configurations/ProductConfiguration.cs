@@ -16,6 +16,10 @@ public class ProductConfiguration : IEntityTypeConfiguration<Product>
         builder.Property(p => p.FlavorProfile).HasMaxLength(255);
         builder.Property(p => p.BrewingGuide).HasColumnType("TEXT");
         builder.Property(p => p.Description).HasColumnType("TEXT");
+        builder.Property(p => p.BaseUnit).IsRequired().HasMaxLength(50).HasDefaultValue("unit");
+        builder.Property(p => p.WeightValue).HasColumnType("decimal(18,4)");
+        builder.Property(p => p.WeightUnit).HasMaxLength(50);
+        builder.Property(p => p.IsVariantParent).HasDefaultValue(false);
         builder.Property(p => p.IsActive).HasDefaultValue(true);
         builder.Property(p => p.CreatedAt).IsRequired();
         builder.Property(p => p.UpdatedAt).IsRequired(false);

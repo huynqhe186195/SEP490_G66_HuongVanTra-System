@@ -15,6 +15,7 @@ public interface IProductSkuRepository
     Task<int> CountPendingStoreSyncAsync(CancellationToken ct = default);
     Task<List<ProductSku>> SyncPendingToStoreAsync(DateTime syncedAt, CancellationToken ct = default);
     Task<bool> ExistsSkuCodeAsync(string skuCode, Guid? excludeId = null);
+    Task<bool> ExistsBarcodeAsync(string barcode, Guid? excludeId = null);
     Task<ProductSku> CreateAsync(ProductSku sku);
     Task<ProductSku> UpdateAsync(ProductSku sku);
     Task DeleteAsync(ProductSku sku);

@@ -11,7 +11,8 @@ public class OrderDbContext(DbContextOptions<OrderDbContext> options) : DbContex
     public DbSet<OrderActivity> OrderActivities => Set<OrderActivity>();
     public DbSet<Promotion> Promotions => Set<Promotion>();
     public DbSet<PromotionScope> PromotionScopes => Set<PromotionScope>();
-    public DbSet<OrderReturn> OrderReturns => Set<OrderReturn>();
+    public DbSet<ReturnOrder> ReturnOrders => Set<ReturnOrder>();
+    public DbSet<ReturnOrderDetail> ReturnOrderDetails => Set<ReturnOrderDetail>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -22,5 +23,7 @@ public class OrderDbContext(DbContextOptions<OrderDbContext> options) : DbContex
         modelBuilder.Entity<Payment>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<Promotion>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<PromotionScope>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<ReturnOrder>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<ReturnOrderDetail>().HasQueryFilter(e => !e.IsDeleted);
     }
 }

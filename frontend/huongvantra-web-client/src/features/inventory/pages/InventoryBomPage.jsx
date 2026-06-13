@@ -1,205 +1,164 @@
-import { Link } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
-
-const bomRows = [
-  {
-    code: 'BOM-001',
-    product: 'Premium Jasmine Green Tea',
-    image:
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuDKkjn5ofJfmfOIkt_CC-Yn27TkpAeYbut_Y103lMkeWsRSmQTm6gppmXXSRDuhv9x9FwDfZZ4X4u_kWUGel85FlY-IAV2dDEMne-2BvzV6eAiXLphC7vM0l3Ia83pvo0MMP4w57hukbtyAa-dBD6WOksKUV03etI-TvFDUivC9tdJfTJUwfCCEM7I_OrzFTnHRecrfARhRPTkWsT60mMX2IJ-pWK83_ez4J4e5Bv57kgpPEBDXE8lhzd8qQHNWe8GOAFbFFwOt-W86',
-    category: 'Tra Xanh',
-    updatedAt: 'Oct 24, 2023',
-    status: 'Active',
-  },
-  {
-    code: 'BOM-042',
-    product: 'Ancient Mountain Oolong',
-    image:
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuCKneetNNk82E-ZFzgg4gqN9quGNJysVBMs_47gmlqimeq22nu6ovAAHlvIKeSObie188ONezK6703sO8Gx4obyr_HYdpqNa6f4O1d78Tm1_zyAMRAkk7132QK5_JO9TZzulffyzlz_NEGCkun5ruINIO3MhQ568rANiRtdjbt3KVyf8ZOI8gfQBm86oB54xHnUCNSjUmfGUx3kNB2OVvhHiiI2UQxd9h45fv_wOMBsbomaHf-8fdpQ2ikxzZA48p0zPQAx9QP7Gpq0',
-    category: 'Oolong',
-    updatedAt: 'Nov 02, 2023',
-    status: 'Pending',
-  },
-  {
-    code: 'BOM-015',
-    product: 'Sunset Hibiscus Blend',
-    image:
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuCMSgi9GIJgCezEpvfRKa04XkCk2F03JxTONUeh0xfDdNDkeMhwQMRfihyStiBQRBnyfpUgyjLtKw_Yt6esjxFk1xbWIL3lNpWI7lOqSB59JyHWHSBkqY282mfIN9ZUEBp8tW7z1Cx7_GmMJmNI3Sa2qWjXQ5LH0yJ2ufHayPY7ceNxnGJq-EEoVQD4-DSRAGJsnPzSUbMBFrfiGp6YYcUSaR-cVCOeE76BKbjDR_2yE1ED9JnDLzK4hv6dKHIlBstiOhh4Z0k4cWe9',
-    category: 'Herbal Blends',
-    updatedAt: 'Oct 12, 2023',
-    status: 'Draft',
-  },
-  {
-    code: 'BOM-088',
-    product: 'Golden Tip Black Tea',
-    image:
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuAQv2e7mmYlbvsCWx2VvI0uMeyHP8riMAaW9JACTPduXXZBBcUb2_9q5t_iV8juc-rcslUHEooTMWy7xkU8fpVTVGn--VjnuPkDXEm-Bbj7A8l4eT69S8dsGLpB7G-cbr2OMM7krHD-dTZxwCqYoA7VGcssApIoX0-CVUAFi0QaF83KFkc4LMFYRGbqyTXMpA9LByd1zmwZPSFu-XViJjB94VnLBHPQ49zF8KBnCRYOoV7pFuX1VUSfdyIoh-Vj--nRoct5S5gFZQsZ',
-    category: 'Tra Den',
-    updatedAt: 'Nov 15, 2023',
-    status: 'Active',
-  },
-]
+import { showSuccess } from '../../../app/toast.js'
+import ProductBomConfigModal from '../../products/components/ProductBomConfigModal.jsx'
+import { formatProductPrice } from '../../products/utils/productDisplay.js'
+import {
+  buildBomListRows,
+  getBomLinesForVariant,
+  getCategoryName,
+  mockBomConfigs,
+} from '../data/bomMockData.js'
 
 function InventoryBomPage() {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [searchInput, setSearchInput] = useState('')
+  const [bomConfigs, setBomConfigs] = useState(() => ({ ...mockBomConfigs }))
+  const [activeVariant, setActiveVariant] = useState(null)
+
+  const allRows = useMemo(() => {
+    return buildBomListRows().map((row) => ({
+      ...row,
+      lines: bomConfigs[row.variantId] ?? row.lines,
+      materialCount: (bomConfigs[row.variantId] ?? row.lines).length,
+    }))
+  }, [bomConfigs])
+
+  const filteredRows = useMemo(() => {
+    const keyword = searchInput.trim().toLowerCase()
+    if (!keyword) return allRows
+    return allRows.filter((row) => {
+      const sku = String(row.variant?.sku || '').toLowerCase()
+      const name = String(row.product?.name || '').toLowerCase()
+      return sku.includes(keyword) || name.includes(keyword)
+    })
+  }, [allRows, searchInput])
+
+  useEffect(() => {
+    const variantId = Number(searchParams.get('variantId'))
+    if (!variantId) return
+    const row = allRows.find((item) => item.variantId === variantId)
+    if (!row) return
+    setActiveVariant({
+      sku: row.variant.sku,
+      productName: row.product?.name ?? '',
+      attributeLabel: row.attributeLabel,
+      variantId: row.variantId,
+    })
+    setSearchParams({}, { replace: true })
+  }, [searchParams, allRows, setSearchParams])
+
+  function openBomModal(row) {
+    setActiveVariant({
+      sku: row.variant.sku,
+      productName: row.product?.name ?? '',
+      attributeLabel: row.attributeLabel,
+      variantId: row.variantId,
+    })
+  }
+
+  function handleBomConfirm(lines) {
+    if (!activeVariant) return
+    setBomConfigs((current) => ({ ...current, [activeVariant.variantId]: lines }))
+    showSuccess(`Đã cập nhật định mức BOM cho ${activeVariant.sku} (giao diện mẫu).`)
+  }
+
+  const activeLines = activeVariant ? bomConfigs[activeVariant.variantId] ?? getBomLinesForVariant(activeVariant.variantId) : []
+
   return (
-    <div className="relative flex min-h-0 flex-1 flex-col gap-6 [font-family:'Manrope',sans-serif]">
+    <div className="flex min-h-0 flex-1 flex-col gap-6">
       <PageHeader
-        title="BOM / Công thức"
-        description="Quản lý công thức sản phẩm, trạng thái và lần cập nhật gần nhất"
-        searchPlaceholder="Tìm BOM theo mã hoặc tên sản phẩm..."
+        title="BOM / Định mức nguyên liệu"
+        description="Cấu hình tiêu hao nguyên liệu theo từng biến thể thành phẩm — mở popup từ nút Cấu hình BOM"
+        searchPlaceholder="Tìm theo SKU hoặc tên sản phẩm..."
+        searchValue={searchInput}
+        onSearchChange={setSearchInput}
+        rightContent={
+          <Link
+            to="/products/item/create"
+            className="inline-flex items-center gap-2 rounded-xl bg-[#538463] px-5 py-2.5 text-sm font-bold text-white hover:bg-[#457053]"
+          >
+            <span className="material-symbols-outlined text-[18px]">add</span>
+            Tạo hàng hóa mới
+          </Link>
+        }
       />
 
-      <section className="rounded-[24px] border border-[#c1c9c0]/30 bg-white p-6 shadow-sm">
-        <div className="mb-6 flex flex-col justify-between gap-4 md:flex-row md:items-end">
-          <div>
-            <h2 className="mb-1 text-3xl font-bold text-[#356647]">Bill of Materials</h2>
-            <p className="text-sm text-[#414942]">Manage your tea recipes and production components.</p>
-          </div>
-          <Link
-            to="/inventory/bom/create"
-            className="inline-flex items-center gap-2 rounded-xl bg-[#627b59] px-6 py-3 font-bold text-[#f8ffef] shadow-sm transition-transform hover:scale-[1.02] active:scale-95"
-          >
-            <span className="material-symbols-outlined">add</span>
-            <span>Create New BOM</span>
-          </Link>
+      <section className="rounded-[1rem] bg-white p-4 shadow-sm sm:p-6">
+        <div className="mb-4">
+          <h2 className="text-lg font-bold text-slate-800">Danh sách biến thể &amp; định mức</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Mỗi dòng là một SKU thành phẩm. Bấm <strong>Cấu hình BOM</strong> để mở popup định mức nguyên liệu.
+          </p>
         </div>
 
-        <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-4">
-          <article className="flex cursor-pointer items-center justify-between rounded-xl border border-[#c1c9c0] bg-[#f6f4ec] p-4 transition-colors hover:border-[#356647]">
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-wider text-[#717971]">Total Recipes</p>
-              <p className="text-2xl font-bold text-[#356647]">124</p>
-            </div>
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#baefc8]">
-              <span className="material-symbols-outlined text-[#356647]">menu_book</span>
-            </div>
-          </article>
-
-          <article className="rounded-xl border border-[#c1c9c0] bg-[#f6f4ec] p-4">
-            <label className="mb-2 block text-[10px] font-bold uppercase tracking-wider text-[#717971]">Filter Category</label>
-            <select className="w-full cursor-pointer border-none bg-transparent p-0 text-sm text-[#1b1c17] focus:ring-0">
-              <option>All Categories</option>
-              <option>Tra Xanh</option>
-              <option>Tra Den</option>
-              <option>Oolong</option>
-              <option>Herbal Blends</option>
-            </select>
-          </article>
-
-          <article className="rounded-xl border border-[#c1c9c0] bg-[#f6f4ec] p-4">
-            <label className="mb-2 block text-[10px] font-bold uppercase tracking-wider text-[#717971]">Filter Status</label>
-            <div className="flex gap-2">
-              <span className="rounded-full bg-[#4a6242] px-3 py-1 text-[10px] font-bold text-white">Active</span>
-              <span className="cursor-pointer rounded-full bg-[#e4e3db] px-3 py-1 text-[10px] font-bold text-[#414942] transition-colors hover:bg-[#b3cea7]">Draft</span>
-              <span className="cursor-pointer rounded-full bg-[#e4e3db] px-3 py-1 text-[10px] font-bold text-[#414942] transition-colors hover:bg-[#b3cea7]">Pending</span>
-            </div>
-          </article>
-
-          <article className="flex items-center justify-between rounded-xl border border-[#356647] bg-[#4e7f5e] p-4 text-[#f6fff5]">
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-wider opacity-80">Inventory Health</p>
-              <p className="text-2xl font-bold">98%</p>
-            </div>
-            <span className="material-symbols-outlined text-4xl opacity-50">analytics</span>
-          </article>
-        </div>
-
-        <section className="overflow-hidden rounded-2xl border border-[#c1c9c0] bg-white shadow-sm">
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-left text-sm">
-              <thead>
-                <tr className="bg-[#eae8e0] text-xs uppercase tracking-wider text-[#414942]">
-                  <th className="border-b border-[#c1c9c0] px-6 py-4 font-semibold">BOM Code</th>
-                  <th className="border-b border-[#c1c9c0] px-6 py-4 font-semibold">Product Name</th>
-                  <th className="border-b border-[#c1c9c0] px-6 py-4 font-semibold">Category</th>
-                  <th className="border-b border-[#c1c9c0] px-6 py-4 text-center font-semibold">Last Updated</th>
-                  <th className="border-b border-[#c1c9c0] px-6 py-4 text-center font-semibold">Status</th>
-                  <th className="border-b border-[#c1c9c0] px-6 py-4 text-right font-semibold">Actions</th>
+        {filteredRows.length === 0 ? (
+          <p className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-500">
+            Không có biến thể phù hợp.
+          </p>
+        ) : (
+          <div className="overflow-x-auto rounded-xl border border-slate-200">
+            <table className="min-w-full text-left text-sm">
+              <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="px-4 py-3 font-semibold">Mã SKU</th>
+                  <th className="px-4 py-3 font-semibold">Sản phẩm</th>
+                  <th className="px-4 py-3 font-semibold">Đơn vị</th>
+                  <th className="px-4 py-3 font-semibold">Thuộc tính</th>
+                  <th className="px-4 py-3 text-right font-semibold">Giá bán</th>
+                  <th className="px-4 py-3 text-center font-semibold">Số NVL</th>
+                  <th className="px-4 py-3 text-center font-semibold">Âm kho</th>
+                  <th className="px-4 py-3 text-center font-semibold">Định mức (BOM)</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#c1c9c0]">
-                {bomRows.map((row) => (
-                  <tr key={row.code} className="transition-colors hover:bg-[#fbf9f1]">
-                    <td className="px-6 py-5 font-bold text-[#356647]">{row.code}</td>
-                    <td className="px-6 py-5">
-                      <div className="flex items-center gap-3">
-                        <div className="h-10 w-10 overflow-hidden rounded-lg bg-[#f0eee6]">
-                          <img alt={row.product} className="h-full w-full object-cover" src={row.image} />
-                        </div>
-                        <span className="font-medium text-[#1b1c17]">{row.product}</span>
-                      </div>
+              <tbody className="divide-y divide-slate-100">
+                {filteredRows.map((row) => (
+                  <tr key={row.variantId} className="hover:bg-slate-50/70">
+                    <td className="px-4 py-3">
+                      <span className="font-mono text-xs font-bold text-[#356647]">{row.variant?.sku}</span>
                     </td>
-                    <td className="px-6 py-5">
-                      <span className="rounded-lg bg-[#ceebc1] px-3 py-1 text-xs font-bold text-[#354d2e]">{row.category}</span>
+                    <td className="px-4 py-3">
+                      <div className="font-medium text-slate-900">{row.product?.name}</div>
+                      <div className="text-xs text-slate-500">{getCategoryName(row.product?.category_id)}</div>
                     </td>
-                    <td className="px-6 py-5 text-center text-[#414942]">{row.updatedAt}</td>
-                    <td className="px-6 py-5 text-center">
-                      {row.status === 'Active' ? (
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-[#356647]/10 px-3 py-1 text-xs font-bold text-[#356647]">
-                          <span className="h-1.5 w-1.5 rounded-full bg-[#356647]" />
-                          Active
-                        </span>
-                      ) : row.status === 'Pending' ? (
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-[#fec25b]/20 px-3 py-1 text-xs font-bold text-[#7e5700]">
-                          <span className="h-1.5 w-1.5 rounded-full bg-[#7e5700]" />
-                          Pending
+                    <td className="px-4 py-3 text-slate-700">{row.unitName}</td>
+                    <td className="px-4 py-3 text-slate-700">{row.attributeLabel}</td>
+                    <td className="px-4 py-3 text-right font-medium">{formatProductPrice(row.retailPrice)}</td>
+                    <td className="px-4 py-3 text-center font-semibold">{row.materialCount}</td>
+                    <td className="px-4 py-3 text-center">
+                      {row.variant?.allow_negative_stock ? (
+                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800">
+                          Có
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-[#e4e3db] px-3 py-1 text-xs font-bold text-[#414942]">
-                          <span className="h-1.5 w-1.5 rounded-full bg-[#717971]" />
-                          Draft
-                        </span>
+                        <span className="text-slate-400">—</span>
                       )}
                     </td>
-                    <td className="px-6 py-5 text-right">
-                      <div className="flex justify-end gap-2">
-                        <button type="button" className="rounded-lg p-2 transition-colors hover:bg-[#eae8e0]" title="Xem chi tiết">
-                          <span className="material-symbols-outlined text-[#414942]">visibility</span>
-                        </button>
-                        <Link to={`/inventory/bom/${row.code}/edit`} className="rounded-lg p-2 transition-colors hover:bg-[#eae8e0]" title="Sửa BOM">
-                          <span className="material-symbols-outlined text-[#414942]">edit</span>
-                        </Link>
-                        <button type="button" className="rounded-lg p-2 text-[#ba1a1a] transition-colors hover:bg-[#ffdad6]" title="Xóa">
-                          <span className="material-symbols-outlined">delete</span>
-                        </button>
-                      </div>
+                    <td className="px-4 py-3 text-center">
+                      <button
+                        type="button"
+                        onClick={() => openBomModal(row)}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-[#356647]/30 bg-[#356647]/5 px-3 py-1.5 text-xs font-bold text-[#356647] hover:bg-[#356647]/10"
+                      >
+                        <span className="material-symbols-outlined text-[16px]">settings</span>
+                        Cấu hình BOM
+                      </button>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-
-          <div className="flex flex-wrap items-center justify-between gap-3 bg-[#f6f4ec] px-6 py-4">
-            <p className="text-xs text-[#414942]">Showing 1 to 4 of 124 recipes</p>
-            <div className="flex items-center gap-1">
-              <button type="button" className="rounded-lg p-2 text-[#717971] opacity-30" disabled>
-                <span className="material-symbols-outlined">chevron_left</span>
-              </button>
-              <button type="button" className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#356647] text-xs font-bold text-white">
-                1
-              </button>
-              <button type="button" className="flex h-8 w-8 items-center justify-center rounded-lg text-xs font-bold text-[#414942] transition-colors hover:bg-[#eae8e0]">
-                2
-              </button>
-              <button type="button" className="flex h-8 w-8 items-center justify-center rounded-lg text-xs font-bold text-[#414942] transition-colors hover:bg-[#eae8e0]">
-                3
-              </button>
-              <span className="mx-1">...</span>
-              <button type="button" className="flex h-8 w-8 items-center justify-center rounded-lg text-xs font-bold text-[#414942] transition-colors hover:bg-[#eae8e0]">
-                31
-              </button>
-              <button type="button" className="rounded-lg p-2 text-[#717971] transition-colors hover:bg-[#eae8e0]">
-                <span className="material-symbols-outlined">chevron_right</span>
-              </button>
-            </div>
-          </div>
-        </section>
+        )}
       </section>
 
-      <div
-        className="pointer-events-none absolute inset-0 -z-10 opacity-[0.03]"
-        style={{ backgroundImage: "url('https://www.transparenttextures.com/patterns/natural-paper.png')" }}
+      <ProductBomConfigModal
+        isOpen={Boolean(activeVariant)}
+        variant={activeVariant}
+        initialLines={activeLines}
+        onClose={() => setActiveVariant(null)}
+        onConfirm={handleBomConfirm}
       />
     </div>
   )

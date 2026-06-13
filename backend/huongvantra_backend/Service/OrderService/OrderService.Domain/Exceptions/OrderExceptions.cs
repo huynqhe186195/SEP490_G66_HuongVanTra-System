@@ -43,6 +43,12 @@ public class OrderCannotBeModifiedException : Exception
         : base($"Order '{id}' cannot be modified because its status is '{status}'.") { }
 }
 
+public class ReturnOrderNotFoundException : Exception
+{
+    public ReturnOrderNotFoundException(Guid id)
+        : base($"Return order '{id}' was not found.") { }
+}
+
 public class PaymentNotFoundException : Exception
 {
     public PaymentNotFoundException(Guid id)

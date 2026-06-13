@@ -16,7 +16,8 @@ public record CreateOrderRequest(
     decimal TransferQrAmount = 0,
     Guid? PromotionId = null,
     string? PromotionCode = null,
-    string? CodDebtSettlementJson = null
+    string? CodDebtSettlementJson = null,
+    OrderKind OrderKind = OrderKind.Sale
 );
 
 public record CreateOrderDetailRequest(
@@ -41,6 +42,25 @@ public record VerifyCodPaymentRequest(
     string? TransactionRef,
     decimal CollectedAmount = 0);
 
+public record ReturnOrderLineRequest(Guid OrderDetailId, int ReturnQuantity);
+
+public record ReturnExchangeItemRequest(
+    Guid SkuId,
+    string SkuSnapshotName,
+    string? SkuSnapshotCode,
+    string? CategorySnapshotName,
+    int Quantity,
+    decimal CostPrice,
+    decimal UnitPrice);
+
+public record ReturnOrderRequest(
+    List<ReturnOrderLineRequest> Items,
+    string PaymentMethod,
+    decimal CustomerPaidAmount,
+    List<ReturnExchangeItemRequest>? ExchangeItems = null,
+    string? Note = null,
+    string? ExchangeFulfillment = null);
+
 public record GetOrdersRequest(
     string? Search,
     Guid? CustomerId,
@@ -48,6 +68,9 @@ public record GetOrdersRequest(
     string? Channel,
     string? ExcludeChannel = null,
     string? CodTab = null,
+    bool ReturnableOnly = false,
+    string? OrderKind = null,
+    string? ExcludeOrderKind = null,
     int Page = 1,
     int PageSize = 20
 );

@@ -20,14 +20,19 @@ import InventoryImportPage from '../features/inventory/pages/InventoryImportPage
 import InventoryStockPage from '../features/inventory/pages/InventoryStockPage.jsx'
 import ProfilePage from '../features/profile/pages/ProfilePage.jsx'
 import OrdersPage from '../features/orders/pages/OrdersPage.jsx'
+import ExchangeOrdersPage from '../features/orders/pages/ExchangeOrdersPage.jsx'
+import ReturnOrderDetailPage from '../features/orders/pages/ReturnOrderDetailPage.jsx'
 import CodOrdersPage from '../features/orders/pages/CodOrdersPage.jsx'
 import StockDeductQueuePage from '../features/inventory/pages/StockDeductQueuePage.jsx'
 import StockAdjustmentRequestsPage from '../features/inventory/pages/StockAdjustmentRequestsPage.jsx'
 import OrderDetailPage from '../features/orders/pages/OrderDetailPage.jsx'
 import PosPage from '../features/pos/pages/PosPage.jsx'
 import PosTransferQrPage from '../features/pos/pages/PosTransferQrPage.jsx'
+import ReturnOrderPage from '../features/pos/pages/ReturnOrderPage.jsx'
 import ProductFormPage from '../features/products/pages/ProductFormPage.jsx'
+import ProductItemCreatePage from '../features/products/pages/ProductItemCreatePage.jsx'
 import ProductsListPage from '../features/products/pages/ProductsListPage.jsx'
+import ProductsCategoriesPage from '../features/products/pages/ProductsCategoriesPage.jsx'
 import ProductsPricingPage from '../features/products/pages/ProductsPricingPage.jsx'
 import ReportsCustomersPage from '../features/reports/pages/ReportsCustomersPage.jsx'
 import ReportsOverviewPage from '../features/reports/pages/ReportsOverviewPage.jsx'
@@ -53,14 +58,20 @@ function App() {
         <Route path="/pos" element={<PosPage />} />
         <Route path="/pos/receipt/print" element={<Navigate to="/pos" replace />} />
         <Route path="/pos/payment/qr" element={<PosTransferQrPage />} />
+        <Route path="/pos/returns/:orderId" element={<ReturnOrderPage />} />
         <Route path="/orders" element={<OrdersPage />} />
+        <Route path="/orders/exchange" element={<ExchangeOrdersPage />} />
+        <Route path="/orders/returns" element={<Navigate to="/orders/exchange?tab=returns" replace />} />
+        <Route path="/orders/returns/:id" element={<ReturnOrderDetailPage />} />
         <Route path="/orders/cod" element={<CodOrdersPage />} />
         <Route path="/orders/stock-deduct" element={<StockDeductQueuePage />} />
         <Route path="/orders/create" element={<Navigate to="/pos" replace />} />
         <Route path="/orders/:id" element={<OrderDetailPage />} />
         <Route path="/products" element={<ProductsListPage />} />
         <Route path="/products/pricing" element={<ProductsPricingPage />} />
+        <Route path="/products/categories" element={<ProductsCategoriesPage />} />
         <Route path="/products/create" element={<ProductFormPage mode="create" />} />
+        <Route path="/products/item/create" element={<ProductItemCreatePage />} />
         <Route path="/products/:id/edit" element={<ProductFormPage mode="edit" />} />
         <Route path="/inventory" element={<InventoryStockPage />} />
         <Route path="/inventory/stock-requests" element={<StockAdjustmentRequestsPage />} />

@@ -1,22 +1,11 @@
 import { loadAuthSession } from '../../auth/services/authSession.js'
+import { parseResponseError } from '../../../lib/apiClient.js'
 import { mapPromotion } from '../../pos/utils/posPromotionUtils.js'
 
 const DEFAULT_API_BASE_URL = 'http://localhost:5249'
 
 function getApiBaseUrl() {
   return import.meta.env.VITE_API_BASE_URL || DEFAULT_API_BASE_URL
-}
-
-async function parseResponseError(response) {
-  const contentType = response.headers.get('content-type') || ''
-  if (contentType.includes('application/json')) {
-    const body = await response.json().catch(() => null)
-    if (body && typeof body === 'object') {
-      if (typeof body.message === 'string' && body.message.trim()) return body.message
-    }
-  }
-  const text = await response.text().catch(() => '')
-  return text.trim() || 'Có lỗi xảy ra.'
 }
 
 async function requestWithAuth(path, options = {}) {
@@ -58,17 +47,77 @@ function buildPromotionPayload(payload) {
     promoCode: payload.promoCode,
     discountType: payload.discountType || 'PERCENTAGE',
     discountValue: Number(payload.discountValue ?? 0),
+    maxDiscountAmount:
+      payload.discountType === 'PERCENTAGE'
+        ? Number(payload.maxDiscountAmount || 0)
+        : null,
+    minimumOrderAmount: Number(payload.minimumOrderAmount || 0),
+    usageLimitTotal: Number(payload.usageLimitTotal || 0),
+    usageLimitPerCustomer: Number(payload.usageLimitPerCustomer || 0),
     validFrom: payload.validFrom || null,
     validTo: payload.validTo || null,
-    isActive: payload.isActive ?? true,
-    scopeType: payload.scopeType || 'ORDER',
-    skuScopes: Array.isArray(payload.skuScopes) ? payload.skuScopes : [],
   }
 }
 
-export async function fetchAdminPromotions() {
-  const items = await requestWithAuth('/api/admin/promotions', { method: 'GET' })
-  return Array.isArray(items) ? items.map(mapPromotionAdminItem).filter(Boolean) : []
+function buildAdminPromotionQuery(params = {}) {
+  const query = new URLSearchParams()
+  query.set('page', String(params.page || 1))
+  query.set('pageSize', String(params.pageSize || 10))
+
+  const search = String(params.search || '').trim()
+  if (search) query.set('search', search)
+
+  for (const key of ['discountType', 'scopeType', 'status']) {
+    const value = String(params[key] || '').trim()
+    if (value && value !== 'ALL') query.set(key, value)
+  }
+
+  return query.toString()
+}
+
+function mapPagedPromotionsResponse(data, fallbackPage = 1, fallbackPageSize = 10) {
+  if (Array.isArray(data)) {
+    const items = data.map(mapPromotionAdminItem).filter(Boolean)
+    return {
+      items,
+      page: fallbackPage,
+      pageSize: fallbackPageSize,
+      totalItems: items.length,
+      totalPages: 1,
+    }
+  }
+
+  const rawItems = data?.items ?? data?.Items ?? []
+  const page = Number(data?.page ?? data?.Page ?? fallbackPage)
+  const pageSize = Number(data?.pageSize ?? data?.PageSize ?? fallbackPageSize)
+  const totalItems = Number(
+    data?.totalItems ??
+      data?.TotalItems ??
+      data?.totalCount ??
+      data?.TotalCount ??
+      rawItems.length,
+  )
+  const totalPages = Number(
+    data?.totalPages ??
+      data?.TotalPages ??
+      Math.max(1, Math.ceil(totalItems / Math.max(1, pageSize))),
+  )
+
+  return {
+    items: Array.isArray(rawItems) ? rawItems.map(mapPromotionAdminItem).filter(Boolean) : [],
+    page,
+    pageSize,
+    totalItems,
+    totalPages,
+  }
+}
+
+export async function fetchAdminPromotions(params = {}) {
+  const page = Number(params.page || 1)
+  const pageSize = Number(params.pageSize || 10)
+  const query = buildAdminPromotionQuery({ ...params, page, pageSize })
+  const data = await requestWithAuth(`/api/admin/promotions?${query}`, { method: 'GET' })
+  return mapPagedPromotionsResponse(data, page, pageSize)
 }
 
 export async function createAdminPromotion(payload) {

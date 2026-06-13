@@ -1,0 +1,38 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using ProductService.Domain.Entities;
+
+namespace ProductService.Infrastructure.Data.Configurations;
+
+public class ProductVariantConfiguration : IEntityTypeConfiguration<ProductVariant>
+{
+    public void Configure(EntityTypeBuilder<ProductVariant> builder)
+    {
+        builder.ToTable("ProductVariants");
+        builder.HasKey(v => v.Id);
+        builder.Property(v => v.Id).ValueGeneratedNever();
+        builder.Property(v => v.SkuCode).IsRequired().HasMaxLength(50);
+        builder.Property(v => v.Barcode).HasMaxLength(100);
+        builder.Property(v => v.VariantName).IsRequired().HasMaxLength(255);
+        builder.Property(v => v.OptionValuesJson).IsRequired().HasColumnType("TEXT");
+        builder.Property(v => v.CostPrice).HasColumnType("decimal(18,2)");
+        builder.Property(v => v.RetailPrice).HasColumnType("decimal(18,2)");
+        builder.Property(v => v.IsSellable).HasDefaultValue(true);
+        builder.Property(v => v.AllowRewardPoints).HasDefaultValue(true);
+        builder.Property(v => v.IsActive).HasDefaultValue(true);
+        builder.Property(v => v.ImageUrl).HasMaxLength(500);
+        builder.Property(v => v.CreatedAt).IsRequired();
+        builder.Property(v => v.UpdatedAt).IsRequired(false);
+        builder.Property(v => v.IsDeleted).HasDefaultValue(false);
+
+        builder.HasIndex(v => v.SkuCode).IsUnique();
+        builder.HasIndex(v => v.Barcode).IsUnique();
+
+        builder.HasOne(v => v.Product)
+            .WithMany(p => p.Variants)
+            .HasForeignKey(v => v.ProductId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasQueryFilter(v => !v.IsDeleted);
+    }
+}

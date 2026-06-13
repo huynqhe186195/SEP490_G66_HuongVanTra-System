@@ -151,7 +151,7 @@ function Sidebar({
         ) : null}
 
         {items.map((item) => {
-          const itemActive = isNavigationItemActive(location.pathname, item)
+          const itemActive = isNavigationItemActive(location.pathname, item, location.search)
           const iconName = item.icon || 'circle'
 
           return (

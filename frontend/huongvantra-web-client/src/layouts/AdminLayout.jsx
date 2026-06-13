@@ -3,6 +3,7 @@ import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import ModuleRouteGuard from '../app/ModuleRouteGuard.jsx'
 import Sidebar from '../components/shared/Sidebar.jsx'
 import { getNavigationItemsForSession } from '../app/navigation.js'
+import { isWarehouseUserRole } from '../features/auth/services/authApi.js'
 import { syncSessionFromServer } from '../features/auth/services/authApi.js'
 import { loadAuthSession, saveAuthSession } from '../features/auth/services/authSession.js'
 
@@ -96,7 +97,9 @@ function AdminLayout() {
     return <Navigate to="/login" replace />
   }
 
-  const isViewportLocked = location.pathname === '/pos'
+  const isStoreProductsPage =
+    location.pathname === '/products' && !isWarehouseUserRole(authSession?.roles ?? [])
+  const isViewportLocked = location.pathname === '/pos' || isStoreProductsPage
 
   return (
     <div className="min-h-screen bg-[#F8FAF7] text-gray-800">

@@ -35,6 +35,7 @@ const HOME_MODULE_PRIORITY = [
 export const navigationItems = [
   { label: 'POS bán hàng', path: '/pos', module: 'pos', icon: 'point_of_sale', roles: ['agencyManager', 'salesStaff', 'customer'] },
   { label: 'Đơn hàng', path: '/orders', module: 'orders', icon: 'receipt_long', roles: ['admin', 'agencyManager', 'salesStaff'] },
+  { label: 'Trả / đổi hàng', path: '/orders/exchange', module: 'orders', icon: 'swap_horiz', roles: ['admin', 'agencyManager', 'salesStaff'] },
   { label: 'Quản lý đơn COD', path: '/orders/cod', module: 'cod_ops', icon: 'local_shipping', roles: ['agencyManager'] },
   {
     label: 'Chờ trừ kho',
@@ -44,7 +45,7 @@ export const navigationItems = [
     roles: ['admin', 'agencyManager'],
   },
   { label: 'Khách hàng', path: '/customers', module: 'customers', icon: 'groups', roles: ['admin', 'agencyManager'] },
-  { label: 'Sản phẩm & số lượng', path: '/products', module: 'products', icon: 'inventory_2', roles: ['admin', 'agencyManager', 'inventoryManager'] },
+  { label: 'Hàng hóa', path: '/products', module: 'products', icon: 'inventory_2', roles: ['admin', 'agencyManager', 'inventoryManager'] },
   { label: 'Kho tổng', path: '/inventory', module: 'inventory', icon: 'warehouse', roles: ['admin', 'agencyManager', 'inventoryManager'] },
   {
     label: 'Yêu cầu điều chỉnh tồn',
@@ -136,12 +137,25 @@ export function getNavigationItemsForRoles(roles = []) {
   return navigationItems.filter((item) => hasAnyRoleGroup(roles, item.roles))
 }
 
+function withRoleAwareProductLabel(items, roles = []) {
+  const isWarehouse = (roles ?? []).some((role) => {
+    const normalized = String(role || '').toLowerCase().trim()
+    return ['inventory manager', 'inventorymanager', 'warehouse manager', 'thu kho', 'thukho', 'warehouse'].includes(
+      normalized,
+    )
+  })
+
+  return items.map((item) =>
+    item.path === '/products' && isWarehouse ? { ...item, label: 'Sản phẩm & số lượng' } : item,
+  )
+}
+
 export function getNavigationItemsForSession(session) {
   if (session?.modules?.length) {
-    return getNavigationItemsForModules(session.modules, session.roles ?? [])
+    return getNavigationItemsForModules(session.modules)
   }
 
-  return getNavigationItemsForRoles(session?.roles ?? [])
+  return withRoleAwareProductLabel(getNavigationItemsForRoles(session?.roles ?? []), session?.roles ?? [])
 }
 
 export function getHomeRouteForModules(modules = []) {
@@ -297,17 +311,36 @@ export function getAccessDeniedMessage(pathname) {
   return 'Bạn không có quyền truy cập trang này.'
 }
 
+const ORDER_LIST_SUBROUTES = new Set(['cod', 'exchange', 'stock-deduct', 'create'])
+
+function getOrderDetailContext(pathname, search = '') {
+  const path = (pathname || '').toLowerCase()
+  const match = path.match(/^\/orders\/([^/]+)$/)
+  if (!match || ORDER_LIST_SUBROUTES.has(match[1])) {
+    return null
+  }
+
+  const params = new URLSearchParams(search || '')
+  const from = (params.get('from') || '').toLowerCase()
+  if (from === 'exchange' || from === 'cod') {
+    return from
+  }
+
+  return 'sale'
+}
+
 /** Sidebar highlight: /orders/cod must not activate the /orders item. */
-export function isNavigationItemActive(pathname, item) {
+export function isNavigationItemActive(pathname, item, search = '') {
   const path = (pathname || '').toLowerCase()
   const target = (item?.path || '').toLowerCase()
+  const orderDetailContext = getOrderDetailContext(pathname, search)
 
   if (!target) {
     return false
   }
 
   if (item.module === 'cod_ops') {
-    return path === target || path.startsWith(`${target}/`)
+    return path === target || path.startsWith(`${target}/`) || orderDetailContext === 'cod'
   }
 
   if (item.module === 'stock_deduct_ops') {
@@ -326,7 +359,28 @@ export function isNavigationItemActive(pathname, item) {
   }
 
   if (item.module === 'orders') {
+    if (target === '/orders/exchange') {
+      return (
+        path === '/orders/exchange'
+        || path.startsWith('/orders/exchange/')
+        || path === '/orders/returns'
+        || path.startsWith('/orders/returns/')
+        || orderDetailContext === 'exchange'
+      )
+    }
     if (path === '/orders/cod' || path.startsWith('/orders/cod/')) {
+      return false
+    }
+    if (path === '/orders/exchange') {
+      return false
+    }
+    if (path === '/orders/returns' || path.startsWith('/orders/returns/')) {
+      return false
+    }
+    if (orderDetailContext === 'exchange') {
+      return false
+    }
+    if (orderDetailContext === 'cod') {
       return false
     }
     if (path === '/orders/stock-deduct' || path.startsWith('/orders/stock-deduct/')) {

@@ -10,6 +10,7 @@ public class OrderDetail : BaseEntity
     public string? CategorySnapshotName { get; set; }
     public int Quantity { get; set; }
     public decimal CostPrice { get; set; }
+    public int ReturnedQuantity { get; set; }
     public decimal UnitPrice { get; set; }
     public decimal SubTotal { get; set; }
 

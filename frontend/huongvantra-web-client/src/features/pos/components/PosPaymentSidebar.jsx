@@ -1,5 +1,8 @@
-import { isVipCustomerType } from '../../customers/utils/customerDisplay.js'
-import { formatPromotionLabel } from '../utils/posPromotionUtils.js'
+import {
+  formatPromotionLabel,
+  formatPromotionMinimumOrderText,
+  formatPromotionUsageText,
+} from '../utils/posPromotionUtils.js'
 
 function Icon({ children, className = '', filled = false }) {
   return (
@@ -54,14 +57,6 @@ export default function PosPaymentSidebar({
   onConfirm,
   isSubmitting,
   canPay,
-  customerSearchValue,
-  onCustomerSearchChange,
-  customerSearchResults,
-  isCustomerSearchLoading,
-  showCustomerDropdown,
-  showCustomerSearchEmpty,
-  onSelectCustomer,
-  onOpenAddCustomer,
   onOpenCustomerDetail,
   onClearCustomer,
   shippingAddress,
@@ -79,8 +74,16 @@ export default function PosPaymentSidebar({
   onApplyPromoCode,
   onClearPromoCode,
   isApplyingPromo,
-  orderNote,
-  onOrderNoteChange,
+  visibleAvailablePromotions = [],
+  isPromotionDropdownOpen,
+  isPromotionListLoading,
+  onLoadAvailablePromotions,
+  onSelectPromotion,
+  onClosePromotionDropdown,
+  formatPromotionDiscountText,
+  formatPromotionValidityText,
+  formatPromotionScopeLabel,
+  appliedPromotionScopeText,
 }) {
   if (!isOpen) return null
 
@@ -124,103 +127,41 @@ export default function PosPaymentSidebar({
         </header>
 
         <div className="custom-scrollbar flex-1 space-y-4 overflow-y-auto p-4">
-          <div className="relative rounded-xl bg-white p-3 shadow-sm">
-            <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[#717971]">Khách hàng</label>
-            {selectedCustomer ? (
-              <div
-                role="button"
-                tabIndex={0}
-                onClick={onOpenCustomerDetail}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault()
-                    onOpenCustomerDetail()
-                  }
-                }}
-                className="flex w-full items-center gap-2 rounded-lg border border-[#356647]/30 bg-[#356647]/5 px-3 py-2 text-left"
-              >
+          {selectedCustomer ? (
+            <div className="rounded-xl border border-[#356647]/20 bg-white p-3 shadow-sm">
+              <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-[#1b1c17]">{selectedCustomer.fullName}</p>
+                  <p className="text-xs font-bold uppercase tracking-wider text-[#717971]">Khách thanh toán</p>
+                  <button
+                    type="button"
+                    onClick={onOpenCustomerDetail}
+                    className="mt-1 block w-full truncate text-left text-sm font-semibold text-[#1b1c17] hover:text-[#356647]"
+                  >
+                    {selectedCustomer.fullName}
+                  </button>
                   <p className="truncate text-xs text-[#717971]">
                     {selectedCustomer.phone || '—'} · {selectedCustomer.customerCode}
                   </p>
-                  {isVipCustomerType(selectedCustomer.customerType) ? (
-                    <p className="mt-1 inline-flex">
-                      <span className="rounded-full bg-[#fec25b] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#744f00]">
-                        Khách VIP
-                      </span>
-                    </p>
-                  ) : selectedCustomer.tierCode ? (
-                    <p className="mt-0.5 text-xs font-semibold text-[#356647]">
-                      Hạng {selectedCustomer.tierCode}
-                      {tierDiscountPercent > 0 ? ` · CK ${tierDiscountPercent}%` : ''}
-                    </p>
-                  ) : null}
                   {Number(selectedCustomer.currentDebt) > 0 ? (
-                    <p className="mt-0.5 text-xs font-semibold text-[#7e5700]">
+                    <p className="mt-1 text-xs font-semibold text-[#7e5700]">
                       Công nợ: {formatMoney(selectedCustomer.currentDebt)} đ
                     </p>
                   ) : null}
                 </div>
                 <button
                   type="button"
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    onClearCustomer()
-                  }}
+                  onClick={onClearCustomer}
                   className="shrink-0 rounded-lg border border-[#c1c9c0] px-2 py-1 text-xs font-semibold text-[#414942] hover:bg-[#f6f4ec]"
                 >
                   Đổi
                 </button>
               </div>
-            ) : (
-              <div className="flex gap-2">
-                <div className="relative min-w-0 flex-1">
-                  <Icon className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[18px] text-[#717971]">person</Icon>
-                  <input
-                    className="w-full rounded-lg border border-[#c1c9c0]/60 bg-[#fbf9f1] py-2 pl-9 pr-2 text-sm outline-none focus:border-[#356647] focus:ring-2 focus:ring-[#356647]/20"
-                    placeholder="Tìm tên, SĐT, mã KH..."
-                    value={customerSearchValue}
-                    onChange={(event) => onCustomerSearchChange(event.target.value)}
-                  />
-                </div>
-                <button
-                  type="button"
-                  onClick={onOpenAddCustomer}
-                  className="shrink-0 rounded-lg bg-[#356647] px-3 py-2 text-xs font-bold text-white hover:bg-[#4e7f5e]"
-                >
-                  Thêm KH
-                </button>
-              </div>
-            )}
-            {!selectedCustomer && isCustomerSearchLoading ? (
-              <p className="mt-2 text-xs text-[#717971]">Đang tìm khách hàng...</p>
-            ) : null}
-            {showCustomerDropdown ? (
-              <div className="custom-scrollbar absolute left-3 right-3 top-full z-40 mt-1 max-h-52 overflow-y-auto rounded-xl border border-[#c1c9c0] bg-white shadow-2xl">
-                {customerSearchResults.map((customer) => (
-                  <button
-                    key={customer.customerId}
-                    type="button"
-                    onClick={() => onSelectCustomer(customer)}
-                    className="flex w-full flex-col border-b border-[#f0eee6] px-3 py-2.5 text-left last:border-b-0 hover:bg-[#f6f4ec]"
-                  >
-                    <span className="text-sm font-semibold text-[#1b1c17]">{customer.fullName}</span>
-                    <span className="text-xs text-[#717971]">
-                      {customer.phone || '—'} · {customer.customerCode}
-                      {Number(customer.currentDebt) > 0 ? ` · Nợ ${formatMoney(customer.currentDebt)} đ` : ''}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            ) : null}
-            {showCustomerSearchEmpty ? (
-              <p className="mt-2 text-xs text-[#717971]">Không tìm thấy khách hàng.</p>
-            ) : null}
-            {!selectedCustomer ? (
-              <p className="mt-2 text-xs font-medium text-[#ba1a1a]">Bắt buộc chọn khách trước khi xác nhận.</p>
-            ) : null}
-          </div>
+            </div>
+          ) : (
+            <p className="rounded-xl border border-[#ba1a1a]/30 bg-[#fff5f5] px-3 py-2 text-xs font-medium text-[#ba1a1a]">
+              Chưa chọn khách — tìm hoặc thêm khách ở panel bên phải.
+            </p>
+          )}
 
           {isTakeaway ? (
             <div className="rounded-xl bg-white p-3 shadow-sm">
@@ -294,16 +235,24 @@ export default function PosPaymentSidebar({
             </div>
           ) : null}
 
-          <div className="rounded-xl bg-white p-3 shadow-sm">
+          <div className="relative rounded-xl bg-white p-3 shadow-sm">
             <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[#717971]">Mã giảm giá</label>
             {appliedPromotion ? (
               <div className="flex items-center justify-between gap-2 rounded-lg border border-[#356647]/30 bg-[#356647]/5 px-3 py-2">
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold text-[#356647]">
-                    {formatPromotionLabel(appliedPromotion)}
+                    {couponDiscountAmount > 0
+                      ? `Mã ${appliedPromotion.promoCode} - Giảm ${formatMoney(couponDiscountAmount)}đ`
+                      : formatPromotionLabel(appliedPromotion)}
                   </p>
-                  {couponDiscountAmount > 0 ? (
-                    <p className="text-xs text-[#717971]">Giảm {formatMoney(couponDiscountAmount)} đ</p>
+                  {appliedPromotionScopeText ? (
+                    <p className="text-xs text-[#717971]">{appliedPromotionScopeText}</p>
+                  ) : null}
+                  {formatPromotionMinimumOrderText(appliedPromotion) ? (
+                    <p className="text-xs text-[#717971]">{formatPromotionMinimumOrderText(appliedPromotion)}</p>
+                  ) : null}
+                  {formatPromotionUsageText(appliedPromotion) ? (
+                    <p className="text-xs text-[#717971]">{formatPromotionUsageText(appliedPromotion)}</p>
                   ) : null}
                 </div>
                 <button
@@ -322,6 +271,9 @@ export default function PosPaymentSidebar({
                   placeholder="VD: SALE10"
                   value={promoCodeInput}
                   onChange={(event) => onPromoCodeChange(event.target.value.toUpperCase())}
+                  onFocus={onLoadAvailablePromotions}
+                  onClick={onLoadAvailablePromotions}
+                  onBlur={() => setTimeout(() => onClosePromotionDropdown?.(), 150)}
                   onKeyDown={(event) => {
                     if (event.key === 'Enter') {
                       event.preventDefault()
@@ -339,21 +291,51 @@ export default function PosPaymentSidebar({
                 </button>
               </div>
             )}
-          </div>
+            {isPromotionDropdownOpen ? (
+              <div className="custom-scrollbar absolute left-3 right-3 top-full z-50 mt-1 max-h-56 overflow-y-auto rounded-lg border border-[#c1c9c0] bg-white shadow-2xl">
+                {isPromotionListLoading ? (
+                  <div className="px-3 py-2 text-xs text-[#717971]">Đang tải mã giảm giá...</div>
+                ) : null}
+                {!isPromotionListLoading && visibleAvailablePromotions.length === 0 ? (
+                  <div className="px-3 py-2 text-xs text-[#717971]">Không có mã giảm giá phù hợp với đơn hàng hiện tại.</div>
+                ) : null}
+                {!isPromotionListLoading
+                  ? visibleAvailablePromotions.map((promotion) => {
+                      const validityText = formatPromotionValidityText?.(promotion)
+                      const scopeText = formatPromotionScopeLabel?.(promotion) || ''
+                      const discountText = formatPromotionDiscountText?.(promotion) || ''
+                      const minimumText = formatPromotionMinimumOrderText(promotion)
+                      const usageText = formatPromotionUsageText(promotion)
 
-          <div className="rounded-xl bg-white p-3 shadow-sm">
-            <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[#717971]" htmlFor="sidebar-order-note">
-              Ghi chú đơn hàng
-            </label>
-            <textarea
-              id="sidebar-order-note"
-              rows={2}
-              maxLength={500}
-              placeholder="VD: Gói quà, giao giờ hành chính..."
-              className="w-full resize-none rounded-xl border border-[#c1c9c0] bg-[#fbf9f1] px-3 py-2.5 text-sm outline-none focus:border-[#356647] focus:ring-2 focus:ring-[#356647]/20"
-              value={orderNote}
-              onChange={(event) => onOrderNoteChange(event.target.value)}
-            />
+                      return (
+                        <button
+                          key={promotion.id}
+                          type="button"
+                          onMouseDown={(event) => {
+                            event.preventDefault()
+                            onSelectPromotion?.(promotion)
+                          }}
+                          className="block w-full border-b border-[#f0eee6] px-3 py-2 text-left last:border-b-0 hover:bg-[#f6f4ec]"
+                        >
+                          <span className="block text-sm font-bold text-[#263528]">
+                            {promotion.promoCode} - {discountText}
+                            {scopeText ? ` - ${scopeText}` : ''}
+                          </span>
+                          {validityText ? (
+                            <span className="block text-xs text-[#717971]">{validityText}</span>
+                          ) : null}
+                          {minimumText ? (
+                            <span className="block text-xs text-[#717971]">{minimumText}</span>
+                          ) : null}
+                          {usageText ? (
+                            <span className="block text-xs text-[#717971]">{usageText}</span>
+                          ) : null}
+                        </button>
+                      )
+                    })
+                  : null}
+              </div>
+            ) : null}
           </div>
 
           {hasCartItems ? (

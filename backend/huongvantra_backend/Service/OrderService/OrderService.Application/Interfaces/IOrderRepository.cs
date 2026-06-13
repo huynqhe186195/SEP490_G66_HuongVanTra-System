@@ -8,7 +8,8 @@ public interface IOrderRepository
     Task<Order?> GetByCodeAsync(string orderCode, CancellationToken ct = default);
     Task<(List<Order> Items, int TotalCount)> GetPagedAsync(
         string? search, Guid? customerId, string? status, string? channel,
-        string? excludeChannel, string? codTab,
+        string? excludeChannel, string? codTab, bool returnableOnly,
+        string? orderKind, string? excludeOrderKind,
         int page, int pageSize, CancellationToken ct = default);
     Task<List<Order>> GetPendingCodAsync(CancellationToken ct = default);
     Task<Order?> GetSinglePendingTransferByAmountAsync(

@@ -19,6 +19,7 @@ public record OrderResponse(
     string? CustomerSnapshotName,
     Guid? EmployeeId,
     string OrderChannel,
+    string OrderKind,
     string OrderStatus,
     string InventorySyncStatus,
     decimal TotalAmount,
@@ -26,8 +27,6 @@ public record OrderResponse(
     Guid? PromotionId,
     string? PromotionCode,
     decimal PromotionDiscountAmount,
-    string? PromotionScopeType,
-    List<PromotionScopeResponse> PromotionSkuScopes,
     decimal FinalAmount,
     string? ShippingAddress,
     string? Note,
@@ -43,9 +42,67 @@ public record OrderDetailResponse(
     string SkuSnapshotName,
     string? SkuSnapshotCode,
     int Quantity,
+    int ReturnedQuantity,
     decimal UnitPrice,
     decimal SubTotal
 );
+
+public record ReturnOrderResponse(
+    Guid ReturnId,
+    string ReturnCode,
+    Guid SourceOrderId,
+    string SourceOrderCode,
+    decimal ReturnAmount,
+    decimal ExchangeAmount,
+    decimal NetCustomerPays,
+    decimal RefundAmount,
+    Guid? ExchangeOrderId,
+    string? ExchangeOrderCode
+);
+
+public record ReturnOrderLineResponse(
+    Guid Id,
+    Guid SkuId,
+    string SkuSnapshotName,
+    string? SkuSnapshotCode,
+    int ReturnQuantity,
+    decimal UnitPrice,
+    decimal SubTotal);
+
+public record ReturnOrderDetailResponse(
+    Guid Id,
+    string ReturnCode,
+    Guid SourceOrderId,
+    string SourceOrderCode,
+    string SourceOrderChannel,
+    Guid? CustomerId,
+    string? CustomerSnapshotName,
+    decimal ReturnAmount,
+    decimal ExchangeAmount,
+    decimal NetCustomerPays,
+    decimal RefundAmount,
+    decimal CustomerPaidAmount,
+    string RefundMethod,
+    Guid? ExchangeOrderId,
+    string? ExchangeOrderCode,
+    string? Note,
+    DateTime CreatedAt,
+    List<ReturnOrderLineResponse> Items);
+
+public record ReturnOrderSummaryResponse(
+    Guid Id,
+    string ReturnCode,
+    Guid SourceOrderId,
+    string SourceOrderCode,
+    string SourceOrderChannel,
+    Guid? CustomerId,
+    string? CustomerSnapshotName,
+    decimal ReturnAmount,
+    decimal RefundAmount,
+    decimal ExchangeAmount,
+    Guid? ExchangeOrderId,
+    string? ExchangeOrderCode,
+    DateTime CreatedAt);
 
 public record PaymentResponse(
     Guid Id,
@@ -68,10 +125,12 @@ public record OrderSummaryResponse(
     Guid? CustomerId,
     string? CustomerSnapshotName,
     string OrderChannel,
+    string OrderKind,
     string OrderStatus,
     string InventorySyncStatus,
     decimal FinalAmount,
     DateTime CreatedAt,
+    string? Note = null,
     Guid? CodPaymentId = null,
     bool? IsCodVerified = null,
     DateTime? CodWarningDate = null,

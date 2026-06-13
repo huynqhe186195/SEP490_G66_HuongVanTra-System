@@ -22,7 +22,10 @@ public class ProductSkuRepository(ProductDbContext _db) : IProductSkuRepository
             var s = search.Trim().ToLower();
             query = query.Where(sku =>
                 sku.SkuCode.ToLower().Contains(s) ||
-                sku.PackagingType.ToLower().Contains(s));
+                (sku.Barcode != null && sku.Barcode.ToLower().Contains(s)) ||
+                sku.PackagingType.ToLower().Contains(s) ||
+                (sku.Product != null && sku.Product.Name.ToLower().Contains(s)) ||
+                (sku.Product != null && sku.Product.Category != null && sku.Product.Category.Name.ToLower().Contains(s)));
         }
 
         if (productId.HasValue)
@@ -125,18 +128,31 @@ public class ProductSkuRepository(ProductDbContext _db) : IProductSkuRepository
         return await query.AnyAsync();
     }
 
+    public async Task<bool> ExistsBarcodeAsync(string barcode, Guid? excludeId = null)
+    {
+        var query = _db.ProductSkus.Where(s => s.Barcode == barcode);
+        if (excludeId.HasValue) query = query.Where(s => s.Id != excludeId.Value);
+        return await query.AnyAsync();
+    }
+
     public async Task<ProductSku> CreateAsync(ProductSku sku)
     {
         _db.ProductSkus.Add(sku);
         await _db.SaveChangesAsync();
-        return sku;
+        return await _db.ProductSkus
+            .Include(s => s.Product)
+            .ThenInclude(product => product.Category)
+            .FirstAsync(s => s.Id == sku.Id);
     }
 
     public async Task<ProductSku> UpdateAsync(ProductSku sku)
     {
         _db.ProductSkus.Update(sku);
         await _db.SaveChangesAsync();
-        return sku;
+        return await _db.ProductSkus
+            .Include(s => s.Product)
+            .ThenInclude(product => product.Category)
+            .FirstAsync(s => s.Id == sku.Id);
     }
 
     public async Task DeleteAsync(ProductSku sku)

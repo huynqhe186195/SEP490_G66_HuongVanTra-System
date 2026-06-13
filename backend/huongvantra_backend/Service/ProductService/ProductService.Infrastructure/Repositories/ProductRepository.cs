@@ -13,8 +13,8 @@ public class ProductRepository(ProductDbContext _db) : IProductRepository
         int page, int pageSize, CatalogViewScope scope = CatalogViewScope.Warehouse)
     {
         IQueryable<Product> query = isDeleted == true
-            ? _db.Products.IgnoreQueryFilters().Include(p => p.Category).Include(p => p.Skus)
-            : _db.Products.Include(p => p.Category).Include(p => p.Skus);
+            ? IncludeAggregate(_db.Products.IgnoreQueryFilters())
+            : IncludeAggregate(_db.Products);
 
         if (isDeleted == true)
             query = query.Where(p => p.IsDeleted);
@@ -51,7 +51,7 @@ public class ProductRepository(ProductDbContext _db) : IProductRepository
 
     public async Task<List<Product>> GetAllAsync(bool includeInactive = false, CatalogViewScope scope = CatalogViewScope.Warehouse)
     {
-        var query = _db.Products.Include(p => p.Category).Include(p => p.Skus).AsQueryable();
+        var query = IncludeAggregate(_db.Products);
         if (!includeInactive) query = query.Where(p => p.IsActive);
         if (scope == CatalogViewScope.Store)
             query = query.Where(p => p.SyncedToStoreAt != null);
@@ -112,14 +112,20 @@ public class ProductRepository(ProductDbContext _db) : IProductRepository
         return await query.AnyAsync();
     }
 
+    public async Task<bool> ExistsVariantSkuCodeAsync(string skuCode, Guid? excludeId = null)
+    {
+        var query = _db.ProductVariants.Where(v => v.SkuCode == skuCode);
+        if (excludeId.HasValue) query = query.Where(v => v.Id != excludeId.Value);
+        return await query.AnyAsync();
+    }
+
     public async Task<Product?> GetByIdAsync(Guid id, bool includeDeleted = false)
     {
         var query = includeDeleted
-            ? _db.Products.IgnoreQueryFilters()
-            : _db.Products.AsQueryable();
+            ? IncludeAggregate(_db.Products.IgnoreQueryFilters())
+            : IncludeAggregate(_db.Products);
 
-        return await query.Include(p => p.Category).Include(p => p.Skus)
-            .FirstOrDefaultAsync(p => p.Id == id);
+        return await query.FirstOrDefaultAsync(p => p.Id == id);
     }
 
     public async Task<Product> CreateAsync(Product product)
@@ -151,4 +157,12 @@ public class ProductRepository(ProductDbContext _db) : IProductRepository
         product.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
     }
+
+    private static IQueryable<Product> IncludeAggregate(IQueryable<Product> query) =>
+        query.Include(p => p.Category)
+            .Include(p => p.Skus)
+            .Include(p => p.Images)
+            .Include(p => p.Units)
+            .Include(p => p.Variants)
+            .ThenInclude(v => v.Units);
 }

@@ -45,6 +45,7 @@ function OrdersPage() {
       status: filters.status || undefined,
       channel: filters.channel || undefined,
       excludeChannel: filters.channel ? undefined : 'COD',
+      excludeOrderKind: 'Exchange',
       page,
       pageSize: TABLE_PAGE_SIZE,
     }),
@@ -162,9 +163,15 @@ function OrdersPage() {
             </button>
           ) : null}
 
+          <Link
+            className="ml-auto inline-flex items-center gap-2 rounded-xl border border-[#538463]/30 bg-[#538463]/5 px-4 py-2.5 text-sm font-bold text-[#538463] hover:bg-[#538463]/10"
+            to="/orders/exchange"
+          >
+            Đơn đổi hàng
+          </Link>
           {canManageCod ? (
             <Link
-              className="ml-auto inline-flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm font-bold text-amber-800 hover:bg-amber-100"
+              className="inline-flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm font-bold text-amber-800 hover:bg-amber-100"
               to="/orders/cod"
             >
               Quản lý đơn COD

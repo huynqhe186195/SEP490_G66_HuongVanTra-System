@@ -49,6 +49,7 @@ function OrderProductsSection({
               <th className={`pr-3 ${constrained ? 'pb-2 pr-3 pt-1' : 'pb-3 pr-4'}`}>Sản phẩm</th>
               <th className={`pr-3 ${constrained ? 'pb-2 pr-3 pt-1' : 'pb-3 pr-4'}`}>Biến thể / SKU</th>
               <th className={`pr-3 ${constrained ? 'pb-2 pr-3 pt-1' : 'pb-3 pr-4'}`}>SL</th>
+              {!constrained ? <th className="pb-3 pr-4">Đã trả</th> : null}
               <th className={`pr-3 ${constrained ? 'pb-2 pr-3 pt-1' : 'pb-3 pr-4'}`}>Đơn giá</th>
               <th className={`text-right ${constrained ? 'pb-2 pr-2 pt-1' : 'pb-3'}`}>Thành tiền</th>
             </tr>
@@ -93,6 +94,11 @@ function OrderProductsSection({
                   ) : null}
                 </td>
                 <td className={constrained ? 'py-1.5 pr-3' : 'py-3 pr-4'}>{line.quantity}</td>
+                {!constrained ? (
+                  <td className="py-3 pr-4 text-amber-700">
+                    {line.returnedQuantity > 0 ? line.returnedQuantity : '—'}
+                  </td>
+                ) : null}
                 <td className={constrained ? 'whitespace-nowrap py-1.5 pr-3' : 'py-3 pr-4'}>
                   {formatVnd(line.unitPrice)}
                 </td>

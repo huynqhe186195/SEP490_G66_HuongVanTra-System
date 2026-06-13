@@ -6,8 +6,6 @@ using OrderService.Infrastructure.Data;
 
 namespace OrderService.Infrastructure.Migrations
 {
-    [DbContext(typeof(OrderDbContext))]
-    [Migration("20260611120000_AddCodDebtSettlementJson")]
     public partial class AddCodDebtSettlementJson : Migration
     {
         /// <inheritdoc />

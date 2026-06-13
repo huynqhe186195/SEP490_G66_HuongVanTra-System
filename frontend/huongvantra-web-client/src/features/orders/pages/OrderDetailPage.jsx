@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
@@ -9,6 +9,7 @@ import CodVerifyModal from '../components/CodVerifyModal.jsx'
 import { parseCodDebtSettlement } from '../../customers/utils/codDebtSettlementUtils.js'
 import OrderCustomerCell from '../components/OrderCustomerCell.jsx'
 import OrderProductsSection from '../components/OrderProductsSection.jsx'
+import OrderReturnsSection from '../components/OrderReturnsSection.jsx'
 import OrderTimeline from '../components/OrderTimeline.jsx'
 import OrderTransferQrPanel from '../components/OrderTransferQrPanel.jsx'
 import OrderUpdateMetaModal from '../components/OrderUpdateMetaModal.jsx'
@@ -16,6 +17,7 @@ import {
   cancelOrder,
   completeOrder,
   fetchOrder,
+  fetchReturnsByOrderId,
   shipOrder,
   updateOrder,
 } from '../services/ordersApi.js'
@@ -23,6 +25,7 @@ import {
   canCancelOrder,
   canCompleteOrder,
   canEditOrderMeta,
+  canReturnOrder,
   canShipOrder,
   canVerifyCod,
   isCodChannelOrder,
@@ -31,6 +34,8 @@ import {
   formatVnd,
   resolveInventorySyncMeta,
   getOrderChannelLabel,
+  getOrderKindLabel,
+  isExchangeOrder,
   getOrderStatusClass,
   getOrderStatusLabel,
   getPaymentMethodLabel,
@@ -43,8 +48,10 @@ import { fetchProducts } from '../../products/services/productsApi.js'
 import { buildProductCatalogLookups, resolveOrderLineDisplay } from '../../products/utils/productDisplay.js'
 function OrderDetailPage() {
   const { id } = useParams()
+  const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const fromCod = searchParams.get('from') === 'cod'
+  const fromExchange = searchParams.get('from') === 'exchange'
   const canManage = canCreateOrder(loadAuthSession())
 
   const [order, setOrder] = useState(null)
@@ -54,6 +61,7 @@ function OrderDetailPage() {
   const [isCodVerifyOpen, setIsCodVerifyOpen] = useState(false)
   const [timelineRefreshKey, setTimelineRefreshKey] = useState(0)
   const [catalogLookups, setCatalogLookups] = useState(() => buildProductCatalogLookups())
+  const [orderReturns, setOrderReturns] = useState([])
 
   const loadOrder = useCallback(async () => {
     if (!id) return
@@ -72,6 +80,32 @@ function OrderDetailPage() {
   useEffect(() => {
     loadOrder()
   }, [loadOrder])
+
+  useEffect(() => {
+    if (!id) return undefined
+    let mounted = true
+
+    async function loadReturns() {
+      try {
+        const data = await fetchReturnsByOrderId(id)
+        if (mounted) setOrderReturns(data)
+      } catch {
+        if (mounted) setOrderReturns([])
+      }
+    }
+
+    loadReturns()
+    return () => {
+      mounted = false
+    }
+  }, [id, timelineRefreshKey])
+
+  useEffect(() => {
+    if (!order || isLoading || fromCod || fromExchange || !id) return
+    if (isExchangeOrder(order)) {
+      navigate(`/orders/${id}?from=exchange`, { replace: true })
+    }
+  }, [order, isLoading, fromCod, fromExchange, id, navigate])
 
   useEffect(() => {
     let mounted = true
@@ -120,25 +154,6 @@ function OrderDetailPage() {
     }))
   }, [order?.items, catalogLookups])
 
-  const promotionScopeType = String(
-    order?.promotionScopeType || (order?.promotionCode ? 'ORDER' : ''),
-  ).toUpperCase()
-  const promotionAppliedSkuText = useMemo(() => {
-    if (!order || promotionScopeType !== 'SKU') return ''
-
-    const scopedSkuIds = new Set((order.promotionSkuScopes ?? []).map((scope) => scope.skuId))
-    const orderItemNames = (order.items ?? [])
-      .filter((line) => scopedSkuIds.has(line.skuId))
-      .map((line) => line.skuSnapshotName || line.skuSnapshotCode)
-      .filter(Boolean)
-
-    const scopeNames = (order.promotionSkuScopes ?? [])
-      .map((scope) => scope.skuName || scope.skuCode || scope.skuId)
-      .filter(Boolean)
-
-    return [...new Set(orderItemNames.length ? orderItemNames : scopeNames)].join(', ')
-  }, [order, promotionScopeType])
-
   async function runAction(action) {
     if (!canManage || !order) return
     try {
@@ -178,8 +193,11 @@ function OrderDetailPage() {
       <PageShell>
         <div className="mx-auto w-full max-w-5xl px-1 py-10 sm:px-2">
           <p className="text-slate-500">Không tìm thấy đơn hàng.</p>
-          <Link className="mt-4 inline-block text-sm font-semibold text-[#538463]" to={fromCod ? '/orders/cod' : '/orders'}>
-            ← Quay lại {fromCod ? 'quản lý đơn COD' : 'danh sách'}
+          <Link
+            className="mt-4 inline-block text-sm font-semibold text-[#538463]"
+            to={fromCod ? '/orders/cod' : fromExchange ? '/orders/exchange' : '/orders'}
+          >
+            ← Quay lại {fromCod ? 'quản lý đơn COD' : fromExchange ? 'đơn đổi hàng' : 'danh sách'}
           </Link>
         </div>
       </PageShell>
@@ -198,13 +216,25 @@ function OrderDetailPage() {
         <div>
           <Link
             className="text-sm font-semibold text-[#538463] hover:underline"
-            to={fromCod || isCodChannelOrder(order) ? '/orders/cod' : '/orders'}
+            to={
+              fromCod || isCodChannelOrder(order)
+                ? '/orders/cod'
+                : fromExchange || isExchangeOrder(order)
+                  ? '/orders/exchange'
+                  : '/orders'
+            }
           >
-            ← {fromCod || isCodChannelOrder(order) ? 'Quản lý đơn COD' : 'Danh sách đơn'}
+            ←{' '}
+            {fromCod || isCodChannelOrder(order)
+              ? 'Quản lý đơn COD'
+              : fromExchange || isExchangeOrder(order)
+                ? 'Trả / đổi hàng'
+                : 'Danh sách đơn'}
           </Link>
           <h1 className="mt-2 text-2xl font-bold text-slate-900">{order.orderCode}</h1>
           <p className="mt-1 text-sm text-slate-500">
-            {getOrderChannelLabel(order.orderChannel)} · Tạo lúc {formatVietnamDateTime(order.createdAt)}
+            {isExchangeOrder(order) ? getOrderKindLabel(order.orderKind) : getOrderChannelLabel(order.orderChannel)} · Tạo lúc{' '}
+            {formatVietnamDateTime(order.createdAt)}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -245,35 +275,12 @@ function OrderDetailPage() {
             ) : null}
           </section>
 
+          <OrderReturnsSection returns={orderReturns} />
+
           {order.note?.trim() ? (
             <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
               <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-400">Ghi chú</h2>
               <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-700">{order.note}</p>
-            </section>
-          ) : null}
-
-          {order.promotionCode ? (
-            <section className="rounded-2xl border border-emerald-100 bg-emerald-50/40 p-5 shadow-sm">
-              <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-emerald-700">Mã giảm giá</h2>
-              <div className="space-y-1 text-sm text-slate-700">
-                <p>
-                  <span className="font-semibold text-slate-800">Mã giảm giá:</span> {order.promotionCode}
-                </p>
-                <p>
-                  <span className="font-semibold text-slate-800">Phạm vi:</span>{' '}
-                  {promotionScopeType === 'SKU' ? 'SKU cụ thể' : 'Toàn đơn'}
-                </p>
-                {promotionScopeType === 'SKU' ? (
-                  <p>
-                    <span className="font-semibold text-slate-800">Áp dụng cho:</span>{' '}
-                    {promotionAppliedSkuText || 'SKU cụ thể'}
-                  </p>
-                ) : null}
-                <p>
-                  <span className="font-semibold text-slate-800">Tổng giảm từ mã:</span>{' '}
-                  {formatVnd(order.promotionDiscountAmount)}
-                </p>
-              </div>
             </section>
           ) : null}
 
@@ -336,6 +343,15 @@ function OrderDetailPage() {
                     className="rounded-xl bg-amber-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-amber-700 disabled:opacity-50"
                   >
                     Đã giao &amp; thu tiền (COD)
+                  </button>
+                ) : null}
+                {canReturnOrder(order) ? (
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/pos/returns/${order.id}`)}
+                    className="rounded-xl border border-[#538463]/40 bg-[#f6f4ec] px-4 py-2.5 text-sm font-bold text-[#356647] hover:bg-[#ebe8dc]"
+                  >
+                    Trả hàng / Đổi
                   </button>
                 ) : null}
                 {canCancelOrder(order) ? (

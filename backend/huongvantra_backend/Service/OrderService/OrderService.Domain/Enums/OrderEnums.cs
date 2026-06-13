@@ -19,6 +19,12 @@ public enum OrderChannel
     COD
 }
 
+public enum OrderKind
+{
+    Sale,
+    Exchange
+}
+
 public enum InventorySyncStatus
 {
     Synced,

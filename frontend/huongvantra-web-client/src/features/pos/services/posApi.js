@@ -13,6 +13,30 @@ import {
 } from '../../orders/services/ordersApi.js'
 import { mapPromotion } from '../utils/posPromotionUtils.js'
 
+function buildPromotionPreviewBody({
+  promotionId = null,
+  promotionCode = null,
+  customerId = null,
+  items = [],
+  manualDiscount = 0,
+} = {}) {
+  return {
+    promotionId: promotionId || null,
+    promotionCode: promotionCode?.trim() || null,
+    customerId: customerId || null,
+    manualDiscount: Math.max(0, Math.round(Number(manualDiscount) || 0)),
+    items: items.map((item) => ({
+      skuId: item.skuId ?? item.productId,
+      quantity: Math.max(1, Math.round(Number(item.quantity ?? item.qty ?? 1))),
+      unitPrice: Number(item.unitPrice ?? item.price ?? 0),
+      subTotal:
+        item.subTotal ??
+        item.lineTotal ??
+        Number(item.unitPrice ?? item.price ?? 0) * Number(item.quantity ?? item.qty ?? 1),
+    })),
+  }
+}
+
 function mapPaymentMethod(method) {
   const value = String(method || '').toUpperCase()
   if (value === 'CASH') return 'Cash'
@@ -587,25 +611,33 @@ export async function fetchPromotionByCode(code) {
 export async function applyPromotionPreview({
   promotionId = null,
   promotionCode = null,
+  customerId = null,
   items = [],
   manualDiscount = 0,
 }) {
   const data = await apiRequestAuth('/api/promotions/apply-preview', {
     method: 'POST',
-    body: JSON.stringify({
-      promotionId: promotionId || null,
-      promotionCode: promotionCode?.trim() || null,
-      manualDiscount: Math.max(0, Math.round(Number(manualDiscount) || 0)),
-      items: items.map((item) => ({
-        skuId: item.skuId ?? item.productId,
-        quantity: Math.max(1, Math.round(Number(item.quantity ?? item.qty ?? 1))),
-        unitPrice: Number(item.unitPrice ?? item.price ?? 0),
-        subTotal:
-          item.subTotal ?? item.lineTotal ?? Number(item.unitPrice ?? item.price ?? 0) * Number(item.quantity ?? item.qty ?? 1),
-      })),
-    }),
+    body: JSON.stringify(buildPromotionPreviewBody({
+      promotionId,
+      promotionCode,
+      customerId,
+      items,
+      manualDiscount,
+    })),
   })
   return mapPromotion(data)
+}
+
+export async function fetchApplicablePromotions({ customerId = null, items = [], manualDiscount = 0 } = {}) {
+  const data = await apiRequestAuth('/api/promotions/applicable', {
+    method: 'POST',
+    body: JSON.stringify(buildPromotionPreviewBody({
+      customerId,
+      items,
+      manualDiscount,
+    })),
+  })
+  return Array.isArray(data) ? data.map(mapPromotion).filter(Boolean) : []
 }
 
 export async function fetchAvailablePromotions() {

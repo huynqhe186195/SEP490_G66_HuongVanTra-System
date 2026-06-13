@@ -1,0 +1,44 @@
+namespace ProductService.Application.DTOs.Requests;
+
+public record ProductImageRequest(
+    string ImageUrl,
+    string? AltText,
+    int SortOrder,
+    bool IsThumbnail);
+
+public record ProductUnitRequest(
+    Guid? VariantId,
+    string UnitName,
+    decimal ConversionRate,
+    decimal? Price,
+    string? Barcode,
+    bool IsDirectSell,
+    bool IsBaseUnit);
+
+public record ProductVariantOptionGroupRequest(
+    string Name,
+    List<string> Values);
+
+public record ProductVariantRequest(
+    string? SkuCode,
+    string? Barcode,
+    string VariantName,
+    string OptionValuesJson,
+    decimal CostPrice,
+    decimal RetailPrice,
+    int? MinStock,
+    int? MaxStock,
+    bool IsSellable,
+    bool AllowRewardPoints,
+    bool IsActive,
+    string? ImageUrl,
+    List<ProductUnitRequest>? Units);
+
+public record GenerateProductVariantsRequest(
+    List<ProductVariantOptionGroupRequest> OptionGroups,
+    decimal CostPrice,
+    decimal RetailPrice,
+    int? MinStock,
+    int? MaxStock,
+    bool IsSellable = true,
+    bool AllowRewardPoints = true);

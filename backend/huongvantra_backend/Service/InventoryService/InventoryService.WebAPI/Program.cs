@@ -47,6 +47,7 @@ builder.Services.AddMassTransit(x =>
     x.AddConsumer<SkuCreatedConsumer>();
     x.AddConsumer<OrderPlacedConsumer>();
     x.AddConsumer<OrderCancelledConsumer>();
+    x.AddConsumer<OrderReturnedConsumer>();
 
     x.UsingRabbitMq((ctx, cfg) =>
     {
@@ -64,6 +65,9 @@ builder.Services.AddMassTransit(x =>
 
         cfg.ReceiveEndpoint("inventory-service.order-cancelled", e =>
             e.ConfigureConsumer<OrderCancelledConsumer>(ctx));
+
+        cfg.ReceiveEndpoint("inventory-service.order-returned", e =>
+            e.ConfigureConsumer<OrderReturnedConsumer>(ctx));
     });
 });
 

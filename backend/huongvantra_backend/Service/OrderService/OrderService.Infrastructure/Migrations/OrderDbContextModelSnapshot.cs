@@ -304,6 +304,14 @@ namespace OrderService.Infrastructure.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("tinyint(1)");
 
+                    b.Property<decimal?>("MaxDiscountAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("MinimumOrderAmount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(18,2)")
+                        .HasDefaultValue(0m);
+
                     b.Property<string>("NormalizedPromoCode")
                         .IsRequired()
                         .HasMaxLength(50)
@@ -320,6 +328,12 @@ namespace OrderService.Infrastructure.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("varchar(20)")
                         .HasDefaultValue("ORDER");
+
+                    b.Property<int?>("UsageLimitPerCustomer")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("UsageLimitTotal")
+                        .HasColumnType("int");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("datetime(6)");

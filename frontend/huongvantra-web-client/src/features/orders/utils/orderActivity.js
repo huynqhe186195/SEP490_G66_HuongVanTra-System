@@ -12,6 +12,7 @@ export function getOrderActivityTitle(activityType) {
     Completed: 'Hoàn tất',
     Cancelled: 'Hủy đơn',
     InventorySynced: 'Đồng bộ kho',
+    Returned: 'Trả hàng',
   }
   return map[key] || key || 'Hoạt động'
 }
@@ -28,6 +29,7 @@ export function getOrderActivityDotClass(activityType) {
     Completed: 'bg-[#538463]',
     Cancelled: 'bg-red-600',
     InventorySynced: 'bg-violet-600',
+    Returned: 'bg-orange-600',
   }
   return map[key] || 'bg-[#4a6242]'
 }
