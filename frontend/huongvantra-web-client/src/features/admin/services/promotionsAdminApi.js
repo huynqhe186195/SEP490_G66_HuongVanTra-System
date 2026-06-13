@@ -34,15 +34,18 @@ async function requestWithAuth(path, options = {}) {
 function mapPromotionAdminItem(item) {
   const base = mapPromotion(item)
   if (!base) return null
+  const validityStatus = normalizePromotionValidityStatus(
+    item.validityStatus ?? item.ValidityStatus ?? base.validityStatus,
+  )
   return {
     ...base,
     categoryScopes: mapPromotionCategoryScopes(item),
     customerTierScopes: mapPromotionCustomerTierScopes(item),
     orderCount: Number(item.orderCount ?? item.OrderCount ?? 0),
-    validityStatus: normalizePromotionValidityStatus(
-      item.validityStatus ?? item.ValidityStatus ?? base.validityStatus,
-    ),
+    validityStatus,
     isActive: base.isActive,
+    isEffectivelyActive: item.isEffectivelyActive ?? item.IsEffectivelyActive ?? validityStatus === 'ACTIVE',
+    canToggleActive: item.canToggleActive ?? item.CanToggleActive ?? validityStatus !== 'EXPIRED',
   }
 }
 

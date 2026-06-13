@@ -511,6 +511,10 @@ function PromotionsPage() {
   }
 
   const handleDeactivate = async (promotion) => {
+    if (promotion.canToggleActive === false) {
+      showError('Mã giảm giá đã hết hạn. Vui lòng gia hạn thời gian sử dụng trước khi kích hoạt lại.')
+      return
+    }
     if (!window.confirm(`Ngừng hoạt động mã "${promotion.promoCode}"?`)) return
     try {
       await deactivateAdminPromotion(promotion.id)
@@ -522,6 +526,10 @@ function PromotionsPage() {
   }
 
   const handleReactivate = async (promotion) => {
+    if (promotion.canToggleActive === false) {
+      showError('Mã giảm giá đã hết hạn. Vui lòng gia hạn thời gian sử dụng trước khi kích hoạt lại.')
+      return
+    }
     try {
       await reactivateAdminPromotion(promotion.id)
       showSuccess('Đã kích hoạt lại mã giảm giá.')
@@ -784,9 +792,10 @@ function PromotionsPage() {
                 ? promotions.map((promotion) => {
                     const status = String(promotion.validityStatus || (promotion.isActive ? 'ACTIVE' : 'INACTIVE')).toUpperCase()
                     const badgeClass = VALIDITY_BADGE_CLASS[status] ?? VALIDITY_BADGE_CLASS.INACTIVE
+                    const canToggleActive = promotion.canToggleActive !== false
 
                     return (
-                      <tr key={promotion.id} className={`hover:bg-[#fbf9f1]/30 ${!promotion.isActive ? 'opacity-60' : ''}`}>
+                      <tr key={promotion.id} className={`hover:bg-[#fbf9f1]/30 ${promotion.isEffectivelyActive === false ? 'opacity-60' : ''}`}>
                         <td className="px-8 py-5 font-bold text-slate-800">{promotion.promoCode}</td>
                         <td className="px-4 py-5 text-slate-600">{promotion.discountType}</td>
                         <td className="px-4 py-5 text-slate-700">
@@ -826,7 +835,16 @@ function PromotionsPage() {
                             >
                               Sửa
                             </button>
-                            {promotion.isActive ? (
+                            {!canToggleActive ? (
+                              <button
+                                type="button"
+                                disabled
+                                title="Mã đã hết hạn, hãy gia hạn thời gian sử dụng để kích hoạt lại."
+                                className="cursor-not-allowed rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-400"
+                              >
+                                Hết hạn
+                              </button>
+                            ) : promotion.isActive ? (
                               <button
                                 type="button"
                                 onClick={() => handleDeactivate(promotion)}

@@ -244,6 +244,15 @@ public class PromotionLogic(
             throw new OrderValidationException(
                 "Mã giảm giá đã được sử dụng nên không được đổi cấu hình giảm giá, phạm vi áp dụng, đơn tối thiểu, giới hạn lượt dùng hoặc hạng khách hàng áp dụng.");
 
+        if (req.IsActive.HasValue &&
+            req.IsActive.Value != promotion.IsActive &&
+            IsExpired(promotion, now) &&
+            IsExpired(input.ValidToUtc, now))
+        {
+            throw new OrderValidationException(
+                "Mã giảm giá đã hết hạn. Vui lòng gia hạn thời gian sử dụng trước khi kích hoạt lại.");
+        }
+
         if (promotion.NormalizedPromoCode != input.NormalizedPromoCode)
         {
             var existing = await _promotionRepo.GetByNormalizedCodeAsync(input.NormalizedPromoCode, ct);
@@ -280,6 +289,7 @@ public class PromotionLogic(
         var promotion = await _promotionRepo.GetByIdAsync(id, ct)
             ?? throw new PromotionNotFoundException(id);
 
+        EnsureNotExpiredForToggle(promotion, DateTime.UtcNow);
         promotion.IsActive = false;
         promotion.UpdatedAt = DateTime.UtcNow;
 
@@ -293,6 +303,7 @@ public class PromotionLogic(
         var promotion = await _promotionRepo.GetByIdAsync(id, ct)
             ?? throw new PromotionNotFoundException(id);
 
+        EnsureNotExpiredForToggle(promotion, DateTime.UtcNow);
         promotion.IsActive = true;
         promotion.UpdatedAt = DateTime.UtcNow;
 
@@ -850,10 +861,23 @@ public class PromotionLogic(
             return false;
         if (promotion.ValidFromUtc.HasValue && AsUtc(promotion.ValidFromUtc.Value) > nowUtc)
             return false;
-        if (promotion.ValidToUtc.HasValue && AsUtc(promotion.ValidToUtc.Value) < nowUtc)
+        if (IsExpired(promotion, nowUtc))
             return false;
 
         return true;
+    }
+
+    private static bool IsExpired(Promotion promotion, DateTime nowUtc) =>
+        IsExpired(promotion.ValidToUtc, nowUtc);
+
+    private static bool IsExpired(DateTime? validToUtc, DateTime nowUtc) =>
+        validToUtc.HasValue && AsUtc(validToUtc.Value) <= nowUtc;
+
+    private static void EnsureNotExpiredForToggle(Promotion promotion, DateTime nowUtc)
+    {
+        if (IsExpired(promotion, nowUtc))
+            throw new OrderValidationException(
+                "Mã giảm giá đã hết hạn. Vui lòng gia hạn thời gian sử dụng trước khi kích hoạt lại.");
     }
 
     private async Task<PromotionUsageSnapshot> ValidateUsageLimitsAsync(
@@ -923,12 +947,12 @@ public class PromotionLogic(
 
     private static string GetValidityStatus(Promotion promotion, DateTime nowUtc)
     {
+        if (IsExpired(promotion, nowUtc))
+            return PromotionEffectiveStatus.EXPIRED.ToString();
         if (!promotion.IsActive)
             return PromotionEffectiveStatus.INACTIVE.ToString();
         if (promotion.ValidFromUtc.HasValue && AsUtc(promotion.ValidFromUtc.Value) > nowUtc)
             return PromotionEffectiveStatus.SCHEDULED.ToString();
-        if (promotion.ValidToUtc.HasValue && AsUtc(promotion.ValidToUtc.Value) < nowUtc)
-            return PromotionEffectiveStatus.EXPIRED.ToString();
 
         return PromotionEffectiveStatus.ACTIVE.ToString();
     }
@@ -1077,26 +1101,32 @@ public class PromotionLogic(
         return existingIds.SequenceEqual(nextIds);
     }
 
-    private static PromotionResponse MapToResponse(Promotion promotion, int orderCount) => new(
-        promotion.Id,
-        promotion.PromoCode,
-        promotion.DiscountType.ToString(),
-        promotion.DiscountValue,
-        promotion.MaxDiscountAmount,
-        promotion.MinimumOrderAmount,
-        promotion.UsageLimitTotal,
-        promotion.UsageLimitPerCustomer,
-        orderCount,
-        GetRemainingUsageTotal(promotion, orderCount),
-        AsNullableUtc(promotion.ValidFromUtc),
-        AsNullableUtc(promotion.ValidToUtc),
-        GetValidityStatus(promotion, DateTime.UtcNow),
-        promotion.IsActive,
-        promotion.ScopeType.ToString(),
-        MapScopes(promotion),
-        MapCategoryScopes(promotion),
-        MapCustomerTierScopes(promotion),
-        orderCount);
+    private static PromotionResponse MapToResponse(Promotion promotion, int orderCount)
+    {
+        var status = GetValidityStatus(promotion, DateTime.UtcNow);
+        return new PromotionResponse(
+            promotion.Id,
+            promotion.PromoCode,
+            promotion.DiscountType.ToString(),
+            promotion.DiscountValue,
+            promotion.MaxDiscountAmount,
+            promotion.MinimumOrderAmount,
+            promotion.UsageLimitTotal,
+            promotion.UsageLimitPerCustomer,
+            orderCount,
+            GetRemainingUsageTotal(promotion, orderCount),
+            AsNullableUtc(promotion.ValidFromUtc),
+            AsNullableUtc(promotion.ValidToUtc),
+            status,
+            promotion.IsActive,
+            status == PromotionEffectiveStatus.ACTIVE.ToString(),
+            status != PromotionEffectiveStatus.EXPIRED.ToString(),
+            promotion.ScopeType.ToString(),
+            MapScopes(promotion),
+            MapCategoryScopes(promotion),
+            MapCustomerTierScopes(promotion),
+            orderCount);
+    }
 
     private static PromotionLookupResponse MapToLookupResponse(
         Promotion promotion,
@@ -1104,29 +1134,35 @@ public class PromotionLogic(
         decimal? estimatedDiscountAmount = null,
         decimal? estimatedFinalTotal = null,
         decimal? estimatedPayableAmount = null,
-        bool isBestSuggestion = false) => new(
-        promotion.Id,
-        promotion.PromoCode,
-        promotion.DiscountType.ToString(),
-        promotion.DiscountValue,
-        promotion.MaxDiscountAmount,
-        promotion.MinimumOrderAmount,
-        promotion.UsageLimitTotal,
-        promotion.UsageLimitPerCustomer,
-        usedCountTotal,
-        GetRemainingUsageTotal(promotion, usedCountTotal),
-        AsNullableUtc(promotion.ValidFromUtc),
-        AsNullableUtc(promotion.ValidToUtc),
-        GetValidityStatus(promotion, DateTime.UtcNow),
-        promotion.IsActive,
-        promotion.ScopeType.ToString(),
-        MapScopes(promotion),
-        MapCategoryScopes(promotion),
-        MapCustomerTierScopes(promotion),
-        estimatedDiscountAmount,
-        estimatedFinalTotal,
-        estimatedPayableAmount,
-        isBestSuggestion);
+        bool isBestSuggestion = false)
+    {
+        var status = GetValidityStatus(promotion, DateTime.UtcNow);
+        return new PromotionLookupResponse(
+            promotion.Id,
+            promotion.PromoCode,
+            promotion.DiscountType.ToString(),
+            promotion.DiscountValue,
+            promotion.MaxDiscountAmount,
+            promotion.MinimumOrderAmount,
+            promotion.UsageLimitTotal,
+            promotion.UsageLimitPerCustomer,
+            usedCountTotal,
+            GetRemainingUsageTotal(promotion, usedCountTotal),
+            AsNullableUtc(promotion.ValidFromUtc),
+            AsNullableUtc(promotion.ValidToUtc),
+            status,
+            promotion.IsActive,
+            status == PromotionEffectiveStatus.ACTIVE.ToString(),
+            status != PromotionEffectiveStatus.EXPIRED.ToString(),
+            promotion.ScopeType.ToString(),
+            MapScopes(promotion),
+            MapCategoryScopes(promotion),
+            MapCustomerTierScopes(promotion),
+            estimatedDiscountAmount,
+            estimatedFinalTotal,
+            estimatedPayableAmount,
+            isBestSuggestion);
+    }
 
     private static List<PromotionScopeResponse> MapScopes(Promotion promotion) =>
         promotion.ScopeType == PromotionScopeType.SKU

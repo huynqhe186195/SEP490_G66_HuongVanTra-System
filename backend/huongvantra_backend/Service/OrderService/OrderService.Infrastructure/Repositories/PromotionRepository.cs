@@ -46,19 +46,21 @@ public class PromotionRepository(OrderDbContext _db) : IPromotionRepository
         {
             query = effectiveStatus.Value switch
             {
-                PromotionEffectiveStatus.INACTIVE => query.Where(p => !p.IsActive),
+                PromotionEffectiveStatus.INACTIVE => query.Where(p =>
+                    !p.IsActive &&
+                    (!p.ValidToUtc.HasValue || p.ValidToUtc.Value > nowUtc)),
                 PromotionEffectiveStatus.SCHEDULED => query.Where(p =>
                     p.IsActive &&
                     p.ValidFromUtc.HasValue &&
-                    p.ValidFromUtc.Value > nowUtc),
+                    p.ValidFromUtc.Value > nowUtc &&
+                    (!p.ValidToUtc.HasValue || p.ValidToUtc.Value > nowUtc)),
                 PromotionEffectiveStatus.EXPIRED => query.Where(p =>
-                    p.IsActive &&
                     p.ValidToUtc.HasValue &&
-                    p.ValidToUtc.Value < nowUtc),
+                    p.ValidToUtc.Value <= nowUtc),
                 PromotionEffectiveStatus.ACTIVE => query.Where(p =>
                     p.IsActive &&
                     (!p.ValidFromUtc.HasValue || p.ValidFromUtc.Value <= nowUtc) &&
-                    (!p.ValidToUtc.HasValue || p.ValidToUtc.Value >= nowUtc)),
+                    (!p.ValidToUtc.HasValue || p.ValidToUtc.Value > nowUtc)),
                 _ => query
             };
         }
@@ -103,7 +105,7 @@ public class PromotionRepository(OrderDbContext _db) : IPromotionRepository
             .Where(p =>
                 p.IsActive &&
                 (!p.ValidFromUtc.HasValue || p.ValidFromUtc <= nowUtc) &&
-                (!p.ValidToUtc.HasValue || p.ValidToUtc >= nowUtc))
+                (!p.ValidToUtc.HasValue || p.ValidToUtc > nowUtc))
             .OrderBy(p => p.PromoCode)
             .ToListAsync(ct);
 

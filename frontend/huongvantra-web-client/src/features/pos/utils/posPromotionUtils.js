@@ -40,6 +40,8 @@ export function mapPromotion(item) {
     validToUtc: item.validToUtc ?? item.ValidToUtc ?? null,
     validityStatus: item.validityStatus ?? item.ValidityStatus ?? null,
     isActive: item.isActive ?? item.IsActive ?? true,
+    isEffectivelyActive: item.isEffectivelyActive ?? item.IsEffectivelyActive ?? null,
+    canToggleActive: item.canToggleActive ?? item.CanToggleActive ?? true,
     scopeType: String(item.scopeType ?? item.ScopeType ?? 'ORDER').toUpperCase(),
     skuScopes,
     categoryScopes,
