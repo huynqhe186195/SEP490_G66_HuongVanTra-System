@@ -46,7 +46,13 @@ export default function OverpaymentDebtModal({
     () => (payDebtsEnabled ? sumAllocationRows(rows) : 0),
     [payDebtsEnabled, rows],
   )
-  const creditToCustomer = Math.max(0, excessAmount - allocatedTotal)
+  const effectiveAllocatedTotal = useMemo(() => {
+    if (!payDebtsEnabled) return 0
+    if (allocatedTotal > 0) return allocatedTotal
+    if (openDebts.length === 0 && customerCurrentDebt > 0 && maxPayable > 0) return maxPayable
+    return 0
+  }, [payDebtsEnabled, allocatedTotal, openDebts.length, customerCurrentDebt, maxPayable])
+  const creditToCustomer = Math.max(0, excessAmount - effectiveAllocatedTotal)
 
   if (!isOpen) return null
 
@@ -68,15 +74,29 @@ export default function OverpaymentDebtModal({
   }
 
   function handleConfirm() {
+    if (payDebtsEnabled && openDebts.length > 0 && allocatedTotal <= 0) {
+      return
+    }
+
     const payload = payDebtsEnabled ? toAllocationPayload(rows) : []
-    const amount = payload.reduce((sum, row) => sum + row.amount, 0)
+    let amount = payload.reduce((sum, row) => sum + row.amount, 0)
+
+    if (payDebtsEnabled && amount <= 0 && customerCurrentDebt > 0 && maxPayable > 0) {
+      amount = maxPayable
+    }
+
     onConfirm?.({
       payDebtsEnabled,
-      allocations: payload,
+      allocations: amount > 0 && payload.length > 0 ? payload : [],
       allocatedAmount: amount,
       creditToCustomer: Math.max(0, excessAmount - amount),
     })
   }
+
+  const canConfirm =
+    !payDebtsEnabled
+    || allocatedTotal > 0
+    || (openDebts.length === 0 && customerCurrentDebt > 0 && maxPayable > 0)
 
   return createPortal(
     <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
@@ -119,9 +139,14 @@ export default function OverpaymentDebtModal({
 
           {isLoading ? (
             <p className="text-sm text-[#717971]">Đang tải hóa đơn còn nợ...</p>
-          ) : openDebts.length === 0 ? (
+          ) : openDebts.length === 0 && customerCurrentDebt <= 0 ? (
             <p className="rounded-xl border border-[#e4e3db] bg-[#fbf9f1] px-4 py-3 text-sm text-[#717971]">
               Khách không có hóa đơn nợ để thanh toán.
+            </p>
+          ) : openDebts.length === 0 ? (
+            <p className="rounded-xl border border-[#e4e3db] bg-[#fff8e8] px-4 py-3 text-sm text-[#7e5700]">
+              Chưa có hóa đơn nợ chi tiết. Hệ thống sẽ tự trừ tối đa{' '}
+              <span className="font-bold">{formatMoney(maxPayable)} đ</span> theo công nợ hiện tại.
             </p>
           ) : (
             <div className="overflow-x-auto rounded-xl border border-[#e4e3db]">
@@ -168,7 +193,7 @@ export default function OverpaymentDebtModal({
           <div className="mt-4 space-y-1.5 text-sm">
             <div className="flex items-center justify-between">
               <span className="text-[#717971]">Tổng thanh toán hóa đơn</span>
-              <span className="font-bold tabular-nums text-[#1b1c17]">{formatMoney(allocatedTotal)} đ</span>
+              <span className="font-bold tabular-nums text-[#1b1c17]">{formatMoney(effectiveAllocatedTotal)} đ</span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-[#717971]">Còn lại trả khách</span>
@@ -188,7 +213,8 @@ export default function OverpaymentDebtModal({
           <button
             type="button"
             onClick={handleConfirm}
-            className="rounded-xl bg-[#356647] px-5 py-2.5 text-sm font-bold text-white hover:brightness-110"
+            disabled={!canConfirm}
+            className="rounded-xl bg-[#356647] px-5 py-2.5 text-sm font-bold text-white hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Đồng ý
           </button>

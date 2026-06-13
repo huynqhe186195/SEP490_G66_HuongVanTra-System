@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { Link } from 'react-router-dom'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 
 export default function CustomerOpenDebtsPanel({
@@ -64,6 +65,7 @@ export default function CustomerOpenDebtsPanel({
           {openDebts.map((row) => {
             const allocation = allocationMap.get(row.orderId)
             const isAllocated = Boolean(allocation)
+            const isLinkedOrder = row.orderCode && !String(row.orderCode).startsWith('CN-')
             return (
               <div
                 key={row.orderId}
@@ -76,7 +78,13 @@ export default function CustomerOpenDebtsPanel({
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className={`truncate font-bold text-[#1b1c17] ${compact ? 'text-xs' : 'text-sm'}`}>
-                      {row.orderCode}
+                      {isLinkedOrder ? (
+                        <Link to={`/orders/${row.orderId}`} className="hover:text-[#356647] hover:underline">
+                          {row.orderCode}
+                        </Link>
+                      ) : (
+                        row.orderCode
+                      )}
                     </p>
                     {row.createdAt ? (
                       <p className={`text-[#717971] ${compact ? 'text-[10px]' : 'text-xs'}`}>

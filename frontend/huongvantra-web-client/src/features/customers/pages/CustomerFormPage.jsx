@@ -3,15 +3,15 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
-import { loadAuthSession } from '../../auth/services/authSession.js'
 import MembershipTierProgress from '../components/MembershipTierProgress.jsx'
-import CustomerDebtHistory from '../components/CustomerDebtHistory.jsx'
 import CustomerActivityFeed from '../components/CustomerActivityFeed.jsx'
+import CustomerOpenDebtsPanel from '../components/CustomerOpenDebtsPanel.jsx'
 import {
   changeCustomerStatus,
   createCustomer,
   deleteCustomer,
   fetchCustomerById,
+  fetchCustomerOpenDebts,
   fetchMembershipTiers,
   updateCustomer,
 } from '../services/customersApi.js'
@@ -22,7 +22,6 @@ import {
   customerTypeLabel,
   formatDebtVnd,
   formatVnd,
-  isAdminSession,
   supportsMembershipTierForTab,
   tabKeyFromCustomerType,
 } from '../utils/customerDisplay.js'
@@ -48,12 +47,11 @@ function CustomerFormPage() {
   const [currentTierDiscount, setCurrentTierDiscount] = useState(0)
   const [currentTierId, setCurrentTierId] = useState(null)
   const [initialStatus, setInitialStatus] = useState('active')
-  const [debtRefreshKey, setDebtRefreshKey] = useState(0)
-  const [activityRefreshKey, setActivityRefreshKey] = useState(0)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [openDebts, setOpenDebts] = useState([])
+  const [isLoadingOpenDebts, setIsLoadingOpenDebts] = useState(false)
   const [fieldErrors, setFieldErrors] = useState({})
   const [isNameComposing, setIsNameComposing] = useState(false)
-  const isAdmin = isAdminSession(loadAuthSession())
   const [form, setForm] = useState({
     type: ['general', 'vip', 'corporate'].includes(searchParams.get('type'))
       ? searchParams.get('type')
@@ -108,6 +106,56 @@ function CustomerFormPage() {
       mounted = false
     }
   }, [customerId, isEditMode])
+
+  useEffect(() => {
+    if (!isEditMode || !customerId) return undefined
+
+    let mounted = true
+
+    async function loadOpenDebts() {
+      try {
+        setIsLoadingOpenDebts(true)
+        const debts = await fetchCustomerOpenDebts(customerId)
+        if (mounted) setOpenDebts(Array.isArray(debts) ? debts : [])
+      } catch {
+        if (mounted) setOpenDebts([])
+      } finally {
+        if (mounted) setIsLoadingOpenDebts(false)
+      }
+    }
+
+    loadOpenDebts()
+    return () => {
+      mounted = false
+    }
+  }, [customerId, isEditMode, currentDebt])
+
+  useEffect(() => {
+    if (!isEditMode || !customerId) return undefined
+
+    async function refreshCustomerDebt() {
+      try {
+        const customer = await fetchCustomerById(customerId)
+        setCurrentDebt(Number(customer.currentDebt || 0))
+      } catch {
+        // ignore background refresh errors
+      }
+    }
+
+    function onVisible() {
+      if (document.visibilityState === 'visible') refreshCustomerDebt()
+    }
+
+    window.addEventListener('focus', refreshCustomerDebt)
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      window.removeEventListener('focus', refreshCustomerDebt)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [customerId, isEditMode])
+
+  const formatMoney = (value) =>
+    new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(Number(value || 0))
 
   function applyCustomerToForm(customer) {
     setForm({
@@ -444,6 +492,19 @@ function CustomerFormPage() {
                   <p className="text-xs text-[#717971]">Công nợ hiện tại</p>
                   <p className="text-lg font-bold text-[#7e5700]">{formatDebtVnd(currentDebt)}</p>
                 </div>
+                <CustomerOpenDebtsPanel
+                  openDebts={openDebts}
+                  isLoading={isLoadingOpenDebts}
+                  formatMoney={formatMoney}
+                  compact
+                  title="Hóa đơn chưa trả"
+                  subtitle="Liên kết từ đơn bán ghi nợ"
+                />
+                {!isLoadingOpenDebts && Number(currentDebt) > 0 && openDebts.length === 0 ? (
+                  <p className="rounded-xl border border-[#7e5700]/20 bg-[#fff8e8] px-3 py-2 text-xs text-[#7e5700]">
+                    Có công nợ nhưng chưa có hóa đơn đơn hàng liên kết (có thể từ nhập thủ công hoặc đồng bộ chưa xong).
+                  </p>
+                ) : null}
                 {supportsMembershipTierForTab(form.type) && tiers.length > 0 ? (
                   <div className="rounded-xl border border-[#356647]/15 bg-[#f8ffef] p-4">
                     <p className="mb-3 text-xs font-bold uppercase tracking-wider text-[#356647]">Hạng & chi tiêu tích lũy</p>
@@ -481,24 +542,11 @@ function CustomerFormPage() {
 
       {isEditMode && !isLoading ? (
         <>
-          <CustomerDebtHistory
-            customerId={customerId}
-            refreshKey={debtRefreshKey}
-            allowManualEntry={isAdmin}
-            onDebtChanged={() => {
-              setDebtRefreshKey((key) => key + 1)
-              setActivityRefreshKey((key) => key + 1)
-              fetchCustomerById(customerId).then((customer) => {
-                setCurrentDebt(Number(customer.currentDebt || 0))
-              }).catch(() => {})
-            }}
-          />
           <section className="rounded-[24px] border border-[#c1c9c0]/30 bg-white p-4 shadow-sm sm:p-6">
             <h3 className="mb-3 text-lg font-semibold text-[#356647]">Nhật ký hoạt động</h3>
             <div className="custom-scrollbar max-h-[min(50vh,420px)] overflow-y-auto overscroll-contain">
               <CustomerActivityFeed
                 customerId={customerId}
-                refreshKey={activityRefreshKey}
                 emptyMessage="Chưa có hoạt động ghi nhận cho khách hàng này."
               />
             </div>

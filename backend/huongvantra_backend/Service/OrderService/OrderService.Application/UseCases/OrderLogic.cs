@@ -45,6 +45,10 @@ public class OrderLogic(
     {
         var order = await _orderRepo.GetByIdAsync(id, ct)
             ?? throw new OrderNotFoundException(id);
+        if (await RepairInconsistentPaymentsAsync(order, ct))
+            await _orderRepo.SaveChangesAsync(ct);
+        if (await RepairMissingPosTierDiscountAsync(order, ct))
+            await _orderRepo.SaveChangesAsync(ct);
         return MapToResponse(order);
     }
 
@@ -54,6 +58,10 @@ public class OrderLogic(
             throw new OrderValidationException("Mã đơn hàng không được để trống.");
         var order = await _orderRepo.GetByCodeAsync(code.Trim().ToUpperInvariant(), ct)
             ?? throw new OrderNotFoundByCodeException(code);
+        if (await RepairInconsistentPaymentsAsync(order, ct))
+            await _orderRepo.SaveChangesAsync(ct);
+        if (await RepairMissingPosTierDiscountAsync(order, ct))
+            await _orderRepo.SaveChangesAsync(ct);
         return MapToResponse(order);
     }
 
@@ -214,6 +222,10 @@ public class OrderLogic(
             paymentAmount = req.TransferQrAmount;
         }
 
+        var isPosRecordedPayment = isPosCompletedOnCreate
+            && req.PaymentMethod != PaymentMethod.COD
+            && (req.PaidAmount > 0 || finalAmount <= 0);
+
         var payment = new Payment
         {
             Id = Guid.NewGuid(),
@@ -222,7 +234,9 @@ public class OrderLogic(
             Amount = paymentAmount,
             PaymentStatus = req.PaymentMethod == PaymentMethod.COD
                 ? PaymentStatus.Pending
-                : (req.PaidAmount >= finalAmount ? PaymentStatus.Success : PaymentStatus.Pending),
+                : isPosRecordedPayment || req.PaidAmount >= finalAmount
+                    ? PaymentStatus.Success
+                    : PaymentStatus.Pending,
             IsCodVerified = false,
             CodWarningDate = req.PaymentMethod == PaymentMethod.COD
                 ? DateTime.UtcNow.AddDays(7)
@@ -263,10 +277,13 @@ public class OrderLogic(
 
         if (payment.PaymentStatus == PaymentStatus.Success)
         {
+            var paymentNote = debtAmount > 0
+                ? $"Đã thu {FormatVnd(payment.Amount)} qua {GetPaymentMethodLabel(payment.PaymentMethod)}. Còn nợ {FormatVnd(debtAmount)}."
+                : $"Đã thanh toán {FormatVnd(payment.Amount)} qua {GetPaymentMethodLabel(payment.PaymentMethod)}.";
             await RecordActivityAsync(
                 order.Id,
                 OrderActivityType.PaymentReceived,
-                $"Đã thanh toán {FormatVnd(payment.Amount)} qua {GetPaymentMethodLabel(payment.PaymentMethod)}.",
+                paymentNote,
                 actorId,
                 actorName,
                 ct);
@@ -362,6 +379,16 @@ public class OrderLogic(
         order.OrderStatus = OrderStatus.Cancelled;
         order.InventorySyncStatus = InventorySyncStatus.Cancelled;
         order.UpdatedAt = DateTime.UtcNow;
+
+        var payments = order.Payments ?? await GetPaymentsInternal(order.Id, ct);
+        foreach (var payment in payments)
+        {
+            if (payment.PaymentStatus != PaymentStatus.Success)
+            {
+                payment.PaymentStatus = PaymentStatus.Failed;
+                payment.UpdatedAt = DateTime.UtcNow;
+            }
+        }
 
         var description = string.IsNullOrWhiteSpace(reason)
             ? "Hủy đơn hàng."
@@ -764,6 +791,63 @@ public class OrderLogic(
         activity.ActorId,
         activity.ActorName,
         activity.CreatedAt);
+
+    private async Task<bool> RepairInconsistentPaymentsAsync(Order order, CancellationToken ct)
+    {
+        if (order.OrderStatus != OrderStatus.Completed) return false;
+
+        var payments = order.Payments ?? await GetPaymentsInternal(order.Id, ct);
+        var changed = false;
+
+        foreach (var payment in payments)
+        {
+            if (payment.PaymentMethod == PaymentMethod.COD) continue;
+            if (payment.PaymentStatus == PaymentStatus.Success) continue;
+
+            var shouldBeSuccess = order.OrderChannel == OrderChannel.POS
+                ? payment.Amount > 0 || order.FinalAmount <= 0
+                : payment.Amount >= order.FinalAmount && order.FinalAmount > 0;
+
+            if (!shouldBeSuccess) continue;
+
+            payment.PaymentStatus = PaymentStatus.Success;
+            payment.PaidAt ??= payment.UpdatedAt == default ? DateTime.UtcNow : payment.UpdatedAt;
+            payment.UpdatedAt = DateTime.UtcNow;
+            changed = true;
+        }
+
+        return changed;
+    }
+
+    /// <summary>
+    /// Đơn POS cũ: POS đã áp CK hạng nhưng backend chưa lưu vào DiscountAmount → FinalAmount lớn hơn số đã thu.
+    /// </summary>
+    private static Task<bool> RepairMissingPosTierDiscountAsync(Order order, CancellationToken ct)
+    {
+        _ = ct;
+        if (order.OrderChannel != OrderChannel.POS || order.OrderStatus != OrderStatus.Completed)
+            return Task.FromResult(false);
+
+        var payment = order.Payments?.FirstOrDefault(p =>
+            p.PaymentMethod == PaymentMethod.Cash && p.PaymentStatus == PaymentStatus.Success);
+        if (payment is null || payment.Amount <= 0 || payment.Amount >= order.FinalAmount)
+            return Task.FromResult(false);
+
+        var gap = order.FinalAmount - payment.Amount;
+        if (gap <= 0 || gap >= order.FinalAmount * 0.2m)
+            return Task.FromResult(false);
+
+        if (order.PromotionDiscountAmount > 0)
+            return Task.FromResult(false);
+
+        if (order.DiscountAmount > 0 && order.DiscountAmount != gap)
+            return Task.FromResult(false);
+
+        order.DiscountAmount = gap;
+        order.FinalAmount = payment.Amount;
+        order.UpdatedAt = DateTime.UtcNow;
+        return Task.FromResult(true);
+    }
 
     private static OrderResponse MapToResponse(Order o) => new(
         o.Id, o.OrderCode, o.CustomerId, o.CustomerSnapshotName,

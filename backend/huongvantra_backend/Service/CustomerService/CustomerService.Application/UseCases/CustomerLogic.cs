@@ -293,7 +293,26 @@ public class CustomerLogic
             throw new CustomerValidationException(["Tổng trừ theo hóa đơn vượt số tiền thanh toán."]);
 
         if (allocatedAmount <= 0)
-            throw new CustomerValidationException(["Khách không có đơn nợ để trừ."]);
+        {
+            if (customer.CurrentDebt <= 0)
+                throw new CustomerValidationException(["Khách không có đơn nợ để trừ."]);
+
+            var fallbackAmount = Math.Min(request.Amount, customer.CurrentDebt);
+            var orphanId = CreateOrphanDebtOrderId(customerId);
+            var orphanDebt = openDebts.FirstOrDefault(d => d.OrderId == orphanId);
+            var orderCode = orphanDebt?.OrderCode ?? "CN-TONG-HOP";
+            var remainingBefore = orphanDebt?.RemainingDebt ?? customer.CurrentDebt;
+
+            allocationPlans =
+            [
+                new CustomerDebtAllocationResponse(
+                    orphanId,
+                    orderCode,
+                    fallbackAmount,
+                    Math.Max(0, remainingBefore - fallbackAmount))
+            ];
+            allocatedAmount = fallbackAmount;
+        }
 
         if (allocatedAmount > customer.CurrentDebt)
         {
@@ -456,7 +475,7 @@ public class CustomerLogic
         var transactions = (await _debtRepo.GetByCustomerIdAsync(customerId, ct)).ToList();
         var allocations = await _allocationRepo.GetByCustomerIdAsync(customerId, ct);
 
-        var increases = transactions
+        var orderIncreases = transactions
             .Where(t => t.Type == DebtTransactionType.IncreaseDebt
                 && t.ReferenceType == "Order"
                 && t.ReferenceId.HasValue)
@@ -487,7 +506,9 @@ public class CustomerLogic
                 .Sum(t => t.Amount) - allocations.Sum(a => a.Amount));
 
         var items = new List<OpenDebtItem>();
-        foreach (var item in increases)
+        var trackedKeys = new HashSet<Guid>();
+
+        foreach (var item in orderIncreases)
         {
             paidByOrder.TryGetValue(item.OrderId, out var paid);
             var remaining = Math.Max(0, item.OriginalDebt - paid);
@@ -508,12 +529,78 @@ public class CustomerLogic
                 paid,
                 remaining,
                 item.CreatedAt));
+            trackedKeys.Add(item.OrderId);
+        }
+
+        foreach (var transaction in transactions
+            .Where(t => t.Type == DebtTransactionType.IncreaseDebt
+                && (t.ReferenceType != "Order" || !t.ReferenceId.HasValue))
+            .OrderBy(t => t.CreatedAt))
+        {
+            var pseudoOrderId = transaction.ReferenceId ?? transaction.Id;
+            if (trackedKeys.Contains(pseudoOrderId)) continue;
+
+            paidByOrder.TryGetValue(pseudoOrderId, out var paid);
+            var remaining = Math.Max(0, transaction.Amount - paid);
+            if (unallocatedPool > 0 && remaining > 0)
+            {
+                var fromPool = Math.Min(remaining, unallocatedPool);
+                paid += fromPool;
+                remaining -= fromPool;
+                unallocatedPool -= fromPool;
+            }
+
+            if (remaining <= 0) continue;
+
+            items.Add(new OpenDebtItem(
+                pseudoOrderId,
+                ResolveManualDebtCode(transaction),
+                transaction.Amount,
+                paid,
+                remaining,
+                transaction.CreatedAt));
+            trackedKeys.Add(pseudoOrderId);
         }
 
         if (customer is not null)
+        {
             items = CapOpenDebtItemsToBalance(items, customer.CurrentDebt);
 
-        return items;
+            var trackedRemaining = items.Sum(i => i.RemainingDebt);
+            var gap = customer.CurrentDebt - trackedRemaining;
+            if (gap > 0)
+            {
+                var orphanOrderId = CreateOrphanDebtOrderId(customerId);
+                if (!trackedKeys.Contains(orphanOrderId))
+                {
+                    items.Add(new OpenDebtItem(
+                        orphanOrderId,
+                        "CN-CHUA-LIEN-KET",
+                        gap,
+                        0,
+                        gap,
+                        items.Count > 0 ? items.Min(i => i.CreatedAt) : DateTime.UtcNow));
+                }
+            }
+        }
+
+        return items.OrderBy(i => i.CreatedAt).ToList();
+    }
+
+    private static Guid CreateOrphanDebtOrderId(Guid customerId)
+    {
+        var bytes = customerId.ToByteArray();
+        bytes[8] = 0xde;
+        bytes[9] = 0x0b;
+        return new Guid(bytes);
+    }
+
+    private static string ResolveManualDebtCode(CustomerDebtTransaction transaction)
+    {
+        if (!string.IsNullOrWhiteSpace(transaction.RelatedOrderCode))
+            return transaction.RelatedOrderCode!;
+
+        return string.IsNullOrWhiteSpace(transaction.Note) ? "CN-THU-CONG" : transaction.Note!;
     }
 
     private static List<CustomerDebtAllocationResponse> BuildExplicitAllocations(

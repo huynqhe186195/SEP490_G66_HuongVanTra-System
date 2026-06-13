@@ -38,7 +38,12 @@ function activityPresentation(item) {
   }
 }
 
-function CustomerActivityFeed({ customerId, refreshKey = 0, emptyMessage = 'Chưa có hoạt động từ đơn hàng.' }) {
+function CustomerActivityFeed({
+  customerId,
+  refreshKey = 0,
+  emptyMessage = 'Chưa có hoạt động từ đơn hàng.',
+  scrollable = true,
+}) {
   const [items, setItems] = useState([])
   const [isLoading, setIsLoading] = useState(Boolean(customerId))
 
@@ -80,7 +85,9 @@ function CustomerActivityFeed({ customerId, refreshKey = 0, emptyMessage = 'Chư
   }
 
   return (
-    <div className="custom-scrollbar flex max-h-64 flex-col gap-4 overflow-y-auto">
+    <div
+      className={`flex flex-col gap-4${scrollable ? ' custom-scrollbar max-h-64 overflow-y-auto' : ''}`}
+    >
       {items.map((item) => {
         const view = activityPresentation(item)
         return (
