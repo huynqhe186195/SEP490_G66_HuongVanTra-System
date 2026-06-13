@@ -72,6 +72,7 @@ function ProductFormPage({ mode }) {
   const [session, setSession] = useState(() => loadAuthSession())
   const canEdit = canCreateCatalog(session)
   const canAdjustStock = canAdjustStoreStock(session)
+  const stockOnlyAccess = isEditMode && !canEdit && canAdjustStock
 
   const [categories, setCategories] = useState([])
   const [isLoading, setIsLoading] = useState(isEditMode)
@@ -126,8 +127,14 @@ function ProductFormPage({ mode }) {
   }, [])
 
   useEffect(() => {
-    if (!canEdit) navigate('/products', { replace: true })
-  }, [canEdit, navigate])
+    if (!isEditMode && !canEdit) {
+      navigate('/products', { replace: true })
+      return
+    }
+    if (isEditMode && !canEdit && !canAdjustStock) {
+      navigate('/products', { replace: true })
+    }
+  }, [canEdit, canAdjustStock, isEditMode, navigate])
 
   useEffect(() => {
     if (!isEditMode || !id) return undefined
@@ -527,6 +534,45 @@ function ProductFormPage({ mode }) {
     )
   }
 
+  if (stockOnlyAccess && id) {
+    return (
+      <PageShell>
+        <div className="space-y-6">
+          <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-start">
+            <div>
+              <h1 className="text-2xl font-extrabold text-slate-800">Gửi yêu cầu điều chỉnh tồn</h1>
+              <p className="mt-1 text-sm text-slate-500">
+                {form.name ? (
+                  <>
+                    Sản phẩm: <span className="font-semibold text-[#356647]">{form.name}</span> — chọn SKU và nhập số
+                    lượng cần nhập từ kho hoặc giảm tại cửa hàng.
+                  </>
+                ) : (
+                  'Chọn SKU và nhập số lượng cần nhập từ kho hoặc giảm tại cửa hàng.'
+                )}
+              </p>
+            </div>
+            <Link
+              className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
+              to="/products"
+            >
+              Quay lại
+            </Link>
+          </div>
+          <ProductSkusPanel
+            productId={id}
+            productName={form.name}
+            canManage={false}
+            canAdjustStock
+            warehouseStockView={false}
+            layout="column"
+            stockOnlyMode
+          />
+        </div>
+      </PageShell>
+    )
+  }
+
   const inputClass = 'mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-[#538463] focus:ring-2 focus:ring-[#538463]/15 disabled:bg-slate-100 disabled:text-slate-500'
   const labelClass = 'text-xs font-bold uppercase tracking-wide text-slate-500'
 
@@ -815,7 +861,7 @@ function ProductFormPage({ mode }) {
 
         {isEditMode && id ? (
           <section className="rounded-[1rem] bg-white p-4 shadow-sm sm:p-6 lg:p-8">
-            <ProductSkusPanel productId={id} canManage={canEdit} canAdjustStock={canAdjustStock} warehouseStockView={canEdit} layout="column" />
+            <ProductSkusPanel productId={id} productName={form.name} canManage={canEdit} canAdjustStock={canAdjustStock} warehouseStockView={canEdit} layout="column" />
           </section>
         ) : null}
       </form>

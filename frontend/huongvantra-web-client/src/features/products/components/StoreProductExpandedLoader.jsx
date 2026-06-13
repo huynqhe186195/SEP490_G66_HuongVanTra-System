@@ -3,7 +3,7 @@ import { showError } from '../../../app/toast.js'
 import { fetchProductById } from '../services/productsApi.js'
 import ProductExpandedPanel from './ProductExpandedPanel.jsx'
 
-export default function StoreProductExpandedLoader({ sku, stockBySkuId }) {
+export default function StoreProductExpandedLoader({ sku, stockBySkuId, canAdjustStock = false }) {
   const [product, setProduct] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
 
@@ -59,6 +59,7 @@ export default function StoreProductExpandedLoader({ sku, stockBySkuId }) {
       stockLabel="Tồn cửa hàng"
       activeSkuId={sku.id}
       readOnly
+      canAdjustStock={canAdjustStock}
     />
   )
 }
