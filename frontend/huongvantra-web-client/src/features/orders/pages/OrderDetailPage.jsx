@@ -6,6 +6,7 @@ import { loadAuthSession } from '../../auth/services/authSession.js'
 import { canCreateOrder } from '../../auth/utils/permissions.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import CodVerifyModal from '../components/CodVerifyModal.jsx'
+import ConfirmDialog from '../../../components/shared/ConfirmDialog.jsx'
 import { parseCodDebtSettlement } from '../../customers/utils/codDebtSettlementUtils.js'
 import OrderCustomerCell from '../components/OrderCustomerCell.jsx'
 import OrderProductsSection from '../components/OrderProductsSection.jsx'
@@ -39,8 +40,8 @@ import {
   getOrderStatusClass,
   getOrderStatusLabel,
   getPaymentMethodLabel,
-  getPaymentStatusClass,
-  getPaymentStatusLabel,
+  resolveOrderPaymentDisplay,
+  getOrderRemainingDebt,
   getPrimaryPayment,
 } from '../utils/orderDisplay.js'
 import { fetchAllActiveSkus } from '../../products/services/productSkusApi.js'
@@ -59,6 +60,7 @@ function OrderDetailPage() {
   const [isSaving, setIsSaving] = useState(false)
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false)
   const [isCodVerifyOpen, setIsCodVerifyOpen] = useState(false)
+  const [confirmCancelOpen, setConfirmCancelOpen] = useState(false)
   const [timelineRefreshKey, setTimelineRefreshKey] = useState(0)
   const [catalogLookups, setCatalogLookups] = useState(() => buildProductCatalogLookups())
   const [orderReturns, setOrderReturns] = useState([])
@@ -154,6 +156,22 @@ function OrderDetailPage() {
     }))
   }, [order?.items, catalogLookups])
 
+  async function handleConfirmCancel() {
+    if (!canManage || !order) return
+    setConfirmCancelOpen(false)
+    try {
+      setIsSaving(true)
+      await cancelOrder(order.id)
+      showSuccess('Đã hủy đơn hàng.')
+      await loadOrder()
+      setTimelineRefreshKey((key) => key + 1)
+    } catch (error) {
+      showError(error.message)
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
   async function runAction(action) {
     if (!canManage || !order) return
     try {
@@ -165,9 +183,9 @@ function OrderDetailPage() {
         await completeOrder(order.id)
         showSuccess('Đã hoàn tất đơn hàng.')
       } else if (action === 'cancel') {
-        if (!window.confirm('Hủy đơn hàng này?')) return
-        await cancelOrder(order.id)
-        showSuccess('Đã hủy đơn hàng.')
+        setIsSaving(false)
+        setConfirmCancelOpen(true)
+        return
       }
       await loadOrder()
       setTimelineRefreshKey((key) => key + 1)
@@ -205,6 +223,8 @@ function OrderDetailPage() {
   }
 
   const payment = getPrimaryPayment(order)
+  const paymentDisplay = resolveOrderPaymentDisplay(order)
+  const orderRemainingDebt = getOrderRemainingDebt(order)
   const showTransferQr = isPendingTransferPayment(order)
   const compactProducts = isPendingPaymentOrder(order)
   const inventorySyncMeta = resolveInventorySyncMeta(order)
@@ -301,10 +321,24 @@ function OrderDetailPage() {
             <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
               <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-400">Thanh toán</h2>
               <p className="text-sm text-slate-700">{getPaymentMethodLabel(payment.paymentMethod)}</p>
-              <p className="mt-1 text-sm font-semibold">{formatVnd(payment.amount)}</p>
-              <span className={`mt-2 inline-block rounded-full px-3 py-1 text-xs font-semibold ${getPaymentStatusClass(payment.paymentStatus)}`}>
-                {getPaymentStatusLabel(payment.paymentStatus)}
+              <p className="mt-1 text-sm">
+                <span className="text-slate-500">{paymentDisplay.amountCaption}: </span>
+                <span className="font-semibold text-slate-800">{formatVnd(paymentDisplay.displayAmount)}</span>
+              </p>
+              <span className={`mt-2 inline-block rounded-full px-3 py-1 text-xs font-semibold ${paymentDisplay.className}`}>
+                {paymentDisplay.label}
               </span>
+              {paymentDisplay.detail ? (
+                <p className="mt-2 text-xs text-amber-800">{paymentDisplay.detail}</p>
+              ) : null}
+              {orderRemainingDebt > 0 && order.customerId ? (
+                <p className="mt-2 text-xs text-[#7e5700]">
+                  Còn nợ {formatVnd(orderRemainingDebt)} đã ghi vào công nợ khách.{' '}
+                  <Link to={`/customers/${order.customerId}/edit`} className="font-semibold underline">
+                    Xem hóa đơn nợ
+                  </Link>
+                </p>
+              ) : null}
               {payment.isCodVerified ? (
                 <p className="mt-2 text-xs text-emerald-700">COD đã xác nhận</p>
               ) : null}
@@ -412,6 +446,16 @@ function OrderDetailPage() {
         isSaving={isSaving}
         onClose={() => setIsUpdateModalOpen(false)}
         onSave={handleSaveMeta}
+      />
+
+      <ConfirmDialog
+        isOpen={confirmCancelOpen}
+        title="Hủy đơn hàng"
+        message={`Bạn có chắc muốn hủy đơn ${order.orderCode}? Thao tác này không thể hoàn tác.`}
+        confirmLabel="Hủy đơn"
+        cancelLabel="Giữ đơn"
+        onConfirm={handleConfirmCancel}
+        onCancel={() => setConfirmCancelOpen(false)}
       />
 
     </div>

@@ -19,14 +19,17 @@ import {
   fetchCustomerOpenDebts,
 } from '../../customers/services/customersApi.js'
 import OverpaymentDebtModal from '../../customers/components/OverpaymentDebtModal.jsx'
-import { clampDebtSettlement } from '../../customers/utils/debtAllocationEditor.js'
+import {
+  clampDebtSettlement,
+  resolveMaxDebtPayable,
+} from '../../customers/utils/debtAllocationEditor.js'
 import { serializeCodDebtSettlement } from '../../customers/utils/codDebtSettlementUtils.js'
 import { buildDebtReceiptFromPayment } from '../../customers/utils/debtPaymentUtils.js'
 import {
   applyPromotionPreview,
-  buildTakeawayOrderPayload,
   createPosOrderOffline,
   createPosOrderOnline,
+  createPosOrderTransferRecorded,
   createTakeawayCodOrder,
   createTakeawayVietQrOrder,
   fetchApplicablePromotions,
@@ -257,6 +260,7 @@ function PosPage() {
   const [isPriceFilterOpen, setIsPriceFilterOpen] = useState(false)
   const [priceFilter, setPriceFilter] = useState('')
   const promotionCartSignatureRef = useRef('')
+  const previousCustomerIdRef = useRef(null)
 
   const isTakeaway = salesMode === 'takeaway'
   const workspace = workspaceByMode[salesMode]
@@ -433,11 +437,10 @@ function PosPage() {
       ? 0
       : Math.max(total - transferQrAmount, 0)
     : Math.max(total - recordedPaymentAmount, 0)
-  const debtReductionFromOverpay =
-    overpaymentAction === 'apply_to_debt' && change > 0 && customerCurrentDebt > 0
-      ? Math.min(change, customerCurrentDebt)
-      : 0
-  const displayChange = Math.max(change - debtReductionFromOverpay, 0)
+  const confirmedDebtAllocation = debtSettlement?.payDebtsEnabled
+    ? Math.max(0, Number(debtSettlement.allocatedAmount || 0))
+    : 0
+  const displayChange = Math.max(change - confirmedDebtAllocation, 0)
   const isTransferQrFlow = isTransferPayment && !isTakeaway
   const isDebtSale = !isTransferPayment && amountPaid === 0 && total > 0
   const isPartialPayment = amountPaid > 0 && amountPaid < total
@@ -467,11 +470,38 @@ function PosPage() {
   }, [selectedCustomer?.customerId, customerCurrentDebt])
 
   useEffect(() => {
-    if (debtSettlement) {
+    const customerId = selectedCustomer?.customerId ?? null
+    if (
+      previousCustomerIdRef.current
+      && customerId
+      && previousCustomerIdRef.current !== customerId
+      && debtSettlement
+    ) {
       updateActiveSession({ debtSettlement: null, overpaymentAction: 'return_change' })
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset debt plan when payment inputs change
-  }, [selectedCustomer?.customerId, change, amountPaidInput])
+    previousCustomerIdRef.current = customerId
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset debt plan only when switching customers
+  }, [selectedCustomer?.customerId])
+
+  useEffect(() => {
+    if (!debtSettlement?.payDebtsEnabled) return
+
+    const maxPayable = resolveMaxDebtPayable(change, customerCurrentDebt)
+    const clamped = clampDebtSettlement(debtSettlement, maxPayable, customerOpenDebts, change)
+    const prevAllocated = Number(debtSettlement.allocatedAmount || 0)
+    const nextAllocated = Number(clamped.allocatedAmount || 0)
+    const prevCredit = Number(debtSettlement.creditToCustomer ?? 0)
+    const nextCredit = Number(clamped.creditToCustomer ?? 0)
+
+    if (
+      prevAllocated !== nextAllocated
+      || prevCredit !== nextCredit
+      || JSON.stringify(debtSettlement.allocations || []) !== JSON.stringify(clamped.allocations || [])
+    ) {
+      updateActiveSession({ debtSettlement: clamped })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-clamp debt plan when payment inputs change
+  }, [selectedCustomer?.customerId, change, amountPaidInput, customerCurrentDebt, customerOpenDebts])
 
   useEffect(() => {
     let cancelled = false
@@ -1189,7 +1219,9 @@ function PosPage() {
 
   const buildOrderPayload = (method, amount) => {
     const storeId = resolvePosStoreId()
-    const manualDiscount = Math.round(itemDiscountTotal + orderDiscountAmount)
+    const manualDiscount = Math.round(
+      itemDiscountTotal + orderDiscountAmount + membershipDiscountAmount,
+    )
     return {
       storeId,
       customerId: selectedCustomer.customerId,
@@ -1264,13 +1296,19 @@ function PosPage() {
 
   const resolveDebtApplyAmount = (overrideSettlement) => {
     const settlement = overrideSettlement ?? debtSettlement
-    if (!settlement) {
-      return overpaymentAction === 'apply_to_debt' ? debtReductionFromOverpay : 0
-    }
-    return settlement.payDebtsEnabled ? Number(settlement.allocatedAmount || 0) : 0
+    if (!settlement?.payDebtsEnabled) return 0
+
+    const allocated = Number(settlement.allocatedAmount || 0)
+    if (allocated > 0) return allocated
+
+    const maxPayable = resolveMaxDebtPayable(change, customerCurrentDebt)
+    return maxPayable > 0 ? maxPayable : 0
   }
 
   const resolveChangeAfterDebt = (debtSettlement, debtApplyAmount) => {
+    if (debtSettlement && debtSettlement.creditToCustomer != null) {
+      return Math.max(0, Number(debtSettlement.creditToCustomer) || 0)
+    }
     if (debtSettlement) {
       return Math.max(change - debtApplyAmount, 0)
     }
@@ -1320,13 +1358,20 @@ function PosPage() {
 
     let debtPayment = null
     if (debtApplyAmount > 0 && selectedCustomer?.customerId) {
-      debtPayment = await applyOverpaymentToDebt(
-        selectedCustomer.customerId,
-        result.orderCode,
-        result.orderId,
-        debtApplyAmount,
-        debtSettlement?.allocations ?? null,
-      )
+      try {
+        debtPayment = await applyOverpaymentToDebt(
+          selectedCustomer.customerId,
+          result.orderCode,
+          result.orderId,
+          debtApplyAmount,
+          debtSettlement?.allocations?.length ? debtSettlement.allocations : null,
+        )
+      } catch (error) {
+        showError(
+          `Đơn ${result.orderCode} đã tạo nhưng trừ công nợ thất bại: ${error.message || 'Lỗi không xác định'}`,
+        )
+        throw error
+      }
     }
 
     if (recordedPaymentAmount >= total) {
@@ -1484,6 +1529,16 @@ function PosPage() {
     }
 
     if (isTransferPayment) {
+      const isTransferRecorded = amountPaid > 0 && amountPaid >= transferQrAmount
+      if (isTransferRecorded) {
+        await finalizeRecordedPayment({
+          method: 'TRANSFER',
+          createOrder: createPosOrderTransferRecorded,
+          debtSettlement,
+        })
+        return
+      }
+
       const payload = buildOrderPayload('TRANSFER', 0)
       const result = await createPosOrderOnline(payload, { qrAmount: transferQrAmount })
       const transferDebtSettlement = buildTransferDebtSettlement(debtSettlement, result.orderId)
@@ -2230,9 +2285,7 @@ function PosPage() {
         overpaymentAction={overpaymentAction}
         onOverpaymentActionChange={handleOverpaymentActionChange}
         onOpenDebtAllocation={handleOpenDebtAllocation}
-        confirmedDebtAllocationAmount={
-          debtSettlement?.payDebtsEnabled ? Number(debtSettlement.allocatedAmount || 0) : 0
-        }
+        confirmedDebtAllocationAmount={confirmedDebtAllocation}
         isDebtSale={isDebtSale}
         isPartialPayment={isPartialPayment}
         isTransferQrFlow={isTransferQrFlow}

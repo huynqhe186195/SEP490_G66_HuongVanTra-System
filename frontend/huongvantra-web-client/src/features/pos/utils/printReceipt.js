@@ -26,10 +26,11 @@ function printReceiptHtml(paperHtml, { title = 'Hóa đơn' } = {}) {
 <html lang="vi">
 <head>
   <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>${title}</title>
   <style>${RECEIPT_PRINT_CSS}</style>
 </head>
-<body>${paperHtml}</body>
+<body><div class="thermal-print-shell">${paperHtml}</div></body>
 </html>`,
     )
     doc.close()
