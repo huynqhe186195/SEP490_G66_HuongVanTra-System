@@ -187,11 +187,15 @@ public class CustomerLogic
 
         if (debtAmount > 0)
         {
-            customer.CurrentDebt += debtAmount;
-            await RecordDebtAsync(customer, DebtTransactionType.IncreaseDebt, debtAmount, "Order", orderId,
-                $"Mua chịu đơn {orderCode}", orderCode, ct);
-            await RecordActivityAsync(customerId, CustomerActivityType.DebtUpdated,
-                $"Công nợ +{debtAmount:N0} từ đơn {orderCode}", ct);
+            if (!await _debtRepo.HasOrderDebtAsync(orderId, ct))
+            {
+                await ReconcileCurrentDebtFromLedgerAsync(customer, ct);
+                customer.CurrentDebt += debtAmount;
+                await RecordDebtAsync(customer, DebtTransactionType.IncreaseDebt, debtAmount, "Order", orderId,
+                    $"Mua chịu đơn {orderCode}", orderCode, ct);
+                await RecordActivityAsync(customerId, CustomerActivityType.DebtUpdated,
+                    $"Công nợ +{debtAmount:N0} từ đơn {orderCode}", ct);
+            }
         }
 
         customer.UpdatedAt = DateTime.UtcNow;
@@ -317,6 +321,8 @@ public class CustomerLogic
 
         EnsureCanAccess(customer, access);
 
+        await ReconcileCurrentDebtFromLedgerAsync(customer, ct);
+
         var openDebts = await BuildOpenDebtItemsAsync(customerId, ct);
         var allocationPlans = request.Allocations is { Count: > 0 }
             ? BuildExplicitAllocations(request.Allocations, openDebts)
@@ -411,7 +417,7 @@ public class CustomerLogic
         EnsureCanAccess(customer, access);
 
         var items = await _debtRepo.GetByCustomerIdAsync(customerId, ct);
-        return items.Select(MapDebt);
+        return MapDebtsWithLedgerBalances(items);
     }
 
     public async Task<CustomerDebtSummaryResponse> GetDebtSummaryAsync(
@@ -424,6 +430,7 @@ public class CustomerLogic
 
         EnsureCanAccess(customer, access);
 
+        await ReconcileCurrentDebtFromLedgerAsync(customer, ct);
         var (increase, decrease, count) = await _debtRepo.GetSummaryAsync(customerId, ct);
         return new CustomerDebtSummaryResponse(customer.CurrentDebt, increase, decrease, count);
     }
@@ -479,6 +486,7 @@ public class CustomerLogic
             ?? throw new CustomerNotFoundException(id);
 
         EnsureCanAccess(customer, access);
+        await ReconcileCurrentDebtFromLedgerAsync(customer, ct);
         return MapToDetailResponse(customer);
     }
 
@@ -1014,6 +1022,48 @@ public class CustomerLogic
 
     private static CustomerDebtTransactionResponse MapDebt(CustomerDebtTransaction t) =>
         new(t.Id, t.CustomerId, t.Type, t.Amount, t.BalanceAfter, t.ReferenceType, t.ReferenceId, t.Note, t.CreatedAt);
+
+    private static IEnumerable<CustomerDebtTransactionResponse> MapDebtsWithLedgerBalances(
+        IEnumerable<CustomerDebtTransaction> items)
+    {
+        var ordered = items.OrderBy(t => t.CreatedAt).ThenBy(t => t.Id).ToList();
+        decimal balance = 0;
+        var results = new List<CustomerDebtTransactionResponse>();
+
+        foreach (var transaction in ordered)
+        {
+            balance = transaction.Type == DebtTransactionType.IncreaseDebt
+                ? balance + transaction.Amount
+                : Math.Max(0, balance - transaction.Amount);
+
+            results.Add(new CustomerDebtTransactionResponse(
+                transaction.Id,
+                transaction.CustomerId,
+                transaction.Type,
+                transaction.Amount,
+                balance,
+                transaction.ReferenceType,
+                transaction.ReferenceId,
+                transaction.Note,
+                transaction.CreatedAt));
+        }
+
+        return results
+            .OrderByDescending(t => t.CreatedAt)
+            .ThenByDescending(t => t.Id);
+    }
+
+    private async Task ReconcileCurrentDebtFromLedgerAsync(Customer customer, CancellationToken ct)
+    {
+        var ledgerBalance = await _debtRepo.GetLedgerBalanceAsync(customer.Id, ct);
+        if (customer.CurrentDebt == ledgerBalance)
+            return;
+
+        customer.CurrentDebt = ledgerBalance;
+        customer.UpdatedAt = DateTime.UtcNow;
+        _customerRepo.Update(customer);
+        await _customerRepo.SaveChangesAsync(ct);
+    }
 
     private static CustomerResponse MapToResponse(Customer c) =>
         new(c.Id, c.CustomerCode, c.FullName, c.PhoneNumber, c.Email, c.CustomerGroup, c.TaxCode,

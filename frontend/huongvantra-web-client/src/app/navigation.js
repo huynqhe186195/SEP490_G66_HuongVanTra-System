@@ -243,6 +243,10 @@ export function canAccessModule(session, module) {
     return false
   }
 
+  if (String(module).toLowerCase() === 'pos' && session?.permissions?.length) {
+    return session.permissions.includes('CREATE_ORDER')
+  }
+
   if (session?.modules?.length) {
     const normalizedModule = String(module).toLowerCase()
     if (session.modules.some((entry) => entry.toLowerCase() === normalizedModule)) {
@@ -286,6 +290,9 @@ export function canConfirmStockDeduct(session) {
 
 export function getAccessDeniedMessage(pathname) {
   const module = getModuleForPath(pathname)
+  if (module === 'pos') {
+    return 'Tài khoản không có quyền tạo đơn (CREATE_ORDER). Vui lòng đăng nhập bằng Sale hoặc Quản lý, hoặc đăng xuất và đăng nhập lại sau khi quyền được cập nhật.'
+  }
   if (module === 'cod_ops') {
     return 'Chỉ Quản lý chi nhánh mới được truy cập Quản lý COD.'
   }

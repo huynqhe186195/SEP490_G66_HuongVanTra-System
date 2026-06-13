@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
-import { fetchRoleOptions, fetchStaffAccount, updateStaffAccount } from '../services/staffApi.js'
+import { fetchStaffAccount, updateStaffAccount } from '../services/staffApi.js'
 
 const loginHistory = [
   { id: '1', channel: 'He thong POS 02', time: '14:20', date: 'Lan cuoi: Hom nay', icon: 'devices', active: true },
@@ -15,13 +15,12 @@ function StaffDetailPage() {
   const { id: employeeId } = useParams()
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
-  const [roleOptions, setRoleOptions] = useState([])
+  const [currentRoles, setCurrentRoles] = useState([])
   const [form, setForm] = useState({
     fullName: '',
     phone: '',
     username: '',
     employeeCode: '',
-    role: '',
     note: '',
     newPassword: '',
     active: true,
@@ -37,16 +36,15 @@ function StaffDetailPage() {
     let mounted = true
     const loadData = async () => {
       try {
-        const [account, roles] = await Promise.all([fetchStaffAccount(employeeId), fetchRoleOptions()])
+        const account = await fetchStaffAccount(employeeId)
         if (!mounted) return
 
-        setRoleOptions(roles || [])
+        setCurrentRoles(account.roles || [])
         setForm({
           fullName: account.fullName || '',
           phone: account.phone || '',
           username: account.username || '',
           employeeCode: account.employeeCode || '',
-          role: account.roles?.[0] || '',
           note: account.note || '',
           newPassword: '',
           active: Boolean(account.isActive),
@@ -81,10 +79,6 @@ function StaffDetailPage() {
         showError('Vui lòng nhập đủ họ tên, số điện thoại và tên đăng nhập.')
         return
       }
-      if (!form.role) {
-        showError('Vui lòng chọn vai trò nhân viên.')
-        return
-      }
     }
 
     setIsSaving(true)
@@ -95,7 +89,6 @@ function StaffDetailPage() {
         note: form.note,
         username: form.username,
         isActive: form.active,
-        role: form.role || undefined,
         newPassword: isDeactivating ? null : form.newPassword || null,
       })
 
@@ -112,7 +105,7 @@ function StaffDetailPage() {
     <PageShell className="[font-family:'Manrope',sans-serif]">
       <PageHeader
         title="Chi tiết nhân viên"
-        description="Xem và chỉnh sửa thông tin tài khoản, quyền truy cập và lịch sử đăng nhập"
+        description="Xem và chỉnh sửa thông tin tài khoản nhân viên"
         searchPlaceholder="Tìm kiếm hệ thống..."
       />
 
@@ -186,6 +179,15 @@ function StaffDetailPage() {
                 </label>
 
                 <label className="flex flex-col gap-2">
+                  <span className="text-xs font-semibold text-[#414942]">Vai trò</span>
+                  <input
+                    className="rounded-lg border-none bg-[#f0eee6] p-3 text-sm text-[#414942] shadow-inner"
+                    value={currentRoles.join(', ') || '—'}
+                    readOnly
+                  />
+                </label>
+
+                <label className="flex flex-col gap-2">
                   <span className="text-xs font-semibold text-[#414942]">Mat khau moi</span>
                   <input
                     type="password"
@@ -204,33 +206,6 @@ function StaffDetailPage() {
                     onChange={handleChange('note')}
                   />
                 </label>
-              </div>
-            </section>
-
-            <section className="rounded-xl bg-white p-5 shadow-[0px_4px_20px_rgba(0,0,0,0.04)]">
-              <div className="mb-6 flex items-center gap-2 text-[#356647]">
-                <span className="material-symbols-outlined">admin_panel_settings</span>
-                <h3 className="text-xl font-semibold">Gán quyền</h3>
-              </div>
-
-              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                <label className="flex flex-col gap-2">
-                  <span className="text-xs font-semibold text-[#414942]">Vai tro nhan vien</span>
-                  <div className="relative">
-                    <select
-                      className="w-full appearance-none rounded-lg border-none bg-[#f6f4ec] p-3 text-sm shadow-inner outline-none focus:ring-2 focus:ring-[#356647]/30"
-                      value={form.role}
-                      onChange={handleChange('role')}
-                    >
-                      <option value="">Chọn vai trò</option>
-                      {roleOptions.map((role) => (
-                        <option key={role.id} value={role.name}>{role.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                </label>
-
-          
               </div>
             </section>
 

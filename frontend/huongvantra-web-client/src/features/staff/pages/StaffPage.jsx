@@ -3,9 +3,12 @@ import { Link } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import { showError } from '../../../app/toast.js'
+import { AUTH_SESSION_CHANGED_EVENT, loadAuthSession } from '../../auth/services/authSession.js'
+import { getStaffManagementScopeLabel } from '../../auth/utils/permissions.js'
 import { fetchRoleOptions, fetchStaffAccounts } from '../services/staffApi.js'
 
 function StaffPage() {
+  const [authSession, setAuthSession] = useState(() => loadAuthSession())
   const [staffRows, setStaffRows] = useState([])
   const [roleOptions, setRoleOptions] = useState([])
   const [searchValue, setSearchValue] = useState('')
@@ -15,6 +18,14 @@ function StaffPage() {
   const [pageSize] = useState(10)
   const [totalCount, setTotalCount] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    const refreshSession = () => setAuthSession(loadAuthSession())
+    window.addEventListener(AUTH_SESSION_CHANGED_EVENT, refreshSession)
+    return () => window.removeEventListener(AUTH_SESSION_CHANGED_EVENT, refreshSession)
+  }, [])
+
+  const scopeLabel = getStaffManagementScopeLabel(authSession)
 
   useEffect(() => {
     let mounted = true
@@ -71,7 +82,7 @@ function StaffPage() {
     <PageShell className="[font-family:'Manrope',sans-serif]">
       <PageHeader
         title="Nhân viên"
-        description="Quản lý tài khoản nhân sự, trạng thái hoạt động và vai trò trong hệ thống"
+        description={scopeLabel}
       />
 
       <section className="rounded-[24px] border border-[#c1c9c0]/30 bg-white p-6 shadow-sm">
@@ -82,6 +93,7 @@ function StaffPage() {
             <span className="font-semibold text-[#356647]">Nhân viên</span>
           </div>
           <h1 className="text-2xl font-bold text-[#356647] sm:text-3xl">Quản lý nhân sự</h1>
+          <p className="mt-2 text-sm text-[#414942]">{scopeLabel}</p>
         </div>
 
         <div className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-3">

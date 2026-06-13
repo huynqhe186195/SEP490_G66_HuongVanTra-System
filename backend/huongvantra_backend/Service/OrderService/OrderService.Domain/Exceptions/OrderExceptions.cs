@@ -70,3 +70,9 @@ public class DuplicateOrderCodeException : Exception
     public DuplicateOrderCodeException(string code)
         : base($"Order code '{code}' already exists.") { }
 }
+
+public class OrderForbiddenException : Exception
+{
+    public OrderForbiddenException(string message = "Bạn không có quyền truy cập đơn hàng này.")
+        : base(message) { }
+}

@@ -21,13 +21,14 @@ public static class DataSeeder
         ("Accountant", "Kế toán",
         [PermissionNames.ViewOrder, PermissionNames.ViewAllCustomers]),
         ("Manager", "Quản lý",
-        [PermissionNames.ViewOrder, PermissionNames.ViewAllCustomers, PermissionNames.ManageEmployee,
+        [PermissionNames.CreateOrder, PermissionNames.ViewOrder, PermissionNames.ViewAllCustomers, PermissionNames.ManageEmployee,
          PermissionNames.CreateCustomer, PermissionNames.ViewCustomer])
     ];
 
     private static readonly (string Username, string FullName, string Department, string RoleName)[] DemoUsers =
     [
-        ("sale01", "Nguyen Van Sale", "Sales", "Sale")
+        ("sale01", "Nguyen Van Sale", "Sales", "Sale"),
+        ("manager01", "Tran Thi Manager", "Operations", "Manager")
     ];
 
     public static async Task SeedAsync(UserDbContext context)

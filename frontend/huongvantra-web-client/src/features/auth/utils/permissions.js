@@ -13,6 +13,15 @@ export function canViewAllCustomers(session) {
   return hasPermission(session, 'VIEW_ALL_CUSTOMERS') || hasPermission(session, 'MANAGE_ROLE')
 }
 
+/** Manager/Admin/Kế toán xem mọi đơn; Sale chỉ đơn do mình tạo (EmployeeId). */
+export function canViewAllOrders(session) {
+  return (
+    hasPermission(session, 'VIEW_ALL_CUSTOMERS')
+    || hasPermission(session, 'MANAGE_EMPLOYEE')
+    || hasPermission(session, 'MANAGE_ROLE')
+  )
+}
+
 /** Quản lý hồ sơ KH trên trang /customers (tạo/sửa/xóa). Sale chỉ xem; tạo tại POS vẫn dùng API create. */
 export function canEditCustomer(session) {
   return canViewAllCustomers(session)
@@ -58,4 +67,18 @@ export function canCreateOrder(session) {
 
 export function canAdjustStoreStock(session) {
   return hasPermission(session, 'VIEW_ORDER') || hasPermission(session, 'MANAGE_ROLE')
+}
+
+export function isSystemAdmin(session) {
+  return hasPermission(session, 'MANAGE_ROLE')
+}
+
+export function isBranchManager(session) {
+  return hasPermission(session, 'MANAGE_EMPLOYEE') && !isSystemAdmin(session)
+}
+
+export function getStaffManagementScopeLabel(session) {
+  if (isSystemAdmin(session)) return 'Quản lý nhân sự: Warehouse, Accountant, Manager'
+  if (isBranchManager(session)) return 'Quản lý nhân sự: Sale'
+  return 'Quản lý nhân sự'
 }

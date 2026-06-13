@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { showError } from '../../../app/toast.js'
+import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import { fetchCustomerDebts, fetchCustomerDebtSummary } from '../services/customersApi.js'
 import { formatDebtVnd, formatVnd } from '../utils/customerDisplay.js'
 
@@ -74,6 +75,7 @@ function CustomerDebtHistory({ customerId, refreshKey = 0 }) {
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="text-[#717971]">
+                <th className="pb-2 font-semibold">Thời gian</th>
                 <th className="pb-2 font-semibold">Loại</th>
                 <th className="pb-2 font-semibold">Số tiền</th>
                 <th className="pb-2 font-semibold">Dư sau GD</th>
@@ -83,6 +85,9 @@ function CustomerDebtHistory({ customerId, refreshKey = 0 }) {
             <tbody className="divide-y divide-[#f0eee6]">
               {debts.map((item) => (
                 <tr key={item.id}>
+                  <td className="py-2 pr-2 whitespace-nowrap text-[#717971]">
+                    {item.createdAt ? formatVietnamDateTime(item.createdAt) : '—'}
+                  </td>
                   <td className="py-2 pr-2">{formatDebtType(item.type)}</td>
                   <td className="py-2 pr-2 font-semibold">{formatVnd(item.amount)}</td>
                   <td className="py-2 pr-2">{formatDebtVnd(item.balanceAfter)}</td>

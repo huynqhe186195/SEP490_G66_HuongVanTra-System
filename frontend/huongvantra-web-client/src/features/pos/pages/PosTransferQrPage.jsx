@@ -11,7 +11,7 @@ import {
 } from '../services/posApi.js'
 import { isQrExpired, useQrExpiryCountdown } from '../utils/qrExpiry.js'
 import { vietnamNowLabel } from '../../../utils/vietnamDateTime.js'
-import { applyCustomerDebtPayment } from '../../customers/services/customersApi.js'
+import { applyCustomerDebtPaymentWithRetry } from '../../customers/services/customersApi.js'
 import { buildDebtReceiptFromPayment } from '../../customers/utils/debtPaymentUtils.js'
 import { printReceiptSequence } from '../utils/printReceipt.js'
 
@@ -89,7 +89,7 @@ function PosTransferQrPage() {
 
       if (debtSettlement?.customerId && debtSettlement.amount > 0) {
         try {
-          const debtPayment = await applyCustomerDebtPayment(debtSettlement.customerId, {
+          const debtPayment = await applyCustomerDebtPaymentWithRetry(debtSettlement.customerId, {
             amount: debtSettlement.amount,
             note: `Trừ từ tiền thừa đơn ${orderCode}`,
             sourceOrderId: debtSettlement.orderId || payment?.orderId,

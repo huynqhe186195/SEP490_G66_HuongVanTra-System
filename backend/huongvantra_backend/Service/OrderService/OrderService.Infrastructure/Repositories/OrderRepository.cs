@@ -26,9 +26,13 @@ public class OrderRepository(OrderDbContext _db) : IOrderRepository
         string? search, Guid? customerId, string? status, string? channel,
         string? excludeChannel, string? codTab, bool returnableOnly,
         string? orderKind, string? excludeOrderKind,
+        Guid? employeeId,
         int page, int pageSize, CancellationToken ct = default)
     {
         var query = _db.Orders.AsQueryable();
+
+        if (employeeId.HasValue)
+            query = query.Where(o => o.EmployeeId == employeeId.Value);
 
         if (!string.IsNullOrWhiteSpace(search))
         {
@@ -68,13 +72,14 @@ public class OrderRepository(OrderDbContext _db) : IOrderRepository
             }
             else if (codTabKey == "overdue")
             {
-                var now = DateTime.UtcNow;
+                var overdueCutoff = DateTime.UtcNow.AddDays(-7);
                 query = query.Where(o =>
-                    o.Payments.Any(p =>
+                    o.OrderStatus != OrderStatus.Completed
+                    && o.OrderStatus != OrderStatus.Cancelled
+                    && o.CreatedAt <= overdueCutoff
+                    && o.Payments.Any(p =>
                         p.PaymentMethod == PaymentMethod.COD
-                        && !p.IsCodVerified
-                        && p.CodWarningDate != null
-                        && p.CodWarningDate <= now));
+                        && !p.IsCodVerified));
             }
             else if (codTabKey == "done")
             {

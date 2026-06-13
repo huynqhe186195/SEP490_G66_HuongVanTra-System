@@ -1,5 +1,6 @@
 using System.Globalization;
 using Microsoft.Extensions.Options;
+using OrderService.Application.Authorization;
 using OrderService.Application.DTOs.Requests;
 using OrderService.Application.DTOs.Responses;
 using OrderService.Application.Interfaces;
@@ -25,13 +26,14 @@ public class OrderLogic(
     private const int MaxActivities = 100;
 
     public async Task<PagedResponse<OrderSummaryResponse>> GetPagedAsync(
-        GetOrdersRequest req, CancellationToken ct = default)
+        GetOrdersRequest req, OrderAccessContext access, CancellationToken ct = default)
     {
         OrderInputValidator.ValidatePagination(req.Page, req.PageSize);
         var (items, total) = await _orderRepo.GetPagedAsync(
             req.Search, req.CustomerId, req.Status, req.Channel,
             req.ExcludeChannel, req.CodTab, req.ReturnableOnly,
             req.OrderKind, req.ExcludeOrderKind,
+            access.EmployeeFilter,
             req.Page, req.PageSize, ct);
 
         var dtos = items.Select(MapToSummary).ToList();
@@ -40,10 +42,11 @@ public class OrderLogic(
             (int)Math.Ceiling((double)total / req.PageSize));
     }
 
-    public async Task<OrderResponse> GetByIdAsync(Guid id, CancellationToken ct = default)
+    public async Task<OrderResponse> GetByIdAsync(Guid id, OrderAccessContext access, CancellationToken ct = default)
     {
         var order = await _orderRepo.GetByIdAsync(id, ct)
             ?? throw new OrderNotFoundException(id);
+        EnsureCanAccess(order, access);
         if (await RepairInconsistentPaymentsAsync(order, ct))
             await _orderRepo.SaveChangesAsync(ct);
         if (await RepairMissingPosTierDiscountAsync(order, ct))
@@ -51,12 +54,13 @@ public class OrderLogic(
         return MapToResponse(order);
     }
 
-    public async Task<OrderResponse> GetByCodeAsync(string code, CancellationToken ct = default)
+    public async Task<OrderResponse> GetByCodeAsync(string code, OrderAccessContext access, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(code))
             throw new OrderValidationException("Mã đơn hàng không được để trống.");
         var order = await _orderRepo.GetByCodeAsync(code.Trim().ToUpperInvariant(), ct)
             ?? throw new OrderNotFoundByCodeException(code);
+        EnsureCanAccess(order, access);
         if (await RepairInconsistentPaymentsAsync(order, ct))
             await _orderRepo.SaveChangesAsync(ct);
         if (await RepairMissingPosTierDiscountAsync(order, ct))
@@ -64,20 +68,23 @@ public class OrderLogic(
         return MapToResponse(order);
     }
 
-    public async Task<List<OrderActivityResponse>> GetActivitiesAsync(Guid orderId, CancellationToken ct = default)
+    public async Task<List<OrderActivityResponse>> GetActivitiesAsync(
+        Guid orderId, OrderAccessContext access, CancellationToken ct = default)
     {
-        _ = await _orderRepo.GetByIdAsync(orderId, ct)
+        var order = await _orderRepo.GetByIdAsync(orderId, ct)
             ?? throw new OrderNotFoundException(orderId);
+        EnsureCanAccess(order, access);
 
         var items = await _activityRepo.GetByOrderIdAsync(orderId, MaxActivities, ct);
         return items.Select(MapActivity).ToList();
     }
 
     public async Task<PagedResponse<ReturnOrderSummaryResponse>> GetReturnsPagedAsync(
-        string? search, string? sourceChannel, int page, int pageSize, CancellationToken ct = default)
+        string? search, string? sourceChannel, OrderAccessContext access, int page, int pageSize, CancellationToken ct = default)
     {
         OrderInputValidator.ValidatePagination(page, pageSize);
-        var (items, total) = await _returnOrderRepo.GetPagedAsync(search, sourceChannel, page, pageSize, ct);
+        var (items, total) = await _returnOrderRepo.GetPagedAsync(
+            search, sourceChannel, access.EmployeeFilter, page, pageSize, ct);
         var dtos = new List<ReturnOrderSummaryResponse>(items.Count);
 
         foreach (var (item, sourceOrderChannel) in items)
@@ -94,12 +101,15 @@ public class OrderLogic(
             (int)Math.Ceiling((double)total / pageSize));
     }
 
-    public async Task<ReturnOrderDetailResponse> GetReturnByIdAsync(Guid id, CancellationToken ct = default)
+    public async Task<ReturnOrderDetailResponse> GetReturnByIdAsync(
+        Guid id, OrderAccessContext access, CancellationToken ct = default)
     {
         var item = await _returnOrderRepo.GetByIdAsync(id, ct)
             ?? throw new ReturnOrderNotFoundException(id);
 
-        var sourceOrder = await _orderRepo.GetByIdAsync(item.SourceOrderId, ct);
+        var sourceOrder = await _orderRepo.GetByIdAsync(item.SourceOrderId, ct)
+            ?? throw new OrderNotFoundException(item.SourceOrderId);
+        EnsureCanAccess(sourceOrder, access);
         var sourceChannel = sourceOrder?.OrderChannel ?? OrderChannel.POS;
 
         string? exchangeCode = null;
@@ -110,10 +120,11 @@ public class OrderLogic(
     }
 
     public async Task<List<ReturnOrderSummaryResponse>> GetReturnsByOrderIdAsync(
-        Guid orderId, CancellationToken ct = default)
+        Guid orderId, OrderAccessContext access, CancellationToken ct = default)
     {
         var sourceOrder = await _orderRepo.GetByIdAsync(orderId, ct)
             ?? throw new OrderNotFoundException(orderId);
+        EnsureCanAccess(sourceOrder, access);
 
         var items = await _returnOrderRepo.GetBySourceOrderIdAsync(orderId, ct);
         var dtos = new List<ReturnOrderSummaryResponse>(items.Count);
@@ -131,7 +142,11 @@ public class OrderLogic(
     }
 
     public async Task<OrderResponse> CreateAsync(
-        CreateOrderRequest req, Guid? actorId = null, string? actorName = null, CancellationToken ct = default)
+        CreateOrderRequest req,
+        OrderAccessContext access,
+        Guid? actorId = null,
+        string? actorName = null,
+        CancellationToken ct = default)
     {
         var detailInputs = req.Items.Select(i =>
         {
@@ -171,13 +186,22 @@ public class OrderLogic(
 
         var isPosCompletedOnCreate = isPosCashCompleted || isPosRecordedTransferCompleted;
 
+        var ownerId = access.CanViewAllOrders ? (req.EmployeeId ?? actorId) : actorId;
+        if (!access.CanViewAllOrders
+            && req.EmployeeId.HasValue
+            && actorId.HasValue
+            && req.EmployeeId.Value != actorId.Value)
+        {
+            throw new OrderForbiddenException();
+        }
+
         var order = new Order
         {
             Id = Guid.NewGuid(),
             OrderCode = orderCode,
             CustomerId = req.CustomerId,
             CustomerSnapshotName = req.CustomerSnapshotName?.Trim(),
-            EmployeeId = req.EmployeeId,
+            EmployeeId = ownerId,
             OrderChannel = req.OrderChannel,
             OrderKind = req.OrderKind,
             OrderStatus = isPosCompletedOnCreate ? OrderStatus.Completed : OrderStatus.PendingPayment,
@@ -323,10 +347,11 @@ public class OrderLogic(
     }
 
     public async Task<OrderResponse> UpdateAsync(
-        Guid id, UpdateOrderRequest req, Guid? actorId = null, string? actorName = null, CancellationToken ct = default)
+        Guid id, UpdateOrderRequest req, OrderAccessContext access, Guid? actorId = null, string? actorName = null, CancellationToken ct = default)
     {
         var order = await _orderRepo.GetByIdAsync(id, ct)
             ?? throw new OrderNotFoundException(id);
+        EnsureCanAccess(order, access);
 
         if (order.OrderStatus == OrderStatus.Completed || order.OrderStatus == OrderStatus.Cancelled)
             throw new OrderCannotBeModifiedException(id, order.OrderStatus.ToString());
@@ -410,10 +435,11 @@ public class OrderLogic(
     }
 
     public async Task CancelAsync(
-        Guid id, string? reason = null, Guid? actorId = null, string? actorName = null, CancellationToken ct = default)
+        Guid id, OrderAccessContext access, string? reason = null, Guid? actorId = null, string? actorName = null, CancellationToken ct = default)
     {
         var order = await _orderRepo.GetByIdAsync(id, ct)
             ?? throw new OrderNotFoundException(id);
+        EnsureCanAccess(order, access);
 
         if (order.OrderStatus == OrderStatus.Completed || order.OrderStatus == OrderStatus.Cancelled)
             throw new OrderCannotBeCancelledException(id, order.OrderStatus.ToString());
@@ -453,10 +479,11 @@ public class OrderLogic(
     }
 
     public async Task MarkShippingAsync(
-        Guid id, Guid? actorId = null, string? actorName = null, CancellationToken ct = default)
+        Guid id, OrderAccessContext access, Guid? actorId = null, string? actorName = null, CancellationToken ct = default)
     {
         var order = await _orderRepo.GetByIdAsync(id, ct)
             ?? throw new OrderNotFoundException(id);
+        EnsureCanAccess(order, access);
 
         if (order.OrderStatus != OrderStatus.Processing && order.OrderStatus != OrderStatus.PendingPayment)
             throw new OrderCannotBeModifiedException(id, order.OrderStatus.ToString());
@@ -483,10 +510,11 @@ public class OrderLogic(
     }
 
     public async Task CompleteAsync(
-        Guid id, Guid? actorId = null, string? actorName = null, CancellationToken ct = default)
+        Guid id, OrderAccessContext access, Guid? actorId = null, string? actorName = null, CancellationToken ct = default)
     {
         var order = await _orderRepo.GetByIdAsync(id, ct)
             ?? throw new OrderNotFoundException(id);
+        EnsureCanAccess(order, access);
 
         if (order.OrderStatus == OrderStatus.Cancelled || order.OrderStatus == OrderStatus.Completed)
             throw new OrderCannotBeModifiedException(id, order.OrderStatus.ToString());
@@ -546,12 +574,14 @@ public class OrderLogic(
     public async Task<ReturnOrderResponse> ReturnAsync(
         Guid orderId,
         ReturnOrderRequest req,
+        OrderAccessContext access,
         Guid? actorId = null,
         string? actorName = null,
         CancellationToken ct = default)
     {
         var order = await _orderRepo.GetByIdAsync(orderId, ct)
             ?? throw new OrderNotFoundException(orderId);
+        EnsureCanAccess(order, access);
 
         if (order.OrderStatus != OrderStatus.Completed)
             throw new OrderValidationException("Chỉ trả hàng trên hóa đơn đã hoàn tất.");
@@ -674,7 +704,7 @@ public class OrderLogic(
                 new CreateOrderRequest(
                     order.CustomerId,
                     order.CustomerSnapshotName,
-                    order.EmployeeId ?? actorId,
+                    actorId,
                     exchangeChannel,
                     null,
                     $"Đổi hàng từ {order.OrderCode} ({returnCode})",
@@ -692,6 +722,7 @@ public class OrderLogic(
                     null,
                     null,
                     OrderKind.Exchange),
+                access,
                 actorId,
                 actorName,
                 ct);
@@ -966,4 +997,10 @@ public class OrderLogic(
         PaymentMethod.COD => "COD",
         _ => method.ToString()
     };
+
+    private static void EnsureCanAccess(Order order, OrderAccessContext access)
+    {
+        if (!access.CanAccessOrder(order.EmployeeId))
+            throw new OrderForbiddenException();
+    }
 }

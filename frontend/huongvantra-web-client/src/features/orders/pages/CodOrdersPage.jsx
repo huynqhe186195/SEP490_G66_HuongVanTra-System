@@ -61,20 +61,6 @@ function CodOrdersPage() {
     loadData()
   }, [loadData])
 
-  useEffect(() => {
-    let mounted = true
-    loadTab(activeTab)
-      .then((items) => {
-        if (mounted) setOrders(items)
-      })
-      .catch(() => {
-        if (mounted) setOrders([])
-      })
-    return () => {
-      mounted = false
-    }
-  }, [activeTab, loadTab])
-
   const stats = useMemo(
     () => [
       { label: 'Chờ thu COD', value: String(counts.pending), note: 'Chưa xác nhận thu tiền' },
@@ -174,16 +160,14 @@ function CodOrdersPage() {
                 </tr>
               ) : (
                 orders.map((order) => {
-                  const overdue =
-                    activeTab !== 'done' &&
-                    isCodOverdue({ codWarningDate: order.codWarningDate })
+                  const overdue = activeTab !== 'done' && isCodOverdue(order)
                   return (
                     <tr key={order.id} className="transition-colors hover:bg-[#fbf9f1]/30">
                       <td className="px-8 py-5 font-bold text-slate-700">
                         {order.orderCode}
                         {overdue ? (
                           <span className="mt-1 block text-xs font-normal text-amber-700">
-                            Quá hạn · {getCodDaysPending({ codWarningDate: order.codWarningDate })} ngày
+                            Quá hạn · {getCodDaysPending(order)} ngày
                           </span>
                         ) : null}
                       </td>

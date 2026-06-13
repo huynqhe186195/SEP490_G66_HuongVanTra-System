@@ -30,6 +30,7 @@ public class GlobalExceptionMiddleware(RequestDelegate next, ILogger<GlobalExcep
             PaymentNotFoundException e          => (StatusCodes.Status404NotFound,    e.Message, null),
             OrderCannotBeCancelledException e   => (StatusCodes.Status409Conflict,    e.Message, null),
             OrderCannotBeModifiedException e    => (StatusCodes.Status409Conflict,    e.Message, null),
+            OrderForbiddenException e           => (StatusCodes.Status403Forbidden,   e.Message, null),
             DuplicateOrderCodeException e       => (StatusCodes.Status409Conflict,    e.Message, null),
             _                                   => (StatusCodes.Status500InternalServerError, "An unexpected error occurred.", null)
         };

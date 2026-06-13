@@ -365,6 +365,38 @@ export async function applyCustomerDebtPayment(
   return mapDebtPaymentResult(data)
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms)
+  })
+}
+
+/** Chờ công nợ từ OrderCompleted ghi vào DB trước khi trừ từ tiền thừa POS. */
+export async function applyCustomerDebtPaymentWithRetry(
+  customerId,
+  payload,
+  { attempts = 5, delayMs = 400 } = {},
+) {
+  let lastError = null
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      return await applyCustomerDebtPayment(customerId, payload)
+    } catch (error) {
+      lastError = error
+      const message = String(error?.message || '').toLowerCase()
+      const retryable =
+        message.includes('không có công nợ') ||
+        message.includes('không có đơn nợ') ||
+        message.includes('không tìm thấy đơn nợ')
+      if (!retryable || attempt === attempts - 1) {
+        throw error
+      }
+      await sleep(delayMs)
+    }
+  }
+  throw lastError ?? new Error('Trừ công nợ thất bại.')
+}
+
 export async function fetchCustomerActivities(customerId) {
   const data = await apiRequestAuth(`/api/customers/${customerId}/activities`, { method: 'GET' })
   return Array.isArray(data) ? data.map(mapActivity).filter(Boolean) : []

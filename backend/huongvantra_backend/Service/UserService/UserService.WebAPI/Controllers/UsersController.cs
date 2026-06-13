@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using UserService.Application.DTOs.Requests;
 using UserService.Application.UseCases;
 using UserService.Domain.Constants;
+using UserService.WebAPI.Extensions;
 
 namespace UserService.WebAPI.Controllers;
 
@@ -12,6 +13,11 @@ namespace UserService.WebAPI.Controllers;
 [Authorize]
 public class UsersController(UserLogic userLogic) : ControllerBase
 {
+    private IReadOnlyList<string> ActorPermissions => User.GetPermissions().ToList();
+
+    private bool CanManageStaffAccounts() =>
+        User.HasClaim("permission", PermissionNames.ManageUser)
+        || User.HasClaim("permission", PermissionNames.ManageEmployee);
     [HttpGet]
     [Authorize(Policy = PermissionNames.ManageUser)]
     public async Task<IActionResult> GetAll([FromQuery] int page = 1, [FromQuery] int pageSize = 20, [FromQuery] bool onlyDeleted = false)
@@ -25,11 +31,17 @@ public class UsersController(UserLogic userLogic) : ControllerBase
     {
         var currentUserId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)
             ?? User.FindFirstValue("sub")!);
-        if (id != currentUserId && !User.HasClaim("permission", PermissionNames.ManageUser))
-            return Forbid();
 
-        var result = await userLogic.GetByIdAsync(id);
-        return Ok(result);
+        if (id == currentUserId)
+            return Ok(await userLogic.GetByIdAsync(id));
+
+        if (User.HasClaim("permission", PermissionNames.ManageUser))
+            return Ok(await userLogic.GetByIdAsync(id));
+
+        if (CanManageStaffAccounts())
+            return Ok(await userLogic.GetByIdAsync(id, ActorPermissions));
+
+        return Forbid();
     }
 
     [HttpPost]
@@ -41,26 +53,26 @@ public class UsersController(UserLogic userLogic) : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
-    [Authorize(Policy = PermissionNames.ManageUser)]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateUserRequest request)
     {
-        await userLogic.UpdateAsync(id, request);
+        if (!CanManageStaffAccounts()) return Forbid();
+        await userLogic.UpdateAsync(id, request, ActorPermissions);
         return NoContent();
     }
 
     [HttpPut("{id:guid}/lock")]
-    [Authorize(Policy = PermissionNames.ManageUser)]
     public async Task<IActionResult> Lock(Guid id)
     {
-        await userLogic.LockAsync(id);
+        if (!CanManageStaffAccounts()) return Forbid();
+        await userLogic.LockAsync(id, ActorPermissions);
         return NoContent();
     }
 
     [HttpPut("{id:guid}/unlock")]
-    [Authorize(Policy = PermissionNames.ManageUser)]
     public async Task<IActionResult> Unlock(Guid id)
     {
-        await userLogic.UnlockAsync(id);
+        if (!CanManageStaffAccounts()) return Forbid();
+        await userLogic.UnlockAsync(id, ActorPermissions);
         return NoContent();
     }
 
@@ -88,10 +100,10 @@ public class UsersController(UserLogic userLogic) : ControllerBase
     }
 
     [HttpPost("{id:guid}/roles")]
-    [Authorize(Policy = PermissionNames.ManageUser)]
     public async Task<IActionResult> AssignRoles(Guid id, [FromBody] AssignRolesRequest request)
     {
-        await userLogic.AssignRolesAsync(id, request);
+        if (!CanManageStaffAccounts()) return Forbid();
+        await userLogic.AssignRolesAsync(id, request, ActorPermissions);
         return NoContent();
     }
 
@@ -104,10 +116,20 @@ public class UsersController(UserLogic userLogic) : ControllerBase
     }
 
     [HttpGet("{id:guid}/roles")]
-    [Authorize(Policy = PermissionNames.ManageUser)]
     public async Task<IActionResult> GetRoles(Guid id)
     {
-        var result = await userLogic.GetRolesAsync(id);
-        return Ok(result);
+        var currentUserId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? User.FindFirstValue("sub")!);
+
+        if (id == currentUserId)
+            return Ok(await userLogic.GetRolesAsync(id));
+
+        if (User.HasClaim("permission", PermissionNames.ManageUser))
+            return Ok(await userLogic.GetRolesAsync(id));
+
+        if (CanManageStaffAccounts())
+            return Ok(await userLogic.GetRolesAsync(id, ActorPermissions));
+
+        return Forbid();
     }
 }

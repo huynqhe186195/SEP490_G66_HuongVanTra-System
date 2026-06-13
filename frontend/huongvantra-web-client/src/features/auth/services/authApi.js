@@ -161,20 +161,33 @@ function hasCatalogPermission(session) {
 
 export function enrichSessionWithAccess(session) {
   const permissions = mergePermissions(session, session?.accessToken)
+  const modules = deriveModulesFromRoles(session.roles ?? []).filter((module) => {
+    if (module !== 'pos') return true
+    return permissions.includes('CREATE_ORDER')
+  })
   return {
     ...session,
     permissions,
-    modules: deriveModulesFromRoles(session.roles ?? []),
+    modules,
   }
 }
 
-/** Làm mới quyền từ server (JWT mới) — cần khi role Warehouse vừa được gán MANAGE_CATALOG. */
+/** Làm mới quyền từ server (JWT mới) — cần khi role/permission vừa được cập nhật trên backend. */
 export async function syncSessionFromServer(session) {
   const enriched = enrichSessionWithAccess(session)
+  const roleModules = deriveModulesFromRoles(enriched.roles ?? [])
   const shouldRefresh =
     enriched.refreshToken &&
-    isWarehouseUserRole(enriched.roles) &&
-    !hasCatalogPermission(enriched)
+    (
+      (
+        isWarehouseUserRole(enriched.roles) &&
+        !hasCatalogPermission(enriched)
+      ) ||
+      (
+        roleModules.includes('pos') &&
+        !enriched.permissions.includes('CREATE_ORDER')
+      )
+    )
 
   if (!shouldRefresh) {
     return enriched

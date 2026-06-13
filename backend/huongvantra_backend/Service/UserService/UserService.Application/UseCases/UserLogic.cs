@@ -1,3 +1,4 @@
+using UserService.Application.Authorization;
 using UserService.Application.DTOs.Requests;
 using UserService.Application.DTOs.Responses;
 using UserService.Application.Interfaces;
@@ -65,38 +66,61 @@ public class UserLogic(IUserRepository userRepo, IRoleRepository roleRepo, IEmpl
         return MapToResponse(user);
     }
 
-    public async Task UpdateAsync(Guid id, UpdateUserRequest request)
+    public async Task<UserResponse> GetByIdAsync(Guid id, IReadOnlyList<string> actorPermissions)
+    {
+        var user = await userRepo.GetByIdAsync(id) ?? throw new UserNotFoundException(id);
+        EnforceStaffScopeIfNeeded(actorPermissions, user.UserRoles.Select(ur => ur.Role.RoleName));
+        return MapToResponse(user);
+    }
+
+    public async Task UpdateAsync(Guid id, UpdateUserRequest request, IReadOnlyList<string>? actorPermissions = null)
     {
         UserInputValidator.ValidateSingleRole(request.RoleIds);
 
         var user = await userRepo.GetByIdAsync(id) ?? throw new UserNotFoundException(id);
+        var currentRoles = user.UserRoles.Select(ur => ur.Role.RoleName).ToList();
+
+        var assignedRoles = new List<Role>();
+        foreach (var roleId in request.RoleIds)
+        {
+            var role = await roleRepo.GetByIdAsync(roleId) ?? throw new RoleNotFoundException(roleId);
+            assignedRoles.Add(role);
+        }
+
+        EnforceStaffScopeIfNeeded(
+            actorPermissions,
+            currentRoles,
+            assignedRoles.Select(r => r.RoleName));
 
         user.IsActive = request.IsActive;
         user.UpdatedAt = DateTime.UtcNow;
         user.UserRoles.Clear();
 
-        foreach (var roleId in request.RoleIds)
-        {
-            _ = await roleRepo.GetByIdAsync(roleId) ?? throw new RoleNotFoundException(roleId);
-            user.UserRoles.Add(new UserRole { UserId = user.Id, RoleId = roleId });
-        }
+        foreach (var role in assignedRoles)
+            user.UserRoles.Add(new UserRole { UserId = user.Id, RoleId = role.Id });
 
         userRepo.Update(user);
         await userRepo.SaveChangesAsync();
     }
 
-    public async Task LockAsync(Guid id)
+    public async Task LockAsync(Guid id, IReadOnlyList<string>? actorPermissions = null)
     {
         var user = await userRepo.GetByIdAsync(id) ?? throw new UserNotFoundException(id);
+        EnforceStaffScopeIfNeeded(
+            actorPermissions,
+            user.UserRoles.Select(ur => ur.Role.RoleName));
         user.IsActive = false;
         user.UpdatedAt = DateTime.UtcNow;
         userRepo.Update(user);
         await userRepo.SaveChangesAsync();
     }
 
-    public async Task UnlockAsync(Guid id)
+    public async Task UnlockAsync(Guid id, IReadOnlyList<string>? actorPermissions = null)
     {
         var user = await userRepo.GetByIdAsync(id) ?? throw new UserNotFoundException(id);
+        EnforceStaffScopeIfNeeded(
+            actorPermissions,
+            user.UserRoles.Select(ur => ur.Role.RoleName));
         user.IsActive = true;
         user.UpdatedAt = DateTime.UtcNow;
         userRepo.Update(user);
@@ -128,15 +152,26 @@ public class UserLogic(IUserRepository userRepo, IRoleRepository roleRepo, IEmpl
         await userRepo.SaveChangesAsync();
     }
 
-    public async Task AssignRolesAsync(Guid id, AssignRolesRequest request)
+    public async Task AssignRolesAsync(Guid id, AssignRolesRequest request, IReadOnlyList<string>? actorPermissions = null)
     {
         var user = await userRepo.GetByIdAsync(id) ?? throw new UserNotFoundException(id);
 
+        var assignedRoles = new List<Role>();
         foreach (var roleId in request.RoleIds)
         {
-            if (user.UserRoles.Any(ur => ur.RoleId == roleId)) continue;
-            _ = await roleRepo.GetByIdAsync(roleId) ?? throw new RoleNotFoundException(roleId);
-            user.UserRoles.Add(new UserRole { UserId = user.Id, RoleId = roleId });
+            var role = await roleRepo.GetByIdAsync(roleId) ?? throw new RoleNotFoundException(roleId);
+            assignedRoles.Add(role);
+        }
+
+        EnforceStaffScopeIfNeeded(
+            actorPermissions,
+            user.UserRoles.Select(ur => ur.Role.RoleName),
+            assignedRoles.Select(r => r.RoleName));
+
+        foreach (var role in assignedRoles)
+        {
+            if (user.UserRoles.Any(ur => ur.RoleId == role.Id)) continue;
+            user.UserRoles.Add(new UserRole { UserId = user.Id, RoleId = role.Id });
         }
 
         user.UpdatedAt = DateTime.UtcNow;
@@ -159,11 +194,38 @@ public class UserLogic(IUserRepository userRepo, IRoleRepository roleRepo, IEmpl
     public async Task<IEnumerable<RoleSummaryResponse>> GetRolesAsync(Guid id)
     {
         var user = await userRepo.GetByIdAsync(id) ?? throw new UserNotFoundException(id);
-        return user.UserRoles.Select(ur => new RoleSummaryResponse(
+        return MapUserRoles(user);
+    }
+
+    public async Task<IEnumerable<RoleSummaryResponse>> GetRolesAsync(Guid id, IReadOnlyList<string> actorPermissions)
+    {
+        var user = await userRepo.GetByIdAsync(id) ?? throw new UserNotFoundException(id);
+        EnforceStaffScopeIfNeeded(actorPermissions, user.UserRoles.Select(ur => ur.Role.RoleName));
+        return MapUserRoles(user);
+    }
+
+    private static void EnforceStaffScopeIfNeeded(
+        IReadOnlyList<string>? actorPermissions,
+        IEnumerable<string> employeeRoles,
+        IEnumerable<string>? assignedRoleNames = null)
+    {
+        if (actorPermissions is null
+            || StaffManagementScope.HasFullUserManagement(actorPermissions)
+            || StaffManagementScope.IsSystemAdmin(actorPermissions))
+        {
+            return;
+        }
+
+        StaffManagementScope.EnsureCanManageEmployee(actorPermissions, employeeRoles);
+        if (assignedRoleNames is not null)
+            StaffManagementScope.EnsureCanAssignRoles(actorPermissions, assignedRoleNames);
+    }
+
+    private static IEnumerable<RoleSummaryResponse> MapUserRoles(User user) =>
+        user.UserRoles.Select(ur => new RoleSummaryResponse(
             ur.Role.Id,
             ur.Role.RoleName,
             ur.Role.Description));
-    }
 
     private static UserResponse MapToResponse(User user) => new(
         user.Id,

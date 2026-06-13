@@ -15,7 +15,7 @@ import {
 import { printReceiptFromData, printReceiptSequence } from '../utils/printReceipt.js'
 import { formatVietnamDateTimeMinute, vietnamNowLabel } from '../../../utils/vietnamDateTime.js'
 import {
-  applyCustomerDebtPayment,
+  applyCustomerDebtPaymentWithRetry,
   fetchCustomerOpenDebts,
 } from '../../customers/services/customersApi.js'
 import OverpaymentDebtModal from '../../customers/components/OverpaymentDebtModal.jsx'
@@ -1255,7 +1255,7 @@ function PosPage() {
 
   const applyOverpaymentToDebt = async (customerId, orderCode, orderId, amount, allocations = null) => {
     if (!customerId || amount <= 0) return null
-    return applyCustomerDebtPayment(customerId, {
+    return applyCustomerDebtPaymentWithRetry(customerId, {
       amount,
       note: `Trừ từ tiền thừa đơn ${orderCode}`,
       sourceOrderId: orderId,
