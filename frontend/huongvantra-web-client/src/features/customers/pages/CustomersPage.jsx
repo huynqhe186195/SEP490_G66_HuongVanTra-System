@@ -636,6 +636,7 @@ function CustomersPage() {
                 <CustomerActivityFeed
                   refreshKey={activityRefreshKey}
                   emptyMessage="Chưa có hoạt động từ đơn hàng hoàn tất."
+                  scrollable={false}
                 />
               </article>
             </section>
@@ -841,6 +842,7 @@ function CustomersPage() {
                 <CustomerActivityFeed
                   refreshKey={activityRefreshKey}
                   emptyMessage="Chưa có hoạt động từ đơn hàng hoàn tất."
+                  scrollable={false}
                 />
               </div>
             </section>

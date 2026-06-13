@@ -3,9 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
-import { loadAuthSession } from '../../auth/services/authSession.js'
 import MembershipTierProgress from '../components/MembershipTierProgress.jsx'
-import CustomerDebtHistory from '../components/CustomerDebtHistory.jsx'
 import CustomerActivityFeed from '../components/CustomerActivityFeed.jsx'
 import {
   changeCustomerStatus,
@@ -22,7 +20,6 @@ import {
   customerTypeLabel,
   formatDebtVnd,
   formatVnd,
-  isAdminSession,
   supportsMembershipTierForTab,
   tabKeyFromCustomerType,
 } from '../utils/customerDisplay.js'
@@ -48,12 +45,9 @@ function CustomerFormPage() {
   const [currentTierDiscount, setCurrentTierDiscount] = useState(0)
   const [currentTierId, setCurrentTierId] = useState(null)
   const [initialStatus, setInitialStatus] = useState('active')
-  const [debtRefreshKey, setDebtRefreshKey] = useState(0)
-  const [activityRefreshKey, setActivityRefreshKey] = useState(0)
   const [isDeleting, setIsDeleting] = useState(false)
   const [fieldErrors, setFieldErrors] = useState({})
   const [isNameComposing, setIsNameComposing] = useState(false)
-  const isAdmin = isAdminSession(loadAuthSession())
   const [form, setForm] = useState({
     type: ['general', 'vip', 'corporate'].includes(searchParams.get('type'))
       ? searchParams.get('type')
@@ -481,24 +475,11 @@ function CustomerFormPage() {
 
       {isEditMode && !isLoading ? (
         <>
-          <CustomerDebtHistory
-            customerId={customerId}
-            refreshKey={debtRefreshKey}
-            allowManualEntry={isAdmin}
-            onDebtChanged={() => {
-              setDebtRefreshKey((key) => key + 1)
-              setActivityRefreshKey((key) => key + 1)
-              fetchCustomerById(customerId).then((customer) => {
-                setCurrentDebt(Number(customer.currentDebt || 0))
-              }).catch(() => {})
-            }}
-          />
           <section className="rounded-[24px] border border-[#c1c9c0]/30 bg-white p-4 shadow-sm sm:p-6">
             <h3 className="mb-3 text-lg font-semibold text-[#356647]">Nhật ký hoạt động</h3>
             <div className="custom-scrollbar max-h-[min(50vh,420px)] overflow-y-auto overscroll-contain">
               <CustomerActivityFeed
                 customerId={customerId}
-                refreshKey={activityRefreshKey}
                 emptyMessage="Chưa có hoạt động ghi nhận cho khách hàng này."
               />
             </div>
