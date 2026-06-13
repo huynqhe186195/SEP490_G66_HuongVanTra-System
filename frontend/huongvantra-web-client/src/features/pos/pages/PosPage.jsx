@@ -17,24 +17,49 @@ import { clampDebtSettlement } from "../../customers/utils/debtAllocationEditor.
 import { serializeCodDebtSettlement } from "../../customers/utils/codDebtSettlementUtils.js";
 import { buildDebtReceiptFromPayment } from "../../customers/utils/debtPaymentUtils.js";
 import {
-    buildTakeawayOrderPayload,
-    createPosOrderOffline,
-    createPosOrderOnline,
-    createTakeawayCodOrder,
-    createTakeawayVietQrOrder,
-    fetchAvailablePromotions,
-    fetchPosCustomerContext,
-    fetchPosCustomers,
-    fetchPosProducts,
-    resolvePosStoreId,
-} from "../services/posApi.js";
-import { loadPosSeller } from "../utils/posSeller.js";
-import { normalizeOrderDiscountInput, validatePosDiscountsBeforePayment } from "../utils/posDiscountValidation.js";
-import { formatCustomerOrderSnapshot, isVipCustomerType } from "../../customers/utils/customerDisplay.js";
-import { fetchPendingCatalogSync, syncCatalogToStore } from "../../products/services/catalogSyncApi.js";
-import { fetchCategories } from "../../products/services/categoriesApi.js";
-import ProductImage from "../../products/components/ProductImage.jsx";
-import { computeCouponDiscount, formatPromotionLabel, formatPromotionScopeLabel } from "../utils/posPromotionUtils.js";
+  expandCategoryFilterIds,
+  formatCategoryFilterSummary,
+} from '../../products/utils/categoryTreeUtils.js'
+import { printReceiptFromData, printReceiptSequence } from '../utils/printReceipt.js'
+import { formatVietnamDateTimeMinute, vietnamNowLabel } from '../../../utils/vietnamDateTime.js'
+import {
+  applyCustomerDebtPayment,
+  fetchCustomerOpenDebts,
+} from '../../customers/services/customersApi.js'
+import OverpaymentDebtModal from '../../customers/components/OverpaymentDebtModal.jsx'
+import {
+  clampDebtSettlement,
+  resolveMaxDebtPayable,
+} from '../../customers/utils/debtAllocationEditor.js'
+import { serializeCodDebtSettlement } from '../../customers/utils/codDebtSettlementUtils.js'
+import { buildDebtReceiptFromPayment } from '../../customers/utils/debtPaymentUtils.js'
+import {
+  applyPromotionPreview,
+  buildTakeawayOrderPayload,
+  createPosOrderOffline,
+  createPosOrderOnline,
+  createTakeawayCodOrder,
+  createTakeawayVietQrOrder,
+  fetchApplicablePromotions,
+  fetchPosCustomerContext,
+  fetchPosCustomers,
+  fetchPosProducts,
+  resolvePosStoreId,
+} from '../services/posApi.js'
+import { loadPosSeller } from '../utils/posSeller.js'
+import {
+  normalizeOrderDiscountInput,
+  validatePosDiscountsBeforePayment,
+} from '../utils/posDiscountValidation.js'
+import { formatCustomerOrderSnapshot, isVipCustomerType } from '../../customers/utils/customerDisplay.js'
+import { fetchPendingCatalogSync, syncCatalogToStore } from '../../products/services/catalogSyncApi.js'
+import { fetchCategories } from '../../products/services/categoriesApi.js'
+import ProductImage from '../../products/components/ProductImage.jsx'
+import {
+  computeCouponDiscount,
+  formatPromotionDiscountText as formatPromotionDiscountLabel,
+  formatPromotionScopeLabel,
+} from '../utils/posPromotionUtils.js'
 
 const SALES_MODES = [
     { id: "counter", label: "Bán trực tiếp", icon: "storefront" },
@@ -185,74 +210,75 @@ function createEmptySession(mode = "counter") {
 }
 
 function PosPage() {
-    const navigate = useNavigate();
-    const [salesMode, setSalesMode] = useState("counter");
-    const [workspaceByMode, setWorkspaceByMode] = useState({
-        counter: createWorkspace("counter"),
-        takeaway: createWorkspace("takeaway"),
-    });
-    const [customerSearchResults, setCustomerSearchResults] = useState([]);
-    const [isCustomerSearchLoading, setIsCustomerSearchLoading] = useState(false);
-    const [openModal, setOpenModal] = useState(null);
-    const [openDiscountSku, setOpenDiscountSku] = useState(null);
-    const [isSubmitting, setIsSubmitting] = useState(false);
-    const [isApplyingPromo, setIsApplyingPromo] = useState(false);
-    const [availablePromotions, setAvailablePromotions] = useState([]);
-    const [isPromotionListLoading, setIsPromotionListLoading] = useState(false);
-    const [applicablePromotionsSignature, setApplicablePromotionsSignature] = useState("");
-    const [isPromotionDropdownOpen, setIsPromotionDropdownOpen] = useState(false);
-    const [searchProducts, setSearchProducts] = useState([]);
-    const [posCategories, setPosCategories] = useState([]);
-    const [selectedCategoryIds, setSelectedCategoryIds] = useState([]);
-    const [isCategoryFilterSidebarOpen, setIsCategoryFilterSidebarOpen] = useState(false);
-    const [isSearchLoading, setIsSearchLoading] = useState(false);
-    const [catalogReloadKey, setCatalogReloadKey] = useState(0);
-    const [isCatalogSyncing, setIsCatalogSyncing] = useState(false);
-    const [pendingCatalogSync, setPendingCatalogSync] = useState(0);
-    const [tabCloseConfirm, setTabCloseConfirm] = useState(null);
-    const [savedShippingAddresses, setSavedShippingAddresses] = useState([]);
-    const [isLoadingShippingAddresses, setIsLoadingShippingAddresses] = useState(false);
-    const [useCustomShippingAddress, setUseCustomShippingAddress] = useState(false);
-    const [seller, setSeller] = useState({ name: "Nhân viên POS", role: "—", display: "Nhân viên POS · —" });
-    const [isPaymentSidebarOpen, setIsPaymentSidebarOpen] = useState(false);
-    const [customerOpenDebts, setCustomerOpenDebts] = useState([]);
-    const [isLoadingOpenDebts, setIsLoadingOpenDebts] = useState(false);
-    const [overpaymentDebtModalOpen, setOverpaymentDebtModalOpen] = useState(false);
-    const [debtModalMode, setDebtModalMode] = useState("configure");
-    const discountPopoverRef = useRef(null);
-    const priceFilterRef = useRef(null);
-    const [isPriceFilterOpen, setIsPriceFilterOpen] = useState(false);
-    const [priceFilter, setPriceFilter] = useState("");
-    const promotionCartSignatureRef = useRef("");
+  const navigate = useNavigate()
+  const [salesMode, setSalesMode] = useState('counter')
+  const [workspaceByMode, setWorkspaceByMode] = useState({
+    counter: createWorkspace('counter'),
+    takeaway: createWorkspace('takeaway'),
+  })
+  const [customerSearchResults, setCustomerSearchResults] = useState([])
+  const [isCustomerSearchLoading, setIsCustomerSearchLoading] = useState(false)
+  const [openModal, setOpenModal] = useState(null)
+  const [openDiscountSku, setOpenDiscountSku] = useState(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isApplyingPromo, setIsApplyingPromo] = useState(false)
+  const [availablePromotions, setAvailablePromotions] = useState([])
+  const [isPromotionListLoading, setIsPromotionListLoading] = useState(false)
+  const [applicablePromotionsSignature, setApplicablePromotionsSignature] = useState('')
+  const [isPromotionDropdownOpen, setIsPromotionDropdownOpen] = useState(false)
+  const [searchProducts, setSearchProducts] = useState([])
+  const [posCategories, setPosCategories] = useState([])
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState([])
+  const [isCategoryFilterSidebarOpen, setIsCategoryFilterSidebarOpen] = useState(false)
+  const [isSearchLoading, setIsSearchLoading] = useState(false)
+  const [catalogReloadKey, setCatalogReloadKey] = useState(0)
+  const [isCatalogSyncing, setIsCatalogSyncing] = useState(false)
+  const [pendingCatalogSync, setPendingCatalogSync] = useState(0)
+  const [tabCloseConfirm, setTabCloseConfirm] = useState(null)
+  const [savedShippingAddresses, setSavedShippingAddresses] = useState([])
+  const [isLoadingShippingAddresses, setIsLoadingShippingAddresses] = useState(false)
+  const [useCustomShippingAddress, setUseCustomShippingAddress] = useState(false)
+  const [seller, setSeller] = useState({ name: 'Nhân viên POS', role: '—', display: 'Nhân viên POS · —' })
+  const [isPaymentSidebarOpen, setIsPaymentSidebarOpen] = useState(false)
+  const [customerOpenDebts, setCustomerOpenDebts] = useState([])
+  const [isLoadingOpenDebts, setIsLoadingOpenDebts] = useState(false)
+  const [overpaymentDebtModalOpen, setOverpaymentDebtModalOpen] = useState(false)
+  const [debtModalMode, setDebtModalMode] = useState('configure')
+  const discountPopoverRef = useRef(null)
+  const priceFilterRef = useRef(null)
+  const [isPriceFilterOpen, setIsPriceFilterOpen] = useState(false)
+  const [priceFilter, setPriceFilter] = useState('')
+  const promotionCartSignatureRef = useRef('')
+  const previousCustomerIdRef = useRef(null)
 
-    const isTakeaway = salesMode === "takeaway";
-    const workspace = workspaceByMode[salesMode];
-    const { tabs, activeTabId, sessions } = workspace;
-    const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0];
-    const session = sessions[activeTabId] ?? createEmptySession(salesMode);
-    const {
-        searchValue = "",
-        cartItems = [],
-        orderDiscountPercent = 0,
-        orderDiscountAmountFixed = 0,
-        promoCodeInput = "",
-        appliedPromotion = null,
-        selectedCustomer = null,
-        customerSearchValue = "",
-        paymentMethod: sessionPaymentMethod,
-        amountPaidInput = "",
-        overpaymentAction = "return_change",
-        debtSettlement = null,
-        shippingAddress = "",
-        orderNote = "",
-    } = session ?? createEmptySession(salesMode);
+  const isTakeaway = salesMode === 'takeaway'
+  const workspace = workspaceByMode[salesMode]
+  const { tabs, activeTabId, sessions } = workspace
+  const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0]
+  const session = sessions[activeTabId] ?? createEmptySession(salesMode)
+  const {
+    searchValue = '',
+    cartItems = [],
+    orderDiscountPercent = 0,
+    orderDiscountAmountFixed = 0,
+    promoCodeInput = '',
+    appliedPromotion = null,
+    selectedCustomer = null,
+    customerSearchValue = '',
+    paymentMethod: sessionPaymentMethod,
+    amountPaidInput = '',
+    overpaymentAction = 'return_change',
+    debtSettlement = null,
+    shippingAddress = '',
+    orderNote = '',
+  } = session ?? createEmptySession(salesMode)
 
-    const paymentMethod = sessionPaymentMethod ?? (isTakeaway ? "COD" : "CASH");
-    const isTransferPayment = paymentMethod === "TRANSFER";
-    const isCodTakeaway = isTakeaway && paymentMethod === "COD";
-    const isTransferTakeaway = isTakeaway && isTransferPayment;
+  const paymentMethod = sessionPaymentMethod ?? (isTakeaway ? 'COD' : 'CASH')
+  const isTransferPayment = paymentMethod === 'TRANSFER'
+  const isCodTakeaway = isTakeaway && paymentMethod === 'COD'
+  const isTransferTakeaway = isTakeaway && isTransferPayment
 
-    const paymentMethods = isTakeaway ? TAKEAWAY_PAYMENT_METHODS : COUNTER_PAYMENT_METHODS;
+  const paymentMethods = isTakeaway ? TAKEAWAY_PAYMENT_METHODS : COUNTER_PAYMENT_METHODS
 
     const patchWorkspace = (patch) => {
         setWorkspaceByMode((all) => ({
@@ -351,56 +377,68 @@ function PosPage() {
         return Number(parsed.toFixed(2));
     };
 
-    const parseMoneyInput = (value) => {
-        const digits = String(value).replace(/\D/g, "");
-        return digits ? Number(digits) : 0;
-    };
+  const parseMoneyInput = (value) => {
+    const digits = String(value).replace(/\D/g, '')
+    return digits ? Number(digits) : 0
+  }
 
-    const tierDiscountPercent = isVipCustomerType(selectedCustomer?.customerType) ? 0 : Number(selectedCustomer?.tierDiscountPercent || 0);
-    const canUseOrderDiscount = isVipCustomerType(selectedCustomer?.customerType);
-    const effectiveOrderDiscountPercent = canUseOrderDiscount ? orderDiscountPercent : 0;
-    const effectiveOrderDiscountAmountFixed = canUseOrderDiscount ? orderDiscountAmountFixed : 0;
-    const { grossSubtotal, itemDiscountTotal, subtotalAfterItemDiscount, orderDiscountAmount, couponDiscountAmount, membershipDiscountAmount, total, totalDiscount } =
-        computePosTotals(cartItems, effectiveOrderDiscountPercent, effectiveOrderDiscountAmountFixed, tierDiscountPercent, appliedPromotion);
-    const usesFixedOrderDiscount = canUseOrderDiscount && (orderDiscountAmountFixed || 0) > 0;
-    const cartItemQuantity = cartItems.reduce((sum, item) => sum + (Number(item.qty) || 0), 0);
-    const amountPaid = parseMoneyInput(amountPaidInput);
-    const customerCurrentDebt = Number(selectedCustomer?.currentDebt || 0);
-    const change = Math.max(amountPaid - total, 0);
-    const transferQrAmount =
-        isTransferPayment ?
-            amountPaid > 0 ?
-                amountPaid
-            :   total
-        :   0;
-    const transferOverpayToDebt =
-        overpaymentAction === "apply_to_debt" && isTransferPayment && change > 0 && customerCurrentDebt > 0 ? Math.min(change, customerCurrentDebt) : 0;
-    const codExpectedAmount =
-        isCodTakeaway ?
-            amountPaid > 0 ?
-                amountPaid
-            :   total
-        :   0;
-    const codOverpayToDebt = overpaymentAction === "apply_to_debt" && isCodTakeaway && change > 0 && customerCurrentDebt > 0 ? Math.min(change, customerCurrentDebt) : 0;
-    // Tiền mặt: để trống = ghi nợ toàn bộ. CK: để trống = QR đủ tiền; nhập vượt đơn = QR đúng số nhập (trừ nợ).
-    const recordedPaymentAmount = amountPaid >= total ? total : amountPaid;
-    const debtAmount =
-        isTransferPayment ?
-            transferQrAmount >= total ?
-                0
-            :   Math.max(total - transferQrAmount, 0)
-        :   Math.max(total - recordedPaymentAmount, 0);
-    const debtReductionFromOverpay = overpaymentAction === "apply_to_debt" && change > 0 && customerCurrentDebt > 0 ? Math.min(change, customerCurrentDebt) : 0;
-    const displayChange = Math.max(change - debtReductionFromOverpay, 0);
-    const isTransferQrFlow = isTransferPayment && !isTakeaway;
-    const isDebtSale = !isTransferPayment && amountPaid === 0 && total > 0;
-    const isPartialPayment = amountPaid > 0 && amountPaid < total;
-    const canApplyOverpayToDebt = change > 0 && customerCurrentDebt > 0;
-    useEffect(() => {
-        if (!selectedCustomer?.customerId || customerCurrentDebt <= 0) {
-            setCustomerOpenDebts([]);
-            return undefined;
-        }
+  const tierDiscountPercent = isVipCustomerType(selectedCustomer?.customerType)
+    ? 0
+    : Number(selectedCustomer?.tierDiscountPercent || 0)
+  const canUseOrderDiscount = isVipCustomerType(selectedCustomer?.customerType)
+  const effectiveOrderDiscountPercent = canUseOrderDiscount ? orderDiscountPercent : 0
+  const effectiveOrderDiscountAmountFixed = canUseOrderDiscount ? orderDiscountAmountFixed : 0
+  const {
+    grossSubtotal,
+    itemDiscountTotal,
+    subtotalAfterItemDiscount,
+    orderDiscountAmount,
+    couponDiscountAmount,
+    membershipDiscountAmount,
+    total,
+    totalDiscount,
+  } = computePosTotals(
+    cartItems,
+    effectiveOrderDiscountPercent,
+    effectiveOrderDiscountAmountFixed,
+    tierDiscountPercent,
+    appliedPromotion,
+  )
+  const usesFixedOrderDiscount = canUseOrderDiscount && (orderDiscountAmountFixed || 0) > 0
+  const cartItemQuantity = cartItems.reduce((sum, item) => sum + (Number(item.qty) || 0), 0)
+  const amountPaid = parseMoneyInput(amountPaidInput)
+  const customerCurrentDebt = Number(selectedCustomer?.currentDebt || 0)
+  const change = Math.max(amountPaid - total, 0)
+  const transferQrAmount = isTransferPayment ? (amountPaid > 0 ? amountPaid : total) : 0
+  const transferOverpayToDebt =
+    overpaymentAction === 'apply_to_debt' && isTransferPayment && change > 0 && customerCurrentDebt > 0
+      ? Math.min(change, customerCurrentDebt)
+      : 0
+  const codExpectedAmount = isCodTakeaway ? (amountPaid > 0 ? amountPaid : total) : 0
+  const codOverpayToDebt =
+    overpaymentAction === 'apply_to_debt' && isCodTakeaway && change > 0 && customerCurrentDebt > 0
+      ? Math.min(change, customerCurrentDebt)
+      : 0
+  // Tiền mặt: để trống = ghi nợ toàn bộ. CK: để trống = QR đủ tiền; nhập vượt đơn = QR đúng số nhập (trừ nợ).
+  const recordedPaymentAmount = amountPaid >= total ? total : amountPaid
+  const debtAmount = isTransferPayment
+    ? transferQrAmount >= total
+      ? 0
+      : Math.max(total - transferQrAmount, 0)
+    : Math.max(total - recordedPaymentAmount, 0)
+  const confirmedDebtAllocation = debtSettlement?.payDebtsEnabled
+    ? Math.max(0, Number(debtSettlement.allocatedAmount || 0))
+    : 0
+  const displayChange = Math.max(change - confirmedDebtAllocation, 0)
+  const isTransferQrFlow = isTransferPayment && !isTakeaway
+  const isDebtSale = !isTransferPayment && amountPaid === 0 && total > 0
+  const isPartialPayment = amountPaid > 0 && amountPaid < total
+  const canApplyOverpayToDebt = change > 0 && customerCurrentDebt > 0
+  useEffect(() => {
+    if (!selectedCustomer?.customerId || customerCurrentDebt <= 0) {
+      setCustomerOpenDebts([])
+      return undefined
+    }
 
         let cancelled = false;
         setIsLoadingOpenDebts(true);
@@ -420,12 +458,39 @@ function PosPage() {
         };
     }, [selectedCustomer?.customerId, customerCurrentDebt]);
 
-    useEffect(() => {
-        if (debtSettlement) {
-            updateActiveSession({ debtSettlement: null, overpaymentAction: "return_change" });
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- reset debt plan when payment inputs change
-    }, [selectedCustomer?.customerId, change, amountPaidInput]);
+  useEffect(() => {
+    const customerId = selectedCustomer?.customerId ?? null
+    if (
+      previousCustomerIdRef.current
+      && customerId
+      && previousCustomerIdRef.current !== customerId
+      && debtSettlement
+    ) {
+      updateActiveSession({ debtSettlement: null, overpaymentAction: 'return_change' })
+    }
+    previousCustomerIdRef.current = customerId
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset debt plan only when switching customers
+  }, [selectedCustomer?.customerId])
+
+  useEffect(() => {
+    if (!debtSettlement?.payDebtsEnabled) return
+
+    const maxPayable = resolveMaxDebtPayable(change, customerCurrentDebt)
+    const clamped = clampDebtSettlement(debtSettlement, maxPayable, customerOpenDebts, change)
+    const prevAllocated = Number(debtSettlement.allocatedAmount || 0)
+    const nextAllocated = Number(clamped.allocatedAmount || 0)
+    const prevCredit = Number(debtSettlement.creditToCustomer ?? 0)
+    const nextCredit = Number(clamped.creditToCustomer ?? 0)
+
+    if (
+      prevAllocated !== nextAllocated
+      || prevCredit !== nextCredit
+      || JSON.stringify(debtSettlement.allocations || []) !== JSON.stringify(clamped.allocations || [])
+    ) {
+      updateActiveSession({ debtSettlement: clamped })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-clamp debt plan when payment inputs change
+  }, [selectedCustomer?.customerId, change, amountPaidInput, customerCurrentDebt, customerOpenDebts])
 
     useEffect(() => {
         let cancelled = false;
@@ -1066,67 +1131,72 @@ function PosPage() {
         return names.length ? `Áp dụng cho: ${[...new Set(names)].join(", ")}` : "Áp dụng cho SKU cụ thể";
     })();
 
-    const buildOrderPayload = (method, amount) => {
-        const storeId = resolvePosStoreId();
-        const manualDiscount = Math.round(itemDiscountTotal + orderDiscountAmount);
-        return {
-            storeId,
-            customerId: selectedCustomer.customerId,
-            customerSnapshotName: formatCustomerOrderSnapshot(selectedCustomer),
-            promotionId: appliedPromotion?.id ?? null,
-            promotionCode: appliedPromotion?.promoCode ?? null,
-            manualDiscount,
-            note: orderNote,
-            items: cartItems.map((item) => ({
-                productId: item.productId,
-                sku: item.sku,
-                name: item.name,
-                quantity: item.qty,
-                unitPrice: item.price,
-                costPrice: item.costPrice,
-                isGift: 0,
-            })),
-            payments: [
-                {
-                    paymentMethod: method,
-                    amount,
-                },
-            ],
-        };
-    };
+  const buildOrderPayload = (method, amount) => {
+    const storeId = resolvePosStoreId()
+    const manualDiscount = Math.round(
+      itemDiscountTotal + orderDiscountAmount + membershipDiscountAmount,
+    )
+    return {
+      storeId,
+      customerId: selectedCustomer.customerId,
+      customerSnapshotName: formatCustomerOrderSnapshot(selectedCustomer),
+      promotionId: appliedPromotion?.id ?? null,
+      promotionCode: appliedPromotion?.promoCode ?? null,
+      manualDiscount,
+      note: orderNote,
+      items: cartItems.map((item) => ({
+        productId: item.productId,
+        sku: item.sku,
+        name: item.name,
+        quantity: item.qty,
+        unitPrice: item.price,
+        isGift: 0,
+      })),
+      payments: [
+        {
+          paymentMethod: method,
+          amount,
+        },
+      ],
+    }
+  }
 
-    const buildReceiptData = ({ orderCode, method, invoiceCode, orderTotal, changeAmount = displayChange }) => {
-        const receiptTotal = orderTotal ?? total;
-        const isRecordedPayment = method === "CASH" || method === "TRANSFER";
-        return {
-            orderCode: orderCode || activeTab.label,
-            invoiceCode: invoiceCode || undefined,
-            customerName: selectedCustomer?.fullName || "Khách lẻ",
-            paymentMethodLabel:
-                method === "COD" ? "COD — thu khi giao"
-                : method === "TRANSFER" ? "Chuyển khoản"
-                : "Tiền mặt",
-            createdAtLabel: vietnamNowLabel(),
-            sellerName: seller.name,
-            sellerRole: seller.role,
-            items: cartItems.map((item) => ({
-                sku: item.sku,
-                name: item.name,
-                qty: item.qty,
-                price: item.price,
-                total: getLineTotal(item),
-            })),
-            grossSubtotal,
-            totalDiscount: itemDiscountTotal + orderDiscountAmount + couponDiscountAmount + membershipDiscountAmount,
-            total: receiptTotal,
-            amountPaid: isRecordedPayment ? recordedPaymentAmount : receiptTotal,
-            customerPaid: isRecordedPayment ? amountPaid : receiptTotal,
-            change: isRecordedPayment ? changeAmount : 0,
-            debtAmount: isRecordedPayment ? debtAmount : 0,
-            isDebtSale: method === "CASH" && isDebtSale,
-            isPartialCashPayment: isRecordedPayment && isPartialPayment,
-        };
-    };
+  const buildReceiptData = ({
+    orderCode,
+    method,
+    invoiceCode,
+    orderTotal,
+    changeAmount = displayChange,
+  }) => {
+    const receiptTotal = orderTotal ?? total
+    const isRecordedPayment = method === 'CASH' || method === 'TRANSFER'
+    return {
+      orderCode: orderCode || activeTab.label,
+      invoiceCode: invoiceCode || undefined,
+      customerName: selectedCustomer?.fullName || 'Khách lẻ',
+      paymentMethodLabel:
+        method === 'COD' ? 'COD — thu khi giao' : method === 'TRANSFER' ? 'Chuyển khoản' : 'Tiền mặt',
+      createdAtLabel: vietnamNowLabel(),
+      sellerName: seller.name,
+      sellerRole: seller.role,
+      items: cartItems.map((item) => ({
+        sku: item.sku,
+        name: item.name,
+        qty: item.qty,
+        price: item.price,
+        total: getLineTotal(item),
+      })),
+      grossSubtotal,
+      totalDiscount: itemDiscountTotal + orderDiscountAmount + couponDiscountAmount + membershipDiscountAmount,
+      total: receiptTotal,
+      amountPaid: isRecordedPayment ? recordedPaymentAmount : receiptTotal,
+      customerPaid: isRecordedPayment ? amountPaid : receiptTotal,
+      change: isRecordedPayment ? changeAmount : 0,
+      debtAmount: isRecordedPayment ? debtAmount : 0,
+      isDebtSale: method === 'CASH' && isDebtSale,
+      isPartialCashPayment: isRecordedPayment && isPartialPayment,
+    }
+  }
 
     const applyOverpaymentToDebt = async (customerId, orderCode, orderId, amount, allocations = null) => {
         if (!customerId || amount <= 0) return null;
@@ -1138,20 +1208,26 @@ function PosPage() {
         });
     };
 
-    const resolveDebtApplyAmount = (overrideSettlement) => {
-        const settlement = overrideSettlement ?? debtSettlement;
-        if (!settlement) {
-            return overpaymentAction === "apply_to_debt" ? debtReductionFromOverpay : 0;
-        }
-        return settlement.payDebtsEnabled ? Number(settlement.allocatedAmount || 0) : 0;
-    };
+  const resolveDebtApplyAmount = (overrideSettlement) => {
+    const settlement = overrideSettlement ?? debtSettlement
+    if (!settlement?.payDebtsEnabled) return 0
 
-    const resolveChangeAfterDebt = (debtSettlement, debtApplyAmount) => {
-        if (debtSettlement) {
-            return Math.max(change - debtApplyAmount, 0);
-        }
-        return displayChange;
-    };
+    const allocated = Number(settlement.allocatedAmount || 0)
+    if (allocated > 0) return allocated
+
+    const maxPayable = resolveMaxDebtPayable(change, customerCurrentDebt)
+    return maxPayable > 0 ? maxPayable : 0
+  }
+
+  const resolveChangeAfterDebt = (debtSettlement, debtApplyAmount) => {
+    if (debtSettlement && debtSettlement.creditToCustomer != null) {
+      return Math.max(0, Number(debtSettlement.creditToCustomer) || 0)
+    }
+    if (debtSettlement) {
+      return Math.max(change - debtApplyAmount, 0)
+    }
+    return displayChange
+  }
 
     const buildTransferDebtSettlement = (debtSettlement, orderId) => {
         const amount = resolveDebtApplyAmount(debtSettlement);
@@ -1187,16 +1263,29 @@ function PosPage() {
         });
     };
 
-    const finalizeRecordedPayment = async ({ method, createOrder, debtSettlement = null }) => {
-        const debtApplyAmount = resolveDebtApplyAmount(debtSettlement);
-        const changeAfterDebt = resolveChangeAfterDebt(debtSettlement, debtApplyAmount);
-        const payload = buildOrderPayload(method, recordedPaymentAmount);
-        const result = await createOrder(payload);
+  const finalizeRecordedPayment = async ({ method, createOrder, debtSettlement = null }) => {
+    const debtApplyAmount = resolveDebtApplyAmount(debtSettlement)
+    const changeAfterDebt = resolveChangeAfterDebt(debtSettlement, debtApplyAmount)
+    const payload = buildOrderPayload(method, recordedPaymentAmount)
+    const result = await createOrder(payload)
 
-        let debtPayment = null;
-        if (debtApplyAmount > 0 && selectedCustomer?.customerId) {
-            debtPayment = await applyOverpaymentToDebt(selectedCustomer.customerId, result.orderCode, result.orderId, debtApplyAmount, debtSettlement?.allocations ?? null);
-        }
+    let debtPayment = null
+    if (debtApplyAmount > 0 && selectedCustomer?.customerId) {
+      try {
+        debtPayment = await applyOverpaymentToDebt(
+          selectedCustomer.customerId,
+          result.orderCode,
+          result.orderId,
+          debtApplyAmount,
+          debtSettlement?.allocations?.length ? debtSettlement.allocations : null,
+        )
+      } catch (error) {
+        showError(
+          `Đơn ${result.orderCode} đã tạo nhưng trừ công nợ thất bại: ${error.message || 'Lỗi không xác định'}`,
+        )
+        throw error
+      }
+    }
 
         if (recordedPaymentAmount >= total) {
             const debtNote =
@@ -2002,97 +2091,94 @@ function PosPage() {
                 </section>
             </div>
 
-            <PosPaymentSidebar
-                isOpen={isPaymentSidebarOpen}
-                onClose={() => {
-                    setIsPaymentSidebarOpen(false);
-                    setIsPromotionDropdownOpen(false);
-                }}
-                formatMoney={formatMoney}
-                total={total}
-                grossSubtotal={grossSubtotal}
-                itemDiscountTotal={itemDiscountTotal}
-                orderDiscountAmount={orderDiscountAmount}
-                orderDiscountPercent={orderDiscountPercent}
-                couponDiscountAmount={couponDiscountAmount}
-                membershipDiscountAmount={membershipDiscountAmount}
-                appliedPromotion={appliedPromotion}
-                selectedCustomer={selectedCustomer}
-                tierDiscountPercent={tierDiscountPercent}
-                canUseOrderDiscount={canUseOrderDiscount}
-                usesFixedOrderDiscount={usesFixedOrderDiscount}
-                isZeroAmountSale={isZeroAmountSale}
-                hasCartItems={hasCartItems}
-                isTakeaway={isTakeaway}
-                paymentMethod={paymentMethod}
-                paymentMethods={paymentMethods}
-                onPaymentMethodChange={(id) => updateActiveSession({ paymentMethod: id })}
-                isTransferPayment={isTransferPayment}
-                isCodTakeaway={isCodTakeaway}
-                isTransferTakeaway={isTransferTakeaway}
-                customerCurrentDebt={customerCurrentDebt}
-                amountPaidInput={amountPaidInput}
-                onAmountPaidChange={handleAmountPaidChange}
-                transferQrAmount={transferQrAmount}
-                amountPaid={amountPaid}
-                debtAmount={debtAmount}
-                change={change}
-                displayChange={displayChange}
-                canApplyOverpayToDebt={canApplyOverpayToDebt}
-                overpaymentAction={overpaymentAction}
-                onOverpaymentActionChange={handleOverpaymentActionChange}
-                onOpenDebtAllocation={handleOpenDebtAllocation}
-                confirmedDebtAllocationAmount={debtSettlement?.payDebtsEnabled ? Number(debtSettlement.allocatedAmount || 0) : 0}
-                isDebtSale={isDebtSale}
-                isPartialPayment={isPartialPayment}
-                isTransferQrFlow={isTransferQrFlow}
-                onQuickAmount={handleQuickAmount}
-                onConfirm={handlePayment}
-                isSubmitting={isSubmitting}
-                canPay={canPay}
-                customerSearchValue={customerSearchValue}
-                onCustomerSearchChange={(value) => updateActiveSession({ customerSearchValue: value })}
-                customerSearchResults={customerSearchResults}
-                isCustomerSearchLoading={isCustomerSearchLoading}
-                showCustomerDropdown={showCustomerDropdown}
-                showCustomerSearchEmpty={showCustomerSearchEmpty}
-                onSelectCustomer={selectCustomer}
-                onOpenAddCustomer={() => setOpenModal("customer")}
-                onOpenCustomerDetail={() => setOpenModal("customer-detail")}
-                onClearCustomer={() =>
-                    updateActiveSession({
-                        selectedCustomer: null,
-                        customerSearchValue: "",
-                        orderDiscountPercent: 0,
-                        orderDiscountAmountFixed: 0,
-                    })
-                }
-                shippingAddress={shippingAddress}
-                onShippingAddressChange={(value) => updateActiveSession({ shippingAddress: value })}
-                savedShippingAddresses={savedShippingAddresses}
-                useCustomShippingAddress={useCustomShippingAddress}
-                onSavedShippingAddressChange={handleSavedShippingAddressChange}
-                isLoadingShippingAddresses={isLoadingShippingAddresses}
-                hasShippingAddress={hasShippingAddress}
-                orderDiscountPercentInput={orderDiscountPercent}
-                onOrderDiscountPercentChange={updateOrderDiscountPercent}
-                onOpenOfferModal={() => setOpenModal("offer")}
-                promoCodeInput={promoCodeInput}
-                onPromoCodeChange={(value) => updateActiveSession({ promoCodeInput: value })}
-                onApplyPromoCode={handleApplyPromoCode}
-                onClearPromoCode={handleClearPromoCode}
-                isApplyingPromo={isApplyingPromo}
-                visibleAvailablePromotions={visibleAvailablePromotions}
-                isPromotionDropdownOpen={isPromotionDropdownOpen}
-                isPromotionListLoading={isPromotionListLoading}
-                onLoadAvailablePromotions={loadAvailablePromotions}
-                onSelectPromotion={handleSelectPromotion}
-                onClosePromotionDropdown={() => setIsPromotionDropdownOpen(false)}
-                formatPromotionDiscountText={formatPromotionDiscountText}
-                formatPromotionValidityText={formatPromotionValidityText}
-                formatPromotionScopeLabel={formatPromotionScopeLabel}
-                appliedPromotionScopeText={appliedPromotionScopeText}
-            />
+      <PosPaymentSidebar
+        isOpen={isPaymentSidebarOpen}
+        onClose={() => {
+          setIsPaymentSidebarOpen(false)
+          setIsPromotionDropdownOpen(false)
+        }}
+        formatMoney={formatMoney}
+        total={total}
+        grossSubtotal={grossSubtotal}
+        itemDiscountTotal={itemDiscountTotal}
+        orderDiscountAmount={orderDiscountAmount}
+        orderDiscountPercent={orderDiscountPercent}
+        couponDiscountAmount={couponDiscountAmount}
+        membershipDiscountAmount={membershipDiscountAmount}
+        appliedPromotion={appliedPromotion}
+        selectedCustomer={selectedCustomer}
+        tierDiscountPercent={tierDiscountPercent}
+        canUseOrderDiscount={canUseOrderDiscount}
+        usesFixedOrderDiscount={usesFixedOrderDiscount}
+        isZeroAmountSale={isZeroAmountSale}
+        hasCartItems={hasCartItems}
+        isTakeaway={isTakeaway}
+        paymentMethod={paymentMethod}
+        paymentMethods={paymentMethods}
+        onPaymentMethodChange={(id) =>
+          updateActiveSession({
+            paymentMethod: id,
+            amountPaidInput: id === paymentMethod ? amountPaidInput : '',
+          })
+        }
+        isTransferPayment={isTransferPayment}
+        isCodTakeaway={isCodTakeaway}
+        isTransferTakeaway={isTransferTakeaway}
+        customerCurrentDebt={customerCurrentDebt}
+        amountPaidInput={amountPaidInput}
+        onAmountPaidChange={handleAmountPaidChange}
+        transferQrAmount={transferQrAmount}
+        amountPaid={amountPaid}
+        debtAmount={debtAmount}
+        change={change}
+        displayChange={displayChange}
+        canApplyOverpayToDebt={canApplyOverpayToDebt}
+        overpaymentAction={overpaymentAction}
+        onOverpaymentActionChange={handleOverpaymentActionChange}
+        onOpenDebtAllocation={handleOpenDebtAllocation}
+        confirmedDebtAllocationAmount={confirmedDebtAllocation}
+        isDebtSale={isDebtSale}
+        isPartialPayment={isPartialPayment}
+        isTransferQrFlow={isTransferQrFlow}
+        onQuickAmount={handleQuickAmount}
+        onConfirm={handlePayment}
+        isSubmitting={isSubmitting}
+        canPay={canPay}
+        onOpenCustomerDetail={() => setOpenModal('customer-detail')}
+        onClearCustomer={() =>
+          updateActiveSession({
+            selectedCustomer: null,
+            customerSearchValue: '',
+            orderDiscountPercent: 0,
+            orderDiscountAmountFixed: 0,
+          })
+        }
+        shippingAddress={shippingAddress}
+        onShippingAddressChange={(value) => updateActiveSession({ shippingAddress: value })}
+        savedShippingAddresses={savedShippingAddresses}
+        useCustomShippingAddress={useCustomShippingAddress}
+        onSavedShippingAddressChange={handleSavedShippingAddressChange}
+        isLoadingShippingAddresses={isLoadingShippingAddresses}
+        hasShippingAddress={hasShippingAddress}
+        orderDiscountPercentInput={orderDiscountPercent}
+        onOrderDiscountPercentChange={updateOrderDiscountPercent}
+        onOpenOfferModal={() => setOpenModal('offer')}
+        promoCodeInput={promoCodeInput}
+        onPromoCodeChange={(value) => updateActiveSession({ promoCodeInput: value })}
+        onApplyPromoCode={handleApplyPromoCode}
+        onClearPromoCode={handleClearPromoCode}
+        isApplyingPromo={isApplyingPromo}
+        visibleAvailablePromotions={visibleAvailablePromotions}
+        isPromotionDropdownOpen={isPromotionDropdownOpen}
+        isPromotionListLoading={isPromotionListLoading}
+        onLoadAvailablePromotions={loadAvailablePromotions}
+        onSelectPromotion={handleSelectPromotion}
+        onClosePromotionDropdown={() => setIsPromotionDropdownOpen(false)}
+        formatPromotionDiscountText={formatPromotionDiscountText}
+        formatPromotionValidityText={formatPromotionValidityText}
+        formatPromotionScopeLabel={formatPromotionScopeLabel}
+        appliedPromotionScopeText={appliedPromotionScopeText}
+      />
 
             <footer className="shrink-0 border-t border-[#d8d6ce] bg-white px-4">
                 <div className="flex items-end justify-between gap-4">

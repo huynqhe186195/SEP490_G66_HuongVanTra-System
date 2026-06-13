@@ -118,6 +118,153 @@ export function getPaymentStatusLabel(status) {
   return map[key] || status || '—'
 }
 
+/** Số tiền thực sự đã thu — không dùng số tiền QR/chờ CK khi chưa Success. */
+export function getCollectedPaymentAmount(payment, order = null) {
+  if (!payment) return 0
+  const paymentStatus = normalizeOrderKey(payment.paymentStatus).toLowerCase()
+  const paymentMethod = normalizeOrderKey(payment.paymentMethod)
+  const orderStatus = normalizeOrderKey(order?.orderStatus)
+  const amount = Number(payment.amount || 0)
+  if (amount <= 0) return 0
+
+  if (paymentStatus === 'success' || payment.paidAt) return amount
+
+  const isTransfer = paymentMethod === 'VietQR' || paymentMethod === 'BankTransfer'
+  if (isTransfer) return 0
+
+  if (orderStatus === 'Completed' && normalizeOrderKey(order?.orderChannel) === 'POS' && paymentMethod === 'Cash') {
+    return amount
+  }
+
+  return 0
+}
+
+/** Hiển thị trạng thái thanh toán nhất quán với trạng thái đơn (tránh "Hoàn tất" nhưng "Chờ xử lý"). */
+export function resolveOrderPaymentDisplay(order) {
+  const payment = getPrimaryPayment(order)
+  if (!payment) {
+    return { label: '—', className: 'bg-slate-100 text-slate-600', detail: null, amountCaption: 'Số tiền', displayAmount: 0 }
+  }
+
+  const orderStatus = normalizeOrderKey(order?.orderStatus)
+  const paymentStatus = normalizeOrderKey(payment.paymentStatus).toLowerCase()
+  const paymentMethod = normalizeOrderKey(payment.paymentMethod)
+  const orderChannel = normalizeOrderKey(order?.orderChannel)
+  const finalAmount = Number(order?.finalAmount || 0)
+  const expectedAmount = Number(payment.amount || 0)
+  const collectedAmount = getCollectedPaymentAmount(payment, order)
+  const remainingDebt = Math.max(0, finalAmount - collectedAmount)
+  const isFullyPaid = collectedAmount > 0 && remainingDebt <= 0
+  const isCod = paymentMethod === 'COD'
+  const isTransfer = paymentMethod === 'VietQR' || paymentMethod === 'BankTransfer'
+  const isPosSale = orderChannel === 'POS' && !isCod
+  const amountCaption =
+    collectedAmount > 0 ? 'Đã thu' : isTransfer && paymentStatus === 'pending' ? 'Số tiền cần thu' : 'Số tiền'
+  const displayAmount = collectedAmount > 0 ? collectedAmount : expectedAmount
+
+  if (orderStatus === 'Cancelled') {
+    if (collectedAmount > 0) {
+      return {
+        label: 'Đã thanh toán trước khi hủy',
+        className: getPaymentStatusClass('Success'),
+        detail: `Đã thu ${formatVnd(collectedAmount)}`,
+        amountCaption: 'Đã thu',
+        displayAmount: collectedAmount,
+      }
+    }
+
+    return {
+      label: 'Chưa thanh toán',
+      className: 'bg-slate-100 text-slate-600',
+      detail:
+        isTransfer && expectedAmount > 0
+          ? `Đơn đã hủy · VietQR ${formatVnd(expectedAmount)} chưa được xác nhận`
+          : 'Đơn đã hủy',
+      amountCaption: isTransfer && expectedAmount > 0 ? 'Số tiền QR' : 'Số tiền',
+      displayAmount: expectedAmount,
+    }
+  }
+
+  if (orderStatus === 'Completed') {
+    if (isCod) {
+      return {
+        label: payment.isCodVerified ? 'Đã thanh toán' : 'COD chưa xác nhận',
+        className: payment.isCodVerified ? getPaymentStatusClass('Success') : 'bg-amber-50 text-amber-800',
+        detail: null,
+        amountCaption: payment.isCodVerified ? 'Đã thu' : 'Số tiền COD',
+        displayAmount: payment.isCodVerified ? collectedAmount || expectedAmount : expectedAmount,
+      }
+    }
+
+    if (collectedAmount > 0) {
+      if (!isFullyPaid) {
+        return {
+          label: 'Đã thu một phần',
+          className: 'bg-amber-50 text-amber-800',
+          detail: `Đã thu ${formatVnd(collectedAmount)} · Còn nợ ${formatVnd(remainingDebt)}`,
+          amountCaption: 'Đã thu',
+          displayAmount: collectedAmount,
+        }
+      }
+
+      return {
+        label: 'Đã thanh toán',
+        className: getPaymentStatusClass('Success'),
+        detail: null,
+        amountCaption: 'Đã thu',
+        displayAmount: collectedAmount,
+      }
+    }
+
+    if (finalAmount > 0) {
+      return {
+        label: 'Mua chịu',
+        className: 'bg-amber-50 text-amber-800',
+        detail: `Còn nợ ${formatVnd(finalAmount)}`,
+        amountCaption: 'Số tiền',
+        displayAmount: finalAmount,
+      }
+    }
+  }
+
+  if (paymentStatus === 'pending' && isTransfer) {
+    return {
+      label: 'Chờ thanh toán',
+      className: 'bg-amber-50 text-amber-800',
+      detail: expectedAmount > 0 ? `Chờ chuyển khoản ${formatVnd(expectedAmount)}` : null,
+      amountCaption: 'Số tiền cần thu',
+      displayAmount: expectedAmount,
+    }
+  }
+
+  if (orderStatus === 'PendingPayment' && isPosSale && collectedAmount <= 0 && expectedAmount > 0 && !isTransfer) {
+    return {
+      label: 'Chờ thanh toán',
+      className: getPaymentStatusClass('Pending'),
+      detail: null,
+      amountCaption: 'Số tiền',
+      displayAmount: expectedAmount,
+    }
+  }
+
+  return {
+    label: getPaymentStatusLabel(payment.paymentStatus),
+    className: getPaymentStatusClass(payment.paymentStatus),
+    detail: null,
+    amountCaption: collectedAmount > 0 ? 'Đã thu' : 'Số tiền',
+    displayAmount: collectedAmount > 0 ? collectedAmount : expectedAmount,
+  }
+}
+
+export function getOrderRemainingDebt(order) {
+  const payment = getPrimaryPayment(order)
+  if (!payment) return 0
+  if (normalizeOrderKey(order?.orderStatus) !== 'Completed') return 0
+  const finalAmount = Number(order?.finalAmount || 0)
+  const collectedAmount = getCollectedPaymentAmount(payment, order)
+  return Math.max(0, finalAmount - collectedAmount)
+}
+
 export function getInventorySyncLabel(status) {
   const key = normalizeOrderKey(status)
   const map = {
