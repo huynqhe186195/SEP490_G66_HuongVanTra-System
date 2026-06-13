@@ -33,6 +33,7 @@ export function mapOrderItem(item) {
     returnedQuantity: Number(item.returnedQuantity ?? item.ReturnedQuantity ?? 0),
     unitPrice: Number(item.unitPrice ?? item.UnitPrice ?? 0),
     subTotal: Number(item.subTotal ?? item.SubTotal ?? 0),
+    isGift: Boolean(item.isGift ?? item.IsGift ?? false),
   }
 }
 
@@ -163,6 +164,7 @@ export function buildCreateOrderBody(payload) {
       skuSnapshotCode: line.skuSnapshotCode || null,
       quantity: Number(line.quantity),
       unitPrice: Number(line.unitPrice),
+      isGift: Boolean(line.isGift),
     })),
   }
 }
@@ -176,13 +178,24 @@ export async function createOrder(payload) {
 }
 
 export async function updateOrder(id, payload) {
+  const body = {
+    shippingAddress: payload.shippingAddress?.trim() || null,
+    note: payload.note?.trim() || null,
+    discountAmount: Number(payload.manualDiscountAmount ?? payload.discountAmount ?? 0),
+  }
+  if (payload.promotionTouched) {
+    if (payload.promotionId) {
+      body.promotionId = payload.promotionId
+    } else if (payload.clearPromotion) {
+      body.promotionId = '00000000-0000-0000-0000-000000000000'
+      body.promotionCode = ''
+    } else if (payload.promotionCode !== undefined) {
+      body.promotionCode = payload.promotionCode?.trim() || ''
+    }
+  }
   const data = await apiRequestAuth(`/api/v1/orders/${id}`, {
     method: 'PUT',
-    body: JSON.stringify({
-      shippingAddress: payload.shippingAddress?.trim() || null,
-      note: payload.note?.trim() || null,
-      discountAmount: Number(payload.discountAmount ?? 0),
-    }),
+    body: JSON.stringify(body),
   })
   return mapOrderDetail(data)
 }

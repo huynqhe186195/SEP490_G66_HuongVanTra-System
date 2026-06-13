@@ -26,6 +26,10 @@ public class CustomerConfiguration : IEntityTypeConfiguration<Customer>
         builder.Property(c => c.TotalSpending).HasColumnType("decimal(18,2)").HasDefaultValue(0);
         builder.Property(c => c.CurrentDebt).HasColumnType("decimal(18,2)").HasDefaultValue(0);
         builder.Property(c => c.AssignedSaleId);
+        builder.Property(c => c.Source)
+               .HasConversion<string>()
+               .HasMaxLength(20);
+        builder.Property(c => c.Department).HasMaxLength(100);
         builder.Property(c => c.CreatedAt).IsRequired();
         builder.Property(c => c.UpdatedAt).IsRequired();
         builder.Property(c => c.IsDeleted).HasDefaultValue(false);

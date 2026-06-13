@@ -44,7 +44,8 @@ public record OrderDetailResponse(
     int Quantity,
     int ReturnedQuantity,
     decimal UnitPrice,
-    decimal SubTotal
+    decimal SubTotal,
+    bool IsGift
 );
 
 public record ReturnOrderResponse(

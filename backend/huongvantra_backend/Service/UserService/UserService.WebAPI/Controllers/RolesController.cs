@@ -19,6 +19,14 @@ public class RolesController(RoleLogic roleLogic) : ControllerBase
         return Ok(result);
     }
 
+    [HttpGet("assignable")]
+    [Authorize(Policy = PermissionNames.ManageEmployee)]
+    public async Task<IActionResult> GetAssignable()
+    {
+        var result = await roleLogic.GetAssignableAsync();
+        return Ok(result);
+    }
+
     [HttpGet("{id:int}")]
     [Authorize(Policy = PermissionNames.ManageRole)]
     public async Task<IActionResult> GetById(int id)

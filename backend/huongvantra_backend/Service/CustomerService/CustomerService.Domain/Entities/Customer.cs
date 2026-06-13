@@ -15,6 +15,8 @@ public class Customer : BaseEntity
     public decimal TotalSpending { get; set; }
     public decimal CurrentDebt { get; set; }
     public Guid? AssignedSaleId { get; set; }
+    public CustomerSource? Source { get; set; }
+    public string? Department { get; set; }
 
     public CustomerTier? Tier { get; set; }
     public ICollection<CustomerAddress> Addresses { get; set; } = new List<CustomerAddress>();

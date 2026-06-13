@@ -95,6 +95,7 @@ public class OrderDetailConfiguration : IEntityTypeConfiguration<OrderDetail>
         builder.Property(e => e.ReturnedQuantity).HasDefaultValue(0).IsRequired();
         builder.Property(e => e.UnitPrice).HasColumnType("decimal(18,2)").IsRequired();
         builder.Property(e => e.SubTotal).HasColumnType("decimal(18,2)").IsRequired();
+        builder.Property(e => e.IsGift).HasDefaultValue(false).IsRequired();
         builder.Property(e => e.CreatedAt).IsRequired();
         builder.Property(e => e.UpdatedAt).IsRequired();
     }

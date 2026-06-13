@@ -35,6 +35,7 @@ public class GlobalExceptionMiddleware
             DuplicatePhoneNumberException => (StatusCodes.Status409Conflict, ex.Message, null),
             DuplicateEmailException => (StatusCodes.Status409Conflict, ex.Message, null),
             CustomerValidationException validation => (StatusCodes.Status400BadRequest, validation.Message, validation.Errors),
+            CustomerForbiddenException => (StatusCodes.Status403Forbidden, ex.Message, null),
             _ => (StatusCodes.Status500InternalServerError, "An unexpected error occurred.", null)
         };
 

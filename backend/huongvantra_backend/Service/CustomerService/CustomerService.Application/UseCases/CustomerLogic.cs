@@ -39,18 +39,22 @@ public class CustomerLogic
         _addressRepo = addressRepo;
     }
 
-    public async Task<CustomerResponse> CreateAsync(CreateCustomerRequest request, CancellationToken ct = default)
+    public async Task<CustomerResponse> CreateAsync(
+        CreateCustomerRequest request,
+        CustomerAccessContext access,
+        CancellationToken ct = default)
     {
         var input = ValidateCustomerRequest(request);
 
         if (await _customerRepo.PhoneExistsAsync(input.PhoneNumber, ct: ct))
-            throw new DuplicatePhoneNumberException(input.PhoneNumber);
+            throw await BuildDuplicatePhoneExceptionAsync(input.PhoneNumber, access, ct);
 
         if (!string.IsNullOrWhiteSpace(input.Email) && await _customerRepo.EmailExistsAsync(input.Email, ct: ct))
             throw new DuplicateEmailException(input.Email);
 
         var customerCode = await _customerRepo.GenerateNextCustomerCodeAsync(ct);
-        var initialTierId = await ResolveInitialTierIdAsync(input.CustomerGroup, ct);
+        var initialTierId = await ResolveInitialTierIdAsync(input.CustomerGroup, input.TierId, ct);
+        var assignedSaleId = ResolveAssignedSaleId(input.AssignedSaleId, access);
 
         var customer = new Customer
         {
@@ -62,7 +66,9 @@ public class CustomerLogic
             CustomerGroup = input.CustomerGroup,
             TaxCode = input.TaxCode,
             TierId = initialTierId,
-            AssignedSaleId = input.AssignedSaleId,
+            AssignedSaleId = assignedSaleId,
+            Source = input.Source,
+            Department = input.Department,
             TotalSpending = 0,
             CurrentDebt = 0,
             CreatedAt = DateTime.UtcNow,
@@ -78,10 +84,16 @@ public class CustomerLogic
         return MapToResponse(customer);
     }
 
-    public async Task<CustomerResponse> UpdateAsync(Guid id, UpdateCustomerRequest request, CancellationToken ct = default)
+    public async Task<CustomerResponse> UpdateAsync(
+        Guid id,
+        UpdateCustomerRequest request,
+        CustomerAccessContext access,
+        CancellationToken ct = default)
     {
         var customer = await _customerRepo.GetByIdAsync(id, ct)
             ?? throw new CustomerNotFoundException(id);
+
+        EnsureCanAccess(customer, access);
 
         var input = ValidateCustomerRequest(request);
 
@@ -96,7 +108,12 @@ public class CustomerLogic
         customer.Email = input.Email;
         customer.CustomerGroup = input.CustomerGroup;
         customer.TaxCode = input.TaxCode;
-        customer.AssignedSaleId = input.AssignedSaleId;
+        customer.Source = input.Source;
+        customer.Department = input.Department;
+        customer.AssignedSaleId = access.CanViewAllCustomers
+            ? input.AssignedSaleId
+            : customer.AssignedSaleId ?? access.UserId;
+        customer.TierId = await ResolveTierIdOnUpdateAsync(input.CustomerGroup, input.TierId, customer, ct);
         customer.UpdatedAt = DateTime.UtcNow;
 
         _customerRepo.Update(customer);
@@ -108,20 +125,25 @@ public class CustomerLogic
         return MapToResponse(customer);
     }
 
-    public async Task DeleteAsync(Guid id, CancellationToken ct = default)
+    public async Task DeleteAsync(Guid id, CustomerAccessContext access, CancellationToken ct = default)
     {
-        if (!await _customerRepo.ExistsAsync(id, ct))
+        var customer = await _customerRepo.GetByIdAsync(id, ct);
+        if (customer == null)
             throw new CustomerNotFoundException(id);
+
+        EnsureCanAccess(customer, access);
 
         await _customerRepo.SoftDeleteAsync(id, ct);
         await RecordActivityAsync(id, CustomerActivityType.Updated, "Xóa mềm khách hàng", ct);
         await _customerRepo.SaveChangesAsync(ct);
     }
 
-    public async Task<CustomerResponse> RestoreAsync(Guid id, CancellationToken ct = default)
+    public async Task<CustomerResponse> RestoreAsync(Guid id, CustomerAccessContext access, CancellationToken ct = default)
     {
         var customer = await _customerRepo.GetByIdIncludingDeletedAsync(id, ct)
             ?? throw new CustomerNotFoundException(id);
+
+        EnsureCanAccess(customer, access);
 
         if (!customer.IsDeleted)
             throw new CustomerValidationException(["Khách hàng đang hoạt động, không cần khôi phục."]);
@@ -199,6 +221,7 @@ public class CustomerLogic
     public async Task<CustomerDebtTransactionResponse> RecordDebtTransactionAsync(
         Guid customerId,
         RecordDebtTransactionRequest request,
+        CustomerAccessContext access,
         CancellationToken ct = default)
     {
         if (request is null)
@@ -210,11 +233,13 @@ public class CustomerLogic
         var customer = await _customerRepo.GetByIdAsync(customerId, ct)
             ?? throw new CustomerNotFoundException(customerId);
 
+        EnsureCanAccess(customer, access);
+
         if (request.Type == DebtTransactionType.DecreaseDebt)
         {
             var payment = await ApplyDebtPaymentAsync(customerId, new ApplyDebtPaymentRequest(
                 request.Amount,
-                request.Note ?? "Thanh toán công nợ"), ct);
+                request.Note ?? "Thanh toán công nợ"), access, ct);
             return payment.Transaction;
         }
 
@@ -235,10 +260,13 @@ public class CustomerLogic
 
     public async Task<IReadOnlyList<CustomerOpenDebtResponse>> GetOpenDebtsAsync(
         Guid customerId,
+        CustomerAccessContext access,
         CancellationToken ct = default)
     {
-        if (!await _customerRepo.ExistsAsync(customerId, ct))
-            throw new CustomerNotFoundException(customerId);
+        var customer = await _customerRepo.GetByIdAsync(customerId, ct)
+            ?? throw new CustomerNotFoundException(customerId);
+
+        EnsureCanAccess(customer, access);
 
         var items = await BuildOpenDebtItemsAsync(customerId, ct);
         return items
@@ -250,13 +278,16 @@ public class CustomerLogic
     public async Task<CustomerDebtPaymentPreviewResponse> PreviewDebtPaymentAsync(
         Guid customerId,
         decimal amount,
+        CustomerAccessContext access,
         CancellationToken ct = default)
     {
         if (amount <= 0)
             throw new CustomerValidationException(["Amount must be greater than zero."]);
 
-        if (!await _customerRepo.ExistsAsync(customerId, ct))
-            throw new CustomerNotFoundException(customerId);
+        var customer = await _customerRepo.GetByIdAsync(customerId, ct)
+            ?? throw new CustomerNotFoundException(customerId);
+
+        EnsureCanAccess(customer, access);
 
         var openDebts = await BuildOpenDebtItemsAsync(customerId, ct);
         var allocations = BuildFifoAllocations(amount, openDebts);
@@ -272,6 +303,7 @@ public class CustomerLogic
     public async Task<CustomerDebtPaymentResponse> ApplyDebtPaymentAsync(
         Guid customerId,
         ApplyDebtPaymentRequest request,
+        CustomerAccessContext access,
         CancellationToken ct = default)
     {
         if (request is null)
@@ -282,6 +314,8 @@ public class CustomerLogic
 
         var customer = await _customerRepo.GetByIdAsync(customerId, ct)
             ?? throw new CustomerNotFoundException(customerId);
+
+        EnsureCanAccess(customer, access);
 
         var openDebts = await BuildOpenDebtItemsAsync(customerId, ct);
         var allocationPlans = request.Allocations is { Count: > 0 }
@@ -366,69 +400,108 @@ public class CustomerLogic
             Math.Max(0, request.Amount - allocatedAmount));
     }
 
-    public async Task<IEnumerable<CustomerDebtTransactionResponse>> GetDebtsAsync(Guid customerId, CancellationToken ct = default)
+    public async Task<IEnumerable<CustomerDebtTransactionResponse>> GetDebtsAsync(
+        Guid customerId,
+        CustomerAccessContext access,
+        CancellationToken ct = default)
     {
-        if (!await _customerRepo.ExistsAsync(customerId, ct))
-            throw new CustomerNotFoundException(customerId);
+        var customer = await _customerRepo.GetByIdAsync(customerId, ct)
+            ?? throw new CustomerNotFoundException(customerId);
+
+        EnsureCanAccess(customer, access);
 
         var items = await _debtRepo.GetByCustomerIdAsync(customerId, ct);
         return items.Select(MapDebt);
     }
 
-    public async Task<CustomerDebtSummaryResponse> GetDebtSummaryAsync(Guid customerId, CancellationToken ct = default)
+    public async Task<CustomerDebtSummaryResponse> GetDebtSummaryAsync(
+        Guid customerId,
+        CustomerAccessContext access,
+        CancellationToken ct = default)
     {
         var customer = await _customerRepo.GetByIdAsync(customerId, ct)
             ?? throw new CustomerNotFoundException(customerId);
+
+        EnsureCanAccess(customer, access);
 
         var (increase, decrease, count) = await _debtRepo.GetSummaryAsync(customerId, ct);
         return new CustomerDebtSummaryResponse(customer.CurrentDebt, increase, decrease, count);
     }
 
-    public async Task<IEnumerable<CustomerActivityResponse>> GetActivitiesAsync(Guid customerId, CancellationToken ct = default)
+    public async Task<IEnumerable<CustomerActivityResponse>> GetActivitiesAsync(
+        Guid customerId,
+        CustomerAccessContext access,
+        CancellationToken ct = default)
     {
-        if (!await _customerRepo.ExistsAsync(customerId, ct))
-            throw new CustomerNotFoundException(customerId);
+        var customer = await _customerRepo.GetByIdAsync(customerId, ct)
+            ?? throw new CustomerNotFoundException(customerId);
+
+        EnsureCanAccess(customer, access);
 
         var items = await _activityRepo.GetByCustomerIdAsync(customerId, 100, ct);
         return items.Select(a => new CustomerActivityResponse(a.Id, a.CustomerId, a.ActivityType, a.Description, a.CreatedAt));
     }
 
-    public async Task<CustomerStatisticsResponse> GetStatisticsAsync(CancellationToken ct = default)
+    public async Task<CustomerStatisticsResponse> GetStatisticsAsync(CustomerAccessContext access, CancellationToken ct = default)
     {
+        var filter = access.AssignedSaleFilter;
         var monthStart = new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1, 0, 0, 0, DateTimeKind.Utc);
-        var total = await _customerRepo.CountAsync(ct);
-        var newThisMonth = await _customerRepo.CountCreatedSinceAsync(monthStart, ct);
-        var topSpenders = (await _customerRepo.GetTopSpendersAsync(5, ct)).Select(MapToResponse);
-        var topDebtors = (await _customerRepo.GetTopDebtorsAsync(5, ct)).Select(MapToResponse);
-        var byTier = (await _customerRepo.CountByTierAsync(ct))
+        var total = await _customerRepo.CountAsync(filter, ct);
+        var newThisMonth = await _customerRepo.CountCreatedSinceAsync(monthStart, filter, ct);
+        var topSpenders = (await _customerRepo.GetTopSpendersAsync(5, filter, ct)).Select(MapToResponse);
+        var topDebtors = (await _customerRepo.GetTopDebtorsAsync(5, filter, ct)).Select(MapToResponse);
+        var byTier = (await _customerRepo.CountByTierAsync(filter, ct))
             .Select(x => new TierCountResponse(x.TierName, x.Count));
 
         return new CustomerStatisticsResponse(total, newThisMonth, topSpenders, topDebtors, byTier);
     }
 
-    public async Task<CustomerDetailResponse> GetByIdAsync(Guid id, CancellationToken ct = default)
+    public async Task<CustomerDetailResponse?> GetByPhoneAsync(
+        string phone,
+        CustomerAccessContext access,
+        CancellationToken ct = default)
     {
-        var customer = await _customerRepo.GetByIdAsync(id, ct)
-            ?? throw new CustomerNotFoundException(id);
+        var normalized = phone?.Trim() ?? string.Empty;
+        if (string.IsNullOrEmpty(normalized))
+            throw new CustomerValidationException(["Số điện thoại là bắt buộc."]);
+
+        var customer = await _customerRepo.GetByPhoneAsync(normalized, ct);
+        if (customer is null)
+            return null;
+
+        EnsureCanAccess(customer, access);
         return MapToDetailResponse(customer);
     }
 
-    public async Task<PagedResult<CustomerResponse>> GetAllAsync(int page, int pageSize, CancellationToken ct = default)
+    public async Task<CustomerDetailResponse> GetByIdAsync(Guid id, CustomerAccessContext access, CancellationToken ct = default)
+    {
+        var customer = await _customerRepo.GetByIdAsync(id, ct)
+            ?? throw new CustomerNotFoundException(id);
+
+        EnsureCanAccess(customer, access);
+        return MapToDetailResponse(customer);
+    }
+
+    public async Task<PagedResult<CustomerResponse>> GetAllAsync(
+        int page, int pageSize, CustomerAccessContext access, CancellationToken ct = default)
     {
         ValidatePagination(page, pageSize);
 
-        var totalCount = await _customerRepo.CountAsync(ct);
-        var customers = await _customerRepo.GetAllAsync(page, pageSize, ct);
+        var filter = access.AssignedSaleFilter;
+        var totalCount = await _customerRepo.CountAsync(filter, ct);
+        var customers = await _customerRepo.GetAllAsync(page, pageSize, filter, ct);
         var items = customers.Select(MapToResponse).ToList();
         return new PagedResult<CustomerResponse>(items, page, pageSize, totalCount);
     }
 
-    public async Task<PagedResult<CustomerResponse>> GetInactiveAsync(int page, int pageSize, CancellationToken ct = default)
+    public async Task<PagedResult<CustomerResponse>> GetInactiveAsync(
+        int page, int pageSize, CustomerAccessContext access, CancellationToken ct = default)
     {
         ValidatePagination(page, pageSize);
 
-        var totalCount = await _customerRepo.CountDeletedAsync(ct);
-        var customers = await _customerRepo.GetAllDeletedAsync(page, pageSize, ct);
+        var filter = access.AssignedSaleFilter;
+        var totalCount = await _customerRepo.CountDeletedAsync(filter, ct);
+        var customers = await _customerRepo.GetAllDeletedAsync(page, pageSize, filter, ct);
         var items = customers.Select(MapToResponse).ToList();
         return new PagedResult<CustomerResponse>(items, page, pageSize, totalCount);
     }
@@ -827,13 +900,71 @@ public class CustomerLogic
         return (true, eligibleTier.TierName);
     }
 
-    private async Task<int?> ResolveInitialTierIdAsync(CustomerGroup customerGroup, CancellationToken ct)
+    private async Task<int?> ResolveInitialTierIdAsync(
+        CustomerGroup customerGroup, int? requestedTierId, CancellationToken ct)
     {
-        if (customerGroup != CustomerGroup.PhoThong)
+        if (customerGroup == CustomerGroup.DoiNgoai)
             return null;
 
-        var defaultTier = await _tierRepo.GetDefaultTierAsync(ct);
-        return defaultTier?.Id;
+        if (customerGroup == CustomerGroup.PhoThong)
+        {
+            var defaultTier = await _tierRepo.GetDefaultTierAsync(ct);
+            return defaultTier?.Id;
+        }
+
+        return null;
+    }
+
+    private async Task<int?> ResolveTierIdOnUpdateAsync(
+        CustomerGroup customerGroup,
+        int? requestedTierId,
+        Customer customer,
+        CancellationToken ct)
+    {
+        if (customerGroup == CustomerGroup.DoiNgoai)
+        {
+            if (customer.TierId.HasValue)
+            {
+                await RecordActivityAsync(
+                    customer.Id,
+                    CustomerActivityType.TierChanged,
+                    $"Gỡ hạng thẻ khỏi khách VIP: {customer.Tier?.TierName ?? "—"}",
+                    ct);
+            }
+            return null;
+        }
+
+        return customer.TierId;
+    }
+
+    private async Task<DuplicatePhoneNumberException> BuildDuplicatePhoneExceptionAsync(
+        string phone,
+        CustomerAccessContext access,
+        CancellationToken ct)
+    {
+        var existing = await _customerRepo.GetByPhoneAsync(phone, ct);
+        if (existing is not null && !access.CanAccessCustomer(existing.AssignedSaleId))
+        {
+            return new DuplicatePhoneNumberException(
+                $"Số điện thoại '{phone}' đã có trong hệ thống nhưng không thuộc khách bạn phụ trách. Vui lòng liên hệ quản lý để được gán khách.");
+        }
+
+        return new DuplicatePhoneNumberException(
+            $"Số điện thoại '{phone}' đã được đăng ký. Hãy tìm khách trong danh sách hoặc ô tìm kiếm tại POS.");
+    }
+
+    private static void EnsureCanAccess(Customer customer, CustomerAccessContext access)
+    {
+        if (!access.CanAccessCustomer(customer.AssignedSaleId))
+            throw new CustomerForbiddenException();
+    }
+
+    private static Guid? ResolveAssignedSaleId(Guid? requestedSaleId, CustomerAccessContext access)
+    {
+        if (access.CanViewAllCustomers)
+            return requestedSaleId;
+
+        return access.UserId != Guid.Empty ? access.UserId : requestedSaleId;
     }
 
     private static ValidatedCustomerInput ValidateCustomerRequest(CreateCustomerRequest request)
@@ -849,7 +980,9 @@ public class CustomerLogic
             request.CustomerGroup,
             request.TaxCode,
             request.TierId,
-            request.AssignedSaleId);
+            request.AssignedSaleId,
+            request.Source,
+            request.Department);
     }
 
     private static ValidatedCustomerInput ValidateCustomerRequest(UpdateCustomerRequest request)
@@ -865,7 +998,9 @@ public class CustomerLogic
             request.CustomerGroup,
             request.TaxCode,
             request.TierId,
-            request.AssignedSaleId);
+            request.AssignedSaleId,
+            request.Source,
+            request.Department);
     }
 
     private static void ValidatePagination(int page, int pageSize)
@@ -883,13 +1018,13 @@ public class CustomerLogic
     private static CustomerResponse MapToResponse(Customer c) =>
         new(c.Id, c.CustomerCode, c.FullName, c.PhoneNumber, c.Email, c.CustomerGroup, c.TaxCode,
             c.TierId, c.Tier?.TierName, c.TotalSpending, c.CurrentDebt,
-            c.AssignedSaleId, c.CreatedAt, c.UpdatedAt);
+            c.AssignedSaleId, c.Source, c.Department, c.CreatedAt, c.UpdatedAt);
 
     private static CustomerDetailResponse MapToDetailResponse(Customer c) =>
         new(c.Id, c.CustomerCode, c.FullName, c.PhoneNumber, c.Email, c.CustomerGroup, c.TaxCode,
             c.Tier == null ? null : new CustomerTierResponse(c.Tier.Id, c.Tier.TierName,
                 c.Tier.MinSpendingThreshold, c.Tier.DiscountPercent, c.Tier.ValidityMonths),
-            c.TotalSpending, c.CurrentDebt, c.AssignedSaleId,
+            c.TotalSpending, c.CurrentDebt, c.AssignedSaleId, c.Source, c.Department,
             c.Addresses.Where(a => !a.IsDeleted).Select(a => new CustomerAddressResponse(a.Id, a.CustomerId, a.ReceiverName,
                 a.ReceiverPhone, a.AddressLine, a.Ward, a.District, a.Province, a.IsDefault)),
             c.CreatedAt, c.UpdatedAt);

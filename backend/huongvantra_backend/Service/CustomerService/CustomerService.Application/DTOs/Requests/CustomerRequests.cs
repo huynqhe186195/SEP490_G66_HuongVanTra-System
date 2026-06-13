@@ -10,7 +10,9 @@ public record CreateCustomerRequest(
     CustomerGroup CustomerGroup,
     string? TaxCode,
     int? TierId,
-    Guid? AssignedSaleId
+    Guid? AssignedSaleId,
+    CustomerSource? Source = null,
+    string? Department = null
 );
 
 public record UpdateCustomerRequest(
@@ -21,7 +23,9 @@ public record UpdateCustomerRequest(
     CustomerGroup CustomerGroup,
     string? TaxCode,
     int? TierId,
-    Guid? AssignedSaleId
+    Guid? AssignedSaleId,
+    CustomerSource? Source = null,
+    string? Department = null
 );
 
 public record RecordDebtTransactionRequest(

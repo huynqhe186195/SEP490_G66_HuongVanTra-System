@@ -25,13 +25,27 @@ public record CreateOrderDetailRequest(
     string SkuSnapshotName,
     string? SkuSnapshotCode,
     int Quantity,
-    decimal UnitPrice
+    decimal UnitPrice,
+    bool IsGift = false
+);
+
+public record UpdateOrderDetailRequest(
+    Guid? Id,
+    Guid SkuId,
+    string SkuSnapshotName,
+    string? SkuSnapshotCode,
+    int Quantity,
+    decimal UnitPrice,
+    bool IsGift = false
 );
 
 public record UpdateOrderRequest(
     string? ShippingAddress,
     string? Note,
-    decimal DiscountAmount
+    decimal DiscountAmount,
+    Guid? PromotionId = null,
+    string? PromotionCode = null,
+    List<UpdateOrderDetailRequest>? Items = null
 );
 
 public record CancelOrderRequest(string? Reason);

@@ -40,7 +40,17 @@ public class OrderCannotBeCancelledException : Exception
 public class OrderCannotBeModifiedException : Exception
 {
     public OrderCannotBeModifiedException(Guid id, string status)
-        : base($"Order '{id}' cannot be modified because its status is '{status}'.") { }
+        : base($"Không thể sửa đơn hàng khi trạng thái là \"{GetStatusLabel(status)}\". Chỉ sửa được đơn chờ thanh toán, đang xử lý hoặc đang giao.") { }
+
+    private static string GetStatusLabel(string status) => status switch
+    {
+        "Completed" => "Hoàn tất",
+        "Cancelled" => "Đã hủy",
+        "PendingPayment" => "Chờ thanh toán",
+        "Processing" => "Đang xử lý",
+        "Shipping" => "Đang giao",
+        _ => status,
+    };
 }
 
 public class ReturnOrderNotFoundException : Exception

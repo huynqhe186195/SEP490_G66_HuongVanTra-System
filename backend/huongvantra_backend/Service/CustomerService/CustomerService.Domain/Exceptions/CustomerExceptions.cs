@@ -28,3 +28,9 @@ public class CustomerValidationException : Exception
 
     public IReadOnlyCollection<string> Errors { get; }
 }
+
+public class CustomerForbiddenException : Exception
+{
+    public CustomerForbiddenException()
+        : base("Bạn không có quyền truy cập khách hàng này.") { }
+}

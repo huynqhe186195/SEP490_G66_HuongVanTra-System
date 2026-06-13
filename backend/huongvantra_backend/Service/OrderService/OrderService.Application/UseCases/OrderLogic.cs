@@ -133,9 +133,14 @@ public class OrderLogic(
     public async Task<OrderResponse> CreateAsync(
         CreateOrderRequest req, Guid? actorId = null, string? actorName = null, CancellationToken ct = default)
     {
-        var detailInputs = req.Items.Select(i => new CreateOrderDetailInput(
-            i.SkuId, i.SkuSnapshotName.Trim(), i.SkuSnapshotCode?.Trim(),
-            i.Quantity, i.UnitPrice)).ToList();
+        var detailInputs = req.Items.Select(i =>
+        {
+            var isGift = i.IsGift;
+            var unitPrice = isGift ? 0m : i.UnitPrice;
+            return new CreateOrderDetailInput(
+                i.SkuId, i.SkuSnapshotName.Trim(), i.SkuSnapshotCode?.Trim(),
+                i.Quantity, unitPrice, isGift);
+        }).ToList();
 
         OrderInputValidator.ValidateCreateOrder(
             detailInputs, req.DiscountAmount, req.PaidAmount,
@@ -199,6 +204,7 @@ public class OrderLogic(
             Quantity = i.Quantity,
             UnitPrice = i.UnitPrice,
             SubTotal = i.UnitPrice * i.Quantity,
+            IsGift = i.IsGift,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         }).ToList();
@@ -325,16 +331,76 @@ public class OrderLogic(
         if (order.OrderStatus == OrderStatus.Completed || order.OrderStatus == OrderStatus.Cancelled)
             throw new OrderCannotBeModifiedException(id, order.OrderStatus.ToString());
 
+        var manualDiscount = Math.Max(0, req.DiscountAmount);
+        if (manualDiscount > order.TotalAmount)
+            throw new OrderValidationException("Giảm giá thủ công không được lớn hơn tạm tính.");
+
+        var promotionItems = (order.OrderDetails ?? [])
+            .Select(d => new PromotionCalculationItem(d.SkuId, d.Quantity, d.UnitPrice, d.SubTotal))
+            .ToList();
+
+        Guid? promotionId = order.PromotionId;
+        string? promotionCode = order.PromotionCode;
+        if (req.PromotionId.HasValue)
+        {
+            if (req.PromotionId.Value == Guid.Empty)
+            {
+                promotionId = null;
+                promotionCode = null;
+            }
+            else
+            {
+                promotionId = req.PromotionId;
+                promotionCode = null;
+            }
+        }
+        else if (req.PromotionCode is not null)
+        {
+            var trimmedCode = req.PromotionCode.Trim();
+            if (string.IsNullOrEmpty(trimmedCode))
+            {
+                promotionId = null;
+                promotionCode = null;
+            }
+            else
+            {
+                promotionId = null;
+                promotionCode = trimmedCode;
+            }
+        }
+
+        var promotionDiscount = await _promotionLogic.ValidateAndCalculateDiscountAsync(
+            promotionId,
+            promotionCode,
+            promotionItems,
+            manualDiscount,
+            order.CustomerId,
+            ct);
+
+        var totalDiscount = manualDiscount + promotionDiscount.DiscountAmount;
+        if (totalDiscount > order.TotalAmount)
+            throw new OrderValidationException("Tổng giảm giá (thủ công + khuyến mãi) không được lớn hơn tạm tính.");
+
         order.ShippingAddress = req.ShippingAddress?.Trim();
         order.Note = req.Note?.Trim();
-        order.DiscountAmount = req.DiscountAmount;
-        order.FinalAmount = Math.Max(0, order.TotalAmount - req.DiscountAmount);
+        order.DiscountAmount = totalDiscount;
+        order.PromotionId = promotionDiscount.PromotionId;
+        order.PromotionCode = promotionDiscount.PromotionCode;
+        order.PromotionDiscountAmount = promotionDiscount.DiscountAmount;
+        order.FinalAmount = Math.Max(0, order.TotalAmount - totalDiscount);
         order.UpdatedAt = DateTime.UtcNow;
+
+        var payments = order.Payments ?? await GetPaymentsInternal(order.Id, ct);
+        foreach (var payment in payments.Where(p => p.PaymentStatus != PaymentStatus.Success))
+        {
+            payment.Amount = order.FinalAmount;
+            payment.UpdatedAt = DateTime.UtcNow;
+        }
 
         await RecordActivityAsync(
             order.Id,
             OrderActivityType.Updated,
-            "Cập nhật thông tin đơn (địa chỉ, ghi chú hoặc giảm giá).",
+            $"Cập nhật đơn: địa chỉ/ghi chú/giảm giá. Thành tiền mới {FormatVnd(order.FinalAmount)}.",
             actorId,
             actorName,
             ct);
@@ -833,7 +899,7 @@ public class OrderLogic(
         o.ShippingAddress, o.Note, o.CreatedAt, o.UpdatedAt,
         (o.OrderDetails ?? []).Select(d => new OrderDetailResponse(
             d.Id, d.SkuId, d.SkuSnapshotName, d.SkuSnapshotCode,
-            d.Quantity, d.ReturnedQuantity, d.UnitPrice, d.SubTotal)).ToList(),
+            d.Quantity, d.ReturnedQuantity, d.UnitPrice, d.SubTotal, d.IsGift)).ToList(),
         (o.Payments ?? []).Select(p => new PaymentResponse(
             p.Id, p.OrderId, o.OrderCode, o.CustomerSnapshotName,
             p.PaymentMethod.ToString(), p.Amount, p.PaymentStatus.ToString(),

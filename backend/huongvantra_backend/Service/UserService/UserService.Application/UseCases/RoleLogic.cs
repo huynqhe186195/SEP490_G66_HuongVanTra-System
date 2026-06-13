@@ -33,6 +33,20 @@ public class RoleLogic(IRoleRepository roleRepo, IPermissionRepository permissio
         return roles.Select(MapToResponse);
     }
 
+    public async Task<IEnumerable<RoleResponse>> GetAssignableAsync()
+    {
+        var assignableNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "Sale",
+            "Warehouse"
+        };
+
+        var roles = await roleRepo.GetAllAsync();
+        return roles
+            .Where(r => !r.IsDeleted && assignableNames.Contains(r.RoleName))
+            .Select(MapToResponse);
+    }
+
     public async Task<RoleResponse> GetByIdAsync(int id)
     {
         var role = await roleRepo.GetByIdAsync(id) ?? throw new RoleNotFoundException(id);

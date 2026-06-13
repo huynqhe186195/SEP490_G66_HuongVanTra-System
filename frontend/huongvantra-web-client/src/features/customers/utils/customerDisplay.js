@@ -4,6 +4,18 @@ export const CUSTOMER_TYPE_BY_TAB = {
   corporate: 'CORPORATE',
 }
 
+/** Tạm ẩn module khách doanh nghiệp — chờ DN chốt nghiệp vụ. */
+export const CUSTOMER_CORPORATE_ENABLED = false
+
+export const CUSTOMER_LIST_TABS = [
+  { key: 'general', label: 'Phổ thông', shortLabel: 'Phổ thông' },
+  { key: 'vip', label: 'VIP', shortLabel: 'VIP' },
+  ...(CUSTOMER_CORPORATE_ENABLED
+    ? [{ key: 'corporate', label: 'Doanh nghiệp', shortLabel: 'Doanh nghiệp' }]
+    : []),
+  { key: 'inactive', label: 'Khách đã ngừng hoạt động', shortLabel: 'Ngừng hoạt động' },
+]
+
 export const DEFAULT_MEMBERSHIP_TIER = 'Member'
 
 export function customerHasTier(customer) {
@@ -12,6 +24,7 @@ export function customerHasTier(customer) {
 }
 
 export function getMembershipTierLabel(customer) {
+  if (isVipCustomerType(customer?.customerType)) return 'VIP'
   const code = String(customer?.tierCode || '').trim()
   return code || DEFAULT_MEMBERSHIP_TIER
 }

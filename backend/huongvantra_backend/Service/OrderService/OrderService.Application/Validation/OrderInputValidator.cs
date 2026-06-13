@@ -68,5 +68,6 @@ public record CreateOrderDetailInput(
     string SkuSnapshotName,
     string? SkuSnapshotCode,
     int Quantity,
-    decimal UnitPrice
+    decimal UnitPrice,
+    bool IsGift = false
 );

@@ -28,6 +28,7 @@ function CustomersMobileCards({
   renderRowActions,
   onRestore,
   restoringId,
+  canEditCustomer = true,
 }) {
   if (isLoading) {
     return (
@@ -138,8 +139,8 @@ function CustomersMobileCards({
                   to={`/customers/${row.customerId}/edit`}
                   className="inline-flex items-center gap-1 rounded-lg bg-[#4a6242] px-3 py-2 text-xs font-semibold text-white hover:opacity-90"
                 >
-                  <span className="material-symbols-outlined text-[16px]">edit</span>
-                  Sửa
+                  <span className="material-symbols-outlined text-[16px]">{canEditCustomer ? 'edit' : 'visibility'}</span>
+                  {canEditCustomer ? 'Sửa' : 'Xem'}
                 </Link>
               </div>
             )}

@@ -9,6 +9,15 @@ export function hasPermission(session, permission) {
   return session.permissions.includes(permission)
 }
 
+export function canViewAllCustomers(session) {
+  return hasPermission(session, 'VIEW_ALL_CUSTOMERS') || hasPermission(session, 'MANAGE_ROLE')
+}
+
+/** Quản lý hồ sơ KH trên trang /customers (tạo/sửa/xóa). Sale chỉ xem; tạo tại POS vẫn dùng API create. */
+export function canEditCustomer(session) {
+  return canViewAllCustomers(session)
+}
+
 export function canSimulateOrderCompleted(session) {
   return hasPermission(session, 'CREATE_ORDER')
 }

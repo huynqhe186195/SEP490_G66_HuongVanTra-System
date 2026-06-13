@@ -332,8 +332,20 @@ export function canReturnOrder(order) {
   return lines.some((line) => Number(line.returnedQuantity || 0) < Number(line.quantity || 0))
 }
 
+export function getManualDiscountAmount(order) {
+  const total = Number(order?.discountAmount ?? 0)
+  const promotion = Number(order?.promotionDiscountAmount ?? 0)
+  return Math.max(0, total - promotion)
+}
+
 export function canEditOrderMeta(order) {
   return Boolean(order && !isOrderTerminal(order))
+}
+
+export function getOrderEditBlockedMessage(order) {
+  if (!order) return ''
+  const status = getOrderStatusLabel(order.orderStatus)
+  return `Đơn đang ở trạng thái "${status}" nên không thể sửa địa chỉ, giảm giá hay khuyến mãi. Chỉ sửa được khi đơn chờ thanh toán, đang xử lý hoặc đang giao.`
 }
 
 export function isTransferPaymentMethod(method) {

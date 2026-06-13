@@ -7,7 +7,7 @@ import {
   updateEmployee,
 } from '../../iam/services/employeesApi.js'
 import { assignUserRoles, lockUser, unlockUser, updateUser } from '../../iam/services/usersApi.js'
-import { fetchRoles, mapRole } from '../../iam/services/rolesApi.js'
+import { fetchAssignableRoles, fetchRoles, mapRole } from '../../iam/services/rolesApi.js'
 import { resetPassword } from '../../auth/services/authApi.js'
 
 function mapStaffRow(employee) {
@@ -56,7 +56,12 @@ function filterStaffRows(rows, params = {}) {
 }
 
 export async function fetchRoleOptions() {
-  const roles = await fetchRoles()
+  let roles = []
+  try {
+    roles = await fetchAssignableRoles()
+  } catch {
+    roles = await fetchRoles()
+  }
   return (Array.isArray(roles) ? roles : [])
     .map(mapRole)
     .filter(Boolean)

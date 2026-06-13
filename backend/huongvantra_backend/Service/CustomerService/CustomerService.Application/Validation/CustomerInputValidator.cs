@@ -31,7 +31,9 @@ public static class CustomerInputValidator
         CustomerGroup customerGroup,
         string? taxCodeValue,
         int? tierId,
-        Guid? assignedSaleId)
+        Guid? assignedSaleId,
+        CustomerSource? source,
+        string? department)
     {
         var errors = new List<string>();
 
@@ -84,6 +86,15 @@ public static class CustomerInputValidator
         if (assignedSaleId == Guid.Empty)
             errors.Add("Mã nhân viên phụ trách không hợp lệ.");
 
+        var normalizedDepartment = department?.Trim();
+        if (string.IsNullOrWhiteSpace(normalizedDepartment))
+            normalizedDepartment = null;
+        else if (normalizedDepartment.Length > 100)
+            errors.Add("Phòng ban tối đa 100 ký tự.");
+
+        if (source.HasValue && !Enum.IsDefined(typeof(CustomerSource), source.Value))
+            errors.Add("Nguồn khách hàng không hợp lệ.");
+
         if (errors.Count > 0)
             throw new CustomerValidationException(errors);
 
@@ -95,7 +106,9 @@ public static class CustomerInputValidator
             customerGroup,
             taxCode,
             tierId,
-            assignedSaleId);
+            assignedSaleId,
+            source,
+            normalizedDepartment);
     }
 }
 
@@ -107,4 +120,6 @@ public record ValidatedCustomerInput(
     CustomerGroup CustomerGroup,
     string? TaxCode,
     int? TierId,
-    Guid? AssignedSaleId);
+    Guid? AssignedSaleId,
+    CustomerSource? Source,
+    string? Department);
