@@ -33,6 +33,7 @@ function buildPromotionPreviewBody({
         item.subTotal ??
         item.lineTotal ??
         Number(item.unitPrice ?? item.price ?? 0) * Number(item.quantity ?? item.qty ?? 1),
+      categoryId: item.categoryId ?? item.CategoryId ?? null,
     })),
   }
 }

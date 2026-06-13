@@ -746,7 +746,13 @@ function PosPage() {
           cartItems: clampCartLineDiscounts(
             currentItems.map((item) =>
               item.sku === product.sku
-                ? { ...item, qty: nextQty, stockQuantity: stockOnHand }
+                ? {
+                    ...item,
+                    qty: nextQty,
+                    stockQuantity: stockOnHand,
+                    categoryId: item.categoryId ?? product.categoryId ?? product.CategoryId ?? null,
+                    categoryName: item.categoryName ?? product.categoryName ?? product.CategoryName ?? null,
+                  }
                 : item,
             ),
           ),
@@ -767,6 +773,8 @@ function PosPage() {
             qty: 1,
             unit: 'x',
             price: product.price,
+            categoryId: product.categoryId ?? product.CategoryId ?? null,
+            categoryName: product.categoryName ?? product.CategoryName ?? null,
             step: 1,
             stockQuantity: stockOnHand,
             lineDiscountType: 'percent',
@@ -903,6 +911,7 @@ function PosPage() {
         skuId: item.productId,
         quantity: item.qty,
         unitPrice: item.price,
+        categoryId: item.categoryId ?? null,
         lineDiscountType: item.lineDiscountType,
         lineDiscountValue: item.lineDiscountValue || 0,
       })),
@@ -919,6 +928,7 @@ function PosPage() {
       quantity: item.qty,
       unitPrice: item.price,
       subTotal: getLineGross(item),
+      categoryId: item.categoryId ?? null,
     }))
 
   useEffect(() => {
