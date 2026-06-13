@@ -465,12 +465,12 @@ INSERT INTO Orders (Id, OrderCode, OrderKind, CustomerId, CustomerSnapshotName, 
 SELECT 'dddddddd-0001-4000-8000-000000000001', 'HVT-DEMO-001', 'Sale', 'cccccccc-0001-4000-8000-000000000001', @CUST_001, @SALE_USER_ID, 'POS', 'Completed', 'Synced', 275000, 0, NULL, NULL, 0, 275000, NULL, @NOTE_POS_001, DATE_SUB(@NOW, INTERVAL 5 DAY), DATE_SUB(@NOW, INTERVAL 5 DAY), 0
 WHERE NOT EXISTS (SELECT 1 FROM Orders WHERE OrderCode = 'HVT-DEMO-001');
 
-INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, SubTotal, CreatedAt, UpdatedAt, IsDeleted)
-SELECT '22222222-0001-4000-8000-000000000001', 'dddddddd-0001-4000-8000-000000000001', 'bbbbbbbb-0001-4000-8000-000000000003', @PROD_002, 'SKU-DEMO-003', 2, 0, 95000, 190000, DATE_SUB(@NOW, INTERVAL 5 DAY), DATE_SUB(@NOW, INTERVAL 5 DAY), 0
+INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, CostPrice, CategorySnapshotName, SubTotal, CreatedAt, UpdatedAt, IsDeleted)
+SELECT '22222222-0001-4000-8000-000000000001', 'dddddddd-0001-4000-8000-000000000001', 'bbbbbbbb-0001-4000-8000-000000000003', @PROD_002, 'SKU-DEMO-003', 2, 0, 95000, 50000, 'Trà demo', 190000, DATE_SUB(@NOW, INTERVAL 5 DAY), DATE_SUB(@NOW, INTERVAL 5 DAY), 0
 WHERE NOT EXISTS (SELECT 1 FROM OrderDetails WHERE Id = '22222222-0001-4000-8000-000000000001');
 
-INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, SubTotal, CreatedAt, UpdatedAt, IsDeleted)
-SELECT '22222222-0001-4000-8000-000000000002', 'dddddddd-0001-4000-8000-000000000001', 'bbbbbbbb-0001-4000-8000-000000000007', @PROD_006, 'SKU-DEMO-007', 1, 0, 65000, 65000, DATE_SUB(@NOW, INTERVAL 5 DAY), DATE_SUB(@NOW, INTERVAL 5 DAY), 0
+INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, CostPrice, CategorySnapshotName, SubTotal, CreatedAt, UpdatedAt, IsDeleted)
+SELECT '22222222-0001-4000-8000-000000000002', 'dddddddd-0001-4000-8000-000000000001', 'bbbbbbbb-0001-4000-8000-000000000007', @PROD_006, 'SKU-DEMO-007', 1, 0, 65000, 50000, 'Trà demo', 65000, DATE_SUB(@NOW, INTERVAL 5 DAY), DATE_SUB(@NOW, INTERVAL 5 DAY), 0
 WHERE NOT EXISTS (SELECT 1 FROM OrderDetails WHERE Id = '22222222-0001-4000-8000-000000000002');
 
 INSERT INTO Payments (Id, OrderId, PaymentMethod, Amount, PaymentStatus, TransactionRef, IsCodVerified, PaidAt, CreatedAt, UpdatedAt, IsDeleted)
@@ -482,8 +482,8 @@ INSERT INTO Orders (Id, OrderCode, OrderKind, CustomerId, CustomerSnapshotName, 
 SELECT 'dddddddd-0001-4000-8000-000000000002', 'HVT-DEMO-002', 'Sale', 'cccccccc-0001-4000-8000-000000000003', @CUST_003, @SALE_USER_ID, 'POS', 'Completed', 'Synced', 890000, 89000, 'eeeeeeee-0001-4000-8000-000000000001', 'DEMO10', 89000, 801000, NULL, @NOTE_POS_002, DATE_SUB(@NOW, INTERVAL 4 DAY), DATE_SUB(@NOW, INTERVAL 4 DAY), 0
 WHERE NOT EXISTS (SELECT 1 FROM Orders WHERE OrderCode = 'HVT-DEMO-002');
 
-INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, SubTotal, CreatedAt, UpdatedAt, IsDeleted)
-SELECT '22222222-0001-4000-8000-000000000003', 'dddddddd-0001-4000-8000-000000000002', 'bbbbbbbb-0001-4000-8000-000000000010', @PROD_009, 'SKU-DEMO-010', 1, 0, 890000, 890000, DATE_SUB(@NOW, INTERVAL 4 DAY), DATE_SUB(@NOW, INTERVAL 4 DAY), 0
+INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, CostPrice, CategorySnapshotName, SubTotal, CreatedAt, UpdatedAt, IsDeleted)
+SELECT '22222222-0001-4000-8000-000000000003', 'dddddddd-0001-4000-8000-000000000002', 'bbbbbbbb-0001-4000-8000-000000000010', @PROD_009, 'SKU-DEMO-010', 1, 0, 890000, 50000, 'Trà demo', 890000, DATE_SUB(@NOW, INTERVAL 4 DAY), DATE_SUB(@NOW, INTERVAL 4 DAY), 0
 WHERE NOT EXISTS (SELECT 1 FROM OrderDetails WHERE Id = '22222222-0001-4000-8000-000000000003');
 
 INSERT INTO Payments (Id, OrderId, PaymentMethod, Amount, PaymentStatus, TransactionRef, IsCodVerified, PaidAt, CreatedAt, UpdatedAt, IsDeleted)
@@ -495,12 +495,12 @@ INSERT INTO Orders (Id, OrderCode, OrderKind, CustomerId, CustomerSnapshotName, 
 SELECT 'dddddddd-0001-4000-8000-000000000003', 'HVT-DEMO-003', 'Sale', 'cccccccc-0001-4000-8000-000000000002', @CUST_002, @SALE_USER_ID, 'COD', 'Shipping', 'PendingDeduction', 580000, 0, NULL, NULL, 0, 580000, @SHIP_003, @NOTE_COD_003, DATE_SUB(@NOW, INTERVAL 2 DAY), DATE_SUB(@NOW, INTERVAL 1 DAY), 0
 WHERE NOT EXISTS (SELECT 1 FROM Orders WHERE OrderCode = 'HVT-DEMO-003');
 
-INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, SubTotal, CreatedAt, UpdatedAt, IsDeleted)
-SELECT '22222222-0001-4000-8000-000000000004', 'dddddddd-0001-4000-8000-000000000003', 'bbbbbbbb-0001-4000-8000-000000000001', @PROD_001, 'SKU-DEMO-001', 2, 0, 180000, 360000, DATE_SUB(@NOW, INTERVAL 2 DAY), DATE_SUB(@NOW, INTERVAL 2 DAY), 0
+INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, CostPrice, CategorySnapshotName, SubTotal, CreatedAt, UpdatedAt, IsDeleted)
+SELECT '22222222-0001-4000-8000-000000000004', 'dddddddd-0001-4000-8000-000000000003', 'bbbbbbbb-0001-4000-8000-000000000001', @PROD_001, 'SKU-DEMO-001', 2, 0, 180000, 50000, 'Trà demo', 360000, DATE_SUB(@NOW, INTERVAL 2 DAY), DATE_SUB(@NOW, INTERVAL 2 DAY), 0
 WHERE NOT EXISTS (SELECT 1 FROM OrderDetails WHERE Id = '22222222-0001-4000-8000-000000000004');
 
-INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, SubTotal, CreatedAt, UpdatedAt, IsDeleted)
-SELECT '22222222-0001-4000-8000-000000000005', 'dddddddd-0001-4000-8000-000000000003', 'bbbbbbbb-0001-4000-8000-000000000005', @PROD_004, 'SKU-DEMO-005', 1, 0, 220000, 220000, DATE_SUB(@NOW, INTERVAL 2 DAY), DATE_SUB(@NOW, INTERVAL 2 DAY), 0
+INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, CostPrice, CategorySnapshotName, SubTotal, CreatedAt, UpdatedAt, IsDeleted)
+SELECT '22222222-0001-4000-8000-000000000005', 'dddddddd-0001-4000-8000-000000000003', 'bbbbbbbb-0001-4000-8000-000000000005', @PROD_004, 'SKU-DEMO-005', 1, 0, 220000, 50000, 'Trà demo', 220000, DATE_SUB(@NOW, INTERVAL 2 DAY), DATE_SUB(@NOW, INTERVAL 2 DAY), 0
 WHERE NOT EXISTS (SELECT 1 FROM OrderDetails WHERE Id = '22222222-0001-4000-8000-000000000005');
 
 INSERT INTO Payments (Id, OrderId, PaymentMethod, Amount, PaymentStatus, TransactionRef, IsCodVerified, CodWarningDate, PaidAt, CreatedAt, UpdatedAt, IsDeleted)
@@ -512,8 +512,8 @@ INSERT INTO Orders (Id, OrderCode, OrderKind, CustomerId, CustomerSnapshotName, 
 SELECT 'dddddddd-0001-4000-8000-000000000004', 'HVT-DEMO-004', 'Sale', 'cccccccc-0001-4000-8000-000000000005', @CUST_005, @SALE_USER_ID, 'COD', 'Completed', 'Synced', 420000, 0, NULL, NULL, 0, 420000, @SHIP_004, @NOTE_COD_004, DATE_SUB(@NOW, INTERVAL 7 DAY), DATE_SUB(@NOW, INTERVAL 6 DAY), 0
 WHERE NOT EXISTS (SELECT 1 FROM Orders WHERE OrderCode = 'HVT-DEMO-004');
 
-INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, SubTotal, CreatedAt, UpdatedAt, IsDeleted)
-SELECT '22222222-0001-4000-8000-000000000006', 'dddddddd-0001-4000-8000-000000000004', 'bbbbbbbb-0001-4000-8000-000000000002', @PROD_001, 'SKU-DEMO-002', 1, 0, 420000, 420000, DATE_SUB(@NOW, INTERVAL 7 DAY), DATE_SUB(@NOW, INTERVAL 7 DAY), 0
+INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, CostPrice, CategorySnapshotName, SubTotal, CreatedAt, UpdatedAt, IsDeleted)
+SELECT '22222222-0001-4000-8000-000000000006', 'dddddddd-0001-4000-8000-000000000004', 'bbbbbbbb-0001-4000-8000-000000000002', @PROD_001, 'SKU-DEMO-002', 1, 0, 420000, 50000, 'Trà demo', 420000, DATE_SUB(@NOW, INTERVAL 7 DAY), DATE_SUB(@NOW, INTERVAL 7 DAY), 0
 WHERE NOT EXISTS (SELECT 1 FROM OrderDetails WHERE Id = '22222222-0001-4000-8000-000000000006');
 
 INSERT INTO Payments (Id, OrderId, PaymentMethod, Amount, PaymentStatus, TransactionRef, IsCodVerified, CodWarningDate, PaidAt, CreatedAt, UpdatedAt, IsDeleted)
@@ -525,8 +525,8 @@ INSERT INTO Orders (Id, OrderCode, OrderKind, CustomerId, CustomerSnapshotName, 
 SELECT 'dddddddd-0001-4000-8000-000000000005', 'HVT-DEMO-005', 'Sale', 'cccccccc-0001-4000-8000-000000000007', @CUST_007, @SALE_USER_ID, 'COD', 'PendingPayment', 'PendingDeduction', 350000, 0, NULL, NULL, 0, 350000, @SHIP_005, NULL, DATE_SUB(@NOW, INTERVAL 1 DAY), DATE_SUB(@NOW, INTERVAL 1 DAY), 0
 WHERE NOT EXISTS (SELECT 1 FROM Orders WHERE OrderCode = 'HVT-DEMO-005');
 
-INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, SubTotal, CreatedAt, UpdatedAt, IsDeleted)
-SELECT '22222222-0001-4000-8000-000000000007', 'dddddddd-0001-4000-8000-000000000005', 'bbbbbbbb-0001-4000-8000-000000000013', @PROD_012, 'SKU-DEMO-013', 1, 0, 350000, 350000, DATE_SUB(@NOW, INTERVAL 1 DAY), DATE_SUB(@NOW, INTERVAL 1 DAY), 0
+INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, CostPrice, CategorySnapshotName, SubTotal, CreatedAt, UpdatedAt, IsDeleted)
+SELECT '22222222-0001-4000-8000-000000000007', 'dddddddd-0001-4000-8000-000000000005', 'bbbbbbbb-0001-4000-8000-000000000013', @PROD_012, 'SKU-DEMO-013', 1, 0, 350000, 50000, 'Trà demo', 350000, DATE_SUB(@NOW, INTERVAL 1 DAY), DATE_SUB(@NOW, INTERVAL 1 DAY), 0
 WHERE NOT EXISTS (SELECT 1 FROM OrderDetails WHERE Id = '22222222-0001-4000-8000-000000000007');
 
 INSERT INTO Payments (Id, OrderId, PaymentMethod, Amount, PaymentStatus, TransactionRef, IsCodVerified, CodWarningDate, PaidAt, CreatedAt, UpdatedAt, IsDeleted)
@@ -538,12 +538,12 @@ INSERT INTO Orders (Id, OrderCode, OrderKind, CustomerId, CustomerSnapshotName, 
 SELECT 'dddddddd-0001-4000-8000-000000000006', 'HVT-DEMO-006', 'Sale', 'cccccccc-0001-4000-8000-000000000010', @CUST_010, @SALE_USER_ID, 'POS', 'Completed', 'Synced', 565000, 0, NULL, NULL, 0, 565000, NULL, @NOTE_POS_006, DATE_SUB(@NOW, INTERVAL 3 DAY), DATE_SUB(@NOW, INTERVAL 3 DAY), 0
 WHERE NOT EXISTS (SELECT 1 FROM Orders WHERE OrderCode = 'HVT-DEMO-006');
 
-INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, SubTotal, CreatedAt, UpdatedAt, IsDeleted)
-SELECT '22222222-0001-4000-8000-000000000008', 'dddddddd-0001-4000-8000-000000000006', 'bbbbbbbb-0001-4000-8000-000000000011', @PROD_010, 'SKU-DEMO-011', 1, 0, 520000, 520000, DATE_SUB(@NOW, INTERVAL 3 DAY), DATE_SUB(@NOW, INTERVAL 3 DAY), 0
+INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, CostPrice, CategorySnapshotName, SubTotal, CreatedAt, UpdatedAt, IsDeleted)
+SELECT '22222222-0001-4000-8000-000000000008', 'dddddddd-0001-4000-8000-000000000006', 'bbbbbbbb-0001-4000-8000-000000000011', @PROD_010, 'SKU-DEMO-011', 1, 0, 520000, 50000, 'Trà demo', 520000, DATE_SUB(@NOW, INTERVAL 3 DAY), DATE_SUB(@NOW, INTERVAL 3 DAY), 0
 WHERE NOT EXISTS (SELECT 1 FROM OrderDetails WHERE Id = '22222222-0001-4000-8000-000000000008');
 
-INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, SubTotal, CreatedAt, UpdatedAt, IsDeleted)
-SELECT '22222222-0001-4000-8000-000000000009', 'dddddddd-0001-4000-8000-000000000006', 'bbbbbbbb-0001-4000-8000-000000000008', @PROD_007, 'SKU-DEMO-008', 1, 0, 45000, 45000, DATE_SUB(@NOW, INTERVAL 3 DAY), DATE_SUB(@NOW, INTERVAL 3 DAY), 0
+INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, CostPrice, CategorySnapshotName, SubTotal, CreatedAt, UpdatedAt, IsDeleted)
+SELECT '22222222-0001-4000-8000-000000000009', 'dddddddd-0001-4000-8000-000000000006', 'bbbbbbbb-0001-4000-8000-000000000008', @PROD_007, 'SKU-DEMO-008', 1, 0, 45000, 50000, 'Trà demo', 45000, DATE_SUB(@NOW, INTERVAL 3 DAY), DATE_SUB(@NOW, INTERVAL 3 DAY), 0
 WHERE NOT EXISTS (SELECT 1 FROM OrderDetails WHERE Id = '22222222-0001-4000-8000-000000000009');
 
 INSERT INTO Payments (Id, OrderId, PaymentMethod, Amount, PaymentStatus, TransactionRef, IsCodVerified, PaidAt, CreatedAt, UpdatedAt, IsDeleted)
@@ -555,12 +555,12 @@ INSERT INTO Orders (Id, OrderCode, OrderKind, CustomerId, CustomerSnapshotName, 
 SELECT 'dddddddd-0001-4000-8000-000000000009', 'HVT-DEMO-DEBT-002', 'Sale', 'cccccccc-0001-4000-8000-000000000002', @CUST_002, @SALE_USER_ID, 'POS', 'Completed', 'Synced', 330000, 0, NULL, NULL, 0, 330000, NULL, @NOTE_POS_DEBT_002, DATE_SUB(@NOW, INTERVAL 8 DAY), DATE_SUB(@NOW, INTERVAL 8 DAY), 0
 WHERE NOT EXISTS (SELECT 1 FROM Orders WHERE OrderCode = 'HVT-DEMO-DEBT-002');
 
-INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, SubTotal, CreatedAt, UpdatedAt, IsDeleted)
-SELECT '22222222-0001-4000-8000-00000000000a', 'dddddddd-0001-4000-8000-000000000009', 'bbbbbbbb-0001-4000-8000-000000000001', @PROD_001, 'SKU-DEMO-001', 1, 0, 180000, 180000, DATE_SUB(@NOW, INTERVAL 8 DAY), DATE_SUB(@NOW, INTERVAL 8 DAY), 0
+INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, CostPrice, CategorySnapshotName, SubTotal, CreatedAt, UpdatedAt, IsDeleted)
+SELECT '22222222-0001-4000-8000-00000000000a', 'dddddddd-0001-4000-8000-000000000009', 'bbbbbbbb-0001-4000-8000-000000000001', @PROD_001, 'SKU-DEMO-001', 1, 0, 180000, 50000, 'Trà demo', 180000, DATE_SUB(@NOW, INTERVAL 8 DAY), DATE_SUB(@NOW, INTERVAL 8 DAY), 0
 WHERE NOT EXISTS (SELECT 1 FROM OrderDetails WHERE Id = '22222222-0001-4000-8000-00000000000a');
 
-INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, SubTotal, CreatedAt, UpdatedAt, IsDeleted)
-SELECT '22222222-0001-4000-8000-00000000000b', 'dddddddd-0001-4000-8000-000000000009', 'bbbbbbbb-0001-4000-8000-000000000007', @PROD_006, 'SKU-DEMO-007', 1, 0, 150000, 150000, DATE_SUB(@NOW, INTERVAL 8 DAY), DATE_SUB(@NOW, INTERVAL 8 DAY), 0
+INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, CostPrice, CategorySnapshotName, SubTotal, CreatedAt, UpdatedAt, IsDeleted)
+SELECT '22222222-0001-4000-8000-00000000000b', 'dddddddd-0001-4000-8000-000000000009', 'bbbbbbbb-0001-4000-8000-000000000007', @PROD_006, 'SKU-DEMO-007', 1, 0, 150000, 50000, 'Trà demo', 150000, DATE_SUB(@NOW, INTERVAL 8 DAY), DATE_SUB(@NOW, INTERVAL 8 DAY), 0
 WHERE NOT EXISTS (SELECT 1 FROM OrderDetails WHERE Id = '22222222-0001-4000-8000-00000000000b');
 
 INSERT INTO Payments (Id, OrderId, PaymentMethod, Amount, PaymentStatus, TransactionRef, IsCodVerified, PaidAt, CreatedAt, UpdatedAt, IsDeleted)
@@ -572,12 +572,12 @@ INSERT INTO Orders (Id, OrderCode, OrderKind, CustomerId, CustomerSnapshotName, 
 SELECT 'dddddddd-0001-4000-8000-00000000000a', 'HVT-DEMO-DEBT-005', 'Sale', 'cccccccc-0001-4000-8000-000000000005', @CUST_005, @SALE_USER_ID, 'POS', 'Completed', 'Synced', 520000, 0, NULL, NULL, 0, 520000, NULL, @NOTE_POS_DEBT_005, DATE_SUB(@NOW, INTERVAL 9 DAY), DATE_SUB(@NOW, INTERVAL 9 DAY), 0
 WHERE NOT EXISTS (SELECT 1 FROM Orders WHERE OrderCode = 'HVT-DEMO-DEBT-005');
 
-INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, SubTotal, CreatedAt, UpdatedAt, IsDeleted)
-SELECT '22222222-0001-4000-8000-00000000000c', 'dddddddd-0001-4000-8000-00000000000a', 'bbbbbbbb-0001-4000-8000-000000000005', @PROD_004, 'SKU-DEMO-005', 1, 0, 220000, 220000, DATE_SUB(@NOW, INTERVAL 9 DAY), DATE_SUB(@NOW, INTERVAL 9 DAY), 0
+INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, CostPrice, CategorySnapshotName, SubTotal, CreatedAt, UpdatedAt, IsDeleted)
+SELECT '22222222-0001-4000-8000-00000000000c', 'dddddddd-0001-4000-8000-00000000000a', 'bbbbbbbb-0001-4000-8000-000000000005', @PROD_004, 'SKU-DEMO-005', 1, 0, 220000, 50000, 'Trà demo', 220000, DATE_SUB(@NOW, INTERVAL 9 DAY), DATE_SUB(@NOW, INTERVAL 9 DAY), 0
 WHERE NOT EXISTS (SELECT 1 FROM OrderDetails WHERE Id = '22222222-0001-4000-8000-00000000000c');
 
-INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, SubTotal, CreatedAt, UpdatedAt, IsDeleted)
-SELECT '22222222-0001-4000-8000-00000000000d', 'dddddddd-0001-4000-8000-00000000000a', 'bbbbbbbb-0001-4000-8000-000000000006', @PROD_005, 'SKU-DEMO-006', 1, 0, 300000, 300000, DATE_SUB(@NOW, INTERVAL 9 DAY), DATE_SUB(@NOW, INTERVAL 9 DAY), 0
+INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, CostPrice, CategorySnapshotName, SubTotal, CreatedAt, UpdatedAt, IsDeleted)
+SELECT '22222222-0001-4000-8000-00000000000d', 'dddddddd-0001-4000-8000-00000000000a', 'bbbbbbbb-0001-4000-8000-000000000006', @PROD_005, 'SKU-DEMO-006', 1, 0, 300000, 50000, 'Trà demo', 300000, DATE_SUB(@NOW, INTERVAL 9 DAY), DATE_SUB(@NOW, INTERVAL 9 DAY), 0
 WHERE NOT EXISTS (SELECT 1 FROM OrderDetails WHERE Id = '22222222-0001-4000-8000-00000000000d');
 
 INSERT INTO Payments (Id, OrderId, PaymentMethod, Amount, PaymentStatus, TransactionRef, IsCodVerified, PaidAt, CreatedAt, UpdatedAt, IsDeleted)
@@ -589,8 +589,8 @@ INSERT INTO Orders (Id, OrderCode, OrderKind, CustomerId, CustomerSnapshotName, 
 SELECT 'dddddddd-0001-4000-8000-000000000007', 'HVT-DEMO-DOI-001', 'Exchange', 'cccccccc-0001-4000-8000-000000000004', @CUST_004, @SALE_USER_ID, 'POS', 'Completed', 'Synced', 150000, 95000, NULL, NULL, 0, 55000, NULL, @NOTE_EXCH_007, DATE_SUB(@NOW, INTERVAL 1 DAY), DATE_SUB(@NOW, INTERVAL 1 DAY), 0
 WHERE NOT EXISTS (SELECT 1 FROM Orders WHERE OrderCode = 'HVT-DEMO-DOI-001');
 
-INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, SubTotal, CreatedAt, UpdatedAt, IsDeleted)
-SELECT '22222222-0001-4000-8000-000000000010', 'dddddddd-0001-4000-8000-000000000007', 'bbbbbbbb-0001-4000-8000-000000000004', @PROD_003, 'SKU-DEMO-004', 1, 0, 150000, 150000, DATE_SUB(@NOW, INTERVAL 1 DAY), DATE_SUB(@NOW, INTERVAL 1 DAY), 0
+INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, CostPrice, CategorySnapshotName, SubTotal, CreatedAt, UpdatedAt, IsDeleted)
+SELECT '22222222-0001-4000-8000-000000000010', 'dddddddd-0001-4000-8000-000000000007', 'bbbbbbbb-0001-4000-8000-000000000004', @PROD_003, 'SKU-DEMO-004', 1, 0, 150000, 50000, 'Trà demo', 150000, DATE_SUB(@NOW, INTERVAL 1 DAY), DATE_SUB(@NOW, INTERVAL 1 DAY), 0
 WHERE NOT EXISTS (SELECT 1 FROM OrderDetails WHERE Id = '22222222-0001-4000-8000-000000000010');
 
 INSERT INTO Payments (Id, OrderId, PaymentMethod, Amount, PaymentStatus, TransactionRef, IsCodVerified, PaidAt, CreatedAt, UpdatedAt, IsDeleted)
@@ -617,8 +617,8 @@ INSERT INTO Orders (Id, OrderCode, OrderKind, CustomerId, CustomerSnapshotName, 
 SELECT 'dddddddd-0001-4000-8000-000000000008', 'HVT-DEMO-008', 'Sale', 'cccccccc-0001-4000-8000-000000000009', @CUST_009, @SALE_USER_ID, 'COD', 'Completed', 'Synced', 1780000, 50000, 'eeeeeeee-0001-4000-8000-000000000002', 'DEMO50K', 50000, 1730000, @SHIP_008, @NOTE_COD_008, DATE_SUB(@NOW, INTERVAL 10 DAY), DATE_SUB(@NOW, INTERVAL 9 DAY), 0
 WHERE NOT EXISTS (SELECT 1 FROM Orders WHERE OrderCode = 'HVT-DEMO-008');
 
-INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, SubTotal, CreatedAt, UpdatedAt, IsDeleted)
-SELECT '22222222-0001-4000-8000-000000000011', 'dddddddd-0001-4000-8000-000000000008', 'bbbbbbbb-0001-4000-8000-000000000010', @PROD_009, 'SKU-DEMO-010', 2, 0, 890000, 1780000, DATE_SUB(@NOW, INTERVAL 10 DAY), DATE_SUB(@NOW, INTERVAL 10 DAY), 0
+INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, CostPrice, CategorySnapshotName, SubTotal, CreatedAt, UpdatedAt, IsDeleted)
+SELECT '22222222-0001-4000-8000-000000000011', 'dddddddd-0001-4000-8000-000000000008', 'bbbbbbbb-0001-4000-8000-000000000010', @PROD_009, 'SKU-DEMO-010', 2, 0, 890000, 50000, 'Trà demo', 1780000, DATE_SUB(@NOW, INTERVAL 10 DAY), DATE_SUB(@NOW, INTERVAL 10 DAY), 0
 WHERE NOT EXISTS (SELECT 1 FROM OrderDetails WHERE Id = '22222222-0001-4000-8000-000000000011');
 
 INSERT INTO Payments (Id, OrderId, PaymentMethod, Amount, PaymentStatus, TransactionRef, IsCodVerified, CodWarningDate, PaidAt, CreatedAt, UpdatedAt, IsDeleted)

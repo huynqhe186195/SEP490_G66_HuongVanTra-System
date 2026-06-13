@@ -26,6 +26,7 @@ public class OrderRepository(OrderDbContext _db) : IOrderRepository
         string? search, Guid? customerId, string? status, string? channel,
         string? excludeChannel, string? codTab, bool returnableOnly,
         string? orderKind, string? excludeOrderKind,
+        DateTime? fromDate, DateTime? toDate, Guid? employeeId,
         int page, int pageSize, CancellationToken ct = default)
     {
         var query = _db.Orders.AsQueryable();
@@ -121,9 +122,26 @@ public class OrderRepository(OrderDbContext _db) : IOrderRepository
                 && o.OrderDetails.Any(d => d.ReturnedQuantity < d.Quantity));
         }
 
+        if (employeeId.HasValue)
+        {
+            query = query.Where(o => 
+                o.EmployeeId == employeeId 
+                || _db.OrderActivities.Any(a => 
+                    a.OrderId == o.Id 
+                    && a.ActivityType == OrderActivityType.Created 
+                    && a.ActorId == employeeId));
+        }
+
+        if (fromDate.HasValue)
+            query = query.Where(o => o.CreatedAt >= fromDate.Value);
+
+        if (toDate.HasValue)
+            query = query.Where(o => o.CreatedAt <= toDate.Value);
+
         var total = await query.CountAsync(ct);
-        var items = await query
+         var items = await query
             .Include(o => o.Payments)
+            .Include(o => o.OrderDetails)
             .OrderByDescending(o => o.CreatedAt)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)

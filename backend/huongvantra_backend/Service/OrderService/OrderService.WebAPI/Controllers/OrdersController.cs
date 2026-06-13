@@ -25,11 +25,14 @@ public class OrdersController(OrderLogic _orderLogic) : ControllerBase
         [FromQuery] bool returnableOnly = false,
         [FromQuery] string? orderKind = null,
         [FromQuery] string? excludeOrderKind = null,
+        [FromQuery] DateTime? fromDate = null,
+        [FromQuery] DateTime? toDate = null,
+        [FromQuery] Guid? employeeId = null,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20,
         CancellationToken ct = default) =>
         Ok(await _orderLogic.GetPagedAsync(
-            new GetOrdersRequest(search, customerId, status, channel, excludeChannel, codTab, returnableOnly, orderKind, excludeOrderKind, page, pageSize), ct));
+            new GetOrdersRequest(search, customerId, status, channel, excludeChannel, codTab, returnableOnly, orderKind, excludeOrderKind, fromDate, toDate, employeeId, page, pageSize), ct));
 
     [HttpGet("return-slips")]
     [Authorize(Policy = PermissionNames.ViewOrder)]

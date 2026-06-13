@@ -10,6 +10,7 @@ public interface IOrderRepository
         string? search, Guid? customerId, string? status, string? channel,
         string? excludeChannel, string? codTab, bool returnableOnly,
         string? orderKind, string? excludeOrderKind,
+        DateTime? fromDate, DateTime? toDate, Guid? employeeId,
         int page, int pageSize, CancellationToken ct = default);
     Task<List<Order>> GetPendingCodAsync(CancellationToken ct = default);
     Task<Order?> GetSinglePendingTransferByAmountAsync(

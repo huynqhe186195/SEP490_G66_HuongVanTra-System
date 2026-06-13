@@ -47,6 +47,9 @@ export function mapOrderSummary(item) {
     orderKind: normalizeEnum(item.orderKind ?? item.OrderKind ?? 'Sale'),
     orderStatus: normalizeEnum(item.orderStatus ?? item.OrderStatus),
     inventorySyncStatus: normalizeEnum(item.inventorySyncStatus ?? item.InventorySyncStatus),
+    totalAmount: Number(item.totalAmount ?? item.TotalAmount ?? 0),
+    discountAmount: Number(item.discountAmount ?? item.DiscountAmount ?? 0),
+    totalQuantity: Number(item.totalQuantity ?? item.TotalQuantity ?? 0),
     finalAmount: Number(item.finalAmount ?? item.FinalAmount ?? 0),
     createdAt: item.createdAt ?? item.CreatedAt,
     note: item.note ?? item.Note ?? '',
@@ -97,8 +100,11 @@ function buildOrdersQuery(params = {}) {
   if (params.returnableOnly) search.set('returnableOnly', 'true')
   if (params.orderKind) search.set('orderKind', params.orderKind)
   if (params.excludeOrderKind) search.set('excludeOrderKind', params.excludeOrderKind)
+  if (params.fromDate) search.set('fromDate', params.fromDate)
+  if (params.toDate) search.set('toDate', params.toDate)
+  if (params.employeeId) search.set('employeeId', params.employeeId)
   search.set('page', String(params.page ?? 1))
-  search.set('pageSize', String(Math.min(100, Math.max(1, params.pageSize ?? 20))))
+  search.set('pageSize', String(Math.min(1000, Math.max(1, params.pageSize ?? 20))))
   return search.toString()
 }
 

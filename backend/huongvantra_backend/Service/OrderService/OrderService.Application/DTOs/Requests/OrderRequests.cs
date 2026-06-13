@@ -71,6 +71,9 @@ public record GetOrdersRequest(
     bool ReturnableOnly = false,
     string? OrderKind = null,
     string? ExcludeOrderKind = null,
+    DateTime? FromDate = null,
+    DateTime? ToDate = null,
+    Guid? EmployeeId = null,
     int Page = 1,
     int PageSize = 20
 );
