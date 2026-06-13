@@ -471,8 +471,8 @@ export default function PosPaymentSidebar({
                       : `Để trống: thu đúng ${formatMoney(total)} đ khi giao hàng.`
                     : isTransferPayment
                       ? amountPaid > 0
-                        ? `Mã QR sẽ hiển thị ${formatMoney(transferQrAmount)} đ.`
-                        : `Để trống: mã QR ${formatMoney(total)} đ (thanh toán đủ).`
+                        ? `Mã QR hiển thị ${formatMoney(transferQrAmount)} đ (chưa ghi nhận đã thu).`
+                        : `Để trống: mã QR ${formatMoney(total)} đ — khách quét để thanh toán.`
                       : `Để trống: ghi nợ ${formatMoney(total)} đ.`}
                 </p>
                 <div className="mt-2 flex items-center justify-between rounded-lg bg-[#f6f4ec] px-3 py-2 text-sm">

@@ -29,7 +29,6 @@ import {
   applyPromotionPreview,
   createPosOrderOffline,
   createPosOrderOnline,
-  createPosOrderTransferRecorded,
   createTakeawayCodOrder,
   createTakeawayVietQrOrder,
   fetchApplicablePromotions,
@@ -1529,16 +1528,6 @@ function PosPage() {
     }
 
     if (isTransferPayment) {
-      const isTransferRecorded = amountPaid > 0 && amountPaid >= transferQrAmount
-      if (isTransferRecorded) {
-        await finalizeRecordedPayment({
-          method: 'TRANSFER',
-          createOrder: createPosOrderTransferRecorded,
-          debtSettlement,
-        })
-        return
-      }
-
       const payload = buildOrderPayload('TRANSFER', 0)
       const result = await createPosOrderOnline(payload, { qrAmount: transferQrAmount })
       const transferDebtSettlement = buildTransferDebtSettlement(debtSettlement, result.orderId)
@@ -2269,7 +2258,12 @@ function PosPage() {
         isTakeaway={isTakeaway}
         paymentMethod={paymentMethod}
         paymentMethods={paymentMethods}
-        onPaymentMethodChange={(id) => updateActiveSession({ paymentMethod: id })}
+        onPaymentMethodChange={(id) =>
+          updateActiveSession({
+            paymentMethod: id,
+            amountPaidInput: id === paymentMethod ? amountPaidInput : '',
+          })
+        }
         isTransferPayment={isTransferPayment}
         isCodTakeaway={isCodTakeaway}
         isTransferTakeaway={isTransferTakeaway}
