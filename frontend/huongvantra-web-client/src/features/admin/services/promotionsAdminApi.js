@@ -37,6 +37,7 @@ function mapPromotionAdminItem(item) {
   return {
     ...base,
     categoryScopes: mapPromotionCategoryScopes(item),
+    customerTierScopes: mapPromotionCustomerTierScopes(item),
     orderCount: Number(item.orderCount ?? item.OrderCount ?? 0),
     validityStatus: normalizePromotionValidityStatus(
       item.validityStatus ?? item.ValidityStatus ?? base.validityStatus,
@@ -71,6 +72,25 @@ function mapPromotionCategoryScopes(item) {
     .filter((scope) => scope.categoryId)
 }
 
+function mapPromotionCustomerTierScopes(item) {
+  const rawScopes = item?.customerTierScopes ?? item?.CustomerTierScopes ?? []
+  if (!Array.isArray(rawScopes)) return []
+
+  return rawScopes
+    .map((scope) => {
+      const tierId = Number(scope.tierId ?? scope.TierId ?? 0)
+      const tierName =
+        scope.tierName ??
+        scope.TierName ??
+        scope.tierSnapshotName ??
+        scope.TierSnapshotName ??
+        (tierId > 0 ? `Hạng #${tierId}` : '')
+
+      return { tierId, tierName }
+    })
+    .filter((scope) => scope.tierId > 0)
+}
+
 function buildPromotionPayload(payload) {
   const scopeType = String(payload.scopeType || 'ORDER').toUpperCase()
   return {
@@ -90,6 +110,7 @@ function buildPromotionPayload(payload) {
     scopeType,
     skuScopes: scopeType === 'SKU' ? payload.skuScopes ?? [] : [],
     categoryScopes: scopeType === 'CATEGORY' ? payload.categoryScopes ?? [] : [],
+    customerTierScopes: payload.customerTierScopes ?? [],
   }
 }
 
