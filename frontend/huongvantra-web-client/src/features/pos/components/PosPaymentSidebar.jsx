@@ -306,6 +306,10 @@ export default function PosPaymentSidebar({
                       const discountText = formatPromotionDiscountText?.(promotion) || ''
                       const minimumText = formatPromotionMinimumOrderText(promotion)
                       const usageText = formatPromotionUsageText(promotion)
+                      const estimatedDiscountAmount = Number(promotion.estimatedDiscountAmount || 0)
+                      const estimatedDiscountText = Number.isFinite(estimatedDiscountAmount) && estimatedDiscountAmount > 0
+                        ? `Dự kiến giảm ${formatMoney(estimatedDiscountAmount)}đ`
+                        : ''
 
                       return (
                         <button
@@ -317,10 +321,20 @@ export default function PosPaymentSidebar({
                           }}
                           className="block w-full border-b border-[#f0eee6] px-3 py-2 text-left last:border-b-0 hover:bg-[#f6f4ec]"
                         >
-                          <span className="block text-sm font-bold text-[#263528]">
-                            {promotion.promoCode} - {discountText}
-                            {scopeText ? ` - ${scopeText}` : ''}
+                          <span className="flex flex-wrap items-center gap-1.5 text-sm font-bold text-[#263528]">
+                            <span>
+                              {promotion.promoCode} - {discountText}
+                              {scopeText ? ` - ${scopeText}` : ''}
+                            </span>
+                            {promotion.isBestSuggestion ? (
+                              <span className="rounded-full bg-[#e8f5e9] px-2 py-0.5 text-[11px] font-bold text-[#2f6b3f]">
+                                Gợi ý tốt nhất
+                              </span>
+                            ) : null}
                           </span>
+                          {estimatedDiscountText ? (
+                            <span className="block text-xs font-semibold text-[#356647]">{estimatedDiscountText}</span>
+                          ) : null}
                           {validityText ? (
                             <span className="block text-xs text-[#717971]">{validityText}</span>
                           ) : null}

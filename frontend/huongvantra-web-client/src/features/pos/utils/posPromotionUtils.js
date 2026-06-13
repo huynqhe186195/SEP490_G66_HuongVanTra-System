@@ -10,6 +10,20 @@ export function mapPromotion(item) {
         }))
         .filter((scope) => scope.skuId)
     : []
+  const rawCategoryScopes = item.categoryScopes ?? item.CategoryScopes ?? []
+  const categoryScopes = Array.isArray(rawCategoryScopes)
+    ? rawCategoryScopes
+        .map((scope) => ({
+          categoryId: scope.categoryId ?? scope.CategoryId ?? null,
+          categoryName:
+            scope.categoryName ??
+            scope.CategoryName ??
+            scope.categorySnapshotName ??
+            scope.CategorySnapshotName ??
+            '',
+        }))
+        .filter((scope) => scope.categoryId !== null && scope.categoryId !== undefined)
+    : []
 
   return {
     id: item.id ?? item.Id,
@@ -28,9 +42,17 @@ export function mapPromotion(item) {
     isActive: item.isActive ?? item.IsActive ?? true,
     scopeType: String(item.scopeType ?? item.ScopeType ?? 'ORDER').toUpperCase(),
     skuScopes,
+    categoryScopes,
     promotionDiscountAmount:
       item.promotionDiscountAmount ?? item.PromotionDiscountAmount ?? null,
     eligibleSubtotal: item.eligibleSubtotal ?? item.EligibleSubtotal ?? null,
+    estimatedDiscountAmount:
+      item.estimatedDiscountAmount ?? item.EstimatedDiscountAmount ?? null,
+    estimatedFinalTotal:
+      item.estimatedFinalTotal ?? item.EstimatedFinalTotal ?? null,
+    estimatedPayableAmount:
+      item.estimatedPayableAmount ?? item.EstimatedPayableAmount ?? null,
+    isBestSuggestion: Boolean(item.isBestSuggestion ?? item.IsBestSuggestion ?? false),
     message: item.message ?? item.Message ?? null,
   }
 }
@@ -82,15 +104,27 @@ export function formatPromotionDiscountText(promotion) {
 }
 
 export function formatPromotionScopeLabel(promotion) {
-  return String(promotion?.scopeType || 'ORDER').toUpperCase() === 'SKU'
-    ? 'SKU cụ thể'
-    : 'Toàn đơn'
+  const scopeType = String(promotion?.scopeType || 'ORDER').toUpperCase()
+  if (scopeType === 'SKU') return 'SKU cụ thể'
+  if (scopeType === 'CATEGORY') return 'Theo danh mục'
+  return 'Toàn đơn'
 }
 
 export function formatPromotionScopeSummary(promotion) {
   if (!promotion) return ''
-  if (String(promotion.scopeType || 'ORDER').toUpperCase() !== 'SKU') {
+  const scopeType = String(promotion.scopeType || 'ORDER').toUpperCase()
+  if (scopeType === 'ORDER') {
     return 'Toàn đơn'
+  }
+
+  if (scopeType === 'CATEGORY') {
+    const scopes = Array.isArray(promotion.categoryScopes) ? promotion.categoryScopes : []
+    if (!scopes.length) return 'Theo danh mục'
+
+    return `Danh mục: ${scopes
+      .map((scope) => scope.categoryName || scope.categoryId)
+      .filter(Boolean)
+      .join(', ')}`
   }
 
   const scopes = Array.isArray(promotion.skuScopes) ? promotion.skuScopes : []

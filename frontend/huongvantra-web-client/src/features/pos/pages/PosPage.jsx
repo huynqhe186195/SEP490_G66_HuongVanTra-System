@@ -1151,8 +1151,29 @@ function PosPage() {
 
   const appliedPromotionScopeText = (() => {
     if (!appliedPromotion) return ''
-    if (String(appliedPromotion.scopeType || 'ORDER').toUpperCase() !== 'SKU') {
+    const scopeType = String(appliedPromotion.scopeType || 'ORDER').toUpperCase()
+    if (scopeType === 'ORDER') {
       return 'Áp dụng toàn đơn'
+    }
+
+    if (scopeType === 'CATEGORY') {
+      const categoryIds = new Set((appliedPromotion.categoryScopes ?? []).map((scope) => Number(scope.categoryId)))
+      const names = cartItems
+        .filter((item) => item.categoryId !== null && item.categoryId !== undefined && categoryIds.has(Number(item.categoryId)))
+        .map((item) => item.categoryName || item.name || item.productName || item.sku)
+        .filter(Boolean)
+
+      if (names.length) {
+        return `Áp dụng cho: ${[...new Set(names)].join(', ')}`
+      }
+
+      const configuredNames = (appliedPromotion.categoryScopes ?? [])
+        .map((scope) => scope.categoryName || scope.categoryId)
+        .filter(Boolean)
+
+      return configuredNames.length
+        ? `Áp dụng cho danh mục: ${configuredNames.join(', ')}`
+        : 'Áp dụng theo danh mục'
     }
 
     const skuIds = new Set((appliedPromotion.skuScopes ?? []).map((scope) => scope.skuId))

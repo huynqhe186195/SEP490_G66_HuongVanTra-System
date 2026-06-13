@@ -85,7 +85,9 @@ public class PromotionLogic(
     {
         var items = ValidatePreviewItems(req.Items);
         var promotions = await _promotionRepo.GetAvailableAsync(DateTime.UtcNow, ct);
-        var result = new List<PromotionLookupResponse>();
+        var totalAmount = items.Sum(i => i.SubTotal);
+        var safeManualDiscount = Math.Min(Math.Max(0, req.ManualDiscount), totalAmount);
+        var candidates = new List<ApplicablePromotionCandidate>();
 
         foreach (var promotion in promotions)
         {
@@ -93,8 +95,16 @@ public class PromotionLogic(
             {
                 var usage = await ValidateUsageLimitsAsync(promotion, req.CustomerId, ct);
                 await ValidateCustomerTierEligibilityAsync(promotion, req.CustomerId, ct);
-                _ = CalculatePromotionDiscount(promotion, items, req.ManualDiscount);
-                result.Add(MapToLookupResponse(promotion, usage.UsedCountTotal));
+                var calculation = CalculatePromotionDiscount(promotion, items, req.ManualDiscount);
+                var estimatedFinalTotal = Math.Max(
+                    0,
+                    totalAmount - safeManualDiscount - calculation.DiscountAmount);
+
+                candidates.Add(new ApplicablePromotionCandidate(
+                    promotion,
+                    usage.UsedCountTotal,
+                    calculation.DiscountAmount,
+                    estimatedFinalTotal));
             }
             catch (OrderValidationException)
             {
@@ -102,7 +112,19 @@ public class PromotionLogic(
             }
         }
 
-        return result;
+        return candidates
+            .OrderByDescending(c => c.EstimatedDiscountAmount)
+            .ThenBy(c => c.Promotion.ValidToUtc.HasValue ? 0 : 1)
+            .ThenBy(c => c.Promotion.ValidToUtc ?? DateTime.MaxValue)
+            .ThenBy(c => c.Promotion.PromoCode)
+            .Select((c, index) => MapToLookupResponse(
+                c.Promotion,
+                c.UsedCountTotal,
+                c.EstimatedDiscountAmount,
+                c.EstimatedFinalTotal,
+                c.EstimatedFinalTotal,
+                index == 0))
+            .ToList();
     }
 
     public async Task<PromotionResponse> CreateAsync(CreatePromotionRequest req, CancellationToken ct = default)
@@ -1076,7 +1098,13 @@ public class PromotionLogic(
         MapCustomerTierScopes(promotion),
         orderCount);
 
-    private static PromotionLookupResponse MapToLookupResponse(Promotion promotion, int usedCountTotal = 0) => new(
+    private static PromotionLookupResponse MapToLookupResponse(
+        Promotion promotion,
+        int usedCountTotal = 0,
+        decimal? estimatedDiscountAmount = null,
+        decimal? estimatedFinalTotal = null,
+        decimal? estimatedPayableAmount = null,
+        bool isBestSuggestion = false) => new(
         promotion.Id,
         promotion.PromoCode,
         promotion.DiscountType.ToString(),
@@ -1094,7 +1122,11 @@ public class PromotionLogic(
         promotion.ScopeType.ToString(),
         MapScopes(promotion),
         MapCategoryScopes(promotion),
-        MapCustomerTierScopes(promotion));
+        MapCustomerTierScopes(promotion),
+        estimatedDiscountAmount,
+        estimatedFinalTotal,
+        estimatedPayableAmount,
+        isBestSuggestion);
 
     private static List<PromotionScopeResponse> MapScopes(Promotion promotion) =>
         promotion.ScopeType == PromotionScopeType.SKU
@@ -1211,6 +1243,12 @@ public class PromotionLogic(
         decimal EligibleSubtotal);
 
     private record PromotionUsageSnapshot(int UsedCountTotal);
+
+    private record ApplicablePromotionCandidate(
+        Promotion Promotion,
+        int UsedCountTotal,
+        decimal EstimatedDiscountAmount,
+        decimal EstimatedFinalTotal);
 }
 
 public record PromotionCalculationItem(

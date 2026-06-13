@@ -57,7 +57,11 @@ public record PromotionLookupResponse(
     string ScopeType,
     List<PromotionScopeResponse> SkuScopes,
     List<PromotionCategoryScopeResponse> CategoryScopes,
-    List<PromotionCustomerTierScopeResponse> CustomerTierScopes
+    List<PromotionCustomerTierScopeResponse> CustomerTierScopes,
+    decimal? EstimatedDiscountAmount,
+    decimal? EstimatedFinalTotal,
+    decimal? EstimatedPayableAmount,
+    bool IsBestSuggestion
 );
 
 public record PromotionApplyPreviewResponse(
