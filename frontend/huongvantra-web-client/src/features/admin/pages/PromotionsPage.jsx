@@ -10,7 +10,6 @@ import {
 import {
   formatPromotionDiscountText,
   formatPromotionLabel,
-  getPromotionValidityLabel,
 } from '../../pos/utils/posPromotionUtils.js'
 import { fetchAllActiveSkus } from '../../products/services/productSkusApi.js'
 import { fetchCategories } from '../../products/services/categoriesApi.js'
@@ -70,11 +69,21 @@ function getPaginationItems(currentPage, totalPages) {
 }
 
 const VALIDITY_BADGE_CLASS = {
-  active: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  not_started: 'bg-amber-50 text-amber-700 border-amber-200',
-  expired: 'bg-red-50 text-red-600 border-red-200',
-  unlimited: 'bg-slate-50 text-slate-600 border-slate-200',
-  deactivated: 'bg-slate-100 text-slate-500 border-slate-300',
+  ACTIVE: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  SCHEDULED: 'bg-amber-50 text-amber-700 border-amber-200',
+  EXPIRED: 'bg-red-50 text-red-600 border-red-200',
+  INACTIVE: 'bg-slate-100 text-slate-500 border-slate-300',
+}
+
+const VALIDITY_LABELS = {
+  ACTIVE: 'Đang hoạt động',
+  INACTIVE: 'Tạm tắt',
+  SCHEDULED: 'Sắp diễn ra',
+  EXPIRED: 'Hết hạn',
+}
+
+function getAdminPromotionValidityLabel(status) {
+  return VALIDITY_LABELS[status] ?? status
 }
 
 function formatPromotionPeriod(promotion) {
@@ -634,8 +643,10 @@ function PromotionsPage() {
           }}
         >
           <option value="ALL">Tất cả trạng thái</option>
-          <option value="ACTIVE">Đang kích hoạt</option>
+          <option value="ACTIVE">Đang hoạt động</option>
           <option value="INACTIVE">Tạm tắt</option>
+          <option value="SCHEDULED">Sắp diễn ra</option>
+          <option value="EXPIRED">Hết hạn</option>
         </select>
       </div>
 
@@ -675,8 +686,8 @@ function PromotionsPage() {
               ) : null}
               {!isLoading
                 ? promotions.map((promotion) => {
-                    const status = promotion.validityStatus || 'unlimited'
-                    const badgeClass = VALIDITY_BADGE_CLASS[status] ?? VALIDITY_BADGE_CLASS.unlimited
+                    const status = String(promotion.validityStatus || (promotion.isActive ? 'ACTIVE' : 'INACTIVE')).toUpperCase()
+                    const badgeClass = VALIDITY_BADGE_CLASS[status] ?? VALIDITY_BADGE_CLASS.INACTIVE
 
                     return (
                       <tr key={promotion.id} className={`hover:bg-[#fbf9f1]/30 ${!promotion.isActive ? 'opacity-60' : ''}`}>
@@ -696,7 +707,7 @@ function PromotionsPage() {
                         </td>
                         <td className="px-4 py-5">
                           <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${badgeClass}`}>
-                            {getPromotionValidityLabel(status)}
+                            {getAdminPromotionValidityLabel(status)}
                           </span>
                         </td>
                         <td className="px-4 py-5 text-sm text-[#538463]">

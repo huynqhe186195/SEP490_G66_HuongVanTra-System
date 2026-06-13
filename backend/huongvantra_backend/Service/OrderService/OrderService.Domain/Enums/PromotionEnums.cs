@@ -12,3 +12,11 @@ public enum PromotionScopeType
     SKU,
     CATEGORY
 }
+
+public enum PromotionEffectiveStatus
+{
+    ACTIVE,
+    INACTIVE,
+    SCHEDULED,
+    EXPIRED
+}

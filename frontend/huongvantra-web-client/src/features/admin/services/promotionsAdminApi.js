@@ -38,9 +38,20 @@ function mapPromotionAdminItem(item) {
     ...base,
     categoryScopes: mapPromotionCategoryScopes(item),
     orderCount: Number(item.orderCount ?? item.OrderCount ?? 0),
-    validityStatus: item.validityStatus ?? item.ValidityStatus ?? base.validityStatus,
+    validityStatus: normalizePromotionValidityStatus(
+      item.validityStatus ?? item.ValidityStatus ?? base.validityStatus,
+    ),
     isActive: base.isActive,
   }
+}
+
+function normalizePromotionValidityStatus(status) {
+  const value = String(status || '').trim().toUpperCase()
+  if (!value || value === 'UNLIMITED') return 'ACTIVE'
+  if (value === 'DEACTIVATED') return 'INACTIVE'
+  if (value === 'NOT_STARTED') return 'SCHEDULED'
+  if (['ACTIVE', 'INACTIVE', 'SCHEDULED', 'EXPIRED'].includes(value)) return value
+  return value
 }
 
 function mapPromotionCategoryScopes(item) {

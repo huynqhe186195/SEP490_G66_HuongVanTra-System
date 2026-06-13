@@ -10,7 +10,8 @@ public interface IPromotionRepository
         string? search,
         PromotionDiscountType? discountType,
         PromotionScopeType? scopeType,
-        bool? isActive,
+        PromotionEffectiveStatus? effectiveStatus,
+        DateTime nowUtc,
         int page,
         int pageSize,
         CancellationToken ct = default);

@@ -19,7 +19,8 @@ public class PromotionRepository(OrderDbContext _db) : IPromotionRepository
         string? search,
         PromotionDiscountType? discountType,
         PromotionScopeType? scopeType,
-        bool? isActive,
+        PromotionEffectiveStatus? effectiveStatus,
+        DateTime nowUtc,
         int page,
         int pageSize,
         CancellationToken ct = default)
@@ -41,8 +42,26 @@ public class PromotionRepository(OrderDbContext _db) : IPromotionRepository
         if (scopeType.HasValue)
             query = query.Where(p => p.ScopeType == scopeType.Value);
 
-        if (isActive.HasValue)
-            query = query.Where(p => p.IsActive == isActive.Value);
+        if (effectiveStatus.HasValue)
+        {
+            query = effectiveStatus.Value switch
+            {
+                PromotionEffectiveStatus.INACTIVE => query.Where(p => !p.IsActive),
+                PromotionEffectiveStatus.SCHEDULED => query.Where(p =>
+                    p.IsActive &&
+                    p.ValidFromUtc.HasValue &&
+                    p.ValidFromUtc.Value > nowUtc),
+                PromotionEffectiveStatus.EXPIRED => query.Where(p =>
+                    p.IsActive &&
+                    p.ValidToUtc.HasValue &&
+                    p.ValidToUtc.Value < nowUtc),
+                PromotionEffectiveStatus.ACTIVE => query.Where(p =>
+                    p.IsActive &&
+                    (!p.ValidFromUtc.HasValue || p.ValidFromUtc.Value <= nowUtc) &&
+                    (!p.ValidToUtc.HasValue || p.ValidToUtc.Value >= nowUtc)),
+                _ => query
+            };
+        }
 
         var totalCount = await query.CountAsync(ct);
         var items = await query

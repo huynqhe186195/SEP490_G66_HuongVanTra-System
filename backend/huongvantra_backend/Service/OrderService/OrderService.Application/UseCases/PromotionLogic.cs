@@ -33,13 +33,15 @@ public class PromotionLogic(
         var pageSize = AdminPromotionPageSize;
         var discountType = ParseAdminDiscountTypeFilter(req.DiscountType);
         var scopeType = ParseAdminScopeTypeFilter(req.ScopeType);
-        var isActive = ParseAdminStatusFilter(req.Status);
+        var effectiveStatus = ParseAdminStatusFilter(req.Status);
+        var nowUtc = DateTime.UtcNow;
 
         var (promotions, totalCount) = await _promotionRepo.GetPagedAsync(
             req.Search,
             discountType,
             scopeType,
-            isActive,
+            effectiveStatus,
+            nowUtc,
             page,
             pageSize,
             ct);
@@ -369,7 +371,7 @@ public class PromotionLogic(
                 : null;
     }
 
-    private static bool? ParseAdminStatusFilter(string? status)
+    private static PromotionEffectiveStatus? ParseAdminStatusFilter(string? status)
     {
         if (string.IsNullOrWhiteSpace(status) ||
             string.Equals(status.Trim(), "ALL", StringComparison.OrdinalIgnoreCase))
@@ -377,8 +379,12 @@ public class PromotionLogic(
 
         return status.Trim().ToUpperInvariant() switch
         {
-            "ACTIVE" => true,
-            "INACTIVE" => false,
+            "ACTIVE" => PromotionEffectiveStatus.ACTIVE,
+            "INACTIVE" => PromotionEffectiveStatus.INACTIVE,
+            "DEACTIVATED" => PromotionEffectiveStatus.INACTIVE,
+            "SCHEDULED" => PromotionEffectiveStatus.SCHEDULED,
+            "NOT_STARTED" => PromotionEffectiveStatus.SCHEDULED,
+            "EXPIRED" => PromotionEffectiveStatus.EXPIRED,
             _ => null
         };
     }
@@ -896,15 +902,13 @@ public class PromotionLogic(
     private static string GetValidityStatus(Promotion promotion, DateTime nowUtc)
     {
         if (!promotion.IsActive)
-            return "deactivated";
-        if (promotion.ValidFromUtc is null && promotion.ValidToUtc is null)
-            return "unlimited";
+            return PromotionEffectiveStatus.INACTIVE.ToString();
         if (promotion.ValidFromUtc.HasValue && AsUtc(promotion.ValidFromUtc.Value) > nowUtc)
-            return "not_started";
+            return PromotionEffectiveStatus.SCHEDULED.ToString();
         if (promotion.ValidToUtc.HasValue && AsUtc(promotion.ValidToUtc.Value) < nowUtc)
-            return "expired";
+            return PromotionEffectiveStatus.EXPIRED.ToString();
 
-        return "active";
+        return PromotionEffectiveStatus.ACTIVE.ToString();
     }
 
     private static List<PromotionScope> BuildPromotionScopes(
