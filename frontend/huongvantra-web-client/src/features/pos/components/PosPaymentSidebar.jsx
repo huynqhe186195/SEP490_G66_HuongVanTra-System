@@ -526,20 +526,30 @@ export default function PosPaymentSidebar({
                         aria-hidden
                       />
                       <span className="font-semibold text-[#356647] underline decoration-[#356647]/35 underline-offset-2 hover:decoration-[#356647]">
-                        Tính vào công nợ
+                        Trừ vào công nợ
                       </span>
                     </button>
                     {overpaymentAction === 'apply_to_debt' && confirmedDebtAllocationAmount > 0 ? (
-                      <p className="pl-6 text-xs text-[#356647]">
-                        Đã chọn trừ {formatMoney(confirmedDebtAllocationAmount)} đ vào hóa đơn nợ ·{' '}
-                        <button
-                          type="button"
-                          onClick={onOpenDebtAllocation}
-                          className="font-semibold underline underline-offset-2"
-                        >
-                          Sửa
-                        </button>
-                      </p>
+                      <div className="space-y-1 pl-6 text-xs">
+                        <p className="text-[#717971]">
+                          Trừ nợ:{' '}
+                          <span className="font-bold tabular-nums text-[#7e5700]">
+                            {formatMoney(confirmedDebtAllocationAmount)} đ
+                          </span>
+                        </p>
+                        <p className="text-[#356647]">
+                          Còn trả khách:{' '}
+                          <span className="font-bold tabular-nums">{formatMoney(displayChange)} đ</span>
+                          {' · '}
+                          <button
+                            type="button"
+                            onClick={onOpenDebtAllocation}
+                            className="font-semibold underline underline-offset-2"
+                          >
+                            Sửa
+                          </button>
+                        </p>
+                      </div>
                     ) : null}
                   </div>
                 ) : null}

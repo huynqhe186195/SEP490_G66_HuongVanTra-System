@@ -258,10 +258,11 @@ async function attachTransferQr(result, qrAmount = 0) {
 export function resolveTransferQrImageUrl({ qrImageUrl, qrPayload } = {}) {
   if (qrImageUrl) return qrImageUrl
   if (!qrPayload) return ''
-  if (qrPayload.startsWith('http://') || qrPayload.startsWith('https://')) {
+  if (qrPayload.startsWith('http://') || qrPayload.startsWith('https://') || qrPayload.startsWith('data:')) {
     return qrPayload
   }
-  return ''
+  // VietQR EMV payload — render thành ảnh QR
+  return `https://quickchart.io/qr?size=280&margin=1&text=${encodeURIComponent(qrPayload)}`
 }
 
 async function submitPosOrder(payload, options) {

@@ -150,6 +150,8 @@ SET @NOTE_POS_002 = CONVERT(UNHEX('4D756120636F6D626F2054E1BABF74') USING utf8mb
 SET @NOTE_COD_003 = CONVERT(UNHEX('4769616F20636869E1BB8175') USING utf8mb4);
 SET @NOTE_COD_004 = CONVERT(UNHEX('53686970204748544B') USING utf8mb4);
 SET @NOTE_POS_006 = CONVERT(UNHEX('5472E1BAA3207472C6B0E1BB9B63203230306B') USING utf8mb4);
+SET @NOTE_POS_DEBT_002 = CONVERT(UNHEX('4D75612063686975C3BA206D6F74207068616E202D205472E1BA7A2056C3A26E204D696E68') USING utf8mb4);
+SET @NOTE_POS_DEBT_005 = CONVERT(UNHEX('4D75612063686975C3BA206D6F74207068616E202D20486FC3A06E67204769616E') USING utf8mb4);
 SET @NOTE_EXCH_007 = CONVERT(UNHEX('C490E1BB95692068C3A06E672074E1BBAB204856542D44454D4F2D303031202854482D44454D4F2D30303129') USING utf8mb4);
 SET @NOTE_COD_008 = CONVERT(UNHEX('C490C6A16E2073E1BB89') USING utf8mb4);
 SET @NOTE_RET_001 = CONVERT(UNHEX('C490E1BB95692073616E67207472C3A02042C3BA70204CE1BB996E67205875C3A26E') USING utf8mb4);
@@ -371,6 +373,15 @@ INSERT INTO CustomerAddresses (Id, CustomerId, ReceiverName, ReceiverPhone, Addr
 SELECT '11111111-0001-4000-8000-000000000004', 'cccccccc-0001-4000-8000-000000000009', @CUST_009, '0901000009', @ADDR_004_LINE, @ADDR_004_WARD, @ADDR_004_DIST, @ADDR_004_PROV, 1, @NOW, @NOW, 0
 WHERE NOT EXISTS (SELECT 1 FROM CustomerAddresses WHERE Id = '11111111-0001-4000-8000-000000000004');
 
+-- Giao dịch công nợ (liên kết đơn mua chịu)
+INSERT INTO CustomerDebtTransactions (Id, CustomerId, Type, Amount, BalanceAfter, ReferenceType, ReferenceId, RelatedOrderCode, Note, CreatedAt)
+SELECT '66666666-0001-4000-8000-000000000001', 'cccccccc-0001-4000-8000-000000000002', 'IncreaseDebt', 150000, 150000, 'Order', 'dddddddd-0001-4000-8000-000000000009', 'HVT-DEMO-DEBT-002', 'Mua chịu đơn HVT-DEMO-DEBT-002', DATE_SUB(@NOW, INTERVAL 8 DAY)
+WHERE NOT EXISTS (SELECT 1 FROM CustomerDebtTransactions WHERE Id = '66666666-0001-4000-8000-000000000001');
+
+INSERT INTO CustomerDebtTransactions (Id, CustomerId, Type, Amount, BalanceAfter, ReferenceType, ReferenceId, RelatedOrderCode, Note, CreatedAt)
+SELECT '66666666-0001-4000-8000-000000000002', 'cccccccc-0001-4000-8000-000000000005', 'IncreaseDebt', 320000, 320000, 'Order', 'dddddddd-0001-4000-8000-00000000000a', 'HVT-DEMO-DEBT-005', 'Mua chịu đơn HVT-DEMO-DEBT-005', DATE_SUB(@NOW, INTERVAL 9 DAY)
+WHERE NOT EXISTS (SELECT 1 FROM CustomerDebtTransactions WHERE Id = '66666666-0001-4000-8000-000000000002');
+
 -- -----------------------------------------------------------------------------
 -- INVENTORY DB — Tồn kho quầy + kho
 -- -----------------------------------------------------------------------------
@@ -539,6 +550,40 @@ INSERT INTO Payments (Id, OrderId, PaymentMethod, Amount, PaymentStatus, Transac
 SELECT '33333333-0001-4000-8000-000000000006', 'dddddddd-0001-4000-8000-000000000006', 'Cash', 200000, 'Success', NULL, 0, DATE_SUB(@NOW, INTERVAL 3 DAY), DATE_SUB(@NOW, INTERVAL 3 DAY), DATE_SUB(@NOW, INTERVAL 3 DAY), 0
 WHERE NOT EXISTS (SELECT 1 FROM Payments WHERE Id = '33333333-0001-4000-8000-000000000006');
 
+-- 6b) POS mua chịu — Trần Văn Minh (KH-DEMO-002, nợ 150.000)
+INSERT INTO Orders (Id, OrderCode, OrderKind, CustomerId, CustomerSnapshotName, EmployeeId, OrderChannel, OrderStatus, InventorySyncStatus, TotalAmount, DiscountAmount, PromotionId, PromotionCode, PromotionDiscountAmount, FinalAmount, ShippingAddress, Note, CreatedAt, UpdatedAt, IsDeleted)
+SELECT 'dddddddd-0001-4000-8000-000000000009', 'HVT-DEMO-DEBT-002', 'Sale', 'cccccccc-0001-4000-8000-000000000002', @CUST_002, @SALE_USER_ID, 'POS', 'Completed', 'Synced', 330000, 0, NULL, NULL, 0, 330000, NULL, @NOTE_POS_DEBT_002, DATE_SUB(@NOW, INTERVAL 8 DAY), DATE_SUB(@NOW, INTERVAL 8 DAY), 0
+WHERE NOT EXISTS (SELECT 1 FROM Orders WHERE OrderCode = 'HVT-DEMO-DEBT-002');
+
+INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, SubTotal, CreatedAt, UpdatedAt, IsDeleted)
+SELECT '22222222-0001-4000-8000-00000000000a', 'dddddddd-0001-4000-8000-000000000009', 'bbbbbbbb-0001-4000-8000-000000000001', @PROD_001, 'SKU-DEMO-001', 1, 0, 180000, 180000, DATE_SUB(@NOW, INTERVAL 8 DAY), DATE_SUB(@NOW, INTERVAL 8 DAY), 0
+WHERE NOT EXISTS (SELECT 1 FROM OrderDetails WHERE Id = '22222222-0001-4000-8000-00000000000a');
+
+INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, SubTotal, CreatedAt, UpdatedAt, IsDeleted)
+SELECT '22222222-0001-4000-8000-00000000000b', 'dddddddd-0001-4000-8000-000000000009', 'bbbbbbbb-0001-4000-8000-000000000007', @PROD_006, 'SKU-DEMO-007', 1, 0, 150000, 150000, DATE_SUB(@NOW, INTERVAL 8 DAY), DATE_SUB(@NOW, INTERVAL 8 DAY), 0
+WHERE NOT EXISTS (SELECT 1 FROM OrderDetails WHERE Id = '22222222-0001-4000-8000-00000000000b');
+
+INSERT INTO Payments (Id, OrderId, PaymentMethod, Amount, PaymentStatus, TransactionRef, IsCodVerified, PaidAt, CreatedAt, UpdatedAt, IsDeleted)
+SELECT '33333333-0001-4000-8000-000000000009', 'dddddddd-0001-4000-8000-000000000009', 'Cash', 180000, 'Success', NULL, 0, DATE_SUB(@NOW, INTERVAL 8 DAY), DATE_SUB(@NOW, INTERVAL 8 DAY), DATE_SUB(@NOW, INTERVAL 8 DAY), 0
+WHERE NOT EXISTS (SELECT 1 FROM Payments WHERE Id = '33333333-0001-4000-8000-000000000009');
+
+-- 6c) POS mua chịu — Hoàng Gia Bảo (KH-DEMO-005, nợ 320.000)
+INSERT INTO Orders (Id, OrderCode, OrderKind, CustomerId, CustomerSnapshotName, EmployeeId, OrderChannel, OrderStatus, InventorySyncStatus, TotalAmount, DiscountAmount, PromotionId, PromotionCode, PromotionDiscountAmount, FinalAmount, ShippingAddress, Note, CreatedAt, UpdatedAt, IsDeleted)
+SELECT 'dddddddd-0001-4000-8000-00000000000a', 'HVT-DEMO-DEBT-005', 'Sale', 'cccccccc-0001-4000-8000-000000000005', @CUST_005, @SALE_USER_ID, 'POS', 'Completed', 'Synced', 520000, 0, NULL, NULL, 0, 520000, NULL, @NOTE_POS_DEBT_005, DATE_SUB(@NOW, INTERVAL 9 DAY), DATE_SUB(@NOW, INTERVAL 9 DAY), 0
+WHERE NOT EXISTS (SELECT 1 FROM Orders WHERE OrderCode = 'HVT-DEMO-DEBT-005');
+
+INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, SubTotal, CreatedAt, UpdatedAt, IsDeleted)
+SELECT '22222222-0001-4000-8000-00000000000c', 'dddddddd-0001-4000-8000-00000000000a', 'bbbbbbbb-0001-4000-8000-000000000005', @PROD_004, 'SKU-DEMO-005', 1, 0, 220000, 220000, DATE_SUB(@NOW, INTERVAL 9 DAY), DATE_SUB(@NOW, INTERVAL 9 DAY), 0
+WHERE NOT EXISTS (SELECT 1 FROM OrderDetails WHERE Id = '22222222-0001-4000-8000-00000000000c');
+
+INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, SubTotal, CreatedAt, UpdatedAt, IsDeleted)
+SELECT '22222222-0001-4000-8000-00000000000d', 'dddddddd-0001-4000-8000-00000000000a', 'bbbbbbbb-0001-4000-8000-000000000006', @PROD_005, 'SKU-DEMO-006', 1, 0, 300000, 300000, DATE_SUB(@NOW, INTERVAL 9 DAY), DATE_SUB(@NOW, INTERVAL 9 DAY), 0
+WHERE NOT EXISTS (SELECT 1 FROM OrderDetails WHERE Id = '22222222-0001-4000-8000-00000000000d');
+
+INSERT INTO Payments (Id, OrderId, PaymentMethod, Amount, PaymentStatus, TransactionRef, IsCodVerified, PaidAt, CreatedAt, UpdatedAt, IsDeleted)
+SELECT '33333333-0001-4000-8000-00000000000a', 'dddddddd-0001-4000-8000-00000000000a', 'Cash', 200000, 'Success', NULL, 0, DATE_SUB(@NOW, INTERVAL 9 DAY), DATE_SUB(@NOW, INTERVAL 9 DAY), DATE_SUB(@NOW, INTERVAL 9 DAY), 0
+WHERE NOT EXISTS (SELECT 1 FROM Payments WHERE Id = '33333333-0001-4000-8000-00000000000a');
+
 -- 7) Đơn đổi (Exchange)
 INSERT INTO Orders (Id, OrderCode, OrderKind, CustomerId, CustomerSnapshotName, EmployeeId, OrderChannel, OrderStatus, InventorySyncStatus, TotalAmount, DiscountAmount, PromotionId, PromotionCode, PromotionDiscountAmount, FinalAmount, ShippingAddress, Note, CreatedAt, UpdatedAt, IsDeleted)
 SELECT 'dddddddd-0001-4000-8000-000000000007', 'HVT-DEMO-DOI-001', 'Exchange', 'cccccccc-0001-4000-8000-000000000004', @CUST_004, @SALE_USER_ID, 'POS', 'Completed', 'Synced', 150000, 95000, NULL, NULL, 0, 55000, NULL, @NOTE_EXCH_007, DATE_SUB(@NOW, INTERVAL 1 DAY), DATE_SUB(@NOW, INTERVAL 1 DAY), 0
@@ -656,6 +701,8 @@ UPDATE Orders SET ShippingAddress = @SHIP_003, Note = @NOTE_COD_003, UpdatedAt =
 UPDATE Orders SET ShippingAddress = @SHIP_004, Note = @NOTE_COD_004, UpdatedAt = @NOW WHERE OrderCode = 'HVT-DEMO-004';
 UPDATE Orders SET ShippingAddress = @SHIP_005, UpdatedAt = @NOW WHERE OrderCode = 'HVT-DEMO-005';
 UPDATE Orders SET Note = @NOTE_POS_006, UpdatedAt = @NOW WHERE OrderCode = 'HVT-DEMO-006';
+UPDATE Orders SET Note = @NOTE_POS_DEBT_002, UpdatedAt = @NOW WHERE OrderCode = 'HVT-DEMO-DEBT-002';
+UPDATE Orders SET Note = @NOTE_POS_DEBT_005, UpdatedAt = @NOW WHERE OrderCode = 'HVT-DEMO-DEBT-005';
 UPDATE Orders SET Note = @NOTE_EXCH_007, UpdatedAt = @NOW WHERE OrderCode = 'HVT-DEMO-DOI-001';
 UPDATE Orders SET ShippingAddress = @SHIP_008, Note = @NOTE_COD_008, UpdatedAt = @NOW WHERE OrderCode = 'HVT-DEMO-008';
 

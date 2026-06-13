@@ -141,6 +141,12 @@ function OrderProductsSection({
               <span className="text-slate-500">Giảm giá</span>
               <span>-{formatVnd(order.discountAmount)}</span>
             </div>
+            {order.promotionCode ? (
+              <div className="flex justify-between py-1 text-xs text-slate-500">
+                <span>Mã KM ({order.promotionCode})</span>
+                <span>-{formatVnd(order.promotionDiscountAmount)}</span>
+              </div>
+            ) : null}
             <div className="flex justify-between py-2 text-base font-bold text-[#356647]">
               <span>Thành tiền</span>
               <span>{formatVnd(order.finalAmount)}</span>
