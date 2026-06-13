@@ -36,13 +36,32 @@ function mapPromotionAdminItem(item) {
   if (!base) return null
   return {
     ...base,
+    categoryScopes: mapPromotionCategoryScopes(item),
     orderCount: Number(item.orderCount ?? item.OrderCount ?? 0),
     validityStatus: item.validityStatus ?? item.ValidityStatus ?? base.validityStatus,
     isActive: base.isActive,
   }
 }
 
+function mapPromotionCategoryScopes(item) {
+  const rawScopes = item?.categoryScopes ?? item?.CategoryScopes ?? []
+  if (!Array.isArray(rawScopes)) return []
+
+  return rawScopes
+    .map((scope) => ({
+      categoryId: scope.categoryId ?? scope.CategoryId ?? null,
+      categoryName:
+        scope.categoryName ??
+        scope.CategoryName ??
+        scope.categorySnapshotName ??
+        scope.CategorySnapshotName ??
+        '',
+    }))
+    .filter((scope) => scope.categoryId)
+}
+
 function buildPromotionPayload(payload) {
+  const scopeType = String(payload.scopeType || 'ORDER').toUpperCase()
   return {
     promoCode: payload.promoCode,
     discountType: payload.discountType || 'PERCENTAGE',
@@ -56,6 +75,10 @@ function buildPromotionPayload(payload) {
     usageLimitPerCustomer: Number(payload.usageLimitPerCustomer || 0),
     validFrom: payload.validFrom || null,
     validTo: payload.validTo || null,
+    isActive: payload.isActive ?? true,
+    scopeType,
+    skuScopes: scopeType === 'SKU' ? payload.skuScopes ?? [] : [],
+    categoryScopes: scopeType === 'CATEGORY' ? payload.categoryScopes ?? [] : [],
   }
 }
 

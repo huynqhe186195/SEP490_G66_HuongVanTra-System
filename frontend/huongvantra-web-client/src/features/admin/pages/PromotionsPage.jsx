@@ -10,10 +10,10 @@ import {
 import {
   formatPromotionDiscountText,
   formatPromotionLabel,
-  formatPromotionScopeSummary,
   getPromotionValidityLabel,
 } from '../../pos/utils/posPromotionUtils.js'
 import { fetchAllActiveSkus } from '../../products/services/productSkusApi.js'
+import { fetchCategories } from '../../products/services/categoriesApi.js'
 import {
   createAdminPromotion,
   deactivateAdminPromotion,
@@ -35,6 +35,7 @@ const EMPTY_FORM = {
   isActive: true,
   scopeType: 'ORDER',
   skuScopes: [],
+  categoryScopes: [],
 }
 
 const MAX_PERCENTAGE_DISCOUNT_VALUE = 90
@@ -157,6 +158,27 @@ function formatPromotionUsageSummary(promotion) {
   return lines
 }
 
+function formatAdminPromotionScopeSummary(promotion) {
+  const scopeType = String(promotion?.scopeType || 'ORDER').toUpperCase()
+  if (scopeType === 'ORDER') return 'Toàn đơn'
+
+  if (scopeType === 'CATEGORY') {
+    const scopes = Array.isArray(promotion.categoryScopes) ? promotion.categoryScopes : []
+    if (!scopes.length) return 'Theo danh mục'
+    return `Danh mục: ${scopes
+      .map((scope) => scope.categoryName || scope.categorySnapshotName || scope.categoryId)
+      .filter(Boolean)
+      .join(', ')}`
+  }
+
+  const scopes = Array.isArray(promotion.skuScopes) ? promotion.skuScopes : []
+  if (!scopes.length) return 'SKU cụ thể'
+  return `SKU: ${scopes
+    .map((scope) => scope.skuCode || scope.skuName || scope.skuId)
+    .filter(Boolean)
+    .join(', ')}`
+}
+
 function getSkuDisplayName(sku) {
   if (!sku) return ''
   const name = [sku.productName, sku.packagingType].filter(Boolean).join(' - ')
@@ -171,6 +193,18 @@ function mapSkuToPromotionScope(sku) {
   }
 }
 
+function getCategoryDisplayName(category) {
+  if (!category) return ''
+  return category.name || category.categoryName || category.categorySnapshotName || `#${category.id}`
+}
+
+function mapCategoryToPromotionScope(category) {
+  return {
+    categoryId: category.id,
+    categoryName: getCategoryDisplayName(category),
+  }
+}
+
 function PromotionsPage() {
   const [promotions, setPromotions] = useState([])
   const [isLoading, setIsLoading] = useState(true)
@@ -182,6 +216,9 @@ function PromotionsPage() {
   const [skuOptions, setSkuOptions] = useState([])
   const [isSkuLoading, setIsSkuLoading] = useState(false)
   const [skuSearchTerm, setSkuSearchTerm] = useState('')
+  const [categoryOptions, setCategoryOptions] = useState([])
+  const [isCategoryLoading, setIsCategoryLoading] = useState(false)
+  const [categorySearchTerm, setCategorySearchTerm] = useState('')
   const [promotionSearchTerm, setPromotionSearchTerm] = useState('')
   const [discountTypeFilter, setDiscountTypeFilter] = useState('ALL')
   const [scopeTypeFilter, setScopeTypeFilter] = useState('ALL')
@@ -233,6 +270,21 @@ function PromotionsPage() {
     }
   }, [isSkuLoading, skuOptions.length])
 
+  const loadCategoryOptions = useCallback(async () => {
+    if (categoryOptions.length > 0 || isCategoryLoading) return
+
+    setIsCategoryLoading(true)
+    try {
+      const items = await fetchCategories()
+      setCategoryOptions(items.filter((category) => !category.isDeleted && category.isActive !== false))
+    } catch (error) {
+      setCategoryOptions([])
+      showError(error.message)
+    } finally {
+      setIsCategoryLoading(false)
+    }
+  }, [categoryOptions.length, isCategoryLoading])
+
   useEffect(() => {
     loadData()
   }, [loadData])
@@ -247,6 +299,7 @@ function PromotionsPage() {
     setEditingOrderCount(0)
     setForm(EMPTY_FORM)
     setSkuSearchTerm('')
+    setCategorySearchTerm('')
     loadSkuOptions()
     setModalOpen(true)
   }
@@ -277,9 +330,14 @@ function PromotionsPage() {
       isActive: promotion.isActive ?? true,
       scopeType: promotion.scopeType || 'ORDER',
       skuScopes: Array.isArray(promotion.skuScopes) ? promotion.skuScopes : [],
+      categoryScopes: Array.isArray(promotion.categoryScopes) ? promotion.categoryScopes : [],
     })
     setSkuSearchTerm('')
+    setCategorySearchTerm('')
     loadSkuOptions()
+    if (String(promotion.scopeType || 'ORDER').toUpperCase() === 'CATEGORY') {
+      loadCategoryOptions()
+    }
     setModalOpen(true)
   }
 
@@ -291,6 +349,7 @@ function PromotionsPage() {
 
     const scopeType = String(form.scopeType || 'ORDER').toUpperCase()
     const skuScopes = scopeType === 'SKU' ? form.skuScopes ?? [] : []
+    const categoryScopes = scopeType === 'CATEGORY' ? form.categoryScopes ?? [] : []
     const discountType = String(form.discountType || 'PERCENTAGE').toUpperCase()
     const discountValue = discountType === 'FIXED'
       ? parseCurrencyInput(form.discountValue)
@@ -303,6 +362,10 @@ function PromotionsPage() {
     const usageLimitPerCustomer = parseIntegerInput(form.usageLimitPerCustomer)
     if (scopeType === 'SKU' && skuScopes.length === 0) {
       showError('Vui lòng chọn ít nhất 1 SKU cho phạm vi SKU cụ thể.')
+      return
+    }
+    if (scopeType === 'CATEGORY' && categoryScopes.length === 0) {
+      showError('Vui lòng chọn ít nhất một danh mục áp dụng mã giảm giá.')
       return
     }
 
@@ -350,6 +413,7 @@ function PromotionsPage() {
       isActive: form.isActive,
       scopeType,
       skuScopes,
+      categoryScopes,
     }
 
     if (!payload.promoCode) {
@@ -409,6 +473,7 @@ function PromotionsPage() {
     statusFilter !== 'ALL'
   const isImmutableLocked = editingOrderCount > 0
   const selectedSkuIds = new Set((form.skuScopes ?? []).map((scope) => scope.skuId))
+  const selectedCategoryIds = new Set((form.categoryScopes ?? []).map((scope) => Number(scope.categoryId)))
   const displaySkuOptions = [
     ...skuOptions,
     ...(form.skuScopes ?? [])
@@ -435,6 +500,30 @@ function PromotionsPage() {
     })
     .slice(0, 12)
   const selectedSkuScopes = form.skuScopes ?? []
+  const displayCategoryOptions = [
+    ...categoryOptions,
+    ...(form.categoryScopes ?? [])
+      .filter((scope) => scope.categoryId && !categoryOptions.some((category) => Number(category.id) === Number(scope.categoryId)))
+      .map((scope) => ({
+        id: scope.categoryId,
+        name: scope.categoryName || scope.categorySnapshotName || '',
+      })),
+  ]
+  const normalizedCategorySearch = categorySearchTerm.trim().toLowerCase()
+  const visibleCategoryOptions = displayCategoryOptions
+    .filter((category) => {
+      if (!normalizedCategorySearch) return true
+      return [
+        category.name,
+        category.categoryName,
+        category.description,
+        category.id,
+      ]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(normalizedCategorySearch))
+    })
+    .slice(0, 12)
+  const selectedCategoryScopes = form.categoryScopes ?? []
   const totalPages = Math.max(1, pagination.totalPages)
   const currentPage = Math.min(totalPages, Math.max(1, pagination.page))
   const paginationItems = getPaginationItems(currentPage, totalPages)
@@ -462,6 +551,21 @@ function PromotionsPage() {
     setForm((prev) => ({
       ...prev,
       skuScopes: (prev.skuScopes ?? []).filter((scope) => scope.skuId !== skuId),
+    }))
+  }
+  const addCategoryScope = (category) => {
+    const categoryId = Number(category.id)
+    if (isImmutableLocked || !categoryId || selectedCategoryIds.has(categoryId)) return
+    setForm((prev) => ({
+      ...prev,
+      categoryScopes: [...(prev.categoryScopes ?? []), mapCategoryToPromotionScope(category)],
+    }))
+  }
+  const removeCategoryScope = (categoryId) => {
+    if (isImmutableLocked) return
+    setForm((prev) => ({
+      ...prev,
+      categoryScopes: (prev.categoryScopes ?? []).filter((scope) => Number(scope.categoryId) !== Number(categoryId)),
     }))
   }
   return (
@@ -519,6 +623,7 @@ function PromotionsPage() {
           <option value="ALL">Tất cả phạm vi</option>
           <option value="ORDER">Toàn đơn</option>
           <option value="SKU">SKU cụ thể</option>
+          <option value="CATEGORY">Theo danh mục</option>
         </select>
         <select
           className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-[#538463] focus:ring-2 focus:ring-[#538463]/15"
@@ -587,7 +692,7 @@ function PromotionsPage() {
                           {formatPromotionPeriod(promotion)}
                         </td>
                         <td className="max-w-[220px] px-4 py-5 text-sm text-slate-600">
-                          <span className="line-clamp-2">{formatPromotionScopeSummary(promotion)}</span>
+                          <span className="line-clamp-2">{formatAdminPromotionScopeSummary(promotion)}</span>
                         </td>
                         <td className="px-4 py-5">
                           <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${badgeClass}`}>
@@ -901,15 +1006,18 @@ function PromotionsPage() {
                   disabled={isImmutableLocked}
                   onChange={(e) => {
                     if (e.target.value === 'SKU') loadSkuOptions()
+                    if (e.target.value === 'CATEGORY') loadCategoryOptions()
                     setForm((prev) => ({
                       ...prev,
                       scopeType: e.target.value,
                       skuScopes: e.target.value === 'SKU' ? prev.skuScopes : [],
+                      categoryScopes: e.target.value === 'CATEGORY' ? prev.categoryScopes : [],
                     }))
                   }}
                 >
                   <option value="ORDER">Toàn đơn</option>
                   <option value="SKU">SKU cụ thể</option>
+                  <option value="CATEGORY">Theo danh mục</option>
                 </select>
               </label>
               {form.scopeType === 'SKU' ? (
@@ -980,6 +1088,84 @@ function PromotionsPage() {
                               type="button"
                               disabled={isImmutableLocked || isSelected}
                               onClick={() => addSkuScope(sku)}
+                              className="shrink-0 rounded-lg border border-[#538463]/30 px-2.5 py-1 text-xs font-semibold text-[#356647] hover:bg-[#538463]/10 disabled:border-slate-200 disabled:text-slate-400"
+                            >
+                              {isSelected ? 'Đã chọn' : 'Thêm'}
+                            </button>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+              {form.scopeType === 'CATEGORY' ? (
+                <div className="rounded-lg border border-slate-200 p-3">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <span className="text-xs font-bold uppercase text-slate-400">Danh mục áp dụng</span>
+                    <span className="text-xs text-slate-500">{selectedCategoryIds.size} đã chọn</span>
+                  </div>
+                  <input
+                    type="text"
+                    className="mb-3 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#538463] focus:ring-2 focus:ring-[#538463]/15 disabled:bg-slate-50 disabled:text-slate-500"
+                    placeholder="Nhập tên danh mục..."
+                    value={categorySearchTerm}
+                    disabled={isImmutableLocked}
+                    onFocus={loadCategoryOptions}
+                    onChange={(e) => setCategorySearchTerm(e.target.value)}
+                  />
+                  {selectedCategoryScopes.length > 0 ? (
+                    <div className="mb-3 flex flex-wrap gap-2">
+                      {selectedCategoryScopes.map((scope) => (
+                        <span
+                          key={scope.categoryId}
+                          className="inline-flex max-w-full items-center gap-1 rounded-full border border-[#538463]/20 bg-[#538463]/10 px-2.5 py-1 text-xs font-semibold text-[#356647]"
+                        >
+                          <span className="truncate">{scope.categoryName || scope.categorySnapshotName || scope.categoryId}</span>
+                          {!isImmutableLocked ? (
+                            <button
+                              type="button"
+                              className="text-[#356647] hover:text-red-600"
+                              onClick={() => removeCategoryScope(scope.categoryId)}
+                              aria-label={`Gỡ ${scope.categoryName || scope.categorySnapshotName || scope.categoryId}`}
+                            >
+                              ×
+                            </button>
+                          ) : null}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mb-3 text-xs text-slate-500">Chưa chọn danh mục nào.</p>
+                  )}
+                  {isCategoryLoading ? (
+                    <p className="text-xs text-slate-500">Đang tải danh mục...</p>
+                  ) : null}
+                  {!isCategoryLoading && displayCategoryOptions.length === 0 ? (
+                    <p className="text-xs text-slate-500">Không có danh mục khả dụng.</p>
+                  ) : null}
+                  {!isCategoryLoading && displayCategoryOptions.length > 0 ? (
+                    <div className="max-h-52 space-y-1 overflow-y-auto pr-1">
+                      {visibleCategoryOptions.length === 0 ? (
+                        <p className="px-2 py-2 text-xs text-slate-500">Không tìm thấy danh mục phù hợp.</p>
+                      ) : null}
+                      {visibleCategoryOptions.map((category) => {
+                        const categoryId = Number(category.id)
+                        const isSelected = selectedCategoryIds.has(categoryId)
+                        return (
+                          <div
+                            key={category.id}
+                            className="flex items-center justify-between gap-3 rounded-lg px-2 py-1.5 text-sm hover:bg-slate-50"
+                          >
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate font-semibold text-slate-700">
+                                {getCategoryDisplayName(category)}
+                              </span>
+                            </span>
+                            <button
+                              type="button"
+                              disabled={isImmutableLocked || isSelected}
+                              onClick={() => addCategoryScope(category)}
                               className="shrink-0 rounded-lg border border-[#538463]/30 px-2.5 py-1 text-xs font-semibold text-[#356647] hover:bg-[#538463]/10 disabled:border-slate-200 disabled:text-slate-400"
                             >
                               {isSelected ? 'Đã chọn' : 'Thêm'}
