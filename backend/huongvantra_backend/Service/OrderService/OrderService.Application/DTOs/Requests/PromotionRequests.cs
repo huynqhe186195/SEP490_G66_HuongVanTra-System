@@ -29,6 +29,7 @@ public class CreatePromotionRequest
     public List<PromotionSkuScopeRequest>? SkuScopes { get; init; }
     public List<int>? CategoryIds { get; init; }
     public List<PromotionCategoryScopeRequest>? CategoryScopes { get; init; }
+    public List<PromotionCustomerTierScopeRequest>? CustomerTierScopes { get; init; }
 }
 
 public class UpdatePromotionRequest
@@ -50,6 +51,7 @@ public class UpdatePromotionRequest
     public List<PromotionSkuScopeRequest>? SkuScopes { get; init; }
     public List<int>? CategoryIds { get; init; }
     public List<PromotionCategoryScopeRequest>? CategoryScopes { get; init; }
+    public List<PromotionCustomerTierScopeRequest>? CustomerTierScopes { get; init; }
 }
 
 public record PromotionSkuScopeRequest(
@@ -61,6 +63,11 @@ public record PromotionSkuScopeRequest(
 public record PromotionCategoryScopeRequest(
     int CategoryId,
     string? CategoryName
+);
+
+public record PromotionCustomerTierScopeRequest(
+    int TierId,
+    string? TierName
 );
 
 public record PromotionApplyPreviewRequest(

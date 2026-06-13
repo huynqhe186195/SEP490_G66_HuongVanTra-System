@@ -41,11 +41,18 @@ builder.Services.AddScoped<IPromotionRepository, PromotionRepository>();
 builder.Services.AddScoped<IOrderCodeGenerator, OrderCodeGenerator>();
 builder.Services.AddScoped<IReturnOrderRepository, ReturnOrderRepository>();
 builder.Services.AddScoped<IOrderEventPublisher, OrderEventPublisher>();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddTransient<ForwardAuthorizationHeaderHandler>();
 builder.Services.AddHttpClient<IProductCatalogClient, ProductCatalogClient>(client =>
 {
     var baseUrl = builder.Configuration["ProductService:BaseUrl"] ?? "http://product-service:8080";
     client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
 });
+builder.Services.AddHttpClient<ICustomerCatalogClient, CustomerCatalogClient>(client =>
+{
+    var baseUrl = builder.Configuration["CustomerService:BaseUrl"] ?? "http://customer-service:8080";
+    client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
+}).AddHttpMessageHandler<ForwardAuthorizationHeaderHandler>();
 builder.Services.Configure<PosTransferPaymentOptions>(
     builder.Configuration.GetSection(PosTransferPaymentOptions.SectionName));
 builder.Services.Configure<SepayOptions>(
@@ -107,3 +114,17 @@ app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
 app.MapControllers();
 
 app.Run();
+
+public sealed class ForwardAuthorizationHeaderHandler(IHttpContextAccessor httpContextAccessor) : DelegatingHandler
+{
+    protected override Task<HttpResponseMessage> SendAsync(
+        HttpRequestMessage request,
+        CancellationToken cancellationToken)
+    {
+        var authorization = httpContextAccessor.HttpContext?.Request.Headers.Authorization.ToString();
+        if (!string.IsNullOrWhiteSpace(authorization))
+            request.Headers.TryAddWithoutValidation("Authorization", authorization);
+
+        return base.SendAsync(request, cancellationToken);
+    }
+}

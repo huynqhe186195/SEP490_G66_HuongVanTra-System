@@ -18,4 +18,5 @@ public class Promotion : BaseEntity
     public DateTime? ValidToUtc { get; set; }
     public bool IsActive { get; set; }
     public ICollection<PromotionScope> Scopes { get; set; } = new List<PromotionScope>();
+    public ICollection<PromotionCustomerTierScope> CustomerTierScopes { get; set; } = new List<PromotionCustomerTierScope>();
 }

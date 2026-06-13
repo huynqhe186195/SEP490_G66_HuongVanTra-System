@@ -311,6 +311,39 @@ namespace OrderService.Infrastructure.Migrations
                     b.ToTable("Promotions", (string)null);
                 });
 
+            modelBuilder.Entity("OrderService.Domain.Entities.PromotionCustomerTierScope", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<Guid>("PromotionId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<int>("TierId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("TierSnapshotName")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PromotionId");
+
+                    b.HasIndex("TierId");
+
+                    b.ToTable("PromotionCustomerTierScopes", (string)null);
+                });
+
             modelBuilder.Entity("OrderService.Domain.Entities.PromotionScope", b =>
                 {
                     b.Property<Guid>("Id")
@@ -406,6 +439,17 @@ namespace OrderService.Infrastructure.Migrations
                     b.Navigation("Promotion");
                 });
 
+            modelBuilder.Entity("OrderService.Domain.Entities.PromotionCustomerTierScope", b =>
+                {
+                    b.HasOne("OrderService.Domain.Entities.Promotion", "Promotion")
+                        .WithMany("CustomerTierScopes")
+                        .HasForeignKey("PromotionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Promotion");
+                });
+
             modelBuilder.Entity("OrderService.Domain.Entities.Order", b =>
                 {
                     b.Navigation("OrderDetails");
@@ -415,6 +459,8 @@ namespace OrderService.Infrastructure.Migrations
 
             modelBuilder.Entity("OrderService.Domain.Entities.Promotion", b =>
                 {
+                    b.Navigation("CustomerTierScopes");
+
                     b.Navigation("Scopes");
                 });
 #pragma warning restore 612, 618

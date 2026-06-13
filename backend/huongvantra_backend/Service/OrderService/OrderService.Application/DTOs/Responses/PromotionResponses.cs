@@ -11,6 +11,12 @@ public record PromotionCategoryScopeResponse(
     string? CategoryName
 );
 
+public record PromotionCustomerTierScopeResponse(
+    int TierId,
+    string? TierName,
+    string? TierSnapshotName
+);
+
 public record PromotionResponse(
     Guid Id,
     string PromoCode,
@@ -29,6 +35,7 @@ public record PromotionResponse(
     string ScopeType,
     List<PromotionScopeResponse> SkuScopes,
     List<PromotionCategoryScopeResponse> CategoryScopes,
+    List<PromotionCustomerTierScopeResponse> CustomerTierScopes,
     int OrderCount
 );
 
@@ -49,7 +56,8 @@ public record PromotionLookupResponse(
     bool IsActive,
     string ScopeType,
     List<PromotionScopeResponse> SkuScopes,
-    List<PromotionCategoryScopeResponse> CategoryScopes
+    List<PromotionCategoryScopeResponse> CategoryScopes,
+    List<PromotionCustomerTierScopeResponse> CustomerTierScopes
 );
 
 public record PromotionApplyPreviewResponse(
@@ -66,6 +74,7 @@ public record PromotionApplyPreviewResponse(
     string ScopeType,
     List<PromotionScopeResponse> SkuScopes,
     List<PromotionCategoryScopeResponse> CategoryScopes,
+    List<PromotionCustomerTierScopeResponse> CustomerTierScopes,
     decimal PromotionDiscountAmount,
     decimal EligibleSubtotal,
     string Message
