@@ -38,12 +38,19 @@ builder.Services.AddScoped<CatalogSyncLogic>();
 
 builder.Services.AddMassTransit(x =>
 {
+    x.AddConsumer<CostPriceUpdatedConsumer>();
+
     x.UsingRabbitMq((context, cfg) =>
     {
         cfg.Host(builder.Configuration["RabbitMQ:Host"] ?? "rabbitmq", "/", h =>
         {
             h.Username(builder.Configuration["RabbitMQ:Username"] ?? "hvt");
             h.Password(builder.Configuration["RabbitMQ:Password"] ?? "hvtrabbit123");
+        });
+
+        cfg.ReceiveEndpoint("product-cost-price-updated", e =>
+        {
+            e.ConfigureConsumer<CostPriceUpdatedConsumer>(context);
         });
     });
 });

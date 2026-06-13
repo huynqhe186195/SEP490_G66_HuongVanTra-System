@@ -799,6 +799,9 @@ public class InventoryLogic(
             var stock = await _skuStockRepo.GetBySkuIdAsync(skuId, ct);
             if (stock != null)
                 await SyncWarehouseQtyFromBatchesAsync(stock, ct);
+
+            var newMac = await _batchRepo.CalculateMovingAverageCostAsync(skuId, ct);
+            await _eventPublisher.PublishCostPriceUpdatedAsync(skuId, newMac, ct);
         }
 
         return MapWarehouseBatch(batch);

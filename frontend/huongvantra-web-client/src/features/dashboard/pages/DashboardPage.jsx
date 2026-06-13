@@ -1,22 +1,41 @@
 import { useEffect, useState } from "react";
 import PageHeader from "../../../components/shared/PageHeader.jsx";
 import { dashboardApi } from "../services/dashboardApi.js";
+import { loadAuthSession } from '../../auth/services/authSession.js'
 
 function DashboardPage() {
+    const session = loadAuthSession();
+    const roles = (session?.roles || []).map(r => String(r || '').toLowerCase().trim());
+    const isAdmin = roles.includes('admin') || roles.includes('agencymanager') || roles.includes('agency manager');
+    const isAccountant = roles.includes('accountant');
+    const isSalesStaff = roles.includes('salesstaff') || roles.includes('sale') || roles.includes('sales staff');
+    
+    const canViewRevenue = isAdmin || isAccountant || isSalesStaff;
+    const canViewCustomerGrowth = isAdmin || isAccountant || isSalesStaff;
+
     const [stats, setStats] = useState(null);
     const [topProducts, setTopProducts] = useState([]);
     const [categorySales, setCategorySales] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(null);
 
+    const [filterPeriod, setFilterPeriod] = useState('month'); // 'month', 'quarter', 'year'
+    const [filterMonth, setFilterMonth] = useState(new Date().getMonth() + 1);
+    const [filterQuarter, setFilterQuarter] = useState(Math.floor(new Date().getMonth() / 3) + 1);
+    const [filterYear, setFilterYear] = useState(new Date().getFullYear());
+
     useEffect(() => {
         const fetchStats = async () => {
             try {
                 setIsLoading(true);
+                const params = { year: filterYear };
+                if (filterPeriod === 'month') params.month = filterMonth;
+                if (filterPeriod === 'quarter') params.quarter = filterQuarter;
+
                 const [statsData, topProductsData, categorySalesData] = await Promise.all([
-                    dashboardApi.getSalesStatistics(), 
-                    dashboardApi.getTopProducts({ topCount: 5 }),
-                    dashboardApi.getSalesByCategory()
+                    dashboardApi.getSalesStatistics(params), 
+                    dashboardApi.getTopProducts({ topCount: 5, ...params }),
+                    dashboardApi.getSalesByCategory(params)
                 ]);
                 setStats(statsData);
                 setTopProducts(topProductsData);
@@ -30,7 +49,7 @@ function DashboardPage() {
         };
 
         fetchStats();
-    }, []);
+    }, [filterPeriod, filterMonth, filterQuarter, filterYear]);
 
     const formatCurrency = (value) => {
         return new Intl.NumberFormat("vi-VN", {
@@ -50,6 +69,34 @@ function DashboardPage() {
         <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 sm:gap-6">
             <PageHeader title="Thống kê bán hàng" description="Tổng quan hoạt động cửa hàng, doanh thu và chỉ số vận hành quan trọng." searchPlaceholder="Tìm kiếm..." />
 
+            <div className="flex items-center gap-4 bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
+                <select value={filterPeriod} onChange={e => setFilterPeriod(e.target.value)} className="rounded-lg border-gray-200 text-sm">
+                    <option value="month">Theo Tháng</option>
+                    <option value="quarter">Theo Quý</option>
+                    <option value="year">Theo Năm</option>
+                </select>
+
+                {filterPeriod === 'month' && (
+                    <select value={filterMonth} onChange={e => setFilterMonth(Number(e.target.value))} className="rounded-lg border-gray-200 text-sm">
+                        {Array.from({length: 12}).map((_, i) => <option key={i+1} value={i+1}>Tháng {i+1}</option>)}
+                    </select>
+                )}
+
+                {filterPeriod === 'quarter' && (
+                    <select value={filterQuarter} onChange={e => setFilterQuarter(Number(e.target.value))} className="rounded-lg border-gray-200 text-sm">
+                        <option value={1}>Quý 1</option>
+                        <option value={2}>Quý 2</option>
+                        <option value={3}>Quý 3</option>
+                        <option value={4}>Quý 4</option>
+                    </select>
+                )}
+
+                <select value={filterYear} onChange={e => setFilterYear(Number(e.target.value))} className="rounded-lg border-gray-200 text-sm">
+                    <option value={2026}>2026</option>
+                    <option value={2025}>2025</option>
+                </select>
+            </div>
+
             {isLoading ?
                 <div className="flex justify-center p-8">
                     <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#356647] border-t-transparent"></div>
@@ -60,22 +107,28 @@ function DashboardPage() {
                     <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
                         {/* line 1 */}
                         <MetricCard title="Số đơn bán ra" value={stats?.totalCompletedOrders || 0} icon="receipt_long" colorClass="text-purple-600" bgClass="bg-purple-50" />
-                        <MetricCard title="Doanh thu gộp (Gross Revenue)" value={formatCurrency(stats?.grossRevenue)} icon="payments" colorClass="text-blue-600" bgClass="bg-blue-50" />
-                        <MetricCard
-                            title="Doanh thu thuần (Net Revenue)"
-                            value={formatCurrency(stats?.netRevenue)}
-                            icon="account_balance_wallet"
-                            colorClass="text-[#356647]"
-                            bgClass="bg-[#eaf4eb]"
-                        />
-                        <MetricCard
-                            title="Lợi nhuận gộp (Gross Profit)"
-                            value={formatCurrency(stats?.grossProfit)}
-                            icon="savings"
-                            colorClass="text-yellow-600"
-                            bgClass="bg-yellow-50"
-                        />
-                        <MetricCard title="Khách hàng mua sắm" value={stats?.customerCount || 0} icon="group" colorClass="text-teal-600" bgClass="bg-teal-50" />
+                        
+                        {canViewRevenue && (
+                            <>
+                                <MetricCard title="Doanh thu gộp (Gross Revenue)" value={formatCurrency(stats?.grossRevenue)} icon="payments" colorClass="text-blue-600" bgClass="bg-blue-50" />
+                                <MetricCard
+                                    title="Doanh thu thuần (Net Revenue)"
+                                    value={formatCurrency(stats?.netRevenue)}
+                                    icon="account_balance_wallet"
+                                    colorClass="text-[#356647]"
+                                    bgClass="bg-[#eaf4eb]"
+                                />
+                                <MetricCard
+                                    title="Lợi nhuận gộp (Gross Profit)"
+                                    value={formatCurrency(stats?.grossProfit)}
+                                    icon="savings"
+                                    colorClass="text-yellow-600"
+                                    bgClass="bg-yellow-50"
+                                />
+                            </>
+                        )}
+                        
+                        {canViewCustomerGrowth && <MetricCard title="Khách hàng mua sắm" value={stats?.customerCount || 0} icon="group" colorClass="text-teal-600" bgClass="bg-teal-50" />}
 
                         {/* line 2 */}
                         <MetricCard
@@ -85,21 +138,29 @@ function DashboardPage() {
                             colorClass="text-orange-600"
                             bgClass="bg-orange-50"
                         />
-                        <MetricCard
-                            title="Tổng tiền hoàn trả"
-                            value={formatCurrency(stats?.refundAmount)}
-                            icon="assignment_return"
-                            colorClass="text-red-600"
-                            bgClass="bg-red-50"
-                        />
-                        <MetricCard title="Tỷ lệ trả hàng" value={formatPercent(stats?.returnRate)} icon="percent" colorClass="text-slate-600" bgClass="bg-slate-50" />
-                        <MetricCard
-                            title="Tăng trưởng khách hàng"
-                            value={formatPercent(stats?.customerGrowthRate)}
-                            icon="trending_up"
-                            colorClass="text-emerald-600"
-                            bgClass="bg-emerald-50"
-                        />
+                        
+                        {canViewRevenue && (
+                            <>
+                                <MetricCard
+                                    title="Tổng tiền hoàn trả"
+                                    value={formatCurrency(stats?.refundAmount)}
+                                    icon="assignment_return"
+                                    colorClass="text-red-600"
+                                    bgClass="bg-red-50"
+                                />
+                                <MetricCard title="Tỷ lệ trả hàng" value={formatPercent(stats?.returnRate)} icon="percent" colorClass="text-slate-600" bgClass="bg-slate-50" />
+                            </>
+                        )}
+
+                        {canViewCustomerGrowth && (
+                            <MetricCard
+                                title="Tăng trưởng khách hàng"
+                                value={formatPercent(stats?.customerGrowthRate)}
+                                icon="trending_up"
+                                colorClass="text-emerald-600"
+                                bgClass="bg-emerald-50"
+                            />
+                        )}
                     </div>
 
                     <div className="grid gap-6 lg:grid-cols-2">

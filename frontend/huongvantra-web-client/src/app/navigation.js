@@ -69,7 +69,7 @@ export const navigationItems = [
     icon: 'sell',
     roles: ['admin'],
   },
-  { label: 'Thống kê bán hàng', path: '/dashboard', module: 'dashboard', icon: 'dashboard', roles: ['admin', 'agencymanager', 'accountant'] },
+  { label: 'Thống kê bán hàng', path: '/dashboard', module: 'dashboard', icon: 'dashboard', roles: ['admin', 'agencyManager', 'accountant', 'salesStaff', 'inventoryManager'] },
   {
     label: 'Tài khoản',
     path: '/admin/users',
@@ -152,7 +152,7 @@ function withRoleAwareProductLabel(items, roles = []) {
 
 export function getNavigationItemsForSession(session) {
   if (session?.modules?.length) {
-    return getNavigationItemsForModules(session.modules)
+    return withRoleAwareProductLabel(getNavigationItemsForModules(session.modules, session.roles ?? []), session?.roles ?? [])
   }
 
   return withRoleAwareProductLabel(getNavigationItemsForRoles(session?.roles ?? []), session?.roles ?? [])

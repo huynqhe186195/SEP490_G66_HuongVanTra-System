@@ -9,17 +9,25 @@ namespace OrderService.Infrastructure.Repositories;
 
 public class ReportRepository(OrderDbContext dbContext) : IReportRepository
 {
-    public async Task<SalesStatisticsResponse> GetSalesStatisticsAsync(int? month, int? year, CancellationToken ct = default)
+    public async Task<SalesStatisticsResponse> GetSalesStatisticsAsync(int? quarter, int? month, int? year, CancellationToken ct = default)
     {
         var query = dbContext.Orders
+            .Include(o => o.OrderDetails)
             .Include(o => o.Payments)
-            .Include(o => o.Returns)
+            .Include(o => o.ReturnOrders)
             .AsNoTracking()
             .Where(o => o.OrderStatus == OrderStatus.Completed);
 
         if (year.HasValue)
         {
             query = query.Where(o => o.CreatedAt.Year == year.Value);
+        }
+
+        if (quarter.HasValue)
+        {
+            var startMonth = (quarter.Value - 1) * 3 + 1;
+            var endMonth = quarter.Value * 3;
+            query = query.Where(o => o.CreatedAt.Month >= startMonth && o.CreatedAt.Month <= endMonth);
         }
 
         if (month.HasValue)
@@ -42,10 +50,10 @@ public class ReportRepository(OrderDbContext dbContext) : IReportRepository
 
         foreach (var order in validOrders)
         {
-            if (order.Returns != null && order.Returns.Any())
+            if (order.ReturnOrders != null && order.ReturnOrders.Count > 0)
             {
-                var orderRefund = order.Returns.Sum(r => r.RefundedAmount);
-                var orderReturnValue = order.Returns.Sum(r => r.ReturnValue);
+                var orderRefund = order.ReturnOrders.Sum(r => r.RefundAmount);
+                var orderReturnValue = order.ReturnOrders.Sum(r => r.ReturnAmount);
 
                 totalRefundAmount += orderRefund;
                 totalReturnValue += orderReturnValue;
@@ -67,9 +75,9 @@ public class ReportRepository(OrderDbContext dbContext) : IReportRepository
         var returnedOrdersCount = partiallyReturned + fullyReturned;
 
         // Calculate CostPrice sum for Profit
-        // Summing over OrderDetails of validOrders
+        // Summing over OrderDetails of validOrders, subtracting cost of returned quantities
         var totalCost = validOrders.SelectMany(o => o.OrderDetails ?? [])
-                                   .Sum(od => od.CostPrice * od.Quantity);
+                                   .Sum(od => od.CostPrice * (od.Quantity - od.ReturnedQuantity));
         var grossProfit = netRevenue - totalCost;
 
         var returnRate = totalOrders > 0 ? (double)returnedOrdersCount / totalOrders : 0;
@@ -84,6 +92,16 @@ public class ReportRepository(OrderDbContext dbContext) : IReportRepository
             var prevYear = month.Value == 1 ? year.Value - 1 : year.Value;
             prevCustomerCount = await dbContext.Orders
                 .Where(o => o.OrderStatus == OrderStatus.Completed && o.CreatedAt.Year == prevYear && o.CreatedAt.Month == prevMonth && o.Payments.Any(p => p.PaymentStatus == PaymentStatus.Success))
+                .Select(o => o.CustomerId).Distinct().CountAsync(ct);
+        }
+        else if (year.HasValue && quarter.HasValue)
+        {
+            var prevQuarter = quarter.Value == 1 ? 4 : quarter.Value - 1;
+            var prevYear = quarter.Value == 1 ? year.Value - 1 : year.Value;
+            var startMonth = (prevQuarter - 1) * 3 + 1;
+            var endMonth = prevQuarter * 3;
+            prevCustomerCount = await dbContext.Orders
+                .Where(o => o.OrderStatus == OrderStatus.Completed && o.CreatedAt.Year == prevYear && o.CreatedAt.Month >= startMonth && o.CreatedAt.Month <= endMonth && o.Payments.Any(p => p.PaymentStatus == PaymentStatus.Success))
                 .Select(o => o.CustomerId).Distinct().CountAsync(ct);
         }
         else if (year.HasValue)
@@ -112,7 +130,7 @@ public class ReportRepository(OrderDbContext dbContext) : IReportRepository
         };
     }
 
-    public async Task<List<TopProductDto>> GetTopSellingProductsAsync(int topCount, int? month, int? year, CancellationToken ct = default)
+    public async Task<List<TopProductDto>> GetTopSellingProductsAsync(int topCount, int? quarter, int? month, int? year, CancellationToken ct = default)
     {
         var query = dbContext.OrderDetails
             .Where(od => od.Order.OrderStatus == OrderStatus.Completed &&
@@ -121,6 +139,13 @@ public class ReportRepository(OrderDbContext dbContext) : IReportRepository
         if (year.HasValue)
         {
             query = query.Where(od => od.Order.CreatedAt.Year == year.Value);
+        }
+
+        if (quarter.HasValue)
+        {
+            var startMonth = (quarter.Value - 1) * 3 + 1;
+            var endMonth = quarter.Value * 3;
+            query = query.Where(od => od.Order.CreatedAt.Month >= startMonth && od.Order.CreatedAt.Month <= endMonth);
         }
 
         if (month.HasValue)
@@ -144,7 +169,7 @@ public class ReportRepository(OrderDbContext dbContext) : IReportRepository
         return topProducts;
     }
 
-    public async Task<List<CategorySalesDto>> GetSalesByCategoryAsync(int? month, int? year, CancellationToken ct = default)
+    public async Task<List<CategorySalesDto>> GetSalesByCategoryAsync(int? quarter, int? month, int? year, CancellationToken ct = default)
     {
         var query = dbContext.OrderDetails
             .Where(od => od.Order.OrderStatus == OrderStatus.Completed &&
@@ -153,6 +178,13 @@ public class ReportRepository(OrderDbContext dbContext) : IReportRepository
         if (year.HasValue)
         {
             query = query.Where(od => od.Order.CreatedAt.Year == year.Value);
+        }
+
+        if (quarter.HasValue)
+        {
+            var startMonth = (quarter.Value - 1) * 3 + 1;
+            var endMonth = quarter.Value * 3;
+            query = query.Where(od => od.Order.CreatedAt.Month >= startMonth && od.Order.CreatedAt.Month <= endMonth);
         }
 
         if (month.HasValue)

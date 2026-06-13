@@ -160,6 +160,7 @@ export function buildCreateOrderBody(payload) {
       skuSnapshotCode: line.skuSnapshotCode || null,
       quantity: Number(line.quantity),
       unitPrice: Number(line.unitPrice),
+      costPrice: Number(line.costPrice ?? 0),
     })),
   }
 }

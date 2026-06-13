@@ -56,7 +56,7 @@ function mapPosLineItem(item) {
     unitPrice: Number(item.unitPrice ?? item.price ?? 0),
     isGift: item.isGift ?? 0,
     categoryName: item.categoryName ?? item.CategoryName ?? '',
-    costPrice: Number(item.costPrice ?? (item.unitPrice ?? item.price ?? 0) * 0.7),
+    costPrice: Number(item.costPrice ?? 0),
   }
 }
 
@@ -89,7 +89,7 @@ function buildOrderRequestFromPosPayload(
       skuSnapshotCode: line.sku || null,
       categorySnapshotName: line.categoryName || null,
       quantity: Math.max(1, Math.round(line.quantity)),
-      costPrice: line.costPrice || 0,
+      costPrice: Number(line.costPrice ?? 0),
       unitPrice: line.unitPrice,
     })),
   })
@@ -311,6 +311,7 @@ export function buildTakeawayOrderPayload({
       name: item.name,
       quantity: item.qty,
       unitPrice: item.price,
+      costPrice: item.costPrice,
       isGift: 0,
     })),
     payments: [],
@@ -426,6 +427,7 @@ export function mapPosProduct(item) {
     imageUrl: item.imageUrl ?? item.ImageUrl ?? '',
     categoryId: item.categoryId ?? item.CategoryId ?? null,
     categoryName: item.categoryName ?? item.CategoryName ?? '',
+    costPrice: Number(item.costPrice ?? item.CostPrice ?? 0),
   }
 }
 
@@ -718,6 +720,7 @@ export async function fetchPosProducts({ storeId, search, limit = 30 }) {
       imageUrl: sku.imageUrl ?? sku.ImageUrl ?? '',
       categoryId: product?.categoryId ?? product?.CategoryId ?? null,
       categoryName: sku.categoryName ?? sku.CategoryName ?? product?.categoryName ?? product?.CategoryName ?? '',
+      costPrice: sku.costPrice ?? sku.CostPrice ?? 0,
     })
     })
     .filter(Boolean)

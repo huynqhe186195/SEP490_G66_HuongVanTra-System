@@ -14,4 +14,11 @@ public class InventoryEventPublisher(IPublishEndpoint _publishEndpoint) : IInven
             OrderCode = orderCode,
             Success = success
         }, ct);
+
+    public Task PublishCostPriceUpdatedAsync(Guid skuId, decimal newCostPrice, CancellationToken ct = default) =>
+        _publishEndpoint.Publish(new CostPriceUpdatedEvent
+        {
+            SkuId = skuId,
+            NewCostPrice = newCostPrice
+        }, ct);
 }

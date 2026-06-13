@@ -5,18 +5,18 @@ namespace OrderService.Application.UseCases;
 
 public class ReportLogic(IReportRepository reportRepository) : IReportLogic
 {
-    public Task<SalesStatisticsResponse> GetSalesStatisticsAsync(int? month, int? year, CancellationToken cancellationToken = default)
+    public Task<SalesStatisticsResponse> GetSalesStatisticsAsync(int? quarter, int? month, int? year, CancellationToken cancellationToken = default)
     {
-        return reportRepository.GetSalesStatisticsAsync(month, year, cancellationToken);
+        return reportRepository.GetSalesStatisticsAsync(quarter, month, year, cancellationToken);
     }
 
-    public Task<List<TopProductDto>> GetTopSellingProductsAsync(int topCount, int? month, int? year, CancellationToken cancellationToken = default)
+    public Task<List<TopProductDto>> GetTopSellingProductsAsync(int topCount, int? quarter, int? month, int? year, CancellationToken cancellationToken = default)
     {
-        return reportRepository.GetTopSellingProductsAsync(topCount, month, year, cancellationToken);
+        return reportRepository.GetTopSellingProductsAsync(topCount, quarter, month, year, cancellationToken);
     }
 
-    public Task<List<CategorySalesDto>> GetSalesByCategoryAsync(int? month, int? year, CancellationToken cancellationToken = default)
+    public Task<List<CategorySalesDto>> GetSalesByCategoryAsync(int? quarter, int? month, int? year, CancellationToken cancellationToken = default)
     {
-        return reportRepository.GetSalesByCategoryAsync(month, year, cancellationToken);
+        return reportRepository.GetSalesByCategoryAsync(quarter, month, year, cancellationToken);
     }
 }

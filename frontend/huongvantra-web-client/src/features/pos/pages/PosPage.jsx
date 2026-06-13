@@ -6,6 +6,9 @@ import CustomerDetailModal from "../components/CustomerDetailModal.jsx";
 import OrderOfferModal from "../components/OrderOfferModal.jsx";
 import ConfirmDialog from "../components/ConfirmDialog.jsx";
 import PosPaymentSidebar from "../components/PosPaymentSidebar.jsx";
+import SelectReturnOrderModal from "../components/SelectReturnOrderModal.jsx";
+import PosCategoryFilterSidebar from "../components/PosCategoryFilterSidebar.jsx";
+import { expandCategoryFilterIds, formatCategoryFilterSummary } from "../../products/utils/categoryTreeUtils.js";
 import { printReceiptFromData, printReceiptSequence } from "../utils/printReceipt.js";
 import { formatVietnamDateTimeMinute, vietnamNowLabel } from "../../../utils/vietnamDateTime.js";
 import { applyCustomerDebtPayment, fetchCustomerOpenDebts } from "../../customers/services/customersApi.js";
@@ -32,7 +35,6 @@ import { fetchPendingCatalogSync, syncCatalogToStore } from "../../products/serv
 import { fetchCategories } from "../../products/services/categoriesApi.js";
 import ProductImage from "../../products/components/ProductImage.jsx";
 import { computeCouponDiscount, formatPromotionLabel, formatPromotionScopeLabel } from "../utils/posPromotionUtils.js";
-import { isVipCustomerType } from "../../customers/utils/customerDisplay.js";
 
 const SALES_MODES = [
     { id: "counter", label: "Bán trực tiếp", icon: "storefront" },
@@ -1081,6 +1083,7 @@ function PosPage() {
                 name: item.name,
                 quantity: item.qty,
                 unitPrice: item.price,
+                costPrice: item.costPrice,
                 isGift: 0,
             })),
             payments: [
