@@ -29,21 +29,24 @@ const EMPTY_FORM = {
   maxDiscountAmount: '',
   minimumOrderAmount: '',
   usageLimitTotal: '',
-  usageLimitPerCustomer: '',
+  usageLimitPerCustomer: '1',
   validFrom: '',
   validTo: '',
   isActive: true,
   scopeType: 'ORDER',
   skuScopes: [],
   categoryScopes: [],
+  customerTierMode: 'ALL',
   customerTierScopes: [],
 }
 
 const MAX_PERCENTAGE_DISCOUNT_VALUE = 90
 const MAX_FIXED_DISCOUNT_VALUE = 10000000
 const MAX_PERCENTAGE_DISCOUNT_AMOUNT = 10000000
+const MAX_MINIMUM_ORDER_AMOUNT = 100000000
 const MAX_USAGE_LIMIT = 1000000
 const PROMOTION_PAGE_SIZE = 10
+const PROMO_CODE_REGEX = /^[A-Z0-9_-]+$/
 const DEFAULT_PAGINATION = {
   page: 1,
   pageSize: PROMOTION_PAGE_SIZE,
@@ -107,6 +110,16 @@ function getCurrentDatetimeLocalMinute() {
   return formatDatetimeLocal(new Date())
 }
 
+function isDatetimeLocalBeforeCurrentMinute(value) {
+  if (!value) return false
+  const selected = new Date(value)
+  if (Number.isNaN(selected.getTime())) return false
+
+  const current = new Date()
+  current.setSeconds(0, 0)
+  return selected < current
+}
+
 function addMinutesToDatetimeLocal(value, minutes) {
   if (!value) return ''
   const date = new Date(value)
@@ -143,8 +156,8 @@ function getDiscountValueMax(discountType) {
 
 function getDiscountValueHelperText(discountType) {
   return discountType === 'PERCENTAGE'
-    ? 'Tối đa 90%'
-    : 'Tối đa 10.000.000đ'
+    ? 'Với giảm phần trăm: tối đa 90%.'
+    : 'Với giảm cố định: tối đa 10.000.000đ.'
 }
 
 function formatPromotionMinimumOrderSummary(promotion) {
@@ -240,12 +253,24 @@ function formatPromotionCustomerTierSummary(promotion) {
     .join(', ')}`
 }
 
+function formatSelectedCustomerTierSummary(scopes = []) {
+  if (!scopes.length) return 'Tất cả hạng khách hàng'
+
+  const names = scopes
+    .map((scope) => scope.tierName || scope.tierSnapshotName || `Hạng #${scope.tierId}`)
+    .filter(Boolean)
+
+  if (names.length <= 2) return names.join(', ')
+  return `${names.slice(0, 2).join(', ')} +${names.length - 2}`
+}
+
 function PromotionsPage() {
   const [promotions, setPromotions] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [modalOpen, setModalOpen] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [editingOrderCount, setEditingOrderCount] = useState(0)
+  const [editingOriginalValidity, setEditingOriginalValidity] = useState({ validFrom: '', validTo: '' })
   const [form, setForm] = useState(EMPTY_FORM)
   const [isSaving, setIsSaving] = useState(false)
   const [skuOptions, setSkuOptions] = useState([])
@@ -350,7 +375,8 @@ function PromotionsPage() {
   const openCreate = () => {
     setEditingId(null)
     setEditingOrderCount(0)
-    setForm(EMPTY_FORM)
+    setEditingOriginalValidity({ validFrom: '', validTo: '' })
+    setForm({ ...EMPTY_FORM, skuScopes: [], categoryScopes: [], customerTierScopes: [] })
     setSkuSearchTerm('')
     setCategorySearchTerm('')
     setCustomerTierSearchTerm('')
@@ -362,6 +388,12 @@ function PromotionsPage() {
   const openEdit = (promotion) => {
     setEditingId(promotion.id)
     setEditingOrderCount(Number(promotion.orderCount || 0))
+    const validFrom = promotion.validFromUtc ? toDatetimeLocalValue(promotion.validFromUtc) : ''
+    const validTo = promotion.validToUtc ? toDatetimeLocalValue(promotion.validToUtc) : ''
+    const customerTierScopes = Array.isArray(promotion.customerTierScopes)
+      ? promotion.customerTierScopes
+      : []
+    setEditingOriginalValidity({ validFrom, validTo })
     setForm({
       promoCode: promotion.promoCode,
       discountType: promotion.discountType,
@@ -380,15 +412,14 @@ function PromotionsPage() {
       usageLimitPerCustomer: Number(promotion.usageLimitPerCustomer || 0) > 0
         ? String(promotion.usageLimitPerCustomer)
         : '',
-      validFrom: promotion.validFromUtc ? toDatetimeLocalValue(promotion.validFromUtc) : '',
-      validTo: promotion.validToUtc ? toDatetimeLocalValue(promotion.validToUtc) : '',
+      validFrom,
+      validTo,
       isActive: promotion.isActive ?? true,
       scopeType: promotion.scopeType || 'ORDER',
       skuScopes: Array.isArray(promotion.skuScopes) ? promotion.skuScopes : [],
       categoryScopes: Array.isArray(promotion.categoryScopes) ? promotion.categoryScopes : [],
-      customerTierScopes: Array.isArray(promotion.customerTierScopes)
-        ? promotion.customerTierScopes
-        : [],
+      customerTierMode: customerTierScopes.length > 0 ? 'SPECIFIC' : 'ALL',
+      customerTierScopes,
     })
     setSkuSearchTerm('')
     setCategorySearchTerm('')
@@ -402,15 +433,41 @@ function PromotionsPage() {
   }
 
   const handleSave = async () => {
+    const promoCode = form.promoCode.trim().toUpperCase()
+    if (!promoCode) {
+      showError('Mã giảm giá là bắt buộc.')
+      return
+    }
+    if (promoCode.length < 3 || promoCode.length > 50) {
+      showError('Mã giảm giá phải có từ 3 đến 50 ký tự.')
+      return
+    }
+    if (!PROMO_CODE_REGEX.test(promoCode)) {
+      showError('Mã giảm giá chỉ được chứa chữ cái, số, dấu gạch ngang (-) hoặc gạch dưới (_).')
+      return
+    }
+
     if (form.validFrom && form.validTo && form.validTo <= form.validFrom) {
       showError('Thời gian kết thúc phải sau thời gian bắt đầu.')
+      return
+    }
+    const validFromChanged = !editingId || form.validFrom !== editingOriginalValidity.validFrom
+    const validToChanged = !editingId || form.validTo !== editingOriginalValidity.validTo
+    if (form.validFrom && validFromChanged && isDatetimeLocalBeforeCurrentMinute(form.validFrom)) {
+      showError('Thời gian bắt đầu không được ở quá khứ.')
+      return
+    }
+    if (form.validTo && validToChanged && isDatetimeLocalBeforeCurrentMinute(form.validTo)) {
+      showError('Thời gian kết thúc không được ở quá khứ.')
       return
     }
 
     const scopeType = String(form.scopeType || 'ORDER').toUpperCase()
     const skuScopes = scopeType === 'SKU' ? form.skuScopes ?? [] : []
     const categoryScopes = scopeType === 'CATEGORY' ? form.categoryScopes ?? [] : []
-    const customerTierScopes = form.customerTierScopes ?? []
+    const customerTierScopes = form.customerTierMode === 'SPECIFIC'
+      ? form.customerTierScopes ?? []
+      : []
     const discountType = String(form.discountType || 'PERCENTAGE').toUpperCase()
     const discountValue = discountType === 'FIXED'
       ? parseCurrencyInput(form.discountValue)
@@ -421,8 +478,13 @@ function PromotionsPage() {
     const minimumOrderAmount = parseCurrencyInput(form.minimumOrderAmount)
     const usageLimitTotal = parseIntegerInput(form.usageLimitTotal)
     const usageLimitPerCustomer = parseIntegerInput(form.usageLimitPerCustomer)
+
+    if (!Number.isFinite(discountValue) || discountValue <= 0) {
+      showError('Giá trị giảm phải lớn hơn 0.')
+      return
+    }
     if (scopeType === 'SKU' && skuScopes.length === 0) {
-      showError('Vui lòng chọn ít nhất 1 SKU cho phạm vi SKU cụ thể.')
+      showError('Vui lòng chọn ít nhất một sản phẩm áp dụng.')
       return
     }
     if (scopeType === 'CATEGORY' && categoryScopes.length === 0) {
@@ -433,20 +495,43 @@ function PromotionsPage() {
       showError('Hạng khách hàng áp dụng không hợp lệ.')
       return
     }
+    if (form.customerTierMode === 'SPECIFIC' && customerTierScopes.length === 0) {
+      showError('Vui lòng chọn ít nhất một hạng khách hàng áp dụng.')
+      return
+    }
 
     if (discountType === 'PERCENTAGE') {
+      if (discountValue > MAX_PERCENTAGE_DISCOUNT_VALUE) {
+        showError('Mã giảm phần trăm không được vượt quá 90%.')
+        return
+      }
       if (maxDiscountAmount <= 0) {
-        showError('Giảm tối đa phải lớn hơn 0.')
+        showError('Mã giảm phần trăm cần có số tiền giảm tối đa.')
         return
       }
       if (maxDiscountAmount > MAX_PERCENTAGE_DISCOUNT_AMOUNT) {
-        showError('Giảm tối đa không quá 10.000.000đ.')
+        showError('Số tiền giảm tối đa không được vượt quá 10.000.000đ.')
         return
       }
     }
 
-    if (discountType === 'FIXED' && minimumOrderAmount > 0 && discountValue > minimumOrderAmount) {
-      showError('Số tiền giảm cố định không được lớn hơn đơn tối thiểu.')
+    if (discountType === 'FIXED') {
+      if (discountValue > MAX_FIXED_DISCOUNT_VALUE) {
+        showError('Mã giảm cố định không được vượt quá 10.000.000đ.')
+        return
+      }
+      if (minimumOrderAmount <= 0) {
+        showError('Mã giảm cố định cần có đơn tối thiểu lớn hơn 0đ.')
+        return
+      }
+      if (discountValue > minimumOrderAmount) {
+        showError('Số tiền giảm cố định không được lớn hơn đơn tối thiểu.')
+        return
+      }
+    }
+
+    if (minimumOrderAmount < 0 || minimumOrderAmount > MAX_MINIMUM_ORDER_AMOUNT) {
+      showError('Đơn tối thiểu không được vượt quá 100.000.000đ.')
       return
     }
 
@@ -466,7 +551,7 @@ function PromotionsPage() {
     }
 
     const payload = {
-      promoCode: form.promoCode.trim(),
+      promoCode,
       discountType,
       discountValue,
       maxDiscountAmount,
@@ -480,11 +565,6 @@ function PromotionsPage() {
       skuScopes,
       categoryScopes,
       customerTierScopes,
-    }
-
-    if (!payload.promoCode) {
-      showError('Vui lòng nhập mã giảm giá.')
-      return
     }
 
     if (payload.validFrom && payload.validTo && payload.validFrom > payload.validTo) {
@@ -1008,6 +1088,9 @@ function PromotionsPage() {
                   onChange={(e) => setForm((prev) => ({ ...prev, promoCode: e.target.value.toUpperCase() }))}
                   placeholder="VD: SALE10"
                 />
+                <p className="mt-1 text-xs text-slate-500">
+                  Từ 3 đến 50 ký tự, chỉ dùng chữ cái, số, dấu gạch ngang (-) hoặc gạch dưới (_).
+                </p>
               </label>
               <label className="block">
                 <span className="text-xs font-bold uppercase text-slate-400">Loại giảm</span>
@@ -1032,6 +1115,9 @@ function PromotionsPage() {
                   <option value="PERCENTAGE">PERCENTAGE — giảm theo %</option>
                   <option value="FIXED">FIXED — giảm số tiền cố định</option>
                 </select>
+                <p className="mt-1 text-xs text-slate-500">
+                  PERCENTAGE cần cấu hình giảm tối đa. FIXED cần cấu hình đơn tối thiểu.
+                </p>
               </label>
               <label className="block">
                 <span className="text-xs font-bold uppercase text-slate-400">
@@ -1087,7 +1173,9 @@ function PromotionsPage() {
                   }))}
                 />
                 <p className="mt-1 text-xs text-slate-500">
-                  Để trống hoặc 0 nếu không yêu cầu đơn tối thiểu.
+                  {form.discountType === 'FIXED'
+                    ? 'Bắt buộc với mã giảm cố định, phải lớn hơn 0 và không vượt quá 100.000.000đ.'
+                    : 'Để trống hoặc 0 nếu không yêu cầu đơn tối thiểu. Tối đa 100.000.000đ.'}
                 </p>
               </label>
               <div className="grid grid-cols-2 gap-3">
@@ -1122,7 +1210,7 @@ function PromotionsPage() {
                     }))}
                   />
                   <p className="mt-1 text-xs text-slate-500">
-                    Để trống hoặc 0 nếu không giới hạn theo từng khách hàng.
+                    Mặc định 1 lần/khách. Nhập 0 nếu không giới hạn theo từng khách hàng.
                   </p>
                 </label>
               </div>
@@ -1147,6 +1235,9 @@ function PromotionsPage() {
                   <option value="SKU">SKU cụ thể</option>
                   <option value="CATEGORY">Theo danh mục</option>
                 </select>
+                <p className="mt-1 text-xs text-slate-500">
+                  ORDER áp dụng toàn đơn. SKU hoặc CATEGORY cần chọn ít nhất một đối tượng áp dụng.
+                </p>
               </label>
               {form.scopeType === 'SKU' ? (
                 <div className="rounded-lg border border-slate-200 p-3">
@@ -1309,88 +1400,110 @@ function PromotionsPage() {
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <span className="text-xs font-bold uppercase text-slate-400">Hạng khách hàng áp dụng</span>
                   <span className="text-xs text-slate-500">
-                    {selectedCustomerTierIds.size > 0
-                      ? `${selectedCustomerTierIds.size} đã chọn`
-                      : 'Tất cả'}
+                    {formatSelectedCustomerTierSummary(selectedCustomerTierScopes)}
                   </span>
                 </div>
-                <p className="mb-3 text-xs text-slate-500">
-                  Không chọn hạng nào = áp dụng cho tất cả khách hàng.
-                </p>
-                <input
-                  type="text"
-                  className="mb-3 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#538463] focus:ring-2 focus:ring-[#538463]/15 disabled:bg-slate-50 disabled:text-slate-500"
-                  placeholder="Tìm hạng khách hàng..."
-                  value={customerTierSearchTerm}
+                <select
+                  className="mb-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-50 disabled:text-slate-500"
+                  value={form.customerTierMode}
                   disabled={isImmutableLocked}
-                  onFocus={loadCustomerTierOptions}
-                  onChange={(e) => setCustomerTierSearchTerm(e.target.value)}
-                />
-                {selectedCustomerTierScopes.length > 0 ? (
-                  <div className="mb-3 flex flex-wrap gap-2">
-                    {selectedCustomerTierScopes.map((scope) => (
-                      <span
-                        key={scope.tierId}
-                        className="inline-flex max-w-full items-center gap-1 rounded-full border border-[#538463]/20 bg-[#538463]/10 px-2.5 py-1 text-xs font-semibold text-[#356647]"
-                      >
-                        <span className="truncate">{scope.tierName || scope.tierSnapshotName || `Hạng #${scope.tierId}`}</span>
-                        {!isImmutableLocked ? (
-                          <button
-                            type="button"
-                            className="text-[#356647] hover:text-red-600"
-                            onClick={() => removeCustomerTierScope(scope.tierId)}
-                            aria-label={`Gỡ ${scope.tierName || scope.tierSnapshotName || scope.tierId}`}
+                  onChange={(e) => {
+                    const nextMode = e.target.value
+                    if (nextMode === 'SPECIFIC') loadCustomerTierOptions()
+                    setForm((prev) => ({
+                      ...prev,
+                      customerTierMode: nextMode,
+                      customerTierScopes: nextMode === 'SPECIFIC' ? prev.customerTierScopes : [],
+                    }))
+                  }}
+                >
+                  <option value="ALL">Tất cả hạng khách hàng</option>
+                  <option value="SPECIFIC">Chọn hạng cụ thể</option>
+                </select>
+                <p className="mb-3 text-xs text-slate-500">
+                  Mặc định áp dụng cho tất cả khách hàng. Chỉ chọn hạng cụ thể khi muốn giới hạn mã cho một nhóm khách hàng.
+                </p>
+                {form.customerTierMode === 'SPECIFIC' ? (
+                  <>
+                    <p className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">
+                      Mã giới hạn theo hạng khách hàng chỉ áp dụng cho khách hàng đã đăng ký.
+                    </p>
+                    <input
+                      type="text"
+                      className="mb-3 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#538463] focus:ring-2 focus:ring-[#538463]/15 disabled:bg-slate-50 disabled:text-slate-500"
+                      placeholder="Tìm hạng khách hàng..."
+                      value={customerTierSearchTerm}
+                      disabled={isImmutableLocked}
+                      onFocus={loadCustomerTierOptions}
+                      onChange={(e) => setCustomerTierSearchTerm(e.target.value)}
+                    />
+                    {selectedCustomerTierScopes.length > 0 ? (
+                      <div className="mb-3 flex flex-wrap gap-2">
+                        {selectedCustomerTierScopes.map((scope) => (
+                          <span
+                            key={scope.tierId}
+                            className="inline-flex max-w-full items-center gap-1 rounded-full border border-[#538463]/20 bg-[#538463]/10 px-2.5 py-1 text-xs font-semibold text-[#356647]"
                           >
-                            ×
-                          </button>
-                        ) : null}
-                      </span>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="mb-3 text-xs text-slate-500">Tất cả hạng khách hàng.</p>
-                )}
-                {isCustomerTierLoading ? (
-                  <p className="text-xs text-slate-500">Đang tải hạng khách hàng...</p>
-                ) : null}
-                {!isCustomerTierLoading && displayCustomerTierOptions.length === 0 ? (
-                  <p className="text-xs text-slate-500">Không có hạng khách hàng khả dụng.</p>
-                ) : null}
-                {!isCustomerTierLoading && displayCustomerTierOptions.length > 0 ? (
-                  <div className="max-h-52 space-y-1 overflow-y-auto pr-1">
-                    {visibleCustomerTierOptions.length === 0 ? (
-                      <p className="px-2 py-2 text-xs text-slate-500">Không tìm thấy hạng khách hàng phù hợp.</p>
-                    ) : null}
-                    {visibleCustomerTierOptions.map((tier) => {
-                      const tierId = Number(tier.id)
-                      const isSelected = selectedCustomerTierIds.has(tierId)
-                      return (
-                        <div
-                          key={tier.id}
-                          className="flex items-center justify-between gap-3 rounded-lg px-2 py-1.5 text-sm hover:bg-slate-50"
-                        >
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate font-semibold text-slate-700">
-                              {getCustomerTierDisplayName(tier)}
-                            </span>
-                            {Number(tier.discountPercent || 0) > 0 ? (
-                              <span className="block truncate text-xs text-slate-500">
-                                CK hạng {Number(tier.discountPercent).toLocaleString('vi-VN')}%
-                              </span>
+                            <span className="truncate">{scope.tierName || scope.tierSnapshotName || `Hạng #${scope.tierId}`}</span>
+                            {!isImmutableLocked ? (
+                              <button
+                                type="button"
+                                className="text-[#356647] hover:text-red-600"
+                                onClick={() => removeCustomerTierScope(scope.tierId)}
+                                aria-label={`Gỡ ${scope.tierName || scope.tierSnapshotName || scope.tierId}`}
+                              >
+                                ×
+                              </button>
                             ) : null}
                           </span>
-                          <button
-                            type="button"
-                            disabled={isImmutableLocked || isSelected}
-                            onClick={() => addCustomerTierScope(tier)}
-                            className="shrink-0 rounded-lg border border-[#538463]/30 px-2.5 py-1 text-xs font-semibold text-[#356647] hover:bg-[#538463]/10 disabled:border-slate-200 disabled:text-slate-400"
-                          >
-                            {isSelected ? 'Đã chọn' : 'Thêm'}
-                          </button>
-                        </div>
-                      )
-                    })}
-                  </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="mb-3 text-xs text-slate-500">Chưa chọn hạng khách hàng nào.</p>
+                    )}
+                    {isCustomerTierLoading ? (
+                      <p className="text-xs text-slate-500">Đang tải hạng khách hàng...</p>
+                    ) : null}
+                    {!isCustomerTierLoading && displayCustomerTierOptions.length === 0 ? (
+                      <p className="text-xs text-slate-500">Không có hạng khách hàng khả dụng.</p>
+                    ) : null}
+                    {!isCustomerTierLoading && displayCustomerTierOptions.length > 0 ? (
+                      <div className="max-h-52 space-y-1 overflow-y-auto pr-1">
+                        {visibleCustomerTierOptions.length === 0 ? (
+                          <p className="px-2 py-2 text-xs text-slate-500">Không tìm thấy hạng khách hàng phù hợp.</p>
+                        ) : null}
+                        {visibleCustomerTierOptions.map((tier) => {
+                          const tierId = Number(tier.id)
+                          const isSelected = selectedCustomerTierIds.has(tierId)
+                          return (
+                            <div
+                              key={tier.id}
+                              className="flex items-center justify-between gap-3 rounded-lg px-2 py-1.5 text-sm hover:bg-slate-50"
+                            >
+                              <span className="min-w-0 flex-1">
+                                <span className="block truncate font-semibold text-slate-700">
+                                  {getCustomerTierDisplayName(tier)}
+                                </span>
+                                {Number(tier.discountPercent || 0) > 0 ? (
+                                  <span className="block truncate text-xs text-slate-500">
+                                    CK hạng {Number(tier.discountPercent).toLocaleString('vi-VN')}%
+                                  </span>
+                                ) : null}
+                              </span>
+                              <button
+                                type="button"
+                                disabled={isImmutableLocked || isSelected}
+                                onClick={() => addCustomerTierScope(tier)}
+                                className="shrink-0 rounded-lg border border-[#538463]/30 px-2.5 py-1 text-xs font-semibold text-[#356647] hover:bg-[#538463]/10 disabled:border-slate-200 disabled:text-slate-400"
+                              >
+                                {isSelected ? 'Đã chọn' : 'Thêm'}
+                              </button>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    ) : null}
+                  </>
                 ) : null}
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -1426,7 +1539,7 @@ function PromotionsPage() {
                 </label>
               </div>
               <p className="text-xs text-slate-500">
-                Để trống cả hai ô nếu mã không giới hạn thời gian. Ngày tính theo giờ Việt Nam.
+                Để trống cả hai ô nếu mã không giới hạn thời gian. Thời gian bắt đầu/kết thúc không được chọn quá khứ; thời gian kết thúc phải sau thời gian bắt đầu.
               </p>
               <label className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700">
                 <input

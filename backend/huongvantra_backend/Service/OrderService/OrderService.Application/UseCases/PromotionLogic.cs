@@ -15,14 +15,19 @@ public class PromotionLogic(
     private const decimal MaxPercentageDiscountValue = 90m;
     private const decimal MaxFixedDiscountValue = 10_000_000m;
     private const decimal MaxPercentageDiscountAmount = 10_000_000m;
+    private const decimal MaxMinimumOrderAmount = 100_000_000m;
     private const int MaxUsageLimit = 1_000_000;
     private const int AdminPromotionPageSize = 10;
-    private const string InvalidLookupMessage = "M├ú giß║úm gi├í kh├┤ng hß╗úp lß╗ç hoß║Àc ─æ├ú hß║┐t hiß╗çu lß╗▒c.";
-    private const string NotApplicableMessage = "Promotion is not applicable to selected items.";
+    private const string InvalidLookupMessage = "Mã giảm giá không hợp lệ hoặc đã hết hiệu lực.";
+    private const string NotApplicableMessage = "Mã giảm giá không áp dụng cho sản phẩm trong đơn hàng.";
     private const string CategoryNotApplicableMessage = "Mã giảm giá không áp dụng cho danh mục trong đơn hàng.";
-    private const string CustomerTierRequiredMessage = "Vui lòng chọn khách hàng để áp dụng mã này.";
+    private const string PerCustomerUsageRequiresCustomerMessage =
+        "Mã này yêu cầu chọn khách hàng để kiểm soát lượt sử dụng.";
+    private const string CustomerTierRequiredMessage =
+        "Mã này chỉ áp dụng cho khách hàng đã đăng ký thuộc hạng phù hợp.";
     private const string CustomerNotFoundMessage = "Không tìm thấy thông tin khách hàng.";
-    private const string CustomerTierNotApplicableMessage = "Khách hàng không thuộc hạng áp dụng mã giảm giá này.";
+    private const string CustomerTierNotApplicableMessage =
+        "Mã này chỉ áp dụng cho khách hàng đã đăng ký thuộc hạng phù hợp.";
     private static readonly TimeSpan ValidFromPastTolerance = TimeSpan.FromMinutes(2);
     private static readonly Regex PromoCodeRegex = new("^[A-Z0-9_-]+$", RegexOptions.Compiled);
 
@@ -148,11 +153,12 @@ public class PromotionLogic(
             req.CategoryScopes,
             req.CustomerTierScopes,
             validateValidFromNotPast: true,
+            validateValidToNotPast: true,
             nowUtc: now);
 
         var existing = await _promotionRepo.GetByNormalizedCodeAsync(input.NormalizedPromoCode, ct);
         if (existing is not null)
-            throw new OrderValidationException("M├ú giß║úm gi├í ─æ├ú tß╗ôn tß║íi.");
+            throw new OrderValidationException("Mã giảm giá đã tồn tại.");
 
         var promotion = new Promotion
         {
@@ -200,6 +206,9 @@ public class PromotionLogic(
         var requestedValidFromUtc = AsNullableUtc(req.ValidFromUtc ?? req.ValidFrom);
         var existingValidFromUtc = AsNullableUtc(promotion.ValidFromUtc);
         var validFromChanged = !SameNullableDateTimeMinute(requestedValidFromUtc, existingValidFromUtc);
+        var requestedValidToUtc = AsNullableUtc(req.ValidToUtc ?? req.ValidTo);
+        var existingValidToUtc = AsNullableUtc(promotion.ValidToUtc);
+        var validToChanged = !SameNullableDateTimeMinute(requestedValidToUtc, existingValidToUtc);
         var requestedCustomerTierScopes = req.CustomerTierScopes ??
             promotion.CustomerTierScopes
                 .Where(s => !s.IsDeleted)
@@ -224,6 +233,7 @@ public class PromotionLogic(
             req.CategoryScopes,
             requestedCustomerTierScopes,
             validateValidFromNotPast: validFromChanged,
+            validateValidToNotPast: validToChanged,
             nowUtc: now);
 
         var orderCount = await _promotionRepo.CountOrdersUsingPromotionAsync(promotion.Id, ct);
@@ -257,7 +267,7 @@ public class PromotionLogic(
         {
             var existing = await _promotionRepo.GetByNormalizedCodeAsync(input.NormalizedPromoCode, ct);
             if (existing is not null && existing.Id != promotion.Id)
-                throw new OrderValidationException("M├ú giß║úm gi├í ─æ├ú tß╗ôn tß║íi.");
+                throw new OrderValidationException("Mã giảm giá đã tồn tại.");
         }
 
         if (orderCount == 0)
@@ -455,7 +465,7 @@ public class PromotionLogic(
         if (promotion.MinimumOrderAmount > 0 &&
             baseAfterManualDiscount < promotion.MinimumOrderAmount)
             throw new OrderValidationException(
-                $"─Éãín h├áng cß║ºn tß╗æi thiß╗âu {FormatVietnamAmount(promotion.MinimumOrderAmount)}─æ ─æß╗â ├íp dß╗Ñng m├ú {promotion.PromoCode}.");
+                $"Đơn hàng cần tối thiểu {FormatVietnamAmount(promotion.MinimumOrderAmount)}đ để áp dụng mã {promotion.PromoCode}.");
 
         var eligibleSubtotal = promotion.ScopeType switch
         {
@@ -514,7 +524,7 @@ public class PromotionLogic(
     {
         var errors = new List<string>();
         if (items is null || items.Count == 0)
-            errors.Add("─Éãín h├áng phß║úi c├│ ├¡t nhß║Ñt 1 sß║ún phß║®m.");
+            errors.Add("Đơn hàng phải có ít nhất 1 sản phẩm.");
 
         var result = new List<PromotionCalculationItem>();
         if (items is not null)
@@ -523,15 +533,15 @@ public class PromotionLogic(
             {
                 var item = items[i];
                 if (item.SkuId == Guid.Empty)
-                    errors.Add($"Sß║ún phß║®m [{i + 1}]: SkuId kh├┤ng hß╗úp lß╗ç.");
+                    errors.Add($"Sản phẩm [{i + 1}]: SkuId không hợp lệ.");
                 if (item.Quantity < 1)
-                    errors.Add($"Sß║ún phß║®m [{i + 1}]: Sß╗æ lã░ß╗úng phß║úi >= 1.");
+                    errors.Add($"Sản phẩm [{i + 1}]: Số lượng phải >= 1.");
                 if (item.UnitPrice < 0)
-                    errors.Add($"Sß║ún phß║®m [{i + 1}]: ─Éãín gi├í kh├┤ng ─æã░ß╗úc ├óm.");
+                    errors.Add($"Sản phẩm [{i + 1}]: Đơn giá không được âm.");
 
                 var subTotal = item.SubTotal ?? item.UnitPrice * item.Quantity;
                 if (subTotal < 0)
-                    errors.Add($"Sß║ún phß║®m [{i + 1}]: Th├ánh tiß╗ün kh├┤ng ─æã░ß╗úc ├óm.");
+                    errors.Add($"Sản phẩm [{i + 1}]: Thành tiền không được âm.");
 
                 result.Add(new PromotionCalculationItem(
                     item.SkuId,
@@ -566,6 +576,7 @@ public class PromotionLogic(
         List<PromotionCategoryScopeRequest>? categoryScopes,
         List<PromotionCustomerTierScopeRequest>? customerTierScopes,
         bool validateValidFromNotPast,
+        bool validateValidToNotPast,
         DateTime nowUtc)
     {
         var errors = new List<string>();
@@ -575,46 +586,52 @@ public class PromotionLogic(
         var normalizedMinimumOrderAmount = minimumOrderAmount ?? 0m;
         var normalizedUsageLimitTotal = NormalizeUsageLimit(
             usageLimitTotal,
-            "Giß╗øi hß║ín tß╗òng lã░ß╗út d├╣ng kh├┤ng hß╗úp lß╗ç.",
+            "Tổng lượt sử dụng không hợp lệ.",
             errors);
         var normalizedUsageLimitPerCustomer = NormalizeUsageLimit(
             usageLimitPerCustomer,
-            "Giß╗øi hß║ín lã░ß╗út d├╣ng mß╗ùi kh├ích kh├┤ng hß╗úp lß╗ç.",
+            "Giới hạn mỗi khách không hợp lệ.",
             errors);
         decimal? normalizedMaxDiscountAmount = null;
 
         if (discountValue <= 0)
-            errors.Add("Gi├í trß╗ï giß║úm gi├í phß║úi lß╗øn hãín 0.");
+            errors.Add("Giá trị giảm phải lớn hơn 0.");
         if (normalizedMinimumOrderAmount < 0)
-            errors.Add("─Éãín tß╗æi thiß╗âu kh├┤ng ─æã░ß╗úc ├óm.");
+            errors.Add("Đơn tối thiểu không được âm.");
+        if (normalizedMinimumOrderAmount > MaxMinimumOrderAmount)
+            errors.Add("Đơn tối thiểu không được vượt quá 100.000.000đ.");
 
         if (parsedDiscountType == PromotionDiscountType.PERCENTAGE &&
             discountValue > MaxPercentageDiscountValue)
-            errors.Add("M├ú giß║úm percentage kh├┤ng qu├í 90%.");
+            errors.Add("Mã giảm phần trăm không được vượt quá 90%.");
 
         if (parsedDiscountType == PromotionDiscountType.PERCENTAGE)
         {
             if (!maxDiscountAmount.HasValue || maxDiscountAmount.Value <= 0)
-                errors.Add("Giß║úm tß╗æi ─æa phß║úi lß╗øn hãín 0.");
+                errors.Add("Mã giảm phần trăm cần có số tiền giảm tối đa.");
             else if (maxDiscountAmount.Value > MaxPercentageDiscountAmount)
-                errors.Add("Giß║úm tß╗æi ─æa kh├┤ng qu├í 10.000.000─æ.");
+                errors.Add("Số tiền giảm tối đa không được vượt quá 10.000.000đ.");
             else
                 normalizedMaxDiscountAmount = maxDiscountAmount.Value;
         }
 
         if (parsedDiscountType == PromotionDiscountType.FIXED &&
             discountValue > MaxFixedDiscountValue)
-            errors.Add("M├ú giß║úm FIXED kh├┤ng qu├í 10.000.000─æ.");
+            errors.Add("Mã giảm cố định không được vượt quá 10.000.000đ.");
+
+        if (parsedDiscountType == PromotionDiscountType.FIXED &&
+            normalizedMinimumOrderAmount <= 0)
+            errors.Add("Mã giảm cố định cần có đơn tối thiểu lớn hơn 0đ.");
 
         if (parsedDiscountType == PromotionDiscountType.FIXED &&
             normalizedMinimumOrderAmount > 0 &&
             discountValue > normalizedMinimumOrderAmount)
-            errors.Add("Sß╗æ tiß╗ün giß║úm cß╗æ ─æß╗ïnh kh├┤ng ─æã░ß╗úc lß╗øn hãín ─æãín tß╗æi thiß╗âu.");
+            errors.Add("Số tiền giảm cố định không được lớn hơn đơn tối thiểu.");
 
         if (normalizedUsageLimitTotal.HasValue &&
             normalizedUsageLimitPerCustomer.HasValue &&
             normalizedUsageLimitPerCustomer.Value > normalizedUsageLimitTotal.Value)
-            errors.Add("Giß╗øi hß║ín lã░ß╗út d├╣ng mß╗ùi kh├ích kh├┤ng ─æã░ß╗úc lß╗øn hãín tß╗òng lã░ß╗út d├╣ng.");
+            errors.Add("Giới hạn mỗi khách không được lớn hơn tổng lượt sử dụng.");
 
         var validFromUtc = NormalizeValidFromUtc(
             AsNullableUtc(validFrom),
@@ -622,8 +639,10 @@ public class PromotionLogic(
             nowUtc,
             errors);
         var validToUtc = AsNullableUtc(validTo);
+        if (validateValidToNotPast && validToUtc.HasValue && validToUtc.Value < nowUtc)
+            errors.Add("Thời gian kết thúc không được ở quá khứ.");
         if (validFromUtc.HasValue && validToUtc.HasValue && validToUtc.Value <= validFromUtc.Value)
-            errors.Add("Thß╗Øi gian kß║┐t th├║c phß║úi sau thß╗Øi gian bß║»t ─æß║ºu.");
+            errors.Add("Thời gian kết thúc phải sau thời gian bắt đầu.");
 
         var normalizedSkuScopes = NormalizeSkuScopes(parsedScopeType, skuIds, skuScopes, errors);
         var normalizedCategoryScopes = NormalizeCategoryScopes(
@@ -697,7 +716,7 @@ public class PromotionLogic(
         }
 
         if (bySkuId.Count == 0)
-            errors.Add("Promotion ├íp dß╗Ñng theo SKU phß║úi chß╗ìn ├¡t nhß║Ñt 1 SKU.");
+            errors.Add("Vui lòng chọn ít nhất một sản phẩm áp dụng.");
 
         return bySkuId.Values.ToList();
     }
@@ -767,15 +786,15 @@ public class PromotionLogic(
     {
         if (string.IsNullOrWhiteSpace(promoCode))
         {
-            errors.Add("M├ú giß║úm gi├í kh├┤ng ─æã░ß╗úc ─æß╗â trß╗æng.");
+            errors.Add("Mã giảm giá là bắt buộc.");
             return null;
         }
 
         var normalizedCode = promoCode.Trim().ToUpperInvariant();
         if (normalizedCode.Length is < 3 or > 50)
-            errors.Add("M├ú giß║úm gi├í phß║úi tß╗½ 3 ─æß║┐n 50 k├¢ tß╗▒.");
+            errors.Add("Mã giảm giá phải có từ 3 đến 50 ký tự.");
         if (!PromoCodeRegex.IsMatch(normalizedCode))
-            errors.Add("M├ú giß║úm gi├í chß╗ë ─æã░ß╗úc chß╗®a chß╗» c├íi, sß╗æ, dß║Ñu gß║ích ngang hoß║Àc gß║ích dã░ß╗øi.");
+            errors.Add("Mã giảm giá chỉ được chứa chữ cái, số, dấu gạch ngang (-) hoặc gạch dưới (_).");
 
         return normalizedCode;
     }
@@ -796,7 +815,7 @@ public class PromotionLogic(
     {
         if (string.IsNullOrWhiteSpace(discountType))
         {
-            errors.Add("Loß║íi giß║úm gi├í kh├┤ng ─æã░ß╗úc ─æß╗â trß╗æng.");
+            errors.Add("Loại giảm giá là bắt buộc.");
             return null;
         }
 
@@ -805,7 +824,7 @@ public class PromotionLogic(
             Enum.TryParse<PromotionDiscountType>(normalizedType, out var parsed))
             return parsed;
 
-        errors.Add("Loß║íi giß║úm gi├í chß╗ë hß╗ù trß╗ú PERCENTAGE hoß║Àc FIXED.");
+        errors.Add("Loại giảm giá chỉ hỗ trợ PERCENTAGE hoặc FIXED.");
         return null;
     }
 
@@ -888,13 +907,13 @@ public class PromotionLogic(
         var usedTotal = await _promotionRepo.CountOrdersUsingPromotionAsync(promotion.Id, ct);
         var totalLimit = NormalizeConfiguredUsageLimit(promotion.UsageLimitTotal);
         if (totalLimit.HasValue && usedTotal >= totalLimit.Value)
-            throw new OrderValidationException("M├ú giß║úm gi├í ─æ├ú hß║┐t lã░ß╗út sß╗¡ dß╗Ñng.");
+            throw new OrderValidationException("Mã giảm giá đã hết lượt sử dụng.");
 
         var perCustomerLimit = NormalizeConfiguredUsageLimit(promotion.UsageLimitPerCustomer);
         if (perCustomerLimit.HasValue)
         {
             if (!customerId.HasValue || customerId.Value == Guid.Empty)
-                throw new OrderValidationException(CustomerTierRequiredMessage);
+                throw new OrderValidationException(PerCustomerUsageRequiresCustomerMessage);
 
             var usedByCustomer = await _promotionRepo.CountOrdersUsingPromotionByCustomerAsync(
                 promotion.Id,
@@ -902,7 +921,7 @@ public class PromotionLogic(
                 ct);
 
             if (usedByCustomer >= perCustomerLimit.Value)
-                throw new OrderValidationException("Kh├ích h├áng ─æ├ú sß╗¡ dß╗Ñng hß║┐t lã░ß╗út cho m├ú giß║úm gi├í n├áy.");
+                throw new OrderValidationException("Khách hàng đã sử dụng hết lượt cho mã giảm giá này.");
         }
 
         return new PromotionUsageSnapshot(usedTotal);
@@ -1210,7 +1229,7 @@ public class PromotionLogic(
         if (nowUtc - value <= ValidFromPastTolerance)
             return nowUtc;
 
-        errors.Add("Thß╗Øi gian bß║»t ─æß║ºu kh├┤ng ─æã░ß╗úc ß╗ƒ qu├í khß╗®.");
+        errors.Add("Thời gian bắt đầu không được ở quá khứ.");
         return value;
     }
 
