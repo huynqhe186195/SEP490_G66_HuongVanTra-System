@@ -29,11 +29,12 @@ public class OrderLogic(
         GetOrdersRequest req, OrderAccessContext access, CancellationToken ct = default)
     {
         OrderInputValidator.ValidatePagination(req.Page, req.PageSize);
+        var employeeFilter = access.EmployeeFilter ?? req.EmployeeId;
         var (items, total) = await _orderRepo.GetPagedAsync(
             req.Search, req.CustomerId, req.Status, req.Channel,
             req.ExcludeChannel, req.CodTab, req.ReturnableOnly,
             req.OrderKind, req.ExcludeOrderKind,
-            access.EmployeeFilter,
+            req.FromDate, req.ToDate, employeeFilter,
             req.Page, req.PageSize, ct);
 
         var dtos = items.Select(MapToSummary).ToList();
@@ -153,8 +154,14 @@ public class OrderLogic(
             var isGift = i.IsGift;
             var unitPrice = isGift ? 0m : i.UnitPrice;
             return new CreateOrderDetailInput(
-                i.SkuId, i.SkuSnapshotName.Trim(), i.SkuSnapshotCode?.Trim(),
-                i.Quantity, unitPrice, isGift);
+                i.SkuId,
+                i.SkuSnapshotName.Trim(),
+                i.SkuSnapshotCode?.Trim(),
+                i.CategorySnapshotName?.Trim(),
+                i.Quantity,
+                i.CostPrice,
+                unitPrice,
+                isGift);
         }).ToList();
 
         OrderInputValidator.ValidateCreateOrder(
@@ -225,7 +232,9 @@ public class OrderLogic(
             SkuId = i.SkuId,
             SkuSnapshotName = i.SkuSnapshotName,
             SkuSnapshotCode = i.SkuSnapshotCode,
+            CategorySnapshotName = i.CategorySnapshotName,
             Quantity = i.Quantity,
+            CostPrice = i.CostPrice,
             UnitPrice = i.UnitPrice,
             SubTotal = i.UnitPrice * i.Quantity,
             IsGift = i.IsGift,
@@ -713,7 +722,9 @@ public class OrderLogic(
                         i.SkuId,
                         i.SkuSnapshotName.Trim(),
                         i.SkuSnapshotCode?.Trim(),
+                        i.CategorySnapshotName,
                         i.Quantity,
+                        i.CostPrice,
                         i.UnitPrice)).ToList(),
                     exchangePaymentMethod,
                     exchangePaidAmount,
@@ -943,14 +954,13 @@ public class OrderLogic(
         return new(
             o.Id, o.OrderCode, o.CustomerId, o.CustomerSnapshotName,
             o.OrderChannel.ToString(), o.OrderKind.ToString(), o.OrderStatus.ToString(),
-            o.InventorySyncStatus.ToString(), o.FinalAmount, o.CreatedAt,
+            o.InventorySyncStatus.ToString(), o.TotalAmount, o.DiscountAmount, o.FinalAmount, o.CreatedAt,
             o.Note,
             codPayment?.Id,
             codPayment?.IsCodVerified,
             codPayment?.CodWarningDate,
-            codPayment is { IsCodVerified: false } && codPayment.Amount > 0
-                ? codPayment.Amount
-                : null);
+            codPayment is { IsCodVerified: false } && codPayment.Amount > 0 ? codPayment.Amount : null,
+            o.OrderDetails?.Sum(d => d.Quantity) ?? 0);
     }
 
     private static string FormatVnd(decimal amount)

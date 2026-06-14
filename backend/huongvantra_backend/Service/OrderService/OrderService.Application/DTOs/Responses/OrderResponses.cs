@@ -129,11 +129,14 @@ public record OrderSummaryResponse(
     string OrderKind,
     string OrderStatus,
     string InventorySyncStatus,
+    decimal TotalAmount,
+    decimal DiscountAmount,
     decimal FinalAmount,
     DateTime CreatedAt,
     string? Note = null,
     Guid? CodPaymentId = null,
     bool? IsCodVerified = null,
     DateTime? CodWarningDate = null,
-    decimal? CodExpectedAmount = null
+    decimal? CodExpectedAmount = null,
+    int TotalQuantity = 0
 );

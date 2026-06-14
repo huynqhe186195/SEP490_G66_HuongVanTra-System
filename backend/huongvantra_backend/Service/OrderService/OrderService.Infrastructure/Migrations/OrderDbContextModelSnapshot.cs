@@ -65,6 +65,13 @@ namespace OrderService.Infrastructure.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("varchar(50)");
 
+                    b.Property<string>("OrderKind")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)")
+                        .HasDefaultValue("Sale");
+
                     b.Property<string>("OrderStatus")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -99,15 +106,58 @@ namespace OrderService.Infrastructure.Migrations
                     b.HasIndex("OrderCode")
                         .IsUnique();
 
+                    b.HasIndex("OrderKind");
+
                     b.HasIndex("PromotionId");
 
                     b.ToTable("Orders", (string)null);
+                });
+
+            modelBuilder.Entity("OrderService.Domain.Entities.OrderActivity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("ActivityType")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)");
+
+                    b.Property<Guid?>("ActorId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("ActorName")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("char(36)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrderId");
+
+                    b.ToTable("OrderActivities", (string)null);
                 });
 
             modelBuilder.Entity("OrderService.Domain.Entities.OrderDetail", b =>
                 {
                     b.Property<Guid>("Id")
                         .HasColumnType("char(36)");
+
+                    b.Property<string>("CategorySnapshotName")
+                        .HasColumnType("longtext");
+
+                    b.Property<decimal>("CostPrice")
+                        .HasColumnType("decimal(65,30)");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
@@ -131,6 +181,9 @@ namespace OrderService.Infrastructure.Migrations
                         .HasColumnType("int")
                         .HasDefaultValue(0);
 
+                    b.Property<Guid>("SkuId")
+                        .HasColumnType("char(36)");
+
                     b.Property<string>("SkuSnapshotCode")
                         .HasMaxLength(50)
                         .HasColumnType("varchar(50)");
@@ -139,9 +192,6 @@ namespace OrderService.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(255)
                         .HasColumnType("varchar(255)");
-
-                    b.Property<Guid>("SkuId")
-                        .HasColumnType("char(36)");
 
                     b.Property<decimal>("SubTotal")
                         .HasColumnType("decimal(18,2)");
@@ -167,12 +217,12 @@ namespace OrderService.Infrastructure.Migrations
                     b.Property<decimal>("Amount")
                         .HasColumnType("decimal(18,2)");
 
-                    b.Property<DateTime?>("CodWarningDate")
-                        .HasColumnType("datetime(6)");
-
                     b.Property<string>("CodDebtSettlementJson")
                         .HasMaxLength(4000)
                         .HasColumnType("varchar(4000)");
+
+                    b.Property<DateTime?>("CodWarningDate")
+                        .HasColumnType("datetime(6)");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
@@ -214,41 +264,6 @@ namespace OrderService.Infrastructure.Migrations
                     b.HasIndex("OrderId");
 
                     b.ToTable("Payments", (string)null);
-                });
-
-            modelBuilder.Entity("OrderService.Domain.Entities.OrderActivity", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("char(36)");
-
-                    b.Property<string>("ActivityType")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("varchar(30)");
-
-                    b.Property<Guid?>("ActorId")
-                        .HasColumnType("char(36)");
-
-                    b.Property<string>("ActorName")
-                        .HasMaxLength(100)
-                        .HasColumnType("varchar(100)");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<string>("Description")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("varchar(500)");
-
-                    b.Property<Guid>("OrderId")
-                        .HasColumnType("char(36)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("OrderId");
-
-                    b.ToTable("OrderActivities", (string)null);
                 });
 
             modelBuilder.Entity("OrderService.Domain.Entities.Promotion", b =>
@@ -298,14 +313,14 @@ namespace OrderService.Infrastructure.Migrations
                         .HasColumnType("varchar(20)")
                         .HasDefaultValue("ORDER");
 
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
                     b.Property<int?>("UsageLimitPerCustomer")
                         .HasColumnType("int");
 
                     b.Property<int?>("UsageLimitTotal")
                         .HasColumnType("int");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("datetime(6)");
 
                     b.Property<DateTime?>("ValidFromUtc")
                         .HasColumnType("datetime(6)");
@@ -363,6 +378,125 @@ namespace OrderService.Infrastructure.Migrations
                     b.ToTable("PromotionScopes", (string)null);
                 });
 
+            modelBuilder.Entity("OrderService.Domain.Entities.ReturnOrder", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid?>("CustomerId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<decimal>("CustomerPaidAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("CustomerSnapshotName")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<decimal>("ExchangeAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<Guid?>("ExchangeOrderId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<decimal>("NetCustomerPays")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<decimal>("RefundAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("RefundMethod")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)");
+
+                    b.Property<decimal>("ReturnAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("ReturnCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<string>("SourceOrderCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<Guid>("SourceOrderId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ReturnCode")
+                        .IsUnique();
+
+                    b.HasIndex("SourceOrderId");
+
+                    b.ToTable("ReturnOrders", (string)null);
+                });
+
+            modelBuilder.Entity("OrderService.Domain.Entities.ReturnOrderDetail", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<Guid>("ReturnOrderId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<int>("ReturnQuantity")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("SkuId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("SkuSnapshotCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<string>("SkuSnapshotName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<Guid>("SourceOrderDetailId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<decimal>("SubTotal")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("UnitPrice")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ReturnOrderId");
+
+                    b.ToTable("ReturnOrderDetails", (string)null);
+                });
+
             modelBuilder.Entity("OrderService.Domain.Entities.OrderActivity", b =>
                 {
                     b.HasOne("OrderService.Domain.Entities.Order", "Order")
@@ -407,16 +541,45 @@ namespace OrderService.Infrastructure.Migrations
                     b.Navigation("Promotion");
                 });
 
+            modelBuilder.Entity("OrderService.Domain.Entities.ReturnOrder", b =>
+                {
+                    b.HasOne("OrderService.Domain.Entities.Order", "SourceOrder")
+                        .WithMany("ReturnOrders")
+                        .HasForeignKey("SourceOrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("SourceOrder");
+                });
+
+            modelBuilder.Entity("OrderService.Domain.Entities.ReturnOrderDetail", b =>
+                {
+                    b.HasOne("OrderService.Domain.Entities.ReturnOrder", "ReturnOrder")
+                        .WithMany("Details")
+                        .HasForeignKey("ReturnOrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ReturnOrder");
+                });
+
             modelBuilder.Entity("OrderService.Domain.Entities.Order", b =>
                 {
                     b.Navigation("OrderDetails");
 
                     b.Navigation("Payments");
+
+                    b.Navigation("ReturnOrders");
                 });
 
             modelBuilder.Entity("OrderService.Domain.Entities.Promotion", b =>
                 {
                     b.Navigation("Scopes");
+                });
+
+            modelBuilder.Entity("OrderService.Domain.Entities.ReturnOrder", b =>
+                {
+                    b.Navigation("Details");
                 });
 #pragma warning restore 612, 618
         }

@@ -42,6 +42,7 @@ builder.Services.AddScoped<IPromotionRepository, PromotionRepository>();
 builder.Services.AddScoped<IOrderCodeGenerator, OrderCodeGenerator>();
 builder.Services.AddScoped<IReturnOrderRepository, ReturnOrderRepository>();
 builder.Services.AddScoped<IOrderEventPublisher, OrderEventPublisher>();
+builder.Services.AddScoped<IReportRepository, ReportRepository>();
 builder.Services.Configure<PosTransferPaymentOptions>(
     builder.Configuration.GetSection(PosTransferPaymentOptions.SectionName));
 builder.Services.Configure<SepayOptions>(
@@ -53,6 +54,7 @@ builder.Services.AddScoped<PosTransferPaymentLogic>();
 builder.Services.AddScoped<PromotionLogic>();
 builder.Services.AddScoped<CodReminderLogic>();
 builder.Services.AddHostedService<CodReminderHostedService>();
+builder.Services.AddScoped<IReportLogic, ReportLogic>();
 
 builder.Services.AddMassTransit(x =>
 {

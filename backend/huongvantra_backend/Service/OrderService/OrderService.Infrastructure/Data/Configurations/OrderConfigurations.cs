@@ -141,7 +141,7 @@ public class ReturnOrderConfiguration : IEntityTypeConfiguration<ReturnOrder>
         builder.Property(e => e.CreatedAt).IsRequired();
         builder.Property(e => e.UpdatedAt).IsRequired();
 
-        builder.HasOne(e => e.SourceOrder).WithMany().HasForeignKey(e => e.SourceOrderId);
+        builder.HasOne(e => e.SourceOrder).WithMany(o => o.ReturnOrders).HasForeignKey(e => e.SourceOrderId);
         builder.HasMany(e => e.Details).WithOne(d => d.ReturnOrder).HasForeignKey(d => d.ReturnOrderId);
     }
 }

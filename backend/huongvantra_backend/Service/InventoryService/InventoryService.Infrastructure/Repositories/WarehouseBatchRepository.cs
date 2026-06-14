@@ -79,6 +79,22 @@ public class WarehouseBatchRepository(InventoryDbContext _db) : IWarehouseBatchR
                 (i, _) => i.QuantityOnHand)
             .SumAsync(ct);
 
+    public async Task<decimal> CalculateMovingAverageCostAsync(Guid skuId, CancellationToken ct = default)
+    {
+        var items = await _db.WarehouseBatchItems
+            .Where(i => i.SkuId == skuId && i.UnitCost.HasValue)
+            .Select(i => new { i.InitialQuantity, UnitCost = i.UnitCost.Value })
+            .ToListAsync(ct);
+
+        if (items.Count == 0) return 0m;
+
+        var totalQty = items.Sum(i => (decimal)i.InitialQuantity);
+        if (totalQty == 0) return 0m;
+
+        var totalValue = items.Sum(i => i.InitialQuantity * i.UnitCost);
+        return Math.Round(totalValue / totalQty, 2);
+    }
+
     public async Task<Dictionary<Guid, int>> GetQuantitySumsBySkuAsync(CancellationToken ct = default)
     {
         var rows = await _db.WarehouseBatchItems

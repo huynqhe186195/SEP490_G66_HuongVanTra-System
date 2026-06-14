@@ -24,4 +24,5 @@ public class Order : BaseEntity
 
     public ICollection<OrderDetail> OrderDetails { get; set; } = new List<OrderDetail>();
     public ICollection<Payment> Payments { get; set; } = new List<Payment>();
+    public ICollection<ReturnOrder> ReturnOrders { get; set; } = new List<ReturnOrder>();
 }
