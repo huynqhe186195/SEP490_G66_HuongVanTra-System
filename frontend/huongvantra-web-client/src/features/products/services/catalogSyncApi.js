@@ -24,7 +24,10 @@ export function mapSyncResult(data) {
 }
 
 export async function fetchPendingCatalogSync() {
-  const data = await apiRequestAuth('/api/v1/catalog/sync/pending', { method: 'GET' })
+  const data = await apiRequestAuth('/api/v1/catalog/sync/pending', {
+    method: 'GET',
+    silentAuthErrors: true,
+  })
   return mapPendingSync(data)
 }
 

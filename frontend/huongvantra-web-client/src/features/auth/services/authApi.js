@@ -21,11 +21,12 @@ const ROLE_MODULE_MAP = {
     'promotions_admin',
     'users_admin',
     'phan_quyen_admin',
+    'dashboard',
   ],
-  manager: ['pos', 'orders', 'cod_ops', 'stock_deduct_ops', 'stock_adjustment_ops', 'customers', 'products', 'inventory', 'staff'],
-  sale: ['pos', 'orders', 'customers'],
-  warehouse: ['products', 'stock_adjustment_ops', 'inventory'],
-  accountant: ['orders', 'customers', 'reports'],
+  manager: ['pos', 'orders', 'cod_ops', 'stock_deduct_ops', 'stock_adjustment_ops', 'customers', 'products', 'inventory', 'staff', 'dashboard'],
+  sale: ['pos', 'orders', 'customers', 'dashboard'],
+  warehouse: ['products', 'stock_adjustment_ops', 'inventory', 'dashboard'],
+  accountant: ['orders', 'customers', 'reports', 'dashboard'],
 }
 
 const ROLE_ALIAS_TO_MAP_KEY = {
