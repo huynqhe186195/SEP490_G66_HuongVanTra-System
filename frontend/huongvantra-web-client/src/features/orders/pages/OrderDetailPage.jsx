@@ -47,6 +47,7 @@ import {
 } from '../utils/orderDisplay.js'
 import { fetchAllActiveSkus } from '../../products/services/productSkusApi.js'
 import { fetchProducts } from '../../products/services/productsApi.js'
+import { fetchCustomerById } from '../../customers/services/customersApi.js'
 import { buildProductCatalogLookups, resolveOrderLineDisplay } from '../../products/utils/productDisplay.js'
 function OrderDetailPage() {
   const { id } = useParams()
@@ -65,6 +66,7 @@ function OrderDetailPage() {
   const [timelineRefreshKey, setTimelineRefreshKey] = useState(0)
   const [catalogLookups, setCatalogLookups] = useState(() => buildProductCatalogLookups())
   const [orderReturns, setOrderReturns] = useState([])
+  const [orderCustomer, setOrderCustomer] = useState(null)
 
   const loadOrder = useCallback(async () => {
     if (!id) return
@@ -83,6 +85,26 @@ function OrderDetailPage() {
   useEffect(() => {
     loadOrder()
   }, [loadOrder])
+
+  useEffect(() => {
+    if (!order?.customerId) {
+      setOrderCustomer(null)
+      return undefined
+    }
+
+    let mounted = true
+    fetchCustomerById(order.customerId)
+      .then((customer) => {
+        if (mounted) setOrderCustomer(customer)
+      })
+      .catch(() => {
+        if (mounted) setOrderCustomer(null)
+      })
+
+    return () => {
+      mounted = false
+    }
+  }, [order?.customerId])
 
   useEffect(() => {
     if (!id) return undefined
@@ -449,6 +471,8 @@ function OrderDetailPage() {
       <OrderUpdateMetaModal
         isOpen={isUpdateModalOpen}
         order={order}
+        customer={orderCustomer}
+        catalogLookups={catalogLookups}
         isSaving={isSaving}
         onClose={() => setIsUpdateModalOpen(false)}
         onSave={handleSaveMeta}

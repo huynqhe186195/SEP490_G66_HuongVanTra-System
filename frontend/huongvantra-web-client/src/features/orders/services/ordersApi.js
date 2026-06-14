@@ -201,6 +201,19 @@ export async function updateOrder(id, payload) {
       body.promotionCode = payload.promotionCode?.trim() || ''
     }
   }
+  if (Array.isArray(payload.items) && payload.items.length > 0) {
+    body.items = payload.items.map((line) => ({
+      id: line.id || null,
+      skuId: line.skuId,
+      skuSnapshotName: line.skuSnapshotName,
+      skuSnapshotCode: line.skuSnapshotCode || null,
+      categorySnapshotName: line.categorySnapshotName || null,
+      quantity: Number(line.quantity),
+      costPrice: Number(line.costPrice ?? 0),
+      unitPrice: Number(line.unitPrice ?? 0),
+      isGift: Boolean(line.isGift),
+    }))
+  }
   const data = await apiRequestAuth(`/api/v1/orders/${id}`, {
     method: 'PUT',
     body: JSON.stringify(body),

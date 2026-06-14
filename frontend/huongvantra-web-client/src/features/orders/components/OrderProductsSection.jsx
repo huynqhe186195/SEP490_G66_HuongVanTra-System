@@ -67,6 +67,11 @@ function OrderProductsSection({
                 <td className={constrained ? 'py-1.5 pr-3' : 'py-3 pr-4'}>
                   <p className={`text-slate-900 ${constrained ? 'font-medium leading-snug' : 'font-semibold'}`}>
                     {display.productName}
+                    {line.isGift ? (
+                      <span className="ml-1.5 rounded-full bg-[#fff8e8] px-1.5 py-0.5 text-[10px] font-bold uppercase text-[#7e5700]">
+                        Quà
+                      </span>
+                    ) : null}
                   </p>
                   {!constrained && display.categoryName ? (
                     <p className="mt-0.5 text-xs text-slate-500">Danh mục: {display.categoryName}</p>
@@ -100,7 +105,11 @@ function OrderProductsSection({
                   </td>
                 ) : null}
                 <td className={constrained ? 'whitespace-nowrap py-1.5 pr-3' : 'py-3 pr-4'}>
-                  {formatVnd(line.unitPrice)}
+                  {line.isGift ? (
+                    <span className="text-[#7e5700]">0 VND</span>
+                  ) : (
+                    formatVnd(line.unitPrice)
+                  )}
                 </td>
                 <td
                   className={`text-right font-semibold ${constrained ? 'whitespace-nowrap py-1.5 pr-2' : 'py-3'}`}

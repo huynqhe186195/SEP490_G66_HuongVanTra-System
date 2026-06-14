@@ -56,7 +56,7 @@ function mapPosLineItem(item) {
     name: item.name ?? item.skuSnapshotName ?? '',
     quantity: Number(item.quantity ?? item.qty ?? 1),
     unitPrice: Number(item.unitPrice ?? item.price ?? 0),
-    isGift: item.isGift ?? 0,
+    isGift: Boolean(item.isGift),
     categoryName: item.categoryName ?? item.CategoryName ?? '',
     costPrice: Number(item.costPrice ?? 0),
   }
@@ -314,9 +314,10 @@ export function buildTakeawayOrderPayload({
       sku: item.sku,
       name: item.name,
       quantity: item.qty,
-      unitPrice: item.price,
-      costPrice: item.costPrice,
-      isGift: 0,
+      unitPrice: item.isGift ? 0 : item.price,
+      costPrice: item.costPrice ?? 0,
+      categoryName: item.categoryName ?? null,
+      isGift: item.isGift ? 1 : 0,
     })),
     payments: [],
   }
