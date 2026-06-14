@@ -27,7 +27,6 @@ public record CreateOrderDetailRequest(
     string? CategorySnapshotName,
     int Quantity,
     decimal CostPrice,
-    decimal UnitPrice,
     bool IsGift = false,
     int? CategoryId = null
 );

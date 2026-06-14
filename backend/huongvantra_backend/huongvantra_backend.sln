@@ -1,4 +1,4 @@
-
+﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 18
 VisualStudioVersion = 18.6.11822.322
@@ -12,13 +12,13 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "services", "services", "{58
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "CustomerService", "CustomerService", "{4840C7DC-1354-9086-81F8-8600587D832E}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CustomerService.Domain", "services\CustomerService\CustomerService.Domain\CustomerService.Domain.csproj", "{B7D1BA20-96D4-4912-B935-6D06297C15DF}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CustomerService.Domain", "Service\CustomerService\CustomerService.Domain\CustomerService.Domain.csproj", "{B7D1BA20-96D4-4912-B935-6D06297C15DF}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CustomerService.Application", "services\CustomerService\CustomerService.Application\CustomerService.Application.csproj", "{0C44C818-1DF5-43E9-A893-CEDD166DA558}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CustomerService.Application", "Service\CustomerService\CustomerService.Application\CustomerService.Application.csproj", "{0C44C818-1DF5-43E9-A893-CEDD166DA558}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CustomerService.Infrastructure", "services\CustomerService\CustomerService.Infrastructure\CustomerService.Infrastructure.csproj", "{63EB2DC1-2B54-4FB2-9A3F-8B04962D87A7}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CustomerService.Infrastructure", "Service\CustomerService\CustomerService.Infrastructure\CustomerService.Infrastructure.csproj", "{63EB2DC1-2B54-4FB2-9A3F-8B04962D87A7}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CustomerService.WebAPI", "services\CustomerService\CustomerService.WebAPI\CustomerService.WebAPI.csproj", "{529E3679-2878-498C-83BC-57235FE73ED2}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CustomerService.WebAPI", "Service\CustomerService\CustomerService.WebAPI\CustomerService.WebAPI.csproj", "{529E3679-2878-498C-83BC-57235FE73ED2}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Shared_Libraries", "Shared_Libraries", "{2E9D5637-D20F-AE29-AB71-F2FED977D48C}"
 EndProject
@@ -30,13 +30,13 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HuongVanTra.Gateway", "API_
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "UserService", "UserService", "{BB9B0570-D764-F740-A1C1-3444BA1D5022}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UserService.Domain", "services\UserService\UserService.Domain\UserService.Domain.csproj", "{C79001BD-7A52-4496-8BC7-21E7624D4640}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UserService.Domain", "Service\UserService\UserService.Domain\UserService.Domain.csproj", "{C79001BD-7A52-4496-8BC7-21E7624D4640}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UserService.Application", "services\UserService\UserService.Application\UserService.Application.csproj", "{1CAA04EB-5882-4ED8-AE8C-D18B542E3FD3}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UserService.Application", "Service\UserService\UserService.Application\UserService.Application.csproj", "{1CAA04EB-5882-4ED8-AE8C-D18B542E3FD3}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UserService.Infrastructure", "services\UserService\UserService.Infrastructure\UserService.Infrastructure.csproj", "{AFD3BD81-220D-4D00-A8DA-67BE6713EEAD}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UserService.Infrastructure", "Service\UserService\UserService.Infrastructure\UserService.Infrastructure.csproj", "{AFD3BD81-220D-4D00-A8DA-67BE6713EEAD}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UserService.WebAPI", "services\UserService\UserService.WebAPI\UserService.WebAPI.csproj", "{2998C254-EE9C-4326-90FE-D2ACD6B1D130}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UserService.WebAPI", "Service\UserService\UserService.WebAPI\UserService.WebAPI.csproj", "{2998C254-EE9C-4326-90FE-D2ACD6B1D130}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "OrderService", "OrderService", "{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}"
 EndProject
@@ -318,3 +318,4 @@ Global
 		SolutionGuid = {CC4BF7C2-45B8-460F-8E97-2F0D2FD0B21D}
 	EndGlobalSection
 EndGlobal
+

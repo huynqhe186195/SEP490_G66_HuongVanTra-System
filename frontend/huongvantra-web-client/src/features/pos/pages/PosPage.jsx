@@ -753,13 +753,19 @@ function PosPage() {
                 const nextQty = Number((existingLine.qty + existingLine.step).toFixed(2));
                 return {
                     ...prev,
-                    cartItems: clampCartLineDiscounts(currentItems.map((item) => (item.sku === product.sku ? {
-                        ...item,
-                        qty: nextQty,
-                        stockQuantity: stockOnHand,
-                        categoryId: item.categoryId ?? product.categoryId ?? product.CategoryId ?? null,
-                        categoryName: item.categoryName ?? product.categoryName ?? product.CategoryName ?? null,
-                    } : item))),
+                    cartItems: clampCartLineDiscounts(
+                        currentItems.map((item) =>
+                            item.sku === product.sku
+                                ? {
+                                      ...item,
+                                      qty: nextQty,
+                                      stockQuantity: stockOnHand,
+                                      categoryId: item.categoryId ?? product.categoryId ?? product.CategoryId ?? null,
+                                      categoryName: item.categoryName ?? product.categoryName ?? product.CategoryName ?? null,
+                                  }
+                                : item,
+                        ),
+                    ),
                     searchValue: "",
                 };
             }

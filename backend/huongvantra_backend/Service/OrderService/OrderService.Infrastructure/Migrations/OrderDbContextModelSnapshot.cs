@@ -583,6 +583,17 @@ namespace OrderService.Infrastructure.Migrations
                     b.Navigation("Promotion");
                 });
 
+            modelBuilder.Entity("OrderService.Domain.Entities.PromotionCustomerTierScope", b =>
+                {
+                    b.HasOne("OrderService.Domain.Entities.Promotion", "Promotion")
+                        .WithMany("CustomerTierScopes")
+                        .HasForeignKey("PromotionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Promotion");
+                });
+
             modelBuilder.Entity("OrderService.Domain.Entities.ReturnOrder", b =>
                 {
                     b.HasOne("OrderService.Domain.Entities.Order", "SourceOrder")
@@ -603,17 +614,6 @@ namespace OrderService.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("ReturnOrder");
-                });
-
-            modelBuilder.Entity("OrderService.Domain.Entities.PromotionCustomerTierScope", b =>
-                {
-                    b.HasOne("OrderService.Domain.Entities.Promotion", "Promotion")
-                        .WithMany("CustomerTierScopes")
-                        .HasForeignKey("PromotionId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Promotion");
                 });
 
             modelBuilder.Entity("OrderService.Domain.Entities.Order", b =>
