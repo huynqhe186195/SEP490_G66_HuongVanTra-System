@@ -1,13 +1,18 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { AUTH_SESSION_CHANGED_EVENT, loadAuthSession } from '../../auth/services/authSession.js'
 import { canAdjustStoreStock, canCreateCatalog } from '../../auth/utils/permissions.js'
+import ProductBomConfigModal from '../components/ProductBomConfigModal.jsx'
 import ProductSkusPanel from '../components/ProductSkusPanel.jsx'
-import { fetchCategories } from '../services/categoriesApi.js'
+import { createCategory, fetchCategories } from '../services/categoriesApi.js'
+import { createBrand, fetchBrands } from '../services/brandsApi.js'
+import { createAttributeName, fetchAttributeNames } from '../services/attributeNamesApi.js'
 import { createProduct, fetchProductById, updateProduct } from '../services/productsApi.js'
 import { mapProductApiError, validateProductForm } from '../utils/productValidation.js'
+
+const PRODUCT_TYPES = { NGUYEN_LIEU: 'NGUYEN_LIEU', THANH_PHAM: 'THANH_PHAM' }
 
 const MAX_IMAGES = 5
 const MAX_IMAGE_SIZE = 2 * 1024 * 1024
@@ -43,6 +48,26 @@ function formatCurrency(value) {
   return toNumber(value).toLocaleString('vi-VN')
 }
 
+function CurrencyInput({ value, onChange, disabled, className, placeholder = '0' }) {
+  const num = parseInt(String(value ?? '').replace(/\D/g, '') || '0', 10)
+  const display = Number.isFinite(num) && num !== 0 ? num.toLocaleString('vi-VN') : ''
+
+  return (
+    <input
+      type="text"
+      inputMode="numeric"
+      disabled={disabled}
+      className={className}
+      placeholder={placeholder}
+      value={display}
+      onChange={(e) => {
+        const digits = e.target.value.replace(/\D/g, '')
+        onChange?.(digits || '0')
+      }}
+    />
+  )
+}
+
 function cartesianProduct(groups) {
   if (!groups.length) return [[]]
   return groups.reduce(
@@ -65,6 +90,255 @@ function FieldError({ message }) {
   return <p className="mt-1 text-xs text-[#b42318]">{message}</p>
 }
 
+// Build a flat list with depth info from a nested category tree
+function buildCategoryTree(categories) {
+  const byId = {}
+  for (const cat of categories) byId[String(cat.id)] = { ...cat, children: [] }
+  const roots = []
+  for (const cat of categories) {
+    const pid = cat.parentId ? String(cat.parentId) : null
+    if (pid && byId[pid]) byId[pid].children.push(byId[String(cat.id)])
+    else roots.push(byId[String(cat.id)])
+  }
+  const flat = []
+  function walk(node, depth) {
+    flat.push({ ...node, depth })
+    for (const child of node.children) walk(child, depth + 1)
+  }
+  for (const root of roots) walk(root, 0)
+  return flat
+}
+
+// Modal for creating a category
+function CreateCategoryModal({ isOpen, onClose, categories, onCreated }) {
+  const [name, setName] = useState('')
+  const [parentId, setParentId] = useState('')
+  const [saving, setSaving] = useState(false)
+  const nameRef = useRef(null)
+
+  useEffect(() => {
+    if (isOpen) {
+      setName('')
+      setParentId('')
+      setTimeout(() => nameRef.current?.focus(), 50)
+    }
+  }, [isOpen])
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    if (!name.trim()) return
+    try {
+      setSaving(true)
+      const created = await createCategory({ name: name.trim(), parentId: parentId || null })
+      onCreated?.(created)
+      onClose()
+    } catch (err) {
+      showError(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (!isOpen) return null
+
+  const treeOptions = buildCategoryTree(
+    categories.filter((c) => !c.isDeleted && c.isActive !== false),
+  )
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm"
+      onClick={onClose}
+      role="presentation"
+    >
+      <div
+        className="w-full max-w-md rounded-2xl bg-white shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+      >
+        <header className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+          <h2 className="text-base font-bold text-slate-800">Tạo nhóm hàng mới</h2>
+          <button type="button" onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100">
+            <span className="material-symbols-outlined">close</span>
+          </button>
+        </header>
+        <form onSubmit={handleSubmit} className="space-y-4 px-6 py-5">
+          <label className="block">
+            <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Tên nhóm *</span>
+            <input
+              ref={nameRef}
+              className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-[#538463] focus:ring-2 focus:ring-[#538463]/15"
+              placeholder="VD: Trà, Cà phê, Bánh..."
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+            />
+          </label>
+          <label className="block">
+            <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Nhóm cha (tuỳ chọn)</span>
+            <select
+              className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-[#538463]"
+              value={parentId}
+              onChange={(e) => setParentId(e.target.value)}
+            >
+              <option value="">Không có — tạo nhóm gốc</option>
+              {treeOptions.map((cat) => (
+                <option key={cat.id} value={String(cat.id)}>
+                  {'  '.repeat(cat.depth)}{cat.depth > 0 ? '└ ' : ''}{cat.name}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-slate-400">Nếu không chọn nhóm cha, nhóm này sẽ là nhóm gốc.</p>
+          </label>
+          <div className="flex justify-end gap-3 pt-2">
+            <button type="button" onClick={onClose} className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+              Huỷ
+            </button>
+            <button type="submit" disabled={saving || !name.trim()} className="rounded-xl bg-[#538463] px-6 py-2.5 text-sm font-bold text-white hover:bg-[#457053] disabled:opacity-50">
+              {saving ? 'Đang tạo...' : 'Tạo nhóm'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// Modal for creating a brand (stored client-side only, no backend yet)
+function CreateBrandModal({ isOpen, onClose, onCreated }) {
+  const [name, setName] = useState('')
+  const [saving, setSaving] = useState(false)
+  const nameRef = useRef(null)
+
+  useEffect(() => {
+    if (isOpen) {
+      setName('')
+      setTimeout(() => nameRef.current?.focus(), 50)
+    }
+  }, [isOpen])
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    if (!name.trim()) return
+    try {
+      setSaving(true)
+      const created = await createBrand(name.trim())
+      onCreated?.(created)
+      onClose()
+    } catch (err) {
+      showError(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (!isOpen) return null
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm"
+      onClick={onClose}
+      role="presentation"
+    >
+      <div
+        className="w-full max-w-sm rounded-2xl bg-white shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+      >
+        <header className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+          <h2 className="text-base font-bold text-slate-800">Tạo thương hiệu mới</h2>
+          <button type="button" onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100">
+            <span className="material-symbols-outlined">close</span>
+          </button>
+        </header>
+        <form onSubmit={handleSubmit} className="space-y-4 px-6 py-5">
+          <label className="block">
+            <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Tên thương hiệu *</span>
+            <input
+              ref={nameRef}
+              className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-[#538463] focus:ring-2 focus:ring-[#538463]/15"
+              placeholder="VD: Hương Vân Trà, OEM..."
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+            />
+          </label>
+          <div className="flex justify-end gap-3 pt-2">
+            <button type="button" onClick={onClose} className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+              Huỷ
+            </button>
+            <button type="submit" disabled={saving || !name.trim()} className="rounded-xl bg-[#538463] px-6 py-2.5 text-sm font-bold text-white hover:bg-[#457053] disabled:opacity-50">
+              {saving ? 'Đang tạo...' : 'Tạo thương hiệu'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+function CreateAttributeNameModal({ isOpen, onClose, onCreated }) {
+  const [name, setName] = useState('')
+  const [saving, setSaving] = useState(false)
+  const nameRef = useRef(null)
+
+  useEffect(() => {
+    if (isOpen) {
+      setName('')
+      setTimeout(() => nameRef.current?.focus(), 50)
+    }
+  }, [isOpen])
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    if (!name.trim()) return
+    try {
+      setSaving(true)
+      const created = await createAttributeName(name.trim())
+      onCreated?.(created)
+      onClose()
+    } catch (err) {
+      showError(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (!isOpen) return null
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm" onClick={onClose} role="presentation">
+      <div className="w-full max-w-sm rounded-2xl bg-white shadow-2xl" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+        <header className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+          <h2 className="text-base font-bold text-slate-800">Tạo tên thuộc tính</h2>
+          <button type="button" onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100">
+            <span className="material-symbols-outlined">close</span>
+          </button>
+        </header>
+        <form onSubmit={handleSubmit} className="space-y-4 px-6 py-5">
+          <label className="block">
+            <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Tên thuộc tính *</span>
+            <input
+              ref={nameRef}
+              className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-[#538463] focus:ring-2 focus:ring-[#538463]/15"
+              placeholder="VD: Hương vị, Đóng gói, Độ tuổi..."
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+            />
+          </label>
+          <div className="flex justify-end gap-3 pt-2">
+            <button type="button" onClick={onClose} className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">Huỷ</button>
+          <button type="submit" disabled={saving || !name.trim()} className="rounded-xl bg-[#538463] px-6 py-2.5 text-sm font-bold text-white hover:bg-[#457053] disabled:opacity-50">{saving ? 'Đang tạo...' : 'Tạo thuộc tính'}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 function ProductFormPage({ mode }) {
   const navigate = useNavigate()
   const { id } = useParams()
@@ -75,10 +349,20 @@ function ProductFormPage({ mode }) {
   const stockOnlyAccess = isEditMode && !canEdit && canAdjustStock
 
   const [categories, setCategories] = useState([])
+  const [dbBrands, setDbBrands] = useState([])
+  const [dbAttributeNames, setDbAttributeNames] = useState([])
   const [isLoading, setIsLoading] = useState(isEditMode)
   const [isSaving, setIsSaving] = useState(false)
   const [fieldErrors, setFieldErrors] = useState({})
   const [variantDrafts, setVariantDrafts] = useState({})
+  const [productType, setProductType] = useState(PRODUCT_TYPES.THANH_PHAM)
+  const [bomByVariant, setBomByVariant] = useState({})
+  const [bomModalVariant, setBomModalVariant] = useState(null)
+  const [showCreateCategory, setShowCreateCategory] = useState(false)
+  const [showCreateBrand, setShowCreateBrand] = useState(false)
+  const [customAttrNames, setCustomAttrNames] = useState([])
+  const [addAttrNameModal, setAddAttrNameModal] = useState({ open: false, forIndex: null })
+  const isFinishedProduct = productType === PRODUCT_TYPES.THANH_PHAM
 
   const [form, setForm] = useState(() => ({
     productCode: '',
@@ -121,9 +405,7 @@ function ProductFormPage({ mode }) {
       }
     }
     loadCategories()
-    return () => {
-      mounted = false
-    }
+    return () => { mounted = false }
   }, [])
 
   useEffect(() => {
@@ -135,6 +417,18 @@ function ProductFormPage({ mode }) {
       navigate('/products', { replace: true })
     }
   }, [canEdit, canAdjustStock, isEditMode, navigate])
+
+  useEffect(() => {
+    let mounted = true
+    fetchBrands().then((list) => { if (mounted) setDbBrands(list) }).catch(() => {})
+    return () => { mounted = false }
+  }, [])
+
+  useEffect(() => {
+    let mounted = true
+    fetchAttributeNames().then((list) => { if (mounted) setDbAttributeNames(list) }).catch(() => {})
+    return () => { mounted = false }
+  }, [])
 
   useEffect(() => {
     if (!isEditMode || !id) return undefined
@@ -181,6 +475,7 @@ function ProductFormPage({ mode }) {
           })) ?? [],
           units: mappedUnits,
         }))
+        setProductType(product.productType || PRODUCT_TYPES.THANH_PHAM)
       } catch (error) {
         if (mounted) showError(error.message)
       } finally {
@@ -188,19 +483,18 @@ function ProductFormPage({ mode }) {
       }
     }
     loadProduct()
-    return () => {
-      mounted = false
-    }
+    return () => { mounted = false }
   }, [id, isEditMode])
 
-  const selectableCategories = useMemo(
-    () =>
-      categories.filter(
-        (category) =>
-          (!category.isDeleted && category.isActive !== false) || String(category.id) === String(form.categoryId),
-      ),
-    [categories, form.categoryId],
-  )
+  // Flat tree list for the category select (shows hierarchy via indentation)
+  const categoryTreeOptions = useMemo(() => {
+    const visible = categories.filter(
+      (c) => (!c.isDeleted && c.isActive !== false) || String(c.id) === String(form.categoryId),
+    )
+    return buildCategoryTree(visible)
+  }, [categories, form.categoryId])
+
+  const allBrands = useMemo(() => dbBrands.map((b) => b.name), [dbBrands])
 
   const validAttributes = useMemo(
     () =>
@@ -209,6 +503,11 @@ function ProductFormPage({ mode }) {
         .map((attribute) => ({ name: normalizeText(attribute.name), values: attribute.values })),
     [form.attributes],
   )
+
+  const baseUnitPrice = useMemo(() => {
+    const baseUnit = form.units.find((u) => u.isBaseUnit) || form.units[0]
+    return toNumber(baseUnit?.price, 0)
+  }, [form.units])
 
   const generatedRows = useMemo(() => {
     const combinations = cartesianProduct(validAttributes)
@@ -260,27 +559,55 @@ function ProductFormPage({ mode }) {
         if (itemIndex !== index) return unit
         const next = { ...unit, [key]: value }
         if (unit.isBaseUnit && key === 'conversionRate') next.conversionRate = '1'
+        // Auto-calc price for non-base units when conversionRate changes
+        if (!unit.isBaseUnit && key === 'conversionRate') {
+          const base = prev.units.find((u) => u.isBaseUnit) || prev.units[0]
+          const basePrice = toNumber(base?.price, 0)
+          const rate = toNumber(value, 1) || 1
+          next.price = String(basePrice * rate)
+        }
         return next
       }),
     }))
     setFieldErrors((prev) => ({ ...prev, units: undefined }))
   }
 
+  // When base unit price changes, recalc all non-base unit prices
+  function updateBaseUnitPrice(index, value) {
+    setForm((prev) => {
+      const basePrice = toNumber(value, 0)
+      return {
+        ...prev,
+        units: prev.units.map((unit, i) => {
+          if (i === index) return { ...unit, price: value }
+          if (unit.isBaseUnit) return unit
+          const rate = toNumber(unit.conversionRate, 1) || 1
+          return { ...unit, price: String(basePrice * rate) }
+        }),
+      }
+    })
+    setFieldErrors((prev) => ({ ...prev, units: undefined }))
+  }
+
   function addUnit() {
-    setForm((prev) => ({
-      ...prev,
-      units: [
-        ...prev.units,
-        {
-          ...EMPTY_UNIT,
-          id: createLocalId('unit'),
-          unitName: '',
-          conversionRate: '1',
-          price: prev.salePrice,
-          isBaseUnit: false,
-        },
-      ],
-    }))
+    setForm((prev) => {
+      const base = prev.units.find((u) => u.isBaseUnit) || prev.units[0]
+      const basePrice = toNumber(base?.price, 0)
+      return {
+        ...prev,
+        units: [
+          ...prev.units,
+          {
+            ...EMPTY_UNIT,
+            id: createLocalId('unit'),
+            unitName: '',
+            conversionRate: '1',
+            price: String(basePrice),
+            isBaseUnit: false,
+          },
+        ],
+      }
+    })
   }
 
   function removeUnit(index) {
@@ -372,6 +699,19 @@ function ProductFormPage({ mode }) {
     }))
   }
 
+  function openBomModal(row) {
+    setBomModalVariant({
+      rowKey: row.key,
+      productName: normalizeText(form.name) || 'Sản phẩm',
+      attributeLabel: row.attributes.map((a) => a.value).join(' / ') || row.unit.unitName,
+    })
+  }
+
+  function handleBomConfirm(lines) {
+    if (!bomModalVariant) return
+    setBomByVariant((prev) => ({ ...prev, [bomModalVariant.rowKey]: lines }))
+  }
+
   function handleImagesChange(event) {
     const files = Array.from(event.target.files || [])
     const accepted = files.filter((file) => file.size <= MAX_IMAGE_SIZE)
@@ -421,7 +761,9 @@ function ProductFormPage({ mode }) {
       .map((unit) => ({
         unitName: normalizeText(unit.unitName),
         conversionRate: toNumber(unit.conversionRate, 1) || 1,
-        price: toNumber(unit.price),
+        price: unit.isBaseUnit
+          ? toNumber(unit.price)
+          : toNumber(baseUnitPrice) * (toNumber(unit.conversionRate, 1) || 1),
         barcode: normalizeText(unit.barcode) || null,
         isDirectSell: unit.isDirectSell !== false,
         isBaseUnit: Boolean(unit.isBaseUnit),
@@ -444,10 +786,14 @@ function ProductFormPage({ mode }) {
         retailPrice: toNumber(row.salePrice),
         minStock: toNumber(form.minStock),
         maxStock: toNumber(form.maxStock, 999999999),
-        isSellable: row.unit.isDirectSell !== false,
+        isSellable: isFinishedProduct && row.unit.isDirectSell !== false,
         allowRewardPoints: true,
         isActive: true,
         imageUrl: form.images.find((image) => image.isThumbnail)?.imageUrl || null,
+        bomLines: (bomByVariant[row.key] ?? []).map((line) => ({
+          materialId: line.material_id,
+          quantity: Number(line.quantity) || 0,
+        })),
       }
     })
 
@@ -465,7 +811,8 @@ function ProductFormPage({ mode }) {
       baseUnit: normalizeText(baseUnit?.unitName) || 'cái',
       weightValue: form.weightValue === '' ? null : toNumber(form.weightValue),
       weightUnit: form.weightUnit || 'g',
-      isVariantParent: variants.length > 1,
+      productType,
+      isVariantParent: isFinishedProduct && variants.length > 1,
       images: form.images
         .filter((image) => normalizeText(image.imageUrl))
         .map((image, index) => ({
@@ -475,7 +822,7 @@ function ProductFormPage({ mode }) {
           isThumbnail: Boolean(image.isThumbnail),
         })),
       units: cleanUnits,
-      variants,
+      variants: isFinishedProduct ? variants : [],
       defaultPricing: {
         costPrice: toNumber(form.costPrice),
         salePrice: toNumber(form.salePrice),
@@ -485,7 +832,7 @@ function ProductFormPage({ mode }) {
         minStock: toNumber(form.minStock),
         maxStock: toNumber(form.maxStock, 999999999),
       },
-      attributes: validAttributes,
+      attributes: isFinishedProduct ? validAttributes : [],
     }
   }
 
@@ -497,7 +844,6 @@ function ProductFormPage({ mode }) {
     }
 
     const payload = buildSubmitPayload()
-    console.log('CREATE_PRODUCT_PAYLOAD', payload)
 
     const validation = validateProductForm(payload)
     if (!validation.valid) {
@@ -588,7 +934,7 @@ function ProductFormPage({ mode }) {
           </div>
 
           <div className="flex items-center gap-3">
-            <Link className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50" to="/products">
+            <Link className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50" to="/inventory/products">
               Quay lại
             </Link>
             <button type="submit" disabled={isSaving} className="rounded-xl bg-[#538463] px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-[#457053] disabled:opacity-50">
@@ -598,8 +944,37 @@ function ProductFormPage({ mode }) {
         </div>
 
         <section className="rounded-[1rem] bg-white p-4 shadow-sm sm:p-6 lg:p-8">
-          <h2 className="text-lg font-bold text-slate-800">1. Thông tin cơ bản</h2>
+          <h2 className="text-lg font-bold text-slate-800">Thông tin cơ bản</h2>
+
+          <div className="mt-4 flex flex-wrap gap-6">
+            <label className="inline-flex cursor-pointer items-center gap-2">
+              <input
+                type="radio"
+                name="productType"
+                checked={productType === PRODUCT_TYPES.NGUYEN_LIEU}
+                onChange={() => setProductType(PRODUCT_TYPES.NGUYEN_LIEU)}
+                className="text-[#356647] focus:ring-[#356647]"
+              />
+              <span className="text-sm font-medium text-slate-800">Nguyên liệu / Bao bì</span>
+            </label>
+            <label className="inline-flex cursor-pointer items-center gap-2">
+              <input
+                type="radio"
+                name="productType"
+                checked={productType === PRODUCT_TYPES.THANH_PHAM}
+                onChange={() => setProductType(PRODUCT_TYPES.THANH_PHAM)}
+                className="text-[#356647] focus:ring-[#356647]"
+              />
+              <span className="text-sm font-medium text-slate-800">Thành phẩm kinh doanh</span>
+            </label>
+          </div>
+
           <div className="mt-5 grid gap-4 md:grid-cols-2">
+            <label className="md:col-span-2">
+              <span className={labelClass}>Tên hàng *</span>
+              <input className={`${inputClass} ${fieldErrors.name ? 'border-[#b42318] ring-2 ring-[#b42318]/20' : ''}`} required value={form.name} onChange={(event) => updateField('name', event.target.value)} />
+              <FieldError message={fieldErrors.name} />
+            </label>
             <label>
               <span className={labelClass}>Mã hàng</span>
               <input className={inputClass} value={form.productCode} onChange={(event) => updateField('productCode', event.target.value)} placeholder="Tự động" />
@@ -608,32 +983,59 @@ function ProductFormPage({ mode }) {
               <span className={labelClass}>Mã vạch</span>
               <input className={inputClass} value={form.barcode} onChange={(event) => updateField('barcode', event.target.value)} />
             </label>
-            <label className="md:col-span-2">
-              <span className={labelClass}>Tên hàng *</span>
-              <input className={`${inputClass} ${fieldErrors.name ? 'border-[#b42318] ring-2 ring-[#b42318]/20' : ''}`} required value={form.name} onChange={(event) => updateField('name', event.target.value)} />
-              <FieldError message={fieldErrors.name} />
-            </label>
-            <label>
+
+            {/* Nhóm hàng with create button */}
+            <div>
               <span className={labelClass}>Nhóm hàng *</span>
-              <select className={`${inputClass} ${fieldErrors.categoryId ? 'border-[#b42318] ring-2 ring-[#b42318]/20' : ''}`} value={form.categoryId} onChange={(event) => updateField('categoryId', event.target.value)}>
-                <option value="">Chọn nhóm hàng</option>
-                {selectableCategories.map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {category.isActive === false || category.isDeleted ? `${category.name} (đã ẩn)` : category.name}
-                  </option>
-                ))}
-              </select>
+              <div className="mt-1 flex gap-2">
+                <select
+                  className={`flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-[#538463] focus:ring-2 focus:ring-[#538463]/15 ${fieldErrors.categoryId ? 'border-[#b42318] ring-2 ring-[#b42318]/20' : ''}`}
+                  value={form.categoryId}
+                  onChange={(event) => updateField('categoryId', event.target.value)}
+                >
+                  <option value="">Chọn nhóm hàng</option>
+                  {categoryTreeOptions.map((cat) => (
+                    <option key={cat.id} value={String(cat.id)}>
+                      {'  '.repeat(cat.depth * 2)}{cat.depth > 0 ? '└ ' : ''}{cat.name}{cat.isActive === false || cat.isDeleted ? ' (đã ẩn)' : ''}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => setShowCreateCategory(true)}
+                  className="shrink-0 rounded-xl border border-[#356647]/30 bg-[#f0eee6] px-3 py-2.5 text-sm font-bold text-[#356647] hover:bg-[#e8f1eb]"
+                  title="Tạo nhóm hàng mới"
+                >
+                  + Tạo mới
+                </button>
+              </div>
               <FieldError message={fieldErrors.categoryId} />
-            </label>
-            <label>
+            </div>
+
+            {/* Thương hiệu with create button */}
+            <div>
               <span className={labelClass}>Thương hiệu</span>
-              <select className={inputClass} value={form.brandName} onChange={(event) => updateField('brandName', event.target.value)}>
-                <option value="">Không có thương hiệu</option>
-                <option value="Hương Vân Trà">Hương Vân Trà</option>
-                <option value="OEM">OEM</option>
-                <option value="Khác">Khác</option>
-              </select>
-            </label>
+              <div className="mt-1 flex gap-2">
+                <select
+                  className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-[#538463] focus:ring-2 focus:ring-[#538463]/15"
+                  value={form.brandName}
+                  onChange={(event) => updateField('brandName', event.target.value)}
+                >
+                  <option value="">Không có thương hiệu</option>
+                  {allBrands.map((brand) => (
+                    <option key={brand} value={brand}>{brand}</option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => setShowCreateBrand(true)}
+                  className="shrink-0 rounded-xl border border-[#356647]/30 bg-[#f0eee6] px-3 py-2.5 text-sm font-bold text-[#356647] hover:bg-[#e8f1eb]"
+                  title="Tạo thương hiệu mới"
+                >
+                  + Tạo mới
+                </button>
+              </div>
+            </div>
           </div>
 
           <div className="mt-5 rounded-2xl border border-dashed border-slate-300 bg-[#fbf9f1] p-4">
@@ -669,33 +1071,37 @@ function ProductFormPage({ mode }) {
         </section>
 
         <section className="rounded-[1rem] bg-white p-4 shadow-sm sm:p-6 lg:p-8">
-          <h2 className="text-lg font-bold text-slate-800">2. Giá & Tồn kho mặc định</h2>
-          <div className="mt-5 grid gap-4 md:grid-cols-3">
+          <h2 className="text-lg font-bold text-slate-800">Giá & Tồn kho mặc định</h2>
+
+          <div className="mt-5 grid gap-4 sm:grid-cols-2">
             <label>
               <span className={labelClass}>Giá vốn</span>
-              <input type="number" min="0" className={inputClass} value={form.costPrice} onChange={(event) => updateField('costPrice', event.target.value)} />
+              <CurrencyInput className={inputClass} value={form.costPrice} onChange={(v) => updateField('costPrice', v)} />
             </label>
             <label>
               <span className={labelClass}>Giá bán</span>
-              <input type="number" min="0" className={inputClass} value={form.salePrice} onChange={(event) => updateField('salePrice', event.target.value)} />
+              <CurrencyInput className={inputClass} value={form.salePrice} onChange={(v) => updateField('salePrice', v)} />
             </label>
+          </div>
+
+          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <label>
               <span className={labelClass}>Tồn kho</span>
-              <input type="number" disabled className={inputClass} value={form.stockQuantity} onChange={(event) => updateField('stockQuantity', event.target.value)} />
+              <input type="number" disabled className={`${inputClass} bg-slate-50 text-slate-400`} value={form.stockQuantity} onChange={(event) => updateField('stockQuantity', event.target.value)} />
             </label>
             <label>
-              <span className={labelClass}>Định mức tồn thấp nhất</span>
+              <span className={labelClass}>Tồn tối thiểu</span>
               <input type="number" min="0" className={inputClass} value={form.minStock} onChange={(event) => updateField('minStock', event.target.value)} />
             </label>
             <label>
-              <span className={labelClass}>Định mức tồn cao nhất</span>
+              <span className={labelClass}>Tồn tối đa</span>
               <input type="number" min="0" className={inputClass} value={form.maxStock} onChange={(event) => updateField('maxStock', event.target.value)} />
             </label>
             <div>
               <span className={labelClass}>Trọng lượng</span>
               <div className="mt-1 flex gap-2">
                 <input type="number" min="0" className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-[#538463]" value={form.weightValue} onChange={(event) => updateField('weightValue', event.target.value)} />
-                <select className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-[#538463]" value={form.weightUnit} onChange={(event) => updateField('weightUnit', event.target.value)}>
+                <select className="w-20 shrink-0 rounded-xl border border-slate-200 bg-white px-2 py-2.5 text-sm outline-none focus:border-[#538463]" value={form.weightUnit} onChange={(event) => updateField('weightUnit', event.target.value)}>
                   <option value="g">g</option>
                   <option value="kg">kg</option>
                 </select>
@@ -708,8 +1114,8 @@ function ProductFormPage({ mode }) {
         <section className="rounded-[1rem] bg-white p-4 shadow-sm sm:p-6 lg:p-8">
           <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
             <div>
-              <h2 className="text-lg font-bold text-slate-800">3. Quản lý đơn vị tính</h2>
-              <p className="text-sm text-slate-500">Dòng đầu là đơn vị cơ bản, các dòng sau là đơn vị quy đổi như thùng, lốc, hộp.</p>
+              <h2 className="text-lg font-bold text-slate-800">Quản lý đơn vị tính</h2>
+              <p className="text-sm text-slate-500">Dòng đầu là đơn vị cơ bản. Các đơn vị khác tự tính giá bán = Giá bán cơ bản × Quy đổi.</p>
             </div>
             <button type="button" onClick={addUnit} className="rounded-xl border border-[#356647]/30 px-4 py-2 text-sm font-bold text-[#356647] hover:bg-[#f0eee6]">
               + Thêm đơn vị
@@ -718,18 +1124,32 @@ function ProductFormPage({ mode }) {
           <FieldError message={fieldErrors.units} />
           <div className="mt-4 space-y-3">
             {form.units.map((unit, index) => (
-              <div key={unit.id} className="grid gap-3 rounded-xl border border-slate-100 bg-[#fbf9f1] p-3 md:grid-cols-[1fr_140px_160px_150px_auto]">
+              <div key={unit.id} className="grid gap-3 rounded-xl border border-slate-100 bg-[#fbf9f1] p-3 md:grid-cols-[2fr_80px_200px_160px_auto]">
                 <label>
                   <span className="text-xs font-semibold text-slate-500">{unit.isBaseUnit ? 'Tên đơn vị cơ bản' : 'Tên đơn vị'}</span>
                   <input className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm" placeholder={unit.isBaseUnit ? 'VD: cái' : 'VD: thùng'} value={unit.unitName} onChange={(event) => updateUnit(index, 'unitName', event.target.value)} />
                 </label>
                 <label>
                   <span className="text-xs font-semibold text-slate-500">Quy đổi</span>
-                  <input type="number" min="1" disabled={unit.isBaseUnit} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm disabled:bg-slate-100" value={unit.conversionRate} onChange={(event) => updateUnit(index, 'conversionRate', event.target.value)} />
+                  <input
+                    type="number"
+                    min="1"
+                    disabled={unit.isBaseUnit}
+                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm disabled:bg-slate-100 disabled:text-slate-400"
+                    value={unit.conversionRate}
+                    onChange={(event) => updateUnit(index, 'conversionRate', event.target.value)}
+                  />
                 </label>
                 <label>
-                  <span className="text-xs font-semibold text-slate-500">Giá bán</span>
-                  <input type="number" min="0" className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm" value={unit.price} onChange={(event) => updateUnit(index, 'price', event.target.value)} />
+                  <span className="text-xs font-semibold text-slate-500">
+                    Giá bán{!unit.isBaseUnit ? <span className="ml-1 text-[10px] text-slate-400">(tự tính)</span> : null}
+                  </span>
+                  <CurrencyInput
+                    disabled={!unit.isBaseUnit}
+                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm disabled:bg-slate-50 disabled:text-slate-500"
+                    value={unit.isBaseUnit ? unit.price : String(Math.round(baseUnitPrice * (toNumber(unit.conversionRate, 1) || 1)))}
+                    onChange={unit.isBaseUnit ? (v) => updateBaseUnitPrice(index, v) : undefined}
+                  />
                 </label>
                 <label>
                   <span className="text-xs font-semibold text-slate-500">Barcode</span>
@@ -740,10 +1160,12 @@ function ProductFormPage({ mode }) {
                     <input type="radio" checked={unit.isBaseUnit} onChange={() => setBaseUnit(index)} />
                     Cơ bản
                   </label>
-                  <label className="flex items-center gap-2 text-xs font-semibold text-slate-700">
-                    <input type="checkbox" checked={unit.isDirectSell} onChange={(event) => updateUnit(index, 'isDirectSell', event.target.checked)} />
-                    Bán trực tiếp
-                  </label>
+                  {isFinishedProduct ? (
+                    <label className="flex items-center gap-2 text-xs font-semibold text-slate-700">
+                      <input type="checkbox" checked={unit.isDirectSell} onChange={(event) => updateUnit(index, 'isDirectSell', event.target.checked)} />
+                      Bán trực tiếp
+                    </label>
+                  ) : null}
                   {!unit.isBaseUnit ? (
                     <button type="button" className="text-left text-xs font-bold text-[#b42318]" onClick={() => removeUnit(index)}>
                       Xóa
@@ -753,111 +1175,176 @@ function ProductFormPage({ mode }) {
               </div>
             ))}
           </div>
+          {!isFinishedProduct ? (
+            <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
+              Nguyên liệu / bao bì — không hiện trên POS thu ngân và không tạo biến thể.
+            </p>
+          ) : null}
         </section>
 
-        <section className="rounded-[1rem] bg-white p-4 shadow-sm sm:p-6 lg:p-8">
-          <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-            <div>
-              <h2 className="text-lg font-bold text-slate-800">4. Thuộc tính</h2>
-              <p className="text-sm text-slate-500">Nhập giá trị bằng dấu phẩy hoặc nhấn Enter để tạo tag.</p>
-            </div>
-            <button type="button" onClick={addAttribute} className="rounded-xl border border-[#356647]/30 px-4 py-2 text-sm font-bold text-[#356647] hover:bg-[#f0eee6]">
-              + Thêm thuộc tính
-            </button>
-          </div>
-          <div className="mt-4 space-y-3">
-            {form.attributes.map((attribute, index) => (
-              <div key={attribute.id} className="rounded-xl border border-slate-100 bg-[#fbf9f1] p-3">
-                <div className="grid gap-3 md:grid-cols-[220px_1fr_auto]">
-                  <select className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm" value={attribute.name} onChange={(event) => updateAttribute(index, 'name', event.target.value)}>
-                    <option value="">Chọn tên thuộc tính</option>
-                    {ATTRIBUTE_OPTIONS.map((option) => (
-                      <option key={option} value={option}>{option}</option>
-                    ))}
-                  </select>
-                  <input
-                    className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
-                    placeholder="VD: Đỏ, Xanh hoặc S, M, L"
-                    value={attribute.inputValue}
-                    onChange={(event) => updateAttribute(index, 'inputValue', event.target.value)}
-                    onKeyDown={(event) => handleAttributeKeyDown(event, index)}
-                    onBlur={(event) => commitAttributeValues(index, event.target.value)}
-                  />
-                  <button type="button" className="rounded-lg px-3 py-2 text-sm font-bold text-[#b42318] hover:bg-red-50" onClick={() => removeAttribute(index)}>
-                    Xóa
-                  </button>
+        {isFinishedProduct ? (
+          <>
+            <section className="rounded-[1rem] bg-white p-4 shadow-sm sm:p-6 lg:p-8">
+              <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+                <div>
+                  <h2 className="text-lg font-bold text-slate-800">Thuộc tính</h2>
+                  <p className="text-sm text-slate-500">Nhập giá trị bằng dấu phẩy hoặc nhấn Enter để tạo tag.</p>
                 </div>
-                {attribute.values.length ? (
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {attribute.values.map((value) => (
-                      <button key={value} type="button" onClick={() => removeAttributeValue(index, value)} className="rounded-full bg-[#e8f1eb] px-3 py-1 text-xs font-bold text-[#356647]">
-                        {value} ×
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
+                <button type="button" onClick={addAttribute} className="rounded-xl border border-[#356647]/30 px-4 py-2 text-sm font-bold text-[#356647] hover:bg-[#f0eee6]">
+                  + Thêm thuộc tính
+                </button>
               </div>
-            ))}
-          </div>
-        </section>
-
-        <section className="rounded-[1rem] bg-white p-4 shadow-sm sm:p-6 lg:p-8">
-          <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
-            <div>
-              <h2 className="text-lg font-bold text-slate-800">5. Hàng cùng loại</h2>
-              <p className="text-sm text-slate-500">Bảng sinh từ Đơn vị tính × Thuộc tính. Giá vốn = Giá vốn mặc định × Quy đổi.</p>
-            </div>
-            <span className="rounded-full bg-[#f0eee6] px-3 py-1 text-sm font-bold text-slate-700">{generatedRows.length} dòng</span>
-          </div>
-          <div className="mt-5 overflow-x-auto rounded-xl border border-slate-200">
-            <table className="w-full min-w-[1050px] text-left text-sm">
-              <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-                <tr>
-                  <th className="px-3 py-3">Đơn vị</th>
-                  <th className="px-3 py-3">Thuộc tính</th>
-                  <th className="px-3 py-3">Quy đổi</th>
-                  <th className="px-3 py-3">Mã hàng</th>
-                  <th className="px-3 py-3">Mã vạch</th>
-                  <th className="px-3 py-3">Giá vốn</th>
-                  <th className="px-3 py-3">Giá bán</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {generatedRows.map((row) => (
-                  <tr key={row.key} className="hover:bg-[#fbf9f1]">
-                    <td className="px-3 py-3 font-bold text-[#356647]">{row.unit.unitName}</td>
-                    <td className="px-3 py-3">
-                      {row.attributes.length ? (
-                        <div className="flex flex-wrap gap-1">
-                          {row.attributes.map((attribute) => (
-                            <span key={`${row.key}-${attribute.name}-${attribute.value}`} className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">
-                              {attribute.name}: {attribute.value}
-                            </span>
-                          ))}
-                        </div>
-                      ) : (
-                        <span className="text-slate-400">Không có</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-3">{row.unit.conversionRate}</td>
-                    <td className="px-3 py-3">
-                      <input className="w-full rounded-lg border border-slate-200 px-2 py-1.5 font-mono text-sm" placeholder="Tự động" value={row.skuCode} onChange={(event) => updateVariantDraft(row.key, 'skuCode', event.target.value)} />
-                    </td>
-                    <td className="px-3 py-3">
-                      <input className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm" value={row.barcode} onChange={(event) => updateVariantDraft(row.key, 'barcode', event.target.value)} />
-                    </td>
-                    <td className="px-3 py-3">
-                      <input readOnly className="w-full rounded-lg border border-slate-200 bg-slate-100 px-2 py-1.5 font-semibold text-slate-600" value={formatCurrency(row.costPrice)} />
-                    </td>
-                    <td className="px-3 py-3">
-                      <input type="number" min="0" className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm" value={row.salePrice} onChange={(event) => updateVariantDraft(row.key, 'salePrice', event.target.value)} />
-                    </td>
-                  </tr>
+              <div className="mt-4 space-y-3">
+                {form.attributes.map((attribute, index) => (
+                  <div key={attribute.id} className="rounded-xl border border-slate-100 bg-[#fbf9f1] p-3">
+                    <div className="grid gap-3 md:grid-cols-[220px_1fr_auto]">
+                      <select
+                        className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                        value={attribute.name}
+                        onChange={(event) => {
+                          if (event.target.value === '__create__') {
+                            setAddAttrNameModal({ open: true, forIndex: index })
+                          } else {
+                            updateAttribute(index, 'name', event.target.value)
+                          }
+                        }}
+                      >
+                        <option value="">Chọn tên thuộc tính</option>
+                        {[...new Set([...ATTRIBUTE_OPTIONS, ...dbAttributeNames.map((item) => item.name), ...customAttrNames])].map((option) => (
+                          <option key={option} value={option}>{option}</option>
+                        ))}
+                        <option value="__create__">+ Tạo tên mới...</option>
+                      </select>
+                      <input
+                        className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                        placeholder="VD: Đỏ, Xanh hoặc S, M, L"
+                        value={attribute.inputValue}
+                        onChange={(event) => updateAttribute(index, 'inputValue', event.target.value)}
+                        onKeyDown={(event) => handleAttributeKeyDown(event, index)}
+                        onBlur={(event) => commitAttributeValues(index, event.target.value)}
+                      />
+                      <button type="button" className="rounded-lg px-3 py-2 text-sm font-bold text-[#b42318] hover:bg-red-50" onClick={() => removeAttribute(index)}>
+                        Xóa
+                      </button>
+                    </div>
+                    {attribute.values.length ? (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {attribute.values.map((value) => (
+                          <button key={value} type="button" onClick={() => removeAttributeValue(index, value)} className="rounded-full bg-[#e8f1eb] px-3 py-1 text-xs font-bold text-[#356647]">
+                            {value} ×
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
+              </div>
+            </section>
+
+            {/* Section 5: only show when there are 2+ rows (i.e. multiple units or attributes) */}
+            {form.units.filter((u) => u.unitName?.trim()).length >= 2 ? (
+              <section className="rounded-[1rem] bg-white p-4 shadow-sm sm:p-6 lg:p-8">
+                <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
+                  <div>
+                    <h2 className="text-lg font-bold text-slate-800">Hàng cùng loại</h2>
+                    <p className="text-sm text-slate-500">Bảng sinh từ Đơn vị tính × Thuộc tính. Giá vốn tự tính theo quy đổi. Giá bán có thể ghi đè — nhấn <span className="material-symbols-outlined align-[-3px] text-[13px]">restart_alt</span> để về giá tự tính.</p>
+                  </div>
+                  <span className="rounded-full bg-[#f0eee6] px-3 py-1 text-sm font-bold text-slate-700">{generatedRows.length} dòng</span>
+                </div>
+                <div className="mt-5 overflow-x-auto rounded-xl border border-slate-200">
+                  <table className="w-full table-fixed text-left text-sm">
+                    <colgroup>
+                      <col className="w-[18%]" />
+                      {validAttributes.length > 0 ? <col className="w-[22%]" /> : null}
+                      <col className="w-[8%]" />
+                      <col className="w-[18%]" />
+                      <col className="w-[16%]" />
+                      <col className={validAttributes.length > 0 ? 'w-[12%]' : 'w-[24%]'} />
+                      <col className="w-[8%]" />
+                    </colgroup>
+                    <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                      <tr>
+                        <th className="px-3 py-3">Đơn vị</th>
+                        {validAttributes.length > 0 ? <th className="px-3 py-3">Thuộc tính</th> : null}
+                        <th className="px-3 py-3 text-center">Q. đổi</th>
+                        <th className="px-3 py-3">Mã hàng</th>
+                        <th className="px-3 py-3">Giá vốn</th>
+                        <th className="px-3 py-3">Giá bán</th>
+                        <th className="px-3 py-3 text-center">BOM</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {generatedRows.map((row) => {
+                        const bomCount = bomByVariant[row.key]?.length ?? 0
+                        const autoSalePrice = Math.round(baseUnitPrice * row.unit.conversionRate)
+                        const draftSalePrice = toNumber(variantDrafts[row.key]?.salePrice ?? autoSalePrice)
+                        const isOverridden = draftSalePrice !== autoSalePrice
+                        return (
+                          <tr key={row.key} className="hover:bg-[#fbf9f1]">
+                            <td className="px-3 py-2.5 font-bold text-[#356647]">{row.unit.unitName}</td>
+                            {validAttributes.length > 0 ? (
+                              <td className="px-3 py-2.5">
+                                {row.attributes.length ? (
+                                  <div className="flex max-h-20 flex-wrap gap-1 overflow-y-auto">
+                                    {row.attributes.map((attribute) => (
+                                      <span key={`${row.key}-${attribute.name}-${attribute.value}`} className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">
+                                        {attribute.name}: {attribute.value}
+                                      </span>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <span className="text-slate-400">—</span>
+                                )}
+                              </td>
+                            ) : null}
+                            <td className="px-3 py-2.5 text-center text-slate-600">{row.unit.conversionRate}</td>
+                            <td className="px-3 py-2.5">
+                              <input className="w-full rounded-lg border border-slate-200 px-2 py-1.5 font-mono text-sm" placeholder="Tự động" value={row.skuCode} onChange={(event) => updateVariantDraft(row.key, 'skuCode', event.target.value)} />
+                            </td>
+                            <td className="px-3 py-2.5">
+                              <input readOnly className="w-full rounded-lg border border-slate-200 bg-slate-100 px-2 py-1.5 text-sm text-slate-500" value={formatCurrency(row.costPrice)} />
+                            </td>
+                            <td className="px-3 py-2.5">
+                              <div className="flex items-center gap-1">
+                                <CurrencyInput
+                                  className={`w-full rounded-lg border px-2 py-1.5 text-sm font-semibold ${isOverridden ? 'border-amber-400 bg-amber-50 text-amber-800' : 'border-slate-100 bg-slate-50 text-[#356647]'}`}
+                                  value={String(draftSalePrice)}
+                                  onChange={(v) => updateVariantDraft(row.key, 'salePrice', v)}
+                                />
+                                {isOverridden ? (
+                                  <button
+                                    type="button"
+                                    title="Về giá tự tính"
+                                    onClick={() => updateVariantDraft(row.key, 'salePrice', String(autoSalePrice))}
+                                    className="shrink-0 rounded-md p-1 text-amber-500 hover:bg-amber-100"
+                                  >
+                                    <span className="material-symbols-outlined text-[16px]">restart_alt</span>
+                                  </button>
+                                ) : null}
+                              </div>
+                            </td>
+                            <td className="px-3 py-2.5 text-center">
+                              <button
+                                type="button"
+                                onClick={() => openBomModal(row)}
+                                className="inline-flex items-center gap-1 rounded-lg border border-[#356647]/30 bg-[#356647]/5 px-2.5 py-1.5 text-xs font-bold text-[#356647] hover:bg-[#356647]/10"
+                              >
+                                <span className="material-symbols-outlined text-[15px]">settings</span>
+                                {bomCount > 0 ? (
+                                  <span className="rounded-full bg-[#356647] px-1.5 py-0.5 text-[10px] text-white">{bomCount}</span>
+                                ) : null}
+                              </button>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            ) : null}
+          </>
+        ) : null}
 
         {isEditMode && id ? (
           <section className="rounded-[1rem] bg-white p-4 shadow-sm sm:p-6 lg:p-8">
@@ -865,6 +1352,46 @@ function ProductFormPage({ mode }) {
           </section>
         ) : null}
       </form>
+
+      <ProductBomConfigModal
+        isOpen={Boolean(bomModalVariant)}
+        variant={bomModalVariant}
+        initialLines={bomModalVariant ? (bomByVariant[bomModalVariant.rowKey] ?? []) : []}
+        onClose={() => setBomModalVariant(null)}
+        onConfirm={handleBomConfirm}
+      />
+
+      <CreateCategoryModal
+        isOpen={showCreateCategory}
+        categories={categories}
+        onClose={() => setShowCreateCategory(false)}
+        onCreated={(newCat) => {
+          setCategories((prev) => [...prev, newCat])
+          updateField('categoryId', String(newCat.id))
+          showSuccess(`Đã tạo nhóm "${newCat.name}"`)
+        }}
+      />
+
+      <CreateBrandModal
+        isOpen={showCreateBrand}
+        onClose={() => setShowCreateBrand(false)}
+        onCreated={(brand) => {
+          setDbBrands((prev) => [...prev, brand])
+          updateField('brandName', brand.name)
+          showSuccess(`Đã tạo thương hiệu "${brand.name}"`)
+        }}
+      />
+
+      <CreateAttributeNameModal
+        isOpen={addAttrNameModal.open}
+        onClose={() => setAddAttrNameModal({ open: false, forIndex: null })}
+        onCreated={(created) => {
+          setDbAttributeNames((prev) => [...prev, created])
+          if (addAttrNameModal.forIndex !== null) {
+            updateAttribute(addAttrNameModal.forIndex, 'name', created.name)
+          }
+        }}
+      />
     </PageShell>
   )
 }

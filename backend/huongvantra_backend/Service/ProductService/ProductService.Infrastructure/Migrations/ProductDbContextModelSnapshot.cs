@@ -19,6 +19,70 @@ namespace ProductService.Infrastructure.Migrations
                 .HasAnnotation("ProductVersion", "8.0.0")
                 .HasAnnotation("Relational:MaxIdentifierLength", 64);
 
+            modelBuilder.Entity("ProductService.Domain.Entities.AttributeName", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("tinyint(1)")
+                        .HasDefaultValue(true);
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("tinyint(1)")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("AttributeNames", (string)null);
+                });
+
+            modelBuilder.Entity("ProductService.Domain.Entities.Brand", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("tinyint(1)")
+                        .HasDefaultValue(true);
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("tinyint(1)")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Brands", (string)null);
+                });
+
             modelBuilder.Entity("ProductService.Domain.Entities.Category", b =>
                 {
                     b.Property<int>("Id")
@@ -218,6 +282,13 @@ namespace ProductService.Infrastructure.Migrations
                     b.Property<string>("Origin")
                         .HasMaxLength(100)
                         .HasColumnType("varchar(100)");
+
+                    b.Property<string>("ProductType")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)")
+                        .HasDefaultValue("THANH_PHAM");
 
                     b.Property<DateTime?>("SyncedToStoreAt")
                         .HasColumnType("datetime(6)");
@@ -510,6 +581,41 @@ namespace ProductService.Infrastructure.Migrations
                     b.ToTable("ProductVariants", (string)null);
                 });
 
+            modelBuilder.Entity("ProductService.Domain.Entities.ProductVariantBomLine", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("tinyint(1)")
+                        .HasDefaultValue(false);
+
+                    b.Property<Guid>("MaterialId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<Guid>("ProductVariantId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<decimal>("Quantity")
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MaterialId");
+
+                    b.HasIndex("ProductVariantId");
+
+                    b.ToTable("ProductVariantBomLines", (string)null);
+                });
+
             modelBuilder.Entity("ProductService.Domain.Entities.Category", b =>
                 {
                     b.HasOne("ProductService.Domain.Entities.Category", "Parent")
@@ -614,6 +720,25 @@ namespace ProductService.Infrastructure.Migrations
                     b.Navigation("Product");
                 });
 
+            modelBuilder.Entity("ProductService.Domain.Entities.ProductVariantBomLine", b =>
+                {
+                    b.HasOne("ProductService.Domain.Entities.Product", "Material")
+                        .WithMany()
+                        .HasForeignKey("MaterialId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ProductService.Domain.Entities.ProductVariant", "Variant")
+                        .WithMany("BomLines")
+                        .HasForeignKey("ProductVariantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Material");
+
+                    b.Navigation("Variant");
+                });
+
             modelBuilder.Entity("ProductService.Domain.Entities.Category", b =>
                 {
                     b.Navigation("Children");
@@ -649,6 +774,8 @@ namespace ProductService.Infrastructure.Migrations
 
             modelBuilder.Entity("ProductService.Domain.Entities.ProductVariant", b =>
                 {
+                    b.Navigation("BomLines");
+
                     b.Navigation("PriceBookEntries");
 
                     b.Navigation("Units");

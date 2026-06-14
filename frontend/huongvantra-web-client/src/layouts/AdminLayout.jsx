@@ -98,7 +98,7 @@ function AdminLayout() {
   }
 
   const isStoreProductsPage =
-    location.pathname === '/products' && !isWarehouseUserRole(authSession?.roles ?? [])
+    location.pathname === '/inventory/products' && !isWarehouseUserRole(authSession?.roles ?? [])
   const isViewportLocked = location.pathname === '/pos' || isStoreProductsPage
 
   return (

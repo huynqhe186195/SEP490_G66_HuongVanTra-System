@@ -6,6 +6,17 @@ public record PromotionScopeResponse(
     string? SkuName
 );
 
+public record PromotionCategoryScopeResponse(
+    int CategoryId,
+    string? CategoryName
+);
+
+public record PromotionCustomerTierScopeResponse(
+    int TierId,
+    string? TierName,
+    string? TierSnapshotName
+);
+
 public record PromotionResponse(
     Guid Id,
     string PromoCode,
@@ -21,8 +32,12 @@ public record PromotionResponse(
     DateTime? ValidToUtc,
     string ValidityStatus,
     bool IsActive,
+    bool IsEffectivelyActive,
+    bool CanToggleActive,
     string ScopeType,
     List<PromotionScopeResponse> SkuScopes,
+    List<PromotionCategoryScopeResponse> CategoryScopes,
+    List<PromotionCustomerTierScopeResponse> CustomerTierScopes,
     int OrderCount
 );
 
@@ -41,8 +56,16 @@ public record PromotionLookupResponse(
     DateTime? ValidToUtc,
     string ValidityStatus,
     bool IsActive,
+    bool IsEffectivelyActive,
+    bool CanToggleActive,
     string ScopeType,
-    List<PromotionScopeResponse> SkuScopes
+    List<PromotionScopeResponse> SkuScopes,
+    List<PromotionCategoryScopeResponse> CategoryScopes,
+    List<PromotionCustomerTierScopeResponse> CustomerTierScopes,
+    decimal? EstimatedDiscountAmount,
+    decimal? EstimatedFinalTotal,
+    decimal? EstimatedPayableAmount,
+    bool IsBestSuggestion
 );
 
 public record PromotionApplyPreviewResponse(
@@ -58,6 +81,8 @@ public record PromotionApplyPreviewResponse(
     int? RemainingUsageTotal,
     string ScopeType,
     List<PromotionScopeResponse> SkuScopes,
+    List<PromotionCategoryScopeResponse> CategoryScopes,
+    List<PromotionCustomerTierScopeResponse> CustomerTierScopes,
     decimal PromotionDiscountAmount,
     decimal EligibleSubtotal,
     string Message

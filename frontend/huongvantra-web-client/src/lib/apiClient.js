@@ -8,15 +8,19 @@ export function getApiBaseUrl() {
 }
 
 export async function parseApiErrorBody(response) {
+  const status = response.status
+  const fallback = `Có lỗi xảy ra (HTTP ${status}).`
+
   const contentType = response.headers.get('content-type') || ''
   if (!contentType.includes('application/json')) {
     const text = await response.text().catch(() => '')
-    return { message: text.trim() || 'Có lỗi xảy ra.', errors: [], statusCode: response.status }
+    const isHtml = text.trimStart().startsWith('<')
+    return { message: (!isHtml && text.trim()) || fallback, errors: [], statusCode: status }
   }
 
   const body = await response.json().catch(() => null)
   if (!body || typeof body !== 'object') {
-    return { message: 'Có lỗi xảy ra.', errors: [], statusCode: response.status }
+    return { message: fallback, errors: [], statusCode: status }
   }
 
   let errors = []
@@ -31,9 +35,9 @@ export async function parseApiErrorBody(response) {
     (typeof body.error === 'string' && body.error.trim()) ||
     (typeof body.message === 'string' && body.message.trim()) ||
     (typeof body.title === 'string' && body.title.trim()) ||
-    'Có lỗi xảy ra.'
+    fallback
 
-  return { message, errors, statusCode: body.statusCode ?? response.status }
+  return { message, errors, statusCode: body.statusCode ?? status }
 }
 
 export async function parseResponseError(response) {

@@ -28,7 +28,8 @@ public record CreateOrderDetailRequest(
     int Quantity,
     decimal CostPrice,
     decimal UnitPrice,
-    bool IsGift = false
+    bool IsGift = false,
+    int? CategoryId = null
 );
 
 public record UpdateOrderDetailRequest(
@@ -40,7 +41,8 @@ public record UpdateOrderDetailRequest(
     int Quantity,
     decimal CostPrice,
     decimal UnitPrice,
-    bool IsGift = false
+    bool IsGift = false,
+    int? CategoryId = null
 );
 
 public record UpdateOrderRequest(

@@ -34,6 +34,7 @@ function buildPromotionPreviewBody({
         item.subTotal ??
         item.lineTotal ??
         Number(item.unitPrice ?? item.price ?? 0) * Number(item.quantity ?? item.qty ?? 1),
+      categoryId: item.categoryId ?? item.CategoryId ?? null,
     })),
   }
 }
@@ -754,7 +755,7 @@ export async function fetchPosProducts({ storeId, search, limit = 30 }) {
       price: sku.basePrice ?? sku.BasePrice,
       stockQuantity: stockBySkuId.get(sku.id ?? sku.Id) ?? 0,
       imageUrl: sku.imageUrl ?? sku.ImageUrl ?? '',
-      categoryId: product?.categoryId ?? product?.CategoryId ?? null,
+      categoryId: sku.categoryId ?? sku.CategoryId ?? product?.categoryId ?? product?.CategoryId ?? null,
       categoryName: sku.categoryName ?? sku.CategoryName ?? product?.categoryName ?? product?.CategoryName ?? '',
       costPrice: sku.costPrice ?? sku.CostPrice ?? 0,
     })

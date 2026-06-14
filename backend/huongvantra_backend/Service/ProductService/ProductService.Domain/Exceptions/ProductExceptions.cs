@@ -12,6 +12,12 @@ public class ProductSkuNotFoundByCodeException(string skuCode)
 public class CategoryNotFoundException(int id)
     : Exception($"Category with id '{id}' was not found.");
 
+public class BrandNotFoundException(int id)
+    : Exception($"Brand with id '{id}' was not found.");
+
+public class AttributeNameNotFoundException(int id)
+    : Exception($"AttributeName with id '{id}' was not found.");
+
 public class DuplicateSkuCodeException(string skuCode)
     : Exception($"SKU code '{skuCode}' already exists.");
 

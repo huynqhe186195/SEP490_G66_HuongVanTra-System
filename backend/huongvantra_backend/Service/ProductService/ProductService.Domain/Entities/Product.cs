@@ -1,9 +1,12 @@
+using ProductService.Domain.Enums;
+
 namespace ProductService.Domain.Entities;
 
 public class Product : BaseEntity
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     public int CategoryId { get; set; }
+    public ProductType ProductType { get; set; } = ProductType.THANH_PHAM;
     public string Name { get; set; } = string.Empty;
     public string? Origin { get; set; }
     public string? FlavorProfile { get; set; }

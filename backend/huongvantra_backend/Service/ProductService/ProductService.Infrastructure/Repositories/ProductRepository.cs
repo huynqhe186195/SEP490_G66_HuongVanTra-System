@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using ProductService.Application;
 using ProductService.Application.Interfaces;
 using ProductService.Domain.Entities;
+using ProductService.Domain.Enums;
 using ProductService.Infrastructure.Data;
 
 namespace ProductService.Infrastructure.Repositories;
@@ -10,7 +11,8 @@ public class ProductRepository(ProductDbContext _db) : IProductRepository
 {
     public async Task<(List<Product> Items, int TotalCount)> GetPagedAsync(
         string? search, int? categoryId, bool? isActive, bool? isDeleted,
-        int page, int pageSize, CatalogViewScope scope = CatalogViewScope.Warehouse)
+        int page, int pageSize, CatalogViewScope scope = CatalogViewScope.Warehouse,
+        ProductType? productType = null)
     {
         IQueryable<Product> query = isDeleted == true
             ? IncludeAggregate(_db.Products.IgnoreQueryFilters())
@@ -35,6 +37,9 @@ public class ProductRepository(ProductDbContext _db) : IProductRepository
 
         if (isDeleted != true && isActive.HasValue)
             query = query.Where(p => p.IsActive == isActive.Value);
+
+        if (productType.HasValue)
+            query = query.Where(p => p.ProductType == productType.Value);
 
         if (scope == CatalogViewScope.Store)
             query = query.Where(p => p.SyncedToStoreAt != null);
@@ -164,5 +169,8 @@ public class ProductRepository(ProductDbContext _db) : IProductRepository
             .Include(p => p.Images)
             .Include(p => p.Units)
             .Include(p => p.Variants)
-            .ThenInclude(v => v.Units);
+                .ThenInclude(v => v.Units)
+            .Include(p => p.Variants)
+                .ThenInclude(v => v.BomLines)
+                    .ThenInclude(b => b.Material);
 }

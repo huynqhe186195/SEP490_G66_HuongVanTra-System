@@ -219,7 +219,7 @@ export default function ProductsWarehouseListPage() {
           <>
             {canCreate ? (
               <Link
-                to="/products/create"
+                to="/inventory/products/create"
                 className="inline-flex items-center gap-2 rounded-xl bg-[#538463] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#457053]"
               >
                 <span className="material-symbols-outlined text-[18px]">add</span>

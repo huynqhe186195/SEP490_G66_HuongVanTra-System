@@ -67,11 +67,10 @@ function App() {
         <Route path="/orders/stock-deduct" element={<StockDeductQueuePage />} />
         <Route path="/orders/create" element={<Navigate to="/pos" replace />} />
         <Route path="/orders/:id" element={<OrderDetailPage />} />
-        <Route path="/products" element={<ProductsListPage />} />
+        <Route path="/inventory/products" element={<ProductsListPage />} />
         <Route path="/products/pricing" element={<ProductsPricingPage />} />
         <Route path="/products/categories" element={<ProductsCategoriesPage />} />
-        <Route path="/products/create" element={<ProductFormPage mode="create" />} />
-        <Route path="/products/item/create" element={<ProductItemCreatePage />} />
+        <Route path="/inventory/products/create" element={<ProductFormPage mode="create" />} />
         <Route path="/products/:id/edit" element={<ProductFormPage mode="edit" />} />
         <Route path="/inventory" element={<InventoryStockPage />} />
         <Route path="/inventory/stock-requests" element={<StockAdjustmentRequestsPage />} />

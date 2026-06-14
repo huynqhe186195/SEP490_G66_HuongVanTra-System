@@ -26,11 +26,15 @@ builder.Services.AddDbContext<ProductDbContext>(options =>
             errorNumbersToAdd: null)));
 
 builder.Services.AddScoped<ICategoryRepository, CategoryRepository>();
+builder.Services.AddScoped<IBrandRepository, BrandRepository>();
+builder.Services.AddScoped<IAttributeNameRepository, AttributeNameRepository>();
 builder.Services.AddScoped<IProductRepository, ProductRepository>();
 builder.Services.AddScoped<IProductSkuRepository, ProductSkuRepository>();
 builder.Services.AddScoped<IPriceBookRepository, PriceBookRepository>();
 builder.Services.AddScoped<IProductEventPublisher, ProductEventPublisher>();
 builder.Services.AddScoped<CategoryLogic>();
+builder.Services.AddScoped<BrandLogic>();
+builder.Services.AddScoped<AttributeNameLogic>();
 builder.Services.AddScoped<ProductLogic>();
 builder.Services.AddScoped<ProductSkuLogic>();
 builder.Services.AddScoped<PriceBookLogic>();

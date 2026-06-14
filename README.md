@@ -105,3 +105,64 @@
   Lưu ý quan trọng: Data trong DB (MySQL, RabbitMQ) vẫn an toàn vì nằm trong volumes. Nếu muốn xóa luôn cả data DB thì thêm flag --volumes vào bước 1:
 
   docker compose down --volumes  # XÓA LUÔN DATA DB - cẩn thận!
+========================================================================================================================================================
+
+  Lần đầu (setup một lần duy nhất)
+
+    # 1. Vào thư mục backend
+    cd backend/huongvantra_backend
+
+    # 2. Tạo file .env từ mẫu (nếu có r thì thôi)
+    cp .env.example .env
+
+    ---
+    Chạy dev — không cần rebuild khi sửa code
+
+    docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+    Cơ chế:
+    - Frontend (port 5173): Vite dev server, bind mount source → save file là browser tự reload (5173: môi trường dev, 3000: môi trường production)
+    - Backend ProductService (port 5003): dotnet watch run, bind mount source → save file .cs là service tự restart (~3-5 giây)
+    - MySQL, RabbitMQ, Gateway: chạy bình thường từ docker-compose.yml
+
+    Muốn chạy riêng 1 service:
+    docker compose -f docker-compose.yml -f docker-compose.dev.yml up product-service
+
+    ---
+    Chạy production — build Docker image đầy đủ
+
+    docker compose up --build
+
+    Dùng khi deploy, hoặc khi cần test image production thật sự.
+
+    ---
+    Sau khi pull code mới (đang chạy dev)
+
+    Không cần làm gì thêm — dotnet watch và Vite tự detect thay đổi. Trường hợp duy nhất cần restart thủ công là khi thay đổi appsettings.json hoặc thêm NuGet package mới:
+
+    docker compose -f docker-compose.yml -f docker-compose.dev.yml restart product-service
+
+=========================================================================================================================
+    Vì docker-compose.dev.yml dùng 2 cơ chế khác nhau cho production vs dev:
+
+    Production (docker-compose.yml)
+    product-service → build Dockerfile → runtime image (aspnet:8.0-alpine, ~120MB)
+                      code được compile sẵn vào image
+                      sửa code → phải docker build lại
+
+    Dev (docker-compose.dev.yml)
+    product-service → SDK image (dotnet/sdk:8.0, ~750MB)
+                      bind mount source code vào container
+                      dotnet watch run theo dõi file → tự rebuild khi save
+
+    Comment có sẵn trong file giải thích lý do để mặc định là comment:
+
+    ▎ SDK image (~750MB) nặng hơn runtime image — chỉ bật service đang làm việc.
+
+    Tức là thiết kế ban đầu là: mỗi developer chỉ uncomment service mình đang làm để tiết kiệm RAM/CPU. Nếu cả team cùng develop ProductService thì uncomment là đúng.
+
+    Nếu bạn muốn revert lại comment để mỗi người tự quyết định, tôi có thể làm vậy — khi đó hướng dẫn cho team sẽ là:
+
+    # Muốn dev ProductService với hot-reload → mở docker-compose.dev.yml, uncomment phần product-service
+    # Chỉ cần infra thì không cần uncomment gì
+    docker compose -f docker-compose.yml -f docker-compose.dev.yml up

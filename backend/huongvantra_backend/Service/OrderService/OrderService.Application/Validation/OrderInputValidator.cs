@@ -71,5 +71,6 @@ public record CreateOrderDetailInput(
     int Quantity,
     decimal CostPrice,
     decimal UnitPrice,
-    bool IsGift = false
+    bool IsGift = false,
+    int? CategoryId = null
 );

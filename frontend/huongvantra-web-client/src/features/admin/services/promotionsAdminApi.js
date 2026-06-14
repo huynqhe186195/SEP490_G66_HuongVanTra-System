@@ -34,15 +34,68 @@ async function requestWithAuth(path, options = {}) {
 function mapPromotionAdminItem(item) {
   const base = mapPromotion(item)
   if (!base) return null
+  const validityStatus = normalizePromotionValidityStatus(
+    item.validityStatus ?? item.ValidityStatus ?? base.validityStatus,
+  )
   return {
     ...base,
+    categoryScopes: mapPromotionCategoryScopes(item),
+    customerTierScopes: mapPromotionCustomerTierScopes(item),
     orderCount: Number(item.orderCount ?? item.OrderCount ?? 0),
-    validityStatus: item.validityStatus ?? item.ValidityStatus ?? base.validityStatus,
+    validityStatus,
     isActive: base.isActive,
+    isEffectivelyActive: item.isEffectivelyActive ?? item.IsEffectivelyActive ?? validityStatus === 'ACTIVE',
+    canToggleActive: item.canToggleActive ?? item.CanToggleActive ?? validityStatus !== 'EXPIRED',
   }
 }
 
+function normalizePromotionValidityStatus(status) {
+  const value = String(status || '').trim().toUpperCase()
+  if (!value || value === 'UNLIMITED') return 'ACTIVE'
+  if (value === 'DEACTIVATED') return 'INACTIVE'
+  if (value === 'NOT_STARTED') return 'SCHEDULED'
+  if (['ACTIVE', 'INACTIVE', 'SCHEDULED', 'EXPIRED'].includes(value)) return value
+  return value
+}
+
+function mapPromotionCategoryScopes(item) {
+  const rawScopes = item?.categoryScopes ?? item?.CategoryScopes ?? []
+  if (!Array.isArray(rawScopes)) return []
+
+  return rawScopes
+    .map((scope) => ({
+      categoryId: scope.categoryId ?? scope.CategoryId ?? null,
+      categoryName:
+        scope.categoryName ??
+        scope.CategoryName ??
+        scope.categorySnapshotName ??
+        scope.CategorySnapshotName ??
+        '',
+    }))
+    .filter((scope) => scope.categoryId)
+}
+
+function mapPromotionCustomerTierScopes(item) {
+  const rawScopes = item?.customerTierScopes ?? item?.CustomerTierScopes ?? []
+  if (!Array.isArray(rawScopes)) return []
+
+  return rawScopes
+    .map((scope) => {
+      const tierId = Number(scope.tierId ?? scope.TierId ?? 0)
+      const tierName =
+        scope.tierName ??
+        scope.TierName ??
+        scope.tierSnapshotName ??
+        scope.TierSnapshotName ??
+        (tierId > 0 ? `Hạng #${tierId}` : '')
+
+      return { tierId, tierName }
+    })
+    .filter((scope) => scope.tierId > 0)
+}
+
 function buildPromotionPayload(payload) {
+  const scopeType = String(payload.scopeType || 'ORDER').toUpperCase()
   return {
     promoCode: payload.promoCode,
     discountType: payload.discountType || 'PERCENTAGE',
@@ -56,6 +109,11 @@ function buildPromotionPayload(payload) {
     usageLimitPerCustomer: Number(payload.usageLimitPerCustomer || 0),
     validFrom: payload.validFrom || null,
     validTo: payload.validTo || null,
+    isActive: payload.isActive ?? true,
+    scopeType,
+    skuScopes: scopeType === 'SKU' ? payload.skuScopes ?? [] : [],
+    categoryScopes: scopeType === 'CATEGORY' ? payload.categoryScopes ?? [] : [],
+    customerTierScopes: payload.customerTierScopes ?? [],
   }
 }
 

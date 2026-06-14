@@ -753,7 +753,13 @@ function PosPage() {
                 const nextQty = Number((existingLine.qty + existingLine.step).toFixed(2));
                 return {
                     ...prev,
-                    cartItems: clampCartLineDiscounts(currentItems.map((item) => (item.sku === product.sku ? { ...item, qty: nextQty, stockQuantity: stockOnHand } : item))),
+                    cartItems: clampCartLineDiscounts(currentItems.map((item) => (item.sku === product.sku ? {
+                        ...item,
+                        qty: nextQty,
+                        stockQuantity: stockOnHand,
+                        categoryId: item.categoryId ?? product.categoryId ?? product.CategoryId ?? null,
+                        categoryName: item.categoryName ?? product.categoryName ?? product.CategoryName ?? null,
+                    } : item))),
                     searchValue: "",
                 };
             }
@@ -771,6 +777,8 @@ function PosPage() {
                         qty: 1,
                         unit: "x",
                         price: product.price,
+                        categoryId: product.categoryId ?? product.CategoryId ?? null,
+                        categoryName: product.categoryName ?? product.CategoryName ?? null,
                         step: 1,
                         stockQuantity: stockOnHand,
                         lineDiscountType: "percent",
@@ -890,6 +898,7 @@ function PosPage() {
                 skuId: item.productId,
                 quantity: item.qty,
                 unitPrice: item.price,
+                categoryId: item.categoryId ?? null,
                 lineDiscountType: item.lineDiscountType,
                 lineDiscountValue: item.lineDiscountValue || 0,
             })),
@@ -906,6 +915,7 @@ function PosPage() {
             quantity: item.qty,
             unitPrice: item.price,
             subTotal: getLineGross(item),
+            categoryId: item.categoryId ?? null,
         }));
 
     useEffect(() => {
@@ -1110,8 +1120,29 @@ function PosPage() {
 
     const appliedPromotionScopeText = (() => {
         if (!appliedPromotion) return "";
-        if (String(appliedPromotion.scopeType || "ORDER").toUpperCase() !== "SKU") {
+        const scopeType = String(appliedPromotion.scopeType || "ORDER").toUpperCase();
+        if (scopeType === "ORDER") {
             return "Áp dụng toàn đơn";
+        }
+
+        if (scopeType === "CATEGORY") {
+            const categoryIds = new Set((appliedPromotion.categoryScopes ?? []).map((scope) => Number(scope.categoryId)));
+            const names = cartItems
+                .filter((item) => item.categoryId !== null && item.categoryId !== undefined && categoryIds.has(Number(item.categoryId)))
+                .map((item) => item.categoryName || item.name || item.productName || item.sku)
+                .filter(Boolean);
+
+            if (names.length) {
+                return `Áp dụng cho: ${[...new Set(names)].join(", ")}`;
+            }
+
+            const configuredNames = (appliedPromotion.categoryScopes ?? [])
+                .map((scope) => scope.categoryName || scope.categoryId)
+                .filter(Boolean);
+
+            return configuredNames.length
+                ? `Áp dụng cho danh mục: ${configuredNames.join(", ")}`
+                : "Áp dụng theo danh mục";
         }
 
         const skuIds = new Set((appliedPromotion.skuScopes ?? []).map((scope) => scope.skuId));

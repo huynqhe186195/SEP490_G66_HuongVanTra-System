@@ -45,7 +45,7 @@ export const navigationItems = [
     roles: ['admin', 'agencyManager'],
   },
   { label: 'Khách hàng', path: '/customers', module: 'customers', icon: 'groups', roles: ['admin', 'agencyManager'] },
-  { label: 'Hàng hóa', path: '/products', module: 'products', icon: 'inventory_2', roles: ['admin', 'agencyManager', 'inventoryManager'] },
+  { label: 'Hàng hóa', path: '/inventory/products', module: 'products', icon: 'inventory_2', roles: ['admin', 'agencyManager', 'inventoryManager'] },
   { label: 'Kho tổng', path: '/inventory', module: 'inventory', icon: 'warehouse', roles: ['admin', 'agencyManager', 'inventoryManager'] },
   {
     label: 'Yêu cầu điều chỉnh tồn',
@@ -146,7 +146,7 @@ function withRoleAwareProductLabel(items, roles = []) {
   })
 
   return items.map((item) =>
-    item.path === '/products' && isWarehouse ? { ...item, label: 'Sản phẩm & số lượng' } : item,
+    item.path === '/inventory/products' && isWarehouse ? { ...item, label: 'Sản phẩm & số lượng' } : item,
   )
 }
 
@@ -222,9 +222,9 @@ const MODULE_PATH_PREFIXES = [
   { module: 'users_admin', prefix: '/admin/users' },
   { module: 'phan_quyen_admin', prefix: '/admin/phan-quyen' },
   { module: 'customers', prefix: '/customers' },
+  { module: 'products', prefix: '/inventory/products' },
   { module: 'stock_adjustment_ops', prefix: '/inventory/stock-requests' },
   { module: 'inventory', prefix: '/inventory' },
-  { module: 'products', prefix: '/products' },
   { module: 'cod_ops', prefix: '/orders/cod' },
   { module: 'stock_deduct_ops', prefix: '/orders/stock-deduct' },
   { module: 'orders', prefix: '/orders' },

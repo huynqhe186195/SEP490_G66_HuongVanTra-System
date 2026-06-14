@@ -4,6 +4,7 @@ public record ProductSkuResponse(
     Guid Id,
     Guid ProductId,
     string ProductName,
+    int? CategoryId,
     string CategoryName,
     string SkuCode,
     string? Barcode,

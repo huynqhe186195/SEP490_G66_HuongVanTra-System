@@ -17,6 +17,7 @@ public record ProductResponse(
     bool IsDeleted,
     DateTime CreatedAt,
     DateTime? SyncedToStoreAt,
+    string ProductType,
     List<ProductSkuResponse> Skus,
     List<ProductImageResponse> Images,
     List<ProductUnitResponse> Units,

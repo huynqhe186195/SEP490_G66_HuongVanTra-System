@@ -7,6 +7,8 @@ namespace ProductService.Infrastructure.Data;
 public class ProductDbContext(DbContextOptions<ProductDbContext> options) : DbContext(options)
 {
     public DbSet<Category> Categories => Set<Category>();
+    public DbSet<Brand> Brands => Set<Brand>();
+    public DbSet<AttributeName> AttributeNames => Set<AttributeName>();
     public DbSet<Product> Products => Set<Product>();
     public DbSet<ProductSku> ProductSkus => Set<ProductSku>();
     public DbSet<ProductImage> ProductImages => Set<ProductImage>();
@@ -14,10 +16,13 @@ public class ProductDbContext(DbContextOptions<ProductDbContext> options) : DbCo
     public DbSet<ProductUnit> ProductUnits => Set<ProductUnit>();
     public DbSet<PriceBook> PriceBooks => Set<PriceBook>();
     public DbSet<PriceBookEntry> PriceBookEntries => Set<PriceBookEntry>();
+    public DbSet<ProductVariantBomLine> ProductVariantBomLines => Set<ProductVariantBomLine>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfiguration(new CategoryConfiguration());
+        modelBuilder.ApplyConfiguration(new BrandConfiguration());
+        modelBuilder.ApplyConfiguration(new AttributeNameConfiguration());
         modelBuilder.ApplyConfiguration(new ProductConfiguration());
         modelBuilder.ApplyConfiguration(new ProductSkuConfiguration());
         modelBuilder.ApplyConfiguration(new ProductImageConfiguration());
@@ -25,5 +30,6 @@ public class ProductDbContext(DbContextOptions<ProductDbContext> options) : DbCo
         modelBuilder.ApplyConfiguration(new ProductUnitConfiguration());
         modelBuilder.ApplyConfiguration(new PriceBookConfiguration());
         modelBuilder.ApplyConfiguration(new PriceBookEntryConfiguration());
+        modelBuilder.ApplyConfiguration(new ProductVariantBomLineConfiguration());
     }
 }

@@ -61,6 +61,7 @@ public class PromotionConfiguration : IEntityTypeConfiguration<Promotion>
         builder.Property(e => e.UpdatedAt).IsRequired();
         builder.Property(e => e.IsDeleted).IsRequired();
         builder.HasMany(e => e.Scopes).WithOne(s => s.Promotion).HasForeignKey(s => s.PromotionId);
+        builder.HasMany(e => e.CustomerTierScopes).WithOne(s => s.Promotion).HasForeignKey(s => s.PromotionId);
     }
 }
 
@@ -74,11 +75,13 @@ public class PromotionScopeConfiguration : IEntityTypeConfiguration<PromotionSco
         builder.Property(e => e.ScopeType).HasConversion<string>().HasMaxLength(20).IsRequired();
         builder.Property(e => e.SkuCode).HasMaxLength(50);
         builder.Property(e => e.SkuSnapshotName).HasMaxLength(255);
+        builder.Property(e => e.CategorySnapshotName).HasMaxLength(255);
         builder.Property(e => e.CreatedAt).IsRequired();
         builder.Property(e => e.UpdatedAt).IsRequired();
         builder.Property(e => e.IsDeleted).IsRequired();
         builder.HasIndex(e => e.PromotionId);
         builder.HasIndex(e => e.SkuId);
+        builder.HasIndex(e => e.CategoryId);
     }
 }
 
@@ -98,6 +101,23 @@ public class OrderDetailConfiguration : IEntityTypeConfiguration<OrderDetail>
         builder.Property(e => e.IsGift).HasDefaultValue(false).IsRequired();
         builder.Property(e => e.CreatedAt).IsRequired();
         builder.Property(e => e.UpdatedAt).IsRequired();
+    }
+}
+
+public class PromotionCustomerTierScopeConfiguration : IEntityTypeConfiguration<PromotionCustomerTierScope>
+{
+    public void Configure(EntityTypeBuilder<PromotionCustomerTierScope> builder)
+    {
+        builder.ToTable("PromotionCustomerTierScopes");
+        builder.HasKey(e => e.Id);
+        builder.Property(e => e.Id).ValueGeneratedNever();
+        builder.Property(e => e.TierId).IsRequired();
+        builder.Property(e => e.TierSnapshotName).HasMaxLength(255);
+        builder.Property(e => e.CreatedAt).IsRequired();
+        builder.Property(e => e.UpdatedAt).IsRequired();
+        builder.Property(e => e.IsDeleted).IsRequired();
+        builder.HasIndex(e => e.PromotionId);
+        builder.HasIndex(e => e.TierId);
     }
 }
 

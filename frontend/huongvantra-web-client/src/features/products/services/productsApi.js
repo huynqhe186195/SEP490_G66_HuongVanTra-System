@@ -45,6 +45,7 @@ export function mapProductUnit(item) {
 export function mapProductVariant(item) {
   if (!item || typeof item !== 'object') return null
   const rawUnits = item.units ?? item.Units ?? []
+  const rawBomLines = item.bomLines ?? item.BomLines ?? []
   return {
     id: item.id ?? item.Id,
     productId: item.productId ?? item.ProductId,
@@ -61,6 +62,11 @@ export function mapProductVariant(item) {
     isActive: Boolean(item.isActive ?? item.IsActive ?? true),
     imageUrl: item.imageUrl ?? item.ImageUrl ?? '',
     units: toArray(rawUnits).map(mapProductUnit).filter(Boolean),
+    bomLines: toArray(rawBomLines).map((line) => ({
+      materialId: line.materialId ?? line.MaterialId,
+      materialName: line.materialName ?? line.MaterialName ?? '',
+      quantity: Number(line.quantity ?? line.Quantity ?? 0),
+    })),
   }
 }
 
@@ -70,6 +76,7 @@ export function mapProductSku(item) {
     id: item.id ?? item.Id,
     productId: item.productId ?? item.ProductId,
     productName: item.productName ?? item.ProductName ?? '',
+    categoryId: item.categoryId ?? item.CategoryId ?? null,
     categoryName: item.categoryName ?? item.CategoryName ?? '',
     skuCode: item.skuCode ?? item.SkuCode ?? '',
     barcode: item.barcode ?? item.Barcode ?? '',
@@ -112,6 +119,7 @@ export function mapProduct(item) {
     isDeleted: Boolean(item.isDeleted ?? item.IsDeleted ?? false),
     createdAt: item.createdAt ?? item.CreatedAt ?? null,
     syncedToStoreAt: item.syncedToStoreAt ?? item.SyncedToStoreAt ?? null,
+    productType: item.productType ?? item.ProductType ?? 'THANH_PHAM',
     skus: toArray(rawSkus).map(mapProductSku).filter(Boolean),
     images: toArray(rawImages).map(mapProductImage).filter(Boolean).sort((a, b) => a.sortOrder - b.sortOrder),
     units: toArray(rawUnits).map(mapProductUnit).filter(Boolean),
@@ -182,6 +190,9 @@ function buildVariantBody(variant) {
     isActive: variant.isActive !== false,
     imageUrl: trimOrNull(variant.imageUrl),
     units: toArray(variant.units).map(buildUnitBody),
+    bomLines: toArray(variant.bomLines)
+      .filter((l) => l.materialId && Number(l.quantity) > 0)
+      .map((l) => ({ materialId: l.materialId, quantity: Number(l.quantity) })),
   }
 }
 
@@ -217,6 +228,7 @@ export function buildCreateProductBody(payload) {
     baseUnit: trimOrNull(payload.baseUnit) || 'unit',
     weightValue: numberOrNull(payload.weightValue),
     weightUnit: trimOrNull(payload.weightUnit),
+    productType: payload.productType || 'THANH_PHAM',
     isVariantParent: Boolean(payload.isVariantParent),
     images: toArray(payload.images).map(buildImageBody).filter((image) => image.imageUrl),
     units: toArray(payload.units).map(buildUnitBody).filter((unit) => unit.unitName),

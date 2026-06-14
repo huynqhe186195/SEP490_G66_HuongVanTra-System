@@ -9,5 +9,14 @@ public enum PromotionDiscountType
 public enum PromotionScopeType
 {
     ORDER,
-    SKU
+    SKU,
+    CATEGORY
+}
+
+public enum PromotionEffectiveStatus
+{
+    ACTIVE,
+    INACTIVE,
+    SCHEDULED,
+    EXPIRED
 }

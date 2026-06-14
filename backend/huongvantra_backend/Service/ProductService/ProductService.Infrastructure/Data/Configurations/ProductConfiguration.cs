@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using ProductService.Domain.Entities;
+using ProductService.Domain.Enums;
 
 namespace ProductService.Infrastructure.Data.Configurations;
 
@@ -24,6 +25,10 @@ public class ProductConfiguration : IEntityTypeConfiguration<Product>
         builder.Property(p => p.CreatedAt).IsRequired();
         builder.Property(p => p.UpdatedAt).IsRequired(false);
         builder.Property(p => p.IsDeleted).HasDefaultValue(false);
+        builder.Property(p => p.ProductType)
+            .HasConversion<string>()
+            .HasMaxLength(20)
+            .HasDefaultValue(ProductType.THANH_PHAM);
 
         builder.HasOne(p => p.Category)
             .WithMany(c => c.Products)

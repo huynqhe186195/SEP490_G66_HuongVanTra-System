@@ -11,6 +11,7 @@ public class PromotionRepository(OrderDbContext _db) : IPromotionRepository
     public async Task<List<Promotion>> GetAllAsync(CancellationToken ct = default) =>
         await _db.Promotions
             .Include(p => p.Scopes)
+            .Include(p => p.CustomerTierScopes)
             .OrderByDescending(p => p.CreatedAt)
             .ToListAsync(ct);
 
@@ -18,13 +19,15 @@ public class PromotionRepository(OrderDbContext _db) : IPromotionRepository
         string? search,
         PromotionDiscountType? discountType,
         PromotionScopeType? scopeType,
-        bool? isActive,
+        PromotionEffectiveStatus? effectiveStatus,
+        DateTime nowUtc,
         int page,
         int pageSize,
         CancellationToken ct = default)
     {
         var query = _db.Promotions
             .Include(p => p.Scopes)
+            .Include(p => p.CustomerTierScopes)
             .AsQueryable();
 
         var normalizedSearch = string.IsNullOrWhiteSpace(search)
@@ -39,8 +42,28 @@ public class PromotionRepository(OrderDbContext _db) : IPromotionRepository
         if (scopeType.HasValue)
             query = query.Where(p => p.ScopeType == scopeType.Value);
 
-        if (isActive.HasValue)
-            query = query.Where(p => p.IsActive == isActive.Value);
+        if (effectiveStatus.HasValue)
+        {
+            query = effectiveStatus.Value switch
+            {
+                PromotionEffectiveStatus.INACTIVE => query.Where(p =>
+                    !p.IsActive &&
+                    (!p.ValidToUtc.HasValue || p.ValidToUtc.Value > nowUtc)),
+                PromotionEffectiveStatus.SCHEDULED => query.Where(p =>
+                    p.IsActive &&
+                    p.ValidFromUtc.HasValue &&
+                    p.ValidFromUtc.Value > nowUtc &&
+                    (!p.ValidToUtc.HasValue || p.ValidToUtc.Value > nowUtc)),
+                PromotionEffectiveStatus.EXPIRED => query.Where(p =>
+                    p.ValidToUtc.HasValue &&
+                    p.ValidToUtc.Value <= nowUtc),
+                PromotionEffectiveStatus.ACTIVE => query.Where(p =>
+                    p.IsActive &&
+                    (!p.ValidFromUtc.HasValue || p.ValidFromUtc.Value <= nowUtc) &&
+                    (!p.ValidToUtc.HasValue || p.ValidToUtc.Value > nowUtc)),
+                _ => query
+            };
+        }
 
         var totalCount = await query.CountAsync(ct);
         var items = await query
@@ -56,18 +79,21 @@ public class PromotionRepository(OrderDbContext _db) : IPromotionRepository
     public async Task<Promotion?> GetByIdAsync(Guid id, CancellationToken ct = default) =>
         await _db.Promotions
             .Include(p => p.Scopes)
+            .Include(p => p.CustomerTierScopes)
             .FirstOrDefaultAsync(p => p.Id == id, ct);
 
     public async Task<Promotion?> GetByNormalizedCodeAsync(
         string normalizedCode, CancellationToken ct = default) =>
         await _db.Promotions
             .Include(p => p.Scopes)
+            .Include(p => p.CustomerTierScopes)
             .FirstOrDefaultAsync(p => p.NormalizedPromoCode == normalizedCode, ct);
 
     public async Task<Promotion?> GetActiveByNormalizedCodeAsync(
         string normalizedCode, CancellationToken ct = default) =>
         await _db.Promotions
             .Include(p => p.Scopes)
+            .Include(p => p.CustomerTierScopes)
             .FirstOrDefaultAsync(p =>
                 p.NormalizedPromoCode == normalizedCode &&
                 p.IsActive, ct);
@@ -75,10 +101,11 @@ public class PromotionRepository(OrderDbContext _db) : IPromotionRepository
     public async Task<List<Promotion>> GetAvailableAsync(DateTime nowUtc, CancellationToken ct = default) =>
         await _db.Promotions
             .Include(p => p.Scopes)
+            .Include(p => p.CustomerTierScopes)
             .Where(p =>
                 p.IsActive &&
                 (!p.ValidFromUtc.HasValue || p.ValidFromUtc <= nowUtc) &&
-                (!p.ValidToUtc.HasValue || p.ValidToUtc >= nowUtc))
+                (!p.ValidToUtc.HasValue || p.ValidToUtc > nowUtc))
             .OrderBy(p => p.PromoCode)
             .ToListAsync(ct);
 

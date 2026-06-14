@@ -20,6 +20,7 @@ public class OrderLogic(
     IOrderEventPublisher _eventPublisher,
     IOrderActivityRepository _activityRepo,
     PromotionLogic _promotionLogic,
+    IProductCatalogClient _productCatalogClient,
     IOptions<SepayOptions> sepayOptions)
 {
     private readonly SepayOptions _sepay = sepayOptions.Value;
@@ -161,7 +162,8 @@ public class OrderLogic(
                 i.Quantity,
                 i.CostPrice,
                 unitPrice,
-                isGift);
+                isGift,
+                i.CategoryId);
         }).ToList();
 
         OrderInputValidator.ValidateCreateOrder(
@@ -174,11 +176,17 @@ public class OrderLogic(
         if (manualDiscount > totalAmount)
             throw new OrderValidationException("Giảm giá thủ công không được lớn hơn tổng tiền đơn hàng.");
 
+        var hasPromotion = (req.PromotionId.HasValue && req.PromotionId.Value != Guid.Empty) ||
+            !string.IsNullOrWhiteSpace(req.PromotionCode);
+        if (hasPromotion)
+            detailInputs = await EnrichCategoryIdsAsync(detailInputs, ct);
+
         var promotionItems = detailInputs.Select(i => new PromotionCalculationItem(
             i.SkuId,
             i.Quantity,
             i.UnitPrice,
-            i.UnitPrice * i.Quantity)).ToList();
+            i.UnitPrice * i.Quantity,
+            i.CategoryId)).ToList();
         var promotionDiscount = await _promotionLogic.ValidateAndCalculateDiscountAsync(
             req.PromotionId, req.PromotionCode, promotionItems, manualDiscount, req.CustomerId, ct);
         var totalDiscount = manualDiscount + promotionDiscount.DiscountAmount;
@@ -353,6 +361,23 @@ public class OrderLogic(
             await PublishOrderCompletedAsync(order, debtAmount, ct);
 
         return MapToResponse(order);
+    }
+
+    private async Task<List<CreateOrderDetailInput>> EnrichCategoryIdsAsync(
+        List<CreateOrderDetailInput> items,
+        CancellationToken ct)
+    {
+        var categoryBySkuId = new Dictionary<Guid, int?>();
+        foreach (var skuId in items.Select(i => i.SkuId).Distinct())
+            categoryBySkuId[skuId] = await _productCatalogClient.GetSkuCategoryIdAsync(skuId, ct);
+
+        return items
+            .Select(item =>
+                categoryBySkuId.TryGetValue(item.SkuId, out var resolvedCategoryId) &&
+                resolvedCategoryId.HasValue
+                    ? item with { CategoryId = resolvedCategoryId.Value }
+                    : item)
+            .ToList();
     }
 
     public async Task<OrderResponse> UpdateAsync(
