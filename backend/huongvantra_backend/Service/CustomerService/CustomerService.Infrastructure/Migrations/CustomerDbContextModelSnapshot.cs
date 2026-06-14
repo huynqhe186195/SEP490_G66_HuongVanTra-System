@@ -45,6 +45,10 @@ namespace CustomerService.Infrastructure.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("varchar(20)");
 
+                    b.Property<string>("Department")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
                     b.Property<string>("Email")
                         .HasMaxLength(100)
                         .HasColumnType("varchar(100)");
@@ -61,6 +65,10 @@ namespace CustomerService.Infrastructure.Migrations
 
                     b.Property<string>("PhoneNumber")
                         .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)");
+
+                    b.Property<string>("Source")
                         .HasMaxLength(20)
                         .HasColumnType("varchar(20)");
 
@@ -181,6 +189,42 @@ namespace CustomerService.Infrastructure.Migrations
                     b.ToTable("CustomerAddresses", (string)null);
                 });
 
+            modelBuilder.Entity("CustomerService.Domain.Entities.CustomerDebtAllocation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)");
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid>("CustomerId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<Guid>("DebtTransactionId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("OrderCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("char(36)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CustomerId");
+
+                    b.HasIndex("DebtTransactionId");
+
+                    b.HasIndex("OrderId");
+
+                    b.ToTable("CustomerDebtAllocations", (string)null);
+                });
+
             modelBuilder.Entity("CustomerService.Domain.Entities.CustomerDebtTransaction", b =>
                 {
                     b.Property<Guid>("Id")
@@ -223,42 +267,6 @@ namespace CustomerService.Infrastructure.Migrations
                     b.HasIndex("CustomerId");
 
                     b.ToTable("CustomerDebtTransactions", (string)null);
-                });
-
-            modelBuilder.Entity("CustomerService.Domain.Entities.CustomerDebtAllocation", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("char(36)");
-
-                    b.Property<decimal>("Amount")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<Guid>("CustomerId")
-                        .HasColumnType("char(36)");
-
-                    b.Property<Guid>("DebtTransactionId")
-                        .HasColumnType("char(36)");
-
-                    b.Property<Guid>("OrderId")
-                        .HasColumnType("char(36)");
-
-                    b.Property<string>("OrderCode")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("varchar(50)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CustomerId");
-
-                    b.HasIndex("DebtTransactionId");
-
-                    b.HasIndex("OrderId");
-
-                    b.ToTable("CustomerDebtAllocations", (string)null);
                 });
 
             modelBuilder.Entity("CustomerService.Domain.Entities.CustomerTier", b =>
@@ -353,6 +361,18 @@ namespace CustomerService.Infrastructure.Migrations
                     b.Navigation("Customer");
                 });
 
+            modelBuilder.Entity("CustomerService.Domain.Entities.CustomerDebtAllocation", b =>
+                {
+                    b.HasOne("CustomerService.Domain.Entities.CustomerDebtTransaction", "DebtTransaction")
+                        .WithMany("Allocations")
+                        .HasForeignKey("DebtTransactionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_DebtAlloc_DebtTxn");
+
+                    b.Navigation("DebtTransaction");
+                });
+
             modelBuilder.Entity("CustomerService.Domain.Entities.CustomerDebtTransaction", b =>
                 {
                     b.HasOne("CustomerService.Domain.Entities.Customer", "Customer")
@@ -362,18 +382,6 @@ namespace CustomerService.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Customer");
-                });
-
-            modelBuilder.Entity("CustomerService.Domain.Entities.CustomerDebtAllocation", b =>
-                {
-                    b.HasOne("CustomerService.Domain.Entities.CustomerDebtTransaction", "DebtTransaction")
-                        .WithMany("Allocations")
-                        .HasForeignKey("DebtTransactionId")
-                        .HasConstraintName("FK_DebtAlloc_DebtTxn")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("DebtTransaction");
                 });
 
             modelBuilder.Entity("CustomerService.Domain.Entities.Customer", b =>

@@ -32,6 +32,32 @@ public class CustomerDebtTransactionRepository : ICustomerDebtTransactionReposit
         return (increase, decrease, items.Count);
     }
 
+    public async Task<decimal> GetLedgerBalanceAsync(Guid customerId, CancellationToken ct = default)
+    {
+        var items = await _db.CustomerDebtTransactions
+            .Where(t => t.CustomerId == customerId)
+            .OrderBy(t => t.CreatedAt)
+            .ThenBy(t => t.Id)
+            .ToListAsync(ct);
+
+        decimal balance = 0;
+        foreach (var transaction in items)
+        {
+            balance = transaction.Type == DebtTransactionType.IncreaseDebt
+                ? balance + transaction.Amount
+                : Math.Max(0, balance - transaction.Amount);
+        }
+
+        return balance;
+    }
+
+    public async Task<bool> HasOrderDebtAsync(Guid orderId, CancellationToken ct = default) =>
+        await _db.CustomerDebtTransactions.AnyAsync(
+            t => t.Type == DebtTransactionType.IncreaseDebt
+                && t.ReferenceType == "Order"
+                && t.ReferenceId == orderId,
+            ct);
+
     public Task<int> SaveChangesAsync(CancellationToken ct = default) =>
         _db.SaveChangesAsync(ct);
 }

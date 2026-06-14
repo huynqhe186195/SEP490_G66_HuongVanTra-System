@@ -514,7 +514,11 @@ export default function ProductsStoreListPage() {
                           {isExpanded ? (
                             <tr>
                               <td colSpan={12} className="p-0">
-                                <StoreProductExpandedLoader sku={sku} stockBySkuId={stockBySkuId} />
+                                <StoreProductExpandedLoader
+                                  sku={sku}
+                                  stockBySkuId={stockBySkuId}
+                                  canAdjustStock={canAdjustStock}
+                                />
                               </td>
                             </tr>
                           ) : null}

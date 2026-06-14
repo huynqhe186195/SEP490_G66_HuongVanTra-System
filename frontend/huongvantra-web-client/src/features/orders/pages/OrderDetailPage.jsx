@@ -29,6 +29,7 @@ import {
   canReturnOrder,
   canShipOrder,
   canVerifyCod,
+  getOrderEditBlockedMessage,
   isCodChannelOrder,
   isPendingPaymentOrder,
   isPendingTransferPayment,
@@ -142,7 +143,8 @@ function OrderDetailPage() {
       setIsUpdateModalOpen(false)
       showSuccess('Đã cập nhật đơn hàng.')
     } catch (error) {
-      showError(error.message)
+      const message = error.message || 'Không thể cập nhật đơn hàng.'
+      showError(message)
     } finally {
       setIsSaving(false)
     }
@@ -267,6 +269,10 @@ function OrderDetailPage() {
               <span className="material-symbols-outlined text-[18px]">edit</span>
               Cập nhật thông tin
             </button>
+          ) : canManage ? (
+            <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              {getOrderEditBlockedMessage(order)}
+            </p>
           ) : null}
           <span className={`rounded-full px-3 py-1 text-xs font-semibold ${getOrderStatusClass(order.orderStatus)}`}>
             {getOrderStatusLabel(order.orderStatus)}

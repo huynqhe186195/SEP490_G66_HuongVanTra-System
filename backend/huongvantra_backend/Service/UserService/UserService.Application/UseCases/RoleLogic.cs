@@ -1,3 +1,4 @@
+using UserService.Application.Authorization;
 using UserService.Application.DTOs.Requests;
 using UserService.Application.DTOs.Responses;
 using UserService.Application.Interfaces;
@@ -31,6 +32,18 @@ public class RoleLogic(IRoleRepository roleRepo, IPermissionRepository permissio
     {
         var roles = await roleRepo.GetAllAsync(onlyDeleted);
         return roles.Select(MapToResponse);
+    }
+
+    public async Task<IEnumerable<RoleResponse>> GetAssignableAsync(IReadOnlyList<string> actorPermissions)
+    {
+        var assignableNames = StaffManagementScope.GetAssignableRoleNames(actorPermissions).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (assignableNames.Count == 0)
+            return [];
+
+        var roles = await roleRepo.GetAllAsync();
+        return roles
+            .Where(r => !r.IsDeleted && assignableNames.Contains(r.RoleName))
+            .Select(MapToResponse);
     }
 
     public async Task<RoleResponse> GetByIdAsync(int id)

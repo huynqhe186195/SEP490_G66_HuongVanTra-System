@@ -1,6 +1,6 @@
 import ProductImage from '../../products/components/ProductImage.jsx'
 import OrderTimeline from './OrderTimeline.jsx'
-import { formatVnd } from '../utils/orderDisplay.js'
+import { formatVnd, getManualDiscountAmount } from '../utils/orderDisplay.js'
 
 function OrderProductsSection({
   order,
@@ -138,8 +138,8 @@ function OrderProductsSection({
               <span>{formatVnd(order.totalAmount)}</span>
             </div>
             <div className="flex justify-between py-1">
-              <span className="text-slate-500">Giảm giá</span>
-              <span>-{formatVnd(order.discountAmount)}</span>
+              <span className="text-slate-500">Giảm giá thủ công</span>
+              <span>-{formatVnd(getManualDiscountAmount(order))}</span>
             </div>
             {order.promotionCode ? (
               <div className="flex justify-between py-1 text-xs text-slate-500">

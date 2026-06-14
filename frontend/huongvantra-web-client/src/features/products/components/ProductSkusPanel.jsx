@@ -42,6 +42,7 @@ function FieldError({ message }) {
 
 function ProductSkusPanel({
   productId,
+  productName = '',
   canManage,
   canAdjustStock = false,
   warehouseStockView = false,
@@ -209,7 +210,7 @@ function ProductSkusPanel({
           </h2>
           <p className="mt-1 text-sm text-slate-500">
             {stockOnlyMode
-              ? 'Chọn SKU và nhập số lượng thay đổi (+ nhập kho, − xuất kho).'
+              ? 'Chọn SKU và gửi yêu cầu (+ nhập từ kho tổng, − giảm tồn cửa hàng). Thủ kho sẽ duyệt trước khi cập nhật số lượng.'
               : 'Mỗi SKU có mã, giá bán và số lượng hiện tại tại cửa hàng.'}
           </p>
         </div>
@@ -489,6 +490,7 @@ function ProductSkusPanel({
       {stockModalSku ? (
         <AdjustSkuStockModal
           sku={stockModalSku}
+          productName={productName}
           quantityOnHand={Number(stockBySkuId.get(stockModalSku.id) ?? 0)}
           onClose={() => setStockModalSku(null)}
         />

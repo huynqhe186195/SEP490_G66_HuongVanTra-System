@@ -9,10 +9,9 @@ using OrderService.Infrastructure.Data;
 namespace OrderService.Infrastructure.Migrations
 {
     [DbContext(typeof(OrderDbContext))]
-    [Migration("20260611130000_AddPromotionMinimumOrderAmount")]
-    partial class AddPromotionMinimumOrderAmount
+    [Migration("20260613163000_AddOrderDetailIsGift")]
+    partial class AddOrderDetailIsGift
     {
-        /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
         }

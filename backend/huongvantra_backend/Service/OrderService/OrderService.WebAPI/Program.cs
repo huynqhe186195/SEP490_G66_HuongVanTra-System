@@ -7,6 +7,7 @@ using OrderService.Infrastructure.Data;
 using OrderService.Infrastructure.Messaging;
 using OrderService.Infrastructure.Repositories;
 using OrderService.Infrastructure.Services;
+using OrderService.WebAPI.Services;
 using OrderService.WebAPI.Middlewares;
 using HuongVanTra.Shared.Auth;
 using Microsoft.EntityFrameworkCore;
@@ -41,6 +42,7 @@ builder.Services.AddScoped<IPromotionRepository, PromotionRepository>();
 builder.Services.AddScoped<IOrderCodeGenerator, OrderCodeGenerator>();
 builder.Services.AddScoped<IReturnOrderRepository, ReturnOrderRepository>();
 builder.Services.AddScoped<IOrderEventPublisher, OrderEventPublisher>();
+builder.Services.AddScoped<IReportRepository, ReportRepository>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddTransient<ForwardAuthorizationHeaderHandler>();
 builder.Services.AddHttpClient<IProductCatalogClient, ProductCatalogClient>(client =>
@@ -62,6 +64,9 @@ builder.Services.AddScoped<OrderLogic>();
 builder.Services.AddScoped<PaymentLogic>();
 builder.Services.AddScoped<PosTransferPaymentLogic>();
 builder.Services.AddScoped<PromotionLogic>();
+builder.Services.AddScoped<CodReminderLogic>();
+builder.Services.AddHostedService<CodReminderHostedService>();
+builder.Services.AddScoped<IReportLogic, ReportLogic>();
 
 builder.Services.AddMassTransit(x =>
 {

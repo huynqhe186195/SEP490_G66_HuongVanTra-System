@@ -21,11 +21,12 @@ const ROLE_MODULE_MAP = {
     'promotions_admin',
     'users_admin',
     'phan_quyen_admin',
+    'dashboard',
   ],
-  manager: ['pos', 'orders', 'cod_ops', 'stock_deduct_ops', 'stock_adjustment_ops', 'customers', 'products', 'inventory', 'staff'],
-  sale: ['pos', 'orders', 'customers'],
-  warehouse: ['products', 'stock_adjustment_ops', 'inventory'],
-  accountant: ['orders', 'customers', 'reports'],
+  manager: ['pos', 'orders', 'cod_ops', 'stock_deduct_ops', 'stock_adjustment_ops', 'customers', 'products', 'inventory', 'staff', 'dashboard'],
+  sale: ['pos', 'orders', 'customers', 'dashboard'],
+  warehouse: ['products', 'stock_adjustment_ops', 'inventory', 'dashboard'],
+  accountant: ['orders', 'customers', 'reports', 'dashboard'],
 }
 
 const ROLE_ALIAS_TO_MAP_KEY = {
@@ -161,20 +162,33 @@ function hasCatalogPermission(session) {
 
 export function enrichSessionWithAccess(session) {
   const permissions = mergePermissions(session, session?.accessToken)
+  const modules = deriveModulesFromRoles(session.roles ?? []).filter((module) => {
+    if (module !== 'pos') return true
+    return permissions.includes('CREATE_ORDER')
+  })
   return {
     ...session,
     permissions,
-    modules: deriveModulesFromRoles(session.roles ?? []),
+    modules,
   }
 }
 
-/** Làm mới quyền từ server (JWT mới) — cần khi role Warehouse vừa được gán MANAGE_CATALOG. */
+/** Làm mới quyền từ server (JWT mới) — cần khi role/permission vừa được cập nhật trên backend. */
 export async function syncSessionFromServer(session) {
   const enriched = enrichSessionWithAccess(session)
+  const roleModules = deriveModulesFromRoles(enriched.roles ?? [])
   const shouldRefresh =
     enriched.refreshToken &&
-    isWarehouseUserRole(enriched.roles) &&
-    !hasCatalogPermission(enriched)
+    (
+      (
+        isWarehouseUserRole(enriched.roles) &&
+        !hasCatalogPermission(enriched)
+      ) ||
+      (
+        roleModules.includes('pos') &&
+        !enriched.permissions.includes('CREATE_ORDER')
+      )
+    )
 
   if (!shouldRefresh) {
     return enriched

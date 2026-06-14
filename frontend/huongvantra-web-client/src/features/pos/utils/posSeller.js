@@ -24,6 +24,8 @@ export function formatRoles(roles) {
 function sellerFromSession(session) {
   const roles = session?.roles ?? []
   return {
+    username: session?.username?.trim() || '',
+    fullName: '',
     name: session?.username?.trim() || 'Nhân viên POS',
     role: formatRoles(roles) || '—',
   }
@@ -38,9 +40,13 @@ export async function loadPosSeller() {
   try {
     const profile = await fetchMyProfile()
     const roles = profile.roles?.length ? profile.roles : session.roles ?? []
-    const name = (profile.fullName || profile.username || session.username || 'Nhân viên POS').trim()
+    const username = profile.username || session.username || ''
+    const fullName = profile.fullName || ''
+    const name = (fullName || username || 'Nhân viên POS').trim()
     const role = formatRoles(roles) || '—'
     return {
+      username,
+      fullName,
       name,
       role,
       display: `${name} · ${role}`,

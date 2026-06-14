@@ -9,7 +9,6 @@ const ROLE_GROUPS = {
 
 /** Tạm ẩn trên sidebar — bật lại khi backend sẵn sàng. */
 const SIDEBAR_DISABLED_MODULES = new Set([
-  'dashboard',
   'contracts',
   'reports',
   'integrations',
@@ -28,7 +27,6 @@ const HOME_MODULE_PRIORITY = [
 ]
 
 // --- Tạm ẩn (chưa xử lý backend) ---
-// { label: 'Dashboard', path: '/dashboard', module: 'dashboard', roles: ['admin', 'agencyManager', 'accountant'] },
 // { label: 'Sản phẩm', path: '/products', module: 'products', roles: ['admin', 'agencyManager', 'inventoryManager'] },
 // { label: 'Hợp đồng', path: '/contracts', module: 'contracts', roles: ['admin', 'agencyManager'] },
 // { label: 'Báo cáo', path: '/reports', module: 'reports', roles: ['admin', 'agencyManager', 'accountant'] },
@@ -71,6 +69,7 @@ export const navigationItems = [
     icon: 'sell',
     roles: ['admin'],
   },
+  { label: 'Thống kê bán hàng', path: '/dashboard', module: 'dashboard', icon: 'dashboard', roles: ['admin', 'agencyManager', 'accountant', 'salesStaff', 'inventoryManager'] },
   {
     label: 'Tài khoản',
     path: '/admin/users',
@@ -108,15 +107,26 @@ function hasAnyRoleGroup(userRoles, allowedGroups) {
   })
 }
 
-export function getNavigationItemsForModules(modules = []) {
-  if (!modules.length) {
+export function getNavigationItemsForModules(modules = [], roles = []) {
+  if (!modules.length && !roles.length) {
     return []
   }
 
-  const allowed = new Set(
+  const allowedModules = new Set(
     modules.map((module) => module.toLowerCase()).filter(isSidebarModuleEnabled),
   )
-  return navigationItems.filter((item) => allowed.has(item.module))
+
+  return navigationItems.filter((item) => {
+    if (!isSidebarModuleEnabled(item.module)) return false
+    
+    // Allow if it's in the modules list
+    if (allowedModules.has(item.module)) return true
+    
+    // Fallback: allow if the user has the required role
+    if (roles.length && hasAnyRoleGroup(roles, item.roles)) return true
+
+    return false
+  })
 }
 
 export function getNavigationItemsForRoles(roles = []) {
@@ -142,7 +152,7 @@ function withRoleAwareProductLabel(items, roles = []) {
 
 export function getNavigationItemsForSession(session) {
   if (session?.modules?.length) {
-    return withRoleAwareProductLabel(getNavigationItemsForModules(session.modules), session?.roles ?? [])
+    return withRoleAwareProductLabel(getNavigationItemsForModules(session.modules, session.roles ?? []), session?.roles ?? [])
   }
 
   return withRoleAwareProductLabel(getNavigationItemsForRoles(session?.roles ?? []), session?.roles ?? [])
@@ -243,6 +253,10 @@ export function canAccessModule(session, module) {
     return false
   }
 
+  if (String(module).toLowerCase() === 'pos' && session?.permissions?.length) {
+    return session.permissions.includes('CREATE_ORDER')
+  }
+
   if (session?.modules?.length) {
     const normalizedModule = String(module).toLowerCase()
     if (session.modules.some((entry) => entry.toLowerCase() === normalizedModule)) {
@@ -286,6 +300,9 @@ export function canConfirmStockDeduct(session) {
 
 export function getAccessDeniedMessage(pathname) {
   const module = getModuleForPath(pathname)
+  if (module === 'pos') {
+    return 'Tài khoản không có quyền tạo đơn (CREATE_ORDER). Vui lòng đăng nhập bằng Sale hoặc Quản lý, hoặc đăng xuất và đăng nhập lại sau khi quyền được cập nhật.'
+  }
   if (module === 'cod_ops') {
     return 'Chỉ Quản lý chi nhánh mới được truy cập Quản lý COD.'
   }

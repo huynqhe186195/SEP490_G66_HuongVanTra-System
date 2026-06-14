@@ -58,7 +58,7 @@ public static class OrderInputValidator
     {
         var errors = new List<string>();
         if (page < 1) errors.Add("Trang phải >= 1.");
-        if (pageSize < 1 || pageSize > 100) errors.Add("Kích thước trang phải từ 1 đến 100.");
+        if (pageSize < 1 || pageSize > 1000) errors.Add("Kích thước trang phải từ 1 đến 1000.");
         if (errors.Count > 0) throw new OrderValidationException(errors);
     }
 }
@@ -67,7 +67,10 @@ public record CreateOrderDetailInput(
     Guid SkuId,
     string SkuSnapshotName,
     string? SkuSnapshotCode,
+    string? CategorySnapshotName,
     int Quantity,
+    decimal CostPrice,
     decimal UnitPrice,
-    int? CategoryId = null
+    int? CategoryId = null,
+    bool IsGift = false
 );

@@ -1,4 +1,5 @@
 using System.Globalization;
+using OrderService.Application.Authorization;
 using OrderService.Application.DTOs.Requests;
 using OrderService.Application.DTOs.Responses;
 using OrderService.Application.Interfaces;
@@ -17,6 +18,7 @@ public class PaymentLogic(
     public async Task<PaymentResponse> VerifyCodAsync(
         Guid paymentId,
         VerifyCodPaymentRequest req,
+        OrderAccessContext access,
         Guid? actorId = null,
         string? actorName = null,
         CancellationToken ct = default)
@@ -29,6 +31,7 @@ public class PaymentLogic(
 
         var order = await _orderRepo.GetByIdAsync(payment.OrderId, ct)
             ?? throw new OrderNotFoundException(payment.OrderId);
+        EnsureCanAccess(order, access);
 
         var collected = req.CollectedAmount > 0 ? req.CollectedAmount : order.FinalAmount;
         if (collected < order.FinalAmount)
@@ -86,22 +89,41 @@ public class PaymentLogic(
         return MapToResponse(payment);
     }
 
-    public async Task<List<PaymentResponse>> GetByOrderIdAsync(Guid orderId, CancellationToken ct = default)
+    public async Task<List<PaymentResponse>> GetByOrderIdAsync(
+        Guid orderId, OrderAccessContext access, CancellationToken ct = default)
     {
+        var order = await _orderRepo.GetByIdAsync(orderId, ct)
+            ?? throw new OrderNotFoundException(orderId);
+        EnsureCanAccess(order, access);
+
         var payments = await _paymentRepo.GetByOrderIdAsync(orderId, ct);
         return payments.Select(MapToResponse).ToList();
     }
 
-    public async Task<List<PaymentResponse>> GetPendingCodAsync(CancellationToken ct = default)
+    public async Task<List<PaymentResponse>> GetPendingCodAsync(
+        OrderAccessContext access, CancellationToken ct = default)
     {
         var payments = await _paymentRepo.GetPendingCodAsync(ct);
-        return payments.Select(MapToResponse).ToList();
+        return payments
+            .Where(p => p.Order is not null && access.CanAccessOrder(p.Order.EmployeeId))
+            .Select(MapToResponse)
+            .ToList();
     }
 
-    public async Task<List<PaymentResponse>> GetUnverifiedCodAsync(CancellationToken ct = default)
+    public async Task<List<PaymentResponse>> GetUnverifiedCodAsync(
+        OrderAccessContext access, CancellationToken ct = default)
     {
         var payments = await _paymentRepo.GetUnverifiedCodAsync(ct);
-        return payments.Select(MapToResponse).ToList();
+        return payments
+            .Where(p => p.Order is not null && access.CanAccessOrder(p.Order.EmployeeId))
+            .Select(MapToResponse)
+            .ToList();
+    }
+
+    private static void EnsureCanAccess(Order order, OrderAccessContext access)
+    {
+        if (!access.CanAccessOrder(order.EmployeeId))
+            throw new OrderForbiddenException();
     }
 
     private async Task RecordActivityAsync(

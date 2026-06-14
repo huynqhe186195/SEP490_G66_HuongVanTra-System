@@ -332,8 +332,20 @@ export function canReturnOrder(order) {
   return lines.some((line) => Number(line.returnedQuantity || 0) < Number(line.quantity || 0))
 }
 
+export function getManualDiscountAmount(order) {
+  const total = Number(order?.discountAmount ?? 0)
+  const promotion = Number(order?.promotionDiscountAmount ?? 0)
+  return Math.max(0, total - promotion)
+}
+
 export function canEditOrderMeta(order) {
   return Boolean(order && !isOrderTerminal(order))
+}
+
+export function getOrderEditBlockedMessage(order) {
+  if (!order) return ''
+  const status = getOrderStatusLabel(order.orderStatus)
+  return `Đơn đang ở trạng thái "${status}" nên không thể sửa địa chỉ, giảm giá hay khuyến mãi. Chỉ sửa được khi đơn chờ thanh toán, đang xử lý hoặc đang giao.`
 }
 
 export function isTransferPaymentMethod(method) {
@@ -394,17 +406,26 @@ export function getPrimaryPayment(order) {
   return order?.payments?.[0] || null
 }
 
-export function getCodDaysPending(payment) {
-  if (!payment?.codWarningDate) return 0
-  const warning = new Date(payment.codWarningDate)
+export function getCodDaysPending(order) {
+  const createdAt = order?.createdAt
+  if (createdAt) {
+    const days = Math.floor((Date.now() - new Date(createdAt).getTime()) / (24 * 60 * 60 * 1000))
+    return Math.max(0, days)
+  }
+
+  if (!order?.codWarningDate) return 0
+  const warning = new Date(order.codWarningDate)
   const createdOffset = warning.getTime() - 7 * 24 * 60 * 60 * 1000
   const days = Math.floor((Date.now() - createdOffset) / (24 * 60 * 60 * 1000))
   return Math.max(0, days)
 }
 
-export function isCodOverdue(payment) {
-  if (!payment?.codWarningDate) return false
-  return new Date(payment.codWarningDate).getTime() <= Date.now()
+export function isCodOverdue(order) {
+  if (!order) return false
+  const payment = order?.payments?.find((row) => normalizeOrderKey(row.paymentMethod) === 'COD')
+  const isUnverifiedCod = payment ? !payment.isCodVerified : order?.codWarningDate != null
+  if (!isUnverifiedCod) return false
+  return getCodDaysPending(order) >= 7
 }
 
 export function requiresShippingAddress(channel) {

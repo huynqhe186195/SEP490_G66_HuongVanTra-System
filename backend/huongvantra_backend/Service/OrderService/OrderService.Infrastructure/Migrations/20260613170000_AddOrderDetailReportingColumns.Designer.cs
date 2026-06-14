@@ -9,8 +9,8 @@ using OrderService.Infrastructure.Data;
 namespace OrderService.Infrastructure.Migrations
 {
     [DbContext(typeof(OrderDbContext))]
-    [Migration("20260612130000_AddPromotionUsageLimits")]
-    partial class AddPromotionUsageLimits
+    [Migration("20260613170000_AddOrderDetailReportingColumns")]
+    partial class AddOrderDetailReportingColumns
     {
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {

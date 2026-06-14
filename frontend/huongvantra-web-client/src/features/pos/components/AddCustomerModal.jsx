@@ -41,6 +41,8 @@ function AddCustomerModal({ isOpen, onClose, onSaved }) {
   }
 
   const handleSave = async () => {
+    if (isSaving) return
+
     const validation = validatePosCustomerForm({ fullName, phone, address })
     if (!validation.valid) {
       setFieldErrors(validation.errors)
@@ -54,12 +56,18 @@ function AddCustomerModal({ isOpen, onClose, onSaved }) {
 
     setIsSaving(true)
     try {
-      const customer = await createPosCustomer({
+      const result = await createPosCustomer({
         fullName: name,
         phone: phoneValue,
         address: addressValue || null,
       })
-      showSuccess(`Đã thêm khách hàng ${customer.fullName || name}.`)
+      const customer = result?.customer ?? result
+      const reusedExisting = Boolean(result?.reusedExisting)
+      showSuccess(
+        reusedExisting
+          ? `Khách ${customer.fullName || name} đã có — đã chọn vào đơn.`
+          : `Đã thêm khách hàng ${customer.fullName || name}.`,
+      )
       onSaved?.(customer)
       resetForm()
       onClose()

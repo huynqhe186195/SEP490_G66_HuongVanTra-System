@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using UserService.Application.DTOs.Requests;
 using UserService.Application.UseCases;
+using UserService.Domain.Constants;
+using UserService.WebAPI.Extensions;
 
 namespace UserService.WebAPI.Controllers;
 
@@ -53,10 +55,16 @@ public class AuthController(AuthLogic authLogic, UserLogic userLogic) : Controll
     }
 
     [HttpPost("reset-password")]
-    [Authorize(Roles = "Admin")]
+    [Authorize]
     public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest request)
     {
-        await authLogic.ResetPasswordAsync(request);
+        if (!User.HasClaim("permission", PermissionNames.ManageUser)
+            && !User.HasClaim("permission", PermissionNames.ManageEmployee))
+        {
+            return Forbid();
+        }
+
+        await authLogic.ResetPasswordAsync(request, User.GetPermissions());
         return NoContent();
     }
 }

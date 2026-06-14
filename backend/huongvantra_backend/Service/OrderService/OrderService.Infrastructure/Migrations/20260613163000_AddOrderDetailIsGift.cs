@@ -5,25 +5,25 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace OrderService.Infrastructure.Migrations
 {
     /// <inheritdoc />
-    public partial class AddPromotionMinimumOrderAmount : Migration
+    public partial class AddOrderDetailIsGift : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<decimal>(
-                name: "MinimumOrderAmount",
-                table: "Promotions",
-                type: "decimal(18,2)",
+            migrationBuilder.AddColumn<bool>(
+                name: "IsGift",
+                table: "OrderDetails",
+                type: "tinyint(1)",
                 nullable: false,
-                defaultValue: 0m);
+                defaultValue: false);
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropColumn(
-                name: "MinimumOrderAmount",
-                table: "Promotions");
+                name: "IsGift",
+                table: "OrderDetails");
         }
     }
 }

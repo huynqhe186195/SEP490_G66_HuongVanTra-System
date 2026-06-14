@@ -3,6 +3,7 @@ import { loadAuthSession } from '../../auth/services/authSession.js'
 import {
   buildCreateCustomerBody,
   fetchCustomerById,
+  fetchCustomerByPhone,
   mapCustomer,
 } from '../../customers/services/customersApi.js'
 import {
@@ -56,6 +57,8 @@ function mapPosLineItem(item) {
     quantity: Number(item.quantity ?? item.qty ?? 1),
     unitPrice: Number(item.unitPrice ?? item.price ?? 0),
     isGift: item.isGift ?? 0,
+    categoryName: item.categoryName ?? item.CategoryName ?? '',
+    costPrice: Number(item.costPrice ?? 0),
   }
 }
 
@@ -86,8 +89,11 @@ function buildOrderRequestFromPosPayload(
           ? `${line.productName} — ${line.packagingType}`
           : line.name || line.sku || 'Sản phẩm',
       skuSnapshotCode: line.sku || null,
+      categorySnapshotName: line.categoryName || null,
       quantity: Math.max(1, Math.round(line.quantity)),
-      unitPrice: line.unitPrice,
+      costPrice: Number(line.costPrice ?? 0),
+      unitPrice: line.isGift ? 0 : line.unitPrice,
+      isGift: Boolean(line.isGift),
     })),
   })
 }
@@ -116,7 +122,7 @@ function mapOrderDetailToPosResult(order) {
       unitPrice: row.unitPrice,
       quantity: row.quantity,
       lineTotal: row.subTotal,
-      isGift: 0,
+      isGift: row.isGift ? 1 : 0,
     })),
   }
 }
@@ -309,6 +315,7 @@ export function buildTakeawayOrderPayload({
       name: item.name,
       quantity: item.qty,
       unitPrice: item.price,
+      costPrice: item.costPrice,
       isGift: 0,
     })),
     payments: [],
@@ -424,6 +431,7 @@ export function mapPosProduct(item) {
     imageUrl: item.imageUrl ?? item.ImageUrl ?? '',
     categoryId: item.categoryId ?? item.CategoryId ?? null,
     categoryName: item.categoryName ?? item.CategoryName ?? '',
+    costPrice: Number(item.costPrice ?? item.CostPrice ?? 0),
   }
 }
 
@@ -563,20 +571,35 @@ export async function fetchPosCustomerContext(customerId) {
 }
 
 export async function fetchPosCustomers({ search, limit = 20 }) {
+  const term = search?.trim()
+  const phoneTerm = term?.replace(/\D/g, '') ?? ''
+
+  if (phoneTerm.length === 10 && phoneTerm.startsWith('0')) {
+    try {
+      const byPhone = await fetchCustomerByPhone(phoneTerm)
+      if (byPhone) {
+        return [mapPosCustomer(byPhone)]
+      }
+    } catch (error) {
+      if (error.statusCode !== 403 && error.statusCode !== 404) {
+        throw error
+      }
+    }
+  }
+
   const data = await apiRequestAuth(`/api/customers?page=1&pageSize=100`, { method: 'GET' })
   const paged = toPagedResult(data)
   let items = paged.items.map(mapCustomer).filter(Boolean)
 
-  const term = search?.trim().toLowerCase()
   if (term) {
-    const phoneTerm = term.replace(/\D/g, '')
+    const lowerTerm = term.toLowerCase()
     items = items.filter((item) => {
       const name = (item.fullName || '').toLowerCase()
       const phone = (item.phone || '').replace(/\s+/g, '')
       const code = (item.customerCode || '').toLowerCase()
       return (
-        name.includes(term) ||
-        code.includes(term) ||
+        name.includes(lowerTerm) ||
+        code.includes(lowerTerm) ||
         (phoneTerm.length > 0 && phone.includes(phoneTerm))
       )
     })
@@ -592,11 +615,29 @@ export async function createPosCustomer(payload) {
     address: payload.address,
     customerType: payload.customerType,
   })
-  const created = await apiRequestAuth('/api/customers', {
-    method: 'POST',
-    body: JSON.stringify(body),
-  })
-  return mapPosCustomer(mapCustomer(created))
+
+  try {
+    const created = await apiRequestAuth('/api/customers', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    })
+    return mapPosCustomer(mapCustomer(created))
+  } catch (error) {
+    if (error.statusCode === 409 && payload.phone) {
+      try {
+        const existing = await fetchCustomerByPhone(payload.phone)
+        if (existing) {
+          return {
+            customer: mapPosCustomer(existing),
+            reusedExisting: true,
+          }
+        }
+      } catch {
+        // fall through to original error
+      }
+    }
+    throw error
+  }
 }
 
 export async function fetchPromotionByCode(code) {
@@ -716,6 +757,7 @@ export async function fetchPosProducts({ storeId, search, limit = 30 }) {
       imageUrl: sku.imageUrl ?? sku.ImageUrl ?? '',
       categoryId: sku.categoryId ?? sku.CategoryId ?? product?.categoryId ?? product?.CategoryId ?? null,
       categoryName: sku.categoryName ?? sku.CategoryName ?? product?.categoryName ?? product?.CategoryName ?? '',
+      costPrice: sku.costPrice ?? sku.CostPrice ?? 0,
     })
     })
     .filter(Boolean)

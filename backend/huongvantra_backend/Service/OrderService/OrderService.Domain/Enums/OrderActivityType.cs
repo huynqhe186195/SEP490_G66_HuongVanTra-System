@@ -11,5 +11,6 @@ public enum OrderActivityType
     Completed,
     Cancelled,
     InventorySynced,
-    Returned
+    Returned,
+    CodReminder
 }

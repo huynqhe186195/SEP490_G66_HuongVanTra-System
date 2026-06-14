@@ -73,7 +73,10 @@ export function mapCustomerApiError(message) {
   if (lower.includes('email') && (lower.includes('đã') || lower.includes('already') || lower.includes('duplicate'))) {
     return { field: 'email', message: text }
   }
-  if (lower.includes('điện thoại') || lower.includes('phone number')) {
+  if (lower.includes('điện thoại') || lower.includes('phone number') || lower.includes('số điện thoại')) {
+    return { field: 'phone', message: text }
+  }
+  if (lower.includes('phụ trách') || lower.includes('quản lý')) {
     return { field: 'phone', message: text }
   }
 

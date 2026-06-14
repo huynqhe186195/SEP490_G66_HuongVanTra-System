@@ -1,3 +1,4 @@
+using UserService.Application.Authorization;
 using UserService.Application.DTOs.Requests;
 using UserService.Application.DTOs.Responses;
 using UserService.Application.Interfaces;
@@ -82,10 +83,17 @@ public class AuthLogic(
         await userRepo.SaveChangesAsync();
     }
 
-    public async Task ResetPasswordAsync(ResetPasswordRequest request)
+    public async Task ResetPasswordAsync(ResetPasswordRequest request, IReadOnlyList<string>? actorPermissions = null)
     {
         var user = await userRepo.GetByUsernameAsync(request.Username)
             ?? throw new UserNotFoundByUsernameException(request.Username);
+
+        if (actorPermissions is not null)
+        {
+            StaffManagementScope.EnsureCanManageEmployee(
+                actorPermissions,
+                user.UserRoles.Select(ur => ur.Role.RoleName));
+        }
 
         user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
         user.UpdatedAt = DateTime.UtcNow;

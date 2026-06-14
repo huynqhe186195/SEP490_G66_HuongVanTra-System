@@ -25,6 +25,8 @@ public record CustomerResponse(
     decimal TotalSpending,
     decimal CurrentDebt,
     Guid? AssignedSaleId,
+    CustomerSource? Source,
+    string? Department,
     DateTime CreatedAt,
     DateTime UpdatedAt
 );
@@ -41,6 +43,8 @@ public record CustomerDetailResponse(
     decimal TotalSpending,
     decimal CurrentDebt,
     Guid? AssignedSaleId,
+    CustomerSource? Source,
+    string? Department,
     IEnumerable<CustomerAddressResponse> Addresses,
     DateTime CreatedAt,
     DateTime UpdatedAt

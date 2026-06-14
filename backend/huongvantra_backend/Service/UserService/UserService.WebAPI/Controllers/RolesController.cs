@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using UserService.Application.DTOs.Requests;
 using UserService.Application.UseCases;
 using UserService.Domain.Constants;
+using UserService.WebAPI.Extensions;
 
 namespace UserService.WebAPI.Controllers;
 
@@ -16,6 +17,14 @@ public class RolesController(RoleLogic roleLogic) : ControllerBase
     public async Task<IActionResult> GetAll([FromQuery] bool onlyDeleted = false)
     {
         var result = await roleLogic.GetAllAsync(onlyDeleted);
+        return Ok(result);
+    }
+
+    [HttpGet("assignable")]
+    [Authorize(Policy = PermissionNames.ManageEmployee)]
+    public async Task<IActionResult> GetAssignable()
+    {
+        var result = await roleLogic.GetAssignableAsync(User.GetPermissions().ToList());
         return Ok(result);
     }
 

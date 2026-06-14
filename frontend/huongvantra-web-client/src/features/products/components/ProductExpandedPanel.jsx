@@ -37,6 +37,7 @@ export default function ProductExpandedPanel({
   stockLabel = 'Tồn kho',
   activeSkuId = null,
   readOnly = false,
+  canAdjustStock = false,
   canManage = false,
   canHide = false,
   onHide,
@@ -257,12 +258,20 @@ export default function ProductExpandedPanel({
       ) : null}
 
       <div className="mt-4 flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 pt-4">
-        {readOnly ? (
+        {readOnly && canAdjustStock ? (
+          <Link
+            to={`/products/${product.id}/edit`}
+            className="rounded-lg bg-[#538463] px-4 py-2 text-sm font-bold text-white hover:bg-[#457053]"
+          >
+            Gửi yêu cầu điều chỉnh tồn
+          </Link>
+        ) : null}
+        {readOnly && canAdjustStock ? (
           <Link
             to="/inventory/stock-requests"
             className="rounded-lg border border-[#356647]/30 px-4 py-2 text-sm font-semibold text-[#356647] hover:bg-[#356647]/5"
           >
-            Yêu cầu điều chỉnh tồn
+            Yêu cầu đã gửi
           </Link>
         ) : null}
         {!readOnly && canHide && !product.isDeleted ? (

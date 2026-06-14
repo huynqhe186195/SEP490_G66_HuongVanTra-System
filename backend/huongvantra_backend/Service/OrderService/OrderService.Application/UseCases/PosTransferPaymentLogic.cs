@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using OrderService.Application.Authorization;
 using OrderService.Application.DTOs.Responses;
 using OrderService.Application.Interfaces;
 using OrderService.Application.Options;
@@ -79,10 +80,10 @@ public class PosTransferPaymentLogic(
     }
 
     public async Task<TransferQrResponse> BuildTransferQrAsync(
-        BuildTransferQrRequest request, CancellationToken ct = default)
+        BuildTransferQrRequest request, OrderAccessContext access, CancellationToken ct = default)
     {
         if (request.OrderId.HasValue)
-            return await ResolveTransferQrForOrderAsync(request.OrderId.Value, issueOnCreate: true, ct);
+            return await ResolveTransferQrForOrderAsync(request.OrderId.Value, access, issueOnCreate: true, ct);
 
         if (string.IsNullOrWhiteSpace(request.OrderCode))
             throw new OrderValidationException("Mã đơn hàng không được để trống.");
@@ -92,14 +93,15 @@ public class PosTransferPaymentLogic(
     }
 
     public async Task<TransferQrResponse> GetTransferQrForOrderAsync(
-        Guid orderId, CancellationToken ct = default) =>
-        await ResolveTransferQrForOrderAsync(orderId, issueOnCreate: false, ct);
+        Guid orderId, OrderAccessContext access, CancellationToken ct = default) =>
+        await ResolveTransferQrForOrderAsync(orderId, access, issueOnCreate: false, ct);
 
     public async Task<TransferQrResponse> RefreshTransferQrForOrderAsync(
-        Guid orderId, CancellationToken ct = default)
+        Guid orderId, OrderAccessContext access, CancellationToken ct = default)
     {
         var order = await orderRepo.GetByIdAsync(orderId, ct)
             ?? throw new OrderNotFoundException(orderId);
+        EnsureCanAccess(order, access);
         var payment = GetTransferPayment(order)
             ?? throw new OrderValidationException("Đơn không có thanh toán chuyển khoản.");
 
@@ -120,10 +122,11 @@ public class PosTransferPaymentLogic(
     }
 
     private async Task<TransferQrResponse> ResolveTransferQrForOrderAsync(
-        Guid orderId, bool issueOnCreate, CancellationToken ct)
+        Guid orderId, OrderAccessContext access, bool issueOnCreate, CancellationToken ct)
     {
         var order = await orderRepo.GetByIdAsync(orderId, ct)
             ?? throw new OrderNotFoundException(orderId);
+        EnsureCanAccess(order, access);
         var payment = GetTransferPayment(order)
             ?? throw new OrderValidationException("Đơn không có thanh toán chuyển khoản.");
 
@@ -214,9 +217,9 @@ public class PosTransferPaymentLogic(
             : 15;
 
     public async Task<PosOrderPaymentStatusResponse> GetOrderPaymentStatusAsync(
-        Guid orderId, CancellationToken ct = default)
+        Guid orderId, OrderAccessContext access, CancellationToken ct = default)
     {
-        var order = await orderLogic.GetByIdAsync(orderId, ct);
+        var order = await orderLogic.GetByIdAsync(orderId, access, ct);
         var payment = order.Payments.FirstOrDefault();
         var isPaid = string.Equals(payment?.PaymentStatus, PaymentStatus.Success.ToString(),
             StringComparison.OrdinalIgnoreCase)
@@ -322,8 +325,18 @@ public class PosTransferPaymentLogic(
 
         payment.TransactionRef = payload.ReferenceCode ?? payload.Id.ToString(CultureInfo.InvariantCulture);
         await orderRepo.SaveChangesAsync(ct);
-        await orderLogic.CompleteAsync(order.Id, actorName: "SePay Webhook", ct: ct);
+        await orderLogic.CompleteAsync(
+            order.Id,
+            new OrderAccessContext(Guid.Empty, CanViewAllOrders: true),
+            actorName: "SePay Webhook",
+            ct: ct);
         logger.LogInformation("SePay webhook completed order {OrderCode}.", orderCode);
+    }
+
+    private static void EnsureCanAccess(Order order, OrderAccessContext access)
+    {
+        if (!access.CanAccessOrder(order.EmployeeId))
+            throw new OrderForbiddenException();
     }
 
     public async Task SimulateWebhookAsync(

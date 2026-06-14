@@ -5,6 +5,10 @@ export function fetchRoles(params = {}) {
   return apiRequestAuth(`/api/roles${query}`, { method: 'GET' })
 }
 
+export function fetchAssignableRoles() {
+  return apiRequestAuth('/api/roles/assignable', { method: 'GET' })
+}
+
 export function fetchRoleById(id) {
   return apiRequestAuth(`/api/roles/${id}`, { method: 'GET' })
 }

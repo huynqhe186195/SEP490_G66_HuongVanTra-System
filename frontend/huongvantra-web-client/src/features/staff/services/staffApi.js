@@ -7,7 +7,7 @@ import {
   updateEmployee,
 } from '../../iam/services/employeesApi.js'
 import { assignUserRoles, lockUser, unlockUser, updateUser } from '../../iam/services/usersApi.js'
-import { fetchRoles, mapRole } from '../../iam/services/rolesApi.js'
+import { fetchAssignableRoles, fetchRoles, mapRole } from '../../iam/services/rolesApi.js'
 import { resetPassword } from '../../auth/services/authApi.js'
 
 function mapStaffRow(employee) {
@@ -56,7 +56,12 @@ function filterStaffRows(rows, params = {}) {
 }
 
 export async function fetchRoleOptions() {
-  const roles = await fetchRoles()
+  let roles = []
+  try {
+    roles = await fetchAssignableRoles()
+  } catch {
+    roles = await fetchRoles()
+  }
   return (Array.isArray(roles) ? roles : [])
     .map(mapRole)
     .filter(Boolean)
@@ -70,16 +75,19 @@ export async function fetchRoleOptions() {
 export async function fetchStaffAccounts(params = {}) {
   const page = params.page ?? 1
   const pageSize = params.pageSize ?? 10
-  const data = await fetchEmployees({ page: 1, pageSize: 200 })
+  const data = await fetchEmployees({ page, pageSize })
   const rows = data.items.map(mapStaffRow).filter(Boolean)
-  const filtered = filterStaffRows(rows, params)
-  const start = (page - 1) * pageSize
+  const filtered = filterStaffRows(rows, {
+    search: params.search,
+    isActive: params.isActive,
+    role: params.role,
+  })
 
   return {
-    items: filtered.slice(start, start + pageSize),
-    totalCount: filtered.length,
-    page,
-    pageSize,
+    items: filtered,
+    totalCount: data.totalCount ?? filtered.length,
+    page: data.page ?? page,
+    pageSize: data.pageSize ?? pageSize,
   }
 }
 
@@ -128,7 +136,6 @@ function resolveRoleIds(options, roleNames) {
 
 export async function updateStaffAccount(employeeId, payload) {
   const current = await fetchStaffAccount(employeeId)
-  const options = await fetchRoleOptions()
   const nextActive = payload.isActive ?? payload.active ?? current.isActive
 
   await updateEmployee(employeeId, {
@@ -141,20 +148,22 @@ export async function updateStaffAccount(employeeId, payload) {
   if (!nextActive) {
     await lockUser(current.userGuid)
   } else {
-    const roleNames = payload.role ? [payload.role] : current.roles?.length ? current.roles : []
-    const roleIds = resolveRoleIds(options, roleNames)
-    if (!roleIds.length) {
-      throw new Error('Vui lòng chọn vai trò nhân viên.')
-    }
-
     if (!current.isActive) {
       await unlockUser(current.userGuid)
     }
 
-    await updateUser(current.userGuid, {
-      isActive: true,
-      roleIds,
-    })
+    if (payload.role !== undefined) {
+      const options = await fetchRoleOptions()
+      const roleIds = resolveRoleIds(options, [payload.role])
+      if (!roleIds.length) {
+        throw new Error('Vui lòng chọn vai trò nhân viên.')
+      }
+
+      await updateUser(current.userGuid, {
+        isActive: true,
+        roleIds,
+      })
+    }
   }
 
   if (payload.newPassword?.trim()) {

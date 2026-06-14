@@ -35,6 +35,8 @@ export function mapCustomer(item) {
     tierDiscountPercent: 0,
     assignedEmployeeId: item.assignedSaleId ?? item.AssignedSaleId ?? null,
     assignedEmployeeName: null,
+    source: item.source ?? item.Source ?? null,
+    department: item.department ?? item.Department ?? '',
     totalSpend: Number(item.totalSpending ?? item.TotalSpending ?? item.totalSpend ?? item.TotalSpend ?? 0),
     currentDebt: Number(item.currentDebt ?? item.CurrentDebt ?? 0),
     taxCode: item.taxCode ?? item.TaxCode ?? '',
@@ -204,6 +206,13 @@ export async function fetchCustomerById(customerId) {
   return mapCustomerDetail(data)
 }
 
+export async function fetchCustomerByPhone(phone) {
+  const query = new URLSearchParams()
+  query.set('phone', String(phone || '').trim())
+  const data = await apiRequestAuth(`/api/customers/lookup?${query.toString()}`, { method: 'GET' })
+  return mapCustomerDetail(data)
+}
+
 export function createCustomer(payload) {
   return apiRequestAuth('/api/customers', {
     method: 'POST',
@@ -235,7 +244,10 @@ export function buildCreateCustomerBody(payload) {
     addressLine,
     customerGroup: payload.customerGroup ?? mapTypeToCustomerGroup(payload.customerType),
     taxCode: payload.taxCode?.trim() || null,
+    tierId: payload.tierId ?? null,
     assignedSaleId: payload.assignedEmployeeId ?? payload.assignedSaleId ?? null,
+    source: payload.source || null,
+    department: payload.department?.trim() || null,
   }
 }
 
@@ -249,7 +261,10 @@ export function buildUpdateCustomerBody(payload) {
     addressLine,
     customerGroup: payload.customerGroup ?? mapTypeToCustomerGroup(payload.customerType),
     taxCode: payload.taxCode?.trim() || null,
+    tierId: payload.tierId ?? null,
     assignedSaleId: payload.assignedEmployeeId ?? payload.assignedSaleId ?? null,
+    source: payload.source || null,
+    department: payload.department?.trim() || null,
   }
 }
 
@@ -348,6 +363,38 @@ export async function applyCustomerDebtPayment(
   })
   const { mapDebtPaymentResult } = await import('../utils/debtPaymentUtils.js')
   return mapDebtPaymentResult(data)
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms)
+  })
+}
+
+/** Chờ công nợ từ OrderCompleted ghi vào DB trước khi trừ từ tiền thừa POS. */
+export async function applyCustomerDebtPaymentWithRetry(
+  customerId,
+  payload,
+  { attempts = 5, delayMs = 400 } = {},
+) {
+  let lastError = null
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      return await applyCustomerDebtPayment(customerId, payload)
+    } catch (error) {
+      lastError = error
+      const message = String(error?.message || '').toLowerCase()
+      const retryable =
+        message.includes('không có công nợ') ||
+        message.includes('không có đơn nợ') ||
+        message.includes('không tìm thấy đơn nợ')
+      if (!retryable || attempt === attempts - 1) {
+        throw error
+      }
+      await sleep(delayMs)
+    }
+  }
+  throw lastError ?? new Error('Trừ công nợ thất bại.')
 }
 
 export async function fetchCustomerActivities(customerId) {

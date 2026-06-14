@@ -38,17 +38,17 @@ public class CustomerRepository : ICustomerRepository
             (!excludeCustomerId.HasValue || c.Id != excludeCustomerId.Value), ct);
     }
 
-    public async Task<IEnumerable<Customer>> GetAllAsync(int page, int pageSize, CancellationToken ct = default) =>
+    public async Task<IEnumerable<Customer>> GetAllAsync(int page, int pageSize, Guid? assignedSaleId = null, CancellationToken ct = default) =>
         await _db.Customers
             .Include(c => c.Tier)
-            .Where(c => !c.IsDeleted)
+            .Where(c => !c.IsDeleted && (!assignedSaleId.HasValue || c.AssignedSaleId == assignedSaleId.Value))
             .OrderByDescending(c => c.CreatedAt)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync(ct);
 
-    public async Task<int> CountAsync(CancellationToken ct = default) =>
-        await _db.Customers.CountAsync(c => !c.IsDeleted, ct);
+    public async Task<int> CountAsync(Guid? assignedSaleId = null, CancellationToken ct = default) =>
+        await _db.Customers.CountAsync(c => !c.IsDeleted && (!assignedSaleId.HasValue || c.AssignedSaleId == assignedSaleId.Value), ct);
 
     public async Task AddAsync(Customer customer, CancellationToken ct = default) =>
         await _db.Customers.AddAsync(customer, ct);
@@ -110,29 +110,32 @@ public class CustomerRepository : ICustomerRepository
     public async Task<bool> IsDeletedAsync(Guid id, CancellationToken ct = default) =>
         await _db.Customers.AnyAsync(c => c.Id == id && c.IsDeleted, ct);
 
-    public async Task<int> CountCreatedSinceAsync(DateTime sinceUtc, CancellationToken ct = default) =>
-        await _db.Customers.CountAsync(c => !c.IsDeleted && c.CreatedAt >= sinceUtc, ct);
+    public async Task<int> CountCreatedSinceAsync(DateTime sinceUtc, Guid? assignedSaleId = null, CancellationToken ct = default) =>
+        await _db.Customers.CountAsync(c =>
+            !c.IsDeleted &&
+            c.CreatedAt >= sinceUtc &&
+            (!assignedSaleId.HasValue || c.AssignedSaleId == assignedSaleId.Value), ct);
 
-    public async Task<IEnumerable<Customer>> GetTopSpendersAsync(int take, CancellationToken ct = default) =>
+    public async Task<IEnumerable<Customer>> GetTopSpendersAsync(int take, Guid? assignedSaleId = null, CancellationToken ct = default) =>
         await _db.Customers
             .Include(c => c.Tier)
-            .Where(c => !c.IsDeleted)
+            .Where(c => !c.IsDeleted && (!assignedSaleId.HasValue || c.AssignedSaleId == assignedSaleId.Value))
             .OrderByDescending(c => c.TotalSpending)
             .Take(take)
             .ToListAsync(ct);
 
-    public async Task<IEnumerable<Customer>> GetTopDebtorsAsync(int take, CancellationToken ct = default) =>
+    public async Task<IEnumerable<Customer>> GetTopDebtorsAsync(int take, Guid? assignedSaleId = null, CancellationToken ct = default) =>
         await _db.Customers
             .Include(c => c.Tier)
-            .Where(c => !c.IsDeleted && c.CurrentDebt > 0)
+            .Where(c => !c.IsDeleted && c.CurrentDebt > 0 && (!assignedSaleId.HasValue || c.AssignedSaleId == assignedSaleId.Value))
             .OrderByDescending(c => c.CurrentDebt)
             .Take(take)
             .ToListAsync(ct);
 
-    public async Task<IEnumerable<(string TierName, int Count)>> CountByTierAsync(CancellationToken ct = default)
+    public async Task<IEnumerable<(string TierName, int Count)>> CountByTierAsync(Guid? assignedSaleId = null, CancellationToken ct = default)
     {
         var grouped = await _db.Customers
-            .Where(c => !c.IsDeleted)
+            .Where(c => !c.IsDeleted && (!assignedSaleId.HasValue || c.AssignedSaleId == assignedSaleId.Value))
             .GroupBy(c => c.Tier != null ? c.Tier.TierName : "Chưa có hạng")
             .Select(g => new { TierName = g.Key, Count = g.Count() })
             .ToListAsync(ct);
@@ -140,17 +143,17 @@ public class CustomerRepository : ICustomerRepository
         return grouped.Select(x => (x.TierName, x.Count));
     }
 
-    public async Task<IEnumerable<Customer>> GetAllDeletedAsync(int page, int pageSize, CancellationToken ct = default) =>
+    public async Task<IEnumerable<Customer>> GetAllDeletedAsync(int page, int pageSize, Guid? assignedSaleId = null, CancellationToken ct = default) =>
         await _db.Customers
             .Include(c => c.Tier)
-            .Where(c => c.IsDeleted)
+            .Where(c => c.IsDeleted && (!assignedSaleId.HasValue || c.AssignedSaleId == assignedSaleId.Value))
             .OrderByDescending(c => c.UpdatedAt)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync(ct);
 
-    public async Task<int> CountDeletedAsync(CancellationToken ct = default) =>
-        await _db.Customers.CountAsync(c => c.IsDeleted, ct);
+    public async Task<int> CountDeletedAsync(Guid? assignedSaleId = null, CancellationToken ct = default) =>
+        await _db.Customers.CountAsync(c => c.IsDeleted && (!assignedSaleId.HasValue || c.AssignedSaleId == assignedSaleId.Value), ct);
 
     public async Task<int> SaveChangesAsync(CancellationToken ct = default) =>
         await _db.SaveChangesAsync(ct);

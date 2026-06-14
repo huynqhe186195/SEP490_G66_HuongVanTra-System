@@ -24,15 +24,34 @@ public record CreateOrderDetailRequest(
     Guid SkuId,
     string SkuSnapshotName,
     string? SkuSnapshotCode,
+    string? CategorySnapshotName,
     int Quantity,
+    decimal CostPrice,
     decimal UnitPrice,
-    int? CategoryId = null
+    int? CategoryId = null,
+    bool IsGift = false
+);
+
+public record UpdateOrderDetailRequest(
+    Guid? Id,
+    Guid SkuId,
+    string SkuSnapshotName,
+    string? SkuSnapshotCode,
+    string? CategorySnapshotName,
+    int Quantity,
+    decimal CostPrice,
+    decimal UnitPrice,
+    int? CategoryId = null,
+    bool IsGift = false
 );
 
 public record UpdateOrderRequest(
     string? ShippingAddress,
     string? Note,
-    decimal DiscountAmount
+    decimal DiscountAmount,
+    Guid? PromotionId = null,
+    string? PromotionCode = null,
+    List<UpdateOrderDetailRequest>? Items = null
 );
 
 public record CancelOrderRequest(string? Reason);
@@ -47,7 +66,9 @@ public record ReturnExchangeItemRequest(
     Guid SkuId,
     string SkuSnapshotName,
     string? SkuSnapshotCode,
+    string? CategorySnapshotName,
     int Quantity,
+    decimal CostPrice,
     decimal UnitPrice);
 
 public record ReturnOrderRequest(
@@ -68,6 +89,9 @@ public record GetOrdersRequest(
     bool ReturnableOnly = false,
     string? OrderKind = null,
     string? ExcludeOrderKind = null,
+    DateTime? FromDate = null,
+    DateTime? ToDate = null,
+    Guid? EmployeeId = null,
     int Page = 1,
     int PageSize = 20
 );

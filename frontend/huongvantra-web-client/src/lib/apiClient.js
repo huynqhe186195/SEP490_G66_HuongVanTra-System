@@ -137,19 +137,21 @@ export async function apiRequest(path, options = {}) {
 }
 
 export async function apiRequestAuth(path, options = {}, retry = true) {
+  const silentAuthErrors = Boolean(options.silentAuthErrors)
+  const { silentAuthErrors: _silent, ...fetchOptions } = options
   let session = loadAuthSession()
   if (!session?.accessToken) {
     throw new Error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.')
   }
 
   const headers = {
-    ...(options.body ? { 'Content-Type': 'application/json' } : {}),
-    ...(options.headers || {}),
+    ...(fetchOptions.body ? { 'Content-Type': 'application/json' } : {}),
+    ...(fetchOptions.headers || {}),
     Authorization: `Bearer ${session.accessToken}`,
   }
 
   let response = await fetch(`${getApiBaseUrl()}${path}`, {
-    ...options,
+    ...fetchOptions,
     headers,
   })
 
@@ -157,21 +159,23 @@ export async function apiRequestAuth(path, options = {}, retry = true) {
     try {
       session = await refreshSession(session)
       response = await fetch(`${getApiBaseUrl()}${path}`, {
-        ...options,
+        ...fetchOptions,
         headers: {
           ...headers,
           Authorization: `Bearer ${session.accessToken}`,
         },
       })
     } catch {
-      handleAuthFailure('Phiên đăng nhập đã hết hạn.', 401)
+      if (!silentAuthErrors) {
+        handleAuthFailure('Phiên đăng nhập đã hết hạn.', 401)
+      }
       throw new Error('Phiên đăng nhập đã hết hạn.')
     }
   }
 
   if (!response.ok) {
     const { message, errors } = await parseApiErrorBody(response)
-    if (response.status === 401 || response.status === 403) {
+    if (!silentAuthErrors && (response.status === 401 || response.status === 403)) {
       handleAuthFailure(message, response.status)
     }
     const error = new Error(message)

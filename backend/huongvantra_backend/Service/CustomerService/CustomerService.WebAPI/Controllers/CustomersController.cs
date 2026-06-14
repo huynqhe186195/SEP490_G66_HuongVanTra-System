@@ -1,5 +1,7 @@
 using CustomerService.Application.DTOs.Requests;
+using CustomerService.Application.Interfaces;
 using CustomerService.Application.UseCases;
+using CustomerService.Domain.Exceptions;
 using HuongVanTra.Shared.Auth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -15,11 +17,15 @@ public class CustomersController : ControllerBase
 
     public CustomersController(CustomerLogic logic) => _logic = logic;
 
+    private CustomerAccessContext AccessContext() => new(
+        User.GetUserId(),
+        User.HasPermission(PermissionNames.ViewAllCustomers));
+
     [HttpGet("statistics")]
     [Authorize(Policy = PermissionNames.ViewCustomer)]
     public async Task<IActionResult> GetStatistics(CancellationToken ct = default)
     {
-        var result = await _logic.GetStatisticsAsync(ct);
+        var result = await _logic.GetStatisticsAsync(AccessContext(), ct);
         return Ok(result);
     }
 
@@ -27,7 +33,7 @@ public class CustomersController : ControllerBase
     [Authorize(Policy = PermissionNames.ViewCustomer)]
     public async Task<IActionResult> GetAll([FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken ct = default)
     {
-        var result = await _logic.GetAllAsync(page, pageSize, ct);
+        var result = await _logic.GetAllAsync(page, pageSize, AccessContext(), ct);
         return Ok(result);
     }
 
@@ -35,15 +41,35 @@ public class CustomersController : ControllerBase
     [Authorize(Policy = PermissionNames.ViewCustomer)]
     public async Task<IActionResult> GetInactive([FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken ct = default)
     {
-        var result = await _logic.GetInactiveAsync(page, pageSize, ct);
+        var result = await _logic.GetInactiveAsync(page, pageSize, AccessContext(), ct);
         return Ok(result);
+    }
+
+    [HttpGet("lookup")]
+    [Authorize(Policy = PermissionNames.ViewCustomer)]
+    public async Task<IActionResult> LookupByPhone([FromQuery] string phone, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(phone))
+            return BadRequest(new { error = "Số điện thoại là bắt buộc.", statusCode = 400 });
+
+        try
+        {
+            var result = await _logic.GetByPhoneAsync(phone, AccessContext(), ct);
+            if (result is null)
+                return NotFound(new { error = "Không tìm thấy khách hàng với số điện thoại này.", statusCode = 404 });
+            return Ok(result);
+        }
+        catch (CustomerForbiddenException ex)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { error = ex.Message, statusCode = 403 });
+        }
     }
 
     [HttpGet("{id:guid}")]
     [Authorize(Policy = PermissionNames.ViewCustomer)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct = default)
     {
-        var result = await _logic.GetByIdAsync(id, ct);
+        var result = await _logic.GetByIdAsync(id, AccessContext(), ct);
         return Ok(result);
     }
 
@@ -51,7 +77,7 @@ public class CustomersController : ControllerBase
     [Authorize(Policy = PermissionNames.ViewCustomer)]
     public async Task<IActionResult> GetDebts(Guid id, CancellationToken ct = default)
     {
-        var result = await _logic.GetDebtsAsync(id, ct);
+        var result = await _logic.GetDebtsAsync(id, AccessContext(), ct);
         return Ok(result);
     }
 
@@ -59,7 +85,7 @@ public class CustomersController : ControllerBase
     [Authorize(Policy = PermissionNames.ViewCustomer)]
     public async Task<IActionResult> GetDebtSummary(Guid id, CancellationToken ct = default)
     {
-        var result = await _logic.GetDebtSummaryAsync(id, ct);
+        var result = await _logic.GetDebtSummaryAsync(id, AccessContext(), ct);
         return Ok(result);
     }
 
@@ -67,7 +93,7 @@ public class CustomersController : ControllerBase
     [Authorize(Policy = PermissionNames.CreateCustomer)]
     public async Task<IActionResult> RecordDebt(Guid id, [FromBody] RecordDebtTransactionRequest request, CancellationToken ct = default)
     {
-        var result = await _logic.RecordDebtTransactionAsync(id, request, ct);
+        var result = await _logic.RecordDebtTransactionAsync(id, request, AccessContext(), ct);
         return Ok(result);
     }
 
@@ -75,7 +101,7 @@ public class CustomersController : ControllerBase
     [Authorize(Policy = PermissionNames.ViewCustomer)]
     public async Task<IActionResult> GetOpenDebts(Guid id, CancellationToken ct = default)
     {
-        var result = await _logic.GetOpenDebtsAsync(id, ct);
+        var result = await _logic.GetOpenDebtsAsync(id, AccessContext(), ct);
         return Ok(result);
     }
 
@@ -83,7 +109,7 @@ public class CustomersController : ControllerBase
     [Authorize(Policy = PermissionNames.ViewCustomer)]
     public async Task<IActionResult> PreviewDebtPayment(Guid id, [FromQuery] decimal amount, CancellationToken ct = default)
     {
-        var result = await _logic.PreviewDebtPaymentAsync(id, amount, ct);
+        var result = await _logic.PreviewDebtPaymentAsync(id, amount, AccessContext(), ct);
         return Ok(result);
     }
 
@@ -91,7 +117,7 @@ public class CustomersController : ControllerBase
     [Authorize(Policy = PermissionNames.CreateCustomer)]
     public async Task<IActionResult> ApplyDebtPayment(Guid id, [FromBody] ApplyDebtPaymentRequest request, CancellationToken ct = default)
     {
-        var result = await _logic.ApplyDebtPaymentAsync(id, request, ct);
+        var result = await _logic.ApplyDebtPaymentAsync(id, request, AccessContext(), ct);
         return Ok(result);
     }
 
@@ -99,7 +125,7 @@ public class CustomersController : ControllerBase
     [Authorize(Policy = PermissionNames.ViewCustomer)]
     public async Task<IActionResult> GetActivities(Guid id, CancellationToken ct = default)
     {
-        var result = await _logic.GetActivitiesAsync(id, ct);
+        var result = await _logic.GetActivitiesAsync(id, AccessContext(), ct);
         return Ok(result);
     }
 
@@ -107,31 +133,31 @@ public class CustomersController : ControllerBase
     [Authorize(Policy = PermissionNames.CreateCustomer)]
     public async Task<IActionResult> Create([FromBody] CreateCustomerRequest request, CancellationToken ct = default)
     {
-        var result = await _logic.CreateAsync(request, ct);
+        var result = await _logic.CreateAsync(request, AccessContext(), ct);
         return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
     }
 
     [HttpPut("{id:guid}")]
-    [Authorize(Policy = PermissionNames.CreateCustomer)]
+    [Authorize(Policy = PermissionNames.ViewAllCustomers)]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateCustomerRequest request, CancellationToken ct = default)
     {
-        var result = await _logic.UpdateAsync(id, request, ct);
+        var result = await _logic.UpdateAsync(id, request, AccessContext(), ct);
         return Ok(result);
     }
 
     [HttpDelete("{id:guid}")]
-    [Authorize(Policy = PermissionNames.CreateCustomer)]
+    [Authorize(Policy = PermissionNames.ViewAllCustomers)]
     public async Task<IActionResult> Delete(Guid id, CancellationToken ct = default)
     {
-        await _logic.DeleteAsync(id, ct);
+        await _logic.DeleteAsync(id, AccessContext(), ct);
         return NoContent();
     }
 
     [HttpPost("{id:guid}/restore")]
-    [Authorize(Policy = PermissionNames.CreateCustomer)]
+    [Authorize(Policy = PermissionNames.ViewAllCustomers)]
     public async Task<IActionResult> Restore(Guid id, CancellationToken ct = default)
     {
-        var result = await _logic.RestoreAsync(id, ct);
+        var result = await _logic.RestoreAsync(id, AccessContext(), ct);
         return Ok(result);
     }
 }
