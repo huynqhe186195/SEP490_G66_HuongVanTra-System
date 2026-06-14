@@ -99,7 +99,7 @@ export function buildEndOfDayReportHtml({
 
   return `
     <div class="text-center mb-4">
-      <h1 class="report-title font-bold" style="font-size: 22px; text-transform: uppercase;">BÁO CÁO CUỐI NGÀY VỀ BÁN HÀNG</h1>
+      <h1 class="report-title font-bold" style="font-size: 22px; text-transform: uppercase;">BÁO CÁO DOANH THU CUỐI NGÀY</h1>
       <div style="font-weight: bold; margin-bottom: 8px;">Hệ thống Quản lý Hương Vân Trà</div>
       <div style="font-weight: bold; margin-bottom: 16px;">Ngày giao dịch: ${dateStr}</div>
       
@@ -145,7 +145,7 @@ export function buildEndOfDayReportHtml({
 export function printEndOfDayReport(data) {
   return new Promise((resolve) => {
     const iframe = document.createElement('iframe')
-    iframe.setAttribute('title', 'Báo cáo cuối ngày')
+    iframe.setAttribute('title', 'Báo cáo doanh thu cuối ngày')
     iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;'
 
     document.body.appendChild(iframe)
@@ -165,7 +165,7 @@ export function printEndOfDayReport(data) {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Báo cáo cuối ngày</title>
+  <title>Báo cáo doanh thu cuối ngày</title>
   <style>${getReceiptPrintCss(data.paperSize)}</style>
 </head>
 <body><div class="thermal-print-shell">${buildEndOfDayReportHtml(data)}</div></body>

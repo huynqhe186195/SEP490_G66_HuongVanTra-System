@@ -19,11 +19,15 @@ public class UsersController(UserLogic userLogic) : ControllerBase
         User.HasClaim("permission", PermissionNames.ManageUser)
         || User.HasClaim("permission", PermissionNames.ManageEmployee);
     [HttpGet]
-    [Authorize(Policy = PermissionNames.ManageUser)]
     public async Task<IActionResult> GetAll([FromQuery] int page = 1, [FromQuery] int pageSize = 20, [FromQuery] bool onlyDeleted = false)
     {
-        var result = await userLogic.GetAllAsync(page, pageSize, onlyDeleted);
-        return Ok(result);
+        if (User.HasClaim("permission", PermissionNames.ManageUser))
+            return Ok(await userLogic.GetAllAsync(page, pageSize, onlyDeleted));
+
+        if (CanManageStaffAccounts() || User.HasClaim("permission", PermissionNames.ViewAllCustomers))
+            return Ok(await userLogic.GetAllAccessibleAsync(page, pageSize, ActorPermissions, onlyDeleted));
+
+        return Forbid();
     }
 
     [HttpGet("{id:guid}")]

@@ -3,6 +3,7 @@ using UserService.Application.DTOs.Requests;
 using UserService.Application.DTOs.Responses;
 using UserService.Application.Interfaces;
 using UserService.Application.Validation;
+using UserService.Domain.Constants;
 using UserService.Domain.Entities;
 using UserService.Domain.Enums;
 using UserService.Domain.Exceptions;
@@ -58,6 +59,41 @@ public class UserLogic(IUserRepository userRepo, IRoleRepository roleRepo, IEmpl
             page,
             pageSize,
             totalCount);
+    }
+
+    public async Task<PagedResult<UserResponse>> GetAllAccessibleAsync(
+        int page,
+        int pageSize,
+        IReadOnlyList<string> actorPermissions,
+        bool onlyDeleted = false)
+    {
+        var (items, _) = await userRepo.GetAllAsync(1, 500, onlyDeleted);
+        IEnumerable<User> filtered = items;
+
+        if (StaffManagementScope.IsBranchManager(actorPermissions))
+        {
+            filtered = items.Where(user =>
+                StaffManagementScope.CanViewEmployee(
+                    actorPermissions,
+                    user.UserRoles.Select(ur => ur.Role.RoleName)));
+        }
+        else if (actorPermissions.Contains(PermissionNames.ViewAllCustomers, StringComparer.Ordinal))
+        {
+            filtered = items.Where(user => user.IsActive && !user.IsDeleted);
+        }
+        else
+        {
+            filtered = [];
+        }
+
+        var list = filtered.ToList();
+        var paged = list
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(MapToResponse)
+            .ToList();
+
+        return new PagedResult<UserResponse>(paged, page, pageSize, list.Count);
     }
 
     public async Task<UserResponse> GetByIdAsync(Guid id)

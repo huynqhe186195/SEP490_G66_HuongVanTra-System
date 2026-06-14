@@ -4,6 +4,7 @@ import { fetchOrders } from '../../orders/services/ordersApi.js'
 import { printEndOfDayReport } from '../utils/printEndOfDayReport.js'
 import { loadPosSeller } from '../../pos/utils/posSeller.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
+import { canViewAllOrders } from '../../auth/utils/permissions.js'
 import { formatVietnamDateTimeMinute } from '../../../utils/vietnamDateTime.js'
 
 function formatCurrency(value) {
@@ -29,6 +30,7 @@ export default function EndOfDayReportModal({ isOpen, onClose }) {
   
   const [sellerInfo, setSellerInfo] = useState({ name: '', role: '—' })
   const session = loadAuthSession()
+  const canFilterByEmployee = canViewAllOrders(session)
   const agencyName = session?.agency?.name || 'Chi nhánh chính'
 
   useEffect(() => {
@@ -36,18 +38,26 @@ export default function EndOfDayReportModal({ isOpen, onClose }) {
   }, [])
 
   useEffect(() => {
+    if (!isOpen || !canFilterByEmployee) {
+      setUsers([])
+      return
+    }
+
     const loadUsers = async () => {
       try {
-        const res = await apiRequestAuth('/api/users?pageSize=100', { method: 'GET' })
+        const res = await apiRequestAuth('/api/users?pageSize=100', {
+          method: 'GET',
+          silentAuthErrors: true,
+        })
         setUsers(res?.items || [])
       } catch (err) {
         console.error('Failed to load users:', err)
+        setUsers([])
       }
     }
-    if (isOpen) {
-      loadUsers()
-    }
-  }, [isOpen])
+
+    loadUsers()
+  }, [isOpen, canFilterByEmployee])
 
   useEffect(() => {
     if (!isOpen) return
@@ -98,9 +108,13 @@ export default function EndOfDayReportModal({ isOpen, onClose }) {
     
     await printEndOfDayReport({
       dateStr,
-      employeeName: selectedEmployeeId 
-        ? `${users.find(u => u.id === selectedEmployeeId)?.username} - ${users.find(u => u.id === selectedEmployeeId)?.employee?.fullName || 'Chưa cập nhật'}`
-        : 'Tất cả nhân viên',
+      employeeName: !canFilterByEmployee
+        ? (sellerInfo.username
+          ? `${sellerInfo.username} - ${sellerInfo.fullName || 'Chưa cập nhật'}`
+          : 'Bản thân')
+        : selectedEmployeeId
+          ? `${users.find(u => u.id === selectedEmployeeId)?.username} - ${users.find(u => u.id === selectedEmployeeId)?.employee?.fullName || 'Chưa cập nhật'}`
+          : 'Tất cả nhân viên',
       orders,
       paperSize,
       creatorName: sellerInfo.username ? `${sellerInfo.username} - ${sellerInfo.fullName || 'Chưa cập nhật'}` : sellerInfo.role,
@@ -119,7 +133,7 @@ export default function EndOfDayReportModal({ isOpen, onClose }) {
         {/* Header */}
         <div className="flex items-center justify-between border-b border-gray-100 p-4 sm:p-6">
           <div className="flex items-center gap-6">
-            <h2 className="text-xl font-bold text-gray-900">Báo cáo cuối ngày</h2>
+            <h2 className="text-xl font-bold text-gray-900">Báo cáo doanh thu cuối ngày</h2>
             
             <div className="flex items-center gap-3">
               <input 
@@ -132,6 +146,7 @@ export default function EndOfDayReportModal({ isOpen, onClose }) {
                 value={selectedEmployeeId} 
                 onChange={(e) => setSelectedEmployeeId(e.target.value)}
                 className="rounded-lg border-gray-300 text-sm focus:border-[#356647] focus:ring-[#356647]"
+                disabled={!canFilterByEmployee}
               >
                 <option value="">Tất cả nhân viên</option>
                 {users.map(u => (
@@ -171,7 +186,7 @@ export default function EndOfDayReportModal({ isOpen, onClose }) {
         <div className="flex-1 overflow-auto bg-gray-50 p-4 sm:p-6">
           <div className="mx-auto max-w-4xl bg-white p-8 shadow-sm ring-1 ring-gray-200" style={{ minHeight: '600px' }}>
             <div className="text-center mb-8">
-              <h1 className="text-2xl font-bold uppercase text-gray-800">BÁO CÁO CUỐI NGÀY VỀ BÁN HÀNG</h1>
+              <h1 className="text-2xl font-bold uppercase text-gray-800">BÁO CÁO DOANH THU CUỐI NGÀY</h1>
               <div className="text-sm font-bold text-gray-800 mb-4">Hệ thống Quản lý Hương Vân Trà</div>
               <div className="text-center mb-4 text-sm font-bold text-gray-800">
                 Ngày giao dịch: {filterDate}
@@ -182,9 +197,13 @@ export default function EndOfDayReportModal({ isOpen, onClose }) {
                 <div><strong>Người tạo:</strong> {sellerInfo.username ? `${sellerInfo.username} - ${sellerInfo.fullName || 'Chưa cập nhật'}` : sellerInfo.role}</div>
                 <div><strong>Chi nhánh:</strong> {agencyName}</div>
                 <div><strong>Nhân viên:</strong> {
-                  selectedEmployeeId 
-                  ? `${users.find(u => u.id === selectedEmployeeId)?.username} - ${users.find(u => u.id === selectedEmployeeId)?.employee?.fullName || 'Chưa cập nhật'}`
-                  : 'Tất cả nhân viên'
+                  !canFilterByEmployee
+                    ? (sellerInfo.username
+                      ? `${sellerInfo.username} - ${sellerInfo.fullName || 'Chưa cập nhật'}`
+                      : 'Bản thân')
+                    : selectedEmployeeId
+                      ? `${users.find(u => u.id === selectedEmployeeId)?.username} - ${users.find(u => u.id === selectedEmployeeId)?.employee?.fullName || 'Chưa cập nhật'}`
+                      : 'Tất cả nhân viên'
                 }</div>
               </div>
             </div>
