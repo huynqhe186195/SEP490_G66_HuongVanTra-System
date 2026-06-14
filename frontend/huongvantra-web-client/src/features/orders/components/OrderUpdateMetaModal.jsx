@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { showError } from '../../../app/toast.js'
+import { customerHasTier, isVipCustomerType } from '../../customers/utils/customerDisplay.js'
+import { resolveOrderLineDisplay } from '../../products/utils/productDisplay.js'
 import { normalizeOrderDiscountInput } from '../../pos/utils/posDiscountValidation.js'
 import {
   computeCouponDiscount,
@@ -38,7 +40,22 @@ function inferPercentFromManual(totalAmount, manualAmount) {
   return Math.abs(manual - Math.round((total * pct) / 100)) <= 1 ? pct : 0
 }
 
-function OrderUpdateMetaModal({ isOpen, order, isSaving, onClose, onSave }) {
+function resolveLineUnitPrice(line, isGift, catalogLookups) {
+  if (isGift) return 0
+  if (!line.isGift && Number(line.unitPrice) > 0) return Number(line.unitPrice)
+  const sku = catalogLookups?.skuById?.get(line.skuId)
+  return Number(sku?.retailPrice ?? line.unitPrice ?? 0)
+}
+
+function buildGiftStateFromOrder(order) {
+  const next = {}
+  for (const line of order?.items || []) {
+    next[line.id] = Boolean(line.isGift)
+  }
+  return next
+}
+
+function OrderUpdateMetaModal({ isOpen, order, customer, catalogLookups, isSaving, onClose, onSave }) {
   const [shippingAddress, setShippingAddress] = useState('')
   const [note, setNote] = useState('')
   const [discountPercent, setDiscountPercent] = useState('')
@@ -53,16 +70,29 @@ function OrderUpdateMetaModal({ isOpen, order, isSaving, onClose, onSave }) {
   const [isPromotionListLoading, setIsPromotionListLoading] = useState(false)
   const [isPromotionDropdownOpen, setIsPromotionDropdownOpen] = useState(false)
   const [previewPromotionDiscount, setPreviewPromotionDiscount] = useState(0)
+  const [giftByLineId, setGiftByLineId] = useState({})
+
+  const canUseVipManualAdjustments = isVipCustomerType(customer?.customerType)
+  const canUseManualDiscount = canUseVipManualAdjustments || customerHasTier(customer)
 
   const promotionsLoadingRef = useRef(false)
   const promotionsLoadedRef = useRef(false)
   const skipInitialPreviewRef = useRef(true)
-  const orderSubtotal = Math.max(0, Number(order?.totalAmount || 0))
+
+  const orderSubtotal = useMemo(() => {
+    if (!order?.items?.length) return Math.max(0, Number(order?.totalAmount || 0))
+    return order.items.reduce((sum, line) => {
+      const isGift = giftByLineId[line.id] ?? line.isGift
+      const unitPrice = resolveLineUnitPrice(line, isGift, catalogLookups)
+      return sum + unitPrice * line.quantity
+    }, 0)
+  }, [catalogLookups, giftByLineId, order])
 
   const resetForm = useCallback(() => {
     if (!order) return
+    const baseSubtotal = Math.max(0, Number(order.totalAmount || 0))
     const manual = Math.max(0, Number(order.discountAmount || 0) - Number(order.promotionDiscountAmount || 0))
-    const inferredPct = inferPercentFromManual(orderSubtotal, manual)
+    const inferredPct = inferPercentFromManual(baseSubtotal, manual)
     const preset = [5, 10, 15, 20].includes(inferredPct) ? String(inferredPct) : ''
 
     setShippingAddress(order.shippingAddress || '')
@@ -84,7 +114,8 @@ function OrderUpdateMetaModal({ isOpen, order, isSaving, onClose, onSave }) {
     setPromotionTouched(false)
     setPreviewPromotionDiscount(Number(order.promotionDiscountAmount || 0))
     setIsPromotionDropdownOpen(false)
-  }, [order, orderSubtotal])
+    setGiftByLineId(buildGiftStateFromOrder(order))
+  }, [order])
 
   useEffect(() => {
     if (!isOpen || !order) return
@@ -120,6 +151,7 @@ function OrderUpdateMetaModal({ isOpen, order, isSaving, onClose, onSave }) {
   }, [isOpen, order?.id, loadAvailablePromotions])
 
   const manualDiscountAmount = useMemo(() => {
+    if (!canUseManualDiscount) return 0
     const fixed = parseMoneyInput(discountFixedInput)
     const fromSelect = Number(discountPercent) || 0
     const fromCustom = Math.min(100, Math.max(0, Number(customPercent) || 0))
@@ -134,7 +166,7 @@ function OrderUpdateMetaModal({ isOpen, order, isSaving, onClose, onSave }) {
     if (!result.ok) return 0
     if (result.orderDiscountAmountFixed > 0) return result.orderDiscountAmountFixed
     return Math.round((orderSubtotal * (result.orderDiscountPercent || 0)) / 100)
-  }, [customPercent, discountFixedInput, discountPercent, orderSubtotal])
+  }, [canUseManualDiscount, customPercent, discountFixedInput, discountPercent, orderSubtotal])
 
   useEffect(() => {
     if (!isOpen || !order) return undefined
@@ -210,29 +242,64 @@ function OrderUpdateMetaModal({ isOpen, order, isSaving, onClose, onSave }) {
     setPreviewPromotionDiscount(0)
   }
 
+  function toggleLineGift(lineId) {
+    if (!canUseVipManualAdjustments) return
+    setGiftByLineId((prev) => ({
+      ...prev,
+      [lineId]: !prev[lineId],
+    }))
+  }
+
+  function buildItemUpdates() {
+    const giftsChanged = (order.items || []).some(
+      (line) => (giftByLineId[line.id] ?? line.isGift) !== line.isGift,
+    )
+    if (!giftsChanged) return undefined
+
+    return (order.items || []).map((line) => {
+      const isGift = giftByLineId[line.id] ?? line.isGift
+      const display = resolveOrderLineDisplay(line, catalogLookups)
+      const sku = catalogLookups?.skuById?.get(line.skuId)
+      return {
+        id: line.id,
+        skuId: line.skuId,
+        skuSnapshotName: line.skuSnapshotName,
+        skuSnapshotCode: line.skuSnapshotCode || null,
+        categorySnapshotName: display.categoryName || null,
+        quantity: line.quantity,
+        costPrice: Number(sku?.costPrice ?? 0),
+        unitPrice: resolveLineUnitPrice(line, isGift, catalogLookups),
+        isGift,
+      }
+    })
+  }
+
   async function handleSubmit(event) {
     event.preventDefault()
     setDiscountError('')
 
-    const fixed = parseMoneyInput(discountFixedInput)
-    const fromSelect = Number(discountPercent) || 0
-    const fromCustom = Math.min(100, Math.max(0, Number(customPercent) || 0))
-    const percent = fixed > 0 ? 0 : fromSelect > 0 ? fromSelect : fromCustom
+    let manual = 0
+    if (canUseManualDiscount) {
+      const fixed = parseMoneyInput(discountFixedInput)
+      const fromSelect = Number(discountPercent) || 0
+      const fromCustom = Math.min(100, Math.max(0, Number(customPercent) || 0))
+      const percent = fixed > 0 ? 0 : fromSelect > 0 ? fromSelect : fromCustom
 
-    const discountResult = normalizeOrderDiscountInput({
-      percent,
-      fixedAmount: fixed,
-      subtotalAfterItemDiscount: orderSubtotal,
-    })
+      const discountResult = normalizeOrderDiscountInput({
+        percent,
+        fixedAmount: fixed,
+        subtotalAfterItemDiscount: orderSubtotal,
+      })
 
-    if (!discountResult.ok) {
-      setDiscountError(discountResult.error)
-      return
+      if (!discountResult.ok) {
+        setDiscountError(discountResult.error)
+        return
+      }
+
+      manual = discountResult.orderDiscountAmountFixed > 0
+        ? discountResult.orderDiscountAmountFixed
+        : Math.round((orderSubtotal * (discountResult.orderDiscountPercent || 0)) / 100)
     }
-
-    const manual = discountResult.orderDiscountAmountFixed > 0
-      ? discountResult.orderDiscountAmountFixed
-      : Math.round((orderSubtotal * (discountResult.orderDiscountPercent || 0)) / 100)
 
     await onSave({
       shippingAddress,
@@ -242,6 +309,7 @@ function OrderUpdateMetaModal({ isOpen, order, isSaving, onClose, onSave }) {
       promotionId: selectedPromotion?.id ?? null,
       promotionCode: selectedPromotion?.promoCode ?? promoSearch.trim(),
       clearPromotion: promotionTouched && !selectedPromotion?.id && !promoSearch.trim(),
+      items: buildItemUpdates(),
     })
   }
 
@@ -294,6 +362,12 @@ function OrderUpdateMetaModal({ isOpen, order, isSaving, onClose, onSave }) {
             <section className="rounded-xl border border-slate-100 bg-[#fbf9f1] p-4">
               <p className="mb-3 text-xs font-bold uppercase tracking-wide text-slate-500">Chiết khấu / giảm giá đơn</p>
 
+              {!canUseManualDiscount ? (
+                <p className="text-xs text-slate-500">
+                  Chiết khấu thủ công chỉ dành cho khách VIP hoặc khách có hạng thành viên.
+                </p>
+              ) : (
+                <>
               <label className="mb-2 block text-xs font-semibold text-slate-600">Theo %</label>
               <select
                 className="mb-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-[#538463]"
@@ -357,7 +431,41 @@ function OrderUpdateMetaModal({ isOpen, order, isSaving, onClose, onSave }) {
               {discountError ? (
                 <p className="mt-2 text-xs font-medium text-red-600">{discountError}</p>
               ) : null}
+                </>
+              )}
             </section>
+
+            {canUseVipManualAdjustments && order.items?.length ? (
+              <section className="rounded-xl border border-[#7e5700]/20 bg-[#fff8e8]/40 p-4">
+                <p className="mb-3 text-xs font-bold uppercase tracking-wide text-[#7e5700]">Quà tặng VIP (theo dòng)</p>
+                <ul className="space-y-2">
+                  {(order.items || []).map((line) => {
+                    const display = resolveOrderLineDisplay(line, catalogLookups)
+                    const isGift = giftByLineId[line.id] ?? line.isGift
+                    return (
+                      <li
+                        key={line.id}
+                        className="flex items-center justify-between gap-2 rounded-lg border border-[#7e5700]/15 bg-white px-3 py-2"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-slate-800">{display.productName}</p>
+                          <p className="text-[10px] text-slate-500">SL {line.quantity}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => toggleLineGift(line.id)}
+                          className={`shrink-0 rounded-lg px-2.5 py-1 text-[10px] font-bold uppercase ${
+                            isGift ? 'bg-[#7e5700] text-white' : 'border border-[#7e5700]/40 text-[#7e5700] hover:bg-[#fff8e8]'
+                          }`}
+                        >
+                          {isGift ? 'Đang là quà' : 'Đánh dấu quà'}
+                        </button>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </section>
+            ) : null}
 
             <section className="rounded-xl border border-slate-100 bg-white p-4">
               <p className="mb-3 text-xs font-bold uppercase tracking-wide text-slate-500">Mã khuyến mãi</p>

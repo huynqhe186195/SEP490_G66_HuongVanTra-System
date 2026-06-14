@@ -21,6 +21,7 @@ public class OrderLogic(
     IOrderActivityRepository _activityRepo,
     PromotionLogic _promotionLogic,
     IProductCatalogClient _productCatalogClient,
+    ICustomerCatalogClient _customerCatalogClient,
     IOptions<SepayOptions> sepayOptions)
 {
     private readonly SepayOptions _sepay = sepayOptions.Value;
@@ -169,6 +170,12 @@ public class OrderLogic(
         OrderInputValidator.ValidateCreateOrder(
             detailInputs, req.DiscountAmount, req.PaidAmount,
             req.OrderChannel, req.ShippingAddress);
+
+        if (detailInputs.Any(i => i.IsGift))
+            await EnsureVipCustomerAsync(req.CustomerId, ct);
+
+        if (req.DiscountAmount > 0)
+            await EnsureManualDiscountAllowedAsync(req.CustomerId, ct);
 
         var orderCode = await _codeGen.GenerateAsync(req.OrderKind, ct);
         var totalAmount = detailInputs.Sum(i => i.UnitPrice * i.Quantity);
@@ -363,6 +370,100 @@ public class OrderLogic(
         return MapToResponse(order);
     }
 
+    private async Task EnsureVipCustomerAsync(Guid? customerId, CancellationToken ct)
+    {
+        if (!customerId.HasValue || customerId == Guid.Empty)
+            throw new OrderValidationException(
+                "Quà tặng và chiết khấu thủ công chỉ áp dụng cho khách đối ngoại (VIP). Vui lòng chọn khách VIP.");
+
+        var customer = await _customerCatalogClient.GetCustomerAsync(customerId.Value, ct);
+        if (customer is null || !customer.IsVipCustomer)
+            throw new OrderValidationException(
+                "Quà tặng và chiết khấu thủ công chỉ dành cho khách đối ngoại (VIP).");
+    }
+
+    private async Task EnsureManualDiscountAllowedAsync(Guid? customerId, CancellationToken ct)
+    {
+        if (!customerId.HasValue || customerId == Guid.Empty)
+            throw new OrderValidationException(
+                "Chiết khấu thủ công yêu cầu khách hàng có hồ sơ (VIP hoặc hạng thành viên).");
+
+        var customer = await _customerCatalogClient.GetCustomerAsync(customerId.Value, ct);
+        if (customer is null)
+            throw new OrderValidationException("Không xác minh được loại khách hàng.");
+
+        if (customer.IsVipCustomer || customer.TierId.HasValue)
+            return;
+
+        throw new OrderValidationException(
+            "Chiết khấu thủ công chỉ dành cho khách VIP hoặc khách có hạng thành viên.");
+    }
+
+    private async Task ApplyOrderDetailUpdatesAsync(
+        Order order, List<UpdateOrderDetailRequest> items, CancellationToken ct)
+    {
+        await EnsureVipCustomerAsync(order.CustomerId, ct);
+
+        order.OrderDetails ??= new List<OrderDetail>();
+        var existingById = order.OrderDetails.ToDictionary(d => d.Id);
+        var now = DateTime.UtcNow;
+
+        foreach (var reqItem in items)
+        {
+            if (reqItem.Quantity < 1)
+                throw new OrderValidationException("Số lượng sản phẩm phải >= 1.");
+
+            if (reqItem.Id.HasValue && reqItem.Id != Guid.Empty)
+            {
+                if (!existingById.TryGetValue(reqItem.Id.Value, out var detail))
+                    throw new OrderValidationException("Dòng đơn hàng không tồn tại.");
+
+                if (reqItem.Quantity < detail.ReturnedQuantity)
+                    throw new OrderValidationException(
+                        $"Số lượng không thể nhỏ hơn số đã trả ({detail.ReturnedQuantity}).");
+
+                var unitPrice = reqItem.IsGift ? 0m : reqItem.UnitPrice;
+                if (!reqItem.IsGift && unitPrice < 0)
+                    throw new OrderValidationException("Đơn giá không được âm.");
+
+                detail.SkuSnapshotName = reqItem.SkuSnapshotName.Trim();
+                detail.SkuSnapshotCode = reqItem.SkuSnapshotCode?.Trim();
+                detail.CategorySnapshotName = reqItem.CategorySnapshotName?.Trim();
+                detail.Quantity = reqItem.Quantity;
+                detail.CostPrice = reqItem.CostPrice;
+                detail.UnitPrice = unitPrice;
+                detail.SubTotal = unitPrice * reqItem.Quantity;
+                detail.IsGift = reqItem.IsGift;
+                detail.UpdatedAt = now;
+                continue;
+            }
+
+            if (!reqItem.IsGift)
+                throw new OrderValidationException("Chỉ được thêm dòng quà tặng khi cập nhật đơn VIP.");
+
+            var giftLine = new OrderDetail
+            {
+                Id = Guid.NewGuid(),
+                OrderId = order.Id,
+                SkuId = reqItem.SkuId,
+                SkuSnapshotName = reqItem.SkuSnapshotName.Trim(),
+                SkuSnapshotCode = reqItem.SkuSnapshotCode?.Trim(),
+                CategorySnapshotName = reqItem.CategorySnapshotName?.Trim(),
+                Quantity = reqItem.Quantity,
+                CostPrice = reqItem.CostPrice,
+                UnitPrice = 0m,
+                SubTotal = 0m,
+                IsGift = true,
+                CreatedAt = now,
+                UpdatedAt = now
+            };
+            order.OrderDetails.Add(giftLine);
+        }
+
+        order.TotalAmount = order.OrderDetails.Sum(d => d.SubTotal);
+        order.UpdatedAt = now;
+    }
+
     private async Task<List<CreateOrderDetailInput>> EnrichCategoryIdsAsync(
         List<CreateOrderDetailInput> items,
         CancellationToken ct)
@@ -390,7 +491,13 @@ public class OrderLogic(
         if (order.OrderStatus == OrderStatus.Completed || order.OrderStatus == OrderStatus.Cancelled)
             throw new OrderCannotBeModifiedException(id, order.OrderStatus.ToString());
 
+        if (req.Items is { Count: > 0 })
+            await ApplyOrderDetailUpdatesAsync(order, req.Items, ct);
+
         var manualDiscount = Math.Max(0, req.DiscountAmount);
+        if (manualDiscount > 0)
+            await EnsureManualDiscountAllowedAsync(order.CustomerId, ct);
+
         if (manualDiscount > order.TotalAmount)
             throw new OrderValidationException("Giảm giá thủ công không được lớn hơn tạm tính.");
 
@@ -459,7 +566,9 @@ public class OrderLogic(
         await RecordActivityAsync(
             order.Id,
             OrderActivityType.Updated,
-            $"Cập nhật đơn: địa chỉ/ghi chú/giảm giá. Thành tiền mới {FormatVnd(order.FinalAmount)}.",
+            req.Items is { Count: > 0 }
+                ? $"Cập nhật đơn: sản phẩm/địa chỉ/ghi chú/giảm giá. Thành tiền mới {FormatVnd(order.FinalAmount)}."
+                : $"Cập nhật đơn: địa chỉ/ghi chú/giảm giá. Thành tiền mới {FormatVnd(order.FinalAmount)}.",
             actorId,
             actorName,
             ct);

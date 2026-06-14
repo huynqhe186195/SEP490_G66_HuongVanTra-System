@@ -102,6 +102,7 @@ function Icon({ children, className = "", filled = false }) {
 }
 
 function getLineGross(item) {
+    if (item.isGift) return 0;
     return item.qty * item.price;
 }
 
@@ -377,7 +378,8 @@ function PosPage() {
   const tierDiscountPercent = isVipCustomerType(selectedCustomer?.customerType)
     ? 0
     : Number(selectedCustomer?.tierDiscountPercent || 0)
-  const canUseOrderDiscount = isVipCustomerType(selectedCustomer?.customerType)
+  const canUseVipManualAdjustments = isVipCustomerType(selectedCustomer?.customerType)
+  const canUseOrderDiscount = canUseVipManualAdjustments
   const effectiveOrderDiscountPercent = canUseOrderDiscount ? orderDiscountPercent : 0
   const effectiveOrderDiscountAmountFixed = canUseOrderDiscount ? orderDiscountAmountFixed : 0
   const {
@@ -789,6 +791,7 @@ function PosPage() {
                         stockQuantity: stockOnHand,
                         lineDiscountType: "percent",
                         lineDiscountValue: 0,
+                        isGift: false,
                     },
                 ],
                 searchValue: "",
@@ -845,13 +848,36 @@ function PosPage() {
     };
 
     const updateLineDiscountType = (sku, discountType) => {
+        if (!canUseVipManualAdjustments) return;
         updateActiveSession((prev) => ({
             ...prev,
             cartItems: prev.cartItems.map((item) => (item.sku === sku ? { ...item, lineDiscountType: discountType, lineDiscountValue: 0 } : item)),
         }));
     };
 
+    const toggleLineGift = (sku) => {
+        if (!canUseVipManualAdjustments) {
+            showError("Quà tặng chỉ áp dụng cho khách VIP / đối ngoại.");
+            return;
+        }
+        updateActiveSession((prev) => ({
+            ...prev,
+            cartItems: prev.cartItems.map((item) => {
+                if (item.sku !== sku) return item;
+                const nextIsGift = !item.isGift;
+                return {
+                    ...item,
+                    isGift: nextIsGift,
+                    lineDiscountType: "percent",
+                    lineDiscountValue: 0,
+                };
+            }),
+        }));
+        setOpenDiscountSku(null);
+    };
+
     const updateLineDiscountValue = (sku, rawValue) => {
+        if (!canUseVipManualAdjustments) return;
         const item = cartItems.find((row) => row.sku === sku);
         if (!item) {
             return;
@@ -1178,8 +1204,10 @@ function PosPage() {
         sku: item.sku,
         name: item.name,
         quantity: item.qty,
-        unitPrice: item.price,
-        isGift: 0,
+        unitPrice: item.isGift ? 0 : item.price,
+        costPrice: item.costPrice ?? 0,
+        categoryName: item.categoryName ?? null,
+        isGift: item.isGift ? 1 : 0,
       })),
       payments: [
         {
@@ -1626,13 +1654,24 @@ function PosPage() {
     const showCustomerSearchEmpty = !selectedCustomer && hasCustomerSearchQuery && !isCustomerSearchLoading && customerSearchResults.length === 0;
 
     const selectCustomer = (customer) => {
-        const keepOrderDiscount = isVipCustomerType(customer?.customerType);
-        updateActiveSession({
+        const keepVipAdjustments = isVipCustomerType(customer?.customerType);
+        updateActiveSession((prev) => ({
             selectedCustomer: customer,
             customerSearchValue: "",
             shippingAddress: "",
-            ...(keepOrderDiscount ? {} : { orderDiscountPercent: 0, orderDiscountAmountFixed: 0 }),
-        });
+            ...(keepVipAdjustments ? {} : {
+                orderDiscountPercent: 0,
+                orderDiscountAmountFixed: 0,
+                cartItems: clampCartLineDiscounts(
+                    prev.cartItems.map((item) => ({
+                        ...item,
+                        isGift: false,
+                        lineDiscountType: "percent",
+                        lineDiscountValue: 0,
+                    })),
+                ),
+            }),
+        }));
         setCustomerSearchResults([]);
         setSavedShippingAddresses([]);
         setUseCustomShippingAddress(false);
@@ -1761,9 +1800,14 @@ function PosPage() {
                                                 <div className="min-w-0 flex-1 overflow-hidden">
                                                     <p className="truncate text-sm font-semibold leading-snug text-[#1b1c17] sm:text-base" title={item.name}>
                                                         {item.name}
+                                                        {item.isGift ?
+                                                            <span className="ml-1.5 rounded-full bg-[#fff8e8] px-1.5 py-0.5 text-[10px] font-bold uppercase text-[#7e5700]">Quà</span>
+                                                        :   null}
                                                     </p>
                                                     <p className="mt-0.5 truncate text-xs text-[#717971] sm:text-sm">
-                                                        {formatMoney(item.price)} đ
+                                                        {item.isGift ?
+                                                            <span className="line-through opacity-60">{formatMoney(item.price)} đ</span>
+                                                        :   <span>{formatMoney(item.price)} đ</span>}
                                                         <span
                                                             className={`ml-1 text-[11px] sm:text-xs ${Number(item.stockQuantity) <= 0 ? "font-semibold text-[#7e5700]" : ""}`}>
                                                             · {formatStockHint(item.stockQuantity)}
@@ -1798,18 +1842,32 @@ function PosPage() {
                                                 </div>
 
                                                 <div className="relative shrink-0">
+                                                    {canUseVipManualAdjustments ?
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => toggleLineGift(item.sku)}
+                                                            className={`mr-1 rounded-lg px-1.5 py-1 text-[10px] font-bold uppercase ${
+                                                                item.isGift ? "bg-[#7e5700] text-white" : "border border-[#7e5700]/40 text-[#7e5700] hover:bg-[#fff8e8]"
+                                                            }`}
+                                                            title="Đánh dấu quà tặng VIP">
+                                                            Quà
+                                                        </button>
+                                                    :   null}
                                                     <button
                                                         type="button"
                                                         onMouseDown={(event) => event.stopPropagation()}
-                                                        onClick={() => setOpenDiscountSku(isDiscountOpen ? null : item.sku)}
+                                                        onClick={() => {
+                                                            if (!canUseVipManualAdjustments || item.isGift) return;
+                                                            setOpenDiscountSku(isDiscountOpen ? null : item.sku);
+                                                        }}
                                                         className={`whitespace-nowrap rounded-lg px-1.5 py-1 text-right text-sm font-bold tabular-nums transition-colors sm:text-base ${
-                                                            isDiscountOpen ? "bg-[#356647] text-white" : "text-[#356647] hover:bg-[#356647]/10"
+                                                            item.isGift ? "text-[#7e5700]" : isDiscountOpen ? "bg-[#356647] text-white" : "text-[#356647] hover:bg-[#356647]/10"
                                                         }`}
-                                                        title="Bấm để chỉnh chiết khấu">
-                                                        {formatMoney(lineTotal)} đ
+                                                        title={item.isGift ? "Dòng quà tặng" : canUseVipManualAdjustments ? "Bấm để chỉnh chiết khấu" : "Chiết khấu chỉ dành khách VIP"}>
+                                                        {item.isGift ? "0" : formatMoney(lineTotal)} đ
                                                     </button>
 
-                                                    {isDiscountOpen ?
+                                                    {isDiscountOpen && canUseVipManualAdjustments && !item.isGift ?
                                                         <div
                                                             ref={discountPopoverRef}
                                                             onMouseDown={(event) => event.stopPropagation()}

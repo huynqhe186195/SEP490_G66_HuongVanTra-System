@@ -8,5 +8,10 @@ public interface ICustomerCatalogClient
 public sealed record CustomerCatalogProfile(
     Guid Id,
     string? FullName,
+    string? CustomerGroup,
     int? TierId,
-    string? TierName);
+    string? TierName)
+{
+    public bool IsVipCustomer =>
+        string.Equals(CustomerGroup, "DoiNgoai", StringComparison.OrdinalIgnoreCase);
+}
