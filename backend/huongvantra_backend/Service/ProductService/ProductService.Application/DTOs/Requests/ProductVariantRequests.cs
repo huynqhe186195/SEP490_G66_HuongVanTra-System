@@ -32,7 +32,8 @@ public record ProductVariantRequest(
     bool AllowRewardPoints,
     bool IsActive,
     string? ImageUrl,
-    List<ProductUnitRequest>? Units);
+    List<ProductUnitRequest>? Units,
+    List<BomLineRequest>? BomLines);
 
 public record GenerateProductVariantsRequest(
     List<ProductVariantOptionGroupRequest> OptionGroups,

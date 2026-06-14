@@ -20,4 +20,5 @@ public class ProductVariant : BaseEntity
     public Product Product { get; set; } = null!;
     public ICollection<ProductUnit> Units { get; set; } = new List<ProductUnit>();
     public ICollection<PriceBookEntry> PriceBookEntries { get; set; } = new List<PriceBookEntry>();
+    public ICollection<ProductVariantBomLine> BomLines { get; set; } = new List<ProductVariantBomLine>();
 }

@@ -6,6 +6,7 @@ using ProductService.Application.DTOs.Responses;
 using ProductService.Application.Interfaces;
 using ProductService.Application.Validation;
 using ProductService.Domain.Entities;
+using ProductService.Domain.Enums;
 using ProductService.Domain.Exceptions;
 
 namespace ProductService.Application.UseCases;
@@ -23,7 +24,8 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
 
         var (items, total) = await _productRepository.GetPagedAsync(
             request.Search, request.CategoryId, request.IsActive, request.IsDeleted,
-            request.Page, request.PageSize, scope);
+            request.Page, request.PageSize, scope,
+            ParseProductType(request.ProductType));
 
         return new PagedResponse<ProductResponse>(
             items.Select(p => MapToResponse(p, scope)).ToList(),
@@ -86,9 +88,10 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
             WeightValue = input.WeightValue,
             WeightUnit = input.WeightUnit,
             IsVariantParent = input.IsVariantParent || variants.Count > 0,
+            ProductType = ParseProductType(request.ProductType),
             Images = images.Select(MapImage).ToList(),
             Units = units.Select(MapUnit).ToList(),
-            Variants = await MapVariantsAsync(input.Name, variants)
+            Variants = await MapVariantsAsync(input.Name, variants, request.Variants)
         };
 
         var created = await _productRepository.CreateAsync(product);
@@ -133,11 +136,12 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
         product.WeightUnit = input.WeightUnit;
         product.IsVariantParent = input.IsVariantParent || variants.Count > 0;
         product.IsActive = input.IsActive ?? product.IsActive;
+        product.ProductType = ParseProductType(request.ProductType);
         product.UpdatedAt = DateTime.UtcNow;
 
         Replace(product.Images, images.Select(MapImage));
         Replace(product.Units, units.Select(MapUnit));
-        Replace(product.Variants, await MapVariantsAsync(input.Name, variants));
+        Replace(product.Variants, await MapVariantsAsync(input.Name, variants, request.Variants));
 
         var updated = await _productRepository.UpdateAsync(product);
         return MapToResponse(updated, CatalogViewScope.Warehouse);
@@ -167,16 +171,30 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
         return MapToResponse((await _productRepository.GetByIdAsync(id))!, CatalogViewScope.Warehouse);
     }
 
-    private async Task<List<ProductVariant>> MapVariantsAsync(string productName, List<ValidatedProductVariantInput> inputs)
+    private async Task<List<ProductVariant>> MapVariantsAsync(
+        string productName,
+        List<ValidatedProductVariantInput> inputs,
+        List<ProductVariantRequest>? rawRequests = null)
     {
         var variants = new List<ProductVariant>();
-        foreach (var input in inputs)
+        for (var i = 0; i < inputs.Count; i++)
         {
+            var input = inputs[i];
             var skuCode = string.IsNullOrWhiteSpace(input.SkuCode)
                 ? await GenerateUniqueVariantSkuAsync(productName, input.VariantName)
                 : input.SkuCode;
             if (await _productRepository.ExistsVariantSkuCodeAsync(skuCode))
                 throw new DuplicateSkuCodeException(skuCode);
+
+            var bomLines = rawRequests != null && i < rawRequests.Count
+                ? (rawRequests[i].BomLines ?? [])
+                    .Where(b => b.Quantity > 0)
+                    .Select(b => new ProductVariantBomLine
+                    {
+                        MaterialId = b.MaterialId,
+                        Quantity = b.Quantity
+                    }).ToList()
+                : new List<ProductVariantBomLine>();
 
             variants.Add(new ProductVariant
             {
@@ -192,7 +210,8 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
                 AllowRewardPoints = input.AllowRewardPoints,
                 IsActive = input.IsActive,
                 ImageUrl = input.ImageUrl,
-                Units = input.Units.Select(MapUnit).ToList()
+                Units = input.Units.Select(MapUnit).ToList(),
+                BomLines = bomLines
             });
         }
 
@@ -267,6 +286,7 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
         p.Name, p.Origin, p.FlavorProfile, p.BrewingGuide, p.Description,
         p.BaseUnit, p.WeightValue, p.WeightUnit, p.IsVariantParent,
         p.IsActive, p.IsDeleted, p.CreatedAt, p.SyncedToStoreAt,
+        p.ProductType.ToString(),
         FilterSkus(p.Skus, scope).Select(s => MapSku(s, p)).ToList(),
         p.Images.Where(i => !i.IsDeleted).OrderBy(i => i.SortOrder).Select(MapImageResponse).ToList(),
         p.Units.Where(u => !u.IsDeleted).Select(MapUnitResponse).ToList(),
@@ -298,5 +318,12 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
         v.Id, v.ProductId, v.SkuCode, v.Barcode, v.VariantName,
         v.OptionValuesJson, v.CostPrice, v.RetailPrice, v.MinStock, v.MaxStock,
         v.IsSellable, v.AllowRewardPoints, v.IsActive, v.ImageUrl,
-        v.Units.Where(u => !u.IsDeleted).Select(MapUnitResponse).ToList());
+        v.Units.Where(u => !u.IsDeleted).Select(MapUnitResponse).ToList(),
+        v.BomLines.Where(b => !b.IsDeleted).Select(b => new BomLineResponse(
+            b.MaterialId, b.Material?.Name ?? string.Empty, b.Quantity)).ToList());
+
+    private static ProductType ParseProductType(string? value) =>
+        Enum.TryParse<ProductType>(value, ignoreCase: true, out var result)
+            ? result
+            : ProductType.THANH_PHAM;
 }

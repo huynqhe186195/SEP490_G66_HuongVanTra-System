@@ -1,0 +1,219 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Dev overlay — bind mounts + hot reload, không cần build lại Docker.
+#
+# Chạy toàn bộ stack dev:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+#
+# Chỉ chạy frontend dev (infra + gateway giữ nguyên production image):
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up \
+#     mysql rabbitmq gateway web-client
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── Frontend: thay build nginx bằng Vite dev server ────────────────────────
+  web-client:
+    build: null                          # hủy Dockerfile production (nginx build)
+    image: node:20-alpine
+    container_name: hvt-web-client-dev
+    working_dir: /app
+    volumes:
+      - ../../frontend/huongvantra-web-client:/app          # source code live
+      - web_client_node_modules:/app/node_modules           # giữ node_modules trong container
+    ports:
+      - "5173:5173"                      # Vite dev server (thay port 3000 của nginx)
+    environment:
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:5000}
+    command: sh -c "npm install && npm run dev"
+    networks:
+      - hvt-network
+    depends_on:
+      - gateway
+
+  # ── Gateway: bind mount appsettings để thay đổi routes không cần rebuild ───
+  # Sau khi sửa appsettings.json chỉ cần: docker restart hvt-gateway
+  gateway:
+    volumes:
+      - ./API_Gateway/HuongVanTra.Gateway/appsettings.json:/app/appsettings.json:ro
+
+  # ── Backend: bật dotnet watch cho từng service cần sửa ─────────────────────
+  # Uncomment service nào đang phát triển, comment lại khi không cần.
+  # SDK image (~750MB) nặng hơn runtime image — chỉ bật service đang làm việc.
+
+  product-service:
+    build: null
+    image: mcr.microsoft.com/dotnet/sdk:8.0-alpine
+    pull_policy: always
+    container_name: hvt-product-service-dev
+    entrypoint: []
+    working_dir: /src
+    volumes:
+      - .:/src
+      - product_nuget_cache:/root/.nuget/packages
+    command: >
+      dotnet watch run
+        --project Service/ProductService/ProductService.WebAPI/ProductService.WebAPI.csproj
+        --no-hot-reload
+    environment:
+      DOTNET_USE_POLLING_FILE_WATCHER: "1"
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__DefaultConnection: "Server=mysql;Port=3306;Database=hvt_product_db;User=${MYSQL_USER:-hvtuser};Password=${MYSQL_PASSWORD:-hvtpass123};CharSet=utf8mb4;"
+      RabbitMQ__Host: rabbitmq
+      RabbitMQ__Username: ${RABBITMQ_USER:-hvt}
+      RabbitMQ__Password: ${RABBITMQ_PASS:-hvtrabbit123}
+      Jwt__Secret: ${JWT_SECRET:-your-super-secret-key-at-least-32-chars!!}
+      Jwt__Issuer: HuongVanTra
+      Jwt__Audience: HuongVanTra
+    ports:
+      - "5003:8080"
+    networks:
+      - hvt-network
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 300s
+
+  # customer-service:
+  #   build: null
+  #   image: mcr.microsoft.com/dotnet/sdk:8.0-alpine
+  #   container_name: hvt-customer-service-dev
+  #   working_dir: /src
+  #   volumes:
+  #     - .:/src
+  #     - customer_nuget_cache:/root/.nuget/packages
+  #   command: >
+  #     dotnet watch run
+  #       --project Service/CustomerService/CustomerService.WebAPI/CustomerService.WebAPI.csproj
+  #       --no-hot-reload
+  #   environment:
+  #     DOTNET_USE_POLLING_FILE_WATCHER: "1"
+  #     ASPNETCORE_ENVIRONMENT: Development
+  #     ASPNETCORE_URLS: http://+:8080
+  #     ConnectionStrings__DefaultConnection: "Server=mysql;Port=3306;Database=hvt_customer_db;User=${MYSQL_USER:-hvtuser};Password=${MYSQL_PASSWORD:-hvtpass123};CharSet=utf8mb4;"
+  #     RabbitMQ__Host: rabbitmq
+  #     RabbitMQ__Username: ${RABBITMQ_USER:-hvt}
+  #     RabbitMQ__Password: ${RABBITMQ_PASS:-hvtrabbit123}
+  #     Jwt__Secret: ${JWT_SECRET:-your-super-secret-key-at-least-32-chars!!}
+  #     Jwt__Issuer: HuongVanTra
+  #     Jwt__Audience: HuongVanTra
+  #   ports:
+  #     - "5001:8080"
+  #   networks:
+  #     - hvt-network
+  #   depends_on:
+  #     mysql:
+  #       condition: service_healthy
+  #     rabbitmq:
+  #       condition: service_healthy
+
+  # user-service:
+  #   build: null
+  #   image: mcr.microsoft.com/dotnet/sdk:8.0-alpine
+  #   container_name: hvt-user-service-dev
+  #   working_dir: /src
+  #   volumes:
+  #     - .:/src
+  #     - user_nuget_cache:/root/.nuget/packages
+  #   command: >
+  #     dotnet watch run
+  #       --project Service/UserService/UserService.WebAPI/UserService.WebAPI.csproj
+  #       --no-hot-reload
+  #   environment:
+  #     DOTNET_USE_POLLING_FILE_WATCHER: "1"
+  #     ASPNETCORE_ENVIRONMENT: Development
+  #     ASPNETCORE_URLS: http://+:8080
+  #     ConnectionStrings__DefaultConnection: "Server=mysql;Port=3306;Database=hvt_user_db;User=${MYSQL_USER:-hvtuser};Password=${MYSQL_PASSWORD:-hvtpass123};CharSet=utf8mb4;"
+  #     Jwt__Secret: ${JWT_SECRET:-your-super-secret-key-at-least-32-chars!!}
+  #     Jwt__Issuer: HuongVanTra
+  #     Jwt__Audience: HuongVanTra
+  #     CustomerService__BaseUrl: http://customer-service:8080
+  #   ports:
+  #     - "5002:8080"
+  #   networks:
+  #     - hvt-network
+  #   depends_on:
+  #     mysql:
+  #       condition: service_healthy
+
+  # order-service:
+  #   build: null
+  #   image: mcr.microsoft.com/dotnet/sdk:8.0-alpine
+  #   container_name: hvt-order-service-dev
+  #   working_dir: /src
+  #   volumes:
+  #     - .:/src
+  #     - order_nuget_cache:/root/.nuget/packages
+  #   command: >
+  #     dotnet watch run
+  #       --project Service/OrderService/OrderService.WebAPI/OrderService.WebAPI.csproj
+  #       --no-hot-reload
+  #   environment:
+  #     DOTNET_USE_POLLING_FILE_WATCHER: "1"
+  #     ASPNETCORE_ENVIRONMENT: Development
+  #     ASPNETCORE_URLS: http://+:8080
+  #     ConnectionStrings__DefaultConnection: "Server=mysql;Port=3306;Database=hvt_order_db;User=${MYSQL_USER:-hvtuser};Password=${MYSQL_PASSWORD:-hvtpass123};CharSet=utf8mb4;"
+  #     RabbitMQ__Host: rabbitmq
+  #     RabbitMQ__Username: ${RABBITMQ_USER:-hvt}
+  #     RabbitMQ__Password: ${RABBITMQ_PASS:-hvtrabbit123}
+  #     Jwt__Secret: ${JWT_SECRET:-your-super-secret-key-at-least-32-chars!!}
+  #     Jwt__Issuer: HuongVanTra
+  #     Jwt__Audience: HuongVanTra
+  #   ports:
+  #     - "5004:8080"
+  #   networks:
+  #     - hvt-network
+  #   depends_on:
+  #     mysql:
+  #       condition: service_healthy
+  #     rabbitmq:
+  #       condition: service_healthy
+
+  # inventory-service:
+  #   build: null
+  #   image: mcr.microsoft.com/dotnet/sdk:8.0-alpine
+  #   container_name: hvt-inventory-service-dev
+  #   working_dir: /src
+  #   volumes:
+  #     - .:/src
+  #     - inventory_nuget_cache:/root/.nuget/packages
+  #   command: >
+  #     dotnet watch run
+  #       --project Service/InventoryService/InventoryService.WebAPI/InventoryService.WebAPI.csproj
+  #       --no-hot-reload
+  #   environment:
+  #     DOTNET_USE_POLLING_FILE_WATCHER: "1"
+  #     ASPNETCORE_ENVIRONMENT: Development
+  #     ASPNETCORE_URLS: http://+:8080
+  #     ConnectionStrings__DefaultConnection: "Server=mysql;Port=3306;Database=hvt_inventory_db;User=${MYSQL_USER:-hvtuser};Password=${MYSQL_PASSWORD:-hvtpass123};CharSet=utf8mb4;"
+  #     RabbitMQ__Host: rabbitmq
+  #     RabbitMQ__Username: ${RABBITMQ_USER:-hvt}
+  #     RabbitMQ__Password: ${RABBITMQ_PASS:-hvtrabbit123}
+  #     Jwt__Secret: ${JWT_SECRET:-your-super-secret-key-at-least-32-chars!!}
+  #     Jwt__Issuer: HuongVanTra
+  #     Jwt__Audience: HuongVanTra
+  #     Inventory__SimulateWarehouse: "false"
+  #   ports:
+  #     - "5005:8080"
+  #   networks:
+  #     - hvt-network
+  #   depends_on:
+  #     mysql:
+  #       condition: service_healthy
+  #     rabbitmq:
+  #       condition: service_healthy
+
+volumes:
+  web_client_node_modules:
+  product_nuget_cache:
+  # customer_nuget_cache:
+  # user_nuget_cache:
+  # order_nuget_cache:
+  # inventory_nuget_cache:

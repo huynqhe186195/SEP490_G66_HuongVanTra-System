@@ -19,6 +19,8 @@ public record ProductUnitResponse(
     bool IsDirectSell,
     bool IsBaseUnit);
 
+public record BomLineResponse(Guid MaterialId, string MaterialName, decimal Quantity);
+
 public record ProductVariantResponse(
     Guid Id,
     Guid ProductId,
@@ -34,4 +36,5 @@ public record ProductVariantResponse(
     bool AllowRewardPoints,
     bool IsActive,
     string? ImageUrl,
-    List<ProductUnitResponse> Units);
+    List<ProductUnitResponse> Units,
+    List<BomLineResponse> BomLines);

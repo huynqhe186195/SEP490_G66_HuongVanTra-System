@@ -17,10 +17,11 @@ public class ProductsController(ProductLogic _productLogic) : ControllerBase
         [FromQuery] int? categoryId,
         [FromQuery] bool? isActive,
         [FromQuery] bool? isDeleted,
+        [FromQuery] string? productType,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20) =>
         Ok(await _productLogic.GetPagedAsync(
-            new GetProductsRequest(search, categoryId, isActive, isDeleted, page, pageSize),
+            new GetProductsRequest(search, categoryId, isActive, isDeleted, productType, page, pageSize),
             User.GetCatalogViewScope()));
 
     [HttpGet("{id:guid}")]
