@@ -13,11 +13,16 @@ public class StockDeductQueueController(InventoryLogic _logic) : ControllerBase
 {
     [HttpGet("waiting")]
     [Authorize(Policy = PermissionNames.ViewOrder)]
-    public async Task<IActionResult> GetWaiting([FromQuery] string? status, [FromQuery] string? search, CancellationToken ct)
+    public async Task<IActionResult> GetWaiting(
+        [FromQuery] string? status,
+        [FromQuery] string? search,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10,
+        CancellationToken ct = default)
     {
         _ = status;
-        var items = await _logic.GetWaitingQueuesAsync(search, ct);
-        return Ok(items);
+        var result = await _logic.GetWaitingQueuesPagedAsync(search, page, pageSize, ct);
+        return Ok(result);
     }
 
     [HttpGet("{queueId:guid}/preview")]

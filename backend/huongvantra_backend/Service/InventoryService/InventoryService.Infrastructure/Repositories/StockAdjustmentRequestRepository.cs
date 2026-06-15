@@ -19,10 +19,48 @@ public class StockAdjustmentRequestRepository(InventoryDbContext _db) : IStockAd
         string? search,
         CancellationToken ct = default)
     {
+        var query = BuildListQuery(status, false, requestedBy, search);
+
+        return await query
+            .Include(r => r.ExportSlip)
+            .OrderByDescending(r => r.RequestedAt)
+            .ToListAsync(ct);
+    }
+
+    public async Task<(List<StockAdjustmentRequest> Items, int TotalCount)> GetPagedAsync(
+        StockAdjustmentRequestStatus? status,
+        bool excludePending,
+        Guid? requestedBy,
+        string? search,
+        int page,
+        int pageSize,
+        CancellationToken ct = default)
+    {
+        var query = BuildListQuery(status, excludePending, requestedBy, search);
+        var totalCount = await query.CountAsync(ct);
+        var items = await query
+            .Include(r => r.ExportSlip)
+            .OrderByDescending(r => r.RequestedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(ct);
+
+        return (items, totalCount);
+    }
+
+    private IQueryable<StockAdjustmentRequest> BuildListQuery(
+        StockAdjustmentRequestStatus? status,
+        bool excludePending,
+        Guid? requestedBy,
+        string? search)
+    {
         var query = _db.StockAdjustmentRequests.AsQueryable();
 
         if (status.HasValue)
             query = query.Where(r => r.Status == status.Value);
+
+        if (excludePending)
+            query = query.Where(r => r.Status != StockAdjustmentRequestStatus.Pending);
 
         if (requestedBy.HasValue)
             query = query.Where(r => r.RequestedBy == requestedBy.Value);
@@ -36,10 +74,7 @@ public class StockAdjustmentRequestRepository(InventoryDbContext _db) : IStockAd
                 r.SkuSnapshotName.ToLower().Contains(keyword));
         }
 
-        return await query
-            .Include(r => r.ExportSlip)
-            .OrderByDescending(r => r.RequestedAt)
-            .ToListAsync(ct);
+        return query;
     }
 
     public Task<int> CountCreatedSinceAsync(DateTime sinceUtc, CancellationToken ct = default) =>

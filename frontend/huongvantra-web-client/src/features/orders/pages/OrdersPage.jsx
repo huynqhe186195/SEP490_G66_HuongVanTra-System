@@ -37,6 +37,7 @@ function OrdersPage() {
   const [orders, setOrders] = useState([])
   const [totalCount, setTotalCount] = useState(0)
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE)
   const [isLoading, setIsLoading] = useState(true)
 
   const queryParams = useMemo(
@@ -47,9 +48,9 @@ function OrdersPage() {
       excludeChannel: filters.channel ? undefined : 'COD',
       excludeOrderKind: 'Exchange',
       page,
-      pageSize: TABLE_PAGE_SIZE,
+      pageSize,
     }),
-    [filters, page],
+    [filters, page, pageSize],
   )
 
   useEffect(() => {
@@ -274,7 +275,14 @@ function OrdersPage() {
           </table>
         </div>
 
-        <TablePagination page={page} totalCount={totalCount} itemLabel="đơn" onPageChange={setPage} />
+        <TablePagination
+          page={page}
+          pageSize={pageSize}
+          totalCount={totalCount}
+          itemLabel="đơn"
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+        />
       </section>
     </PageShell>
   )

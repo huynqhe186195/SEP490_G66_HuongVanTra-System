@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
+import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
 import { showError } from '../../../app/toast.js'
 import { fetchAllActiveSkus } from '../../products/services/productSkusApi.js'
 import { fetchProducts } from '../../products/services/productsApi.js'
@@ -13,6 +14,8 @@ import { fetchWarehouseBatches } from '../services/warehouseBatchApi.js'
 function InventoryStockPage() {
   const [searchInput, setSearchInput] = useState('')
   const [rows, setRows] = useState([])
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE)
   const [isLoading, setIsLoading] = useState(true)
 
   const loadData = useCallback(async () => {
@@ -68,6 +71,20 @@ function InventoryStockPage() {
       return haystack.includes(keyword)
     })
   }, [rows, searchInput])
+
+  useEffect(() => {
+    setPage(1)
+  }, [searchInput])
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize))
+    if (page > totalPages) setPage(totalPages)
+  }, [filteredRows.length, page, pageSize])
+
+  const pagedRows = useMemo(() => {
+    const start = (page - 1) * pageSize
+    return filteredRows.slice(start, start + pageSize)
+  }, [filteredRows, page, pageSize])
 
   return (
     <PageShell>
@@ -137,7 +154,7 @@ function InventoryStockPage() {
                   </td>
                 </tr>
               ) : (
-                filteredRows.map((row) => (
+                pagedRows.map((row) => (
                   <tr key={row.skuId}>
                     <td className="px-6 py-4 font-mono font-semibold text-[#356647]">{row.skuCode}</td>
                     <td className="px-4 py-4 text-slate-700">
@@ -164,6 +181,14 @@ function InventoryStockPage() {
             </tbody>
           </table>
         </div>
+        <TablePagination
+          page={page}
+          pageSize={pageSize}
+          totalCount={filteredRows.length}
+          itemLabel="SKU"
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+        />
       </section>
     </PageShell>
   )

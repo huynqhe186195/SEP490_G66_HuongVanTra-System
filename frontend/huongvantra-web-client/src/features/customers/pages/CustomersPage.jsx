@@ -67,6 +67,7 @@ function CustomersPage() {
   const [sortBy, setSortBy] = useState('')
   const [filterOpen, setFilterOpen] = useState(false)
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE)
   const [membershipTiers, setMembershipTiers] = useState([])
   const [statistics, setStatistics] = useState(null)
   const [activityRefreshKey, setActivityRefreshKey] = useState(0)
@@ -171,16 +172,16 @@ function CustomersPage() {
   }
 
   useEffect(() => {
-    const totalPages = Math.max(1, Math.ceil(customers.length / TABLE_PAGE_SIZE))
+    const totalPages = Math.max(1, Math.ceil(customers.length / pageSize))
     if (page > totalPages) {
       setPage(totalPages)
     }
-  }, [customers.length, page])
+  }, [customers.length, page, pageSize])
 
   const paginatedCustomers = useMemo(() => {
-    const start = (page - 1) * TABLE_PAGE_SIZE
-    return customers.slice(start, start + TABLE_PAGE_SIZE)
-  }, [customers, page])
+    const start = (page - 1) * pageSize
+    return customers.slice(start, start + pageSize)
+  }, [customers, page, pageSize])
 
   const corporateStats = useMemo(() => {
     const activeCount = customers.filter((item) => item.status?.toUpperCase() === 'ACTIVE').length
@@ -497,9 +498,11 @@ function CustomersPage() {
 
             <TablePagination
               page={page}
+              pageSize={pageSize}
               totalCount={customers.length}
               itemLabel="khách hàng"
               onPageChange={setPage}
+              onPageSizeChange={setPageSize}
             />
           </section>
         ) : activeTab === 'corporate' && CUSTOMER_CORPORATE_ENABLED ? (
@@ -607,12 +610,14 @@ function CustomersPage() {
                 </table>
               </CustomersTableShell>
 
-              <TablePagination
-                page={page}
-                totalCount={customers.length}
+            <TablePagination
+              page={page}
+              pageSize={pageSize}
+              totalCount={customers.length}
                 itemLabel="khách hàng"
-                onPageChange={setPage}
-              />
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+            />
             </section>
 
             <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
@@ -843,12 +848,14 @@ function CustomersPage() {
                 </table>
               </CustomersTableShell>
 
-              <TablePagination
-                page={page}
-                totalCount={customers.length}
+            <TablePagination
+              page={page}
+              pageSize={pageSize}
+              totalCount={customers.length}
                 itemLabel="khách hàng"
-                onPageChange={setPage}
-              />
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+            />
 
               <div className="border-t border-[#f0eee6] bg-[#f6f4ec]/40 p-3 sm:p-6">
                 <h5 className="mb-3 text-sm font-bold text-[#1b1c17]">Hoạt động từ đơn hàng (integration event)</h5>
@@ -1026,12 +1033,14 @@ function CustomersPage() {
                 </table>
               </CustomersTableShell>
 
-              <TablePagination
-                page={page}
-                totalCount={customers.length}
+            <TablePagination
+              page={page}
+              pageSize={pageSize}
+              totalCount={customers.length}
                 itemLabel="khách hàng"
-                onPageChange={setPage}
-              />
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+            />
             </section>
           </>
         )}

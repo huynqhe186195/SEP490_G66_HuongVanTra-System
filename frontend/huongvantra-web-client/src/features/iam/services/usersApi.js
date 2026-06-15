@@ -1,6 +1,9 @@
 import { apiRequestAuth, toPagedResult } from '../../../lib/apiClient.js'
 
 export function fetchUsers(params = {}) {
+  const keyword = params.search?.trim().toLowerCase()
+  if (keyword) return fetchUsersWithClientSearch(params, keyword)
+
   const search = new URLSearchParams()
   if (params.page) search.set('page', String(params.page))
   if (params.pageSize) search.set('pageSize', String(params.pageSize))
@@ -8,6 +11,48 @@ export function fetchUsers(params = {}) {
   const query = search.toString()
   const path = query ? `/api/users?${query}` : '/api/users'
   return apiRequestAuth(path, { method: 'GET' }).then(toPagedResult)
+}
+
+async function fetchUsersWithClientSearch(params, keyword) {
+  const requestedPage = params.page ?? 1
+  const requestedPageSize = params.pageSize ?? 10
+  const fetchPageSize = 100
+  let page = 1
+  let totalCount = 0
+  let items = []
+
+  do {
+    const search = new URLSearchParams()
+    search.set('page', String(page))
+    search.set('pageSize', String(fetchPageSize))
+    if (params.onlyDeleted) search.set('onlyDeleted', 'true')
+    const data = await apiRequestAuth(`/api/users?${search.toString()}`, { method: 'GET' })
+    const paged = toPagedResult(data)
+    items = items.concat(paged.items)
+    totalCount = paged.totalCount
+    if (paged.items.length < fetchPageSize) break
+    page += 1
+  } while (items.length < totalCount && page <= 20)
+
+  const filtered = items.filter((item) => {
+    const employee = item.employee ?? item.Employee
+    const haystack = [
+      item.username ?? item.Username,
+      employee?.fullName ?? employee?.FullName,
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase()
+    return haystack.includes(keyword)
+  })
+  const start = (requestedPage - 1) * requestedPageSize
+
+  return {
+    items: filtered.slice(start, start + requestedPageSize),
+    page: requestedPage,
+    pageSize: requestedPageSize,
+    totalCount: filtered.length,
+  }
 }
 
 export function fetchUserById(id) {

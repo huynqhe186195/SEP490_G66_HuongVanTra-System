@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
+import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { canConfirmStockDeduct } from '../../../app/navigation.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
@@ -25,6 +26,12 @@ const TABS = [
   { key: 'processed', label: 'Đã xử lý', status: undefined, mine: false, excludePending: true },
 ]
 
+const REQUEST_TABS = TABS.map((tab) =>
+  tab.key === 'processed'
+    ? { ...tab, status: 'processed', excludePending: false }
+    : tab,
+)
+
 function formatDelta(delta) {
   const value = Number(delta)
   if (!Number.isFinite(value)) return '—'
@@ -38,6 +45,9 @@ function StockAdjustmentRequestsPage() {
   const [activeTab, setActiveTab] = useState(canReview ? 'pending' : 'mine')
   const [searchValue, setSearchValue] = useState('')
   const [requests, setRequests] = useState([])
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE)
+  const [totalCount, setTotalCount] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
   const [actingId, setActingId] = useState(null)
   const [rejectTarget, setRejectTarget] = useState(null)
@@ -47,21 +57,25 @@ function StockAdjustmentRequestsPage() {
   const loadData = useCallback(async () => {
     setIsLoading(true)
     try {
-      const tab = TABS.find((t) => t.key === activeTab) ?? TABS[0]
-      const items = await fetchStockAdjustmentRequests({
+      const tab = REQUEST_TABS.find((t) => t.key === activeTab) ?? REQUEST_TABS[0]
+      const data = await fetchStockAdjustmentRequests({
         status: tab.status,
         mine: tab.mine,
         search: searchValue.trim() || undefined,
+        page,
+        pageSize,
       })
-      const filtered = tab.excludePending ? items.filter((row) => row.status !== 'pending') : items
+      const filtered = tab.excludePending ? data.items.filter((row) => row.status !== 'pending') : data.items
       setRequests(filtered)
+      setTotalCount(data.totalCount)
     } catch (error) {
       setRequests([])
+      setTotalCount(0)
       showError(error.message)
     } finally {
       setIsLoading(false)
     }
-  }, [activeTab, searchValue])
+  }, [activeTab, searchValue, page, pageSize])
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -142,7 +156,10 @@ function StockAdjustmentRequestsPage() {
         }
         searchPlaceholder="Tìm mã yêu cầu, SKU..."
         searchValue={searchValue}
-        onSearchChange={setSearchValue}
+        onSearchChange={(value) => {
+          setSearchValue(value)
+          setPage(1)
+        }}
         rightContent={
           <div className="flex flex-wrap items-center gap-2">
             {inventoryNavTabs.map((tab) => (
@@ -169,7 +186,10 @@ function StockAdjustmentRequestsPage() {
           <button
             key={tab.key}
             type="button"
-            onClick={() => setActiveTab(tab.key)}
+            onClick={() => {
+              setActiveTab(tab.key)
+              setPage(1)
+            }}
             className={`rounded-xl px-5 py-2.5 text-sm font-semibold transition-colors ${
               activeTab === tab.key
                 ? 'bg-[#538463] text-white shadow-md shadow-[#538463]/20'
@@ -200,7 +220,7 @@ function StockAdjustmentRequestsPage() {
       <section className="rounded-3xl border border-slate-100 bg-white shadow-sm">
         <div className="border-b border-slate-50 p-6">
           <h2 className="text-xl font-bold text-slate-800">
-            {TABS.find((t) => t.key === activeTab)?.label}
+            {REQUEST_TABS.find((t) => t.key === activeTab)?.label}
           </h2>
         </div>
 
@@ -322,6 +342,14 @@ function StockAdjustmentRequestsPage() {
             </tbody>
           </table>
         </div>
+        <TablePagination
+          page={page}
+          pageSize={pageSize}
+          totalCount={totalCount}
+          itemLabel="yêu cầu"
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+        />
       </section>
 
       {rejectTarget ? (

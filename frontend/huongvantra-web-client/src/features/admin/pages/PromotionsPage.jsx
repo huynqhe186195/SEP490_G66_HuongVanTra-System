@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
+import TablePagination from '../../../components/shared/TablePagination.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
 import {
   formatVietnamDateTimeMinute,
@@ -52,25 +53,6 @@ const DEFAULT_PAGINATION = {
   pageSize: PROMOTION_PAGE_SIZE,
   totalItems: 0,
   totalPages: 1,
-}
-
-function getPaginationItems(currentPage, totalPages) {
-  const total = Math.max(1, Number(totalPages) || 1)
-  const current = Math.min(total, Math.max(1, Number(currentPage) || 1))
-
-  if (total <= 7) {
-    return Array.from({ length: total }, (_, index) => index + 1)
-  }
-
-  if (current <= 3) {
-    return [1, 2, 3, 'ellipsis-right']
-  }
-
-  if (current >= total - 2) {
-    return ['ellipsis-left', total - 2, total - 1, total]
-  }
-
-  return ['ellipsis-left', current - 1, current, current + 1, 'ellipsis-right']
 }
 
 const VALIDITY_BADGE_CLASS = {
@@ -287,16 +269,15 @@ function PromotionsPage() {
   const [scopeTypeFilter, setScopeTypeFilter] = useState('ALL')
   const [statusFilter, setStatusFilter] = useState('ALL')
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(PROMOTION_PAGE_SIZE)
   const [pagination, setPagination] = useState(DEFAULT_PAGINATION)
-  const [jumpPopoverKey, setJumpPopoverKey] = useState(null)
-  const [jumpPageInput, setJumpPageInput] = useState('')
 
   const loadData = useCallback(async () => {
     setIsLoading(true)
     try {
       const result = await fetchAdminPromotions({
         page,
-        pageSize: PROMOTION_PAGE_SIZE,
+        pageSize,
         search: promotionSearchTerm,
         discountType: discountTypeFilter,
         scopeType: scopeTypeFilter,
@@ -305,7 +286,7 @@ function PromotionsPage() {
       setPromotions(result.items)
       setPagination({
         page: result.page || page,
-        pageSize: result.pageSize || PROMOTION_PAGE_SIZE,
+        pageSize: result.pageSize || pageSize,
         totalItems: result.totalItems || 0,
         totalPages: Math.max(1, result.totalPages || 1),
       })
@@ -316,7 +297,7 @@ function PromotionsPage() {
     } finally {
       setIsLoading(false)
     }
-  }, [discountTypeFilter, page, promotionSearchTerm, scopeTypeFilter, statusFilter])
+  }, [discountTypeFilter, page, pageSize, promotionSearchTerm, scopeTypeFilter, statusFilter])
 
   const loadSkuOptions = useCallback(async () => {
     if (skuOptions.length > 0 || isSkuLoading) return
@@ -366,11 +347,6 @@ function PromotionsPage() {
   useEffect(() => {
     loadData()
   }, [loadData])
-
-  useEffect(() => {
-    setJumpPopoverKey(null)
-    setJumpPageInput('')
-  }, [pagination.page, pagination.totalPages])
 
   const openCreate = () => {
     setEditingId(null)
@@ -702,21 +678,6 @@ function PromotionsPage() {
     })
     .slice(0, 12)
   const selectedCustomerTierScopes = form.customerTierScopes ?? []
-  const totalPages = Math.max(1, pagination.totalPages)
-  const currentPage = Math.min(totalPages, Math.max(1, pagination.page))
-  const paginationItems = getPaginationItems(currentPage, totalPages)
-  const openJumpPopover = (key) => {
-    setJumpPopoverKey((current) => (current === key ? null : key))
-    setJumpPageInput('')
-  }
-  const submitJumpPage = () => {
-    const nextPage = Number(jumpPageInput)
-    if (!Number.isInteger(nextPage) || nextPage < 1 || nextPage > totalPages) return
-
-    setPage(nextPage)
-    setJumpPopoverKey(null)
-    setJumpPageInput('')
-  }
   const addSkuScope = (sku) => {
     if (isImmutableLocked || selectedSkuIds.has(sku.id)) return
     setForm((prev) => ({
@@ -952,119 +913,16 @@ function PromotionsPage() {
         </div>
       </section>
 
-      <div className="mt-4 flex flex-wrap items-center justify-end gap-3 text-sm text-slate-600">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <button
-            type="button"
-            disabled={isLoading || currentPage <= 1}
-            onClick={() => setPage(1)}
-            className="rounded-lg border border-slate-200 px-3 py-1.5 font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Đầu
-          </button>
-          <button
-            type="button"
-            disabled={isLoading || currentPage <= 1}
-            onClick={() => setPage((prev) => Math.max(1, prev - 1))}
-            className="rounded-lg border border-slate-200 px-3 py-1.5 font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Trước
-          </button>
-          {paginationItems.map((item) => {
-            if (typeof item === 'string') {
-              return (
-                <span key={item} className="relative inline-flex">
-                  <button
-                    type="button"
-                    title="Đi tới trang bất kỳ"
-                    onClick={() => openJumpPopover(item)}
-                    className="rounded-lg px-2 py-1.5 font-semibold text-slate-400 hover:bg-slate-50 hover:text-slate-600"
-                  >
-                    ...
-                  </button>
-                  {jumpPopoverKey === item ? (
-                    <span className="absolute left-1/2 top-full z-30 mt-2 w-44 -translate-x-1/2 rounded-xl border border-slate-200 bg-white p-3 text-left shadow-xl">
-                      <label className="block text-xs font-bold text-slate-500">
-                        Đi tới trang
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          value={jumpPageInput}
-                          onChange={(event) => setJumpPageInput(event.target.value.replace(/\D/g, ''))}
-                          onKeyDown={(event) => {
-                            if (event.key === 'Enter') {
-                              event.preventDefault()
-                              submitJumpPage()
-                            }
-                          }}
-                          className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm font-semibold text-slate-700 outline-none focus:border-[#538463] focus:ring-2 focus:ring-[#538463]/15"
-                          placeholder={`1 - ${totalPages}`}
-                          autoFocus
-                        />
-                      </label>
-                      <div className="mt-2 flex justify-end gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setJumpPopoverKey(null)
-                            setJumpPageInput('')
-                          }}
-                          className="rounded-lg px-2 py-1 text-xs font-semibold text-slate-500 hover:bg-slate-50"
-                        >
-                          Hủy
-                        </button>
-                        <button
-                          type="button"
-                          onClick={submitJumpPage}
-                          className="rounded-lg bg-[#538463] px-3 py-1 text-xs font-bold text-white hover:bg-[#457053]"
-                        >
-                          Đi
-                        </button>
-                      </div>
-                    </span>
-                  ) : null}
-                </span>
-              )
-            }
-
-            const isCurrent = item === currentPage
-            return (
-              <button
-                key={item}
-                type="button"
-                disabled={isLoading || isCurrent}
-                onClick={() => setPage(item)}
-                className={`min-w-9 rounded-lg border px-3 py-1.5 font-semibold ${
-                  isCurrent
-                    ? 'border-[#538463] bg-[#538463] text-white'
-                    : 'border-slate-200 text-slate-700 hover:bg-slate-50'
-                } disabled:cursor-not-allowed disabled:opacity-80`}
-                aria-current={isCurrent ? 'page' : undefined}
-              >
-                {item}
-              </button>
-            )
-          })}
-          <button
-            type="button"
-            disabled={isLoading || currentPage >= totalPages}
-            onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
-            className="rounded-lg border border-slate-200 px-3 py-1.5 font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Tiếp
-          </button>
-          <button
-            type="button"
-            disabled={isLoading || currentPage >= totalPages}
-            onClick={() => setPage(totalPages)}
-            className="rounded-lg border border-slate-200 px-3 py-1.5 font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Cuối
-          </button>
-        </div>
-        <span className="font-semibold text-slate-500">
-          Trang {currentPage} / {totalPages}
-        </span>
+      <div className="mt-4 overflow-hidden rounded-2xl border border-slate-100">
+        <TablePagination
+          page={page}
+          pageSize={pageSize}
+          totalCount={pagination.totalItems}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+          disabled={isLoading}
+          itemLabel="mã giảm giá"
+        />
       </div>
 
       {modalOpen ? (

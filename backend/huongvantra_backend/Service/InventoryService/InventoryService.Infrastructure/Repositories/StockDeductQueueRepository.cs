@@ -20,6 +20,30 @@ public class StockDeductQueueRepository(InventoryDbContext _db) : IStockDeductQu
 
     public async Task<List<StockDeductQueue>> GetWaitingAsync(string? search, CancellationToken ct = default)
     {
+        var query = BuildWaitingQuery(search);
+
+        return await query.OrderByDescending(q => q.CreatedAt).ToListAsync(ct);
+    }
+
+    public async Task<(List<StockDeductQueue> Items, int TotalCount)> GetWaitingPagedAsync(
+        string? search,
+        int page,
+        int pageSize,
+        CancellationToken ct = default)
+    {
+        var query = BuildWaitingQuery(search);
+        var totalCount = await query.CountAsync(ct);
+        var items = await query
+            .OrderByDescending(q => q.CreatedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(ct);
+
+        return (items, totalCount);
+    }
+
+    private IQueryable<StockDeductQueue> BuildWaitingQuery(string? search)
+    {
         var query = _db.StockDeductQueues
             .Where(q => q.QueueStatus == QueueStatus.Waiting);
 
@@ -29,7 +53,7 @@ public class StockDeductQueueRepository(InventoryDbContext _db) : IStockDeductQu
             query = query.Where(q => q.OrderCode.ToLower().Contains(s));
         }
 
-        return await query.OrderByDescending(q => q.CreatedAt).ToListAsync(ct);
+        return query;
     }
 
     public async Task AddAsync(StockDeductQueue queue, CancellationToken ct = default) =>

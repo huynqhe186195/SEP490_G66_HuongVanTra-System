@@ -36,6 +36,7 @@ function ExchangeOrdersPage() {
   const [returns, setReturns] = useState([])
   const [totalCount, setTotalCount] = useState(0)
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE)
   const [isLoading, setIsLoading] = useState(true)
 
   const queryParams = useMemo(
@@ -45,9 +46,9 @@ function ExchangeOrdersPage() {
       orderKind: 'Exchange',
       channel: channel || undefined,
       page,
-      pageSize: TABLE_PAGE_SIZE,
+      pageSize,
     }),
-    [search, status, channel, page],
+    [search, status, channel, page, pageSize],
   )
 
   const returnQueryParams = useMemo(
@@ -55,9 +56,9 @@ function ExchangeOrdersPage() {
       search: search.trim() || undefined,
       channel: returnChannel || undefined,
       page,
-      pageSize: TABLE_PAGE_SIZE,
+      pageSize,
     }),
-    [search, returnChannel, page],
+    [search, returnChannel, page, pageSize],
   )
 
   const hasActiveFilters =
@@ -370,7 +371,14 @@ function ExchangeOrdersPage() {
               </tbody>
             </table>
           </div>
-          <TablePagination page={page} totalCount={totalCount} itemLabel="phiếu trả" onPageChange={setPage} />
+          <TablePagination
+            page={page}
+            pageSize={pageSize}
+            totalCount={totalCount}
+            itemLabel="phiếu trả"
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
         </section>
       ) : null}
 
@@ -472,7 +480,14 @@ function ExchangeOrdersPage() {
           </table>
         </div>
 
-        <TablePagination page={page} totalCount={totalCount} itemLabel="đơn đổi" onPageChange={setPage} />
+        <TablePagination
+          page={page}
+          pageSize={pageSize}
+          totalCount={totalCount}
+          itemLabel="đơn đổi"
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+        />
       </section>
       ) : null}
     </PageShell>

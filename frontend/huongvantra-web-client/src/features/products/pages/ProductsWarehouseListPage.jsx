@@ -3,7 +3,7 @@ import { AUTH_SESSION_CHANGED_EVENT, loadAuthSession } from '../../auth/services
 import { Link } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
-import TablePagination from '../../../components/shared/TablePagination.jsx'
+import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
 import {
   canAdjustStoreStock,
@@ -57,7 +57,7 @@ export default function ProductsWarehouseListPage() {
   const [categoryId, setCategoryId] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [page, setPage] = useState(1)
-  const [pageSize] = useState(10)
+  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE)
   const [totalCount, setTotalCount] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
   const [stockBySkuId, setStockBySkuId] = useState(() => new Map())
@@ -477,7 +477,14 @@ export default function ProductsWarehouseListPage() {
           </table>
         </div>
 
-        <TablePagination page={page} pageSize={pageSize} totalCount={totalCount} onPageChange={setPage} itemLabel="sản phẩm" />
+        <TablePagination
+          page={page}
+          pageSize={pageSize}
+          totalCount={totalCount}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+          itemLabel="sản phẩm"
+        />
       </div>
 
       {skuModalProduct ? (
