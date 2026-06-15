@@ -1,19 +1,10 @@
-const PHONE_REGEX = /^0\d{9}$/
-
-export function normalizePhoneInput(value) {
-  return String(value || '').replace(/\D/g, '').slice(0, 10)
-}
+import { normalizePhoneInput, validatePhoneNumber } from '../../customers/utils/customerValidation.js'
 
 export function validateAccountPhone(phone, { required = false } = {}) {
-  const value = String(phone || '').trim()
-  if (!value) {
-    return required ? 'Số điện thoại là bắt buộc.' : null
-  }
-  if (!PHONE_REGEX.test(value)) {
-    return 'Số điện thoại phải gồm 10 chữ số và bắt đầu bằng 0.'
-  }
-  return null
+  return validatePhoneNumber(phone, { required })
 }
+
+export { normalizePhoneInput }
 
 export function validateCreateAccountForm({ username, password, fullName, phone, roleId }) {
   const errors = {}

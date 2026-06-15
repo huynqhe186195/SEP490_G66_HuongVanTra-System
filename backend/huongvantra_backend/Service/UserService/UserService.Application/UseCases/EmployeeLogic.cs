@@ -87,6 +87,23 @@ public class EmployeeLogic(
             visible.Count);
     }
 
+    public async Task<IReadOnlyList<SalesAssigneeResponse>> GetSalesAssigneesAsync()
+    {
+        var (items, _) = await employeeRepo.GetAllAsync(1, 500);
+        return items
+            .Select(MapToDetail)
+            .Where(employee =>
+                employee.IsUserActive
+                && string.Equals(employee.Status, EmployeeStatus.Active.ToString(), StringComparison.OrdinalIgnoreCase)
+                && employee.Roles.Any(StaffManagementScope.IsSaleRole))
+            .Select(employee => new SalesAssigneeResponse(
+                employee.UserId,
+                employee.FullName,
+                employee.Department))
+            .OrderBy(employee => employee.FullName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
     public async Task<EmployeeDetailResponse> GetByIdAsync(long id, IReadOnlyList<string>? actorPermissions = null)
     {
         var employee = await employeeRepo.GetByIdAsync(id) ?? throw new EmployeeNotFoundException(id);

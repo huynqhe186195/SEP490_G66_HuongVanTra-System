@@ -618,7 +618,7 @@ export async function createPosCustomer(payload) {
   })
 
   try {
-    const created = await apiRequestAuth('/api/customers', {
+    const created = await apiRequestAuth('/api/customers/pos-quick', {
       method: 'POST',
       body: JSON.stringify(body),
     })

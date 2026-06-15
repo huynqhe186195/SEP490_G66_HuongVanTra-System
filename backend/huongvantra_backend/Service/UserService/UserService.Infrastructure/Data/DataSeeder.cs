@@ -15,7 +15,7 @@ public static class DataSeeder
     private static readonly (string RoleName, string Description, string[] Permissions)[] DefaultRoles =
     [
         ("Sale", "Nhân viên kinh doanh",
-        [PermissionNames.CreateOrder, PermissionNames.ViewOrder, PermissionNames.CreateCustomer, PermissionNames.ViewCustomer]),
+        [PermissionNames.CreateOrder, PermissionNames.ViewOrder, PermissionNames.ViewCustomer]),
         ("Warehouse", "Nhân viên kho",
         [PermissionNames.ViewOrder, PermissionNames.ManageCatalog]),
         ("Accountant", "Kế toán",
@@ -99,6 +99,13 @@ public static class DataSeeder
         }
 
         role.Description = description;
+        var targetPermissionIds = permissions.Select(p => p.Id).ToHashSet();
+        var staleAssignments = role.RolePermissions
+            .Where(rp => !targetPermissionIds.Contains(rp.PermissionId))
+            .ToList();
+        foreach (var stale in staleAssignments)
+            role.RolePermissions.Remove(stale);
+
         var assignedIds = role.RolePermissions.Select(rp => rp.PermissionId).ToHashSet();
         foreach (var permission in permissions.Where(p => !assignedIds.Contains(p.Id)))
             role.RolePermissions.Add(new RolePermission { RoleId = role.Id, PermissionId = permission.Id });

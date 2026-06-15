@@ -11,7 +11,6 @@ public static class CustomerInputValidator
         @"^[^\s@]+@[^\s@]+\.[^\s@]{2,}$",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
-    private static readonly Regex PhoneRegex = new(@"^0\d{9}$", RegexOptions.Compiled);
     private static readonly Regex DigitsOnlyRegex = new(@"^\d+$", RegexOptions.Compiled);
     private static readonly Regex LettersOnlyRegex = new(@"^[\p{L}\s]+$", RegexOptions.Compiled);
 
@@ -48,10 +47,8 @@ public static class CustomerInputValidator
             errors.Add("Họ tên chỉ được chứa chữ cái và khoảng trắng (hỗ trợ tiếng Việt có dấu).");
 
         var phoneNumber = phoneNumberValue?.Trim();
-        if (string.IsNullOrWhiteSpace(phoneNumber))
-            errors.Add("Số điện thoại là bắt buộc.");
-        else if (!PhoneRegex.IsMatch(phoneNumber))
-            errors.Add("Số điện thoại phải gồm 10 chữ số và bắt đầu bằng 0.");
+        if (!VietnamPhoneValidator.TryValidate(phoneNumber, out var phoneError))
+            errors.Add(phoneError!);
 
         var email = emailValue?.Trim();
         if (string.IsNullOrWhiteSpace(email))
@@ -77,11 +74,12 @@ public static class CustomerInputValidator
         var taxCode = taxCodeValue?.Trim();
         if (string.IsNullOrWhiteSpace(taxCode))
             taxCode = null;
-        else if (taxCode.Length > 50)
-            errors.Add("Mã số thuế tối đa 50 ký tự.");
 
-        if (customerGroup == CustomerGroup.DoanhNghiep && string.IsNullOrWhiteSpace(taxCode))
-            errors.Add("Khách doanh nghiệp cần mã số thuế.");
+        if (!VietnamTaxCodeValidator.TryValidate(
+                taxCode,
+                customerGroup == CustomerGroup.DoanhNghiep,
+                out var taxCodeError))
+            errors.Add(taxCodeError!);
 
         if (assignedSaleId == Guid.Empty)
             errors.Add("Mã nhân viên phụ trách không hợp lệ.");

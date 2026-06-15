@@ -9,12 +9,21 @@ namespace UserService.WebAPI.Controllers;
 
 [ApiController]
 [Route("api/employees")]
-[Authorize(Policy = PermissionNames.ManageEmployee)]
+[Authorize]
 public class EmployeesController(EmployeeLogic employeeLogic) : ControllerBase
 {
     private IReadOnlyList<string> ActorPermissions => User.GetPermissions().ToList();
 
+    [HttpGet("sales-assignees")]
+    [Authorize(Policy = PermissionNames.ViewAllCustomers)]
+    public async Task<IActionResult> GetSalesAssignees()
+    {
+        var result = await employeeLogic.GetSalesAssigneesAsync();
+        return Ok(result);
+    }
+
     [HttpGet]
+    [Authorize(Policy = PermissionNames.ManageEmployee)]
     public async Task<IActionResult> GetAll([FromQuery] int page = 1, [FromQuery] int pageSize = 20)
     {
         var result = await employeeLogic.GetAllAsync(page, pageSize, ActorPermissions);
@@ -22,6 +31,7 @@ public class EmployeesController(EmployeeLogic employeeLogic) : ControllerBase
     }
 
     [HttpGet("{id:long}")]
+    [Authorize(Policy = PermissionNames.ManageEmployee)]
     public async Task<IActionResult> GetById(long id)
     {
         var result = await employeeLogic.GetByIdAsync(id, ActorPermissions);
@@ -29,6 +39,7 @@ public class EmployeesController(EmployeeLogic employeeLogic) : ControllerBase
     }
 
     [HttpPost]
+    [Authorize(Policy = PermissionNames.ManageEmployee)]
     public async Task<IActionResult> Create([FromBody] CreateEmployeeRequest request)
     {
         var result = await employeeLogic.CreateAsync(request, ActorPermissions);
@@ -36,6 +47,7 @@ public class EmployeesController(EmployeeLogic employeeLogic) : ControllerBase
     }
 
     [HttpPut("{id:long}")]
+    [Authorize(Policy = PermissionNames.ManageEmployee)]
     public async Task<IActionResult> Update(long id, [FromBody] UpdateEmployeeRequest request)
     {
         await employeeLogic.UpdateAsync(id, request, ActorPermissions);
@@ -43,6 +55,7 @@ public class EmployeesController(EmployeeLogic employeeLogic) : ControllerBase
     }
 
     [HttpPut("{id:long}/deactivate")]
+    [Authorize(Policy = PermissionNames.ManageEmployee)]
     public async Task<IActionResult> Deactivate(long id)
     {
         await employeeLogic.DeactivateAsync(id, ActorPermissions);

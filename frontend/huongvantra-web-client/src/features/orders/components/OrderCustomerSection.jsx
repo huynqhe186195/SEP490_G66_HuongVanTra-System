@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { showError, showSuccess } from '../../../app/toast.js'
 import {
-  createCustomer,
+  createCustomerForOrder,
   fetchCustomerAddresses,
   fetchCustomers,
 } from '../../customers/services/customersApi.js'
@@ -178,7 +178,7 @@ function OrderCustomerSection({
 
     try {
       setIsCreatingCustomer(true)
-      const created = await createCustomer({
+      const created = await createCustomerForOrder({
         fullName: newCustomerForm.fullName.trim(),
         phone: newCustomerForm.phone.trim(),
         address: newCustomerForm.addressLine.trim() || null,

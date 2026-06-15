@@ -130,6 +130,14 @@ public class CustomersController : ControllerBase
         return Ok(result);
     }
 
+    [HttpPost("pos-quick")]
+    [Authorize(Policy = PermissionNames.CreateOrder)]
+    public async Task<IActionResult> CreateFromPos([FromBody] CreateCustomerRequest request, CancellationToken ct = default)
+    {
+        var result = await _logic.CreateAsync(request, AccessContext(), ct);
+        return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
+    }
+
     [HttpPost]
     [Authorize(Policy = PermissionNames.CreateCustomer)]
     public async Task<IActionResult> Create([FromBody] CreateCustomerRequest request, CancellationToken ct = default)
@@ -139,7 +147,7 @@ public class CustomersController : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
-    [Authorize(Policy = PermissionNames.ViewAllCustomers)]
+    [Authorize(Policy = PermissionNames.EditCustomerProfile)]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateCustomerRequest request, CancellationToken ct = default)
     {
         var result = await _logic.UpdateAsync(id, request, AccessContext(), ct);

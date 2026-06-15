@@ -13,6 +13,28 @@ export function canViewAllCustomers(session) {
   return hasPermission(session, 'VIEW_ALL_CUSTOMERS') || hasPermission(session, 'MANAGE_ROLE')
 }
 
+export function canViewCustomer(session) {
+  return hasPermission(session, 'VIEW_CUSTOMER')
+}
+
+export function canCreateCustomer(session) {
+  return hasPermission(session, 'CREATE_CUSTOMER')
+}
+
+/** Sửa hồ sơ KH: chỉ Admin/Manager/Kế toán (VIEW_ALL_CUSTOMERS). Sale chỉ xem. */
+export function canEditCustomer(session) {
+  return canViewAllCustomers(session)
+}
+
+/** Sale (hoặc NV chỉ có VIEW_CUSTOMER): xem tệp KH được gán, không thêm/sửa hồ sơ. */
+export function isAssignedCustomerViewer(session) {
+  return canViewCustomer(session) && !canViewAllCustomers(session)
+}
+
+export function canDeleteCustomer(session) {
+  return canViewAllCustomers(session)
+}
+
 /** Manager/Admin/Kế toán xem mọi đơn; Sale chỉ đơn do mình tạo (EmployeeId). */
 export function canViewAllOrders(session) {
   return (
@@ -20,11 +42,6 @@ export function canViewAllOrders(session) {
     || hasPermission(session, 'MANAGE_EMPLOYEE')
     || hasPermission(session, 'MANAGE_ROLE')
   )
-}
-
-/** Quản lý hồ sơ KH trên trang /customers (tạo/sửa/xóa). Sale chỉ xem; tạo tại POS vẫn dùng API create. */
-export function canEditCustomer(session) {
-  return canViewAllCustomers(session)
 }
 
 export function canSimulateOrderCompleted(session) {

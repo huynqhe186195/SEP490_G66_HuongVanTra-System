@@ -45,7 +45,7 @@ export const navigationItems = [
     icon: 'inventory_2',
     roles: ['admin', 'agencyManager'],
   },
-  { label: 'Khách hàng', path: '/customers', module: 'customers', icon: 'groups', roles: ['admin', 'agencyManager'] },
+  { label: 'Khách hàng', path: '/customers', module: 'customers', icon: 'groups', roles: ['admin', 'agencyManager', 'salesStaff', 'accountant'] },
   { label: 'Hàng hóa', path: '/inventory/products', module: 'products', icon: 'inventory_2', roles: ['admin', 'agencyManager', 'inventoryManager'] },
   { label: 'Kho tổng', path: '/inventory', module: 'inventory', icon: 'warehouse', roles: ['inventoryManager'] },
   {

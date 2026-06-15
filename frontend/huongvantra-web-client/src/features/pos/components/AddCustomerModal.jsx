@@ -103,7 +103,7 @@ function AddCustomerModal({ isOpen, onClose, onSaved }) {
             <input
               className={inputClass(fieldErrors.phone)}
               inputMode="numeric"
-              placeholder="Nhập số điện thoại (10 số, bắt đầu 0)..."
+              placeholder="Nhập số điện thoại (di động 10 số, máy bàn 02 + 9 số)..."
               value={phone}
               onChange={(event) => {
                 setPhone(normalizePhoneInput(event.target.value))
