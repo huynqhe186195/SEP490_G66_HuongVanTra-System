@@ -378,21 +378,6 @@ namespace InventoryService.Infrastructure.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("char(36)");
 
-                    b.Property<Guid?>("ExportSlipId")
-                        .HasColumnType("char(36)");
-
-                    b.Property<int>("QuantityDelta")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("QuantityOnHandAfter")
-                        .HasColumnType("int");
-
-                    b.Property<int>("QuantityOnHandSnapshot")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("WarehouseQuantityOnHandAfter")
-                        .HasColumnType("int");
-
                     b.Property<string>("Reason")
                         .HasMaxLength(500)
                         .HasColumnType("varchar(500)");
@@ -418,19 +403,6 @@ namespace InventoryService.Infrastructure.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("varchar(500)");
 
-                    b.Property<string>("SkuCode")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("varchar(50)");
-
-                    b.Property<Guid>("SkuId")
-                        .HasColumnType("char(36)");
-
-                    b.Property<string>("SkuSnapshotName")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("varchar(255)");
-
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -447,19 +419,83 @@ namespace InventoryService.Infrastructure.Migrations
 
                     b.HasIndex("Status");
 
-                    b.HasIndex("ExportSlipId");
-
                     b.ToTable("StockAdjustmentRequests");
                 });
 
+            modelBuilder.Entity("InventoryService.Domain.Entities.StockAdjustmentRequestItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)");
+
+                    b.Property<Guid?>("ExportSlipId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<int>("QuantityDelta")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("QuantityOnHandAfter")
+                        .HasColumnType("int");
+
+                    b.Property<int>("QuantityOnHandSnapshot")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("RequestId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("SkuCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<Guid>("SkuId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("SkuSnapshotName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<int?>("WarehouseQuantityOnHandAfter")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExportSlipId");
+
+                    b.HasIndex("RequestId");
+
+                    b.HasIndex("SkuId");
+
+                    b.ToTable("StockAdjustmentRequestItems");
+                });
+
             modelBuilder.Entity("InventoryService.Domain.Entities.StockAdjustmentRequest", b =>
+                {
+                    b.HasMany("Items")
+                        .WithOne("Request")
+                        .HasForeignKey("RequestId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Items");
+                });
+
+            modelBuilder.Entity("InventoryService.Domain.Entities.StockAdjustmentRequestItem", b =>
                 {
                     b.HasOne("InventoryService.Domain.Entities.StockExportSlip", "ExportSlip")
                         .WithMany()
                         .HasForeignKey("ExportSlipId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("InventoryService.Domain.Entities.StockAdjustmentRequest", "Request")
+                        .WithMany("Items")
+                        .HasForeignKey("RequestId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
                     b.Navigation("ExportSlip");
+
+                    b.Navigation("Request");
                 });
 
             modelBuilder.Entity("InventoryService.Domain.Entities.StockExportBatchAllocation", b =>

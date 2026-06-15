@@ -87,12 +87,20 @@ public class EmployeeLogic(
             visible.Count);
     }
 
-    public async Task<List<EmployeeDetailResponse>> GetSalesAsync()
+    public async Task<IReadOnlyList<SalesAssigneeResponse>> GetSalesAssigneesAsync()
     {
         var (items, _) = await employeeRepo.GetAllAsync(1, 500);
         return items
             .Select(MapToDetail)
-            .Where(e => e.Roles.Any(StaffManagementScope.IsSaleRole))
+            .Where(employee =>
+                employee.IsUserActive
+                && string.Equals(employee.Status, EmployeeStatus.Active.ToString(), StringComparison.OrdinalIgnoreCase)
+                && employee.Roles.Any(StaffManagementScope.IsSaleRole))
+            .Select(employee => new SalesAssigneeResponse(
+                employee.UserId,
+                employee.FullName,
+                employee.Department))
+            .OrderBy(employee => employee.FullName, StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
 

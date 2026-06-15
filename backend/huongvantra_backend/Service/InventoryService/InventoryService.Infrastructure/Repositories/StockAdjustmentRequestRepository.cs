@@ -10,7 +10,8 @@ public class StockAdjustmentRequestRepository(InventoryDbContext _db) : IStockAd
 {
     public Task<StockAdjustmentRequest?> GetByIdAsync(Guid id, CancellationToken ct = default) =>
         _db.StockAdjustmentRequests
-            .Include(r => r.ExportSlip)
+            .Include(r => r.Items)
+            .ThenInclude(i => i.ExportSlip)
             .FirstOrDefaultAsync(r => r.Id == id, ct);
 
     public async Task<List<StockAdjustmentRequest>> GetListAsync(
@@ -22,7 +23,8 @@ public class StockAdjustmentRequestRepository(InventoryDbContext _db) : IStockAd
         var query = BuildListQuery(status, false, requestedBy, search);
 
         return await query
-            .Include(r => r.ExportSlip)
+            .Include(r => r.Items)
+            .ThenInclude(i => i.ExportSlip)
             .OrderByDescending(r => r.RequestedAt)
             .ToListAsync(ct);
     }
@@ -39,7 +41,8 @@ public class StockAdjustmentRequestRepository(InventoryDbContext _db) : IStockAd
         var query = BuildListQuery(status, excludePending, requestedBy, search);
         var totalCount = await query.CountAsync(ct);
         var items = await query
-            .Include(r => r.ExportSlip)
+            .Include(r => r.Items)
+            .ThenInclude(i => i.ExportSlip)
             .OrderByDescending(r => r.RequestedAt)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
@@ -70,8 +73,9 @@ public class StockAdjustmentRequestRepository(InventoryDbContext _db) : IStockAd
             var keyword = search.Trim().ToLower();
             query = query.Where(r =>
                 r.RequestCode.ToLower().Contains(keyword) ||
-                r.SkuCode.ToLower().Contains(keyword) ||
-                r.SkuSnapshotName.ToLower().Contains(keyword));
+                r.Items.Any(i =>
+                    i.SkuCode.ToLower().Contains(keyword) ||
+                    i.SkuSnapshotName.ToLower().Contains(keyword)));
         }
 
         return query;

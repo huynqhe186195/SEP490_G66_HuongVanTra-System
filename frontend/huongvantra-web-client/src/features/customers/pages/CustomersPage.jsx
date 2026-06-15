@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useAuthSession } from '../../auth/hooks/useAuthSession.js'
 import { Link } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
-import { loadAuthSession } from '../../auth/services/authSession.js'
-import { canEditCustomer, canManageCorporateCustomers } from '../../auth/utils/permissions.js'
+import { canCreateCustomer, canDeleteCustomer, canEditCustomer, canManageCorporateCustomers, canViewAllCustomers, isAssignedCustomerViewer } from '../../auth/utils/permissions.js'
 import CustomerActivityFeed from '../components/CustomerActivityFeed.jsx'
 import CustomersTableShell from '../components/CustomersTableShell.jsx'
 import CustomersMobileCards from '../components/CustomersMobileCards.jsx'
@@ -59,9 +59,12 @@ const growthBars = [
 ]
 
 function CustomersPage() {
-  const session = useMemo(() => loadAuthSession(), [])
+  const session = useAuthSession()
   const canManageCustomers = canEditCustomer(session)
+  const canCreateCustomers = canCreateCustomer(session)
+  const canRemoveCustomers = canDeleteCustomer(session)
   const canManageCorporate = canManageCorporateCustomers(session)
+  const isScopedSale = isAssignedCustomerViewer(session)
   const canEditCustomerRow = (row) =>
     isCorporateCustomerType(row?.customerType) ? canManageCorporate : canManageCustomers
   const [activeTab, setActiveTab] = useState('general')
@@ -103,13 +106,23 @@ function CustomersPage() {
     setSortBy('')
   }
 
-  const tabs = useMemo(() => CUSTOMER_LIST_TABS, [])
+  const tabs = useMemo(() => {
+    if (!isScopedSale) return CUSTOMER_LIST_TABS
+    return CUSTOMER_LIST_TABS.filter((tab) => tab.key === 'general' || tab.key === 'vip')
+  }, [isScopedSale])
 
   useEffect(() => {
     if (!CUSTOMER_CORPORATE_ENABLED && activeTab === 'corporate') {
       setActiveTab('general')
     }
   }, [activeTab])
+
+  useEffect(() => {
+    if (!isScopedSale) return
+    if (!tabs.some((tab) => tab.key === activeTab)) {
+      setActiveTab('general')
+    }
+  }, [isScopedSale, tabs, activeTab])
 
   useEffect(() => {
     let mounted = true
@@ -306,8 +319,14 @@ function CustomersPage() {
           <div className="flex items-center gap-2 text-xs text-[#717971]">
             <span>Khách hàng</span>
             <span className="material-symbols-outlined text-[14px]">chevron_right</span>
-            <span className="font-semibold text-[#356647]">Quản lý</span>
+            <span className="font-semibold text-[#356647]">{isScopedSale ? 'Tệp của tôi' : 'Quản lý'}</span>
           </div>
+
+          {isScopedSale ? (
+            <p className="text-xs leading-relaxed text-[#717971]">
+              Chỉ xem khách hàng được gán cho bạn (Phổ thông & VIP). Thêm hoặc sửa hồ sơ khách hàng do Quản lý/Admin thực hiện; tại POS bạn vẫn có thể thêm khách nhanh khi bán hàng.
+            </p>
+          ) : null}
 
           <div className={`grid grid-cols-1 gap-2 min-[420px]:grid-cols-2 ${tabs.length >= 4 ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
               {tabs.map((tab) => (
@@ -413,7 +432,7 @@ function CustomersPage() {
               rows={paginatedCustomers}
               isLoading={isLoading}
               emptyMessage="Không có khách hàng đã ngừng hoạt động."
-              onRestore={canManageCustomers || canManageCorporate ? handleRestore : undefined}
+              onRestore={canRemoveCustomers || canManageCorporate ? handleRestore : undefined}
               restoringId={restoringId}
               canEditCustomer={canManageCustomers}
               canEditRow={canEditCustomerRow}
@@ -700,7 +719,7 @@ function CustomersPage() {
                 <article className="rounded-xl border border-[#eae8e0] bg-white p-4 shadow-sm sm:p-5">
                   <div className="mb-4 flex items-center justify-between gap-2">
                     <h4 className="font-bold text-[#1b1c17]">Top chi tiêu cao</h4>
-                    <span className="text-xs text-[#717971]">Toàn hệ thống · {statistics.totalCustomers} khách</span>
+                    <span className="text-xs text-[#717971]">{isScopedSale ? 'Tệp của bạn' : 'Toàn hệ thống'} · {statistics.totalCustomers} khách</span>
                   </div>
                   {statistics.topSpenders?.length ? (
                     <ul className="space-y-2">
@@ -767,7 +786,7 @@ function CustomersPage() {
                   </span>
                 </div>
 
-                {canManageCustomers ? (
+                {canCreateCustomers ? (
                   <div className="flex w-full sm:w-auto">
                     <Link to="/customers/create?type=general" className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[#4a6242] px-4 py-2.5 text-sm text-white hover:opacity-90 sm:w-auto">
                       <span className="material-symbols-outlined text-[20px]">add</span>
@@ -961,7 +980,7 @@ function CustomersPage() {
                   </span>
                 </div>
 
-                {canManageCustomers ? (
+                {canCreateCustomers ? (
                   <div className="flex w-full sm:w-auto">
                     <Link to="/customers/create?type=vip" className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[#7e5700] px-4 py-2.5 text-sm text-white hover:opacity-90 sm:w-auto">
                       <span className="material-symbols-outlined text-[20px]">add</span>

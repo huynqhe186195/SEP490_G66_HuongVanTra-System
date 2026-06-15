@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import ModuleRouteGuard from '../app/ModuleRouteGuard.jsx'
+import StockAdjustmentBatchBar from '../features/inventory/components/StockAdjustmentBatchBar.jsx'
 import Sidebar from '../components/shared/Sidebar.jsx'
 import { getNavigationItemsForSession } from '../app/navigation.js'
 import { isWarehouseUserRole } from '../features/auth/services/authApi.js'
@@ -157,6 +158,7 @@ function AdminLayout() {
               </div>
             </ModuleRouteGuard>
           </main>
+          <StockAdjustmentBatchBar />
         </div>
       </div>
     </div>

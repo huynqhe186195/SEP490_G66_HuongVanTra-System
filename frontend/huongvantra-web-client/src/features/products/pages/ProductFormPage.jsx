@@ -11,6 +11,7 @@ import { createAttributeName, fetchAttributeNames } from '../services/attributeN
 import { createProduct, fetchProductById, updateProduct } from '../services/productsApi.js'
 import { uploadImage } from '../services/cloudinaryApi.js'
 import { mapProductApiError, validateProductForm } from '../utils/productValidation.js'
+import { setProductListFocus } from '../utils/productListFocus.js'
 
 const PRODUCT_TYPES = { NGUYEN_LIEU: 'NGUYEN_LIEU', THANH_PHAM: 'THANH_PHAM' }
 
@@ -447,6 +448,7 @@ function ProductFormPage({ mode }) {
   const [showCreateBrand, setShowCreateBrand] = useState(false)
   const [customAttrNames, setCustomAttrNames] = useState([])
   const [addAttrNameModal, setAddAttrNameModal] = useState({ open: false, forIndex: null })
+  const [duplicateProductName, setDuplicateProductName] = useState('')
   const isFinishedProduct = productType === PRODUCT_TYPES.THANH_PHAM
 
   const [form, setForm] = useState(() => ({
@@ -495,11 +497,11 @@ function ProductFormPage({ mode }) {
 
   useEffect(() => {
     if (!isEditMode && !canEdit) {
-      navigate('/products', { replace: true })
+      navigate('/inventory/products', { replace: true })
       return
     }
     if (isEditMode && !canEdit && !canAdjustStock) {
-      navigate('/products', { replace: true })
+      navigate('/inventory/products', { replace: true })
     }
   }, [canEdit, canAdjustStock, isEditMode, navigate])
 
@@ -653,6 +655,7 @@ function ProductFormPage({ mode }) {
   }, [form.units, validAttributes])
 
   function updateField(key, value) {
+    if (key === 'name') setDuplicateProductName('')
     setForm((prev) => ({ ...prev, [key]: value }))
     setFieldErrors((prev) => ({ ...prev, [key]: undefined }))
   }
@@ -975,13 +978,22 @@ function ProductFormPage({ mode }) {
         showSuccess('Đã cập nhật sản phẩm.')
       } else {
         const created = await createProduct(payload)
-        showSuccess('Đã tạo sản phẩm thành công.')
-        navigate(`/products/${created.id}/edit`, { replace: true })
+        setProductListFocus(created, { showBanner: true })
+        showSuccess(`Đã tạo "${created.name}". Xem trong danh sách bên dưới.`)
+        navigate(`/inventory/products?highlight=${created.id}`, {
+          replace: true,
+          state: { createdName: created.name },
+        })
       }
     } catch (error) {
       const mapped = mapProductApiError(error.message, error.apiErrors)
       if (Object.keys(mapped.errors).length) setFieldErrors((prev) => ({ ...prev, ...mapped.errors }))
       else if (mapped.field) setFieldErrors((prev) => ({ ...prev, [mapped.field]: mapped.message }))
+      if (mapped.duplicateProduct) {
+        setDuplicateProductName(normalizeText(form.name))
+      } else {
+        setDuplicateProductName('')
+      }
       showError(mapped.message)
     } finally {
       setIsSaving(false)
@@ -1006,17 +1018,17 @@ function ProductFormPage({ mode }) {
               <p className="mt-1 text-sm text-slate-500">
                 {form.name ? (
                   <>
-                    Sản phẩm: <span className="font-semibold text-[#356647]">{form.name}</span> — chọn SKU và nhập số
-                    lượng cần nhập từ kho hoặc giảm tại cửa hàng.
+                    Sản phẩm: <span className="font-semibold text-[#356647]">{form.name}</span> — thêm SKU vào lô chung
+                    (có thể quay lại danh sách hàng hóa thêm SKU khác trước khi gửi).
                   </>
                 ) : (
-                  'Chọn SKU và nhập số lượng cần nhập từ kho hoặc giảm tại cửa hàng.'
+                  'Thêm SKU vào lô chung (giữ khi chuyển trang), rồi gửi một yêu cầu cho Thủ kho duyệt.'
                 )}
               </p>
             </div>
             <Link
               className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
-              to="/products"
+              to="/inventory/products"
             >
               Quay lại
             </Link>
@@ -1040,456 +1052,470 @@ function ProductFormPage({ mode }) {
 
   return (
     <PageShell>
-      <form onSubmit={handleSubmit} className="space-y-6">
-        <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-start">
-          <div>
-            <h1 className="text-2xl font-extrabold text-slate-800">{isEditMode ? 'Sửa hàng hóa' : 'Tạo hàng hóa mới'}</h1>
-            <p className="mt-1 text-sm text-slate-500">
-              Form hàng hóa theo mô hình ERP/POS: đơn vị tính, thuộc tính và bảng hàng cùng loại tự sinh.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <Link className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50" to="/inventory/products">
-              Quay lại
-            </Link>
-            <button type="submit" disabled={isSaving} className="rounded-xl bg-[#538463] px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-[#457053] disabled:opacity-50">
-              {isSaving ? 'Đang lưu...' : isEditMode ? 'Cập nhật' : 'Lưu hàng hóa'}
-            </button>
-          </div>
-        </div>
-
-        <section className="rounded-[1rem] bg-white p-4 shadow-sm sm:p-6 lg:p-8">
-          <h2 className="text-lg font-bold text-slate-800">Thông tin cơ bản</h2>
-
-          <div className="mt-4 flex flex-wrap gap-6">
-            <label className="inline-flex cursor-pointer items-center gap-2">
-              <input
-                type="radio"
-                name="productType"
-                checked={productType === PRODUCT_TYPES.NGUYEN_LIEU}
-                onChange={() => setProductType(PRODUCT_TYPES.NGUYEN_LIEU)}
-                className="text-[#356647] focus:ring-[#356647]"
-              />
-              <span className="text-sm font-medium text-slate-800">Nguyên liệu / Bao bì</span>
-            </label>
-            <label className="inline-flex cursor-pointer items-center gap-2">
-              <input
-                type="radio"
-                name="productType"
-                checked={productType === PRODUCT_TYPES.THANH_PHAM}
-                onChange={() => setProductType(PRODUCT_TYPES.THANH_PHAM)}
-                className="text-[#356647] focus:ring-[#356647]"
-              />
-              <span className="text-sm font-medium text-slate-800">Thành phẩm kinh doanh</span>
-            </label>
-          </div>
-
-          <div className="mt-5 grid gap-4 md:grid-cols-2">
-            <label className="md:col-span-2">
-              <span className={labelClass}>Tên hàng *</span>
-              <input className={`${inputClass} ${fieldErrors.name ? 'border-[#b42318] ring-2 ring-[#b42318]/20' : ''}`} required value={form.name} onChange={(event) => updateField('name', event.target.value)} />
-              <FieldError message={fieldErrors.name} />
-            </label>
-            <label>
-              <span className={labelClass}>Mã hàng</span>
-              <input className={inputClass} value={form.productCode} onChange={(event) => updateField('productCode', event.target.value)} placeholder="Tự động" />
-            </label>
-            <label>
-              <span className={labelClass}>Mã vạch</span>
-              <input className={inputClass} value={form.barcode} onChange={(event) => updateField('barcode', event.target.value)} />
-            </label>
-
-            {/* Nhóm hàng with create button */}
+      <div className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-start">
             <div>
-              <span className={labelClass}>Nhóm hàng *</span>
-              <div className="mt-1 flex gap-2">
-                <CategoryCombobox
-                  options={categoryTreeOptions}
-                  value={form.categoryId}
-                  onChange={(v) => updateField('categoryId', v)}
-                  hasError={Boolean(fieldErrors.categoryId)}
+              <h1 className="text-2xl font-extrabold text-slate-800">{isEditMode ? 'Sửa hàng hóa' : 'Tạo hàng hóa mới'}</h1>
+              <p className="mt-1 text-sm text-slate-500">
+                Form hàng hóa theo mô hình ERP/POS: đơn vị tính, thuộc tính và bảng hàng cùng loại tự sinh.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <Link className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50" to="/inventory/products">
+                Quay lại
+              </Link>
+              <button type="submit" disabled={isSaving} className="rounded-xl bg-[#538463] px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-[#457053] disabled:opacity-50">
+                {isSaving ? 'Đang lưu...' : isEditMode ? 'Cập nhật' : 'Lưu hàng hóa'}
+              </button>
+            </div>
+          </div>
+
+          <section className="rounded-[1rem] bg-white p-4 shadow-sm sm:p-6 lg:p-8">
+            <h2 className="text-lg font-bold text-slate-800">Thông tin cơ bản</h2>
+
+            <div className="mt-4 flex flex-wrap gap-6">
+              <label className="inline-flex cursor-pointer items-center gap-2">
+                <input
+                  type="radio"
+                  name="productType"
+                  checked={productType === PRODUCT_TYPES.NGUYEN_LIEU}
+                  onChange={() => setProductType(PRODUCT_TYPES.NGUYEN_LIEU)}
+                  className="text-[#356647] focus:ring-[#356647]"
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowCreateCategory(true)}
-                  className="shrink-0 rounded-xl border border-[#356647]/30 bg-[#f0eee6] px-3 py-2.5 text-sm font-bold text-[#356647] hover:bg-[#e8f1eb]"
-                  title="Tạo nhóm hàng mới"
-                >
-                  + Tạo mới
-                </button>
-              </div>
-              <FieldError message={fieldErrors.categoryId} />
-            </div>
-
-            {/* Thương hiệu with create button */}
-            <div>
-              <span className={labelClass}>Thương hiệu</span>
-              <div className="mt-1 flex gap-2">
-                <select
-                  className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-[#538463] focus:ring-2 focus:ring-[#538463]/15"
-                  value={form.brandName}
-                  onChange={(event) => updateField('brandName', event.target.value)}
-                >
-                  <option value="">Không có thương hiệu</option>
-                  {allBrands.map((brand) => (
-                    <option key={brand} value={brand}>{brand}</option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  onClick={() => setShowCreateBrand(true)}
-                  className="shrink-0 rounded-xl border border-[#356647]/30 bg-[#f0eee6] px-3 py-2.5 text-sm font-bold text-[#356647] hover:bg-[#e8f1eb]"
-                  title="Tạo thương hiệu mới"
-                >
-                  + Tạo mới
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-5 rounded-2xl border border-dashed border-slate-300 bg-[#fbf9f1] p-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="text-sm font-bold text-slate-700">Upload ảnh</p>
-                <p className="text-xs text-slate-500">Tối đa {MAX_IMAGES} ảnh, mỗi ảnh nhỏ hơn 2MB. Ảnh sẽ được tự động upload lên Cloudinary khi lưu.</p>
-              </div>
-              <label className="inline-flex cursor-pointer items-center justify-center rounded-xl bg-[#538463] px-4 py-2 text-sm font-bold text-white hover:bg-[#457053]">
-                Chọn ảnh
-                <input type="file" accept="image/*" multiple disabled={form.images.length >= MAX_IMAGES} onChange={handleImagesChange} className="hidden" />
+                <span className="text-sm font-medium text-slate-800">Nguyên liệu / Bao bì</span>
+              </label>
+              <label className="inline-flex cursor-pointer items-center gap-2">
+                <input
+                  type="radio"
+                  name="productType"
+                  checked={productType === PRODUCT_TYPES.THANH_PHAM}
+                  onChange={() => setProductType(PRODUCT_TYPES.THANH_PHAM)}
+                  className="text-[#356647] focus:ring-[#356647]"
+                />
+                <span className="text-sm font-medium text-slate-800">Thành phẩm kinh doanh</span>
               </label>
             </div>
-            {form.images.length ? (
-              <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-5">
-                {form.images.map((image) => (
-                  <div key={image.id} className="relative overflow-hidden rounded-xl border border-slate-200 bg-white">
-                    <img src={image.previewUrl || image.imageUrl} alt={image.name} className="h-28 w-full object-cover" />
-                    <div className="absolute inset-x-0 bottom-0 flex items-center justify-between bg-white/90 px-2 py-1">
-                      <label className="flex items-center gap-1 text-[11px] font-semibold text-slate-700">
-                        <input type="radio" checked={image.isThumbnail} onChange={() => setThumbnail(image.id)} />
-                        Đại diện
-                      </label>
-                      <button type="button" className="text-[11px] font-bold text-[#b42318]" onClick={() => removeImage(image.id)}>
-                        Xóa
-                      </button>
-                    </div>
+
+            <div className="mt-5 grid gap-4 md:grid-cols-2">
+              <label className="md:col-span-2">
+                <span className={labelClass}>Tên hàng *</span>
+                <input className={`${inputClass} ${fieldErrors.name ? 'border-[#b42318] ring-2 ring-[#b42318]/20' : ''}`} required value={form.name} onChange={(event) => updateField('name', event.target.value)} />
+                <FieldError message={fieldErrors.name} />
+                {duplicateProductName ? (
+                  <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-950">
+                    <p>Sản phẩm này có thể đã bị ẩn trước đó và không hiện trong danh sách mặc định.</p>
+                    <Link
+                      to="/inventory/products"
+                      className="mt-2 inline-flex items-center gap-1 font-semibold text-[#356647] hover:underline"
+                      onClick={() => setProductListFocus({ name: duplicateProductName }, { statusFilter: 'all' })}
+                    >
+                      <span className="material-symbols-outlined text-[16px]">search</span>
+                      Tìm &quot;{duplicateProductName}&quot; trong danh sách và kích hoạt lại
+                    </Link>
                   </div>
-                ))}
-              </div>
-            ) : null}
-          </div>
-        </section>
+                ) : null}
+              </label>
+              <label>
+                <span className={labelClass}>Mã hàng</span>
+                <input className={inputClass} value={form.productCode} onChange={(event) => updateField('productCode', event.target.value)} placeholder="Tự động" />
+              </label>
+              <label>
+                <span className={labelClass}>Mã vạch</span>
+                <input className={inputClass} value={form.barcode} onChange={(event) => updateField('barcode', event.target.value)} />
+              </label>
 
-        <section className="rounded-[1rem] bg-white p-4 shadow-sm sm:p-6 lg:p-8">
-          <h2 className="text-lg font-bold text-slate-800">Giá & Tồn kho mặc định</h2>
-
-          <div className="mt-5 grid gap-4 sm:grid-cols-2">
-            <label>
-              <span className={labelClass}>Giá vốn</span>
-              <CurrencyInput className={inputClass} value={form.costPrice} onChange={(v) => updateField('costPrice', v)} />
-            </label>
-            <label>
-              <span className={labelClass}>Giá bán</span>
-              <CurrencyInput className={inputClass} value={form.salePrice} onChange={(v) => updateField('salePrice', v)} />
-            </label>
-          </div>
-
-          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <label>
-              <span className={labelClass}>Tồn kho</span>
-              <input type="number" disabled className={`${inputClass} bg-slate-50 text-slate-400`} value={form.stockQuantity} onChange={(event) => updateField('stockQuantity', event.target.value)} />
-            </label>
-            <label>
-              <span className={labelClass}>Tồn tối thiểu</span>
-              <input type="number" min="0" className={inputClass} value={form.minStock} onChange={(event) => updateField('minStock', event.target.value)} />
-            </label>
-            <label>
-              <span className={labelClass}>Tồn tối đa</span>
-              <input type="number" min="0" className={inputClass} value={form.maxStock} onChange={(event) => updateField('maxStock', event.target.value)} />
-            </label>
-            <div>
-              <span className={labelClass}>Trọng lượng</span>
-              <div className="mt-1 flex gap-2">
-                <input type="number" min="0" className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-[#538463]" value={form.weightValue} onChange={(event) => updateField('weightValue', event.target.value)} />
-                <select className="w-20 shrink-0 rounded-xl border border-slate-200 bg-white px-2 py-2.5 text-sm outline-none focus:border-[#538463]" value={form.weightUnit} onChange={(event) => updateField('weightUnit', event.target.value)}>
-                  <option value="g">g</option>
-                  <option value="kg">kg</option>
-                </select>
-              </div>
-              <FieldError message={fieldErrors.weightValue || fieldErrors.weightUnit} />
-            </div>
-          </div>
-        </section>
-
-        <section className="rounded-[1rem] bg-white p-4 shadow-sm sm:p-6 lg:p-8">
-          <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-            <div>
-              <h2 className="text-lg font-bold text-slate-800">Quản lý đơn vị tính</h2>
-              <p className="text-sm text-slate-500">Dòng đầu là đơn vị cơ bản. Các đơn vị khác tự tính giá bán = Giá bán cơ bản × Quy đổi.</p>
-            </div>
-            <button type="button" onClick={addUnit} className="rounded-xl border border-[#356647]/30 px-4 py-2 text-sm font-bold text-[#356647] hover:bg-[#f0eee6]">
-              + Thêm đơn vị
-            </button>
-          </div>
-          <FieldError message={fieldErrors.units} />
-          <div className="mt-4 space-y-3">
-            {form.units.map((unit, index) => (
-              <div key={unit.id} className="grid gap-3 rounded-xl border border-slate-100 bg-[#fbf9f1] p-3 md:grid-cols-[2fr_80px_200px_160px_auto]">
-                <label>
-                  <span className="text-xs font-semibold text-slate-500">{unit.isBaseUnit ? 'Tên đơn vị cơ bản' : 'Tên đơn vị'}</span>
-                  <input className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm" placeholder={unit.isBaseUnit ? 'VD: cái' : 'VD: thùng'} value={unit.unitName} onChange={(event) => updateUnit(index, 'unitName', event.target.value)} />
-                </label>
-                <label>
-                  <span className="text-xs font-semibold text-slate-500">Quy đổi</span>
-                  <input
-                    type="number"
-                    min="1"
-                    disabled={unit.isBaseUnit}
-                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm disabled:bg-slate-100 disabled:text-slate-400"
-                    value={unit.conversionRate}
-                    onChange={(event) => updateUnit(index, 'conversionRate', event.target.value)}
+              {/* Nhóm hàng with create button */}
+              <div>
+                <span className={labelClass}>Nhóm hàng *</span>
+                <div className="mt-1 flex gap-2">
+                  <CategoryCombobox
+                    options={categoryTreeOptions}
+                    value={form.categoryId}
+                    onChange={(v) => updateField('categoryId', v)}
+                    hasError={Boolean(fieldErrors.categoryId)}
                   />
-                </label>
-                <label>
-                  <span className="text-xs font-semibold text-slate-500">
-                    Giá bán{!unit.isBaseUnit ? <span className="ml-1 text-[10px] text-slate-400">(tự tính)</span> : null}
-                  </span>
-                  <CurrencyInput
-                    disabled={!unit.isBaseUnit}
-                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm disabled:bg-slate-50 disabled:text-slate-500"
-                    value={unit.isBaseUnit ? unit.price : String(Math.round(baseUnitPrice * (toNumber(unit.conversionRate, 1) || 1)))}
-                    onChange={unit.isBaseUnit ? (v) => updateBaseUnitPrice(index, v) : undefined}
-                  />
-                </label>
-                <label>
-                  <span className="text-xs font-semibold text-slate-500">Barcode</span>
-                  <input className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm" value={unit.barcode} onChange={(event) => updateUnit(index, 'barcode', event.target.value)} />
-                </label>
-                <div className="flex flex-col justify-end gap-2">
-                  <label className="flex items-center gap-2 text-xs font-semibold text-slate-700">
-                    <input type="radio" checked={unit.isBaseUnit} onChange={() => setBaseUnit(index)} />
-                    Cơ bản
-                  </label>
-                  {isFinishedProduct ? (
-                    <label className="flex items-center gap-2 text-xs font-semibold text-slate-700">
-                      <input type="checkbox" checked={unit.isDirectSell} onChange={(event) => updateUnit(index, 'isDirectSell', event.target.checked)} />
-                      Bán trực tiếp
-                    </label>
-                  ) : null}
-                  {!unit.isBaseUnit ? (
-                    <button type="button" className="text-left text-xs font-bold text-[#b42318]" onClick={() => removeUnit(index)}>
-                      Xóa
-                    </button>
-                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateCategory(true)}
+                    className="shrink-0 rounded-xl border border-[#356647]/30 bg-[#f0eee6] px-3 py-2.5 text-sm font-bold text-[#356647] hover:bg-[#e8f1eb]"
+                    title="Tạo nhóm hàng mới"
+                  >
+                    + Tạo mới
+                  </button>
+                </div>
+                <FieldError message={fieldErrors.categoryId} />
+              </div>
+
+              {/* Thương hiệu with create button */}
+              <div>
+                <span className={labelClass}>Thương hiệu</span>
+                <div className="mt-1 flex gap-2">
+                  <select
+                    className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-[#538463] focus:ring-2 focus:ring-[#538463]/15"
+                    value={form.brandName}
+                    onChange={(event) => updateField('brandName', event.target.value)}
+                  >
+                    <option value="">Không có thương hiệu</option>
+                    {allBrands.map((brand) => (
+                      <option key={brand} value={brand}>{brand}</option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateBrand(true)}
+                    className="shrink-0 rounded-xl border border-[#356647]/30 bg-[#f0eee6] px-3 py-2.5 text-sm font-bold text-[#356647] hover:bg-[#e8f1eb]"
+                    title="Tạo thương hiệu mới"
+                  >
+                    + Tạo mới
+                  </button>
                 </div>
               </div>
-            ))}
-          </div>
-        </section>
+            </div>
 
-        <>
+            <div className="mt-5 rounded-2xl border border-dashed border-slate-300 bg-[#fbf9f1] p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-bold text-slate-700">Upload ảnh</p>
+                  <p className="text-xs text-slate-500">Tối đa {MAX_IMAGES} ảnh, mỗi ảnh nhỏ hơn 2MB. Ảnh sẽ được tự động upload lên Cloudinary khi lưu.</p>
+                </div>
+                <label className="inline-flex cursor-pointer items-center justify-center rounded-xl bg-[#538463] px-4 py-2 text-sm font-bold text-white hover:bg-[#457053]">
+                  Chọn ảnh
+                  <input type="file" accept="image/*" multiple disabled={form.images.length >= MAX_IMAGES} onChange={handleImagesChange} className="hidden" />
+                </label>
+              </div>
+              {form.images.length ? (
+                <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-5">
+                  {form.images.map((image) => (
+                    <div key={image.id} className="relative overflow-hidden rounded-xl border border-slate-200 bg-white">
+                      <img src={image.previewUrl || image.imageUrl} alt={image.name} className="h-28 w-full object-cover" />
+                      <div className="absolute inset-x-0 bottom-0 flex items-center justify-between bg-white/90 px-2 py-1">
+                        <label className="flex items-center gap-1 text-[11px] font-semibold text-slate-700">
+                          <input type="radio" checked={image.isThumbnail} onChange={() => setThumbnail(image.id)} />
+                          Đại diện
+                        </label>
+                        <button type="button" className="text-[11px] font-bold text-[#b42318]" onClick={() => removeImage(image.id)}>
+                          Xóa
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          </section>
+
+          <section className="rounded-[1rem] bg-white p-4 shadow-sm sm:p-6 lg:p-8">
+            <h2 className="text-lg font-bold text-slate-800">Giá & Tồn kho mặc định</h2>
+
+            <div className="mt-5 grid gap-4 sm:grid-cols-2">
+              <label>
+                <span className={labelClass}>Giá vốn</span>
+                <CurrencyInput className={inputClass} value={form.costPrice} onChange={(v) => updateField('costPrice', v)} />
+              </label>
+              <label>
+                <span className={labelClass}>Giá bán</span>
+                <CurrencyInput className={inputClass} value={form.salePrice} onChange={(v) => updateField('salePrice', v)} />
+              </label>
+            </div>
+
+            <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <label>
+                <span className={labelClass}>Tồn kho</span>
+                <input type="number" disabled className={`${inputClass} bg-slate-50 text-slate-400`} value={form.stockQuantity} onChange={(event) => updateField('stockQuantity', event.target.value)} />
+              </label>
+              <label>
+                <span className={labelClass}>Tồn tối thiểu</span>
+                <input type="number" min="0" className={inputClass} value={form.minStock} onChange={(event) => updateField('minStock', event.target.value)} />
+              </label>
+              <label>
+                <span className={labelClass}>Tồn tối đa</span>
+                <input type="number" min="0" className={inputClass} value={form.maxStock} onChange={(event) => updateField('maxStock', event.target.value)} />
+              </label>
+              <div>
+                <span className={labelClass}>Trọng lượng</span>
+                <div className="mt-1 flex gap-2">
+                  <input type="number" min="0" className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-[#538463]" value={form.weightValue} onChange={(event) => updateField('weightValue', event.target.value)} />
+                  <select className="w-20 shrink-0 rounded-xl border border-slate-200 bg-white px-2 py-2.5 text-sm outline-none focus:border-[#538463]" value={form.weightUnit} onChange={(event) => updateField('weightUnit', event.target.value)}>
+                    <option value="g">g</option>
+                    <option value="kg">kg</option>
+                  </select>
+                </div>
+                <FieldError message={fieldErrors.weightValue || fieldErrors.weightUnit} />
+              </div>
+            </div>
+          </section>
+
           <section className="rounded-[1rem] bg-white p-4 shadow-sm sm:p-6 lg:p-8">
             <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
               <div>
-                <h2 className="text-lg font-bold text-slate-800">Thuộc tính</h2>
-                <p className="text-sm text-slate-500">Nhập giá trị bằng dấu phẩy hoặc nhấn Enter để tạo tag.</p>
+                <h2 className="text-lg font-bold text-slate-800">Quản lý đơn vị tính</h2>
+                <p className="text-sm text-slate-500">Dòng đầu là đơn vị cơ bản. Các đơn vị khác tự tính giá bán = Giá bán cơ bản × Quy đổi.</p>
               </div>
-              <button type="button" onClick={addAttribute} className="rounded-xl border border-[#356647]/30 px-4 py-2 text-sm font-bold text-[#356647] hover:bg-[#f0eee6]">
-                + Thêm thuộc tính
+              <button type="button" onClick={addUnit} className="rounded-xl border border-[#356647]/30 px-4 py-2 text-sm font-bold text-[#356647] hover:bg-[#f0eee6]">
+                + Thêm đơn vị
               </button>
             </div>
+            <FieldError message={fieldErrors.units} />
             <div className="mt-4 space-y-3">
-              {form.attributes.map((attribute, index) => (
-                <div key={attribute.id} className="rounded-xl border border-slate-100 bg-[#fbf9f1] p-3">
-                  <div className="grid gap-3 md:grid-cols-[220px_1fr_auto]">
-                    <select
-                      className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
-                      value={attribute.name}
-                      onChange={(event) => {
-                        if (event.target.value === '__create__') {
-                          setAddAttrNameModal({ open: true, forIndex: index })
-                        } else {
-                          updateAttribute(index, 'name', event.target.value)
-                        }
-                      }}
-                    >
-                      <option value="">Chọn tên thuộc tính</option>
-                      {[...new Set([...ATTRIBUTE_OPTIONS, ...dbAttributeNames.map((item) => item.name), ...customAttrNames])].map((option) => (
-                        <option key={option} value={option}>{option}</option>
-                      ))}
-                      <option value="__create__">+ Tạo tên mới...</option>
-                    </select>
+              {form.units.map((unit, index) => (
+                <div key={unit.id} className="grid gap-3 rounded-xl border border-slate-100 bg-[#fbf9f1] p-3 md:grid-cols-[2fr_80px_200px_160px_auto]">
+                  <label>
+                    <span className="text-xs font-semibold text-slate-500">{unit.isBaseUnit ? 'Tên đơn vị cơ bản' : 'Tên đơn vị'}</span>
+                    <input className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm" placeholder={unit.isBaseUnit ? 'VD: cái' : 'VD: thùng'} value={unit.unitName} onChange={(event) => updateUnit(index, 'unitName', event.target.value)} />
+                  </label>
+                  <label>
+                    <span className="text-xs font-semibold text-slate-500">Quy đổi</span>
                     <input
-                      className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
-                      placeholder="VD: Đỏ, Xanh hoặc S, M, L"
-                      value={attribute.inputValue}
-                      onChange={(event) => updateAttribute(index, 'inputValue', event.target.value)}
-                      onKeyDown={(event) => handleAttributeKeyDown(event, index)}
-                      onBlur={(event) => commitAttributeValues(index, event.target.value)}
+                      type="number"
+                      min="1"
+                      disabled={unit.isBaseUnit}
+                      className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm disabled:bg-slate-100 disabled:text-slate-400"
+                      value={unit.conversionRate}
+                      onChange={(event) => updateUnit(index, 'conversionRate', event.target.value)}
                     />
-                    <button type="button" className="rounded-lg px-3 py-2 text-sm font-bold text-[#b42318] hover:bg-red-50" onClick={() => removeAttribute(index)}>
-                      Xóa
-                    </button>
+                  </label>
+                  <label>
+                    <span className="text-xs font-semibold text-slate-500">
+                      Giá bán{!unit.isBaseUnit ? <span className="ml-1 text-[10px] text-slate-400">(tự tính)</span> : null}
+                    </span>
+                    <CurrencyInput
+                      disabled={!unit.isBaseUnit}
+                      className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm disabled:bg-slate-50 disabled:text-slate-500"
+                      value={unit.isBaseUnit ? unit.price : String(Math.round(baseUnitPrice * (toNumber(unit.conversionRate, 1) || 1)))}
+                      onChange={unit.isBaseUnit ? (v) => updateBaseUnitPrice(index, v) : undefined}
+                    />
+                  </label>
+                  <label>
+                    <span className="text-xs font-semibold text-slate-500">Barcode</span>
+                    <input className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm" value={unit.barcode} onChange={(event) => updateUnit(index, 'barcode', event.target.value)} />
+                  </label>
+                  <div className="flex flex-col justify-end gap-2">
+                    <label className="flex items-center gap-2 text-xs font-semibold text-slate-700">
+                      <input type="radio" checked={unit.isBaseUnit} onChange={() => setBaseUnit(index)} />
+                      Cơ bản
+                    </label>
+                    {isFinishedProduct ? (
+                      <label className="flex items-center gap-2 text-xs font-semibold text-slate-700">
+                        <input type="checkbox" checked={unit.isDirectSell} onChange={(event) => updateUnit(index, 'isDirectSell', event.target.checked)} />
+                        Bán trực tiếp
+                      </label>
+                    ) : null}
+                    {!unit.isBaseUnit ? (
+                      <button type="button" className="text-left text-xs font-bold text-[#b42318]" onClick={() => removeUnit(index)}>
+                        Xóa
+                      </button>
+                    ) : null}
                   </div>
-                  {attribute.values.length ? (
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {attribute.values.map((value) => (
-                        <button key={value} type="button" onClick={() => removeAttributeValue(index, value)} className="rounded-full bg-[#e8f1eb] px-3 py-1 text-xs font-bold text-[#356647]">
-                          {value} ×
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
                 </div>
               ))}
             </div>
           </section>
 
-          {/* Section 5: variants table — show for THANH_PHAM (BOM config) or when there are 2+ units */}
-          {(isFinishedProduct || form.units.filter((u) => u.unitName?.trim()).length >= 2) ? (
+          <>
             <section className="rounded-[1rem] bg-white p-4 shadow-sm sm:p-6 lg:p-8">
-              <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
+              <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
                 <div>
-                  <h2 className="text-lg font-bold text-slate-800">Hàng cùng loại</h2>
-                  <p className="text-sm text-slate-500">Bảng sinh từ Đơn vị tính × Thuộc tính. Giá vốn tự tính theo quy đổi. Giá bán có thể ghi đè — nhấn <span className="material-symbols-outlined align-[-3px] text-[13px]">restart_alt</span> để về giá tự tính.</p>
+                  <h2 className="text-lg font-bold text-slate-800">Thuộc tính</h2>
+                  <p className="text-sm text-slate-500">Nhập giá trị bằng dấu phẩy hoặc nhấn Enter để tạo tag.</p>
                 </div>
-                <span className="rounded-full bg-[#f0eee6] px-3 py-1 text-sm font-bold text-slate-700">{generatedRows.length} dòng</span>
+                <button type="button" onClick={addAttribute} className="rounded-xl border border-[#356647]/30 px-4 py-2 text-sm font-bold text-[#356647] hover:bg-[#f0eee6]">
+                  + Thêm thuộc tính
+                </button>
               </div>
-              <div className="mt-5 overflow-x-auto rounded-xl border border-slate-200">
-                <table className="w-full table-fixed text-left text-sm">
-                  <colgroup>
-                    <col className="w-[18%]" />
-                    {validAttributes.length > 0 ? <col className="w-[22%]" /> : null}
-                    <col className="w-[8%]" />
-                    <col className="w-[18%]" />
-                    <col className="w-[16%]" />
-                    <col className={validAttributes.length > 0 ? 'w-[12%]' : 'w-[24%]'} />
-                    <col className="w-[8%]" />
-                  </colgroup>
-                  <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-                    <tr>
-                      <th className="px-3 py-3">Đơn vị</th>
-                      {validAttributes.length > 0 ? <th className="px-3 py-3">Thuộc tính</th> : null}
-                      <th className="px-3 py-3 text-center">Q. đổi</th>
-                      <th className="px-3 py-3">Mã hàng</th>
-                      <th className="px-3 py-3">Giá vốn</th>
-                      <th className="px-3 py-3">Giá bán</th>
-                      <th className="px-3 py-3 text-center">BOM</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {generatedRows.map((row) => {
-                      const bomCount = bomByVariant[row.key]?.length ?? 0
-                      const autoSalePrice = Math.round(baseUnitPrice * row.unit.conversionRate)
-                      const draftSalePrice = toNumber(variantDrafts[row.key]?.salePrice ?? autoSalePrice)
-                      const isOverridden = draftSalePrice !== autoSalePrice
-                      return (
-                        <tr key={row.key} className="hover:bg-[#fbf9f1]">
-                          <td className="px-3 py-2.5 font-bold text-[#356647]">{row.unit.unitName}</td>
-                          {validAttributes.length > 0 ? (
-                            <td className="px-3 py-2.5">
-                              {row.attributes.length ? (
-                                <div className="flex max-h-20 flex-wrap gap-1 overflow-y-auto">
-                                  {row.attributes.map((attribute) => (
-                                    <span key={`${row.key}-${attribute.name}-${attribute.value}`} className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">
-                                      {attribute.name}: {attribute.value}
-                                    </span>
-                                  ))}
-                                </div>
-                              ) : (
-                                <span className="text-slate-400">—</span>
-                              )}
-                            </td>
-                          ) : null}
-                          <td className="px-3 py-2.5 text-center text-slate-600">{row.unit.conversionRate}</td>
-                          <td className="px-3 py-2.5">
-                            <input className="w-full rounded-lg border border-slate-200 px-2 py-1.5 font-mono text-sm" placeholder="Tự động" value={row.skuCode} onChange={(event) => updateVariantDraft(row.key, 'skuCode', event.target.value)} />
-                          </td>
-                          <td className="px-3 py-2.5">
-                            <input readOnly className="w-full rounded-lg border border-slate-200 bg-slate-100 px-2 py-1.5 text-sm text-slate-500" value={formatCurrency(row.costPrice)} />
-                          </td>
-                          <td className="px-3 py-2.5">
-                            <div className="flex items-center gap-1">
-                              <CurrencyInput
-                                className={`w-full rounded-lg border px-2 py-1.5 text-sm font-semibold ${isOverridden ? 'border-amber-400 bg-amber-50 text-amber-800' : 'border-slate-100 bg-slate-50 text-[#356647]'}`}
-                                value={String(draftSalePrice)}
-                                onChange={(v) => updateVariantDraft(row.key, 'salePrice', v)}
-                              />
-                              {isOverridden ? (
-                                <button
-                                  type="button"
-                                  title="Về giá tự tính"
-                                  onClick={() => updateVariantDraft(row.key, 'salePrice', String(autoSalePrice))}
-                                  className="shrink-0 rounded-md p-1 text-amber-500 hover:bg-amber-100"
-                                >
-                                  <span className="material-symbols-outlined text-[16px]">restart_alt</span>
-                                </button>
-                              ) : null}
-                            </div>
-                          </td>
-                          <td className="px-3 py-2.5 text-center">
-                            <button
-                              type="button"
-                              onClick={() => openBomModal(row)}
-                              className="inline-flex items-center gap-1 rounded-lg border border-[#356647]/30 bg-[#356647]/5 px-2.5 py-1.5 text-xs font-bold text-[#356647] hover:bg-[#356647]/10"
-                            >
-                              <span className="material-symbols-outlined text-[15px]">settings</span>
-                              {bomCount > 0 ? (
-                                <span className="rounded-full bg-[#356647] px-1.5 py-0.5 text-[10px] text-white">{bomCount}</span>
-                              ) : null}
-                            </button>
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
+              <div className="mt-4 space-y-3">
+                {form.attributes.map((attribute, index) => (
+                  <div key={attribute.id} className="rounded-xl border border-slate-100 bg-[#fbf9f1] p-3">
+                    <div className="grid gap-3 md:grid-cols-[220px_1fr_auto]">
+                      <select
+                        className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                        value={attribute.name}
+                        onChange={(event) => {
+                          if (event.target.value === '__create__') {
+                            setAddAttrNameModal({ open: true, forIndex: index })
+                          } else {
+                            updateAttribute(index, 'name', event.target.value)
+                          }
+                        }}
+                      >
+                        <option value="">Chọn tên thuộc tính</option>
+                        {[...new Set([...ATTRIBUTE_OPTIONS, ...dbAttributeNames.map((item) => item.name), ...customAttrNames])].map((option) => (
+                          <option key={option} value={option}>{option}</option>
+                        ))}
+                        <option value="__create__">+ Tạo tên mới...</option>
+                      </select>
+                      <input
+                        className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                        placeholder="VD: Đỏ, Xanh hoặc S, M, L"
+                        value={attribute.inputValue}
+                        onChange={(event) => updateAttribute(index, 'inputValue', event.target.value)}
+                        onKeyDown={(event) => handleAttributeKeyDown(event, index)}
+                        onBlur={(event) => commitAttributeValues(index, event.target.value)}
+                      />
+                      <button type="button" className="rounded-lg px-3 py-2 text-sm font-bold text-[#b42318] hover:bg-red-50" onClick={() => removeAttribute(index)}>
+                        Xóa
+                      </button>
+                    </div>
+                    {attribute.values.length ? (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {attribute.values.map((value) => (
+                          <button key={value} type="button" onClick={() => removeAttributeValue(index, value)} className="rounded-full bg-[#e8f1eb] px-3 py-1 text-xs font-bold text-[#356647]">
+                            {value} ×
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                ))}
               </div>
             </section>
-          ) : null}
-        </>
 
-      </form>
+            {/* Section 5: variants table — show for THANH_PHAM (BOM config) or when there are 2+ units */}
+            {(isFinishedProduct || form.units.filter((u) => u.unitName?.trim()).length >= 2) ? (
+              <section className="rounded-[1rem] bg-white p-4 shadow-sm sm:p-6 lg:p-8">
+                <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
+                  <div>
+                    <h2 className="text-lg font-bold text-slate-800">Hàng cùng loại</h2>
+                    <p className="text-sm text-slate-500">Bảng sinh từ Đơn vị tính × Thuộc tính. Giá vốn tự tính theo quy đổi. Giá bán có thể ghi đè — nhấn <span className="material-symbols-outlined align-[-3px] text-[13px]">restart_alt</span> để về giá tự tính.</p>
+                  </div>
+                  <span className="rounded-full bg-[#f0eee6] px-3 py-1 text-sm font-bold text-slate-700">{generatedRows.length} dòng</span>
+                </div>
+                <div className="mt-5 overflow-x-auto rounded-xl border border-slate-200">
+                  <table className="w-full table-fixed text-left text-sm">
+                    <colgroup>
+                      <col className="w-[18%]" />
+                      {validAttributes.length > 0 ? <col className="w-[22%]" /> : null}
+                      <col className="w-[8%]" />
+                      <col className="w-[18%]" />
+                      <col className="w-[16%]" />
+                      <col className={validAttributes.length > 0 ? 'w-[12%]' : 'w-[24%]'} />
+                      <col className="w-[8%]" />
+                    </colgroup>
+                    <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                      <tr>
+                        <th className="px-3 py-3">Đơn vị</th>
+                        {validAttributes.length > 0 ? <th className="px-3 py-3">Thuộc tính</th> : null}
+                        <th className="px-3 py-3 text-center">Q. đổi</th>
+                        <th className="px-3 py-3">Mã hàng</th>
+                        <th className="px-3 py-3">Giá vốn</th>
+                        <th className="px-3 py-3">Giá bán</th>
+                        <th className="px-3 py-3 text-center">BOM</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {generatedRows.map((row) => {
+                        const bomCount = bomByVariant[row.key]?.length ?? 0
+                        const autoSalePrice = Math.round(baseUnitPrice * row.unit.conversionRate)
+                        const draftSalePrice = toNumber(variantDrafts[row.key]?.salePrice ?? autoSalePrice)
+                        const isOverridden = draftSalePrice !== autoSalePrice
+                        return (
+                          <tr key={row.key} className="hover:bg-[#fbf9f1]">
+                            <td className="px-3 py-2.5 font-bold text-[#356647]">{row.unit.unitName}</td>
+                            {validAttributes.length > 0 ? (
+                              <td className="px-3 py-2.5">
+                                {row.attributes.length ? (
+                                  <div className="flex max-h-20 flex-wrap gap-1 overflow-y-auto">
+                                    {row.attributes.map((attribute) => (
+                                      <span key={`${row.key}-${attribute.name}-${attribute.value}`} className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">
+                                        {attribute.name}: {attribute.value}
+                                      </span>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <span className="text-slate-400">—</span>
+                                )}
+                              </td>
+                            ) : null}
+                            <td className="px-3 py-2.5 text-center text-slate-600">{row.unit.conversionRate}</td>
+                            <td className="px-3 py-2.5">
+                              <input className="w-full rounded-lg border border-slate-200 px-2 py-1.5 font-mono text-sm" placeholder="Tự động" value={row.skuCode} onChange={(event) => updateVariantDraft(row.key, 'skuCode', event.target.value)} />
+                            </td>
+                            <td className="px-3 py-2.5">
+                              <input readOnly className="w-full rounded-lg border border-slate-200 bg-slate-100 px-2 py-1.5 text-sm text-slate-500" value={formatCurrency(row.costPrice)} />
+                            </td>
+                            <td className="px-3 py-2.5">
+                              <div className="flex items-center gap-1">
+                                <CurrencyInput
+                                  className={`w-full rounded-lg border px-2 py-1.5 text-sm font-semibold ${isOverridden ? 'border-amber-400 bg-amber-50 text-amber-800' : 'border-slate-100 bg-slate-50 text-[#356647]'}`}
+                                  value={String(draftSalePrice)}
+                                  onChange={(v) => updateVariantDraft(row.key, 'salePrice', v)}
+                                />
+                                {isOverridden ? (
+                                  <button
+                                    type="button"
+                                    title="Về giá tự tính"
+                                    onClick={() => updateVariantDraft(row.key, 'salePrice', String(autoSalePrice))}
+                                    className="shrink-0 rounded-md p-1 text-amber-500 hover:bg-amber-100"
+                                  >
+                                    <span className="material-symbols-outlined text-[16px]">restart_alt</span>
+                                  </button>
+                                ) : null}
+                              </div>
+                            </td>
+                            <td className="px-3 py-2.5 text-center">
+                              <button
+                                type="button"
+                                onClick={() => openBomModal(row)}
+                                className="inline-flex items-center gap-1 rounded-lg border border-[#356647]/30 bg-[#356647]/5 px-2.5 py-1.5 text-xs font-bold text-[#356647] hover:bg-[#356647]/10"
+                              >
+                                <span className="material-symbols-outlined text-[15px]">settings</span>
+                                {bomCount > 0 ? (
+                                  <span className="rounded-full bg-[#356647] px-1.5 py-0.5 text-[10px] text-white">{bomCount}</span>
+                                ) : null}
+                              </button>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            ) : null}
+          </>
 
-      <ProductBomConfigModal
-        isOpen={Boolean(bomModalVariant)}
-        variant={bomModalVariant}
-        initialLines={bomModalVariant ? (bomByVariant[bomModalVariant.rowKey] ?? []) : []}
-        onClose={() => setBomModalVariant(null)}
-        onConfirm={handleBomConfirm}
-      />
+        </form>
 
-      <CreateCategoryModal
-        isOpen={showCreateCategory}
-        categories={categories}
-        onClose={() => setShowCreateCategory(false)}
-        onCreated={(newCat) => {
-          setCategories((prev) => [...prev, newCat])
-          updateField('categoryId', String(newCat.id))
-          showSuccess(`Đã tạo nhóm "${newCat.name}"`)
-        }}
-      />
+        <ProductBomConfigModal
+          isOpen={Boolean(bomModalVariant)}
+          variant={bomModalVariant}
+          initialLines={bomModalVariant ? (bomByVariant[bomModalVariant.rowKey] ?? []) : []}
+          onClose={() => setBomModalVariant(null)}
+          onConfirm={handleBomConfirm}
+        />
 
-      <CreateBrandModal
-        isOpen={showCreateBrand}
-        onClose={() => setShowCreateBrand(false)}
-        onCreated={(brand) => {
-          setDbBrands((prev) => [...prev, brand])
-          updateField('brandName', brand.name)
-          showSuccess(`Đã tạo thương hiệu "${brand.name}"`)
-        }}
-      />
+        <CreateCategoryModal
+          isOpen={showCreateCategory}
+          categories={categories}
+          onClose={() => setShowCreateCategory(false)}
+          onCreated={(newCat) => {
+            setCategories((prev) => [...prev, newCat])
+            updateField('categoryId', String(newCat.id))
+            showSuccess(`Đã tạo nhóm "${newCat.name}"`)
+          }}
+        />
 
-      <CreateAttributeNameModal
-        isOpen={addAttrNameModal.open}
-        onClose={() => setAddAttrNameModal({ open: false, forIndex: null })}
-        onCreated={(created) => {
-          setDbAttributeNames((prev) => [...prev, created])
-          if (addAttrNameModal.forIndex !== null) {
-            updateAttribute(addAttrNameModal.forIndex, 'name', created.name)
-          }
-        }}
-      />
+        <CreateBrandModal
+          isOpen={showCreateBrand}
+          onClose={() => setShowCreateBrand(false)}
+          onCreated={(brand) => {
+            setDbBrands((prev) => [...prev, brand])
+            updateField('brandName', brand.name)
+            showSuccess(`Đã tạo thương hiệu "${brand.name}"`)
+          }}
+        />
+
+        <CreateAttributeNameModal
+          isOpen={addAttrNameModal.open}
+          onClose={() => setAddAttrNameModal({ open: false, forIndex: null })}
+          onCreated={(created) => {
+            setDbAttributeNames((prev) => [...prev, created])
+            if (addAttrNameModal.forIndex !== null) {
+              updateAttribute(addAttrNameModal.forIndex, 'name', created.name)
+            }
+          }}
+        />
     </PageShell>
   )
 }

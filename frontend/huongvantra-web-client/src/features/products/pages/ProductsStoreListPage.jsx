@@ -11,6 +11,7 @@ import { fetchPendingCatalogSync, syncCatalogToStore } from '../services/catalog
 import { fetchAllActiveSkus } from '../services/productSkusApi.js'
 import ProductImage from '../components/ProductImage.jsx'
 import StoreProductExpandedLoader from '../components/StoreProductExpandedLoader.jsx'
+import { useStockAdjustmentBatch } from '../../inventory/hooks/useStockAdjustmentBatch.js'
 import ProductsFilterSidebar, { ProductsFilterContent } from '../components/ProductsFilterSidebar.jsx'
 import InventorySimulationBanner from '../../inventory/components/InventorySimulationBanner.jsx'
 import { fetchInventorySettings } from '../../inventory/services/inventoryStockApi.js'
@@ -71,6 +72,7 @@ export default function ProductsStoreListPage() {
   const [expandedSkuId, setExpandedSkuId] = useState(null)
   const [selectedIds, setSelectedIds] = useState(() => new Set())
   const [favoriteIds, setFavoriteIds] = useState(() => loadFavoriteIds())
+  const { isInBatch, addAll, toggleLine } = useStockAdjustmentBatch()
 
   useEffect(() => {
     const sync = () => setSession(loadAuthSession())
@@ -237,6 +239,44 @@ export default function ProductsStoreListPage() {
     setExpandedSkuId((current) => (current === skuId ? null : skuId))
   }
 
+  function skuBatchMeta(sku) {
+    return {
+      productName: sku.productName,
+      quantityOnHand: Number(stockBySkuId.get(sku.id) ?? 0),
+    }
+  }
+
+  function toggleBatchSku(sku) {
+    toggleLine(
+      { id: sku.id, skuCode: sku.skuCode, packagingType: sku.packagingType },
+      skuBatchMeta(sku),
+    )
+  }
+
+  function addSelectedToBatch() {
+    const selectedSkus = skus.filter((sku) => selectedIds.has(String(sku.id)))
+    addAll(
+      selectedSkus.map((sku) => ({
+        id: sku.id,
+        skuCode: sku.skuCode,
+        packagingType: sku.packagingType,
+      })),
+      (sku) => {
+        const full = selectedSkus.find((item) => String(item.id) === String(sku.id))
+        return skuBatchMeta(full ?? sku)
+      },
+    )
+  }
+
+  function addAllSkusToBatch(skuList, productName = '') {
+    addAll(skuList, (sku) => ({
+      productName,
+      quantityOnHand: Number(stockBySkuId.get(sku.id) ?? 0),
+    }))
+  }
+
+  const tableColSpan = canAdjustStock ? 13 : 12
+
   const filterProps = {
     categories,
     categoryId,
@@ -334,6 +374,16 @@ export default function ProductsStoreListPage() {
                 >
                   <span className="material-symbols-outlined text-[20px]">sell</span>
                 </Link>
+                {canAdjustStock && selectedIds.size > 0 ? (
+                  <button
+                    type="button"
+                    onClick={addSelectedToBatch}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-[#356647]/30 bg-[#356647]/5 px-3 py-2.5 text-sm font-semibold text-[#356647] hover:bg-[#356647]/10"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">playlist_add</span>
+                    Thêm {selectedIds.size} SKU vào lô
+                  </button>
+                ) : null}
                 {canAdjustStock ? (
                   <Link
                     to="/inventory/stock-requests"
@@ -346,6 +396,15 @@ export default function ProductsStoreListPage() {
               </div>
             </div>
           </div>
+
+          {pendingSyncTotal > 0 ? (
+            <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+              <p className="font-semibold">Có {pendingSyncTotal} mục từ kho chưa đồng bộ sang cửa hàng.</p>
+              <p className="mt-1 text-amber-900/90">
+                Sản phẩm / SKU mới tạo ở kho sẽ không hiện trong danh sách này cho đến khi bấm Đồng bộ (và SKU đã được thêm trên sản phẩm).
+              </p>
+            </div>
+          ) : null}
         </div>
 
         <div className="flex min-h-0 flex-1 overflow-hidden">
@@ -379,18 +438,21 @@ export default function ProductsStoreListPage() {
                     <th className="hidden px-3 py-3 xl:table-cell">Quy cách</th>
                     <th className="px-3 py-3 text-right">Tồn cửa hàng</th>
                     <th className="hidden px-3 py-3 text-center sm:table-cell">Bán POS</th>
+                    {canAdjustStock ? (
+                      <th className="hidden px-3 py-3 text-right md:table-cell">Lô</th>
+                    ) : null}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {isLoading ? (
                     <tr>
-                      <td colSpan={12} className="px-6 py-10 text-center text-slate-500">
+                      <td colSpan={tableColSpan} className="px-6 py-10 text-center text-slate-500">
                         Đang tải catalog...
                       </td>
                     </tr>
                   ) : pagedSkus.length === 0 ? (
                     <tr>
-                      <td colSpan={12} className="px-6 py-10 text-center text-slate-500">
+                      <td colSpan={tableColSpan} className="px-6 py-10 text-center text-slate-500">
                         {skus.length === 0
                           ? 'Chưa có SKU — bấm Đồng bộ để tải từ kho.'
                           : 'Không có hàng hóa phù hợp bộ lọc.'}
@@ -404,6 +466,8 @@ export default function ProductsStoreListPage() {
                       const isSelected = selectedIds.has(String(sku.id))
                       const isOut = stockQty <= 0
                       const isLow = stockQty > 0 && stockQty <= 5
+
+                      const inBatch = isInBatch(sku.id)
 
                       return (
                         <Fragment key={sku.id}>
@@ -510,14 +574,36 @@ export default function ProductsStoreListPage() {
                                 <span className="text-slate-400">Không</span>
                               )}
                             </td>
+                            {canAdjustStock ? (
+                              <td className="hidden px-3 py-3 text-right md:table-cell" onClick={(event) => event.stopPropagation()}>
+                                <button
+                                  type="button"
+                                  onClick={() => toggleBatchSku(sku)}
+                                  className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold ${
+                                    inBatch
+                                      ? 'bg-[#356647]/10 text-[#356647]'
+                                      : 'text-[#356647] hover:bg-[#356647]/5'
+                                  }`}
+                                >
+                                  {inBatch ? 'Đã thêm' : 'Thêm vào lô'}
+                                </button>
+                              </td>
+                            ) : null}
                           </tr>
                           {isExpanded ? (
                             <tr>
-                              <td colSpan={12} className="p-0">
+                              <td colSpan={tableColSpan} className="p-0">
                                 <StoreProductExpandedLoader
                                   sku={sku}
                                   stockBySkuId={stockBySkuId}
                                   canAdjustStock={canAdjustStock}
+                                  inBatch={inBatch}
+                                  isInBatch={isInBatch}
+                                  onToggleBatchSku={() => toggleBatchSku(sku)}
+                                  onToggleBatchSkuItem={(item, meta) => toggleLine(item, meta)}
+                                  onAddAllSkusToBatch={(skuList, productName) =>
+                                    addAllSkusToBatch(skuList, productName)
+                                  }
                                 />
                               </td>
                             </tr>

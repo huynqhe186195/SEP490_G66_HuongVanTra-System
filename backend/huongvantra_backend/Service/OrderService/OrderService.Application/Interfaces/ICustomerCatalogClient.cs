@@ -10,7 +10,8 @@ public sealed record CustomerCatalogProfile(
     string? FullName,
     string? CustomerGroup,
     int? TierId,
-    string? TierName)
+    string? TierName,
+    decimal TierDiscountPercent)
 {
     public bool IsVipCustomer =>
         string.Equals(CustomerGroup, "DoiNgoai", StringComparison.OrdinalIgnoreCase);

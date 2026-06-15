@@ -3,8 +3,11 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { vietnamNowLabel } from '../../../utils/vietnamDateTime.js'
 import { fetchOrder, returnOrder } from '../../orders/services/ordersApi.js'
-import { fetchOrderTransferQrByOrderId, fetchPosProducts } from '../services/posApi.js'
+import { calcReturnLineAmount, calcMembershipDiscountAmount, getOrderPaidRatio, getReturnUnitPrice } from '../../orders/utils/returnPricing.js'
+import { fetchOrderTransferQrByOrderId, fetchPosCustomerContext, fetchPosProducts } from '../services/posApi.js'
+import { isVipCustomerType } from '../../customers/utils/customerDisplay.js'
 import ReturnOrderSidebar from '../components/ReturnOrderSidebar.jsx'
+import OrderOfferModal from '../components/OrderOfferModal.jsx'
 
 function Icon({ children, className = '' }) {
   return <span className={`material-symbols-outlined ${className}`}>{children}</span>
@@ -24,16 +27,18 @@ function clampQty(value, max) {
   return Math.min(Math.max(0, n), max)
 }
 
-function mapOrderLineToReturnLine(line) {
+function mapOrderLineToReturnLine(line, paidRatio = 1) {
   const originalQty = Number(line.quantity) || 0
   const alreadyReturned = Number(line.returnedQuantity) || 0
   const remaining = Math.max(0, originalQty - alreadyReturned)
+  const listUnitPrice = Number(line.unitPrice) || 0
   return {
     lineId: line.id,
     skuId: line.skuId,
     name: line.skuSnapshotName,
     code: line.skuSnapshotCode || '',
-    unitPrice: Number(line.unitPrice) || 0,
+    listUnitPrice,
+    unitPrice: getReturnUnitPrice(listUnitPrice, paidRatio),
     originalSoldQty: originalQty,
     soldQty: remaining,
     returnQty: remaining,
@@ -57,7 +62,7 @@ function ReturnLineTable({ rows, onQtyChange, onRemove, emptyLabel }) {
             <th className="w-10 px-2 py-2" />
             <th className="px-3 py-2 font-semibold">Hàng hóa</th>
             <th className="w-24 px-3 py-2 text-center font-semibold">SL</th>
-            <th className="w-28 px-3 py-2 text-right font-semibold">Đơn giá</th>
+            <th className="w-28 px-3 py-2 text-right font-semibold">Giá đã trả</th>
             <th className="w-28 px-3 py-2 text-right font-semibold">Thành tiền</th>
           </tr>
         </thead>
@@ -107,6 +112,7 @@ function ReturnOrderPage() {
   const exchangeSearchRef = useRef(null)
 
   const [order, setOrder] = useState(null)
+  const [customerContext, setCustomerContext] = useState(null)
   const [returnLines, setReturnLines] = useState([])
   const [exchangeCart, setExchangeCart] = useState([])
   const [returnSearch, setReturnSearch] = useState('')
@@ -117,6 +123,9 @@ function ReturnOrderPage() {
   const [paymentMethod, setPaymentMethod] = useState('CASH')
   const [refundTransactionRef, setRefundTransactionRef] = useState('')
   const [amountPaidInput, setAmountPaidInput] = useState('')
+  const [exchangeOrderDiscountPercent, setExchangeOrderDiscountPercent] = useState(0)
+  const [exchangeOrderDiscountAmountFixed, setExchangeOrderDiscountAmountFixed] = useState(0)
+  const [offerModalOpen, setOfferModalOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -138,8 +147,9 @@ function ReturnOrderPage() {
           navigate('/pos', { replace: true })
           return
         }
+        const paidRatio = getOrderPaidRatio(detail)
         const lines = detail.items
-          .map(mapOrderLineToReturnLine)
+          .map((line) => mapOrderLineToReturnLine(line, paidRatio))
           .filter((line) => line.soldQty > 0 && line.returnQty > 0)
         if (lines.length === 0) {
           showError('Hóa đơn này đã trả hết hàng, không còn dòng nào để trả.')
@@ -148,6 +158,17 @@ function ReturnOrderPage() {
         }
         setOrder(detail)
         setReturnLines(lines)
+        if (detail.customerId) {
+          fetchPosCustomerContext(detail.customerId)
+            .then((context) => {
+              if (mounted) setCustomerContext(context)
+            })
+            .catch(() => {
+              if (mounted) setCustomerContext(null)
+            })
+        } else {
+          setCustomerContext(null)
+        }
       } catch (error) {
         if (mounted) {
           showError(error.message)
@@ -172,9 +193,11 @@ function ReturnOrderPage() {
       maxQty: line.soldQty,
     }))
     if (!q) return rows
-    return rows.filter(
-      (line) => line.name.toLowerCase().includes(q) || line.code.toLowerCase().includes(q),
-    )
+    return rows.filter((line) => {
+      const name = String(line.name || '').toLowerCase()
+      const code = String(line.code || '').toLowerCase()
+      return name.includes(q) || code.includes(q)
+    })
   }, [returnLines, returnSearch])
 
   const exchangeRows = useMemo(
@@ -189,16 +212,51 @@ function ReturnOrderPage() {
     [exchangeCart],
   )
 
+  const tierDiscountPercent = useMemo(() => {
+    if (!customerContext || isVipCustomerType(customerContext.customerType)) return 0
+    return Number(customerContext.tierDiscountPercent ?? 0)
+  }, [customerContext])
+
+  const canUseVipManualAdjustments = isVipCustomerType(customerContext?.customerType)
+  const usesFixedExchangeOrderDiscount =
+    canUseVipManualAdjustments && (exchangeOrderDiscountAmountFixed || 0) > 0
+
+  useEffect(() => {
+    if (!canUseVipManualAdjustments) {
+      setExchangeOrderDiscountPercent(0)
+      setExchangeOrderDiscountAmountFixed(0)
+    }
+  }, [canUseVipManualAdjustments])
+
+  const paidRatio = useMemo(() => getOrderPaidRatio(order), [order])
+
   const totals = useMemo(() => {
-    const returnOriginalTotal = returnLines.reduce((sum, line) => sum + line.unitPrice * line.returnQty, 0)
-    const returnItemsTotal = returnLines.reduce((sum, line) => sum + line.unitPrice * line.returnQty, 0)
-    const returnDiscount = 0
+    const returnOriginalTotal = returnLines.reduce(
+      (sum, line) => sum + line.listUnitPrice * line.returnQty,
+      0,
+    )
+    const returnItemsTotal = returnLines.reduce(
+      (sum, line) => sum + calcReturnLineAmount(line.listUnitPrice, line.returnQty, paidRatio),
+      0,
+    )
+    const returnDiscount = Math.max(0, returnOriginalTotal - returnItemsTotal)
     const returnFee = 0
-    const returnNetTotal = returnItemsTotal - returnDiscount + returnFee
+    const returnNetTotal = returnItemsTotal + returnFee
 
     const purchaseItemsTotal = exchangeCart.reduce((sum, item) => sum + item.price * item.qty, 0)
-    const purchaseDiscount = 0
-    const purchaseNetTotal = purchaseItemsTotal - purchaseDiscount
+    const membershipDiscountAmount = calcMembershipDiscountAmount(purchaseItemsTotal, tierDiscountPercent)
+    let manualExchangeDiscountAmount = 0
+    if (canUseVipManualAdjustments && purchaseItemsTotal > 0) {
+      if (usesFixedExchangeOrderDiscount) {
+        manualExchangeDiscountAmount = Math.min(purchaseItemsTotal, exchangeOrderDiscountAmountFixed)
+      } else if (exchangeOrderDiscountPercent > 0) {
+        manualExchangeDiscountAmount = Math.round(
+          (purchaseItemsTotal * exchangeOrderDiscountPercent) / 100,
+        )
+      }
+    }
+    const purchaseDiscount = membershipDiscountAmount + manualExchangeDiscountAmount
+    const purchaseNetTotal = Math.max(0, purchaseItemsTotal - purchaseDiscount)
 
     const customerOwes = purchaseNetTotal - returnNetTotal
     return {
@@ -209,10 +267,24 @@ function ReturnOrderPage() {
       returnNetTotal,
       purchaseItemsTotal,
       purchaseDiscount,
+      membershipDiscountAmount,
+      manualExchangeDiscountAmount,
+      tierDiscountPercent,
+      tierCode: customerContext?.tierCode ?? '',
       purchaseNetTotal,
       customerOwes,
     }
-  }, [returnLines, exchangeCart])
+  }, [
+    returnLines,
+    exchangeCart,
+    paidRatio,
+    tierDiscountPercent,
+    customerContext?.tierCode,
+    canUseVipManualAdjustments,
+    exchangeOrderDiscountPercent,
+    exchangeOrderDiscountAmountFixed,
+    usesFixedExchangeOrderDiscount,
+  ])
 
   useEffect(() => {
     const owed = Math.max(0, totals.customerOwes)
@@ -333,6 +405,7 @@ function ReturnOrderPage() {
           quantity: item.qty,
           unitPrice: item.price,
         })),
+        exchangeManualDiscount: totals.manualExchangeDiscountAmount,
         note: buildReturnNote(),
       })
 
@@ -528,6 +601,10 @@ function ReturnOrderPage() {
           returnNetTotal={totals.returnNetTotal}
           purchaseItemsTotal={totals.purchaseItemsTotal}
           purchaseDiscount={totals.purchaseDiscount}
+          membershipDiscountAmount={totals.membershipDiscountAmount}
+          manualExchangeDiscountAmount={totals.manualExchangeDiscountAmount}
+          tierDiscountPercent={totals.tierDiscountPercent}
+          tierCode={totals.tierCode}
           purchaseNetTotal={totals.purchaseNetTotal}
           customerOwes={totals.customerOwes}
           amountPaid={amountPaidInput}
@@ -536,10 +613,32 @@ function ReturnOrderPage() {
           onAmountPaidChange={setAmountPaidInput}
           refundTransactionRef={refundTransactionRef}
           onRefundTransactionRefChange={setRefundTransactionRef}
+          canUseVipManualAdjustments={canUseVipManualAdjustments}
+          exchangeOrderDiscountPercent={exchangeOrderDiscountPercent}
+          usesFixedExchangeOrderDiscount={usesFixedExchangeOrderDiscount}
+          onExchangeOrderDiscountPercentChange={(value) => {
+            const pct = Math.min(100, Math.max(0, Number(value) || 0))
+            setExchangeOrderDiscountPercent(pct)
+            if (pct > 0) setExchangeOrderDiscountAmountFixed(0)
+          }}
+          onOpenExchangeOfferModal={() => setOfferModalOpen(true)}
           formatMoney={formatMoney}
           isSubmitting={isSubmitting}
           canSubmit={canSubmit}
           onSubmit={handleSubmit}
+        />
+
+        <OrderOfferModal
+          isOpen={offerModalOpen}
+          onClose={() => setOfferModalOpen(false)}
+          initialPercent={exchangeOrderDiscountPercent}
+          initialFixedAmount={exchangeOrderDiscountAmountFixed}
+          maxFixedAmount={totals.purchaseItemsTotal}
+          onConfirm={({ percent, fixedAmount, warning }) => {
+            setExchangeOrderDiscountPercent(percent)
+            setExchangeOrderDiscountAmountFixed(fixedAmount)
+            if (warning) showError(warning)
+          }}
         />
       </div>
     </div>

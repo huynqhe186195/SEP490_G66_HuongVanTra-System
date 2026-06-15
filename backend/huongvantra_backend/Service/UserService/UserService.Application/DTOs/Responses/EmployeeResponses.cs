@@ -11,3 +11,8 @@ public record EmployeeDetailResponse(
     string Status,
     bool IsUserActive,
     List<string> Roles);
+
+public record SalesAssigneeResponse(
+    Guid UserId,
+    string FullName,
+    string? Department);

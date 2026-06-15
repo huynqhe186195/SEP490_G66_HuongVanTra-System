@@ -17,6 +17,7 @@ export function mapCategory(item) {
 export async function fetchCategories({ isDeleted } = {}) {
   const params = new URLSearchParams()
   if (isDeleted === true) params.set('isDeleted', 'true')
+  if (isDeleted === false) params.set('isDeleted', 'false')
   const query = params.toString()
   const data = await apiRequestAuth(`/api/v1/categories${query ? `?${query}` : ''}`, { method: 'GET' })
   const items = Array.isArray(data) ? data : data?.items ?? data?.Items ?? []

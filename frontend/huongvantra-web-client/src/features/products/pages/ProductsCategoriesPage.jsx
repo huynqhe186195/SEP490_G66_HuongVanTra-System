@@ -56,7 +56,8 @@ function ProductsCategoriesPage() {
     try {
       setIsLoading(true)
       const items = await fetchCategories({
-        isDeleted: statusFilter === 'hidden' ? true : undefined,
+        isDeleted:
+          statusFilter === 'hidden' ? true : statusFilter === 'active' ? false : undefined,
       })
       setCategories(items)
     } catch (error) {
@@ -88,8 +89,7 @@ function ProductsCategoriesPage() {
   const visibleCategories = useMemo(() => {
     return categories.filter((item) => {
       if (statusFilter === 'hidden') return item.isDeleted
-      if (item.isDeleted) return false
-      if (statusFilter === 'active' && item.isActive === false) return false
+      if (statusFilter === 'active') return !item.isDeleted && item.isActive !== false
       return true
     })
   }, [categories, statusFilter])
@@ -296,7 +296,7 @@ function ProductsCategoriesPage() {
               </button>
             ) : null}
             <Link
-              to="/products"
+              to="/inventory/products"
               className="inline-flex items-center gap-2 rounded-xl border border-[#356647]/30 bg-white px-4 py-2.5 text-sm font-semibold text-[#356647] hover:bg-[#356647]/5"
             >
               <span className="material-symbols-outlined text-[18px]">inventory_2</span>

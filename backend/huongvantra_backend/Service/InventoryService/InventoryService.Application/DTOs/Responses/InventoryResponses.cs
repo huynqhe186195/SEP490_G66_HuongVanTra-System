@@ -51,34 +51,42 @@ public record SkuStockResponse(
     int WarehouseQuantityOnHand,
     DateTime UpdatedAt);
 
-public record StockAdjustmentRequestResponse(
+public record StockAdjustmentRequestItemResponse(
     Guid Id,
-    string RequestCode,
     Guid SkuId,
     string SkuCode,
     string SkuSnapshotName,
     int QuantityDelta,
-    string? Reason,
-    string Status,
     int QuantityOnHandSnapshot,
     int? QuantityOnHandAfter,
+    int? WarehouseQuantityOnHandAfter,
+    Guid? ExportSlipId,
+    string? ExportSlipCode);
+
+public record StockAdjustmentRequestResponse(
+    Guid Id,
+    string RequestCode,
+    string? Reason,
+    string Status,
     Guid RequestedBy,
     DateTime RequestedAt,
     Guid? ReviewedBy,
     DateTime? ReviewedAt,
     string? ReviewNote,
-    Guid? ExportSlipId,
-    string? ExportSlipCode);
+    List<StockAdjustmentRequestItemResponse> Items);
+
+public record StockAdjustmentExportSlipSummary(
+    Guid ExportSlipId,
+    string ExportSlipCode,
+    Guid SkuId,
+    string SkuCode);
 
 public record StockAdjustmentReviewResponse(
     Guid Id,
     string RequestCode,
     string Status,
-    int QuantityOnHandAfter,
-    int WarehouseQuantityOnHandAfter,
     DateTime? ReviewedAt,
-    Guid? ExportSlipId,
-    string? ExportSlipCode);
+    List<StockAdjustmentExportSlipSummary> ExportSlips);
 
 public record StockExportBatchAllocationResponse(
     Guid Id,

@@ -28,7 +28,7 @@ public class ProductLogic(
         var (items, total) = await _productRepository.GetPagedAsync(
             request.Search, request.CategoryId, request.IsActive, request.IsDeleted,
             request.Page, request.PageSize, scope,
-            ParseProductType(request.ProductType));
+            ParseProductTypeFilter(request.ProductType));
 
         return new PagedResponse<ProductResponse>(
             items.Select(p => MapToResponse(p, scope)).ToList(),

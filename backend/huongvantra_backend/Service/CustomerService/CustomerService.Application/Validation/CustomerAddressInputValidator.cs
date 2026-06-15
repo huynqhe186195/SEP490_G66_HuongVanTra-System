@@ -6,7 +6,6 @@ namespace CustomerService.Application.Validation;
 
 public static class CustomerAddressInputValidator
 {
-    private static readonly Regex PhoneRegex = new(@"^0\d{9}$", RegexOptions.Compiled);
     private static readonly Regex DigitsOnlyRegex = new(@"^\d+$", RegexOptions.Compiled);
     private static readonly Regex LettersOnlyRegex = new(@"^[\p{L}\s]+$", RegexOptions.Compiled);
 
@@ -39,8 +38,8 @@ public static class CustomerAddressInputValidator
         var receiverPhone = receiverPhoneValue?.Trim();
         if (string.IsNullOrWhiteSpace(receiverPhone))
             receiverPhone = string.Empty;
-        else if (!PhoneRegex.IsMatch(receiverPhone))
-            errors.Add("Số điện thoại người nhận phải gồm 10 chữ số và bắt đầu bằng 0.");
+        else if (!VietnamPhoneValidator.TryValidate(receiverPhone, out var receiverPhoneError))
+            errors.Add(receiverPhoneError!.Replace("Số điện thoại", "Số điện thoại người nhận"));
 
         var addressLine = addressLineValue?.Trim();
         if (string.IsNullOrWhiteSpace(addressLine))

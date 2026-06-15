@@ -385,6 +385,7 @@ export async function returnOrder(orderId, payload) {
       })),
       note: payload.note?.trim() || null,
       exchangeFulfillment: payload.exchangeFulfillment || null,
+      exchangeManualDiscount: Number(payload.exchangeManualDiscount ?? 0),
     }),
   })
   return mapReturnOrderResult(data)

@@ -236,11 +236,13 @@ export function mapProductApiError(message, apiErrors = []) {
 
   const firstField = Object.keys(fieldErrors)[0]
   const firstMessage = firstField ? fieldErrors[firstField] : messages[0] || 'Có lỗi xảy ra.'
+  const duplicateProduct = messages.some((text) => mapSingleProductApiError(text).duplicateProduct)
 
   return {
     field: firstField || null,
     message: firstMessage,
     errors: fieldErrors,
+    duplicateProduct,
   }
 }
 
@@ -264,7 +266,9 @@ function mapSingleProductApiError(message) {
   if (lower.includes('giá bán')) return { field: 'basePrice', message: text }
   if (lower.includes('url ảnh')) return { field: 'imageUrl', message: text }
   if (lower.includes('tên danh mục')) return { field: 'name', message: text }
-  if (lower.includes('tên sản phẩm')) return { field: 'name', message: text }
+  if (lower.includes('sản phẩm') && lower.includes('đã tồn tại')) {
+    return { field: 'name', message: text, duplicateProduct: true }
+  }
   if (lower.includes('categoryid') || lower.includes('danh mục')) return { field: 'categoryId', message: text }
 
   return { field: null, message: text }

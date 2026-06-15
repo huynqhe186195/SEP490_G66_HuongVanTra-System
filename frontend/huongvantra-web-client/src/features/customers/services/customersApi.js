@@ -213,6 +213,13 @@ export async function fetchCustomerByPhone(phone) {
   return mapCustomerDetail(data)
 }
 
+export function createCustomerForOrder(payload) {
+  return apiRequestAuth('/api/customers/pos-quick', {
+    method: 'POST',
+    body: JSON.stringify(buildCreateCustomerBody(payload)),
+  }).then(mapCustomerDetail)
+}
+
 export function createCustomer(payload) {
   return apiRequestAuth('/api/customers', {
     method: 'POST',

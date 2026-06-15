@@ -80,10 +80,22 @@ function orderMatchesProductFilter(orderDetail, productCode, productName) {
 }
 
 function buildServerSearch(filters) {
-  const parts = [filters.invoiceCode, filters.waybillCode, filters.customer]
-    .map((v) => String(v || '').trim())
-    .filter(Boolean)
-  return parts[0] || undefined
+  const invoice = String(filters.invoiceCode || '').trim()
+  if (invoice) return invoice
+
+  const waybill = String(filters.waybillCode || '').trim()
+  if (waybill) return waybill
+
+  const customer = String(filters.customer || '').trim()
+  if (customer) return customer
+
+  const productCode = String(filters.productCode || '').trim()
+  if (productCode) return productCode
+
+  const productName = String(filters.productName || '').trim()
+  if (productName) return productName
+
+  return undefined
 }
 
 function ReturnOrderPagination({ page, totalPages, totalCount, pageSize, onPageChange }) {
@@ -193,13 +205,13 @@ function SelectReturnOrderModal({ isOpen, onClose, onSelectOrder, onQuickReturn 
         channel: orderChannel,
         returnableOnly: true,
         excludeOrderKind: 'Exchange',
+        fromDate: draftFilters.dateFrom || undefined,
+        toDate: draftFilters.dateTo || undefined,
         page: hasProductFilter ? 1 : page,
-        pageSize: hasProductFilter ? 100 : PAGE_SIZE,
+        pageSize: hasProductFilter ? 200 : PAGE_SIZE,
       })
 
-      let items = data.items.filter((order) =>
-        isOrderInDateRange(order.createdAt, draftFilters.dateFrom, draftFilters.dateTo),
-      )
+      let items = data.items
 
       if (hasProductFilter) {
         const details = await Promise.all(
@@ -211,7 +223,9 @@ function SelectReturnOrderModal({ isOpen, onClose, onSelectOrder, onQuickReturn 
             }
           }),
         )
-        items = items.filter((order, index) => orderMatchesProductFilter(details[index], draftFilters.productCode, draftFilters.productName))
+        items = items.filter((order, index) =>
+          orderMatchesProductFilter(details[index], draftFilters.productCode, draftFilters.productName),
+        )
         const start = (page - 1) * PAGE_SIZE
         const paged = items.slice(start, start + PAGE_SIZE)
         setOrders(paged)

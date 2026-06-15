@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
@@ -9,11 +9,13 @@ import { loadAuthSession } from '../../auth/services/authSession.js'
 import { formatStockQuantity } from '../../products/utils/productDisplay.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import InventorySimulationBanner from '../components/InventorySimulationBanner.jsx'
-import { inventoryNavTabs } from '../utils/inventoryNavTabs.js'
+import StockAdjustmentRequestDetailPanel from '../components/StockAdjustmentRequestDetailPanel.jsx'
+import InventoryNavTabs from '../components/InventoryNavTabs.jsx'
 import { fetchInventorySettings } from '../services/inventoryStockApi.js'
 import {
   approveStockAdjustmentRequest,
   cancelStockAdjustmentRequest,
+  fetchStockAdjustmentRequestById,
   fetchStockAdjustmentRequests,
   getAdjustmentStatusClass,
   getAdjustmentStatusLabel,
@@ -40,11 +42,13 @@ function formatDelta(delta) {
 }
 
 function StockAdjustmentRequestsPage() {
-  const navigate = useNavigate()
   const canReview = canConfirmStockDeduct(loadAuthSession())
   const [activeTab, setActiveTab] = useState(canReview ? 'pending' : 'mine')
   const [searchValue, setSearchValue] = useState('')
   const [requests, setRequests] = useState([])
+  const [selectedId, setSelectedId] = useState(null)
+  const [selectedDetail, setSelectedDetail] = useState(null)
+  const [isLoadingDetail, setIsLoadingDetail] = useState(false)
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE)
   const [totalCount, setTotalCount] = useState(0)
@@ -68,9 +72,14 @@ function StockAdjustmentRequestsPage() {
       const filtered = tab.excludePending ? data.items.filter((row) => row.status !== 'pending') : data.items
       setRequests(filtered)
       setTotalCount(data.totalCount)
+      setSelectedId((prev) => {
+        if (prev && filtered.some((row) => row.id === prev)) return prev
+        return filtered[0]?.id ?? null
+      })
     } catch (error) {
       setRequests([])
       setTotalCount(0)
+      setSelectedId(null)
       showError(error.message)
     } finally {
       setIsLoading(false)
@@ -88,6 +97,38 @@ function StockAdjustmentRequestsPage() {
     fetchInventorySettings().then((s) => setSimulateWarehouse(s.simulateWarehouse)).catch(() => {})
   }, [])
 
+  useEffect(() => {
+    if (!selectedId) {
+      setSelectedDetail(null)
+      return undefined
+    }
+
+    const cached = requests.find((row) => row.id === selectedId)
+    if (cached) setSelectedDetail(cached)
+
+    let mounted = true
+    async function loadDetail() {
+      setIsLoadingDetail(true)
+      try {
+        const detail = await fetchStockAdjustmentRequestById(selectedId)
+        if (mounted) setSelectedDetail(detail)
+      } catch (error) {
+        if (mounted && cached) setSelectedDetail(cached)
+        else if (mounted) {
+          setSelectedDetail(null)
+          showError(error.message)
+        }
+      } finally {
+        if (mounted) setIsLoadingDetail(false)
+      }
+    }
+
+    loadDetail()
+    return () => {
+      mounted = false
+    }
+  }, [selectedId, requests])
+
   const stats = useMemo(() => {
     const pending = requests.filter((r) => r.status === 'pending').length
     const approved = requests.filter((r) => r.status === 'approved').length
@@ -102,13 +143,19 @@ function StockAdjustmentRequestsPage() {
     setActingId(id)
     try {
       const result = await approveStockAdjustmentRequest(id)
-      const slipCode = result?.exportSlipCode ?? result?.ExportSlipCode
-      showSuccess(
-        slipCode
-          ? `Đã duyệt. Đã tạo phiếu xuất kho ${slipCode}.`
-          : 'Đã duyệt và cập nhật tồn cửa hàng.',
-      )
+      const slips = result?.exportSlips ?? []
+      if (slips.length === 1) {
+        showSuccess(`Đã duyệt lô. Đã tạo phiếu xuất kho ${slips[0].exportSlipCode}.`)
+      } else if (slips.length > 1) {
+        showSuccess(`Đã duyệt lô. Đã tạo ${slips.length} phiếu xuất kho.`)
+      } else {
+        showSuccess('Đã duyệt lô và cập nhật tồn cửa hàng.')
+      }
       await loadData()
+      if (selectedId === id) {
+        const detail = await fetchStockAdjustmentRequestById(id)
+        setSelectedDetail(detail)
+      }
     } catch (error) {
       showError(error.message)
     } finally {
@@ -151,8 +198,8 @@ function StockAdjustmentRequestsPage() {
         title="Yêu cầu điều chỉnh tồn"
         description={
           canReview
-            ? 'Duyệt yêu cầu từ cửa hàng — nhập hàng sẽ xuất từ kho tổng và tạo phiếu xuất kho'
-            : 'Theo dõi yêu cầu điều chỉnh tồn bạn đã gửi'
+            ? 'Duyệt lô yêu cầu từ cửa hàng — bấm thẻ để xem chi tiết từng lô'
+            : 'Theo dõi lô yêu cầu bạn đã gửi — bấm thẻ để xem chi tiết'
         }
         searchPlaceholder="Tìm mã yêu cầu, SKU..."
         searchValue={searchValue}
@@ -160,23 +207,7 @@ function StockAdjustmentRequestsPage() {
           setSearchValue(value)
           setPage(1)
         }}
-        rightContent={
-          <div className="flex flex-wrap items-center gap-2">
-            {inventoryNavTabs.map((tab) => (
-              <Link
-                key={tab.to}
-                to={tab.to}
-                className={`rounded-xl px-4 py-2 text-sm font-semibold ${
-                  tab.to === '/inventory/stock-requests'
-                    ? 'bg-[#538463] text-white'
-                    : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-                }`}
-              >
-                {tab.label}
-              </Link>
-            ))}
-          </div>
-        }
+        rightContent={<InventoryNavTabs />}
       />
 
       <InventorySimulationBanner simulateWarehouse={simulateWarehouse} warehouseView={canReview} />
@@ -201,7 +232,7 @@ function StockAdjustmentRequestsPage() {
         ))}
         <Link
           className="ml-auto rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-          to="/products"
+          to="/inventory/products"
         >
           Sản phẩm &amp; số lượng
         </Link>
@@ -217,147 +248,118 @@ function StockAdjustmentRequestsPage() {
         ))}
       </section>
 
-      <section className="rounded-3xl border border-slate-100 bg-white shadow-sm">
-        <div className="border-b border-slate-50 p-6">
-          <h2 className="text-xl font-bold text-slate-800">
-            {REQUEST_TABS.find((t) => t.key === activeTab)?.label}
-          </h2>
-        </div>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+        <section className="flex flex-col rounded-2xl border border-slate-100 bg-white shadow-sm lg:col-span-5">
+          <div className="border-b border-slate-50 px-6 py-4">
+            <h2 className="text-lg font-bold text-slate-800">
+              {REQUEST_TABS.find((t) => t.key === activeTab)?.label}
+            </h2>
+            <p className="mt-1 text-xs text-slate-500">Bấm thẻ để xem chi tiết lô</p>
+          </div>
 
-        <div className="custom-scrollbar overflow-x-auto">
-          <table className="w-full text-left">
-            <thead className="bg-[#fbf9f1]/50 text-xs font-bold uppercase tracking-wider text-slate-400">
-              <tr>
-                <th className="px-8 py-4">Mã yêu cầu</th>
-                <th className="px-4 py-4">SKU</th>
-                <th className="px-4 py-4">Thay đổi</th>
-                {canReview ? null : <th className="px-4 py-4">Tồn CH lúc gửi</th>}
-                <th className="px-4 py-4">Phiếu xuất</th>
-                <th className="px-4 py-4">Trạng thái</th>
-                <th className="px-4 py-4">Ngày gửi</th>
-                <th className="px-4 py-4 text-right">Thao tác</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
-              {isLoading ? (
-                <tr>
-                  <td className="px-8 py-10 text-slate-500" colSpan={canReview ? 7 : 8}>
-                    Đang tải...
-                  </td>
-                </tr>
-              ) : null}
-              {!isLoading && requests.length === 0 ? (
-                <tr>
-                  <td className="px-8 py-10 text-slate-500" colSpan={canReview ? 7 : 8}>
-                    Không có yêu cầu trong mục này.
-                  </td>
-                </tr>
-              ) : null}
-              {!isLoading
-                ? requests.map((row) => (
-                    <tr key={row.id} className="transition-colors hover:bg-[#fbf9f1]/30">
-                      <td className="px-8 py-5 font-bold text-slate-700">{row.requestCode}</td>
-                      <td className="px-4 py-5">
-                        <p className="font-mono text-sm font-semibold text-[#356647]">{row.skuCode}</p>
-                        <p className="mt-0.5 text-xs text-slate-500">{row.skuSnapshotName}</p>
-                        {row.reason ? (
-                          <p className="mt-1 text-xs text-slate-600">Lý do: {row.reason}</p>
-                        ) : null}
-                        {row.reviewNote ? (
-                          <p className="mt-1 text-xs text-rose-600">Ghi chú duyệt: {row.reviewNote}</p>
-                        ) : null}
-                      </td>
-                      <td className="px-4 py-5">
+          <div className="min-h-[280px] flex-1 overflow-y-auto custom-scrollbar">
+            {isLoading ? (
+              <p className="px-6 py-8 text-sm text-slate-500">Đang tải...</p>
+            ) : requests.length === 0 ? (
+              <p className="px-6 py-8 text-sm text-slate-500">Không có yêu cầu trong mục này.</p>
+            ) : (
+              <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-1">
+                {requests.map((row) => {
+                  const preview = row.items[0]
+                  const isSelected = selectedId === row.id
+                  return (
+                    <button
+                      key={row.id}
+                      type="button"
+                      onClick={() => setSelectedId(row.id)}
+                      className={`rounded-xl border p-4 text-left transition-all hover:shadow-md ${
+                        isSelected
+                          ? 'border-[#356647]/40 bg-[#f0f7f2] shadow-sm ring-1 ring-[#356647]/20'
+                          : 'border-slate-100 bg-white hover:border-[#356647]/20 hover:bg-[#fbf9f1]/40'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="font-mono text-sm font-bold text-[#356647]">{row.requestCode}</p>
                         <span
-                          className={`font-bold ${
-                            row.quantityDelta > 0 ? 'text-emerald-700' : 'text-rose-700'
-                          }`}
-                        >
-                          {formatDelta(row.quantityDelta)}
-                        </span>
-                      </td>
-                      {canReview ? null : (
-                        <td className="px-4 py-5 text-sm text-slate-600">
-                          {formatStockQuantity(row.quantityOnHandSnapshot)}
-                        </td>
-                      )}
-                      <td className="px-4 py-5 text-sm">
-                        {row.exportSlipCode ? (
-                          <button
-                            type="button"
-                            className="font-semibold text-[#356647] hover:underline"
-                            onClick={() => navigate('/inventory/export', { state: { search: row.exportSlipCode } })}
-                          >
-                            {row.exportSlipCode}
-                          </button>
-                        ) : (
-                          <span className="text-slate-400">—</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-5">
-                        <span
-                          className={`rounded-full px-3 py-1 text-xs font-semibold ${getAdjustmentStatusClass(row.status)}`}
+                          className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${getAdjustmentStatusClass(row.status)}`}
                         >
                           {getAdjustmentStatusLabel(row.status)}
                         </span>
-                      </td>
-                      <td className="px-4 py-5 text-sm text-slate-600">
+                      </div>
+                      <p className="mt-2 text-sm font-semibold text-slate-800">
+                        {row.itemCount} SKU
+                        {row.hasIncrease && row.hasDecrease
+                          ? ' · nhập & giảm'
+                          : row.hasIncrease
+                            ? ' · nhập kho'
+                            : row.hasDecrease
+                              ? ' · giảm tồn'
+                              : ''}
+                      </p>
+                      {preview ? (
+                        <p className="mt-1 truncate text-xs text-slate-500">
+                          {preview.skuCode}
+                          {row.itemCount > 1 ? ` +${row.itemCount - 1} SKU` : ''}
+                          {' · '}
+                          {formatDelta(preview.quantityDelta)}
+                        </p>
+                      ) : null}
+                      {row.reason ? (
+                        <p className="mt-2 line-clamp-2 text-xs text-slate-600">Lý do: {row.reason}</p>
+                      ) : null}
+                      <p className="mt-2 text-[11px] text-slate-400">
                         {formatVietnamDateTime(row.requestedAt)}
-                      </td>
-                      <td className="px-4 py-5 text-right">
-                        {row.status === 'pending' && canReview && activeTab !== 'mine' ? (
-                          <div className="flex flex-wrap justify-end gap-2">
-                            <button
-                              type="button"
-                              disabled={actingId === row.id}
-                              onClick={() => handleApprove(row.id)}
-                              className="rounded-lg bg-[#538463] px-3 py-1.5 text-xs font-bold text-white hover:bg-[#457053] disabled:opacity-50"
-                            >
-                              Duyệt
-                            </button>
-                            <button
-                              type="button"
-                              disabled={actingId === row.id}
-                              onClick={() => setRejectTarget(row)}
-                              className="rounded-lg border border-rose-200 bg-white px-3 py-1.5 text-xs font-bold text-rose-700 hover:bg-rose-50 disabled:opacity-50"
-                            >
-                              Từ chối
-                            </button>
-                          </div>
-                        ) : null}
-                        {row.status === 'pending' && activeTab === 'mine' ? (
-                          <button
-                            type="button"
-                            disabled={actingId === row.id}
-                            onClick={() => handleCancel(row.id)}
-                            className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-                          >
-                            Hủy
-                          </button>
-                        ) : null}
-                      </td>
-                    </tr>
-                  ))
-                : null}
-            </tbody>
-          </table>
-        </div>
-        <TablePagination
-          page={page}
-          pageSize={pageSize}
-          totalCount={totalCount}
-          itemLabel="yêu cầu"
-          onPageChange={setPage}
-          onPageSizeChange={setPageSize}
-        />
-      </section>
+                      </p>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="border-t border-slate-50 px-4 py-3">
+            <TablePagination
+              page={page}
+              pageSize={pageSize}
+              totalCount={totalCount}
+              itemLabel="yêu cầu"
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+            />
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm sm:p-8 lg:col-span-7">
+          <h2 className="mb-6 text-lg font-bold text-slate-800">Chi tiết yêu cầu</h2>
+          {isLoadingDetail && selectedId ? (
+            <p className="text-sm text-slate-500">Đang tải chi tiết...</p>
+          ) : (
+            <StockAdjustmentRequestDetailPanel
+              request={selectedDetail}
+              canReview={canReview}
+              activeTab={activeTab}
+              actingId={actingId}
+              onApprove={handleApprove}
+              onReject={setRejectTarget}
+              onCancel={handleCancel}
+            />
+          )}
+        </section>
+      </div>
 
       {rejectTarget ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
-            <h3 className="text-lg font-bold text-slate-800">Từ chối {rejectTarget.requestCode}</h3>
+            <h3 className="text-lg font-bold text-slate-800">Từ chối lô {rejectTarget.requestCode}</h3>
             <p className="mt-2 text-sm text-slate-600">
-              SKU {rejectTarget.skuCode} — thay đổi {formatDelta(rejectTarget.quantityDelta)}
+              {rejectTarget.itemCount} SKU trong lô
+              {rejectTarget.hasIncrease && rejectTarget.hasDecrease
+                ? ' (có nhập và giảm tồn)'
+                : rejectTarget.hasIncrease
+                  ? ' (nhập từ kho)'
+                  : rejectTarget.hasDecrease
+                    ? ' (giảm tồn)'
+                    : ''}
             </p>
             <label className="mt-4 block space-y-2">
               <span className="text-xs font-semibold text-slate-500">Lý do từ chối (tùy chọn)</span>

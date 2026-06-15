@@ -1,0 +1,6 @@
+<Project>
+  <!-- Avoid Windows VS NuGet fallback paths breaking Linux docker bind mounts -->
+  <PropertyGroup>
+    <DisableImplicitNuGetFallbackFolder>true</DisableImplicitNuGetFallbackFolder>
+  </PropertyGroup>
+</Project>

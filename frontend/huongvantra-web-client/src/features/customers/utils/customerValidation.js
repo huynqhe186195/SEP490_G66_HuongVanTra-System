@@ -1,7 +1,7 @@
-const PHONE_REGEX = /^0\d{9}$/
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i
 const DIGITS_ONLY_REGEX = /^\d+$/
 const LETTERS_ONLY_REGEX = /^[\p{L}\s]+$/u
+const TAX_CODE_REGEX = /^\d{10}(-\d{3})?$/
 
 function normalizeText(value) {
   return String(value || '').normalize('NFC').trim()
@@ -18,6 +18,61 @@ function isLettersOnly(value) {
 
 export function normalizeNameInput(value) {
   return String(value || '').normalize('NFC')
+}
+
+export function normalizePhoneInput(value) {
+  const digits = String(value || '').replace(/\D/g, '')
+  if (digits.startsWith('02')) return digits.slice(0, 11)
+  return digits.slice(0, 10)
+}
+
+export function getPhoneMaxLength(value) {
+  const digits = String(value || '').replace(/\D/g, '')
+  return digits.startsWith('02') ? 11 : 10
+}
+
+export function validatePhoneNumber(phone, { required = true } = {}) {
+  const phoneValue = String(phone || '').trim()
+  if (!phoneValue) {
+    return required ? 'Số điện thoại là bắt buộc.' : null
+  }
+
+  if (!DIGITS_ONLY_REGEX.test(phoneValue) || !phoneValue.startsWith('0')) {
+    return 'Số điện thoại chỉ gồm chữ số và bắt đầu bằng 0.'
+  }
+
+  if (phoneValue.startsWith('02')) {
+    if (phoneValue.length !== 11) {
+      return 'Số máy bàn phải gồm 11 chữ số và bắt đầu bằng 02.'
+    }
+    return null
+  }
+
+  if (phoneValue.length !== 10) {
+    return 'Số di động phải gồm 10 chữ số và bắt đầu bằng 0.'
+  }
+
+  return null
+}
+
+export function normalizeTaxCodeInput(value) {
+  return String(value || '')
+    .replace(/\s/g, '')
+    .replace(/[^0-9-]/g, '')
+    .slice(0, 14)
+}
+
+export function validateTaxCode(taxCode, { required = false } = {}) {
+  const value = String(taxCode || '').trim()
+  if (!value) {
+    return required ? 'Khách doanh nghiệp cần mã số thuế.' : null
+  }
+
+  if (!TAX_CODE_REGEX.test(value)) {
+    return 'Mã số thuế không hợp lệ. Nhập 10 số hoặc 10 số-3 số chi nhánh (VD: 0312345678 hoặc 0312345678-001).'
+  }
+
+  return null
 }
 
 export function validateCustomerForm({ name, phone, email, customerType, taxCode, address }) {
@@ -38,9 +93,8 @@ export function validateCustomerForm({ name, phone, email, customerType, taxCode
   else if (addressValue.length > 255) errors.address = 'Địa chỉ tối đa 255 ký tự.'
   else if (isDigitsOnly(addressValue)) errors.address = 'Địa chỉ không được chỉ gồm chữ số.'
 
-  const phoneValue = String(phone || '').trim()
-  if (!phoneValue) errors.phone = 'Số điện thoại là bắt buộc.'
-  else if (!PHONE_REGEX.test(phoneValue)) errors.phone = 'Số điện thoại phải gồm 10 chữ số và bắt đầu bằng 0.'
+  const phoneError = validatePhoneNumber(phone)
+  if (phoneError) errors.phone = phoneError
 
   const emailValue = String(email || '').trim()
   if (emailValue) {
@@ -53,9 +107,8 @@ export function validateCustomerForm({ name, phone, email, customerType, taxCode
     }
   }
 
-  if (isCorporate && !String(taxCode || '').trim()) {
-    errors.taxCode = 'Khách doanh nghiệp cần mã số thuế.'
-  }
+  const taxCodeError = validateTaxCode(taxCode, { required: isCorporate })
+  if (taxCodeError) errors.taxCode = taxCodeError
 
   const messages = Object.values(errors)
   return {
@@ -73,6 +126,9 @@ export function mapCustomerApiError(message) {
   if (lower.includes('email') && (lower.includes('đã') || lower.includes('already') || lower.includes('duplicate'))) {
     return { field: 'email', message: text }
   }
+  if (lower.includes('mã số thuế') || lower.includes('tax code')) {
+    return { field: 'taxCode', message: text }
+  }
   if (lower.includes('điện thoại') || lower.includes('phone number') || lower.includes('số điện thoại')) {
     return { field: 'phone', message: text }
   }
@@ -83,10 +139,6 @@ export function mapCustomerApiError(message) {
   return { field: null, message: text }
 }
 
-export function normalizePhoneInput(value) {
-  return String(value || '').replace(/\D/g, '').slice(0, 10)
-}
-
 export function validatePosCustomerForm({ fullName, phone, address }) {
   const errors = {}
   const nameValue = normalizeText(fullName)
@@ -95,9 +147,8 @@ export function validatePosCustomerForm({ fullName, phone, address }) {
   else if (nameValue.length > 100) errors.fullName = 'Họ tên tối đa 100 ký tự.'
   else if (!isLettersOnly(nameValue)) errors.fullName = 'Họ tên chỉ được chứa chữ cái và khoảng trắng (hỗ trợ tiếng Việt có dấu).'
 
-  const phoneValue = String(phone || '').trim()
-  if (!phoneValue) errors.phone = 'Số điện thoại là bắt buộc.'
-  else if (!PHONE_REGEX.test(phoneValue)) errors.phone = 'Số điện thoại phải gồm 10 chữ số và bắt đầu bằng 0.'
+  const phoneError = validatePhoneNumber(phone)
+  if (phoneError) errors.phone = phoneError
 
   const addressValue = normalizeText(address)
   if (addressValue) {
@@ -124,8 +175,9 @@ export function validateCustomerAddressForm(form) {
   else if (!isLettersOnly(receiverName)) errors.receiverName = 'Tên người nhận chỉ được chứa chữ cái và khoảng trắng.'
 
   const receiverPhone = String(form.receiverPhone || '').trim()
-  if (receiverPhone && !PHONE_REGEX.test(receiverPhone)) {
-    errors.receiverPhone = 'Số điện thoại phải gồm 10 chữ số và bắt đầu bằng 0.'
+  const receiverPhoneError = validatePhoneNumber(receiverPhone, { required: false })
+  if (receiverPhoneError) {
+    errors.receiverPhone = receiverPhoneError.replace('Số điện thoại', 'Số điện thoại người nhận')
   }
 
   const addressLine = normalizeText(form.addressLine)

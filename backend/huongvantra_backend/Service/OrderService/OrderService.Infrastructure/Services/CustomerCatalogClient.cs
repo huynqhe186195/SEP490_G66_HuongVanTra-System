@@ -21,7 +21,8 @@ public class CustomerCatalogClient(HttpClient httpClient, ILogger<CustomerCatalo
                     response.FullName,
                     response.CustomerGroup,
                     response.TierId ?? response.Tier?.Id,
-                    response.TierName ?? response.Tier?.TierName);
+                    response.TierName ?? response.Tier?.TierName,
+                    response.Tier?.DiscountPercent ?? 0m);
         }
         catch (Exception ex) when (
             ex is HttpRequestException or NotSupportedException ||
@@ -42,5 +43,6 @@ public class CustomerCatalogClient(HttpClient httpClient, ILogger<CustomerCatalo
 
     private sealed record CustomerTierCatalogResponse(
         int Id,
-        string? TierName);
+        string? TierName,
+        decimal DiscountPercent);
 }

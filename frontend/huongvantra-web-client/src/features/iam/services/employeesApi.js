@@ -9,8 +9,18 @@ export function fetchEmployees(params = {}) {
   return apiRequestAuth(path, { method: 'GET' }).then(toPagedResult)
 }
 
-export function fetchSalesEmployees() {
-  return apiRequestAuth('/api/employees/sales', { method: 'GET' })
+export function fetchSalesAssignees() {
+  return apiRequestAuth('/api/employees/sales-assignees', { method: 'GET' }).then((data) =>
+    Array.isArray(data)
+      ? data
+        .map((item) => ({
+          userId: item.userId ?? item.UserId,
+          fullName: item.fullName ?? item.FullName ?? '',
+          department: item.department ?? item.Department ?? '',
+        }))
+        .filter((item) => item.userId)
+      : [],
+  )
 }
 
 export function fetchEmployeeById(id) {

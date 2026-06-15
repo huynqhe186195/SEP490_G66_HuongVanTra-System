@@ -195,7 +195,7 @@ function ReportsOverviewPage() {
         <section className="overflow-hidden rounded-xl bg-[#ffffff] p-5 shadow-sm">
           <div className="mb-5 flex items-center justify-between">
             <h3 className="text-xl font-semibold text-[#1b1c17]">Top 5 sản phẩm bán chạy</h3>
-            <Link to="/products" className="text-sm font-semibold text-[#356647] hover:underline">
+            <Link to="/inventory/products" className="text-sm font-semibold text-[#356647] hover:underline">
               Xem tất cả
             </Link>
           </div>

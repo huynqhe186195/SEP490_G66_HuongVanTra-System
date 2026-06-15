@@ -759,6 +759,8 @@ public class OrderLogic(
         if (order.OrderStatus != OrderStatus.Completed)
             throw new OrderValidationException("Chỉ trả hàng trên hóa đơn đã hoàn tất.");
 
+        await RepairMissingPosTierDiscountAsync(order, ct);
+
         var returnInputs = (req.Items ?? []).Where(i => i.ReturnQuantity > 0).ToList();
         if (returnInputs.Count == 0)
             throw new OrderValidationException("Chọn ít nhất một dòng hàng để trả.");
@@ -779,10 +781,29 @@ public class OrderLogic(
             returnLines.Add((detail, input.ReturnQuantity));
         }
 
-        var returnAmount = returnLines.Sum(x => x.Detail.UnitPrice * x.Quantity);
+        var paidRatio = GetOrderPaidRatio(order);
+        var returnAmount = returnLines.Sum(x =>
+            Math.Round(x.Detail.UnitPrice * x.Quantity * paidRatio, 0, MidpointRounding.AwayFromZero));
         var exchangeItems = (req.ExchangeItems ?? []).Where(i => i.Quantity > 0).ToList();
         var exchangeAmount = exchangeItems.Sum(i => i.UnitPrice * i.Quantity);
-        var netCustomerPays = exchangeAmount - returnAmount;
+        var manualExchangeDiscount = Math.Max(0, req.ExchangeManualDiscount);
+        if (manualExchangeDiscount > 0)
+        {
+            if (exchangeItems.Count == 0)
+                throw new OrderValidationException("Chiết khấu thủ công chỉ áp dụng khi có hàng đổi.");
+            await EnsureVipCustomerAsync(order.CustomerId, ct);
+        }
+
+        var membershipDiscount = exchangeItems.Count > 0
+            ? await GetMembershipTierDiscountAsync(order.CustomerId, exchangeAmount, ct)
+            : 0m;
+        var maxManualExchangeDiscount = Math.Max(0, exchangeAmount - membershipDiscount);
+        if (manualExchangeDiscount > maxManualExchangeDiscount + 0.01m)
+            throw new OrderValidationException(
+                $"Chiết khấu thủ công không được vượt {FormatVnd(maxManualExchangeDiscount)}.");
+
+        var exchangePayable = Math.Max(0, exchangeAmount - membershipDiscount - manualExchangeDiscount);
+        var netCustomerPays = exchangePayable - returnAmount;
         var refundAmount = netCustomerPays < 0 ? Math.Abs(netCustomerPays) : 0m;
         var customerPaid = Math.Max(0, req.CustomerPaidAmount);
         var refundMethod = MapReturnPaymentMethod(req.PaymentMethod);
@@ -813,19 +834,24 @@ public class OrderLogic(
             Note = req.Note?.Trim(),
             CreatedAt = now,
             UpdatedAt = now,
-            Details = returnLines.Select(x => new ReturnOrderDetail
+            Details = returnLines.Select(x =>
             {
-                Id = Guid.NewGuid(),
-                ReturnOrderId = returnId,
-                SourceOrderDetailId = x.Detail.Id,
-                SkuId = x.Detail.SkuId,
-                SkuSnapshotName = x.Detail.SkuSnapshotName,
-                SkuSnapshotCode = x.Detail.SkuSnapshotCode,
-                ReturnQuantity = x.Quantity,
-                UnitPrice = x.Detail.UnitPrice,
-                SubTotal = x.Detail.UnitPrice * x.Quantity,
-                CreatedAt = now,
-                UpdatedAt = now
+                var effectiveUnit = Math.Round(x.Detail.UnitPrice * paidRatio, 0, MidpointRounding.AwayFromZero);
+                var subTotal = Math.Round(effectiveUnit * x.Quantity, 0, MidpointRounding.AwayFromZero);
+                return new ReturnOrderDetail
+                {
+                    Id = Guid.NewGuid(),
+                    ReturnOrderId = returnId,
+                    SourceOrderDetailId = x.Detail.Id,
+                    SkuId = x.Detail.SkuId,
+                    SkuSnapshotName = x.Detail.SkuSnapshotName,
+                    SkuSnapshotCode = x.Detail.SkuSnapshotCode,
+                    ReturnQuantity = x.Quantity,
+                    UnitPrice = effectiveUnit,
+                    SubTotal = subTotal,
+                    CreatedAt = now,
+                    UpdatedAt = now
+                };
             }).ToList()
         };
 
@@ -870,7 +896,10 @@ public class OrderLogic(
 
         if (exchangeItems.Count > 0)
         {
-            var exchangeDiscount = Math.Min(returnAmount, exchangeAmount);
+            var returnCredit = Math.Min(returnAmount, exchangeAmount);
+            var exchangeDiscount = Math.Min(
+                exchangeAmount,
+                returnCredit + membershipDiscount + manualExchangeDiscount);
             var exchangeChannel = OrderChannel.POS;
             var exchangePaymentMethod = refundMethod;
             var isExchangeTransferQr = netCustomerPays > 0
@@ -1070,6 +1099,55 @@ public class OrderLogic(
         }
 
         return changed;
+    }
+
+    private async Task<decimal> GetMembershipTierDiscountAsync(
+        Guid? customerId,
+        decimal amount,
+        CancellationToken ct)
+    {
+        if (!customerId.HasValue || customerId == Guid.Empty || amount <= 0)
+            return 0m;
+
+        var customer = await _customerCatalogClient.GetCustomerAsync(customerId.Value, ct);
+        if (customer is null || customer.IsVipCustomer || customer.TierDiscountPercent <= 0)
+            return 0m;
+
+        return Math.Round(
+            amount * customer.TierDiscountPercent / 100m,
+            0,
+            MidpointRounding.AwayFromZero);
+    }
+
+    private static decimal GetOrderCollectedAmount(Order order)
+    {
+        var successTotal = (order.Payments ?? [])
+            .Where(p => p.PaymentStatus == PaymentStatus.Success)
+            .Sum(p => p.Amount);
+
+        if (successTotal > 0)
+            return successTotal;
+
+        if (order.OrderStatus == OrderStatus.Completed)
+        {
+            var posCash = (order.Payments ?? [])
+                .Where(p => p.PaymentMethod == PaymentMethod.Cash && p.Amount > 0)
+                .Sum(p => p.Amount);
+            if (posCash > 0)
+                return posCash;
+        }
+
+        return order.FinalAmount > 0 ? order.FinalAmount : order.TotalAmount;
+    }
+
+    private static decimal GetOrderPaidRatio(Order order)
+    {
+        if (order.TotalAmount <= 0)
+            return 1m;
+
+        var collected = GetOrderCollectedAmount(order);
+        var ratio = collected / order.TotalAmount;
+        return ratio <= 0 ? 1m : Math.Min(ratio, 1m);
     }
 
     /// <summary>

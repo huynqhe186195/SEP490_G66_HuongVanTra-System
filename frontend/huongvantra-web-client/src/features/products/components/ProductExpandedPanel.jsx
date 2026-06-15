@@ -40,6 +40,11 @@ export default function ProductExpandedPanel({
   canAdjustStock = false,
   canManage = false,
   canHide = false,
+  inBatch = false,
+  isInBatch,
+  onToggleBatchSku,
+  onToggleBatchSkuItem,
+  onAddAllSkusToBatch,
   onHide,
   isHiding = false,
 }) {
@@ -190,7 +195,19 @@ export default function ProductExpandedPanel({
       ) : null}
 
       {activeTab === 'inventory' ? (
-        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+        <div className="space-y-3">
+          {canAdjustStock && skus.length > 1 ? (
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => onAddAllSkusToBatch?.(skus)}
+                className="rounded-lg border border-[#356647]/30 px-3 py-1.5 text-xs font-semibold text-[#356647] hover:bg-[#356647]/5"
+              >
+                Thêm tất cả {skus.length} SKU vào lô
+              </button>
+            </div>
+          ) : null}
+          <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
           <table className="min-w-full text-left text-sm">
             <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
               <tr>
@@ -198,23 +215,26 @@ export default function ProductExpandedPanel({
                 <th className="px-4 py-2.5">Quy cách</th>
                 <th className="px-4 py-2.5 text-right">Giá bán</th>
                 <th className="px-4 py-2.5 text-right">{stockLabel}</th>
+                {canAdjustStock ? <th className="px-4 py-2.5 text-right">Lô</th> : null}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {isLoadingSkus ? (
                 <tr>
-                  <td colSpan={4} className="px-4 py-6 text-center text-slate-500">
+                  <td colSpan={canAdjustStock ? 5 : 4} className="px-4 py-6 text-center text-slate-500">
                     Đang tải...
                   </td>
                 </tr>
               ) : skus.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-4 py-6 text-center text-slate-500">
+                  <td colSpan={canAdjustStock ? 5 : 4} className="px-4 py-6 text-center text-slate-500">
                     Chưa có SKU.
                   </td>
                 </tr>
               ) : (
-                skus.map((sku) => (
+                skus.map((sku) => {
+                  const skuInBatch = isInBatch?.(sku.id) ?? false
+                  return (
                   <tr key={sku.id} className={rowClass(sku.id)}>
                     <td className="px-4 py-2.5 font-mono text-xs font-bold text-[#356647]">{sku.skuCode}</td>
                     <td className="px-4 py-2.5">{sku.packagingType || '—'}</td>
@@ -222,11 +242,28 @@ export default function ProductExpandedPanel({
                     <td className="px-4 py-2.5 text-right font-semibold text-[#356647]">
                       {formatStockQuantity(stockBySkuId.get(sku.id) ?? 0)}
                     </td>
+                    {canAdjustStock ? (
+                      <td className="px-4 py-2.5 text-right">
+                        <button
+                          type="button"
+                          onClick={() => onToggleBatchSkuItem?.(sku)}
+                          className={`rounded-lg px-2.5 py-1 text-xs font-semibold ${
+                            skuInBatch
+                              ? 'bg-[#356647]/10 text-[#356647]'
+                              : 'text-[#356647] hover:bg-[#356647]/5'
+                          }`}
+                        >
+                          {skuInBatch ? 'Đã thêm' : 'Thêm vào lô'}
+                        </button>
+                      </td>
+                    ) : null}
                   </tr>
-                ))
+                  )
+                })
               )}
             </tbody>
           </table>
+        </div>
         </div>
       ) : null}
 
@@ -259,11 +296,24 @@ export default function ProductExpandedPanel({
 
       <div className="mt-4 flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 pt-4">
         {readOnly && canAdjustStock ? (
+          <button
+            type="button"
+            onClick={onToggleBatchSku}
+            className={`rounded-lg px-4 py-2 text-sm font-bold ${
+              inBatch
+                ? 'border border-[#356647]/30 bg-[#356647]/10 text-[#356647]'
+                : 'bg-[#538463] text-white hover:bg-[#457053]'
+            }`}
+          >
+            {inBatch ? 'Đã thêm vào lô' : 'Thêm vào lô'}
+          </button>
+        ) : null}
+        {readOnly && canAdjustStock ? (
           <Link
             to={`/products/${product.id}/edit`}
-            className="rounded-lg bg-[#538463] px-4 py-2 text-sm font-bold text-white hover:bg-[#457053]"
+            className="rounded-lg border border-[#356647]/30 px-4 py-2 text-sm font-semibold text-[#356647] hover:bg-[#356647]/5"
           >
-            Gửi yêu cầu điều chỉnh tồn
+            Gửi lô nhiều SKU cùng sản phẩm
           </Link>
         ) : null}
         {readOnly && canAdjustStock ? (

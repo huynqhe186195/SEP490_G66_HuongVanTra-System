@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { showError, showSuccess } from '../../../app/toast.js'
-import AdjustSkuStockModal from './AdjustSkuStockModal.jsx'
 import ProductImage, { ProductImagePreview } from './ProductImage.jsx'
+import { useStockAdjustmentBatch } from '../../inventory/hooks/useStockAdjustmentBatch.js'
 import {
   buildStockBySkuIdMap,
   buildWarehouseStockBySkuIdMap,
@@ -59,7 +59,7 @@ function ProductSkusPanel({
   const [editingId, setEditingId] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
   const [fieldErrors, setFieldErrors] = useState({})
-  const [stockModalSku, setStockModalSku] = useState(null)
+  const { isInBatch, addAll, toggleLine } = useStockAdjustmentBatch()
 
   async function reload() {
     if (!productId) return
@@ -201,6 +201,15 @@ function ProductSkusPanel({
     }
   }
 
+  function addAllToBatch() {
+    addAll(skus, (sku) => ({
+      productName,
+      quantityOnHand: Number(stockBySkuId.get(sku.id) ?? 0),
+    }))
+  }
+
+  const batchableSkuCount = skus.filter((sku) => !isInBatch(sku.id)).length
+
   return (
     <div className="rounded-[1rem] bg-white p-4 shadow-sm sm:p-6 lg:p-8">
       <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
@@ -210,10 +219,20 @@ function ProductSkusPanel({
           </h2>
           <p className="mt-1 text-sm text-slate-500">
             {stockOnlyMode
-              ? 'Chọn SKU và gửi yêu cầu (+ nhập từ kho tổng, − giảm tồn cửa hàng). Thủ kho sẽ duyệt trước khi cập nhật số lượng.'
+              ? 'Thêm một hoặc nhiều SKU vào lô, rồi gửi một yêu cầu chung. Thủ kho duyệt cả lô trước khi cập nhật tồn.'
               : 'Mỗi SKU có mã, giá bán và số lượng hiện tại tại cửa hàng.'}
           </p>
         </div>
+        {canAdjustStock && skus.length > 1 ? (
+          <button
+            type="button"
+            disabled={batchableSkuCount === 0}
+            onClick={addAllToBatch}
+            className="rounded-xl border border-[#356647]/30 px-4 py-2 text-sm font-semibold text-[#356647] hover:bg-[#356647]/5 disabled:opacity-50"
+          >
+            {batchableSkuCount === 0 ? 'Đã thêm hết SKU' : `Thêm tất cả ${skus.length} SKU vào lô`}
+          </button>
+        ) : null}
       </div>
 
       {canManage ? (
@@ -400,6 +419,11 @@ function ProductSkusPanel({
             ) : null}
           </div>
         </form>
+      ) : !stockOnlyMode ? (
+        <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+          <p className="font-semibold">Chỉ tài khoản Thủ kho mới thêm hoặc sửa SKU.</p>
+          <p className="mt-1">Hãy đăng nhập bằng user <strong>inventory</strong> (role Warehouse) để quản lý biến thể và giá.</p>
+        </div>
       ) : null}
 
       {isLoading ? (
@@ -458,15 +482,24 @@ function ProductSkusPanel({
                   </div>
                 </div>
 
-                {canManage || (!warehouseStockView && canAdjustStock) ? (
+                {canManage || canAdjustStock ? (
                   <div className="flex flex-wrap items-center gap-2">
-                    {!warehouseStockView && canAdjustStock ? (
+                    {canAdjustStock ? (
                       <button
                         type="button"
-                        className="rounded-lg px-3 py-2 text-sm font-semibold text-[#356647] hover:bg-[#356647]/5"
-                        onClick={() => setStockModalSku(sku)}
+                        className={`rounded-lg px-3 py-2 text-sm font-semibold ${
+                          isInBatch(sku.id)
+                            ? 'bg-[#356647]/10 text-[#356647]'
+                            : 'text-[#356647] hover:bg-[#356647]/5'
+                        }`}
+                        onClick={() =>
+                          toggleLine(sku, {
+                            productName,
+                            quantityOnHand: Number(stockBySkuId.get(sku.id) ?? 0),
+                          })
+                        }
                       >
-                        Gửi yêu cầu điều chỉnh
+                        {isInBatch(sku.id) ? 'Đã thêm vào lô' : 'Thêm vào lô'}
                       </button>
                     ) : null}
                     {canManage ? (
@@ -486,15 +519,6 @@ function ProductSkusPanel({
           })}
         </div>
       )}
-
-      {stockModalSku ? (
-        <AdjustSkuStockModal
-          sku={stockModalSku}
-          productName={productName}
-          quantityOnHand={Number(stockBySkuId.get(stockModalSku.id) ?? 0)}
-          onClose={() => setStockModalSku(null)}
-        />
-      ) : null}
     </div>
   )
 }

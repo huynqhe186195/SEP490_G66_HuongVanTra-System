@@ -11,6 +11,7 @@ const ROLE_GROUPS = {
 const SIDEBAR_DISABLED_MODULES = new Set([
   'reports',
   'integrations',
+  'stock_deduct_ops',
 ])
 
 const HOME_MODULE_PRIORITY = [
@@ -43,10 +44,9 @@ export const navigationItems = [
     icon: 'inventory_2',
     roles: ['admin', 'agencyManager'],
   },
-  { label: 'Khách hàng', path: '/customers', module: 'customers', icon: 'groups', roles: ['admin', 'agencyManager'] },
-  { label: 'Hợp đồng', path: '/contracts', module: 'contracts', icon: 'description', roles: ['admin', 'agencyManager'] },
+  { label: 'Khách hàng', path: '/customers', module: 'customers', icon: 'groups', roles: ['admin', 'agencyManager', 'salesStaff', 'accountant'] },
   { label: 'Hàng hóa', path: '/inventory/products', module: 'products', icon: 'inventory_2', roles: ['admin', 'agencyManager', 'inventoryManager'] },
-  { label: 'Kho tổng', path: '/inventory', module: 'inventory', icon: 'warehouse', roles: ['admin', 'agencyManager', 'inventoryManager'] },
+  { label: 'Kho tổng', path: '/inventory', module: 'inventory', icon: 'warehouse', roles: ['inventoryManager'] },
   {
     label: 'Yêu cầu điều chỉnh tồn',
     path: '/inventory/stock-requests',
@@ -118,11 +118,11 @@ export function getNavigationItemsForModules(modules = [], roles = []) {
 
   return navigationItems.filter((item) => {
     if (!isSidebarModuleEnabled(item.module)) return false
-    
-    // Allow if it's in the modules list
+
+    const roleAllowed = !item.roles?.length || hasAnyRoleGroup(roles, item.roles)
+    if (!roleAllowed) return false
+
     if (allowedModules.has(item.module)) return true
-    
-    // Fallback: allow if the user has the required role
     if (roles.length && hasAnyRoleGroup(roles, item.roles)) return true
 
     return false
@@ -257,6 +257,11 @@ export function canAccessModule(session, module) {
     return session.permissions.includes('CREATE_ORDER')
   }
 
+  if (String(module).toLowerCase() === 'inventory') {
+    if (!session?.roles?.length) return false
+    return hasAnyRoleGroup(session.roles, ['inventoryManager'])
+  }
+
   if (session?.modules?.length) {
     const normalizedModule = String(module).toLowerCase()
     if (session.modules.some((entry) => entry.toLowerCase() === normalizedModule)) {
@@ -308,6 +313,9 @@ export function getAccessDeniedMessage(pathname) {
   }
   if (module === 'stock_deduct_ops') {
     return 'Chỉ Quản lý chi nhánh hoặc Thủ kho mới được xem hàng chờ trừ kho. Thao tác trừ kho do Thủ kho thực hiện.'
+  }
+  if (module === 'inventory') {
+    return 'Chỉ Thủ kho (Inventory) mới được truy cập module kho tổng.'
   }
   if (module === 'promotions_admin' || module === 'membership_tiers_admin') {
     return 'Chỉ Admin mới được quản lý hạng thẻ và mã giảm giá.'
@@ -362,6 +370,13 @@ export function isNavigationItemActive(pathname, item, search = '') {
     if (path === '/inventory/stock-requests' || path.startsWith('/inventory/stock-requests/')) {
       return false
     }
+    if (path === '/inventory/products' || path.startsWith('/inventory/products/')) {
+      return false
+    }
+    return path === target || path.startsWith(`${target}/`)
+  }
+
+  if (item.module === 'products') {
     return path === target || path.startsWith(`${target}/`)
   }
 

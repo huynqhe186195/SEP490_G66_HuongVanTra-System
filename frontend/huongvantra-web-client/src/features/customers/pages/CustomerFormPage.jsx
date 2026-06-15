@@ -1,11 +1,18 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
-import { loadAuthSession } from '../../auth/services/authSession.js'
-import { canEditCustomer, canManageCorporateCustomers, canViewAllCustomers } from '../../auth/utils/permissions.js'
-import { fetchSalesEmployees, mapEmployee } from '../../iam/services/employeesApi.js'
+import { useAuthSession } from '../../auth/hooks/useAuthSession.js'
+import {
+  canCreateCustomer,
+  canDeleteCustomer,
+  canEditCustomer,
+  canManageCorporateCustomers,
+  canViewAllCustomers,
+  canViewCustomer,
+} from '../../auth/utils/permissions.js'
+import { fetchSalesAssignees } from '../../iam/services/employeesApi.js'
 import MembershipTierProgress from '../components/MembershipTierProgress.jsx'
 import CustomerActivityFeed from '../components/CustomerActivityFeed.jsx'
 import CustomerOpenDebtsPanel from '../components/CustomerOpenDebtsPanel.jsx'
@@ -31,7 +38,7 @@ import {
   tabKeyFromCustomerType,
   CUSTOMER_CORPORATE_ENABLED,
 } from '../utils/customerDisplay.js'
-import { mapCustomerApiError, normalizeNameInput, normalizePhoneInput, validateCustomerForm } from '../utils/customerValidation.js'
+import { mapCustomerApiError, normalizeNameInput, normalizePhoneInput, normalizeTaxCodeInput, getPhoneMaxLength, validateCustomerForm } from '../utils/customerValidation.js'
 
 const CUSTOMER_SOURCE_OPTIONS = [
   { value: '', label: '— Chưa chọn —' },
@@ -70,9 +77,11 @@ function CustomerFormPage() {
   const [isNameComposing, setIsNameComposing] = useState(false)
   const [saleOptions, setSaleOptions] = useState([])
   const [profileTab, setProfileTab] = useState('overview')
-  const session = useMemo(() => loadAuthSession(), [])
+  const session = useAuthSession()
   const canAssignSale = canViewAllCustomers(session)
   const canManageProfile = canEditCustomer(session)
+  const canViewProfile = canViewCustomer(session)
+  const canRemoveCustomer = canDeleteCustomer(session)
   const canManageCorporate = canManageCorporateCustomers(session)
   const requestedType = searchParams.get('type')
   const initialType =
@@ -99,10 +108,15 @@ function CustomerFormPage() {
   const isReadOnly = (isEditMode && !canManageProfile) || isCorporateLocked
 
   useEffect(() => {
-    if (!isEditMode && !canManageProfile) {
+    if (!isEditMode && !canCreateCustomer(session)) {
       navigate('/customers', { replace: true })
     }
-  }, [canManageProfile, isEditMode, navigate])
+  }, [isEditMode, navigate, session])
+
+  useEffect(() => {
+    if (!isEditMode || canManageProfile || canViewProfile) return
+    navigate('/customers', { replace: true })
+  }, [canManageProfile, canViewProfile, isEditMode, navigate])
 
   useEffect(() => {
     if (!isEditMode && form.type === 'corporate' && !canManageCorporate) {
@@ -135,17 +149,13 @@ function CustomerFormPage() {
 
     async function loadSales() {
       try {
-        const data = await fetchSalesEmployees()
-        const options = (Array.isArray(data) ? data : [])
-          .map(mapEmployee)
-          .filter((item) => item?.userId)
-          .map((item) => ({
-            userId: item.userId,
-            fullName: item.fullName,
-          }))
+        const options = await fetchSalesAssignees()
         if (mounted) setSaleOptions(options)
-      } catch {
-        if (mounted) setSaleOptions([])
+      } catch (error) {
+        if (mounted) {
+          setSaleOptions([])
+          showError(error.message || 'Không tải được danh sách Sale phụ trách.')
+        }
       }
     }
 
@@ -253,7 +263,7 @@ function CustomerFormPage() {
   }
 
   const updateField = (field) => (event) => {
-    const value = event.target.value
+    const value = field === 'taxCode' ? normalizeTaxCodeInput(event.target.value) : event.target.value
     setForm((current) => ({ ...current, [field]: value }))
     setFieldErrors((current) => ({ ...current, [field]: undefined }))
   }
@@ -350,7 +360,7 @@ function CustomerFormPage() {
           tierId: payload.tierId,
         })
 
-        if (form.status !== initialStatus) {
+        if (canManageProfile && form.status !== initialStatus) {
           await changeCustomerStatus(
             customerId,
             form.status === 'inactive' ? 'INACTIVE' : 'ACTIVE',
@@ -399,34 +409,34 @@ function CustomerFormPage() {
         }
         rightContent={
           isReadOnly || isCorporateProfile ? null : (
-          <div className="flex w-full flex-col gap-2 sm:w-auto">
-            <span className="text-xs font-medium text-[#717971]">Loại khách</span>
-            <div className="inline-flex max-w-full flex-wrap gap-1 rounded-full bg-[#f6f4ec] p-1">
-              <button
-                type="button"
-                className={`rounded-full px-4 py-1 text-xs font-semibold ${form.type === 'general' ? 'bg-[#4a6242] text-white' : 'text-[#414942]'}`}
-                onClick={() => handleTypeChange('general')}
-              >
-                Phổ thông
-              </button>
-              <button
-                type="button"
-                className={`rounded-full px-4 py-1 text-xs font-semibold ${form.type === 'vip' ? 'bg-[#4a6242] text-white' : 'text-[#414942]'}`}
-                onClick={() => handleTypeChange('vip')}
-              >
-                VIP
-              </button>
-              {CUSTOMER_CORPORATE_ENABLED && canManageCorporate ? (
+            <div className="flex w-full flex-col gap-2 sm:w-auto">
+              <span className="text-xs font-medium text-[#717971]">Loại khách</span>
+              <div className="inline-flex max-w-full flex-wrap gap-1 rounded-full bg-[#f6f4ec] p-1">
                 <button
                   type="button"
-                  className={`rounded-full px-4 py-1 text-xs font-semibold ${form.type === 'corporate' ? 'bg-[#7e5700] text-white' : 'text-[#414942]'}`}
-                  onClick={() => handleTypeChange('corporate')}
+                  className={`rounded-full px-4 py-1 text-xs font-semibold ${form.type === 'general' ? 'bg-[#4a6242] text-white' : 'text-[#414942]'}`}
+                  onClick={() => handleTypeChange('general')}
                 >
-                  Doanh nghiệp
+                  Phổ thông
                 </button>
-              ) : null}
+                <button
+                  type="button"
+                  className={`rounded-full px-4 py-1 text-xs font-semibold ${form.type === 'vip' ? 'bg-[#4a6242] text-white' : 'text-[#414942]'}`}
+                  onClick={() => handleTypeChange('vip')}
+                >
+                  VIP
+                </button>
+                {CUSTOMER_CORPORATE_ENABLED && canManageCorporate ? (
+                  <button
+                    type="button"
+                    className={`rounded-full px-4 py-1 text-xs font-semibold ${form.type === 'corporate' ? 'bg-[#7e5700] text-white' : 'text-[#414942]'}`}
+                    onClick={() => handleTypeChange('corporate')}
+                  >
+                    Doanh nghiệp
+                  </button>
+                ) : null}
+              </div>
             </div>
-          </div>
           )
         }
       />
@@ -461,10 +471,10 @@ function CustomerFormPage() {
                 <span className="text-xs font-semibold text-[#717971]">Số điện thoại *</span>
                 <input
                   className={`w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20 ${fieldErrors.phone ? 'ring-2 ring-[#b42318]/40' : ''} ${isReadOnly ? 'cursor-default opacity-90' : ''}`}
-                  placeholder="0xxxxxxxxx"
+                  placeholder="0xxxxxxxxx hoặc 02xxxxxxxx"
                   type="tel"
                   inputMode="numeric"
-                  maxLength={10}
+                  maxLength={getPhoneMaxLength(form.phone)}
                   value={form.phone}
                   onChange={handlePhoneChange}
                   readOnly={isReadOnly}
@@ -506,7 +516,7 @@ function CustomerFormPage() {
                   <span className="text-xs font-semibold text-[#717971]">Mã số thuế *</span>
                   <input
                     className={`w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20 ${fieldErrors.taxCode ? 'ring-2 ring-[#b42318]/40' : ''} ${isReadOnly ? 'cursor-default opacity-90' : ''}`}
-                    placeholder="Mã số thuế doanh nghiệp"
+                    placeholder="VD: 0312345678 hoặc 0312345678-001"
                     type="text"
                     value={form.taxCode}
                     onChange={updateField('taxCode')}
@@ -589,22 +599,29 @@ function CustomerFormPage() {
                 </div>
               ) : null}
 
-              <label className="space-y-2">
-                <span className="text-xs font-semibold text-[#717971]">Trạng thái</span>
-                <select
-                  className={`w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20 ${isReadOnly ? 'cursor-default opacity-90' : ''}`}
-                  value={form.status}
-                  onChange={updateField('status')}
-                  disabled={!isEditMode || isReadOnly}
-                >
-                  <option value="active">Đang hoạt động</option>
-                  <option value="inactive">Ngừng hoạt động</option>
-                </select>
-              </label>
+              {isEditMode ? (
+                <label className="space-y-2">
+                  <span className="text-xs font-semibold text-[#717971]">Trạng thái</span>
+                  {isReadOnly ? (
+                    <div className="rounded-xl border border-[#c1c9c0]/40 bg-[#f0eee6] px-3 py-2.5 text-sm text-[#1b1c17]">
+                      {form.status === 'inactive' ? 'Ngừng hoạt động' : 'Đang hoạt động'}
+                    </div>
+                  ) : (
+                    <select
+                      className="w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20"
+                      value={form.status}
+                      onChange={updateField('status')}
+                    >
+                      <option value="active">Đang hoạt động</option>
+                      <option value="inactive">Ngừng hoạt động</option>
+                    </select>
+                  )}
+                </label>
+              ) : null}
             </div>
 
             <div className="flex flex-col-reverse gap-3 border-t border-[#c1c9c0]/40 pt-5 sm:flex-row sm:flex-wrap sm:justify-between">
-              {isEditMode && !isReadOnly ? (
+              {isEditMode && canRemoveCustomer && !isReadOnly ? (
                 <button
                   type="button"
                   className="w-full rounded-xl border border-[#b42318] px-5 py-2.5 text-sm font-semibold text-[#b42318] hover:bg-[#b42318]/5 disabled:opacity-60 sm:w-auto"
@@ -715,9 +732,8 @@ function CustomerFormPage() {
                 <button
                   key={tab.key}
                   type="button"
-                  className={`rounded-full px-4 py-1.5 text-xs font-semibold ${
-                    profileTab === tab.key ? 'bg-[#4a6242] text-white' : 'bg-[#f6f4ec] text-[#414942]'
-                  }`}
+                  className={`rounded-full px-4 py-1.5 text-xs font-semibold ${profileTab === tab.key ? 'bg-[#4a6242] text-white' : 'bg-[#f6f4ec] text-[#414942]'
+                    }`}
                   onClick={() => setProfileTab(tab.key)}
                 >
                   {tab.label}
