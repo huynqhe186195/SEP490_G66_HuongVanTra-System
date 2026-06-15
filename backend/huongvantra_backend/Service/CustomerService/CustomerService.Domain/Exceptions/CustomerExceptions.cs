@@ -33,4 +33,7 @@ public class CustomerForbiddenException : Exception
 {
     public CustomerForbiddenException()
         : base("Bạn không có quyền truy cập khách hàng này.") { }
+
+    public CustomerForbiddenException(string message)
+        : base(message) { }
 }

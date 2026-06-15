@@ -4,7 +4,7 @@ import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
-import { canEditCustomer, canViewAllCustomers } from '../../auth/utils/permissions.js'
+import { canEditCustomer, canManageCorporateCustomers, canViewAllCustomers } from '../../auth/utils/permissions.js'
 import { fetchEmployees, mapEmployee } from '../../iam/services/employeesApi.js'
 import MembershipTierProgress from '../components/MembershipTierProgress.jsx'
 import CustomerActivityFeed from '../components/CustomerActivityFeed.jsx'
@@ -73,10 +73,10 @@ function CustomerFormPage() {
   const session = useMemo(() => loadAuthSession(), [])
   const canAssignSale = canViewAllCustomers(session)
   const canManageProfile = canEditCustomer(session)
-  const isReadOnly = isEditMode && !canManageProfile
+  const canManageCorporate = canManageCorporateCustomers(session)
   const requestedType = searchParams.get('type')
   const initialType =
-    requestedType === 'corporate' && !CUSTOMER_CORPORATE_ENABLED
+    requestedType === 'corporate' && (!CUSTOMER_CORPORATE_ENABLED || !canManageCorporate)
       ? 'general'
       : ['general', 'vip', 'corporate'].includes(requestedType)
         ? requestedType
@@ -94,12 +94,21 @@ function CustomerFormPage() {
     assignedEmployeeId: '',
     status: 'active',
   })
+  const isCorporateProfile = form.type === 'corporate'
+  const isCorporateLocked = isCorporateProfile && !canManageCorporate
+  const isReadOnly = (isEditMode && !canManageProfile) || isCorporateLocked
 
   useEffect(() => {
     if (!isEditMode && !canManageProfile) {
       navigate('/customers', { replace: true })
     }
   }, [canManageProfile, isEditMode, navigate])
+
+  useEffect(() => {
+    if (!isEditMode && form.type === 'corporate' && !canManageCorporate) {
+      navigate('/customers', { replace: true })
+    }
+  }, [canManageCorporate, form.type, isEditMode, navigate])
 
   useEffect(() => {
     let mounted = true
@@ -282,7 +291,7 @@ function CustomerFormPage() {
   })
 
   const handleTypeChange = (type) => {
-    if (type === 'corporate' && !CUSTOMER_CORPORATE_ENABLED) return
+    if (type === 'corporate' && (!CUSTOMER_CORPORATE_ENABLED || !canManageCorporate)) return
     setForm((current) => ({
       ...current,
       type,
@@ -383,11 +392,13 @@ function CustomerFormPage() {
         title={isReadOnly ? 'Xem khách hàng' : isEditMode ? 'Chỉnh sửa khách hàng' : 'Thêm khách hàng'}
         description={
           isReadOnly
-            ? 'Xem thông tin liên hệ, hạng thành viên và lịch sử giao dịch'
+            ? isCorporateLocked
+              ? 'Chỉ Admin được chỉnh sửa khách doanh nghiệp. Bạn đang xem ở chế độ chỉ đọc.'
+              : 'Xem thông tin liên hệ, hạng thành viên và lịch sử giao dịch'
             : 'Cập nhật thông tin liên hệ, hạng thành viên và trạng thái tài khoản'
         }
         rightContent={
-          isReadOnly || form.type === 'corporate' ? null : (
+          isReadOnly || isCorporateProfile ? null : (
           <div className="flex w-full flex-col gap-2 sm:w-auto">
             <span className="text-xs font-medium text-[#717971]">Loại khách</span>
             <div className="inline-flex max-w-full flex-wrap gap-1 rounded-full bg-[#f6f4ec] p-1">
@@ -405,7 +416,7 @@ function CustomerFormPage() {
               >
                 VIP
               </button>
-              {CUSTOMER_CORPORATE_ENABLED ? (
+              {CUSTOMER_CORPORATE_ENABLED && canManageCorporate ? (
                 <button
                   type="button"
                   className={`rounded-full px-4 py-1 text-xs font-semibold ${form.type === 'corporate' ? 'bg-[#7e5700] text-white' : 'text-[#414942]'}`}
@@ -574,7 +585,7 @@ function CustomerFormPage() {
                 </div>
               ) : form.type === 'corporate' ? (
                 <div className="rounded-xl bg-[#fff8e8] p-3 text-sm leading-relaxed text-[#744f00] md:col-span-2">
-                  Hồ sơ doanh nghiệp (module tạm ẩn — chỉ xem dữ liệu cũ).
+                  Khách doanh nghiệp: bắt buộc MST, không dùng hạng Member. Chỉ Admin được tạo và chỉnh sửa hồ sơ.
                 </div>
               ) : null}
 

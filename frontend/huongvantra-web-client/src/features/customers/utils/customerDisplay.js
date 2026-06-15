@@ -4,8 +4,8 @@ export const CUSTOMER_TYPE_BY_TAB = {
   corporate: 'CORPORATE',
 }
 
-/** Tạm ẩn module khách doanh nghiệp — chờ DN chốt nghiệp vụ. */
-export const CUSTOMER_CORPORATE_ENABLED = false
+/** Bật module khách doanh nghiệp — chỉ Admin được tạo/sửa (xem: mọi role có VIEW_CUSTOMER). */
+export const CUSTOMER_CORPORATE_ENABLED = true
 
 export const CUSTOMER_LIST_TABS = [
   { key: 'general', label: 'Phổ thông', shortLabel: 'Phổ thông' },
@@ -67,6 +67,10 @@ export function getInitials(name) {
 export function isVipCustomerType(customerType) {
   const normalized = String(customerType || '').toUpperCase()
   return normalized === 'VIP' || normalized === 'VVIP'
+}
+
+export function isCorporateCustomerType(customerType) {
+  return String(customerType || '').toUpperCase() === 'CORPORATE'
 }
 
 export function supportsMembershipTierForCustomerType(customerType) {

@@ -3,6 +3,8 @@ using CustomerService.Application.DTOs.Responses;
 using CustomerService.Application.Interfaces;
 using CustomerService.Application.Validation;
 using CustomerService.Domain.Entities;
+using CustomerService.Domain.Enums;
+using CustomerService.Domain.Exceptions;
 using HuongVanTra.Shared.Auth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -15,9 +17,15 @@ namespace CustomerService.WebAPI.Controllers;
 public class CustomerAddressesController : ControllerBase
 {
     private readonly ICustomerAddressRepository _addressRepo;
+    private readonly ICustomerRepository _customerRepo;
 
-    public CustomerAddressesController(ICustomerAddressRepository addressRepo)
-        => _addressRepo = addressRepo;
+    public CustomerAddressesController(
+        ICustomerAddressRepository addressRepo,
+        ICustomerRepository customerRepo)
+    {
+        _addressRepo = addressRepo;
+        _customerRepo = customerRepo;
+    }
 
     [HttpGet]
     [Authorize(Policy = PermissionNames.ViewCustomer)]
@@ -34,6 +42,8 @@ public class CustomerAddressesController : ControllerBase
     [Authorize(Policy = PermissionNames.CreateCustomer)]
     public async Task<IActionResult> Create(Guid customerId, [FromBody] CreateCustomerAddressRequest request, CancellationToken ct = default)
     {
+        await EnsureCorporateMutationAllowedAsync(customerId, ct);
+
         var validated = CustomerAddressInputValidator.Validate(
             request.ReceiverName,
             request.ReceiverPhone,
@@ -72,6 +82,8 @@ public class CustomerAddressesController : ControllerBase
     [Authorize(Policy = PermissionNames.CreateCustomer)]
     public async Task<IActionResult> Update(Guid customerId, Guid addressId, [FromBody] UpdateCustomerAddressRequest request, CancellationToken ct = default)
     {
+        await EnsureCorporateMutationAllowedAsync(customerId, ct);
+
         var address = await _addressRepo.GetByIdAsync(addressId, ct);
         if (address == null || address.CustomerId != customerId) return NotFound();
 
@@ -104,11 +116,26 @@ public class CustomerAddressesController : ControllerBase
     [Authorize(Policy = PermissionNames.CreateCustomer)]
     public async Task<IActionResult> Delete(Guid customerId, Guid addressId, CancellationToken ct = default)
     {
+        await EnsureCorporateMutationAllowedAsync(customerId, ct);
+
         var address = await _addressRepo.GetByIdAsync(addressId, ct);
         if (address == null || address.CustomerId != customerId) return NotFound();
 
         _addressRepo.Delete(address);
         await _addressRepo.SaveChangesAsync(ct);
         return NoContent();
+    }
+
+    private async Task EnsureCorporateMutationAllowedAsync(Guid customerId, CancellationToken ct)
+    {
+        var customer = await _customerRepo.GetByIdAsync(customerId, ct);
+        if (customer is null)
+            return;
+
+        if (customer.CustomerGroup == CustomerGroup.DoanhNghiep
+            && !User.HasPermission(PermissionNames.ManageRole))
+        {
+            throw new CustomerForbiddenException("Chỉ Admin được tạo hoặc chỉnh sửa khách doanh nghiệp.");
+        }
     }
 }

@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { showError, showSuccess } from '../../../app/toast.js'
 import MembershipTierProgress from '../../customers/components/MembershipTierProgress.jsx'
-import { isVipCustomerType, supportsMembershipTierForCustomerType } from '../../customers/utils/customerDisplay.js'
+import { isVipCustomerType, supportsMembershipTierForCustomerType, isCorporateCustomerType } from '../../customers/utils/customerDisplay.js'
+import { canManageCorporateCustomers } from '../../auth/utils/permissions.js'
+import { loadAuthSession } from '../../auth/services/authSession.js'
 import {
   applyCustomerDebtPayment,
   fetchCustomerDebts,
@@ -71,6 +73,10 @@ function TabButton({ tab, activeTab, onChange }) {
 }
 
 function CustomerDetailModal({ isOpen, customer, onClose, onCustomerUpdated }) {
+  const session = useMemo(() => loadAuthSession(), [])
+  const canManageCorporate = canManageCorporateCustomers(session)
+  const canCollectCorporateDebt =
+    !isCorporateCustomerType(customer?.customerType) || canManageCorporate
   const [activeTab, setActiveTab] = useState('profile')
   const [context, setContext] = useState(null)
   const [membershipTiers, setMembershipTiers] = useState([])
@@ -355,7 +361,7 @@ function CustomerDetailModal({ isOpen, customer, onClose, onCustomerUpdated }) {
                 }
               />
 
-              {Number(context?.currentDebt ?? 0) > 0 ? (
+              {Number(context?.currentDebt ?? 0) > 0 && canCollectCorporateDebt ? (
                 <form className="rounded-xl border border-[#356647]/25 bg-white p-4" onSubmit={handleDebtPayment}>
                   <p className="text-sm font-semibold text-[#356647]">Thu trả công nợ</p>
                   <div className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -404,6 +410,10 @@ function CustomerDetailModal({ isOpen, customer, onClose, onCustomerUpdated }) {
                     </button>
                   </div>
                 </form>
+              ) : Number(context?.currentDebt ?? 0) > 0 && isCorporateCustomerType(customer?.customerType) ? (
+                <p className="rounded-xl border border-[#7e5700]/20 bg-[#fff8e8] px-4 py-3 text-xs leading-relaxed text-[#744f00]">
+                  Khách doanh nghiệp: chỉ Admin được thu/ghi công nợ thủ công.
+                </p>
               ) : null}
 
               <div className="rounded-xl border border-[#e5e7eb] bg-white p-4">

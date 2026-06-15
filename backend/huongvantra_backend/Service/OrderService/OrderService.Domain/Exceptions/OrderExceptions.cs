@@ -15,11 +15,11 @@ public class OrderNotFoundByCodeException : Exception
 public class OrderValidationException : Exception
 {
     public OrderValidationException(IEnumerable<string> errors)
-        : base("One or more validation errors occurred.")
+        : base(string.Join("; ", errors))
     { Errors = errors.ToArray(); }
 
     public OrderValidationException(string error)
-        : base("One or more validation errors occurred.")
+        : base(error)
     { Errors = [error]; }
 
     public IReadOnlyCollection<string> Errors { get; }

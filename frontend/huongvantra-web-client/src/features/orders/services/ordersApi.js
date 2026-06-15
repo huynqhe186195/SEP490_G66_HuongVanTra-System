@@ -90,10 +90,16 @@ export function mapOrderDetail(item) {
   }
 }
 
+function isValidGuid(value) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(value || '').trim())
+}
+
 function buildOrdersQuery(params = {}) {
   const search = new URLSearchParams()
   if (params.search?.trim()) search.set('search', params.search.trim())
-  if (params.customerId) search.set('customerId', String(params.customerId))
+  if (params.customerId && isValidGuid(params.customerId)) {
+    search.set('customerId', String(params.customerId).trim())
+  }
   if (params.status) search.set('status', params.status)
   if (params.channel) search.set('channel', params.channel)
   if (params.excludeChannel) search.set('excludeChannel', params.excludeChannel)
@@ -103,9 +109,13 @@ function buildOrdersQuery(params = {}) {
   if (params.excludeOrderKind) search.set('excludeOrderKind', params.excludeOrderKind)
   if (params.fromDate) search.set('fromDate', params.fromDate)
   if (params.toDate) search.set('toDate', params.toDate)
-  if (params.employeeId) search.set('employeeId', params.employeeId)
-  search.set('page', String(params.page ?? 1))
-  search.set('pageSize', String(Math.min(1000, Math.max(1, params.pageSize ?? 20))))
+  if (params.employeeId && isValidGuid(params.employeeId)) {
+    search.set('employeeId', String(params.employeeId).trim())
+  }
+  const page = Math.max(1, Number(params.page) || 1)
+  const pageSize = Math.min(1000, Math.max(1, Number(params.pageSize) || 20))
+  search.set('page', String(page))
+  search.set('pageSize', String(pageSize))
   return search.toString()
 }
 

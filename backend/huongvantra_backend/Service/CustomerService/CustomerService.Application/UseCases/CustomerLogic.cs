@@ -46,6 +46,7 @@ public class CustomerLogic
         CancellationToken ct = default)
     {
         var input = ValidateCustomerRequest(request);
+        EnsureCanManageCorporateCustomer(input.CustomerGroup, access);
 
         if (await _customerRepo.PhoneExistsAsync(input.PhoneNumber, ct: ct))
             throw await BuildDuplicatePhoneExceptionAsync(input.PhoneNumber, access, ct);
@@ -97,6 +98,8 @@ public class CustomerLogic
         EnsureCanAccess(customer, access);
 
         var input = ValidateCustomerRequest(request);
+        EnsureCanManageCorporateCustomer(customer.CustomerGroup, access);
+        EnsureCanManageCorporateCustomer(input.CustomerGroup, access);
 
         if (await _customerRepo.PhoneExistsAsync(input.PhoneNumber, id, ct))
             throw new DuplicatePhoneNumberException(input.PhoneNumber);
@@ -133,6 +136,7 @@ public class CustomerLogic
             throw new CustomerNotFoundException(id);
 
         EnsureCanAccess(customer, access);
+        EnsureCanManageCorporateCustomer(customer.CustomerGroup, access);
 
         await _customerRepo.SoftDeleteAsync(id, ct);
         await RecordActivityAsync(id, CustomerActivityType.Updated, "Xóa mềm khách hàng", ct);
@@ -145,6 +149,7 @@ public class CustomerLogic
             ?? throw new CustomerNotFoundException(id);
 
         EnsureCanAccess(customer, access);
+        EnsureCanManageCorporateCustomer(customer.CustomerGroup, access);
 
         if (!customer.IsDeleted)
             throw new CustomerValidationException(["Khách hàng đang hoạt động, không cần khôi phục."]);
@@ -356,6 +361,7 @@ public class CustomerLogic
             ?? throw new CustomerNotFoundException(customerId);
 
         EnsureCanAccess(customer, access);
+        EnsureCanManageCorporateCustomer(customer.CustomerGroup, access);
 
         if (request.Type == DebtTransactionType.DecreaseDebt)
         {
@@ -438,6 +444,7 @@ public class CustomerLogic
             ?? throw new CustomerNotFoundException(customerId);
 
         EnsureCanAccess(customer, access);
+        EnsureCanManageCorporateCustomer(customer.CustomerGroup, access);
 
         await ReconcileCurrentDebtFromLedgerAsync(customer, ct);
 
@@ -1083,6 +1090,12 @@ public class CustomerLogic
     {
         if (!access.CanAccessCustomer(customer.AssignedSaleId))
             throw new CustomerForbiddenException();
+    }
+
+    private static void EnsureCanManageCorporateCustomer(CustomerGroup customerGroup, CustomerAccessContext access)
+    {
+        if (customerGroup == CustomerGroup.DoanhNghiep && !access.CanManageCorporateCustomers)
+            throw new CustomerForbiddenException("Chỉ Admin được tạo hoặc chỉnh sửa khách doanh nghiệp.");
     }
 
     private static Guid? ResolveAssignedSaleId(Guid? requestedSaleId, CustomerAccessContext access)

@@ -3,11 +3,15 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import { showError } from '../../../app/toast.js'
+import { loadAuthSession } from '../../auth/services/authSession.js'
+import { canManageCorporateCustomers } from '../../auth/utils/permissions.js'
 import CustomerAddressesPanel from '../components/CustomerAddressesPanel.jsx'
 import { fetchCustomerById, fetchCustomers } from '../services/customersApi.js'
-import { customerTypeLabelFromType, formatVnd, getInitials } from '../utils/customerDisplay.js'
+import { customerTypeLabelFromType, formatVnd, getInitials, isCorporateCustomerType } from '../utils/customerDisplay.js'
 
 function CustomerAddressesPage() {
+  const session = useMemo(() => loadAuthSession(), [])
+  const canManageCorporate = canManageCorporateCustomers(session)
   const navigate = useNavigate()
   const { customerId: routeCustomerId } = useParams()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -211,7 +215,11 @@ function CustomerAddressesPage() {
               </section>
             ) : null}
 
-            <CustomerAddressesPanel customerId={selectedCustomerId} standalone />
+            <CustomerAddressesPanel
+              customerId={selectedCustomerId}
+              standalone
+              readOnly={isCorporateCustomerType(customer?.customerType) && !canManageCorporate}
+            />
           </>
         ) : (
           <section className="rounded-[24px] border border-dashed border-[#c1c9c0] bg-white p-8 text-center shadow-sm">

@@ -1,6 +1,9 @@
 namespace CustomerService.Application.Interfaces;
 
-public record CustomerAccessContext(Guid UserId, bool CanViewAllCustomers)
+public record CustomerAccessContext(
+    Guid UserId,
+    bool CanViewAllCustomers,
+    bool CanManageCorporateCustomers = false)
 {
     public Guid? AssignedSaleFilter => CanViewAllCustomers ? null : UserId;
 

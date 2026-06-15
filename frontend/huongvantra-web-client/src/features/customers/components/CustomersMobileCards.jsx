@@ -8,6 +8,7 @@ import {
   getMembershipTierLabel,
   getStatusDisplay,
   getTierClass,
+  isCorporateCustomerType,
 } from '../utils/customerDisplay.js'
 
 function MobileField({ label, children, className = '' }) {
@@ -29,7 +30,10 @@ function CustomersMobileCards({
   onRestore,
   restoringId,
   canEditCustomer = true,
+  canEditRow,
 }) {
+  const resolveCanEdit = (row) =>
+    typeof canEditRow === 'function' ? canEditRow(row) : canEditCustomer
   if (isLoading) {
     return (
       <p className="border-t border-[#f0eee6] px-4 py-10 text-center text-sm text-[#717971] lg:hidden">
@@ -51,6 +55,7 @@ function CustomersMobileCards({
       {rows.map((row) => {
         const status = getStatusDisplay(row.status)
         const tierLabel = getMembershipTierLabel(row)
+        const rowCanEdit = resolveCanEdit(row)
 
         return (
           <li key={row.customerId} className="space-y-3 p-4">
@@ -125,8 +130,8 @@ function CustomersMobileCards({
                 <button
                   type="button"
                   className="inline-flex flex-1 items-center justify-center gap-1 rounded-xl bg-[#356647] px-4 py-2.5 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-60 sm:flex-none"
-                  disabled={restoringId === row.customerId}
-                  onClick={() => onRestore?.(row.customerId)}
+                  disabled={restoringId === row.customerId || !rowCanEdit}
+                  onClick={() => rowCanEdit && onRestore?.(row.customerId)}
                 >
                   <span className="material-symbols-outlined text-[18px]">restore</span>
                   {restoringId === row.customerId ? 'Đang khôi phục...' : 'Khôi phục'}
@@ -139,8 +144,8 @@ function CustomersMobileCards({
                   to={`/customers/${row.customerId}/edit`}
                   className="inline-flex items-center gap-1 rounded-lg bg-[#4a6242] px-3 py-2 text-xs font-semibold text-white hover:opacity-90"
                 >
-                  <span className="material-symbols-outlined text-[16px]">{canEditCustomer ? 'edit' : 'visibility'}</span>
-                  {canEditCustomer ? 'Sửa' : 'Xem'}
+                  <span className="material-symbols-outlined text-[16px]">{rowCanEdit ? 'edit' : 'visibility'}</span>
+                  {rowCanEdit ? 'Sửa' : 'Xem'}
                 </Link>
               </div>
             )}

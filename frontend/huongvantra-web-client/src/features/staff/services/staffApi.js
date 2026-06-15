@@ -15,6 +15,7 @@ function mapStaffRow(employee) {
   if (!mapped) return null
 
   return {
+    id: mapped.employeeId,
     employeeId: mapped.employeeId,
     userId: mapped.employeeId,
     userGuid: mapped.userId,

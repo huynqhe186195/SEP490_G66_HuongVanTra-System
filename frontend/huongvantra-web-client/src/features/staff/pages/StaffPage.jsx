@@ -133,7 +133,7 @@ function StaffPage() {
             >
               <option value="">Tất cả vai trò</option>
               {roleOptions.map((role) => (
-                <option key={role.id} value={role.name}>{role.name}</option>
+                <option key={role.id ?? role.name} value={role.name}>{role.name}</option>
               ))}
             </select>
 
@@ -174,7 +174,7 @@ function StaffPage() {
                     <td className="px-6 py-6 text-sm text-[#414942]" colSpan={5}>Không có dữ liệu nhân viên.</td>
                   </tr>
                 ) : staffRows.map((staff) => (
-                  <tr key={staff.id} className="group transition-colors hover:bg-[#356647]/5">
+                  <tr key={staff.employeeId ?? staff.userGuid ?? staff.username} className="group transition-colors hover:bg-[#356647]/5">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         <div className={`flex h-10 w-10 items-center justify-center rounded-full bg-[#e7ece4] text-[#356647] ${staff.isActive ? 'ring-2 ring-[#4e7f5e]/20' : 'opacity-60'}`}>

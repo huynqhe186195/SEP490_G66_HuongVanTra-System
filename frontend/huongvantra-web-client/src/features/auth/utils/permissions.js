@@ -73,6 +73,11 @@ export function isSystemAdmin(session) {
   return hasPermission(session, 'MANAGE_ROLE')
 }
 
+/** Chỉ Admin (MANAGE_ROLE) được tạo/sửa/xóa khách doanh nghiệp. */
+export function canManageCorporateCustomers(session) {
+  return isSystemAdmin(session)
+}
+
 export function isBranchManager(session) {
   return hasPermission(session, 'MANAGE_EMPLOYEE') && !isSystemAdmin(session)
 }

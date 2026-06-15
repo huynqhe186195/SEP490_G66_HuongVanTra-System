@@ -152,6 +152,8 @@ services:
       RabbitMQ__Host: rabbitmq
       RabbitMQ__Username: ${RABBITMQ_USER:-hvt}
       RabbitMQ__Password: ${RABBITMQ_PASS:-hvtrabbit123}
+      CustomerService__BaseUrl: http://customer-service:8080
+      ProductService__BaseUrl: http://product-service:8080
       Jwt__Secret: ${JWT_SECRET:-your-super-secret-key-at-least-32-chars!!}
       Jwt__Issuer: HuongVanTra
       Jwt__Audience: HuongVanTra
@@ -163,6 +165,10 @@ services:
       mysql:
         condition: service_healthy
       rabbitmq:
+        condition: service_healthy
+      customer-service:
+        condition: service_healthy
+      product-service:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]

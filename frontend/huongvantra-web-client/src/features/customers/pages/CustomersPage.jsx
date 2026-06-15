@@ -5,7 +5,7 @@ import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
-import { canEditCustomer } from '../../auth/utils/permissions.js'
+import { canEditCustomer, canManageCorporateCustomers } from '../../auth/utils/permissions.js'
 import CustomerActivityFeed from '../components/CustomerActivityFeed.jsx'
 import CustomersTableShell from '../components/CustomersTableShell.jsx'
 import CustomersMobileCards from '../components/CustomersMobileCards.jsx'
@@ -23,6 +23,7 @@ import {
   getMembershipTierLabel,
   CUSTOMER_LIST_TABS,
   CUSTOMER_CORPORATE_ENABLED,
+  isCorporateCustomerType,
 } from '../utils/customerDisplay.js'
 
 const corporateIcons = ['corporate_fare', 'business', 'domain', 'factory']
@@ -60,6 +61,9 @@ const growthBars = [
 function CustomersPage() {
   const session = useMemo(() => loadAuthSession(), [])
   const canManageCustomers = canEditCustomer(session)
+  const canManageCorporate = canManageCorporateCustomers(session)
+  const canEditCustomerRow = (row) =>
+    isCorporateCustomerType(row?.customerType) ? canManageCorporate : canManageCustomers
   const [activeTab, setActiveTab] = useState('general')
   const [searchValue, setSearchValue] = useState('')
   const [tierFilter, setTierFilter] = useState('')
@@ -409,9 +413,10 @@ function CustomersPage() {
               rows={paginatedCustomers}
               isLoading={isLoading}
               emptyMessage="Không có khách hàng đã ngừng hoạt động."
-              onRestore={canManageCustomers ? handleRestore : undefined}
+              onRestore={canManageCustomers || canManageCorporate ? handleRestore : undefined}
               restoringId={restoringId}
               canEditCustomer={canManageCustomers}
+              canEditRow={canEditCustomerRow}
             />
 
             <CustomersTableShell minWidthClass="min-w-[960px]">
@@ -474,7 +479,7 @@ function CustomersPage() {
                             </span>
                           </td>
                           <td className={TABLE_CELL_RIGHT}>
-                            {canManageCustomers ? (
+                            {canEditCustomerRow(row) ? (
                               <button
                                 type="button"
                                 className="inline-flex items-center gap-1 rounded-full bg-[#356647] px-4 py-2 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-60"
@@ -529,6 +534,15 @@ function CustomersPage() {
               <div className="flex flex-col gap-3 border-b border-[#f0eee6] p-4 sm:flex-row sm:items-center sm:justify-between sm:p-6">
                 <h3 className="text-lg font-semibold text-[#1b1c17] sm:text-xl">Danh sách khách doanh nghiệp</h3>
                 <div className="flex items-center gap-3">
+                  {canManageCorporate ? (
+                    <Link
+                      to="/customers/create?type=corporate"
+                      className="inline-flex items-center gap-1 rounded-lg bg-[#7e5700] px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90"
+                    >
+                      <span className="material-symbols-outlined text-sm">add</span>
+                      Thêm doanh nghiệp
+                    </Link>
+                  ) : null}
                   <button type="button" className="inline-flex items-center gap-1 rounded-lg border border-[#c1c9c0] px-3 py-1.5 text-xs text-[#717971] hover:bg-[#f6f4ec]">
                     <span className="material-symbols-outlined text-sm">download</span>
                     Xuất Excel
@@ -541,7 +555,7 @@ function CustomersPage() {
                 rows={paginatedCustomers}
                 isLoading={isLoading}
                 emptyMessage="Chưa có khách hàng doanh nghiệp."
-                canEditCustomer={canManageCustomers}
+                canEditCustomer={canManageCorporate}
               />
 
               <CustomersTableShell minWidthClass="min-w-[900px]">
@@ -597,8 +611,8 @@ function CustomersPage() {
                             </td>
                             <td className={CORP_TABLE_CELL}>
                               <div className="flex items-center gap-1 sm:gap-2">
-                                <Link to={`/customers/${row.customerId}/edit`} className="p-2 text-[#717971] hover:text-[#356647]" title={canManageCustomers ? 'Sửa' : 'Xem'}>
-                                  <span className="material-symbols-outlined text-sm">{canManageCustomers ? 'edit' : 'visibility'}</span>
+                                <Link to={`/customers/${row.customerId}/edit`} className="p-2 text-[#717971] hover:text-[#356647]" title={canManageCorporate ? 'Sửa' : 'Xem'}>
+                                  <span className="material-symbols-outlined text-sm">{canManageCorporate ? 'edit' : 'visibility'}</span>
                                 </Link>
                               </div>
                             </td>

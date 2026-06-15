@@ -18,7 +18,7 @@ const emptyForm = {
   isDefault: false,
 }
 
-function CustomerAddressesPanel({ customerId, standalone = false }) {
+function CustomerAddressesPanel({ customerId, standalone = false, readOnly = false }) {
   const [addresses, setAddresses] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
@@ -147,7 +147,7 @@ function CustomerAddressesPanel({ customerId, standalone = false }) {
       {isLoading ? (
         <p className="text-sm text-[#717971]">Đang tải địa chỉ...</p>
       ) : addresses.length === 0 ? (
-        <p className="text-sm text-[#717971]">Chưa có địa chỉ. Thêm địa chỉ bên dưới.</p>
+        <p className="text-sm text-[#717971]">{readOnly ? 'Chưa có địa chỉ.' : 'Chưa có địa chỉ. Thêm địa chỉ bên dưới.'}</p>
       ) : (
         <ul className="space-y-2">
           {addresses.map((address) => (
@@ -168,6 +168,8 @@ function CustomerAddressesPanel({ customerId, standalone = false }) {
                   </p>
                 </div>
                 <div className="flex shrink-0 gap-1">
+                  {!readOnly ? (
+                    <>
                   <button
                     type="button"
                     className="rounded-full p-2 text-[#717971] hover:bg-white hover:text-[#356647]"
@@ -182,6 +184,8 @@ function CustomerAddressesPanel({ customerId, standalone = false }) {
                   >
                     <span className="material-symbols-outlined text-[18px]">delete</span>
                   </button>
+                    </>
+                  ) : null}
                 </div>
               </div>
             </li>
@@ -189,6 +193,8 @@ function CustomerAddressesPanel({ customerId, standalone = false }) {
         </ul>
       )}
 
+      {!readOnly ? (
+      <>
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <label className="space-y-1 md:col-span-2">
           <span className="text-xs font-semibold text-[#717971]">Tên người nhận *</span>
@@ -234,6 +240,8 @@ function CustomerAddressesPanel({ customerId, standalone = false }) {
       >
         {isSaving ? 'Đang lưu...' : editingId ? 'Cập nhật địa chỉ' : 'Thêm địa chỉ'}
       </button>
+      </>
+      ) : null}
     </section>
   )
 }

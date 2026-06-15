@@ -81,7 +81,7 @@ public record ReturnOrderRequest(
 
 public record GetOrdersRequest(
     string? Search,
-    Guid? CustomerId,
+    string? CustomerId,
     string? Status,
     string? Channel,
     string? ExcludeChannel = null,
@@ -89,9 +89,9 @@ public record GetOrdersRequest(
     bool ReturnableOnly = false,
     string? OrderKind = null,
     string? ExcludeOrderKind = null,
-    DateTime? FromDate = null,
-    DateTime? ToDate = null,
-    Guid? EmployeeId = null,
-    int Page = 1,
-    int PageSize = 20
+    string? FromDate = null,
+    string? ToDate = null,
+    string? EmployeeId = null,
+    string? Page = null,
+    string? PageSize = null
 );

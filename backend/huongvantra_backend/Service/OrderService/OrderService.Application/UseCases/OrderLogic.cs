@@ -30,19 +30,49 @@ public class OrderLogic(
     public async Task<PagedResponse<OrderSummaryResponse>> GetPagedAsync(
         GetOrdersRequest req, OrderAccessContext access, CancellationToken ct = default)
     {
-        OrderInputValidator.ValidatePagination(req.Page, req.PageSize);
-        var employeeFilter = access.EmployeeFilter ?? req.EmployeeId;
+        var page = ParsePositiveInt(req.Page, 1);
+        var pageSize = Math.Clamp(ParsePositiveInt(req.PageSize, 20), 1, 1000);
+        OrderInputValidator.ValidatePagination(page, pageSize);
+
+        var customerId = ParseOptionalGuid(req.CustomerId);
+        var employeeFilter = access.EmployeeFilter ?? ParseOptionalGuid(req.EmployeeId);
+        var fromDate = ParseOptionalDate(req.FromDate);
+        var toDate = ParseOptionalDate(req.ToDate);
+
         var (items, total) = await _orderRepo.GetPagedAsync(
-            req.Search, req.CustomerId, req.Status, req.Channel,
+            req.Search, customerId, req.Status, req.Channel,
             req.ExcludeChannel, req.CodTab, req.ReturnableOnly,
             req.OrderKind, req.ExcludeOrderKind,
-            req.FromDate, req.ToDate, employeeFilter,
-            req.Page, req.PageSize, ct);
+            fromDate, toDate, employeeFilter,
+            page, pageSize, ct);
 
         var dtos = items.Select(MapToSummary).ToList();
         return new PagedResponse<OrderSummaryResponse>(
-            dtos, req.Page, req.PageSize, total,
-            (int)Math.Ceiling((double)total / req.PageSize));
+            dtos, page, pageSize, total,
+            (int)Math.Ceiling((double)total / pageSize));
+    }
+
+    private static int ParsePositiveInt(string? value, int fallback)
+    {
+        return int.TryParse(value, out var parsed) && parsed > 0 ? parsed : fallback;
+    }
+
+    private static Guid? ParseOptionalGuid(string? value)
+    {
+        var text = value?.Trim();
+        if (string.IsNullOrEmpty(text))
+            return null;
+        return Guid.TryParse(text, out var id) ? id : null;
+    }
+
+    private static DateTime? ParseOptionalDate(string? value)
+    {
+        var text = value?.Trim();
+        if (string.IsNullOrEmpty(text))
+            return null;
+        return DateTime.TryParse(text, null, System.Globalization.DateTimeStyles.RoundtripKind, out var parsed)
+            ? parsed
+            : null;
     }
 
     public async Task<OrderResponse> GetByIdAsync(Guid id, OrderAccessContext access, CancellationToken ct = default)
