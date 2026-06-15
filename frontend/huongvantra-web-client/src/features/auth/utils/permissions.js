@@ -82,6 +82,18 @@ export function isBranchManager(session) {
   return hasPermission(session, 'MANAGE_EMPLOYEE') && !isSystemAdmin(session)
 }
 
+export function canViewContracts(session) {
+  return hasPermission(session, 'VIEW_CUSTOMER')
+}
+
+export function canCreateContracts(session) {
+  return Boolean(session?.userId)
+}
+
+export function canApproveContracts(session) {
+  return isSystemAdmin(session)
+}
+
 export function getStaffManagementScopeLabel(session) {
   if (isSystemAdmin(session)) return 'Quản lý nhân sự: Warehouse, Accountant, Manager'
   if (isBranchManager(session)) return 'Quản lý nhân sự: Sale'

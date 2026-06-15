@@ -210,6 +210,36 @@ services:
       retries: 5
       start_period: 60s
 
+  document-service:
+    build:
+      context: .
+      dockerfile: Service/DocumentService/DocumentService.WebAPI/Dockerfile
+    container_name: hvt-document-service
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__DefaultConnection: "Server=mysql;Port=3306;Database=hvt_document_db;User=${MYSQL_USER:-hvtuser};Password=${MYSQL_PASSWORD:-hvtpass123};CharSet=utf8mb4;"
+      CustomerService__BaseUrl: http://customer-service:8080
+      Jwt__Secret: ${JWT_SECRET:-your-super-secret-key-at-least-32-chars!!}
+      Jwt__Issuer: HuongVanTra
+      Jwt__Audience: HuongVanTra
+    ports:
+      - "5006:8080"
+    networks:
+      - hvt-network
+    depends_on:
+      mysql:
+        condition: service_healthy
+      customer-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
   # ─── API Gateway ──────────────────────────────────────────────────────────────
 
   gateway:
@@ -231,6 +261,7 @@ services:
       ReverseProxy__Clusters__product-cluster__Destinations__destination1__Address: http://product-service:8080
       ReverseProxy__Clusters__order-cluster__Destinations__destination1__Address: http://order-service:8080
       ReverseProxy__Clusters__inventory-cluster__Destinations__destination1__Address: http://inventory-service:8080
+      ReverseProxy__Clusters__document-cluster__Destinations__destination1__Address: http://document-service:8080
     ports:
       - "5000:8080"
     networks:
@@ -245,6 +276,8 @@ services:
       order-service:
         condition: service_healthy
       inventory-service:
+        condition: service_healthy
+      document-service:
         condition: service_healthy
 
   # ─── Frontend ─────────────────────────────────────────────────────────────────

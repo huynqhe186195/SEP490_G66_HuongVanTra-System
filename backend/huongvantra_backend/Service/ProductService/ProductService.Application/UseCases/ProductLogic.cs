@@ -11,7 +11,10 @@ using ProductService.Domain.Exceptions;
 
 namespace ProductService.Application.UseCases;
 
-public class ProductLogic(IProductRepository _productRepository, ICategoryRepository _categoryRepository)
+public class ProductLogic(
+    IProductRepository _productRepository,
+    ICategoryRepository _categoryRepository,
+    IProductSkuRepository _skuRepository)
 {
     public async Task<PagedResponse<ProductResponse>> GetPagedAsync(
         GetProductsRequest request,
@@ -88,13 +91,14 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
             WeightValue = input.WeightValue,
             WeightUnit = input.WeightUnit,
             IsVariantParent = input.IsVariantParent || variants.Count > 0,
-            ProductType = ParseProductType(request.ProductType),
+            ProductType = ParseProductTypeOrDefault(request.ProductType),
             Images = images.Select(MapImage).ToList(),
             Units = units.Select(MapUnit).ToList(),
             Variants = await MapVariantsAsync(input.Name, variants, request.Variants)
         };
 
         var created = await _productRepository.CreateAsync(product);
+        await SyncSkusFromVariantsAsync(created);
         return MapToResponse(created, CatalogViewScope.Warehouse);
     }
 
@@ -136,14 +140,15 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
         product.WeightUnit = input.WeightUnit;
         product.IsVariantParent = input.IsVariantParent || variants.Count > 0;
         product.IsActive = input.IsActive ?? product.IsActive;
-        product.ProductType = ParseProductType(request.ProductType);
+        product.ProductType = ParseProductTypeOrDefault(request.ProductType);
         product.UpdatedAt = DateTime.UtcNow;
 
         Replace(product.Images, images.Select(MapImage));
         Replace(product.Units, units.Select(MapUnit));
-        Replace(product.Variants, await MapVariantsAsync(input.Name, variants, request.Variants));
+        Replace(product.Variants, await MapVariantsAsync(input.Name, variants, request.Variants, product.Id));
 
         var updated = await _productRepository.UpdateAsync(product);
+        await SyncSkusFromVariantsAsync(updated);
         return MapToResponse(updated, CatalogViewScope.Warehouse);
     }
 
@@ -174,16 +179,17 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
     private async Task<List<ProductVariant>> MapVariantsAsync(
         string productName,
         List<ValidatedProductVariantInput> inputs,
-        List<ProductVariantRequest>? rawRequests = null)
+        List<ProductVariantRequest>? rawRequests = null,
+        Guid? excludeProductId = null)
     {
         var variants = new List<ProductVariant>();
         for (var i = 0; i < inputs.Count; i++)
         {
             var input = inputs[i];
             var skuCode = string.IsNullOrWhiteSpace(input.SkuCode)
-                ? await GenerateUniqueVariantSkuAsync(productName, input.VariantName)
+                ? await GenerateUniqueVariantSkuAsync(productName, input.VariantName, excludeProductId)
                 : input.SkuCode;
-            if (await _productRepository.ExistsVariantSkuCodeAsync(skuCode))
+            if (await _productRepository.ExistsVariantSkuCodeAsync(skuCode, excludeProductId: excludeProductId))
                 throw new DuplicateSkuCodeException(skuCode);
 
             var bomLines = rawRequests != null && i < rawRequests.Count
@@ -218,13 +224,13 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
         return variants;
     }
 
-    private async Task<string> GenerateUniqueVariantSkuAsync(string productName, string variantName)
+    private async Task<string> GenerateUniqueVariantSkuAsync(string productName, string variantName, Guid? excludeProductId = null)
     {
         var prefix = BuildSkuPrefix($"{productName} {variantName}");
         for (var i = 1; i <= 999; i++)
         {
             var candidate = $"{prefix}-{i:000}";
-            if (!await _productRepository.ExistsVariantSkuCodeAsync(candidate))
+            if (!await _productRepository.ExistsVariantSkuCodeAsync(candidate, excludeProductId: excludeProductId))
                 return candidate;
         }
 
@@ -322,8 +328,95 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
         v.BomLines.Where(b => !b.IsDeleted).Select(b => new BomLineResponse(
             b.MaterialId, b.Material?.Name ?? string.Empty, b.Quantity)).ToList());
 
-    private static ProductType ParseProductType(string? value) =>
-        Enum.TryParse<ProductType>(value, ignoreCase: true, out var result)
-            ? result
-            : ProductType.THANH_PHAM;
+    private static ProductType? ParseProductType(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null
+        : Enum.TryParse<ProductType>(value, ignoreCase: true, out var result) ? result : null;
+
+    private static ProductType ParseProductTypeOrDefault(string? value) =>
+        ParseProductType(value) ?? ProductType.THANH_PHAM;
+
+    private async Task SyncSkusFromVariantsAsync(Product product)
+    {
+        var activeVariants = product.Variants.Where(v => !v.IsDeleted).ToList();
+        if (activeVariants.Count == 0) return;
+
+        var existingSkus = await _skuRepository.GetByProductIdAsync(product.Id);
+        var existingByCode = existingSkus
+            .Where(s => !s.IsDeleted)
+            .ToDictionary(s => s.SkuCode, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var variant in activeVariants)
+        {
+            var skuCode = string.IsNullOrWhiteSpace(variant.SkuCode)
+                ? await GenerateUniqueSkuCodeAsync(product.Name)
+                : variant.SkuCode.Trim().ToUpperInvariant();
+
+            if (existingByCode.TryGetValue(skuCode, out var existing))
+            {
+                existing.Barcode = variant.Barcode;
+                existing.CostPrice = variant.CostPrice;
+                existing.BasePrice = variant.RetailPrice;
+                existing.RetailPrice = variant.RetailPrice;
+                existing.MinStock = variant.MinStock;
+                existing.MaxStock = variant.MaxStock;
+                existing.IsSellable = variant.IsSellable;
+                existing.AllowRewardPoints = variant.AllowRewardPoints;
+                existing.ImageUrl = variant.ImageUrl;
+                existing.IsActive = variant.IsActive;
+                existing.UpdatedAt = DateTime.UtcNow;
+                await _skuRepository.UpdateAsync(existing);
+            }
+            else
+            {
+                var sku = new ProductSku
+                {
+                    ProductId = product.Id,
+                    SkuCode = skuCode,
+                    Barcode = variant.Barcode,
+                    PackagingType = string.Empty,
+                    WeightInGrams = 0,
+                    BasePrice = variant.RetailPrice,
+                    CostPrice = variant.CostPrice,
+                    RetailPrice = variant.RetailPrice,
+                    MinStock = variant.MinStock,
+                    MaxStock = variant.MaxStock,
+                    IsSellable = variant.IsSellable,
+                    AllowRewardPoints = variant.AllowRewardPoints,
+                    ImageUrl = variant.ImageUrl,
+                    IsActive = variant.IsActive,
+                };
+                await _skuRepository.CreateAsync(sku);
+            }
+        }
+
+        // Soft-delete SKUs whose SkuCode no longer matches any active variant
+        var activeSkuCodes = activeVariants
+            .Select(v => (string.IsNullOrWhiteSpace(v.SkuCode) ? string.Empty : v.SkuCode.Trim().ToUpperInvariant()))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var orphan in existingByCode.Values.Where(s => !activeSkuCodes.Contains(s.SkuCode)))
+        {
+            await _skuRepository.DeleteAsync(orphan);
+        }
+    }
+
+    private async Task<string> GenerateUniqueSkuCodeAsync(string productName)
+    {
+        var normalized = productName.Normalize(NormalizationForm.FormD);
+        var chars = normalized
+            .Where(c => System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c) !=
+                        System.Globalization.UnicodeCategory.NonSpacingMark)
+            .Select(c => char.IsLetterOrDigit(c) ? char.ToUpperInvariant(c) : '-')
+            .ToArray();
+        var prefix = string.Join('-', new string(chars).Split('-', StringSplitOptions.RemoveEmptyEntries));
+        prefix = prefix.Length switch { 0 => "SKU", > 20 => prefix[..20].Trim('-'), _ => prefix };
+
+        for (var i = 1; i <= 9999; i++)
+        {
+            var candidate = $"{prefix}-{i:000}";
+            if (!await _skuRepository.ExistsSkuCodeAsync(candidate))
+                return candidate;
+        }
+        throw new ProductValidationException("Không thể tự sinh SKU code duy nhất.");
+    }
 }

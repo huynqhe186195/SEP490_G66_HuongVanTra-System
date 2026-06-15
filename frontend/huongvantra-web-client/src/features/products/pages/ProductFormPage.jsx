@@ -5,11 +5,11 @@ import { showError, showSuccess } from '../../../app/toast.js'
 import { AUTH_SESSION_CHANGED_EVENT, loadAuthSession } from '../../auth/services/authSession.js'
 import { canAdjustStoreStock, canCreateCatalog } from '../../auth/utils/permissions.js'
 import ProductBomConfigModal from '../components/ProductBomConfigModal.jsx'
-import ProductSkusPanel from '../components/ProductSkusPanel.jsx'
-import { createCategory, fetchCategories } from '../services/categoriesApi.js'
+import { createCategory, fetchCategories, updateCategory } from '../services/categoriesApi.js'
 import { createBrand, fetchBrands } from '../services/brandsApi.js'
 import { createAttributeName, fetchAttributeNames } from '../services/attributeNamesApi.js'
 import { createProduct, fetchProductById, updateProduct } from '../services/productsApi.js'
+import { uploadImage } from '../services/cloudinaryApi.js'
 import { mapProductApiError, validateProductForm } from '../utils/productValidation.js'
 
 const PRODUCT_TYPES = { NGUYEN_LIEU: 'NGUYEN_LIEU', THANH_PHAM: 'THANH_PHAM' }
@@ -107,6 +107,91 @@ function buildCategoryTree(categories) {
   }
   for (const root of roots) walk(root, 0)
   return flat
+}
+
+// Searchable combobox for category (fixes scroll issue with native <select> inside overflow-hidden layout)
+function CategoryCombobox({ options, value, onChange, hasError }) {
+  const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState('')
+  const containerRef = useRef(null)
+  const inputRef = useRef(null)
+  const listRef = useRef(null)
+
+  const selected = options.find((o) => String(o.id) === String(value))
+
+  const filtered = search.trim()
+    ? options.filter((o) => o.name.toLowerCase().includes(search.trim().toLowerCase()))
+    : options
+
+  useEffect(() => {
+    function handleClick(e) {
+      if (containerRef.current && !containerRef.current.contains(e.target)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
+
+  function handleOpen() {
+    setOpen(true)
+    setSearch('')
+    setTimeout(() => inputRef.current?.focus(), 20)
+  }
+
+  function handleSelect(id) {
+    onChange(id)
+    setOpen(false)
+    setSearch('')
+  }
+
+  return (
+    <div ref={containerRef} className="relative flex-1">
+      <button
+        type="button"
+        onClick={handleOpen}
+        className={`w-full rounded-xl border bg-white px-3 py-2.5 text-left text-sm outline-none transition focus:border-[#538463] focus:ring-2 focus:ring-[#538463]/15 ${hasError ? 'border-[#b42318] ring-2 ring-[#b42318]/20' : 'border-slate-200'}`}
+      >
+        {selected ? (
+          <span>{'  '.repeat(selected.depth)}{selected.depth > 0 ? '└ ' : ''}{selected.name}</span>
+        ) : (
+          <span className="text-slate-400">Chọn nhóm hàng</span>
+        )}
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full z-50 mt-1 w-full rounded-xl border border-slate-200 bg-white shadow-xl">
+          <div className="border-b border-slate-100 p-2">
+            <input
+              ref={inputRef}
+              className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm outline-none focus:border-[#538463] focus:ring-2 focus:ring-[#538463]/15"
+              placeholder="Tìm nhóm hàng..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          <ul ref={listRef} className="max-h-52 overflow-y-auto py-1">
+            <li>
+              <button type="button" onClick={() => handleSelect('')} className={`w-full px-3 py-2 text-left text-sm hover:bg-slate-50 ${!value ? 'font-semibold text-[#538463]' : 'text-slate-400'}`}>
+                Chọn nhóm hàng
+              </button>
+            </li>
+            {filtered.length === 0 && (
+              <li className="px-3 py-2 text-sm text-slate-400">Không tìm thấy</li>
+            )}
+            {filtered.map((o) => (
+              <li key={o.id}>
+                <button
+                  type="button"
+                  onClick={() => handleSelect(String(o.id))}
+                  className={`w-full px-3 py-2 text-left text-sm hover:bg-slate-50 ${String(o.id) === String(value) ? 'font-semibold text-[#538463]' : 'text-slate-700'}`}
+                >
+                  {'  '.repeat(o.depth)}{o.depth > 0 ? '└ ' : ''}{o.name}{o.isActive === false || o.isDeleted ? ' (đã ẩn)' : ''}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  )
 }
 
 // Modal for creating a category
@@ -331,7 +416,7 @@ function CreateAttributeNameModal({ isOpen, onClose, onCreated }) {
           </label>
           <div className="flex justify-end gap-3 pt-2">
             <button type="button" onClick={onClose} className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">Huỷ</button>
-          <button type="submit" disabled={saving || !name.trim()} className="rounded-xl bg-[#538463] px-6 py-2.5 text-sm font-bold text-white hover:bg-[#457053] disabled:opacity-50">{saving ? 'Đang tạo...' : 'Tạo thuộc tính'}</button>
+            <button type="submit" disabled={saving || !name.trim()} className="rounded-xl bg-[#538463] px-6 py-2.5 text-sm font-bold text-white hover:bg-[#457053] disabled:opacity-50">{saving ? 'Đang tạo...' : 'Tạo thuộc tính'}</button>
           </div>
         </form>
       </div>
@@ -420,13 +505,13 @@ function ProductFormPage({ mode }) {
 
   useEffect(() => {
     let mounted = true
-    fetchBrands().then((list) => { if (mounted) setDbBrands(list) }).catch(() => {})
+    fetchBrands().then((list) => { if (mounted) setDbBrands(list) }).catch(() => { })
     return () => { mounted = false }
   }, [])
 
   useEffect(() => {
     let mounted = true
-    fetchAttributeNames().then((list) => { if (mounted) setDbAttributeNames(list) }).catch(() => {})
+    fetchAttributeNames().then((list) => { if (mounted) setDbAttributeNames(list) }).catch(() => { })
     return () => { mounted = false }
   }, [])
 
@@ -441,14 +526,14 @@ function ProductFormPage({ mode }) {
         const baseUnit = product.units?.find((unit) => unit.isBaseUnit) || product.units?.[0]
         const mappedUnits = product.units?.length
           ? product.units.map((unit, index) => ({
-              id: unit.id || createLocalId('unit'),
-              unitName: unit.unitName || (index === 0 ? product.baseUnit : ''),
-              conversionRate: String(unit.conversionRate || 1),
-              price: String(unit.price ?? 0),
-              barcode: unit.barcode || '',
-              isDirectSell: unit.isDirectSell !== false,
-              isBaseUnit: Boolean(unit.isBaseUnit || index === 0),
-            }))
+            id: unit.id || createLocalId('unit'),
+            unitName: unit.unitName || (index === 0 ? product.baseUnit : ''),
+            conversionRate: String(unit.conversionRate || 1),
+            price: String(unit.price ?? 0),
+            barcode: unit.barcode || '',
+            isDirectSell: unit.isDirectSell !== false,
+            isBaseUnit: Boolean(unit.isBaseUnit || index === 0),
+          }))
           : [{ ...EMPTY_UNIT, id: createLocalId('unit'), unitName: product.baseUnit || 'cái' }]
 
         setForm((prev) => ({
@@ -476,6 +561,26 @@ function ProductFormPage({ mode }) {
           units: mappedUnits,
         }))
         setProductType(product.productType || PRODUCT_TYPES.THANH_PHAM)
+
+        if (product.variants?.length) {
+          const bomMap = {}
+          for (const variant of product.variants) {
+            if (!variant.bomLines?.length) continue
+            let optionValues = {}
+            try { optionValues = JSON.parse(variant.optionValuesJson || '{}') } catch { optionValues = {} }
+            const unitName = optionValues.Unit || ''
+            const matchedUnit = mappedUnits.find((u) => u.unitName === unitName) || mappedUnits[0]
+            const attributes = Object.entries(optionValues)
+              .filter(([k]) => k !== 'Unit')
+              .map(([name, value]) => ({ name, value }))
+            const key = buildVariantKey(matchedUnit, attributes)
+            bomMap[key] = variant.bomLines.map((line) => ({
+              material_id: line.materialId,
+              quantity: line.quantity,
+            }))
+          }
+          setBomByVariant(bomMap)
+        }
       } catch (error) {
         if (mounted) showError(error.message)
       } finally {
@@ -754,7 +859,7 @@ function ProductFormPage({ mode }) {
     }))
   }
 
-  function buildSubmitPayload() {
+  function buildSubmitPayload(uploadedImages = form.images) {
     const baseUnit = form.units.find((unit) => unit.isBaseUnit) || form.units[0]
     const cleanUnits = form.units
       .filter((unit) => normalizeText(unit.unitName))
@@ -786,10 +891,10 @@ function ProductFormPage({ mode }) {
         retailPrice: toNumber(row.salePrice),
         minStock: toNumber(form.minStock),
         maxStock: toNumber(form.maxStock, 999999999),
-        isSellable: isFinishedProduct && row.unit.isDirectSell !== false,
+        isSellable: row.unit.isDirectSell !== false,
         allowRewardPoints: true,
         isActive: true,
-        imageUrl: form.images.find((image) => image.isThumbnail)?.imageUrl || null,
+        imageUrl: uploadedImages.find((image) => image.isThumbnail)?.imageUrl || null,
         bomLines: (bomByVariant[row.key] ?? []).map((line) => ({
           materialId: line.material_id,
           quantity: Number(line.quantity) || 0,
@@ -812,8 +917,8 @@ function ProductFormPage({ mode }) {
       weightValue: form.weightValue === '' ? null : toNumber(form.weightValue),
       weightUnit: form.weightUnit || 'g',
       productType,
-      isVariantParent: isFinishedProduct && variants.length > 1,
-      images: form.images
+      isVariantParent: variants.length > 1,
+      images: uploadedImages
         .filter((image) => normalizeText(image.imageUrl))
         .map((image, index) => ({
           imageUrl: normalizeText(image.imageUrl),
@@ -822,17 +927,8 @@ function ProductFormPage({ mode }) {
           isThumbnail: Boolean(image.isThumbnail),
         })),
       units: cleanUnits,
-      variants: isFinishedProduct ? variants : [],
-      defaultPricing: {
-        costPrice: toNumber(form.costPrice),
-        salePrice: toNumber(form.salePrice),
-      },
-      stockConfig: {
-        stockQuantity: toNumber(form.stockQuantity),
-        minStock: toNumber(form.minStock),
-        maxStock: toNumber(form.maxStock, 999999999),
-      },
-      attributes: isFinishedProduct ? validAttributes : [],
+      variants,
+      attributes: validAttributes,
     }
   }
 
@@ -843,23 +939,43 @@ function ProductFormPage({ mode }) {
       return
     }
 
-    const payload = buildSubmitPayload()
-
-    const validation = validateProductForm(payload)
-    if (!validation.valid) {
-      setFieldErrors(validation.errors)
-      showError(validation.message)
-      return
-    }
-
     try {
       setIsSaving(true)
+
+      // Upload ảnh mới lên Cloudinary trước khi build payload
+      const pendingUploads = form.images.filter((img) => img.file && !img.imageUrl)
+      let mergedImages = form.images
+      if (pendingUploads.length > 0) {
+        const results = await Promise.allSettled(pendingUploads.map((img) => uploadImage(img.file)))
+        const failed = results.filter((r) => r.status === 'rejected')
+        if (failed.length > 0) {
+          showError(`Upload ảnh thất bại: ${failed[0].reason?.message ?? 'Lỗi không xác định'}`)
+          return
+        }
+        const urlMap = {}
+        pendingUploads.forEach((img, i) => {
+          urlMap[img.id] = results[i].value
+        })
+        mergedImages = form.images.map((img) =>
+          urlMap[img.id] ? { ...img, imageUrl: urlMap[img.id], previewUrl: urlMap[img.id] } : img,
+        )
+        setForm((prev) => ({ ...prev, images: mergedImages }))
+      }
+
+      const payload = buildSubmitPayload(mergedImages)
+      const validation = validateProductForm(payload)
+      if (!validation.valid) {
+        setFieldErrors(validation.errors)
+        showError(validation.message)
+        return
+      }
+
       if (isEditMode && id) {
         await updateProduct(id, payload)
         showSuccess('Đã cập nhật sản phẩm.')
       } else {
         const created = await createProduct(payload)
-        showSuccess('Đã tạo sản phẩm. Bạn có thể thêm SKU ngay bây giờ.')
+        showSuccess('Đã tạo sản phẩm thành công.')
         navigate(`/products/${created.id}/edit`, { replace: true })
       }
     } catch (error) {
@@ -988,18 +1104,12 @@ function ProductFormPage({ mode }) {
             <div>
               <span className={labelClass}>Nhóm hàng *</span>
               <div className="mt-1 flex gap-2">
-                <select
-                  className={`flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-[#538463] focus:ring-2 focus:ring-[#538463]/15 ${fieldErrors.categoryId ? 'border-[#b42318] ring-2 ring-[#b42318]/20' : ''}`}
+                <CategoryCombobox
+                  options={categoryTreeOptions}
                   value={form.categoryId}
-                  onChange={(event) => updateField('categoryId', event.target.value)}
-                >
-                  <option value="">Chọn nhóm hàng</option>
-                  {categoryTreeOptions.map((cat) => (
-                    <option key={cat.id} value={String(cat.id)}>
-                      {'  '.repeat(cat.depth * 2)}{cat.depth > 0 ? '└ ' : ''}{cat.name}{cat.isActive === false || cat.isDeleted ? ' (đã ẩn)' : ''}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(v) => updateField('categoryId', v)}
+                  hasError={Boolean(fieldErrors.categoryId)}
+                />
                 <button
                   type="button"
                   onClick={() => setShowCreateCategory(true)}
@@ -1042,7 +1152,7 @@ function ProductFormPage({ mode }) {
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="text-sm font-bold text-slate-700">Upload ảnh</p>
-                <p className="text-xs text-slate-500">Tối đa {MAX_IMAGES} ảnh, mỗi ảnh nhỏ hơn 2MB. Nếu backend chưa có upload file, ảnh sẽ chỉ preview local.</p>
+                <p className="text-xs text-slate-500">Tối đa {MAX_IMAGES} ảnh, mỗi ảnh nhỏ hơn 2MB. Ảnh sẽ được tự động upload lên Cloudinary khi lưu.</p>
               </div>
               <label className="inline-flex cursor-pointer items-center justify-center rounded-xl bg-[#538463] px-4 py-2 text-sm font-bold text-white hover:bg-[#457053]">
                 Chọn ảnh
@@ -1175,182 +1285,170 @@ function ProductFormPage({ mode }) {
               </div>
             ))}
           </div>
-          {!isFinishedProduct ? (
-            <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
-              Nguyên liệu / bao bì — không hiện trên POS thu ngân và không tạo biến thể.
-            </p>
-          ) : null}
         </section>
 
-        {isFinishedProduct ? (
-          <>
-            <section className="rounded-[1rem] bg-white p-4 shadow-sm sm:p-6 lg:p-8">
-              <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-                <div>
-                  <h2 className="text-lg font-bold text-slate-800">Thuộc tính</h2>
-                  <p className="text-sm text-slate-500">Nhập giá trị bằng dấu phẩy hoặc nhấn Enter để tạo tag.</p>
-                </div>
-                <button type="button" onClick={addAttribute} className="rounded-xl border border-[#356647]/30 px-4 py-2 text-sm font-bold text-[#356647] hover:bg-[#f0eee6]">
-                  + Thêm thuộc tính
-                </button>
+        <>
+          <section className="rounded-[1rem] bg-white p-4 shadow-sm sm:p-6 lg:p-8">
+            <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+              <div>
+                <h2 className="text-lg font-bold text-slate-800">Thuộc tính</h2>
+                <p className="text-sm text-slate-500">Nhập giá trị bằng dấu phẩy hoặc nhấn Enter để tạo tag.</p>
               </div>
-              <div className="mt-4 space-y-3">
-                {form.attributes.map((attribute, index) => (
-                  <div key={attribute.id} className="rounded-xl border border-slate-100 bg-[#fbf9f1] p-3">
-                    <div className="grid gap-3 md:grid-cols-[220px_1fr_auto]">
-                      <select
-                        className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
-                        value={attribute.name}
-                        onChange={(event) => {
-                          if (event.target.value === '__create__') {
-                            setAddAttrNameModal({ open: true, forIndex: index })
-                          } else {
-                            updateAttribute(index, 'name', event.target.value)
-                          }
-                        }}
-                      >
-                        <option value="">Chọn tên thuộc tính</option>
-                        {[...new Set([...ATTRIBUTE_OPTIONS, ...dbAttributeNames.map((item) => item.name), ...customAttrNames])].map((option) => (
-                          <option key={option} value={option}>{option}</option>
-                        ))}
-                        <option value="__create__">+ Tạo tên mới...</option>
-                      </select>
-                      <input
-                        className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
-                        placeholder="VD: Đỏ, Xanh hoặc S, M, L"
-                        value={attribute.inputValue}
-                        onChange={(event) => updateAttribute(index, 'inputValue', event.target.value)}
-                        onKeyDown={(event) => handleAttributeKeyDown(event, index)}
-                        onBlur={(event) => commitAttributeValues(index, event.target.value)}
-                      />
-                      <button type="button" className="rounded-lg px-3 py-2 text-sm font-bold text-[#b42318] hover:bg-red-50" onClick={() => removeAttribute(index)}>
-                        Xóa
-                      </button>
-                    </div>
-                    {attribute.values.length ? (
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {attribute.values.map((value) => (
-                          <button key={value} type="button" onClick={() => removeAttributeValue(index, value)} className="rounded-full bg-[#e8f1eb] px-3 py-1 text-xs font-bold text-[#356647]">
-                            {value} ×
-                          </button>
-                        ))}
-                      </div>
-                    ) : null}
+              <button type="button" onClick={addAttribute} className="rounded-xl border border-[#356647]/30 px-4 py-2 text-sm font-bold text-[#356647] hover:bg-[#f0eee6]">
+                + Thêm thuộc tính
+              </button>
+            </div>
+            <div className="mt-4 space-y-3">
+              {form.attributes.map((attribute, index) => (
+                <div key={attribute.id} className="rounded-xl border border-slate-100 bg-[#fbf9f1] p-3">
+                  <div className="grid gap-3 md:grid-cols-[220px_1fr_auto]">
+                    <select
+                      className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                      value={attribute.name}
+                      onChange={(event) => {
+                        if (event.target.value === '__create__') {
+                          setAddAttrNameModal({ open: true, forIndex: index })
+                        } else {
+                          updateAttribute(index, 'name', event.target.value)
+                        }
+                      }}
+                    >
+                      <option value="">Chọn tên thuộc tính</option>
+                      {[...new Set([...ATTRIBUTE_OPTIONS, ...dbAttributeNames.map((item) => item.name), ...customAttrNames])].map((option) => (
+                        <option key={option} value={option}>{option}</option>
+                      ))}
+                      <option value="__create__">+ Tạo tên mới...</option>
+                    </select>
+                    <input
+                      className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                      placeholder="VD: Đỏ, Xanh hoặc S, M, L"
+                      value={attribute.inputValue}
+                      onChange={(event) => updateAttribute(index, 'inputValue', event.target.value)}
+                      onKeyDown={(event) => handleAttributeKeyDown(event, index)}
+                      onBlur={(event) => commitAttributeValues(index, event.target.value)}
+                    />
+                    <button type="button" className="rounded-lg px-3 py-2 text-sm font-bold text-[#b42318] hover:bg-red-50" onClick={() => removeAttribute(index)}>
+                      Xóa
+                    </button>
                   </div>
-                ))}
+                  {attribute.values.length ? (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {attribute.values.map((value) => (
+                        <button key={value} type="button" onClick={() => removeAttributeValue(index, value)} className="rounded-full bg-[#e8f1eb] px-3 py-1 text-xs font-bold text-[#356647]">
+                          {value} ×
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* Section 5: variants table — show for THANH_PHAM (BOM config) or when there are 2+ units */}
+          {(isFinishedProduct || form.units.filter((u) => u.unitName?.trim()).length >= 2) ? (
+            <section className="rounded-[1rem] bg-white p-4 shadow-sm sm:p-6 lg:p-8">
+              <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
+                <div>
+                  <h2 className="text-lg font-bold text-slate-800">Hàng cùng loại</h2>
+                  <p className="text-sm text-slate-500">Bảng sinh từ Đơn vị tính × Thuộc tính. Giá vốn tự tính theo quy đổi. Giá bán có thể ghi đè — nhấn <span className="material-symbols-outlined align-[-3px] text-[13px]">restart_alt</span> để về giá tự tính.</p>
+                </div>
+                <span className="rounded-full bg-[#f0eee6] px-3 py-1 text-sm font-bold text-slate-700">{generatedRows.length} dòng</span>
+              </div>
+              <div className="mt-5 overflow-x-auto rounded-xl border border-slate-200">
+                <table className="w-full table-fixed text-left text-sm">
+                  <colgroup>
+                    <col className="w-[18%]" />
+                    {validAttributes.length > 0 ? <col className="w-[22%]" /> : null}
+                    <col className="w-[8%]" />
+                    <col className="w-[18%]" />
+                    <col className="w-[16%]" />
+                    <col className={validAttributes.length > 0 ? 'w-[12%]' : 'w-[24%]'} />
+                    <col className="w-[8%]" />
+                  </colgroup>
+                  <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                    <tr>
+                      <th className="px-3 py-3">Đơn vị</th>
+                      {validAttributes.length > 0 ? <th className="px-3 py-3">Thuộc tính</th> : null}
+                      <th className="px-3 py-3 text-center">Q. đổi</th>
+                      <th className="px-3 py-3">Mã hàng</th>
+                      <th className="px-3 py-3">Giá vốn</th>
+                      <th className="px-3 py-3">Giá bán</th>
+                      <th className="px-3 py-3 text-center">BOM</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {generatedRows.map((row) => {
+                      const bomCount = bomByVariant[row.key]?.length ?? 0
+                      const autoSalePrice = Math.round(baseUnitPrice * row.unit.conversionRate)
+                      const draftSalePrice = toNumber(variantDrafts[row.key]?.salePrice ?? autoSalePrice)
+                      const isOverridden = draftSalePrice !== autoSalePrice
+                      return (
+                        <tr key={row.key} className="hover:bg-[#fbf9f1]">
+                          <td className="px-3 py-2.5 font-bold text-[#356647]">{row.unit.unitName}</td>
+                          {validAttributes.length > 0 ? (
+                            <td className="px-3 py-2.5">
+                              {row.attributes.length ? (
+                                <div className="flex max-h-20 flex-wrap gap-1 overflow-y-auto">
+                                  {row.attributes.map((attribute) => (
+                                    <span key={`${row.key}-${attribute.name}-${attribute.value}`} className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">
+                                      {attribute.name}: {attribute.value}
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span className="text-slate-400">—</span>
+                              )}
+                            </td>
+                          ) : null}
+                          <td className="px-3 py-2.5 text-center text-slate-600">{row.unit.conversionRate}</td>
+                          <td className="px-3 py-2.5">
+                            <input className="w-full rounded-lg border border-slate-200 px-2 py-1.5 font-mono text-sm" placeholder="Tự động" value={row.skuCode} onChange={(event) => updateVariantDraft(row.key, 'skuCode', event.target.value)} />
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <input readOnly className="w-full rounded-lg border border-slate-200 bg-slate-100 px-2 py-1.5 text-sm text-slate-500" value={formatCurrency(row.costPrice)} />
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <div className="flex items-center gap-1">
+                              <CurrencyInput
+                                className={`w-full rounded-lg border px-2 py-1.5 text-sm font-semibold ${isOverridden ? 'border-amber-400 bg-amber-50 text-amber-800' : 'border-slate-100 bg-slate-50 text-[#356647]'}`}
+                                value={String(draftSalePrice)}
+                                onChange={(v) => updateVariantDraft(row.key, 'salePrice', v)}
+                              />
+                              {isOverridden ? (
+                                <button
+                                  type="button"
+                                  title="Về giá tự tính"
+                                  onClick={() => updateVariantDraft(row.key, 'salePrice', String(autoSalePrice))}
+                                  className="shrink-0 rounded-md p-1 text-amber-500 hover:bg-amber-100"
+                                >
+                                  <span className="material-symbols-outlined text-[16px]">restart_alt</span>
+                                </button>
+                              ) : null}
+                            </div>
+                          </td>
+                          <td className="px-3 py-2.5 text-center">
+                            <button
+                              type="button"
+                              onClick={() => openBomModal(row)}
+                              className="inline-flex items-center gap-1 rounded-lg border border-[#356647]/30 bg-[#356647]/5 px-2.5 py-1.5 text-xs font-bold text-[#356647] hover:bg-[#356647]/10"
+                            >
+                              <span className="material-symbols-outlined text-[15px]">settings</span>
+                              {bomCount > 0 ? (
+                                <span className="rounded-full bg-[#356647] px-1.5 py-0.5 text-[10px] text-white">{bomCount}</span>
+                              ) : null}
+                            </button>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
               </div>
             </section>
+          ) : null}
+        </>
 
-            {/* Section 5: only show when there are 2+ rows (i.e. multiple units or attributes) */}
-            {form.units.filter((u) => u.unitName?.trim()).length >= 2 ? (
-              <section className="rounded-[1rem] bg-white p-4 shadow-sm sm:p-6 lg:p-8">
-                <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
-                  <div>
-                    <h2 className="text-lg font-bold text-slate-800">Hàng cùng loại</h2>
-                    <p className="text-sm text-slate-500">Bảng sinh từ Đơn vị tính × Thuộc tính. Giá vốn tự tính theo quy đổi. Giá bán có thể ghi đè — nhấn <span className="material-symbols-outlined align-[-3px] text-[13px]">restart_alt</span> để về giá tự tính.</p>
-                  </div>
-                  <span className="rounded-full bg-[#f0eee6] px-3 py-1 text-sm font-bold text-slate-700">{generatedRows.length} dòng</span>
-                </div>
-                <div className="mt-5 overflow-x-auto rounded-xl border border-slate-200">
-                  <table className="w-full table-fixed text-left text-sm">
-                    <colgroup>
-                      <col className="w-[18%]" />
-                      {validAttributes.length > 0 ? <col className="w-[22%]" /> : null}
-                      <col className="w-[8%]" />
-                      <col className="w-[18%]" />
-                      <col className="w-[16%]" />
-                      <col className={validAttributes.length > 0 ? 'w-[12%]' : 'w-[24%]'} />
-                      <col className="w-[8%]" />
-                    </colgroup>
-                    <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-                      <tr>
-                        <th className="px-3 py-3">Đơn vị</th>
-                        {validAttributes.length > 0 ? <th className="px-3 py-3">Thuộc tính</th> : null}
-                        <th className="px-3 py-3 text-center">Q. đổi</th>
-                        <th className="px-3 py-3">Mã hàng</th>
-                        <th className="px-3 py-3">Giá vốn</th>
-                        <th className="px-3 py-3">Giá bán</th>
-                        <th className="px-3 py-3 text-center">BOM</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {generatedRows.map((row) => {
-                        const bomCount = bomByVariant[row.key]?.length ?? 0
-                        const autoSalePrice = Math.round(baseUnitPrice * row.unit.conversionRate)
-                        const draftSalePrice = toNumber(variantDrafts[row.key]?.salePrice ?? autoSalePrice)
-                        const isOverridden = draftSalePrice !== autoSalePrice
-                        return (
-                          <tr key={row.key} className="hover:bg-[#fbf9f1]">
-                            <td className="px-3 py-2.5 font-bold text-[#356647]">{row.unit.unitName}</td>
-                            {validAttributes.length > 0 ? (
-                              <td className="px-3 py-2.5">
-                                {row.attributes.length ? (
-                                  <div className="flex max-h-20 flex-wrap gap-1 overflow-y-auto">
-                                    {row.attributes.map((attribute) => (
-                                      <span key={`${row.key}-${attribute.name}-${attribute.value}`} className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">
-                                        {attribute.name}: {attribute.value}
-                                      </span>
-                                    ))}
-                                  </div>
-                                ) : (
-                                  <span className="text-slate-400">—</span>
-                                )}
-                              </td>
-                            ) : null}
-                            <td className="px-3 py-2.5 text-center text-slate-600">{row.unit.conversionRate}</td>
-                            <td className="px-3 py-2.5">
-                              <input className="w-full rounded-lg border border-slate-200 px-2 py-1.5 font-mono text-sm" placeholder="Tự động" value={row.skuCode} onChange={(event) => updateVariantDraft(row.key, 'skuCode', event.target.value)} />
-                            </td>
-                            <td className="px-3 py-2.5">
-                              <input readOnly className="w-full rounded-lg border border-slate-200 bg-slate-100 px-2 py-1.5 text-sm text-slate-500" value={formatCurrency(row.costPrice)} />
-                            </td>
-                            <td className="px-3 py-2.5">
-                              <div className="flex items-center gap-1">
-                                <CurrencyInput
-                                  className={`w-full rounded-lg border px-2 py-1.5 text-sm font-semibold ${isOverridden ? 'border-amber-400 bg-amber-50 text-amber-800' : 'border-slate-100 bg-slate-50 text-[#356647]'}`}
-                                  value={String(draftSalePrice)}
-                                  onChange={(v) => updateVariantDraft(row.key, 'salePrice', v)}
-                                />
-                                {isOverridden ? (
-                                  <button
-                                    type="button"
-                                    title="Về giá tự tính"
-                                    onClick={() => updateVariantDraft(row.key, 'salePrice', String(autoSalePrice))}
-                                    className="shrink-0 rounded-md p-1 text-amber-500 hover:bg-amber-100"
-                                  >
-                                    <span className="material-symbols-outlined text-[16px]">restart_alt</span>
-                                  </button>
-                                ) : null}
-                              </div>
-                            </td>
-                            <td className="px-3 py-2.5 text-center">
-                              <button
-                                type="button"
-                                onClick={() => openBomModal(row)}
-                                className="inline-flex items-center gap-1 rounded-lg border border-[#356647]/30 bg-[#356647]/5 px-2.5 py-1.5 text-xs font-bold text-[#356647] hover:bg-[#356647]/10"
-                              >
-                                <span className="material-symbols-outlined text-[15px]">settings</span>
-                                {bomCount > 0 ? (
-                                  <span className="rounded-full bg-[#356647] px-1.5 py-0.5 text-[10px] text-white">{bomCount}</span>
-                                ) : null}
-                              </button>
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </section>
-            ) : null}
-          </>
-        ) : null}
-
-        {isEditMode && id ? (
-          <section className="rounded-[1rem] bg-white p-4 shadow-sm sm:p-6 lg:p-8">
-            <ProductSkusPanel productId={id} productName={form.name} canManage={canEdit} canAdjustStock={canAdjustStock} warehouseStockView={canEdit} layout="column" />
-          </section>
-        ) : null}
       </form>
 
       <ProductBomConfigModal

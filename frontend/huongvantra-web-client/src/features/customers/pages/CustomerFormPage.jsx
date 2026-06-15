@@ -5,7 +5,7 @@ import PageShell from '../../../components/shared/PageShell.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import { canEditCustomer, canManageCorporateCustomers, canViewAllCustomers } from '../../auth/utils/permissions.js'
-import { fetchEmployees, mapEmployee } from '../../iam/services/employeesApi.js'
+import { fetchSalesEmployees, mapEmployee } from '../../iam/services/employeesApi.js'
 import MembershipTierProgress from '../components/MembershipTierProgress.jsx'
 import CustomerActivityFeed from '../components/CustomerActivityFeed.jsx'
 import CustomerOpenDebtsPanel from '../components/CustomerOpenDebtsPanel.jsx'
@@ -135,10 +135,10 @@ function CustomerFormPage() {
 
     async function loadSales() {
       try {
-        const data = await fetchEmployees({ page: 1, pageSize: 200 })
-        const options = (data.items || [])
+        const data = await fetchSalesEmployees()
+        const options = (Array.isArray(data) ? data : [])
           .map(mapEmployee)
-          .filter((item) => item?.userId && (item.roles || []).some((role) => String(role).toLowerCase() === 'sale'))
+          .filter((item) => item?.userId)
           .map((item) => ({
             userId: item.userId,
             fullName: item.fullName,

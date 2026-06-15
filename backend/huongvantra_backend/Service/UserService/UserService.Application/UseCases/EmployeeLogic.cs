@@ -87,6 +87,15 @@ public class EmployeeLogic(
             visible.Count);
     }
 
+    public async Task<List<EmployeeDetailResponse>> GetSalesAsync()
+    {
+        var (items, _) = await employeeRepo.GetAllAsync(1, 500);
+        return items
+            .Select(MapToDetail)
+            .Where(e => e.Roles.Any(StaffManagementScope.IsSaleRole))
+            .ToList();
+    }
+
     public async Task<EmployeeDetailResponse> GetByIdAsync(long id, IReadOnlyList<string>? actorPermissions = null)
     {
         var employee = await employeeRepo.GetByIdAsync(id) ?? throw new EmployeeNotFoundException(id);

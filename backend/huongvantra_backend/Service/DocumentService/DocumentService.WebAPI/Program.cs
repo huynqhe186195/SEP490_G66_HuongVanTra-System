@@ -1,0 +1,88 @@
+using DocumentService.Application.Interfaces;
+using DocumentService.Application.UseCases;
+using DocumentService.Infrastructure.Data;
+using DocumentService.Infrastructure.Repositories;
+using DocumentService.Infrastructure.Services;
+using DocumentService.WebAPI.Middlewares;
+using HuongVanTra.Shared.Auth;
+using Microsoft.EntityFrameworkCore;
+using System.Text.Json.Serialization;
+
+var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+    });
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
+
+builder.Services.AddHvtJwtAuthentication(builder.Configuration);
+builder.Services.AddHvtPermissionPolicies();
+
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+builder.Services.AddDbContext<DocumentDbContext>(options =>
+    options.UseMySql(connectionString, new MySqlServerVersion(new Version(8, 0, 0)),
+        mySqlOptions => mySqlOptions.EnableRetryOnFailure(
+            maxRetryCount: 5,
+            maxRetryDelay: TimeSpan.FromSeconds(10),
+            errorNumbersToAdd: null)));
+
+builder.Services.AddScoped<IContractRepository, ContractRepository>();
+builder.Services.AddScoped<ContractLogic>();
+
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddTransient<ForwardAuthorizationHeaderHandler>();
+builder.Services.AddHttpClient<ICustomerCatalogClient, CustomerCatalogClient>(client =>
+{
+    var baseUrl = builder.Configuration["CustomerService:BaseUrl"] ?? "http://customer-service:8080";
+    client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
+}).AddHttpMessageHandler<ForwardAuthorizationHeaderHandler>();
+
+var app = builder.Build();
+
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<DocumentDbContext>();
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    var retries = 0;
+    while (retries < 10)
+    {
+        try { db.Database.Migrate(); break; }
+        catch (Exception ex)
+        {
+            retries++;
+            logger.LogWarning("Migration attempt {Retry}/10 failed: {Message}. Retrying in 5s...", retries, ex.Message);
+            Thread.Sleep(5000);
+        }
+    }
+}
+
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
+
+app.UseMiddleware<GlobalExceptionMiddleware>();
+app.UseAuthentication();
+app.UseAuthorization();
+app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
+app.MapControllers();
+
+app.Run();
+
+public sealed class ForwardAuthorizationHeaderHandler(IHttpContextAccessor httpContextAccessor) : DelegatingHandler
+{
+    protected override Task<HttpResponseMessage> SendAsync(
+        HttpRequestMessage request,
+        CancellationToken cancellationToken)
+    {
+        var authorization = httpContextAccessor.HttpContext?.Request.Headers.Authorization.ToString();
+        if (!string.IsNullOrWhiteSpace(authorization))
+            request.Headers.TryAddWithoutValidation("Authorization", authorization);
+
+        return base.SendAsync(request, cancellationToken);
+    }
+}

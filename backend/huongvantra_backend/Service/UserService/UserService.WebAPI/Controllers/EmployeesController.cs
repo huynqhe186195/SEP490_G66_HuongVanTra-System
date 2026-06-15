@@ -21,6 +21,13 @@ public class EmployeesController(EmployeeLogic employeeLogic) : ControllerBase
         return Ok(result);
     }
 
+    [HttpGet("sales")]
+    public async Task<IActionResult> GetSales()
+    {
+        var result = await employeeLogic.GetSalesAsync();
+        return Ok(result);
+    }
+
     [HttpGet("{id:long}")]
     public async Task<IActionResult> GetById(long id)
     {

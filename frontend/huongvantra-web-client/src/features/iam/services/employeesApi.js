@@ -9,6 +9,10 @@ export function fetchEmployees(params = {}) {
   return apiRequestAuth(path, { method: 'GET' }).then(toPagedResult)
 }
 
+export function fetchSalesEmployees() {
+  return apiRequestAuth('/api/employees/sales', { method: 'GET' })
+}
+
 export function fetchEmployeeById(id) {
   return apiRequestAuth(`/api/employees/${id}`, { method: 'GET' })
 }
