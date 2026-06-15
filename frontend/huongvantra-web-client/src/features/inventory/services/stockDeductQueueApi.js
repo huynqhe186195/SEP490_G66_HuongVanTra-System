@@ -1,4 +1,5 @@
 import { loadAuthSession } from '../../auth/services/authSession.js'
+import { toPagedResult } from '../../../lib/apiClient.js'
 
 const DEFAULT_API_BASE_URL = 'http://localhost:5249'
 
@@ -108,14 +109,29 @@ function mapConfirmResult(data) {
   }
 }
 
-export async function fetchPendingStockDeductQueues({ status, search } = {}) {
+export async function fetchPendingStockDeductQueues({ status, search, page = 1, pageSize = 10 } = {}) {
   const params = new URLSearchParams()
   if (status) params.set('status', status)
   if (search?.trim()) params.set('search', search.trim())
+  params.set('page', String(page))
+  params.set('pageSize', String(pageSize))
   const query = params.toString()
   const path = query ? `/api/stock-deduct-queue/waiting?${query}` : '/api/stock-deduct-queue/waiting'
-  const items = await requestWithAuth(path, { method: 'GET' })
-  return Array.isArray(items) ? items.map(mapQueueItem) : []
+  const data = await requestWithAuth(path, { method: 'GET' })
+  if (Array.isArray(data)) {
+    return {
+      items: data.map(mapQueueItem),
+      page,
+      pageSize,
+      totalCount: data.length,
+    }
+  }
+
+  const paged = toPagedResult(data)
+  return {
+    ...paged,
+    items: paged.items.map(mapQueueItem),
+  }
 }
 
 export async function previewStockDeductQueue(queueId) {

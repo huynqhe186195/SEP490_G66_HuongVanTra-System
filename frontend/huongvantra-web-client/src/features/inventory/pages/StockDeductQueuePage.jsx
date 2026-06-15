@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
+import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
 import { showError } from '../../../app/toast.js'
 import { canConfirmStockDeduct } from '../../../app/navigation.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
@@ -28,6 +29,9 @@ function StockDeductQueuePage() {
   const [activeTab, setActiveTab] = useState('all')
   const [searchValue, setSearchValue] = useState('')
   const [queues, setQueues] = useState([])
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE)
+  const [totalCount, setTotalCount] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
   const [previewQueue, setPreviewQueue] = useState(null)
 
@@ -38,15 +42,19 @@ function StockDeductQueuePage() {
       const items = await fetchPendingStockDeductQueues({
         status: tab?.status,
         search: searchValue.trim() || undefined,
+        page,
+        pageSize,
       })
-      setQueues(items)
+      setQueues(items.items)
+      setTotalCount(items.totalCount)
     } catch (error) {
       setQueues([])
+      setTotalCount(0)
       showError(error.message)
     } finally {
       setIsLoading(false)
     }
-  }, [activeTab, searchValue])
+  }, [activeTab, searchValue, page, pageSize])
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -81,7 +89,10 @@ function StockDeductQueuePage() {
         }
         searchPlaceholder="Tìm mã đơn..."
         searchValue={searchValue}
-        onSearchChange={setSearchValue}
+        onSearchChange={(value) => {
+          setSearchValue(value)
+          setPage(1)
+        }}
       />
 
       <div className="mb-6 flex flex-wrap items-center gap-3">
@@ -89,7 +100,10 @@ function StockDeductQueuePage() {
           <button
             key={tab.key}
             type="button"
-            onClick={() => setActiveTab(tab.key)}
+            onClick={() => {
+              setActiveTab(tab.key)
+              setPage(1)
+            }}
             className={`rounded-xl px-5 py-2.5 text-sm font-semibold transition-colors ${
               activeTab === tab.key
                 ? 'bg-[#538463] text-white shadow-md shadow-[#538463]/20'
@@ -209,6 +223,14 @@ function StockDeductQueuePage() {
             </tbody>
           </table>
         </div>
+        <TablePagination
+          page={page}
+          pageSize={pageSize}
+          totalCount={totalCount}
+          itemLabel="đơn chờ trừ kho"
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+        />
       </section>
 
       {previewQueue ? (

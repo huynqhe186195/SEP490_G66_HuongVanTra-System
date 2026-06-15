@@ -75,6 +75,37 @@ export async function fetchRoleOptions() {
 export async function fetchStaffAccounts(params = {}) {
   const page = params.page ?? 1
   const pageSize = params.pageSize ?? 10
+  const hasClientFilters = Boolean(params.search || typeof params.isActive === 'boolean' || params.role)
+
+  if (hasClientFilters) {
+    const rows = []
+    const fetchPageSize = 100
+    let fetchPage = 1
+    let totalCount = 0
+
+    do {
+      const data = await fetchEmployees({ page: fetchPage, pageSize: fetchPageSize })
+      rows.push(...data.items.map(mapStaffRow).filter(Boolean))
+      totalCount = data.totalCount ?? rows.length
+      if (data.items.length < fetchPageSize) break
+      fetchPage += 1
+    } while (rows.length < totalCount && fetchPage <= 20)
+
+    const filtered = filterStaffRows(rows, {
+      search: params.search,
+      isActive: params.isActive,
+      role: params.role,
+    })
+    const start = (page - 1) * pageSize
+
+    return {
+      items: filtered.slice(start, start + pageSize),
+      totalCount: filtered.length,
+      page,
+      pageSize,
+    }
+  }
+
   const data = await fetchEmployees({ page, pageSize })
   const rows = data.items.map(mapStaffRow).filter(Boolean)
   const filtered = filterStaffRows(rows, {

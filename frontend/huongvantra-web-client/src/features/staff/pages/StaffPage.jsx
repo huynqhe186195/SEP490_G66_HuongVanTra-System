@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
+import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
 import { showError } from '../../../app/toast.js'
 import { AUTH_SESSION_CHANGED_EVENT, loadAuthSession } from '../../auth/services/authSession.js'
 import { getStaffManagementScopeLabel } from '../../auth/utils/permissions.js'
@@ -15,7 +16,7 @@ function StaffPage() {
   const [roleFilter, setRoleFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [page, setPage] = useState(1)
-  const [pageSize] = useState(10)
+  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE)
   const [totalCount, setTotalCount] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
 
@@ -71,12 +72,12 @@ function StaffPage() {
     ]
   }, [staffRows, totalCount])
 
-  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize))
-
   const handleFilterChange = (setter) => (event) => {
     setPage(1)
     setter(event.target.value)
   }
+
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize))
 
   return (
     <PageShell className="[font-family:'Manrope',sans-serif]">
@@ -219,7 +220,16 @@ function StaffPage() {
             </table>
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#c1c9c0]/30 bg-[#f6f4ec]/50 px-6 py-4">
+          <TablePagination
+            page={page}
+            pageSize={pageSize}
+            totalCount={totalCount}
+            itemLabel="nhân viên"
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
+
+          <div className="hidden flex-wrap items-center justify-between gap-3 border-t border-[#c1c9c0]/30 bg-[#f6f4ec]/50 px-6 py-4">
             <p className="text-sm text-[#414942]">Hiển thị trang {page}/{totalPages} · tổng {totalCount} nhân viên</p>
             <div className="flex items-center gap-1">
               <button

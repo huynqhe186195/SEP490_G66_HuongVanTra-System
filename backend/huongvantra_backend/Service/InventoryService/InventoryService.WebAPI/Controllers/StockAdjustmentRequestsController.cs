@@ -17,14 +17,16 @@ public class StockAdjustmentRequestsController(InventoryLogic _logic) : Controll
         CancellationToken ct,
         [FromQuery] string? status,
         [FromQuery] bool mine = false,
-        [FromQuery] string? search = null)
+        [FromQuery] string? search = null,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10)
     {
         Guid? requestedBy = mine ? User.GetUserId() : null;
         if (mine && requestedBy == Guid.Empty)
             return Unauthorized(new { message = "Không xác định được người dùng." });
 
-        var items = await _logic.GetStockAdjustmentRequestsAsync(status, requestedBy, search, ct);
-        return Ok(items);
+        var result = await _logic.GetStockAdjustmentRequestsPagedAsync(status, requestedBy, search, page, pageSize, ct);
+        return Ok(result);
     }
 
     [HttpGet("{id:guid}")]

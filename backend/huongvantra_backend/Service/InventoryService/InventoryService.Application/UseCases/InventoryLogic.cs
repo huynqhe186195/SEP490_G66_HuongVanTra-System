@@ -179,6 +179,23 @@ public class InventoryLogic(
         return queues.Select(MapQueue).ToList();
     }
 
+    public async Task<PagedResponse<StockDeductQueueResponse>> GetWaitingQueuesPagedAsync(
+        string? search,
+        int page,
+        int pageSize,
+        CancellationToken ct = default)
+    {
+        var (safePage, safePageSize) = NormalizePagination(page, pageSize);
+        var (queues, totalCount) = await _queueRepo.GetWaitingPagedAsync(search, safePage, safePageSize, ct);
+        var totalPages = Math.Max(1, (int)Math.Ceiling(totalCount / (double)safePageSize));
+        return new PagedResponse<StockDeductQueueResponse>(
+            queues.Select(MapQueue).ToList(),
+            safePage,
+            safePageSize,
+            totalCount,
+            totalPages);
+    }
+
     public async Task<StockDeductPreviewResponse> PreviewQueueAsync(Guid queueId, CancellationToken ct = default)
     {
         var queue = await _queueRepo.GetByIdAsync(queueId, ct)
@@ -500,6 +517,54 @@ public class InventoryLogic(
 
         var items = await _adjustmentRequestRepo.GetListAsync(parsedStatus, requestedBy, search, ct);
         return items.Select(MapAdjustmentRequest).ToList();
+    }
+
+    public async Task<PagedResponse<StockAdjustmentRequestResponse>> GetStockAdjustmentRequestsPagedAsync(
+        string? status,
+        Guid? requestedBy,
+        string? search,
+        int page,
+        int pageSize,
+        CancellationToken ct = default)
+    {
+        var (parsedStatus, excludePending) = ParseAdjustmentStatus(status);
+        var (safePage, safePageSize) = NormalizePagination(page, pageSize);
+        var (items, totalCount) = await _adjustmentRequestRepo.GetPagedAsync(
+            parsedStatus,
+            excludePending,
+            requestedBy,
+            search,
+            safePage,
+            safePageSize,
+            ct);
+        var totalPages = Math.Max(1, (int)Math.Ceiling(totalCount / (double)safePageSize));
+        return new PagedResponse<StockAdjustmentRequestResponse>(
+            items.Select(MapAdjustmentRequest).ToList(),
+            safePage,
+            safePageSize,
+            totalCount,
+            totalPages);
+    }
+
+    private static (StockAdjustmentRequestStatus? Status, bool ExcludePending) ParseAdjustmentStatus(string? status)
+    {
+        if (string.Equals(status, "processed", StringComparison.OrdinalIgnoreCase))
+            return (null, true);
+
+        if (!string.IsNullOrWhiteSpace(status) &&
+            Enum.TryParse<StockAdjustmentRequestStatus>(status, true, out var value))
+        {
+            return (value, false);
+        }
+
+        return (null, false);
+    }
+
+    private static (int Page, int PageSize) NormalizePagination(int page, int pageSize)
+    {
+        var safePage = page < 1 ? 1 : page;
+        var safePageSize = pageSize < 1 ? 10 : Math.Min(pageSize, 50);
+        return (safePage, safePageSize);
     }
 
     public async Task<StockAdjustmentRequestResponse?> GetStockAdjustmentRequestAsync(

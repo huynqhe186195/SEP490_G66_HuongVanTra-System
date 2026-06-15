@@ -2,7 +2,7 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { AUTH_SESSION_CHANGED_EVENT, loadAuthSession } from '../../auth/services/authSession.js'
 import { Link } from 'react-router-dom'
 import PageShell from '../../../components/shared/PageShell.jsx'
-import TablePagination from '../../../components/shared/TablePagination.jsx'
+import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { canAdjustStoreStock, canSyncCatalog } from '../../auth/utils/permissions.js'
 import { fetchCategories } from '../services/categoriesApi.js'
@@ -87,7 +87,7 @@ export default function ProductsStoreListPage() {
   const [stockFilter, setStockFilter] = useState('all')
   const [directSellFilter, setDirectSellFilter] = useState('all')
   const [page, setPage] = useState(1)
-  const [pageSize] = useState(50)
+  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE)
   const [isLoading, setIsLoading] = useState(true)
   const [stockBySkuId, setStockBySkuId] = useState(() => new Map())
   const [simulateWarehouse, setSimulateWarehouse] = useState(true)
@@ -536,6 +536,7 @@ export default function ProductsStoreListPage() {
                 pageSize={pageSize}
                 totalCount={totalCount}
                 onPageChange={setPage}
+                onPageSizeChange={setPageSize}
                 itemLabel="SKU"
               />
             </div>

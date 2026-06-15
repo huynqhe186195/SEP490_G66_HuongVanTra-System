@@ -1,4 +1,4 @@
-import { apiRequestAuth } from '../../../lib/apiClient.js'
+import { apiRequestAuth, toPagedResult } from '../../../lib/apiClient.js'
 
 function mapRequest(row) {
   return {
@@ -40,16 +40,30 @@ export function getAdjustmentStatusClass(status) {
   return 'bg-slate-100 text-slate-600'
 }
 
-export async function fetchStockAdjustmentRequests({ status, mine, search } = {}) {
+export async function fetchStockAdjustmentRequests({ status, mine, search, page = 1, pageSize = 10 } = {}) {
   const params = new URLSearchParams()
   if (status) params.set('status', status)
   if (mine) params.set('mine', 'true')
   if (search?.trim()) params.set('search', search.trim())
+  params.set('page', String(page))
+  params.set('pageSize', String(pageSize))
   const query = params.toString()
   const path = `/api/v1/inventory/stock-adjustment-requests${query ? `?${query}` : ''}`
   const data = await apiRequestAuth(path, { method: 'GET' })
-  if (!Array.isArray(data)) return []
-  return data.map(mapRequest)
+  if (Array.isArray(data)) {
+    return {
+      items: data.map(mapRequest),
+      page,
+      pageSize,
+      totalCount: data.length,
+    }
+  }
+
+  const paged = toPagedResult(data)
+  return {
+    ...paged,
+    items: paged.items.map(mapRequest),
+  }
 }
 
 export async function createStockAdjustmentRequest(payload) {

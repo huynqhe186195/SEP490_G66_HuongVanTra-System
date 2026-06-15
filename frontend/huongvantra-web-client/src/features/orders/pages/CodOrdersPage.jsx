@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
+import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
 import { showError } from '../../../app/toast.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import OrderCustomerCell from '../components/OrderCustomerCell.jsx'
@@ -25,37 +26,45 @@ function CodOrdersPage() {
   const [searchValue, setSearchValue] = useState('')
   const [orders, setOrders] = useState([])
   const [counts, setCounts] = useState({ pending: 0, overdue: 0, done: 0 })
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE)
+  const [totalCount, setTotalCount] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
 
-  const loadTab = useCallback(async (codTab) => {
-    const data = await fetchOrders({
+  const loadTab = useCallback(async (codTab, nextPage = 1, nextPageSize = 1) => {
+    return fetchOrders({
       codTab,
       search: searchValue.trim() || undefined,
-      pageSize: 50,
+      page: nextPage,
+      pageSize: nextPageSize,
     })
-    return data.items
   }, [searchValue])
 
   const loadData = useCallback(async () => {
     setIsLoading(true)
     try {
-      const [pending, overdue, done] = await Promise.all([
+      const [pending, overdue, done, activeData] = await Promise.all([
         loadTab('pending'),
         loadTab('overdue'),
         loadTab('done'),
+        loadTab(activeTab, page, pageSize),
       ])
-      setCounts({ pending: pending.length, overdue: overdue.length, done: done.length })
-      setOrders(
-        activeTab === 'overdue' ? overdue : activeTab === 'done' ? done : pending,
-      )
+      setCounts({
+        pending: pending.totalCount,
+        overdue: overdue.totalCount,
+        done: done.totalCount,
+      })
+      setOrders(activeData.items)
+      setTotalCount(activeData.totalCount)
     } catch (error) {
       setOrders([])
       setCounts({ pending: 0, overdue: 0, done: 0 })
+      setTotalCount(0)
       showError(error.message)
     } finally {
       setIsLoading(false)
     }
-  }, [activeTab, loadTab])
+  }, [activeTab, loadTab, page, pageSize])
 
   useEffect(() => {
     loadData()
@@ -82,7 +91,10 @@ function CodOrdersPage() {
         description="Theo dõi đơn kênh COD và xác nhận thu tiền tại trang chi tiết đơn hàng."
         searchPlaceholder="Tìm mã đơn, tên khách..."
         searchValue={searchValue}
-        onSearchChange={setSearchValue}
+        onSearchChange={(value) => {
+          setSearchValue(value)
+          setPage(1)
+        }}
       />
 
       <div className="mb-6 flex flex-wrap items-center gap-3">
@@ -90,7 +102,10 @@ function CodOrdersPage() {
           <button
             key={tab.key}
             type="button"
-            onClick={() => setActiveTab(tab.key)}
+            onClick={() => {
+              setActiveTab(tab.key)
+              setPage(1)
+            }}
             className={`rounded-xl px-5 py-2.5 text-sm font-semibold transition-colors ${
               activeTab === tab.key
                 ? 'bg-[#538463] text-white shadow-md shadow-[#538463]/20'
@@ -216,6 +231,14 @@ function CodOrdersPage() {
             </tbody>
           </table>
         </div>
+        <TablePagination
+          page={page}
+          pageSize={pageSize}
+          totalCount={totalCount}
+          itemLabel="đơn COD"
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+        />
       </section>
     </PageShell>
   )

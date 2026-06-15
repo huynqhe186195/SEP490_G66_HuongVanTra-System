@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
+import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
 import ViewTabs from '../components/ViewTabs.jsx'
 import { fetchRoles, mapRole } from '../services/rolesApi.js'
@@ -66,7 +67,7 @@ function UsersPage() {
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const [totalCount, setTotalCount] = useState(0)
-  const pageSize = 10
+  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE)
 
   const [createOpen, setCreateOpen] = useState(false)
   const [editUser, setEditUser] = useState(null)
@@ -81,7 +82,7 @@ function UsersPage() {
     try {
       const [rolesData, usersData, deletedData] = await Promise.all([
         fetchRoles(),
-        fetchUsers({ page, pageSize }),
+        fetchUsers({ page, pageSize, search: search.trim() || undefined }),
         fetchUsers({ page: 1, pageSize: 100, onlyDeleted: true }),
       ])
       setRoles((Array.isArray(rolesData) ? rolesData : []).map(mapRole).filter(Boolean))
@@ -94,7 +95,7 @@ function UsersPage() {
     } finally {
       setIsLoading(false)
     }
-  }, [page])
+  }, [page, pageSize, search])
 
   useEffect(() => {
     loadData()
@@ -320,7 +321,10 @@ function UsersPage() {
             className="w-full rounded-2xl border-2 border-[#c1c9c0] py-4 pl-12 pr-4 text-base outline-none focus:border-[#356647]"
             placeholder="Gõ tên đăng nhập hoặc họ tên..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => {
+              setSearch(e.target.value)
+              setPage(1)
+            }}
           />
         </div>
 
@@ -382,7 +386,18 @@ function UsersPage() {
           </div>
         )}
 
-        <div className="mt-6 flex flex-wrap items-center justify-between gap-3 text-base text-[#414942]">
+        <div className="mt-6 overflow-hidden rounded-2xl border-2 border-[#c1c9c0]/40">
+          <TablePagination
+            page={page}
+            pageSize={pageSize}
+            totalCount={totalCount}
+            itemLabel="tài khoản"
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
+        </div>
+
+        <div className="hidden flex-wrap items-center justify-between gap-3 text-base text-[#414942]">
           <span>Trang {page} / {totalPages} — Tổng {totalCount} tài khoản</span>
           <div className="flex gap-2">
             <BigButton variant="secondary" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>

@@ -1,5 +1,12 @@
 namespace InventoryService.Application.DTOs.Responses;
 
+public record PagedResponse<T>(
+    List<T> Items,
+    int Page,
+    int PageSize,
+    int TotalItems,
+    int TotalPages);
+
 public record StockDeductQueueResponse(
     Guid QueueId,
     Guid OrderId,

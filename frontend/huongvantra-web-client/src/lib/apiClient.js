@@ -204,10 +204,18 @@ export function toPagedResult(data) {
   }
 
   const items = data.items ?? data.Items ?? []
+  const totalCount = Number(
+    data.totalCount ?? data.TotalCount ?? data.totalItems ?? data.TotalItems ?? items.length ?? 0,
+  )
+  const pageSize = Number(data.pageSize ?? data.PageSize ?? 20)
   return {
     items: Array.isArray(items) ? items : [],
     page: Number(data.page ?? data.Page ?? 1),
-    pageSize: Number(data.pageSize ?? data.PageSize ?? 20),
-    totalCount: Number(data.totalCount ?? data.TotalCount ?? items.length ?? 0),
+    pageSize,
+    totalCount,
+    totalItems: totalCount,
+    totalPages: Number(
+      data.totalPages ?? data.TotalPages ?? (pageSize > 0 ? Math.max(1, Math.ceil(totalCount / pageSize)) : 1),
+    ),
   }
 }
