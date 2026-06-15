@@ -43,6 +43,7 @@ builder.Services.AddHvtPermissionPolicies();
 builder.Services.AddMassTransit(x =>
 {
     x.AddConsumer<OrderCompletedConsumer>();
+    x.AddConsumer<OrderReturnedConsumer>();
 
     x.UsingRabbitMq((ctx, cfg) =>
     {
@@ -55,6 +56,11 @@ builder.Services.AddMassTransit(x =>
         cfg.ReceiveEndpoint("customer-service.order-completed", e =>
         {
             e.ConfigureConsumer<OrderCompletedConsumer>(ctx);
+        });
+
+        cfg.ReceiveEndpoint("customer-service.order-returned", e =>
+        {
+            e.ConfigureConsumer<OrderReturnedConsumer>(ctx);
         });
     });
 });

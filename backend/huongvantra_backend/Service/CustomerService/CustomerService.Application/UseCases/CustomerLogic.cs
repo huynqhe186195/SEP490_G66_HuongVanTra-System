@@ -12,6 +12,7 @@ public class CustomerLogic
 {
     private const int MaxPageSize = 100;
     public const string OrderCompletedEventType = "OrderCompleted";
+    public const string OrderReturnedEventType = "OrderReturned";
 
     private readonly ICustomerRepository _customerRepo;
     private readonly ICustomerTierRepository _tierRepo;
@@ -220,6 +221,123 @@ public class CustomerLogic
             TierId: customer.TierId,
             TierName: upgradedTierName ?? customer.Tier?.TierName,
             TierUpgraded: tierUpgraded);
+    }
+
+    public async Task<OrderReturnedHandlingResult> HandleOrderReturnedAsync(
+        Guid returnId,
+        string returnCode,
+        Guid orderId,
+        string orderCode,
+        Guid? customerId,
+        decimal returnAmount,
+        decimal orderFinalAmount,
+        decimal refundAmount,
+        CancellationToken ct = default)
+    {
+        if (await _processedEvents.ExistsAsync(OrderReturnedEventType, returnId, ct))
+        {
+            return new OrderReturnedHandlingResult(
+                returnId, orderId, customerId, SkippedDuplicate: true, CustomerNotFound: false,
+                SkippedNoCustomer: false, SpendingReduced: 0, DebtReduced: 0, TotalSpending: 0, CurrentDebt: 0);
+        }
+
+        if (!customerId.HasValue || customerId == Guid.Empty)
+        {
+            await _processedEvents.AddAsync(OrderReturnedEventType, returnId, ct);
+            await _customerRepo.SaveChangesAsync(ct);
+            return new OrderReturnedHandlingResult(
+                returnId, orderId, null, SkippedDuplicate: false, CustomerNotFound: false,
+                SkippedNoCustomer: true, SpendingReduced: 0, DebtReduced: 0, TotalSpending: 0, CurrentDebt: 0);
+        }
+
+        var customer = await _customerRepo.GetByIdAsync(customerId.Value, ct);
+        if (customer is null)
+        {
+            return new OrderReturnedHandlingResult(
+                returnId, orderId, customerId, SkippedDuplicate: false, CustomerNotFound: true,
+                SkippedNoCustomer: false, SpendingReduced: 0, DebtReduced: 0, TotalSpending: 0, CurrentDebt: 0);
+        }
+
+        var spendingReduction = Math.Max(0, returnAmount);
+        if (spendingReduction > 0)
+            customer.TotalSpending = Math.Max(0, customer.TotalSpending - spendingReduction);
+
+        var debtReduction = 0m;
+        if (spendingReduction > 0 && orderFinalAmount > 0)
+        {
+            await ReconcileCurrentDebtFromLedgerAsync(customer, ct);
+            var openDebts = await BuildOpenDebtItemsAsync(customer.Id, ct);
+            var orderDebt = openDebts.FirstOrDefault(d => d.OrderId == orderId);
+            if (orderDebt is not null && orderDebt.RemainingDebt > 0)
+            {
+                var proportional = Math.Round(
+                    orderDebt.OriginalDebt * spendingReduction / orderFinalAmount,
+                    0,
+                    MidpointRounding.AwayFromZero);
+                debtReduction = Math.Min(orderDebt.RemainingDebt, proportional);
+            }
+        }
+
+        if (debtReduction > 0)
+        {
+            customer.CurrentDebt = Math.Max(0, customer.CurrentDebt - debtReduction);
+            var transaction = await RecordDebtAsync(
+                customer,
+                DebtTransactionType.DecreaseDebt,
+                debtReduction,
+                "OrderReturn",
+                returnId,
+                $"Trả hàng {returnCode} từ đơn {orderCode}" +
+                (refundAmount > 0 ? $" (hoàn {refundAmount:N0} đ)" : string.Empty),
+                orderCode,
+                ct);
+
+            await _allocationRepo.AddRangeAsync(
+            [
+                new CustomerDebtAllocation
+                {
+                    Id = Guid.NewGuid(),
+                    DebtTransactionId = transaction.Id,
+                    CustomerId = customer.Id,
+                    OrderId = orderId,
+                    OrderCode = orderCode,
+                    Amount = debtReduction,
+                    CreatedAt = DateTime.UtcNow
+                }
+            ], ct);
+        }
+
+        customer.UpdatedAt = DateTime.UtcNow;
+        _customerRepo.Update(customer);
+        await _processedEvents.AddAsync(OrderReturnedEventType, returnId, ct);
+
+        if (spendingReduction > 0 || debtReduction > 0)
+        {
+            var parts = new List<string>();
+            if (spendingReduction > 0)
+                parts.Add($"chi tiêu -{spendingReduction:N0}");
+            if (debtReduction > 0)
+                parts.Add($"công nợ -{debtReduction:N0}");
+            await RecordActivityAsync(
+                customer.Id,
+                CustomerActivityType.DebtUpdated,
+                $"Trả hàng {returnCode}: {string.Join(", ", parts)}",
+                ct);
+        }
+
+        await _customerRepo.SaveChangesAsync(ct);
+
+        return new OrderReturnedHandlingResult(
+            returnId,
+            orderId,
+            customer.Id,
+            SkippedDuplicate: false,
+            CustomerNotFound: false,
+            SkippedNoCustomer: false,
+            SpendingReduced: spendingReduction,
+            DebtReduced: debtReduction,
+            TotalSpending: customer.TotalSpending,
+            CurrentDebt: customer.CurrentDebt);
     }
 
     public async Task<CustomerDebtTransactionResponse> RecordDebtTransactionAsync(

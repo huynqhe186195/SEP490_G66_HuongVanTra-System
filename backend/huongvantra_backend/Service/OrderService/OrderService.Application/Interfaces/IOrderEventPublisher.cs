@@ -19,7 +19,14 @@ public interface IOrderEventPublisher
         CancellationToken ct = default);
 
     Task PublishOrderReturnedAsync(
-        Guid returnId, Guid orderId, string orderCode,
+        Guid returnId,
+        string returnCode,
+        Guid orderId,
+        string orderCode,
+        Guid? customerId,
+        decimal returnAmount,
+        decimal orderFinalAmount,
+        decimal refundAmount,
         IEnumerable<(Guid SkuId, int Quantity)> items,
         CancellationToken ct = default);
 }

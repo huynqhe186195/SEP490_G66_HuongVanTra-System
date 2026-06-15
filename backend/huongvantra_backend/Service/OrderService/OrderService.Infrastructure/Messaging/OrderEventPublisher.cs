@@ -52,14 +52,26 @@ public class OrderEventPublisher(IPublishEndpoint _publishEndpoint) : IOrderEven
         }, ct);
 
     public Task PublishOrderReturnedAsync(
-        Guid returnId, Guid orderId, string orderCode,
+        Guid returnId,
+        string returnCode,
+        Guid orderId,
+        string orderCode,
+        Guid? customerId,
+        decimal returnAmount,
+        decimal orderFinalAmount,
+        decimal refundAmount,
         IEnumerable<(Guid SkuId, int Quantity)> items,
         CancellationToken ct = default) =>
         _publishEndpoint.Publish(new OrderReturnedEvent
         {
             ReturnId = returnId,
+            ReturnCode = returnCode,
             OrderId = orderId,
             OrderCode = orderCode,
+            CustomerId = customerId,
+            ReturnAmount = returnAmount,
+            OrderFinalAmount = orderFinalAmount,
+            RefundAmount = refundAmount,
             Items = items.Select(i => new OrderItemEvent { SkuId = i.SkuId, Quantity = i.Quantity })
         }, ct);
 }

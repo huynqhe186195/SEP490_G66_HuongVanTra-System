@@ -825,8 +825,13 @@ public class OrderLogic(
 
         await _eventPublisher.PublishOrderReturnedAsync(
             returnId,
+            returnCode,
             order.Id,
             order.OrderCode,
+            order.CustomerId,
+            returnAmount,
+            order.FinalAmount,
+            refundAmount,
             returnLines.Select(x => (x.Detail.SkuId, x.Quantity)),
             ct);
 
