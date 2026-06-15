@@ -137,7 +137,7 @@ export default function ProductItemCreatePage() {
         <h1 className="text-xl font-bold uppercase tracking-wide text-slate-900 sm:text-2xl">Tạo hàng hóa mới</h1>
         <div className="flex gap-2">
           <Link
-            to="/products"
+            to="/inventory/products"
             className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
           >
             Bỏ qua

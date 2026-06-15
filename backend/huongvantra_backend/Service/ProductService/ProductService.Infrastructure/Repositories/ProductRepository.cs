@@ -15,12 +15,12 @@ public class ProductRepository(ProductDbContext _db) : IProductRepository
         ProductType? productType = null)
     {
         IQueryable<Product> query = isDeleted == true
-            ? IncludeAggregate(_db.Products.IgnoreQueryFilters())
-            : IncludeAggregate(_db.Products);
+            ? IncludeAggregate(_db.Products.IgnoreQueryFilters()).Where(p => p.IsDeleted)
+            : scope == CatalogViewScope.Warehouse
+                ? IncludeAggregate(_db.Products.IgnoreQueryFilters())
+                : IncludeAggregate(_db.Products);
 
-        if (isDeleted == true)
-            query = query.Where(p => p.IsDeleted);
-        else if (isDeleted == false)
+        if (isDeleted == false)
             query = query.Where(p => !p.IsDeleted);
 
         if (!string.IsNullOrWhiteSpace(search))
@@ -46,7 +46,8 @@ public class ProductRepository(ProductDbContext _db) : IProductRepository
 
         var totalCount = await query.CountAsync();
         var items = await query
-            .OrderBy(p => p.Name)
+            .OrderByDescending(p => p.CreatedAt)
+            .ThenBy(p => p.Name)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync();

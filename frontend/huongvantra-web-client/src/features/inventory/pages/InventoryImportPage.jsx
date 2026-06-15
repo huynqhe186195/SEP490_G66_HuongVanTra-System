@@ -16,7 +16,7 @@ import { fetchAllActiveSkus } from '../../products/services/productSkusApi.js'
 
 import { fetchProducts } from '../../products/services/productsApi.js'
 
-import { inventoryNavTabs } from '../utils/inventoryNavTabs.js'
+import InventoryNavTabs from '../components/InventoryNavTabs.jsx'
 
 import { createWarehouseBatch } from '../services/warehouseBatchApi.js'
 import { notifyInventoryStockChanged } from '../utils/inventoryStockEvents.js'
@@ -261,39 +261,7 @@ function InventoryImportPage() {
 
         description="Một mã lô có thể chứa nhiều SKU / sản phẩm — tồn kho tổng tăng theo từng dòng"
 
-        rightContent={
-
-          <div className="flex flex-wrap items-center gap-2">
-
-            {inventoryNavTabs.map((tab) => (
-
-              <Link
-
-                key={tab.to}
-
-                to={tab.to}
-
-                className={`rounded-xl px-4 py-2 text-sm font-semibold ${
-
-                  tab.to === '/inventory/import'
-
-                    ? 'bg-[#538463] text-white'
-
-                    : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-
-                }`}
-
-              >
-
-                {tab.label}
-
-              </Link>
-
-            ))}
-
-          </div>
-
-        }
+        rightContent={<InventoryNavTabs />}
 
       />
 

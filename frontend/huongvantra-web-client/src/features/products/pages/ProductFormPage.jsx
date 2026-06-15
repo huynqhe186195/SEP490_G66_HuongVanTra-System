@@ -11,6 +11,7 @@ import { createBrand, fetchBrands } from '../services/brandsApi.js'
 import { createAttributeName, fetchAttributeNames } from '../services/attributeNamesApi.js'
 import { createProduct, fetchProductById, updateProduct } from '../services/productsApi.js'
 import { mapProductApiError, validateProductForm } from '../utils/productValidation.js'
+import { setProductListFocus } from '../utils/productListFocus.js'
 
 const PRODUCT_TYPES = { NGUYEN_LIEU: 'NGUYEN_LIEU', THANH_PHAM: 'THANH_PHAM' }
 
@@ -362,6 +363,7 @@ function ProductFormPage({ mode }) {
   const [showCreateBrand, setShowCreateBrand] = useState(false)
   const [customAttrNames, setCustomAttrNames] = useState([])
   const [addAttrNameModal, setAddAttrNameModal] = useState({ open: false, forIndex: null })
+  const [duplicateProductName, setDuplicateProductName] = useState('')
   const isFinishedProduct = productType === PRODUCT_TYPES.THANH_PHAM
 
   const [form, setForm] = useState(() => ({
@@ -410,11 +412,11 @@ function ProductFormPage({ mode }) {
 
   useEffect(() => {
     if (!isEditMode && !canEdit) {
-      navigate('/products', { replace: true })
+      navigate('/inventory/products', { replace: true })
       return
     }
     if (isEditMode && !canEdit && !canAdjustStock) {
-      navigate('/products', { replace: true })
+      navigate('/inventory/products', { replace: true })
     }
   }, [canEdit, canAdjustStock, isEditMode, navigate])
 
@@ -548,6 +550,7 @@ function ProductFormPage({ mode }) {
   }, [form.units, validAttributes])
 
   function updateField(key, value) {
+    if (key === 'name') setDuplicateProductName('')
     setForm((prev) => ({ ...prev, [key]: value }))
     setFieldErrors((prev) => ({ ...prev, [key]: undefined }))
   }
@@ -859,13 +862,22 @@ function ProductFormPage({ mode }) {
         showSuccess('Đã cập nhật sản phẩm.')
       } else {
         const created = await createProduct(payload)
-        showSuccess('Đã tạo sản phẩm. Bạn có thể thêm SKU ngay bây giờ.')
-        navigate(`/products/${created.id}/edit`, { replace: true })
+        setProductListFocus(created)
+        showSuccess(`Đã tạo "${created.name}". Xem trong danh sách bên dưới.`)
+        navigate(`/inventory/products?highlight=${created.id}`, {
+          replace: true,
+          state: { createdName: created.name },
+        })
       }
     } catch (error) {
       const mapped = mapProductApiError(error.message, error.apiErrors)
       if (Object.keys(mapped.errors).length) setFieldErrors((prev) => ({ ...prev, ...mapped.errors }))
       else if (mapped.field) setFieldErrors((prev) => ({ ...prev, [mapped.field]: mapped.message }))
+      if (mapped.duplicateProduct) {
+        setDuplicateProductName(normalizeText(form.name))
+      } else {
+        setDuplicateProductName('')
+      }
       showError(mapped.message)
     } finally {
       setIsSaving(false)
@@ -890,17 +902,20 @@ function ProductFormPage({ mode }) {
               <p className="mt-1 text-sm text-slate-500">
                 {form.name ? (
                   <>
-                    Sản phẩm: <span className="font-semibold text-[#356647]">{form.name}</span> — chọn SKU và nhập số
-                    lượng cần nhập từ kho hoặc giảm tại cửa hàng.
+                    Sản phẩm: <span className="font-semibold text-[#356647]">{form.name}</span> — thêm SKU vào lô chung
+                    (có thể quay lại danh sách hàng hóa thêm SKU khác trước khi gửi).
                   </>
                 ) : (
-                  'Chọn SKU và nhập số lượng cần nhập từ kho hoặc giảm tại cửa hàng.'
+                  'Thêm SKU vào lô chung (giữ khi chuyển trang), rồi gửi một yêu cầu cho Thủ kho duyệt.'
                 )}
               </p>
             </div>
             <Link
               className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
-              to="/products"
+              to="/inventory/products"
+              onClick={() => {
+                if (id) setProductListFocus({ id, name: form.name })
+              }}
             >
               Quay lại
             </Link>
@@ -924,6 +939,7 @@ function ProductFormPage({ mode }) {
 
   return (
     <PageShell>
+      <div className="space-y-6">
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-start">
           <div>
@@ -934,7 +950,9 @@ function ProductFormPage({ mode }) {
           </div>
 
           <div className="flex items-center gap-3">
-            <Link className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50" to="/inventory/products">
+            <Link className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50" to="/inventory/products" onClick={() => {
+              if (id) setProductListFocus({ id, name: form.name })
+            }}>
               Quay lại
             </Link>
             <button type="submit" disabled={isSaving} className="rounded-xl bg-[#538463] px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-[#457053] disabled:opacity-50">
@@ -974,6 +992,19 @@ function ProductFormPage({ mode }) {
               <span className={labelClass}>Tên hàng *</span>
               <input className={`${inputClass} ${fieldErrors.name ? 'border-[#b42318] ring-2 ring-[#b42318]/20' : ''}`} required value={form.name} onChange={(event) => updateField('name', event.target.value)} />
               <FieldError message={fieldErrors.name} />
+              {duplicateProductName ? (
+                <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-950">
+                  <p>Sản phẩm này có thể đã bị ẩn trước đó và không hiện trong danh sách mặc định.</p>
+                  <Link
+                    to="/inventory/products"
+                    className="mt-2 inline-flex items-center gap-1 font-semibold text-[#356647] hover:underline"
+                    onClick={() => setProductListFocus({ name: duplicateProductName }, { statusFilter: 'all' })}
+                  >
+                    <span className="material-symbols-outlined text-[16px]">search</span>
+                    Tìm &quot;{duplicateProductName}&quot; trong danh sách và kích hoạt lại
+                  </Link>
+                </div>
+              ) : null}
             </label>
             <label>
               <span className={labelClass}>Mã hàng</span>
@@ -1345,13 +1376,14 @@ function ProductFormPage({ mode }) {
             ) : null}
           </>
         ) : null}
+      </form>
 
         {isEditMode && id ? (
           <section className="rounded-[1rem] bg-white p-4 shadow-sm sm:p-6 lg:p-8">
             <ProductSkusPanel productId={id} productName={form.name} canManage={canEdit} canAdjustStock={canAdjustStock} warehouseStockView={canEdit} layout="column" />
           </section>
         ) : null}
-      </form>
+      </div>
 
       <ProductBomConfigModal
         isOpen={Boolean(bomModalVariant)}

@@ -133,6 +133,7 @@ function buildProductQuery(params = {}) {
   if (params.categoryId) search.set('categoryId', String(params.categoryId))
   if (params.isActive === true || params.isActive === false) search.set('isActive', String(params.isActive))
   if (params.isDeleted === true) search.set('isDeleted', 'true')
+  if (params.productType) search.set('productType', String(params.productType))
   search.set('page', String(params.page ?? 1))
   search.set('pageSize', String(Math.min(100, Math.max(1, params.pageSize ?? 20))))
   return search.toString()

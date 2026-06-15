@@ -6,12 +6,15 @@ public record AdjustWarehouseStockRequest(int QuantityDelta);
 
 public record CancelStockDeductRequest(string? Reason);
 
-public record CreateStockAdjustmentRequest(
+public record CreateStockAdjustmentRequestItem(
     Guid SkuId,
     string? SkuCode,
     string? SkuSnapshotName,
-    int QuantityDelta,
-    string? Reason);
+    int QuantityDelta);
+
+public record CreateStockAdjustmentRequest(
+    string? Reason,
+    List<CreateStockAdjustmentRequestItem> Items);
 
 public record RejectStockAdjustmentRequest(string? Reason);
 

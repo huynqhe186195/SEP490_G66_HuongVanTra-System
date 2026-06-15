@@ -12,7 +12,7 @@ import { formatStockQuantity } from '../../products/utils/productDisplay.js'
 
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 
-import { inventoryNavTabs } from '../utils/inventoryNavTabs.js'
+import InventoryNavTabs from '../components/InventoryNavTabs.jsx'
 
 import { fetchWarehouseBatches } from '../services/warehouseBatchApi.js'
 
@@ -100,39 +100,7 @@ function InventoryBatchesPage() {
 
         onSearchChange={setSearchInput}
 
-        rightContent={
-
-          <div className="flex flex-wrap items-center gap-2">
-
-            {inventoryNavTabs.map((tab) => (
-
-              <Link
-
-                key={tab.to}
-
-                to={tab.to}
-
-                className={`rounded-xl px-4 py-2 text-sm font-semibold ${
-
-                  tab.to === '/inventory/batches'
-
-                    ? 'bg-[#538463] text-white'
-
-                    : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-
-                }`}
-
-              >
-
-                {tab.label}
-
-              </Link>
-
-            ))}
-
-          </div>
-
-        }
+        rightContent={<InventoryNavTabs />}
 
       />
 

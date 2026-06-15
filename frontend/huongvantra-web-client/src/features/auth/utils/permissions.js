@@ -48,6 +48,10 @@ export function canHideCatalog(session) {
   return canCreateCatalog(session)
 }
 
+export function canAccessWarehouseInventory(session) {
+  return isWarehouseRole(session)
+}
+
 /** Chỉ Thủ kho được sửa sản phẩm, danh mục, SKU. */
 export function canManageProducts(session) {
   return canCreateCatalog(session)

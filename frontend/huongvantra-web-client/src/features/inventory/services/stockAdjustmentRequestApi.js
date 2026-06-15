@@ -1,24 +1,39 @@
 import { apiRequestAuth, toPagedResult } from '../../../lib/apiClient.js'
 
-function mapRequest(row) {
+function mapRequestItem(row) {
   return {
     id: row.id ?? row.Id,
-    requestCode: row.requestCode ?? row.RequestCode ?? '',
     skuId: row.skuId ?? row.SkuId,
     skuCode: row.skuCode ?? row.SkuCode ?? '',
     skuSnapshotName: row.skuSnapshotName ?? row.SkuSnapshotName ?? '',
     quantityDelta: Number(row.quantityDelta ?? row.QuantityDelta ?? 0),
-    reason: row.reason ?? row.Reason ?? '',
-    status: String(row.status ?? row.Status ?? '').toLowerCase(),
     quantityOnHandSnapshot: Number(row.quantityOnHandSnapshot ?? row.QuantityOnHandSnapshot ?? 0),
     quantityOnHandAfter: row.quantityOnHandAfter ?? row.QuantityOnHandAfter ?? null,
+    warehouseQuantityOnHandAfter:
+      row.warehouseQuantityOnHandAfter ?? row.WarehouseQuantityOnHandAfter ?? null,
+    exportSlipId: row.exportSlipId ?? row.ExportSlipId ?? null,
+    exportSlipCode: row.exportSlipCode ?? row.ExportSlipCode ?? '',
+  }
+}
+
+function mapRequest(row) {
+  const items = (row.items ?? row.Items ?? []).map(mapRequestItem)
+  return {
+    id: row.id ?? row.Id,
+    requestCode: row.requestCode ?? row.RequestCode ?? '',
+    reason: row.reason ?? row.Reason ?? '',
+    status: String(row.status ?? row.Status ?? '').toLowerCase(),
     requestedBy: row.requestedBy ?? row.RequestedBy,
     requestedAt: row.requestedAt ?? row.RequestedAt ?? null,
     reviewedBy: row.reviewedBy ?? row.ReviewedBy ?? null,
     reviewedAt: row.reviewedAt ?? row.ReviewedAt ?? null,
     reviewNote: row.reviewNote ?? row.ReviewNote ?? '',
-    exportSlipId: row.exportSlipId ?? row.ExportSlipId ?? null,
-    exportSlipCode: row.exportSlipCode ?? row.ExportSlipCode ?? '',
+    items,
+    itemCount: items.length,
+    totalDelta: items.reduce((sum, item) => sum + item.quantityDelta, 0),
+    hasIncrease: items.some((item) => item.quantityDelta > 0),
+    hasDecrease: items.some((item) => item.quantityDelta < 0),
+    exportSlipCodes: items.map((item) => item.exportSlipCode).filter(Boolean),
   }
 }
 
@@ -38,6 +53,13 @@ export function getAdjustmentStatusClass(status) {
   if (key === 'rejected') return 'bg-rose-100 text-rose-800'
   if (key === 'cancelled') return 'bg-slate-100 text-slate-600'
   return 'bg-slate-100 text-slate-600'
+}
+
+export async function fetchStockAdjustmentRequestById(id) {
+  const data = await apiRequestAuth(`/api/v1/inventory/stock-adjustment-requests/${id}`, {
+    method: 'GET',
+  })
+  return mapRequest(data)
 }
 
 export async function fetchStockAdjustmentRequests({ status, mine, search, page = 1, pageSize = 10 } = {}) {
@@ -78,12 +100,18 @@ export async function approveStockAdjustmentRequest(id) {
   const data = await apiRequestAuth(`/api/v1/inventory/stock-adjustment-requests/${id}/approve`, {
     method: 'POST',
   })
+  const exportSlips = (data?.exportSlips ?? data?.ExportSlips ?? []).map((row) => ({
+    exportSlipId: row.exportSlipId ?? row.ExportSlipId ?? null,
+    exportSlipCode: row.exportSlipCode ?? row.ExportSlipCode ?? '',
+    skuId: row.skuId ?? row.SkuId,
+    skuCode: row.skuCode ?? row.SkuCode ?? '',
+  }))
   return {
-    exportSlipId: data?.exportSlipId ?? data?.ExportSlipId ?? null,
-    exportSlipCode: data?.exportSlipCode ?? data?.ExportSlipCode ?? '',
-    quantityOnHandAfter: data?.quantityOnHandAfter ?? data?.QuantityOnHandAfter ?? null,
-    warehouseQuantityOnHandAfter:
-      data?.warehouseQuantityOnHandAfter ?? data?.WarehouseQuantityOnHandAfter ?? null,
+    id: data?.id ?? data?.Id,
+    requestCode: data?.requestCode ?? data?.RequestCode ?? '',
+    status: String(data?.status ?? data?.Status ?? '').toLowerCase(),
+    reviewedAt: data?.reviewedAt ?? data?.ReviewedAt ?? null,
+    exportSlips,
   }
 }
 

@@ -12,7 +12,8 @@ namespace ProductService.Application.UseCases;
 
 public class ProductSkuLogic(
     IProductSkuRepository _skuRepository,
-    IProductRepository _productRepository)
+    IProductRepository _productRepository,
+    IProductEventPublisher _eventPublisher)
 {
     public async Task<PagedResponse<ProductSkuResponse>> GetPagedAsync(
         GetProductSkusRequest request,
@@ -115,6 +116,7 @@ public class ProductSkuLogic(
         };
 
         var created = await _skuRepository.CreateAsync(sku);
+        await _eventPublisher.PublishSkuCreatedAsync(created.Id, created.SkuCode, created.WeightInGrams);
         return MapToResponse(created);
     }
 

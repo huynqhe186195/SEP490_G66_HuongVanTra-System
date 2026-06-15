@@ -10,6 +10,7 @@ public class InventoryDbContext(DbContextOptions<InventoryDbContext> options) : 
     public DbSet<StockDeductQueueItem> StockDeductQueueItems => Set<StockDeductQueueItem>();
     public DbSet<ProcessedIntegrationEvent> ProcessedIntegrationEvents => Set<ProcessedIntegrationEvent>();
     public DbSet<StockAdjustmentRequest> StockAdjustmentRequests => Set<StockAdjustmentRequest>();
+    public DbSet<StockAdjustmentRequestItem> StockAdjustmentRequestItems => Set<StockAdjustmentRequestItem>();
     public DbSet<StockExportSlip> StockExportSlips => Set<StockExportSlip>();
     public DbSet<WarehouseBatch> WarehouseBatches => Set<WarehouseBatch>();
     public DbSet<WarehouseBatchItem> WarehouseBatchItems => Set<WarehouseBatchItem>();

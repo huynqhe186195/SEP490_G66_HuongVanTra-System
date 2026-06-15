@@ -25,7 +25,7 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
         var (items, total) = await _productRepository.GetPagedAsync(
             request.Search, request.CategoryId, request.IsActive, request.IsDeleted,
             request.Page, request.PageSize, scope,
-            ParseProductType(request.ProductType));
+            ParseProductTypeFilter(request.ProductType));
 
         return new PagedResponse<ProductResponse>(
             items.Select(p => MapToResponse(p, scope)).ToList(),
@@ -322,8 +322,14 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
         v.BomLines.Where(b => !b.IsDeleted).Select(b => new BomLineResponse(
             b.MaterialId, b.Material?.Name ?? string.Empty, b.Quantity)).ToList());
 
-    private static ProductType ParseProductType(string? value) =>
-        Enum.TryParse<ProductType>(value, ignoreCase: true, out var result)
+    private static ProductType? ParseProductTypeFilter(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        return Enum.TryParse<ProductType>(value, ignoreCase: true, out var result)
             ? result
-            : ProductType.THANH_PHAM;
+            : null;
+    }
+
+    private static ProductType ParseProductType(string? value) =>
+        ParseProductTypeFilter(value) ?? ProductType.THANH_PHAM;
 }

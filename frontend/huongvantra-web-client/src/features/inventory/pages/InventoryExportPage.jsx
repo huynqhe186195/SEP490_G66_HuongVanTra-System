@@ -6,7 +6,7 @@ import { showError } from '../../../app/toast.js'
 import { formatStockQuantity } from '../../products/utils/productDisplay.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import { fetchStockExportSlips, getExportTypeLabel } from '../services/stockExportSlipApi.js'
-import { inventoryNavTabs } from '../utils/inventoryNavTabs.js'
+import InventoryNavTabs from '../components/InventoryNavTabs.jsx'
 
 function InventoryExportPage() {
   const location = useLocation()
@@ -47,23 +47,7 @@ function InventoryExportPage() {
         searchPlaceholder="Tìm mã phiếu, SKU..."
         searchValue={searchInput}
         onSearchChange={setSearchInput}
-        rightContent={
-          <div className="flex flex-wrap items-center gap-2">
-            {inventoryNavTabs.map((tab) => (
-              <Link
-                key={tab.to}
-                to={tab.to}
-                className={`rounded-xl px-4 py-2 text-sm font-semibold ${
-                  tab.to === '/inventory/export'
-                    ? 'bg-[#538463] text-white'
-                    : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-                }`}
-              >
-                {tab.label}
-              </Link>
-            ))}
-          </div>
-        }
+        rightContent={<InventoryNavTabs />}
       />
 
       <div className="grid flex-1 grid-cols-1 gap-6 lg:grid-cols-12">

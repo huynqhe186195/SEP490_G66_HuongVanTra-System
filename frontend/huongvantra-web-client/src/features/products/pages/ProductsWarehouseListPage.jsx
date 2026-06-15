@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AUTH_SESSION_CHANGED_EVENT, loadAuthSession } from '../../auth/services/authSession.js'
-import { Link } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
@@ -31,11 +31,32 @@ import {
   summarizeProductSkus,
   summarizeProductStock,
 } from '../utils/productDisplay.js'
+import { consumeProductListFocus, readHighlightProductIdFromUrl } from '../utils/productListFocus.js'
+
+function readInitialListState(locationState) {
+  const focus = consumeProductListFocus()
+  const highlightFromUrl = readHighlightProductIdFromUrl()
+  const focusId = highlightFromUrl || focus?.id || null
+  const searchName = focus?.name || locationState?.createdName || ''
+  return {
+    focusId,
+    searchName,
+    statusFilter: focus?.statusFilter || 'all',
+    showCreatedBanner: Boolean(focusId),
+    createdName: locationState?.createdName || focus?.name || '',
+  }
+}
 
 const TABLE_HEAD = 'px-4 py-3 text-left text-xs font-bold uppercase tracking-wide text-[#717971] sm:px-6'
 const TABLE_CELL = 'px-4 py-4 text-sm text-[#414942] sm:px-6'
 
 export default function ProductsWarehouseListPage() {
+  const location = useLocation()
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const [initialListState] = useState(() => readInitialListState(location.state))
+  const skipSearchDebounceRef = useRef(Boolean(initialListState.searchName))
+
   const [session, setSession] = useState(() => loadAuthSession())
   const canCreate = canCreateCatalog(session)
   const canHide = canHideCatalog(session)
@@ -52,10 +73,11 @@ export default function ProductsWarehouseListPage() {
 
   const [products, setProducts] = useState([])
   const [categories, setCategories] = useState([])
-  const [searchInput, setSearchInput] = useState('')
-  const [search, setSearch] = useState('')
+  const [searchInput, setSearchInput] = useState(() => initialListState.searchName)
+  const [search, setSearch] = useState(() => initialListState.searchName)
   const [categoryId, setCategoryId] = useState('')
-  const [statusFilter, setStatusFilter] = useState('all')
+  const [statusFilter, setStatusFilter] = useState(() => initialListState.statusFilter)
+  const [productTypeFilter, setProductTypeFilter] = useState('')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE)
   const [totalCount, setTotalCount] = useState(0)
@@ -65,8 +87,26 @@ export default function ProductsWarehouseListPage() {
   const [skuModalProduct, setSkuModalProduct] = useState(null)
   const [simulateWarehouse, setSimulateWarehouse] = useState(true)
   const [pendingSyncTotal, setPendingSyncTotal] = useState(0)
+  const [focusProductId, setFocusProductId] = useState(() => initialListState.focusId)
+  const [createdBanner, setCreatedBanner] = useState(() => ({
+    open: initialListState.showCreatedBanner,
+    productId: initialListState.focusId,
+    name: initialListState.createdName,
+  }))
 
   useEffect(() => {
+    const highlight = searchParams.get('highlight')
+    if (!highlight) return
+    navigate('/inventory/products', { replace: true, state: location.state })
+    // Strip ?highlight= from URL after bootstrap reads it once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    if (skipSearchDebounceRef.current) {
+      skipSearchDebounceRef.current = false
+      return undefined
+    }
     const timer = window.setTimeout(() => {
       setSearch(searchInput.trim())
       setPage(1)
@@ -101,6 +141,7 @@ export default function ProductsWarehouseListPage() {
           categoryId: categoryId ? Number(categoryId) : undefined,
           isActive: statusFilter === 'active' ? true : undefined,
           isDeleted: statusFilter === 'hidden' ? true : undefined,
+          productType: productTypeFilter || undefined,
           page,
           pageSize,
         }),
@@ -115,7 +156,7 @@ export default function ProductsWarehouseListPage() {
     } finally {
       setIsLoading(false)
     }
-  }, [search, categoryId, statusFilter, page, pageSize, loadStocks])
+  }, [search, categoryId, statusFilter, productTypeFilter, page, pageSize, loadStocks])
 
   const loadPendingSync = useCallback(async () => {
     if (!canSync) {
@@ -139,6 +180,14 @@ export default function ProductsWarehouseListPage() {
   useEffect(() => {
     loadProducts()
   }, [loadProducts])
+
+  useEffect(() => {
+    if (!createdBanner.open || !createdBanner.productId) return
+    const found = products.find((product) => String(product.id) === String(createdBanner.productId))
+    if (found?.name && found.name !== createdBanner.name) {
+      setCreatedBanner((prev) => ({ ...prev, name: found.name }))
+    }
+  }, [products, createdBanner.open, createdBanner.productId, createdBanner.name])
 
   useEffect(() => {
     const refreshStocks = () => loadStocks()
@@ -211,7 +260,7 @@ export default function ProductsWarehouseListPage() {
     <PageShell>
       <PageHeader
         title="Sản phẩm & số lượng"
-        description="Nhập lô tại Kho → cột Tồn kho tổng cập nhật theo lô đã nhập (cửa hàng nhận hàng sau khi đồng bộ)"
+        description="Master catalog kho — sản phẩm mới nhất hiển thị đầu tiên. Nhập lô tại Kho → cột Tồn kho tổng cập nhật theo lô đã nhập (cửa hàng nhận hàng sau khi đồng bộ)"
         searchPlaceholder="Tìm theo tên, xuất xứ, mô tả..."
         searchValue={searchInput}
         onSearchChange={setSearchInput}
@@ -278,6 +327,35 @@ export default function ProductsWarehouseListPage() {
 
       <InventorySimulationBanner simulateWarehouse={simulateWarehouse} warehouseView />
 
+      {createdBanner.open && createdBanner.productId ? (
+        <div className="flex flex-col gap-3 rounded-xl border border-[#356647]/30 bg-[#356647]/8 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="font-semibold text-[#1d3d2a]">
+              Đã lưu sản phẩm{createdBanner.name ? ` "${createdBanner.name}"` : ''} — đang hiển thị trong danh sách bên dưới.
+            </p>
+            <p className="mt-1 text-sm text-[#356647]">
+              Tiếp theo: thêm SKU để bán hàng và cập nhật tồn kho. Cửa hàng/POS chỉ thấy sau khi có SKU và được đồng bộ.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              to={`/products/${createdBanner.productId}/edit`}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-[#538463] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#457053]"
+            >
+              <span className="material-symbols-outlined text-[18px]">add</span>
+              Thêm SKU
+            </Link>
+            <button
+              type="button"
+              onClick={() => setCreatedBanner({ open: false, productId: null, name: '' })}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Đóng
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       <div className="flex flex-col gap-3 rounded-2xl border border-slate-100 bg-white p-3 shadow-sm sm:flex-row sm:items-center sm:gap-4 sm:p-4">
         <select
           className="min-h-[44px] w-full flex-[1.5] rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none focus:border-[#356647] focus:ring-2 focus:ring-[#356647]/20 sm:min-w-[260px] sm:text-base"
@@ -296,15 +374,28 @@ export default function ProductsWarehouseListPage() {
 
         <select
           className="min-h-[44px] w-full flex-1 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none focus:border-[#356647] focus:ring-2 focus:ring-[#356647]/20 sm:min-w-[220px] sm:text-base"
+          value={productTypeFilter}
+          onChange={(event) => {
+            setProductTypeFilter(event.target.value)
+            setPage(1)
+          }}
+        >
+          <option value="">Tất cả loại hàng</option>
+          <option value="THANH_PHAM">Thành phẩm</option>
+          <option value="NGUYEN_LIEU">Nguyên liệu</option>
+        </select>
+
+        <select
+          className="min-h-[44px] w-full flex-1 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none focus:border-[#356647] focus:ring-2 focus:ring-[#356647]/20 sm:min-w-[220px] sm:text-base"
           value={statusFilter}
           onChange={(event) => {
             setStatusFilter(event.target.value)
             setPage(1)
           }}
         >
-          <option value="all">Tất cả trạng thái</option>
+          <option value="all">Tất cả (gồm đã ẩn)</option>
           <option value="active">Đang bán</option>
-          <option value="hidden">Đã ẩn</option>
+          <option value="hidden">Chỉ đã ẩn</option>
         </select>
 
         <button
@@ -354,7 +445,17 @@ export default function ProductsWarehouseListPage() {
                   const variantCount = product.variants?.length ?? 0
                   const stockSummary = summarizeProductStock(product.skus, stockBySkuId, 'tồn kho tổng')
                   return (
-                    <tr key={product.id} className={product.isDeleted ? 'bg-slate-50/80 opacity-75' : undefined}>
+                    <tr
+                      key={product.id}
+                      className={[
+                        product.isDeleted ? 'bg-slate-50/80 opacity-75' : undefined,
+                        focusProductId && String(product.id) === focusProductId
+                          ? 'bg-[#356647]/8 ring-1 ring-inset ring-[#356647]/25'
+                          : undefined,
+                      ]
+                        .filter(Boolean)
+                        .join(' ') || undefined}
+                    >
                       <td className={TABLE_CELL}>
                         {imageUrl ? (
                           <a href={imageUrl} target="_blank" rel="noopener noreferrer" title={`Ảnh ${product.name}`}>
@@ -367,6 +468,11 @@ export default function ProductsWarehouseListPage() {
                       <td className={TABLE_CELL}>
                         <div className="flex flex-wrap items-center gap-2">
                           <p className="font-semibold text-slate-900">{product.name}</p>
+                          {product.productType === 'NGUYEN_LIEU' ? (
+                            <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-violet-800">
+                              Nguyên liệu
+                            </span>
+                          ) : null}
                           {!isSyncedToStore(product) ? (
                             <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-800">
                               Chưa đồng bộ CH

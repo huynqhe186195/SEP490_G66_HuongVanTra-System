@@ -50,8 +50,6 @@ public class StockAdjustmentRequestConfiguration : IEntityTypeConfiguration<Stoc
         builder.ToTable("StockAdjustmentRequests");
         builder.HasKey(e => e.Id);
         builder.Property(e => e.RequestCode).HasMaxLength(30).IsRequired();
-        builder.Property(e => e.SkuCode).HasMaxLength(50).IsRequired();
-        builder.Property(e => e.SkuSnapshotName).HasMaxLength(255).IsRequired();
         builder.Property(e => e.Reason).HasMaxLength(500);
         builder.Property(e => e.ReviewNote).HasMaxLength(500);
         builder.Property(e => e.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
@@ -59,6 +57,23 @@ public class StockAdjustmentRequestConfiguration : IEntityTypeConfiguration<Stoc
         builder.HasIndex(e => e.Status);
         builder.HasIndex(e => e.RequestedBy);
         builder.HasIndex(e => e.RequestedAt);
+        builder.HasMany(e => e.Items)
+            .WithOne(i => i.Request)
+            .HasForeignKey(i => i.RequestId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
+public class StockAdjustmentRequestItemConfiguration : IEntityTypeConfiguration<StockAdjustmentRequestItem>
+{
+    public void Configure(EntityTypeBuilder<StockAdjustmentRequestItem> builder)
+    {
+        builder.ToTable("StockAdjustmentRequestItems");
+        builder.HasKey(e => e.Id);
+        builder.Property(e => e.SkuCode).HasMaxLength(50).IsRequired();
+        builder.Property(e => e.SkuSnapshotName).HasMaxLength(255).IsRequired();
+        builder.HasIndex(e => e.RequestId);
+        builder.HasIndex(e => e.SkuId);
         builder.HasIndex(e => e.ExportSlipId);
         builder.HasOne(e => e.ExportSlip)
             .WithMany()

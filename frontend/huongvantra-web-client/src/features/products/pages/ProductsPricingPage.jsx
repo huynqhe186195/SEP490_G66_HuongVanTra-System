@@ -281,7 +281,7 @@ function ProductsPricingPage() {
         onSearchChange={setSearchInput}
         rightContent={
           <Link
-            to="/products"
+            to="/inventory/products"
             className="inline-flex items-center gap-2 rounded-xl border border-[#356647]/30 bg-white px-4 py-2.5 text-sm font-semibold text-[#356647] hover:bg-[#356647]/5"
           >
             <span className="material-symbols-outlined text-[18px]">inventory_2</span>
