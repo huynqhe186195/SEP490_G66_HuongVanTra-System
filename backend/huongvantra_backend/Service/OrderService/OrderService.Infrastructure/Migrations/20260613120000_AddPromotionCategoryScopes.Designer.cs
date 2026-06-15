@@ -9,8 +9,8 @@ using OrderService.Infrastructure.Data;
 namespace OrderService.Infrastructure.Migrations
 {
     [DbContext(typeof(OrderDbContext))]
-    [Migration("20260613110000_AddPromotionCustomerTierScopes")]
-    partial class AddPromotionCustomerTierScopes
+    [Migration("20260613120000_AddPromotionCategoryScopes")]
+    partial class AddPromotionCategoryScopes
     {
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {

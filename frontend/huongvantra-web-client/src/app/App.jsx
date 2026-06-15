@@ -6,6 +6,8 @@ import ForgotPasswordPage from '../features/auth/pages/ForgotPasswordPage.jsx'
 import LoginPage from '../features/auth/pages/LoginPage.jsx'
 import OtpVerificationPage from '../features/auth/pages/OtpVerificationPage.jsx'
 import ContractsPage from '../features/contracts/pages/ContractsPage.jsx'
+import ContractFormPage from '../features/contracts/pages/ContractFormPage.jsx'
+import ContractDetailPage from '../features/contracts/pages/ContractDetailPage.jsx'
 import CustomerFormPage from '../features/customers/pages/CustomerFormPage.jsx'
 import CustomerAddressesPage from '../features/customers/pages/CustomerAddressesPage.jsx'
 import CustomersPage from '../features/customers/pages/CustomersPage.jsx'
@@ -98,6 +100,9 @@ function App() {
         <Route path="/admin/roles" element={<Navigate to="/admin/phan-quyen?tab=vai-tro" replace />} />
         <Route path="/admin/permissions" element={<Navigate to="/admin/phan-quyen?tab=quyen" replace />} />
         <Route path="/contracts" element={<ContractsPage />} />
+        <Route path="/contracts/new" element={<ContractFormPage />} />
+        <Route path="/contracts/:id" element={<ContractDetailPage />} />
+        <Route path="/contracts/:id/edit" element={<ContractFormPage />} />
         <Route path="/reports" element={<ReportsOverviewPage />} />
         <Route path="/reports/customers" element={<ReportsCustomersPage />} />
         <Route path="/integrations" element={<IntegrationsPage />} />

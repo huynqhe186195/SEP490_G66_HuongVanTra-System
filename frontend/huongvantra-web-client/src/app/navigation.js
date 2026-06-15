@@ -9,7 +9,6 @@ const ROLE_GROUPS = {
 
 /** Tạm ẩn trên sidebar — bật lại khi backend sẵn sàng. */
 const SIDEBAR_DISABLED_MODULES = new Set([
-  'contracts',
   'reports',
   'integrations',
   'stock_deduct_ops',
@@ -46,6 +45,7 @@ export const navigationItems = [
     roles: ['admin', 'agencyManager'],
   },
   { label: 'Khách hàng', path: '/customers', module: 'customers', icon: 'groups', roles: ['admin', 'agencyManager', 'salesStaff', 'accountant'] },
+  { label: 'Hợp đồng', path: '/contracts', module: 'contracts', icon: 'description', roles: ['admin', 'agencyManager'] },
   { label: 'Hàng hóa', path: '/inventory/products', module: 'products', icon: 'inventory_2', roles: ['admin', 'agencyManager', 'inventoryManager'] },
   { label: 'Kho tổng', path: '/inventory', module: 'inventory', icon: 'warehouse', roles: ['inventoryManager'] },
   {

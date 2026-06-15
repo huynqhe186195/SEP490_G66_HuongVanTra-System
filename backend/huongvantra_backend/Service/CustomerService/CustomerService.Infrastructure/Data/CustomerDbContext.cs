@@ -14,7 +14,6 @@ public class CustomerDbContext : DbContext
     public DbSet<CustomerDebtTransaction> CustomerDebtTransactions => Set<CustomerDebtTransaction>();
     public DbSet<CustomerDebtAllocation> CustomerDebtAllocations => Set<CustomerDebtAllocation>();
     public DbSet<CustomerActivity> CustomerActivities => Set<CustomerActivity>();
-
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);

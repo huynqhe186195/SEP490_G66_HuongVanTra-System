@@ -42,7 +42,7 @@ public class ProductRepository(ProductDbContext _db) : IProductRepository
             query = query.Where(p => p.ProductType == productType.Value);
 
         if (scope == CatalogViewScope.Store)
-            query = query.Where(p => p.SyncedToStoreAt != null);
+            query = query.Where(p => p.SyncedToStoreAt != null || p.ProductType == ProductType.NGUYEN_LIEU);
 
         var totalCount = await query.CountAsync();
         var items = await query
@@ -60,7 +60,7 @@ public class ProductRepository(ProductDbContext _db) : IProductRepository
         var query = IncludeAggregate(_db.Products);
         if (!includeInactive) query = query.Where(p => p.IsActive);
         if (scope == CatalogViewScope.Store)
-            query = query.Where(p => p.SyncedToStoreAt != null);
+            query = query.Where(p => p.SyncedToStoreAt != null || p.ProductType == ProductType.NGUYEN_LIEU);
         return await query.OrderBy(p => p.Name).ToListAsync();
     }
 
@@ -118,10 +118,11 @@ public class ProductRepository(ProductDbContext _db) : IProductRepository
         return await query.AnyAsync();
     }
 
-    public async Task<bool> ExistsVariantSkuCodeAsync(string skuCode, Guid? excludeId = null)
+    public async Task<bool> ExistsVariantSkuCodeAsync(string skuCode, Guid? excludeVariantId = null, Guid? excludeProductId = null)
     {
         var query = _db.ProductVariants.Where(v => v.SkuCode == skuCode);
-        if (excludeId.HasValue) query = query.Where(v => v.Id != excludeId.Value);
+        if (excludeVariantId.HasValue) query = query.Where(v => v.Id != excludeVariantId.Value);
+        if (excludeProductId.HasValue) query = query.Where(v => v.ProductId != excludeProductId.Value);
         return await query.AnyAsync();
     }
 
