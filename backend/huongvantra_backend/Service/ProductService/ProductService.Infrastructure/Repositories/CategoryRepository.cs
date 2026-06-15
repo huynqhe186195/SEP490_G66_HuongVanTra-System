@@ -12,7 +12,9 @@ public class CategoryRepository(ProductDbContext _db) : ICategoryRepository
     {
         IQueryable<Category> query = isDeleted == true
             ? _db.Categories.IgnoreQueryFilters().Where(c => c.IsDeleted)
-            : _db.Categories.AsQueryable();
+            : scope == CatalogViewScope.Warehouse
+                ? _db.Categories.IgnoreQueryFilters()
+                : _db.Categories.AsQueryable();
 
         if (isDeleted == false)
             query = query.Where(c => !c.IsDeleted);

@@ -862,7 +862,7 @@ function ProductFormPage({ mode }) {
         showSuccess('Đã cập nhật sản phẩm.')
       } else {
         const created = await createProduct(payload)
-        setProductListFocus(created)
+        setProductListFocus(created, { showBanner: true })
         showSuccess(`Đã tạo "${created.name}". Xem trong danh sách bên dưới.`)
         navigate(`/inventory/products?highlight=${created.id}`, {
           replace: true,
@@ -913,9 +913,6 @@ function ProductFormPage({ mode }) {
             <Link
               className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
               to="/inventory/products"
-              onClick={() => {
-                if (id) setProductListFocus({ id, name: form.name })
-              }}
             >
               Quay lại
             </Link>
@@ -950,9 +947,7 @@ function ProductFormPage({ mode }) {
           </div>
 
           <div className="flex items-center gap-3">
-            <Link className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50" to="/inventory/products" onClick={() => {
-              if (id) setProductListFocus({ id, name: form.name })
-            }}>
+            <Link className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50" to="/inventory/products">
               Quay lại
             </Link>
             <button type="submit" disabled={isSaving} className="rounded-xl bg-[#538463] px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-[#457053] disabled:opacity-50">

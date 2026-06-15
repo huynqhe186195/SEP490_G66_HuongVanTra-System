@@ -36,7 +36,11 @@ public class OrderRepository(OrderDbContext _db) : IOrderRepository
             var s = search.Trim().ToLower();
             query = query.Where(o =>
                 o.OrderCode.ToLower().Contains(s) ||
-                (o.CustomerSnapshotName != null && o.CustomerSnapshotName.ToLower().Contains(s)));
+                (o.CustomerSnapshotName != null && o.CustomerSnapshotName.ToLower().Contains(s)) ||
+                (o.Note != null && o.Note.ToLower().Contains(s)) ||
+                o.OrderDetails.Any(d =>
+                    (d.SkuSnapshotCode != null && d.SkuSnapshotCode.ToLower().Contains(s)) ||
+                    d.SkuSnapshotName.ToLower().Contains(s)));
         }
 
         if (customerId.HasValue)

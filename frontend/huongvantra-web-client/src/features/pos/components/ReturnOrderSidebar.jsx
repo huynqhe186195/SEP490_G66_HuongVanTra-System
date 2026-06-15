@@ -44,6 +44,10 @@ export default function ReturnOrderSidebar({
   returnNetTotal,
   purchaseItemsTotal,
   purchaseDiscount,
+  membershipDiscountAmount = 0,
+  manualExchangeDiscountAmount = 0,
+  tierDiscountPercent = 0,
+  tierCode = '',
   purchaseNetTotal,
   customerOwes,
   amountPaid,
@@ -52,6 +56,11 @@ export default function ReturnOrderSidebar({
   onAmountPaidChange,
   refundTransactionRef,
   onRefundTransactionRefChange,
+  canUseVipManualAdjustments = false,
+  exchangeOrderDiscountPercent = 0,
+  usesFixedExchangeOrderDiscount = false,
+  onExchangeOrderDiscountPercentChange,
+  onOpenExchangeOfferModal,
   formatMoney,
   isSubmitting,
   canSubmit,
@@ -77,21 +86,27 @@ export default function ReturnOrderSidebar({
           <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-600">Trả hàng</h3>
           <dl className="space-y-1.5 text-sm">
             <div className="flex justify-between gap-2">
-              <dt className="text-slate-600">Tổng giá gốc hàng mua</dt>
-              <dd className="font-medium text-slate-800">{formatMoney(returnOriginalTotal)}</dd>
-            </div>
-            <div className="flex justify-between gap-2">
               <dt className="text-slate-600">Tổng tiền hàng trả</dt>
               <dd className="font-medium text-slate-800">{formatMoney(returnItemsTotal)}</dd>
             </div>
-            <div className="flex justify-between gap-2">
-              <dt className="text-slate-600">Giảm giá</dt>
-              <dd className="text-slate-800">{formatMoney(returnDiscount)}</dd>
-            </div>
-            <div className="flex justify-between gap-2">
-              <dt className="text-slate-600">Phí trả hàng</dt>
-              <dd className="text-slate-800">{formatMoney(returnFee)}</dd>
-            </div>
+            {returnDiscount > 0 ? (
+              <div className="flex justify-between gap-2 text-xs text-slate-500">
+                <dt>Giá niêm yết trước giảm</dt>
+                <dd>{formatMoney(returnOriginalTotal)}</dd>
+              </div>
+            ) : null}
+            {returnDiscount > 0 ? (
+              <div className="flex justify-between gap-2">
+                <dt className="text-slate-600">Giảm giá / CK đã áp</dt>
+                <dd className="text-slate-800">−{formatMoney(returnDiscount)}</dd>
+              </div>
+            ) : null}
+            {returnFee > 0 ? (
+              <div className="flex justify-between gap-2">
+                <dt className="text-slate-600">Phí trả hàng</dt>
+                <dd className="text-slate-800">{formatMoney(returnFee)}</dd>
+              </div>
+            ) : null}
             <div className="flex justify-between gap-2 border-t border-slate-100 pt-1.5 font-semibold">
               <dt className="text-slate-700">Tổng tiền trả</dt>
               <dd className="text-slate-900">{formatMoney(returnNetTotal)}</dd>
@@ -101,15 +116,67 @@ export default function ReturnOrderSidebar({
 
         <section className="mb-4">
           <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-600">Mua hàng</h3>
+          {canUseVipManualAdjustments && purchaseItemsTotal > 0 ? (
+            <div className="mb-3 rounded-lg border border-[#356647]/25 bg-[#356647]/5 p-3">
+              <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[#356647]">
+                Chiết khấu đơn (VIP)
+              </label>
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    disabled={usesFixedExchangeOrderDiscount}
+                    className="w-full rounded-lg border border-slate-300 py-2 pl-3 pr-7 text-sm outline-none focus:border-[#356647] disabled:bg-slate-50 disabled:text-slate-400"
+                    value={usesFixedExchangeOrderDiscount ? '' : exchangeOrderDiscountPercent || ''}
+                    onChange={(event) => onExchangeOrderDiscountPercentChange(event.target.value)}
+                    placeholder={usesFixedExchangeOrderDiscount ? '—' : '0'}
+                  />
+                  <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-slate-500">%</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={onOpenExchangeOfferModal}
+                  className="shrink-0 rounded-lg border border-[#356647]/40 px-3 py-2 text-xs font-semibold text-[#356647] hover:bg-[#356647]/10"
+                >
+                  Tùy chỉnh
+                </button>
+              </div>
+              {usesFixedExchangeOrderDiscount ? (
+                <p className="mt-2 text-xs font-semibold text-[#356647]">
+                  CK cố định: −{formatMoney(manualExchangeDiscountAmount)} đ
+                </p>
+              ) : null}
+            </div>
+          ) : null}
           <dl className="space-y-1.5 text-sm">
             <div className="flex justify-between gap-2">
               <dt className="text-slate-600">Tổng tiền hàng</dt>
               <dd className="font-medium text-slate-800">{formatMoney(purchaseItemsTotal)}</dd>
             </div>
-            <div className="flex justify-between gap-2">
-              <dt className="text-slate-600">Giảm giá</dt>
-              <dd className="text-slate-800">{formatMoney(purchaseDiscount)}</dd>
-            </div>
+            {membershipDiscountAmount > 0 ? (
+              <div className="flex justify-between gap-2">
+                <dt className="text-slate-600">
+                  CK hạng {tierCode || 'thành viên'} ({tierDiscountPercent}%)
+                </dt>
+                <dd className="text-slate-800">−{formatMoney(membershipDiscountAmount)}</dd>
+              </div>
+            ) : null}
+            {manualExchangeDiscountAmount > 0 ? (
+              <div className="flex justify-between gap-2">
+                <dt className="text-slate-600">CK VIP (thủ công)</dt>
+                <dd className="text-slate-800">−{formatMoney(manualExchangeDiscountAmount)}</dd>
+              </div>
+            ) : null}
+            {purchaseDiscount > membershipDiscountAmount + manualExchangeDiscountAmount ? (
+              <div className="flex justify-between gap-2">
+                <dt className="text-slate-600">Giảm giá khác</dt>
+                <dd className="text-slate-800">
+                  −{formatMoney(purchaseDiscount - membershipDiscountAmount - manualExchangeDiscountAmount)}
+                </dd>
+              </div>
+            ) : null}
             <div className="flex justify-between gap-2 border-t border-slate-100 pt-1.5 font-semibold">
               <dt className="text-slate-700">Tổng tiền mua</dt>
               <dd className="text-slate-900">{formatMoney(purchaseNetTotal)}</dd>

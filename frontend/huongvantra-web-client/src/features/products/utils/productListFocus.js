@@ -11,6 +11,7 @@ export function setProductListFocus(product, options = {}) {
         id: id || null,
         name,
         statusFilter: options.statusFilter || 'all',
+        showBanner: Boolean(options.showBanner),
       }),
     )
   } catch {
@@ -38,6 +39,7 @@ export function consumeProductListFocus() {
       id: parsed.id ? String(parsed.id) : null,
       name: String(parsed.name || '').trim(),
       statusFilter: parsed.statusFilter || 'all',
+      showBanner: Boolean(parsed.showBanner),
     }
   } catch {
     sessionStorage.removeItem(STORAGE_KEY)

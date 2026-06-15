@@ -34,16 +34,13 @@ import {
 import { consumeProductListFocus, readHighlightProductIdFromUrl } from '../utils/productListFocus.js'
 
 function readInitialListState(locationState) {
-  const focus = consumeProductListFocus()
   const highlightFromUrl = readHighlightProductIdFromUrl()
-  const focusId = highlightFromUrl || focus?.id || null
-  const searchName = focus?.name || locationState?.createdName || ''
   return {
-    focusId,
-    searchName,
-    statusFilter: focus?.statusFilter || 'all',
-    showCreatedBanner: Boolean(focusId),
-    createdName: locationState?.createdName || focus?.name || '',
+    focusId: highlightFromUrl || null,
+    searchName: locationState?.createdName || '',
+    statusFilter: 'all',
+    showCreatedBanner: Boolean(highlightFromUrl),
+    createdName: locationState?.createdName || '',
   }
 }
 
@@ -101,6 +98,29 @@ export default function ProductsWarehouseListPage() {
     // Strip ?highlight= from URL after bootstrap reads it once.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  useEffect(() => {
+    const focus = consumeProductListFocus()
+    if (!focus?.id) return undefined
+
+    setFocusProductId(focus.id)
+    if (focus.showBanner) {
+      setCreatedBanner({ open: true, productId: focus.id, name: focus.name || '' })
+    }
+    if (focus.statusFilter) {
+      setStatusFilter(focus.statusFilter)
+    }
+
+    const scrollTimer = window.setTimeout(() => {
+      document.getElementById(`product-row-${focus.id}`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    }, 120)
+    const clearTimer = window.setTimeout(() => setFocusProductId(null), 4500)
+
+    return () => {
+      window.clearTimeout(scrollTimer)
+      window.clearTimeout(clearTimer)
+    }
+  }, [location.key])
 
   useEffect(() => {
     if (skipSearchDebounceRef.current) {
@@ -447,6 +467,7 @@ export default function ProductsWarehouseListPage() {
                   return (
                     <tr
                       key={product.id}
+                      id={`product-row-${product.id}`}
                       className={[
                         product.isDeleted ? 'bg-slate-50/80 opacity-75' : undefined,
                         focusProductId && String(product.id) === focusProductId

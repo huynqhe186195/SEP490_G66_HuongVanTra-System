@@ -56,7 +56,8 @@ function ProductsCategoriesPage() {
     try {
       setIsLoading(true)
       const items = await fetchCategories({
-        isDeleted: statusFilter === 'hidden' ? true : undefined,
+        isDeleted:
+          statusFilter === 'hidden' ? true : statusFilter === 'active' ? false : undefined,
       })
       setCategories(items)
     } catch (error) {
@@ -88,8 +89,7 @@ function ProductsCategoriesPage() {
   const visibleCategories = useMemo(() => {
     return categories.filter((item) => {
       if (statusFilter === 'hidden') return item.isDeleted
-      if (item.isDeleted) return false
-      if (statusFilter === 'active' && item.isActive === false) return false
+      if (statusFilter === 'active') return !item.isDeleted && item.isActive !== false
       return true
     })
   }, [categories, statusFilter])

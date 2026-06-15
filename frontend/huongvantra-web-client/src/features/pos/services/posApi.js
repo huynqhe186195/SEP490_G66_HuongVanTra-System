@@ -747,19 +747,28 @@ export async function fetchPosProducts({ storeId, search, limit = 30 }) {
     .map((sku) => {
       const parentProductId = sku.productId ?? sku.ProductId
       const product = productById.get(parentProductId)
-      if (!product) return null
+      const skuId = sku.id ?? sku.Id
+      const skuCode = sku.skuCode ?? sku.SkuCode ?? ''
+      const productName =
+        sku.productName
+        ?? sku.ProductName
+        ?? product?.name
+        ?? product?.Name
+        ?? ''
+      if (!skuId || (!productName && !skuCode)) return null
+
       return mapPosProduct({
-      productId: sku.id ?? sku.Id,
-      sku: sku.skuCode ?? sku.SkuCode,
-      productName: sku.productName ?? sku.ProductName ?? product?.name ?? product?.Name ?? '',
-      packagingType: sku.packagingType ?? sku.PackagingType ?? '',
-      price: sku.basePrice ?? sku.BasePrice,
-      stockQuantity: stockBySkuId.get(sku.id ?? sku.Id) ?? 0,
-      imageUrl: sku.imageUrl ?? sku.ImageUrl ?? '',
-      categoryId: sku.categoryId ?? sku.CategoryId ?? product?.categoryId ?? product?.CategoryId ?? null,
-      categoryName: sku.categoryName ?? sku.CategoryName ?? product?.categoryName ?? product?.CategoryName ?? '',
-      costPrice: sku.costPrice ?? sku.CostPrice ?? 0,
-    })
+        productId: skuId,
+        sku: skuCode,
+        productName,
+        packagingType: sku.packagingType ?? sku.PackagingType ?? '',
+        price: sku.basePrice ?? sku.BasePrice ?? sku.retailPrice ?? sku.RetailPrice,
+        stockQuantity: stockBySkuId.get(skuId) ?? 0,
+        imageUrl: sku.imageUrl ?? sku.ImageUrl ?? product?.imageUrl ?? product?.ImageUrl ?? '',
+        categoryId: sku.categoryId ?? sku.CategoryId ?? product?.categoryId ?? product?.CategoryId ?? null,
+        categoryName: sku.categoryName ?? sku.CategoryName ?? product?.categoryName ?? product?.CategoryName ?? '',
+        costPrice: sku.costPrice ?? sku.CostPrice ?? 0,
+      })
     })
     .filter(Boolean)
 }
