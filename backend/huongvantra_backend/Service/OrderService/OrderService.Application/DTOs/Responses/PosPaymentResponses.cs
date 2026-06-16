@@ -1,5 +1,7 @@
 namespace OrderService.Application.DTOs.Responses;
 
+using System.Text.Json.Serialization;
+
 public record TransferPaymentInfoResponse(
     string BankCode,
     string BankBin,
@@ -49,17 +51,17 @@ public record PosOrderPaymentStatusResponse(
     decimal ExpectedAmount);
 
 public record SepayWebhookPayload(
-    long Id,
-    string? Gateway,
-    string? TransactionDate,
-    string? AccountNumber,
-    string? SubAccount,
-    string? Code,
-    string? Content,
-    string? TransferType,
-    string? Description,
-    long TransferAmount,
-    long Accumulated,
-    string? ReferenceCode);
+    [property: JsonPropertyName("id")] long Id,
+    [property: JsonPropertyName("gateway")] string? Gateway,
+    [property: JsonPropertyName("transactionDate")] string? TransactionDate,
+    [property: JsonPropertyName("accountNumber")] string? AccountNumber,
+    [property: JsonPropertyName("subAccount")] string? SubAccount,
+    [property: JsonPropertyName("code")] string? Code,
+    [property: JsonPropertyName("content")] string? Content,
+    [property: JsonPropertyName("transferType")] string? TransferType,
+    [property: JsonPropertyName("description")] string? Description,
+    [property: JsonPropertyName("transferAmount")] long TransferAmount,
+    [property: JsonPropertyName("accumulated")] long Accumulated,
+    [property: JsonPropertyName("referenceCode")] string? ReferenceCode);
 
 public record SimulateSepayWebhookRequest(string OrderCode, decimal Amount);

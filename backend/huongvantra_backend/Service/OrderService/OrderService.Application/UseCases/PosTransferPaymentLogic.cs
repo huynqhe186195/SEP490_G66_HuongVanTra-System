@@ -251,7 +251,10 @@ public class PosTransferPaymentLogic(
         }
 
         if (!string.Equals(payload.TransferType, "in", StringComparison.OrdinalIgnoreCase))
+        {
+            logger.LogInformation("SePay webhook skipped: transferType={TransferType} (not 'in').", payload.TransferType);
             return;
+        }
 
         if (_sepay.ValidateAccountNumber
             && !string.IsNullOrWhiteSpace(_sepay.AccountNumber)
@@ -313,14 +316,27 @@ public class PosTransferPaymentLogic(
 
         var expectedAmount = (long)Math.Round(GetTransferQrAmount(order, payment), MidpointRounding.AwayFromZero);
         var tolerance = Math.Max(0, _sepay.AmountToleranceVnd);
-        if (Math.Abs(receivedAmount - expectedAmount) > tolerance)
+
+        // Từ chối nếu chuyển thừa quá tolerance (có thể nhầm đơn) hoặc chuyển 0/âm
+        if (receivedAmount <= 0 || receivedAmount > expectedAmount + tolerance)
         {
             logger.LogWarning(
-                "SePay webhook ignored: amount mismatch for {OrderCode}. Expected {Expected}, got {Received}.",
+                "SePay webhook ignored: amount out of range for {OrderCode}. Expected {Expected}, got {Received}.",
                 orderCode,
                 expectedAmount,
                 receivedAmount);
             return;
+        }
+
+        // Cho phép chuyển thiếu — phần còn lại sẽ tính vào công nợ khách hàng
+        if (receivedAmount < expectedAmount - tolerance)
+        {
+            logger.LogInformation(
+                "SePay webhook partial payment for {OrderCode}. Expected {Expected}, received {Received}. Debt: {Debt}.",
+                orderCode,
+                expectedAmount,
+                receivedAmount,
+                expectedAmount - receivedAmount);
         }
 
         payment.TransactionRef = payload.ReferenceCode ?? payload.Id.ToString(CultureInfo.InvariantCulture);
@@ -329,6 +345,7 @@ public class PosTransferPaymentLogic(
             order.Id,
             new OrderAccessContext(Guid.Empty, CanViewAllOrders: true),
             actorName: "SePay Webhook",
+            actualReceivedAmount: (decimal)receivedAmount,
             ct: ct);
         logger.LogInformation("SePay webhook completed order {OrderCode}.", orderCode);
     }
