@@ -1,10 +1,21 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import PageHeader from "../../../components/shared/PageHeader.jsx";
 import EndOfDayReportModal from "../components/EndOfDayReportModal.jsx";
 import { dashboardApi } from "../services/dashboardApi.js";
 import { loadAuthSession } from '../../auth/services/authSession.js'
+import { getDashboardSectionFromSearch, getDashboardSectionLabel } from '../../../app/dashboardSections.js'
+
+const VALID_SECTIONS = new Set(['overview', 'top-products', 'by-category']);
 
 function DashboardPage() {
+    const [searchParams] = useSearchParams();
+    const activeSection = useMemo(() => {
+        const section = getDashboardSectionFromSearch(`?${searchParams.toString()}`);
+        return VALID_SECTIONS.has(section) ? section : 'overview';
+    }, [searchParams]);
+    const sectionLabel = getDashboardSectionLabel(activeSection);
+
     const session = loadAuthSession();
     const roles = (session?.roles || []).map(r => String(r || '').toLowerCase().trim());
     const isAdmin = roles.includes('admin') || roles.includes('agencymanager') || roles.includes('agency manager');
@@ -69,34 +80,50 @@ function DashboardPage() {
 
     return (
         <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 sm:gap-6">
-            <PageHeader title="Thống kê bán hàng" description="Tổng quan hoạt động cửa hàng, doanh thu và chỉ số vận hành quan trọng." searchPlaceholder="Tìm kiếm..." />
+            <PageHeader
+                title="Thống kê bán hàng"
+                description={`${sectionLabel} — tổng quan hoạt động cửa hàng, doanh thu và chỉ số vận hành.`}
+                searchPlaceholder="Tìm kiếm..."
+            />
 
-            <div className="flex items-center gap-4 bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
-                <select value={filterPeriod} onChange={e => setFilterPeriod(e.target.value)} className="rounded-lg border-gray-200 text-sm">
-                    <option value="month">Theo Tháng</option>
-                    <option value="quarter">Theo Quý</option>
-                    <option value="year">Theo Năm</option>
-                </select>
+            <div className="flex flex-wrap items-center gap-3 bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
+                <label className="flex flex-col gap-1">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#717971]">Kỳ báo cáo</span>
+                    <select value={filterPeriod} onChange={e => setFilterPeriod(e.target.value)} className="rounded-lg border-gray-200 text-sm">
+                        <option value="month">Theo Tháng</option>
+                        <option value="quarter">Theo Quý</option>
+                        <option value="year">Theo Năm</option>
+                    </select>
+                </label>
 
                 {filterPeriod === 'month' && (
-                    <select value={filterMonth} onChange={e => setFilterMonth(Number(e.target.value))} className="rounded-lg border-gray-200 text-sm">
-                        {Array.from({length: 12}).map((_, i) => <option key={i+1} value={i+1}>Tháng {i+1}</option>)}
-                    </select>
+                    <label className="flex flex-col gap-1">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-[#717971]">Tháng</span>
+                        <select value={filterMonth} onChange={e => setFilterMonth(Number(e.target.value))} className="rounded-lg border-gray-200 text-sm">
+                            {Array.from({length: 12}).map((_, i) => <option key={i+1} value={i+1}>Tháng {i+1}</option>)}
+                        </select>
+                    </label>
                 )}
 
                 {filterPeriod === 'quarter' && (
-                    <select value={filterQuarter} onChange={e => setFilterQuarter(Number(e.target.value))} className="rounded-lg border-gray-200 text-sm">
-                        <option value={1}>Quý 1</option>
-                        <option value={2}>Quý 2</option>
-                        <option value={3}>Quý 3</option>
-                        <option value={4}>Quý 4</option>
-                    </select>
+                    <label className="flex flex-col gap-1">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-[#717971]">Quý</span>
+                        <select value={filterQuarter} onChange={e => setFilterQuarter(Number(e.target.value))} className="rounded-lg border-gray-200 text-sm">
+                            <option value={1}>Quý 1</option>
+                            <option value={2}>Quý 2</option>
+                            <option value={3}>Quý 3</option>
+                            <option value={4}>Quý 4</option>
+                        </select>
+                    </label>
                 )}
 
-                <select value={filterYear} onChange={e => setFilterYear(Number(e.target.value))} className="rounded-lg border-gray-200 text-sm">
-                    <option value={2026}>2026</option>
-                    <option value={2025}>2025</option>
-                </select>
+                <label className="flex flex-col gap-1">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#717971]">Năm</span>
+                    <select value={filterYear} onChange={e => setFilterYear(Number(e.target.value))} className="rounded-lg border-gray-200 text-sm">
+                        <option value={2026}>2026</option>
+                        <option value={2025}>2025</option>
+                    </select>
+                </label>
 
                 <div className="ml-auto">
                     <button
@@ -118,6 +145,7 @@ function DashboardPage() {
             : error ?
                 <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-red-600">{error}</div>
             :   <div className="flex flex-col gap-6">
+                    {activeSection === 'overview' ? (
                     <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
                         {/* line 1 */}
                         <MetricCard title="Số đơn bán ra" value={stats?.totalCompletedOrders || 0} icon="receipt_long" colorClass="text-purple-600" bgClass="bg-purple-50" />
@@ -176,10 +204,10 @@ function DashboardPage() {
                             />
                         )}
                     </div>
+                    ) : null}
 
-                    <div className="grid gap-6 lg:grid-cols-2">
-                        {/* Top 5 Sản phẩm */}
-                        {topProducts && topProducts.length > 0 && (
+                    {activeSection === 'top-products' ? (
+                        topProducts && topProducts.length > 0 ? (
                             <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm sm:p-6">
                                 <h3 className="mb-4 text-lg font-bold text-gray-800">Top 5 sản phẩm bán chạy</h3>
                                 <div className="overflow-x-auto">
@@ -210,10 +238,15 @@ function DashboardPage() {
                                     </table>
                                 </div>
                             </div>
-                        )}
+                        ) : (
+                            <div className="rounded-2xl border border-dashed border-gray-200 bg-white p-8 text-center text-sm text-gray-500">
+                                Chưa có dữ liệu top sản phẩm trong kỳ đã chọn.
+                            </div>
+                        )
+                    ) : null}
 
-                        {/* Doanh thu theo Danh mục */}
-                        {categorySales && categorySales.length > 0 && (
+                    {activeSection === 'by-category' ? (
+                        categorySales && categorySales.length > 0 ? (
                             <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm sm:p-6">
                                 <h3 className="mb-4 text-lg font-bold text-gray-800">Báo cáo theo danh mục</h3>
                                 <div className="overflow-x-auto">
@@ -242,8 +275,12 @@ function DashboardPage() {
                                     </table>
                                 </div>
                             </div>
-                        )}
-                    </div>
+                        ) : (
+                            <div className="rounded-2xl border border-dashed border-gray-200 bg-white p-8 text-center text-sm text-gray-500">
+                                Chưa có dữ liệu theo danh mục trong kỳ đã chọn.
+                            </div>
+                        )
+                    ) : null}
                 </div>
             }
         </div>

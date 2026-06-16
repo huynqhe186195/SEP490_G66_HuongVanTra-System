@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { logout as logoutApi } from '../../features/auth/services/authApi.js'
 import {
@@ -6,9 +6,12 @@ import {
   formatDisplayName,
   loadAuthSession,
 } from '../../features/auth/services/authSession.js'
-import { canAccessModule, isNavigationItemActive } from '../../app/navigation.js'
+import {
+  canAccessModule,
+  isNavigationChildActive,
+  isNavigationItemActive,
+} from '../../app/navigation.js'
 import { showError } from '../../app/toast'
-
 function Sidebar({
   items,
   isLoading = false,
@@ -20,11 +23,22 @@ function Sidebar({
   const navigate = useNavigate()
   const location = useLocation()
   const [isLoggingOut, setIsLoggingOut] = useState(false)
+  const [expandedPaths, setExpandedPaths] = useState({})
+  const [openFlyoutPath, setOpenFlyoutPath] = useState(null)
 
   const authSession = loadAuthSession()
   const userLabel = formatDisplayName(authSession?.username) || 'Quản trị'
   const isCompact = collapsed
 
+  useEffect(() => {
+    setOpenFlyoutPath(null)
+    items.forEach((item) => {
+      if (!item.children?.length) return
+      if (isNavigationItemActive(location.pathname, item, location.search)) {
+        setExpandedPaths((current) => ({ ...current, [item.path]: true }))
+      }
+    })
+  }, [items, location.pathname, location.search])
   const handleLogout = async () => {
     if (!authSession) {
       clearAuthSession()
@@ -71,6 +85,18 @@ function Sidebar({
     }
     closeMobileNav()
   }
+
+  const toggleExpanded = (path) => {
+    setExpandedPaths((current) => ({ ...current, [path]: !current[path] }))
+  }
+
+  const childNavClass = (active) =>
+    [
+      'group flex items-center gap-2 rounded-2xl px-3 py-2.5 text-sm transition-all duration-200',
+      active
+        ? 'bg-[#A7C49E] font-semibold text-[#538463] shadow-md'
+        : 'text-white/80 hover:bg-white/10 hover:text-white',
+    ].join(' ')
 
   return (
     <aside
@@ -153,6 +179,133 @@ function Sidebar({
         {items.map((item) => {
           const itemActive = isNavigationItemActive(location.pathname, item, location.search)
           const iconName = item.icon || 'circle'
+
+          if (item.children?.length) {
+            const isExpanded = Boolean(expandedPaths[item.path])
+            const flyoutOpen = openFlyoutPath === item.path
+            const hasActiveChild = item.children.some((child) =>
+              isNavigationChildActive(location.pathname, location.search, child),
+            )
+            const parentHighlighted = itemActive && !hasActiveChild
+
+            if (isCompact) {
+              return (
+                <div key={item.path} className="relative">
+                  <button
+                    type="button"
+                    title={item.label}
+                    onClick={() => {
+                      if (!canAccessModule(loadAuthSession(), item.module)) {
+                        showError('Bạn không có quyền truy cập tab này.')
+                        return
+                      }
+                      setOpenFlyoutPath(flyoutOpen ? null : item.path)
+                    }}
+                    className={navLinkClass(parentHighlighted)}
+                  >
+                    <span
+                      className={`material-symbols-outlined text-[22px] leading-none ${
+                        parentHighlighted ? 'text-[#538463]' : 'text-white/90'
+                      }`}
+                    >
+                      {iconName}
+                    </span>
+                  </button>
+
+                  {flyoutOpen ? (
+                    <div className="absolute left-[calc(100%+0.5rem)] top-0 z-[70] min-w-[15rem] rounded-2xl border border-white/10 bg-[#538463] p-2 shadow-2xl">
+                      <p className="px-3 py-2 text-xs font-bold uppercase tracking-wide text-white/60">
+                        {item.label}
+                      </p>
+                      {item.children.map((child) => {
+                        const childActive = isNavigationChildActive(
+                          location.pathname,
+                          location.search,
+                          child,
+                        )
+                        return (
+                          <NavLink
+                            key={child.path}
+                            to={child.path}
+                            onClick={(event) => {
+                              handleNavClick(event, item.module)
+                              setOpenFlyoutPath(null)
+                            }}
+                            className={childNavClass(childActive)}
+                          >
+                            <span
+                              className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                                childActive ? 'bg-[#538463]' : 'bg-white/30 group-hover:bg-white/60'
+                              }`}
+                            />
+                            <span className="truncate">{child.label}</span>
+                          </NavLink>
+                        )
+                      })}
+                    </div>
+                  ) : null}
+                </div>
+              )
+            }
+
+            return (
+              <div key={item.path} className="space-y-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!canAccessModule(loadAuthSession(), item.module)) {
+                      showError('Bạn không có quyền truy cập tab này.')
+                      return
+                    }
+                    toggleExpanded(item.path)
+                  }}
+                  className={`${navLinkClass(parentHighlighted)} w-full text-left`}
+                  aria-expanded={isExpanded}
+                >
+                  <span
+                    className={`h-2 w-2 shrink-0 rounded-full ${
+                      parentHighlighted ? 'bg-[#538463]' : 'bg-white/30 group-hover:bg-white/60'
+                    }`}
+                  />
+                  <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                  <span
+                    className={`material-symbols-outlined shrink-0 text-[20px] transition-transform duration-200 ${
+                      isExpanded ? 'rotate-180' : ''
+                    } ${parentHighlighted ? 'text-[#538463]' : 'text-white/80'}`}
+                  >
+                    expand_more
+                  </span>
+                </button>
+
+                {isExpanded ? (
+                  <div className="ml-3 space-y-1 border-l border-white/15 pl-3">
+                    {item.children.map((child) => {
+                      const childActive = isNavigationChildActive(
+                        location.pathname,
+                        location.search,
+                        child,
+                      )
+                      return (
+                        <NavLink
+                          key={child.path}
+                          to={child.path}
+                          onClick={(event) => handleNavClick(event, item.module)}
+                          className={childNavClass(childActive)}
+                        >
+                          <span
+                            className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                              childActive ? 'bg-[#538463]' : 'bg-white/30 group-hover:bg-white/60'
+                            }`}
+                          />
+                          <span className="truncate">{child.label}</span>
+                        </NavLink>
+                      )
+                    })}
+                  </div>
+                ) : null}
+              </div>
+            )
+          }
 
           return (
             <NavLink

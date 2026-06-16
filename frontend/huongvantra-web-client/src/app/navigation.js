@@ -1,3 +1,6 @@
+import { buildDashboardPath, DASHBOARD_SECTIONS, getDashboardSectionFromSearch } from './dashboardSections.js'
+import { buildCustomerPath, CUSTOMER_SIDEBAR_SECTIONS, getCustomerSectionFromSearch } from './customerSections.js'
+
 const ROLE_GROUPS = {
   admin: ['admin'],
   agencyManager: ['agency manager', 'agencymanager', 'am', 'owner', 'chu co so', 'chủ cơ sở', 'branch manager', 'manager'],
@@ -44,7 +47,19 @@ export const navigationItems = [
     icon: 'inventory_2',
     roles: ['admin', 'agencyManager'],
   },
-  { label: 'Khách hàng', path: '/customers', module: 'customers', icon: 'groups', roles: ['admin', 'agencyManager', 'salesStaff', 'accountant'] },
+  {
+    label: 'Khách hàng',
+    path: '/customers',
+    module: 'customers',
+    icon: 'groups',
+    roles: ['admin', 'agencyManager', 'salesStaff', 'accountant'],
+    children: CUSTOMER_SIDEBAR_SECTIONS.map((section) => ({
+      label: section.label,
+      path: buildCustomerPath(section.key),
+      section: section.key,
+      sectionScope: 'customers',
+    })),
+  },
   { label: 'Hợp đồng', path: '/contracts', module: 'contracts', icon: 'description', roles: ['admin', 'agencyManager'] },
   { label: 'Hàng hóa', path: '/inventory/products', module: 'products', icon: 'inventory_2', roles: ['admin', 'agencyManager', 'inventoryManager'] },
   { label: 'Kho tổng', path: '/inventory', module: 'inventory', icon: 'warehouse', roles: ['inventoryManager'] },
@@ -70,7 +85,19 @@ export const navigationItems = [
     icon: 'sell',
     roles: ['admin'],
   },
-  { label: 'Thống kê bán hàng', path: '/dashboard', module: 'dashboard', icon: 'dashboard', roles: ['admin', 'agencyManager', 'accountant', 'salesStaff', 'inventoryManager'] },
+  {
+    label: 'Thống kê bán hàng',
+    path: '/dashboard',
+    module: 'dashboard',
+    icon: 'dashboard',
+    roles: ['admin', 'agencyManager', 'accountant', 'salesStaff', 'inventoryManager'],
+    children: DASHBOARD_SECTIONS.map((section) => ({
+      label: section.label,
+      path: buildDashboardPath(section.key),
+      section: section.key,
+      sectionScope: 'dashboard',
+    })),
+  },
   {
     label: 'Tài khoản',
     path: '/admin/users',
@@ -416,5 +443,32 @@ export function isNavigationItemActive(pathname, item, search = '') {
     return path === target || path.startsWith(`${target}/`)
   }
 
+  if (item.module === 'dashboard') {
+    return path === target || path.startsWith(`${target}/`)
+  }
+
   return path === target || path.startsWith(`${target}/`)
+}
+
+export function isNavigationChildActive(pathname, search, child) {
+  if (!child?.section) {
+    return false
+  }
+
+  const path = (pathname || '').toLowerCase()
+  const scope = child.sectionScope || 'dashboard'
+
+  if (scope === 'customers') {
+    if (path !== '/customers') {
+      return false
+    }
+
+    return getCustomerSectionFromSearch(search) === child.section
+  }
+
+  if (path !== '/dashboard') {
+    return false
+  }
+
+  return getDashboardSectionFromSearch(search) === child.section
 }

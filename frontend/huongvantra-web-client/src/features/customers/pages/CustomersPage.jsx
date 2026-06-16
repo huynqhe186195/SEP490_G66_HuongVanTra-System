@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useAuthSession } from '../../auth/hooks/useAuthSession.js'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
+import { getCustomerSectionFromSearch, getCustomerSectionLabel } from '../../../app/customerSections.js'
 import { canCreateCustomer, canDeleteCustomer, canEditCustomer, canManageCorporateCustomers, canViewAllCustomers, isAssignedCustomerViewer } from '../../auth/utils/permissions.js'
 import CustomerActivityFeed from '../components/CustomerActivityFeed.jsx'
 import CustomersTableShell from '../components/CustomersTableShell.jsx'
@@ -21,10 +22,11 @@ import {
   getTierClass,
   customerTypeLabelFromType,
   getMembershipTierLabel,
-  CUSTOMER_LIST_TABS,
   CUSTOMER_CORPORATE_ENABLED,
   isCorporateCustomerType,
 } from '../utils/customerDisplay.js'
+
+const VALID_CUSTOMER_SECTIONS = new Set(['general', 'vip'])
 
 const corporateIcons = ['corporate_fare', 'business', 'domain', 'factory']
 const corporateIconClasses = [
@@ -60,6 +62,12 @@ const growthBars = [
 
 function CustomersPage() {
   const session = useAuthSession()
+  const [searchParams] = useSearchParams()
+  const activeTab = useMemo(() => {
+    const section = getCustomerSectionFromSearch(`?${searchParams.toString()}`)
+    return VALID_CUSTOMER_SECTIONS.has(section) ? section : 'general'
+  }, [searchParams])
+  const sectionLabel = getCustomerSectionLabel(activeTab)
   const canManageCustomers = canEditCustomer(session)
   const canCreateCustomers = canCreateCustomer(session)
   const canRemoveCustomers = canDeleteCustomer(session)
@@ -67,7 +75,6 @@ function CustomersPage() {
   const isScopedSale = isAssignedCustomerViewer(session)
   const canEditCustomerRow = (row) =>
     isCorporateCustomerType(row?.customerType) ? canManageCorporate : canManageCustomers
-  const [activeTab, setActiveTab] = useState('general')
   const [searchValue, setSearchValue] = useState('')
   const [tierFilter, setTierFilter] = useState('')
   const [debtFilter, setDebtFilter] = useState('')
@@ -105,24 +112,6 @@ function CustomersPage() {
     setDebtFilter('')
     setSortBy('')
   }
-
-  const tabs = useMemo(() => {
-    if (!isScopedSale) return CUSTOMER_LIST_TABS
-    return CUSTOMER_LIST_TABS.filter((tab) => tab.key === 'general' || tab.key === 'vip')
-  }, [isScopedSale])
-
-  useEffect(() => {
-    if (!CUSTOMER_CORPORATE_ENABLED && activeTab === 'corporate') {
-      setActiveTab('general')
-    }
-  }, [activeTab])
-
-  useEffect(() => {
-    if (!isScopedSale) return
-    if (!tabs.some((tab) => tab.key === activeTab)) {
-      setActiveTab('general')
-    }
-  }, [isScopedSale, tabs, activeTab])
 
   useEffect(() => {
     let mounted = true
@@ -284,7 +273,7 @@ function CustomersPage() {
     <PageShell className="min-w-0 [font-family:'Manrope',sans-serif]">
       <PageHeader
         title="Khách hàng"
-        description="Khách phổ thông và VIP"
+        description={`${sectionLabel} — quản lý hồ sơ, công nợ và hoạt động khách hàng.`}
         descriptionClassName="hidden sm:block"
         searchPlaceholder="Tìm theo tên, SĐT"
         searchWide
@@ -319,7 +308,7 @@ function CustomersPage() {
           <div className="flex items-center gap-2 text-xs text-[#717971]">
             <span>Khách hàng</span>
             <span className="material-symbols-outlined text-[14px]">chevron_right</span>
-            <span className="font-semibold text-[#356647]">{isScopedSale ? 'Tệp của tôi' : 'Quản lý'}</span>
+            <span className="font-semibold text-[#356647]">{sectionLabel}</span>
           </div>
 
           {isScopedSale ? (
@@ -327,22 +316,6 @@ function CustomersPage() {
               Chỉ xem khách hàng được gán cho bạn (Phổ thông & VIP). Thêm hoặc sửa hồ sơ khách hàng do Quản lý/Admin thực hiện; tại POS bạn vẫn có thể thêm khách nhanh khi bán hàng.
             </p>
           ) : null}
-
-          <div className={`grid grid-cols-1 gap-2 min-[420px]:grid-cols-2 ${tabs.length >= 4 ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
-              {tabs.map((tab) => (
-                <button
-                  key={tab.key}
-                  type="button"
-                  className={`min-h-[44px] rounded-lg px-3 py-2.5 text-left text-xs leading-snug transition-all sm:px-4 sm:text-sm lg:text-center ${
-                    activeTab === tab.key ? 'bg-[#4a6242] font-bold text-white shadow-sm' : 'bg-[#f6f4ec] text-[#414942] hover:bg-[#e4e3db]'
-                  }`}
-                  onClick={() => setActiveTab(tab.key)}
-                >
-                  <span className="sm:hidden">{tab.shortLabel}</span>
-                  <span className="hidden sm:inline">{tab.label}</span>
-                </button>
-              ))}
-          </div>
 
           {activeTab !== 'inactive' ? (
             <div className="flex flex-col gap-3 border-t border-[#eae8e0] pt-4">
