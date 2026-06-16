@@ -41,7 +41,8 @@ public class ReportRepository(OrderDbContext dbContext) : IReportRepository
         var validOrders = completedOrders.Where(o => 
             o.Payments.Any(p => p.PaymentStatus == PaymentStatus.Success)).ToList();
 
-        var grossRevenue = validOrders.Sum(o => o.FinalAmount);
+        var grossRevenue = validOrders.Sum(o => o.TotalAmount);
+        var totalDiscountAmount = validOrders.Sum(o => o.DiscountAmount);
         
         var partiallyReturned = 0;
         var fullyReturned = 0;
@@ -70,7 +71,7 @@ public class ReportRepository(OrderDbContext dbContext) : IReportRepository
             }
         }
 
-        var netRevenue = grossRevenue - totalRefundAmount;
+        var netRevenue = grossRevenue - totalDiscountAmount - totalRefundAmount;
         var totalOrders = validOrders.Count;
         var returnedOrdersCount = partiallyReturned + fullyReturned;
 
