@@ -18,7 +18,8 @@ import { fetchInventorySettings } from '../../inventory/services/inventoryStockA
 import { INVENTORY_STOCK_CHANGED_EVENT } from '../../inventory/utils/inventoryStockEvents.js'
 import { formatProductPrice, formatStockQuantity } from '../utils/productDisplay.js'
 
-const FAVORITES_KEY = 'hvt_product_favorites_store'
+// v2: now keyed by productId instead of skuId
+const FAVORITES_KEY = 'hvt_product_favorites_store_v2'
 
 function loadFavoriteIds() {
   try {
@@ -40,11 +41,6 @@ function matchesSkuSearch(sku, term) {
     .join(' ')
     .toLowerCase()
   return haystack.includes(term)
-}
-
-function getSkuDisplayName(sku) {
-  if (!sku.packagingType) return sku.productName || sku.skuCode
-  return `${sku.productName} — ${sku.packagingType}`
 }
 
 function passesSkuStockFilter(sku, stockFilter, stockBySkuId) {
@@ -69,9 +65,11 @@ export default function ProductsStoreListPage() {
 
   const [isSyncing, setIsSyncing] = useState(false)
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
-  const [expandedSkuId, setExpandedSkuId] = useState(null)
+  const [expandedProductId, setExpandedProductId] = useState(null)
   const [selectedIds, setSelectedIds] = useState(() => new Set())
   const [favoriteIds, setFavoriteIds] = useState(() => loadFavoriteIds())
+  // Map<productId, skuId> — which SKU variant is currently selected per product group
+  const [selectedSkuByProductId, setSelectedSkuByProductId] = useState(() => new Map())
   const { isInBatch, addAll, toggleLine } = useStockAdjustmentBatch()
 
   useEffect(() => {
@@ -150,7 +148,7 @@ export default function ProductsStoreListPage() {
   useEffect(() => {
     loadCategories()
     loadPendingSync()
-    fetchInventorySettings().then((s) => setSimulateWarehouse(s.simulateWarehouse)).catch(() => {})
+    fetchInventorySettings().then((s) => setSimulateWarehouse(s.simulateWarehouse)).catch(() => { })
   }, [loadCategories, loadPendingSync])
 
   useEffect(() => {
@@ -181,12 +179,44 @@ export default function ProductsStoreListPage() {
     })
   }, [skus, search, selectedCategoryName, statusFilter, stockFilter, directSellFilter, stockBySkuId])
 
-  const totalCount = filteredSkus.length
+  // Group filtered SKUs by productId so same-product variants share one row
+  const groupedProducts = useMemo(() => {
+    const map = new Map()
+    for (const sku of filteredSkus) {
+      const key = String(sku.productId ?? sku.productName)
+      if (!map.has(key)) {
+        map.set(key, { productId: key, productName: sku.productName, skus: [] })
+      }
+      map.get(key).skus.push(sku)
+    }
+    return Array.from(map.values())
+  }, [filteredSkus])
 
-  const pagedSkus = useMemo(() => {
+  const totalCount = groupedProducts.length
+
+  const pagedGroups = useMemo(() => {
     const start = (page - 1) * pageSize
-    return filteredSkus.slice(start, start + pageSize)
-  }, [filteredSkus, page, pageSize])
+    return groupedProducts.slice(start, start + pageSize)
+  }, [groupedProducts, page, pageSize])
+
+  // Returns the currently-selected SKU for a product group
+  function getSelectedSku(group) {
+    const selectedId = selectedSkuByProductId.get(String(group.productId))
+    if (selectedId != null) {
+      const found = group.skus.find((s) => String(s.id) === selectedId)
+      if (found) return found
+    }
+    return group.skus[0]
+  }
+
+  function selectSkuForProduct(productId, skuId) {
+    setSelectedSkuByProductId((prev) => {
+      const next = new Map(prev)
+      // store as string to match sku.id regardless of whether API returns number or string
+      next.set(String(productId), String(skuId))
+      return next
+    })
+  }
 
   async function handleSyncCatalog() {
     setIsSyncing(true)
@@ -206,10 +236,10 @@ export default function ProductsStoreListPage() {
     }
   }
 
-  function toggleFavorite(skuId) {
+  function toggleFavorite(productId) {
     setFavoriteIds((current) => {
       const next = new Set(current)
-      const key = String(skuId)
+      const key = String(productId)
       if (next.has(key)) next.delete(key)
       else next.add(key)
       saveFavoriteIds(next)
@@ -228,15 +258,18 @@ export default function ProductsStoreListPage() {
   }
 
   function toggleSelectAll() {
-    if (selectedIds.size === pagedSkus.length) {
+    const selectedSkus = pagedGroups.map((g) => getSelectedSku(g))
+    const allSelected =
+      pagedGroups.length > 0 && selectedSkus.every((s) => selectedIds.has(String(s.id)))
+    if (allSelected) {
       setSelectedIds(new Set())
       return
     }
-    setSelectedIds(new Set(pagedSkus.map((sku) => String(sku.id))))
+    setSelectedIds(new Set(selectedSkus.map((s) => String(s.id))))
   }
 
-  function toggleExpand(skuId) {
-    setExpandedSkuId((current) => (current === skuId ? null : skuId))
+  function toggleExpand(productId) {
+    setExpandedProductId((current) => (current === productId ? null : productId))
   }
 
   function skuBatchMeta(sku) {
@@ -317,7 +350,7 @@ export default function ProductsStoreListPage() {
             <div>
               <h1 className="text-xl font-bold text-slate-900">Hàng hóa</h1>
               <p className="mt-0.5 text-xs text-slate-500 sm:text-sm">
-                Catalog cửa hàng theo SKU — cùng nguồn dữ liệu với POS ({totalCount} mặt hàng)
+                Catalog cửa hàng theo sản phẩm — cùng nguồn dữ liệu với POS ({totalCount} sản phẩm)
               </p>
             </div>
 
@@ -339,11 +372,10 @@ export default function ProductsStoreListPage() {
                 <button
                   type="button"
                   onClick={() => setMobileFiltersOpen(true)}
-                  className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2.5 text-sm font-semibold lg:hidden ${
-                    hasActiveClientFilters
+                  className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2.5 text-sm font-semibold lg:hidden ${hasActiveClientFilters
                       ? 'border-[#356647]/40 bg-[#356647]/5 text-[#356647]'
                       : 'border-slate-200 text-slate-700 hover:bg-slate-50'
-                  }`}
+                    }`}
                 >
                   <span className="material-symbols-outlined text-[18px]">filter_list</span>
                   Lọc
@@ -422,7 +454,10 @@ export default function ProductsStoreListPage() {
                     <th className="w-10 px-3 py-3">
                       <input
                         type="checkbox"
-                        checked={pagedSkus.length > 0 && selectedIds.size === pagedSkus.length}
+                        checked={
+                          pagedGroups.length > 0 &&
+                          pagedGroups.every((g) => selectedIds.has(String(getSelectedSku(g).id)))
+                        }
                         onChange={toggleSelectAll}
                         aria-label="Chọn tất cả"
                       />
@@ -450,7 +485,7 @@ export default function ProductsStoreListPage() {
                         Đang tải catalog...
                       </td>
                     </tr>
-                  ) : pagedSkus.length === 0 ? (
+                  ) : pagedGroups.length === 0 ? (
                     <tr>
                       <td colSpan={tableColSpan} className="px-6 py-10 text-center text-slate-500">
                         {skus.length === 0
@@ -459,35 +494,35 @@ export default function ProductsStoreListPage() {
                       </td>
                     </tr>
                   ) : (
-                    pagedSkus.map((sku) => {
-                      const stockQty = Number(stockBySkuId.get(sku.id) ?? 0)
-                      const isExpanded = expandedSkuId === sku.id
-                      const isFavorite = favoriteIds.has(String(sku.id))
-                      const isSelected = selectedIds.has(String(sku.id))
+                    pagedGroups.map((group) => {
+                      const selectedSku = getSelectedSku(group)
+                      const stockQty = Number(stockBySkuId.get(selectedSku.id) ?? 0)
+                      const isExpanded = expandedProductId === group.productId
+                      const isFavorite = favoriteIds.has(String(group.productId))
+                      const isSelected = selectedIds.has(String(selectedSku.id))
                       const isOut = stockQty <= 0
                       const isLow = stockQty > 0 && stockQty <= 5
-
-                      const inBatch = isInBatch(sku.id)
+                      const inBatch = isInBatch(selectedSku.id)
+                      const hasMultipleSkus = group.skus.length > 1
 
                       return (
-                        <Fragment key={sku.id}>
+                        <Fragment key={group.productId}>
                           <tr
-                            className={`cursor-pointer transition-colors hover:bg-[#f8faf8] ${
-                              isExpanded ? 'bg-[#f0f7f2] shadow-[inset_3px_0_0_0_#356647]' : ''
-                            }`}
+                            className={`cursor-pointer transition-colors hover:bg-[#f8faf8] ${isExpanded ? 'bg-[#f0f7f2] shadow-[inset_3px_0_0_0_#356647]' : ''
+                              }`}
                           >
                             <td className="px-3 py-3" onClick={(event) => event.stopPropagation()}>
                               <input
                                 type="checkbox"
                                 checked={isSelected}
-                                onChange={() => toggleSelect(sku.id)}
-                                aria-label={`Chọn ${sku.skuCode}`}
+                                onChange={() => toggleSelect(selectedSku.id)}
+                                aria-label={`Chọn ${selectedSku.skuCode}`}
                               />
                             </td>
                             <td className="px-2 py-3" onClick={(event) => event.stopPropagation()}>
                               <button
                                 type="button"
-                                onClick={() => toggleFavorite(sku.id)}
+                                onClick={() => toggleFavorite(group.productId)}
                                 className={`rounded p-1 ${isFavorite ? 'text-amber-500' : 'text-slate-300 hover:text-amber-400'}`}
                                 aria-label={isFavorite ? 'Bỏ yêu thích' : 'Yêu thích'}
                               >
@@ -502,73 +537,93 @@ export default function ProductsStoreListPage() {
                             <td className="px-2 py-3">
                               <button
                                 type="button"
-                                onClick={() => toggleExpand(sku.id)}
+                                onClick={() => toggleExpand(group.productId)}
                                 className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-[#356647]"
                                 aria-expanded={isExpanded}
                               >
                                 <span
-                                  className={`material-symbols-outlined text-[20px] transition-transform ${
-                                    isExpanded ? 'rotate-90' : ''
-                                  }`}
+                                  className={`material-symbols-outlined text-[20px] transition-transform ${isExpanded ? 'rotate-90' : ''
+                                    }`}
                                 >
                                   chevron_right
                                 </span>
                               </button>
                             </td>
-                            <td className="px-2 py-3" onClick={() => toggleExpand(sku.id)}>
+                            <td className="px-2 py-3" onClick={() => toggleExpand(group.productId)}>
                               <ProductImage
-                                src={sku.imageUrl}
-                                alt={getSkuDisplayName(sku)}
+                                src={selectedSku.imageUrl}
+                                alt={group.productName}
                                 className="h-10 w-10 rounded-lg"
                                 iconClassName="text-lg"
                               />
                             </td>
                             <td
                               className="px-3 py-3 font-mono text-xs font-bold text-[#356647]"
-                              onClick={() => toggleExpand(sku.id)}
+                              onClick={() => toggleExpand(group.productId)}
                             >
-                              {sku.skuCode}
+                              {selectedSku.skuCode}
                             </td>
-                            <td className="px-3 py-3" onClick={() => toggleExpand(sku.id)}>
-                              <span className="font-semibold text-slate-900">{getSkuDisplayName(sku)}</span>
+                            {/* Tên hàng — shows product name + variant selector when multiple SKUs */}
+                            <td className="px-3 py-3" onClick={() => toggleExpand(group.productId)}>
+                              <span className="block font-semibold text-slate-900">{group.productName}</span>
+                              {hasMultipleSkus ? (
+                                <select
+                                  value={String(selectedSku.id)}
+                                  onChange={(e) => {
+                                    e.stopPropagation()
+                                    selectSkuForProduct(group.productId, e.target.value)
+                                  }}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="mt-1 w-20 cursor-pointer rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs text-slate-600 outline-none focus:border-[#356647] focus:ring-1 focus:ring-[#356647]/20"
+                                >
+                                  {group.skus.map((sku) => (
+                                    <option key={sku.id} value={String(sku.id)}>
+                                      {sku.packagingType || sku.skuCode}
+                                    </option>
+                                  ))}
+                                </select>
+                              ) : (
+                                selectedSku.packagingType ? (
+                                  <span className="mt-0.5 block text-xs text-slate-400">{selectedSku.packagingType}</span>
+                                ) : null
+                              )}
                             </td>
                             <td
                               className="hidden px-3 py-3 text-slate-600 md:table-cell"
-                              onClick={() => toggleExpand(sku.id)}
+                              onClick={() => toggleExpand(group.productId)}
                             >
-                              {sku.categoryName || '—'}
+                              {selectedSku.categoryName || '—'}
                             </td>
                             <td
                               className="px-3 py-3 text-right font-medium text-slate-800"
-                              onClick={() => toggleExpand(sku.id)}
+                              onClick={() => toggleExpand(group.productId)}
                             >
-                              {formatProductPrice(sku.retailPrice || sku.basePrice)}
+                              {formatProductPrice(selectedSku.retailPrice || selectedSku.basePrice)}
                             </td>
                             <td
                               className="hidden px-3 py-3 text-right text-slate-600 lg:table-cell"
-                              onClick={() => toggleExpand(sku.id)}
+                              onClick={() => toggleExpand(group.productId)}
                             >
-                              {formatProductPrice(sku.costPrice)}
+                              {formatProductPrice(selectedSku.costPrice)}
                             </td>
                             <td
                               className="hidden px-3 py-3 text-slate-600 xl:table-cell"
-                              onClick={() => toggleExpand(sku.id)}
+                              onClick={() => toggleExpand(group.productId)}
                             >
-                              {sku.packagingType || '—'}
+                              {selectedSku.packagingType || '—'}
                             </td>
                             <td
-                              className={`px-3 py-3 text-right font-semibold ${
-                                isOut ? 'text-[#b42318]' : isLow ? 'text-[#7e5700]' : 'text-[#356647]'
-                              }`}
-                              onClick={() => toggleExpand(sku.id)}
+                              className={`px-3 py-3 text-right font-semibold ${isOut ? 'text-[#b42318]' : isLow ? 'text-[#7e5700]' : 'text-[#356647]'
+                                }`}
+                              onClick={() => toggleExpand(group.productId)}
                             >
                               {formatStockQuantity(stockQty)}
                             </td>
                             <td
                               className="hidden px-3 py-3 text-center sm:table-cell"
-                              onClick={() => toggleExpand(sku.id)}
+                              onClick={() => toggleExpand(group.productId)}
                             >
-                              {sku.isSellable !== false ? (
+                              {selectedSku.isSellable !== false ? (
                                 <span className="text-emerald-700">Có</span>
                               ) : (
                                 <span className="text-slate-400">Không</span>
@@ -578,12 +633,11 @@ export default function ProductsStoreListPage() {
                               <td className="hidden px-3 py-3 text-right md:table-cell" onClick={(event) => event.stopPropagation()}>
                                 <button
                                   type="button"
-                                  onClick={() => toggleBatchSku(sku)}
-                                  className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold ${
-                                    inBatch
+                                  onClick={() => toggleBatchSku(selectedSku)}
+                                  className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold ${inBatch
                                       ? 'bg-[#356647]/10 text-[#356647]'
                                       : 'text-[#356647] hover:bg-[#356647]/5'
-                                  }`}
+                                    }`}
                                 >
                                   {inBatch ? 'Đã thêm' : 'Thêm vào lô'}
                                 </button>
@@ -594,12 +648,12 @@ export default function ProductsStoreListPage() {
                             <tr>
                               <td colSpan={tableColSpan} className="p-0">
                                 <StoreProductExpandedLoader
-                                  sku={sku}
+                                  sku={selectedSku}
                                   stockBySkuId={stockBySkuId}
                                   canAdjustStock={canAdjustStock}
                                   inBatch={inBatch}
                                   isInBatch={isInBatch}
-                                  onToggleBatchSku={() => toggleBatchSku(sku)}
+                                  onToggleBatchSku={() => toggleBatchSku(selectedSku)}
                                   onToggleBatchSkuItem={(item, meta) => toggleLine(item, meta)}
                                   onAddAllSkusToBatch={(skuList, productName) =>
                                     addAllSkusToBatch(skuList, productName)
@@ -623,7 +677,7 @@ export default function ProductsStoreListPage() {
                 totalCount={totalCount}
                 onPageChange={setPage}
                 onPageSizeChange={setPageSize}
-                itemLabel="SKU"
+                itemLabel="sản phẩm"
               />
             </div>
           </div>

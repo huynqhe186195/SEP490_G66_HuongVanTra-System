@@ -52,6 +52,7 @@ import {
   formatPromotionDiscountText as formatPromotionDiscountLabel,
   formatPromotionScopeLabel,
 } from '../utils/posPromotionUtils.js'
+import ResizableSplitPane from '../../../components/shared/ResizableSplitPane.jsx'
 
 const SALES_MODES = [
     { id: "counter", label: "Bán trực tiếp", icon: "storefront" },
@@ -1763,10 +1764,16 @@ function PosPage() {
                 </div>
             </header>
 
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden xl:flex-row">
-                {/* Left: cart */}
-                <section className="order-1 flex min-h-[42vh] w-full min-w-0 flex-col border-t border-[#c1c9c0] bg-[#f6f4ec] xl:min-h-0 xl:min-w-[min(100%,300px)] xl:max-w-[min(100%,48%)] xl:flex-[1_1_360px] xl:border-r xl:border-t-0 xl:shadow-[4px_0_20px_rgba(0,0,0,0.04)]">
-                    <div className="flex min-h-0 flex-1 flex-col bg-white">
+            <ResizableSplitPane
+                storageKey="hvt-pos-panel-ratio"
+                defaultRatio={0.38}
+                minStartPx={260}
+                minEndPx={320}
+                className="grid-cols-1 lg:grid-rows-1"
+                startClassName="flex min-h-[42vh] flex-col border-t border-[#c1c9c0] bg-[#f6f4ec] lg:min-h-0 lg:border-t-0 lg:shadow-[4px_0_20px_rgba(0,0,0,0.04)]"
+                endClassName="flex min-h-[38vh] flex-col bg-white text-base lg:min-h-0"
+                startPanel={
+                <div className="flex min-h-0 flex-1 flex-col bg-white">
                         <div className="flex shrink-0 items-center justify-between gap-2 px-4 py-2.5">
                             <p className="text-xs font-bold uppercase tracking-wider text-[#717971]">Giỏ hàng</p>
                             <span className="shrink-0 text-xs text-[#717971]">
@@ -1950,10 +1957,9 @@ function PosPage() {
                             </div>
                         </div>
                     </div>
-                </section>
-
-                {/* Right: customer + product catalog */}
-                <section className="order-2 flex min-h-[38vh] min-w-0 flex-1 flex-col bg-white text-base xl:min-h-0">
+                }
+                endPanel={
+                <>
                     <div className="relative z-30 shrink-0 overflow-visible border-b border-[#c1c9c0]/60 bg-[#f6f4ec] px-4 py-3">
                         <div className="flex items-start gap-2">
                             {selectedCustomer ?
@@ -2175,8 +2181,9 @@ function PosPage() {
                             Thanh toán
                         </button>
                     </div>
-                </section>
-            </div>
+                </>
+                }
+            />
 
       <PosPaymentSidebar
         isOpen={isPaymentSidebarOpen}
@@ -2265,6 +2272,18 @@ function PosPage() {
         formatPromotionValidityText={formatPromotionValidityText}
         formatPromotionScopeLabel={formatPromotionScopeLabel}
         appliedPromotionScopeText={appliedPromotionScopeText}
+        cartItemLines={cartItems.map((item) => ({
+          key: item.sku,
+          name: item.name,
+          sku: item.sku,
+          qty: Number(item.qty) || 0,
+          unitPrice: Number(item.price) || 0,
+          isGift: Boolean(item.isGift),
+          lineGross: getLineGross(item),
+          lineDiscount: getLineDiscount(item),
+          lineTotal: getLineTotal(item),
+          discountLabel: formatLineDiscountLabel(item),
+        }))}
       />
 
             <footer className="shrink-0 border-t border-[#d8d6ce] bg-white px-4">

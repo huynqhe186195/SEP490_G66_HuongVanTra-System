@@ -252,7 +252,7 @@ export function buildCreateCustomerBody(payload) {
     customerGroup: payload.customerGroup ?? mapTypeToCustomerGroup(payload.customerType),
     taxCode: payload.taxCode?.trim() || null,
     tierId: payload.tierId ?? null,
-    assignedSaleId: payload.assignedEmployeeId ?? payload.assignedSaleId ?? null,
+    assignedSaleId: (payload.assignedEmployeeId || payload.assignedSaleId) || null,
     source: payload.source || null,
     department: payload.department?.trim() || null,
   }
@@ -269,7 +269,7 @@ export function buildUpdateCustomerBody(payload) {
     customerGroup: payload.customerGroup ?? mapTypeToCustomerGroup(payload.customerType),
     taxCode: payload.taxCode?.trim() || null,
     tierId: payload.tierId ?? null,
-    assignedSaleId: payload.assignedEmployeeId ?? payload.assignedSaleId ?? null,
+    assignedSaleId: (payload.assignedEmployeeId || payload.assignedSaleId) || null,
     source: payload.source || null,
     department: payload.department?.trim() || null,
   }

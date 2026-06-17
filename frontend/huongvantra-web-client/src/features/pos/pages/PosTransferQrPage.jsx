@@ -50,6 +50,7 @@ function PosTransferQrPage() {
   const [sepaySetup, setSepaySetup] = useState(null)
   const [qrData, setQrData] = useState(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const [paymentDone, setPaymentDone] = useState(false)
   const completedRef = useRef(false)
   const qrExpiresAtUtc = qrData?.qrExpiresAtUtc ?? payment?.qrExpiresAtUtc
   const qrExpired = isQrExpired(qrExpiresAtUtc, qrData?.isExpired)
@@ -109,20 +110,22 @@ function PosTransferQrPage() {
         }
       }
 
-      showSuccess(
-        status?.invoiceCode
-          ? debtSettlement?.amount > 0
-            ? `Đã thanh toán · Số HĐ: ${status.invoiceCode} · Trừ nợ ${formatMoney(debtSettlement.amount)} đ`
-            : `Đã thanh toán · Số HĐ: ${status.invoiceCode}`
-          : debtSettlement?.amount > 0
-            ? `Đã thanh toán đơn ${orderCode} · Trừ nợ ${formatMoney(debtSettlement.amount)} đ`
-            : `Đã thanh toán · Đơn ${orderCode}`,
-      )
+      const successMsg = status?.invoiceCode
+        ? debtSettlement?.amount > 0
+          ? `Đã thanh toán · Số HĐ: ${status.invoiceCode} · Trừ nợ ${formatMoney(debtSettlement.amount)} đ`
+          : `Đã thanh toán · Số HĐ: ${status.invoiceCode}`
+        : debtSettlement?.amount > 0
+          ? `Đã thanh toán đơn ${orderCode} · Trừ nợ ${formatMoney(debtSettlement.amount)} đ`
+          : `Đã thanh toán · Đơn ${orderCode}`
 
-      navigate('/pos', { replace: true })
+      setPaymentDone(true)
+      showSuccess(successMsg)
+
       if (receipts.length > 0) {
         await printReceiptSequence(receipts)
       }
+
+      navigate('/pos', { replace: true })
     },
     [navigate, payment?.orderCode, payment?.orderId, payment?.receipt, payment?.debtSettlement, invoiceCode],
   )
@@ -251,6 +254,18 @@ function PosTransferQrPage() {
 
   if (payment?.paymentMethod !== 'TRANSFER' || !payment.orderId) {
     return <Navigate to="/pos" replace />
+  }
+
+  if (paymentDone) {
+    return (
+      <div className="mx-auto flex w-full max-w-lg flex-col items-center gap-4 py-16">
+        <div className="flex h-20 w-20 items-center justify-center rounded-full bg-[#356647]/15">
+          <Icon className="text-5xl text-[#356647]">check_circle</Icon>
+        </div>
+        <p className="text-xl font-bold text-[#356647]">Thanh toán thành công</p>
+        <p className="text-sm text-[#717971]">Đang in hóa đơn và quay về POS...</p>
+      </div>
+    )
   }
 
   const receiveAccount =

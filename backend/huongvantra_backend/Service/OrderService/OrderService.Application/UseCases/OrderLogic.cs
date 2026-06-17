@@ -683,7 +683,8 @@ public class OrderLogic(
     }
 
     public async Task CompleteAsync(
-        Guid id, OrderAccessContext access, Guid? actorId = null, string? actorName = null, CancellationToken ct = default)
+        Guid id, OrderAccessContext access, Guid? actorId = null, string? actorName = null,
+        decimal? actualReceivedAmount = null, CancellationToken ct = default)
     {
         var order = await _orderRepo.GetByIdAsync(id, ct)
             ?? throw new OrderNotFoundException(id);
@@ -702,14 +703,19 @@ public class OrderLogic(
 
             if (payment.PaymentMethod is PaymentMethod.VietQR or PaymentMethod.BankTransfer or PaymentMethod.Cash)
             {
+                var paidNow = (payment.PaymentMethod is PaymentMethod.VietQR or PaymentMethod.BankTransfer)
+                    && actualReceivedAmount.HasValue
+                    ? Math.Min(actualReceivedAmount.Value, order.FinalAmount)
+                    : order.FinalAmount;
+
                 payment.PaymentStatus = PaymentStatus.Success;
-                payment.Amount = order.FinalAmount;
+                payment.Amount = paidNow;
                 payment.PaidAt = DateTime.UtcNow;
                 payment.UpdatedAt = DateTime.UtcNow;
 
                 var paymentDescription = string.IsNullOrWhiteSpace(payment.TransactionRef)
-                    ? $"Đã thanh toán {FormatVnd(order.FinalAmount)} qua {GetPaymentMethodLabel(payment.PaymentMethod)}."
-                    : $"Đã thanh toán {FormatVnd(order.FinalAmount)} qua {GetPaymentMethodLabel(payment.PaymentMethod)}. Mã GD: {payment.TransactionRef}.";
+                    ? $"Đã thanh toán {FormatVnd(paidNow)} qua {GetPaymentMethodLabel(payment.PaymentMethod)}."
+                    : $"Đã thanh toán {FormatVnd(paidNow)} qua {GetPaymentMethodLabel(payment.PaymentMethod)}. Mã GD: {payment.TransactionRef}.";
 
                 await RecordActivityAsync(
                     order.Id,

@@ -3,6 +3,10 @@ import {
   formatPromotionMinimumOrderText,
   formatPromotionUsageText,
 } from '../utils/posPromotionUtils.js'
+import { useMediaQuery, useResizableWidth } from '../../../hooks/useResizableWidth.js'
+
+const PAYMENT_SIDEBAR_WIDTH_KEY = 'hvt-pos-payment-sidebar-width'
+const PAYMENT_SIDEBAR_DEFAULT_WIDTH = 448
 
 function Icon({ children, className = '', filled = false }) {
   return (
@@ -84,7 +88,17 @@ export default function PosPaymentSidebar({
   formatPromotionValidityText,
   formatPromotionScopeLabel,
   appliedPromotionScopeText,
+  cartItemLines = [],
 }) {
+  const isCompact = useMediaQuery('(max-width: 639px)')
+  const { width, isDragging, startResize, resetWidth } = useResizableWidth({
+    storageKey: PAYMENT_SIDEBAR_WIDTH_KEY,
+    defaultWidth: PAYMENT_SIDEBAR_DEFAULT_WIDTH,
+    minWidth: 320,
+    maxWidth: () => Math.min(820, Math.round(window.innerWidth * 0.92)),
+    direction: 'from-right',
+  })
+
   if (!isOpen) return null
 
   const confirmLabel = isSubmitting
@@ -106,12 +120,30 @@ export default function PosPaymentSidebar({
         onClick={onClose}
       />
       <aside
-        className="fixed inset-y-0 right-0 z-[61] flex w-full max-w-md flex-col border-l border-[#c1c9c0] bg-[#fbf9f1] shadow-2xl"
+        className="fixed inset-y-0 right-0 z-[61] flex flex-col border-l border-[#c1c9c0] bg-[#fbf9f1] shadow-2xl"
+        style={isCompact ? { width: '100%' } : { width: `${width}px`, maxWidth: '92vw' }}
         role="dialog"
         aria-modal="true"
         aria-label="Thanh toán"
       >
-        <header className="flex shrink-0 items-center justify-between border-b border-[#c1c9c0]/60 bg-[#f6f4ec] px-4 py-4">
+        {!isCompact ? (
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Kéo để chỉnh độ rộng sidebar thanh toán"
+            aria-valuenow={width}
+            onPointerDown={startResize}
+            onDoubleClick={resetWidth}
+            className={`absolute bottom-0 left-0 top-0 z-10 w-1.5 touch-none select-none ${
+              isDragging ? 'bg-[#356647]/35' : 'bg-[#c1c9c0] hover:bg-[#356647]/25'
+            }`}
+            style={{ cursor: 'col-resize' }}
+          >
+            <div className="absolute inset-y-0 -left-2 -right-2" />
+          </div>
+        ) : null}
+
+        <header className="relative flex shrink-0 items-center justify-between border-b border-[#c1c9c0]/60 bg-[#f6f4ec] px-4 py-4">
           <div>
             <p className="text-xs font-bold uppercase tracking-wider text-[#717971]">Thanh toán</p>
             <p className="text-2xl font-bold text-[#356647]">{formatMoney(total)} đ</p>
@@ -354,7 +386,45 @@ export default function PosPaymentSidebar({
 
           {hasCartItems ? (
             <div className="rounded-xl bg-white p-4 shadow-sm">
-              <p className="mb-2 text-xs font-bold uppercase tracking-wider text-[#717971]">Chi tiết tổng tiền</p>
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <p className="text-xs font-bold uppercase tracking-wider text-[#717971]">Chi tiết tổng tiền</p>
+                <span className="text-xs text-[#717971]">{cartItemLines.length} mặt hàng</span>
+              </div>
+
+              <div className="custom-scrollbar mb-3 max-h-56 space-y-2 overflow-y-auto border-b border-[#f0eee6] pb-3">
+                {cartItemLines.map((line) => (
+                  <div key={line.key} className="flex items-start justify-between gap-3 text-sm">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium text-[#1b1c17]" title={line.name}>
+                        {line.name}
+                        {line.isGift ? (
+                          <span className="ml-1.5 rounded-full bg-[#fff8e8] px-1.5 py-0.5 text-[10px] font-bold uppercase text-[#7e5700]">
+                            Quà
+                          </span>
+                        ) : null}
+                      </p>
+                      <p className="mt-0.5 text-xs text-[#717971]">
+                        <span className="font-mono">{line.sku}</span>
+                        <span className="mx-1">·</span>
+                        {line.qty} × {formatMoney(line.unitPrice)} đ
+                        {line.discountLabel ? (
+                          <>
+                            <span className="mx-1">·</span>
+                            <span className="font-semibold text-[#7e5700]">CK {line.discountLabel}</span>
+                          </>
+                        ) : null}
+                      </p>
+                    </div>
+                    <div className="shrink-0 text-right tabular-nums">
+                      {line.lineDiscount > 0 && !line.isGift ? (
+                        <p className="text-[11px] text-[#717971] line-through">{formatMoney(line.lineGross)} đ</p>
+                      ) : null}
+                      <p className="font-semibold text-[#1b1c17]">{formatMoney(line.lineTotal)} đ</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
               <div className="space-y-1 text-sm text-[#717971]">
                 <div className="flex justify-between">
                   <span>Tạm tính</span>

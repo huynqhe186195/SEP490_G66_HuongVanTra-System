@@ -104,7 +104,7 @@ public class OrdersController(OrderLogic orderLogic) : ControllerBase
     public async Task<IActionResult> Complete(Guid id, CancellationToken ct)
     {
         var (actorId, actorName) = Actor();
-        await orderLogic.CompleteAsync(id, AccessContext(), actorId, actorName, ct);
+        await orderLogic.CompleteAsync(id, AccessContext(), actorId, actorName, ct: ct);
         return NoContent();
     }
 

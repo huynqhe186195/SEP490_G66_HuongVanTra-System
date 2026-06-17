@@ -205,8 +205,8 @@ function SelectReturnOrderModal({ isOpen, onClose, onSelectOrder, onQuickReturn 
         channel: orderChannel,
         returnableOnly: true,
         excludeOrderKind: 'Exchange',
-        fromDate: draftFilters.dateFrom || undefined,
-        toDate: draftFilters.dateTo || undefined,
+        fromDate: parseDateInputToUtcStart(draftFilters.dateFrom)?.toISOString() || undefined,
+        toDate: parseDateInputToUtcEnd(draftFilters.dateTo)?.toISOString() || undefined,
         page: hasProductFilter ? 1 : page,
         pageSize: hasProductFilter ? 200 : PAGE_SIZE,
       })
