@@ -12,6 +12,24 @@ function formatMoney(value) {
   return new Intl.NumberFormat('vi-VN').format(Math.round(Number(value) || 0))
 }
 
+function normalizePercentInputValue(value) {
+  const raw = String(value ?? '')
+    .replace(',', '.')
+    .replace(/[^\d.]/g, '')
+
+  if (!raw || raw === '.') return ''
+
+  const [integerPart, ...decimalParts] = raw.split('.')
+  const normalizedText = decimalParts.length > 0
+    ? `${integerPart || '0'}.${decimalParts.join('')}`
+    : integerPart
+  const numericValue = Number(normalizedText)
+
+  if (!Number.isFinite(numericValue)) return ''
+
+  return String(Math.min(100, Math.max(0, numericValue)))
+}
+
 function OrderOfferModal({
   isOpen,
   onClose,
@@ -28,7 +46,7 @@ function OrderOfferModal({
   useEffect(() => {
     if (!isOpen) return
     setError('')
-    const pct = initialPercent > 0 ? initialPercent : 0
+    const pct = Math.min(100, Math.max(0, Number(initialPercent) || 0))
     setActiveType(initialFixedAmount > 0 ? 'fixed' : 'percent')
     setCustomPercent(pct > 0 ? String(pct) : '')
     setDiscountFixedInput(initialFixedAmount > 0 ? formatMoney(initialFixedAmount) : '')
@@ -125,21 +143,17 @@ function OrderOfferModal({
             <section>
               <label className="mb-2 block text-sm font-semibold text-gray-700">Phần trăm giảm</label>
               <input
-                type="number"
-                min={0}
-                max={100}
+                type="text"
+                inputMode="decimal"
                 className="h-11 w-full rounded-xl border border-gray-200 px-4 text-sm outline-none focus:border-[#6d8c71] focus:ring-4 focus:ring-[#6d8c71]/15"
                 placeholder="Ví dụ: 25"
                 value={customPercent}
                 onChange={(event) => {
                   setError('')
-                  const raw = event.target.value
+                  const nextValue = normalizePercentInputValue(event.target.value)
                   setActiveType('percent')
-                  if (Number(raw) > 100) {
-                    setError('Chiết khấu % không được vượt 100%.')
-                  }
-                  setCustomPercent(raw)
-                  if (raw !== '') {
+                  setCustomPercent(nextValue)
+                  if (nextValue !== '') {
                     setDiscountFixedInput('')
                   }
                 }}

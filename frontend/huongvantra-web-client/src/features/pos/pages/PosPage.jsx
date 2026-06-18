@@ -81,7 +81,7 @@ const PRICE_FILTER_OPTIONS = [
     { id: "over-200k", label: "Trên 200.000 đ" },
 ];
 
-const POS_PRODUCT_PAGE_SIZE = 24;
+const POS_PRODUCT_PAGE_SIZE = 18;
 
 function createWorkspace(mode = "counter") {
     const empty = () => createEmptySession(mode);
@@ -2212,7 +2212,7 @@ function PosPage() {
                                 </div>
                             </div>
 
-                            <CustomScrollArea className="flex-1" contentClassName="px-3 py-3">
+                            <CustomScrollArea className="flex-1" contentClassName="flex h-full min-h-0 px-2.5 py-2">
                                 {isSearchLoading ?
                                     <LoadingIndicator label="Đang tải sản phẩm..." className="min-h-[220px]" />
                                 : filteredSearchProducts.length === 0 ?
@@ -2221,7 +2221,7 @@ function PosPage() {
                                             "Không tìm thấy sản phẩm phù hợp."
                                         :   "Chưa có sản phẩm để hiển thị."}
                                     </p>
-                                :   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                                :   <div className={`grid min-h-0 flex-1 grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 ${visibleProductPageItems.length >= POS_PRODUCT_PAGE_SIZE ? "xl:grid-rows-6" : "xl:auto-rows-max"}`}>
                                         {visibleProductPageItems.map((item) => {
                                             const outOfStock = Number(item.stockQuantity) <= 0;
                                             const lowStock = outOfStock || Number(item.stockQuantity) <= 5;
@@ -2230,16 +2230,16 @@ function PosPage() {
                                                     key={`${item.productId}-${item.sku}`}
                                                     type="button"
                                                     onClick={() => addToCart(item)}
-                                                    className="flex min-h-[86px] w-full items-start gap-2.5 rounded-lg border border-[#c1c9c0]/50 bg-[#fbf9f1] p-2 text-left transition-colors hover:border-[#356647]/35 hover:bg-[#f6f4ec]">
-                                                    <div className="flex w-[60px] shrink-0 flex-col items-center gap-1">
-                                                        <ProductImage src={item.imageUrl} alt={item.name} className="h-14 w-14 rounded-lg" iconClassName="text-[19px]" />
-                                                        <p className={`max-w-[64px] text-center text-[10px] leading-tight ${lowStock ? "font-semibold text-[#7e5700]" : "text-[#717971]"}`}>
+                                                    className="flex h-full min-h-[80px] w-full items-start gap-2 rounded-lg border border-[#c1c9c0]/50 bg-[#fbf9f1] p-2 text-left transition-colors hover:border-[#356647]/35 hover:bg-[#f6f4ec]">
+                                                    <div className="flex w-[52px] shrink-0 flex-col items-center gap-0.5">
+                                                        <ProductImage src={item.imageUrl} alt={item.name} className="h-12 w-12 rounded-lg" iconClassName="text-[18px]" />
+                                                        <p className={`max-w-[54px] text-center text-[9px] leading-tight ${lowStock ? "font-semibold text-[#7e5700]" : "text-[#717971]"}`}>
                                                             {formatCompactStock(item.stockQuantity)}
                                                         </p>
                                                     </div>
-                                                    <div className="min-w-0 flex-1 pt-0.5">
-                                                        <p className="line-clamp-2 min-h-[34px] text-sm font-semibold leading-snug text-[#1b1c17]" title={item.name}>{item.name}</p>
-                                                        <p className="mt-1.5 text-sm font-bold tabular-nums text-[#356647]">{formatMoney(item.price)} đ</p>
+                                                    <div className="min-w-0 flex-1">
+                                                        <p className="line-clamp-2 min-h-[31px] text-[13px] font-semibold leading-tight text-[#1b1c17]" title={item.name}>{item.name}</p>
+                                                        <p className="mt-1 text-[13px] font-bold tabular-nums text-[#356647]">{formatMoney(item.price)} đ</p>
                                                     </div>
                                                 </button>
                                             );
