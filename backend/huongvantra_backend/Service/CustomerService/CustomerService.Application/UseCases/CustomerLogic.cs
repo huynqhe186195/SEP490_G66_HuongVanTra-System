@@ -826,29 +826,20 @@ public class CustomerLogic
         var note = NormalizeImportText(rawRow.Note);
 
         if (string.IsNullOrWhiteSpace(fullName))
+        {
             errors.Add("Họ và Tên là bắt buộc.");
-        else if (fullName.Length < 2)
-            errors.Add("Họ và Tên phải có ít nhất 2 ký tự.");
-        else if (fullName.Length > 100)
-            errors.Add("Họ và Tên tối đa 100 ký tự.");
-
-        if (!string.IsNullOrWhiteSpace(fullName))
+        }
+        else
         {
             if (fullName.Length < 2)
             {
-                warnings.Add("Há» vĂ  TĂªn quĂ¡ ngáº¯n, vui lĂ²ng kiá»ƒm tra láº¡i sau khi import.");
+                warnings.Add("Họ và Tên quá ngắn, vui lòng kiểm tra lại sau khi import.");
             }
             else if (fullName.Length > 100)
             {
                 fullName = fullName[..100];
-                warnings.Add("Há» vĂ  TĂªn dĂ i hÆ¡n 100 kĂ½ tá»± nĂªn Ä‘Ă£ Ä‘Æ°á»£c cáº¯t ngáº¯n khi import.");
+                warnings.Add("Họ và Tên dài hơn 100 ký tự nên đã được cắt ngắn khi import.");
             }
-
-            errors.RemoveAll(message =>
-            {
-                var key = NormalizeImportKey(message);
-                return key.Contains("hoten", StringComparison.Ordinal) && key.Contains("ky", StringComparison.Ordinal);
-            });
         }
 
         if (!TryValidateImportPhone(phoneNumber, out var phoneError))
@@ -858,7 +849,7 @@ public class CustomerLogic
         else
         {
             if (seenPhones.Contains(phoneNumber))
-                errors.Add("Số điện thoại bị trùng trong file import.");
+                errors.Add("Số điện thoại bị trùng trong file Excel.");
 
             if (await _customerRepo.PhoneExistsAsync(phoneNumber, ct: ct))
                 errors.Add("Số điện thoại đã tồn tại trong hệ thống.");
@@ -868,12 +859,12 @@ public class CustomerLogic
         {
             if (email.Length > 100 || !ImportEmailRegex.IsMatch(email))
             {
-                warnings.Add("Email không đúng định dạng nên không được lưu.");
+                warnings.Add("Email sai định dạng, đã bỏ qua email.");
                 email = null;
             }
             else if (await _customerRepo.EmailExistsAsync(email, ct: ct))
             {
-                warnings.Add("Email đã được sử dụng trong hệ thống nên không được lưu.");
+                warnings.Add("Email đã được sử dụng trong hệ thống nên đã bỏ qua email.");
                 email = null;
             }
         }
@@ -895,23 +886,17 @@ public class CustomerLogic
 
         if (!string.IsNullOrWhiteSpace(rawRow.DateOfBirth))
         {
-            if (!TryParseImportDate(rawRow.DateOfBirth, out _))
-                errors.Add("Ngày Sinh không hợp lệ. Vui lòng nhập theo định dạng DD/MM/YYYY.");
-            else
+            if (TryParseImportDate(rawRow.DateOfBirth, out _))
                 warnings.Add("Ngày Sinh chưa có trường lưu riêng nên không được lưu.");
-        }
-
-        if (!string.IsNullOrWhiteSpace(rawRow.DateOfBirth) && !TryParseImportDate(rawRow.DateOfBirth, out _))
-        {
-            warnings.Add("NgĂ y Sinh khĂ´ng há»£p lá»‡ nĂªn khĂ´ng Ä‘Æ°á»£c lÆ°u.");
-            errors.RemoveAll(message => NormalizeImportKey(message).Contains("ngaysinh", StringComparison.Ordinal));
+            else
+                warnings.Add("Ngày Sinh không hợp lệ nên không được lưu.");
         }
 
         if (!string.IsNullOrWhiteSpace(rawRow.Gender))
             ValidateImportGender(rawRow.Gender, warnings);
 
         if (!string.IsNullOrWhiteSpace(rawRow.Points))
-            warnings.Add("Điểm tích lũy không được import thủ công, hệ thống sẽ tự tính theo đơn hàng.");
+            warnings.Add("Điểm tích lũy không được import thủ công, hệ thống đã bỏ qua giá trị này.");
 
         if (!string.IsNullOrWhiteSpace(note))
             warnings.Add("Cột Ghi Chú Đặc Điểm KH chưa có trường lưu riêng nên không được lưu.");
@@ -1121,26 +1106,103 @@ public class CustomerLogic
         return null;
     }
 
+    private static readonly Lazy<Dictionary<string, CustomerGroup>> ImportCustomerGroupAliasMap = new(BuildImportCustomerGroupAliasMap);
+
+    private static Dictionary<string, CustomerGroup> BuildImportCustomerGroupAliasMap()
+    {
+        var aliases = new Dictionary<string, CustomerGroup>(StringComparer.OrdinalIgnoreCase);
+
+        AddImportCustomerGroupAliases(
+            aliases,
+            CustomerGroup.PhoThong,
+            "Phổ Thông",
+            "phổ thông",
+            "Pho Thong",
+            "Pho thong",
+            "pho Thong",
+            "Khách thường",
+            "Khach thuong",
+            "khach thuong",
+            "Khách lẻ",
+            "Khach le",
+            "khach le",
+            "Thường",
+            "Bán lẻ",
+            "Normal",
+            "normal",
+            "General",
+            "general",
+            "Retail",
+            "Member");
+
+        AddImportCustomerGroupAliases(
+            aliases,
+            CustomerGroup.DoiNgoai,
+            "VIP",
+            "Vip",
+            "vip",
+            "Khách VIP",
+            "Khach VIP",
+            "khach vip",
+            "khach VIP",
+            "khách vip",
+            "Đối ngoại",
+            "Doi Ngoai",
+            "Doi ngoai",
+            "doingoai",
+            "VVIP");
+
+        AddImportCustomerGroupAliases(
+            aliases,
+            CustomerGroup.DoanhNghiep,
+            "Doanh Nghiệp",
+            "doanh nghiep",
+            "doanh nghiệp",
+            "doanh Nghiệp",
+            "Doanh nghiệp",
+            "Doanh Nghiep",
+            "Doanh nghiep",
+            "doanh Nghiep",
+            "Công ty",
+            "Cong ty",
+            "Business",
+            "business",
+            "Company",
+            "company",
+            "Enterprise",
+            "enterprise",
+            "Corporate");
+
+        return aliases;
+    }
+
+    private static void AddImportCustomerGroupAliases(
+        Dictionary<string, CustomerGroup> aliases,
+        CustomerGroup group,
+        params string[] rawAliases)
+    {
+        foreach (var rawAlias in rawAliases)
+        {
+            var key = NormalizeImportKey(rawAlias);
+            if (!string.IsNullOrWhiteSpace(key) && !aliases.ContainsKey(key))
+                aliases[key] = group;
+        }
+    }
+
     private static CustomerGroup? ResolveImportCustomerGroup(string value, List<string> warnings)
     {
         var key = NormalizeImportKey(value);
         if (string.IsNullOrWhiteSpace(key))
             return CustomerGroup.PhoThong;
 
-        return key switch
-        {
-            "phothong" or "thuong" or "khachthuong" or "khachle" or "banle" or "general" or "normal" or "retail" or "member" => CustomerGroup.PhoThong,
-            "vip" or "khachvip" or "doingoai" or "vvip" => CustomerGroup.DoiNgoai,
-            "doanhnghiep" or "congty" or "corporate" or "enterprise" or "business" or "company" => CustomerGroup.DoanhNghiep,
-            _ => AddInvalidGroupWarning(value, warnings)
-        };
+        return ImportCustomerGroupAliasMap.Value.TryGetValue(key, out var group)
+            ? group
+            : AddInvalidGroupWarning(value, warnings);
     }
 
-    private static CustomerGroup? AddInvalidGroupWarning(string value, List<string> errors)
+    private static CustomerGroup? AddInvalidGroupWarning(string value, List<string> warnings)
     {
-        errors.Add($"Loại Khách Hàng '{value.Trim()}' không hợp lệ. Chỉ hỗ trợ Phổ Thông, VIP hoặc Doanh Nghiệp.");
-        errors.RemoveAt(errors.Count - 1);
-        errors.Add("Loáº¡i khĂ¡ch hĂ ng khĂ´ng nháº­n diá»‡n Ä‘Æ°á»£c, Ä‘Ă£ máº·c Ä‘á»‹nh lĂ  Phá»• ThĂ´ng.");
+        warnings.Add("Loại khách hàng không nhận diện được, đã mặc định là Phổ Thông.");
         return CustomerGroup.PhoThong;
     }
 
@@ -1165,7 +1227,7 @@ public class CustomerLogic
 
     private static CustomerSource WarnAndDefaultSource(string value, List<string> warnings)
     {
-        warnings.Add($"Nguồn Khách Hàng '{value.Trim()}' chưa có loại riêng trong hệ thống, đã mặc định là Khác.");
+        warnings.Add("Nguồn khách hàng không nhận diện được, đã mặc định là Khác.");
         return CustomerSource.Other;
     }
 
@@ -1417,13 +1479,13 @@ public class CustomerLogic
         errorMessage = null;
         if (string.IsNullOrWhiteSpace(phoneNumber))
         {
-            errorMessage = "Sá»‘ Ä‘iá»‡n thoáº¡i lĂ  báº¯t buá»™c.";
+            errorMessage = "Số điện thoại là bắt buộc.";
             return false;
         }
 
         if (!ImportPhoneRegex.IsMatch(phoneNumber))
         {
-            errorMessage = "Sá»‘ Ä‘iá»‡n thoáº¡i pháº£i gá»“m 10 chá»¯ sá»‘ vĂ  báº¯t Ä‘áº§u báº±ng 0.";
+            errorMessage = "Số điện thoại phải gồm 10 chữ số và bắt đầu bằng 0.";
             return false;
         }
 
@@ -1585,6 +1647,10 @@ public class CustomerLogic
         ("\u00C3\u00B9", "u"),
         ("\u00C3\u00BA", "u"),
         ("\u00C3\u00BD", "y"),
+        ("\u00C6\u00A0", "O"),
+        ("\u00C6\u00A1", "o"),
+        ("\u00C6\u00AF", "U"),
+        ("\u00C6\u00B0", "u"),
         ("\u00E1\u00BA\u00A1", "a"),
         ("\u00E1\u00BA\u00A3", "a"),
         ("\u00E1\u00BA\u00A5", "a"),
