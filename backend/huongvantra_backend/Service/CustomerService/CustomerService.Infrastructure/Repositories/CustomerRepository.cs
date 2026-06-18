@@ -47,6 +47,25 @@ public class CustomerRepository : ICustomerRepository
             .Take(pageSize)
             .ToListAsync(ct);
 
+    public async Task<IEnumerable<Customer>> GetAllForExportAsync(Guid? assignedSaleId = null, bool includeDeleted = false, CancellationToken ct = default)
+    {
+        var query = _db.Customers
+            .Include(c => c.Tier)
+            .Include(c => c.Addresses)
+            .AsQueryable();
+
+        query = includeDeleted
+            ? query.Where(c => c.IsDeleted)
+            : query.Where(c => !c.IsDeleted);
+
+        if (assignedSaleId.HasValue)
+            query = query.Where(c => c.AssignedSaleId == assignedSaleId.Value);
+
+        return await query
+            .OrderByDescending(c => c.CreatedAt)
+            .ToListAsync(ct);
+    }
+
     public async Task<int> CountAsync(Guid? assignedSaleId = null, CancellationToken ct = default) =>
         await _db.Customers.CountAsync(c => !c.IsDeleted && (!assignedSaleId.HasValue || c.AssignedSaleId == assignedSaleId.Value), ct);
 

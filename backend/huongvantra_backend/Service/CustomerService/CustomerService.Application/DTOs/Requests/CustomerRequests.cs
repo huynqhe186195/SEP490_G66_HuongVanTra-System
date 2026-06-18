@@ -28,6 +28,17 @@ public record UpdateCustomerRequest(
     string? Department = null
 );
 
+public class CustomerExportRequest
+{
+    public string? Keyword { get; set; }
+    public string? CustomerType { get; set; }
+    public string? TierCode { get; set; }
+    public int? TierId { get; set; }
+    public string? DebtFilter { get; set; }
+    public string? SortBy { get; set; }
+    public string? ActiveTab { get; set; }
+}
+
 public record RecordDebtTransactionRequest(
     DebtTransactionType Type,
     decimal Amount,

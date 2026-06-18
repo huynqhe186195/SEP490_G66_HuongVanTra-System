@@ -87,6 +87,14 @@ public class CustomersController : ControllerBase
         return Ok(result);
     }
 
+    [HttpGet("export")]
+    [Authorize(Policy = PermissionNames.ViewCustomer)]
+    public async Task<IActionResult> ExportCustomers([FromQuery] CustomerExportRequest request, CancellationToken ct = default)
+    {
+        var result = await _logic.ExportToExcelAsync(request, AccessContext(), ct);
+        return File(result.Content, result.ContentType, result.FileName);
+    }
+
     [HttpGet("{id:guid}")]
     [Authorize(Policy = PermissionNames.ViewCustomer)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct = default)

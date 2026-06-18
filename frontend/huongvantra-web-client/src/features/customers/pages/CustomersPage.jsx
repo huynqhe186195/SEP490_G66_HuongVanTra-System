@@ -13,6 +13,7 @@ import CustomersMobileCards from '../components/CustomersMobileCards.jsx'
 import { useCustomersList } from '../hooks/useCustomersList.js'
 import {
   downloadCustomerImportTemplate,
+  exportCustomersToExcel,
   fetchMembershipTiers,
   fetchCustomerStatistics,
   importCustomersFromExcel,
@@ -29,6 +30,7 @@ import {
   customerTypeLabelFromType,
   getMembershipTierLabel,
   CUSTOMER_CORPORATE_ENABLED,
+  CUSTOMER_TYPE_BY_TAB,
   isCorporateCustomerType,
 } from '../utils/customerDisplay.js'
 
@@ -109,6 +111,7 @@ function CustomersPage() {
   const [importResult, setImportResult] = useState(null)
   const [isImporting, setIsImporting] = useState(false)
   const [isTemplateDownloading, setIsTemplateDownloading] = useState(false)
+  const [isExporting, setIsExporting] = useState(false)
 
   const { customers, isLoading, reload } = useCustomersList({
     activeTab,
@@ -232,6 +235,27 @@ function CustomersPage() {
       showError(error.message || 'Import khách hàng thất bại.')
     } finally {
       setIsImporting(false)
+    }
+  }
+
+  async function handleExportCustomers() {
+    if (isExporting) return
+
+    try {
+      setIsExporting(true)
+      await exportCustomersToExcel({
+        activeTab,
+        keyword: searchValue.trim() || undefined,
+        customerType: activeTab === 'inactive' ? undefined : CUSTOMER_TYPE_BY_TAB[activeTab],
+        tierCode: activeTab === 'general' ? tierFilter || undefined : undefined,
+        debtFilter: activeTab === 'inactive' ? undefined : debtFilter || undefined,
+        sortBy: activeTab === 'inactive' ? undefined : sortBy || undefined,
+      })
+      showSuccess('Đã tải file export khách hàng.')
+    } catch (error) {
+      showError(error.message || 'Export khách hàng thất bại.')
+    } finally {
+      setIsExporting(false)
     }
   }
 
@@ -374,6 +398,15 @@ function CustomersPage() {
                 </button>
               </>
             ) : null}
+            <button
+              type="button"
+              className="inline-flex h-11 items-center justify-center gap-1 rounded-full border border-[#356647]/30 bg-white px-3 text-xs font-semibold text-[#356647] hover:bg-[#356647]/5 disabled:opacity-60 sm:h-12 sm:px-5 sm:text-sm"
+              disabled={isExporting || isLoading}
+              onClick={handleExportCustomers}
+            >
+              <span className={`material-symbols-outlined text-[18px] sm:text-[20px] ${isExporting ? 'animate-spin' : ''}`}>ios_share</span>
+              <span className="truncate">Export Excel</span>
+            </button>
             <Link
               to="/customers/addresses"
               className="inline-flex h-11 items-center justify-center gap-1 rounded-full border border-[#356647]/30 bg-white px-3 text-xs font-semibold text-[#356647] hover:bg-[#356647]/5 sm:h-12 sm:px-5 sm:text-sm"
@@ -1164,7 +1197,7 @@ function CustomersPage() {
                   Import khách hàng từ Excel
                 </h2>
                 <p className="mt-1 text-sm text-[#717971]">
-                  Chọn file `.xlsx` theo mẫu. Hệ thống sẽ bỏ qua dòng lỗi và báo cáo chi tiết từng dòng.
+                  Chọn file `.xlsx` theo mẫu. Một file có thể import khách Phổ Thông, VIP và Doanh Nghiệp; hệ thống sẽ bỏ qua dòng lỗi và báo cáo chi tiết từng dòng.
                 </p>
               </div>
               <button
@@ -1193,7 +1226,7 @@ function CustomersPage() {
                     }}
                   />
                   <p className="text-xs text-[#717971]">
-                    Cột bắt buộc: Họ và tên, Số điện thoại. Email sai định dạng sẽ được bỏ qua và ghi cảnh báo.
+                    Cột bắt buộc: Họ và Tên, Số Điện Thoại. Số điện thoại đã tồn tại sẽ bị bỏ qua. Email sai định dạng sẽ được bỏ qua và ghi cảnh báo; Điểm Tích Lũy không import thủ công.
                   </p>
                 </label>
 

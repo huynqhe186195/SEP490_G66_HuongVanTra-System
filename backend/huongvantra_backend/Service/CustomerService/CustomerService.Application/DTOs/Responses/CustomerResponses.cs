@@ -132,3 +132,9 @@ public record CustomerImportResultResponse(
     int WarningCount,
     IReadOnlyList<CustomerImportRowResultResponse> Rows
 );
+
+public record CustomerExcelFileResponse(
+    byte[] Content,
+    string FileName,
+    string ContentType
+);

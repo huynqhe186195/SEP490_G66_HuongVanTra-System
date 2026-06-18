@@ -9,6 +9,7 @@ public interface ICustomerRepository
     Task<bool> PhoneExistsAsync(string phone, Guid? excludeCustomerId = null, CancellationToken ct = default);
     Task<bool> EmailExistsAsync(string email, Guid? excludeCustomerId = null, CancellationToken ct = default);
     Task<IEnumerable<Customer>> GetAllAsync(int page, int pageSize, Guid? assignedSaleId = null, CancellationToken ct = default);
+    Task<IEnumerable<Customer>> GetAllForExportAsync(Guid? assignedSaleId = null, bool includeDeleted = false, CancellationToken ct = default);
     Task<int> CountAsync(Guid? assignedSaleId = null, CancellationToken ct = default);
     Task<string> GenerateNextCustomerCodeAsync(CancellationToken ct = default);
     Task AddAsync(Customer customer, CancellationToken ct = default);

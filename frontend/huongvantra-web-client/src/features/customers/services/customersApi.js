@@ -45,6 +45,17 @@ export function mapCustomer(item) {
   }
 }
 
+function downloadBlob(blob, fileName) {
+  const url = window.URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = fileName
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  window.URL.revokeObjectURL(url)
+}
+
 function mapCustomerImportRow(item) {
   if (!item || typeof item !== 'object') return null
   const messages = item.messages ?? item.Messages ?? []
@@ -73,14 +84,34 @@ export async function downloadCustomerImportTemplate() {
     method: 'GET',
     responseType: 'blob',
   })
-  const url = window.URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = 'mau-import-khach-hang.xlsx'
-  document.body.appendChild(link)
-  link.click()
-  link.remove()
-  window.URL.revokeObjectURL(url)
+  downloadBlob(blob, 'Mau_Import_Khach_Hang_Huong_Van_Tra.xlsx')
+}
+
+export async function exportCustomersToExcel(params = {}) {
+  const query = new URLSearchParams()
+  const entries = {
+    keyword: params.keyword,
+    customerType: params.customerType,
+    tierCode: params.tierCode,
+    tierId: params.tierId,
+    debtFilter: params.debtFilter,
+    sortBy: params.sortBy,
+    activeTab: params.activeTab,
+  }
+
+  Object.entries(entries).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && String(value).trim() !== '') {
+      query.set(key, String(value).trim())
+    }
+  })
+
+  const suffix = query.toString()
+  const blob = await apiRequestAuth(`/api/customers/export${suffix ? `?${suffix}` : ''}`, {
+    method: 'GET',
+    responseType: 'blob',
+  })
+  const timestamp = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '')
+  downloadBlob(blob, `Khach_Hang_Huong_Van_Tra_${timestamp}.xlsx`)
 }
 
 export async function importCustomersFromExcel(file) {
