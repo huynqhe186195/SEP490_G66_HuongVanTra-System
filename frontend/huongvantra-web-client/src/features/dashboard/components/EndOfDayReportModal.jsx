@@ -6,6 +6,7 @@ import { loadPosSeller } from '../../pos/utils/posSeller.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import { canViewAllOrders } from '../../auth/utils/permissions.js'
 import { formatVietnamDateTimeMinute } from '../../../utils/vietnamDateTime.js'
+import * as XLSX from 'xlsx'
 
 function formatCurrency(value) {
   return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value || 0)
@@ -126,15 +127,49 @@ export default function EndOfDayReportModal({ isOpen, onClose }) {
   const totalNet = orders.reduce((sum, o) => sum + (o.finalAmount || 0), 0)
   const totalDiscount = orders.reduce((sum, o) => sum + (o.discountAmount || 0), 0)
 
+  const handleExportExcel = () => {
+    const excelData = orders.map(o => ({
+      "Mã giao dịch": o.orderCode,
+      "Thời gian": new Date(o.createdAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
+      "Số lượng": o.totalQuantity || 0,
+      "Doanh thu": o.totalAmount || 0,
+      "Giảm giá": o.discountAmount || 0,
+      "Thực thu": o.finalAmount || 0
+    }))
+
+    // Add totals row
+    excelData.push({
+      "Mã giao dịch": "TỔNG CỘNG",
+      "Thời gian": "",
+      "Số lượng": orders.reduce((sum, o) => sum + (o.totalQuantity || 0), 0),
+      "Doanh thu": totalGross,
+      "Giảm giá": totalDiscount,
+      "Thực thu": totalNet
+    })
+
+    const wb = XLSX.utils.book_new()
+    const ws = XLSX.utils.json_to_sheet(excelData)
+    XLSX.utils.book_append_sheet(wb, ws, "Báo cáo")
+    XLSX.writeFile(wb, `Bao_cao_cuoi_ngay_${filterDate}.xlsx`)
+  }
+
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm sm:p-6">
       <div className="flex max-h-full w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
         
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-gray-100 p-4 sm:p-6">
-          <div className="flex items-center gap-6">
+        <div className="flex flex-col gap-4 border-b border-gray-100 p-4 sm:p-6">
+          <div className="flex items-center justify-between">
             <h2 className="text-xl font-bold text-gray-900">Báo cáo doanh thu cuối ngày</h2>
-            
+            <button
+              onClick={onClose}
+              className="flex h-10 w-10 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+            >
+              <span className="material-symbols-outlined">close</span>
+            </button>
+          </div>
+          
+          <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <input 
                 type="date" 
@@ -154,31 +189,33 @@ export default function EndOfDayReportModal({ isOpen, onClose }) {
                 ))}
               </select>
             </div>
-          </div>
-          
-          <div className="flex items-center gap-2">
-            <select 
-              value={paperSize} 
-              onChange={(e) => setPaperSize(e.target.value)}
-              className="rounded-lg border-gray-300 text-sm focus:border-[#356647] focus:ring-[#356647]"
-            >
-              <option value="A4">Khổ A4</option>
-              <option value="K80">Khổ K80</option>
-            </select>
-            <button
-              onClick={handlePrint}
-              disabled={isLoading || orders.length === 0}
-              className="flex items-center gap-2 rounded-lg bg-[#356647] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#2a5238] disabled:opacity-50"
-            >
-              <span className="material-symbols-outlined text-[20px]">print</span>
-              Xuất ra PDF
-            </button>
-            <button
-              onClick={onClose}
-              className="flex h-10 w-10 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
-            >
-              <span className="material-symbols-outlined">close</span>
-            </button>
+            
+            <div className="flex items-center gap-2">
+              <select 
+                value={paperSize} 
+                onChange={(e) => setPaperSize(e.target.value)}
+                className="rounded-lg border-gray-300 text-sm focus:border-[#356647] focus:ring-[#356647]"
+              >
+                <option value="A4">Khổ A4</option>
+                <option value="K80">Khổ K80</option>
+              </select>
+              <button
+                onClick={handleExportExcel}
+                disabled={isLoading || orders.length === 0}
+                className="flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-green-700 disabled:opacity-50"
+              >
+                <span className="material-symbols-outlined text-[20px]">table_view</span>
+                Xuất ra Excel
+              </button>
+              <button
+                onClick={handlePrint}
+                disabled={isLoading || orders.length === 0}
+                className="flex items-center gap-2 rounded-lg bg-[#356647] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#2a5238] disabled:opacity-50"
+              >
+                <span className="material-symbols-outlined text-[20px]">print</span>
+                Xuất ra PDF
+              </button>
+            </div>
           </div>
         </div>
 

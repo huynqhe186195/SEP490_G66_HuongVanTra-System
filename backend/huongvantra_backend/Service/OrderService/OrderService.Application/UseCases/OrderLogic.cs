@@ -1003,7 +1003,7 @@ public class OrderLogic(
             var customer = await _customerCatalogClient.GetCustomerAsync(order.CustomerId.Value, ct);
             if (customer is not null && !string.IsNullOrWhiteSpace(customer.Email))
             {
-                _ = Task.Run(() => _emailService.SendInvoiceEmailAsync(customer.Email, customer.FullName ?? "Quý khách", order, CancellationToken.None));
+                _ = Task.Run(() => _emailService.SendInvoiceEmailAsync(customer.Email, customer.FullName ?? "Quý khách", customer.TierName, order, CancellationToken.None));
             }
         }
         catch (Exception ex)

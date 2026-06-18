@@ -1,7 +1,7 @@
 export const DASHBOARD_SECTIONS = [
   { key: 'overview', label: 'Tổng quan chỉ số' },
-  { key: 'top-products', label: 'Top sản phẩm bán chạy' },
-  { key: 'by-category', label: 'Báo cáo theo danh mục' },
+  { key: 'sales-growth', label: 'Tăng trưởng bán hàng' },
+  { key: 'customer-growth', label: 'Tăng trưởng khách hàng' },
 ]
 
 export function getDashboardSectionFromSearch(search = '') {

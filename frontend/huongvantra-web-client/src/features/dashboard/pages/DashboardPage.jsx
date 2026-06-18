@@ -1,12 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { 
+    BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, 
+    PieChart, Pie, Cell, Legend,
+    LineChart, Line, CartesianGrid
+} from 'recharts';
 import PageHeader from "../../../components/shared/PageHeader.jsx";
 import EndOfDayReportModal from "../components/EndOfDayReportModal.jsx";
 import { dashboardApi } from "../services/dashboardApi.js";
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import { getDashboardSectionFromSearch, getDashboardSectionLabel } from '../../../app/dashboardSections.js'
 
-const VALID_SECTIONS = new Set(['overview', 'top-products', 'by-category']);
+const VALID_SECTIONS = new Set(['overview', 'sales-growth', 'customer-growth']);
+const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#ffc658'];
 
 function DashboardPage() {
     const [searchParams] = useSearchParams();
@@ -28,14 +34,23 @@ function DashboardPage() {
     const [stats, setStats] = useState(null);
     const [topProducts, setTopProducts] = useState([]);
     const [categorySales, setCategorySales] = useState([]);
+    const [customerGrowthData, setCustomerGrowthData] = useState([]);
+    const [revenueGrowthData, setRevenueGrowthData] = useState([]);
+    const [salesByChannelData, setSalesByChannelData] = useState([]);
+    const [orderGrowthData, setOrderGrowthData] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(null);
+
+    const [showCustomerLine, setShowCustomerLine] = useState(true);
+    const [showOrderLine, setShowOrderLine] = useState(true);
 
     const [filterPeriod, setFilterPeriod] = useState('month'); // 'month', 'quarter', 'year'
     const [filterMonth, setFilterMonth] = useState(new Date().getMonth() + 1);
     const [filterQuarter, setFilterQuarter] = useState(Math.floor(new Date().getMonth() / 3) + 1);
     const [filterYear, setFilterYear] = useState(new Date().getFullYear());
     const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+    
+    const [topCount, setTopCount] = useState(5); // Default top 5
 
     useEffect(() => {
         const fetchStats = async () => {
@@ -45,14 +60,45 @@ function DashboardPage() {
                 if (filterPeriod === 'month') params.month = filterMonth;
                 if (filterPeriod === 'quarter') params.quarter = filterQuarter;
 
-                const [statsData, topProductsData, categorySalesData] = await Promise.all([
+                const paramsLastYear = { ...params, year: params.year - 1 };
+
+                const [statsData, topProductsData, categorySalesData, customerGrowth, revenueGrowth, salesByChannel, orderGrowth, revenueGrowthLastYear] = await Promise.all([
                     dashboardApi.getSalesStatistics(params), 
-                    dashboardApi.getTopProducts({ topCount: 5, ...params }),
-                    dashboardApi.getSalesByCategory(params)
+                    dashboardApi.getTopProducts({ topCount, ...params }),
+                    dashboardApi.getSalesByCategory(params),
+                    dashboardApi.getCustomerGrowth(params),
+                    dashboardApi.getRevenueGrowth(params),
+                    dashboardApi.getSalesByChannel(params),
+                    dashboardApi.getOrderGrowth(params),
+                    dashboardApi.getRevenueGrowth(paramsLastYear)
                 ]);
                 setStats(statsData);
                 setTopProducts(topProductsData);
                 setCategorySales(categorySalesData);
+                
+                // Merge customer and order growth
+                const mergedCustomerOrder = customerGrowth.map(c => {
+                    const o = orderGrowth.find(x => x.label === c.label);
+                    return {
+                        label: c.label,
+                        "Khách hàng mới": c.value,
+                        "Số lượng đơn": o ? o.value : 0
+                    };
+                });
+                setCustomerGrowthData(mergedCustomerOrder);
+                
+                // Merge revenue growth data
+                const mergedRevenue = revenueGrowth.map(current => {
+                    const lastYear = revenueGrowthLastYear.find(prev => prev.label === current.label);
+                    return {
+                        label: current.label,
+                        "Năm nay": current.value,
+                        "Năm trước": lastYear ? lastYear.value : 0
+                    };
+                });
+                setRevenueGrowthData(mergedRevenue);
+                setSalesByChannelData(salesByChannel);
+                setOrderGrowthData(orderGrowth);
             } catch (err) {
                 setError("Không thể tải dữ liệu thống kê");
                 console.error(err);
@@ -62,7 +108,7 @@ function DashboardPage() {
         };
 
         fetchStats();
-    }, [filterPeriod, filterMonth, filterQuarter, filterYear]);
+    }, [filterPeriod, filterMonth, filterQuarter, filterYear, topCount]);
 
     const formatCurrency = (value) => {
         return new Intl.NumberFormat("vi-VN", {
@@ -77,6 +123,302 @@ function DashboardPage() {
             minimumFractionDigits: 1,
         }).format(value || 0);
     };
+
+    const renderOverview = () => (
+        <div className="flex flex-col gap-6">
+            <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+                <MetricCard title="Số đơn bán ra" value={stats?.totalCompletedOrders || 0} icon="receipt_long" colorClass="text-purple-600" bgClass="bg-purple-50" />
+                
+                {canViewRevenue && (
+                    <>
+                        <MetricCard title="Doanh thu gộp" value={formatCurrency(stats?.grossRevenue)} icon="payments" colorClass="text-blue-600" bgClass="bg-blue-50" />
+                        <MetricCard title="Doanh thu thuần" value={formatCurrency(stats?.netRevenue)} icon="account_balance_wallet" colorClass="text-[#356647]" bgClass="bg-[#eaf4eb]" />
+                        <MetricCard title="Lợi nhuận gộp" value={formatCurrency(stats?.grossProfit)} icon="savings" colorClass="text-yellow-600" bgClass="bg-yellow-50" />
+                    </>
+                )}
+
+                <MetricCard title="Số đơn trả hàng" value={(stats?.partiallyReturnedOrders || 0) + (stats?.fullyReturnedOrders || 0)} icon="remove_shopping_cart" colorClass="text-orange-600" bgClass="bg-orange-50" />
+                
+                {canViewRevenue && (
+                    <>
+                        <MetricCard title="Tổng tiền hoàn trả" value={formatCurrency(stats?.refundAmount)} icon="assignment_return" colorClass="text-red-600" bgClass="bg-red-50" />
+                        <MetricCard title="Tỷ lệ trả hàng" value={formatPercent(stats?.returnRate)} icon="percent" colorClass="text-slate-600" bgClass="bg-slate-50" />
+                    </>
+                )}
+            </div>
+
+            {canViewRevenue && (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    {/* Revenue Growth Chart */}
+                    <div className="lg:col-span-2 rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+                        <h3 className="mb-6 text-lg font-bold text-gray-800">Doanh Thu Thuần Theo Thời Gian</h3>
+                        {revenueGrowthData && revenueGrowthData.length > 0 ? (
+                            <div className="h-[300px] w-full">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <LineChart data={revenueGrowthData} margin={{ top: 10, right: 30, left: 20, bottom: 10 }}>
+                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                                        <XAxis dataKey="label" tick={{fontSize: 12, fill: '#6b7280'}} tickLine={false} axisLine={false} />
+                                        <YAxis tickFormatter={(val) => new Intl.NumberFormat('vi-VN', { notation: "compact" }).format(val)} tick={{fontSize: 12, fill: '#6b7280'}} tickLine={false} axisLine={false} />
+                                        <Tooltip formatter={(value) => formatCurrency(value)} />
+                                        <Legend verticalAlign="top" height={36} />
+                                        <Line type="monotone" dataKey="Năm nay" stroke="#3b82f6" strokeWidth={3} activeDot={{ r: 6 }} name={`Năm ${filterYear}`} />
+                                        <Line type="monotone" dataKey="Năm trước" stroke="#9ca3af" strokeWidth={2} strokeDasharray="5 5" name={`Năm ${filterYear - 1}`} />
+                                    </LineChart>
+                                </ResponsiveContainer>
+                            </div>
+                        ) : (
+                            <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-8 text-center text-sm text-gray-500 min-h-[300px] flex items-center justify-center">
+                                Chưa có dữ liệu doanh thu.
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Sales by Channel Chart */}
+                    <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+                        <h3 className="mb-6 text-lg font-bold text-gray-800">Doanh Số Theo Kênh Bán</h3>
+                        {salesByChannelData && salesByChannelData.length > 0 ? (
+                            <div className="h-[300px] w-full flex flex-col items-center">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <PieChart>
+                                        <Pie
+                                            data={salesByChannelData}
+                                            cx="50%" cy="50%"
+                                            innerRadius={40} outerRadius={80}
+                                            paddingAngle={5}
+                                            dataKey="totalRevenue"
+                                            nameKey="categoryName"
+                                            label={({name, percent}) => `${name} ${(percent * 100).toFixed(0)}%`}
+                                        >
+                                            {salesByChannelData.map((entry, index) => (
+                                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                            ))}
+                                        </Pie>
+                                        <Tooltip formatter={(value) => formatCurrency(value)} />
+                                    </PieChart>
+                                </ResponsiveContainer>
+                            </div>
+                        ) : (
+                            <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-8 text-center text-sm text-gray-500 min-h-[300px] flex items-center justify-center">
+                                Chưa có dữ liệu kênh bán.
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+
+    const renderSalesGrowth = () => (
+        <div className="flex flex-col gap-8">
+            {/* Top Products Section */}
+            <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+                <div className="flex justify-between items-center mb-6">
+                    <h3 className="text-lg font-bold text-gray-800">Top Sản Phẩm Bán Chạy</h3>
+                    <div className="flex bg-gray-100 p-1 rounded-lg">
+                        <button 
+                            onClick={() => setTopCount(5)}
+                            className={`px-4 py-1 text-sm font-medium rounded-md transition-colors ${topCount === 5 ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+                        >
+                            Top 5
+                        </button>
+                        <button 
+                            onClick={() => setTopCount(10)}
+                            className={`px-4 py-1 text-sm font-medium rounded-md transition-colors ${topCount === 10 ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+                        >
+                            Top 10
+                        </button>
+                    </div>
+                </div>
+
+                {topProducts && topProducts.length > 0 ? (
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                        <div className="w-full" style={{ height: `${Math.max(300, topProducts.length * 40)}px` }}>
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={topProducts} layout="vertical" margin={{ top: 5, right: 30, left: 0, bottom: 5 }}>
+                                    <XAxis type="number" tickFormatter={(val) => new Intl.NumberFormat('vi-VN', { notation: "compact", compactDisplay: "short" }).format(val)} />
+                                    <YAxis dataKey="skuSnapshotName" type="category" width={150} tick={{fontSize: 12}} interval={0} />
+                                    <Tooltip formatter={(value) => formatCurrency(value)} />
+                                    <Bar dataKey="totalRevenue" fill="#3b82f6" name="Doanh thu" radius={[0, 4, 4, 0]} />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </div>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left text-sm text-gray-600">
+                                <thead className="bg-gray-50 text-xs uppercase text-gray-500">
+                                    <tr>
+                                        <th className="px-4 py-3 font-medium">Sản phẩm</th>
+                                        <th className="px-4 py-3 font-medium text-right">Đã bán</th>
+                                        <th className="px-4 py-3 font-medium text-right">Doanh thu</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100">
+                                    {topProducts.map((p, i) => (
+                                        <tr key={p.skuId} className="transition-colors hover:bg-gray-50">
+                                            <td className="px-4 py-3">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-100 font-bold text-blue-600">
+                                                        #{i + 1}
+                                                    </div>
+                                                    <span className="font-medium text-gray-900 line-clamp-1">{p.skuSnapshotName}</span>
+                                                </div>
+                                            </td>
+                                            <td className="px-4 py-3 text-right font-medium">{p.totalQuantitySold}</td>
+                                            <td className="px-4 py-3 text-right font-medium text-[#356647]">{formatCurrency(p.totalRevenue)}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-8 text-center text-sm text-gray-500">
+                        Chưa có dữ liệu sản phẩm trong kỳ đã chọn.
+                    </div>
+                )}
+            </div>
+
+            {/* Categories Section */}
+            <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+                <h3 className="mb-6 text-lg font-bold text-gray-800">Doanh Số Theo Danh Mục</h3>
+                
+                {categorySales && categorySales.length > 0 ? (
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
+                        <div className="h-[300px] w-full">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <PieChart>
+                                    <Pie
+                                        data={categorySales}
+                                        cx="50%"
+                                        cy="50%"
+                                        innerRadius={60}
+                                        outerRadius={100}
+                                        paddingAngle={5}
+                                        dataKey="totalRevenue"
+                                        nameKey="categoryName"
+                                        label={({name, percent}) => `${name} ${(percent * 100).toFixed(0)}%`}
+                                    >
+                                        {categorySales.map((entry, index) => (
+                                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                        ))}
+                                    </Pie>
+                                    <Tooltip formatter={(value) => formatCurrency(value)} />
+                                </PieChart>
+                            </ResponsiveContainer>
+                        </div>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left text-sm text-gray-600">
+                                <thead className="bg-gray-50 text-xs uppercase text-gray-500">
+                                    <tr>
+                                        <th className="px-4 py-3 font-medium">Danh mục</th>
+                                        <th className="px-4 py-3 font-medium text-right">Số lượng</th>
+                                        <th className="px-4 py-3 font-medium text-right">Doanh thu</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100">
+                                    {categorySales.map((c, i) => (
+                                        <tr key={i} className="transition-colors hover:bg-gray-50">
+                                            <td className="px-4 py-3">
+                                                <div className="flex items-center gap-3">
+                                                    <span className="material-symbols-outlined text-gray-400">category</span>
+                                                    <span className="font-medium text-gray-900">{c.categoryName}</span>
+                                                </div>
+                                            </td>
+                                            <td className="px-4 py-3 text-right font-medium">{c.totalQuantitySold}</td>
+                                            <td className="px-4 py-3 text-right font-medium text-blue-600">{formatCurrency(c.totalRevenue)}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-8 text-center text-sm text-gray-500">
+                        Chưa có dữ liệu danh mục trong kỳ đã chọn.
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+
+    const renderCustomerGrowth = () => (
+        <div className="flex flex-col gap-6">
+            <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
+                <MetricCard 
+                    title="Khách hàng mua sắm" 
+                    value={stats?.customerCount || 0} 
+                    icon="group" 
+                    colorClass="text-teal-600" 
+                    bgClass="bg-teal-50" 
+                />
+                <MetricCard
+                    title="Tăng trưởng khách hàng (So với kỳ trước)"
+                    value={formatPercent(stats?.customerGrowthRate)}
+                    icon="trending_up"
+                    colorClass={stats?.customerGrowthRate >= 0 ? "text-emerald-600" : "text-red-600"}
+                    bgClass={stats?.customerGrowthRate >= 0 ? "bg-emerald-50" : "bg-red-50"}
+                />
+            </div>
+            <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+                <div className="flex justify-between items-center mb-6">
+                    <h3 className="text-lg font-bold text-gray-800">Biểu đồ Tăng trưởng khách hàng & Đơn hàng</h3>
+                    <div className="flex gap-2">
+                        <button 
+                            onClick={() => setShowCustomerLine(!showCustomerLine)}
+                            className={`px-3 py-1 rounded-md text-sm font-medium border transition-colors ${showCustomerLine ? 'bg-teal-50 text-teal-700 border-teal-200 shadow-sm' : 'bg-gray-50 text-gray-400 border-gray-200'}`}
+                        >
+                            Khách hàng
+                        </button>
+                        <button 
+                            onClick={() => setShowOrderLine(!showOrderLine)}
+                            className={`px-3 py-1 rounded-md text-sm font-medium border transition-colors ${showOrderLine ? 'bg-purple-50 text-purple-700 border-purple-200 shadow-sm' : 'bg-gray-50 text-gray-400 border-gray-200'}`}
+                        >
+                            Đơn hàng
+                        </button>
+                    </div>
+                </div>
+                {customerGrowthData && customerGrowthData.length > 0 ? (
+                    <div className="h-[400px] w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <LineChart data={customerGrowthData} margin={{ top: 10, right: 30, left: 0, bottom: 10 }}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                                <XAxis dataKey="label" tick={{fontSize: 12, fill: '#6b7280'}} tickLine={false} axisLine={false} />
+                                <YAxis tick={{fontSize: 12, fill: '#6b7280'}} tickLine={false} axisLine={false} />
+                                <Tooltip
+                                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                                    labelStyle={{ color: '#374151', fontWeight: 'bold', marginBottom: '4px' }}
+                                />
+                                <Legend verticalAlign="top" height={36} />
+                                {showCustomerLine && (
+                                    <Line 
+                                        type="monotone" 
+                                        dataKey="Khách hàng mới" 
+                                        stroke="#0d9488" 
+                                        strokeWidth={3}
+                                        dot={{ r: 4, strokeWidth: 2, fill: '#fff' }}
+                                        activeDot={{ r: 6, strokeWidth: 0, fill: '#0d9488' }}
+                                    />
+                                )}
+                                {showOrderLine && (
+                                    <Line 
+                                        type="monotone" 
+                                        dataKey="Số lượng đơn" 
+                                        stroke="#8b5cf6" 
+                                        strokeWidth={3}
+                                        dot={{ r: 4, strokeWidth: 2, fill: '#fff' }}
+                                        activeDot={{ r: 6, strokeWidth: 0, fill: '#8b5cf6' }}
+                                    />
+                                )}
+                            </LineChart>
+                        </ResponsiveContainer>
+                    </div>
+                ) : (
+                    <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-8 text-center text-sm text-gray-500 min-h-[300px] flex items-center justify-center">
+                        Chưa có dữ liệu.
+                    </div>
+                )}
+            </div>
+        </div>
+    );
 
     return (
         <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 sm:gap-6">
@@ -145,142 +487,9 @@ function DashboardPage() {
             : error ?
                 <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-red-600">{error}</div>
             :   <div className="flex flex-col gap-6">
-                    {activeSection === 'overview' ? (
-                    <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
-                        {/* line 1 */}
-                        <MetricCard title="Số đơn bán ra" value={stats?.totalCompletedOrders || 0} icon="receipt_long" colorClass="text-purple-600" bgClass="bg-purple-50" />
-                        
-                        {canViewRevenue && (
-                            <>
-                                <MetricCard title="Doanh thu gộp (Gross Revenue)" value={formatCurrency(stats?.grossRevenue)} icon="payments" colorClass="text-blue-600" bgClass="bg-blue-50" />
-                                <MetricCard
-                                    title="Doanh thu thuần (Net Revenue)"
-                                    value={formatCurrency(stats?.netRevenue)}
-                                    icon="account_balance_wallet"
-                                    colorClass="text-[#356647]"
-                                    bgClass="bg-[#eaf4eb]"
-                                />
-                                <MetricCard
-                                    title="Lợi nhuận gộp (Gross Profit)"
-                                    value={formatCurrency(stats?.grossProfit)}
-                                    icon="savings"
-                                    colorClass="text-yellow-600"
-                                    bgClass="bg-yellow-50"
-                                />
-                            </>
-                        )}
-                        
-                        {canViewCustomerGrowth && <MetricCard title="Khách hàng mua sắm" value={stats?.customerCount || 0} icon="group" colorClass="text-teal-600" bgClass="bg-teal-50" />}
-
-                        {/* line 2 */}
-                        <MetricCard
-                            title="Số đơn trả hàng"
-                            value={(stats?.partiallyReturnedOrders || 0) + (stats?.fullyReturnedOrders || 0)}
-                            icon="remove_shopping_cart"
-                            colorClass="text-orange-600"
-                            bgClass="bg-orange-50"
-                        />
-                        
-                        {canViewRevenue && (
-                            <>
-                                <MetricCard
-                                    title="Tổng tiền hoàn trả"
-                                    value={formatCurrency(stats?.refundAmount)}
-                                    icon="assignment_return"
-                                    colorClass="text-red-600"
-                                    bgClass="bg-red-50"
-                                />
-                                <MetricCard title="Tỷ lệ trả hàng" value={formatPercent(stats?.returnRate)} icon="percent" colorClass="text-slate-600" bgClass="bg-slate-50" />
-                            </>
-                        )}
-
-                        {canViewCustomerGrowth && (
-                            <MetricCard
-                                title="Tăng trưởng khách hàng"
-                                value={formatPercent(stats?.customerGrowthRate)}
-                                icon="trending_up"
-                                colorClass="text-emerald-600"
-                                bgClass="bg-emerald-50"
-                            />
-                        )}
-                    </div>
-                    ) : null}
-
-                    {activeSection === 'top-products' ? (
-                        topProducts && topProducts.length > 0 ? (
-                            <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm sm:p-6">
-                                <h3 className="mb-4 text-lg font-bold text-gray-800">Top 5 sản phẩm bán chạy</h3>
-                                <div className="overflow-x-auto">
-                                    <table className="w-full text-left text-sm text-gray-600">
-                                        <thead className="bg-gray-50 text-xs uppercase text-gray-500">
-                                            <tr>
-                                                <th className="px-4 py-3 font-medium">Sản phẩm</th>
-                                                <th className="px-4 py-3 font-medium text-right">Đã bán</th>
-                                                <th className="px-4 py-3 font-medium text-right">Doanh thu</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-gray-100">
-                                            {topProducts.map((p, i) => (
-                                                <tr key={p.skuId} className="transition-colors hover:bg-gray-50">
-                                                    <td className="px-4 py-3">
-                                                        <div className="flex items-center gap-3">
-                                                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-orange-100 font-bold text-orange-600">
-                                                                #{i + 1}
-                                                            </div>
-                                                            <span className="font-medium text-gray-900 line-clamp-1">{p.skuSnapshotName}</span>
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-4 py-3 text-right font-medium">{p.totalQuantitySold}</td>
-                                                    <td className="px-4 py-3 text-right font-medium text-[#356647]">{formatCurrency(p.totalRevenue)}</td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="rounded-2xl border border-dashed border-gray-200 bg-white p-8 text-center text-sm text-gray-500">
-                                Chưa có dữ liệu top sản phẩm trong kỳ đã chọn.
-                            </div>
-                        )
-                    ) : null}
-
-                    {activeSection === 'by-category' ? (
-                        categorySales && categorySales.length > 0 ? (
-                            <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm sm:p-6">
-                                <h3 className="mb-4 text-lg font-bold text-gray-800">Báo cáo theo danh mục</h3>
-                                <div className="overflow-x-auto">
-                                    <table className="w-full text-left text-sm text-gray-600">
-                                        <thead className="bg-gray-50 text-xs uppercase text-gray-500">
-                                            <tr>
-                                                <th className="px-4 py-3 font-medium">Danh mục</th>
-                                                <th className="px-4 py-3 font-medium text-right">Số lượng</th>
-                                                <th className="px-4 py-3 font-medium text-right">Doanh thu</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-gray-100">
-                                            {categorySales.map((c, i) => (
-                                                <tr key={i} className="transition-colors hover:bg-gray-50">
-                                                    <td className="px-4 py-3">
-                                                        <div className="flex items-center gap-3">
-                                                            <span className="material-symbols-outlined text-gray-400">category</span>
-                                                            <span className="font-medium text-gray-900">{c.categoryName}</span>
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-4 py-3 text-right font-medium">{c.totalQuantitySold}</td>
-                                                    <td className="px-4 py-3 text-right font-medium text-blue-600">{formatCurrency(c.totalRevenue)}</td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="rounded-2xl border border-dashed border-gray-200 bg-white p-8 text-center text-sm text-gray-500">
-                                Chưa có dữ liệu theo danh mục trong kỳ đã chọn.
-                            </div>
-                        )
-                    ) : null}
+                    {activeSection === 'overview' && renderOverview()}
+                    {activeSection === 'sales-growth' && renderSalesGrowth()}
+                    {activeSection === 'customer-growth' && canViewCustomerGrowth && renderCustomerGrowth()}
                 </div>
             }
         </div>

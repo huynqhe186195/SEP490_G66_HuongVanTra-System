@@ -13,7 +13,7 @@ public class EmailService(IOptions<EmailOptions> options, ILogger<EmailService> 
 {
     private readonly EmailOptions _options = options.Value;
 
-    public async Task SendInvoiceEmailAsync(string toEmail, string customerName, Order order, CancellationToken ct = default)
+    public async Task SendInvoiceEmailAsync(string toEmail, string customerName, string? tierName, Order order, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(_options.SmtpHost) || string.IsNullOrWhiteSpace(_options.SmtpUser))
         {
@@ -38,7 +38,7 @@ public class EmailService(IOptions<EmailOptions> options, ILogger<EmailService> 
                 From = new MailAddress(_options.SmtpUser, "Hương Vân Trà"),
                 Subject = $"[Hương Vân Trà] Hoá đơn thanh toán đơn hàng {order.OrderCode}",
                 IsBodyHtml = true,
-                Body = GenerateInvoiceHtml(customerName, order),
+                Body = GenerateInvoiceHtml(customerName, tierName, order),
                 BodyEncoding = Encoding.UTF8,
                 SubjectEncoding = Encoding.UTF8
             };
@@ -60,7 +60,7 @@ public class EmailService(IOptions<EmailOptions> options, ILogger<EmailService> 
         }
     }
 
-    private static string GenerateInvoiceHtml(string customerName, Order order)
+    private static string GenerateInvoiceHtml(string customerName, string? tierName, Order order)
     {
         var sb = new StringBuilder();
         
@@ -100,7 +100,8 @@ public class EmailService(IOptions<EmailOptions> options, ILogger<EmailService> 
 
                 <div class='info-section' style='background-color: #f9fafb; padding: 15px; border-radius: 6px;'>
                     <p><strong>Mã đơn hàng:</strong> {order.OrderCode}</p>
-                    <p><strong>Ngày mua:</strong> {order.CreatedAt.ToLocalTime():dd/MM/yyyy HH:mm}</p>
+                    <p><strong>Ngày mua:</strong> {order.CreatedAt.ToLocalTime():dd/MM/yyyy HH:mm:ss}</p>
+                    {(string.IsNullOrWhiteSpace(tierName) ? "" : $"<p><strong>Hạng thành viên:</strong> {tierName}</p>")}
                     {(string.IsNullOrWhiteSpace(order.ShippingAddress) ? "" : $"<p><strong>Địa chỉ nhận hàng:</strong> {order.ShippingAddress}</p>")}
                 </div>
 
@@ -115,8 +116,16 @@ public class EmailService(IOptions<EmailOptions> options, ILogger<EmailService> 
                     </thead>
                     <tbody>");
 
+        int totalQuantity = 0;
+        decimal totalUnitPrice = 0;
+        decimal totalSubTotal = 0;
+
         foreach (var item in order.OrderDetails ?? Enumerable.Empty<OrderDetail>())
         {
+            totalQuantity += item.Quantity;
+            totalUnitPrice += item.UnitPrice;
+            totalSubTotal += item.SubTotal;
+
             var priceStr = item.IsGift ? "Quà tặng" : $"{item.UnitPrice:N0}đ";
             var subTotalStr = item.IsGift ? "0đ" : $"{item.SubTotal:N0}đ";
             
@@ -131,6 +140,14 @@ public class EmailService(IOptions<EmailOptions> options, ILogger<EmailService> 
 
         sb.Append($@"
                     </tbody>
+                    <tfoot>
+                        <tr style='font-weight: 600; background-color: #f9fafb;'>
+                            <td>Tổng cộng</td>
+                            <td class='text-right'>{totalQuantity}</td>
+                            <td class='text-right'>{totalUnitPrice:N0}đ</td>
+                            <td class='text-right'>{totalSubTotal:N0}đ</td>
+                        </tr>
+                    </tfoot>
                 </table>
 
                 <div class='summary'>

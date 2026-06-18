@@ -4,5 +4,5 @@ namespace OrderService.Application.Interfaces;
 
 public interface IEmailService
 {
-    Task SendInvoiceEmailAsync(string toEmail, string customerName, Order order, CancellationToken ct = default);
+    Task SendInvoiceEmailAsync(string toEmail, string customerName, string? tierName, Order order, CancellationToken ct = default);
 }
