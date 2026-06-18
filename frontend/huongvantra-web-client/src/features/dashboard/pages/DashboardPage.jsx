@@ -51,6 +51,7 @@ function DashboardPage() {
     const [isReportModalOpen, setIsReportModalOpen] = useState(false);
     
     const [topCount, setTopCount] = useState(5); // Default top 5
+    const [topProductsSortBy, setTopProductsSortBy] = useState('revenue'); // 'revenue' | 'quantity'
 
     useEffect(() => {
         const fetchStats = async () => {
@@ -64,7 +65,7 @@ function DashboardPage() {
 
                 const [statsData, topProductsData, categorySalesData, customerGrowth, revenueGrowth, salesByChannel, orderGrowth, revenueGrowthLastYear] = await Promise.all([
                     dashboardApi.getSalesStatistics(params), 
-                    dashboardApi.getTopProducts({ topCount, ...params }),
+                    dashboardApi.getTopProducts({ topCount, sortBy: topProductsSortBy, ...params }),
                     dashboardApi.getSalesByCategory(params),
                     dashboardApi.getCustomerGrowth(params),
                     dashboardApi.getRevenueGrowth(params),
@@ -108,7 +109,7 @@ function DashboardPage() {
         };
 
         fetchStats();
-    }, [filterPeriod, filterMonth, filterQuarter, filterYear, topCount]);
+    }, [filterPeriod, filterMonth, filterQuarter, filterYear, topCount, topProductsSortBy]);
 
     const formatCurrency = (value) => {
         return new Intl.NumberFormat("vi-VN", {
@@ -124,7 +125,32 @@ function DashboardPage() {
         }).format(value || 0);
     };
 
-    const renderOverview = () => (
+    const renderPieTooltip = (totalValue, isCurrency = true) => ({ active, payload }) => {
+        if (active && payload && payload.length) {
+            const data = payload[0];
+            const percent = totalValue > 0 ? (data.value / totalValue * 100).toFixed(1) : 0;
+            const formattedValue = isCurrency ? formatCurrency(data.value) : new Intl.NumberFormat('vi-VN').format(data.value);
+            return (
+                <div className="bg-white p-3 border border-gray-200 shadow-lg rounded-xl text-sm min-w-[150px]">
+                    <p className="font-bold text-gray-800 mb-1">{data.name}</p>
+                    <p className="text-gray-600 font-medium">
+                        {formattedValue} 
+                        <span className="text-gray-400 font-bold ml-2">({percent}%)</span>
+                    </p>
+                </div>
+            );
+        }
+        return null;
+    };
+
+    const renderOverview = () => {
+        const ordersRatioData = [
+            { name: 'Đơn thành công', value: stats?.totalCompletedOrders || 0 },
+            { name: 'Đơn trả hàng', value: (stats?.partiallyReturnedOrders || 0) + (stats?.fullyReturnedOrders || 0) }
+        ].filter(d => d.value > 0);
+        const totalOrdersRatio = ordersRatioData.reduce((sum, d) => sum + d.value, 0);
+
+        return (
         <div className="flex flex-col gap-6">
             <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
                 <MetricCard title="Số đơn bán ra" value={stats?.totalCompletedOrders || 0} icon="receipt_long" colorClass="text-purple-600" bgClass="bg-purple-50" />
@@ -140,15 +166,43 @@ function DashboardPage() {
                 <MetricCard title="Số đơn trả hàng" value={(stats?.partiallyReturnedOrders || 0) + (stats?.fullyReturnedOrders || 0)} icon="remove_shopping_cart" colorClass="text-orange-600" bgClass="bg-orange-50" />
                 
                 {canViewRevenue && (
-                    <>
-                        <MetricCard title="Tổng tiền hoàn trả" value={formatCurrency(stats?.refundAmount)} icon="assignment_return" colorClass="text-red-600" bgClass="bg-red-50" />
-                        <MetricCard title="Tỷ lệ trả hàng" value={formatPercent(stats?.returnRate)} icon="percent" colorClass="text-slate-600" bgClass="bg-slate-50" />
-                    </>
+                    <MetricCard title="Tổng tiền hoàn trả" value={formatCurrency(stats?.refundAmount)} icon="assignment_return" colorClass="text-red-600" bgClass="bg-red-50" />
                 )}
             </div>
 
             {canViewRevenue && (
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    {/* Orders Ratio Chart */}
+                    <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+                        <h3 className="mb-6 text-lg font-bold text-gray-800">Tỷ Lệ Đơn Hàng</h3>
+                        {ordersRatioData && ordersRatioData.length > 0 ? (
+                            <div className="h-[300px] w-full flex flex-col items-center">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <PieChart>
+                                        <Pie
+                                            data={ordersRatioData}
+                                            cx="50%" cy="50%"
+                                            innerRadius={40} outerRadius={80}
+                                            paddingAngle={5}
+                                            dataKey="value"
+                                            nameKey="name"
+                                            label={({name, percent}) => `${(percent * 100).toFixed(0)}%`}
+                                        >
+                                            {ordersRatioData.map((entry, index) => (
+                                                <Cell key={`cell-${index}`} fill={index === 0 ? '#10b981' : '#f43f5e'} />
+                                            ))}
+                                        </Pie>
+                                        <Tooltip content={renderPieTooltip(totalOrdersRatio, false)} />
+                                        <Legend verticalAlign="bottom" height={36} />
+                                    </PieChart>
+                                </ResponsiveContainer>
+                            </div>
+                        ) : (
+                            <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-8 text-center text-sm text-gray-500 min-h-[300px] flex items-center justify-center">
+                                Chưa có dữ liệu đơn hàng.
+                            </div>
+                        )}
+                    </div>
                     {/* Revenue Growth Chart */}
                     <div className="lg:col-span-2 rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
                         <h3 className="mb-6 text-lg font-bold text-gray-800">Doanh Thu Thuần Theo Thời Gian</h3>
@@ -193,7 +247,7 @@ function DashboardPage() {
                                                 <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                             ))}
                                         </Pie>
-                                        <Tooltip formatter={(value) => formatCurrency(value)} />
+                                        <Tooltip content={renderPieTooltip(salesByChannelData.reduce((acc, d) => acc + d.totalRevenue, 0), true)} />
                                     </PieChart>
                                 </ResponsiveContainer>
                             </div>
@@ -207,26 +261,43 @@ function DashboardPage() {
             )}
         </div>
     );
+    };
 
     const renderSalesGrowth = () => (
         <div className="flex flex-col gap-8">
             {/* Top Products Section */}
             <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
-                <div className="flex justify-between items-center mb-6">
+                <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-4 mb-6">
                     <h3 className="text-lg font-bold text-gray-800">Top Sản Phẩm Bán Chạy</h3>
-                    <div className="flex bg-gray-100 p-1 rounded-lg">
-                        <button 
-                            onClick={() => setTopCount(5)}
-                            className={`px-4 py-1 text-sm font-medium rounded-md transition-colors ${topCount === 5 ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
-                        >
-                            Top 5
-                        </button>
-                        <button 
-                            onClick={() => setTopCount(10)}
-                            className={`px-4 py-1 text-sm font-medium rounded-md transition-colors ${topCount === 10 ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
-                        >
-                            Top 10
-                        </button>
+                    <div className="flex flex-wrap gap-4">
+                        <div className="flex bg-gray-100 p-1 rounded-lg">
+                            <button 
+                                onClick={() => setTopProductsSortBy('revenue')}
+                                className={`px-4 py-1 text-sm font-medium rounded-md transition-colors ${topProductsSortBy === 'revenue' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+                            >
+                                Theo doanh thu
+                            </button>
+                            <button 
+                                onClick={() => setTopProductsSortBy('quantity')}
+                                className={`px-4 py-1 text-sm font-medium rounded-md transition-colors ${topProductsSortBy === 'quantity' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+                            >
+                                Theo số lượng
+                            </button>
+                        </div>
+                        <div className="flex bg-gray-100 p-1 rounded-lg">
+                            <button 
+                                onClick={() => setTopCount(5)}
+                                className={`px-4 py-1 text-sm font-medium rounded-md transition-colors ${topCount === 5 ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+                            >
+                                Top 5
+                            </button>
+                            <button 
+                                onClick={() => setTopCount(10)}
+                                className={`px-4 py-1 text-sm font-medium rounded-md transition-colors ${topCount === 10 ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+                            >
+                                Top 10
+                            </button>
+                        </div>
                     </div>
                 </div>
 
@@ -237,8 +308,12 @@ function DashboardPage() {
                                 <BarChart data={topProducts} layout="vertical" margin={{ top: 5, right: 30, left: 0, bottom: 5 }}>
                                     <XAxis type="number" tickFormatter={(val) => new Intl.NumberFormat('vi-VN', { notation: "compact", compactDisplay: "short" }).format(val)} />
                                     <YAxis dataKey="skuSnapshotName" type="category" width={150} tick={{fontSize: 12}} interval={0} />
-                                    <Tooltip formatter={(value) => formatCurrency(value)} />
-                                    <Bar dataKey="totalRevenue" fill="#3b82f6" name="Doanh thu" radius={[0, 4, 4, 0]} />
+                                    <Tooltip formatter={(value) => topProductsSortBy === 'revenue' ? formatCurrency(value) : new Intl.NumberFormat('vi-VN').format(value)} />
+                                    {topProductsSortBy === 'revenue' ? (
+                                        <Bar dataKey="totalRevenue" fill="#3b82f6" name="Doanh thu" radius={[0, 4, 4, 0]} />
+                                    ) : (
+                                        <Bar dataKey="totalQuantitySold" fill="#10b981" name="Số lượng bán" radius={[0, 4, 4, 0]} />
+                                    )}
                                 </BarChart>
                             </ResponsiveContainer>
                         </div>
@@ -301,7 +376,7 @@ function DashboardPage() {
                                             <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                         ))}
                                     </Pie>
-                                    <Tooltip formatter={(value) => formatCurrency(value)} />
+                                    <Tooltip content={renderPieTooltip(categorySales.reduce((acc, c) => acc + c.totalRevenue, 0), true)} />
                                 </PieChart>
                             </ResponsiveContainer>
                         </div>

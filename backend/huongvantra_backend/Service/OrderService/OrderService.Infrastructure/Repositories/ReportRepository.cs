@@ -131,7 +131,7 @@ public class ReportRepository(OrderDbContext dbContext) : IReportRepository
         };
     }
 
-    public async Task<List<TopProductDto>> GetTopSellingProductsAsync(int topCount, int? quarter, int? month, int? year, CancellationToken ct = default)
+    public async Task<List<TopProductDto>> GetTopSellingProductsAsync(int topCount, string sortBy, int? quarter, int? month, int? year, CancellationToken ct = default)
     {
         var query = dbContext.OrderDetails
             .Where(od => od.Order.OrderStatus == OrderStatus.Completed &&
@@ -154,7 +154,7 @@ public class ReportRepository(OrderDbContext dbContext) : IReportRepository
             query = query.Where(od => od.Order.CreatedAt.Month == month.Value);
         }
 
-        var topProducts = await query
+        var topProductsQuery = query
             .GroupBy(od => new { od.SkuId, od.SkuSnapshotName })
             .Select(g => new TopProductDto
             {
@@ -162,12 +162,21 @@ public class ReportRepository(OrderDbContext dbContext) : IReportRepository
                 SkuSnapshotName = g.Key.SkuSnapshotName,
                 TotalQuantitySold = g.Sum(od => od.Quantity),
                 TotalRevenue = g.Sum(od => od.SubTotal)
-            })
-            .OrderByDescending(dto => dto.TotalQuantitySold)
+            });
+
+        IQueryable<TopProductDto> sortedQuery;
+        if (!string.IsNullOrEmpty(sortBy) && sortBy.ToLower() == "quantity")
+        {
+            sortedQuery = topProductsQuery.OrderByDescending(x => x.TotalQuantitySold);
+        }
+        else
+        {
+            sortedQuery = topProductsQuery.OrderByDescending(x => x.TotalRevenue);
+        }
+
+        return await sortedQuery
             .Take(topCount)
             .ToListAsync(ct);
-
-        return topProducts;
     }
 
     public async Task<List<CategorySalesDto>> GetSalesByCategoryAsync(int? quarter, int? month, int? year, CancellationToken ct = default)

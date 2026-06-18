@@ -26,12 +26,13 @@ public class ReportsController(IReportLogic reportLogic) : ControllerBase
     [Authorize(Policy = PermissionNames.ViewOrder)]
     public async Task<IActionResult> GetTopSellingProducts(
         [FromQuery] int topCount = 5,
+        [FromQuery] string sortBy = "revenue",
         [FromQuery] int? quarter = null,
         [FromQuery] int? month = null,
         [FromQuery] int? year = null,
         CancellationToken ct = default)
     {
-        var topProducts = await reportLogic.GetTopSellingProductsAsync(topCount, quarter, month, year, ct);
+        var topProducts = await reportLogic.GetTopSellingProductsAsync(topCount, sortBy, quarter, month, year, ct);
         return Ok(topProducts);
     }
 
