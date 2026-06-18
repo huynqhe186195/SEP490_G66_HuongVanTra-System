@@ -22,6 +22,7 @@ public class OrderLogic(
     PromotionLogic _promotionLogic,
     IProductCatalogClient _productCatalogClient,
     ICustomerCatalogClient _customerCatalogClient,
+    IEmailService _emailService,
     IOptions<SepayOptions> sepayOptions)
 {
     private readonly SepayOptions _sepay = sepayOptions.Value;
@@ -1039,6 +1040,19 @@ public class OrderLogic(
     private async Task PublishOrderCompletedAsync(Order order, decimal debtAmount, CancellationToken ct)
     {
         if (!order.CustomerId.HasValue) return;
+
+        try
+        {
+            var customer = await _customerCatalogClient.GetCustomerAsync(order.CustomerId.Value, ct);
+            if (customer is not null && !string.IsNullOrWhiteSpace(customer.Email))
+            {
+                _ = Task.Run(() => _emailService.SendInvoiceEmailAsync(customer.Email, customer.FullName ?? "Quý khách", customer.TierName, order, CancellationToken.None));
+            }
+        }
+        catch (Exception ex)
+        {
+            // Log if needed, but don't prevent the event from being published
+        }
 
         await _eventPublisher.PublishOrderCompletedAsync(
             order.Id, order.OrderCode, order.CustomerId.Value,

@@ -157,6 +157,11 @@ services:
       Jwt__Secret: ${JWT_SECRET:-your-super-secret-key-at-least-32-chars!!}
       Jwt__Issuer: HuongVanTra
       Jwt__Audience: HuongVanTra
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASS: ${SMTP_PASS}
+      DEMO_EMAIL_OVERRIDE: ${DEMO_EMAIL_OVERRIDE}
     ports:
       - "5004:8080"
     networks:

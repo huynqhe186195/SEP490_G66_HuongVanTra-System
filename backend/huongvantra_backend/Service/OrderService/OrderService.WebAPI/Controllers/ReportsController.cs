@@ -26,12 +26,13 @@ public class ReportsController(IReportLogic reportLogic) : ControllerBase
     [Authorize(Policy = PermissionNames.ViewOrder)]
     public async Task<IActionResult> GetTopSellingProducts(
         [FromQuery] int topCount = 5,
+        [FromQuery] string sortBy = "revenue",
         [FromQuery] int? quarter = null,
         [FromQuery] int? month = null,
         [FromQuery] int? year = null,
         CancellationToken ct = default)
     {
-        var topProducts = await reportLogic.GetTopSellingProductsAsync(topCount, quarter, month, year, ct);
+        var topProducts = await reportLogic.GetTopSellingProductsAsync(topCount, sortBy, quarter, month, year, ct);
         return Ok(topProducts);
     }
 
@@ -45,5 +46,53 @@ public class ReportsController(IReportLogic reportLogic) : ControllerBase
     {
         var categorySales = await reportLogic.GetSalesByCategoryAsync(quarter, month, year, ct);
         return Ok(categorySales);
+    }
+
+    [HttpGet("customer-growth")]
+    [Authorize(Policy = PermissionNames.ViewOrder)]
+    public async Task<IActionResult> GetCustomerGrowthTimeSeries(
+        [FromQuery] int? quarter = null,
+        [FromQuery] int? month = null,
+        [FromQuery] int? year = null,
+        CancellationToken ct = default)
+    {
+        var points = await reportLogic.GetCustomerGrowthTimeSeriesAsync(quarter, month, year, ct);
+        return Ok(points);
+    }
+
+    [HttpGet("revenue-growth")]
+    [Authorize(Policy = PermissionNames.ViewOrder)]
+    public async Task<IActionResult> GetRevenueTimeSeries(
+        [FromQuery] int? quarter = null,
+        [FromQuery] int? month = null,
+        [FromQuery] int? year = null,
+        CancellationToken ct = default)
+    {
+        var points = await reportLogic.GetRevenueTimeSeriesAsync(quarter, month, year, ct);
+        return Ok(points);
+    }
+
+    [HttpGet("sales-by-channel")]
+    [Authorize(Policy = PermissionNames.ViewOrder)]
+    public async Task<IActionResult> GetSalesByChannel(
+        [FromQuery] int? quarter = null,
+        [FromQuery] int? month = null,
+        [FromQuery] int? year = null,
+        CancellationToken ct = default)
+    {
+        var channelSales = await reportLogic.GetSalesByChannelAsync(quarter, month, year, ct);
+        return Ok(channelSales);
+    }
+
+    [HttpGet("order-count-growth")]
+    [Authorize(Policy = PermissionNames.ViewOrder)]
+    public async Task<IActionResult> GetOrderCountTimeSeries(
+        [FromQuery] int? quarter = null,
+        [FromQuery] int? month = null,
+        [FromQuery] int? year = null,
+        CancellationToken ct = default)
+    {
+        var points = await reportLogic.GetOrderCountTimeSeriesAsync(quarter, month, year, ct);
+        return Ok(points);
     }
 }

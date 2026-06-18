@@ -60,6 +60,16 @@ builder.Services.Configure<PosTransferPaymentOptions>(
 builder.Services.Configure<SepayOptions>(
     builder.Configuration.GetSection(SepayOptions.SectionName));
 
+builder.Services.Configure<EmailOptions>(options => 
+{
+    options.SmtpHost = builder.Configuration["SMTP_HOST"] ?? "";
+    options.SmtpPort = int.TryParse(builder.Configuration["SMTP_PORT"], out var port) ? port : 587;
+    options.SmtpUser = builder.Configuration["SMTP_USER"] ?? "";
+    options.SmtpPass = builder.Configuration["SMTP_PASS"] ?? "";
+    options.DemoEmailOverride = builder.Configuration["DEMO_EMAIL_OVERRIDE"];
+});
+builder.Services.AddScoped<IEmailService, EmailService>();
+
 builder.Services.AddScoped<OrderLogic>();
 builder.Services.AddScoped<PaymentLogic>();
 builder.Services.AddScoped<PosTransferPaymentLogic>();

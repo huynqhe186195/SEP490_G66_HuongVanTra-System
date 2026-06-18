@@ -8,6 +8,7 @@ public interface ICustomerCatalogClient
 public sealed record CustomerCatalogProfile(
     Guid Id,
     string? FullName,
+    string? Email,
     string? CustomerGroup,
     int? TierId,
     string? TierName,

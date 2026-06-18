@@ -1,4 +1,4 @@
-import { formatVietnamDateTimeMinute } from '../../../utils/vietnamDateTime.js'
+import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 
 function formatCurrency(value) {
   return new Intl.NumberFormat('vi-VN').format(value || 0)
@@ -72,13 +72,16 @@ export function buildEndOfDayReportHtml({
   const totalOrders = orders.length
   let totalGross = 0
   let totalNet = 0
-  let totalReturn = 0
+  let totalQuantitySum = 0
+  let totalDiscountSum = 0
 
   const orderRows = orders.map((o) => {
     // KiotViet columns: Mã GD, Thời gian, Số lượng, Doanh thu, Thực thu
     const qty = o.totalQuantity || 0
     totalGross += o.totalAmount || 0
     totalNet += o.finalAmount || 0
+    totalQuantitySum += qty
+    totalDiscountSum += o.discountAmount || 0
     // Simplified return sum
     
     return `
@@ -87,7 +90,7 @@ export function buildEndOfDayReportHtml({
           <div class="font-bold">${o.orderCode}</div>
         </td>
         <td class="text-center" style="font-size: 0.85em; color: #555;">
-          ${new Date(o.createdAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+          ${new Date(o.createdAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
         </td>
         <td class="text-center">${qty}</td>
         <td>${formatCurrency(o.totalAmount)}</td>
@@ -105,7 +108,7 @@ export function buildEndOfDayReportHtml({
       
       <table style="width: 100%; max-width: 600px; margin: 0 auto; border: none; font-size: 13px;">
         <tr>
-          <td style="border: none; padding: 4px; text-align: left;"><strong>Thời gian tạo:</strong> ${formatVietnamDateTimeMinute(new Date().toISOString())}</td>
+          <td style="border: none; padding: 4px; text-align: left;"><strong>Thời gian tạo:</strong> ${formatVietnamDateTime(new Date().toISOString())}</td>
           <td style="border: none; padding: 4px; text-align: left;"><strong>Người tạo:</strong> ${creatorName}</td>
         </tr>
         <tr>
@@ -132,9 +135,9 @@ export function buildEndOfDayReportHtml({
       <tfoot>
         <tr style="background: #f9f9f9; font-weight: bold;">
           <td colspan="2" class="text-center">TỔNG CỘNG (${totalOrders} Đơn)</td>
-          <td></td>
+          <td class="text-center">${totalQuantitySum}</td>
           <td>${formatCurrency(totalGross)}</td>
-          <td class="hide-on-k80"></td>
+          <td class="hide-on-k80">${formatCurrency(totalDiscountSum)}</td>
           <td style="color: #c92a2a;">${formatCurrency(totalNet)}</td>
         </tr>
       </tfoot>
@@ -145,7 +148,8 @@ export function buildEndOfDayReportHtml({
 export function printEndOfDayReport(data) {
   return new Promise((resolve) => {
     const iframe = document.createElement('iframe')
-    iframe.setAttribute('title', 'Báo cáo doanh thu cuối ngày')
+    const title = data.filename || 'Báo cáo doanh thu cuối ngày'
+    iframe.setAttribute('title', title)
     iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;'
 
     document.body.appendChild(iframe)
@@ -165,7 +169,7 @@ export function printEndOfDayReport(data) {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Báo cáo doanh thu cuối ngày</title>
+  <title>${title}</title>
   <style>${getReceiptPrintCss(data.paperSize)}</style>
 </head>
 <body><div class="thermal-print-shell">${buildEndOfDayReportHtml(data)}</div></body>
