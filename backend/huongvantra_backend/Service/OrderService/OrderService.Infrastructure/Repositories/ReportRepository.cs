@@ -42,7 +42,7 @@ public class ReportRepository(OrderDbContext dbContext) : IReportRepository
             o.Payments.Any(p => p.PaymentStatus == PaymentStatus.Success)).ToList();
 
         var grossRevenue = validOrders.Sum(o => o.TotalAmount);
-        var totalDiscountAmount = validOrders.Sum(o => o.DiscountAmount);
+        var totalDiscountAmount = validOrders.Sum(o => o.DiscountAmount + o.PromotionDiscountAmount);
         
         var partiallyReturned = 0;
         var fullyReturned = 0;
@@ -205,5 +205,218 @@ public class ReportRepository(OrderDbContext dbContext) : IReportRepository
             .ToListAsync(ct);
 
         return categorySales;
+    }
+
+    public async Task<List<TimeSeriesPointDto>> GetCustomerGrowthTimeSeriesAsync(int? quarter, int? month, int? year, CancellationToken ct = default)
+    {
+        var query = dbContext.Orders
+            .AsNoTracking()
+            .Where(o => o.OrderStatus == OrderStatus.Completed && o.Payments.Any(p => p.PaymentStatus == PaymentStatus.Success));
+
+        if (year.HasValue) query = query.Where(o => o.CreatedAt.Year == year.Value);
+        
+        if (month.HasValue)
+        {
+            query = query.Where(o => o.CreatedAt.Month == month.Value);
+            var orders = await query.Select(o => new { o.CreatedAt, o.CustomerId }).ToListAsync(ct);
+            return Enumerable.Range(1, DateTime.DaysInMonth(year ?? DateTime.Now.Year, month.Value))
+                .Select(day => new TimeSeriesPointDto
+                {
+                    Label = $"{day}/{month}",
+                    Value = orders.Where(o => o.CreatedAt.Day == day).Select(o => o.CustomerId).Distinct().Count()
+                }).ToList();
+        }
+        else if (quarter.HasValue)
+        {
+            var startMonth = (quarter.Value - 1) * 3 + 1;
+            var endMonth = quarter.Value * 3;
+            query = query.Where(o => o.CreatedAt.Month >= startMonth && o.CreatedAt.Month <= endMonth);
+            var orders = await query.Select(o => new { o.CreatedAt, o.CustomerId }).ToListAsync(ct);
+            
+            var points = new List<TimeSeriesPointDto>();
+            var startDate = new DateTime(year ?? DateTime.Now.Year, startMonth, 1);
+            var endDate = new DateTime(year ?? DateTime.Now.Year, endMonth, DateTime.DaysInMonth(year ?? DateTime.Now.Year, endMonth));
+            for (var d = startDate; d <= endDate; d = d.AddDays(5))
+            {
+                var dEnd = d.AddDays(4);
+                if (dEnd > endDate) dEnd = endDate;
+                var count = orders.Where(o => o.CreatedAt.Date >= d && o.CreatedAt.Date <= dEnd)
+                                  .Select(o => o.CustomerId).Distinct().Count();
+                points.Add(new TimeSeriesPointDto { Label = $"{d:dd/MM}-{dEnd:dd/MM}", Value = count });
+            }
+            return points;
+        }
+        else if (year.HasValue)
+        {
+            var orders = await query.Select(o => new { o.CreatedAt, o.CustomerId }).ToListAsync(ct);
+            return Enumerable.Range(1, 12)
+                .Select(m => new TimeSeriesPointDto
+                {
+                    Label = $"Tháng {m}",
+                    Value = orders.Where(o => o.CreatedAt.Month == m).Select(o => o.CustomerId).Distinct().Count()
+                }).ToList();
+        }
+        else
+        {
+            var orders = await query.Select(o => new { o.CreatedAt, o.CustomerId }).ToListAsync(ct);
+            var years = orders.Select(o => o.CreatedAt.Year).Distinct().OrderBy(y => y).ToList();
+            if (!years.Any()) return new List<TimeSeriesPointDto>();
+            return years.Select(y => new TimeSeriesPointDto
+            {
+                Label = $"Năm {y}",
+                Value = orders.Where(o => o.CreatedAt.Year == y).Select(o => o.CustomerId).Distinct().Count()
+            }).ToList();
+        }
+    }
+
+    public async Task<List<TimeSeriesPointDto>> GetRevenueTimeSeriesAsync(int? quarter, int? month, int? year, CancellationToken ct = default)
+    {
+        var query = dbContext.Orders
+            .AsNoTracking()
+            .Where(o => o.OrderStatus == OrderStatus.Completed && o.Payments.Any(p => p.PaymentStatus == PaymentStatus.Success));
+
+        if (year.HasValue) query = query.Where(o => o.CreatedAt.Year == year.Value);
+        
+        if (month.HasValue)
+        {
+            query = query.Where(o => o.CreatedAt.Month == month.Value);
+            var orders = await query.Select(o => new { o.CreatedAt, o.FinalAmount }).ToListAsync(ct);
+            return Enumerable.Range(1, DateTime.DaysInMonth(year ?? DateTime.Now.Year, month.Value))
+                .Select(day => new TimeSeriesPointDto
+                {
+                    Label = $"{day}/{month}",
+                    Value = orders.Where(o => o.CreatedAt.Day == day).Sum(o => o.FinalAmount)
+                }).ToList();
+        }
+        else if (quarter.HasValue)
+        {
+            var startMonth = (quarter.Value - 1) * 3 + 1;
+            var endMonth = quarter.Value * 3;
+            query = query.Where(o => o.CreatedAt.Month >= startMonth && o.CreatedAt.Month <= endMonth);
+            var orders = await query.Select(o => new { o.CreatedAt, o.FinalAmount }).ToListAsync(ct);
+            
+            var points = new List<TimeSeriesPointDto>();
+            var startDate = new DateTime(year ?? DateTime.Now.Year, startMonth, 1);
+            var endDate = new DateTime(year ?? DateTime.Now.Year, endMonth, DateTime.DaysInMonth(year ?? DateTime.Now.Year, endMonth));
+            for (var d = startDate; d <= endDate; d = d.AddDays(5))
+            {
+                var dEnd = d.AddDays(4);
+                if (dEnd > endDate) dEnd = endDate;
+                var value = orders.Where(o => o.CreatedAt.Date >= d && o.CreatedAt.Date <= dEnd).Sum(o => o.FinalAmount);
+                points.Add(new TimeSeriesPointDto { Label = $"{d:dd/MM}-{dEnd:dd/MM}", Value = value });
+            }
+            return points;
+        }
+        else if (year.HasValue)
+        {
+            var orders = await query.Select(o => new { o.CreatedAt, o.FinalAmount }).ToListAsync(ct);
+            return Enumerable.Range(1, 12)
+                .Select(m => new TimeSeriesPointDto
+                {
+                    Label = $"Tháng {m}",
+                    Value = orders.Where(o => o.CreatedAt.Month == m).Sum(o => o.FinalAmount)
+                }).ToList();
+        }
+        else
+        {
+            var orders = await query.Select(o => new { o.CreatedAt, o.FinalAmount }).ToListAsync(ct);
+            var years = orders.Select(o => o.CreatedAt.Year).Distinct().OrderBy(y => y).ToList();
+            if (!years.Any()) return new List<TimeSeriesPointDto>();
+            return years.Select(y => new TimeSeriesPointDto
+            {
+                Label = $"Năm {y}",
+                Value = orders.Where(o => o.CreatedAt.Year == y).Sum(o => o.FinalAmount)
+            }).ToList();
+        }
+    }
+
+    public async Task<List<CategorySalesDto>> GetSalesByChannelAsync(int? quarter, int? month, int? year, CancellationToken ct = default)
+    {
+        var query = dbContext.Orders
+            .Where(o => o.OrderStatus == OrderStatus.Completed && o.Payments.Any(p => p.PaymentStatus == PaymentStatus.Success));
+
+        if (year.HasValue) query = query.Where(o => o.CreatedAt.Year == year.Value);
+        if (quarter.HasValue)
+        {
+            var startMonth = (quarter.Value - 1) * 3 + 1;
+            var endMonth = quarter.Value * 3;
+            query = query.Where(o => o.CreatedAt.Month >= startMonth && o.CreatedAt.Month <= endMonth);
+        }
+        if (month.HasValue) query = query.Where(o => o.CreatedAt.Month == month.Value);
+
+        // Map "Phone" to "Telesale" directly
+        var channelSales = await query
+            .GroupBy(o => o.OrderChannel)
+            .Select(g => new CategorySalesDto
+            {
+                CategoryName = g.Key == OrderChannel.Phone ? "Telesale" : g.Key.ToString() ?? "",
+                TotalQuantitySold = g.Sum(o => o.OrderDetails.Sum(od => od.Quantity)),
+                TotalRevenue = g.Sum(o => o.FinalAmount)
+            })
+            .OrderByDescending(dto => dto.TotalRevenue)
+            .ToListAsync(ct);
+
+        return channelSales;
+    }
+
+    public async Task<List<TimeSeriesPointDto>> GetOrderCountTimeSeriesAsync(int? quarter, int? month, int? year, CancellationToken ct = default)
+    {
+        var query = dbContext.Orders
+            .AsNoTracking()
+            .Where(o => o.OrderStatus == OrderStatus.Completed && o.Payments.Any(p => p.PaymentStatus == PaymentStatus.Success));
+
+        if (year.HasValue) query = query.Where(o => o.CreatedAt.Year == year.Value);
+        
+        if (month.HasValue)
+        {
+            query = query.Where(o => o.CreatedAt.Month == month.Value);
+            var orders = await query.Select(o => new { o.CreatedAt, o.Id }).ToListAsync(ct);
+            return Enumerable.Range(1, DateTime.DaysInMonth(year ?? DateTime.Now.Year, month.Value))
+                .Select(day => new TimeSeriesPointDto
+                {
+                    Label = $"{day}/{month}",
+                    Value = orders.Count(o => o.CreatedAt.Day == day)
+                }).ToList();
+        }
+        else if (quarter.HasValue)
+        {
+            var startMonth = (quarter.Value - 1) * 3 + 1;
+            var endMonth = quarter.Value * 3;
+            query = query.Where(o => o.CreatedAt.Month >= startMonth && o.CreatedAt.Month <= endMonth);
+            var orders = await query.Select(o => new { o.CreatedAt, o.Id }).ToListAsync(ct);
+            
+            var points = new List<TimeSeriesPointDto>();
+            var startDate = new DateTime(year ?? DateTime.Now.Year, startMonth, 1);
+            var endDate = new DateTime(year ?? DateTime.Now.Year, endMonth, DateTime.DaysInMonth(year ?? DateTime.Now.Year, endMonth));
+            for (var d = startDate; d <= endDate; d = d.AddDays(5))
+            {
+                var dEnd = d.AddDays(4);
+                if (dEnd > endDate) dEnd = endDate;
+                var count = orders.Count(o => o.CreatedAt.Date >= d && o.CreatedAt.Date <= dEnd);
+                points.Add(new TimeSeriesPointDto { Label = $"{d:dd/MM}-{dEnd:dd/MM}", Value = count });
+            }
+            return points;
+        }
+        else if (year.HasValue)
+        {
+            var orders = await query.Select(o => new { o.CreatedAt, o.Id }).ToListAsync(ct);
+            return Enumerable.Range(1, 12)
+                .Select(m => new TimeSeriesPointDto
+                {
+                    Label = $"Tháng {m}",
+                    Value = orders.Count(o => o.CreatedAt.Month == m)
+                }).ToList();
+        }
+        else
+        {
+            var orders = await query.Select(o => new { o.CreatedAt, o.Id }).ToListAsync(ct);
+            var years = orders.Select(o => o.CreatedAt.Year).Distinct().OrderBy(y => y).ToList();
+            if (!years.Any()) return new List<TimeSeriesPointDto>();
+            return years.Select(y => new TimeSeriesPointDto
+            {
+                Label = $"Năm {y}",
+                Value = orders.Count(o => o.CreatedAt.Year == y)
+            }).ToList();
+        }
     }
 }

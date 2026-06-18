@@ -19,6 +19,7 @@ public class CustomerCatalogClient(HttpClient httpClient, ILogger<CustomerCatalo
                 : new CustomerCatalogProfile(
                     response.Id,
                     response.FullName,
+                    response.Email,
                     response.CustomerGroup,
                     response.TierId ?? response.Tier?.Id,
                     response.TierName ?? response.Tier?.TierName,
@@ -36,6 +37,7 @@ public class CustomerCatalogClient(HttpClient httpClient, ILogger<CustomerCatalo
     private sealed record CustomerCatalogResponse(
         Guid Id,
         string? FullName,
+        string? Email,
         string? CustomerGroup,
         int? TierId,
         string? TierName,

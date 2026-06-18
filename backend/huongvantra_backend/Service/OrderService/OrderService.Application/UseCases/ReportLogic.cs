@@ -19,4 +19,24 @@ public class ReportLogic(IReportRepository reportRepository) : IReportLogic
     {
         return reportRepository.GetSalesByCategoryAsync(quarter, month, year, cancellationToken);
     }
+
+    public Task<List<TimeSeriesPointDto>> GetCustomerGrowthTimeSeriesAsync(int? quarter, int? month, int? year, CancellationToken cancellationToken = default)
+    {
+        return reportRepository.GetCustomerGrowthTimeSeriesAsync(quarter, month, year, cancellationToken);
+    }
+
+    public Task<List<TimeSeriesPointDto>> GetRevenueTimeSeriesAsync(int? quarter, int? month, int? year, CancellationToken cancellationToken = default)
+    {
+        return reportRepository.GetRevenueTimeSeriesAsync(quarter, month, year, cancellationToken);
+    }
+
+    public Task<List<CategorySalesDto>> GetSalesByChannelAsync(int? quarter, int? month, int? year, CancellationToken cancellationToken = default)
+    {
+        return reportRepository.GetSalesByChannelAsync(quarter, month, year, cancellationToken);
+    }
+
+    public Task<List<TimeSeriesPointDto>> GetOrderCountTimeSeriesAsync(int? quarter, int? month, int? year, CancellationToken cancellationToken = default)
+    {
+        return reportRepository.GetOrderCountTimeSeriesAsync(quarter, month, year, cancellationToken);
+    }
 }
