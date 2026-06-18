@@ -5,7 +5,7 @@ import { printEndOfDayReport } from '../utils/printEndOfDayReport.js'
 import { loadPosSeller } from '../../pos/utils/posSeller.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import { canViewAllOrders } from '../../auth/utils/permissions.js'
-import { formatVietnamDateTimeMinute } from '../../../utils/vietnamDateTime.js'
+import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import * as XLSX from 'xlsx'
 
 function formatCurrency(value) {
@@ -21,6 +21,7 @@ function formatDateToLocalString(date) {
 export default function EndOfDayReportModal({ isOpen, onClose }) {
   const [filterDate, setFilterDate] = useState(formatDateToLocalString(new Date()))
   const [paperSize, setPaperSize] = useState('A4')
+  const [exportFormat, setExportFormat] = useState('pdf')
   
   const [users, setUsers] = useState([])
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('')
@@ -102,6 +103,13 @@ export default function EndOfDayReportModal({ isOpen, onClose }) {
 
   if (!isOpen) return null
 
+  const getExportFilename = () => {
+    const d = new Date()
+    const pad = (n) => String(n).padStart(2, '0')
+    const timeStr = `${pad(d.getHours())}_${pad(d.getMinutes())}_${pad(d.getSeconds())}`
+    return `Bao_cao_cuoi_ngay_${filterDate.replace(/-/g, '_')}_${timeStr}`
+  }
+
   const handlePrint = async () => {
     // KiotViet format date string: DD/MM/YYYY
     const d = new Date(filterDate)
@@ -119,7 +127,8 @@ export default function EndOfDayReportModal({ isOpen, onClose }) {
       orders,
       paperSize,
       creatorName: sellerInfo.username ? `${sellerInfo.username} - ${sellerInfo.fullName || 'Chưa cập nhật'}` : sellerInfo.role,
-      agencyName
+      agencyName,
+      filename: getExportFilename()
     })
   }
 
@@ -128,29 +137,60 @@ export default function EndOfDayReportModal({ isOpen, onClose }) {
   const totalDiscount = orders.reduce((sum, o) => sum + (o.discountAmount || 0), 0)
 
   const handleExportExcel = () => {
-    const excelData = orders.map(o => ({
-      "Mã giao dịch": o.orderCode,
-      "Thời gian": new Date(o.createdAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
-      "Số lượng": o.totalQuantity || 0,
-      "Doanh thu": o.totalAmount || 0,
-      "Giảm giá": o.discountAmount || 0,
-      "Thực thu": o.finalAmount || 0
-    }))
+    const creatorName = sellerInfo.username ? `${sellerInfo.username} - ${sellerInfo.fullName || 'Chưa cập nhật'}` : sellerInfo.role;
+    const employeeName = !canFilterByEmployee
+        ? (sellerInfo.username
+          ? `${sellerInfo.username} - ${sellerInfo.fullName || 'Chưa cập nhật'}`
+          : 'Bản thân')
+        : selectedEmployeeId
+          ? `${users.find(u => u.id === selectedEmployeeId)?.username} - ${users.find(u => u.id === selectedEmployeeId)?.employee?.fullName || 'Chưa cập nhật'}`
+          : 'Tất cả nhân viên';
 
-    // Add totals row
-    excelData.push({
-      "Mã giao dịch": "TỔNG CỘNG",
-      "Thời gian": "",
-      "Số lượng": orders.reduce((sum, o) => sum + (o.totalQuantity || 0), 0),
-      "Doanh thu": totalGross,
-      "Giảm giá": totalDiscount,
-      "Thực thu": totalNet
-    })
+    const wsData = [
+      ["BÁO CÁO DOANH THU CUỐI NGÀY", null, null, null, null, null],
+      ["Hệ thống Quản lý Hương Vân Trà", null, null, null, null, null],
+      [`Ngày giao dịch: ${filterDate}`, null, null, null, null, null],
+      [`Thời gian tạo: ${formatVietnamDateTime(new Date().toISOString())}`, null, null, `Người tạo: ${creatorName}`, null, null],
+      [`Chi nhánh: ${agencyName}`, null, null, `Nhân viên: ${employeeName}`, null, null],
+      [],
+      ["Mã giao dịch", "Thời gian", "Số lượng", "Doanh thu", "Giảm giá", "Thực thu"]
+    ];
 
-    const wb = XLSX.utils.book_new()
-    const ws = XLSX.utils.json_to_sheet(excelData)
-    XLSX.utils.book_append_sheet(wb, ws, "Báo cáo")
-    XLSX.writeFile(wb, `Bao_cao_cuoi_ngay_${filterDate}.xlsx`)
+    orders.forEach(o => {
+      wsData.push([
+        o.orderCode,
+        new Date(o.createdAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+        o.totalQuantity || 0,
+        o.totalAmount || 0,
+        o.discountAmount || 0,
+        o.finalAmount || 0
+      ]);
+    });
+
+    wsData.push([
+      "TỔNG CỘNG", null,
+      orders.reduce((sum, o) => sum + (o.totalQuantity || 0), 0),
+      totalGross,
+      totalDiscount,
+      totalNet
+    ]);
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+    ws['!merges'] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 5 } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: 5 } },
+      { s: { r: 2, c: 0 }, e: { r: 2, c: 5 } },
+      { s: { r: 3, c: 0 }, e: { r: 3, c: 2 } },
+      { s: { r: 3, c: 3 }, e: { r: 3, c: 5 } },
+      { s: { r: 4, c: 0 }, e: { r: 4, c: 2 } },
+      { s: { r: 4, c: 3 }, e: { r: 4, c: 5 } },
+      { s: { r: wsData.length - 1, c: 0 }, e: { r: wsData.length - 1, c: 1 } }
+    ];
+
+    XLSX.utils.book_append_sheet(wb, ws, "Báo cáo");
+    XLSX.writeFile(wb, `${getExportFilename()}.xlsx`);
   }
 
   return (
@@ -191,30 +231,36 @@ export default function EndOfDayReportModal({ isOpen, onClose }) {
             </div>
             
             <div className="flex items-center gap-2">
-              <select 
-                value={paperSize} 
-                onChange={(e) => setPaperSize(e.target.value)}
-                className="rounded-lg border-gray-300 text-sm focus:border-[#356647] focus:ring-[#356647]"
-              >
-                <option value="A4">Khổ A4</option>
-                <option value="K80">Khổ K80</option>
-              </select>
-              <button
-                onClick={handleExportExcel}
-                disabled={isLoading || orders.length === 0}
-                className="flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-green-700 disabled:opacity-50"
-              >
-                <span className="material-symbols-outlined text-[20px]">table_view</span>
-                Xuất ra Excel
-              </button>
-              <button
-                onClick={handlePrint}
-                disabled={isLoading || orders.length === 0}
-                className="flex items-center gap-2 rounded-lg bg-[#356647] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#2a5238] disabled:opacity-50"
-              >
-                <span className="material-symbols-outlined text-[20px]">print</span>
-                Xuất ra PDF
-              </button>
+              {exportFormat === 'pdf' && (
+                <select 
+                  value={paperSize} 
+                  onChange={(e) => setPaperSize(e.target.value)}
+                  className="rounded-lg border-gray-300 text-sm focus:border-[#356647] focus:ring-[#356647]"
+                >
+                  <option value="A4">Khổ A4</option>
+                  <option value="K80">Khổ K80</option>
+                </select>
+              )}
+              <div className="flex rounded-lg shadow-sm">
+                <select 
+                  value={exportFormat}
+                  onChange={(e) => setExportFormat(e.target.value)}
+                  className="rounded-l-lg border-gray-300 text-sm focus:border-[#356647] focus:ring-[#356647] bg-gray-50 border-r-0"
+                >
+                  <option value="pdf">PDF</option>
+                  <option value="excel">Excel</option>
+                </select>
+                <button
+                  onClick={exportFormat === 'pdf' ? handlePrint : handleExportExcel}
+                  disabled={isLoading || orders.length === 0}
+                  className="flex items-center gap-2 rounded-r-lg bg-[#356647] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#2a5238] disabled:opacity-50 border border-l-0 border-[#356647]"
+                >
+                  <span className="material-symbols-outlined text-[20px]">
+                    {exportFormat === 'pdf' ? 'print' : 'table_view'}
+                  </span>
+                  Xuất báo cáo
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -230,7 +276,7 @@ export default function EndOfDayReportModal({ isOpen, onClose }) {
               </div>
               
               <div className="text-left text-sm text-gray-800 leading-relaxed grid grid-cols-2 gap-4">
-                <div><strong>Thời gian tạo:</strong> {formatVietnamDateTimeMinute(new Date().toISOString())}</div>
+                <div><strong>Thời gian tạo:</strong> {formatVietnamDateTime(new Date().toISOString())}</div>
                 <div><strong>Người tạo:</strong> {sellerInfo.username ? `${sellerInfo.username} - ${sellerInfo.fullName || 'Chưa cập nhật'}` : sellerInfo.role}</div>
                 <div><strong>Chi nhánh:</strong> {agencyName}</div>
                 <div><strong>Nhân viên:</strong> {
@@ -266,7 +312,7 @@ export default function EndOfDayReportModal({ isOpen, onClose }) {
                 <tbody className="divide-y divide-gray-100">
                   {orders.map(o => {
                     const qty = o.totalQuantity || 0;
-                    const timeStr = new Date(o.createdAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
+                    const timeStr = new Date(o.createdAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
                     return (
                       <tr key={o.id} className="hover:bg-gray-50">
                         <td className="px-4 py-3 font-medium text-gray-900">
@@ -292,11 +338,12 @@ export default function EndOfDayReportModal({ isOpen, onClose }) {
                 {orders.length > 0 && (
                   <tfoot className="bg-yellow-50 font-bold border-y border-yellow-200">
                     <tr>
-                      <td colSpan={3} className="px-4 py-3 text-yellow-900">
+                      <td colSpan={2} className="px-4 py-3 text-yellow-900">
                         TỔNG CỘNG ({orders.length} Đơn)
                       </td>
+                      <td className="px-4 py-3 text-center text-yellow-900">{orders.reduce((sum, o) => sum + (o.totalQuantity || 0), 0)}</td>
                       <td className="px-4 py-3 text-right text-yellow-900">{formatCurrency(totalGross)}</td>
-                      <td className="px-4 py-3 text-right text-yellow-900"></td>
+                      <td className="px-4 py-3 text-right text-yellow-900">{formatCurrency(totalDiscount)}</td>
                       <td className="px-4 py-3 text-right text-red-600 text-base">{formatCurrency(totalNet)}</td>
                     </tr>
                   </tfoot>

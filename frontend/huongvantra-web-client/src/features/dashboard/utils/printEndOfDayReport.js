@@ -1,4 +1,5 @@
-import { formatVietnamDateTimeMinute } from '../../../utils/vietnamDateTime.js'
+import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
+import html2pdf from 'html2pdf.js'
 
 function formatCurrency(value) {
   return new Intl.NumberFormat('vi-VN').format(value || 0)
@@ -72,13 +73,16 @@ export function buildEndOfDayReportHtml({
   const totalOrders = orders.length
   let totalGross = 0
   let totalNet = 0
-  let totalReturn = 0
+  let totalQuantitySum = 0
+  let totalDiscountSum = 0
 
   const orderRows = orders.map((o) => {
     // KiotViet columns: Mã GD, Thời gian, Số lượng, Doanh thu, Thực thu
     const qty = o.totalQuantity || 0
     totalGross += o.totalAmount || 0
     totalNet += o.finalAmount || 0
+    totalQuantitySum += qty
+    totalDiscountSum += o.discountAmount || 0
     // Simplified return sum
     
     return `
@@ -87,7 +91,7 @@ export function buildEndOfDayReportHtml({
           <div class="font-bold">${o.orderCode}</div>
         </td>
         <td class="text-center" style="font-size: 0.85em; color: #555;">
-          ${new Date(o.createdAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+          ${new Date(o.createdAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
         </td>
         <td class="text-center">${qty}</td>
         <td>${formatCurrency(o.totalAmount)}</td>
@@ -105,7 +109,7 @@ export function buildEndOfDayReportHtml({
       
       <table style="width: 100%; max-width: 600px; margin: 0 auto; border: none; font-size: 13px;">
         <tr>
-          <td style="border: none; padding: 4px; text-align: left;"><strong>Thời gian tạo:</strong> ${formatVietnamDateTimeMinute(new Date().toISOString())}</td>
+          <td style="border: none; padding: 4px; text-align: left;"><strong>Thời gian tạo:</strong> ${formatVietnamDateTime(new Date().toISOString())}</td>
           <td style="border: none; padding: 4px; text-align: left;"><strong>Người tạo:</strong> ${creatorName}</td>
         </tr>
         <tr>
@@ -132,9 +136,9 @@ export function buildEndOfDayReportHtml({
       <tfoot>
         <tr style="background: #f9f9f9; font-weight: bold;">
           <td colspan="2" class="text-center">TỔNG CỘNG (${totalOrders} Đơn)</td>
-          <td></td>
+          <td class="text-center">${totalQuantitySum}</td>
           <td>${formatCurrency(totalGross)}</td>
-          <td class="hide-on-k80"></td>
+          <td class="hide-on-k80">${formatCurrency(totalDiscountSum)}</td>
           <td style="color: #c92a2a;">${formatCurrency(totalNet)}</td>
         </tr>
       </tfoot>
@@ -144,55 +148,50 @@ export function buildEndOfDayReportHtml({
 
 export function printEndOfDayReport(data) {
   return new Promise((resolve) => {
-    const iframe = document.createElement('iframe')
-    iframe.setAttribute('title', 'Báo cáo doanh thu cuối ngày')
-    iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;'
+    const container = document.createElement('div')
+    
+    // Use the CSS we already defined
+    const style = document.createElement('style')
+    style.innerHTML = getReceiptPrintCss(data.paperSize)
+    container.appendChild(style)
+    
+    const content = document.createElement('div')
+    content.className = 'thermal-print-shell'
+    content.innerHTML = buildEndOfDayReportHtml(data)
+    container.appendChild(content)
+    
+    // Must be in DOM for html2canvas to render properly
+    container.style.position = 'absolute'
+    container.style.left = '-9999px'
+    container.style.top = '0'
+    document.body.appendChild(container)
 
-    document.body.appendChild(iframe)
+    const title = data.filename || 'Báo cáo doanh thu cuối ngày'
 
-    const win = iframe.contentWindow
-    if (!win) {
-      document.body.removeChild(iframe)
-      resolve()
-      return
+    const opt = {
+      margin:       10,
+      filename:     `${title}.pdf`,
+      image:        { type: 'jpeg', quality: 0.98 },
+      html2canvas:  { scale: 2, useCORS: true },
+      jsPDF:        { unit: 'mm', format: data.paperSize === 'K80' ? [80, 297] : 'a4', orientation: 'portrait' }
     }
 
-    const doc = win.document
-    doc.open()
-    doc.write(
-      `<!DOCTYPE html>
-<html lang="vi">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Báo cáo doanh thu cuối ngày</title>
-  <style>${getReceiptPrintCss(data.paperSize)}</style>
-</head>
-<body><div class="thermal-print-shell">${buildEndOfDayReportHtml(data)}</div></body>
-</html>`
-    )
-    doc.close()
-
-    const finish = () => {
-      if (iframe.parentNode) {
-        iframe.parentNode.removeChild(iframe)
-      }
-      resolve()
-    }
-
-    let printed = false
-    const doPrint = () => {
-      if (printed) return
-      printed = true
-      win.onafterprint = finish
-      setTimeout(finish, 2500)
-      win.focus()
-      win.print()
-    }
-
-    iframe.onload = () => {
-      setTimeout(doPrint, 50)
-    }
-    setTimeout(doPrint, 120)
+    html2pdf()
+      .from(container)
+      .set(opt)
+      .save()
+      .then(() => {
+        if (document.body.contains(container)) {
+          document.body.removeChild(container)
+        }
+        resolve()
+      })
+      .catch((err) => {
+        console.error('Failed to generate PDF:', err)
+        if (document.body.contains(container)) {
+          document.body.removeChild(container)
+        }
+        resolve()
+      })
   })
 }
