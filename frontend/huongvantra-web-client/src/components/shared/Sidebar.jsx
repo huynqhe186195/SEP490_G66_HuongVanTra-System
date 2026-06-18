@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { logout as logoutApi } from '../../features/auth/services/authApi.js'
 import {
@@ -25,10 +25,69 @@ function Sidebar({
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [expandedPaths, setExpandedPaths] = useState({})
   const [openFlyoutPath, setOpenFlyoutPath] = useState(null)
+  const navScrollRef = useRef(null)
+  const scrollIdleTimerRef = useRef(null)
+  const [scrollIndicator, setScrollIndicator] = useState({
+    visible: false,
+    height: 0,
+    top: 0,
+  })
+  const [isScrollIndicatorActive, setIsScrollIndicatorActive] = useState(false)
 
   const authSession = loadAuthSession()
   const userLabel = formatDisplayName(authSession?.username) || 'Quản trị'
   const isCompact = collapsed
+
+  const updateScrollIndicator = useCallback(() => {
+    const scrollElement = navScrollRef.current
+    if (!scrollElement) return
+
+    const { clientHeight, scrollHeight, scrollTop } = scrollElement
+    const maxScrollTop = scrollHeight - clientHeight
+
+    if (clientHeight <= 0 || maxScrollTop <= 1) {
+      setScrollIndicator((current) =>
+        current.visible ? { visible: false, height: 0, top: 0 } : current,
+      )
+      return
+    }
+
+    const minThumbHeight = 28
+    const thumbHeight = Math.max(
+      minThumbHeight,
+      Math.round((clientHeight / scrollHeight) * clientHeight),
+    )
+    const maxThumbTop = Math.max(0, clientHeight - thumbHeight)
+    const thumbTop = Math.round((scrollTop / maxScrollTop) * maxThumbTop)
+
+    setScrollIndicator((current) => {
+      const next = {
+        visible: true,
+        height: thumbHeight,
+        top: Math.min(maxThumbTop, Math.max(0, thumbTop)),
+      }
+
+      if (
+        current.visible === next.visible &&
+        current.height === next.height &&
+        current.top === next.top
+      ) {
+        return current
+      }
+
+      return next
+    })
+  }, [])
+
+  const markScrollIndicatorActive = useCallback(() => {
+    setIsScrollIndicatorActive(true)
+    if (scrollIdleTimerRef.current) {
+      window.clearTimeout(scrollIdleTimerRef.current)
+    }
+    scrollIdleTimerRef.current = window.setTimeout(() => {
+      setIsScrollIndicatorActive(false)
+    }, 900)
+  }, [])
 
   useEffect(() => {
     setOpenFlyoutPath(null)
@@ -39,6 +98,51 @@ function Sidebar({
       }
     })
   }, [items, location.pathname, location.search])
+
+  useEffect(() => {
+    const scrollElement = navScrollRef.current
+    if (!scrollElement) return undefined
+
+    const handleScroll = () => {
+      updateScrollIndicator()
+      markScrollIndicatorActive()
+    }
+
+    const handleResize = () => updateScrollIndicator()
+
+    scrollElement.addEventListener('scroll', handleScroll, { passive: true })
+    window.addEventListener('resize', handleResize)
+
+    let resizeObserver
+    if (typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(updateScrollIndicator)
+      resizeObserver.observe(scrollElement)
+    }
+
+    const frameId = window.requestAnimationFrame(updateScrollIndicator)
+
+    return () => {
+      scrollElement.removeEventListener('scroll', handleScroll)
+      window.removeEventListener('resize', handleResize)
+      resizeObserver?.disconnect()
+      window.cancelAnimationFrame(frameId)
+    }
+  }, [markScrollIndicatorActive, updateScrollIndicator])
+
+  useEffect(() => {
+    const frameId = window.requestAnimationFrame(updateScrollIndicator)
+    return () => window.cancelAnimationFrame(frameId)
+  }, [expandedPaths, isCompact, isLoading, items, mobileOpen, updateScrollIndicator])
+
+  useEffect(
+    () => () => {
+      if (scrollIdleTimerRef.current) {
+        window.clearTimeout(scrollIdleTimerRef.current)
+      }
+    },
+    [],
+  )
+
   const handleLogout = async () => {
     if (!authSession) {
       clearAuthSession()
@@ -169,7 +273,24 @@ function Sidebar({
       </div>
 
       {/* Navigation */}
-      <nav className="custom-scrollbar min-h-0 flex-1 space-y-1 overflow-y-auto">
+      <div
+        className="relative min-h-0 flex-1"
+        onMouseEnter={() => {
+          if (scrollIndicator.visible) {
+            setIsScrollIndicatorActive(true)
+          }
+        }}
+        onMouseLeave={() => {
+          if (scrollIdleTimerRef.current) {
+            window.clearTimeout(scrollIdleTimerRef.current)
+          }
+          setIsScrollIndicatorActive(false)
+        }}
+      >
+      <nav
+        ref={navScrollRef}
+        className="sidebar-scrollbar-native-hidden h-full min-h-0 space-y-1 overflow-x-hidden overflow-y-auto"
+      >
         {isLoading ? (
           <p className={`py-2 text-sm text-white/70 ${isCompact ? 'text-center' : 'px-4'}`}>
             {isCompact ? '…' : 'Đang tải menu...'}
@@ -337,6 +458,27 @@ function Sidebar({
           )
         })}
       </nav>
+
+        {scrollIndicator.visible ? (
+          <div
+            aria-hidden="true"
+            className={`pointer-events-none absolute inset-y-0 right-0 w-1.5 transition-opacity duration-200 ${
+              isScrollIndicatorActive ? 'opacity-100' : 'opacity-45'
+            }`}
+          >
+            <div
+              className="absolute right-0.5 w-[4px] rounded-full transition-colors duration-200"
+              style={{
+                height: `${scrollIndicator.height}px`,
+                transform: `translateY(${scrollIndicator.top}px)`,
+                backgroundColor: isScrollIndicatorActive
+                  ? 'rgba(220, 248, 229, 0.88)'
+                  : 'rgba(202, 242, 216, 0.58)',
+              }}
+            />
+          </div>
+        ) : null}
+      </div>
 
       {/* Footer */}
       <div

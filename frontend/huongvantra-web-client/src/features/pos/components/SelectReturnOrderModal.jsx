@@ -3,6 +3,7 @@ import { addUtcPlus7, formatVietnamDateTime } from '../../../utils/vietnamDateTi
 import { fetchOrder, fetchOrders } from '../../orders/services/ordersApi.js'
 import { formatVnd } from '../../orders/utils/orderDisplay.js'
 import { showError } from '../../../app/toast.js'
+import CustomScrollArea from '../../../components/shared/CustomScrollArea.jsx'
 
 const PAGE_SIZE = 7
 
@@ -381,7 +382,7 @@ function SelectReturnOrderModal({ isOpen, onClose, onSelectOrder, onQuickReturn 
           </aside>
 
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-            <div className="min-h-0 flex-1 overflow-auto">
+            <CustomScrollArea className="min-h-0 flex-1" allowHorizontalScroll>
               <table className="w-full min-w-[640px] border-collapse text-sm">
                 <thead className="sticky top-0 z-10 bg-[#538463] text-left text-white">
                   <tr>
@@ -441,7 +442,7 @@ function SelectReturnOrderModal({ isOpen, onClose, onSelectOrder, onQuickReturn 
                   )}
                 </tbody>
               </table>
-            </div>
+            </CustomScrollArea>
 
             <ReturnOrderPagination
               page={page}

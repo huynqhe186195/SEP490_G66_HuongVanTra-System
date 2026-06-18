@@ -1,3 +1,5 @@
+import CustomScrollArea from '../../../components/shared/CustomScrollArea.jsx'
+
 function Cart({ items, total, onAddCustomerClick, onAddOfferClick }) {
   return (
     <aside className="flex h-full w-full min-w-0 flex-col rounded-[24px] border border-gray-100 bg-white p-4 shadow-xl ring-1 ring-black/5 sm:p-5 xl:max-h-[calc(100dvh-3rem)] xl:overflow-hidden xl:p-6">
@@ -59,14 +61,14 @@ function Cart({ items, total, onAddCustomerClick, onAddOfferClick }) {
         </button>
       </div>
 
-      <div className="mb-5 min-h-0 flex-1 space-y-3 overflow-y-auto pr-1 sm:mb-6">
+      <CustomScrollArea className="mb-5 min-h-0 flex-1 sm:mb-6" contentClassName="space-y-3 pr-1">
         {items.map((item) => (
           <div key={item.name} className="flex items-center justify-between gap-3 rounded-2xl bg-[#FCFAF2] p-4 sm:p-5">
             <p className="min-w-0 flex-1 text-sm font-semibold leading-snug">{item.name}</p>
             <p className="shrink-0 text-sm font-bold">{item.price}</p>
           </div>
         ))}
-      </div>
+      </CustomScrollArea>
 
       <div className="mt-auto space-y-4 border-t border-gray-100 pt-4 sm:pt-5">
         <div className="mb-2">

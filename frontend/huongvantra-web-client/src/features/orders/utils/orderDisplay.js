@@ -7,6 +7,14 @@ export function normalizeOrderKey(value) {
   return String(value || '').trim()
 }
 
+function normalizeLooseKey(value) {
+  return normalizeOrderKey(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '')
+}
+
 export const ORDER_STATUS_OPTIONS = [
   { value: '', label: 'Tất cả trạng thái' },
   { value: 'PendingPayment', label: 'Chờ thanh toán' },
@@ -55,13 +63,26 @@ export function getOrderStatusLabel(status) {
 export function getOrderChannelLabel(channel) {
   const key = normalizeOrderKey(channel)
   const map = {
-    POS: 'Bán trực tiếp tại quầy',
+    POS: 'Bán tại quầy',
     COD: 'COD (giao hàng thu tiền)',
     Website: 'Website',
     Zalo: 'Zalo',
     Phone: 'Điện thoại',
   }
   return map[key] || channel || '—'
+}
+
+export function getOrderChannelClass(channel) {
+  const key = normalizeLooseKey(channel)
+  if (key === 'pos' || key.includes('bantaiquay') || key.includes('bantructieptaiquay')) {
+    return 'border border-[#538463]/20 bg-[#538463]/10 text-[#356647]'
+  }
+  if (key === 'zalo') return 'border border-blue-200 bg-blue-50 text-blue-700'
+  if (key === 'website') return 'border border-purple-200 bg-purple-50 text-purple-700'
+  if (key === 'phone' || key.includes('dienthoai')) {
+    return 'border border-emerald-200 bg-emerald-50 text-emerald-700'
+  }
+  return 'border border-slate-200 bg-slate-100 text-slate-600'
 }
 
 export function getOrderKindLabel(kind) {
@@ -293,12 +314,23 @@ export function resolveInventorySyncMeta(order) {
 }
 
 export function getOrderStatusClass(status) {
-  const key = normalizeOrderKey(status)
-  if (key === 'Completed') return 'bg-emerald-50 text-emerald-700'
-  if (key === 'Cancelled') return 'bg-red-50 text-red-600'
-  if (key === 'Shipping' || key === 'Processing') return 'bg-blue-50 text-blue-700'
-  if (key === 'PendingPayment') return 'bg-amber-50 text-amber-700'
-  return 'bg-slate-100 text-slate-600'
+  const key = normalizeLooseKey(status)
+  if (key === 'completed' || key.includes('hoantat')) {
+    return 'text-emerald-700 bg-emerald-100 border border-emerald-300'
+  }
+  if (key === 'cancelled' || key.includes('dahuy')) {
+    return 'text-red-700 bg-red-100 border border-red-300'
+  }
+  if (key === 'shipping' || key.includes('danggiao')) {
+    return 'text-orange-700 bg-orange-100 border border-orange-300'
+  }
+  if (key === 'processing' || key.includes('dangxuly')) {
+    return 'text-blue-700 bg-blue-100 border border-blue-300'
+  }
+  if (key === 'pendingpayment' || key.includes('chothanhtoan')) {
+    return 'text-amber-700 bg-amber-100 border border-amber-300'
+  }
+  return 'border border-slate-200 bg-slate-100 text-slate-600'
 }
 
 export function getPaymentStatusClass(status) {

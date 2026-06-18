@@ -116,3 +116,19 @@ public record CustomerStatisticsResponse(
     IEnumerable<CustomerResponse> TopDebtors,
     IEnumerable<TierCountResponse> CustomersByTier
 );
+
+public record CustomerImportRowResultResponse(
+    int RowNumber,
+    string? CustomerName,
+    string? PhoneNumber,
+    string Status,
+    IReadOnlyList<string> Messages
+);
+
+public record CustomerImportResultResponse(
+    int TotalRows,
+    int SuccessCount,
+    int FailedCount,
+    int WarningCount,
+    IReadOnlyList<CustomerImportRowResultResponse> Rows
+);

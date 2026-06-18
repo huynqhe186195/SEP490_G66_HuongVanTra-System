@@ -103,7 +103,8 @@ public record ReturnOrderSummaryResponse(
     decimal ExchangeAmount,
     Guid? ExchangeOrderId,
     string? ExchangeOrderCode,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    string? Note = null);
 
 public record PaymentResponse(
     Guid Id,

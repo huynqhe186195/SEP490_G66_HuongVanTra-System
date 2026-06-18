@@ -75,6 +75,47 @@ public class OrderLogic(
             : null;
     }
 
+    private static bool IsOtherReturnReason(string value)
+    {
+        var text = value.Trim();
+        return text.Equals("OTHER", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("khác", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("khac", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string BuildReturnNote(ReturnOrderRequest req)
+    {
+        var reasons = (req.Reasons ?? [])
+            .Select(reason => reason?.Trim())
+            .Where(reason => !string.IsNullOrWhiteSpace(reason))
+            .Select(reason => reason!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (reasons.Count == 0)
+            throw new OrderValidationException("Vui lòng chọn ít nhất một lý do trả/đổi hàng.");
+
+        var hasOtherReason = reasons.Any(IsOtherReturnReason);
+        var otherReason = req.OtherReason?.Trim();
+        if (hasOtherReason && (otherReason?.Length ?? 0) < 10)
+            throw new OrderValidationException("Vui lòng nhập lý do khác ít nhất 10 ký tự.");
+
+        var displayReasons = reasons
+            .Select(reason => IsOtherReturnReason(reason) ? "Lý do khác" : reason)
+            .ToList();
+
+        var parts = new List<string> { $"Lý do: {string.Join("; ", displayReasons)}" };
+
+        if (hasOtherReason && !string.IsNullOrWhiteSpace(otherReason))
+            parts.Add($"Chi tiết khác: {otherReason}");
+
+        var note = req.Note?.Trim();
+        if (!string.IsNullOrWhiteSpace(note))
+            parts.Add($"Ghi chú: {note}");
+
+        return string.Join(" | ", parts);
+    }
+
     public async Task<OrderResponse> GetByIdAsync(Guid id, OrderAccessContext access, CancellationToken ct = default)
     {
         var order = await _orderRepo.GetByIdAsync(id, ct)
@@ -771,6 +812,8 @@ public class OrderLogic(
         if (returnInputs.Count == 0)
             throw new OrderValidationException("Chọn ít nhất một dòng hàng để trả.");
 
+        var returnNote = BuildReturnNote(req);
+
         var detailById = (order.OrderDetails ?? []).ToDictionary(d => d.Id);
         var returnLines = new List<(OrderDetail Detail, int Quantity)>();
 
@@ -837,7 +880,7 @@ public class OrderLogic(
             RefundAmount = refundAmount,
             CustomerPaidAmount = customerPaid,
             RefundMethod = refundMethod,
-            Note = req.Note?.Trim(),
+            Note = returnNote,
             CreatedAt = now,
             UpdatedAt = now,
             Details = returnLines.Select(x =>
@@ -1041,7 +1084,8 @@ public class OrderLogic(
         item.ExchangeAmount,
         item.ExchangeOrderId,
         exchangeCode,
-        item.CreatedAt);
+        item.CreatedAt,
+        item.Note);
 
     private static ReturnOrderDetailResponse MapReturnDetail(
         ReturnOrder item, OrderChannel sourceChannel, string? exchangeCode) => new(

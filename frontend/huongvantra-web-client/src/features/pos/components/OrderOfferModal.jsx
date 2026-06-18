@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { normalizeOrderDiscountInput } from '../utils/posDiscountValidation.js'
 
+const QUICK_PERCENT_OPTIONS = [5, 10, 15, 20]
+
 function parseMoneyInput(value) {
   const digits = String(value).replace(/\D/g, '')
   return digits ? Number(digits) : 0
@@ -18,7 +20,7 @@ function OrderOfferModal({
   initialFixedAmount = 0,
   maxFixedAmount = 0,
 }) {
-  const [discountPercent, setDiscountPercent] = useState('')
+  const [activeType, setActiveType] = useState(initialFixedAmount > 0 ? 'fixed' : 'percent')
   const [discountFixedInput, setDiscountFixedInput] = useState('')
   const [customPercent, setCustomPercent] = useState('')
   const [error, setError] = useState('')
@@ -27,10 +29,9 @@ function OrderOfferModal({
     if (!isOpen) return
     setError('')
     const pct = initialPercent > 0 ? initialPercent : 0
-    const preset = [5, 10, 15, 20].includes(pct) ? String(pct) : ''
-    setDiscountPercent(preset)
-    setCustomPercent(preset ? '' : pct > 0 ? String(pct) : '')
-    setDiscountFixedInput(initialFixedAmount > 0 ? String(initialFixedAmount) : '')
+    setActiveType(initialFixedAmount > 0 ? 'fixed' : 'percent')
+    setCustomPercent(pct > 0 ? String(pct) : '')
+    setDiscountFixedInput(initialFixedAmount > 0 ? formatMoney(initialFixedAmount) : '')
   }, [isOpen, initialPercent, initialFixedAmount])
 
   if (!isOpen) return null
@@ -38,10 +39,20 @@ function OrderOfferModal({
   const maxFixed = Math.max(0, Math.round(Number(maxFixedAmount) || 0))
 
   const handleConfirm = () => {
-    const fixedAmount = parseMoneyInput(discountFixedInput)
-    const fromSelect = Number(discountPercent) || 0
-    const fromCustom = Math.min(100, Math.max(0, Number(customPercent) || 0))
-    const percent = fixedAmount > 0 ? 0 : fromSelect > 0 ? fromSelect : fromCustom
+    const fixedAmount = activeType === 'fixed' ? parseMoneyInput(discountFixedInput) : 0
+    const rawCustom = activeType === 'percent' ? Number(customPercent) || 0 : 0
+
+    if (activeType === 'percent' && rawCustom > 100) {
+      setError('Chiết khấu % không được vượt 100%.')
+      return
+    }
+
+    if (activeType === 'fixed' && fixedAmount > maxFixed) {
+      setError(`Chiết khấu cố định không được vượt ${formatMoney(maxFixed)} đ.`)
+      return
+    }
+
+    const percent = Math.min(100, Math.max(0, rawCustom))
 
     const result = normalizeOrderDiscountInput({
       percent,
@@ -54,18 +65,16 @@ function OrderOfferModal({
       return
     }
 
-    if (onConfirm) {
-      onConfirm({
-        percent: result.orderDiscountPercent,
-        fixedAmount: result.orderDiscountAmountFixed,
-        warning: result.clamped ? result.warning : null,
-      })
-    }
+    onConfirm?.({
+      percent: result.orderDiscountPercent,
+      fixedAmount: result.orderDiscountAmountFixed,
+      warning: result.clamped ? result.warning : null,
+    })
     onClose()
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm" onClick={onClose}>
+    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm" onClick={onClose}>
       <main
         className="flex w-full max-w-lg flex-col overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-2xl"
         onClick={(event) => event.stopPropagation()}
@@ -74,7 +83,7 @@ function OrderOfferModal({
           <h1 className="text-lg font-semibold text-gray-800">Chiết khấu đơn</h1>
           <button
             type="button"
-            aria-label="Close"
+            aria-label="Đóng"
             onClick={onClose}
             className="rounded-full p-1 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600"
           >
@@ -83,74 +92,115 @@ function OrderOfferModal({
         </header>
 
         <div className="space-y-5 p-5">
-          <section>
-            <label className="mb-2 block text-sm font-semibold text-gray-700">Chiết khấu theo %</label>
-            <select
-              className="w-full rounded-xl border border-gray-200 bg-white py-3 pl-4 pr-10 text-sm outline-none focus:border-[#6d8c71] focus:ring-4 focus:ring-[#6d8c71]/15"
-              value={discountPercent}
-              onChange={(event) => {
+          <div className="grid grid-cols-2 gap-2 rounded-2xl bg-[#f6f4ec] p-1">
+            <button
+              type="button"
+              onClick={() => {
                 setError('')
-                setDiscountPercent(event.target.value)
-                if (event.target.value) {
-                  setDiscountFixedInput('')
-                  setCustomPercent('')
-                }
+                setActiveType('percent')
+                setDiscountFixedInput('')
               }}
+              className={`rounded-xl px-3 py-2 text-sm font-bold transition ${
+                activeType === 'percent' ? 'bg-white text-[#356647] shadow-sm' : 'text-[#717971] hover:text-[#356647]'
+              }`}
             >
-              <option value="">Không áp dụng %</option>
-              <option value="5">5%</option>
-              <option value="10">10%</option>
-              <option value="15">15%</option>
-              <option value="20">20%</option>
-            </select>
-            <label className="mt-3 mb-1 block text-xs font-medium text-gray-600">Hoặc % khác (0–100)</label>
-            <input
-              type="number"
-              min={0}
-              max={100}
-              disabled={parseMoneyInput(discountFixedInput) > 0}
-              className="h-11 w-full rounded-xl border border-gray-200 px-4 text-sm outline-none focus:border-[#6d8c71] focus:ring-4 focus:ring-[#6d8c71]/15 disabled:bg-gray-50"
-              placeholder="Ví dụ: 25"
-              value={customPercent}
-              onChange={(event) => {
+              Theo %
+            </button>
+            <button
+              type="button"
+              onClick={() => {
                 setError('')
-                const raw = event.target.value
-                setCustomPercent(raw)
-                if (raw !== '') {
-                  setDiscountPercent('')
-                  setDiscountFixedInput('')
-                }
+                setActiveType('fixed')
+                setCustomPercent('')
               }}
-            />
-          </section>
+              className={`rounded-xl px-3 py-2 text-sm font-bold transition ${
+                activeType === 'fixed' ? 'bg-white text-[#356647] shadow-sm' : 'text-[#717971] hover:text-[#356647]'
+              }`}
+            >
+              Số tiền VNĐ
+            </button>
+          </div>
 
-          <section>
-            <label className="mb-2 block text-sm font-semibold text-gray-700">Hoặc giảm cố định (VNĐ)</label>
-            <input
-              className="h-12 w-full rounded-xl border border-gray-200 px-4 text-sm outline-none transition placeholder:text-gray-400 focus:border-[#6d8c71] focus:ring-4 focus:ring-[#6d8c71]/15"
-              placeholder={maxFixed > 0 ? `Tối đa ${formatMoney(maxFixed)} đ` : 'Thêm sản phẩm trước'}
-              type="text"
-              inputMode="numeric"
-              value={discountFixedInput}
-              onChange={(event) => {
-                setError('')
-                const parsed = parseMoneyInput(event.target.value)
-                setDiscountFixedInput(event.target.value)
-                if (parsed > 0) {
-                  setDiscountPercent('')
-                  setCustomPercent('')
-                }
-                if (maxFixed > 0 && parsed > maxFixed) {
-                  setError(`Chiết khấu không được vượt ${formatMoney(maxFixed)} đ (tổng sau CK dòng).`)
-                }
-              }}
-            />
-            <p className="mt-2 text-xs text-gray-500">
-              {maxFixed > 0
-                ? `Tối đa ${formatMoney(maxFixed)} đ sau CK từng SP. Nhập VNĐ thì % đơn không áp dụng.`
-                : 'Chưa có tổng để chiết khấu — thêm sản phẩm vào giỏ.'}
-            </p>
-          </section>
+          {activeType === 'percent' ? (
+            <section>
+              <label className="mb-2 block text-sm font-semibold text-gray-700">Phần trăm giảm</label>
+              <input
+                type="number"
+                min={0}
+                max={100}
+                className="h-11 w-full rounded-xl border border-gray-200 px-4 text-sm outline-none focus:border-[#6d8c71] focus:ring-4 focus:ring-[#6d8c71]/15"
+                placeholder="Ví dụ: 25"
+                value={customPercent}
+                onChange={(event) => {
+                  setError('')
+                  const raw = event.target.value
+                  setActiveType('percent')
+                  if (Number(raw) > 100) {
+                    setError('Chiết khấu % không được vượt 100%.')
+                  }
+                  setCustomPercent(raw)
+                  if (raw !== '') {
+                    setDiscountFixedInput('')
+                  }
+                }}
+              />
+              <div className="mt-3 grid grid-cols-4 gap-2">
+                {QUICK_PERCENT_OPTIONS.map((value) => {
+                  const isSelected = Number(customPercent) === value
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => {
+                        setError('')
+                        setActiveType('percent')
+                        setCustomPercent(String(value))
+                        setDiscountFixedInput('')
+                      }}
+                      className={`rounded-xl border px-3 py-2 text-sm font-bold transition ${
+                        isSelected
+                          ? 'border-[#356647] bg-[#356647] text-white shadow-sm'
+                          : 'border-gray-200 bg-white text-[#356647] hover:border-[#6d8c71] hover:bg-[#f6f4ec]'
+                      }`}
+                    >
+                      {value}%
+                    </button>
+                  )
+                })}
+              </div>
+              <p className="mt-2 text-xs text-gray-500">Nhập từ 0 đến 100%, hoặc chọn nhanh một mức bên dưới.</p>
+            </section>
+          ) : null}
+
+          {activeType === 'fixed' ? (
+            <section>
+              <label className="mb-2 block text-sm font-semibold text-gray-700">Giảm cố định (VNĐ)</label>
+              <input
+                className="h-12 w-full rounded-xl border border-gray-200 px-4 text-sm outline-none transition placeholder:text-gray-400 focus:border-[#6d8c71] focus:ring-4 focus:ring-[#6d8c71]/15"
+                placeholder={maxFixed > 0 ? `Tối đa ${formatMoney(maxFixed)} đ` : 'Thêm sản phẩm trước'}
+                type="text"
+                inputMode="numeric"
+                value={discountFixedInput}
+                onChange={(event) => {
+                  setError('')
+                  const parsed = parseMoneyInput(event.target.value)
+                  setActiveType('fixed')
+                  setDiscountFixedInput(parsed > 0 ? formatMoney(parsed) : '')
+                  if (parsed > 0) {
+                    setCustomPercent('')
+                  }
+                  if (maxFixed > 0 && parsed > maxFixed) {
+                    setError(`Chiết khấu không được vượt ${formatMoney(maxFixed)} đ (tổng sau CK dòng).`)
+                  }
+                }}
+              />
+              <p className="mt-2 text-xs text-gray-500">
+                {maxFixed > 0
+                  ? `Tối đa ${formatMoney(maxFixed)} đ sau CK từng SP. Nhập VNĐ thì % đơn không áp dụng.`
+                  : 'Chưa có tổng để chiết khấu - thêm sản phẩm vào giỏ.'}
+              </p>
+            </section>
+          ) : null}
 
           {error ? (
             <p className="rounded-lg bg-red-50 px-3 py-2 text-sm font-medium text-red-700" role="alert">

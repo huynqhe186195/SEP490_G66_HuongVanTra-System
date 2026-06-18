@@ -23,6 +23,11 @@ function OrderReturnsSection({ returns = [] }) {
             <div>
               <p className="font-semibold text-slate-900">{item.returnCode}</p>
               <p className="text-xs text-slate-500">{formatVietnamDateTime(item.createdAt)}</p>
+              {item.note?.trim() ? (
+                <p className="mt-1 line-clamp-1 max-w-[320px] text-xs text-slate-500" title={item.note}>
+                  {item.note}
+                </p>
+              ) : null}
             </div>
             <div className="text-right">
               <p className="font-semibold text-[#356647]">{formatVnd(item.returnAmount)}</p>

@@ -78,7 +78,9 @@ public record ReturnOrderRequest(
     List<ReturnExchangeItemRequest>? ExchangeItems = null,
     string? Note = null,
     string? ExchangeFulfillment = null,
-    decimal ExchangeManualDiscount = 0);
+    decimal ExchangeManualDiscount = 0,
+    List<string>? Reasons = null,
+    string? OtherReason = null);
 
 public record GetOrdersRequest(
     string? Search,

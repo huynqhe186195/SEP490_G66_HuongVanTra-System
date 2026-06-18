@@ -4,6 +4,7 @@ import {
   formatPromotionUsageText,
 } from '../utils/posPromotionUtils.js'
 import { useMediaQuery, useResizableWidth } from '../../../hooks/useResizableWidth.js'
+import CustomScrollArea from '../../../components/shared/CustomScrollArea.jsx'
 
 const PAYMENT_SIDEBAR_WIDTH_KEY = 'hvt-pos-payment-sidebar-width'
 const PAYMENT_SIDEBAR_DEFAULT_WIDTH = 448
@@ -158,7 +159,7 @@ export default function PosPaymentSidebar({
           </button>
         </header>
 
-        <div className="custom-scrollbar flex-1 space-y-4 overflow-y-auto p-4">
+        <CustomScrollArea className="flex-1" contentClassName="space-y-4 p-4">
           {selectedCustomer ? (
             <div className="rounded-xl border border-[#356647]/20 bg-white p-3 shadow-sm">
               <div className="flex items-start justify-between gap-2">
@@ -236,20 +237,26 @@ export default function PosPaymentSidebar({
 
           {canUseOrderDiscount ? (
             <div className="rounded-xl bg-white p-3 shadow-sm">
-              <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[#717971]">Chiết khấu đơn</label>
-              <div className="flex items-center gap-2">
-                <div className="relative flex-1">
-                  <input
-                    type="number"
-                    min={0}
-                    max={100}
-                    disabled={usesFixedOrderDiscount}
-                    className="w-full rounded-lg border border-[#c1c9c0] py-2 pl-3 pr-7 text-sm outline-none focus:border-[#356647] disabled:bg-slate-50 disabled:text-slate-400"
-                    value={usesFixedOrderDiscount ? '' : orderDiscountPercentInput || ''}
-                    onChange={(event) => onOrderDiscountPercentChange(event.target.value)}
-                    placeholder={usesFixedOrderDiscount ? '—' : '0'}
-                  />
-                  <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-[#717971]">%</span>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs font-bold uppercase tracking-wider text-[#717971]">Chiết khấu đơn</p>
+                  {orderDiscountAmount > 0 ? (
+                    <>
+                      <p className="mt-1 text-sm font-bold text-[#356647]">
+                        -{formatMoney(orderDiscountAmount)} đ
+                        {usesFixedOrderDiscount ? '' : orderDiscountPercent > 0 ? ` (${orderDiscountPercent}%)` : ''}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => onOrderDiscountPercentChange?.('0')}
+                        className="mt-1 text-xs font-semibold text-[#717971] hover:text-[#ba1a1a]"
+                      >
+                        Xóa chiết khấu
+                      </button>
+                    </>
+                  ) : (
+                    <p className="mt-1 text-sm font-semibold text-[#414942]">Chưa áp dụng</p>
+                  )}
                 </div>
                 <button
                   type="button"
@@ -259,11 +266,6 @@ export default function PosPaymentSidebar({
                   Tùy chỉnh
                 </button>
               </div>
-              {usesFixedOrderDiscount ? (
-                <p className="mt-2 text-xs font-semibold text-[#356647]">
-                  CK cố định: -{formatMoney(orderDiscountAmount)} đ
-                </p>
-              ) : null}
             </div>
           ) : null}
 
@@ -324,7 +326,7 @@ export default function PosPaymentSidebar({
               </div>
             )}
             {isPromotionDropdownOpen ? (
-              <div className="custom-scrollbar absolute left-3 right-3 top-full z-50 mt-1 max-h-56 overflow-y-auto rounded-lg border border-[#c1c9c0] bg-white shadow-2xl">
+              <CustomScrollArea className="absolute left-3 right-3 top-full z-50 mt-1 rounded-lg border border-[#c1c9c0] bg-white shadow-2xl" contentClassName="max-h-56">
                 {isPromotionListLoading ? (
                   <div className="px-3 py-2 text-xs text-[#717971]">Đang tải mã giảm giá...</div>
                 ) : null}
@@ -380,7 +382,7 @@ export default function PosPaymentSidebar({
                       )
                     })
                   : null}
-              </div>
+              </CustomScrollArea>
             ) : null}
           </div>
 
@@ -391,11 +393,11 @@ export default function PosPaymentSidebar({
                 <span className="text-xs text-[#717971]">{cartItemLines.length} mặt hàng</span>
               </div>
 
-              <div className="custom-scrollbar mb-3 max-h-56 space-y-2 overflow-y-auto border-b border-[#f0eee6] pb-3">
+              <CustomScrollArea className="mb-3 border-b border-[#f0eee6]" contentClassName="max-h-56 space-y-2 pb-3">
                 {cartItemLines.map((line) => (
                   <div key={line.key} className="flex items-start justify-between gap-3 text-sm">
                     <div className="min-w-0 flex-1">
-                      <p className="truncate font-medium text-[#1b1c17]" title={line.name}>
+                      <p className="line-clamp-2 font-medium text-[#1b1c17]" title={line.name}>
                         {line.name}
                         {line.isGift ? (
                           <span className="ml-1.5 rounded-full bg-[#fff8e8] px-1.5 py-0.5 text-[10px] font-bold uppercase text-[#7e5700]">
@@ -404,8 +406,6 @@ export default function PosPaymentSidebar({
                         ) : null}
                       </p>
                       <p className="mt-0.5 text-xs text-[#717971]">
-                        <span className="font-mono">{line.sku}</span>
-                        <span className="mx-1">·</span>
                         {line.qty} × {formatMoney(line.unitPrice)} đ
                         {line.discountLabel ? (
                           <>
@@ -423,7 +423,7 @@ export default function PosPaymentSidebar({
                     </div>
                   </div>
                 ))}
-              </div>
+              </CustomScrollArea>
 
               <div className="space-y-1 text-sm text-[#717971]">
                 <div className="flex justify-between">
@@ -654,7 +654,7 @@ export default function PosPaymentSidebar({
               </div>
             </>
           ) : null}
-        </div>
+        </CustomScrollArea>
 
         <footer className="shrink-0 border-t border-[#c1c9c0] bg-white p-4">
           <button

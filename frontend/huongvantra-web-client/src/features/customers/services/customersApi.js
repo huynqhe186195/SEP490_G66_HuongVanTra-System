@@ -45,6 +45,56 @@ export function mapCustomer(item) {
   }
 }
 
+function mapCustomerImportRow(item) {
+  if (!item || typeof item !== 'object') return null
+  const messages = item.messages ?? item.Messages ?? []
+  return {
+    rowNumber: Number(item.rowNumber ?? item.RowNumber ?? 0),
+    customerName: item.customerName ?? item.CustomerName ?? '',
+    phoneNumber: item.phoneNumber ?? item.PhoneNumber ?? '',
+    status: item.status ?? item.Status ?? '',
+    messages: Array.isArray(messages) ? messages.map(String).filter(Boolean) : [],
+  }
+}
+
+function mapCustomerImportResult(data) {
+  const rows = data?.rows ?? data?.Rows ?? []
+  return {
+    totalRows: Number(data?.totalRows ?? data?.TotalRows ?? 0),
+    successCount: Number(data?.successCount ?? data?.SuccessCount ?? 0),
+    failedCount: Number(data?.failedCount ?? data?.FailedCount ?? 0),
+    warningCount: Number(data?.warningCount ?? data?.WarningCount ?? 0),
+    rows: Array.isArray(rows) ? rows.map(mapCustomerImportRow).filter(Boolean) : [],
+  }
+}
+
+export async function downloadCustomerImportTemplate() {
+  const blob = await apiRequestAuth('/api/customers/import-template', {
+    method: 'GET',
+    responseType: 'blob',
+  })
+  const url = window.URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = 'mau-import-khach-hang.xlsx'
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  window.URL.revokeObjectURL(url)
+}
+
+export async function importCustomersFromExcel(file) {
+  const formData = new FormData()
+  formData.append('file', file)
+
+  const data = await apiRequestAuth('/api/customers/import', {
+    method: 'POST',
+    body: formData,
+  })
+
+  return mapCustomerImportResult(data)
+}
+
 function mapAddress(item) {
   if (!item || typeof item !== 'object') return null
   return {

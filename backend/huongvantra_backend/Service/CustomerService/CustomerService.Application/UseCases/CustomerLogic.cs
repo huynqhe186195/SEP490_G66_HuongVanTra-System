@@ -1,3 +1,7 @@
+using System.Globalization;
+using System.Text;
+using System.Text.RegularExpressions;
+using ClosedXML.Excel;
 using CustomerService.Application.DTOs.Requests;
 using CustomerService.Application.DTOs.Responses;
 using CustomerService.Application.Interfaces;
@@ -11,8 +15,34 @@ namespace CustomerService.Application.UseCases;
 public class CustomerLogic
 {
     private const int MaxPageSize = 100;
+    public const string CustomerImportTemplateFileName = "mau-import-khach-hang.xlsx";
+    public const string CustomerImportContentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    private const int ImportHeaderScanRowCount = 10;
+    private const string ImportFullNameHeader = "Họ và tên";
+    private const string ImportPhoneHeader = "Số điện thoại";
+    private const string ImportEmailHeader = "Email";
+    private const string ImportCustomerGroupHeader = "Nhóm khách hàng";
+    private const string ImportTaxCodeHeader = "Mã số thuế";
+    private const string ImportSourceHeader = "Nguồn khách hàng";
+    private const string ImportNoteHeader = "Ghi chú";
+    private const string DefaultImportedAddressLine = "Chưa có địa chỉ giao hàng";
     public const string OrderCompletedEventType = "OrderCompleted";
     public const string OrderReturnedEventType = "OrderReturned";
+
+    private static readonly string[] CustomerImportHeaders =
+    [
+        ImportFullNameHeader,
+        ImportPhoneHeader,
+        ImportEmailHeader,
+        ImportCustomerGroupHeader,
+        ImportTaxCodeHeader,
+        ImportSourceHeader,
+        ImportNoteHeader
+    ];
+
+    private static readonly Regex ImportEmailRegex = new(
+        @"^[^\s@]+@[^\s@]+\.[^\s@]{2,}$",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     private readonly ICustomerRepository _customerRepo;
     private readonly ICustomerTierRepository _tierRepo;
@@ -163,6 +193,98 @@ public class CustomerLogic
 
         customer = await _customerRepo.GetByIdAsync(id, ct) ?? customer;
         return MapToResponse(customer);
+    }
+
+    public byte[] BuildImportTemplate()
+    {
+        using var workbook = new XLWorkbook();
+        var worksheet = workbook.AddWorksheet("KhachHang");
+
+        for (var index = 0; index < CustomerImportHeaders.Length; index++)
+        {
+            var cell = worksheet.Cell(1, index + 1);
+            cell.Value = CustomerImportHeaders[index];
+            cell.Style.Font.Bold = true;
+            cell.Style.Fill.BackgroundColor = XLColor.FromHtml("#EAF3E6");
+            cell.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+        }
+
+        worksheet.Column(2).Style.NumberFormat.Format = "@";
+        worksheet.SheetView.FreezeRows(1);
+        worksheet.Range(1, 1, 1, CustomerImportHeaders.Length).SetAutoFilter();
+        worksheet.Columns(1, CustomerImportHeaders.Length).AdjustToContents();
+
+        using var stream = new MemoryStream();
+        workbook.SaveAs(stream);
+        return stream.ToArray();
+    }
+
+    public async Task<CustomerImportResultResponse> ImportFromExcelAsync(
+        Stream fileStream,
+        string fileName,
+        CustomerAccessContext access,
+        CancellationToken ct = default)
+    {
+        if (fileStream is null)
+            throw new CustomerValidationException(["Vui lòng chọn file Excel cần import."]);
+
+        if (!string.Equals(Path.GetExtension(fileName), ".xlsx", StringComparison.OrdinalIgnoreCase))
+            throw new CustomerValidationException(["Chỉ hỗ trợ import file Excel định dạng .xlsx."]);
+
+        if (fileStream.CanSeek && fileStream.Length == 0)
+            throw new CustomerValidationException(["File Excel không có dữ liệu."]);
+
+        XLWorkbook workbook;
+        try
+        {
+            workbook = new XLWorkbook(fileStream);
+        }
+        catch
+        {
+            throw new CustomerValidationException(["Không đọc được file Excel. Vui lòng kiểm tra lại định dạng .xlsx."]);
+        }
+
+        using (workbook)
+        {
+            var worksheet = workbook.Worksheets.FirstOrDefault()
+                ?? throw new CustomerValidationException(["File Excel không có dữ liệu."]);
+
+            var headerLookup = FindImportHeaderRow(worksheet);
+            var headerRow = headerLookup.HeaderRow;
+            var headerMap = headerLookup.HeaderMap;
+            var missingHeaders = new List<string>();
+            if (!headerMap.ContainsKey("fullName")) missingHeaders.Add(ImportFullNameHeader);
+            if (!headerMap.ContainsKey("phoneNumber")) missingHeaders.Add(ImportPhoneHeader);
+            if (missingHeaders.Count > 0)
+                throw new CustomerValidationException([BuildMissingRequiredImportHeadersMessage(missingHeaders, headerLookup.DetectedHeaders)]);
+
+            var lastRow = worksheet.LastRowUsed();
+            if (lastRow is null || lastRow.RowNumber() <= headerRow.RowNumber())
+                throw new CustomerValidationException(["File Excel không có dữ liệu khách hàng."]);
+
+            var rowResults = new List<CustomerImportRowResultResponse>();
+            var seenPhones = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var totalRows = 0;
+
+            for (var rowNumber = headerRow.RowNumber() + 1; rowNumber <= lastRow.RowNumber(); rowNumber++)
+            {
+                var rawRow = ReadImportRow(worksheet.Row(rowNumber), headerMap);
+                if (rawRow.IsEmpty) continue;
+
+                totalRows++;
+                var result = await ImportCustomerRowAsync(rowNumber, rawRow, seenPhones, access, ct);
+                rowResults.Add(result);
+            }
+
+            if (totalRows == 0)
+                throw new CustomerValidationException(["File Excel không có dữ liệu khách hàng."]);
+
+            var successCount = rowResults.Count(r => r.Status == "Success" || r.Status == "Warning");
+            var failedCount = rowResults.Count(r => r.Status == "Failed");
+            var warningCount = rowResults.Count(r => r.Status == "Warning");
+
+            return new CustomerImportResultResponse(totalRows, successCount, failedCount, warningCount, rowResults);
+        }
     }
 
     public async Task<OrderCompletedHandlingResult> HandleOrderCompletedAsync(
@@ -639,6 +761,327 @@ public class CustomerLogic
         return new PagedResult<CustomerResponse>(items, page, pageSize, totalCount);
     }
 
+    private async Task<CustomerImportRowResultResponse> ImportCustomerRowAsync(
+        int rowNumber,
+        CustomerImportRawRow rawRow,
+        HashSet<string> seenPhones,
+        CustomerAccessContext access,
+        CancellationToken ct)
+    {
+        var errors = new List<string>();
+        var warnings = new List<string>();
+
+        var fullName = NormalizeImportText(rawRow.FullName);
+        var phoneNumber = NormalizeImportPhone(rawRow.PhoneNumber);
+        var email = NormalizeImportText(rawRow.Email);
+        var taxCode = NormalizeImportText(rawRow.TaxCode);
+        var note = NormalizeImportText(rawRow.Note);
+
+        if (string.IsNullOrWhiteSpace(fullName))
+            errors.Add("Họ và tên là bắt buộc.");
+        else if (fullName.Length > 100)
+            errors.Add("Họ và tên tối đa 100 ký tự.");
+
+        if (!VietnamPhoneValidator.TryValidate(phoneNumber, out var phoneError))
+        {
+            errors.Add(phoneError!);
+        }
+        else
+        {
+            if (!seenPhones.Add(phoneNumber))
+                errors.Add("Số điện thoại bị trùng trong file import.");
+
+            if (await _customerRepo.PhoneExistsAsync(phoneNumber, ct: ct))
+                errors.Add("Số điện thoại đã tồn tại trong hệ thống.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(email))
+        {
+            if (email.Length > 100 || !ImportEmailRegex.IsMatch(email))
+            {
+                warnings.Add("Email không đúng định dạng nên không được lưu.");
+                email = null;
+            }
+            else if (await _customerRepo.EmailExistsAsync(email, ct: ct))
+            {
+                errors.Add("Email đã được sử dụng trong hệ thống.");
+            }
+        }
+        else
+        {
+            email = null;
+        }
+
+        var customerGroup = ResolveImportCustomerGroup(rawRow.CustomerGroup, warnings);
+
+        if (!string.IsNullOrWhiteSpace(taxCode) &&
+            !VietnamTaxCodeValidator.TryValidate(taxCode, required: false, out _))
+        {
+            warnings.Add("Mã số thuế không hợp lệ nên không được lưu.");
+            taxCode = null;
+        }
+
+        if (customerGroup == CustomerGroup.DoanhNghiep && string.IsNullOrWhiteSpace(taxCode))
+        {
+            warnings.Add("Khách doanh nghiệp cần mã số thuế hợp lệ, dòng này được nhập vào nhóm Phổ thông.");
+            customerGroup = CustomerGroup.PhoThong;
+        }
+
+        var source = ResolveImportCustomerSource(rawRow.Source, warnings);
+
+        if (!string.IsNullOrWhiteSpace(note))
+            warnings.Add("Cột Ghi chú chưa có trường lưu riêng trong hồ sơ khách hàng nên không được lưu.");
+
+        if (errors.Count > 0)
+        {
+            return new CustomerImportRowResultResponse(
+                rowNumber,
+                fullName,
+                phoneNumber,
+                "Failed",
+                errors.Concat(warnings).ToList());
+        }
+
+        try
+        {
+            await CreateAsync(
+                new CreateCustomerRequest(
+                    fullName,
+                    phoneNumber,
+                    email,
+                    DefaultImportedAddressLine,
+                    customerGroup,
+                    taxCode,
+                    TierId: null,
+                    AssignedSaleId: null,
+                    Source: source,
+                    Department: null),
+                access,
+                ct);
+        }
+        catch (CustomerValidationException ex)
+        {
+            return new CustomerImportRowResultResponse(rowNumber, fullName, phoneNumber, "Failed", ex.Errors.ToList());
+        }
+        catch (DuplicatePhoneNumberException ex)
+        {
+            return new CustomerImportRowResultResponse(rowNumber, fullName, phoneNumber, "Failed", [ex.Message]);
+        }
+        catch (DuplicateEmailException ex)
+        {
+            return new CustomerImportRowResultResponse(rowNumber, fullName, phoneNumber, "Failed", [ex.Message]);
+        }
+        catch (CustomerForbiddenException ex)
+        {
+            return new CustomerImportRowResultResponse(rowNumber, fullName, phoneNumber, "Failed", [ex.Message]);
+        }
+
+        return new CustomerImportRowResultResponse(
+            rowNumber,
+            fullName,
+            phoneNumber,
+            warnings.Count > 0 ? "Warning" : "Success",
+            warnings.Count > 0 ? warnings : ["Import thành công."]);
+    }
+
+    private static ImportHeaderLookup FindImportHeaderRow(IXLWorksheet worksheet)
+    {
+        var firstRow = worksheet.FirstRowUsed()
+            ?? throw new CustomerValidationException(["File Excel không có dữ liệu."]);
+        var lastRow = worksheet.LastRowUsed()
+            ?? throw new CustomerValidationException(["File Excel không có dữ liệu."]);
+
+        var startRowNumber = firstRow.RowNumber();
+        var endRowNumber = Math.Min(lastRow.RowNumber(), startRowNumber + ImportHeaderScanRowCount - 1);
+        ImportHeaderLookup? bestMatch = null;
+        var bestScore = -1;
+
+        for (var rowNumber = startRowNumber; rowNumber <= endRowNumber; rowNumber++)
+        {
+            var row = worksheet.Row(rowNumber);
+            var headerMap = BuildImportHeaderMap(row);
+            var detectedHeaders = GetImportHeaderTexts(row);
+            var score = headerMap.Count
+                + (headerMap.ContainsKey("fullName") ? 10 : 0)
+                + (headerMap.ContainsKey("phoneNumber") ? 10 : 0);
+
+            var lookup = new ImportHeaderLookup(row, headerMap, detectedHeaders);
+            if (headerMap.ContainsKey("fullName") && headerMap.ContainsKey("phoneNumber"))
+                return lookup;
+
+            if (score > bestScore || (bestMatch is null && detectedHeaders.Count > 0))
+            {
+                bestMatch = lookup;
+                bestScore = score;
+            }
+        }
+
+        return bestMatch ?? new ImportHeaderLookup(firstRow, BuildImportHeaderMap(firstRow), GetImportHeaderTexts(firstRow));
+    }
+
+    private static string BuildMissingRequiredImportHeadersMessage(
+        IReadOnlyCollection<string> missingHeaders,
+        IReadOnlyCollection<string> detectedHeaders)
+    {
+        var message = $"File Excel thiếu cột bắt buộc: {string.Join(", ", missingHeaders)}.";
+        return detectedHeaders.Count > 0
+            ? $"{message} Các cột đã đọc: {string.Join(", ", detectedHeaders)}."
+            : $"{message} Không đọc được dòng tiêu đề trong {ImportHeaderScanRowCount} dòng đầu.";
+    }
+
+    private static List<string> GetImportHeaderTexts(IXLRow headerRow) =>
+        headerRow.CellsUsed()
+            .Select(cell => NormalizeImportText(cell.GetFormattedString()))
+            .Where(text => !string.IsNullOrWhiteSpace(text))
+            .ToList();
+
+    private static Dictionary<string, int> BuildImportHeaderMap(IXLRow headerRow)
+    {
+        var headerMap = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var cell in headerRow.CellsUsed())
+        {
+            var key = ResolveImportColumnKey(cell.GetString());
+            if (key is not null && !headerMap.ContainsKey(key))
+                headerMap[key] = cell.Address.ColumnNumber;
+        }
+
+        return headerMap;
+    }
+
+    private static CustomerImportRawRow ReadImportRow(IXLRow row, IReadOnlyDictionary<string, int> headerMap) =>
+        new(
+            GetImportCellText(row, headerMap, "fullName"),
+            GetImportCellText(row, headerMap, "phoneNumber"),
+            GetImportCellText(row, headerMap, "email"),
+            GetImportCellText(row, headerMap, "customerGroup"),
+            GetImportCellText(row, headerMap, "taxCode"),
+            GetImportCellText(row, headerMap, "source"),
+            GetImportCellText(row, headerMap, "note"));
+
+    private static string GetImportCellText(IXLRow row, IReadOnlyDictionary<string, int> headerMap, string key)
+    {
+        if (!headerMap.TryGetValue(key, out var columnNumber))
+            return string.Empty;
+
+        return row.Cell(columnNumber).GetFormattedString().Trim();
+    }
+
+    private static string? ResolveImportColumnKey(string header)
+    {
+        var key = NormalizeImportKey(header);
+        if (string.IsNullOrWhiteSpace(key))
+            return null;
+
+        if (key is "hovaten" or "hoten" or "fullname" or "customername"
+            || key.StartsWith("hovaten", StringComparison.Ordinal)
+            || key.StartsWith("hoten", StringComparison.Ordinal)
+            || key.StartsWith("fullname", StringComparison.Ordinal))
+            return "fullName";
+
+        if (key is "sodienthoai" or "dienthoai" or "sdt" or "phone" or "phonenumber"
+            || key.StartsWith("sodienthoai", StringComparison.Ordinal)
+            || key.StartsWith("dienthoai", StringComparison.Ordinal)
+            || key.StartsWith("phonenumber", StringComparison.Ordinal))
+            return "phoneNumber";
+
+        return key switch
+        {
+            "email" => "email",
+            "nhomkhachhang" or "loaikhachhang" or "customergroup" or "customertype" => "customerGroup",
+            "masothue" or "mst" or "taxcode" => "taxCode",
+            "nguonkhachhang" or "nguon" or "source" or "customersource" => "source",
+            "ghichu" or "note" or "notes" => "note",
+            _ => null
+        };
+    }
+
+    private static CustomerGroup ResolveImportCustomerGroup(string value, List<string> warnings)
+    {
+        var key = NormalizeImportKey(value);
+        if (string.IsNullOrWhiteSpace(key))
+            return CustomerGroup.PhoThong;
+
+        return key switch
+        {
+            "phothong" or "khachle" or "banle" or "general" or "retail" or "member" => CustomerGroup.PhoThong,
+            "vip" or "doingoai" or "vvip" => CustomerGroup.DoiNgoai,
+            "doanhnghiep" or "congty" or "corporate" or "business" => CustomerGroup.DoanhNghiep,
+            _ => WarnAndDefaultGroup(value, warnings)
+        };
+    }
+
+    private static CustomerGroup WarnAndDefaultGroup(string value, List<string> warnings)
+    {
+        warnings.Add($"Nhóm khách hàng '{value.Trim()}' không hợp lệ, đã mặc định là Phổ thông.");
+        return CustomerGroup.PhoThong;
+    }
+
+    private static CustomerSource? ResolveImportCustomerSource(string value, List<string> warnings)
+    {
+        var key = NormalizeImportKey(value);
+        if (string.IsNullOrWhiteSpace(key))
+            return null;
+
+        return key switch
+        {
+            "website" or "web" => CustomerSource.Website,
+            "zalo" => CustomerSource.Zalo,
+            "phone" or "dienthoai" or "sodienthoai" => CustomerSource.Phone,
+            "walkin" or "cuahang" or "taicuahang" or "tructiep" => CustomerSource.WalkIn,
+            "referral" or "gioithieu" => CustomerSource.Referral,
+            "other" or "khac" => CustomerSource.Other,
+            _ => WarnAndDefaultSource(value, warnings)
+        };
+    }
+
+    private static CustomerSource WarnAndDefaultSource(string value, List<string> warnings)
+    {
+        warnings.Add($"Nguồn khách hàng '{value.Trim()}' không hợp lệ, đã mặc định là Other.");
+        return CustomerSource.Other;
+    }
+
+    private static string NormalizeImportText(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim().Normalize(NormalizationForm.FormC);
+
+    private static string NormalizeImportPhone(string? value)
+    {
+        var text = NormalizeImportText(value);
+        return string.IsNullOrWhiteSpace(text)
+            ? string.Empty
+            : Regex.Replace(text, @"[\s\-.]", string.Empty);
+    }
+
+    private static string NormalizeImportKey(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return string.Empty;
+
+        var cleaned = value.Trim()
+            .Normalize(NormalizationForm.FormKC)
+            .Replace('\u00A0', ' ')
+            .Replace('\u200B', ' ')
+            .Replace('\u200C', ' ')
+            .Replace('\u200D', ' ')
+            .Replace('\uFEFF', ' ');
+
+        var normalized = cleaned
+            .Replace('đ', 'd')
+            .Replace('Đ', 'D')
+            .Normalize(NormalizationForm.FormD);
+
+        var builder = new StringBuilder();
+        foreach (var c in normalized)
+        {
+            if (CharUnicodeInfo.GetUnicodeCategory(c) == UnicodeCategory.NonSpacingMark)
+                continue;
+
+            if (char.IsLetterOrDigit(c))
+                builder.Append(char.ToLowerInvariant(c));
+        }
+
+        return builder.ToString();
+    }
+
     private async Task<CustomerDebtTransaction> RecordDebtAsync(
         Customer customer,
         DebtTransactionType type,
@@ -674,6 +1117,30 @@ public class CustomerLogic
         decimal PaidAmount,
         decimal RemainingDebt,
         DateTime CreatedAt);
+
+    private sealed record ImportHeaderLookup(
+        IXLRow HeaderRow,
+        Dictionary<string, int> HeaderMap,
+        IReadOnlyList<string> DetectedHeaders);
+
+    private sealed record CustomerImportRawRow(
+        string FullName,
+        string PhoneNumber,
+        string Email,
+        string CustomerGroup,
+        string TaxCode,
+        string Source,
+        string Note)
+    {
+        public bool IsEmpty =>
+            string.IsNullOrWhiteSpace(FullName) &&
+            string.IsNullOrWhiteSpace(PhoneNumber) &&
+            string.IsNullOrWhiteSpace(Email) &&
+            string.IsNullOrWhiteSpace(CustomerGroup) &&
+            string.IsNullOrWhiteSpace(TaxCode) &&
+            string.IsNullOrWhiteSpace(Source) &&
+            string.IsNullOrWhiteSpace(Note);
+    }
 
     private async Task<List<OpenDebtItem>> BuildOpenDebtItemsAsync(Guid customerId, CancellationToken ct)
     {

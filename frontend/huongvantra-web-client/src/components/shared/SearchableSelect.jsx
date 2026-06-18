@@ -105,7 +105,7 @@ function SearchableSelect({
           <ul
             id={listId}
             role="listbox"
-            className="absolute z-30 mt-1 max-h-56 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white py-1 shadow-lg"
+            className="custom-scrollbar absolute z-30 mt-1 max-h-56 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white py-1 shadow-lg"
           >
             <li>
               <button

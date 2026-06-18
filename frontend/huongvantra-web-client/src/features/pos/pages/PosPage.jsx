@@ -6,8 +6,10 @@ import CustomerDetailModal from "../components/CustomerDetailModal.jsx";
 import OrderOfferModal from "../components/OrderOfferModal.jsx";
 import ConfirmDialog from "../components/ConfirmDialog.jsx";
 import PosPaymentSidebar from "../components/PosPaymentSidebar.jsx";
+import PosPaymentConfirmModal from "../components/PosPaymentConfirmModal.jsx";
 import SelectReturnOrderModal from "../components/SelectReturnOrderModal.jsx";
 import PosCategoryFilterSidebar from "../components/PosCategoryFilterSidebar.jsx";
+import CustomScrollArea from "../../../components/shared/CustomScrollArea.jsx";
 import {
   expandCategoryFilterIds,
   formatCategoryFilterSummary,
@@ -53,6 +55,7 @@ import {
   formatPromotionScopeLabel,
 } from '../utils/posPromotionUtils.js'
 import ResizableSplitPane from '../../../components/shared/ResizableSplitPane.jsx'
+import LoadingIndicator from '../../../components/shared/LoadingIndicator.jsx'
 
 const SALES_MODES = [
     { id: "counter", label: "Bán trực tiếp", icon: "storefront" },
@@ -234,6 +237,7 @@ function PosPage() {
   const [useCustomShippingAddress, setUseCustomShippingAddress] = useState(false)
   const [seller, setSeller] = useState({ name: 'Nhân viên POS', role: '—', display: 'Nhân viên POS · —' })
   const [isPaymentSidebarOpen, setIsPaymentSidebarOpen] = useState(false)
+  const [isPaymentConfirmOpen, setIsPaymentConfirmOpen] = useState(false)
   const [customerOpenDebts, setCustomerOpenDebts] = useState([])
   const [isLoadingOpenDebts, setIsLoadingOpenDebts] = useState(false)
   const [overpaymentDebtModalOpen, setOverpaymentDebtModalOpen] = useState(false)
@@ -380,7 +384,7 @@ function PosPage() {
     ? 0
     : Number(selectedCustomer?.tierDiscountPercent || 0)
   const canUseVipManualAdjustments = isVipCustomerType(selectedCustomer?.customerType)
-  const canUseOrderDiscount = canUseVipManualAdjustments
+  const canUseOrderDiscount = true
   const effectiveOrderDiscountPercent = canUseOrderDiscount ? orderDiscountPercent : 0
   const effectiveOrderDiscountAmountFixed = canUseOrderDiscount ? orderDiscountAmountFixed : 0
   const {
@@ -1187,6 +1191,21 @@ function PosPage() {
         return names.length ? `Áp dụng cho: ${[...new Set(names)].join(", ")}` : "Áp dụng cho SKU cụ thể";
     })();
 
+    const cartItemLines = cartItems.map((item) => ({
+        key: item.sku,
+        name: item.name,
+        sku: item.sku,
+        qty: Number(item.qty) || 0,
+        unitPrice: Number(item.price) || 0,
+        isGift: Boolean(item.isGift),
+        lineGross: getLineGross(item),
+        lineDiscount: getLineDiscount(item),
+        lineTotal: getLineTotal(item),
+        discountLabel: formatLineDiscountLabel(item),
+    }));
+
+    const selectedPaymentMethodLabel = paymentMethods.find((method) => method.id === paymentMethod)?.label ?? paymentMethod;
+
   const buildOrderPayload = (method, amount) => {
     const storeId = resolvePosStoreId()
     const manualDiscount = Math.round(
@@ -1399,6 +1418,7 @@ function PosPage() {
         updateActiveSession(createEmptySession(salesMode));
         setOpenDiscountSku(null);
         setIsPaymentSidebarOpen(false);
+        setIsPaymentConfirmOpen(false);
     };
 
     const openPaymentSidebar = () => {
@@ -1551,6 +1571,9 @@ function PosPage() {
                 }
                 return;
             }
+            if (!validateDiscountsBeforePayment()) {
+                return;
+            }
         } else {
             if (!validateDiscountsBeforePayment()) {
                 return;
@@ -1570,9 +1593,14 @@ function PosPage() {
             return;
         }
 
+        setIsPaymentConfirmOpen(true);
+    };
+
+    const handleConfirmPayment = async () => {
         setIsSubmitting(true);
         try {
             await executePayment(debtSettlement);
+            setIsPaymentConfirmOpen(false);
         } catch (error) {
             showError(error.message);
         } finally {
@@ -1781,7 +1809,7 @@ function PosPage() {
                             </span>
                         </div>
 
-                        <div className="custom-scrollbar min-h-[120px] flex-1 overflow-y-auto px-3 pb-3">
+                        <CustomScrollArea className="min-h-[120px] flex-1" contentClassName="px-3 pb-3">
                             {!hasCartItems ?
                                 <div className="flex min-h-[140px] flex-col items-center justify-center rounded-xl border border-dashed border-[#c1c9c0]/80 bg-[#f6f4ec]/40 p-5 text-center">
                                     <Icon className="mb-2 text-[44px] text-[#717971]/50">shopping_cart</Icon>
@@ -1933,7 +1961,7 @@ function PosPage() {
                                     })}
                                 </div>
                             }
-                        </div>
+                        </CustomScrollArea>
 
                         <div className="shrink-0 border-t border-[#c1c9c0]/50 bg-white px-3 py-2">
                             <div className="flex items-center justify-between gap-3">
@@ -1943,7 +1971,8 @@ function PosPage() {
                                         id="cart-order-note"
                                         type="text"
                                         maxLength={500}
-                                        placeholder="Ghi chú đơn hàng"
+                                        aria-label="Ghi chú đơn hàng"
+                                        placeholder="Lý do chiết khấu, ghi chú nội bộ, yêu cầu của khách..."
                                         className="min-w-0 flex-1 border-0 bg-transparent text-sm text-[#1b1c17] outline-none placeholder:text-[#717971]"
                                         value={orderNote}
                                         onChange={(event) => updateActiveSession({ orderNote: event.target.value })}
@@ -2132,16 +2161,16 @@ function PosPage() {
                                 </div>
                             </div>
 
-                            <div className="custom-scrollbar flex-1 overflow-y-auto px-3 py-3">
+                            <CustomScrollArea className="flex-1" contentClassName="px-3 py-3">
                                 {isSearchLoading ?
-                                    <p className="px-1 py-3 text-sm text-[#717971]">Đang tải sản phẩm...</p>
+                                    <LoadingIndicator label="Đang tải sản phẩm..." className="min-h-[220px]" />
                                 : filteredSearchProducts.length === 0 ?
                                     <p className="px-1 py-3 text-sm text-[#717971]">
                                         {hasSearchQuery || selectedCategoryIds.length > 0 || priceFilter ?
                                             "Không tìm thấy sản phẩm phù hợp."
                                         :   "Chưa có sản phẩm để hiển thị."}
                                     </p>
-                                :   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2 2xl:grid-cols-3">
+                                :   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
                                         {filteredSearchProducts.map((item) => {
                                             const outOfStock = Number(item.stockQuantity) <= 0;
                                             return (
@@ -2149,25 +2178,21 @@ function PosPage() {
                                                     key={`${item.productId}-${item.sku}`}
                                                     type="button"
                                                     onClick={() => addToCart(item)}
-                                                    className="flex w-full items-center gap-2.5 rounded-xl border border-[#c1c9c0]/50 bg-[#fbf9f1] p-2.5 text-left transition-colors hover:border-[#356647]/35 hover:bg-[#f6f4ec]">
-                                                    <ProductImage src={item.imageUrl} alt={item.name} className="h-12 w-12 shrink-0 rounded-lg" iconClassName="text-[20px]" />
-                                                    <div className="min-w-0 flex-1">
-                                                        <p className="truncate text-sm font-semibold text-[#1b1c17]">{item.name}</p>
-                                                        <p className="truncate text-xs text-[#717971]">
-                                                            {item.sku}
-                                                            <span className="mx-1">·</span>
-                                                            <span className={outOfStock || Number(item.stockQuantity) <= 5 ? "font-semibold text-[#7e5700]" : ""}>
-                                                                {formatStockHint(item.stockQuantity)}
-                                                            </span>
+                                                    className="flex w-full items-start gap-2 rounded-lg border border-[#c1c9c0]/50 bg-[#fbf9f1] p-2 text-left transition-colors hover:border-[#356647]/35 hover:bg-[#f6f4ec]">
+                                                    <ProductImage src={item.imageUrl} alt={item.name} className="h-12 w-12 shrink-0 rounded-lg" iconClassName="text-[19px]" />
+                                                    <div className="min-w-0 flex-1 space-y-0.5">
+                                                        <p className="truncate text-sm font-semibold leading-snug text-[#1b1c17]" title={item.name}>{item.name}</p>
+                                                        <p className="text-sm font-bold tabular-nums text-[#356647]">{formatMoney(item.price)} đ</p>
+                                                        <p className={`truncate text-xs ${outOfStock || Number(item.stockQuantity) <= 5 ? "font-semibold text-[#7e5700]" : "text-[#717971]"}`}>
+                                                            {formatStockHint(item.stockQuantity)}
                                                         </p>
                                                     </div>
-                                                    <p className="shrink-0 whitespace-nowrap text-sm font-bold tabular-nums text-[#356647]">{formatMoney(item.price)} đ</p>
                                                 </button>
                                             );
                                         })}
                                     </div>
                                 }
-                            </div>
+                            </CustomScrollArea>
                         </div>
                     </div>
 
@@ -2189,6 +2214,7 @@ function PosPage() {
         isOpen={isPaymentSidebarOpen}
         onClose={() => {
           setIsPaymentSidebarOpen(false)
+          setIsPaymentConfirmOpen(false)
           setIsPromotionDropdownOpen(false)
         }}
         formatMoney={formatMoney}
@@ -2272,18 +2298,30 @@ function PosPage() {
         formatPromotionValidityText={formatPromotionValidityText}
         formatPromotionScopeLabel={formatPromotionScopeLabel}
         appliedPromotionScopeText={appliedPromotionScopeText}
-        cartItemLines={cartItems.map((item) => ({
-          key: item.sku,
-          name: item.name,
-          sku: item.sku,
-          qty: Number(item.qty) || 0,
-          unitPrice: Number(item.price) || 0,
-          isGift: Boolean(item.isGift),
-          lineGross: getLineGross(item),
-          lineDiscount: getLineDiscount(item),
-          lineTotal: getLineTotal(item),
-          discountLabel: formatLineDiscountLabel(item),
-        }))}
+        cartItemLines={cartItemLines}
+      />
+
+      <PosPaymentConfirmModal
+        isOpen={isPaymentConfirmOpen}
+        onClose={() => setIsPaymentConfirmOpen(false)}
+        onConfirm={handleConfirmPayment}
+        isSubmitting={isSubmitting}
+        formatMoney={formatMoney}
+        cartItemLines={cartItemLines}
+        grossSubtotal={grossSubtotal}
+        itemDiscountTotal={itemDiscountTotal}
+        orderDiscountAmount={orderDiscountAmount}
+        orderDiscountPercent={orderDiscountPercent}
+        usesFixedOrderDiscount={usesFixedOrderDiscount}
+        couponDiscountAmount={couponDiscountAmount}
+        membershipDiscountAmount={membershipDiscountAmount}
+        totalDiscount={totalDiscount}
+        total={total}
+        selectedCustomer={selectedCustomer}
+        paymentMethodLabel={selectedPaymentMethodLabel}
+        appliedPromotion={appliedPromotion}
+        appliedPromotionScopeText={appliedPromotionScopeText}
+        orderNote={orderNote}
       />
 
             <footer className="shrink-0 border-t border-[#d8d6ce] bg-white px-4">
@@ -2299,6 +2337,7 @@ function PosPage() {
                                         setSalesMode(mode.id);
                                         setOpenDiscountSku(null);
                                         setIsPaymentSidebarOpen(false);
+                                        setIsPaymentConfirmOpen(false);
                                     }}
                                     className={`relative flex items-center gap-2 px-1 pb-3 pt-3.5 text-sm font-semibold transition-colors ${
                                         isActive ? "text-[#356647]" : "text-[#5c635c] hover:text-[#1b1c17]"

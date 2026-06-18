@@ -11,7 +11,13 @@ import CustomerActivityFeed from '../components/CustomerActivityFeed.jsx'
 import CustomersTableShell from '../components/CustomersTableShell.jsx'
 import CustomersMobileCards from '../components/CustomersMobileCards.jsx'
 import { useCustomersList } from '../hooks/useCustomersList.js'
-import { fetchMembershipTiers, fetchCustomerStatistics, restoreCustomer } from '../services/customersApi.js'
+import {
+  downloadCustomerImportTemplate,
+  fetchMembershipTiers,
+  fetchCustomerStatistics,
+  importCustomersFromExcel,
+  restoreCustomer,
+} from '../services/customersApi.js'
 import { TIER_READONLY_HINT } from '../utils/membershipTierUtils.js'
 import {
   formatDebtVnd,
@@ -60,6 +66,17 @@ const growthBars = [
   { day: 'SUN', outer: 44, inner: 'h-3/4' },
 ]
 
+function getImportStatusDisplay(status) {
+  const normalized = String(status || '').toUpperCase()
+  if (normalized === 'SUCCESS') {
+    return { label: 'Thành công', className: 'bg-[#627b59]/15 text-[#356647]' }
+  }
+  if (normalized === 'WARNING') {
+    return { label: 'Cảnh báo', className: 'bg-[#fec25b]/25 text-[#7e5700]' }
+  }
+  return { label: 'Lỗi', className: 'bg-[#ffdad6] text-[#93000a]' }
+}
+
 function CustomersPage() {
   const session = useAuthSession()
   const [searchParams] = useSearchParams()
@@ -87,6 +104,11 @@ function CustomersPage() {
   const [activityRefreshKey, setActivityRefreshKey] = useState(0)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [restoringId, setRestoringId] = useState(null)
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false)
+  const [importFile, setImportFile] = useState(null)
+  const [importResult, setImportResult] = useState(null)
+  const [isImporting, setIsImporting] = useState(false)
+  const [isTemplateDownloading, setIsTemplateDownloading] = useState(false)
 
   const { customers, isLoading, reload } = useCustomersList({
     activeTab,
@@ -160,6 +182,56 @@ function CustomersPage() {
       showError(error.message)
     } finally {
       setIsRefreshing(false)
+    }
+  }
+
+  async function handleDownloadImportTemplate() {
+    try {
+      setIsTemplateDownloading(true)
+      await downloadCustomerImportTemplate()
+    } catch (error) {
+      showError(error.message || 'Không tải được file mẫu import khách hàng.')
+    } finally {
+      setIsTemplateDownloading(false)
+    }
+  }
+
+  function handleOpenImportModal() {
+    setImportFile(null)
+    setImportResult(null)
+    setIsImportModalOpen(true)
+  }
+
+  function handleCloseImportModal() {
+    if (isImporting) return
+    setIsImportModalOpen(false)
+  }
+
+  async function handleImportCustomers() {
+    if (isImporting) return
+    if (!importFile) {
+      showError('Vui lòng chọn file Excel cần import.')
+      return
+    }
+
+    if (!importFile.name.toLowerCase().endsWith('.xlsx')) {
+      showError('Chỉ hỗ trợ import file Excel định dạng .xlsx.')
+      return
+    }
+
+    try {
+      setIsImporting(true)
+      const result = await importCustomersFromExcel(importFile)
+      setImportResult(result)
+      if (result.successCount > 0) {
+        setPage(1)
+        await Promise.all([reload(), loadStatistics()])
+      }
+      showSuccess(`Import hoàn tất: ${result.successCount} thành công, ${result.failedCount} lỗi.`)
+    } catch (error) {
+      showError(error.message || 'Import khách hàng thất bại.')
+    } finally {
+      setIsImporting(false)
     }
   }
 
@@ -281,6 +353,27 @@ function CustomersPage() {
         onSearchChange={setSearchValue}
         rightContent={
           <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-row">
+            {canCreateCustomers ? (
+              <>
+                <button
+                  type="button"
+                  className="inline-flex h-11 items-center justify-center gap-1 rounded-full border border-[#356647]/30 bg-white px-3 text-xs font-semibold text-[#356647] hover:bg-[#356647]/5 disabled:opacity-60 sm:h-12 sm:px-5 sm:text-sm"
+                  disabled={isTemplateDownloading}
+                  onClick={handleDownloadImportTemplate}
+                >
+                  <span className={`material-symbols-outlined text-[18px] sm:text-[20px] ${isTemplateDownloading ? 'animate-spin' : ''}`}>download</span>
+                  <span className="truncate">Tải file mẫu</span>
+                </button>
+                <button
+                  type="button"
+                  className="inline-flex h-11 items-center justify-center gap-1 rounded-full bg-[#356647] px-3 text-xs font-semibold text-white hover:bg-[#4e7f5e] sm:h-12 sm:px-5 sm:text-sm"
+                  onClick={handleOpenImportModal}
+                >
+                  <span className="material-symbols-outlined text-[18px] sm:text-[20px]">upload_file</span>
+                  <span className="truncate">Import Excel</span>
+                </button>
+              </>
+            ) : null}
             <Link
               to="/customers/addresses"
               className="inline-flex h-11 items-center justify-center gap-1 rounded-full border border-[#356647]/30 bg-white px-3 text-xs font-semibold text-[#356647] hover:bg-[#356647]/5 sm:h-12 sm:px-5 sm:text-sm"
@@ -1051,6 +1144,162 @@ function CustomersPage() {
           </>
         )}
       </div>
+
+      {isImportModalOpen ? (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm"
+          onClick={handleCloseImportModal}
+          role="presentation"
+        >
+          <div
+            className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-[#c1c9c0]/60 bg-white shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="customer-import-title"
+          >
+            <div className="flex flex-col gap-3 border-b border-[#f0eee6] p-5 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h2 id="customer-import-title" className="text-lg font-bold text-[#1b1c17]">
+                  Import khách hàng từ Excel
+                </h2>
+                <p className="mt-1 text-sm text-[#717971]">
+                  Chọn file `.xlsx` theo mẫu. Hệ thống sẽ bỏ qua dòng lỗi và báo cáo chi tiết từng dòng.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="self-end rounded-full p-2 text-[#717971] hover:bg-[#f6f4ec] sm:self-start"
+                onClick={handleCloseImportModal}
+                disabled={isImporting}
+                aria-label="Đóng"
+              >
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+
+            <div className="custom-scrollbar flex-1 overflow-y-auto p-5">
+              <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+                <label className="space-y-2">
+                  <span className="text-sm font-semibold text-[#414942]">File Excel (.xlsx)</span>
+                  <input
+                    type="file"
+                    accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    className="w-full rounded-xl border border-[#c1c9c0] bg-[#f6f4ec] px-4 py-3 text-sm text-[#414942] file:mr-4 file:rounded-lg file:border-0 file:bg-[#356647] file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white"
+                    disabled={isImporting}
+                    onChange={(event) => {
+                      setImportFile(event.target.files?.[0] ?? null)
+                      setImportResult(null)
+                    }}
+                  />
+                  <p className="text-xs text-[#717971]">
+                    Cột bắt buộc: Họ và tên, Số điện thoại. Email sai định dạng sẽ được bỏ qua và ghi cảnh báo.
+                  </p>
+                </label>
+
+                <div className="flex flex-col gap-2 sm:flex-row lg:justify-end">
+                  <button
+                    type="button"
+                    className="inline-flex items-center justify-center gap-2 rounded-lg border border-[#356647]/30 bg-white px-4 py-2.5 text-sm font-semibold text-[#356647] hover:bg-[#356647]/5 disabled:opacity-60"
+                    disabled={isTemplateDownloading || isImporting}
+                    onClick={handleDownloadImportTemplate}
+                  >
+                    <span className={`material-symbols-outlined text-[18px] ${isTemplateDownloading ? 'animate-spin' : ''}`}>download</span>
+                    Tải file mẫu
+                  </button>
+                  <button
+                    type="button"
+                    className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#356647] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#4e7f5e] disabled:opacity-60"
+                    disabled={isImporting || !importFile}
+                    onClick={handleImportCustomers}
+                  >
+                    <span className={`material-symbols-outlined text-[18px] ${isImporting ? 'animate-spin' : ''}`}>upload_file</span>
+                    {isImporting ? 'Đang import...' : 'Import Excel'}
+                  </button>
+                </div>
+              </div>
+
+              {importResult ? (
+                <div className="mt-6 space-y-4">
+                  <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                    <div className="rounded-xl border border-[#eae8e0] bg-[#f6f4ec]/60 p-4">
+                      <p className="text-xs text-[#717971]">Tổng số dòng</p>
+                      <p className="mt-1 text-2xl font-bold text-[#1b1c17]">{importResult.totalRows}</p>
+                    </div>
+                    <div className="rounded-xl border border-[#627b59]/20 bg-[#627b59]/10 p-4">
+                      <p className="text-xs text-[#356647]">Thành công</p>
+                      <p className="mt-1 text-2xl font-bold text-[#356647]">{importResult.successCount}</p>
+                    </div>
+                    <div className="rounded-xl border border-[#93000a]/20 bg-[#ffdad6]/40 p-4">
+                      <p className="text-xs text-[#93000a]">Lỗi</p>
+                      <p className="mt-1 text-2xl font-bold text-[#93000a]">{importResult.failedCount}</p>
+                    </div>
+                    <div className="rounded-xl border border-[#7e5700]/20 bg-[#fec25b]/20 p-4">
+                      <p className="text-xs text-[#7e5700]">Cảnh báo</p>
+                      <p className="mt-1 text-2xl font-bold text-[#7e5700]">{importResult.warningCount}</p>
+                    </div>
+                  </div>
+
+                  <div className="overflow-hidden rounded-xl border border-[#eae8e0]">
+                    <div className="custom-scrollbar max-h-[360px] overflow-auto">
+                      <table className="min-w-[760px] w-full border-collapse text-left text-sm">
+                        <thead className="sticky top-0 bg-[#f6f4ec] text-xs uppercase tracking-wide text-[#717971]">
+                          <tr>
+                            <th className="px-4 py-3 font-semibold">Dòng</th>
+                            <th className="px-4 py-3 font-semibold">Họ tên</th>
+                            <th className="px-4 py-3 font-semibold">Số điện thoại</th>
+                            <th className="px-4 py-3 font-semibold">Trạng thái</th>
+                            <th className="px-4 py-3 font-semibold">Ghi chú/Lỗi</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[#f0eee6]">
+                          {importResult.rows.length > 0 ? (
+                            importResult.rows.map((row) => {
+                              const status = getImportStatusDisplay(row.status)
+                              return (
+                                <tr key={`${row.rowNumber}-${row.phoneNumber || row.customerName}`} className="align-top">
+                                  <td className="px-4 py-3 font-mono text-xs font-semibold text-[#356647]">{row.rowNumber}</td>
+                                  <td className="px-4 py-3 font-semibold text-[#1b1c17]">{row.customerName || '—'}</td>
+                                  <td className="px-4 py-3 text-[#414942]">{row.phoneNumber || '—'}</td>
+                                  <td className="px-4 py-3">
+                                    <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${status.className}`}>
+                                      {status.label}
+                                    </span>
+                                  </td>
+                                  <td className="px-4 py-3 text-[#414942]">
+                                    {row.messages?.length ? row.messages.join(' · ') : '—'}
+                                  </td>
+                                </tr>
+                              )
+                            })
+                          ) : (
+                            <tr>
+                              <td className="px-4 py-6 text-center text-[#717971]" colSpan={5}>
+                                Không có dữ liệu kết quả.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="flex justify-end gap-3 border-t border-[#f0eee6] bg-[#f6f4ec]/40 p-4">
+              <button
+                type="button"
+                className="rounded-lg border border-[#c1c9c0] bg-white px-5 py-2.5 text-sm font-semibold text-[#414942] hover:bg-[#f6f4ec]"
+                onClick={handleCloseImportModal}
+                disabled={isImporting}
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <button
         type="button"

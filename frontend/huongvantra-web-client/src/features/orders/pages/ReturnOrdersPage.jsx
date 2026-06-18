@@ -91,19 +91,20 @@ function ReturnOrdersPage() {
                 <th className="px-4 py-3">Tiền trả</th>
                 <th className="px-4 py-3">Hoàn khách</th>
                 <th className="px-4 py-3">Đơn đổi</th>
+                <th className="px-4 py-3">Lý do</th>
                 <th className="px-4 py-3">Thời gian</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {isLoading ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center text-slate-500">
+                  <td colSpan={8} className="px-4 py-10 text-center text-slate-500">
                     Đang tải...
                   </td>
                 </tr>
               ) : returns.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center text-slate-500">
+                  <td colSpan={8} className="px-4 py-10 text-center text-slate-500">
                     Chưa có phiếu trả hàng.
                   </td>
                 </tr>
@@ -133,6 +134,15 @@ function ReturnOrdersPage() {
                         >
                           {item.exchangeOrderCode}
                         </Link>
+                      ) : (
+                        '—'
+                      )}
+                    </td>
+                    <td className="max-w-[260px] px-4 py-3 text-xs text-slate-600">
+                      {item.note?.trim() ? (
+                        <span className="line-clamp-2" title={item.note}>
+                          {item.note}
+                        </span>
                       ) : (
                         '—'
                       )}

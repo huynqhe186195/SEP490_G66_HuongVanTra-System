@@ -8,6 +8,7 @@ import { fetchOrderTransferQrByOrderId, fetchPosCustomerContext, fetchPosProduct
 import { isVipCustomerType } from '../../customers/utils/customerDisplay.js'
 import ReturnOrderSidebar from '../components/ReturnOrderSidebar.jsx'
 import OrderOfferModal from '../components/OrderOfferModal.jsx'
+import CustomScrollArea from '../../../components/shared/CustomScrollArea.jsx'
 
 function Icon({ children, className = '' }) {
   return <span className={`material-symbols-outlined ${className}`}>{children}</span>
@@ -26,6 +27,17 @@ function clampQty(value, max) {
   const n = Math.floor(Number(value) || 0)
   return Math.min(Math.max(0, n), max)
 }
+
+const RETURN_REASON_OPTIONS = [
+  { id: 'DAMAGED', label: 'Sản phẩm bị lỗi / hư hỏng' },
+  { id: 'NOT_AS_DESCRIBED', label: 'Sản phẩm không đúng mô tả / hình ảnh' },
+  { id: 'WRONG_ITEM', label: 'Giao sai sản phẩm / sai loại / sai quy cách' },
+  { id: 'SHIPPING_DAMAGE', label: 'Đóng gói bị hư hỏng khi vận chuyển' },
+  { id: 'NEAR_EXPIRY', label: 'Sản phẩm gần hết hạn / kém chất lượng' },
+  { id: 'CUSTOMER_CHANGED_MIND', label: 'Khách đổi ý' },
+  { id: 'CUSTOMER_ORDERED_WRONG', label: 'Khách mua nhầm / mua dư' },
+  { id: 'OTHER', label: 'Lý do khác' },
+]
 
 function mapOrderLineToReturnLine(line, paidRatio = 1) {
   const originalQty = Number(line.quantity) || 0
@@ -119,6 +131,8 @@ function ReturnOrderPage() {
   const [exchangeSearch, setExchangeSearch] = useState('')
   const [exchangeResults, setExchangeResults] = useState([])
   const [isSearchingExchange, setIsSearchingExchange] = useState(false)
+  const [selectedReasons, setSelectedReasons] = useState([])
+  const [otherReason, setOtherReason] = useState('')
   const [note, setNote] = useState('')
   const [paymentMethod, setPaymentMethod] = useState('CASH')
   const [refundTransactionRef, setRefundTransactionRef] = useState('')
@@ -294,6 +308,25 @@ function ReturnOrderPage() {
     }
   }, [totals.customerOwes])
 
+  const selectedReasonLabels = useMemo(
+    () =>
+      RETURN_REASON_OPTIONS
+        .filter((option) => selectedReasons.includes(option.id))
+        .map((option) => option.label),
+    [selectedReasons],
+  )
+
+  const hasOtherReason = selectedReasons.includes('OTHER')
+
+  const toggleReturnReason = (reasonId) => {
+    setSelectedReasons((prev) =>
+      prev.includes(reasonId) ? prev.filter((item) => item !== reasonId) : [...prev, reasonId],
+    )
+    if (reasonId === 'OTHER' && hasOtherReason) {
+      setOtherReason('')
+    }
+  }
+
   function buildReturnNote() {
     const parts = []
     if (note.trim()) parts.push(note.trim())
@@ -377,6 +410,16 @@ function ReturnOrderPage() {
       return
     }
 
+    if (selectedReasons.length === 0) {
+      showError('Vui lòng chọn ít nhất một lý do trả/đổi hàng.')
+      return
+    }
+
+    if (hasOtherReason && otherReason.trim().length < 10) {
+      showError('Vui lòng nhập lý do khác ít nhất 10 ký tự.')
+      return
+    }
+
     const payExtra = totals.customerOwes > 0
     if (payExtra && paymentMethod === 'CASH') {
       const paid = parseMoneyInput(amountPaidInput)
@@ -407,6 +450,8 @@ function ReturnOrderPage() {
         })),
         exchangeManualDiscount: totals.manualExchangeDiscountAmount,
         note: buildReturnNote(),
+        reasons: selectedReasonLabels,
+        otherReason: hasOtherReason ? otherReason : null,
       })
 
       const refund = Number(result?.refundAmount || 0)
@@ -518,14 +563,14 @@ function ReturnOrderPage() {
             <div className="shrink-0 border-b border-slate-100 bg-[#f8f9fa] px-3 py-2">
               <p className="text-xs font-bold uppercase tracking-wide text-slate-600">Hàng trả</p>
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto">
+            <CustomScrollArea className="min-h-0 flex-1">
               <ReturnLineTable
                 rows={filteredReturnLines}
                 onQtyChange={updateReturnQty}
                 onRemove={removeReturnLine}
                 emptyLabel="Không có hàng trả. Thêm từ hóa đơn gốc hoặc đổi bộ lọc tìm kiếm."
               />
-            </div>
+            </CustomScrollArea>
           </section>
 
           <section className="flex min-h-0 flex-[1_1_55%] flex-col bg-white">
@@ -544,7 +589,7 @@ function ReturnOrderPage() {
                 </Icon>
               </div>
               {exchangeSearch.trim() ? (
-                <div className="mt-2 max-h-40 overflow-y-auto rounded bg-white shadow-lg">
+                <CustomScrollArea className="mt-2 rounded bg-white shadow-lg" contentClassName="max-h-40">
                   {isSearchingExchange ? (
                     <p className="px-3 py-2 text-sm text-slate-500">Đang tìm...</p>
                   ) : exchangeResults.length === 0 ? (
@@ -562,17 +607,53 @@ function ReturnOrderPage() {
                       </button>
                     ))
                   )}
-                </div>
+                </CustomScrollArea>
               ) : null}
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto">
+            <CustomScrollArea className="min-h-0 flex-1">
               <ReturnLineTable
                 rows={exchangeRows}
                 onQtyChange={updateExchangeQty}
                 onRemove={removeExchangeLine}
                 emptyLabel="Tìm và thêm hàng đổi / mua thêm ở thanh tìm kiếm phía trên."
               />
+            </CustomScrollArea>
+          </section>
+
+          <section className="shrink-0 border-t border-slate-200 bg-white px-3 py-3">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-600">Lý do trả/đổi hàng</p>
+              <span className="text-[11px] text-slate-500">Bắt buộc</span>
             </div>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+              {RETURN_REASON_OPTIONS.map((reason) => {
+                const selected = selectedReasons.includes(reason.id)
+                return (
+                  <button
+                    key={reason.id}
+                    type="button"
+                    onClick={() => toggleReturnReason(reason.id)}
+                    className={`rounded-lg border px-3 py-2 text-left text-xs font-semibold transition ${
+                      selected
+                        ? 'border-[#356647] bg-[#356647]/10 text-[#356647]'
+                        : 'border-slate-200 bg-[#fbf9f1] text-slate-600 hover:border-[#356647]/40'
+                    }`}
+                  >
+                    {reason.label}
+                  </button>
+                )
+              })}
+            </div>
+            {hasOtherReason ? (
+              <input
+                type="text"
+                value={otherReason}
+                onChange={(e) => setOtherReason(e.target.value)}
+                maxLength={300}
+                placeholder="Nhập lý do khác, ít nhất 10 ký tự..."
+                className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-[#356647]"
+              />
+            ) : null}
           </section>
 
           <div className="shrink-0 border-t border-slate-200 bg-white px-3 py-2">

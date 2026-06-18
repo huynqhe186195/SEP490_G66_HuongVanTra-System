@@ -1,3 +1,5 @@
+import CustomScrollArea from '../../../components/shared/CustomScrollArea.jsx'
+
 function Icon({ children, className = '' }) {
   return <span className={`material-symbols-outlined ${className}`}>{children}</span>
 }
@@ -74,7 +76,7 @@ export default function ReturnOrderSidebar({
 
   return (
     <aside className="flex w-full shrink-0 flex-col border-t border-[#c1c9c0] bg-white xl:w-[min(100%,380px)] xl:border-l xl:border-t-0">
-      <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto p-4">
+      <CustomScrollArea className="min-h-0 flex-1" contentClassName="p-4">
         <div className="mb-4 border-b border-slate-100 pb-3">
           <p className="text-sm font-bold text-slate-800">{customerName || 'Khách lẻ'}</p>
           {customerPhone ? <p className="text-xs text-slate-500">{customerPhone}</p> : null}
@@ -246,7 +248,7 @@ export default function ReturnOrderSidebar({
             )}
           </section>
         ) : null}
-      </div>
+      </CustomScrollArea>
 
       <div className="shrink-0 border-t border-slate-200 p-4">
         <button

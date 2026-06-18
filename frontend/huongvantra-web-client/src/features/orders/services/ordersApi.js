@@ -274,6 +274,7 @@ export function mapReturnOrderSummary(item) {
     exchangeAmount: Number(item.exchangeAmount ?? item.ExchangeAmount ?? 0),
     exchangeOrderId: item.exchangeOrderId ?? item.ExchangeOrderId ?? null,
     exchangeOrderCode: item.exchangeOrderCode ?? item.ExchangeOrderCode ?? null,
+    note: item.note ?? item.Note ?? null,
     createdAt: item.createdAt ?? item.CreatedAt ?? null,
   }
 }
@@ -384,6 +385,8 @@ export async function returnOrder(orderId, payload) {
         unitPrice: Number(line.unitPrice),
       })),
       note: payload.note?.trim() || null,
+      reasons: Array.isArray(payload.reasons) ? payload.reasons.map((reason) => String(reason || '').trim()).filter(Boolean) : [],
+      otherReason: payload.otherReason?.trim() || null,
       exchangeFulfillment: payload.exchangeFulfillment || null,
       exchangeManualDiscount: Number(payload.exchangeManualDiscount ?? 0),
     }),

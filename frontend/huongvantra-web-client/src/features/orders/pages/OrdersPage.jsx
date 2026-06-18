@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
+import LoadingIndicator from '../../../components/shared/LoadingIndicator.jsx'
 import { canAccessModule, canViewStockDeductOps } from '../../../app/navigation.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import { canCreateOrder } from '../../auth/utils/permissions.js'
@@ -13,6 +14,7 @@ import { fetchOrders } from '../services/ordersApi.js'
 import {
   formatVnd,
   resolveInventorySyncMeta,
+  getOrderChannelClass,
   getOrderChannelLabel,
   getOrderStatusClass,
   getOrderStatusLabel,
@@ -24,6 +26,57 @@ const initialFilters = {
   search: '',
   status: '',
   channel: '',
+  fromDate: '',
+  toDate: '',
+}
+
+function toDateInputValue(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return ''
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+function toLocalDayStartIso(value) {
+  if (!value) return undefined
+  const date = new Date(`${value}T00:00:00`)
+  return Number.isNaN(date.getTime()) ? undefined : date.toISOString()
+}
+
+function toLocalDayEndIso(value) {
+  if (!value) return undefined
+  const date = new Date(`${value}T23:59:59.999`)
+  return Number.isNaN(date.getTime()) ? undefined : date.toISOString()
+}
+
+function getQuickDateRange(type) {
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+
+  if (type === 'today') {
+    const value = toDateInputValue(today)
+    return { fromDate: value, toDate: value }
+  }
+
+  if (type === 'last7') {
+    const from = new Date(today)
+    from.setDate(from.getDate() - 6)
+    return { fromDate: toDateInputValue(from), toDate: toDateInputValue(today) }
+  }
+
+  if (type === 'thisMonth') {
+    const from = new Date(today.getFullYear(), today.getMonth(), 1)
+    return { fromDate: toDateInputValue(from), toDate: toDateInputValue(today) }
+  }
+
+  if (type === 'lastMonth') {
+    const from = new Date(today.getFullYear(), today.getMonth() - 1, 1)
+    const to = new Date(today.getFullYear(), today.getMonth(), 0)
+    return { fromDate: toDateInputValue(from), toDate: toDateInputValue(to) }
+  }
+
+  return { fromDate: '', toDate: '' }
 }
 
 function OrdersPage() {
@@ -47,6 +100,8 @@ function OrdersPage() {
       channel: filters.channel || undefined,
       excludeChannel: filters.channel ? undefined : 'COD',
       excludeOrderKind: 'Exchange',
+      fromDate: toLocalDayStartIso(filters.fromDate),
+      toDate: toLocalDayEndIso(filters.toDate),
       page,
       pageSize,
     }),
@@ -89,7 +144,7 @@ function OrdersPage() {
     }
   }, [queryParams])
 
-  const hasActiveFilters = filters.status || filters.channel || filters.search
+  const hasActiveFilters = filters.status || filters.channel || filters.search || filters.fromDate || filters.toDate
 
   return (
     <PageShell className="pb-8">
@@ -150,6 +205,53 @@ function OrdersPage() {
             </select>
           </label>
 
+          <label className="min-w-[150px]">
+            <span className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-400">Từ ngày</span>
+            <input
+              type="date"
+              value={filters.fromDate}
+              onChange={(e) => {
+                setFilters((prev) => ({ ...prev, fromDate: e.target.value }))
+                setPage(1)
+              }}
+              className="min-h-[44px] w-full rounded-xl border border-slate-200 bg-[#fbf9f1] px-4 py-3 text-sm outline-none focus:border-[#538463]"
+            />
+          </label>
+
+          <label className="min-w-[150px]">
+            <span className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-400">Đến ngày</span>
+            <input
+              type="date"
+              value={filters.toDate}
+              onChange={(e) => {
+                setFilters((prev) => ({ ...prev, toDate: e.target.value }))
+                setPage(1)
+              }}
+              className="min-h-[44px] w-full rounded-xl border border-slate-200 bg-[#fbf9f1] px-4 py-3 text-sm outline-none focus:border-[#538463]"
+            />
+          </label>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {[
+              ['today', 'Hôm nay'],
+              ['last7', '7 ngày qua'],
+              ['thisMonth', 'Tháng này'],
+              ['lastMonth', 'Tháng trước'],
+            ].map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => {
+                  setFilters((prev) => ({ ...prev, ...getQuickDateRange(key) }))
+                  setPage(1)
+                }}
+                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
           {hasActiveFilters ? (
             <button
               type="button"
@@ -208,8 +310,8 @@ function OrdersPage() {
             <tbody className="divide-y divide-slate-100 bg-white">
               {isLoading ? (
                 <tr>
-                  <td className="px-6 py-10 text-slate-500" colSpan={9}>
-                    Đang tải...
+                  <td className="px-6 py-10" colSpan={9}>
+                    <LoadingIndicator />
                   </td>
                 </tr>
               ) : null}
@@ -246,7 +348,7 @@ function OrdersPage() {
                         )}
                       </td>
                       <td className="px-4 py-4">
-                        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                        <span className={`rounded-full px-3 py-1 text-xs font-semibold ${getOrderChannelClass(order.orderChannel)}`}>
                           {getOrderChannelLabel(order.orderChannel)}
                         </span>
                       </td>

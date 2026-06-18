@@ -27,7 +27,7 @@ function PageHeader({
       />
 
       {searchDropdown ? (
-        <div className="absolute left-0 right-0 top-full z-50 mt-2 hidden max-h-[60vh] overflow-y-auto rounded-2xl border border-[#c1c9c0] bg-white shadow-[0_20px_40px_rgba(27,28,23,0.12)] group-focus-within:block">
+        <div className="custom-scrollbar absolute left-0 right-0 top-full z-50 mt-2 hidden max-h-[60vh] overflow-y-auto rounded-2xl border border-[#c1c9c0] bg-white shadow-[0_20px_40px_rgba(27,28,23,0.12)] group-focus-within:block">
           {searchDropdown}
         </div>
       ) : null}

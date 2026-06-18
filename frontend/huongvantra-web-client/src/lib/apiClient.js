@@ -116,8 +116,9 @@ function handleAuthFailure(message, status) {
 }
 
 export async function apiRequest(path, options = {}) {
+  const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData
   const headers = {
-    ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+    ...(options.body && !isFormData ? { 'Content-Type': 'application/json' } : {}),
     ...(options.headers || {}),
   }
 
@@ -142,14 +143,15 @@ export async function apiRequest(path, options = {}) {
 
 export async function apiRequestAuth(path, options = {}, retry = true) {
   const silentAuthErrors = Boolean(options.silentAuthErrors)
-  const { silentAuthErrors: _silent, ...fetchOptions } = options
+  const { silentAuthErrors: _silent, responseType, ...fetchOptions } = options
+  const isFormData = typeof FormData !== 'undefined' && fetchOptions.body instanceof FormData
   let session = loadAuthSession()
   if (!session?.accessToken) {
     throw new Error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.')
   }
 
   const headers = {
-    ...(fetchOptions.body ? { 'Content-Type': 'application/json' } : {}),
+    ...(fetchOptions.body && !isFormData ? { 'Content-Type': 'application/json' } : {}),
     ...(fetchOptions.headers || {}),
     Authorization: `Bearer ${session.accessToken}`,
   }
@@ -189,6 +191,10 @@ export async function apiRequestAuth(path, options = {}, retry = true) {
   }
 
   if (response.status === 204) return null
+
+  if (responseType === 'blob') {
+    return response.blob()
+  }
 
   const contentType = response.headers.get('content-type') || ''
   if (contentType.includes('application/json')) {

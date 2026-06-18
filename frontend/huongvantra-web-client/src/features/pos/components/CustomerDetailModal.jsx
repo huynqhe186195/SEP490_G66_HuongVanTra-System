@@ -18,6 +18,7 @@ import { printDebtReceiptFromData } from '../utils/printReceipt.js'
 import { loadPosSeller } from '../utils/posSeller.js'
 import { formatRoleLabel } from '../utils/posSeller.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
+import CustomScrollArea from '../../../components/shared/CustomScrollArea.jsx'
 
 const TABS = [
   { id: 'profile', label: 'Thông tin khách hàng' },
@@ -237,7 +238,7 @@ function CustomerDetailModal({ isOpen, customer, onClose, onCustomerUpdated }) {
           ))}
         </div>
 
-        <main className="max-h-[65vh] overflow-y-auto bg-[#fbf9f1] p-5">
+        <CustomScrollArea contentClassName="max-h-[65vh] bg-[#fbf9f1] p-5">
           {isLoading ? (
             <p className="text-center text-sm text-[#717971]">Đang tải thông tin khách hàng...</p>
           ) : null}
@@ -503,7 +504,7 @@ function CustomerDetailModal({ isOpen, customer, onClose, onCustomerUpdated }) {
               </div>
             </section>
           ) : null}
-        </main>
+        </CustomScrollArea>
       </div>
     </div>
   )

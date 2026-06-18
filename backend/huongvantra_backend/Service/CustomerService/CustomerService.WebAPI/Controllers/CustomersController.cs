@@ -66,6 +66,27 @@ public class CustomersController : ControllerBase
         }
     }
 
+    [HttpGet("import-template")]
+    [Authorize(Policy = PermissionNames.CreateCustomer)]
+    public IActionResult DownloadImportTemplate()
+    {
+        var content = _logic.BuildImportTemplate();
+        return File(content, CustomerLogic.CustomerImportContentType, CustomerLogic.CustomerImportTemplateFileName);
+    }
+
+    [HttpPost("import")]
+    [Authorize(Policy = PermissionNames.CreateCustomer)]
+    [RequestSizeLimit(10_000_000)]
+    public async Task<IActionResult> ImportCustomers([FromForm] IFormFile? file, CancellationToken ct = default)
+    {
+        if (file is null || file.Length == 0)
+            throw new CustomerValidationException(["Vui lòng chọn file Excel cần import."]);
+
+        await using var stream = file.OpenReadStream();
+        var result = await _logic.ImportFromExcelAsync(stream, file.FileName, AccessContext(), ct);
+        return Ok(result);
+    }
+
     [HttpGet("{id:guid}")]
     [Authorize(Policy = PermissionNames.ViewCustomer)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct = default)
