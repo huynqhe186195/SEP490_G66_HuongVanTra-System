@@ -51,7 +51,13 @@ export default function EndOfDayReportModal({ isOpen, onClose }) {
           method: 'GET',
           silentAuthErrors: true,
         })
-        setUsers(res?.items || [])
+        const allowedRoles = ['Sale', 'AgencyManager']
+        const fetchedUsers = res?.items || []
+        const filtered = fetchedUsers.filter(u => {
+          const uRoles = Array.isArray(u.roles) ? u.roles : [u.role].filter(Boolean)
+          return uRoles.some(r => allowedRoles.includes(r) || allowedRoles.includes(r?.name))
+        })
+        setUsers(filtered)
       } catch (err) {
         console.error('Failed to load users:', err)
         setUsers([])

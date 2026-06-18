@@ -1,5 +1,4 @@
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
-import html2pdf from 'html2pdf.js'
 
 function formatCurrency(value) {
   return new Intl.NumberFormat('vi-VN').format(value || 0)
@@ -148,50 +147,56 @@ export function buildEndOfDayReportHtml({
 
 export function printEndOfDayReport(data) {
   return new Promise((resolve) => {
-    const container = document.createElement('div')
-    
-    // Use the CSS we already defined
-    const style = document.createElement('style')
-    style.innerHTML = getReceiptPrintCss(data.paperSize)
-    container.appendChild(style)
-    
-    const content = document.createElement('div')
-    content.className = 'thermal-print-shell'
-    content.innerHTML = buildEndOfDayReportHtml(data)
-    container.appendChild(content)
-    
-    // Must be in DOM for html2canvas to render properly
-    container.style.position = 'absolute'
-    container.style.left = '-9999px'
-    container.style.top = '0'
-    document.body.appendChild(container)
-
+    const iframe = document.createElement('iframe')
     const title = data.filename || 'Báo cáo doanh thu cuối ngày'
+    iframe.setAttribute('title', title)
+    iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;'
 
-    const opt = {
-      margin:       10,
-      filename:     `${title}.pdf`,
-      image:        { type: 'jpeg', quality: 0.98 },
-      html2canvas:  { scale: 2, useCORS: true },
-      jsPDF:        { unit: 'mm', format: data.paperSize === 'K80' ? [80, 297] : 'a4', orientation: 'portrait' }
+    document.body.appendChild(iframe)
+
+    const win = iframe.contentWindow
+    if (!win) {
+      document.body.removeChild(iframe)
+      resolve()
+      return
     }
 
-    html2pdf()
-      .from(container)
-      .set(opt)
-      .save()
-      .then(() => {
-        if (document.body.contains(container)) {
-          document.body.removeChild(container)
-        }
-        resolve()
-      })
-      .catch((err) => {
-        console.error('Failed to generate PDF:', err)
-        if (document.body.contains(container)) {
-          document.body.removeChild(container)
-        }
-        resolve()
-      })
+    const doc = win.document
+    doc.open()
+    doc.write(
+      `<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${title}</title>
+  <style>${getReceiptPrintCss(data.paperSize)}</style>
+</head>
+<body><div class="thermal-print-shell">${buildEndOfDayReportHtml(data)}</div></body>
+</html>`
+    )
+    doc.close()
+
+    const finish = () => {
+      if (iframe.parentNode) {
+        iframe.parentNode.removeChild(iframe)
+      }
+      resolve()
+    }
+
+    let printed = false
+    const doPrint = () => {
+      if (printed) return
+      printed = true
+      win.onafterprint = finish
+      setTimeout(finish, 2500)
+      win.focus()
+      win.print()
+    }
+
+    iframe.onload = () => {
+      setTimeout(doPrint, 50)
+    }
+    setTimeout(doPrint, 120)
   })
 }
