@@ -21,6 +21,8 @@ function ResizableSplitPane({
   defaultRatio = 0.38,
   minStartPx = 260,
   minEndPx = 320,
+  fallbackMinStartPx = minStartPx,
+  fallbackMinEndPx = minEndPx,
   startClassName = '',
   endClassName = '',
   className = '',
@@ -70,13 +72,16 @@ function ResizableSplitPane({
   const clampRatio = useCallback(
     (nextRatio) => {
       if (containerWidth <= 0) return nextRatio
-      const minRatio = minStartPx / containerWidth
-      const maxRatio = 1 - (minEndPx + DIVIDER_WIDTH) / containerWidth
+      const canUseIdealLimits = containerWidth >= minStartPx + minEndPx + DIVIDER_WIDTH
+      const effectiveMinStartPx = canUseIdealLimits ? minStartPx : fallbackMinStartPx
+      const effectiveMinEndPx = canUseIdealLimits ? minEndPx : fallbackMinEndPx
+      const minRatio = effectiveMinStartPx / containerWidth
+      const maxRatio = 1 - (effectiveMinEndPx + DIVIDER_WIDTH) / containerWidth
       const safeMin = Math.min(minRatio, maxRatio)
       const safeMax = Math.max(minRatio, maxRatio)
       return Math.min(safeMax, Math.max(safeMin, nextRatio))
     },
-    [containerWidth, minEndPx, minStartPx],
+    [containerWidth, fallbackMinEndPx, fallbackMinStartPx, minEndPx, minStartPx],
   )
 
   const applyRatio = useCallback(
@@ -135,9 +140,10 @@ function ResizableSplitPane({
     }
   }, [isDragging])
 
+  const safeRatio = isSplit ? clampRatio(ratio) : ratio
   const leftWidth =
     isSplit && containerWidth > 0
-      ? Math.round(ratio * containerWidth)
+      ? Math.round(safeRatio * containerWidth)
       : null
 
   const gridStyle = isSplit
@@ -145,7 +151,7 @@ function ResizableSplitPane({
         gridTemplateColumns:
           leftWidth != null
             ? `${leftWidth}px ${DIVIDER_WIDTH}px minmax(0, 1fr)`
-            : `${ratio * 100}% ${DIVIDER_WIDTH}px minmax(0, 1fr)`,
+            : `${safeRatio * 100}% ${DIVIDER_WIDTH}px minmax(0, 1fr)`,
       }
     : undefined
 

@@ -81,6 +81,8 @@ const PRICE_FILTER_OPTIONS = [
     { id: "over-200k", label: "Trên 200.000 đ" },
 ];
 
+const POS_PRODUCT_PAGE_SIZE = 24;
+
 function createWorkspace(mode = "counter") {
     const empty = () => createEmptySession(mode);
     if (mode === "takeaway") {
@@ -246,6 +248,7 @@ function PosPage() {
   const priceFilterRef = useRef(null)
   const [isPriceFilterOpen, setIsPriceFilterOpen] = useState(false)
   const [priceFilter, setPriceFilter] = useState('')
+  const [productPage, setProductPage] = useState(1)
   const promotionCartSignatureRef = useRef('')
   const previousCustomerIdRef = useRef(null)
 
@@ -361,6 +364,13 @@ function PosPage() {
             return `Số lượng hiện tại: ${formatStock(n)} · sắp hết`;
         }
         return `Số lượng hiện tại: ${formatStock(n)}`;
+    };
+
+    const formatCompactStock = (value) => {
+        const n = Number(value) || 0;
+        if (n <= 0) return "SL: 0";
+        if (n <= 5) return `SL: ${formatStock(n)} \u00b7 s\u1eafp h\u1ebft`;
+        return `SL: ${formatStock(n)}`;
     };
 
     const parseQtyInput = (value) => {
@@ -1674,6 +1684,22 @@ function PosPage() {
         return items;
     }, [searchProducts, selectedCategoryIds, posCategories, priceFilter]);
 
+    const productTotalPages = Math.max(1, Math.ceil(filteredSearchProducts.length / POS_PRODUCT_PAGE_SIZE));
+
+    const visibleProductPageItems = useMemo(() => {
+        const safePage = Math.min(Math.max(1, productPage), productTotalPages);
+        const start = (safePage - 1) * POS_PRODUCT_PAGE_SIZE;
+        return filteredSearchProducts.slice(start, start + POS_PRODUCT_PAGE_SIZE);
+    }, [filteredSearchProducts, productPage, productTotalPages]);
+
+    useEffect(() => {
+        setProductPage(1);
+    }, [searchValue, selectedCategoryIds, priceFilter, activeTabId]);
+
+    useEffect(() => {
+        setProductPage((current) => Math.min(Math.max(1, current), productTotalPages));
+    }, [productTotalPages]);
+
     const selectedCategorySummary = useMemo(() => formatCategoryFilterSummary(selectedCategoryIds, posCategories), [selectedCategoryIds, posCategories]);
 
     const selectedPriceFilterLabel = useMemo(() => PRICE_FILTER_OPTIONS.find((option) => option.id === priceFilter)?.label ?? null, [priceFilter]);
@@ -1795,8 +1821,10 @@ function PosPage() {
             <ResizableSplitPane
                 storageKey="hvt-pos-panel-ratio"
                 defaultRatio={0.38}
-                minStartPx={260}
-                minEndPx={320}
+                minStartPx={420}
+                minEndPx={620}
+                fallbackMinStartPx={360}
+                fallbackMinEndPx={480}
                 className="grid-cols-1 lg:grid-rows-1"
                 startClassName="flex min-h-[42vh] flex-col border-t border-[#c1c9c0] bg-[#f6f4ec] lg:min-h-0 lg:border-t-0 lg:shadow-[4px_0_20px_rgba(0,0,0,0.04)]"
                 endClassName="flex min-h-[38vh] flex-col bg-white text-base lg:min-h-0"
@@ -2145,6 +2173,29 @@ function PosPage() {
                                     :   null}
                                 </p>
                                 <div className="flex shrink-0 items-center gap-2">
+                                    {filteredSearchProducts.length > 0 ?
+                                        <div className="flex items-center overflow-hidden rounded-lg border border-[#c1c9c0] bg-white text-xs font-semibold text-[#414942]">
+                                            <button
+                                                type="button"
+                                                onClick={() => setProductPage((page) => Math.max(1, page - 1))}
+                                                disabled={isSearchLoading || productPage <= 1}
+                                                className="flex size-7 items-center justify-center hover:bg-[#f6f4ec] disabled:cursor-not-allowed disabled:text-[#a4aaa3]"
+                                                aria-label="Trang sản phẩm trước">
+                                                <Icon className="text-[16px]">chevron_left</Icon>
+                                            </button>
+                                            <span className="min-w-[44px] border-x border-[#f0eee6] px-2 text-center tabular-nums">
+                                                {Math.min(productPage, productTotalPages)} / {productTotalPages}
+                                            </span>
+                                            <button
+                                                type="button"
+                                                onClick={() => setProductPage((page) => Math.min(productTotalPages, page + 1))}
+                                                disabled={isSearchLoading || productPage >= productTotalPages}
+                                                className="flex size-7 items-center justify-center hover:bg-[#f6f4ec] disabled:cursor-not-allowed disabled:text-[#a4aaa3]"
+                                                aria-label="Trang sản phẩm sau">
+                                                <Icon className="text-[16px]">chevron_right</Icon>
+                                            </button>
+                                        </div>
+                                    :   null}
                                     <button
                                         type="button"
                                         onClick={handleRefreshCatalog}
@@ -2171,21 +2222,24 @@ function PosPage() {
                                         :   "Chưa có sản phẩm để hiển thị."}
                                     </p>
                                 :   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-                                        {filteredSearchProducts.map((item) => {
+                                        {visibleProductPageItems.map((item) => {
                                             const outOfStock = Number(item.stockQuantity) <= 0;
+                                            const lowStock = outOfStock || Number(item.stockQuantity) <= 5;
                                             return (
                                                 <button
                                                     key={`${item.productId}-${item.sku}`}
                                                     type="button"
                                                     onClick={() => addToCart(item)}
-                                                    className="flex w-full items-start gap-2 rounded-lg border border-[#c1c9c0]/50 bg-[#fbf9f1] p-2 text-left transition-colors hover:border-[#356647]/35 hover:bg-[#f6f4ec]">
-                                                    <ProductImage src={item.imageUrl} alt={item.name} className="h-12 w-12 shrink-0 rounded-lg" iconClassName="text-[19px]" />
-                                                    <div className="min-w-0 flex-1 space-y-0.5">
-                                                        <p className="truncate text-sm font-semibold leading-snug text-[#1b1c17]" title={item.name}>{item.name}</p>
-                                                        <p className="text-sm font-bold tabular-nums text-[#356647]">{formatMoney(item.price)} đ</p>
-                                                        <p className={`truncate text-xs ${outOfStock || Number(item.stockQuantity) <= 5 ? "font-semibold text-[#7e5700]" : "text-[#717971]"}`}>
-                                                            {formatStockHint(item.stockQuantity)}
+                                                    className="flex min-h-[86px] w-full items-start gap-2.5 rounded-lg border border-[#c1c9c0]/50 bg-[#fbf9f1] p-2 text-left transition-colors hover:border-[#356647]/35 hover:bg-[#f6f4ec]">
+                                                    <div className="flex w-[60px] shrink-0 flex-col items-center gap-1">
+                                                        <ProductImage src={item.imageUrl} alt={item.name} className="h-14 w-14 rounded-lg" iconClassName="text-[19px]" />
+                                                        <p className={`max-w-[64px] text-center text-[10px] leading-tight ${lowStock ? "font-semibold text-[#7e5700]" : "text-[#717971]"}`}>
+                                                            {formatCompactStock(item.stockQuantity)}
                                                         </p>
+                                                    </div>
+                                                    <div className="min-w-0 flex-1 pt-0.5">
+                                                        <p className="line-clamp-2 min-h-[34px] text-sm font-semibold leading-snug text-[#1b1c17]" title={item.name}>{item.name}</p>
+                                                        <p className="mt-1.5 text-sm font-bold tabular-nums text-[#356647]">{formatMoney(item.price)} đ</p>
                                                     </div>
                                                 </button>
                                             );
