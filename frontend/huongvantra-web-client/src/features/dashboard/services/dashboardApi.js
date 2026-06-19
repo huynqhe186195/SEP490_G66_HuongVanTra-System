@@ -18,4 +18,24 @@ export const dashboardApi = {
     const path = `/api/reports/sales-by-category${query ? `?${query}` : ''}`
     return await apiRequestAuth(path)
   },
+  getCustomerGrowth: async (params) => {
+    const query = params ? new URLSearchParams(params).toString() : ''
+    const path = `/api/reports/customer-growth${query ? `?${query}` : ''}`
+    return await apiRequestAuth(path)
+  },
+  getRevenueGrowth: async (params) => {
+    const query = params ? new URLSearchParams(params).toString() : ''
+    const path = `/api/reports/revenue-growth${query ? `?${query}` : ''}`
+    return await apiRequestAuth(path)
+  },
+  getSalesByChannel: async (params) => {
+    const query = params ? new URLSearchParams(params).toString() : ''
+    const path = `/api/reports/sales-by-channel${query ? `?${query}` : ''}`
+    return await apiRequestAuth(path)
+  },
+  getOrderGrowth: async (params) => {
+    const query = params ? new URLSearchParams(params).toString() : ''
+    const path = `/api/reports/order-count-growth${query ? `?${query}` : ''}`
+    return await apiRequestAuth(path)
+  },
 }
