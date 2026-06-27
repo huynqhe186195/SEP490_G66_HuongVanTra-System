@@ -68,15 +68,147 @@ const growthBars = [
   { day: 'SUN', outer: 44, inner: 'h-3/4' },
 ]
 
-function getImportStatusDisplay(status) {
+const IMPORT_ROW_PREVIEW_LIMIT = 30
+
+function normalizeImportMessage(message) {
+  return String(message || '').replace(/\s+/g, ' ').trim()
+}
+
+function isImportErrorStatus(status) {
   const normalized = String(status || '').toUpperCase()
-  if (normalized === 'SUCCESS') {
-    return { label: 'Thành công', className: 'bg-[#627b59]/15 text-[#356647]' }
+  return normalized === 'ERROR' || normalized === 'FAILED' || normalized.includes('ERROR')
+}
+
+function isImportWarningStatus(status) {
+  const normalized = String(status || '').toUpperCase()
+  return normalized === 'WARNING' || normalized.includes('WARNING')
+}
+
+function isImportWarningMessage(message) {
+  const text = normalizeImportMessage(message).toLowerCase()
+  return (
+    text.includes('đã bỏ qua') ||
+    text.includes('đã mặc định') ||
+    text.includes('không được lưu') ||
+    text.includes('chưa có trường') ||
+    text.includes('dùng địa chỉ mặc định') ||
+    text.includes('quá ngắn') ||
+    text.includes('dài hơn') ||
+    text.includes('được cắt ngắn')
+  )
+}
+
+function addImportMessageGroup(groups, message, rowNumber) {
+  const text = normalizeImportMessage(message)
+  if (!text || !rowNumber) return
+
+  const existing = groups.get(text)
+  if (existing) {
+    existing.rows.add(rowNumber)
+    return
   }
-  if (normalized === 'WARNING') {
-    return { label: 'Cảnh báo', className: 'bg-[#fec25b]/25 text-[#7e5700]' }
+
+  groups.set(text, {
+    message: text,
+    rows: new Set([rowNumber]),
+  })
+}
+
+function buildImportResultGroups(rows = []) {
+  const errorGroups = new Map()
+  const warningGroups = new Map()
+
+  rows.forEach((row) => {
+    const rowNumber = Number(row?.rowNumber || 0)
+    const messages = Array.isArray(row?.messages) ? row.messages : []
+    const cleanedMessages = messages.map(normalizeImportMessage).filter(Boolean)
+    if (!rowNumber || cleanedMessages.length === 0) return
+
+    if (isImportWarningStatus(row.status)) {
+      cleanedMessages.forEach((message) => addImportMessageGroup(warningGroups, message, rowNumber))
+      return
+    }
+
+    if (isImportErrorStatus(row.status)) {
+      cleanedMessages.forEach((message) => {
+        if (isImportWarningMessage(message)) {
+          addImportMessageGroup(warningGroups, message, rowNumber)
+        } else {
+          addImportMessageGroup(errorGroups, message, rowNumber)
+        }
+      })
+    }
+  })
+
+  const mapToList = (groups) =>
+    Array.from(groups.values())
+      .map((group) => ({
+        message: group.message,
+        rows: Array.from(group.rows).sort((a, b) => a - b),
+      }))
+      .sort((a, b) => b.rows.length - a.rows.length || a.message.localeCompare(b.message, 'vi'))
+
+  return {
+    errors: mapToList(errorGroups),
+    warnings: mapToList(warningGroups),
   }
-  return { label: 'Lỗi', className: 'bg-[#ffdad6] text-[#93000a]' }
+}
+
+function formatImportGroupRows(rows) {
+  const visibleRows = rows.slice(0, IMPORT_ROW_PREVIEW_LIMIT)
+  const hiddenCount = Math.max(0, rows.length - visibleRows.length)
+  return hiddenCount > 0
+    ? `Dòng: ${visibleRows.join(', ')} và ${hiddenCount} dòng khác`
+    : `Dòng: ${visibleRows.join(', ')}`
+}
+
+function ImportGroupedResultSection({ title, emptyText, groups, tone = 'error' }) {
+  const toneClasses = tone === 'warning'
+    ? {
+        badge: 'bg-[#fec25b]/25 text-[#7e5700]',
+        card: 'border-[#fec25b]/40 bg-[#fff8e6]',
+        icon: 'text-[#7e5700]',
+      }
+    : {
+        badge: 'bg-[#ffdad6] text-[#93000a]',
+        card: 'border-[#ffdad6] bg-[#fff7f5]',
+        icon: 'text-[#93000a]',
+      }
+
+  return (
+    <section className="rounded-xl border border-[#eae8e0] bg-white p-4">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h3 className="text-sm font-bold text-[#1b1c17]">{title}</h3>
+        <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${toneClasses.badge}`}>
+          {groups.length} nhóm
+        </span>
+      </div>
+
+      {groups.length > 0 ? (
+        <div className="custom-scrollbar max-h-[300px] space-y-3 overflow-y-auto pr-1">
+          {groups.map((group) => (
+            <article key={group.message} className={`rounded-xl border p-3 ${toneClasses.card}`}>
+              <div className="flex items-start gap-2">
+                <span className={`material-symbols-outlined mt-0.5 text-[18px] ${toneClasses.icon}`}>
+                  {tone === 'warning' ? 'warning' : 'error'}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="min-w-0 text-sm font-semibold text-[#1b1c17]">{group.message}</p>
+                  <p className="mt-2 text-xs font-medium text-[#717971]">
+                    {group.rows.length} dòng · {formatImportGroupRows(group.rows)}
+                  </p>
+                </div>
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <div className="rounded-xl border border-dashed border-[#c1c9c0] bg-[#f6f4ec]/60 px-4 py-6 text-sm font-medium text-[#717971]">
+          {emptyText}
+        </div>
+      )}
+    </section>
+  )
 }
 
 function CustomersPage() {
@@ -123,6 +255,10 @@ function CustomersPage() {
   })
 
   const hasActiveFilters = Boolean(tierFilter || debtFilter || sortBy)
+  const importResultGroups = useMemo(
+    () => buildImportResultGroups(importResult?.rows ?? []),
+    [importResult],
+  )
 
   function handleFilterChange(setter) {
     return (event) => {
@@ -1197,7 +1333,7 @@ function CustomersPage() {
                   Import khách hàng từ Excel
                 </h2>
                 <p className="mt-1 text-sm text-[#717971]">
-                  Chọn file `.xlsx` theo mẫu. Một file có thể import khách Phổ Thông, VIP và Doanh Nghiệp; hệ thống sẽ bỏ qua dòng lỗi và báo cáo chi tiết từng dòng.
+                  Chọn file `.xlsx` theo mẫu. Một file có thể import khách Phổ Thông, VIP và Doanh Nghiệp; hệ thống sẽ bỏ qua dòng lỗi và nhóm lỗi/cảnh báo theo nội dung.
                 </p>
               </div>
               <button
@@ -1273,48 +1409,19 @@ function CustomersPage() {
                     </div>
                   </div>
 
-                  <div className="overflow-hidden rounded-xl border border-[#eae8e0]">
-                    <div className="custom-scrollbar max-h-[360px] overflow-auto">
-                      <table className="min-w-[760px] w-full border-collapse text-left text-sm">
-                        <thead className="sticky top-0 bg-[#f6f4ec] text-xs uppercase tracking-wide text-[#717971]">
-                          <tr>
-                            <th className="px-4 py-3 font-semibold">Dòng</th>
-                            <th className="px-4 py-3 font-semibold">Họ tên</th>
-                            <th className="px-4 py-3 font-semibold">Số điện thoại</th>
-                            <th className="px-4 py-3 font-semibold">Trạng thái</th>
-                            <th className="px-4 py-3 font-semibold">Ghi chú/Lỗi</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-[#f0eee6]">
-                          {importResult.rows.length > 0 ? (
-                            importResult.rows.map((row) => {
-                              const status = getImportStatusDisplay(row.status)
-                              return (
-                                <tr key={`${row.rowNumber}-${row.phoneNumber || row.customerName}`} className="align-top">
-                                  <td className="px-4 py-3 font-mono text-xs font-semibold text-[#356647]">{row.rowNumber}</td>
-                                  <td className="px-4 py-3 font-semibold text-[#1b1c17]">{row.customerName || '—'}</td>
-                                  <td className="px-4 py-3 text-[#414942]">{row.phoneNumber || '—'}</td>
-                                  <td className="px-4 py-3">
-                                    <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${status.className}`}>
-                                      {status.label}
-                                    </span>
-                                  </td>
-                                  <td className="px-4 py-3 text-[#414942]">
-                                    {row.messages?.length ? row.messages.join(' · ') : '—'}
-                                  </td>
-                                </tr>
-                              )
-                            })
-                          ) : (
-                            <tr>
-                              <td className="px-4 py-6 text-center text-[#717971]" colSpan={5}>
-                                Không có dữ liệu kết quả.
-                              </td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
+                  <div className="space-y-4">
+                    <ImportGroupedResultSection
+                      title="Lỗi cần sửa"
+                      emptyText="Không có lỗi cần sửa."
+                      groups={importResultGroups.errors}
+                      tone="error"
+                    />
+                    <ImportGroupedResultSection
+                      title="Cảnh báo đã xử lý"
+                      emptyText="Không có cảnh báo."
+                      groups={importResultGroups.warnings}
+                      tone="warning"
+                    />
                   </div>
                 </div>
               ) : null}
