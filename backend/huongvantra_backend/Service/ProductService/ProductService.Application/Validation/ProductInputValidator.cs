@@ -256,7 +256,7 @@ public static class ProductInputValidator
             if (optionValuesJson.Length > 4000) errors.Add("Thông tin option biến thể quá dài.");
 
             ValidatePrice(costPrice, "Giá vốn biến thể", errors, mustBePositive: false);
-            ValidatePrice(retailPrice, "Giá bán biến thể", errors, mustBePositive: true);
+            ValidatePrice(retailPrice, "Giá bán biến thể", errors, mustBePositive: isSellable);
             ValidateStockRange(minStock, maxStock, errors);
             var imageUrl = NormalizeUrl(imageUrlValue, "URL ảnh biến thể", errors);
             var units = ValidateUnits(variant.Units);

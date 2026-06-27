@@ -10,6 +10,11 @@ public class SkuStockRepository(InventoryDbContext _db) : ISkuStockRepository
     public Task<SkuStock?> GetBySkuIdAsync(Guid skuId, CancellationToken ct = default) =>
         _db.SkuStocks.FirstOrDefaultAsync(s => s.SkuId == skuId, ct);
 
+    public Task<SkuStock?> GetBySkuIdWithLockAsync(Guid skuId, CancellationToken ct = default) =>
+        _db.SkuStocks
+            .FromSqlRaw("SELECT * FROM SkuStocks WHERE SkuId = {0} FOR UPDATE", skuId)
+            .FirstOrDefaultAsync(ct);
+
     public Task<List<SkuStock>> GetAllAsync(CancellationToken ct = default) =>
         _db.SkuStocks.OrderBy(s => s.SkuCode).ToListAsync(ct);
 

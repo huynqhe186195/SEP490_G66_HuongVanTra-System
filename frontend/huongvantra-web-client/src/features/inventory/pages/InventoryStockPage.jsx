@@ -1,14 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
-import { showError } from '../../../app/toast.js'
+import { showError, showSuccess } from '../../../app/toast.js'
 import { fetchAllActiveSkus } from '../../products/services/productSkusApi.js'
 import { fetchProducts } from '../../products/services/productsApi.js'
 import { formatStockQuantity } from '../../products/utils/productDisplay.js'
 import InventoryNavTabs from '../components/InventoryNavTabs.jsx'
-import { fetchSkuStocks } from '../services/inventoryStockApi.js'
+import { fetchSkuStocks, updateLowStockThreshold } from '../services/inventoryStockApi.js'
 import { fetchWarehouseBatches } from '../services/warehouseBatchApi.js'
 
 function InventoryStockPage() {
@@ -17,6 +17,9 @@ function InventoryStockPage() {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE)
   const [isLoading, setIsLoading] = useState(true)
+  const [editingThreshold, setEditingThreshold] = useState(null) // { skuId, value }
+  const [savingSkuId, setSavingSkuId] = useState(null)
+  const inputRef = useRef(null)
 
   const loadData = useCallback(async () => {
     setIsLoading(true)
@@ -46,6 +49,7 @@ function InventoryStockPage() {
           productName: productNameById.get(sku.productId) || '—',
           packagingType: sku.packagingType || '',
           warehouseQuantityOnHand: stock?.warehouseQuantityOnHand ?? 0,
+          lowStockThreshold: stock?.lowStockThreshold ?? 0,
           activeLotCount: batchCountBySku.get(sku.id) || 0,
         }
       })
@@ -86,6 +90,43 @@ function InventoryStockPage() {
     return filteredRows.slice(start, start + pageSize)
   }, [filteredRows, page, pageSize])
 
+  useEffect(() => {
+    if (editingThreshold && inputRef.current) inputRef.current.focus()
+  }, [editingThreshold])
+
+  function startEdit(skuId, currentValue) {
+    setEditingThreshold({ skuId, value: String(currentValue) })
+  }
+
+  function cancelEdit() {
+    setEditingThreshold(null)
+  }
+
+  async function commitEdit(skuId) {
+    const raw = editingThreshold?.value ?? ''
+    const parsed = parseInt(raw, 10)
+    if (isNaN(parsed) || parsed < 0) {
+      showError('Ngưỡng phải là số nguyên không âm')
+      return
+    }
+    setSavingSkuId(skuId)
+    setEditingThreshold(null)
+    try {
+      await updateLowStockThreshold(skuId, parsed)
+      setRows((prev) => prev.map((r) => (r.skuId === skuId ? { ...r, lowStockThreshold: parsed } : r)))
+      showSuccess('Đã cập nhật ngưỡng cảnh báo')
+    } catch (err) {
+      showError(err.message)
+    } finally {
+      setSavingSkuId(null)
+    }
+  }
+
+  function handleKeyDown(e, skuId) {
+    if (e.key === 'Enter') commitEdit(skuId)
+    if (e.key === 'Escape') cancelEdit()
+  }
+
   return (
     <PageShell>
       <PageHeader
@@ -122,18 +163,19 @@ function InventoryStockPage() {
                 <th className="px-4 py-3">Sản phẩm</th>
                 <th className="px-4 py-3">Tồn kho tổng</th>
                 <th className="px-4 py-3">Lô đang còn</th>
+                <th className="px-4 py-3">Ngưỡng cảnh báo</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {isLoading ? (
                 <tr>
-                  <td className="px-6 py-8 text-slate-500" colSpan={4}>
+                  <td className="px-6 py-8 text-slate-500" colSpan={5}>
                     Đang tải...
                   </td>
                 </tr>
               ) : filteredRows.length === 0 ? (
                 <tr>
-                  <td className="px-6 py-8 text-slate-500" colSpan={4}>
+                  <td className="px-6 py-8 text-slate-500" colSpan={5}>
                     Chưa có SKU — tạo sản phẩm và biến thể trước.
                   </td>
                 </tr>
@@ -157,6 +199,41 @@ function InventoryStockPage() {
                         </Link>
                       ) : (
                         <span className="text-amber-700">Chưa có lô</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-4">
+                      {editingThreshold?.skuId === row.skuId ? (
+                        <input
+                          ref={inputRef}
+                          type="number"
+                          min={0}
+                          className="w-20 rounded-lg border border-[#356647] px-2 py-1 text-sm font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-[#356647]/30"
+                          value={editingThreshold.value}
+                          onChange={(e) => setEditingThreshold((prev) => ({ ...prev, value: e.target.value }))}
+                          onKeyDown={(e) => handleKeyDown(e, row.skuId)}
+                          onBlur={() => commitEdit(row.skuId)}
+                        />
+                      ) : (
+                        <button
+                          type="button"
+                          title="Click để sửa ngưỡng"
+                          disabled={savingSkuId === row.skuId}
+                          onClick={() => startEdit(row.skuId, row.lowStockThreshold)}
+                          className="group flex items-center gap-1.5 rounded-lg px-2 py-1 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+                        >
+                          {savingSkuId === row.skuId ? (
+                            <span className="text-xs text-slate-400">Đang lưu...</span>
+                          ) : (
+                            <>
+                              <span className={row.lowStockThreshold === 0 ? 'text-slate-400' : 'text-slate-800'}>
+                                {row.lowStockThreshold === 0 ? 'Chưa đặt' : row.lowStockThreshold}
+                              </span>
+                              <span className="material-symbols-outlined text-[14px] text-slate-400 opacity-0 group-hover:opacity-100">
+                                edit
+                              </span>
+                            </>
+                          )}
+                        </button>
                       )}
                     </td>
                   </tr>

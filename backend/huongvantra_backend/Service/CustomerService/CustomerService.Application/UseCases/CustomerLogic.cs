@@ -312,6 +312,7 @@ public class CustomerLogic
         Guid customerId,
         decimal amountSpent,
         decimal debtAmount,
+        string? codDebtSettlementJson = null,
         CancellationToken ct = default)
     {
         if (await _processedEvents.ExistsAsync(OrderCompletedEventType, orderId, ct))
@@ -345,6 +346,14 @@ public class CustomerLogic
             }
         }
 
+        // Xử lý trừ nợ cũ bằng tiền thừa COD (nếu cashier đã cấu hình khi tạo đơn).
+        // Thực hiện ngay trong cùng handler để đảm bảo atomicity — tránh mất settlement
+        // nếu frontend crash sau khi verify COD nhưng trước khi gọi ApplyDebtPayment.
+        if (!string.IsNullOrWhiteSpace(codDebtSettlementJson))
+        {
+            await TryApplyCodDebtSettlementAsync(customer, orderId, orderCode, codDebtSettlementJson, ct);
+        }
+
         customer.UpdatedAt = DateTime.UtcNow;
 
         _customerRepo.Update(customer);
@@ -369,18 +378,105 @@ public class CustomerLogic
             TierUpgraded: tierUpgraded);
     }
 
-    public async Task<OrderReturnedHandlingResult> HandleOrderReturnedAsync(
-        Guid returnId,
-        string returnCode,
-        Guid orderId,
+    /// <summary>
+    /// Parse CodDebtSettlementJson và trừ nợ cũ của khách bằng tiền thừa COD.
+    /// Được gọi nội bộ trong HandleOrderCompletedAsync — không throw nếu JSON lỗi
+    /// hoặc số tiền không hợp lệ (chỉ log), để không block việc ghi nợ mới của đơn hiện tại.
+    /// </summary>
+    private async Task TryApplyCodDebtSettlementAsync(
+        Customer customer,
+        Guid sourceOrderId,
         string orderCode,
-        Guid? customerId,
-        decimal returnAmount,
-        decimal orderFinalAmount,
-        decimal refundAmount,
-        CancellationToken ct = default)
+        string settlementJson,
+        CancellationToken ct)
     {
-        if (await _processedEvents.ExistsAsync(OrderReturnedEventType, returnId, ct))
+        CodDebtSettlement? settlement;
+        try
+        {
+            settlement = System.Text.Json.JsonSerializer.Deserialize<CodDebtSettlement>(
+                settlementJson,
+                new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        }
+        catch
+        {
+            // JSON hỏng — bỏ qua, không làm hỏng toàn bộ handler
+            return;
+        }
+
+        if (settlement is null || !settlement.PayDebtsEnabled || settlement.AllocatedAmount <= 0)
+            return;
+
+        // Clamp: không được trừ quá tổng nợ hiện tại (có thể đã thay đổi từ lúc tạo đơn)
+        var maxPayable = customer.CurrentDebt;
+        if (maxPayable <= 0) return;
+
+        var allocatedAmount = Math.Min(settlement.AllocatedAmount, maxPayable);
+        if (allocatedAmount <= 0) return;
+
+        // Xây allocation plans từ danh sách explicit hoặc FIFO
+        var openDebts = await BuildOpenDebtItemsAsync(customer.Id, ct);
+        List<CustomerDebtAllocationResponse> allocationPlans;
+
+        if (settlement.Allocations is { Count: > 0 })
+        {
+            // Scale down proportionally nếu tổng preset > maxPayable
+            var presetTotal = settlement.Allocations.Sum(a => a.Amount);
+            var scale = presetTotal > maxPayable ? maxPayable / presetTotal : 1m;
+            var scaledAllocations = settlement.Allocations
+                .Select(a => new DebtAllocationItemRequest(a.OrderId, Math.Floor(a.Amount * scale)))
+                .Where(a => a.Amount > 0)
+                .ToList();
+            allocationPlans = BuildExplicitAllocations(scaledAllocations, openDebts);
+        }
+        else
+        {
+            allocationPlans = BuildFifoAllocations(allocatedAmount, openDebts);
+        }
+
+        allocatedAmount = allocationPlans.Sum(a => a.Amount);
+        if (allocatedAmount <= 0) return;
+
+        // Trim nếu vẫn vượt (phòng thủ)
+        if (allocatedAmount > customer.CurrentDebt)
+        {
+            allocationPlans = TrimAllocationPlans(allocationPlans, customer.CurrentDebt);
+            allocatedAmount = allocationPlans.Sum(a => a.Amount);
+        }
+        if (allocatedAmount <= 0) return;
+
+        customer.CurrentDebt -= allocatedAmount;
+
+        var note = $"Trừ từ tiền thừa đơn COD {orderCode}";
+        var transaction = await RecordDebtAsync(
+            customer,
+            DebtTransactionType.DecreaseDebt,
+            allocatedAmount,
+            "OrderPayment",
+            sourceOrderId,
+            note,
+            null,
+            ct);
+
+        var now = DateTime.UtcNow;
+        var allocationEntities = allocationPlans.Select(plan => new CustomerDebtAllocation
+        {
+            Id = Guid.NewGuid(),
+            DebtTransactionId = transaction.Id,
+            CustomerId = customer.Id,
+            OrderId = plan.OrderId,
+            OrderCode = plan.OrderCode,
+            Amount = plan.Amount,
+            CreatedAt = now
+        }).ToList();
+
+        await _allocationRepo.AddRangeAsync(allocationEntities, ct);
+
+        var orderSummary = string.Join(", ", allocationPlans.Select(a => $"{a.OrderCode} {a.Amount:N0}"));
+        await RecordActivityAsync(customer.Id, CustomerActivityType.DebtUpdated,
+            $"Trừ nợ COD -{allocatedAmount:N0} ({orderSummary})", ct);
+    }
+
+    public async Task<OrderReturnedHandlingResult> HandleOrderReturnedAsync(
         {
             return new OrderReturnedHandlingResult(
                 returnId, orderId, customerId, SkippedDuplicate: true, CustomerNotFound: false,

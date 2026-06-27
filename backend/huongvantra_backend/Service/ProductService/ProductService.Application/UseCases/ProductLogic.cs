@@ -177,14 +177,16 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
         List<ProductVariantRequest>? rawRequests = null)
     {
         var variants = new List<ProductVariant>();
+        var usedInBatch = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         for (var i = 0; i < inputs.Count; i++)
         {
             var input = inputs[i];
             var skuCode = string.IsNullOrWhiteSpace(input.SkuCode)
-                ? await GenerateUniqueVariantSkuAsync(productName, input.VariantName)
+                ? await GenerateUniqueVariantSkuAsync(productName, input.VariantName, usedInBatch)
                 : input.SkuCode;
             if (await _productRepository.ExistsVariantSkuCodeAsync(skuCode))
                 throw new DuplicateSkuCodeException(skuCode);
+            usedInBatch.Add(skuCode);
 
             var bomLines = rawRequests != null && i < rawRequests.Count
                 ? (rawRequests[i].BomLines ?? [])
@@ -218,13 +220,19 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
         return variants;
     }
 
-    private async Task<string> GenerateUniqueVariantSkuAsync(string productName, string variantName)
+    private async Task<string> GenerateUniqueVariantSkuAsync(string productName, string variantName, HashSet<string>? usedInBatch = null)
     {
-        var prefix = BuildSkuPrefix($"{productName} {variantName}");
+        // variantName already contains product name (built on frontend as "productName - unitName - attrs")
+        // so use variantName alone to avoid doubling the product name in the prefix
+        var skuSource = variantName.StartsWith(productName, StringComparison.OrdinalIgnoreCase)
+            ? variantName
+            : $"{productName} {variantName}";
+        var prefix = BuildSkuPrefix(skuSource);
         for (var i = 1; i <= 999; i++)
         {
             var candidate = $"{prefix}-{i:000}";
-            if (!await _productRepository.ExistsVariantSkuCodeAsync(candidate))
+            if ((usedInBatch == null || !usedInBatch.Contains(candidate))
+                && !await _productRepository.ExistsVariantSkuCodeAsync(candidate))
                 return candidate;
         }
 

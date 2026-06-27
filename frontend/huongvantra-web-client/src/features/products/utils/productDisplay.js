@@ -129,6 +129,40 @@ export function summarizeProductStock(skus = [], stockBySkuId = new Map(), stock
   }
 }
 
+export function summarizeProductVariants(variants = []) {
+  if (!variants.length) {
+    return { count: 0, priceLabel: '—', costLabel: '—', codes: '—', variantsLabel: '—', imageUrl: '', primaryCode: '—' }
+  }
+  const active = variants.filter((v) => v.isActive)
+  const list = active.length ? active : variants
+  const sellable = list.filter((v) => v.isSellable !== false)
+  const prices = (sellable.length ? sellable : list).map((v) => Number(v.retailPrice)).filter((n) => n > 0)
+  const costs = list.map((v) => Number(v.costPrice ?? 0)).filter(Number.isFinite)
+  const min = prices.length ? Math.min(...prices) : 0
+  const max = prices.length ? Math.max(...prices) : 0
+  const costMin = costs.length ? Math.min(...costs) : 0
+  const costMax = costs.length ? Math.max(...costs) : 0
+  const priceLabel = !prices.length ? '—' : min === max ? formatProductPrice(min) : `${formatProductPrice(min)} – ${formatProductPrice(max)}`
+  const costLabel =
+    !costs.length || (costMin === 0 && costMax === 0)
+      ? '—'
+      : costMin === costMax
+        ? formatProductPrice(costMin)
+        : `${formatProductPrice(costMin)} – ${formatProductPrice(costMax)}`
+  const codes = list.map((v) => v.skuCode).filter(Boolean).slice(0, 3).join(', ')
+  const labels = list.map((v) => v.variantName || v.skuCode).filter(Boolean).slice(0, 3).join(', ')
+  const imageUrl = list.find((v) => v.imageUrl)?.imageUrl || ''
+  return {
+    count: variants.length,
+    priceLabel,
+    costLabel,
+    codes: variants.length > 3 ? `${codes}…` : codes,
+    variantsLabel: list.length > 3 ? `${labels}…` : labels || codes,
+    imageUrl,
+    primaryCode: list[0]?.skuCode || '—',
+  }
+}
+
 export function summarizeProductSkus(skus = []) {
   if (!skus.length) {
     return { count: 0, priceLabel: '—', costLabel: '—', codes: '—', variantsLabel: '—', imageUrl: '', primaryCode: '—' }

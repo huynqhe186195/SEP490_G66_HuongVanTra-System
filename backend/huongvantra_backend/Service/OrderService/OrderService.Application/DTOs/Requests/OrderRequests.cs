@@ -58,7 +58,8 @@ public record CancelOrderRequest(string? Reason);
 
 public record VerifyCodPaymentRequest(
     string? TransactionRef,
-    decimal CollectedAmount = 0);
+    decimal CollectedAmount = 0,
+    string? DebtSettlementJson = null);
 
 public record ReturnOrderLineRequest(Guid OrderDetailId, int ReturnQuantity);
 

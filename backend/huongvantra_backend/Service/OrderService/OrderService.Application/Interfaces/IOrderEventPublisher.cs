@@ -16,6 +16,7 @@ public interface IOrderEventPublisher
         Guid orderId, string orderCode, Guid customerId,
         decimal totalAmount, decimal debtAmount,
         IEnumerable<(Guid SkuId, int Quantity)> items,
+        string? codDebtSettlementJson = null,
         CancellationToken ct = default);
 
     Task PublishOrderReturnedAsync(

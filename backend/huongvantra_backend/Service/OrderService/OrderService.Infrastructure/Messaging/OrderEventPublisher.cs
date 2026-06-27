@@ -40,6 +40,7 @@ public class OrderEventPublisher(IPublishEndpoint _publishEndpoint) : IOrderEven
         Guid orderId, string orderCode, Guid customerId,
         decimal totalAmount, decimal debtAmount,
         IEnumerable<(Guid SkuId, int Quantity)> items,
+        string? codDebtSettlementJson = null,
         CancellationToken ct = default) =>
         _publishEndpoint.Publish(new OrderCompletedEvent
         {
@@ -48,7 +49,8 @@ public class OrderEventPublisher(IPublishEndpoint _publishEndpoint) : IOrderEven
             CustomerId = customerId,
             TotalAmount = totalAmount,
             DebtAmount = debtAmount,
-            Items = items.Select(i => new OrderItemEvent { SkuId = i.SkuId, Quantity = i.Quantity })
+            Items = items.Select(i => new OrderItemEvent { SkuId = i.SkuId, Quantity = i.Quantity }),
+            CodDebtSettlementJson = codDebtSettlementJson
         }, ct);
 
     public Task PublishOrderReturnedAsync(

@@ -1,14 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { showError, showSuccess } from '../../../app/toast.js'
 import OverpaymentDebtModal from '../../customers/components/OverpaymentDebtModal.jsx'
-import {
-  applyCustomerDebtPayment,
-  fetchCustomerById,
-  fetchCustomerOpenDebts,
-} from '../../customers/services/customersApi.js'
+import { fetchCustomerById, fetchCustomerOpenDebts } from '../../customers/services/customersApi.js'
 import { clampDebtSettlement } from '../../customers/utils/debtAllocationEditor.js'
-import { buildDebtReceiptFromPayment } from '../../customers/utils/debtPaymentUtils.js'
-import { printReceiptSequence } from '../../pos/utils/printReceipt.js'
+import { serializeCodDebtSettlement } from '../../customers/utils/codDebtSettlementUtils.js'
 import { verifyCodPayment } from '../services/ordersApi.js'
 import { formatVnd } from '../utils/orderDisplay.js'
 
@@ -107,32 +102,11 @@ export default function CodVerifyModal({ isOpen, order, onClose, onVerified }) {
 
     setIsSubmitting(true)
     try {
-      const codAlreadyVerified = String(codPayment?.paymentStatus).toUpperCase() === 'SUCCESS'
-        || codPayment?.isCodVerified === true
-
-      if (!codAlreadyVerified) {
-        await verifyCodPayment(order.codPaymentId, {
-          collectedAmount: collected,
-        })
-      }
-
-      let debtReceipt = null
-      if (debtApplyAmount > 0 && order.customerId) {
-        const payment = await applyCustomerDebtPayment(order.customerId, {
-          amount: debtApplyAmount,
-          note: `Trừ từ tiền thừa đơn COD ${order.orderCode}`,
-          sourceOrderId: order.id,
-          allocations: settlement?.allocations ?? null,
-        })
-        debtReceipt = buildDebtReceiptFromPayment({
-          payment,
-          customerName: order.customerSnapshotName?.split(' · ')[0] || '',
-          customerCode: order.customerSnapshotName?.split(' · ')[1] || '',
-          paymentMethodLabel: 'COD',
-          balanceBefore: customerDebt,
-          relatedOrderCode: order.orderCode,
-        })
-      }
+      // Backend tự xử lý settlement trong cùng OrderCompletedEvent — chỉ cần 1 call
+      await verifyCodPayment(order.codPaymentId, {
+        collectedAmount: collected,
+        debtSettlementJson: debtApplyAmount > 0 ? serializeCodDebtSettlement(settlement) : null,
+      })
 
       const message =
         debtApplyAmount > 0
@@ -141,10 +115,6 @@ export default function CodVerifyModal({ isOpen, order, onClose, onVerified }) {
             ? `Đã thu COD ${formatVnd(collected)} · thừa ${formatMoneyInput(displayChange)} đ`
             : `Đã xác nhận thu COD đơn ${order.orderCode}`
       showSuccess(message)
-
-      if (debtReceipt) {
-        await printReceiptSequence([debtReceipt])
-      }
 
       onVerified?.()
       onClose()

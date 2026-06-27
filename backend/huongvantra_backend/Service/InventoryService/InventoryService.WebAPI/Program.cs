@@ -32,6 +32,7 @@ builder.Services.AddDbContext<InventoryDbContext>(options =>
             maxRetryDelay: TimeSpan.FromSeconds(10),
             errorNumbersToAdd: null)));
 
+builder.Services.AddScoped<IInventoryUnitOfWork, InventoryUnitOfWork>();
 builder.Services.AddScoped<ISkuStockRepository, SkuStockRepository>();
 builder.Services.AddScoped<IStockDeductQueueRepository, StockDeductQueueRepository>();
 builder.Services.AddScoped<IStockAdjustmentRequestRepository, StockAdjustmentRequestRepository>();
@@ -39,6 +40,7 @@ builder.Services.AddScoped<IStockExportSlipRepository, StockExportSlipRepository
 builder.Services.AddScoped<IWarehouseBatchRepository, WarehouseBatchRepository>();
 builder.Services.AddScoped<IStockExportBatchAllocationRepository, StockExportBatchAllocationRepository>();
 builder.Services.AddScoped<IProcessedIntegrationEventRepository, ProcessedIntegrationEventRepository>();
+builder.Services.AddScoped<IProductionOrderRepository, ProductionOrderRepository>();
 builder.Services.AddScoped<IInventoryEventPublisher, InventoryEventPublisher>();
 builder.Services.AddScoped<InventoryLogic>();
 
@@ -48,6 +50,7 @@ builder.Services.AddMassTransit(x =>
     x.AddConsumer<OrderPlacedConsumer>();
     x.AddConsumer<OrderCancelledConsumer>();
     x.AddConsumer<OrderReturnedConsumer>();
+    x.AddConsumer<LowStockConsumer>();
 
     x.UsingRabbitMq((ctx, cfg) =>
     {
@@ -68,6 +71,9 @@ builder.Services.AddMassTransit(x =>
 
         cfg.ReceiveEndpoint("inventory-service.order-returned", e =>
             e.ConfigureConsumer<OrderReturnedConsumer>(ctx));
+
+        cfg.ReceiveEndpoint("inventory-service.low-stock", e =>
+            e.ConfigureConsumer<LowStockConsumer>(ctx));
     });
 });
 

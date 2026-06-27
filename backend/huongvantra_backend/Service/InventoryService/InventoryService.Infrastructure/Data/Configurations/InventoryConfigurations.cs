@@ -160,6 +160,40 @@ public class StockExportBatchAllocationConfiguration : IEntityTypeConfiguration<
     }
 }
 
+public class ProductionOrderConfiguration : IEntityTypeConfiguration<ProductionOrder>
+{
+    public void Configure(EntityTypeBuilder<ProductionOrder> builder)
+    {
+        builder.ToTable("ProductionOrders");
+        builder.HasKey(e => e.Id);
+        builder.Property(e => e.ProductionCode).HasMaxLength(30).IsRequired();
+        builder.Property(e => e.FinishedSkuCode).HasMaxLength(50).IsRequired();
+        builder.Property(e => e.FinishedSkuSnapshotName).HasMaxLength(255).IsRequired();
+        builder.Property(e => e.Note).HasMaxLength(500);
+        builder.Property(e => e.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+        builder.HasIndex(e => e.ProductionCode).IsUnique();
+        builder.HasIndex(e => e.Status);
+        builder.HasIndex(e => e.CreatedAt);
+        builder.HasMany(e => e.Lines)
+            .WithOne(l => l.Order)
+            .HasForeignKey(l => l.ProductionOrderId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
+public class ProductionOrderLineConfiguration : IEntityTypeConfiguration<ProductionOrderLine>
+{
+    public void Configure(EntityTypeBuilder<ProductionOrderLine> builder)
+    {
+        builder.ToTable("ProductionOrderLines");
+        builder.HasKey(e => e.Id);
+        builder.Property(e => e.MaterialSkuCode).HasMaxLength(50).IsRequired();
+        builder.Property(e => e.MaterialSnapshotName).HasMaxLength(255).IsRequired();
+        builder.HasIndex(e => e.ProductionOrderId);
+        builder.HasIndex(e => e.MaterialSkuId);
+    }
+}
+
 public class ProcessedIntegrationEventConfiguration : IEntityTypeConfiguration<ProcessedIntegrationEvent>
 {
     public void Configure(EntityTypeBuilder<ProcessedIntegrationEvent> builder)

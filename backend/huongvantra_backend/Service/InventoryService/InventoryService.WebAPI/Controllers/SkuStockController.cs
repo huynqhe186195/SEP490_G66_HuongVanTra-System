@@ -19,6 +19,14 @@ public class SkuStockController(InventoryLogic _logic) : ControllerBase
         return Ok(items);
     }
 
+    [HttpGet("low-stock")]
+    [Authorize(Policy = PermissionNames.ViewOrder)]
+    public async Task<IActionResult> GetLowStock(CancellationToken ct)
+    {
+        var items = await _logic.GetLowStockSkusAsync(ct);
+        return Ok(items);
+    }
+
     [HttpPost("{skuId:guid}/adjust-warehouse")]
     [Authorize(Roles = "Warehouse")]
     public async Task<IActionResult> AdjustWarehouse(Guid skuId, [FromBody] AdjustWarehouseStockRequest request, CancellationToken ct)
@@ -32,6 +40,14 @@ public class SkuStockController(InventoryLogic _logic) : ControllerBase
     public async Task<IActionResult> SimulateAdjustStore(Guid skuId, [FromBody] AdjustSkuStockRequest request, CancellationToken ct)
     {
         var result = await _logic.SimulateAdjustStoreStockAsync(skuId, request.QuantityDelta, null, ct);
+        return Ok(result);
+    }
+
+    [HttpPut("{skuId:guid}/threshold")]
+    [Authorize(Roles = "Warehouse")]
+    public async Task<IActionResult> UpdateThreshold(Guid skuId, [FromBody] UpdateLowStockThresholdRequest request, CancellationToken ct)
+    {
+        var result = await _logic.UpdateLowStockThresholdAsync(skuId, request.Threshold, ct);
         return Ok(result);
     }
 }

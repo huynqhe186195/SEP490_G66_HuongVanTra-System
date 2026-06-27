@@ -49,6 +49,7 @@ public record SkuStockResponse(
     int WeightInGrams,
     int QuantityOnHand,
     int WarehouseQuantityOnHand,
+    int LowStockThreshold,
     DateTime UpdatedAt);
 
 public record StockAdjustmentRequestItemResponse(
@@ -137,3 +138,24 @@ public record StockExportSlipResponse(
     Guid CreatedBy,
     DateTime CreatedAt,
     List<StockExportBatchAllocationResponse> BatchAllocations);
+
+public record ProductionOrderLineResponse(
+    Guid Id,
+    Guid MaterialSkuId,
+    string MaterialSkuCode,
+    string MaterialSnapshotName,
+    int PlannedQuantity);
+
+public record ProductionOrderResponse(
+    Guid Id,
+    string ProductionCode,
+    Guid FinishedSkuId,
+    string FinishedSkuCode,
+    string FinishedSkuSnapshotName,
+    int Quantity,
+    string? Note,
+    string Status,
+    Guid CreatedBy,
+    DateTime CreatedAt,
+    DateTime? CompletedAt,
+    List<ProductionOrderLineResponse> Lines);

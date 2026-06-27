@@ -52,6 +52,10 @@ namespace InventoryService.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
 
+                    b.Property<int>("LowStockThreshold")
+                        .HasDefaultValue(5)
+                        .HasColumnType("int");
+
                     b.Property<int>("QuantityOnHand")
                         .HasColumnType("int");
 
@@ -545,6 +549,123 @@ namespace InventoryService.Infrastructure.Migrations
                 {
                     b.Navigation("BatchAllocations");
                 });
+
+            modelBuilder.Entity("InventoryService.Domain.Entities.ProductionOrder", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("char(36)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("FinishedSkuCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<Guid>("FinishedSkuId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("FinishedSkuSnapshotName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<string>("ProductionCode")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProductionCode")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ProductionOrders_ProductionCode");
+
+                    b.HasIndex("Status")
+                        .HasDatabaseName("IX_ProductionOrders_Status");
+
+                    b.HasIndex("CreatedAt")
+                        .HasDatabaseName("IX_ProductionOrders_CreatedAt");
+
+                    b.ToTable("ProductionOrders");
+                });
+
+            modelBuilder.Entity("InventoryService.Domain.Entities.ProductionOrderLine", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("MaterialSkuCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<Guid>("MaterialSkuId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("MaterialSnapshotName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<int>("PlannedQuantity")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("ProductionOrderId")
+                        .HasColumnType("char(36)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProductionOrderId")
+                        .HasDatabaseName("IX_ProductionOrderLines_ProductionOrderId");
+
+                    b.HasIndex("MaterialSkuId")
+                        .HasDatabaseName("IX_ProductionOrderLines_MaterialSkuId");
+
+                    b.ToTable("ProductionOrderLines");
+                });
+
+            modelBuilder.Entity("InventoryService.Domain.Entities.ProductionOrderLine", b =>
+                {
+                    b.HasOne("InventoryService.Domain.Entities.ProductionOrder", "Order")
+                        .WithMany("Lines")
+                        .HasForeignKey("ProductionOrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Order");
+                });
+
+            modelBuilder.Entity("InventoryService.Domain.Entities.ProductionOrder", b =>
+                {
+                    b.Navigation("Lines");
+                });
+
 #pragma warning restore 612, 618
         }
     }

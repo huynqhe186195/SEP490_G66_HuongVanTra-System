@@ -56,3 +56,19 @@ public record ApplyDebtPaymentRequest(
     Guid? SourceOrderId = null,
     IReadOnlyList<DebtAllocationItemRequest>? Allocations = null
 );
+
+/// <summary>
+/// DTO nội bộ để deserialize Payment.CodDebtSettlementJson — không expose ra API.
+/// Format khớp với serializeCodDebtSettlement() ở frontend.
+/// </summary>
+public record CodDebtSettlement(
+    bool PayDebtsEnabled,
+    decimal AllocatedAmount,
+    IReadOnlyList<CodDebtAllocationItem> Allocations,
+    decimal CreditToCustomer = 0
+);
+
+public record CodDebtAllocationItem(
+    Guid OrderId,
+    decimal Amount
+);

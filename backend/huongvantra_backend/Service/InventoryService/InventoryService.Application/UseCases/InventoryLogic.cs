@@ -19,6 +19,8 @@ public class InventoryLogic(
     IStockExportBatchAllocationRepository _exportAllocationRepo,
     IProcessedIntegrationEventRepository _processedEvents,
     IInventoryEventPublisher _eventPublisher,
+    IInventoryUnitOfWork _unitOfWork,
+    IProductionOrderRepository _productionOrderRepo,
     IOptions<InventoryOptions> inventoryOptions)
 {
     private readonly InventoryOptions _inventoryOptions = inventoryOptions.Value;
@@ -221,41 +223,56 @@ public class InventoryLogic(
         if (queue.QueueStatus != QueueStatus.Waiting)
             throw new InventoryNotFoundException("Chỉ có thể trừ kho cho hàng chờ xử lý.");
 
-        var previewItems = await BuildPreviewItemsAsync(queue, ct);
-        var shortages = previewItems
-            .Where(i => i.ShortageQuantity > 0)
-            .Select(i => new StockShortage(
-                i.SkuId, i.MaterialName, i.RequiredQuantity, i.AvailableQuantity, i.ShortageQuantity))
-            .ToList();
-
-        if (shortages.Count > 0)
-            throw new InsufficientStockException("Không đủ tồn kho để trừ.", shortages);
-
-        foreach (var item in queue.Items)
+        var result = await _unitOfWork.ExecuteInTransactionAsync(async innerCt =>
         {
-            var stock = await _skuStockRepo.GetBySkuIdAsync(item.SkuId, ct);
-            if (stock == null)
-                throw new InsufficientStockException("Không đủ tồn kho để trừ.", [
-                    new StockShortage(item.SkuId, item.SkuSnapshotName, item.Quantity, 0, item.Quantity)
-                ]);
+            var shortages = new List<StockShortage>();
+            var stockBySkuId = new Dictionary<Guid, SkuStock>();
 
-            stock.QuantityOnHand -= item.Quantity;
-            stock.UpdatedAt = DateTime.UtcNow;
-        }
+            foreach (var item in queue.Items)
+            {
+                var stock = await _skuStockRepo.GetBySkuIdWithLockAsync(item.SkuId, innerCt);
+                if (stock == null || stock.QuantityOnHand < item.Quantity)
+                {
+                    shortages.Add(new StockShortage(
+                        item.SkuId,
+                        item.SkuSnapshotName,
+                        item.Quantity,
+                        stock?.QuantityOnHand ?? 0,
+                        item.Quantity - (stock?.QuantityOnHand ?? 0)));
+                }
+                else
+                {
+                    stockBySkuId[item.SkuId] = stock;
+                }
+            }
 
-        queue.IsDeducted = true;
-        queue.QueueStatus = QueueStatus.Confirmed;
-        queue.OrderStockStatus = "deducted";
-        queue.ConfirmedAt = DateTime.UtcNow;
+            if (shortages.Count > 0)
+                throw new InsufficientStockException("Không đủ tồn kho để trừ.", shortages);
 
-        await _queueRepo.SaveChangesAsync(ct);
-        await _eventPublisher.PublishStockDeductedAsync(queue.OrderId, queue.OrderCode, true, ct);
+            foreach (var item in queue.Items)
+            {
+                var stock = stockBySkuId[item.SkuId];
+                stock.QuantityOnHand -= item.Quantity;
+                stock.UpdatedAt = DateTime.UtcNow;
+            }
+
+            queue.IsDeducted = true;
+            queue.QueueStatus = QueueStatus.Confirmed;
+            queue.OrderStockStatus = "deducted";
+            queue.ConfirmedAt = DateTime.UtcNow;
+
+            await _queueRepo.SaveChangesAsync(innerCt);
+            return queue;
+        }, ct);
+
+        await _eventPublisher.PublishStockDeductedAsync(result.OrderId, result.OrderCode, true, ct);
+        await CheckAndNotifyLowStockAsync(result.Items, ct);
 
         return new StockDeductConfirmResponse(
-            queue.Id, queue.OrderId, queue.OrderCode,
-            queue.QueueStatus.ToString().ToLowerInvariant(),
-            queue.OrderStockStatus,
-            queue.ConfirmedAt);
+            result.Id, result.OrderId, result.OrderCode,
+            result.QueueStatus.ToString().ToLowerInvariant(),
+            result.OrderStockStatus,
+            result.ConfirmedAt);
     }
 
     public async Task<StockDeductConfirmResponse> CancelQueueAsync(Guid queueId, CancellationToken ct = default)
@@ -276,6 +293,21 @@ public class InventoryLogic(
             queue.QueueStatus.ToString().ToLowerInvariant(),
             queue.OrderStockStatus,
             queue.ConfirmedAt);
+    }
+
+    public async Task<SkuStockResponse> UpdateLowStockThresholdAsync(
+        Guid skuId, int threshold, CancellationToken ct = default)
+    {
+        if (threshold < 0)
+            throw new InventoryValidationException("Ngưỡng tồn thấp không được âm.");
+
+        var stock = await _skuStockRepo.GetBySkuIdAsync(skuId, ct)
+            ?? throw new InventoryNotFoundException($"Không tìm thấy tồn kho cho SKU '{skuId}'.");
+
+        stock.LowStockThreshold = threshold;
+        stock.UpdatedAt = DateTime.UtcNow;
+        await _skuStockRepo.SaveChangesAsync(ct);
+        return MapSkuStock(stock);
     }
 
     public async Task<List<SkuStockResponse>> GetSkuStocksAsync(CancellationToken ct = default)
@@ -402,8 +434,19 @@ public class InventoryLogic(
         return batch == null ? null : MapWarehouseBatch(batch);
     }
 
-    private async Task RestoreStockAsync(StockDeductQueue queue, CancellationToken ct)
+    private async Task CheckAndNotifyLowStockAsync(
+        ICollection<StockDeductQueueItem> items, CancellationToken ct)
     {
+        foreach (var item in items)
+        {
+            var stock = await _skuStockRepo.GetBySkuIdAsync(item.SkuId, ct);
+            if (stock != null && stock.QuantityOnHand <= stock.LowStockThreshold)
+                await _eventPublisher.PublishLowStockAsync(
+                    stock.SkuId, stock.SkuCode, stock.QuantityOnHand, stock.LowStockThreshold, ct);
+        }
+    }
+
+    private async Task RestoreStockAsync(StockDeductQueue queue, CancellationToken ct)    {
         await RestorePartialStockAsync(
             queue.Items.Select(item => (item.SkuId, item.Quantity)),
             ct);
@@ -998,6 +1041,7 @@ public class InventoryLogic(
         stock.WeightInGrams,
         stock.QuantityOnHand,
         stock.WarehouseQuantityOnHand,
+        stock.LowStockThreshold,
         stock.UpdatedAt);
 
     private static WarehouseBatchResponse MapWarehouseBatch(WarehouseBatch batch)
@@ -1074,5 +1118,222 @@ public class InventoryLogic(
         entity.Items
             .OrderBy(i => i.SkuCode)
             .Select(MapAdjustmentRequestItem)
+            .ToList());
+
+    public async Task<List<SkuStockResponse>> GetLowStockSkusAsync(CancellationToken ct = default)
+    {
+        var stocks = await _skuStockRepo.GetAllAsync(ct);
+        return stocks
+            .Where(s => s.QuantityOnHand <= s.LowStockThreshold)
+            .Select(MapSkuStock)
+            .ToList();
+    }
+
+    // ── Production Orders ──────────────────────────────────────────────────────
+
+    public async Task<ProductionOrderResponse> CreateProductionOrderAsync(
+        CreateProductionOrderRequest request,
+        Guid userId,
+        CancellationToken ct = default)
+    {
+        if (request.Quantity <= 0)
+            throw new InventoryValidationException("Số lượng sản xuất phải lớn hơn 0.");
+        if (request.Lines == null || request.Lines.Count == 0)
+            throw new InventoryValidationException("Lệnh sản xuất phải có ít nhất một dòng nguyên liệu.");
+        foreach (var line in request.Lines)
+        {
+            if (line.PlannedQuantity <= 0)
+                throw new InventoryValidationException($"Số lượng nguyên liệu {line.MaterialSkuCode} phải lớn hơn 0.");
+        }
+
+        var today = DateTime.UtcNow.Date;
+        var countToday = await _productionOrderRepo.CountCreatedSinceAsync(today, ct);
+        var now = DateTime.UtcNow;
+
+        var order = new ProductionOrder
+        {
+            Id = Guid.NewGuid(),
+            ProductionCode = $"SX-{today:yyyyMMdd}-{(countToday + 1):D4}",
+            FinishedSkuId = request.FinishedSkuId,
+            FinishedSkuCode = request.FinishedSkuCode,
+            FinishedSkuSnapshotName = request.FinishedSkuSnapshotName,
+            Quantity = request.Quantity,
+            Note = request.Note?.Trim(),
+            Status = ProductionOrderStatus.Draft,
+            CreatedBy = userId,
+            CreatedAt = now,
+            UpdatedAt = now,
+            Lines = request.Lines.Select(l => new ProductionOrderLine
+            {
+                Id = Guid.NewGuid(),
+                MaterialSkuId = l.MaterialSkuId,
+                MaterialSkuCode = l.MaterialSkuCode,
+                MaterialSnapshotName = l.MaterialSnapshotName,
+                PlannedQuantity = l.PlannedQuantity,
+                CreatedAt = now,
+            }).ToList()
+        };
+
+        await _productionOrderRepo.AddAsync(order, ct);
+        await _productionOrderRepo.SaveChangesAsync(ct);
+
+        return MapProductionOrder(order);
+    }
+
+    public async Task<ProductionOrderResponse> CompleteProductionOrderAsync(
+        Guid id,
+        Guid userId,
+        CancellationToken ct = default)
+    {
+        var order = await _productionOrderRepo.GetByIdAsync(id, ct)
+            ?? throw new InventoryNotFoundException("Không tìm thấy lệnh sản xuất.");
+
+        if (order.Status != ProductionOrderStatus.Draft)
+            throw new InventoryValidationException("Chỉ có thể hoàn thành lệnh đang ở trạng thái Nháp.");
+
+        return await _unitOfWork.ExecuteInTransactionAsync(async innerCt =>
+        {
+            var now = DateTime.UtcNow;
+            var materialSkuIds = new List<Guid>();
+
+            foreach (var line in order.Lines)
+            {
+                var stock = await _skuStockRepo.GetBySkuIdAsync(line.MaterialSkuId, innerCt);
+                var warehouseBefore = stock?.WarehouseQuantityOnHand ?? 0;
+
+                var allocations = await AllocateAndDeductBatchesFifoAsync(
+                    line.MaterialSkuId, line.PlannedQuantity, innerCt);
+
+                if (stock != null)
+                    await SyncWarehouseQtyFromBatchesAsync(stock, innerCt);
+
+                var warehouseAfter = stock?.WarehouseQuantityOnHand ?? 0;
+
+                var countToday = await _exportSlipRepo.CountCreatedSinceAsync(now.Date, innerCt);
+                var slip = new StockExportSlip
+                {
+                    Id = Guid.NewGuid(),
+                    ExportCode = $"PX-{now:yyyyMMdd}-{(countToday + 1):D4}",
+                    ExportType = "production",
+                    StockAdjustmentRequestId = null,
+                    SkuId = line.MaterialSkuId,
+                    SkuCode = line.MaterialSkuCode,
+                    SkuSnapshotName = line.MaterialSnapshotName,
+                    Quantity = line.PlannedQuantity,
+                    WarehouseQtyBefore = warehouseBefore,
+                    WarehouseQtyAfter = warehouseAfter,
+                    StoreQtyBefore = stock?.QuantityOnHand ?? 0,
+                    StoreQtyAfter = stock?.QuantityOnHand ?? 0,
+                    Note = $"Sản xuất lô {order.ProductionCode}",
+                    CreatedBy = userId,
+                    CreatedAt = now,
+                };
+                await _exportSlipRepo.AddAsync(slip, innerCt);
+                await _exportSlipRepo.SaveChangesAsync(innerCt);
+
+                foreach (var alloc in allocations)
+                    alloc.StockExportSlipId = slip.Id;
+                await _exportAllocationRepo.AddRangeAsync(allocations, innerCt);
+                await _exportAllocationRepo.SaveChangesAsync(innerCt);
+
+                materialSkuIds.Add(line.MaterialSkuId);
+            }
+
+            await CreateWarehouseBatchInternalAsync(
+                lotCode: $"SX-{now:yyyyMMddHHmmss}",
+                supplier: null,
+                expiresAt: null,
+                note: $"Sản xuất lô {order.ProductionCode}",
+                items: [new CreateWarehouseBatchItemRequest(
+                    order.FinishedSkuId,
+                    order.FinishedSkuCode,
+                    order.FinishedSkuSnapshotName,
+                    order.Quantity,
+                    null)],
+                createdBy: userId,
+                ct: innerCt);
+
+            order.Status = ProductionOrderStatus.Completed;
+            order.CompletedAt = now;
+            order.UpdatedAt = now;
+            await _productionOrderRepo.SaveChangesAsync(innerCt);
+
+            foreach (var skuId in materialSkuIds)
+            {
+                var stock = await _skuStockRepo.GetBySkuIdAsync(skuId, innerCt);
+                if (stock != null && stock.WarehouseQuantityOnHand <= stock.LowStockThreshold)
+                    await _eventPublisher.PublishLowStockAsync(
+                        stock.SkuId, stock.SkuCode, stock.WarehouseQuantityOnHand, stock.LowStockThreshold, innerCt);
+            }
+
+            return MapProductionOrder(order);
+        }, ct);
+    }
+
+    public async Task<ProductionOrderResponse> CancelProductionOrderAsync(
+        Guid id,
+        Guid userId,
+        CancellationToken ct = default)
+    {
+        var order = await _productionOrderRepo.GetByIdAsync(id, ct)
+            ?? throw new InventoryNotFoundException("Không tìm thấy lệnh sản xuất.");
+
+        if (order.Status != ProductionOrderStatus.Draft)
+            throw new InventoryValidationException("Chỉ có thể hủy lệnh đang ở trạng thái Nháp.");
+
+        order.Status = ProductionOrderStatus.Cancelled;
+        order.UpdatedAt = DateTime.UtcNow;
+        await _productionOrderRepo.SaveChangesAsync(ct);
+
+        return MapProductionOrder(order);
+    }
+
+    public async Task<PagedResponse<ProductionOrderResponse>> GetProductionOrdersAsync(
+        string? status,
+        int page,
+        int pageSize,
+        CancellationToken ct = default)
+    {
+        ProductionOrderStatus? statusFilter = null;
+        if (!string.IsNullOrWhiteSpace(status) && Enum.TryParse<ProductionOrderStatus>(status, true, out var parsed))
+            statusFilter = parsed;
+
+        var (items, total) = await _productionOrderRepo.GetPagedAsync(statusFilter, page, pageSize, ct);
+        var totalPages = (int)Math.Ceiling(total / (double)pageSize);
+
+        return new PagedResponse<ProductionOrderResponse>(
+            items.Select(MapProductionOrder).ToList(),
+            page,
+            pageSize,
+            total,
+            totalPages);
+    }
+
+    public async Task<ProductionOrderResponse?> GetProductionOrderByIdAsync(Guid id, CancellationToken ct = default)
+    {
+        var order = await _productionOrderRepo.GetByIdAsync(id, ct);
+        return order == null ? null : MapProductionOrder(order);
+    }
+
+    private static ProductionOrderResponse MapProductionOrder(ProductionOrder order) => new(
+        order.Id,
+        order.ProductionCode,
+        order.FinishedSkuId,
+        order.FinishedSkuCode,
+        order.FinishedSkuSnapshotName,
+        order.Quantity,
+        order.Note,
+        order.Status.ToString(),
+        order.CreatedBy,
+        order.CreatedAt,
+        order.CompletedAt,
+        order.Lines
+            .OrderBy(l => l.MaterialSkuCode)
+            .Select(l => new ProductionOrderLineResponse(
+                l.Id,
+                l.MaterialSkuId,
+                l.MaterialSkuCode,
+                l.MaterialSnapshotName,
+                l.PlannedQuantity))
             .ToList());
 }

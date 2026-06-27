@@ -21,4 +21,15 @@ public class InventoryEventPublisher(IPublishEndpoint _publishEndpoint) : IInven
             SkuId = skuId,
             NewCostPrice = newCostPrice
         }, ct);
+
+    public Task PublishLowStockAsync(
+        Guid skuId, string skuCode, int currentStock, int threshold, CancellationToken ct = default) =>
+        _publishEndpoint.Publish(new LowStockEvent
+        {
+            SkuId = skuId,
+            SkuCode = skuCode,
+            CurrentStock = currentStock,
+            Threshold = threshold,
+            OccurredAt = DateTime.UtcNow
+        }, ct);
 }

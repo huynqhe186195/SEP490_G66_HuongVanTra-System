@@ -9,6 +9,8 @@ public class SkuStock
     public int QuantityOnHand { get; set; }
     /// <summary>Số lượng tại kho tổng.</summary>
     public int WarehouseQuantityOnHand { get; set; }
+    /// <summary>Ngưỡng tồn thấp — thủ kho nhận thông báo khi QuantityOnHand &lt;= giá trị này.</summary>
+    public int LowStockThreshold { get; set; } = 0;
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 }
