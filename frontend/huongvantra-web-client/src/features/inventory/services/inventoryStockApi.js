@@ -7,6 +7,7 @@ export function mapSkuStock(row) {
     weightInGrams: Number(row.weightInGrams ?? row.WeightInGrams ?? 0),
     quantityOnHand: Number(row.quantityOnHand ?? row.QuantityOnHand ?? 0),
     warehouseQuantityOnHand: Number(row.warehouseQuantityOnHand ?? row.WarehouseQuantityOnHand ?? 0),
+    lowStockThreshold: Number(row.lowStockThreshold ?? row.LowStockThreshold ?? 0),
     updatedAt: row.updatedAt ?? row.UpdatedAt ?? null,
   }
 }
@@ -90,4 +91,17 @@ export async function adjustWarehouseStock(skuId, quantityDelta) {
     body: JSON.stringify({ quantityDelta: Number(quantityDelta) }),
   })
   return mapSkuStock(data)
+}
+
+export async function fetchLowStockSkus() {
+  const data = await apiRequestAuth('/api/v1/inventory/sku-stocks/low-stock', { method: 'GET' })
+  if (!Array.isArray(data)) return []
+  return data.map(mapSkuStock)
+}
+
+export async function updateLowStockThreshold(skuId, threshold) {
+  await apiRequestAuth(`/api/v1/inventory/sku-stocks/${skuId}/threshold`, {
+    method: 'PUT',
+    body: JSON.stringify({ threshold: Number(threshold) }),
+  })
 }

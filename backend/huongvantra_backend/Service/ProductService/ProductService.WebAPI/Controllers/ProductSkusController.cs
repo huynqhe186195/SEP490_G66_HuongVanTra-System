@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using ProductService.Application.DTOs.Requests;
-using ProductService.Application.UseCases;
+using ProductService.Infrastructure.UseCases;
 using ProductService.WebAPI.Extensions;
 using HuongVanTra.Shared.Auth;
 

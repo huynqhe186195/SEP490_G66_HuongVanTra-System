@@ -184,7 +184,7 @@ public class CustomerLogic
         EnsureCanManageCorporateCustomer(customer.CustomerGroup, access);
 
         await _customerRepo.SoftDeleteAsync(id, ct);
-        await RecordActivityAsync(id, CustomerActivityType.Updated, "Xóa mềm khách hàng", ct);
+        await RecordActivityAsync(id, CustomerActivityType.Deleted, "Xóa mềm khách hàng", ct);
         await _customerRepo.SaveChangesAsync(ct);
     }
 
@@ -203,7 +203,7 @@ public class CustomerLogic
             throw new DuplicatePhoneNumberException(customer.PhoneNumber);
 
         await _customerRepo.RestoreAsync(id, ct);
-        await RecordActivityAsync(id, CustomerActivityType.Updated, "Khôi phục khách hàng", ct);
+        await RecordActivityAsync(id, CustomerActivityType.Restored, "Khôi phục khách hàng", ct);
         await _customerRepo.SaveChangesAsync(ct);
 
         customer = await _customerRepo.GetByIdAsync(id, ct) ?? customer;
@@ -299,7 +299,7 @@ public class CustomerLogic
                 throw new CustomerValidationException(["File Excel không có dữ liệu khách hàng."]);
 
             var successCount = rowResults.Count(r => r.Status == "Success" || r.Status == "Warning");
-            var failedCount = rowResults.Count(r => r.Status == "Error" || r.Status == "Failed");
+            var failedCount = rowResults.Count(r => r.Status == "Error");
             var warningCount = rowResults.Count(r => r.Status == "Warning");
 
             return new CustomerImportResultResponse(totalRows, successCount, failedCount, warningCount, rowResults);
@@ -312,6 +312,7 @@ public class CustomerLogic
         Guid customerId,
         decimal amountSpent,
         decimal debtAmount,
+        string? codDebtSettlementJson = null,
         CancellationToken ct = default)
     {
         if (await _processedEvents.ExistsAsync(OrderCompletedEventType, orderId, ct))
@@ -345,6 +346,14 @@ public class CustomerLogic
             }
         }
 
+        // Xử lý trừ nợ cũ bằng tiền thừa COD (nếu cashier đã cấu hình khi tạo đơn).
+        // Thực hiện ngay trong cùng handler để đảm bảo atomicity — tránh mất settlement
+        // nếu frontend crash sau khi verify COD nhưng trước khi gọi ApplyDebtPayment.
+        if (!string.IsNullOrWhiteSpace(codDebtSettlementJson))
+        {
+            await TryApplyCodDebtSettlementAsync(customer, orderId, orderCode, codDebtSettlementJson, ct);
+        }
+
         customer.UpdatedAt = DateTime.UtcNow;
 
         _customerRepo.Update(customer);
@@ -367,6 +376,104 @@ public class CustomerLogic
             TierId: customer.TierId,
             TierName: upgradedTierName ?? customer.Tier?.TierName,
             TierUpgraded: tierUpgraded);
+    }
+
+    /// <summary>
+    /// Parse CodDebtSettlementJson và trừ nợ cũ của khách bằng tiền thừa COD.
+    /// Được gọi nội bộ trong HandleOrderCompletedAsync — không throw nếu JSON lỗi
+    /// hoặc số tiền không hợp lệ (chỉ log), để không block việc ghi nợ mới của đơn hiện tại.
+    /// </summary>
+    private async Task TryApplyCodDebtSettlementAsync(
+        Customer customer,
+        Guid sourceOrderId,
+        string orderCode,
+        string settlementJson,
+        CancellationToken ct)
+    {
+        CodDebtSettlement? settlement;
+        try
+        {
+            settlement = System.Text.Json.JsonSerializer.Deserialize<CodDebtSettlement>(
+                settlementJson,
+                new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        }
+        catch
+        {
+            // JSON hỏng — bỏ qua, không làm hỏng toàn bộ handler
+            return;
+        }
+
+        if (settlement is null || !settlement.PayDebtsEnabled || settlement.AllocatedAmount <= 0)
+            return;
+
+        // Clamp: không được trừ quá tổng nợ hiện tại (có thể đã thay đổi từ lúc tạo đơn)
+        var maxPayable = customer.CurrentDebt;
+        if (maxPayable <= 0) return;
+
+        var allocatedAmount = Math.Min(settlement.AllocatedAmount, maxPayable);
+        if (allocatedAmount <= 0) return;
+
+        // Xây allocation plans từ danh sách explicit hoặc FIFO
+        var openDebts = await BuildOpenDebtItemsAsync(customer.Id, ct);
+        List<CustomerDebtAllocationResponse> allocationPlans;
+
+        if (settlement.Allocations is { Count: > 0 })
+        {
+            // Scale down proportionally nếu tổng preset > maxPayable
+            var presetTotal = settlement.Allocations.Sum(a => a.Amount);
+            var scale = presetTotal > maxPayable ? maxPayable / presetTotal : 1m;
+            var scaledAllocations = settlement.Allocations
+                .Select(a => new DebtAllocationItemRequest(a.OrderId, Math.Floor(a.Amount * scale)))
+                .Where(a => a.Amount > 0)
+                .ToList();
+            allocationPlans = BuildExplicitAllocations(scaledAllocations, openDebts);
+        }
+        else
+        {
+            allocationPlans = BuildFifoAllocations(allocatedAmount, openDebts);
+        }
+
+        allocatedAmount = allocationPlans.Sum(a => a.Amount);
+        if (allocatedAmount <= 0) return;
+
+        // Trim nếu vẫn vượt (phòng thủ)
+        if (allocatedAmount > customer.CurrentDebt)
+        {
+            allocationPlans = TrimAllocationPlans(allocationPlans, customer.CurrentDebt);
+            allocatedAmount = allocationPlans.Sum(a => a.Amount);
+        }
+        if (allocatedAmount <= 0) return;
+
+        customer.CurrentDebt -= allocatedAmount;
+
+        var note = $"Trừ từ tiền thừa đơn COD {orderCode}";
+        var transaction = await RecordDebtAsync(
+            customer,
+            DebtTransactionType.DecreaseDebt,
+            allocatedAmount,
+            "OrderPayment",
+            sourceOrderId,
+            note,
+            null,
+            ct);
+
+        var now = DateTime.UtcNow;
+        var allocationEntities = allocationPlans.Select(plan => new CustomerDebtAllocation
+        {
+            Id = Guid.NewGuid(),
+            DebtTransactionId = transaction.Id,
+            CustomerId = customer.Id,
+            OrderId = plan.OrderId,
+            OrderCode = plan.OrderCode,
+            Amount = plan.Amount,
+            CreatedAt = now
+        }).ToList();
+
+        await _allocationRepo.AddRangeAsync(allocationEntities, ct);
+
+        var orderSummary = string.Join(", ", allocationPlans.Select(a => $"{a.OrderCode} {a.Amount:N0}"));
+        await RecordActivityAsync(customer.Id, CustomerActivityType.DebtUpdated,
+            $"Trừ nợ COD -{allocatedAmount:N0} ({orderSummary})", ct);
     }
 
     public async Task<OrderReturnedHandlingResult> HandleOrderReturnedAsync(
@@ -406,7 +513,10 @@ public class CustomerLogic
 
         var spendingReduction = Math.Max(0, returnAmount);
         if (spendingReduction > 0)
+        {
             customer.TotalSpending = Math.Max(0, customer.TotalSpending - spendingReduction);
+            await TryDowngradeMembershipTierAsync(customer, ct);
+        }
 
         var debtReduction = 0m;
         if (spendingReduction > 0 && orderFinalAmount > 0)
@@ -696,7 +806,8 @@ public class CustomerLogic
 
         EnsureCanAccess(customer, access);
 
-        await ReconcileCurrentDebtFromLedgerAsync(customer, ct);
+        if (await ReconcileCurrentDebtFromLedgerAsync(customer, ct))
+            await _customerRepo.SaveChangesAsync(ct);
         var (increase, decrease, count) = await _debtRepo.GetSummaryAsync(customerId, ct);
         return new CustomerDebtSummaryResponse(customer.CurrentDebt, increase, decrease, count);
     }
@@ -752,7 +863,8 @@ public class CustomerLogic
             ?? throw new CustomerNotFoundException(id);
 
         EnsureCanAccess(customer, access);
-        await ReconcileCurrentDebtFromLedgerAsync(customer, ct);
+        if (await ReconcileCurrentDebtFromLedgerAsync(customer, ct))
+            await _customerRepo.SaveChangesAsync(ct);
         return MapToDetailResponse(customer);
     }
 
@@ -796,7 +908,7 @@ public class CustomerLogic
             worksheet,
             "Danh sách khách hàng",
             "Export theo bộ lọc hiện tại trên màn hình Customers.",
-            $"Thời gian export: {DateTime.Now:dd/MM/yyyy HH:mm} · Tổng số dòng: {filteredCustomers.Count}",
+            $"Thời gian export: {DateTime.UtcNow.AddHours(7):dd/MM/yyyy HH:mm} · Tổng số dòng: {filteredCustomers.Count}",
             filteredCustomers.Count);
         WriteCustomerExcelHeaders(worksheet);
         WriteCustomerExportRows(worksheet, filteredCustomers);
@@ -804,7 +916,7 @@ public class CustomerLogic
 
         using var stream = new MemoryStream();
         workbook.SaveAs(stream);
-        var fileName = $"Khach_Hang_Huong_Van_Tra_{DateTime.Now:yyyyMMdd_HHmm}.xlsx";
+        var fileName = $"Khach_Hang_Huong_Van_Tra_{DateTime.UtcNow.AddHours(7):yyyyMMdd_HHmm}.xlsx";
         return new CustomerExcelFileResponse(stream.ToArray(), fileName, CustomerImportContentType);
     }
 
@@ -846,11 +958,13 @@ public class CustomerLogic
         {
             errors.Add(phoneError!);
         }
+        else if (seenPhones.Contains(phoneNumber))
+        {
+            errors.Add("Số điện thoại bị trùng trong file Excel.");
+        }
         else
         {
-            if (seenPhones.Contains(phoneNumber))
-                errors.Add("Số điện thoại bị trùng trong file Excel.");
-
+            seenPhones.Add(phoneNumber);
             if (await _customerRepo.PhoneExistsAsync(phoneNumber, ct: ct))
                 errors.Add("Số điện thoại đã tồn tại trong hệ thống.");
         }
@@ -938,8 +1052,6 @@ public class CustomerLogic
                 errors.Concat(warnings).ToList());
         }
 
-        seenPhones.Add(phoneNumber);
-
         try
         {
             var now = DateTime.UtcNow;
@@ -969,10 +1081,12 @@ public class CustomerLogic
         }
         catch (CustomerForbiddenException ex)
         {
+            _customerRepo.ClearChangeTracker();
             return new CustomerImportRowResultResponse(rowNumber, fullName, phoneNumber, "Error", [ex.Message]);
         }
         catch (Exception ex)
         {
+            _customerRepo.ClearChangeTracker();
             return new CustomerImportRowResultResponse(rowNumber, fullName, phoneNumber, "Error", [$"Import dòng này thất bại: {ex.Message}"]);
         }
 
@@ -1293,7 +1407,7 @@ public class CustomerLogic
         worksheet.Range(3, 1, 3, lastColumn).Merge();
         worksheet.Cell(4, 1).Value = note;
         worksheet.Range(4, 1, 4, lastColumn).Merge();
-        worksheet.Cell(5, 1).Value = $"Ngày tạo file: {DateTime.Now:dd/MM/yyyy HH:mm}" + (totalRows > 0 ? $" · Tổng số dòng: {totalRows}" : string.Empty);
+        worksheet.Cell(5, 1).Value = $"Ngày tạo file: {DateTime.UtcNow.AddHours(7):dd/MM/yyyy HH:mm}" + (totalRows > 0 ? $" · Tổng số dòng: {totalRows}" : string.Empty);
         worksheet.Range(5, 1, 5, lastColumn).Merge();
 
         worksheet.Range(1, 1, 5, lastColumn).Style.Fill.BackgroundColor = XLColor.FromHtml("#F6F4EC");
@@ -2137,6 +2251,28 @@ public class CustomerLogic
         return (true, eligibleTier.TierName);
     }
 
+    private async Task TryDowngradeMembershipTierAsync(Customer customer, CancellationToken ct)
+    {
+        if (customer.CustomerGroup != CustomerGroup.PhoThong || !customer.TierId.HasValue)
+            return;
+
+        var eligibleTier = await _tierRepo.GetTierForSpendingAsync(customer.TotalSpending, ct)
+                           ?? await _tierRepo.GetDefaultTierAsync(ct);
+
+        if (eligibleTier?.Id == customer.TierId)
+            return;
+
+        var oldName = customer.Tier?.TierName ?? "—";
+        customer.TierId = eligibleTier?.Id;
+        customer.Tier = eligibleTier;
+
+        await RecordActivityAsync(
+            customer.Id,
+            CustomerActivityType.TierChanged,
+            $"Điều chỉnh hạng sau hoàn hàng: {oldName} → {eligibleTier?.TierName ?? "Chưa có hạng"} (tổng chi tiêu {customer.TotalSpending:N0} đ)",
+            ct);
+    }
+
     private async Task<int?> ResolveInitialTierIdAsync(
         CustomerGroup customerGroup, int? requestedTierId, CancellationToken ct)
     {
@@ -2288,16 +2424,16 @@ public class CustomerLogic
             .ThenByDescending(t => t.Id);
     }
 
-    private async Task ReconcileCurrentDebtFromLedgerAsync(Customer customer, CancellationToken ct)
+    private async Task<bool> ReconcileCurrentDebtFromLedgerAsync(Customer customer, CancellationToken ct)
     {
         var ledgerBalance = await _debtRepo.GetLedgerBalanceAsync(customer.Id, ct);
         if (customer.CurrentDebt == ledgerBalance)
-            return;
+            return false;
 
         customer.CurrentDebt = ledgerBalance;
         customer.UpdatedAt = DateTime.UtcNow;
         _customerRepo.Update(customer);
-        await _customerRepo.SaveChangesAsync(ct);
+        return true;
     }
 
     private static CustomerResponse MapToResponse(Customer c) =>

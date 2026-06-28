@@ -21,6 +21,8 @@ public class ProductVariantConfiguration : IEntityTypeConfiguration<ProductVaria
         builder.Property(v => v.AllowRewardPoints).HasDefaultValue(true);
         builder.Property(v => v.IsActive).HasDefaultValue(true);
         builder.Property(v => v.ImageUrl).HasMaxLength(500);
+        builder.Property(v => v.WeightInGrams).HasDefaultValue(0);
+        builder.Property(v => v.SyncedToStoreAt).IsRequired(false);
         builder.Property(v => v.CreatedAt).IsRequired();
         builder.Property(v => v.UpdatedAt).IsRequired(false);
         builder.Property(v => v.IsDeleted).HasDefaultValue(false);

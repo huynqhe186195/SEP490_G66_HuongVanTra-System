@@ -177,14 +177,16 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
         List<ProductVariantRequest>? rawRequests = null)
     {
         var variants = new List<ProductVariant>();
+        var usedInBatch = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         for (var i = 0; i < inputs.Count; i++)
         {
             var input = inputs[i];
             var skuCode = string.IsNullOrWhiteSpace(input.SkuCode)
-                ? await GenerateUniqueVariantSkuAsync(productName, input.VariantName)
+                ? await GenerateUniqueVariantSkuAsync(productName, input.VariantName, usedInBatch)
                 : input.SkuCode;
             if (await _productRepository.ExistsVariantSkuCodeAsync(skuCode))
                 throw new DuplicateSkuCodeException(skuCode);
+            usedInBatch.Add(skuCode);
 
             var bomLines = rawRequests != null && i < rawRequests.Count
                 ? (rawRequests[i].BomLines ?? [])
@@ -218,13 +220,19 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
         return variants;
     }
 
-    private async Task<string> GenerateUniqueVariantSkuAsync(string productName, string variantName)
+    private async Task<string> GenerateUniqueVariantSkuAsync(string productName, string variantName, HashSet<string>? usedInBatch = null)
     {
-        var prefix = BuildSkuPrefix($"{productName} {variantName}");
+        // variantName already contains product name (built on frontend as "productName - unitName - attrs")
+        // so use variantName alone to avoid doubling the product name in the prefix
+        var skuSource = variantName.StartsWith(productName, StringComparison.OrdinalIgnoreCase)
+            ? variantName
+            : $"{productName} {variantName}";
+        var prefix = BuildSkuPrefix(skuSource);
         for (var i = 1; i <= 999; i++)
         {
             var candidate = $"{prefix}-{i:000}";
-            if (!await _productRepository.ExistsVariantSkuCodeAsync(candidate))
+            if ((usedInBatch == null || !usedInBatch.Contains(candidate))
+                && !await _productRepository.ExistsVariantSkuCodeAsync(candidate))
                 return candidate;
         }
 
@@ -287,25 +295,10 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
         p.BaseUnit, p.WeightValue, p.WeightUnit, p.IsVariantParent,
         p.IsActive, p.IsDeleted, p.CreatedAt, p.SyncedToStoreAt,
         p.ProductType.ToString(),
-        FilterSkus(p.Skus, scope).Select(s => MapSku(s, p)).ToList(),
+        new List<ProductSkuResponse>(),
         p.Images.Where(i => !i.IsDeleted).OrderBy(i => i.SortOrder).Select(MapImageResponse).ToList(),
         p.Units.Where(u => !u.IsDeleted).Select(MapUnitResponse).ToList(),
         p.Variants.Where(v => !v.IsDeleted).Select(MapVariantResponse).ToList());
-
-    private static IEnumerable<ProductSku> FilterSkus(IEnumerable<ProductSku> skus, CatalogViewScope scope)
-    {
-        var items = skus.Where(s => !s.IsDeleted);
-        return scope == CatalogViewScope.Store
-            ? items.Where(s => s.SyncedToStoreAt != null)
-            : items;
-    }
-
-    private static ProductSkuResponse MapSku(ProductSku s, Product p) => new(
-        s.Id, s.ProductId, p.Name, p.CategoryId, p.Category?.Name ?? string.Empty,
-        s.SkuCode, s.Barcode, s.PackagingType,
-        s.WeightInGrams, s.BasePrice, s.CostPrice, s.RetailPrice,
-        s.MinStock, s.MaxStock, s.IsSellable, s.AllowRewardPoints,
-        s.ImageUrl, s.IsActive, s.CreatedAt, s.SyncedToStoreAt);
 
     private static ProductImageResponse MapImageResponse(ProductImage i) => new(
         i.Id, i.ProductId, i.ImageUrl, i.AltText, i.SortOrder, i.IsThumbnail);

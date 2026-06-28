@@ -89,7 +89,7 @@ public class ProductRepository(ProductDbContext _db) : IProductRepository
     {
         var pending = await _db.Products
             .Where(p => !p.IsDeleted && p.SyncedToStoreAt == null
-                && p.Skus.Any(s => !s.IsDeleted && s.SyncedToStoreAt != null))
+                && p.Variants.Any(v => !v.IsDeleted && v.SyncedToStoreAt != null))
             .ToListAsync(ct);
 
         foreach (var product in pending)
@@ -102,6 +102,29 @@ public class ProductRepository(ProductDbContext _db) : IProductRepository
             await _db.SaveChangesAsync(ct);
 
         return pending.Count;
+    }
+
+    public Task<int> CountPendingVariantSyncAsync(CancellationToken ct = default) =>
+        _db.ProductVariants.CountAsync(v => !v.IsDeleted && v.IsActive && v.SyncedToStoreAt == null, ct);
+
+    public async Task<List<ProductVariant>> SyncPendingVariantsToStoreAsync(DateTime syncedAt, CancellationToken ct = default)
+    {
+        var pending = await _db.ProductVariants
+            .Include(v => v.Product)
+                .ThenInclude(p => p.Category)
+            .Where(v => !v.IsDeleted && v.IsActive && v.SyncedToStoreAt == null)
+            .ToListAsync(ct);
+
+        foreach (var v in pending)
+        {
+            v.SyncedToStoreAt = syncedAt;
+            v.UpdatedAt = syncedAt;
+        }
+
+        if (pending.Count > 0)
+            await _db.SaveChangesAsync(ct);
+
+        return pending;
     }
 
     public async Task<bool> ExistsNameAsync(string name, Guid? excludeProductId = null, bool includeDeleted = true)
@@ -167,7 +190,6 @@ public class ProductRepository(ProductDbContext _db) : IProductRepository
 
     private static IQueryable<Product> IncludeAggregate(IQueryable<Product> query) =>
         query.Include(p => p.Category)
-            .Include(p => p.Skus)
             .Include(p => p.Images)
             .Include(p => p.Units)
             .Include(p => p.Variants)

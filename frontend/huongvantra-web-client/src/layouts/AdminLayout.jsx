@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import ModuleRouteGuard from '../app/ModuleRouteGuard.jsx'
 import StockAdjustmentBatchBar from '../features/inventory/components/StockAdjustmentBatchBar.jsx'
+import LowStockBadge from '../features/inventory/components/LowStockBadge.jsx'
 import Sidebar from '../components/shared/Sidebar.jsx'
 import { getNavigationItemsForSession } from '../app/navigation.js'
 import { isWarehouseUserRole } from '../features/auth/services/authApi.js'
@@ -137,7 +138,14 @@ function AdminLayout() {
               <p className="truncate text-sm font-bold text-[#1b1c17]">Hương Vân Trà</p>
               <p className="truncate text-xs text-[#717971]">Quản trị hệ thống</p>
             </div>
+            {isWarehouseUserRole(authSession?.roles ?? []) && <LowStockBadge />}
           </header>
+
+          {isWarehouseUserRole(authSession?.roles ?? []) && (
+            <div className="hidden lg:flex shrink-0 items-center justify-end border-b border-[#c1c9c0]/50 bg-[#fbf9f1] px-4 py-2">
+              <LowStockBadge />
+            </div>
+          )}
 
           <main
             className={`relative flex min-h-0 min-w-0 flex-1 flex-col p-3 sm:p-4 lg:p-6 xl:p-8 ${

@@ -80,9 +80,12 @@ export function mapProductSku(item) {
     categoryName: item.categoryName ?? item.CategoryName ?? '',
     skuCode: item.skuCode ?? item.SkuCode ?? '',
     barcode: item.barcode ?? item.Barcode ?? '',
-    packagingType: item.packagingType ?? item.PackagingType ?? '',
+    // packagingType is now VariantName — keep packagingType field for compatibility
+    packagingType: item.packagingType ?? item.PackagingType ?? item.variantName ?? item.VariantName ?? '',
+    variantName: item.variantName ?? item.VariantName ?? item.packagingType ?? item.PackagingType ?? '',
     weightInGrams: Number(item.weightInGrams ?? item.WeightInGrams ?? 0),
-    basePrice: Number(item.basePrice ?? item.BasePrice ?? 0),
+    // basePrice is now RetailPrice — keep basePrice field for compatibility
+    basePrice: Number(item.basePrice ?? item.BasePrice ?? item.retailPrice ?? item.RetailPrice ?? 0),
     costPrice: Number(item.costPrice ?? item.CostPrice ?? item.basePrice ?? item.BasePrice ?? 0),
     retailPrice: Number(item.retailPrice ?? item.RetailPrice ?? item.basePrice ?? item.BasePrice ?? 0),
     minStock: numberOrNull(item.minStock ?? item.MinStock),

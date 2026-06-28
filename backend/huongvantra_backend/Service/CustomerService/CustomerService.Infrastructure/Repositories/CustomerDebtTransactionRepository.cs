@@ -23,13 +23,20 @@ public class CustomerDebtTransactionRepository : ICustomerDebtTransactionReposit
 
     public async Task<(decimal TotalIncrease, decimal TotalDecrease, int Count)> GetSummaryAsync(Guid customerId, CancellationToken ct = default)
     {
-        var items = await _db.CustomerDebtTransactions
+        var result = await _db.CustomerDebtTransactions
             .Where(t => t.CustomerId == customerId)
-            .ToListAsync(ct);
+            .GroupBy(_ => customerId)
+            .Select(g => new
+            {
+                TotalIncrease = g.Where(t => t.Type == DebtTransactionType.IncreaseDebt).Sum(t => t.Amount),
+                TotalDecrease = g.Where(t => t.Type == DebtTransactionType.DecreaseDebt).Sum(t => t.Amount),
+                Count = g.Count()
+            })
+            .FirstOrDefaultAsync(ct);
 
-        var increase = items.Where(t => t.Type == DebtTransactionType.IncreaseDebt).Sum(t => t.Amount);
-        var decrease = items.Where(t => t.Type == DebtTransactionType.DecreaseDebt).Sum(t => t.Amount);
-        return (increase, decrease, items.Count);
+        return result is null
+            ? (0m, 0m, 0)
+            : (result.TotalIncrease, result.TotalDecrease, result.Count);
     }
 
     public async Task<decimal> GetLedgerBalanceAsync(Guid customerId, CancellationToken ct = default)

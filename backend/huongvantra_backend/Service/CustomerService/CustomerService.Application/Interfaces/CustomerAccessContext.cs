@@ -8,5 +8,5 @@ public record CustomerAccessContext(
     public Guid? AssignedSaleFilter => CanViewAllCustomers ? null : UserId;
 
     public bool CanAccessCustomer(Guid? assignedSaleId) =>
-        CanViewAllCustomers || (assignedSaleId.HasValue && assignedSaleId.Value == UserId);
+        CanViewAllCustomers || !assignedSaleId.HasValue || assignedSaleId.Value == UserId;
 }

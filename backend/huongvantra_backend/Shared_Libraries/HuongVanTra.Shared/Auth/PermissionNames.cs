@@ -18,6 +18,9 @@ public static class PermissionNames
     /// <summary>Admin hoặc Thủ kho — tạo/sửa sản phẩm, danh mục, SKU.</summary>
     public const string CatalogManagement = "CATALOG_MANAGEMENT";
 
+    /// <summary>POS cashier (CREATE_ORDER) hoặc admin (CREATE_CUSTOMER) đều được trừ công nợ khi checkout.</summary>
+    public const string ApplyDebtPayment = "APPLY_DEBT_PAYMENT";
+
     public static readonly string[] All =
     [
         CreateOrder,

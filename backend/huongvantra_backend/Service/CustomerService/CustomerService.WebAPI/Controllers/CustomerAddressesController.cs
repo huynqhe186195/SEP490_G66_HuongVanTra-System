@@ -128,9 +128,8 @@ public class CustomerAddressesController : ControllerBase
 
     private async Task EnsureCorporateMutationAllowedAsync(Guid customerId, CancellationToken ct)
     {
-        var customer = await _customerRepo.GetByIdAsync(customerId, ct);
-        if (customer is null)
-            return;
+        var customer = await _customerRepo.GetByIdAsync(customerId, ct)
+            ?? throw new CustomerNotFoundException(customerId);
 
         if (customer.CustomerGroup == CustomerGroup.DoanhNghiep
             && !User.HasPermission(PermissionNames.ManageRole))

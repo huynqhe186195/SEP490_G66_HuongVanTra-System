@@ -144,7 +144,7 @@ public class CustomersController : ControllerBase
     }
 
     [HttpPost("{id:guid}/debt-payments")]
-    [Authorize(Policy = PermissionNames.CreateCustomer)]
+    [Authorize(Policy = PermissionNames.ApplyDebtPayment)]
     public async Task<IActionResult> ApplyDebtPayment(Guid id, [FromBody] ApplyDebtPaymentRequest request, CancellationToken ct = default)
     {
         var result = await _logic.ApplyDebtPaymentAsync(id, request, AccessContext(), ct);
@@ -184,7 +184,7 @@ public class CustomersController : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
-    [Authorize(Policy = PermissionNames.ViewAllCustomers)]
+    [Authorize(Policy = PermissionNames.ManageRole)]
     public async Task<IActionResult> Delete(Guid id, CancellationToken ct = default)
     {
         await _logic.DeleteAsync(id, AccessContext(), ct);
@@ -192,7 +192,7 @@ public class CustomersController : ControllerBase
     }
 
     [HttpPost("{id:guid}/restore")]
-    [Authorize(Policy = PermissionNames.ViewAllCustomers)]
+    [Authorize(Policy = PermissionNames.ManageRole)]
     public async Task<IActionResult> Restore(Guid id, CancellationToken ct = default)
     {
         var result = await _logic.RestoreAsync(id, AccessContext(), ct);

@@ -26,4 +26,5 @@ public interface ICustomerRepository
     Task<IEnumerable<Customer>> GetAllDeletedAsync(int page, int pageSize, Guid? assignedSaleId = null, CancellationToken ct = default);
     Task<int> CountDeletedAsync(Guid? assignedSaleId = null, CancellationToken ct = default);
     Task<int> SaveChangesAsync(CancellationToken ct = default);
+    void ClearChangeTracker();
 }

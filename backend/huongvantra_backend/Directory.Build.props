@@ -3,4 +3,11 @@
   <PropertyGroup>
     <DisableImplicitNuGetFallbackFolder>true</DisableImplicitNuGetFallbackFolder>
   </PropertyGroup>
+
+  <!-- Exclude obj/ and bin/ from dotnet watch polling to prevent duplicate-key crash
+       when Windows-built artifacts are visible inside the Linux container via bind mount. -->
+  <ItemGroup>
+    <Watch Remove="**/obj/**" />
+    <Watch Remove="**/bin/**" />
+  </ItemGroup>
 </Project>

@@ -130,9 +130,9 @@ public class PriceBookLogic(IPriceBookRepository _priceBookRepository)
         var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var entry in entriesValue ?? [])
         {
-            var targetCount = new[] { entry.SkuId, entry.VariantId, entry.UnitId }.Count(v => v.HasValue && v.Value != Guid.Empty);
+            var targetCount = new[] { entry.VariantId, entry.UnitId }.Count(v => v.HasValue && v.Value != Guid.Empty);
             if (targetCount != 1)
-                errors.Add("Mỗi dòng bảng giá phải chọn đúng một SKU, biến thể hoặc đơn vị tính.");
+                errors.Add("Mỗi dòng bảng giá phải chọn đúng một biến thể hoặc đơn vị tính.");
             if (entry.Price <= 0)
                 errors.Add("Giá trong bảng giá phải lớn hơn 0.");
             if (decimal.Round(entry.Price, 2) != entry.Price)
@@ -140,12 +140,12 @@ public class PriceBookLogic(IPriceBookRepository _priceBookRepository)
             if (entry.StartsAt.HasValue && entry.EndsAt.HasValue && entry.EndsAt.Value < entry.StartsAt.Value)
                 errors.Add("Ngày kết thúc dòng bảng giá phải sau ngày bắt đầu.");
 
-            var key = $"{entry.SkuId}:{entry.VariantId}:{entry.UnitId}";
+            var key = $"{entry.VariantId}:{entry.UnitId}";
             if (!keys.Add(key))
                 errors.Add("Dòng bảng giá bị trùng đối tượng áp dụng.");
 
             entries.Add(new ValidatedPriceBookEntryInput(
-                entry.SkuId, entry.VariantId, entry.UnitId,
+                entry.VariantId, entry.UnitId,
                 entry.Price, entry.IsActive, entry.StartsAt, entry.EndsAt));
         }
 
@@ -155,7 +155,6 @@ public class PriceBookLogic(IPriceBookRepository _priceBookRepository)
 
     private static PriceBookEntry MapEntry(ValidatedPriceBookEntryInput input) => new()
     {
-        SkuId = input.SkuId,
         VariantId = input.VariantId,
         UnitId = input.UnitId,
         Price = input.Price,
@@ -169,7 +168,7 @@ public class PriceBookLogic(IPriceBookRepository _priceBookRepository)
         p.Entries.Where(e => !e.IsDeleted).Select(MapEntryResponse).ToList());
 
     private static PriceBookEntryResponse MapEntryResponse(PriceBookEntry e) => new(
-        e.Id, e.PriceBookId, e.SkuId, e.VariantId, e.UnitId,
+        e.Id, e.PriceBookId, e.VariantId, e.UnitId,
         e.Price, e.IsActive, e.StartsAt, e.EndsAt);
 
     private static string BuildCode(string value)
@@ -199,7 +198,6 @@ public record ValidatedPriceBookInput(
     List<ValidatedPriceBookEntryInput> Entries);
 
 public record ValidatedPriceBookEntryInput(
-    Guid? SkuId,
     Guid? VariantId,
     Guid? UnitId,
     decimal Price,

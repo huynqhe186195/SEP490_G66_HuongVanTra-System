@@ -14,6 +14,8 @@ public interface IProductRepository
     Task<int> CountPendingStoreSyncAsync(CancellationToken ct = default);
     Task<int> SyncPendingToStoreAsync(DateTime syncedAt, CancellationToken ct = default);
     Task<int> SyncProductsWithSyncedSkusAsync(DateTime syncedAt, CancellationToken ct = default);
+    Task<int> CountPendingVariantSyncAsync(CancellationToken ct = default);
+    Task<List<Domain.Entities.ProductVariant>> SyncPendingVariantsToStoreAsync(DateTime syncedAt, CancellationToken ct = default);
     Task<Product?> GetByIdAsync(Guid id, bool includeDeleted = false);
     Task<bool> ExistsNameAsync(string name, Guid? excludeProductId = null, bool includeDeleted = true);
     Task<bool> ExistsVariantSkuCodeAsync(string skuCode, Guid? excludeVariantId = null, Guid? excludeProductId = null);

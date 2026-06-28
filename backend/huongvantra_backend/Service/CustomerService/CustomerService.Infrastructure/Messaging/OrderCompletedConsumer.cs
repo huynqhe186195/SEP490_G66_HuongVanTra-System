@@ -30,6 +30,7 @@ public class OrderCompletedConsumer : IConsumer<OrderCompletedEvent>
             msg.CustomerId,
             msg.TotalAmount,
             msg.DebtAmount,
+            msg.CodDebtSettlementJson,
             context.CancellationToken);
 
         if (result.SkippedDuplicate)

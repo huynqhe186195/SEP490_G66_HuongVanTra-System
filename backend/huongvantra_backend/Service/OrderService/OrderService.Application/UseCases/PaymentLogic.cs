@@ -29,6 +29,9 @@ public class PaymentLogic(
         if (payment.PaymentMethod != PaymentMethod.COD)
             throw new OrderValidationException("Chỉ có thể xác nhận thanh toán COD.");
 
+        if (payment.IsCodVerified)
+            throw new OrderValidationException("Đơn COD này đã được xác nhận thu tiền rồi.");
+
         var order = await _orderRepo.GetByIdAsync(payment.OrderId, ct)
             ?? throw new OrderNotFoundException(payment.OrderId);
         EnsureCanAccess(order, access);
@@ -79,10 +82,19 @@ public class PaymentLogic(
             var paidForOrder = Math.Min(collected, order.FinalAmount);
             var debtAmount = Math.Max(0, order.FinalAmount - paidForOrder);
 
+            // Ưu tiên settlement JSON được truyền lên lúc verify (cashier có thể cấu hình lại).
+            // Fallback về giá trị đã lưu khi tạo đơn COD nếu cashier không truyền mới.
+            var settlementJson = !string.IsNullOrWhiteSpace(req.DebtSettlementJson)
+                ? req.DebtSettlementJson
+                : string.IsNullOrWhiteSpace(payment.CodDebtSettlementJson)
+                    ? null
+                    : payment.CodDebtSettlementJson;
+
             await _eventPublisher.PublishOrderCompletedAsync(
                 order.Id, order.OrderCode, order.CustomerId.Value,
                 order.FinalAmount, debtAmount,
                 (order.OrderDetails ?? []).Select(d => (d.SkuId, d.Quantity)),
+                settlementJson,
                 ct);
         }
 

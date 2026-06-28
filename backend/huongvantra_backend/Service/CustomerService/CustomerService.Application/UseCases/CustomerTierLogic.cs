@@ -31,6 +31,13 @@ public class CustomerTierLogic
 
     public async Task<CustomerTierResponse> CreateAsync(CreateCustomerTierRequest request, CancellationToken ct = default)
     {
+        if (string.IsNullOrWhiteSpace(request.TierName))
+            throw new ArgumentException("Tên hạng thành viên là bắt buộc.");
+        if (request.MinSpendingThreshold < 0)
+            throw new ArgumentException("Ngưỡng chi tiêu tối thiểu không được âm.");
+        if (request.DiscountPercent is < 0 or > 100)
+            throw new ArgumentException("Phần trăm giảm giá phải trong khoảng 0–100.");
+
         var tier = new CustomerTier
         {
             TierName = request.TierName.Trim(),
@@ -48,6 +55,13 @@ public class CustomerTierLogic
 
     public async Task<CustomerTierResponse?> UpdateAsync(int id, UpdateCustomerTierRequest request, CancellationToken ct = default)
     {
+        if (string.IsNullOrWhiteSpace(request.TierName))
+            throw new ArgumentException("Tên hạng thành viên là bắt buộc.");
+        if (request.MinSpendingThreshold < 0)
+            throw new ArgumentException("Ngưỡng chi tiêu tối thiểu không được âm.");
+        if (request.DiscountPercent is < 0 or > 100)
+            throw new ArgumentException("Phần trăm giảm giá phải trong khoảng 0–100.");
+
         var tier = await _tierRepo.GetByIdIncludingInactiveAsync(id, ct);
         if (tier == null) return null;
 

@@ -13,7 +13,7 @@ public class CostPriceUpdatedConsumer(ProductDbContext _db, ILogger<CostPriceUpd
         var msg = context.Message;
         _logger.LogInformation("Received CostPriceUpdatedEvent for SkuId {SkuId} with new CostPrice {NewCostPrice}", msg.SkuId, msg.NewCostPrice);
 
-        var sku = await _db.ProductSkus.FirstOrDefaultAsync(s => s.Id == msg.SkuId, context.CancellationToken);
+        var sku = await _db.ProductVariants.FirstOrDefaultAsync(s => s.Id == msg.SkuId, context.CancellationToken);
         if (sku != null)
         {
             sku.CostPrice = msg.NewCostPrice;

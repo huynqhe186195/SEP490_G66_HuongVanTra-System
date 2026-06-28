@@ -6,6 +6,7 @@ import { AUTH_SESSION_CHANGED_EVENT, loadAuthSession } from '../../auth/services
 import { canAdjustStoreStock, canCreateCatalog } from '../../auth/utils/permissions.js'
 import ProductBomConfigModal from '../components/ProductBomConfigModal.jsx'
 import ProductSkusPanel from '../components/ProductSkusPanel.jsx'
+import ProductVariantsPanel from '../components/ProductVariantsPanel.jsx'
 import { createCategory, fetchCategories } from '../services/categoriesApi.js'
 import { createBrand, fetchBrands } from '../services/brandsApi.js'
 import { createAttributeName, fetchAttributeNames } from '../services/attributeNamesApi.js'
@@ -84,6 +85,19 @@ function buildVariantKey(unit, attributes) {
 
 function normalizeText(value) {
   return String(value || '').trim()
+}
+
+// Replicate backend BuildSkuPrefix: remove Vietnamese diacritics, uppercase, hyphenate, max 20 chars
+function buildSkuPrefix(text) {
+  return String(text || '')
+    .replace(/[đĐ]/g, (c) => (c === 'đ' ? 'd' : 'D'))
+    .normalize('NFD')
+    .replace(/\p{Mn}/gu, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 20)
+    .replace(/-+$/, '')
 }
 
 function FieldError({ message }) {
@@ -357,6 +371,7 @@ function ProductFormPage({ mode }) {
   const [fieldErrors, setFieldErrors] = useState({})
   const [variantDrafts, setVariantDrafts] = useState({})
   const [productType, setProductType] = useState(PRODUCT_TYPES.THANH_PHAM)
+  const [productVariants, setProductVariants] = useState([])
   const [bomByVariant, setBomByVariant] = useState({})
   const [bomModalVariant, setBomModalVariant] = useState(null)
   const [showCreateCategory, setShowCreateCategory] = useState(false)
@@ -478,6 +493,7 @@ function ProductFormPage({ mode }) {
           units: mappedUnits,
         }))
         setProductType(product.productType || PRODUCT_TYPES.THANH_PHAM)
+        setProductVariants(product.variants ?? [])
       } catch (error) {
         if (mounted) showError(error.message)
       } finally {
@@ -522,18 +538,21 @@ function ProductFormPage({ mode }) {
         const key = buildVariantKey(unit, attributes)
         const draft = variantDrafts[key] || {}
         const costPrice = toNumber(form.costPrice) * unit.conversionRate
+        const variantLabel = [unit.unitName, ...attributes.map((a) => a.value)].filter(Boolean).join(' ')
+        const skuSuggestion = buildSkuPrefix(`${form.name} ${variantLabel}`)
         return {
           key,
           unit,
           attributes,
           skuCode: draft.skuCode ?? '',
+          skuSuggestion,
           barcode: draft.barcode ?? (unit.isBaseUnit ? form.barcode : unit.barcode) ?? '',
           costPrice,
           salePrice: draft.salePrice ?? unit.price ?? form.salePrice,
         }
       }),
     )
-  }, [form.units, form.costPrice, form.salePrice, form.barcode, validAttributes, variantDrafts])
+  }, [form.units, form.costPrice, form.salePrice, form.barcode, form.name, validAttributes, variantDrafts])
 
   useEffect(() => {
     setVariantDrafts((previous) => {
@@ -548,6 +567,29 @@ function ProductFormPage({ mode }) {
       return next
     })
   }, [form.units, validAttributes])
+
+  // Sync default sale price → base unit price (create mode only)
+  useEffect(() => {
+    if (isEditMode) return
+    const price = toNumber(form.salePrice, 0)
+    if (price <= 0) return
+    setForm((prev) => {
+      const baseUnit = prev.units.find((u) => u.isBaseUnit) || prev.units[0]
+      if (!baseUnit || toNumber(baseUnit.price) === price) return prev
+      return {
+        ...prev,
+        units: prev.units.map((unit) => {
+          const rate = toNumber(unit.conversionRate, 1) || 1
+          return { ...unit, price: String(Math.round(price * rate)) }
+        }),
+      }
+    })
+    setVariantDrafts((prev) => {
+      const next = {}
+      for (const k of Object.keys(prev)) next[k] = { ...prev[k], salePrice: undefined }
+      return next
+    })
+  }, [form.salePrice, isEditMode])
 
   function updateField(key, value) {
     if (key === 'name') setDuplicateProductName('')
@@ -575,7 +617,7 @@ function ProductFormPage({ mode }) {
     setFieldErrors((prev) => ({ ...prev, units: undefined }))
   }
 
-  // When base unit price changes, recalc all non-base unit prices
+  // When base unit price changes, recalc all non-base unit prices and reset variant sale prices
   function updateBaseUnitPrice(index, value) {
     setForm((prev) => {
       const basePrice = toNumber(value, 0)
@@ -588,6 +630,11 @@ function ProductFormPage({ mode }) {
           return { ...unit, price: String(basePrice * rate) }
         }),
       }
+    })
+    setVariantDrafts((prev) => {
+      const next = {}
+      for (const k of Object.keys(prev)) next[k] = { ...prev[k], salePrice: undefined }
+      return next
     })
     setFieldErrors((prev) => ({ ...prev, units: undefined }))
   }
@@ -825,7 +872,7 @@ function ProductFormPage({ mode }) {
           isThumbnail: Boolean(image.isThumbnail),
         })),
       units: cleanUnits,
-      variants: isFinishedProduct ? variants : [],
+      variants,
       defaultPricing: {
         costPrice: toNumber(form.costPrice),
         salePrice: toNumber(form.salePrice),
@@ -1209,7 +1256,6 @@ function ProductFormPage({ mode }) {
         </section>
 
         {isFinishedProduct ? (
-          <>
             <section className="rounded-[1rem] bg-white p-4 shadow-sm sm:p-6 lg:p-8">
               <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
                 <div>
@@ -1266,127 +1312,15 @@ function ProductFormPage({ mode }) {
                 ))}
               </div>
             </section>
-
-            {/* Section 5: only show when there are 2+ rows (i.e. multiple units or attributes) */}
-            {form.units.filter((u) => u.unitName?.trim()).length >= 2 ? (
-              <section className="rounded-[1rem] bg-white p-4 shadow-sm sm:p-6 lg:p-8">
-                <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
-                  <div>
-                    <h2 className="text-lg font-bold text-slate-800">Hàng cùng loại</h2>
-                    <p className="text-sm text-slate-500">Bảng sinh từ Đơn vị tính × Thuộc tính. Giá vốn tự tính theo quy đổi. Giá bán có thể ghi đè — nhấn <span className="material-symbols-outlined align-[-3px] text-[13px]">restart_alt</span> để về giá tự tính.</p>
-                  </div>
-                  <span className="rounded-full bg-[#f0eee6] px-3 py-1 text-sm font-bold text-slate-700">{generatedRows.length} dòng</span>
-                </div>
-                <div className="mt-5 overflow-x-auto rounded-xl border border-slate-200">
-                  <table className="w-full table-fixed text-left text-sm">
-                    <colgroup>
-                      <col className="w-[18%]" />
-                      {validAttributes.length > 0 ? <col className="w-[22%]" /> : null}
-                      <col className="w-[8%]" />
-                      <col className="w-[18%]" />
-                      <col className="w-[16%]" />
-                      <col className={validAttributes.length > 0 ? 'w-[12%]' : 'w-[24%]'} />
-                      <col className="w-[8%]" />
-                    </colgroup>
-                    <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-                      <tr>
-                        <th className="px-3 py-3">Đơn vị</th>
-                        {validAttributes.length > 0 ? <th className="px-3 py-3">Thuộc tính</th> : null}
-                        <th className="px-3 py-3 text-center">Q. đổi</th>
-                        <th className="px-3 py-3">Mã hàng</th>
-                        <th className="px-3 py-3">Giá vốn</th>
-                        <th className="px-3 py-3">Giá bán</th>
-                        <th className="px-3 py-3 text-center">BOM</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {generatedRows.map((row) => {
-                        const bomCount = bomByVariant[row.key]?.length ?? 0
-                        const autoSalePrice = Math.round(baseUnitPrice * row.unit.conversionRate)
-                        const draftSalePrice = toNumber(variantDrafts[row.key]?.salePrice ?? autoSalePrice)
-                        const isOverridden = draftSalePrice !== autoSalePrice
-                        return (
-                          <tr key={row.key} className="hover:bg-[#fbf9f1]">
-                            <td className="px-3 py-2.5 font-bold text-[#356647]">{row.unit.unitName}</td>
-                            {validAttributes.length > 0 ? (
-                              <td className="px-3 py-2.5">
-                                {row.attributes.length ? (
-                                  <div className="flex max-h-20 flex-wrap gap-1 overflow-y-auto">
-                                    {row.attributes.map((attribute) => (
-                                      <span key={`${row.key}-${attribute.name}-${attribute.value}`} className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">
-                                        {attribute.name}: {attribute.value}
-                                      </span>
-                                    ))}
-                                  </div>
-                                ) : (
-                                  <span className="text-slate-400">—</span>
-                                )}
-                              </td>
-                            ) : null}
-                            <td className="px-3 py-2.5 text-center text-slate-600">{row.unit.conversionRate}</td>
-                            <td className="px-3 py-2.5">
-                              <input className="w-full rounded-lg border border-slate-200 px-2 py-1.5 font-mono text-sm" placeholder="Tự động" value={row.skuCode} onChange={(event) => updateVariantDraft(row.key, 'skuCode', event.target.value)} />
-                            </td>
-                            <td className="px-3 py-2.5">
-                              <input readOnly className="w-full rounded-lg border border-slate-200 bg-slate-100 px-2 py-1.5 text-sm text-slate-500" value={formatCurrency(row.costPrice)} />
-                            </td>
-                            <td className="px-3 py-2.5">
-                              <div className="flex items-center gap-1">
-                                <CurrencyInput
-                                  className={`w-full rounded-lg border px-2 py-1.5 text-sm font-semibold ${isOverridden ? 'border-amber-400 bg-amber-50 text-amber-800' : 'border-slate-100 bg-slate-50 text-[#356647]'}`}
-                                  value={String(draftSalePrice)}
-                                  onChange={(v) => updateVariantDraft(row.key, 'salePrice', v)}
-                                />
-                                {isOverridden ? (
-                                  <button
-                                    type="button"
-                                    title="Về giá tự tính"
-                                    onClick={() => updateVariantDraft(row.key, 'salePrice', String(autoSalePrice))}
-                                    className="shrink-0 rounded-md p-1 text-amber-500 hover:bg-amber-100"
-                                  >
-                                    <span className="material-symbols-outlined text-[16px]">restart_alt</span>
-                                  </button>
-                                ) : null}
-                              </div>
-                            </td>
-                            <td className="px-3 py-2.5 text-center">
-                              <button
-                                type="button"
-                                onClick={() => openBomModal(row)}
-                                className="inline-flex items-center gap-1 rounded-lg border border-[#356647]/30 bg-[#356647]/5 px-2.5 py-1.5 text-xs font-bold text-[#356647] hover:bg-[#356647]/10"
-                              >
-                                <span className="material-symbols-outlined text-[15px]">settings</span>
-                                {bomCount > 0 ? (
-                                  <span className="rounded-full bg-[#356647] px-1.5 py-0.5 text-[10px] text-white">{bomCount}</span>
-                                ) : null}
-                              </button>
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </section>
-            ) : null}
-          </>
         ) : null}
       </form>
 
         {isEditMode && id ? (
           <section className="rounded-[1rem] bg-white p-4 shadow-sm sm:p-6 lg:p-8">
-            <ProductSkusPanel productId={id} productName={form.name} canManage={canEdit} canAdjustStock={canAdjustStock} warehouseStockView={canEdit} layout="column" />
+            <ProductVariantsPanel variants={productVariants} productName={form.name} />
           </section>
         ) : null}
       </div>
-
-      <ProductBomConfigModal
-        isOpen={Boolean(bomModalVariant)}
-        variant={bomModalVariant}
-        initialLines={bomModalVariant ? (bomByVariant[bomModalVariant.rowKey] ?? []) : []}
-        onClose={() => setBomModalVariant(null)}
-        onConfirm={handleBomConfirm}
-      />
 
       <CreateCategoryModal
         isOpen={showCreateCategory}

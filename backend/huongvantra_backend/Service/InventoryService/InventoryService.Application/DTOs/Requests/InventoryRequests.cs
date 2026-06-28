@@ -6,6 +6,8 @@ public record AdjustWarehouseStockRequest(int QuantityDelta);
 
 public record CancelStockDeductRequest(string? Reason);
 
+public record UpdateLowStockThresholdRequest(int Threshold);
+
 public record CreateStockAdjustmentRequestItem(
     Guid SkuId,
     string? SkuCode,
@@ -31,3 +33,17 @@ public record CreateWarehouseBatchRequest(
     DateTime? ExpiresAt,
     string? Note,
     List<CreateWarehouseBatchItemRequest> Items);
+
+public record ProductionOrderLineInput(
+    Guid MaterialSkuId,
+    string MaterialSkuCode,
+    string MaterialSnapshotName,
+    int PlannedQuantity);
+
+public record CreateProductionOrderRequest(
+    Guid FinishedSkuId,
+    string FinishedSkuCode,
+    string FinishedSkuSnapshotName,
+    int Quantity,
+    string? Note,
+    List<ProductionOrderLineInput> Lines);

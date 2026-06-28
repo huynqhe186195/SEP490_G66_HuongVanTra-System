@@ -1,8 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { showError } from '../../../app/toast.js'
 import ProductImage from './ProductImage.jsx'
-import { fetchSkusByProductId } from '../services/productSkusApi.js'
 import {
   formatProductCreatedAt,
   formatProductPrice,
@@ -11,6 +9,7 @@ import {
   getProductBrandLabel,
   getProductStatusMeta,
   pickProductImageUrl,
+  summarizeProductVariants,
   summarizeProductSkus,
 } from '../utils/productDisplay.js'
 
@@ -49,40 +48,18 @@ export default function ProductExpandedPanel({
   isHiding = false,
 }) {
   const [activeTab, setActiveTab] = useState('info')
-  const [skus, setSkus] = useState(() => product?.skus ?? [])
-  const [isLoadingSkus, setIsLoadingSkus] = useState(false)
 
   useEffect(() => {
     setActiveTab('info')
-    setSkus(product?.skus ?? [])
-  }, [product?.id, product?.skus])
-
-  useEffect(() => {
-    if (!product?.id) return undefined
-    let mounted = true
-    async function load() {
-      try {
-        setIsLoadingSkus(true)
-        const items = await fetchSkusByProductId(product.id)
-        if (mounted) setSkus(items)
-      } catch (error) {
-        if (mounted) {
-          showError(error.message)
-          setSkus(product.skus ?? [])
-        }
-      } finally {
-        if (mounted) setIsLoadingSkus(false)
-      }
-    }
-    load()
-    return () => {
-      mounted = false
-    }
-  }, [product?.id, product?.skus])
+  }, [product?.id])
 
   if (!product) return null
 
-  const skuSummary = summarizeProductSkus(skus)
+  // Use variants as the canonical SKU list; fall back to old skus for legacy data
+  const skus = product.variants?.length ? product.variants : (product?.skus ?? [])
+  const skuSummary = product.variants?.length
+    ? summarizeProductVariants(product.variants)
+    : summarizeProductSkus(product?.skus ?? [])
   const status = getProductStatusMeta(product.isActive, product.isDeleted)
   const imageUrl = pickProductImageUrl(product)
   const primarySku = skus.find((sku) => sku.isActive) || skus[0]
@@ -219,13 +196,7 @@ export default function ProductExpandedPanel({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {isLoadingSkus ? (
-                <tr>
-                  <td colSpan={canAdjustStock ? 5 : 4} className="px-4 py-6 text-center text-slate-500">
-                    Đang tải...
-                  </td>
-                </tr>
-              ) : skus.length === 0 ? (
+              {skus.length === 0 ? (
                 <tr>
                   <td colSpan={canAdjustStock ? 5 : 4} className="px-4 py-6 text-center text-slate-500">
                     Chưa có SKU.
@@ -237,7 +208,7 @@ export default function ProductExpandedPanel({
                   return (
                   <tr key={sku.id} className={rowClass(sku.id)}>
                     <td className="px-4 py-2.5 font-mono text-xs font-bold text-[#356647]">{sku.skuCode}</td>
-                    <td className="px-4 py-2.5">{sku.packagingType || '—'}</td>
+                    <td className="px-4 py-2.5">{sku.variantName || sku.packagingType || '—'}</td>
                     <td className="px-4 py-2.5 text-right font-medium">{formatProductPrice(sku.retailPrice || sku.basePrice)}</td>
                     <td className="px-4 py-2.5 text-right font-semibold text-[#356647]">
                       {formatStockQuantity(stockBySkuId.get(sku.id) ?? 0)}

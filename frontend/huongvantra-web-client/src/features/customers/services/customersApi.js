@@ -287,10 +287,10 @@ export async function fetchCustomerById(customerId) {
   return mapCustomerDetail(data)
 }
 
-export async function fetchCustomerByPhone(phone) {
+export async function fetchCustomerByPhone(phone, options = {}) {
   const query = new URLSearchParams()
   query.set('phone', String(phone || '').trim())
-  const data = await apiRequestAuth(`/api/customers/lookup?${query.toString()}`, { method: 'GET' })
+  const data = await apiRequestAuth(`/api/customers/lookup?${query.toString()}`, { method: 'GET', ...options })
   return mapCustomerDetail(data)
 }
 

@@ -6,6 +6,7 @@ using ProductService.Application.UseCases;
 using ProductService.Infrastructure.Data;
 using ProductService.Infrastructure.Messaging;
 using ProductService.Infrastructure.Repositories;
+using ProductService.Infrastructure.UseCases;
 using ProductService.WebAPI.Middlewares;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -29,7 +30,6 @@ builder.Services.AddScoped<ICategoryRepository, CategoryRepository>();
 builder.Services.AddScoped<IBrandRepository, BrandRepository>();
 builder.Services.AddScoped<IAttributeNameRepository, AttributeNameRepository>();
 builder.Services.AddScoped<IProductRepository, ProductRepository>();
-builder.Services.AddScoped<IProductSkuRepository, ProductSkuRepository>();
 builder.Services.AddScoped<IPriceBookRepository, PriceBookRepository>();
 builder.Services.AddScoped<IProductEventPublisher, ProductEventPublisher>();
 builder.Services.AddScoped<CategoryLogic>();
