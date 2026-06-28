@@ -21,6 +21,7 @@ public class Order : BaseEntity
     public decimal FinalAmount { get; set; }
     public string? ShippingAddress { get; set; }
     public string? Note { get; set; }
+    public string? IdempotencyKey { get; set; }
 
     public ICollection<OrderDetail> OrderDetails { get; set; } = new List<OrderDetail>();
     public ICollection<Payment> Payments { get; set; } = new List<Payment>();

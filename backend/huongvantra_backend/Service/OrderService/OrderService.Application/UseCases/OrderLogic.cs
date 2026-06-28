@@ -221,8 +221,17 @@ public class OrderLogic(
         OrderAccessContext access,
         Guid? actorId = null,
         string? actorName = null,
+        string? idempotencyKey = null,
         CancellationToken ct = default)
     {
+        // Idempotency: nếu key đã tồn tại, trả về đơn cũ thay vì tạo mới
+        if (!string.IsNullOrWhiteSpace(idempotencyKey))
+        {
+            var existing = await _orderRepo.GetByIdempotencyKeyAsync(idempotencyKey, ct);
+            if (existing != null)
+                return MapToResponse(existing);
+        }
+
         var detailInputs = req.Items.Select(i =>
         {
             var isGift = i.IsGift;
@@ -308,6 +317,7 @@ public class OrderLogic(
             FinalAmount = finalAmount,
             ShippingAddress = req.ShippingAddress?.Trim(),
             Note = req.Note?.Trim(),
+            IdempotencyKey = string.IsNullOrWhiteSpace(idempotencyKey) ? null : idempotencyKey,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
@@ -984,6 +994,7 @@ public class OrderLogic(
                 access,
                 actorId,
                 actorName,
+                null,
                 ct);
 
             exchangeOrderId = exchangeOrder.Id;
@@ -1058,6 +1069,7 @@ public class OrderLogic(
             order.Id, order.OrderCode, order.CustomerId.Value,
             order.FinalAmount, debtAmount,
             (order.OrderDetails ?? []).Select(d => (d.SkuId, d.Quantity)),
+            null,
             ct);
     }
 

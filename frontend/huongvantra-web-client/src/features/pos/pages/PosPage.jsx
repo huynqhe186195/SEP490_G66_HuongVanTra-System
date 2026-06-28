@@ -56,6 +56,7 @@ import {
 } from '../utils/posPromotionUtils.js'
 import ResizableSplitPane from '../../../components/shared/ResizableSplitPane.jsx'
 import LoadingIndicator from '../../../components/shared/LoadingIndicator.jsx'
+import { useNetworkStatus } from '../../../hooks/useNetworkStatus.js'
 
 const SALES_MODES = [
     { id: "counter", label: "Bán trực tiếp", icon: "storefront" },
@@ -274,12 +275,15 @@ function PosPage() {
     orderNote = '',
   } = session ?? createEmptySession(salesMode)
 
+  const isOnline = useNetworkStatus()
   const paymentMethod = sessionPaymentMethod ?? (isTakeaway ? 'COD' : 'CASH')
   const isTransferPayment = paymentMethod === 'TRANSFER'
   const isCodTakeaway = isTakeaway && paymentMethod === 'COD'
   const isTransferTakeaway = isTakeaway && isTransferPayment
 
-  const paymentMethods = isTakeaway ? TAKEAWAY_PAYMENT_METHODS : COUNTER_PAYMENT_METHODS
+  // Khi offline: chỉ cho phép tiền mặt (CASH), ẩn TRANSFER
+  const paymentMethods = (isTakeaway ? TAKEAWAY_PAYMENT_METHODS : COUNTER_PAYMENT_METHODS)
+    .filter(m => isOnline || m.id === 'CASH')
 
     const patchWorkspace = (patch) => {
         setWorkspaceByMode((all) => ({

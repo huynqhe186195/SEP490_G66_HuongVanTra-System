@@ -69,7 +69,10 @@ public class OrdersController(OrderLogic orderLogic) : ControllerBase
     public async Task<IActionResult> Create([FromBody] CreateOrderRequest request, CancellationToken ct)
     {
         var (actorId, actorName) = Actor();
-        var result = await orderLogic.CreateAsync(request, AccessContext(), actorId, actorName, ct);
+        var idempotencyKey = Request.Headers.TryGetValue("X-Idempotency-Key", out var keyValues)
+            ? keyValues.FirstOrDefault()
+            : null;
+        var result = await orderLogic.CreateAsync(request, AccessContext(), actorId, actorName, idempotencyKey, ct);
         return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
     }
 

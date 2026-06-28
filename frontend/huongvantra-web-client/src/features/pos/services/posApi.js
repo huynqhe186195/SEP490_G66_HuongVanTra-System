@@ -13,6 +13,13 @@ import {
   fetchOrders,
 } from '../../orders/services/ordersApi.js'
 import { mapPromotion } from '../utils/posPromotionUtils.js'
+import {
+  getProductsFromCache,
+  getCustomerByPhone as getOfflineCustomerByPhone,
+  searchCustomersFromCache,
+  enqueue,
+  saveDraftOrder,
+} from '../../../lib/offlineDb.js'
 
 function buildPromotionPreviewBody({
   promotionId = null,
@@ -351,7 +358,36 @@ export async function createTakeawayVietQrOrder(payload, { qrAmount = 0 } = {}) 
   return attachTransferQr(result, qrAmount)
 }
 
-export function createPosOrderOffline(payload) {
+export async function createPosOrderOffline(payload) {
+  // Khi offline: lưu vào sync_queue và trả về fake result để UI tiếp tục
+  if (!navigator.onLine) {
+    const payment = payload.payments?.[0]
+    const tempId = `OFFLINE-${Date.now()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`
+    const idempotencyKey = crypto.randomUUID()
+    const orderPayload = buildOrderRequestFromPosPayload(payload, {
+      orderChannel: 'POS',
+      paymentMethod: mapPaymentMethod(payment?.paymentMethod ?? 'CASH'),
+      paidAmount: Number(payment?.amount ?? 0),
+    })
+
+    await saveDraftOrder({
+      tempId,
+      status: 'PENDING_SYNC',
+      payload: orderPayload,
+      createdAt: Date.now(),
+    })
+    await enqueue('CREATE_ORDER', orderPayload, idempotencyKey)
+
+    return {
+      orderId: tempId,
+      orderCode: tempId,
+      status: 'PENDING_SYNC',
+      isOffline: true,
+      totalAmount: orderPayload.totalAmount ?? 0,
+      paidAmount: Number(payment?.amount ?? 0),
+    }
+  }
+
   const payment = payload.payments?.[0]
   return submitPosOrder(payload, {
     orderChannel: 'POS',
@@ -467,6 +503,20 @@ export function mapPosCustomer(item) {
   }
 }
 
+function mapOfflineCustomer(c) {
+  return {
+    customerId: c.customerId,
+    fullName: c.name,
+    phone: c.phone,
+    currentDebt: c.debtBalance ?? 0,
+    outstandingBalance: c.debtBalance ?? 0,
+    tierId: c.tierId ?? null,
+    tierName: c.tierName ?? '',
+    tierDiscountPercent: c.tierDiscountPercent ?? 0,
+    customerType: c.customerType ?? 'RETAIL',
+  }
+}
+
 export function mapPosCustomerContext(item) {
   return {
     customerId: item.customerId ?? item.CustomerId,
@@ -573,6 +623,18 @@ export async function fetchPosCustomerContext(customerId) {
 
 export async function fetchPosCustomers({ search, limit = 20 }) {
   const term = search?.trim()
+
+  // Offline fallback: đọc từ IndexedDB
+  if (!navigator.onLine) {
+    const phoneTerm = term?.replace(/\D/g, '') ?? ''
+    if (phoneTerm.length === 10 && phoneTerm.startsWith('0')) {
+      const byPhone = await getOfflineCustomerByPhone(phoneTerm)
+      if (byPhone) return [mapOfflineCustomer(byPhone)]
+    }
+    const results = await searchCustomersFromCache(term ?? '', limit)
+    return results.map(mapOfflineCustomer)
+  }
+
   const phoneTerm = term?.replace(/\D/g, '') ?? ''
 
   if (phoneTerm.length === 10 && phoneTerm.startsWith('0')) {
@@ -709,6 +771,22 @@ async function fetchStoreProductsForPos() {
 }
 
 export async function fetchPosProducts({ storeId, search, limit = 30 }) {
+  // Offline fallback: đọc từ IndexedDB
+  if (!navigator.onLine) {
+    const cached = await getProductsFromCache(search ?? '', limit)
+    return cached.map(p => mapPosProduct({
+      productId: p.skuId,
+      sku: p.skuCode,
+      productName: p.name,
+      packagingType: p.unit,
+      price: p.price,
+      stockQuantity: p.qtyOnHand ?? 0,
+      imageUrl: p.imageUrl ?? '',
+      categoryId: p.categoryId ?? null,
+      productType: p.productType ?? '',
+    }))
+  }
+
   void storeId
 
   const skuPageSize = Math.min(100, Math.max(1, Number(limit) || 30))

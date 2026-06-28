@@ -29,6 +29,8 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.Property(e => e.FinalAmount).HasColumnType("decimal(18,2)").IsRequired();
         builder.Property(e => e.ShippingAddress).HasMaxLength(255);
         builder.Property(e => e.Note).HasMaxLength(500);
+        builder.Property(e => e.IdempotencyKey).HasMaxLength(100);
+        builder.HasIndex(e => e.IdempotencyKey).IsUnique().HasFilter("`IdempotencyKey` IS NOT NULL");
         builder.Property(e => e.CreatedAt).IsRequired();
         builder.Property(e => e.UpdatedAt).IsRequired();
 

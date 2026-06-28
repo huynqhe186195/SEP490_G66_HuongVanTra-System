@@ -186,6 +186,12 @@ public class OrderRepository(OrderDbContext _db) : IOrderRepository
             .OrderByDescending(o => o.CreatedAt)
             .ToListAsync(ct);
 
+    public async Task<Order?> GetByIdempotencyKeyAsync(string key, CancellationToken ct = default) =>
+        await _db.Orders
+            .Include(o => o.OrderDetails)
+            .Include(o => o.Payments)
+            .FirstOrDefaultAsync(o => o.IdempotencyKey == key, ct);
+
     public async Task AddAsync(Order order, CancellationToken ct = default) =>
         await _db.Orders.AddAsync(order, ct);
 
