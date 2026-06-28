@@ -1,0 +1,134 @@
+import { apiRequestAuth } from './apiClient.js'
+import { cacheProducts, cacheCustomers, setMeta } from './offlineDb.js'
+import { toPagedResult } from './apiClient.js'
+
+// ── Sync products + SKUs + stock into IndexedDB ──────────────────────────────
+
+async function fetchAllSkus() {
+  const pageSize = 100
+  let page = 1
+  let all = []
+  let total = 0
+  do {
+    const data = await apiRequestAuth(
+      `/api/v1/skus?page=${page}&pageSize=${pageSize}&isActive=true`,
+      { method: 'GET' }
+    )
+    const paged = toPagedResult(data)
+    const items = paged.items ?? []
+    all = all.concat(items)
+    total = paged.totalCount ?? 0
+    if (items.length === 0) break
+    page++
+  } while (all.length < total && page <= 50)
+  return all
+}
+
+async function fetchAllProducts() {
+  const pageSize = 100
+  let page = 1
+  let all = []
+  let total = 0
+  do {
+    const data = await apiRequestAuth(
+      `/api/v1/products?page=${page}&pageSize=${pageSize}`,
+      { method: 'GET' }
+    )
+    const paged = toPagedResult(data)
+    const items = paged.items ?? []
+    all = all.concat(items)
+    total = paged.totalCount ?? 0
+    if (items.length === 0) break
+    page++
+  } while (all.length < total && page <= 50)
+  return all
+}
+
+async function fetchAllStocks() {
+  try {
+    const data = await apiRequestAuth('/api/v1/inventory/sku-stocks', { method: 'GET' })
+    return Array.isArray(data) ? data : []
+  } catch {
+    return []
+  }
+}
+
+async function fetchAllCustomers() {
+  const pageSize = 100
+  let page = 1
+  let all = []
+  let total = 0
+  do {
+    const data = await apiRequestAuth(
+      `/api/customers?page=${page}&pageSize=${pageSize}`,
+      { method: 'GET' }
+    )
+    const paged = toPagedResult(data)
+    const items = paged.items ?? []
+    all = all.concat(items)
+    total = paged.totalCount ?? 0
+    if (items.length === 0) break
+    page++
+  } while (all.length < total && page <= 100)
+  return all
+}
+
+// ── Main sync function — called on "Chuẩn bị offline" or background timer ───
+
+export async function syncOfflineCache() {
+  const safe = fn => fn().catch(e => { console.warn('[offline-sync]', e.message); return [] })
+
+  const [skus, products, stocks, customers] = await Promise.all([
+    safe(fetchAllSkus),
+    safe(fetchAllProducts),
+    safe(fetchAllStocks),
+    safe(fetchAllCustomers),
+  ])
+
+  const productById = new Map(
+    products.map(p => [p.id ?? p.Id, p])
+  )
+  const stockBySkuId = new Map(
+    stocks.map(s => [s.skuId ?? s.SkuId, Number(s.quantityOnHand ?? s.QuantityOnHand ?? 0)])
+  )
+
+  const mappedSkus = skus
+    .map(sku => {
+      const skuId = sku.id ?? sku.Id
+      if (!skuId) return null
+      const product = productById.get(sku.productId ?? sku.ProductId)
+      return {
+        skuId,
+        skuCode: sku.skuCode ?? sku.SkuCode ?? '',
+        name: sku.productName ?? sku.ProductName ?? product?.name ?? product?.Name ?? '',
+        price: sku.basePrice ?? sku.BasePrice ?? sku.retailPrice ?? sku.RetailPrice ?? 0,
+        unit: sku.packagingType ?? sku.PackagingType ?? '',
+        productType: sku.productType ?? sku.ProductType ?? product?.productType ?? product?.ProductType ?? '',
+        imageUrl: sku.imageUrl ?? sku.ImageUrl ?? product?.imageUrl ?? product?.ImageUrl ?? '',
+        categoryId: sku.categoryId ?? sku.CategoryId ?? product?.categoryId ?? product?.CategoryId ?? null,
+        qtyOnHand: stockBySkuId.get(skuId) ?? 0,
+        isActive: 1,
+      }
+    })
+    .filter(Boolean)
+
+  const mappedCustomers = customers.map(c => ({
+    customerId: c.id ?? c.customerId ?? c.CustomerId,
+    name: c.fullName ?? c.name ?? c.Name ?? '',
+    phone: c.phoneNumber ?? c.phone ?? c.Phone ?? '',
+    debtBalance: Number(c.currentDebt ?? c.debtBalance ?? 0),
+    tierId: c.tierId ?? null,
+    tierName: c.tierName ?? c.membershipTierName ?? '',
+    tierDiscountPercent: Number(c.tierDiscountPercent ?? 0),
+    customerType: c.customerType ?? c.CustomerType ?? 'RETAIL',
+  }))
+
+  await Promise.all([
+    cacheProducts(mappedSkus),
+    cacheCustomers(mappedCustomers),
+  ])
+
+  await setMeta('isOfflineReady', true)
+
+  window.dispatchEvent(new CustomEvent('hvt-offline-cache-updated'))
+}

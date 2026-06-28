@@ -3,11 +3,17 @@ import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import ModuleRouteGuard from '../app/ModuleRouteGuard.jsx'
 import StockAdjustmentBatchBar from '../features/inventory/components/StockAdjustmentBatchBar.jsx'
 import LowStockBadge from '../features/inventory/components/LowStockBadge.jsx'
+import OfflineBanner from '../features/pos/components/OfflineBanner.jsx'
+import SyncStatusBadge from '../features/pos/components/SyncStatusBadge.jsx'
 import Sidebar from '../components/shared/Sidebar.jsx'
 import { getNavigationItemsForSession } from '../app/navigation.js'
 import { isWarehouseUserRole } from '../features/auth/services/authApi.js'
 import { syncSessionFromServer } from '../features/auth/services/authApi.js'
 import { loadAuthSession, saveAuthSession } from '../features/auth/services/authSession.js'
+import { useNetworkStatus } from '../hooks/useNetworkStatus.js'
+import { syncOfflineCache } from '../lib/offlineCache.js'
+
+const OFFLINE_SYNC_INTERVAL_MS = 30 * 60 * 1000
 
 const SIDEBAR_COLLAPSED_KEY = 'hvt-sidebar-collapsed'
 
@@ -26,6 +32,27 @@ function AdminLayout() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(readSidebarCollapsed)
   const location = useLocation()
+  const isOnline = useNetworkStatus()
+  const isPosPage = location.pathname === '/pos'
+
+  // Background sync mỗi 30 phút khi online, và khi tab được focus lại
+  useEffect(() => {
+    if (!isOnline) return
+    syncOfflineCache().catch(() => {})
+    const interval = setInterval(() => {
+      if (navigator.onLine) syncOfflineCache().catch(() => {})
+    }, OFFLINE_SYNC_INTERVAL_MS)
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible' && navigator.onLine) {
+        syncOfflineCache().catch(() => {})
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => {
+      clearInterval(interval)
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
+  }, [isOnline])
 
   const toggleSidebarCollapsed = () => {
     setSidebarCollapsed((prev) => {
@@ -105,7 +132,8 @@ function AdminLayout() {
 
   return (
     <div className="min-h-screen bg-[#F8FAF7] text-gray-800">
-      <div className="flex h-[100dvh] overflow-hidden">
+      <OfflineBanner isOnline={isOnline} />
+      <div className={`flex h-[100dvh] overflow-hidden${!isOnline ? ' pt-9' : ''}`}>
         {mobileNavOpen ? (
           <button
             type="button"
@@ -138,12 +166,14 @@ function AdminLayout() {
               <p className="truncate text-sm font-bold text-[#1b1c17]">Hương Vân Trà</p>
               <p className="truncate text-xs text-[#717971]">Quản trị hệ thống</p>
             </div>
+            {isPosPage && <SyncStatusBadge />}
             {isWarehouseUserRole(authSession?.roles ?? []) && <LowStockBadge />}
           </header>
 
-          {isWarehouseUserRole(authSession?.roles ?? []) && (
-            <div className="hidden lg:flex shrink-0 items-center justify-end border-b border-[#c1c9c0]/50 bg-[#fbf9f1] px-4 py-2">
-              <LowStockBadge />
+          {(isWarehouseUserRole(authSession?.roles ?? []) || isPosPage) && (
+            <div className="hidden lg:flex shrink-0 items-center justify-end gap-2 border-b border-[#c1c9c0]/50 bg-[#fbf9f1] px-4 py-2">
+              {isPosPage && <SyncStatusBadge />}
+              {isWarehouseUserRole(authSession?.roles ?? []) && <LowStockBadge />}
             </div>
           )}
 
