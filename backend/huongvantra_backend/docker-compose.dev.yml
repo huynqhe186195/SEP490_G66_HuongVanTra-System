@@ -40,48 +40,48 @@ services:
   # Uncomment service nào đang phát triển, comment lại khi không cần.
   # SDK image (~750MB) nặng hơn runtime image — chỉ bật service đang làm việc.
 
-  # product-service:
-  #   build: null
-  #   image: mcr.microsoft.com/dotnet/sdk:8.0-alpine
-  #   pull_policy: always
-  #   container_name: hvt-product-service-dev
-  #   entrypoint: []
-  #   working_dir: /src
-  #   volumes:
-  #     - .:/src
-  #     - product_nuget_cache:/root/.nuget/packages
-  #   command: >
-  #     dotnet watch run
-  #       --project Service/ProductService/ProductService.WebAPI/ProductService.WebAPI.csproj
-  #       --no-hot-reload
-  #   environment:
-  #     DOTNET_USE_POLLING_FILE_WATCHER: "1"
-  #     NUGET_PACKAGES: /root/.nuget/packages
-  #     DisableImplicitNuGetFallbackFolder: "true"
-  #     ASPNETCORE_ENVIRONMENT: Development
-  #     ASPNETCORE_URLS: http://+:8080
-  #     ConnectionStrings__DefaultConnection: "Server=mysql;Port=3306;Database=hvt_product_db;User=${MYSQL_USER:-hvtuser};Password=${MYSQL_PASSWORD:-hvtpass123};CharSet=utf8mb4;"
-  #     RabbitMQ__Host: rabbitmq
-  #     RabbitMQ__Username: ${RABBITMQ_USER:-hvt}
-  #     RabbitMQ__Password: ${RABBITMQ_PASS:-hvtrabbit123}
-  #     Jwt__Secret: ${JWT_SECRET:-your-super-secret-key-at-least-32-chars!!}
-  #     Jwt__Issuer: HuongVanTra
-  #     Jwt__Audience: HuongVanTra
-  #   ports:
-  #     - "5003:8080"
-  #   networks:
-  #     - hvt-network
-  #   depends_on:
-  #     mysql:
-  #       condition: service_healthy
-  #     rabbitmq:
-  #       condition: service_healthy
-  #   healthcheck:
-  #     test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
-  #     interval: 15s
-  #     timeout: 10s
-  #     retries: 10
-  #     start_period: 300s
+  product-service:
+    build: null
+    image: mcr.microsoft.com/dotnet/sdk:8.0-alpine
+    pull_policy: always
+    container_name: hvt-product-service-dev
+    entrypoint: []
+    working_dir: /src
+    volumes:
+      - .:/src
+      - product_nuget_cache:/root/.nuget/packages
+    command: >
+      dotnet watch run
+        --project Service/ProductService/ProductService.WebAPI/ProductService.WebAPI.csproj
+        --no-hot-reload
+    environment:
+      DOTNET_USE_POLLING_FILE_WATCHER: "1"
+      NUGET_PACKAGES: /root/.nuget/packages
+      DisableImplicitNuGetFallbackFolder: "true"
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__DefaultConnection: "Server=mysql;Port=3306;Database=hvt_product_db;User=${MYSQL_USER:-hvtuser};Password=${MYSQL_PASSWORD:-hvtpass123};CharSet=utf8mb4;"
+      RabbitMQ__Host: rabbitmq
+      RabbitMQ__Username: ${RABBITMQ_USER:-hvt}
+      RabbitMQ__Password: ${RABBITMQ_PASS:-hvtrabbit123}
+      Jwt__Secret: ${JWT_SECRET:-your-super-secret-key-at-least-32-chars!!}
+      Jwt__Issuer: HuongVanTra
+      Jwt__Audience: HuongVanTra
+    ports:
+      - "5003:8080"
+    networks:
+      - hvt-network
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 300s
 
   # customer-service:
   #   build: null

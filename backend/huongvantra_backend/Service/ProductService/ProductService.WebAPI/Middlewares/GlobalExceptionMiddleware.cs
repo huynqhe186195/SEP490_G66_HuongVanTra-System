@@ -22,13 +22,13 @@ public class GlobalExceptionMiddleware(RequestDelegate next, ILogger<GlobalExcep
     {
         var (statusCode, message, errors) = ex switch
         {
-            ProductValidationException v     => (StatusCodes.Status400BadRequest,  v.Message, v.Errors),
-            ProductNotFoundException e       => (StatusCodes.Status404NotFound,    e.Message, null),
-            ProductSkuNotFoundException e    => (StatusCodes.Status404NotFound,    e.Message, null),
-            ProductSkuNotFoundByCodeException e => (StatusCodes.Status404NotFound, e.Message, null),
-            CategoryNotFoundException e      => (StatusCodes.Status404NotFound,    e.Message, null),
-            DuplicateSkuCodeException e      => (StatusCodes.Status409Conflict,    e.Message, new[] { e.Message }),
-            _                                => (StatusCodes.Status500InternalServerError, "An unexpected error occurred.", null)
+            ProductValidationException v          => (StatusCodes.Status400BadRequest,  v.Message, v.Errors),
+            ProductNotFoundException e            => (StatusCodes.Status404NotFound,    e.Message, null),
+            ProductSkuNotFoundException e         => (StatusCodes.Status404NotFound,    e.Message, null),
+            ProductSkuNotFoundByCodeException e   => (StatusCodes.Status404NotFound,    e.Message, null),
+            CategoryNotFoundException e           => (StatusCodes.Status404NotFound,    e.Message, null),
+            DuplicateSkuCodeException e           => (StatusCodes.Status409Conflict,    e.Message, new[] { e.Message }),
+            _                                     => (StatusCodes.Status500InternalServerError, "An unexpected error occurred.", null)
         };
 
         context.Response.ContentType = "application/json";

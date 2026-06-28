@@ -17,16 +17,11 @@ public class PriceBookEntryConfiguration : IEntityTypeConfiguration<PriceBookEnt
         builder.Property(e => e.UpdatedAt).IsRequired(false);
         builder.Property(e => e.IsDeleted).HasDefaultValue(false);
 
-        builder.HasIndex(e => new { e.PriceBookId, e.SkuId, e.VariantId, e.UnitId }).IsUnique();
+        builder.HasIndex(e => new { e.PriceBookId, e.VariantId, e.UnitId }).IsUnique();
 
         builder.HasOne(e => e.PriceBook)
             .WithMany(p => p.Entries)
             .HasForeignKey(e => e.PriceBookId)
-            .OnDelete(DeleteBehavior.Cascade);
-
-        builder.HasOne(e => e.Sku)
-            .WithMany(s => s.PriceBookEntries)
-            .HasForeignKey(e => e.SkuId)
             .OnDelete(DeleteBehavior.Cascade);
 
         builder.HasOne(e => e.Variant)

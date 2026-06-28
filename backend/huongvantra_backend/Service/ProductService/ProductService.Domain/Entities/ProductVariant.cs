@@ -16,6 +16,8 @@ public class ProductVariant : BaseEntity
     public bool AllowRewardPoints { get; set; } = true;
     public bool IsActive { get; set; } = true;
     public string? ImageUrl { get; set; }
+    public int WeightInGrams { get; set; }
+    public DateTime? SyncedToStoreAt { get; set; }
 
     public Product Product { get; set; } = null!;
     public ICollection<ProductUnit> Units { get; set; } = new List<ProductUnit>();

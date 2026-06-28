@@ -7,15 +7,14 @@ namespace ProductService.Application.UseCases;
 public class CatalogSyncLogic(
     ICategoryRepository _categoryRepository,
     IProductRepository _productRepository,
-    IProductSkuRepository _skuRepository,
     IProductEventPublisher _eventPublisher)
 {
     public async Task<CatalogPendingSyncResponse> GetPendingAsync(CancellationToken ct = default)
     {
         var categories = await _categoryRepository.CountPendingStoreSyncAsync(ct);
         var products = await _productRepository.CountPendingStoreSyncAsync(ct);
-        var skus = await _skuRepository.CountPendingStoreSyncAsync(ct);
-        return new CatalogPendingSyncResponse(categories, products, skus);
+        var variants = await _productRepository.CountPendingVariantSyncAsync(ct);
+        return new CatalogPendingSyncResponse(categories, products, variants);
     }
 
     public async Task<CatalogSyncResponse> SyncToStoreAsync(CancellationToken ct = default)
@@ -24,19 +23,19 @@ public class CatalogSyncLogic(
 
         var categoriesSynced = await _categoryRepository.SyncPendingToStoreAsync(syncedAt, ct);
         var productsSynced = await _productRepository.SyncPendingToStoreAsync(syncedAt, ct);
-        var syncedSkus = await _skuRepository.SyncPendingToStoreAsync(syncedAt, ct);
+        var syncedVariants = await _productRepository.SyncPendingVariantsToStoreAsync(syncedAt, ct);
 
-        // Sửa lệch: SKU đã sync nhưng SP/DM cha chưa (dữ liệu cũ hoặc SP đang ẩn)
+        // Cascade: ensure parent products and categories are synced if their variants are
         productsSynced += await _productRepository.SyncProductsWithSyncedSkusAsync(syncedAt, ct);
         categoriesSynced += await _categoryRepository.SyncCategoriesWithSyncedProductsAsync(syncedAt, ct);
 
-        foreach (var sku in syncedSkus)
-            await _eventPublisher.PublishSkuCreatedAsync(sku.Id, sku.SkuCode, sku.WeightInGrams);
+        foreach (var v in syncedVariants)
+            await _eventPublisher.PublishSkuCreatedAsync(v.Id, v.SkuCode, v.WeightInGrams);
 
         return new CatalogSyncResponse(
             categoriesSynced,
             productsSynced,
-            syncedSkus.Count,
+            syncedVariants.Count,
             syncedAt);
     }
 

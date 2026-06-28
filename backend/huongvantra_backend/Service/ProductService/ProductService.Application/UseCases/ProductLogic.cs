@@ -295,25 +295,10 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
         p.BaseUnit, p.WeightValue, p.WeightUnit, p.IsVariantParent,
         p.IsActive, p.IsDeleted, p.CreatedAt, p.SyncedToStoreAt,
         p.ProductType.ToString(),
-        FilterSkus(p.Skus, scope).Select(s => MapSku(s, p)).ToList(),
+        new List<ProductSkuResponse>(),
         p.Images.Where(i => !i.IsDeleted).OrderBy(i => i.SortOrder).Select(MapImageResponse).ToList(),
         p.Units.Where(u => !u.IsDeleted).Select(MapUnitResponse).ToList(),
         p.Variants.Where(v => !v.IsDeleted).Select(MapVariantResponse).ToList());
-
-    private static IEnumerable<ProductSku> FilterSkus(IEnumerable<ProductSku> skus, CatalogViewScope scope)
-    {
-        var items = skus.Where(s => !s.IsDeleted);
-        return scope == CatalogViewScope.Store
-            ? items.Where(s => s.SyncedToStoreAt != null)
-            : items;
-    }
-
-    private static ProductSkuResponse MapSku(ProductSku s, Product p) => new(
-        s.Id, s.ProductId, p.Name, p.CategoryId, p.Category?.Name ?? string.Empty,
-        s.SkuCode, s.Barcode, s.PackagingType,
-        s.WeightInGrams, s.BasePrice, s.CostPrice, s.RetailPrice,
-        s.MinStock, s.MaxStock, s.IsSellable, s.AllowRewardPoints,
-        s.ImageUrl, s.IsActive, s.CreatedAt, s.SyncedToStoreAt);
 
     private static ProductImageResponse MapImageResponse(ProductImage i) => new(
         i.Id, i.ProductId, i.ImageUrl, i.AltText, i.SortOrder, i.IsThumbnail);

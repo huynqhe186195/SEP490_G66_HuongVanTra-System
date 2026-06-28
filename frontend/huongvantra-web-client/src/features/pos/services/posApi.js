@@ -577,7 +577,7 @@ export async function fetchPosCustomers({ search, limit = 20 }) {
 
   if (phoneTerm.length === 10 && phoneTerm.startsWith('0')) {
     try {
-      const byPhone = await fetchCustomerByPhone(phoneTerm)
+      const byPhone = await fetchCustomerByPhone(phoneTerm, { silentAuthErrors: true })
       if (byPhone) {
         return [mapPosCustomer(byPhone)]
       }
@@ -626,7 +626,7 @@ export async function createPosCustomer(payload) {
   } catch (error) {
     if (error.statusCode === 409 && payload.phone) {
       try {
-        const existing = await fetchCustomerByPhone(payload.phone)
+        const existing = await fetchCustomerByPhone(payload.phone, { silentAuthErrors: true })
         if (existing) {
           return {
             customer: mapPosCustomer(existing),

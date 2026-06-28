@@ -18,7 +18,10 @@ public class CustomerRepository : ICustomerRepository
             .FirstOrDefaultAsync(c => c.Id == id && !c.IsDeleted, ct);
 
     public async Task<Customer?> GetByPhoneAsync(string phone, CancellationToken ct = default) =>
-        await _db.Customers.FirstOrDefaultAsync(c => c.PhoneNumber == phone && !c.IsDeleted, ct);
+        await _db.Customers
+            .Include(c => c.Tier)
+            .Include(c => c.Addresses)
+            .FirstOrDefaultAsync(c => c.PhoneNumber == phone && !c.IsDeleted, ct);
 
     public async Task<bool> PhoneExistsAsync(string phone, Guid? excludeCustomerId = null, CancellationToken ct = default) =>
         await _db.Customers.AnyAsync(c =>
@@ -176,4 +179,6 @@ public class CustomerRepository : ICustomerRepository
 
     public async Task<int> SaveChangesAsync(CancellationToken ct = default) =>
         await _db.SaveChangesAsync(ct);
+
+    public void ClearChangeTracker() => _db.ChangeTracker.Clear();
 }

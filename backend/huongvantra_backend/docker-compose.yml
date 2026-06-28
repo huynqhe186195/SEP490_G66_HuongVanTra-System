@@ -56,7 +56,7 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
       ASPNETCORE_URLS: http://+:8080
-      ConnectionStrings__DefaultConnection: "Server=mysql;Port=3306;Database=hvt_customer_db;User=${MYSQL_USER:-hvtuser};Password=${MYSQL_PASSWORD:-hvtpass123};CharSet=utf8mb4;"
+      ConnectionStrings__DefaultConnection: "Server=mysql;Port=3306;Database=hvt_customer_db;User=${MYSQL_USER:-hvtuser};Password=${MYSQL_PASSWORD:-hvtpass123};CharSet=utf8mb4;ConvertZeroDateTime=True;"
       Jwt__Secret: ${JWT_SECRET:-your-super-secret-key-at-least-32-chars!!}
       Jwt__Issuer: HuongVanTra
       Jwt__Audience: HuongVanTra

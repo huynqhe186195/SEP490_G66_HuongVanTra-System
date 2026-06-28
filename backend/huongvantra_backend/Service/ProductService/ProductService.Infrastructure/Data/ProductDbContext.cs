@@ -10,7 +10,6 @@ public class ProductDbContext(DbContextOptions<ProductDbContext> options) : DbCo
     public DbSet<Brand> Brands => Set<Brand>();
     public DbSet<AttributeName> AttributeNames => Set<AttributeName>();
     public DbSet<Product> Products => Set<Product>();
-    public DbSet<ProductSku> ProductSkus => Set<ProductSku>();
     public DbSet<ProductImage> ProductImages => Set<ProductImage>();
     public DbSet<ProductVariant> ProductVariants => Set<ProductVariant>();
     public DbSet<ProductUnit> ProductUnits => Set<ProductUnit>();
@@ -24,7 +23,6 @@ public class ProductDbContext(DbContextOptions<ProductDbContext> options) : DbCo
         modelBuilder.ApplyConfiguration(new BrandConfiguration());
         modelBuilder.ApplyConfiguration(new AttributeNameConfiguration());
         modelBuilder.ApplyConfiguration(new ProductConfiguration());
-        modelBuilder.ApplyConfiguration(new ProductSkuConfiguration());
         modelBuilder.ApplyConfiguration(new ProductImageConfiguration());
         modelBuilder.ApplyConfiguration(new ProductVariantConfiguration());
         modelBuilder.ApplyConfiguration(new ProductUnitConfiguration());

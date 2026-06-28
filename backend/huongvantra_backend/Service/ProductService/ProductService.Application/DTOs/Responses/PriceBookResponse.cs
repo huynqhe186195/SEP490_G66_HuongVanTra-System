@@ -14,7 +14,6 @@ public record PriceBookResponse(
 public record PriceBookEntryResponse(
     Guid Id,
     Guid PriceBookId,
-    Guid? SkuId,
     Guid? VariantId,
     Guid? UnitId,
     decimal Price,

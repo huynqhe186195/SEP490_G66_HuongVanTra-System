@@ -6,5 +6,7 @@ public enum CustomerActivityType
     Updated,
     TierChanged,
     OrderCreated,
-    DebtUpdated
+    DebtUpdated,
+    Deleted,
+    Restored
 }

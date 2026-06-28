@@ -21,7 +21,6 @@ public class Product : BaseEntity
     public DateTime? SyncedToStoreAt { get; set; }
 
     public Category Category { get; set; } = null!;
-    public ICollection<ProductSku> Skus { get; set; } = new List<ProductSku>();
     public ICollection<ProductImage> Images { get; set; } = new List<ProductImage>();
     public ICollection<ProductUnit> Units { get; set; } = new List<ProductUnit>();
     public ICollection<ProductVariant> Variants { get; set; } = new List<ProductVariant>();

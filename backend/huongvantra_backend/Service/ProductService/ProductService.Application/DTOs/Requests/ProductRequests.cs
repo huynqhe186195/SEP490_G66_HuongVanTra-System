@@ -11,6 +11,45 @@ public record GetProductsRequest(
     int Page = 1,
     int PageSize = 20);
 
+// Legacy request record kept for /api/v1/skus endpoint (now serves ProductVariant data)
+public record GetProductSkusRequest(
+    string? Search,
+    Guid? ProductId,
+    bool? IsActive,
+    int Page = 1,
+    int PageSize = 20);
+
+// Create/Update SKU requests are deprecated — variants are managed through product endpoints
+public record CreateProductSkuRequest(
+    Guid ProductId,
+    string? SkuCode,
+    string? Barcode,
+    string PackagingType,
+    int WeightInGrams,
+    decimal BasePrice,
+    decimal? CostPrice,
+    decimal? RetailPrice,
+    int? MinStock,
+    int? MaxStock,
+    bool IsSellable,
+    bool AllowRewardPoints,
+    string? ImageUrl);
+
+public record UpdateProductSkuRequest(
+    string SkuCode,
+    string? Barcode,
+    string PackagingType,
+    int WeightInGrams,
+    decimal BasePrice,
+    decimal? CostPrice,
+    decimal? RetailPrice,
+    int? MinStock,
+    int? MaxStock,
+    bool IsSellable,
+    bool AllowRewardPoints,
+    string? ImageUrl,
+    bool IsActive);
+
 public record CreateProductRequest(
     int CategoryId,
     string Name,
@@ -45,3 +84,4 @@ public record UpdateProductRequest(
     List<ProductUnitRequest>? Units,
     List<ProductVariantRequest>? Variants,
     GenerateProductVariantsRequest? VariantGenerator);
+

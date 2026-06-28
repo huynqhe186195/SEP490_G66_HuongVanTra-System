@@ -25,7 +25,6 @@ public record UpdatePriceBookRequest(
     List<PriceBookEntryRequest>? Entries);
 
 public record PriceBookEntryRequest(
-    Guid? SkuId,
     Guid? VariantId,
     Guid? UnitId,
     decimal Price,

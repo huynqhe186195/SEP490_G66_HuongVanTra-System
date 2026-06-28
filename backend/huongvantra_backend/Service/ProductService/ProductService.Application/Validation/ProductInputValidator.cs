@@ -94,56 +94,7 @@ public static class ProductInputValidator
             baseUnit!, weightValue, weightUnit, isVariantParent, isActive);
     }
 
-    public static ValidatedProductSkuInput ValidateProductSku(
-        Guid productId,
-        string? skuCodeValue,
-        string? barcodeValue,
-        string? packagingTypeValue,
-        int weightInGrams,
-        decimal basePrice,
-        decimal? costPrice,
-        decimal? retailPrice,
-        int? minStock,
-        int? maxStock,
-        bool isSellable,
-        bool allowRewardPoints,
-        string? imageUrlValue,
-        bool? isActive = null,
-        bool allowBlankSku = false)
-    {
-        var errors = new List<string>();
 
-        if (productId == Guid.Empty)
-            errors.Add("ProductId không hợp lệ.");
-
-        var skuCode = NormalizeSku(skuCodeValue, errors, allowBlankSku);
-        var barcode = NormalizeBarcode(barcodeValue, errors);
-
-        var packagingType = packagingTypeValue?.Trim();
-        if (string.IsNullOrWhiteSpace(packagingType))
-            errors.Add("Loại đóng gói là bắt buộc.");
-        else if (packagingType.Length > 50)
-            errors.Add("Loại đóng gói tối đa 50 ký tự.");
-
-        if (weightInGrams <= 0)
-            errors.Add("Khối lượng phải lớn hơn 0 gram.");
-        else if (weightInGrams > 100_000)
-            errors.Add("Khối lượng tối đa 100,000 gram (100 kg).");
-
-        ValidatePrice(basePrice, "Giá bán", errors, mustBePositive: true);
-        ValidatePrice(costPrice ?? 0, "Giá vốn", errors, mustBePositive: false);
-        ValidatePrice(retailPrice ?? basePrice, "Giá bán lẻ", errors, mustBePositive: true);
-        ValidateStockRange(minStock, maxStock, errors);
-
-        var imageUrl = NormalizeUrl(imageUrlValue, "URL ảnh", errors);
-
-        if (errors.Count > 0) throw new ProductValidationException(errors);
-
-        return new ValidatedProductSkuInput(
-            productId, skuCode, barcode, packagingType!, weightInGrams, basePrice,
-            costPrice ?? 0, retailPrice ?? basePrice, minStock, maxStock,
-            isSellable, allowRewardPoints, imageUrl, isActive);
-    }
 
     public static List<ValidatedProductImageInput> ValidateImages(IEnumerable<dynamic>? images)
     {
@@ -427,22 +378,6 @@ public record ValidatedProductInput(
     decimal? WeightValue,
     string? WeightUnit,
     bool IsVariantParent,
-    bool? IsActive);
-
-public record ValidatedProductSkuInput(
-    Guid ProductId,
-    string? SkuCode,
-    string? Barcode,
-    string PackagingType,
-    int WeightInGrams,
-    decimal BasePrice,
-    decimal CostPrice,
-    decimal RetailPrice,
-    int? MinStock,
-    int? MaxStock,
-    bool IsSellable,
-    bool AllowRewardPoints,
-    string? ImageUrl,
     bool? IsActive);
 
 public record ValidatedProductImageInput(
