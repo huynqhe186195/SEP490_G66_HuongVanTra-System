@@ -144,7 +144,7 @@ public class CustomersController : ControllerBase
     }
 
     [HttpPost("{id:guid}/debt-payments")]
-    [Authorize(Policy = PermissionNames.CreateCustomer)]
+    [Authorize(Policy = PermissionNames.ApplyDebtPayment)]
     public async Task<IActionResult> ApplyDebtPayment(Guid id, [FromBody] ApplyDebtPaymentRequest request, CancellationToken ct = default)
     {
         var result = await _logic.ApplyDebtPaymentAsync(id, request, AccessContext(), ct);
