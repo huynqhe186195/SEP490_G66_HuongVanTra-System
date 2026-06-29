@@ -1,10 +1,65 @@
 import { useEffect, useRef, useState } from 'react'
 import { showError } from '../../../app/toast.js'
-import { fetchProductById } from '../../products/services/productsApi.js'
+import { fetchProductById, fetchProducts } from '../../products/services/productsApi.js'
 import { fetchSkusByProductId, fetchAllActiveSkus } from '../../products/services/productSkusApi.js'
 import { createProductionOrder } from '../services/productionOrderApi.js'
 
 const STEPS = ['Chọn thành phẩm', 'Nguyên liệu (BOM)', 'Xác nhận']
+
+function sameId(left, right) {
+  return String(left ?? '') === String(right ?? '')
+}
+
+function resolveSelectedVariant(product, sku) {
+  if (!product || !sku) return null
+
+  const variants = product.variants ?? []
+  const variantIdCandidates = [
+    sku.variantId,
+    sku.productVariantId,
+    sku.productVariantID,
+    sku.skuId,
+    sku.id,
+  ].filter(Boolean)
+
+  const byId = variants.find((variant) =>
+    variantIdCandidates.some((candidate) => sameId(candidate, variant.id)),
+  )
+  if (byId) return byId
+
+  if (sku.skuCode) {
+    return variants.find((variant) => variant.skuCode === sku.skuCode) ?? null
+  }
+
+  return null
+}
+
+async function fetchFinishedProductsForProduction() {
+  const pageSize = 100
+  const products = []
+  let page = 1
+  let totalPages = 1
+
+  do {
+    const result = await fetchProducts({
+      isActive: true,
+      productType: 'THANH_PHAM',
+      page,
+      pageSize,
+    })
+    products.push(...(result.items ?? []))
+    totalPages = Number(result.totalPages ?? 1) || 1
+    page += 1
+  } while (page <= totalPages && page <= 20)
+
+  return products
+}
+
+function formatQuantity(value) {
+  const number = Number(value)
+  if (!Number.isFinite(number)) return '0'
+  return number.toLocaleString('vi-VN', { maximumFractionDigits: 4 })
+}
 
 function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
   const [step, setStep] = useState(0)
@@ -18,6 +73,7 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
   // Step 1 — BOM lines: { materialId, materialName, bomQty, skuId, skuCode, snapshotName, skuOptions }
   const [bomLines, setBomLines] = useState([])
   const [loadingBom, setLoadingBom] = useState(false)
+  const [bomError, setBomError] = useState('')
 
   // Step 2
   const [saving, setSaving] = useState(false)
@@ -31,12 +87,16 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
       setSelectedSkuId('')
       setQuantity('')
       setBomLines([])
+      setBomError('')
       setNote('')
       setLoadingSkus(true)
-      fetchAllActiveSkus()
-        .then((items) => {
+      Promise.all([fetchAllActiveSkus(), fetchFinishedProductsForProduction()])
+        .then(([items, finishedProducts]) => {
+          const finishedProductIds = new Set(
+            finishedProducts.map((product) => String(product.id)),
+          )
           const tp = items.filter(
-            (s) => !s.productType || s.productType === 'THANH_PHAM',
+            (s) => finishedProductIds.has(String(s.productId)) && s.isSellable !== false,
           )
           setTpSkus(tp)
         })
@@ -48,22 +108,41 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
 
   if (!isOpen) return null
 
-  const selectedSku = tpSkus.find((s) => s.id === selectedSkuId)
+  const selectedSku = tpSkus.find((s) => sameId(s.id, selectedSkuId))
+
+  function handleSelectedSkuChange(skuId) {
+    setSelectedSkuId(skuId)
+    setBomLines([])
+    setBomError('')
+  }
 
   async function handleNextStep0() {
     const qty = Number(quantity)
     if (!selectedSkuId) return showError('Chọn thành phẩm.')
+    if (!selectedSku) return showError('SKU thành phẩm không hợp lệ.')
     if (!qty || qty <= 0) return showError('Số lượng phải lớn hơn 0.')
 
     setLoadingBom(true)
+    setBomError('')
+    setBomLines([])
     setStep(1)
     try {
       const product = selectedSku?.productId ? await fetchProductById(selectedSku.productId) : null
-      const bomLinesDef = product?.variants?.[0]?.bomLines ?? []
+      const selectedVariant = resolveSelectedVariant(product, selectedSku)
+
+      if (!selectedVariant) {
+        setBomLines([])
+        setBomError(
+          'Không xác định được biến thể của SKU đã chọn. Vui lòng kiểm tra dữ liệu SKU/ProductVariant trước khi tạo lệnh.',
+        )
+        return
+      }
+
+      const bomLinesDef = selectedVariant.bomLines ?? []
 
       if (bomLinesDef.length === 0) {
         setBomLines([])
-        setLoadingBom(false)
+        setBomError('SKU thành phẩm này chưa có BOM. Vui lòng cấu hình BOM cho đúng biến thể trước khi tạo lệnh.')
         return
       }
 
@@ -88,6 +167,8 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
       )
       setBomLines(enriched)
     } catch (err) {
+      setBomLines([])
+      setBomError(err.message)
       showError(err.message)
     } finally {
       setLoadingBom(false)
@@ -98,7 +179,7 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
     setBomLines((prev) =>
       prev.map((l) => {
         if (l.materialId !== materialId) return l
-        const sku = l.skuOptions.find((s) => s.id === skuId)
+        const sku = l.skuOptions.find((s) => sameId(s.id, skuId))
         return {
           ...l,
           skuId,
@@ -111,16 +192,33 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
 
   function handleNextStep1() {
     if (bomLines.length === 0)
-      return showError('Thành phẩm này chưa có BOM. Vui lòng cấu hình BOM trước khi tạo lệnh.')
+      return showError(
+        bomError || 'SKU thành phẩm này chưa có BOM. Vui lòng cấu hình BOM trước khi tạo lệnh.',
+      )
+    const withoutSkuOptions = bomLines.find((l) => l.skuOptions.length === 0)
+    if (withoutSkuOptions)
+      return showError(`Nguyên liệu "${withoutSkuOptions.materialName}" chưa có SKU để xuất kho.`)
     const missing = bomLines.find((l) => !l.skuId)
     if (missing) return showError(`Chọn SKU cho nguyên liệu "${missing.materialName}".`)
     setStep(2)
   }
 
   async function handleSubmit() {
+    const qty = Number(quantity)
+    if (!selectedSku) return showError('SKU thành phẩm không hợp lệ.')
+    if (!qty || qty <= 0) return showError('Số lượng phải lớn hơn 0.')
+    if (bomLines.length === 0)
+      return showError(
+        bomError || 'SKU thành phẩm này chưa có BOM. Vui lòng cấu hình BOM trước khi tạo lệnh.',
+      )
+    const withoutSkuOptions = bomLines.find((l) => l.skuOptions.length === 0)
+    if (withoutSkuOptions)
+      return showError(`Nguyên liệu "${withoutSkuOptions.materialName}" chưa có SKU để xuất kho.`)
+    const missing = bomLines.find((l) => !l.skuId)
+    if (missing) return showError(`Chọn SKU cho nguyên liệu "${missing.materialName}".`)
+
     setSaving(true)
     try {
-      const qty = Number(quantity)
       const order = await createProductionOrder({
         finishedSkuId: selectedSkuId,
         finishedSkuCode: selectedSku?.skuCode ?? '',
@@ -189,13 +287,14 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
                 <select
                   className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-sm"
                   value={selectedSkuId}
-                  onChange={(e) => setSelectedSkuId(e.target.value)}
+                  onChange={(e) => handleSelectedSkuChange(e.target.value)}
                   disabled={loadingSkus}
                 >
                   <option value="">{loadingSkus ? 'Đang tải...' : 'Chọn SKU thành phẩm'}</option>
                   {tpSkus.map((s) => (
                     <option key={s.id} value={s.id}>
                       {s.skuCode} — {s.productName}
+                      {s.variantName ? ` (${s.variantName})` : ''}
                     </option>
                   ))}
                 </select>
@@ -221,7 +320,7 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
                 <p className="py-8 text-center text-sm text-slate-500">Đang tải BOM...</p>
               ) : bomLines.length === 0 ? (
                 <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                  Thành phẩm này chưa có BOM. Lệnh sẽ được tạo không có nguyên liệu.
+                  {bomError || 'SKU thành phẩm này chưa có BOM. Vui lòng cấu hình BOM trước khi tạo lệnh.'}
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -236,7 +335,7 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
                       <div className="mb-2 flex items-baseline justify-between">
                         <span className="text-sm font-semibold text-slate-800">{l.materialName}</span>
                         <span className="text-xs font-medium text-[#538463]">
-                          {l.bomQty} × {quantity} = <strong>{l.bomQty * Number(quantity)}</strong>
+                          {l.bomQty} × {quantity} = <strong>{formatQuantity(l.bomQty * Number(quantity))}</strong>
                         </span>
                       </div>
                       {l.skuOptions.length === 0 ? (
@@ -291,7 +390,7 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
                             {l.materialName} ({l.skuCode})
                           </span>
                           <span className="font-semibold text-slate-800">
-                            {l.bomQty * Number(quantity)}
+                            {formatQuantity(l.bomQty * Number(quantity))}
                           </span>
                         </li>
                       ))}
