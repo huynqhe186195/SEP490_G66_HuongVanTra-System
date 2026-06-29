@@ -1336,4 +1336,29 @@ public class InventoryLogic(
                 l.MaterialSnapshotName,
                 l.PlannedQuantity))
             .ToList());
+
+    public async Task DeductMaterialsAsync(
+        IEnumerable<(Guid SkuId, int Quantity)> items,
+        CancellationToken ct = default)
+    {
+        var itemList = items.ToList();
+        foreach (var (skuId, quantity) in itemList)
+        {
+            if (quantity <= 0) continue;
+
+            var stock = await _skuStockRepo.GetBySkuIdAsync(skuId, ct)
+                ?? throw new InventoryValidationException($"Không tìm thấy tồn kho cho SKU {skuId}.");
+
+            await AllocateAndDeductBatchesFifoAsync(skuId, quantity, ct);
+            await SyncWarehouseQtyFromBatchesAsync(stock, ct);
+        }
+
+        foreach (var (skuId, _) in itemList)
+        {
+            var stock = await _skuStockRepo.GetBySkuIdAsync(skuId, ct);
+            if (stock != null && stock.WarehouseQuantityOnHand <= stock.LowStockThreshold)
+                await _eventPublisher.PublishLowStockAsync(
+                    stock.SkuId, stock.SkuCode, stock.WarehouseQuantityOnHand, stock.LowStockThreshold, ct);
+        }
+    }
 }

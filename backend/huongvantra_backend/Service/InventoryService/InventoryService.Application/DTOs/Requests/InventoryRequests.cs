@@ -47,3 +47,7 @@ public record CreateProductionOrderRequest(
     int Quantity,
     string? Note,
     List<ProductionOrderLineInput> Lines);
+
+public record DeductMaterialItem(Guid SkuId, int Quantity);
+
+public record DeductMaterialsRequest(List<DeductMaterialItem> Items);

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { getMeta } from '../../../lib/offlineDb.js'
 import { syncOfflineCache } from '../../../lib/offlineCache.js'
+import { loadAuthSession } from '../../auth/services/authSession.js'
 
 export default function OfflineReadyBadge() {
   const [lastSync, setLastSync] = useState(null)
@@ -12,8 +13,9 @@ export default function OfflineReadyBadge() {
 
   async function handleSync() {
     setIsSyncing(true)
+    const permissions = loadAuthSession()?.permissions ?? []
     try {
-      await syncOfflineCache()
+      await syncOfflineCache({ permissions })
       const ts = await getMeta('lastProductSync')
       setLastSync(ts)
     } finally {

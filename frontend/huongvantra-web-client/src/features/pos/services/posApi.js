@@ -303,6 +303,7 @@ export function buildTakeawayOrderPayload({
   shippingAddress,
   note,
   cartItems,
+  customBundles = [],
   manualDiscount = 0,
   promotionId = null,
   promotionCode = null,
@@ -326,6 +327,7 @@ export function buildTakeawayOrderPayload({
       categoryName: item.categoryName ?? null,
       isGift: item.isGift ? 1 : 0,
     })),
+    customBundles: customBundles ?? [],
     payments: [],
   }
 }

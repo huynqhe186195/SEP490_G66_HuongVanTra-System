@@ -38,13 +38,14 @@ function AdminLayout() {
   // Background sync mỗi 30 phút khi online, và khi tab được focus lại
   useEffect(() => {
     if (!isOnline) return
-    syncOfflineCache().catch(() => {})
+    const permissions = authSession?.permissions ?? []
+    syncOfflineCache({ permissions }).catch(() => {})
     const interval = setInterval(() => {
-      if (navigator.onLine) syncOfflineCache().catch(() => {})
+      if (navigator.onLine) syncOfflineCache({ permissions }).catch(() => {})
     }, OFFLINE_SYNC_INTERVAL_MS)
     const handleVisibility = () => {
       if (document.visibilityState === 'visible' && navigator.onLine) {
-        syncOfflineCache().catch(() => {})
+        syncOfflineCache({ permissions }).catch(() => {})
       }
     }
     document.addEventListener('visibilitychange', handleVisibility)

@@ -28,6 +28,7 @@ import CodOrdersPage from '../features/orders/pages/CodOrdersPage.jsx'
 import StockDeductQueuePage from '../features/inventory/pages/StockDeductQueuePage.jsx'
 import StockAdjustmentRequestsPage from '../features/inventory/pages/StockAdjustmentRequestsPage.jsx'
 import ProductionOrdersPage from '../features/inventory/pages/ProductionOrdersPage.jsx'
+import CustomBundlesPage from '../features/inventory/pages/CustomBundlesPage.jsx'
 import OrderDetailPage from '../features/orders/pages/OrderDetailPage.jsx'
 import PosPage from '../features/pos/pages/PosPage.jsx'
 import PosTransferQrPage from '../features/pos/pages/PosTransferQrPage.jsx'
@@ -81,6 +82,7 @@ function App() {
         <Route path="/inventory/import" element={<InventoryImportPage />} />
         <Route path="/inventory/export" element={<InventoryExportPage />} />
         <Route path="/inventory/production" element={<ProductionOrdersPage />} />
+        <Route path="/inventory/custom-bundles" element={<CustomBundlesPage />} />
         <Route path="/inventory/bom" element={<InventoryBomPage />} />
         <Route path="/inventory/bom/create" element={<InventoryBomCreatePage />} />
         <Route path="/inventory/bom/:bomId/edit" element={<InventoryBomCreatePage />} />

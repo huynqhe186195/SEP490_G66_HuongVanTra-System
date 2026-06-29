@@ -33,7 +33,8 @@ public record OrderResponse(
     DateTime CreatedAt,
     DateTime UpdatedAt,
     List<OrderDetailResponse> Items,
-    List<PaymentResponse> Payments
+    List<PaymentResponse> Payments,
+    List<CustomBundleResponse>? CustomBundles = null
 );
 
 public record OrderDetailResponse(
@@ -141,3 +142,22 @@ public record OrderSummaryResponse(
     decimal? CodExpectedAmount = null,
     int TotalQuantity = 0
 );
+
+public record CustomBundleIngredientResponse(
+    Guid Id,
+    Guid MaterialSkuId,
+    string MaterialSkuCode,
+    string MaterialSnapshotName,
+    int Quantity,
+    decimal UnitPrice,
+    decimal SubTotal);
+
+public record CustomBundleResponse(
+    Guid Id,
+    Guid OrderId,
+    string? Label,
+    string? Note,
+    decimal TotalPrice,
+    string PackingStatus,
+    DateTime? PackedAt,
+    List<CustomBundleIngredientResponse> Ingredients);

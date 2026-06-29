@@ -41,6 +41,7 @@ builder.Services.AddScoped<IOrderActivityRepository, OrderActivityRepository>();
 builder.Services.AddScoped<IPromotionRepository, PromotionRepository>();
 builder.Services.AddScoped<IOrderCodeGenerator, OrderCodeGenerator>();
 builder.Services.AddScoped<IReturnOrderRepository, ReturnOrderRepository>();
+builder.Services.AddScoped<ICustomBundleRepository, CustomBundleRepository>();
 builder.Services.AddScoped<IOrderEventPublisher, OrderEventPublisher>();
 builder.Services.AddScoped<IReportRepository, ReportRepository>();
 builder.Services.AddHttpContextAccessor();
@@ -53,6 +54,11 @@ builder.Services.AddHttpClient<IProductCatalogClient, ProductCatalogClient>(clie
 builder.Services.AddHttpClient<ICustomerCatalogClient, CustomerCatalogClient>(client =>
 {
     var baseUrl = builder.Configuration["CustomerService:BaseUrl"] ?? "http://customer-service:8080";
+    client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
+}).AddHttpMessageHandler<ForwardAuthorizationHeaderHandler>();
+builder.Services.AddHttpClient<IInventoryCatalogClient, InventoryCatalogClient>(client =>
+{
+    var baseUrl = builder.Configuration["InventoryService:BaseUrl"] ?? "http://inventory-service:8080";
     client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
 }).AddHttpMessageHandler<ForwardAuthorizationHeaderHandler>();
 builder.Services.Configure<PosTransferPaymentOptions>(
