@@ -43,7 +43,7 @@ function InventoryExportPage() {
     <PageShell>
       <PageHeader
         title="Phiếu xuất kho"
-        description="Phiếu xuất tự động khi Thủ kho duyệt yêu cầu nhập hàng từ kho tổng sang cửa hàng"
+        description="Phiếu xuất tự động khi Thủ kho duyệt yêu cầu xuất kho tổng sang cửa hàng"
         searchPlaceholder="Tìm mã phiếu, SKU..."
         searchValue={searchInput}
         onSearchChange={setSearchInput}

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
@@ -11,6 +11,7 @@ import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import InventorySimulationBanner from '../components/InventorySimulationBanner.jsx'
 import StockAdjustmentRequestDetailPanel from '../components/StockAdjustmentRequestDetailPanel.jsx'
 import InventoryNavTabs from '../components/InventoryNavTabs.jsx'
+import { notifyInventoryStockChanged } from '../utils/inventoryStockEvents.js'
 import { fetchInventorySettings } from '../services/inventoryStockApi.js'
 import {
   approveStockAdjustmentRequest,
@@ -41,10 +42,18 @@ function formatDelta(delta) {
   return formatStockQuantity(value)
 }
 
+function getRequestMovementLabel(row) {
+  if (row.hasIncrease && row.hasDecrease) return ' · xuất sang CH & giảm'
+  if (row.hasIncrease) return ' · xuất sang cửa hàng'
+  if (row.hasDecrease) return ' · giảm tồn'
+  return ''
+}
+
 function StockAdjustmentRequestsPage() {
+  const location = useLocation()
   const canReview = canConfirmStockDeduct(loadAuthSession())
   const [activeTab, setActiveTab] = useState(canReview ? 'pending' : 'mine')
-  const [searchValue, setSearchValue] = useState('')
+  const [searchValue, setSearchValue] = useState(() => location.state?.search ?? '')
   const [requests, setRequests] = useState([])
   const [selectedId, setSelectedId] = useState(null)
   const [selectedDetail, setSelectedDetail] = useState(null)
@@ -96,6 +105,14 @@ function StockAdjustmentRequestsPage() {
   useEffect(() => {
     fetchInventorySettings().then((s) => setSimulateWarehouse(s.simulateWarehouse)).catch(() => {})
   }, [])
+
+  useEffect(() => {
+    const nextSearch = location.state?.search
+    if (!nextSearch) return
+    setSearchValue(nextSearch)
+    setActiveTab(canReview ? 'pending' : 'mine')
+    setPage(1)
+  }, [canReview, location.key, location.state])
 
   useEffect(() => {
     if (!selectedId) {
@@ -151,6 +168,7 @@ function StockAdjustmentRequestsPage() {
       } else {
         showSuccess('Đã duyệt lô và cập nhật tồn cửa hàng.')
       }
+      notifyInventoryStockChanged()
       await loadData()
       if (selectedId === id) {
         const detail = await fetchStockAdjustmentRequestById(id)
@@ -195,10 +213,10 @@ function StockAdjustmentRequestsPage() {
   return (
     <PageShell>
       <PageHeader
-        title="Yêu cầu điều chỉnh tồn"
+        title="Yêu cầu tồn & xuất sang cửa hàng"
         description={
           canReview
-            ? 'Duyệt lô yêu cầu từ cửa hàng — bấm thẻ để xem chi tiết từng lô'
+            ? 'Duyệt lô xuất kho tổng sang cửa hàng hoặc điều chỉnh tồn — bấm thẻ để xem chi tiết từng lô'
             : 'Theo dõi lô yêu cầu bạn đã gửi — bấm thẻ để xem chi tiết'
         }
         searchPlaceholder="Tìm mã yêu cầu, SKU..."
@@ -288,13 +306,7 @@ function StockAdjustmentRequestsPage() {
                       </div>
                       <p className="mt-2 text-sm font-semibold text-slate-800">
                         {row.itemCount} SKU
-                        {row.hasIncrease && row.hasDecrease
-                          ? ' · nhập & giảm'
-                          : row.hasIncrease
-                            ? ' · nhập kho'
-                            : row.hasDecrease
-                              ? ' · giảm tồn'
-                              : ''}
+                        {getRequestMovementLabel(row)}
                       </p>
                       {preview ? (
                         <p className="mt-1 truncate text-xs text-slate-500">
@@ -354,9 +366,9 @@ function StockAdjustmentRequestsPage() {
             <p className="mt-2 text-sm text-slate-600">
               {rejectTarget.itemCount} SKU trong lô
               {rejectTarget.hasIncrease && rejectTarget.hasDecrease
-                ? ' (có nhập và giảm tồn)'
+                ? ' (có xuất sang cửa hàng và giảm tồn)'
                 : rejectTarget.hasIncrease
-                  ? ' (nhập từ kho)'
+                  ? ' (xuất sang cửa hàng)'
                   : rejectTarget.hasDecrease
                     ? ' (giảm tồn)'
                     : ''}

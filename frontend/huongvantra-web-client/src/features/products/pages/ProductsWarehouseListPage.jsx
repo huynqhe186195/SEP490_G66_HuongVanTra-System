@@ -12,6 +12,7 @@ import {
 } from '../../auth/utils/permissions.js'
 import { fetchCategories } from '../services/categoriesApi.js'
 import {
+  buildStockBySkuIdMap,
   buildWarehouseStockBySkuIdMap,
   fetchInventorySettings,
   fetchSkuStocks,
@@ -21,6 +22,7 @@ import { deleteProduct, fetchProducts, restoreProduct } from '../services/produc
 import ProductImage from '../components/ProductImage.jsx'
 import ProductSkusDetailModal from '../components/ProductSkusDetailModal.jsx'
 import ProductExpandedPanel from '../components/ProductExpandedPanel.jsx'
+import TransferToStoreModal from '../components/TransferToStoreModal.jsx'
 import InventorySimulationBanner from '../../inventory/components/InventorySimulationBanner.jsx'
 import { INVENTORY_STOCK_CHANGED_EVENT } from '../../inventory/utils/inventoryStockEvents.js'
 import {
@@ -207,11 +209,13 @@ export default function ProductsWarehouseListPage() {
   const [totalCount, setTotalCount] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
   const [stockBySkuId, setStockBySkuId] = useState(() => new Map())
+  const [storeStockBySkuId, setStoreStockBySkuId] = useState(() => new Map())
   const [simulateWarehouse, setSimulateWarehouse] = useState(true)
   const [isSyncing, setIsSyncing] = useState(false)
   const [togglingId, setTogglingId] = useState(null)
   const [pendingSyncTotal, setPendingSyncTotal] = useState(0)
   const [skuModalProduct, setSkuModalProduct] = useState(null)
+  const [transferTarget, setTransferTarget] = useState(null)
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
   const [focusProductId, setFocusProductId] = useState(() => initialState.focusId)
   const [expandedProductId, setExpandedProductId] = useState(null)
@@ -259,8 +263,10 @@ export default function ProductsWarehouseListPage() {
     try {
       const stocks = await fetchSkuStocks()
       setStockBySkuId(buildWarehouseStockBySkuIdMap(stocks))
+      setStoreStockBySkuId(buildStockBySkuIdMap(stocks))
     } catch {
       setStockBySkuId(new Map())
+      setStoreStockBySkuId(new Map())
     }
   }, [])
 
@@ -401,6 +407,16 @@ export default function ProductsWarehouseListPage() {
 
   function toggleExpand(productId) {
     setExpandedProductId((cur) => (cur === productId ? null : productId))
+  }
+
+  function openTransferToStore(product, sku) {
+    if (!sku) return
+    setTransferTarget({
+      sku,
+      productName: product.name,
+      warehouseQuantityOnHand: Number(stockBySkuId.get(sku.id) ?? 0),
+      quantityOnHand: Number(storeStockBySkuId.get(sku.id) ?? 0),
+    })
   }
 
   // ── Filter state for sidebar ───────────────────────────────────────────────
@@ -756,6 +772,18 @@ export default function ProductsWarehouseListPage() {
                                     <span className="material-symbols-outlined text-[18px]">inventory_2</span>
                                   </button>
                                 ) : null}
+                                {isWarehouse && selectedVariant && !product.isDeleted ? (
+                                  <button
+                                    type="button"
+                                    title={stockQty > 0 ? 'Xuất sang cửa hàng' : 'Kho tổng hết hàng'}
+                                    disabled={stockQty <= 0}
+                                    className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-semibold text-[#356647] hover:bg-[#356647]/8 disabled:cursor-not-allowed disabled:opacity-40"
+                                    onClick={() => openTransferToStore(product, selectedVariant)}
+                                  >
+                                    <span className="material-symbols-outlined text-[18px]">output</span>
+                                    <span>Xuất sang CH</span>
+                                  </button>
+                                ) : null}
                                 {!product.isDeleted && canCreate ? (
                                   <Link
                                     to={`/products/${product.id}/edit`}
@@ -876,6 +904,22 @@ export default function ProductsWarehouseListPage() {
           warehouseStockView
           onClose={() => setSkuModalProduct(null)}
           onStockAdjusted={loadStocks}
+        />
+      ) : null}
+
+      {transferTarget ? (
+        <TransferToStoreModal
+          sku={transferTarget.sku}
+          productName={transferTarget.productName}
+          warehouseQuantityOnHand={transferTarget.warehouseQuantityOnHand}
+          quantityOnHand={transferTarget.quantityOnHand}
+          onClose={() => setTransferTarget(null)}
+          onSubmitted={(created) => {
+            setTransferTarget(null)
+            navigate('/inventory/stock-requests', {
+              state: { search: created?.requestCode ?? '' },
+            })
+          }}
         />
       ) : null}
     </PageShell>

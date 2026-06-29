@@ -74,6 +74,7 @@ export default function StockAdjustmentRequestDetailPanel({
               <th className="px-4 py-3 text-right">Thay đổi</th>
               <th className="px-4 py-3 text-right">Tồn CH lúc gửi</th>
               <th className="px-4 py-3 text-right">Tồn CH sau duyệt</th>
+              <th className="px-4 py-3 text-right">Kho tổng sau duyệt</th>
               <th className="px-4 py-3">Phiếu xuất</th>
             </tr>
           </thead>
@@ -97,6 +98,11 @@ export default function StockAdjustmentRequestDetailPanel({
                 <td className="px-4 py-3 text-right text-slate-600">
                   {item.quantityOnHandAfter != null
                     ? formatStockQuantity(item.quantityOnHandAfter)
+                    : '—'}
+                </td>
+                <td className="px-4 py-3 text-right text-slate-600">
+                  {item.warehouseQuantityOnHandAfter != null
+                    ? formatStockQuantity(item.warehouseQuantityOnHandAfter)
                     : '—'}
                 </td>
                 <td className="px-4 py-3">
