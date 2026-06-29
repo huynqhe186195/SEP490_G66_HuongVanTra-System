@@ -8,24 +8,28 @@ namespace OrderService.Infrastructure.Migrations
     {
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<int>(
-                name: "CategoryId",
-                table: "PromotionScopes",
-                type: "int",
-                nullable: true);
+            // Idempotent: DB cũ có thể đã có cột từ migration 20260613100000 (bootstrap).
+            migrationBuilder.Sql("""
+                SET @db := DATABASE();
+                SET @exists := (
+                    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                    WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'PromotionScopes' AND COLUMN_NAME = 'CategoryId');
+                SET @sql := IF(@exists = 0,
+                    'ALTER TABLE `PromotionScopes` ADD COLUMN `CategoryId` int NULL, ADD COLUMN `CategorySnapshotName` varchar(255) CHARACTER SET utf8mb4 NULL',
+                    'SELECT 1');
+                PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+                """);
 
-            migrationBuilder.AddColumn<string>(
-                name: "CategorySnapshotName",
-                table: "PromotionScopes",
-                type: "varchar(255)",
-                maxLength: 255,
-                nullable: true)
-                .Annotation("MySql:CharSet", "utf8mb4");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_PromotionScopes_CategoryId",
-                table: "PromotionScopes",
-                column: "CategoryId");
+            migrationBuilder.Sql("""
+                SET @db := DATABASE();
+                SET @exists := (
+                    SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS
+                    WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'PromotionScopes' AND INDEX_NAME = 'IX_PromotionScopes_CategoryId');
+                SET @sql := IF(@exists = 0,
+                    'CREATE INDEX `IX_PromotionScopes_CategoryId` ON `PromotionScopes` (`CategoryId`)',
+                    'SELECT 1');
+                PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+                """);
         }
 
         protected override void Down(MigrationBuilder migrationBuilder)

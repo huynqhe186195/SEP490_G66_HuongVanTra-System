@@ -9,40 +9,22 @@ namespace OrderService.Infrastructure.Migrations
     {
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.CreateTable(
-                name: "PromotionCustomerTierScopes",
-                columns: table => new
-                {
-                    Id = table.Column<Guid>(type: "char(36)", nullable: false, collation: "ascii_general_ci"),
-                    PromotionId = table.Column<Guid>(type: "char(36)", nullable: false, collation: "ascii_general_ci"),
-                    TierId = table.Column<int>(type: "int", nullable: false),
-                    TierSnapshotName = table.Column<string>(type: "varchar(255)", maxLength: 255, nullable: true)
-                        .Annotation("MySql:CharSet", "utf8mb4"),
-                    CreatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false),
-                    UpdatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false),
-                    IsDeleted = table.Column<bool>(type: "tinyint(1)", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_PromotionCustomerTierScopes", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_PromotionCustomerTierScopes_Promotions_PromotionId",
-                        column: x => x.PromotionId,
-                        principalTable: "Promotions",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                })
-                .Annotation("MySql:CharSet", "utf8mb4");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_PromotionCustomerTierScopes_PromotionId",
-                table: "PromotionCustomerTierScopes",
-                column: "PromotionId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_PromotionCustomerTierScopes_TierId",
-                table: "PromotionCustomerTierScopes",
-                column: "TierId");
+            migrationBuilder.Sql("""
+                CREATE TABLE IF NOT EXISTS `PromotionCustomerTierScopes` (
+                    `Id` char(36) COLLATE ascii_general_ci NOT NULL,
+                    `PromotionId` char(36) COLLATE ascii_general_ci NOT NULL,
+                    `TierId` int NOT NULL,
+                    `TierSnapshotName` varchar(255) CHARACTER SET utf8mb4 NULL,
+                    `CreatedAt` datetime(6) NOT NULL,
+                    `UpdatedAt` datetime(6) NOT NULL,
+                    `IsDeleted` tinyint(1) NOT NULL,
+                    PRIMARY KEY (`Id`),
+                    KEY `IX_PromotionCustomerTierScopes_PromotionId` (`PromotionId`),
+                    KEY `IX_PromotionCustomerTierScopes_TierId` (`TierId`),
+                    CONSTRAINT `FK_PromotionCustomerTierScopes_Promotions_PromotionId`
+                        FOREIGN KEY (`PromotionId`) REFERENCES `Promotions` (`Id`) ON DELETE CASCADE
+                ) CHARACTER SET=utf8mb4;
+                """);
         }
 
         protected override void Down(MigrationBuilder migrationBuilder)

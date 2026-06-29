@@ -56,7 +56,12 @@ services:
       - product_obj_app:/src/Service/ProductService/ProductService.Application/obj
       - product_obj_infra:/src/Service/ProductService/ProductService.Infrastructure/obj
       - product_obj_domain:/src/Service/ProductService/ProductService.Domain/obj
+      - product_bin_webapi:/src/Service/ProductService/ProductService.WebAPI/bin
+      - product_bin_app:/src/Service/ProductService/ProductService.Application/bin
+      - product_bin_infra:/src/Service/ProductService/ProductService.Infrastructure/bin
+      - product_bin_domain:/src/Service/ProductService/ProductService.Domain/bin
       - shared_obj:/src/Shared_Libraries/HuongVanTra.Shared/obj
+      - shared_bin:/src/Shared_Libraries/HuongVanTra.Shared/bin
     command: >
       dotnet watch run
         --project Service/ProductService/ProductService.WebAPI/ProductService.WebAPI.csproj
@@ -226,7 +231,12 @@ volumes:
   product_obj_app:
   product_obj_infra:
   product_obj_domain:
+  product_bin_webapi:
+  product_bin_app:
+  product_bin_infra:
+  product_bin_domain:
   shared_obj:
+  shared_bin:
   # customer_nuget_cache:
   # user_nuget_cache:
   # order_nuget_cache:
