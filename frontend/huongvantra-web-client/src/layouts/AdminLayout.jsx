@@ -12,6 +12,7 @@ import { syncSessionFromServer } from '../features/auth/services/authApi.js'
 import { loadAuthSession, saveAuthSession } from '../features/auth/services/authSession.js'
 import { useNetworkStatus } from '../hooks/useNetworkStatus.js'
 import { syncOfflineCache } from '../lib/offlineCache.js'
+import { canAccessModule } from '../app/navigation.js'
 
 const OFFLINE_SYNC_INTERVAL_MS = 30 * 60 * 1000
 
@@ -38,6 +39,8 @@ function AdminLayout() {
   // Background sync mỗi 30 phút khi online, và khi tab được focus lại
   useEffect(() => {
     if (!isOnline) return
+    if (!canAccessModule(authSession, 'pos')) return
+
     syncOfflineCache().catch(() => {})
     const interval = setInterval(() => {
       if (navigator.onLine) syncOfflineCache().catch(() => {})

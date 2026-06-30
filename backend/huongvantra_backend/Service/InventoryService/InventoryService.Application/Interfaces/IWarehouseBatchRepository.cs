@@ -13,6 +13,7 @@ public interface IWarehouseBatchRepository
     Task<decimal> CalculateMovingAverageCostAsync(Guid skuId, CancellationToken ct = default);
     Task<Dictionary<Guid, int>> GetQuantitySumsBySkuAsync(CancellationToken ct = default);
     Task<int> CountActiveLotsForSkuAsync(Guid skuId, CancellationToken ct = default);
+    Task<decimal> CalculateTotalWarehouseValueAsync(CancellationToken ct = default);
     Task AddAsync(WarehouseBatch batch, CancellationToken ct = default);
     Task SaveChangesAsync(CancellationToken ct = default);
 }

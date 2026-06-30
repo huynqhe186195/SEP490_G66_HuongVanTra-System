@@ -64,6 +64,17 @@ export const navigationItems = [
   { label: 'Hàng hóa', path: '/inventory/products', module: 'products', icon: 'inventory_2', roles: ['admin', 'agencyManager', 'inventoryManager'] },
   { label: 'Kho tổng', path: '/inventory', module: 'inventory', icon: 'warehouse', roles: ['inventoryManager'] },
   {
+    label: 'Thống kê kho',
+    path: '/inventory/statistics',
+    module: 'inventory_statistics',
+    icon: 'analytics',
+    roles: ['inventoryManager'],
+    children: [
+      { label: 'Tổng quan', path: '/inventory/statistics?section=overview', section: 'overview', sectionScope: 'inventory_statistics' },
+      { label: 'Trạng thái hàng hoá', path: '/inventory/statistics?section=alerts', section: 'alerts', sectionScope: 'inventory_statistics' },
+    ],
+  },
+  {
     label: 'Yêu cầu điều chỉnh tồn',
     path: '/inventory/stock-requests',
     module: 'stock_adjustment_ops',
@@ -404,6 +415,10 @@ export function isNavigationItemActive(pathname, item, search = '') {
     return path === target || path.startsWith(`${target}/`)
   }
 
+  if (item.module === 'inventory_statistics') {
+    return path === target || path.startsWith(`${target}/`)
+  }
+
   if (item.module === 'products') {
     return path === target || path.startsWith(`${target}/`)
   }
@@ -464,6 +479,15 @@ export function isNavigationChildActive(pathname, search, child) {
     }
 
     return getCustomerSectionFromSearch(search) === child.section
+  }
+
+  if (scope === 'inventory_statistics') {
+    if (path !== '/inventory/statistics') {
+      return false
+    }
+    const params = new URLSearchParams(search)
+    const section = params.get('section') || 'overview'
+    return section === child.section
   }
 
   if (path !== '/dashboard') {

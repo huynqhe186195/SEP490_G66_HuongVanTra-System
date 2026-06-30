@@ -25,6 +25,12 @@ public class StockDeductQueueRepository(InventoryDbContext _db) : IStockDeductQu
         return await query.OrderByDescending(q => q.CreatedAt).ToListAsync(ct);
     }
 
+    public async Task<int> CountWaitingAsync(CancellationToken ct = default)
+    {
+        return await _db.StockDeductQueues
+            .CountAsync(q => !q.IsDeducted && q.QueueStatus == QueueStatus.Waiting, ct);
+    }
+
     public async Task<(List<StockDeductQueue> Items, int TotalCount)> GetWaitingPagedAsync(
         string? search,
         int page,
