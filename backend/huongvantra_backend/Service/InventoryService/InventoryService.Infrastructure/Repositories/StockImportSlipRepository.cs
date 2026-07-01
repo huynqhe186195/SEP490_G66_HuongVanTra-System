@@ -7,12 +7,15 @@ namespace InventoryService.Infrastructure.Repositories;
 
 public class StockImportSlipRepository(InventoryDbContext _db) : IStockImportSlipRepository
 {
+    private IQueryable<StockImportSlip> WithLines() =>
+        _db.StockImportSlips.Include(s => s.Lines);
+
     public Task<StockImportSlip?> GetByIdAsync(Guid id, CancellationToken ct = default) =>
-        _db.StockImportSlips.FirstOrDefaultAsync(s => s.Id == id, ct);
+        WithLines().FirstOrDefaultAsync(s => s.Id == id, ct);
 
     public async Task<List<StockImportSlip>> GetListAsync(string? search, CancellationToken ct = default)
     {
-        var query = _db.StockImportSlips.AsQueryable();
+        var query = WithLines();
 
         if (!string.IsNullOrWhiteSpace(search))
         {

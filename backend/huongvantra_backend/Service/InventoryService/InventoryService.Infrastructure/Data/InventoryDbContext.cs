@@ -14,6 +14,7 @@ public class InventoryDbContext(DbContextOptions<InventoryDbContext> options) : 
     public DbSet<StockExportSlip> StockExportSlips => Set<StockExportSlip>();
     public DbSet<StockExportSlipLine> StockExportSlipLines => Set<StockExportSlipLine>();
     public DbSet<StockImportSlip> StockImportSlips => Set<StockImportSlip>();
+    public DbSet<StockImportSlipLine> StockImportSlipLines => Set<StockImportSlipLine>();
     public DbSet<WarehouseBatch> WarehouseBatches => Set<WarehouseBatch>();
     public DbSet<WarehouseBatchItem> WarehouseBatchItems => Set<WarehouseBatchItem>();
     public DbSet<StockExportBatchAllocation> StockExportBatchAllocations => Set<StockExportBatchAllocation>();

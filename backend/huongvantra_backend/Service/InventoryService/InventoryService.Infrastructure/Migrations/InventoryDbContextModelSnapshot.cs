@@ -395,6 +395,79 @@ namespace InventoryService.Infrastructure.Migrations
                     b.ToTable("StockImportSlips");
                 });
 
+            modelBuilder.Entity("InventoryService.Domain.Entities.StockImportSlipLine", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<string>("ProductSnapshotName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<Guid?>("ProductionOrderOutputLineId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("int");
+
+                    b.Property<string>("SkuCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<Guid>("SkuId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<Guid>("StockImportSlipId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<int>("StoreQtyAfter")
+                        .HasColumnType("int");
+
+                    b.Property<int>("StoreQtyBefore")
+                        .HasColumnType("int");
+
+                    b.Property<Guid?>("WarehouseBatchId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("WarehouseBatchLotCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<int>("WarehouseQtyAfter")
+                        .HasColumnType("int");
+
+                    b.Property<int>("WarehouseQtyBefore")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt")
+                        .HasDatabaseName("IX_StockImportSlipLines_CreatedAt");
+
+                    b.HasIndex("ProductionOrderOutputLineId")
+                        .HasDatabaseName("IX_StockImportSlipLines_ProductionOrderOutputLineId");
+
+                    b.HasIndex("SkuId")
+                        .HasDatabaseName("IX_StockImportSlipLines_SkuId");
+
+                    b.HasIndex("StockImportSlipId")
+                        .HasDatabaseName("IX_StockImportSlipLines_StockImportSlipId");
+
+                    b.HasIndex("WarehouseBatchId")
+                        .HasDatabaseName("IX_StockImportSlipLines_WarehouseBatchId");
+
+                    b.ToTable("StockImportSlipLines");
+                });
+
             modelBuilder.Entity("InventoryService.Domain.Entities.WarehouseBatch", b =>
                 {
                     b.Property<Guid>("Id")
@@ -758,6 +831,33 @@ namespace InventoryService.Infrastructure.Migrations
                         .WithMany()
                         .HasForeignKey("WarehouseBatchId")
                         .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Lines");
+                });
+
+            modelBuilder.Entity("InventoryService.Domain.Entities.StockImportSlipLine", b =>
+                {
+                    b.HasOne("InventoryService.Domain.Entities.StockImportSlip", "ImportSlip")
+                        .WithMany("Lines")
+                        .HasForeignKey("StockImportSlipId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("InventoryService.Domain.Entities.ProductionOrderOutputLine", "ProductionOrderOutputLine")
+                        .WithMany()
+                        .HasForeignKey("ProductionOrderOutputLineId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("InventoryService.Domain.Entities.WarehouseBatch", "WarehouseBatch")
+                        .WithMany()
+                        .HasForeignKey("WarehouseBatchId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("ImportSlip");
+
+                    b.Navigation("ProductionOrderOutputLine");
+
+                    b.Navigation("WarehouseBatch");
                 });
 
             modelBuilder.Entity("InventoryService.Domain.Entities.ProductionOrder", b =>

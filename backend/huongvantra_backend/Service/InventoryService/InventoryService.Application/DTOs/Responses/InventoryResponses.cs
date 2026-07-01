@@ -160,6 +160,22 @@ public record StockExportSlipResponse(
     List<StockExportBatchAllocationResponse> BatchAllocations,
     List<StockExportSlipLineResponse> Lines);
 
+public record StockImportSlipLineResponse(
+    Guid Id,
+    Guid SkuId,
+    string SkuCode,
+    string ProductSnapshotName,
+    int Quantity,
+    int WarehouseQtyBefore,
+    int WarehouseQtyAfter,
+    int StoreQtyBefore,
+    int StoreQtyAfter,
+    Guid? WarehouseBatchId,
+    string? WarehouseBatchLotCode,
+    Guid? ProductionOrderOutputLineId,
+    string? Note,
+    DateTime CreatedAt);
+
 public record StockImportSlipResponse(
     Guid Id,
     string ImportCode,
@@ -178,7 +194,8 @@ public record StockImportSlipResponse(
     string? ProductionCode,
     string? Note,
     Guid CreatedBy,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    List<StockImportSlipLineResponse> Lines);
 
 public record ProductionOrderLineResponse(
     Guid Id,

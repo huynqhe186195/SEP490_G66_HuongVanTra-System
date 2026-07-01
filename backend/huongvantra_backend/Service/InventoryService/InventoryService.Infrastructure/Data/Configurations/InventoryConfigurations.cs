@@ -156,6 +156,36 @@ public class StockImportSlipConfiguration : IEntityTypeConfiguration<StockImport
             .WithMany()
             .HasForeignKey(e => e.ProductionOrderId)
             .OnDelete(DeleteBehavior.SetNull);
+        builder.HasMany(e => e.Lines)
+            .WithOne(l => l.ImportSlip)
+            .HasForeignKey(l => l.StockImportSlipId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
+public class StockImportSlipLineConfiguration : IEntityTypeConfiguration<StockImportSlipLine>
+{
+    public void Configure(EntityTypeBuilder<StockImportSlipLine> builder)
+    {
+        builder.ToTable("StockImportSlipLines");
+        builder.HasKey(e => e.Id);
+        builder.Property(e => e.SkuCode).HasMaxLength(50).IsRequired();
+        builder.Property(e => e.ProductSnapshotName).HasMaxLength(255).IsRequired();
+        builder.Property(e => e.WarehouseBatchLotCode).HasMaxLength(50);
+        builder.Property(e => e.Note).HasMaxLength(500);
+        builder.HasIndex(e => e.StockImportSlipId);
+        builder.HasIndex(e => e.SkuId);
+        builder.HasIndex(e => e.WarehouseBatchId);
+        builder.HasIndex(e => e.ProductionOrderOutputLineId);
+        builder.HasIndex(e => e.CreatedAt);
+        builder.HasOne(e => e.WarehouseBatch)
+            .WithMany()
+            .HasForeignKey(e => e.WarehouseBatchId)
+            .OnDelete(DeleteBehavior.SetNull);
+        builder.HasOne(e => e.ProductionOrderOutputLine)
+            .WithMany()
+            .HasForeignKey(e => e.ProductionOrderOutputLineId)
+            .OnDelete(DeleteBehavior.SetNull);
     }
 }
 
