@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { Fragment, useCallback, useEffect, useState } from 'react'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
@@ -54,6 +54,38 @@ function StatusChip({ status }) {
       {PRODUCTION_STATUS_LABEL[status] ?? status}
     </span>
   )
+}
+
+function getOutputLines(order) {
+  const outputLines = Array.isArray(order.outputLines) ? order.outputLines.filter(Boolean) : []
+  if (outputLines.length > 0) return outputLines
+
+  return [
+    {
+      id: `${order.id}-legacy-output`,
+      finishedSkuId: order.finishedSkuId,
+      finishedSkuCode: order.finishedSkuCode,
+      finishedSkuSnapshotName: order.finishedSkuSnapshotName,
+      quantity: order.quantity,
+      warehouseBatchId: null,
+      warehouseBatchLotCode: null,
+    },
+  ].filter((line) => line.finishedSkuId || line.finishedSkuCode || line.finishedSkuSnapshotName)
+}
+
+function formatQuantity(value) {
+  const number = Number(value)
+  if (!Number.isFinite(number)) return '0'
+  return number.toLocaleString('vi-VN')
+}
+
+function formatOutputCompact(outputLines) {
+  return outputLines
+    .map((line) => {
+      const name = line.finishedSkuSnapshotName || line.finishedSkuCode
+      return `${name} x${formatQuantity(line.quantity)}`
+    })
+    .join(', ')
 }
 
 function ProductionOrdersPage() {
@@ -184,10 +216,13 @@ function ProductionOrdersPage() {
                 </td>
               </tr>
             ) : (
-              orders.map((order) => (
-                <>
+              orders.map((order) => {
+                const outputLines = getOutputLines(order)
+                const isMultiOutput = outputLines.length > 1
+                const totalOutputQuantity = outputLines.reduce((sum, line) => sum + Number(line.quantity || 0), 0)
+                return (
+                <Fragment key={order.id}>
                   <tr
-                    key={order.id}
                     className="cursor-pointer border-b border-slate-50 hover:bg-slate-50/60"
                     onClick={() => setExpandedId(expandedId === order.id ? null : order.id)}
                   >
@@ -195,11 +230,32 @@ function ProductionOrdersPage() {
                       {order.productionCode}
                     </td>
                     <td className="px-4 py-3">
-                      <p className="font-medium text-slate-800">{order.finishedSkuSnapshotName}</p>
-                      <p className="text-xs text-[#717971]">{order.finishedSkuCode}</p>
+                      {isMultiOutput ? (
+                        <>
+                          <p className="font-medium text-slate-800">{outputLines.length} thành phẩm đầu ra</p>
+                          <p className="max-w-sm truncate text-xs text-[#717971]">
+                            {formatOutputCompact(outputLines)}
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="font-medium text-slate-800">
+                            {outputLines[0]?.finishedSkuSnapshotName || order.finishedSkuSnapshotName}
+                          </p>
+                          <p className="text-xs text-[#717971]">
+                            {outputLines[0]?.finishedSkuCode || order.finishedSkuCode}
+                          </p>
+                        </>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-right font-semibold text-slate-800">
-                      {order.quantity.toLocaleString('vi-VN')}
+                      {isMultiOutput ? (
+                        <span title="Tổng số lượng các dòng thành phẩm">
+                          {formatQuantity(totalOutputQuantity)} tổng
+                        </span>
+                      ) : (
+                        formatQuantity(outputLines[0]?.quantity ?? order.quantity)
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <StatusChip status={order.status} />
@@ -235,24 +291,50 @@ function ProductionOrdersPage() {
                     </td>
                   </tr>
 
-                  {/* Expanded BOM lines */}
-                  {expandedId === order.id && order.lines.length > 0 && (
+                  {expandedId === order.id && (
                     <tr key={`${order.id}-detail`} className="bg-slate-50/40">
                       <td colSpan={6} className="px-6 py-4">
-                        <p className="mb-2 text-xs font-semibold text-[#717971]">Nguyên liệu:</p>
-                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                          {order.lines.map((line) => (
-                            <div
-                              key={line.id}
-                              className="rounded-lg border border-slate-100 bg-white px-3 py-2 text-xs"
-                            >
-                              <p className="font-medium text-slate-800">{line.materialSnapshotName}</p>
-                              <p className="text-[#717971]">
-                                {line.materialSkuCode} · {line.plannedQuantity.toLocaleString('vi-VN')} đơn vị
+                        <p className="mb-2 text-xs font-semibold text-[#717971]">Thành phẩm đầu ra:</p>
+                        <div className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                          {outputLines.map((line) => (
+                            <div key={line.id} className="rounded-lg border border-slate-100 bg-white px-3 py-2 text-xs">
+                              <p className="font-medium text-slate-800">
+                                {line.finishedSkuSnapshotName || line.finishedSkuCode}
                               </p>
+                              <p className="text-[#717971]">
+                                {line.finishedSkuCode} · {formatQuantity(line.quantity)} đơn vị
+                              </p>
+                              {line.warehouseBatchLotCode && (
+                                <p className="mt-1 font-mono text-[11px] text-[#356647]">
+                                  Lot: {line.warehouseBatchLotCode}
+                                </p>
+                              )}
+                              {line.warehouseBatchId && (
+                                <p className="mt-0.5 break-all font-mono text-[11px] text-slate-400">
+                                  BatchId: {line.warehouseBatchId}
+                                </p>
+                              )}
                             </div>
                           ))}
                         </div>
+                        {order.lines.length > 0 && (
+                          <>
+                            <p className="mb-2 text-xs font-semibold text-[#717971]">Nguyên liệu:</p>
+                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                              {order.lines.map((line) => (
+                                <div
+                                  key={line.id}
+                                  className="rounded-lg border border-slate-100 bg-white px-3 py-2 text-xs"
+                                >
+                                  <p className="font-medium text-slate-800">{line.materialSnapshotName}</p>
+                                  <p className="text-[#717971]">
+                                    {line.materialSkuCode} · {formatQuantity(line.plannedQuantity)} đơn vị
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+                          </>
+                        )}
                         {order.completedAt && (
                           <p className="mt-2 text-xs text-slate-400">
                             Hoàn thành: {formatVietnamDateTime(order.completedAt)}
@@ -264,8 +346,9 @@ function ProductionOrdersPage() {
                       </td>
                     </tr>
                   )}
-                </>
-              ))
+                </Fragment>
+                )
+              })
             )}
           </tbody>
         </table>
