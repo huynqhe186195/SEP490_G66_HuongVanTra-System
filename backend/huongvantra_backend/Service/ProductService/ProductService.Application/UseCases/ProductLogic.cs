@@ -54,6 +54,66 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
         return MapToResponse(product, scope);
     }
 
+    public async Task<List<BomLineResponse>> GetVariantBomAsync(Guid variantId)
+    {
+        var variant = await _productRepository.GetVariantByIdAsync(variantId)
+            ?? throw new ProductValidationException("KhĂ´ng tĂ¬m tháº¥y SKU/ProductVariant.");
+
+        return variant.BomLines
+            .Where(line => !line.IsDeleted)
+            .Select(MapBomLineResponse)
+            .ToList();
+    }
+
+    public async Task<List<BomLineResponse>> UpdateVariantBomAsync(Guid variantId, UpdateVariantBomRequest request)
+    {
+        if (request is null)
+            throw new ProductValidationException("Request body lĂ  báº¯t buá»™c.");
+
+        var variant = await _productRepository.GetVariantByIdAsync(variantId)
+            ?? throw new ProductValidationException("KhĂ´ng tĂ¬m tháº¥y SKU/ProductVariant.");
+
+        if (variant.Product.ProductType != ProductType.THANH_PHAM)
+            throw new ProductValidationException("Chá»‰ SKU thĂ nh pháº©m má»›i Ä‘Æ°á»£c cáº¥u hĂ¬nh BOM.");
+
+        var lines = request.Lines ?? [];
+        var normalized = lines
+            .Select(line => new BomLineRequest(line.MaterialId, line.Quantity))
+            .ToList();
+
+        var invalidQuantity = normalized.FirstOrDefault(line => line.Quantity <= 0);
+        if (invalidQuantity is not null)
+            throw new ProductValidationException("Sá»‘ lÆ°á»£ng tiĂªu hao BOM pháº£i lá»›n hÆ¡n 0.");
+
+        var duplicate = normalized
+            .GroupBy(line => line.MaterialId)
+            .FirstOrDefault(group => group.Count() > 1);
+        if (duplicate is not null)
+            throw new ProductValidationException("KhĂ´ng Ä‘Æ°á»£c chá»n trĂ¹ng nguyĂªn liá»‡u trong má»™t BOM.");
+
+        var materialIds = normalized.Select(line => line.MaterialId).ToHashSet();
+        var materials = await _productRepository.GetProductsByIdsAsync(materialIds);
+        if (materials.Count != materialIds.Count)
+            throw new ProductValidationException("CĂ³ nguyĂªn liá»‡u khĂ´ng tá»“n táº¡i hoáº·c Ä‘Ă£ bá»‹ xĂ³a.");
+
+        var nonMaterial = materials.FirstOrDefault(product => product.ProductType != ProductType.NGUYEN_LIEU);
+        if (nonMaterial is not null)
+            throw new ProductValidationException($"'{nonMaterial.Name}' khĂ´ng pháº£i lĂ  nguyĂªn liá»‡u.");
+
+        var updated = await _productRepository.ReplaceVariantBomAsync(
+            variantId,
+            normalized.Select(line => new ProductVariantBomLine
+            {
+                MaterialId = line.MaterialId,
+                Quantity = line.Quantity
+            }).ToList());
+
+        return updated.BomLines
+            .Where(line => !line.IsDeleted)
+            .Select(MapBomLineResponse)
+            .ToList();
+    }
+
     public async Task<ProductResponse> CreateAsync(CreateProductRequest request)
     {
         if (request is null)
@@ -307,13 +367,15 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
         u.Id, u.ProductId, u.VariantId, u.UnitName, u.ConversionRate,
         u.Price, u.Barcode, u.IsDirectSell, u.IsBaseUnit);
 
+    private static BomLineResponse MapBomLineResponse(ProductVariantBomLine b) => new(
+        b.MaterialId, b.Material?.Name ?? string.Empty, b.Quantity);
+
     private static ProductVariantResponse MapVariantResponse(ProductVariant v) => new(
         v.Id, v.ProductId, v.SkuCode, v.Barcode, v.VariantName,
         v.OptionValuesJson, v.CostPrice, v.RetailPrice, v.MinStock, v.MaxStock,
         v.IsSellable, v.AllowRewardPoints, v.IsActive, v.ImageUrl,
         v.Units.Where(u => !u.IsDeleted).Select(MapUnitResponse).ToList(),
-        v.BomLines.Where(b => !b.IsDeleted).Select(b => new BomLineResponse(
-            b.MaterialId, b.Material?.Name ?? string.Empty, b.Quantity)).ToList());
+        v.BomLines.Where(b => !b.IsDeleted).Select(MapBomLineResponse).ToList());
 
     private static ProductType? ParseProductTypeFilter(string? value)
     {

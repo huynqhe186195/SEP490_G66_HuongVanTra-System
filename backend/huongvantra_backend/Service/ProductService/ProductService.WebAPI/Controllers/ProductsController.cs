@@ -28,6 +28,16 @@ public class ProductsController(ProductLogic _productLogic) : ControllerBase
     public async Task<IActionResult> GetById(Guid id) =>
         Ok(await _productLogic.GetByIdAsync(id, User.GetCatalogViewScope()));
 
+    [HttpGet("variants/{variantId:guid}/bom")]
+    [Authorize(Roles = "Warehouse")]
+    public async Task<IActionResult> GetVariantBom(Guid variantId) =>
+        Ok(await _productLogic.GetVariantBomAsync(variantId));
+
+    [HttpPut("variants/{variantId:guid}/bom")]
+    [Authorize(Roles = "Warehouse")]
+    public async Task<IActionResult> UpdateVariantBom(Guid variantId, [FromBody] UpdateVariantBomRequest request) =>
+        Ok(await _productLogic.UpdateVariantBomAsync(variantId, request));
+
     [HttpPost]
     [Authorize(Roles = "Warehouse")]
     public async Task<IActionResult> Create([FromBody] CreateProductRequest request)

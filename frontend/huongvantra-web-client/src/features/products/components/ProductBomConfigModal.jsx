@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { showError } from '../../../app/toast.js'
 import { searchMaterials } from '../services/bomApi.js'
 
 function useDebounce(value, delay = 300) {
@@ -8,6 +9,16 @@ function useDebounce(value, delay = 300) {
     return () => clearTimeout(timer)
   }, [value, delay])
   return debounced
+}
+
+function normalizeInitialLine(line) {
+  const materialId = line.material_id ?? line.materialId
+  return {
+    material_id: materialId,
+    materialName: line.materialName ?? line.name ?? '',
+    baseUnit: line.baseUnit ?? '',
+    quantity: line.quantity,
+  }
 }
 
 export default function ProductBomConfigModal({
@@ -21,6 +32,7 @@ export default function ProductBomConfigModal({
   const [searchInput, setSearchInput] = useState('')
   const [searchResults, setSearchResults] = useState([])
   const [isSearching, setIsSearching] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
   const [materialCache, setMaterialCache] = useState({})
   const dropdownRef = useRef(null)
 
@@ -28,9 +40,23 @@ export default function ProductBomConfigModal({
 
   useEffect(() => {
     if (!isOpen) return
-    setLines(initialLines.length > 0 ? initialLines.map((line) => ({ ...line })) : [])
+    const normalizedLines = initialLines.length > 0 ? initialLines.map(normalizeInitialLine) : []
+    setLines(normalizedLines)
     setSearchInput('')
     setSearchResults([])
+    setIsSaving(false)
+    setMaterialCache(() => {
+      const next = {}
+      for (const line of normalizedLines) {
+        if (!line.material_id || !line.materialName) continue
+        next[line.material_id] = {
+          id: line.material_id,
+          name: line.materialName,
+          baseUnit: line.baseUnit,
+        }
+      }
+      return next
+    })
   }, [isOpen])
 
   useEffect(() => {
@@ -82,16 +108,37 @@ export default function ProductBomConfigModal({
     setLines((prev) => prev.filter((_, i) => i !== index))
   }
 
-  function handleConfirm() {
-    onConfirm?.(
-      lines
-        .filter((line) => line.material_id)
-        .map((line) => ({
-          material_id: line.material_id,
-          quantity: Number(line.quantity) || 0,
-        })),
+  async function handleConfirm() {
+    const validLines = lines.filter((line) => line.material_id)
+    const duplicate = validLines.find(
+      (line, index) => validLines.findIndex((candidate) => String(candidate.material_id) === String(line.material_id)) !== index,
     )
-    onClose?.()
+    if (duplicate) {
+      showError('Không được chọn trùng nguyên liệu trong một BOM.')
+      return
+    }
+
+    const invalid = validLines.find((line) => !Number.isFinite(Number(line.quantity)) || Number(line.quantity) <= 0)
+    if (invalid) {
+      showError('Số lượng tiêu hao phải lớn hơn 0.')
+      return
+    }
+
+    setIsSaving(true)
+    try {
+      await onConfirm?.(
+        validLines.map((line) => ({
+          material_id: line.material_id,
+          materialId: line.material_id,
+          quantity: Number(line.quantity),
+        })),
+      )
+      onClose?.()
+    } catch {
+      // Caller shows the API error toast; keep the modal open for correction.
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   if (!isOpen || !variant) return null
@@ -237,9 +284,10 @@ export default function ProductBomConfigModal({
           <button
             type="button"
             onClick={handleConfirm}
+            disabled={isSaving}
             className="rounded-xl bg-[#538463] px-8 py-2.5 text-sm font-bold uppercase tracking-wide text-white hover:bg-[#457053]"
           >
-            Xác nhận
+            {isSaving ? 'Đang lưu...' : 'Xác nhận'}
           </button>
         </footer>
       </div>

@@ -158,6 +158,31 @@ public class ProductRepository(ProductDbContext _db) : IProductRepository
         return await query.FirstOrDefaultAsync(p => p.Id == id);
     }
 
+    public async Task<ProductVariant?> GetVariantByIdAsync(Guid id, bool includeDeleted = false)
+    {
+        var query = includeDeleted
+            ? _db.ProductVariants.IgnoreQueryFilters()
+            : _db.ProductVariants;
+
+        return await query
+            .Include(v => v.Product)
+            .Include(v => v.BomLines)
+                .ThenInclude(b => b.Material)
+            .FirstOrDefaultAsync(v => v.Id == id);
+    }
+
+    public async Task<List<Product>> GetProductsByIdsAsync(IEnumerable<Guid> ids, bool includeDeleted = false)
+    {
+        var targetIds = ids.ToHashSet();
+        var query = includeDeleted
+            ? _db.Products.IgnoreQueryFilters()
+            : _db.Products;
+
+        return await query
+            .Where(p => targetIds.Contains(p.Id))
+            .ToListAsync();
+    }
+
     public async Task<Product> CreateAsync(Product product)
     {
         _db.Products.Add(product);
@@ -170,6 +195,32 @@ public class ProductRepository(ProductDbContext _db) : IProductRepository
         _db.Products.Update(product);
         await _db.SaveChangesAsync();
         return (await GetByIdAsync(product.Id, includeDeleted: true))!;
+    }
+
+    public async Task<ProductVariant> ReplaceVariantBomAsync(Guid variantId, List<ProductVariantBomLine> lines)
+    {
+        var variant = await _db.ProductVariants
+            .Include(v => v.BomLines)
+            .FirstAsync(v => v.Id == variantId);
+
+        var now = DateTime.UtcNow;
+        foreach (var line in variant.BomLines)
+        {
+            line.IsDeleted = true;
+            line.UpdatedAt = now;
+        }
+
+        foreach (var line in lines)
+        {
+            line.ProductVariantId = variantId;
+            line.CreatedAt = now;
+            line.UpdatedAt = now;
+            _db.ProductVariantBomLines.Add(line);
+        }
+
+        variant.UpdatedAt = now;
+        await _db.SaveChangesAsync();
+        return (await GetVariantByIdAsync(variantId))!;
     }
 
     public async Task DeleteAsync(Product product)
