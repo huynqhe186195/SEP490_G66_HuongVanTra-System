@@ -144,6 +144,26 @@ public record StockExportSlipResponse(
     DateTime CreatedAt,
     List<StockExportBatchAllocationResponse> BatchAllocations);
 
+public record StockImportSlipResponse(
+    Guid Id,
+    string ImportCode,
+    string ImportType,
+    Guid SkuId,
+    string SkuCode,
+    string ProductSnapshotName,
+    int Quantity,
+    int WarehouseQtyBefore,
+    int WarehouseQtyAfter,
+    int StoreQtyBefore,
+    int StoreQtyAfter,
+    Guid? WarehouseBatchId,
+    string? WarehouseBatchLotCode,
+    Guid? ProductionOrderId,
+    string? ProductionCode,
+    string? Note,
+    Guid CreatedBy,
+    DateTime CreatedAt);
+
 public record ProductionOrderLineResponse(
     Guid Id,
     Guid MaterialSkuId,

@@ -15,6 +15,7 @@ public class InventoryLogic(
     IStockDeductQueueRepository _queueRepo,
     IStockAdjustmentRequestRepository _adjustmentRequestRepo,
     IStockExportSlipRepository _exportSlipRepo,
+    IStockImportSlipRepository _importSlipRepo,
     IWarehouseBatchRepository _batchRepo,
     IStockExportBatchAllocationRepository _exportAllocationRepo,
     IProcessedIntegrationEventRepository _processedEvents,
@@ -815,6 +816,20 @@ public class InventoryLogic(
         return slip == null ? null : MapExportSlip(slip);
     }
 
+    public async Task<List<StockImportSlipResponse>> GetStockImportSlipsAsync(
+        string? search,
+        CancellationToken ct = default)
+    {
+        var slips = await _importSlipRepo.GetListAsync(search, ct);
+        return slips.Select(MapImportSlip).ToList();
+    }
+
+    public async Task<StockImportSlipResponse?> GetStockImportSlipAsync(Guid id, CancellationToken ct = default)
+    {
+        var slip = await _importSlipRepo.GetByIdAsync(id, ct);
+        return slip == null ? null : MapImportSlip(slip);
+    }
+
     private async Task<StockExportSlip> CreateExportSlipAsync(
         StockAdjustmentRequest request,
         StockAdjustmentRequestItem line,
@@ -1104,6 +1119,26 @@ public class InventoryLogic(
         slip.BatchAllocations.Select(a => new StockExportBatchAllocationResponse(
             a.Id, a.WarehouseBatchId, a.WarehouseBatchItemId, a.LotCode, a.SkuCode, a.Quantity)).ToList());
 
+    private static StockImportSlipResponse MapImportSlip(StockImportSlip slip) => new(
+        slip.Id,
+        slip.ImportCode,
+        slip.ImportType,
+        slip.SkuId,
+        slip.SkuCode,
+        slip.ProductSnapshotName,
+        slip.Quantity,
+        slip.WarehouseQtyBefore,
+        slip.WarehouseQtyAfter,
+        slip.StoreQtyBefore,
+        slip.StoreQtyAfter,
+        slip.WarehouseBatchId,
+        slip.WarehouseBatchLotCode,
+        slip.ProductionOrderId,
+        slip.ProductionCode,
+        slip.Note,
+        slip.CreatedBy,
+        slip.CreatedAt);
+
     private static StockAdjustmentRequestItemResponse MapAdjustmentRequestItem(StockAdjustmentRequestItem item) => new(
         item.Id,
         item.SkuId,
@@ -1252,7 +1287,11 @@ public class InventoryLogic(
                 materialSkuIds.Add(line.MaterialSkuId);
             }
 
-            await CreateWarehouseBatchInternalAsync(
+            var finishedStockBefore = await _skuStockRepo.GetBySkuIdAsync(order.FinishedSkuId, innerCt);
+            var finishedWarehouseBefore = finishedStockBefore?.WarehouseQuantityOnHand ?? 0;
+            var finishedStoreBefore = finishedStockBefore?.QuantityOnHand ?? 0;
+
+            var finishedBatch = await CreateWarehouseBatchInternalAsync(
                 lotCode: $"SX-{now:yyyyMMddHHmmss}",
                 supplier: null,
                 expiresAt: null,
@@ -1268,6 +1307,32 @@ public class InventoryLogic(
                 sourceType: "production_finished_goods",
                 sourceReferenceId: order.Id,
                 sourceReferenceCode: order.ProductionCode);
+
+            var finishedStockAfter = await _skuStockRepo.GetBySkuIdAsync(order.FinishedSkuId, innerCt);
+            var importCountToday = await _importSlipRepo.CountCreatedSinceAsync(now.Date, innerCt);
+            var importSlip = new StockImportSlip
+            {
+                Id = Guid.NewGuid(),
+                ImportCode = $"PN-{now:yyyyMMdd}-{(importCountToday + 1):D4}",
+                ImportType = "production_finished_goods_receipt",
+                SkuId = order.FinishedSkuId,
+                SkuCode = order.FinishedSkuCode,
+                ProductSnapshotName = order.FinishedSkuSnapshotName,
+                Quantity = order.Quantity,
+                WarehouseQtyBefore = finishedWarehouseBefore,
+                WarehouseQtyAfter = finishedStockAfter?.WarehouseQuantityOnHand ?? finishedWarehouseBefore,
+                StoreQtyBefore = finishedStoreBefore,
+                StoreQtyAfter = finishedStockAfter?.QuantityOnHand ?? finishedStoreBefore,
+                WarehouseBatchId = finishedBatch.Id,
+                WarehouseBatchLotCode = finishedBatch.LotCode,
+                ProductionOrderId = order.Id,
+                ProductionCode = order.ProductionCode,
+                Note = $"Nhập thành phẩm từ lệnh {order.ProductionCode}",
+                CreatedBy = userId,
+                CreatedAt = now,
+            };
+            await _importSlipRepo.AddAsync(importSlip, innerCt);
+            await _importSlipRepo.SaveChangesAsync(innerCt);
 
             order.Status = ProductionOrderStatus.Completed;
             order.CompletedAt = now;

@@ -8,6 +8,10 @@ import PageShell from '../../../components/shared/PageShell.jsx'
 
 import { showError, showSuccess } from '../../../app/toast.js'
 
+import { formatStockQuantity } from '../../products/utils/productDisplay.js'
+
+import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
+
 import { canCreateCatalog } from '../../auth/utils/permissions.js'
 
 import { loadAuthSession } from '../../auth/services/authSession.js'
@@ -19,6 +23,7 @@ import { fetchProducts } from '../../products/services/productsApi.js'
 import InventoryNavTabs from '../components/InventoryNavTabs.jsx'
 
 import { createWarehouseBatch } from '../services/warehouseBatchApi.js'
+import { fetchStockImportSlips, getImportTypeLabel } from '../services/stockImportSlipApi.js'
 import { notifyInventoryStockChanged } from '../utils/inventoryStockEvents.js'
 
 
@@ -58,6 +63,10 @@ function InventoryImportPage() {
   const [isLoading, setIsLoading] = useState(true)
 
   const [isSaving, setIsSaving] = useState(false)
+
+  const [importSlips, setImportSlips] = useState([])
+
+  const [isLoadingImportSlips, setIsLoadingImportSlips] = useState(true)
 
 
 
@@ -103,6 +112,30 @@ function InventoryImportPage() {
 
   }, [])
 
+  const loadImportSlips = useCallback(async () => {
+
+    setIsLoadingImportSlips(true)
+
+    try {
+
+      const items = await fetchStockImportSlips()
+
+      setImportSlips(items)
+
+    } catch (error) {
+
+      setImportSlips([])
+
+      showError(error.message)
+
+    } finally {
+
+      setIsLoadingImportSlips(false)
+
+    }
+
+  }, [])
+
 
 
   useEffect(() => {
@@ -110,6 +143,14 @@ function InventoryImportPage() {
     loadSkus()
 
   }, [loadSkus])
+
+
+
+  useEffect(() => {
+
+    loadImportSlips()
+
+  }, [loadImportSlips])
 
 
 
@@ -233,6 +274,7 @@ function InventoryImportPage() {
         `Đã nhập lô ${header.lotCode.trim().toUpperCase()} — ${payloadLines.length} SKU, tổng ${totalQty} đơn vị. Tồn kho tổng đã cập nhật trên Sản phẩm & số lượng.`,
       )
       notifyInventoryStockChanged()
+      await loadImportSlips()
       setHeader(EMPTY_HEADER)
 
       setLines([emptyLine()])
@@ -548,6 +590,144 @@ function InventoryImportPage() {
         </aside>
 
       </form>
+
+      <section className="mt-6 overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
+
+        <div className="border-b border-slate-50 px-6 py-4">
+
+          <h2 className="text-lg font-bold text-slate-800">Phiếu nhập kho</h2>
+
+          <p className="mt-1 text-sm text-slate-500">
+
+            Phiếu nhập thành phẩm được sinh tự động khi hoàn thành lệnh sản xuất.
+
+          </p>
+
+        </div>
+
+        <div className="overflow-x-auto">
+
+          <table className="min-w-full text-left text-sm">
+
+            <thead className="bg-slate-50 text-xs font-bold uppercase tracking-wide text-slate-500">
+
+              <tr>
+
+                <th className="px-6 py-3">Mã phiếu</th>
+
+                <th className="px-4 py-3">Loại nhập</th>
+
+                <th className="px-4 py-3">SKU / sản phẩm</th>
+
+                <th className="px-4 py-3">Số lượng</th>
+
+                <th className="px-4 py-3">Lô</th>
+
+                <th className="px-4 py-3">Lệnh SX</th>
+
+                <th className="px-4 py-3">Thời gian</th>
+
+                <th className="px-4 py-3">Ghi chú</th>
+
+              </tr>
+
+            </thead>
+
+            <tbody className="divide-y divide-slate-100">
+
+              {isLoadingImportSlips ? (
+
+                <tr>
+
+                  <td colSpan={8} className="px-6 py-8 text-slate-500">
+
+                    Đang tải...
+
+                  </td>
+
+                </tr>
+
+              ) : importSlips.length === 0 ? (
+
+                <tr>
+
+                  <td colSpan={8} className="px-6 py-8 text-slate-500">
+
+                    Chưa có phiếu nhập thành phẩm sau sản xuất.
+
+                  </td>
+
+                </tr>
+
+              ) : (
+
+                importSlips.map((slip) => (
+
+                  <tr key={slip.id} className="hover:bg-slate-50/80">
+
+                    <td className="px-6 py-4 font-mono font-semibold text-[#356647]">
+
+                      {slip.importCode}
+
+                    </td>
+
+                    <td className="px-4 py-4 text-slate-700">
+
+                      {getImportTypeLabel(slip.importType)}
+
+                    </td>
+
+                    <td className="px-4 py-4">
+
+                      <div className="font-mono text-xs font-semibold text-[#356647]">{slip.skuCode}</div>
+
+                      <div className="mt-1 text-slate-700">{slip.productSnapshotName || '—'}</div>
+
+                    </td>
+
+                    <td className="px-4 py-4 font-semibold text-slate-800">
+
+                      {formatStockQuantity(slip.quantity)}
+
+                    </td>
+
+                    <td className="px-4 py-4 font-mono text-slate-700">
+
+                      {slip.warehouseBatchLotCode || '—'}
+
+                    </td>
+
+                    <td className="px-4 py-4 font-mono text-slate-700">
+
+                      {slip.productionCode || '—'}
+
+                    </td>
+
+                    <td className="px-4 py-4 text-slate-600">
+
+                      {slip.createdAt ? formatVietnamDateTime(slip.createdAt) : '—'}
+
+                    </td>
+
+                    <td className="px-4 py-4 text-slate-600">
+
+                      {slip.note || '—'}
+
+                    </td>
+
+                  </tr>
+
+                ))
+
+              )}
+
+            </tbody>
+
+          </table>
+
+        </div>
+
+      </section>
 
     </PageShell>
 

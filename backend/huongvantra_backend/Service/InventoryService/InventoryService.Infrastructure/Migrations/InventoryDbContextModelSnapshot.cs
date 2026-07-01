@@ -256,6 +256,93 @@ namespace InventoryService.Infrastructure.Migrations
                     b.ToTable("StockExportSlips");
                 });
 
+            modelBuilder.Entity("InventoryService.Domain.Entities.StockImportSlip", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("ImportCode")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)");
+
+                    b.Property<string>("ImportType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<string>("ProductSnapshotName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("ProductionCode")
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)");
+
+                    b.Property<Guid?>("ProductionOrderId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("int");
+
+                    b.Property<string>("SkuCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<Guid>("SkuId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<int>("StoreQtyAfter")
+                        .HasColumnType("int");
+
+                    b.Property<int>("StoreQtyBefore")
+                        .HasColumnType("int");
+
+                    b.Property<Guid?>("WarehouseBatchId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("WarehouseBatchLotCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<int>("WarehouseQtyAfter")
+                        .HasColumnType("int");
+
+                    b.Property<int>("WarehouseQtyBefore")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("ImportCode")
+                        .IsUnique();
+
+                    b.HasIndex("ImportType");
+
+                    b.HasIndex("ProductionCode");
+
+                    b.HasIndex("ProductionOrderId");
+
+                    b.HasIndex("SkuId");
+
+                    b.HasIndex("WarehouseBatchId");
+
+                    b.ToTable("StockImportSlips");
+                });
+
             modelBuilder.Entity("InventoryService.Domain.Entities.WarehouseBatch", b =>
                 {
                     b.Property<Guid>("Id")
@@ -579,6 +666,19 @@ namespace InventoryService.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("BatchAllocations");
+                });
+
+            modelBuilder.Entity("InventoryService.Domain.Entities.StockImportSlip", b =>
+                {
+                    b.HasOne("InventoryService.Domain.Entities.ProductionOrder")
+                        .WithMany()
+                        .HasForeignKey("ProductionOrderId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("InventoryService.Domain.Entities.WarehouseBatch")
+                        .WithMany()
+                        .HasForeignKey("WarehouseBatchId")
+                        .OnDelete(DeleteBehavior.SetNull);
                 });
 
             modelBuilder.Entity("InventoryService.Domain.Entities.ProductionOrder", b =>
