@@ -243,6 +243,10 @@ public class ProductionOrderConfiguration : IEntityTypeConfiguration<ProductionO
             .WithOne(l => l.Order)
             .HasForeignKey(l => l.ProductionOrderId)
             .OnDelete(DeleteBehavior.Cascade);
+        builder.HasMany(e => e.OutputLines)
+            .WithOne(l => l.Order)
+            .HasForeignKey(l => l.ProductionOrderId)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 }
 
@@ -256,6 +260,25 @@ public class ProductionOrderLineConfiguration : IEntityTypeConfiguration<Product
         builder.Property(e => e.MaterialSnapshotName).HasMaxLength(255).IsRequired();
         builder.HasIndex(e => e.ProductionOrderId);
         builder.HasIndex(e => e.MaterialSkuId);
+    }
+}
+
+public class ProductionOrderOutputLineConfiguration : IEntityTypeConfiguration<ProductionOrderOutputLine>
+{
+    public void Configure(EntityTypeBuilder<ProductionOrderOutputLine> builder)
+    {
+        builder.ToTable("ProductionOrderOutputLines");
+        builder.HasKey(e => e.Id);
+        builder.Property(e => e.FinishedSkuCode).HasMaxLength(50).IsRequired();
+        builder.Property(e => e.FinishedSkuSnapshotName).HasMaxLength(255).IsRequired();
+        builder.Property(e => e.WarehouseBatchLotCode).HasMaxLength(50);
+        builder.HasIndex(e => e.ProductionOrderId);
+        builder.HasIndex(e => e.FinishedSkuId);
+        builder.HasIndex(e => e.WarehouseBatchId);
+        builder.HasOne(e => e.WarehouseBatch)
+            .WithMany()
+            .HasForeignKey(e => e.WarehouseBatchId)
+            .OnDelete(DeleteBehavior.SetNull);
     }
 }
 

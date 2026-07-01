@@ -1208,7 +1208,9 @@ public class InventoryLogic(
         Guid userId,
         CancellationToken ct = default)
     {
-        if (request.Quantity <= 0)
+        var output = ResolveSingleProductionOutput(request);
+
+        if (output.Quantity <= 0)
             throw new InventoryValidationException("Số lượng sản xuất phải lớn hơn 0.");
         if (request.Lines == null || request.Lines.Count == 0)
             throw new InventoryValidationException("Lệnh sản xuất phải có ít nhất một dòng nguyên liệu.");
@@ -1221,20 +1223,34 @@ public class InventoryLogic(
         var today = DateTime.UtcNow.Date;
         var countToday = await _productionOrderRepo.CountCreatedSinceAsync(today, ct);
         var now = DateTime.UtcNow;
+        var orderId = Guid.NewGuid();
 
         var order = new ProductionOrder
         {
-            Id = Guid.NewGuid(),
+            Id = orderId,
             ProductionCode = $"SX-{today:yyyyMMdd}-{(countToday + 1):D4}",
-            FinishedSkuId = request.FinishedSkuId,
-            FinishedSkuCode = request.FinishedSkuCode,
-            FinishedSkuSnapshotName = request.FinishedSkuSnapshotName,
-            Quantity = request.Quantity,
+            FinishedSkuId = output.FinishedSkuId,
+            FinishedSkuCode = output.FinishedSkuCode,
+            FinishedSkuSnapshotName = output.FinishedSkuSnapshotName,
+            Quantity = output.Quantity,
             Note = request.Note?.Trim(),
             Status = ProductionOrderStatus.Draft,
             CreatedBy = userId,
             CreatedAt = now,
             UpdatedAt = now,
+            OutputLines =
+            [
+                new ProductionOrderOutputLine
+                {
+                    Id = Guid.NewGuid(),
+                    ProductionOrderId = orderId,
+                    FinishedSkuId = output.FinishedSkuId,
+                    FinishedSkuCode = output.FinishedSkuCode,
+                    FinishedSkuSnapshotName = output.FinishedSkuSnapshotName,
+                    Quantity = output.Quantity,
+                    CreatedAt = now,
+                }
+            ],
             Lines = request.Lines.Select(l => new ProductionOrderLine
             {
                 Id = Guid.NewGuid(),
@@ -1252,6 +1268,21 @@ public class InventoryLogic(
         return MapProductionOrder(order);
     }
 
+    private static ProductionOrderOutputLineInput ResolveSingleProductionOutput(CreateProductionOrderRequest request)
+    {
+        if (request.Outputs is { Count: > 1 })
+            throw new InventoryValidationException("Multi-output production orders are not enabled in this batch.");
+
+        if (request.Outputs is { Count: 1 })
+            return request.Outputs[0];
+
+        return new ProductionOrderOutputLineInput(
+            request.FinishedSkuId,
+            request.FinishedSkuCode,
+            request.FinishedSkuSnapshotName,
+            request.Quantity);
+    }
+
     public async Task<ProductionOrderResponse> CompleteProductionOrderAsync(
         Guid id,
         Guid userId,
@@ -1267,6 +1298,7 @@ public class InventoryLogic(
         {
             var now = DateTime.UtcNow;
             var materialSkuIds = new List<Guid>();
+            var outputLine = EnsureSingleProductionOutputLine(order, now);
             var materialLines = order.Lines.OrderBy(l => l.MaterialSkuCode).ToList();
             if (materialLines.Count == 0)
                 throw new InventoryValidationException("Lệnh sản xuất phải có ít nhất một dòng nguyên liệu.");
@@ -1373,6 +1405,9 @@ public class InventoryLogic(
                 sourceReferenceId: order.Id,
                 sourceReferenceCode: order.ProductionCode);
 
+            outputLine.WarehouseBatchId = finishedBatch.Id;
+            outputLine.WarehouseBatchLotCode = finishedBatch.LotCode;
+
             var finishedStockAfter = await _skuStockRepo.GetBySkuIdAsync(order.FinishedSkuId, innerCt);
             var importCountToday = await _importSlipRepo.CountCreatedSinceAsync(now.Date, innerCt);
             var importSlip = new StockImportSlip
@@ -1414,6 +1449,28 @@ public class InventoryLogic(
 
             return MapProductionOrder(order);
         }, ct);
+    }
+
+    private static ProductionOrderOutputLine EnsureSingleProductionOutputLine(ProductionOrder order, DateTime now)
+    {
+        if (order.OutputLines.Count > 1)
+            throw new InventoryValidationException("Multi-output production orders are not enabled in this batch.");
+
+        var outputLine = order.OutputLines.FirstOrDefault();
+        if (outputLine != null) return outputLine;
+
+        outputLine = new ProductionOrderOutputLine
+        {
+            Id = Guid.NewGuid(),
+            ProductionOrderId = order.Id,
+            FinishedSkuId = order.FinishedSkuId,
+            FinishedSkuCode = order.FinishedSkuCode,
+            FinishedSkuSnapshotName = order.FinishedSkuSnapshotName,
+            Quantity = order.Quantity,
+            CreatedAt = order.CreatedAt == default ? now : order.CreatedAt,
+        };
+        order.OutputLines.Add(outputLine);
+        return outputLine;
     }
 
     public async Task<ProductionOrderResponse> CancelProductionOrderAsync(
@@ -1481,7 +1538,40 @@ public class InventoryLogic(
                 l.MaterialSkuCode,
                 l.MaterialSnapshotName,
                 l.PlannedQuantity))
-            .ToList());
+            .ToList(),
+        BuildProductionOrderOutputResponses(order));
+
+    private static List<ProductionOrderOutputLineResponse> BuildProductionOrderOutputResponses(ProductionOrder order)
+    {
+        var outputLines = order.OutputLines
+            .OrderBy(l => l.FinishedSkuCode)
+            .Select(l => new ProductionOrderOutputLineResponse(
+                l.Id,
+                l.FinishedSkuId,
+                l.FinishedSkuCode,
+                l.FinishedSkuSnapshotName,
+                l.Quantity,
+                l.WarehouseBatchId,
+                l.WarehouseBatchLotCode,
+                l.CreatedAt))
+            .ToList();
+
+        if (outputLines.Count > 0)
+            return outputLines;
+
+        return
+        [
+            new ProductionOrderOutputLineResponse(
+                Guid.Empty,
+                order.FinishedSkuId,
+                order.FinishedSkuCode,
+                order.FinishedSkuSnapshotName,
+                order.Quantity,
+                null,
+                null,
+                order.CreatedAt)
+        ];
+    }
 
     public async Task DeductMaterialsAsync(
         IEnumerable<(Guid SkuId, int Quantity)> items,

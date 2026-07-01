@@ -822,6 +822,54 @@ namespace InventoryService.Infrastructure.Migrations
                     b.ToTable("ProductionOrders");
                 });
 
+            modelBuilder.Entity("InventoryService.Domain.Entities.ProductionOrderOutputLine", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("FinishedSkuCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<Guid>("FinishedSkuId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("FinishedSkuSnapshotName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("ProductionOrderId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<Guid?>("WarehouseBatchId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("WarehouseBatchLotCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FinishedSkuId")
+                        .HasDatabaseName("IX_ProductionOrderOutputLines_FinishedSkuId");
+
+                    b.HasIndex("ProductionOrderId")
+                        .HasDatabaseName("IX_ProductionOrderOutputLines_ProductionOrderId");
+
+                    b.HasIndex("WarehouseBatchId")
+                        .HasDatabaseName("IX_ProductionOrderOutputLines_WarehouseBatchId");
+
+                    b.ToTable("ProductionOrderOutputLines");
+                });
+
             modelBuilder.Entity("InventoryService.Domain.Entities.ProductionOrderLine", b =>
                 {
                     b.Property<Guid>("Id")
@@ -871,9 +919,29 @@ namespace InventoryService.Infrastructure.Migrations
                     b.Navigation("Order");
                 });
 
+            modelBuilder.Entity("InventoryService.Domain.Entities.ProductionOrderOutputLine", b =>
+                {
+                    b.HasOne("InventoryService.Domain.Entities.ProductionOrder", "Order")
+                        .WithMany("OutputLines")
+                        .HasForeignKey("ProductionOrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("InventoryService.Domain.Entities.WarehouseBatch", "WarehouseBatch")
+                        .WithMany()
+                        .HasForeignKey("WarehouseBatchId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Order");
+
+                    b.Navigation("WarehouseBatch");
+                });
+
             modelBuilder.Entity("InventoryService.Domain.Entities.ProductionOrder", b =>
                 {
                     b.Navigation("Lines");
+
+                    b.Navigation("OutputLines");
                 });
 
 #pragma warning restore 612, 618

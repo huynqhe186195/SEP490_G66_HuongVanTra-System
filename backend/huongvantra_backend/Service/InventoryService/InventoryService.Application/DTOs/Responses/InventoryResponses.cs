@@ -187,6 +187,16 @@ public record ProductionOrderLineResponse(
     string MaterialSnapshotName,
     int PlannedQuantity);
 
+public record ProductionOrderOutputLineResponse(
+    Guid Id,
+    Guid FinishedSkuId,
+    string FinishedSkuCode,
+    string FinishedSkuSnapshotName,
+    int Quantity,
+    Guid? WarehouseBatchId,
+    string? WarehouseBatchLotCode,
+    DateTime CreatedAt);
+
 public record ProductionOrderResponse(
     Guid Id,
     string ProductionCode,
@@ -199,4 +209,5 @@ public record ProductionOrderResponse(
     Guid CreatedBy,
     DateTime CreatedAt,
     DateTime? CompletedAt,
-    List<ProductionOrderLineResponse> Lines);
+    List<ProductionOrderLineResponse> Lines,
+    List<ProductionOrderOutputLineResponse> OutputLines);
