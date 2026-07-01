@@ -10,12 +10,16 @@ public class StockExportSlipRepository(InventoryDbContext _db) : IStockExportSli
     public Task<StockExportSlip?> GetByIdAsync(Guid id, CancellationToken ct = default) =>
         _db.StockExportSlips
             .Include(s => s.BatchAllocations)
+            .Include(s => s.Lines)
+                .ThenInclude(l => l.BatchAllocations)
             .FirstOrDefaultAsync(s => s.Id == id, ct);
 
     public async Task<List<StockExportSlip>> GetListAsync(string? search, CancellationToken ct = default)
     {
         var query = _db.StockExportSlips
             .Include(s => s.BatchAllocations)
+            .Include(s => s.Lines)
+                .ThenInclude(l => l.BatchAllocations)
             .AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(search))
@@ -25,7 +29,10 @@ public class StockExportSlipRepository(InventoryDbContext _db) : IStockExportSli
                 s.ExportCode.ToLower().Contains(keyword) ||
                 (s.ProductionCode != null && s.ProductionCode.ToLower().Contains(keyword)) ||
                 s.SkuCode.ToLower().Contains(keyword) ||
-                s.SkuSnapshotName.ToLower().Contains(keyword));
+                s.SkuSnapshotName.ToLower().Contains(keyword) ||
+                s.Lines.Any(l =>
+                    l.SkuCode.ToLower().Contains(keyword) ||
+                    l.ProductSnapshotName.ToLower().Contains(keyword)));
         }
 
         return await query

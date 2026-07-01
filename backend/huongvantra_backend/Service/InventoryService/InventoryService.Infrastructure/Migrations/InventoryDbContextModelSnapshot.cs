@@ -256,6 +256,58 @@ namespace InventoryService.Infrastructure.Migrations
                     b.ToTable("StockExportSlips");
                 });
 
+            modelBuilder.Entity("InventoryService.Domain.Entities.StockExportSlipLine", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<string>("ProductSnapshotName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("int");
+
+                    b.Property<string>("SkuCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<Guid>("SkuId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<Guid>("StockExportSlipId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<int>("StoreQtyAfter")
+                        .HasColumnType("int");
+
+                    b.Property<int>("StoreQtyBefore")
+                        .HasColumnType("int");
+
+                    b.Property<int>("WarehouseQtyAfter")
+                        .HasColumnType("int");
+
+                    b.Property<int>("WarehouseQtyBefore")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SkuId");
+
+                    b.HasIndex("StockExportSlipId");
+
+                    b.ToTable("StockExportSlipLines");
+                });
+
             modelBuilder.Entity("InventoryService.Domain.Entities.StockImportSlip", b =>
                 {
                     b.Property<Guid>("Id")
@@ -473,6 +525,9 @@ namespace InventoryService.Infrastructure.Migrations
                     b.Property<Guid>("StockExportSlipId")
                         .HasColumnType("char(36)");
 
+                    b.Property<Guid?>("StockExportSlipLineId")
+                        .HasColumnType("char(36)");
+
                     b.Property<Guid>("WarehouseBatchId")
                         .HasColumnType("char(36)");
 
@@ -482,6 +537,8 @@ namespace InventoryService.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("StockExportSlipId");
+
+                    b.HasIndex("StockExportSlipLineId");
 
                     b.HasIndex("WarehouseBatchId");
 
@@ -623,6 +680,11 @@ namespace InventoryService.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("InventoryService.Domain.Entities.StockExportSlipLine", "ExportSlipLine")
+                        .WithMany("BatchAllocations")
+                        .HasForeignKey("StockExportSlipLineId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("InventoryService.Domain.Entities.WarehouseBatch", "Batch")
                         .WithMany()
                         .HasForeignKey("WarehouseBatchId")
@@ -640,6 +702,8 @@ namespace InventoryService.Infrastructure.Migrations
                     b.Navigation("BatchItem");
 
                     b.Navigation("ExportSlip");
+
+                    b.Navigation("ExportSlipLine");
                 });
 
             modelBuilder.Entity("InventoryService.Domain.Entities.WarehouseBatch", b =>
@@ -664,6 +728,21 @@ namespace InventoryService.Infrastructure.Migrations
                         .WithMany()
                         .HasForeignKey("ProductionOrderId")
                         .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("BatchAllocations");
+
+                    b.Navigation("Lines");
+                });
+
+            modelBuilder.Entity("InventoryService.Domain.Entities.StockExportSlipLine", b =>
+                {
+                    b.HasOne("InventoryService.Domain.Entities.StockExportSlip", "ExportSlip")
+                        .WithMany("Lines")
+                        .HasForeignKey("StockExportSlipId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ExportSlip");
 
                     b.Navigation("BatchAllocations");
                 });

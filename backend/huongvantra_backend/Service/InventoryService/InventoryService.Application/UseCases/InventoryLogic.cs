@@ -1116,8 +1116,34 @@ public class InventoryLogic(
         slip.Note,
         slip.CreatedBy,
         slip.CreatedAt,
-        slip.BatchAllocations.Select(a => new StockExportBatchAllocationResponse(
-            a.Id, a.WarehouseBatchId, a.WarehouseBatchItemId, a.LotCode, a.SkuCode, a.Quantity)).ToList());
+        slip.BatchAllocations.Select(MapExportBatchAllocation).ToList(),
+        slip.Lines
+            .OrderBy(l => l.SkuCode)
+            .Select(MapExportSlipLine)
+            .ToList());
+
+    private static StockExportSlipLineResponse MapExportSlipLine(StockExportSlipLine line) => new(
+        line.Id,
+        line.SkuId,
+        line.SkuCode,
+        line.ProductSnapshotName,
+        line.Quantity,
+        line.WarehouseQtyBefore,
+        line.WarehouseQtyAfter,
+        line.StoreQtyBefore,
+        line.StoreQtyAfter,
+        line.Note,
+        line.CreatedAt,
+        line.BatchAllocations.Select(MapExportBatchAllocation).ToList());
+
+    private static StockExportBatchAllocationResponse MapExportBatchAllocation(StockExportBatchAllocation allocation) => new(
+        allocation.Id,
+        allocation.StockExportSlipLineId,
+        allocation.WarehouseBatchId,
+        allocation.WarehouseBatchItemId,
+        allocation.LotCode,
+        allocation.SkuCode,
+        allocation.Quantity);
 
     private static StockImportSlipResponse MapImportSlip(StockImportSlip slip) => new(
         slip.Id,
@@ -1241,11 +1267,41 @@ public class InventoryLogic(
         {
             var now = DateTime.UtcNow;
             var materialSkuIds = new List<Guid>();
+            var materialLines = order.Lines.OrderBy(l => l.MaterialSkuCode).ToList();
+            if (materialLines.Count == 0)
+                throw new InventoryValidationException("Lệnh sản xuất phải có ít nhất một dòng nguyên liệu.");
 
-            foreach (var line in order.Lines)
+            var firstMaterialLine = materialLines[0];
+            var exportCountToday = await _exportSlipRepo.CountCreatedSinceAsync(now.Date, innerCt);
+            var exportSlip = new StockExportSlip
+            {
+                Id = Guid.NewGuid(),
+                ExportCode = $"PX-{now:yyyyMMdd}-{(exportCountToday + 1):D4}",
+                ExportType = "production",
+                StockAdjustmentRequestId = null,
+                ProductionOrderId = order.Id,
+                ProductionCode = order.ProductionCode,
+                SkuId = materialLines.Count == 1 ? firstMaterialLine.MaterialSkuId : Guid.Empty,
+                SkuCode = materialLines.Count == 1 ? firstMaterialLine.MaterialSkuCode : "MULTI",
+                SkuSnapshotName = materialLines.Count == 1
+                    ? firstMaterialLine.MaterialSnapshotName
+                    : $"{materialLines.Count} dòng nguyên liệu",
+                Quantity = materialLines.Sum(l => l.PlannedQuantity),
+                WarehouseQtyBefore = 0,
+                WarehouseQtyAfter = 0,
+                StoreQtyBefore = 0,
+                StoreQtyAfter = 0,
+                Note = $"Xuất nguyên liệu cho lệnh sản xuất {order.ProductionCode}",
+                CreatedBy = userId,
+                CreatedAt = now,
+            };
+            var allAllocations = new List<StockExportBatchAllocation>();
+
+            foreach (var line in materialLines)
             {
                 var stock = await _skuStockRepo.GetBySkuIdAsync(line.MaterialSkuId, innerCt);
                 var warehouseBefore = stock?.WarehouseQuantityOnHand ?? 0;
+                var storeBefore = stock?.QuantityOnHand ?? 0;
 
                 var allocations = await AllocateAndDeductBatchesFifoAsync(
                     line.MaterialSkuId, line.PlannedQuantity, innerCt);
@@ -1254,37 +1310,46 @@ public class InventoryLogic(
                     await SyncWarehouseQtyFromBatchesAsync(stock, innerCt);
 
                 var warehouseAfter = stock?.WarehouseQuantityOnHand ?? 0;
+                var storeAfter = stock?.QuantityOnHand ?? 0;
 
-                var countToday = await _exportSlipRepo.CountCreatedSinceAsync(now.Date, innerCt);
-                var slip = new StockExportSlip
+                var slipLine = new StockExportSlipLine
                 {
                     Id = Guid.NewGuid(),
-                    ExportCode = $"PX-{now:yyyyMMdd}-{(countToday + 1):D4}",
-                    ExportType = "production",
-                    StockAdjustmentRequestId = null,
-                    ProductionOrderId = order.Id,
-                    ProductionCode = order.ProductionCode,
+                    StockExportSlipId = exportSlip.Id,
                     SkuId = line.MaterialSkuId,
                     SkuCode = line.MaterialSkuCode,
-                    SkuSnapshotName = line.MaterialSnapshotName,
+                    ProductSnapshotName = line.MaterialSnapshotName,
                     Quantity = line.PlannedQuantity,
                     WarehouseQtyBefore = warehouseBefore,
                     WarehouseQtyAfter = warehouseAfter,
-                    StoreQtyBefore = stock?.QuantityOnHand ?? 0,
-                    StoreQtyAfter = stock?.QuantityOnHand ?? 0,
+                    StoreQtyBefore = storeBefore,
+                    StoreQtyAfter = storeAfter,
                     Note = $"Sản xuất lô {order.ProductionCode}",
-                    CreatedBy = userId,
                     CreatedAt = now,
                 };
-                await _exportSlipRepo.AddAsync(slip, innerCt);
-                await _exportSlipRepo.SaveChangesAsync(innerCt);
 
                 foreach (var alloc in allocations)
-                    alloc.StockExportSlipId = slip.Id;
-                await _exportAllocationRepo.AddRangeAsync(allocations, innerCt);
-                await _exportAllocationRepo.SaveChangesAsync(innerCt);
+                {
+                    alloc.StockExportSlipId = exportSlip.Id;
+                    alloc.StockExportSlipLineId = slipLine.Id;
+                }
 
+                exportSlip.WarehouseQtyBefore += warehouseBefore;
+                exportSlip.WarehouseQtyAfter += warehouseAfter;
+                exportSlip.StoreQtyBefore += storeBefore;
+                exportSlip.StoreQtyAfter += storeAfter;
+                exportSlip.Lines.Add(slipLine);
+                allAllocations.AddRange(allocations);
                 materialSkuIds.Add(line.MaterialSkuId);
+            }
+
+            await _exportSlipRepo.AddAsync(exportSlip, innerCt);
+            await _exportSlipRepo.SaveChangesAsync(innerCt);
+
+            if (allAllocations.Count > 0)
+            {
+                await _exportAllocationRepo.AddRangeAsync(allAllocations, innerCt);
+                await _exportAllocationRepo.SaveChangesAsync(innerCt);
             }
 
             var finishedStockBefore = await _skuStockRepo.GetBySkuIdAsync(order.FinishedSkuId, innerCt);

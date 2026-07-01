@@ -91,11 +91,26 @@ public record StockAdjustmentReviewResponse(
 
 public record StockExportBatchAllocationResponse(
     Guid Id,
+    Guid? StockExportSlipLineId,
     Guid WarehouseBatchId,
     Guid WarehouseBatchItemId,
     string LotCode,
     string SkuCode,
     int Quantity);
+
+public record StockExportSlipLineResponse(
+    Guid Id,
+    Guid SkuId,
+    string SkuCode,
+    string ProductSnapshotName,
+    int Quantity,
+    int WarehouseQtyBefore,
+    int WarehouseQtyAfter,
+    int StoreQtyBefore,
+    int StoreQtyAfter,
+    string? Note,
+    DateTime CreatedAt,
+    List<StockExportBatchAllocationResponse> BatchAllocations);
 
 public record WarehouseBatchItemResponse(
     Guid Id,
@@ -142,7 +157,8 @@ public record StockExportSlipResponse(
     string? Note,
     Guid CreatedBy,
     DateTime CreatedAt,
-    List<StockExportBatchAllocationResponse> BatchAllocations);
+    List<StockExportBatchAllocationResponse> BatchAllocations,
+    List<StockExportSlipLineResponse> Lines);
 
 public record StockImportSlipResponse(
     Guid Id,

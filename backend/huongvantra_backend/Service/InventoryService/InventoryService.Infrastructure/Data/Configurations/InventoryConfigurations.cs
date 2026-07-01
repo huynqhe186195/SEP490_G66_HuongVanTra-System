@@ -103,6 +103,28 @@ public class StockExportSlipConfiguration : IEntityTypeConfiguration<StockExport
             .WithMany()
             .HasForeignKey(e => e.ProductionOrderId)
             .OnDelete(DeleteBehavior.SetNull);
+        builder.HasMany(e => e.Lines)
+            .WithOne(l => l.ExportSlip)
+            .HasForeignKey(l => l.StockExportSlipId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
+public class StockExportSlipLineConfiguration : IEntityTypeConfiguration<StockExportSlipLine>
+{
+    public void Configure(EntityTypeBuilder<StockExportSlipLine> builder)
+    {
+        builder.ToTable("StockExportSlipLines");
+        builder.HasKey(e => e.Id);
+        builder.Property(e => e.SkuCode).HasMaxLength(50).IsRequired();
+        builder.Property(e => e.ProductSnapshotName).HasMaxLength(255).IsRequired();
+        builder.Property(e => e.Note).HasMaxLength(500);
+        builder.HasIndex(e => e.StockExportSlipId);
+        builder.HasIndex(e => e.SkuId);
+        builder.HasMany(e => e.BatchAllocations)
+            .WithOne(a => a.ExportSlipLine)
+            .HasForeignKey(a => a.StockExportSlipLineId)
+            .OnDelete(DeleteBehavior.SetNull);
     }
 }
 
@@ -185,6 +207,7 @@ public class StockExportBatchAllocationConfiguration : IEntityTypeConfiguration<
         builder.Property(e => e.LotCode).HasMaxLength(50).IsRequired();
         builder.Property(e => e.SkuCode).HasMaxLength(50).IsRequired();
         builder.HasIndex(e => e.StockExportSlipId);
+        builder.HasIndex(e => e.StockExportSlipLineId);
         builder.HasIndex(e => e.WarehouseBatchId);
         builder.HasIndex(e => e.WarehouseBatchItemId);
         builder.HasOne(e => e.ExportSlip)

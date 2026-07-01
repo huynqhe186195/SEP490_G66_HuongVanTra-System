@@ -1,6 +1,36 @@
 import { apiRequestAuth } from '../../../lib/apiClient.js'
 
+function mapExportAllocation(row) {
+  return {
+    id: row.id ?? row.Id,
+    stockExportSlipLineId: row.stockExportSlipLineId ?? row.StockExportSlipLineId ?? null,
+    warehouseBatchId: row.warehouseBatchId ?? row.WarehouseBatchId,
+    warehouseBatchItemId: row.warehouseBatchItemId ?? row.WarehouseBatchItemId,
+    lotCode: row.lotCode ?? row.LotCode ?? '',
+    skuCode: row.skuCode ?? row.SkuCode ?? '',
+    quantity: Number(row.quantity ?? row.Quantity ?? 0),
+  }
+}
+
+function mapExportSlipLine(row) {
+  return {
+    id: row.id ?? row.Id,
+    skuId: row.skuId ?? row.SkuId,
+    skuCode: row.skuCode ?? row.SkuCode ?? '',
+    productSnapshotName: row.productSnapshotName ?? row.ProductSnapshotName ?? '',
+    quantity: Number(row.quantity ?? row.Quantity ?? 0),
+    warehouseQtyBefore: Number(row.warehouseQtyBefore ?? row.WarehouseQtyBefore ?? 0),
+    warehouseQtyAfter: Number(row.warehouseQtyAfter ?? row.WarehouseQtyAfter ?? 0),
+    storeQtyBefore: Number(row.storeQtyBefore ?? row.StoreQtyBefore ?? 0),
+    storeQtyAfter: Number(row.storeQtyAfter ?? row.StoreQtyAfter ?? 0),
+    note: row.note ?? row.Note ?? '',
+    createdAt: row.createdAt ?? row.CreatedAt ?? null,
+    batchAllocations: (row.batchAllocations ?? row.BatchAllocations ?? []).map(mapExportAllocation),
+  }
+}
+
 function mapExportSlip(row) {
+  const lines = (row.lines ?? row.Lines ?? []).map(mapExportSlipLine)
   return {
     id: row.id ?? row.Id,
     exportCode: row.exportCode ?? row.ExportCode ?? '',
@@ -20,14 +50,8 @@ function mapExportSlip(row) {
     note: row.note ?? row.Note ?? '',
     createdBy: row.createdBy ?? row.CreatedBy,
     createdAt: row.createdAt ?? row.CreatedAt ?? null,
-    batchAllocations: (row.batchAllocations ?? row.BatchAllocations ?? []).map((a) => ({
-      id: a.id ?? a.Id,
-      warehouseBatchId: a.warehouseBatchId ?? a.WarehouseBatchId,
-      warehouseBatchItemId: a.warehouseBatchItemId ?? a.WarehouseBatchItemId,
-      lotCode: a.lotCode ?? a.LotCode ?? '',
-      skuCode: a.skuCode ?? a.SkuCode ?? '',
-      quantity: Number(a.quantity ?? a.Quantity ?? 0),
-    })),
+    batchAllocations: (row.batchAllocations ?? row.BatchAllocations ?? []).map(mapExportAllocation),
+    lines,
   }
 }
 
