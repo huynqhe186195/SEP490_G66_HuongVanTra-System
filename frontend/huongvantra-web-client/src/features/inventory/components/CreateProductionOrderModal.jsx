@@ -10,6 +10,14 @@ function sameId(left, right) {
   return String(left ?? '') === String(right ?? '')
 }
 
+function createOutputRow() {
+  return {
+    key: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    skuId: '',
+    quantity: '',
+  }
+}
+
 function resolveSelectedVariant(product, sku) {
   if (!product || !sku) return null
 
@@ -61,16 +69,21 @@ function formatQuantity(value) {
   return number.toLocaleString('vi-VN', { maximumFractionDigits: 4 })
 }
 
+function getSkuDisplayName(sku) {
+  if (!sku) return ''
+  return [sku.skuCode, sku.productName].filter(Boolean).join(' - ')
+}
+
 function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
   const [step, setStep] = useState(0)
 
   // Step 0
   const [tpSkus, setTpSkus] = useState([])
   const [loadingSkus, setLoadingSkus] = useState(false)
-  const [selectedSkuId, setSelectedSkuId] = useState('')
-  const [quantity, setQuantity] = useState('')
+  const [outputRows, setOutputRows] = useState([createOutputRow()])
 
-  // Step 1 — BOM lines: { materialId, materialName, bomQty, skuId, skuCode, snapshotName, skuOptions }
+  // Step 1 - aggregated BOM lines:
+  // { materialId, materialName, requiredQuantity, skuId, skuCode, snapshotName, skuOptions }
   const [bomLines, setBomLines] = useState([])
   const [loadingBom, setLoadingBom] = useState(false)
   const [bomError, setBomError] = useState('')
@@ -84,8 +97,7 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
   useEffect(() => {
     if (isOpen && !prevIsOpen.current) {
       setStep(0)
-      setSelectedSkuId('')
-      setQuantity('')
+      setOutputRows([createOutputRow()])
       setBomLines([])
       setBomError('')
       setNote('')
@@ -96,7 +108,7 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
             finishedProducts.map((product) => String(product.id)),
           )
           const tp = items.filter(
-            (s) => finishedProductIds.has(String(s.productId)) && s.isSellable !== false,
+            (sku) => finishedProductIds.has(String(sku.productId)) && sku.isSellable !== false,
           )
           setTpSkus(tp)
         })
@@ -108,56 +120,137 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
 
   if (!isOpen) return null
 
-  const selectedSku = tpSkus.find((s) => sameId(s.id, selectedSkuId))
+  const selectedOutputs = outputRows
+    .map((row) => ({
+      ...row,
+      sku: tpSkus.find((sku) => sameId(sku.id, row.skuId)) ?? null,
+      quantityNumber: Number(row.quantity),
+    }))
+    .filter((row) => row.skuId)
 
-  function handleSelectedSkuChange(skuId) {
-    setSelectedSkuId(skuId)
+  function updateOutputRow(key, changes) {
+    setOutputRows((prev) =>
+      prev.map((row) => (row.key === key ? { ...row, ...changes } : row)),
+    )
     setBomLines([])
     setBomError('')
   }
 
+  function addOutputRow() {
+    setOutputRows((prev) => [...prev, createOutputRow()])
+    setBomLines([])
+    setBomError('')
+  }
+
+  function removeOutputRow(key) {
+    setOutputRows((prev) => (prev.length === 1 ? prev : prev.filter((row) => row.key !== key)))
+    setBomLines([])
+    setBomError('')
+  }
+
+  function validateOutputRows() {
+    const rows = outputRows.map((row) => ({
+      ...row,
+      sku: tpSkus.find((sku) => sameId(sku.id, row.skuId)) ?? null,
+      quantityNumber: Number(row.quantity),
+    }))
+
+    if (rows.length === 0) {
+      showError('Cần có ít nhất một thành phẩm đầu ra.')
+      return null
+    }
+
+    for (const row of rows) {
+      if (!row.skuId) {
+        showError('Chọn thành phẩm cho tất cả dòng đầu ra.')
+        return null
+      }
+      if (!row.sku) {
+        showError('SKU thành phẩm không hợp lệ.')
+        return null
+      }
+      if (!Number.isFinite(row.quantityNumber) || row.quantityNumber <= 0) {
+        showError('Số lượng thành phẩm phải lớn hơn 0.')
+        return null
+      }
+    }
+
+    const duplicate = rows.find(
+      (row, index) => rows.findIndex((candidate) => sameId(candidate.skuId, row.skuId)) !== index,
+    )
+    if (duplicate) {
+      showError(`Không chọn trùng SKU thành phẩm: ${duplicate.sku?.skuCode ?? duplicate.skuId}.`)
+      return null
+    }
+
+    return rows
+  }
+
   async function handleNextStep0() {
-    const qty = Number(quantity)
-    if (!selectedSkuId) return showError('Chọn thành phẩm.')
-    if (!selectedSku) return showError('SKU thành phẩm không hợp lệ.')
-    if (!qty || qty <= 0) return showError('Số lượng phải lớn hơn 0.')
+    const rows = validateOutputRows()
+    if (!rows) return
 
     setLoadingBom(true)
     setBomError('')
     setBomLines([])
     setStep(1)
+
     try {
-      const product = selectedSku?.productId ? await fetchProductById(selectedSku.productId) : null
-      const selectedVariant = resolveSelectedVariant(product, selectedSku)
+      const materialSkuOptionsCache = new Map()
+      const aggregated = new Map()
 
-      if (!selectedVariant) {
-        setBomLines([])
-        setBomError(
-          'Không xác định được biến thể của SKU đã chọn. Vui lòng kiểm tra dữ liệu SKU/ProductVariant trước khi tạo lệnh.',
-        )
-        return
-      }
+      for (const output of rows) {
+        const product = output.sku?.productId ? await fetchProductById(output.sku.productId) : null
+        const selectedVariant = resolveSelectedVariant(product, output.sku)
 
-      const bomLinesDef = selectedVariant.bomLines ?? []
+        if (!selectedVariant) {
+          throw new Error(
+            `Không xác định được biến thể của SKU ${output.sku?.skuCode ?? ''}. Vui lòng kiểm tra dữ liệu SKU/ProductVariant trước khi tạo lệnh.`,
+          )
+        }
 
-      if (bomLinesDef.length === 0) {
-        setBomLines([])
-        setBomError('SKU thành phẩm này chưa có BOM. Vui lòng cấu hình BOM cho đúng biến thể trước khi tạo lệnh.')
-        return
+        const bomLinesDef = selectedVariant.bomLines ?? []
+        if (bomLinesDef.length === 0) {
+          throw new Error(`SKU này chưa có BOM, không thể tạo lệnh sản xuất: ${output.sku?.skuCode ?? ''}.`)
+        }
+
+        for (const bomLine of bomLinesDef) {
+          const materialId = bomLine.materialId
+          const bomQty = Number(bomLine.quantity)
+          if (!materialId || !Number.isFinite(bomQty) || bomQty <= 0) {
+            throw new Error(`BOM của SKU ${output.sku?.skuCode ?? ''} có dòng nguyên liệu không hợp lệ.`)
+          }
+
+          const key = String(materialId)
+          const current = aggregated.get(key) ?? {
+            materialId,
+            materialName: bomLine.materialName,
+            requiredQuantity: 0,
+            skuId: '',
+            skuCode: '',
+            snapshotName: '',
+            skuOptions: [],
+          }
+          current.requiredQuantity += bomQty * output.quantityNumber
+          aggregated.set(key, current)
+        }
       }
 
       const enriched = await Promise.all(
-        bomLinesDef.map(async (bl) => {
-          let skuOptions = []
-          try {
-            skuOptions = await fetchSkusByProductId(bl.materialId)
-          } catch {
-            skuOptions = []
+        Array.from(aggregated.values()).map(async (line) => {
+          const key = String(line.materialId)
+          let skuOptions = materialSkuOptionsCache.get(key)
+          if (!skuOptions) {
+            try {
+              skuOptions = await fetchSkusByProductId(line.materialId)
+            } catch {
+              skuOptions = []
+            }
+            materialSkuOptionsCache.set(key, skuOptions)
           }
+
           return {
-            materialId: bl.materialId,
-            materialName: bl.materialName,
-            bomQty: bl.quantity,
+            ...line,
             skuId: skuOptions.length === 1 ? skuOptions[0].id : '',
             skuCode: skuOptions.length === 1 ? skuOptions[0].skuCode : '',
             snapshotName: skuOptions.length === 1 ? skuOptions[0].productName : '',
@@ -165,6 +258,7 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
           }
         }),
       )
+
       setBomLines(enriched)
     } catch (err) {
       setBomLines([])
@@ -177,11 +271,11 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
 
   function updateBomLineSku(materialId, skuId) {
     setBomLines((prev) =>
-      prev.map((l) => {
-        if (l.materialId !== materialId) return l
-        const sku = l.skuOptions.find((s) => sameId(s.id, skuId))
+      prev.map((line) => {
+        if (!sameId(line.materialId, materialId)) return line
+        const sku = line.skuOptions.find((item) => sameId(item.id, skuId))
         return {
-          ...l,
+          ...line,
           skuId,
           skuCode: sku?.skuCode ?? '',
           snapshotName: sku?.productName ?? '',
@@ -190,46 +284,55 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
     )
   }
 
-  function handleNextStep1() {
-    if (bomLines.length === 0)
-      return showError(
-        bomError || 'SKU thành phẩm này chưa có BOM. Vui lòng cấu hình BOM trước khi tạo lệnh.',
+  function validateBomLines() {
+    if (bomLines.length === 0) {
+      showError(
+        bomError || 'SKU này chưa có BOM, không thể tạo lệnh sản xuất.',
       )
-    const withoutSkuOptions = bomLines.find((l) => l.skuOptions.length === 0)
-    if (withoutSkuOptions)
-      return showError(`Nguyên liệu "${withoutSkuOptions.materialName}" chưa có SKU để xuất kho.`)
-    const missing = bomLines.find((l) => !l.skuId)
-    if (missing) return showError(`Chọn SKU cho nguyên liệu "${missing.materialName}".`)
+      return false
+    }
+    const withoutSkuOptions = bomLines.find((line) => line.skuOptions.length === 0)
+    if (withoutSkuOptions) {
+      showError(`Nguyên liệu "${withoutSkuOptions.materialName}" chưa có SKU để xuất kho.`)
+      return false
+    }
+    const missing = bomLines.find((line) => !line.skuId)
+    if (missing) {
+      showError(`Chọn SKU cho nguyên liệu "${missing.materialName}".`)
+      return false
+    }
+    return true
+  }
+
+  function handleNextStep1() {
+    if (!validateBomLines()) return
     setStep(2)
   }
 
   async function handleSubmit() {
-    const qty = Number(quantity)
-    if (!selectedSku) return showError('SKU thành phẩm không hợp lệ.')
-    if (!qty || qty <= 0) return showError('Số lượng phải lớn hơn 0.')
-    if (bomLines.length === 0)
-      return showError(
-        bomError || 'SKU thành phẩm này chưa có BOM. Vui lòng cấu hình BOM trước khi tạo lệnh.',
-      )
-    const withoutSkuOptions = bomLines.find((l) => l.skuOptions.length === 0)
-    if (withoutSkuOptions)
-      return showError(`Nguyên liệu "${withoutSkuOptions.materialName}" chưa có SKU để xuất kho.`)
-    const missing = bomLines.find((l) => !l.skuId)
-    if (missing) return showError(`Chọn SKU cho nguyên liệu "${missing.materialName}".`)
+    const rows = validateOutputRows()
+    if (!rows || !validateBomLines()) return
 
+    const firstOutput = rows[0]
     setSaving(true)
     try {
       const order = await createProductionOrder({
-        finishedSkuId: selectedSkuId,
-        finishedSkuCode: selectedSku?.skuCode ?? '',
-        finishedSkuSnapshotName: selectedSku?.productName ?? '',
-        quantity: qty,
+        finishedSkuId: firstOutput.skuId,
+        finishedSkuCode: firstOutput.sku?.skuCode ?? '',
+        finishedSkuSnapshotName: firstOutput.sku?.productName ?? '',
+        quantity: firstOutput.quantityNumber,
         note,
-        lines: bomLines.map((l) => ({
-          materialSkuId: l.skuId,
-          materialSkuCode: l.skuCode,
-          materialSnapshotName: l.snapshotName,
-          plannedQuantity: l.bomQty * qty,
+        outputs: rows.map((row) => ({
+          finishedSkuId: row.skuId,
+          finishedSkuCode: row.sku?.skuCode ?? '',
+          finishedSkuSnapshotName: row.sku?.productName ?? '',
+          quantity: row.quantityNumber,
+        })),
+        lines: bomLines.map((line) => ({
+          materialSkuId: line.skuId,
+          materialSkuCode: line.skuCode,
+          materialSnapshotName: line.snapshotName,
+          plannedQuantity: line.requiredQuantity,
         })),
       })
       onCreated?.(order)
@@ -247,15 +350,14 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
       onClick={onClose}
     >
       <div
-        className="flex h-[min(680px,calc(100dvh-2rem))] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
+        className="flex h-[min(720px,calc(100dvh-2rem))] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
+        onClick={(event) => event.stopPropagation()}
       >
-        {/* Header */}
         <header className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
           <div>
             <h2 className="text-base font-bold text-slate-800">Tạo lệnh sản xuất</h2>
             <p className="mt-0.5 text-xs text-[#717971]">
-              Bước {step + 1} / {STEPS.length} — {STEPS[step]}
+              Bước {step + 1} / {STEPS.length} - {STEPS[step]}
             </p>
           </div>
           <button
@@ -267,95 +369,133 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
           </button>
         </header>
 
-        {/* Step indicator */}
         <div className="flex gap-1 px-6 py-3">
-          {STEPS.map((label, i) => (
+          {STEPS.map((label, index) => (
             <div
               key={label}
-              className={`h-1 flex-1 rounded-full transition-colors ${i <= step ? 'bg-[#538463]' : 'bg-slate-200'}`}
+              className={`h-1 flex-1 rounded-full transition-colors ${index <= step ? 'bg-[#538463]' : 'bg-slate-200'}`}
             />
           ))}
         </div>
 
-        {/* Body */}
         <main className="flex-1 overflow-y-auto px-6 py-4">
-          {/* ── Step 0: Chọn thành phẩm ── */}
           {step === 0 && (
             <div className="space-y-4">
-              <label className="block space-y-1.5">
-                <span className="text-xs font-semibold text-[#717971]">Thành phẩm (SKU) *</span>
-                <select
-                  className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-sm"
-                  value={selectedSkuId}
-                  onChange={(e) => handleSelectedSkuChange(e.target.value)}
-                  disabled={loadingSkus}
-                >
-                  <option value="">{loadingSkus ? 'Đang tải...' : 'Chọn SKU thành phẩm'}</option>
-                  {tpSkus.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.skuCode} — {s.productName}
-                      {s.variantName ? ` (${s.variantName})` : ''}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="block space-y-1.5">
-                <span className="text-xs font-semibold text-[#717971]">Số lượng sản xuất *</span>
-                <input
-                  type="number"
-                  min="1"
-                  className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-sm"
-                  placeholder="VD: 100"
-                  value={quantity}
-                  onChange={(e) => setQuantity(e.target.value)}
-                />
-              </label>
+              <div className="space-y-3">
+                {outputRows.map((row, index) => (
+                  <div key={row.key} className="rounded-xl border border-slate-100 bg-slate-50/60 p-4">
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <p className="text-sm font-semibold text-slate-800">Thành phẩm {index + 1}</p>
+                      {outputRows.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeOutputRow(row.key)}
+                          className="rounded-lg p-1.5 text-slate-400 hover:bg-white hover:text-red-600"
+                          aria-label="Xóa thành phẩm"
+                        >
+                          <span className="material-symbols-outlined text-[18px]">delete</span>
+                        </button>
+                      )}
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-[1fr_140px]">
+                      <label className="block space-y-1.5">
+                        <span className="text-xs font-semibold text-[#717971]">Thành phẩm (SKU) *</span>
+                        <select
+                          className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-sm"
+                          value={row.skuId}
+                          onChange={(event) => updateOutputRow(row.key, { skuId: event.target.value })}
+                          disabled={loadingSkus}
+                        >
+                          <option value="">{loadingSkus ? 'Đang tải...' : 'Chọn SKU thành phẩm'}</option>
+                          {tpSkus.map((sku) => (
+                            <option key={sku.id} value={sku.id}>
+                              {sku.skuCode} - {sku.productName}
+                              {sku.variantName ? ` (${sku.variantName})` : ''}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="block space-y-1.5">
+                        <span className="text-xs font-semibold text-[#717971]">Số lượng *</span>
+                        <input
+                          type="number"
+                          min="1"
+                          className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-sm"
+                          placeholder="VD: 100"
+                          value={row.quantity}
+                          onChange={(event) => updateOutputRow(row.key, { quantity: event.target.value })}
+                        />
+                      </label>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={addOutputRow}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-[#538463]/30 px-4 py-2 text-sm font-semibold text-[#356647] hover:bg-[#f3f7f4]"
+              >
+                <span className="material-symbols-outlined text-[18px]">add</span>
+                Thêm thành phẩm
+              </button>
             </div>
           )}
 
-          {/* ── Step 1: BOM & SKU nguyên liệu ── */}
           {step === 1 && (
             <div>
               {loadingBom ? (
                 <p className="py-8 text-center text-sm text-slate-500">Đang tải BOM...</p>
               ) : bomLines.length === 0 ? (
                 <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                  {bomError || 'SKU thành phẩm này chưa có BOM. Vui lòng cấu hình BOM trước khi tạo lệnh.'}
+                  {bomError || 'SKU này chưa có BOM, không thể tạo lệnh sản xuất.'}
                 </div>
               ) : (
                 <div className="space-y-3">
+                  <div className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
+                    <p className="text-xs font-semibold text-[#717971]">Thành phẩm đầu ra</p>
+                    <div className="mt-2 space-y-1">
+                      {selectedOutputs.map((output) => (
+                        <div key={output.key} className="flex justify-between gap-3 text-xs">
+                          <span className="font-medium text-slate-700">{getSkuDisplayName(output.sku)}</span>
+                          <span className="font-semibold text-slate-800">
+                            {formatQuantity(output.quantityNumber)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                   <p className="text-xs text-[#717971]">
-                    Số lượng nguyên liệu tính theo BOM × <strong>{quantity}</strong> đơn vị TP.
+                    Nguyên liệu đã được cộng dồn từ BOM của tất cả thành phẩm đầu ra.
                   </p>
-                  {bomLines.map((l) => (
+                  {bomLines.map((line) => (
                     <div
-                      key={l.materialId}
+                      key={line.materialId}
                       className="rounded-xl border border-slate-100 bg-slate-50/60 p-4"
                     >
-                      <div className="mb-2 flex items-baseline justify-between">
-                        <span className="text-sm font-semibold text-slate-800">{l.materialName}</span>
+                      <div className="mb-2 flex items-baseline justify-between gap-3">
+                        <span className="text-sm font-semibold text-slate-800">{line.materialName}</span>
                         <span className="text-xs font-medium text-[#538463]">
-                          {l.bomQty} × {quantity} = <strong>{formatQuantity(l.bomQty * Number(quantity))}</strong>
+                          Cần xuất <strong>{formatQuantity(line.requiredQuantity)}</strong>
                         </span>
                       </div>
-                      {l.skuOptions.length === 0 ? (
+                      {line.skuOptions.length === 0 ? (
                         <p className="text-xs text-red-600">Nguyên liệu chưa có SKU nào.</p>
-                      ) : l.skuOptions.length === 1 ? (
+                      ) : line.skuOptions.length === 1 ? (
                         <p className="text-xs text-slate-500">
-                          SKU: <span className="font-medium text-slate-700">{l.skuCode}</span>
+                          SKU: <span className="font-medium text-slate-700">{line.skuCode}</span>
                         </p>
                       ) : (
                         <label className="block space-y-1">
                           <span className="text-xs text-[#717971]">Chọn SKU *</span>
                           <select
                             className="w-full rounded-xl border border-slate-200 bg-white p-2 text-sm"
-                            value={l.skuId}
-                            onChange={(e) => updateBomLineSku(l.materialId, e.target.value)}
+                            value={line.skuId}
+                            onChange={(event) => updateBomLineSku(line.materialId, event.target.value)}
                           >
-                            <option value="">— Chọn SKU —</option>
-                            {l.skuOptions.map((s) => (
-                              <option key={s.id} value={s.id}>
-                                {s.skuCode}
+                            <option value="">- Chọn SKU -</option>
+                            {line.skuOptions.map((sku) => (
+                              <option key={sku.id} value={sku.id}>
+                                {sku.skuCode}
                               </option>
                             ))}
                           </select>
@@ -368,29 +508,32 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
             </div>
           )}
 
-          {/* ── Step 2: Xác nhận ── */}
           {step === 2 && (
             <div className="space-y-4">
               <div className="rounded-xl border border-slate-100 bg-slate-50 p-4 text-sm">
-                <div className="mb-3 grid grid-cols-2 gap-2 text-xs text-[#717971]">
-                  <span>Thành phẩm</span>
-                  <span className="font-semibold text-slate-800">
-                    {selectedSku?.skuCode} — {selectedSku?.productName}
-                  </span>
-                  <span>Số lượng</span>
-                  <span className="font-semibold text-slate-800">{quantity}</span>
-                </div>
+                <p className="mb-2 text-xs font-semibold text-[#717971]">Thành phẩm đầu ra:</p>
+                <ul className="space-y-1">
+                  {selectedOutputs.map((output) => (
+                    <li key={output.key} className="flex justify-between gap-3 text-xs">
+                      <span className="text-slate-600">{getSkuDisplayName(output.sku)}</span>
+                      <span className="font-semibold text-slate-800">
+                        {formatQuantity(output.quantityNumber)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+
                 {bomLines.length > 0 && (
                   <>
-                    <p className="mb-2 text-xs font-semibold text-[#717971]">Nguyên liệu cần xuất:</p>
+                    <p className="mb-2 mt-4 text-xs font-semibold text-[#717971]">Nguyên liệu cần xuất:</p>
                     <ul className="space-y-1">
-                      {bomLines.map((l) => (
-                        <li key={l.materialId} className="flex justify-between text-xs">
+                      {bomLines.map((line) => (
+                        <li key={line.materialId} className="flex justify-between gap-3 text-xs">
                           <span className="text-slate-600">
-                            {l.materialName} ({l.skuCode})
+                            {line.materialName} ({line.skuCode})
                           </span>
                           <span className="font-semibold text-slate-800">
-                            {formatQuantity(l.bomQty * Number(quantity))}
+                            {formatQuantity(line.requiredQuantity)}
                           </span>
                         </li>
                       ))}
@@ -404,7 +547,7 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
                   rows={3}
                   className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-sm"
                   value={note}
-                  onChange={(e) => setNote(e.target.value)}
+                  onChange={(event) => setNote(event.target.value)}
                   placeholder="Ghi chú thêm về lệnh sản xuất..."
                 />
               </label>
@@ -412,14 +555,13 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
           )}
         </main>
 
-        {/* Footer */}
         <footer className="flex items-center justify-between border-t border-slate-100 px-6 py-4">
           <button
             type="button"
-            onClick={() => (step === 0 ? onClose() : setStep((s) => s - 1))}
+            onClick={() => (step === 0 ? onClose() : setStep((current) => current - 1))}
             className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50"
           >
-            {step === 0 ? 'Huỷ' : '← Quay lại'}
+            {step === 0 ? 'Huỷ' : 'Quay lại'}
           </button>
 
           {step === 0 && (
@@ -429,7 +571,7 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
               disabled={loadingSkus}
               className="rounded-xl bg-[#538463] px-5 py-2 text-sm font-bold text-white hover:bg-[#457053] disabled:opacity-50"
             >
-              Tiếp theo →
+              Tiếp theo
             </button>
           )}
           {step === 1 && (
@@ -439,7 +581,7 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
               disabled={loadingBom}
               className="rounded-xl bg-[#538463] px-5 py-2 text-sm font-bold text-white hover:bg-[#457053] disabled:opacity-50"
             >
-              Tiếp theo →
+              Tiếp theo
             </button>
           )}
           {step === 2 && (
