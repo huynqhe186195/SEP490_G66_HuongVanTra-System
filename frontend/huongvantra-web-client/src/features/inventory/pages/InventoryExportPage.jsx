@@ -89,6 +89,9 @@ function InventoryExportPage() {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <DetailField label="Mã phiếu" value={selected.exportCode} />
               <DetailField label="Loại xuất" value={getExportTypeLabel(selected.exportType)} />
+              {selected.productionCode ? (
+                <DetailField label="Lệnh SX" value={selected.productionCode} />
+              ) : null}
               <DetailField label="SKU" value={selected.skuCode} />
               <DetailField label="Sản phẩm" value={selected.skuSnapshotName} />
               <DetailField label="Số lượng xuất" value={formatStockQuantity(selected.quantity)} />

@@ -90,12 +90,19 @@ public class StockExportSlipConfiguration : IEntityTypeConfiguration<StockExport
         builder.HasKey(e => e.Id);
         builder.Property(e => e.ExportCode).HasMaxLength(30).IsRequired();
         builder.Property(e => e.ExportType).HasMaxLength(30).IsRequired();
+        builder.Property(e => e.ProductionCode).HasMaxLength(30);
         builder.Property(e => e.SkuCode).HasMaxLength(50).IsRequired();
         builder.Property(e => e.SkuSnapshotName).HasMaxLength(255).IsRequired();
         builder.Property(e => e.Note).HasMaxLength(500);
         builder.HasIndex(e => e.ExportCode).IsUnique();
         builder.HasIndex(e => e.StockAdjustmentRequestId);
+        builder.HasIndex(e => e.ProductionOrderId);
+        builder.HasIndex(e => e.ProductionCode);
         builder.HasIndex(e => e.CreatedAt);
+        builder.HasOne<ProductionOrder>()
+            .WithMany()
+            .HasForeignKey(e => e.ProductionOrderId)
+            .OnDelete(DeleteBehavior.SetNull);
     }
 }
 
@@ -108,8 +115,12 @@ public class WarehouseBatchConfiguration : IEntityTypeConfiguration<WarehouseBat
         builder.Property(e => e.LotCode).HasMaxLength(50).IsRequired();
         builder.Property(e => e.Supplier).HasMaxLength(200);
         builder.Property(e => e.Note).HasMaxLength(500);
+        builder.Property(e => e.SourceType).HasMaxLength(50);
+        builder.Property(e => e.SourceReferenceCode).HasMaxLength(50);
         builder.Property(e => e.Status).HasMaxLength(20).IsRequired();
         builder.HasIndex(e => e.LotCode).IsUnique();
+        builder.HasIndex(e => e.SourceReferenceId);
+        builder.HasIndex(e => e.SourceReferenceCode);
         builder.HasIndex(e => e.ExpiresAt);
         builder.HasIndex(e => e.CreatedAt);
         builder.HasMany(e => e.Items)

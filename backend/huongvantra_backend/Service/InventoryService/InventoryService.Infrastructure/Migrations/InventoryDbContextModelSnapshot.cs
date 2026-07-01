@@ -202,6 +202,13 @@ namespace InventoryService.Infrastructure.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("varchar(500)");
 
+                    b.Property<string>("ProductionCode")
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)");
+
+                    b.Property<Guid?>("ProductionOrderId")
+                        .HasColumnType("char(36)");
+
                     b.Property<int>("Quantity")
                         .HasColumnType("int");
 
@@ -240,6 +247,10 @@ namespace InventoryService.Infrastructure.Migrations
                     b.HasIndex("ExportCode")
                         .IsUnique();
 
+                    b.HasIndex("ProductionCode");
+
+                    b.HasIndex("ProductionOrderId");
+
                     b.HasIndex("StockAdjustmentRequestId");
 
                     b.ToTable("StockExportSlips");
@@ -268,6 +279,17 @@ namespace InventoryService.Infrastructure.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("varchar(500)");
 
+                    b.Property<Guid?>("SourceReferenceId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("SourceReferenceCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<string>("SourceType")
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -288,6 +310,10 @@ namespace InventoryService.Infrastructure.Migrations
 
                     b.HasIndex("LotCode")
                         .IsUnique();
+
+                    b.HasIndex("SourceReferenceCode");
+
+                    b.HasIndex("SourceReferenceId");
 
                     b.ToTable("WarehouseBatches");
                 });
@@ -547,6 +573,11 @@ namespace InventoryService.Infrastructure.Migrations
 
             modelBuilder.Entity("InventoryService.Domain.Entities.StockExportSlip", b =>
                 {
+                    b.HasOne("InventoryService.Domain.Entities.ProductionOrder")
+                        .WithMany()
+                        .HasForeignKey("ProductionOrderId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.Navigation("BatchAllocations");
                 });
 

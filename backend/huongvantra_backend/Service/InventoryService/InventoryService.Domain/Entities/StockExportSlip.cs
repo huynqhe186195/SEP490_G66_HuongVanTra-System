@@ -6,6 +6,8 @@ public class StockExportSlip
     public string ExportCode { get; set; } = string.Empty;
     public string ExportType { get; set; } = "transfer_to_store";
     public Guid? StockAdjustmentRequestId { get; set; }
+    public Guid? ProductionOrderId { get; set; }
+    public string? ProductionCode { get; set; }
     public Guid SkuId { get; set; }
     public string SkuCode { get; set; } = string.Empty;
     public string SkuSnapshotName { get; set; } = string.Empty;

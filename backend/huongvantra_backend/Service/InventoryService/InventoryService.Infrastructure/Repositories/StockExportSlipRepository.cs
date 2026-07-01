@@ -14,13 +14,16 @@ public class StockExportSlipRepository(InventoryDbContext _db) : IStockExportSli
 
     public async Task<List<StockExportSlip>> GetListAsync(string? search, CancellationToken ct = default)
     {
-        var query = _db.StockExportSlips.AsQueryable();
+        var query = _db.StockExportSlips
+            .Include(s => s.BatchAllocations)
+            .AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(search))
         {
             var keyword = search.Trim().ToLower();
             query = query.Where(s =>
                 s.ExportCode.ToLower().Contains(keyword) ||
+                (s.ProductionCode != null && s.ProductionCode.ToLower().Contains(keyword)) ||
                 s.SkuCode.ToLower().Contains(keyword) ||
                 s.SkuSnapshotName.ToLower().Contains(keyword));
         }

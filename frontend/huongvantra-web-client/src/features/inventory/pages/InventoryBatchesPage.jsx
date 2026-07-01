@@ -18,6 +18,13 @@ import { fetchWarehouseBatches } from '../services/warehouseBatchApi.js'
 
 
 
+function getBatchSourceLabel(sourceType) {
+  if (sourceType === 'production_finished_goods') return 'Lệnh SX'
+  return 'Nguồn'
+}
+
+
+
 function InventoryBatchesPage() {
 
   const [searchInput, setSearchInput] = useState('')
@@ -223,6 +230,18 @@ function InventoryBatchesPage() {
                             {isOpen ? '▾' : '▸'}
 
                           </span>
+
+                          {batch.sourceReferenceCode ? (
+
+                            <div className="mt-1 text-xs font-normal text-slate-500">
+
+                              {getBatchSourceLabel(batch.sourceType)}:{' '}
+
+                              <span className="font-mono">{batch.sourceReferenceCode}</span>
+
+                            </div>
+
+                          ) : null}
 
                         </td>
 

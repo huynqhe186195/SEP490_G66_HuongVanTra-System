@@ -871,7 +871,10 @@ public class InventoryLogic(
         string? note,
         List<CreateWarehouseBatchItemRequest> items,
         Guid createdBy,
-        CancellationToken ct)
+        CancellationToken ct,
+        string? sourceType = null,
+        Guid? sourceReferenceId = null,
+        string? sourceReferenceCode = null)
     {
         if (items == null || items.Count == 0)
             throw new InventoryValidationException("Lô phải có ít nhất một dòng SKU.");
@@ -895,6 +898,9 @@ public class InventoryLogic(
             Supplier = supplier?.Trim(),
             ExpiresAt = expiresAt,
             Note = note?.Trim(),
+            SourceType = sourceType?.Trim(),
+            SourceReferenceId = sourceReferenceId,
+            SourceReferenceCode = sourceReferenceCode?.Trim(),
             Status = "active",
             CreatedBy = createdBy == Guid.Empty ? Guid.Empty : createdBy,
             CreatedAt = now,
@@ -1064,6 +1070,9 @@ public class InventoryLogic(
             batch.Supplier,
             batch.ExpiresAt,
             batch.Note,
+            batch.SourceType,
+            batch.SourceReferenceId,
+            batch.SourceReferenceCode,
             batch.Status,
             items.Sum(i => i.QuantityOnHand),
             items.Count,
@@ -1079,6 +1088,8 @@ public class InventoryLogic(
         slip.ExportType,
         slip.StockAdjustmentRequestId,
         null,
+        slip.ProductionOrderId,
+        slip.ProductionCode,
         slip.SkuId,
         slip.SkuCode,
         slip.SkuSnapshotName,
@@ -1216,6 +1227,8 @@ public class InventoryLogic(
                     ExportCode = $"PX-{now:yyyyMMdd}-{(countToday + 1):D4}",
                     ExportType = "production",
                     StockAdjustmentRequestId = null,
+                    ProductionOrderId = order.Id,
+                    ProductionCode = order.ProductionCode,
                     SkuId = line.MaterialSkuId,
                     SkuCode = line.MaterialSkuCode,
                     SkuSnapshotName = line.MaterialSnapshotName,
@@ -1251,7 +1264,10 @@ public class InventoryLogic(
                     order.Quantity,
                     null)],
                 createdBy: userId,
-                ct: innerCt);
+                ct: innerCt,
+                sourceType: "production_finished_goods",
+                sourceReferenceId: order.Id,
+                sourceReferenceCode: order.ProductionCode);
 
             order.Status = ProductionOrderStatus.Completed;
             order.CompletedAt = now;
