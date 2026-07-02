@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { Fragment, useCallback, useEffect, useState } from 'react'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
@@ -54,6 +54,46 @@ function StatusChip({ status }) {
       {PRODUCTION_STATUS_LABEL[status] ?? status}
     </span>
   )
+}
+
+function getOutputLines(order) {
+  const outputLines = Array.isArray(order.outputLines) ? order.outputLines.filter(Boolean) : []
+  if (outputLines.length > 0) return outputLines
+
+  return [
+    {
+      id: `${order.id}-legacy-output`,
+      finishedSkuId: order.finishedSkuId,
+      finishedSkuCode: order.finishedSkuCode,
+      finishedSkuSnapshotName: order.finishedSkuSnapshotName,
+      quantity: order.quantity,
+      warehouseBatchId: null,
+      warehouseBatchLotCode: null,
+    },
+  ].filter((line) => line.finishedSkuId || line.finishedSkuCode || line.finishedSkuSnapshotName)
+}
+
+function formatQuantity(value) {
+  const number = Number(value)
+  if (!Number.isFinite(number)) return '0'
+  return number.toLocaleString('vi-VN')
+}
+
+function formatOutputCompact(outputLines) {
+  return outputLines
+    .map((line) => {
+      const name = line.finishedSkuCode || line.finishedSkuSnapshotName
+      return `${name} x${formatQuantity(line.quantity)}`
+    })
+    .join(', ')
+}
+
+function getOutputName(line, fallback = '-') {
+  return line?.finishedSkuSnapshotName || line?.finishedSkuCode || fallback
+}
+
+function getOutputSku(line, fallback = '-') {
+  return line?.finishedSkuCode || fallback
 }
 
 function ProductionOrdersPage() {
@@ -157,14 +197,14 @@ function ProductionOrdersPage() {
         ))}
       </div>
 
-      {/* Table */}
-      <div className="overflow-x-auto rounded-2xl bg-white shadow-sm">
+      <div className="overflow-hidden rounded-2xl bg-white shadow-sm">
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-100 text-left text-xs font-semibold text-[#717971]">
               <th className="px-4 py-3">Mã lệnh</th>
-              <th className="px-4 py-3">Thành phẩm</th>
-              <th className="px-4 py-3 text-right">Số lượng</th>
+              <th className="px-4 py-3">Thành phẩm đầu ra</th>
+              <th className="px-4 py-3 text-right">Tổng SL</th>
               <th className="px-4 py-3">Trạng thái</th>
               <th className="px-4 py-3">Ngày tạo</th>
               <th className="px-4 py-3"></th>
@@ -174,32 +214,57 @@ function ProductionOrdersPage() {
             {isLoading ? (
               <tr>
                 <td colSpan={6} className="py-12 text-center text-sm text-slate-400">
-                  Đang tải...
+                  Đang tải lệnh sản xuất...
                 </td>
               </tr>
             ) : orders.length === 0 ? (
               <tr>
-                <td colSpan={6} className="py-12 text-center text-sm text-slate-400">
-                  Không có lệnh sản xuất nào.
+                <td colSpan={6} className="px-4 py-12 text-center text-sm text-slate-500">
+                  <p className="font-semibold text-slate-700">Chưa có lệnh sản xuất.</p>
+                  <p className="mt-1 text-xs text-slate-400">Bấm Tạo lệnh để tạo ProductionOrder cho Workflow 1.</p>
                 </td>
               </tr>
             ) : (
-              orders.map((order) => (
-                <>
+              orders.map((order) => {
+                const outputLines = getOutputLines(order)
+                const isMultiOutput = outputLines.length > 1
+                const totalOutputQuantity = outputLines.reduce((sum, line) => sum + Number(line.quantity || 0), 0)
+                return (
+                <Fragment key={order.id}>
                   <tr
-                    key={order.id}
-                    className="cursor-pointer border-b border-slate-50 hover:bg-slate-50/60"
+                    className="cursor-pointer border-b border-slate-50 align-top hover:bg-slate-50/60"
                     onClick={() => setExpandedId(expandedId === order.id ? null : order.id)}
                   >
                     <td className="px-4 py-3 font-mono text-xs font-semibold text-[#356647]">
                       {order.productionCode}
                     </td>
                     <td className="px-4 py-3">
-                      <p className="font-medium text-slate-800">{order.finishedSkuSnapshotName}</p>
-                      <p className="text-xs text-[#717971]">{order.finishedSkuCode}</p>
+                      {isMultiOutput ? (
+                        <>
+                          <p className="inline-flex rounded-full bg-[#f3f7f4] px-2.5 py-1 text-xs font-bold text-[#356647]">
+                            {outputLines.length} thành phẩm đầu ra
+                          </p>
+                          <p className="mt-1 max-w-md truncate text-xs text-[#717971]">
+                            {formatOutputCompact(outputLines)}
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="font-medium text-slate-800">{getOutputName(outputLines[0], order.finishedSkuSnapshotName)}</p>
+                          <p className="text-xs text-[#717971]">
+                            {getOutputSku(outputLines[0], order.finishedSkuCode)} · {formatQuantity(outputLines[0]?.quantity ?? order.quantity)} đơn vị
+                          </p>
+                        </>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-right font-semibold text-slate-800">
-                      {order.quantity.toLocaleString('vi-VN')}
+                      {isMultiOutput ? (
+                        <span title="Tổng số lượng các dòng thành phẩm">
+                          {formatQuantity(totalOutputQuantity)} tổng
+                        </span>
+                      ) : (
+                        formatQuantity(outputLines[0]?.quantity ?? order.quantity)
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <StatusChip status={order.status} />
@@ -235,40 +300,94 @@ function ProductionOrdersPage() {
                     </td>
                   </tr>
 
-                  {/* Expanded BOM lines */}
-                  {expandedId === order.id && order.lines.length > 0 && (
+                  {expandedId === order.id && (
                     <tr key={`${order.id}-detail`} className="bg-slate-50/40">
                       <td colSpan={6} className="px-6 py-4">
-                        <p className="mb-2 text-xs font-semibold text-[#717971]">Nguyên liệu:</p>
-                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                          {order.lines.map((line) => (
-                            <div
-                              key={line.id}
-                              className="rounded-lg border border-slate-100 bg-white px-3 py-2 text-xs"
-                            >
-                              <p className="font-medium text-slate-800">{line.materialSnapshotName}</p>
-                              <p className="text-[#717971]">
-                                {line.materialSkuCode} · {line.plannedQuantity.toLocaleString('vi-VN')} đơn vị
-                              </p>
-                            </div>
-                          ))}
+                        <div className="mb-4 rounded-xl border border-slate-100 bg-white">
+                          <div className="border-b border-slate-100 px-4 py-3">
+                            <p className="text-xs font-bold uppercase tracking-wide text-[#717971]">Thành phẩm đầu ra</p>
+                          </div>
+                          <div className="overflow-x-auto">
+                            <table className="min-w-full text-left text-xs">
+                              <thead className="bg-slate-50 text-[#717971]">
+                                <tr>
+                                  <th className="px-4 py-2 font-semibold">SKU</th>
+                                  <th className="px-4 py-2 font-semibold">Tên thành phẩm</th>
+                                  <th className="px-4 py-2 text-right font-semibold">Số lượng</th>
+                                  <th className="px-4 py-2 font-semibold">Lô thành phẩm</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100">
+                                {outputLines.map((line) => (
+                                  <tr key={line.id}>
+                                    <td className="px-4 py-2 font-mono font-semibold text-[#356647]">
+                                      {getOutputSku(line)}
+                                    </td>
+                                    <td className="px-4 py-2 font-medium text-slate-800">{getOutputName(line)}</td>
+                                    <td className="px-4 py-2 text-right font-semibold text-slate-800">
+                                      {formatQuantity(line.quantity)}
+                                    </td>
+                                    <td className="px-4 py-2 text-slate-600">
+                                      <span className="font-mono">{line.warehouseBatchLotCode || '-'}</span>
+                                      {line.warehouseBatchId ? (
+                                        <span className="block break-all text-[11px] text-slate-400">
+                                          {line.warehouseBatchId}
+                                        </span>
+                                      ) : null}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
                         </div>
-                        {order.completedAt && (
-                          <p className="mt-2 text-xs text-slate-400">
-                            Hoàn thành: {formatVietnamDateTime(order.completedAt)}
-                          </p>
+                        {order.lines.length > 0 && (
+                          <div className="rounded-xl border border-slate-100 bg-white">
+                            <div className="border-b border-slate-100 px-4 py-3">
+                              <p className="text-xs font-bold uppercase tracking-wide text-[#717971]">Nguyên liệu cần xuất</p>
+                            </div>
+                            <div className="overflow-x-auto">
+                              <table className="min-w-full text-left text-xs">
+                                <thead className="bg-slate-50 text-[#717971]">
+                                  <tr>
+                                    <th className="px-4 py-2 font-semibold">SKU</th>
+                                    <th className="px-4 py-2 font-semibold">Nguyên liệu</th>
+                                    <th className="px-4 py-2 text-right font-semibold">Số lượng</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                  {order.lines.map((line) => (
+                                    <tr key={line.id}>
+                                      <td className="px-4 py-2 font-mono font-semibold text-[#356647]">
+                                        {line.materialSkuCode || '-'}
+                                      </td>
+                                      <td className="px-4 py-2 font-medium text-slate-800">
+                                        {line.materialSnapshotName || '-'}
+                                      </td>
+                                      <td className="px-4 py-2 text-right font-semibold text-slate-800">
+                                        {formatQuantity(line.plannedQuantity)}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
                         )}
-                        {order.note && (
-                          <p className="mt-2 text-xs italic text-slate-500">Ghi chú: {order.note}</p>
-                        )}
+                        <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-slate-500">
+                          {order.completedAt && <span>Hoàn thành: {formatVietnamDateTime(order.completedAt)}</span>}
+                          {order.note && <span className="italic">Ghi chú: {order.note}</span>}
+                        </div>
                       </td>
                     </tr>
                   )}
-                </>
-              ))
+                </Fragment>
+                )
+              })
             )}
           </tbody>
         </table>
+        </div>
 
         {totalCount > pageSize && (
           <div className="border-t border-slate-100 px-4 py-3">

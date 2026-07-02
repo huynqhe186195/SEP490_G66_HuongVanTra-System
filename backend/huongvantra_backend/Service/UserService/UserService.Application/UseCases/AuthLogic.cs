@@ -134,6 +134,11 @@ public class AuthLogic(
             new(JwtRegisteredClaimNames.UniqueName, user.Username),
             new("username", user.Username),
         };
+        if (!string.IsNullOrWhiteSpace(user.Employee?.FullName))
+        {
+            claims.Add(new Claim("full_name", user.Employee.FullName.Trim()));
+            claims.Add(new Claim("name", user.Employee.FullName.Trim()));
+        }
         claims.AddRange(roles.Select(r => new Claim(ClaimTypes.Role, r)));
         claims.AddRange(permissions.Select(p => new Claim("permission", p)));
 

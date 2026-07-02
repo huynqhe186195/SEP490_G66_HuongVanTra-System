@@ -19,7 +19,11 @@ public record ProductUnitResponse(
     bool IsDirectSell,
     bool IsBaseUnit);
 
-public record BomLineResponse(Guid MaterialId, string MaterialName, decimal Quantity);
+public record BomLineResponse(
+    Guid MaterialId,
+    string MaterialName,
+    string? MaterialUnitName,
+    decimal Quantity);
 
 public record ProductVariantResponse(
     Guid Id,

@@ -8,6 +8,9 @@ public class WarehouseBatch
     public string? Supplier { get; set; }
     public DateTime? ExpiresAt { get; set; }
     public string? Note { get; set; }
+    public string? SourceType { get; set; }
+    public Guid? SourceReferenceId { get; set; }
+    public string? SourceReferenceCode { get; set; }
     /// <summary>active | depleted</summary>
     public string Status { get; set; } = "active";
     public Guid CreatedBy { get; set; }

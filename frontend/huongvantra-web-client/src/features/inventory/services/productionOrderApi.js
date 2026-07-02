@@ -11,8 +11,22 @@ export function mapProductionOrderLine(row) {
   }
 }
 
+export function mapProductionOrderOutputLine(row) {
+  if (!row) return null
+  return {
+    id: row.id ?? row.Id,
+    finishedSkuId: row.finishedSkuId ?? row.FinishedSkuId,
+    finishedSkuCode: row.finishedSkuCode ?? row.FinishedSkuCode ?? '',
+    finishedSkuSnapshotName: row.finishedSkuSnapshotName ?? row.FinishedSkuSnapshotName ?? '',
+    quantity: Number(row.quantity ?? row.Quantity ?? 0),
+    warehouseBatchId: row.warehouseBatchId ?? row.WarehouseBatchId ?? null,
+    warehouseBatchLotCode: row.warehouseBatchLotCode ?? row.WarehouseBatchLotCode ?? null,
+  }
+}
+
 export function mapProductionOrder(row) {
   if (!row) return null
+  const outputLines = (row.outputLines ?? row.OutputLines ?? []).map(mapProductionOrderOutputLine).filter(Boolean)
   return {
     id: row.id ?? row.Id,
     productionCode: row.productionCode ?? row.ProductionCode ?? '',
@@ -26,6 +40,7 @@ export function mapProductionOrder(row) {
     createdAt: row.createdAt ?? row.CreatedAt ?? null,
     completedAt: row.completedAt ?? row.CompletedAt ?? null,
     lines: (row.lines ?? row.Lines ?? []).map(mapProductionOrderLine).filter(Boolean),
+    outputLines,
   }
 }
 
@@ -66,6 +81,12 @@ export async function createProductionOrder(payload) {
       finishedSkuSnapshotName: payload.finishedSkuSnapshotName,
       quantity: Number(payload.quantity),
       note: payload.note?.trim() || null,
+      outputs: (payload.outputs ?? []).map((output) => ({
+        finishedSkuId: output.finishedSkuId,
+        finishedSkuCode: output.finishedSkuCode,
+        finishedSkuSnapshotName: output.finishedSkuSnapshotName,
+        quantity: Number(output.quantity),
+      })),
       lines: (payload.lines ?? []).map((l) => ({
         materialSkuId: l.materialSkuId,
         materialSkuCode: l.materialSkuCode,

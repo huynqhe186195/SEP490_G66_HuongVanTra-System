@@ -54,6 +54,68 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
         return MapToResponse(product, scope);
     }
 
+    public async Task<List<BomLineResponse>> GetVariantBomAsync(Guid variantId)
+    {
+        var variant = await _productRepository.GetVariantByIdAsync(variantId)
+            ?? throw new ProductValidationException("Không tìm thấy SKU/ProductVariant.");
+
+        return variant.BomLines
+            .Where(line => !line.IsDeleted)
+            .Select(MapBomLineResponse)
+            .ToList();
+    }
+
+    public async Task<List<BomLineResponse>> UpdateVariantBomAsync(Guid variantId, UpdateVariantBomRequest request)
+    {
+        if (request is null)
+            throw new ProductValidationException("Request body là bắt buộc.");
+
+        var variant = await _productRepository.GetVariantByIdAsync(variantId)
+            ?? throw new ProductValidationException("Không tìm thấy SKU/ProductVariant.");
+
+        if (variant.Product.ProductType != ProductType.THANH_PHAM)
+            throw new ProductValidationException("Chỉ SKU thành phẩm mới được cấu hình BOM.");
+
+        var lines = request.Lines ?? [];
+        var normalized = lines
+            .Select(line => new BomLineRequest(line.MaterialId, line.Quantity))
+            .ToList();
+
+        var invalidQuantity = normalized.FirstOrDefault(line => line.Quantity <= 0);
+        if (invalidQuantity is not null)
+            throw new ProductValidationException("Định mức phải lớn hơn 0.");
+
+        var duplicate = normalized
+            .GroupBy(line => line.MaterialId)
+            .FirstOrDefault(group => group.Count() > 1);
+        if (duplicate is not null)
+            throw new ProductValidationException("Không được chọn trùng nguyên liệu trong một BOM.");
+
+        var materialIds = normalized.Select(line => line.MaterialId).ToHashSet();
+        var materials = await _productRepository.GetProductsByIdsAsync(materialIds);
+        if (materials.Count != materialIds.Count)
+            throw new ProductValidationException("Có nguyên liệu không tồn tại hoặc đã bị xóa.");
+
+        var nonMaterial = materials.FirstOrDefault(product => product.ProductType != ProductType.NGUYEN_LIEU);
+        if (nonMaterial is not null)
+            throw new ProductValidationException($"'{nonMaterial.Name}' không phải là nguyên liệu.");
+
+        ValidateBomQuantities(normalized, materials);
+
+        var updated = await _productRepository.ReplaceVariantBomAsync(
+            variantId,
+            normalized.Select(line => new ProductVariantBomLine
+            {
+                MaterialId = line.MaterialId,
+                Quantity = line.Quantity
+            }).ToList());
+
+        return updated.BomLines
+            .Where(line => !line.IsDeleted)
+            .Select(MapBomLineResponse)
+            .ToList();
+    }
+
     public async Task<ProductResponse> CreateAsync(CreateProductRequest request)
     {
         if (request is null)
@@ -307,13 +369,65 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
         u.Id, u.ProductId, u.VariantId, u.UnitName, u.ConversionRate,
         u.Price, u.Barcode, u.IsDirectSell, u.IsBaseUnit);
 
+    private static BomLineResponse MapBomLineResponse(ProductVariantBomLine b) => new(
+        b.MaterialId,
+        b.Material?.Name ?? string.Empty,
+        ResolveMaterialUnit(b.Material),
+        b.Quantity);
+
+    private static void ValidateBomQuantities(List<BomLineRequest> lines, List<Product> materials)
+    {
+        var materialById = materials.ToDictionary(material => material.Id);
+        var errors = new List<string>();
+
+        foreach (var line in lines)
+        {
+            var material = materialById[line.MaterialId];
+            var unit = ResolveMaterialUnit(material);
+            var unitLabel = string.IsNullOrWhiteSpace(unit) ? "đơn vị" : unit.Trim();
+
+            if (line.Quantity <= 0)
+            {
+                errors.Add("Định mức phải lớn hơn 0.");
+                continue;
+            }
+
+            if (BomUnitRules.IsCountBasedUnit(unit) && !BomUnitRules.IsIntegerQuantity(line.Quantity))
+            {
+                errors.Add($"Đơn vị \"{unitLabel}\" chỉ cho phép số nguyên.");
+                continue;
+            }
+
+            if (!BomUnitRules.HasMaxDecimalPlaces(line.Quantity))
+                errors.Add("Định mức chỉ được tối đa 3 chữ số thập phân.");
+        }
+
+        if (errors.Count > 0)
+            throw new ProductValidationException(errors.Distinct());
+    }
+
+    private static string ResolveMaterialUnit(Product? material)
+    {
+        if (material is null) return string.Empty;
+
+        var baseUnit = material.Units
+            .Where(unit => !unit.IsDeleted && !string.IsNullOrWhiteSpace(unit.UnitName))
+            .OrderByDescending(unit => unit.IsBaseUnit)
+            .ThenBy(unit => unit.CreatedAt)
+            .Select(unit => unit.UnitName.Trim())
+            .FirstOrDefault();
+
+        return !string.IsNullOrWhiteSpace(baseUnit)
+            ? baseUnit
+            : material.BaseUnit;
+    }
+
     private static ProductVariantResponse MapVariantResponse(ProductVariant v) => new(
         v.Id, v.ProductId, v.SkuCode, v.Barcode, v.VariantName,
         v.OptionValuesJson, v.CostPrice, v.RetailPrice, v.MinStock, v.MaxStock,
         v.IsSellable, v.AllowRewardPoints, v.IsActive, v.ImageUrl,
         v.Units.Where(u => !u.IsDeleted).Select(MapUnitResponse).ToList(),
-        v.BomLines.Where(b => !b.IsDeleted).Select(b => new BomLineResponse(
-            b.MaterialId, b.Material?.Name ?? string.Empty, b.Quantity)).ToList());
+        v.BomLines.Where(b => !b.IsDeleted).Select(MapBomLineResponse).ToList());
 
     private static ProductType? ParseProductTypeFilter(string? value)
     {

@@ -37,6 +37,7 @@ builder.Services.AddScoped<ISkuStockRepository, SkuStockRepository>();
 builder.Services.AddScoped<IStockDeductQueueRepository, StockDeductQueueRepository>();
 builder.Services.AddScoped<IStockAdjustmentRequestRepository, StockAdjustmentRequestRepository>();
 builder.Services.AddScoped<IStockExportSlipRepository, StockExportSlipRepository>();
+builder.Services.AddScoped<IStockImportSlipRepository, StockImportSlipRepository>();
 builder.Services.AddScoped<IWarehouseBatchRepository, WarehouseBatchRepository>();
 builder.Services.AddScoped<IStockExportBatchAllocationRepository, StockExportBatchAllocationRepository>();
 builder.Services.AddScoped<IProcessedIntegrationEventRepository, ProcessedIntegrationEventRepository>();

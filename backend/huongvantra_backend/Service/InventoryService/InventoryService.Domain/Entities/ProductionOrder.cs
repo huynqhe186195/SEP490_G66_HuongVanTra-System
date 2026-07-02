@@ -17,4 +17,5 @@ public class ProductionOrder
     public DateTime UpdatedAt { get; set; }
     public DateTime? CompletedAt { get; set; }
     public ICollection<ProductionOrderLine> Lines { get; set; } = [];
+    public ICollection<ProductionOrderOutputLine> OutputLines { get; set; } = [];
 }

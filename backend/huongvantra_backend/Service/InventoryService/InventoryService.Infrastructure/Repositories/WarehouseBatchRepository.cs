@@ -37,6 +37,8 @@ public class WarehouseBatchRepository(InventoryDbContext _db) : IWarehouseBatchR
                 b.LotCode.ToLower().Contains(s) ||
                 (b.Supplier != null && b.Supplier.ToLower().Contains(s)) ||
                 (b.Note != null && b.Note.ToLower().Contains(s)) ||
+                (b.SourceType != null && b.SourceType.ToLower().Contains(s)) ||
+                (b.SourceReferenceCode != null && b.SourceReferenceCode.ToLower().Contains(s)) ||
                 b.Items.Any(i =>
                     i.SkuCode.ToLower().Contains(s) ||
                     (i.ProductSnapshotName != null && i.ProductSnapshotName.ToLower().Contains(s))));

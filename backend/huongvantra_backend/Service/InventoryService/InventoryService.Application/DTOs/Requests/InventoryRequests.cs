@@ -40,14 +40,26 @@ public record ProductionOrderLineInput(
     string MaterialSnapshotName,
     int PlannedQuantity);
 
+public record ProductionOrderOutputLineInput(
+    Guid FinishedSkuId,
+    string FinishedSkuCode,
+    string FinishedSkuSnapshotName,
+    int Quantity);
+
 public record CreateProductionOrderRequest(
     Guid FinishedSkuId,
     string FinishedSkuCode,
     string FinishedSkuSnapshotName,
     int Quantity,
     string? Note,
-    List<ProductionOrderLineInput> Lines);
+    List<ProductionOrderLineInput> Lines,
+    List<ProductionOrderOutputLineInput>? Outputs = null);
 
 public record DeductMaterialItem(Guid SkuId, int Quantity);
 
 public record DeductMaterialsRequest(List<DeductMaterialItem> Items);
+
+public record CreatorSnapshot(
+    Guid CreatedById,
+    string? CreatedByName,
+    string? CreatedByRoleName);

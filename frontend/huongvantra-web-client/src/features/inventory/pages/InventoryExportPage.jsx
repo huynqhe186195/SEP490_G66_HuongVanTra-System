@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import { showError } from '../../../app/toast.js'
@@ -7,6 +7,22 @@ import { formatStockQuantity } from '../../products/utils/productDisplay.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import { fetchStockExportSlips, getExportTypeLabel } from '../services/stockExportSlipApi.js'
 import InventoryNavTabs from '../components/InventoryNavTabs.jsx'
+import {
+  ExportSlipDocument,
+  SlipActionButtons,
+  SlipPrintStyles,
+} from '../components/InventorySlipDocument.jsx'
+
+function getSlipMaterialLabel(slip) {
+  if (slip.lines?.length > 1) return `${slip.lines.length} dòng nguyên liệu`
+  if (slip.lines?.length === 1) return slip.lines[0].productSnapshotName || slip.lines[0].skuCode
+  return slip.skuSnapshotName
+}
+
+function getSlipQuantity(slip) {
+  if (slip.lines?.length) return slip.lines.reduce((sum, line) => sum + line.quantity, 0)
+  return slip.quantity
+}
 
 function InventoryExportPage() {
   const location = useLocation()
@@ -14,6 +30,7 @@ function InventoryExportPage() {
   const [slips, setSlips] = useState([])
   const [selectedId, setSelectedId] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
+  const exportSlipDocumentRef = useRef(null)
 
   const loadData = useCallback(async () => {
     setIsLoading(true)
@@ -41,9 +58,10 @@ function InventoryExportPage() {
 
   return (
     <PageShell>
+      <SlipPrintStyles />
       <PageHeader
         title="Phiếu xuất kho"
-        description="Phiếu xuất tự động khi Thủ kho duyệt yêu cầu xuất kho tổng sang cửa hàng"
+        description="Chứng từ xuất nguyên liệu, gồm phiếu xuất sản xuất và các phiếu xuất kho khác."
         searchPlaceholder="Tìm mã phiếu, SKU..."
         searchValue={searchInput}
         onSearchChange={setSearchInput}
@@ -51,7 +69,7 @@ function InventoryExportPage() {
       />
 
       <div className="grid flex-1 grid-cols-1 gap-6 lg:grid-cols-12">
-        <section className="rounded-2xl border border-slate-100 bg-white shadow-sm lg:col-span-5">
+        <section className="no-print rounded-2xl border border-slate-100 bg-white shadow-sm lg:col-span-5">
           <div className="border-b border-slate-50 px-6 py-4">
             <h2 className="text-lg font-bold text-slate-800">Danh sách phiếu</h2>
           </div>
@@ -70,11 +88,19 @@ function InventoryExportPage() {
                     selectedId === slip.id ? 'bg-[#fbf9f1]/60' : ''
                   }`}
                 >
-                  <p className="font-bold text-[#356647]">{slip.exportCode}</p>
-                  <p className="mt-1 text-sm text-slate-700">{slip.skuSnapshotName}</p>
-                  <p className="mt-1 text-xs text-slate-500">
-                    SL: {formatStockQuantity(slip.quantity)} · {formatVietnamDateTime(slip.createdAt)}
-                  </p>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-bold text-[#356647]">{slip.exportCode}</p>
+                      <p className="mt-1 text-sm text-slate-700">{getSlipMaterialLabel(slip)}</p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        SL: {formatStockQuantity(getSlipQuantity(slip))} · {formatVietnamDateTime(slip.createdAt)}
+                      </p>
+                    </div>
+                    <span className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700">
+                      <span className="material-symbols-outlined text-[16px]">visibility</span>
+                      Chi tiết
+                    </span>
+                  </div>
                 </button>
               ))
             )}
@@ -82,58 +108,23 @@ function InventoryExportPage() {
         </section>
 
         <section className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm sm:p-8 lg:col-span-7">
-          <h2 className="mb-6 text-lg font-bold text-slate-800">Chi tiết phiếu xuất</h2>
+          <h2 className="no-print mb-6 text-lg font-bold text-slate-800">Chi tiết phiếu xuất</h2>
           {!selected ? (
             <p className="text-sm text-slate-500">Chọn một phiếu để xem chi tiết.</p>
           ) : (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <DetailField label="Mã phiếu" value={selected.exportCode} />
-              <DetailField label="Loại xuất" value={getExportTypeLabel(selected.exportType)} />
-              <DetailField label="SKU" value={selected.skuCode} />
-              <DetailField label="Sản phẩm" value={selected.skuSnapshotName} />
-              <DetailField label="Số lượng xuất" value={formatStockQuantity(selected.quantity)} />
-              <DetailField label="Thời gian" value={formatVietnamDateTime(selected.createdAt)} />
-              <DetailField label="Kho trước → sau" value={`${formatStockQuantity(selected.warehouseQtyBefore)} → ${formatStockQuantity(selected.warehouseQtyAfter)}`} />
-              <DetailField label="Cửa hàng trước → sau" value={`${formatStockQuantity(selected.storeQtyBefore)} → ${formatStockQuantity(selected.storeQtyAfter)}`} />
-              {selected.batchAllocations?.length ? (
-                <div className="rounded-lg border border-slate-200 bg-slate-50/30 p-4 sm:col-span-2">
-                  <label className="mb-2 block text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                    Lô đã trừ (FIFO)
-                  </label>
-                  <ul className="space-y-1 text-sm text-slate-700">
-                    {selected.batchAllocations.map((line) => (
-                      <li key={line.id}>
-                        <span className="font-mono font-semibold text-[#356647]">{line.lotCode}</span>
-                        {line.skuCode ? (
-                          <span className="text-slate-500"> ({line.skuCode})</span>
-                        ) : null}
-                        {' — '}
-                        {formatStockQuantity(line.quantity)}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-              {selected.note ? (
-                <div className="rounded-lg border border-slate-200 bg-slate-50/30 p-4 sm:col-span-2">
-                  <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-slate-400">Ghi chú</label>
-                  <div className="text-sm text-slate-700">{selected.note}</div>
-                </div>
-              ) : null}
-            </div>
+            <>
+              <SlipActionButtons
+                documentRef={exportSlipDocumentRef}
+                filename={selected.exportCode ? `${selected.exportCode}.pdf` : 'phieu-kho.pdf'}
+              />
+              <div ref={exportSlipDocumentRef}>
+                <ExportSlipDocument slip={selected} getTypeLabel={getExportTypeLabel} />
+              </div>
+            </>
           )}
         </section>
       </div>
     </PageShell>
-  )
-}
-
-function DetailField({ label, value }) {
-  return (
-    <div className="rounded-lg border border-slate-200 bg-slate-50/30 p-4">
-      <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-slate-400">{label}</label>
-      <div className="text-sm font-medium text-slate-700">{value}</div>
-    </div>
   )
 }
 

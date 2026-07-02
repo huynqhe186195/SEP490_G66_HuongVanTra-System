@@ -15,6 +15,7 @@ public class InventoryLogic(
     IStockDeductQueueRepository _queueRepo,
     IStockAdjustmentRequestRepository _adjustmentRequestRepo,
     IStockExportSlipRepository _exportSlipRepo,
+    IStockImportSlipRepository _importSlipRepo,
     IWarehouseBatchRepository _batchRepo,
     IStockExportBatchAllocationRepository _exportAllocationRepo,
     IProcessedIntegrationEventRepository _processedEvents,
@@ -638,6 +639,7 @@ public class InventoryLogic(
     public async Task<StockAdjustmentReviewResponse> ApproveStockAdjustmentRequestAsync(
         Guid id,
         Guid reviewedBy,
+        CreatorSnapshot? creator,
         CancellationToken ct = default)
     {
         var entity = await _adjustmentRequestRepo.GetByIdAsync(id, ct)
@@ -675,6 +677,7 @@ public class InventoryLogic(
                         storeBefore,
                         stock.QuantityOnHand,
                         reviewedBy,
+                        creator,
                         "Giả lập — chưa trừ kho tổng (module kho đang phát triển).",
                         null,
                         ct);
@@ -704,6 +707,7 @@ public class InventoryLogic(
                         storeBefore,
                         stock.QuantityOnHand,
                         reviewedBy,
+                        creator,
                         entity.Reason,
                         allocations,
                         ct);
@@ -815,6 +819,20 @@ public class InventoryLogic(
         return slip == null ? null : MapExportSlip(slip);
     }
 
+    public async Task<List<StockImportSlipResponse>> GetStockImportSlipsAsync(
+        string? search,
+        CancellationToken ct = default)
+    {
+        var slips = await _importSlipRepo.GetListAsync(search, ct);
+        return slips.Select(MapImportSlip).ToList();
+    }
+
+    public async Task<StockImportSlipResponse?> GetStockImportSlipAsync(Guid id, CancellationToken ct = default)
+    {
+        var slip = await _importSlipRepo.GetByIdAsync(id, ct);
+        return slip == null ? null : MapImportSlip(slip);
+    }
+
     private async Task<StockExportSlip> CreateExportSlipAsync(
         StockAdjustmentRequest request,
         StockAdjustmentRequestItem line,
@@ -824,12 +842,14 @@ public class InventoryLogic(
         int storeBefore,
         int storeAfter,
         Guid createdBy,
+        CreatorSnapshot? creator,
         string? note,
         List<StockExportBatchAllocation>? batchAllocations,
         CancellationToken ct)
     {
         var today = DateTime.UtcNow.Date;
         var countToday = await _exportSlipRepo.CountCreatedSinceAsync(today, ct);
+        var effectiveCreatedBy = createdBy == Guid.Empty ? request.RequestedBy : createdBy;
         var slip = new StockExportSlip
         {
             Id = Guid.NewGuid(),
@@ -845,7 +865,10 @@ public class InventoryLogic(
             StoreQtyBefore = storeBefore,
             StoreQtyAfter = storeAfter,
             Note = note ?? request.Reason,
-            CreatedBy = createdBy == Guid.Empty ? request.RequestedBy : createdBy,
+            CreatedBy = effectiveCreatedBy,
+            CreatedById = effectiveCreatedBy == Guid.Empty ? null : effectiveCreatedBy,
+            CreatedByName = NormalizeSnapshotText(creator?.CreatedByName),
+            CreatedByRoleName = NormalizeSnapshotText(creator?.CreatedByRoleName),
             CreatedAt = DateTime.UtcNow,
         };
 
@@ -871,7 +894,10 @@ public class InventoryLogic(
         string? note,
         List<CreateWarehouseBatchItemRequest> items,
         Guid createdBy,
-        CancellationToken ct)
+        CancellationToken ct,
+        string? sourceType = null,
+        Guid? sourceReferenceId = null,
+        string? sourceReferenceCode = null)
     {
         if (items == null || items.Count == 0)
             throw new InventoryValidationException("Lô phải có ít nhất một dòng SKU.");
@@ -895,6 +921,9 @@ public class InventoryLogic(
             Supplier = supplier?.Trim(),
             ExpiresAt = expiresAt,
             Note = note?.Trim(),
+            SourceType = sourceType?.Trim(),
+            SourceReferenceId = sourceReferenceId,
+            SourceReferenceCode = sourceReferenceCode?.Trim(),
             Status = "active",
             CreatedBy = createdBy == Guid.Empty ? Guid.Empty : createdBy,
             CreatedAt = now,
@@ -1013,6 +1042,12 @@ public class InventoryLogic(
     private static string NormalizeLotCode(string lotCode) =>
         lotCode.Trim().ToUpperInvariant();
 
+    private static string? NormalizeSnapshotText(string? value)
+    {
+        var normalized = value?.Trim();
+        return string.IsNullOrWhiteSpace(normalized) ? null : normalized;
+    }
+
     private async Task<SkuStock> GetOrCreateSkuStockAsync(
         Guid skuId,
         string? skuCode,
@@ -1064,6 +1099,9 @@ public class InventoryLogic(
             batch.Supplier,
             batch.ExpiresAt,
             batch.Note,
+            batch.SourceType,
+            batch.SourceReferenceId,
+            batch.SourceReferenceCode,
             batch.Status,
             items.Sum(i => i.QuantityOnHand),
             items.Count,
@@ -1079,6 +1117,8 @@ public class InventoryLogic(
         slip.ExportType,
         slip.StockAdjustmentRequestId,
         null,
+        slip.ProductionOrderId,
+        slip.ProductionCode,
         slip.SkuId,
         slip.SkuCode,
         slip.SkuSnapshotName,
@@ -1089,9 +1129,108 @@ public class InventoryLogic(
         slip.StoreQtyAfter,
         slip.Note,
         slip.CreatedBy,
+        slip.CreatedById,
+        slip.CreatedByName,
+        slip.CreatedByRoleName,
         slip.CreatedAt,
-        slip.BatchAllocations.Select(a => new StockExportBatchAllocationResponse(
-            a.Id, a.WarehouseBatchId, a.WarehouseBatchItemId, a.LotCode, a.SkuCode, a.Quantity)).ToList());
+        slip.BatchAllocations.Select(MapExportBatchAllocation).ToList(),
+        slip.Lines
+            .OrderBy(l => l.SkuCode)
+            .Select(MapExportSlipLine)
+            .ToList());
+
+    private static StockExportSlipLineResponse MapExportSlipLine(StockExportSlipLine line) => new(
+        line.Id,
+        line.SkuId,
+        line.SkuCode,
+        line.ProductSnapshotName,
+        line.Quantity,
+        line.WarehouseQtyBefore,
+        line.WarehouseQtyAfter,
+        line.StoreQtyBefore,
+        line.StoreQtyAfter,
+        line.Note,
+        line.CreatedAt,
+        line.BatchAllocations.Select(MapExportBatchAllocation).ToList());
+
+    private static StockExportBatchAllocationResponse MapExportBatchAllocation(StockExportBatchAllocation allocation) => new(
+        allocation.Id,
+        allocation.StockExportSlipLineId,
+        allocation.WarehouseBatchId,
+        allocation.WarehouseBatchItemId,
+        allocation.LotCode,
+        allocation.SkuCode,
+        allocation.Quantity);
+
+    private static StockImportSlipResponse MapImportSlip(StockImportSlip slip) => new(
+        slip.Id,
+        slip.ImportCode,
+        slip.ImportType,
+        slip.SkuId,
+        slip.SkuCode,
+        slip.ProductSnapshotName,
+        slip.Quantity,
+        slip.WarehouseQtyBefore,
+        slip.WarehouseQtyAfter,
+        slip.StoreQtyBefore,
+        slip.StoreQtyAfter,
+        slip.WarehouseBatchId,
+        slip.WarehouseBatchLotCode,
+        slip.ProductionOrderId,
+        slip.ProductionCode,
+        slip.Note,
+        slip.CreatedBy,
+        slip.CreatedById,
+        slip.CreatedByName,
+        slip.CreatedByRoleName,
+        slip.CreatedAt,
+        BuildStockImportSlipLineResponses(slip));
+
+    private static List<StockImportSlipLineResponse> BuildStockImportSlipLineResponses(StockImportSlip slip)
+    {
+        var lines = slip.Lines
+            .OrderBy(l => l.SkuCode)
+            .Select(MapImportSlipLine)
+            .ToList();
+
+        if (lines.Count > 0)
+            return lines;
+
+        return
+        [
+            new StockImportSlipLineResponse(
+                Guid.Empty,
+                slip.SkuId,
+                slip.SkuCode,
+                slip.ProductSnapshotName,
+                slip.Quantity,
+                slip.WarehouseQtyBefore,
+                slip.WarehouseQtyAfter,
+                slip.StoreQtyBefore,
+                slip.StoreQtyAfter,
+                slip.WarehouseBatchId,
+                slip.WarehouseBatchLotCode,
+                null,
+                slip.Note,
+                slip.CreatedAt)
+        ];
+    }
+
+    private static StockImportSlipLineResponse MapImportSlipLine(StockImportSlipLine line) => new(
+        line.Id,
+        line.SkuId,
+        line.SkuCode,
+        line.ProductSnapshotName,
+        line.Quantity,
+        line.WarehouseQtyBefore,
+        line.WarehouseQtyAfter,
+        line.StoreQtyBefore,
+        line.StoreQtyAfter,
+        line.WarehouseBatchId,
+        line.WarehouseBatchLotCode,
+        line.ProductionOrderOutputLineId,
+        line.Note,
+        line.CreatedAt);
 
     private static StockAdjustmentRequestItemResponse MapAdjustmentRequestItem(StockAdjustmentRequestItem item) => new(
         item.Id,
@@ -1136,8 +1275,9 @@ public class InventoryLogic(
         Guid userId,
         CancellationToken ct = default)
     {
-        if (request.Quantity <= 0)
-            throw new InventoryValidationException("Số lượng sản xuất phải lớn hơn 0.");
+        var outputs = ResolveProductionOutputs(request);
+        var firstOutput = outputs[0];
+
         if (request.Lines == null || request.Lines.Count == 0)
             throw new InventoryValidationException("Lệnh sản xuất phải có ít nhất một dòng nguyên liệu.");
         foreach (var line in request.Lines)
@@ -1149,20 +1289,31 @@ public class InventoryLogic(
         var today = DateTime.UtcNow.Date;
         var countToday = await _productionOrderRepo.CountCreatedSinceAsync(today, ct);
         var now = DateTime.UtcNow;
+        var orderId = Guid.NewGuid();
 
         var order = new ProductionOrder
         {
-            Id = Guid.NewGuid(),
+            Id = orderId,
             ProductionCode = $"SX-{today:yyyyMMdd}-{(countToday + 1):D4}",
-            FinishedSkuId = request.FinishedSkuId,
-            FinishedSkuCode = request.FinishedSkuCode,
-            FinishedSkuSnapshotName = request.FinishedSkuSnapshotName,
-            Quantity = request.Quantity,
+            FinishedSkuId = firstOutput.FinishedSkuId,
+            FinishedSkuCode = firstOutput.FinishedSkuCode,
+            FinishedSkuSnapshotName = firstOutput.FinishedSkuSnapshotName,
+            Quantity = firstOutput.Quantity,
             Note = request.Note?.Trim(),
             Status = ProductionOrderStatus.Draft,
             CreatedBy = userId,
             CreatedAt = now,
             UpdatedAt = now,
+            OutputLines = outputs.Select(output => new ProductionOrderOutputLine
+            {
+                Id = Guid.NewGuid(),
+                ProductionOrderId = orderId,
+                FinishedSkuId = output.FinishedSkuId,
+                FinishedSkuCode = output.FinishedSkuCode,
+                FinishedSkuSnapshotName = output.FinishedSkuSnapshotName,
+                Quantity = output.Quantity,
+                CreatedAt = now,
+            }).ToList(),
             Lines = request.Lines.Select(l => new ProductionOrderLine
             {
                 Id = Guid.NewGuid(),
@@ -1180,9 +1331,52 @@ public class InventoryLogic(
         return MapProductionOrder(order);
     }
 
+    private static List<ProductionOrderOutputLineInput> ResolveProductionOutputs(CreateProductionOrderRequest request)
+    {
+        var outputs = request.Outputs is { Count: > 0 }
+            ? request.Outputs
+            :
+            [
+                new ProductionOrderOutputLineInput(
+                    request.FinishedSkuId,
+                    request.FinishedSkuCode,
+                    request.FinishedSkuSnapshotName,
+                    request.Quantity)
+            ];
+
+        if (outputs.Count == 0)
+            throw new InventoryValidationException("Lệnh sản xuất phải có ít nhất một thành phẩm đầu ra.");
+
+        var normalized = new List<ProductionOrderOutputLineInput>();
+        var seenSkuIds = new HashSet<Guid>();
+
+        foreach (var output in outputs)
+        {
+            if (output.FinishedSkuId == Guid.Empty)
+                throw new InventoryValidationException("SKU thành phẩm là bắt buộc.");
+            if (string.IsNullOrWhiteSpace(output.FinishedSkuCode))
+                throw new InventoryValidationException("Mã SKU thành phẩm là bắt buộc.");
+            if (string.IsNullOrWhiteSpace(output.FinishedSkuSnapshotName))
+                throw new InventoryValidationException("Tên thành phẩm là bắt buộc.");
+            if (output.Quantity <= 0)
+                throw new InventoryValidationException($"Số lượng sản xuất của SKU {output.FinishedSkuCode} phải lớn hơn 0.");
+            if (!seenSkuIds.Add(output.FinishedSkuId))
+                throw new InventoryValidationException($"SKU thành phẩm {output.FinishedSkuCode} bị trùng trong cùng lệnh sản xuất.");
+
+            normalized.Add(new ProductionOrderOutputLineInput(
+                output.FinishedSkuId,
+                output.FinishedSkuCode.Trim(),
+                output.FinishedSkuSnapshotName.Trim(),
+                output.Quantity));
+        }
+
+        return normalized;
+    }
+
     public async Task<ProductionOrderResponse> CompleteProductionOrderAsync(
         Guid id,
         Guid userId,
+        CreatorSnapshot? creator,
         CancellationToken ct = default)
     {
         var order = await _productionOrderRepo.GetByIdAsync(id, ct)
@@ -1195,11 +1389,50 @@ public class InventoryLogic(
         {
             var now = DateTime.UtcNow;
             var materialSkuIds = new List<Guid>();
+            var outputLines = ResolveCompletionOutputLines(order, now);
+            var materialLines = order.Lines.OrderBy(l => l.MaterialSkuCode).ToList();
+            if (materialLines.Count == 0)
+                throw new InventoryValidationException("Lệnh sản xuất phải có ít nhất một dòng nguyên liệu.");
+            foreach (var line in materialLines)
+            {
+                if (line.PlannedQuantity <= 0)
+                    throw new InventoryValidationException($"Số lượng nguyên liệu {line.MaterialSkuCode} phải lớn hơn 0.");
+            }
 
-            foreach (var line in order.Lines)
+            var firstMaterialLine = materialLines[0];
+            var exportCountToday = await _exportSlipRepo.CountCreatedSinceAsync(now.Date, innerCt);
+            var exportSlip = new StockExportSlip
+            {
+                Id = Guid.NewGuid(),
+                ExportCode = $"PX-{now:yyyyMMdd}-{(exportCountToday + 1):D4}",
+                ExportType = "production",
+                StockAdjustmentRequestId = null,
+                ProductionOrderId = order.Id,
+                ProductionCode = order.ProductionCode,
+                SkuId = materialLines.Count == 1 ? firstMaterialLine.MaterialSkuId : Guid.Empty,
+                SkuCode = materialLines.Count == 1 ? firstMaterialLine.MaterialSkuCode : "MULTI",
+                SkuSnapshotName = materialLines.Count == 1
+                    ? firstMaterialLine.MaterialSnapshotName
+                    : $"{materialLines.Count} dòng nguyên liệu",
+                Quantity = materialLines.Sum(l => l.PlannedQuantity),
+                WarehouseQtyBefore = 0,
+                WarehouseQtyAfter = 0,
+                StoreQtyBefore = 0,
+                StoreQtyAfter = 0,
+                Note = $"Xuất nguyên liệu cho lệnh sản xuất {order.ProductionCode}",
+                CreatedBy = userId,
+                CreatedById = userId == Guid.Empty ? null : userId,
+                CreatedByName = NormalizeSnapshotText(creator?.CreatedByName),
+                CreatedByRoleName = NormalizeSnapshotText(creator?.CreatedByRoleName),
+                CreatedAt = now,
+            };
+            var allAllocations = new List<StockExportBatchAllocation>();
+
+            foreach (var line in materialLines)
             {
                 var stock = await _skuStockRepo.GetBySkuIdAsync(line.MaterialSkuId, innerCt);
                 var warehouseBefore = stock?.WarehouseQuantityOnHand ?? 0;
+                var storeBefore = stock?.QuantityOnHand ?? 0;
 
                 var allocations = await AllocateAndDeductBatchesFifoAsync(
                     line.MaterialSkuId, line.PlannedQuantity, innerCt);
@@ -1208,50 +1441,134 @@ public class InventoryLogic(
                     await SyncWarehouseQtyFromBatchesAsync(stock, innerCt);
 
                 var warehouseAfter = stock?.WarehouseQuantityOnHand ?? 0;
+                var storeAfter = stock?.QuantityOnHand ?? 0;
 
-                var countToday = await _exportSlipRepo.CountCreatedSinceAsync(now.Date, innerCt);
-                var slip = new StockExportSlip
+                var slipLine = new StockExportSlipLine
                 {
                     Id = Guid.NewGuid(),
-                    ExportCode = $"PX-{now:yyyyMMdd}-{(countToday + 1):D4}",
-                    ExportType = "production",
-                    StockAdjustmentRequestId = null,
+                    StockExportSlipId = exportSlip.Id,
                     SkuId = line.MaterialSkuId,
                     SkuCode = line.MaterialSkuCode,
-                    SkuSnapshotName = line.MaterialSnapshotName,
+                    ProductSnapshotName = line.MaterialSnapshotName,
                     Quantity = line.PlannedQuantity,
                     WarehouseQtyBefore = warehouseBefore,
                     WarehouseQtyAfter = warehouseAfter,
-                    StoreQtyBefore = stock?.QuantityOnHand ?? 0,
-                    StoreQtyAfter = stock?.QuantityOnHand ?? 0,
+                    StoreQtyBefore = storeBefore,
+                    StoreQtyAfter = storeAfter,
                     Note = $"Sản xuất lô {order.ProductionCode}",
-                    CreatedBy = userId,
                     CreatedAt = now,
                 };
-                await _exportSlipRepo.AddAsync(slip, innerCt);
-                await _exportSlipRepo.SaveChangesAsync(innerCt);
 
                 foreach (var alloc in allocations)
-                    alloc.StockExportSlipId = slip.Id;
-                await _exportAllocationRepo.AddRangeAsync(allocations, innerCt);
-                await _exportAllocationRepo.SaveChangesAsync(innerCt);
+                {
+                    alloc.StockExportSlipId = exportSlip.Id;
+                    alloc.StockExportSlipLineId = slipLine.Id;
+                }
 
+                exportSlip.WarehouseQtyBefore += warehouseBefore;
+                exportSlip.WarehouseQtyAfter += warehouseAfter;
+                exportSlip.StoreQtyBefore += storeBefore;
+                exportSlip.StoreQtyAfter += storeAfter;
+                exportSlip.Lines.Add(slipLine);
+                allAllocations.AddRange(allocations);
                 materialSkuIds.Add(line.MaterialSkuId);
             }
 
-            await CreateWarehouseBatchInternalAsync(
-                lotCode: $"SX-{now:yyyyMMddHHmmss}",
-                supplier: null,
-                expiresAt: null,
-                note: $"Sản xuất lô {order.ProductionCode}",
-                items: [new CreateWarehouseBatchItemRequest(
-                    order.FinishedSkuId,
-                    order.FinishedSkuCode,
-                    order.FinishedSkuSnapshotName,
-                    order.Quantity,
-                    null)],
-                createdBy: userId,
-                ct: innerCt);
+            await _exportSlipRepo.AddAsync(exportSlip, innerCt);
+            await _exportSlipRepo.SaveChangesAsync(innerCt);
+
+            if (allAllocations.Count > 0)
+            {
+                await _exportAllocationRepo.AddRangeAsync(allAllocations, innerCt);
+                await _exportAllocationRepo.SaveChangesAsync(innerCt);
+            }
+
+            var importSlipId = Guid.NewGuid();
+            var importLines = new List<StockImportSlipLine>();
+            for (var i = 0; i < outputLines.Count; i++)
+            {
+                var outputLine = outputLines[i];
+                var finishedStockBefore = await _skuStockRepo.GetBySkuIdAsync(outputLine.FinishedSkuId, innerCt);
+                var finishedWarehouseBefore = finishedStockBefore?.WarehouseQuantityOnHand ?? 0;
+                var finishedStoreBefore = finishedStockBefore?.QuantityOnHand ?? 0;
+
+                var finishedBatch = await CreateWarehouseBatchInternalAsync(
+                    lotCode: BuildProductionFinishedLotCode(now, order, i),
+                    supplier: null,
+                    expiresAt: null,
+                    note: $"Sản xuất lô {order.ProductionCode} - {outputLine.FinishedSkuCode}",
+                    items: [new CreateWarehouseBatchItemRequest(
+                        outputLine.FinishedSkuId,
+                        outputLine.FinishedSkuCode,
+                        outputLine.FinishedSkuSnapshotName,
+                        outputLine.Quantity,
+                        null)],
+                    createdBy: userId,
+                    ct: innerCt,
+                    sourceType: "production_finished_goods",
+                    sourceReferenceId: order.Id,
+                    sourceReferenceCode: order.ProductionCode);
+
+                outputLine.WarehouseBatchId = finishedBatch.Id;
+                outputLine.WarehouseBatchLotCode = finishedBatch.LotCode;
+
+                var finishedStockAfter = await _skuStockRepo.GetBySkuIdAsync(outputLine.FinishedSkuId, innerCt);
+                var finishedWarehouseAfter = finishedStockAfter?.WarehouseQuantityOnHand ?? finishedWarehouseBefore;
+                var finishedStoreAfter = finishedStockAfter?.QuantityOnHand ?? finishedStoreBefore;
+
+                importLines.Add(new StockImportSlipLine
+                {
+                    Id = Guid.NewGuid(),
+                    StockImportSlipId = importSlipId,
+                    SkuId = outputLine.FinishedSkuId,
+                    SkuCode = outputLine.FinishedSkuCode,
+                    ProductSnapshotName = outputLine.FinishedSkuSnapshotName,
+                    Quantity = outputLine.Quantity,
+                    WarehouseQtyBefore = finishedWarehouseBefore,
+                    WarehouseQtyAfter = finishedWarehouseAfter,
+                    StoreQtyBefore = finishedStoreBefore,
+                    StoreQtyAfter = finishedStoreAfter,
+                    WarehouseBatchId = finishedBatch.Id,
+                    WarehouseBatchLotCode = finishedBatch.LotCode,
+                    ProductionOrderOutputLineId = outputLine.Id,
+                    Note = $"Nhập thành phẩm từ lệnh {order.ProductionCode}",
+                    CreatedAt = now,
+                });
+            }
+
+            await _productionOrderRepo.SaveChangesAsync(innerCt);
+
+            var firstImportLine = importLines[0];
+            var importCountToday = await _importSlipRepo.CountCreatedSinceAsync(now.Date, innerCt);
+            var importSlip = new StockImportSlip
+            {
+                Id = importSlipId,
+                ImportCode = $"PN-{now:yyyyMMdd}-{(importCountToday + 1):D4}",
+                ImportType = "production_finished_goods_receipt",
+                SkuId = firstImportLine.SkuId,
+                SkuCode = firstImportLine.SkuCode,
+                ProductSnapshotName = firstImportLine.ProductSnapshotName,
+                Quantity = firstImportLine.Quantity,
+                WarehouseQtyBefore = firstImportLine.WarehouseQtyBefore,
+                WarehouseQtyAfter = firstImportLine.WarehouseQtyAfter,
+                StoreQtyBefore = firstImportLine.StoreQtyBefore,
+                StoreQtyAfter = firstImportLine.StoreQtyAfter,
+                WarehouseBatchId = firstImportLine.WarehouseBatchId,
+                WarehouseBatchLotCode = firstImportLine.WarehouseBatchLotCode,
+                ProductionOrderId = order.Id,
+                ProductionCode = order.ProductionCode,
+                Note = outputLines.Count == 1
+                    ? $"Nhập thành phẩm từ lệnh {order.ProductionCode}"
+                    : $"Nhập thành phẩm từ lệnh {order.ProductionCode} ({outputLines.Count} dòng thành phẩm)",
+                CreatedBy = userId,
+                CreatedById = userId == Guid.Empty ? null : userId,
+                CreatedByName = NormalizeSnapshotText(creator?.CreatedByName),
+                CreatedByRoleName = NormalizeSnapshotText(creator?.CreatedByRoleName),
+                CreatedAt = now,
+                Lines = importLines,
+            };
+            await _importSlipRepo.AddAsync(importSlip, innerCt);
+            await _importSlipRepo.SaveChangesAsync(innerCt);
 
             order.Status = ProductionOrderStatus.Completed;
             order.CompletedAt = now;
@@ -1268,6 +1585,57 @@ public class InventoryLogic(
 
             return MapProductionOrder(order);
         }, ct);
+    }
+
+    private static List<ProductionOrderOutputLine> ResolveCompletionOutputLines(ProductionOrder order, DateTime now)
+    {
+        if (order.OutputLines.Count == 0)
+        {
+            order.OutputLines.Add(new ProductionOrderOutputLine
+            {
+                Id = Guid.NewGuid(),
+                ProductionOrderId = order.Id,
+                FinishedSkuId = order.FinishedSkuId,
+                FinishedSkuCode = order.FinishedSkuCode,
+                FinishedSkuSnapshotName = order.FinishedSkuSnapshotName,
+                Quantity = order.Quantity,
+                CreatedAt = order.CreatedAt == default ? now : order.CreatedAt,
+            });
+        }
+
+        var outputLines = order.OutputLines
+            .OrderBy(l => l.CreatedAt)
+            .ThenBy(l => l.FinishedSkuCode)
+            .ToList();
+
+        if (outputLines.Count == 0)
+            throw new InventoryValidationException("Lệnh sản xuất phải có ít nhất một thành phẩm đầu ra.");
+
+        var seenSkuIds = new HashSet<Guid>();
+        foreach (var output in outputLines)
+        {
+            if (output.FinishedSkuId == Guid.Empty)
+                throw new InventoryValidationException("SKU thành phẩm là bắt buộc.");
+            if (string.IsNullOrWhiteSpace(output.FinishedSkuCode))
+                throw new InventoryValidationException("Mã SKU thành phẩm là bắt buộc.");
+            if (string.IsNullOrWhiteSpace(output.FinishedSkuSnapshotName))
+                throw new InventoryValidationException("Tên thành phẩm là bắt buộc.");
+            if (output.Quantity <= 0)
+                throw new InventoryValidationException($"Số lượng sản xuất của SKU {output.FinishedSkuCode} phải lớn hơn 0.");
+            if (!seenSkuIds.Add(output.FinishedSkuId))
+                throw new InventoryValidationException($"SKU thành phẩm {output.FinishedSkuCode} bị trùng trong cùng lệnh sản xuất.");
+
+            output.FinishedSkuCode = output.FinishedSkuCode.Trim();
+            output.FinishedSkuSnapshotName = output.FinishedSkuSnapshotName.Trim();
+        }
+
+        return outputLines;
+    }
+
+    private static string BuildProductionFinishedLotCode(DateTime now, ProductionOrder order, int outputIndex)
+    {
+        var orderSuffix = order.Id.ToString("N")[..6].ToUpperInvariant();
+        return $"SX-{now:yyyyMMddHHmmss}-{outputIndex + 1:D2}-{orderSuffix}";
     }
 
     public async Task<ProductionOrderResponse> CancelProductionOrderAsync(
@@ -1335,7 +1703,40 @@ public class InventoryLogic(
                 l.MaterialSkuCode,
                 l.MaterialSnapshotName,
                 l.PlannedQuantity))
-            .ToList());
+            .ToList(),
+        BuildProductionOrderOutputResponses(order));
+
+    private static List<ProductionOrderOutputLineResponse> BuildProductionOrderOutputResponses(ProductionOrder order)
+    {
+        var outputLines = order.OutputLines
+            .OrderBy(l => l.FinishedSkuCode)
+            .Select(l => new ProductionOrderOutputLineResponse(
+                l.Id,
+                l.FinishedSkuId,
+                l.FinishedSkuCode,
+                l.FinishedSkuSnapshotName,
+                l.Quantity,
+                l.WarehouseBatchId,
+                l.WarehouseBatchLotCode,
+                l.CreatedAt))
+            .ToList();
+
+        if (outputLines.Count > 0)
+            return outputLines;
+
+        return
+        [
+            new ProductionOrderOutputLineResponse(
+                Guid.Empty,
+                order.FinishedSkuId,
+                order.FinishedSkuCode,
+                order.FinishedSkuSnapshotName,
+                order.Quantity,
+                null,
+                null,
+                order.CreatedAt)
+        ];
+    }
 
     public async Task DeductMaterialsAsync(
         IEnumerable<(Guid SkuId, int Quantity)> items,
