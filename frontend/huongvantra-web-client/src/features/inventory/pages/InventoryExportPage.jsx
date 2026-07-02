@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
@@ -30,6 +30,7 @@ function InventoryExportPage() {
   const [slips, setSlips] = useState([])
   const [selectedId, setSelectedId] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
+  const exportSlipDocumentRef = useRef(null)
 
   const loadData = useCallback(async () => {
     setIsLoading(true)
@@ -112,8 +113,13 @@ function InventoryExportPage() {
             <p className="text-sm text-slate-500">Chọn một phiếu để xem chi tiết.</p>
           ) : (
             <>
-              <SlipActionButtons />
-              <ExportSlipDocument slip={selected} getTypeLabel={getExportTypeLabel} />
+              <SlipActionButtons
+                documentRef={exportSlipDocumentRef}
+                filename={selected.exportCode ? `${selected.exportCode}.pdf` : 'phieu-kho.pdf'}
+              />
+              <div ref={exportSlipDocumentRef}>
+                <ExportSlipDocument slip={selected} getTypeLabel={getExportTypeLabel} />
+              </div>
             </>
           )}
         </section>

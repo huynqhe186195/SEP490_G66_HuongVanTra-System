@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
@@ -51,6 +51,7 @@ function InventoryImportPage() {
   const [importSlips, setImportSlips] = useState([])
   const [isLoadingImportSlips, setIsLoadingImportSlips] = useState(true)
   const [selectedSlip, setSelectedSlip] = useState(null)
+  const importSlipDocumentRef = useRef(null)
 
   const loadSkus = useCallback(async () => {
     setIsLoading(true)
@@ -403,8 +404,13 @@ function InventoryImportPage() {
                 <span className="material-symbols-outlined">close</span>
               </button>
             </div>
-            <SlipActionButtons />
-            <ImportSlipDocument slip={selectedSlip} getTypeLabel={getImportTypeLabel} />
+            <SlipActionButtons
+              documentRef={importSlipDocumentRef}
+              filename={selectedSlip.importCode ? `${selectedSlip.importCode}.pdf` : 'phieu-kho.pdf'}
+            />
+            <div ref={importSlipDocumentRef}>
+              <ImportSlipDocument slip={selectedSlip} getTypeLabel={getImportTypeLabel} />
+            </div>
           </div>
         </div>
       ) : null}

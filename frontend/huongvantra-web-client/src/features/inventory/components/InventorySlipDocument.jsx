@@ -1,3 +1,5 @@
+import { useState } from 'react'
+import { showError } from '../../../app/toast.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import { formatStockQuantity } from '../../products/utils/productDisplay.js'
 
@@ -39,9 +41,55 @@ export function SlipPrintStyles() {
   )
 }
 
-export function SlipActionButtons() {
+function getPdfFilename(filename) {
+  const normalized = String(filename || '').trim()
+  if (!normalized) return 'phieu-kho.pdf'
+  return normalized.toLowerCase().endsWith('.pdf') ? normalized : `${normalized}.pdf`
+}
+
+export function SlipActionButtons({ documentRef, filename = 'phieu-kho.pdf' }) {
+  const [isExporting, setIsExporting] = useState(false)
+
   function printSlip() {
     window.print()
+  }
+
+  async function exportPdf() {
+    const element = documentRef?.current
+    if (!element) {
+      showError('Không tìm thấy nội dung phiếu để xuất PDF.')
+      return
+    }
+
+    setIsExporting(true)
+    try {
+      const html2pdfModule = await import('html2pdf.js')
+      const html2pdf = html2pdfModule.default ?? html2pdfModule
+      const worker = html2pdf()
+      await worker
+        .set({
+          margin: [10, 10, 10, 10],
+          filename: getPdfFilename(filename),
+          image: { type: 'jpeg', quality: 0.98 },
+          html2canvas: {
+            scale: Math.min(2, window.devicePixelRatio || 1.5),
+            backgroundColor: '#ffffff',
+            useCORS: true,
+            scrollY: 0,
+          },
+          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+          pagebreak: {
+            mode: ['css', 'legacy'],
+            avoid: ['tr', 'thead', '.signature-area'],
+          },
+        })
+        .from(element)
+        .save()
+    } catch (error) {
+      showError(error?.message ? `Xuất PDF thất bại: ${error.message}` : 'Xuất PDF thất bại.')
+    } finally {
+      setIsExporting(false)
+    }
   }
 
   return (
@@ -56,11 +104,14 @@ export function SlipActionButtons() {
       </button>
       <button
         type="button"
-        onClick={printSlip}
-        className="inline-flex min-w-28 items-center justify-center gap-1.5 rounded-xl bg-[#538463] px-4 py-2 text-sm font-bold text-white hover:bg-[#457053]"
+        onClick={exportPdf}
+        disabled={isExporting}
+        className="inline-flex min-w-28 items-center justify-center gap-1.5 rounded-xl bg-[#538463] px-4 py-2 text-sm font-bold text-white hover:bg-[#457053] disabled:cursor-not-allowed disabled:opacity-60"
       >
-        <span className="material-symbols-outlined text-[18px]">picture_as_pdf</span>
-        Xuất PDF
+        <span className={`material-symbols-outlined text-[18px] ${isExporting ? 'animate-spin' : ''}`}>
+          {isExporting ? 'progress_activity' : 'picture_as_pdf'}
+        </span>
+        {isExporting ? 'Đang xuất...' : 'Xuất PDF'}
       </button>
     </div>
   )
@@ -68,7 +119,7 @@ export function SlipActionButtons() {
 
 function SignatureArea() {
   return (
-    <div className="mt-10 grid grid-cols-3 gap-6 text-center text-sm text-slate-700">
+    <div className="signature-area mt-10 grid grid-cols-3 gap-6 text-center text-sm text-slate-700">
       <div>
         <p className="font-semibold">Người lập phiếu</p>
         <p className="mt-16 text-xs text-slate-400">(Ký, ghi rõ họ tên)</p>
