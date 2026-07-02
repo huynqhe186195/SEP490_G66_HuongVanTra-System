@@ -4,7 +4,7 @@ import { fetchProductById, fetchProducts } from '../../products/services/product
 import { fetchSkusByProductId, fetchAllActiveSkus } from '../../products/services/productSkusApi.js'
 import { createProductionOrder } from '../services/productionOrderApi.js'
 
-const STEPS = ['Thành phẩm đầu ra', 'Nguyên liệu (BOM)', 'Xác nhận']
+const STEPS = ['SKU thành phẩm trong lô', 'Nguyên liệu theo BOM', 'Xác nhận']
 
 function sameId(left, right) {
   return String(left ?? '') === String(right ?? '')
@@ -156,15 +156,15 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
     }))
 
     if (rows.length === 0) {
-      showError('Cần có ít nhất một thành phẩm đầu ra.')
+      showError('Cần có ít nhất một SKU thành phẩm trong lô sản xuất.')
       return null
     }
 
     for (const row of rows) {
       if (!row.skuId) {
-      showError('Vui lòng chọn SKU thành phẩm cho tất cả dòng đầu ra.')
-      return null
-    }
+        showError('Vui lòng chọn SKU thành phẩm cho tất cả dòng trong lô.')
+        return null
+      }
       if (!row.sku) {
         showError('SKU thành phẩm không hợp lệ.')
         return null
@@ -205,13 +205,13 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
 
         if (!selectedVariant) {
           throw new Error(
-            `Không xác định được biến thể của SKU ${output.sku?.skuCode ?? ''}. Vui lòng kiểm tra dữ liệu SKU/ProductVariant trước khi tạo lệnh.`,
+            `Không xác định được biến thể của SKU ${output.sku?.skuCode ?? ''}. Vui lòng kiểm tra dữ liệu SKU/ProductVariant trước khi tạo lô sản xuất.`,
           )
         }
 
         const bomLinesDef = selectedVariant.bomLines ?? []
         if (bomLinesDef.length === 0) {
-          throw new Error(`SKU ${output.sku?.skuCode ?? ''} chưa có BOM, không thể tạo lệnh sản xuất.`)
+          throw new Error(`SKU ${output.sku?.skuCode ?? ''} chưa có BOM, không thể tạo lô sản xuất.`)
         }
 
         for (const bomLine of bomLinesDef) {
@@ -286,7 +286,7 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
 
   function validateBomLines() {
     if (bomLines.length === 0) {
-      showError(bomError || 'SKU thành phẩm chưa có BOM, không thể tạo lệnh sản xuất.')
+      showError(bomError || 'SKU thành phẩm chưa có BOM, không thể tạo lô sản xuất.')
       return false
     }
     const withoutSkuOptions = bomLines.find((line) => line.skuOptions.length === 0)
@@ -353,7 +353,7 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
       >
         <header className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
           <div>
-            <h2 className="text-base font-bold text-slate-800">Tạo lệnh sản xuất</h2>
+            <h2 className="text-base font-bold text-slate-800">Tạo lô sản xuất</h2>
             <p className="mt-0.5 text-xs text-[#717971]">
               Bước {step + 1} / {STEPS.length} - {STEPS[step]}
             </p>
@@ -383,7 +383,7 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
                 {outputRows.map((row, index) => (
                   <div key={row.key} className="rounded-xl border border-slate-100 bg-slate-50/60 p-4">
                     <div className="mb-3 flex items-center justify-between gap-3">
-                      <p className="text-sm font-semibold text-slate-800">Thành phẩm đầu ra {index + 1}</p>
+                      <p className="text-sm font-semibold text-slate-800">SKU thành phẩm trong lô {index + 1}</p>
                       {outputRows.length > 1 && (
                         <button
                           type="button"
@@ -434,7 +434,7 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
                 className="inline-flex items-center gap-1.5 rounded-xl border border-[#538463]/30 px-4 py-2 text-sm font-semibold text-[#356647] hover:bg-[#f3f7f4]"
               >
                 <span className="material-symbols-outlined text-[18px]">add</span>
-                Thêm thành phẩm
+                Thêm SKU vào lô
               </button>
             </div>
           )}
@@ -445,13 +445,13 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
                 <p className="py-8 text-center text-sm text-slate-500">Đang tải BOM...</p>
               ) : bomLines.length === 0 ? (
                 <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                  {bomError || 'SKU thành phẩm chưa có BOM, không thể tạo lệnh sản xuất.'}
+                  {bomError || 'SKU thành phẩm chưa có BOM, không thể tạo lô sản xuất.'}
                 </div>
               ) : (
                 <div className="space-y-3">
                   <div className="rounded-xl border border-slate-100 bg-white">
                     <div className="border-b border-slate-100 px-4 py-3">
-                      <p className="text-xs font-bold uppercase tracking-wide text-[#717971]">Thành phẩm đầu ra</p>
+                      <p className="text-xs font-bold uppercase tracking-wide text-[#717971]">SKU thành phẩm trong lô</p>
                     </div>
                     <div className="overflow-x-auto">
                       <table className="min-w-full text-left text-xs">
@@ -476,9 +476,9 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
                   </div>
                   <div className="rounded-xl border border-slate-100 bg-white">
                     <div className="border-b border-slate-100 px-4 py-3">
-                      <p className="text-xs font-bold uppercase tracking-wide text-[#717971]">Tổng nguyên liệu theo BOM</p>
+                      <p className="text-xs font-bold uppercase tracking-wide text-[#717971]">Tổng nguyên liệu cần xuất theo BOM</p>
                       <p className="mt-1 text-xs text-slate-500">
-                        Nguyên liệu được cộng dồn từ BOM của tất cả thành phẩm đầu ra.
+                        Nguyên liệu được cộng dồn từ BOM của tất cả SKU thành phẩm trong lô.
                       </p>
                     </div>
                     <div className="overflow-x-auto">
@@ -532,7 +532,7 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
             <div className="space-y-4">
               <div className="rounded-xl border border-slate-100 bg-white">
                 <div className="border-b border-slate-100 px-4 py-3">
-                  <p className="text-xs font-bold uppercase tracking-wide text-[#717971]">Thành phẩm đầu ra</p>
+                  <p className="text-xs font-bold uppercase tracking-wide text-[#717971]">SKU thành phẩm trong lô</p>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="min-w-full text-left text-xs">
@@ -559,7 +559,7 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
               {bomLines.length > 0 && (
                 <div className="rounded-xl border border-slate-100 bg-white">
                   <div className="border-b border-slate-100 px-4 py-3">
-                    <p className="text-xs font-bold uppercase tracking-wide text-[#717971]">Nguyên liệu cần xuất</p>
+                    <p className="text-xs font-bold uppercase tracking-wide text-[#717971]">Nguyên liệu cần xuất theo BOM</p>
                   </div>
                   <div className="overflow-x-auto">
                     <table className="min-w-full text-left text-xs">
@@ -592,7 +592,7 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
                   className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-sm"
                   value={note}
                   onChange={(event) => setNote(event.target.value)}
-                  placeholder="Ghi chú thêm về lệnh sản xuất..."
+                  placeholder="Ghi chú thêm về lô sản xuất..."
                 />
               </label>
             </div>
@@ -635,7 +635,7 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
               disabled={saving}
               className="rounded-xl bg-[#538463] px-5 py-2 text-sm font-bold text-white hover:bg-[#457053] disabled:opacity-50"
             >
-              {saving ? 'Đang tạo...' : 'Tạo lệnh sản xuất'}
+              {saving ? 'Đang tạo...' : 'Tạo lô sản xuất'}
             </button>
           )}
         </footer>

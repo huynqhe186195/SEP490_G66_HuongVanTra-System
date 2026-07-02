@@ -19,7 +19,7 @@ import { fetchWarehouseBatches } from '../services/warehouseBatchApi.js'
 
 
 function getBatchSourceLabel(sourceType) {
-  if (sourceType === 'production_finished_goods') return 'Lệnh SX'
+  if (sourceType === 'production_finished_goods') return 'Lô SX'
   return 'Nguồn'
 }
 

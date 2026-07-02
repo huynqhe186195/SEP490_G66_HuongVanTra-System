@@ -313,7 +313,7 @@ function InventoryImportPage() {
           <ul className="space-y-2 text-sm text-slate-600">
             <li>Một mã lô có thể gồm nhiều SKU.</li>
             <li>Mỗi SKU chỉ xuất hiện một lần trong cùng lô.</li>
-            <li>Hoàn thành ProductionOrder sẽ tự tạo phiếu nhập thành phẩm.</li>
+            <li>Hoàn thành lô sản xuất sẽ tự tạo phiếu nhập thành phẩm.</li>
             <li>Thành phẩm sau sản xuất nằm ở kho tổng, chưa vào POS/store stock.</li>
           </ul>
         </aside>
@@ -335,7 +335,7 @@ function InventoryImportPage() {
                 <th className="px-4 py-3">Loại nhập</th>
                 <th className="px-4 py-3">Nội dung</th>
                 <th className="px-4 py-3 text-right">Số lượng</th>
-                <th className="px-4 py-3">Lệnh SX</th>
+                <th className="px-4 py-3">Mã lô SX</th>
                 <th className="px-4 py-3">Thời gian</th>
                 <th className="px-4 py-3 text-right">Thao tác</th>
               </tr>

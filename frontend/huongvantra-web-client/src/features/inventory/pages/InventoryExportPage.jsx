@@ -62,7 +62,7 @@ function InventoryExportPage() {
       <PageHeader
         title="Phiếu xuất kho"
         description="Chứng từ xuất nguyên liệu, gồm phiếu xuất sản xuất và các phiếu xuất kho khác."
-        searchPlaceholder="Tìm mã phiếu, SKU..."
+        searchPlaceholder="Tìm mã phiếu, SKU, mã lô SX..."
         searchValue={searchInput}
         onSearchChange={setSearchInput}
         rightContent={<InventoryNavTabs />}
@@ -95,6 +95,11 @@ function InventoryExportPage() {
                       <p className="mt-1 text-xs text-slate-500">
                         SL: {formatStockQuantity(getSlipQuantity(slip))} · {formatVietnamDateTime(slip.createdAt)}
                       </p>
+                      {slip.productionCode ? (
+                        <p className="mt-1 text-xs text-slate-500">
+                          Mã lô SX: <span className="font-mono text-slate-700">{slip.productionCode}</span>
+                        </p>
+                      ) : null}
                     </div>
                     <span className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700">
                       <span className="material-symbols-outlined text-[16px]">visibility</span>

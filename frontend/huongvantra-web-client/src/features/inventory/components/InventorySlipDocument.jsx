@@ -227,10 +227,28 @@ function formatAllocations(allocations = []) {
     .join(', ')
 }
 
+function normalizeProductionNote(note) {
+  return String(note || '')
+    .trim()
+    .replace(/lệnh sản xuất/gi, 'lô sản xuất')
+    .replace(/từ lệnh/gi, 'từ lô sản xuất')
+    .replace(/cho lệnh/gi, 'cho lô sản xuất')
+}
+
+function getProductionAwareNote(slip, fallbackText) {
+  const normalizedNote = slip?.productionCode ? normalizeProductionNote(slip.note) : String(slip?.note || '').trim()
+  if (normalizedNote) return normalizedNote
+  return slip?.productionCode ? fallbackText : ''
+}
+
 export function ExportSlipDocument({ slip, getTypeLabel }) {
   const lines = getExportLines(slip)
   const totalQuantity = lines.reduce((sum, line) => sum + Number(line.quantity || 0), 0)
   const creator = getCreatorDisplay(slip)
+  const note = getProductionAwareNote(
+    slip,
+    `Xuất nguyên liệu cho lô sản xuất ${slip.productionCode}`,
+  )
 
   return (
     <article className="inventory-slip-print rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -243,7 +261,7 @@ export function ExportSlipDocument({ slip, getTypeLabel }) {
       <div className="mt-5 grid grid-cols-2 gap-4 md:grid-cols-4">
         <HeaderField label="Mã phiếu" value={slip.exportCode} />
         <HeaderField label="Loại xuất" value={getTypeLabel(slip.exportType)} />
-        <HeaderField label="Lệnh SX" value={slip.productionCode} />
+        <HeaderField label="Mã lô SX" value={slip.productionCode} />
         <HeaderField label="Thời gian" value={slip.createdAt ? formatVietnamDateTime(slip.createdAt) : '-'} />
         <HeaderField label="Kho" value="Kho tổng" />
         <HeaderField label="Người lập phiếu" value={creator.name} />
@@ -252,9 +270,9 @@ export function ExportSlipDocument({ slip, getTypeLabel }) {
         <HeaderField label="Số dòng" value={`${lines.length} dòng nguyên liệu`} />
       </div>
 
-      {slip.note ? (
+      {note ? (
         <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-          <span className="font-semibold">Ghi chú:</span> {slip.note}
+          <span className="font-semibold">Ghi chú:</span> {note}
         </div>
       ) : null}
 
@@ -298,6 +316,10 @@ export function ImportSlipDocument({ slip, getTypeLabel }) {
   const lines = getImportLines(slip)
   const totalQuantity = lines.reduce((sum, line) => sum + Number(line.quantity || 0), 0)
   const creator = getCreatorDisplay(slip)
+  const note = getProductionAwareNote(
+    slip,
+    `Nhập thành phẩm từ lô sản xuất ${slip.productionCode}`,
+  )
 
   return (
     <article className="inventory-slip-print rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -310,7 +332,7 @@ export function ImportSlipDocument({ slip, getTypeLabel }) {
       <div className="mt-5 grid grid-cols-2 gap-4 md:grid-cols-4">
         <HeaderField label="Mã phiếu" value={slip.importCode} />
         <HeaderField label="Loại nhập" value={getTypeLabel(slip.importType)} />
-        <HeaderField label="Lệnh SX" value={slip.productionCode} />
+        <HeaderField label="Mã lô SX" value={slip.productionCode} />
         <HeaderField label="Thời gian" value={slip.createdAt ? formatVietnamDateTime(slip.createdAt) : '-'} />
         <HeaderField label="Kho" value="Kho tổng" />
         <HeaderField label="Người lập phiếu" value={creator.name} />
@@ -319,9 +341,9 @@ export function ImportSlipDocument({ slip, getTypeLabel }) {
         <HeaderField label="Số dòng" value={`${lines.length} dòng thành phẩm`} />
       </div>
 
-      {slip.note ? (
+      {note ? (
         <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-          <span className="font-semibold">Ghi chú:</span> {slip.note}
+          <span className="font-semibold">Ghi chú:</span> {note}
         </div>
       ) : null}
 
