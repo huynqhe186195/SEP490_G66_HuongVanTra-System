@@ -168,6 +168,7 @@ public class ProductRepository(ProductDbContext _db) : IProductRepository
             .Include(v => v.Product)
             .Include(v => v.BomLines)
                 .ThenInclude(b => b.Material)
+                    .ThenInclude(m => m.Units)
             .FirstOrDefaultAsync(v => v.Id == id);
     }
 
@@ -179,6 +180,7 @@ public class ProductRepository(ProductDbContext _db) : IProductRepository
             : _db.Products;
 
         return await query
+            .Include(p => p.Units)
             .Where(p => targetIds.Contains(p.Id))
             .ToListAsync();
     }
@@ -247,5 +249,6 @@ public class ProductRepository(ProductDbContext _db) : IProductRepository
                 .ThenInclude(v => v.Units)
             .Include(p => p.Variants)
                 .ThenInclude(v => v.BomLines)
-                    .ThenInclude(b => b.Material);
+                    .ThenInclude(b => b.Material)
+                        .ThenInclude(m => m.Units);
 }

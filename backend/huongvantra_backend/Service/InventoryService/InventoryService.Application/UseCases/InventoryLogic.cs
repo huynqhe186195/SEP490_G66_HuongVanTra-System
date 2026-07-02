@@ -639,6 +639,7 @@ public class InventoryLogic(
     public async Task<StockAdjustmentReviewResponse> ApproveStockAdjustmentRequestAsync(
         Guid id,
         Guid reviewedBy,
+        CreatorSnapshot? creator,
         CancellationToken ct = default)
     {
         var entity = await _adjustmentRequestRepo.GetByIdAsync(id, ct)
@@ -676,6 +677,7 @@ public class InventoryLogic(
                         storeBefore,
                         stock.QuantityOnHand,
                         reviewedBy,
+                        creator,
                         "Giả lập — chưa trừ kho tổng (module kho đang phát triển).",
                         null,
                         ct);
@@ -705,6 +707,7 @@ public class InventoryLogic(
                         storeBefore,
                         stock.QuantityOnHand,
                         reviewedBy,
+                        creator,
                         entity.Reason,
                         allocations,
                         ct);
@@ -839,12 +842,14 @@ public class InventoryLogic(
         int storeBefore,
         int storeAfter,
         Guid createdBy,
+        CreatorSnapshot? creator,
         string? note,
         List<StockExportBatchAllocation>? batchAllocations,
         CancellationToken ct)
     {
         var today = DateTime.UtcNow.Date;
         var countToday = await _exportSlipRepo.CountCreatedSinceAsync(today, ct);
+        var effectiveCreatedBy = createdBy == Guid.Empty ? request.RequestedBy : createdBy;
         var slip = new StockExportSlip
         {
             Id = Guid.NewGuid(),
@@ -860,7 +865,10 @@ public class InventoryLogic(
             StoreQtyBefore = storeBefore,
             StoreQtyAfter = storeAfter,
             Note = note ?? request.Reason,
-            CreatedBy = createdBy == Guid.Empty ? request.RequestedBy : createdBy,
+            CreatedBy = effectiveCreatedBy,
+            CreatedById = effectiveCreatedBy == Guid.Empty ? null : effectiveCreatedBy,
+            CreatedByName = NormalizeSnapshotText(creator?.CreatedByName),
+            CreatedByRoleName = NormalizeSnapshotText(creator?.CreatedByRoleName),
             CreatedAt = DateTime.UtcNow,
         };
 
@@ -1034,6 +1042,12 @@ public class InventoryLogic(
     private static string NormalizeLotCode(string lotCode) =>
         lotCode.Trim().ToUpperInvariant();
 
+    private static string? NormalizeSnapshotText(string? value)
+    {
+        var normalized = value?.Trim();
+        return string.IsNullOrWhiteSpace(normalized) ? null : normalized;
+    }
+
     private async Task<SkuStock> GetOrCreateSkuStockAsync(
         Guid skuId,
         string? skuCode,
@@ -1115,6 +1129,9 @@ public class InventoryLogic(
         slip.StoreQtyAfter,
         slip.Note,
         slip.CreatedBy,
+        slip.CreatedById,
+        slip.CreatedByName,
+        slip.CreatedByRoleName,
         slip.CreatedAt,
         slip.BatchAllocations.Select(MapExportBatchAllocation).ToList(),
         slip.Lines
@@ -1163,6 +1180,9 @@ public class InventoryLogic(
         slip.ProductionCode,
         slip.Note,
         slip.CreatedBy,
+        slip.CreatedById,
+        slip.CreatedByName,
+        slip.CreatedByRoleName,
         slip.CreatedAt,
         BuildStockImportSlipLineResponses(slip));
 
@@ -1356,6 +1376,7 @@ public class InventoryLogic(
     public async Task<ProductionOrderResponse> CompleteProductionOrderAsync(
         Guid id,
         Guid userId,
+        CreatorSnapshot? creator,
         CancellationToken ct = default)
     {
         var order = await _productionOrderRepo.GetByIdAsync(id, ct)
@@ -1400,6 +1421,9 @@ public class InventoryLogic(
                 StoreQtyAfter = 0,
                 Note = $"Xuất nguyên liệu cho lệnh sản xuất {order.ProductionCode}",
                 CreatedBy = userId,
+                CreatedById = userId == Guid.Empty ? null : userId,
+                CreatedByName = NormalizeSnapshotText(creator?.CreatedByName),
+                CreatedByRoleName = NormalizeSnapshotText(creator?.CreatedByRoleName),
                 CreatedAt = now,
             };
             var allAllocations = new List<StockExportBatchAllocation>();
@@ -1537,6 +1561,9 @@ public class InventoryLogic(
                     ? $"Nhập thành phẩm từ lệnh {order.ProductionCode}"
                     : $"Nhập thành phẩm từ lệnh {order.ProductionCode} ({outputLines.Count} dòng thành phẩm)",
                 CreatedBy = userId,
+                CreatedById = userId == Guid.Empty ? null : userId,
+                CreatedByName = NormalizeSnapshotText(creator?.CreatedByName),
+                CreatedByRoleName = NormalizeSnapshotText(creator?.CreatedByRoleName),
                 CreatedAt = now,
                 Lines = importLines,
             };

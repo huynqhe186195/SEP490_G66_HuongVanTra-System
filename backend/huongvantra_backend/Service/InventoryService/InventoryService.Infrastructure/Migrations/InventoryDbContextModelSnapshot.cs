@@ -188,6 +188,17 @@ namespace InventoryService.Infrastructure.Migrations
                     b.Property<Guid>("CreatedBy")
                         .HasColumnType("char(36)");
 
+                    b.Property<Guid?>("CreatedById")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("CreatedByName")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("CreatedByRoleName")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
                     b.Property<string>("ExportCode")
                         .IsRequired()
                         .HasMaxLength(30)
@@ -318,6 +329,17 @@ namespace InventoryService.Infrastructure.Migrations
 
                     b.Property<Guid>("CreatedBy")
                         .HasColumnType("char(36)");
+
+                    b.Property<Guid?>("CreatedById")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("CreatedByName")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("CreatedByRoleName")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
 
                     b.Property<string>("ImportCode")
                         .IsRequired()

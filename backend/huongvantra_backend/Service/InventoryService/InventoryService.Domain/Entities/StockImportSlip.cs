@@ -19,6 +19,9 @@ public class StockImportSlip
     public string? ProductionCode { get; set; }
     public string? Note { get; set; }
     public Guid CreatedBy { get; set; }
+    public Guid? CreatedById { get; set; }
+    public string? CreatedByName { get; set; }
+    public string? CreatedByRoleName { get; set; }
     public DateTime CreatedAt { get; set; }
 
     public ICollection<StockImportSlipLine> Lines { get; set; } = new List<StockImportSlipLine>();

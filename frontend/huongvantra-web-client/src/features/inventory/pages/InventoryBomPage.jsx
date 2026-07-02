@@ -164,7 +164,16 @@ function InventoryBomPage() {
           </p>
         ) : (
           <div className="overflow-x-auto rounded-xl border border-slate-200">
-            <table className="min-w-[980px] text-left text-sm">
+            <table className="min-w-full table-fixed text-left text-sm">
+              <colgroup>
+                <col style={{ width: '13%' }} />
+                <col style={{ width: '18%' }} />
+                <col style={{ width: '12%' }} />
+                <col style={{ width: '10%' }} />
+                <col style={{ width: '8%' }} />
+                <col style={{ width: '29%' }} />
+                <col style={{ width: '10%' }} />
+              </colgroup>
               <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                 <tr>
                   <th className="px-4 py-3 font-semibold">SKU thành phẩm</th>
@@ -173,31 +182,32 @@ function InventoryBomPage() {
                   <th className="px-4 py-3 text-right font-semibold">Giá bán</th>
                   <th className="px-4 py-3 text-center font-semibold">Số nguyên liệu</th>
                   <th className="px-4 py-3 font-semibold">Nguyên liệu</th>
-                  <th className="px-4 py-3 text-center font-semibold">Thao tác</th>
+                  <th className="px-4 py-3 text-right font-semibold">Thao tác</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filteredRows.map((row) => (
                   <tr key={row.variantId} className="hover:bg-slate-50/70">
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3 align-top">
                       <span className="font-mono text-xs font-bold text-[#356647]">{row.skuCode}</span>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3 align-top">
                       <div className="font-medium text-slate-900">{row.productName}</div>
                       <div className="text-xs text-slate-500">{row.categoryName || '-'}</div>
                     </td>
-                    <td className="px-4 py-3 text-slate-700">{row.variantName || '-'}</td>
-                    <td className="px-4 py-3 text-right font-medium">{formatProductPrice(row.retailPrice)}</td>
-                    <td className="px-4 py-3 text-center font-semibold">{row.materialCount}</td>
-                    <td className="max-w-md px-4 py-3 text-xs text-slate-500">
+                    <td className="px-4 py-3 align-top text-slate-700">{row.variantName || '-'}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-right align-top font-medium">{formatProductPrice(row.retailPrice)}</td>
+                    <td className="px-4 py-3 text-center align-top font-semibold">{row.materialCount}</td>
+                    <td className="px-4 py-3 align-top text-xs text-slate-500">
                       {row.bomLines.length > 0 ? (
-                        <div className="flex flex-wrap gap-1.5">
+                        <div className="flex w-full flex-wrap gap-1.5">
                           {row.bomLines.map((line) => (
                             <span
                               key={`${row.variantId}-${line.materialId ?? line.material_id}`}
-                              className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-700"
+                              className="max-w-full break-words rounded-full bg-slate-100 px-2.5 py-1 leading-5 text-slate-700"
                             >
                               {line.materialName || line.materialId || line.material_id} x{line.quantity}
+                              {line.materialUnitName || line.baseUnit ? ` ${line.materialUnitName || line.baseUnit}` : ''}
                             </span>
                           ))}
                         </div>
@@ -207,7 +217,7 @@ function InventoryBomPage() {
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-center">
+                    <td className="px-4 py-3 text-right align-top">
                       <button
                         type="button"
                         onClick={() => openBomModal(row)}

@@ -94,6 +94,8 @@ public class StockExportSlipConfiguration : IEntityTypeConfiguration<StockExport
         builder.Property(e => e.SkuCode).HasMaxLength(50).IsRequired();
         builder.Property(e => e.SkuSnapshotName).HasMaxLength(255).IsRequired();
         builder.Property(e => e.Note).HasMaxLength(500);
+        builder.Property(e => e.CreatedByName).HasMaxLength(255);
+        builder.Property(e => e.CreatedByRoleName).HasMaxLength(100);
         builder.HasIndex(e => e.ExportCode).IsUnique();
         builder.HasIndex(e => e.StockAdjustmentRequestId);
         builder.HasIndex(e => e.ProductionOrderId);
@@ -141,6 +143,8 @@ public class StockImportSlipConfiguration : IEntityTypeConfiguration<StockImport
         builder.Property(e => e.WarehouseBatchLotCode).HasMaxLength(50);
         builder.Property(e => e.ProductionCode).HasMaxLength(30);
         builder.Property(e => e.Note).HasMaxLength(500);
+        builder.Property(e => e.CreatedByName).HasMaxLength(255);
+        builder.Property(e => e.CreatedByRoleName).HasMaxLength(100);
         builder.HasIndex(e => e.ImportCode).IsUnique();
         builder.HasIndex(e => e.ImportType);
         builder.HasIndex(e => e.SkuId);

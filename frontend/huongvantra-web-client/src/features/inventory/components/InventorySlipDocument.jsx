@@ -3,6 +3,8 @@ import { showError } from '../../../app/toast.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import { formatStockQuantity } from '../../products/utils/productDisplay.js'
 
+const UNKNOWN_CREATOR_VALUE = 'Chưa xác định'
+
 export function SlipPrintStyles() {
   return (
     <style>
@@ -45,6 +47,41 @@ function getPdfFilename(filename) {
   const normalized = String(filename || '').trim()
   if (!normalized) return 'phieu-kho.pdf'
   return normalized.toLowerCase().endsWith('.pdf') ? normalized : `${normalized}.pdf`
+}
+
+function normalizeRoleKey(roleName) {
+  return String(roleName || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_-]+/g, '')
+}
+
+function formatCreatorRole(roleName) {
+  const trimmed = String(roleName || '').trim()
+  if (!trimmed) return UNKNOWN_CREATOR_VALUE
+
+  const roleMap = {
+    warehouse: 'Thủ kho',
+    warehousestaff: 'Thủ kho',
+    inventorystaff: 'Thủ kho',
+    inventorymanager: 'Quản lý kho',
+    manager: 'Quản lý',
+    agencymanager: 'Quản lý',
+    admin: 'Quản trị viên',
+    administrator: 'Quản trị viên',
+    sale: 'Nhân viên bán hàng',
+    salesstaff: 'Nhân viên bán hàng',
+  }
+
+  return roleMap[normalizeRoleKey(trimmed)] || trimmed
+}
+
+function getCreatorDisplay(slip) {
+  const name = String(slip?.createdByName || '').trim()
+  return {
+    name: name || UNKNOWN_CREATOR_VALUE,
+    role: formatCreatorRole(slip?.createdByRoleName),
+  }
 }
 
 export function SlipActionButtons({ documentRef, filename = 'phieu-kho.pdf' }) {
@@ -117,12 +154,14 @@ export function SlipActionButtons({ documentRef, filename = 'phieu-kho.pdf' }) {
   )
 }
 
-function SignatureArea() {
+function SignatureArea({ creator }) {
   return (
     <div className="signature-area mt-10 grid grid-cols-3 gap-6 text-center text-sm text-slate-700">
       <div>
         <p className="font-semibold">Người lập phiếu</p>
-        <p className="mt-16 text-xs text-slate-400">(Ký, ghi rõ họ tên)</p>
+        <p className="mt-12 font-medium text-slate-800">{creator.name}</p>
+        <p className="mt-1 text-xs text-slate-500">Chức vụ/Vai trò: {creator.role}</p>
+        <p className="mt-8 text-xs text-slate-400">(Ký, ghi rõ họ tên)</p>
       </div>
       <div>
         <p className="font-semibold">Thủ kho</p>
@@ -181,15 +220,17 @@ function getImportLines(slip) {
 }
 
 function formatAllocations(allocations = []) {
-  if (!allocations.length) return '-'
-  return allocations
-    .map((allocation) => `${allocation.lotCode || allocation.warehouseBatchId} (${formatStockQuantity(allocation.quantity)})`)
+  const visibleAllocations = allocations.filter((allocation) => allocation.lotCode)
+  if (!visibleAllocations.length) return '-'
+  return visibleAllocations
+    .map((allocation) => `${allocation.lotCode} (${formatStockQuantity(allocation.quantity)})`)
     .join(', ')
 }
 
 export function ExportSlipDocument({ slip, getTypeLabel }) {
   const lines = getExportLines(slip)
   const totalQuantity = lines.reduce((sum, line) => sum + Number(line.quantity || 0), 0)
+  const creator = getCreatorDisplay(slip)
 
   return (
     <article className="inventory-slip-print rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -205,7 +246,8 @@ export function ExportSlipDocument({ slip, getTypeLabel }) {
         <HeaderField label="Lệnh SX" value={slip.productionCode} />
         <HeaderField label="Thời gian" value={slip.createdAt ? formatVietnamDateTime(slip.createdAt) : '-'} />
         <HeaderField label="Kho" value="Kho tổng" />
-        <HeaderField label="Người lập" value={slip.createdBy || '-'} />
+        <HeaderField label="Người lập phiếu" value={creator.name} />
+        <HeaderField label="Chức vụ/Vai trò" value={creator.role} />
         <HeaderField label="Tổng số lượng" value={formatStockQuantity(totalQuantity)} />
         <HeaderField label="Số dòng" value={`${lines.length} dòng nguyên liệu`} />
       </div>
@@ -247,7 +289,7 @@ export function ExportSlipDocument({ slip, getTypeLabel }) {
         </table>
       </div>
 
-      <SignatureArea />
+      <SignatureArea creator={creator} />
     </article>
   )
 }
@@ -255,6 +297,7 @@ export function ExportSlipDocument({ slip, getTypeLabel }) {
 export function ImportSlipDocument({ slip, getTypeLabel }) {
   const lines = getImportLines(slip)
   const totalQuantity = lines.reduce((sum, line) => sum + Number(line.quantity || 0), 0)
+  const creator = getCreatorDisplay(slip)
 
   return (
     <article className="inventory-slip-print rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -270,7 +313,8 @@ export function ImportSlipDocument({ slip, getTypeLabel }) {
         <HeaderField label="Lệnh SX" value={slip.productionCode} />
         <HeaderField label="Thời gian" value={slip.createdAt ? formatVietnamDateTime(slip.createdAt) : '-'} />
         <HeaderField label="Kho" value="Kho tổng" />
-        <HeaderField label="Người lập" value={slip.createdBy || '-'} />
+        <HeaderField label="Người lập phiếu" value={creator.name} />
+        <HeaderField label="Chức vụ/Vai trò" value={creator.role} />
         <HeaderField label="Tổng số lượng" value={formatStockQuantity(totalQuantity)} />
         <HeaderField label="Số dòng" value={`${lines.length} dòng thành phẩm`} />
       </div>
@@ -301,9 +345,6 @@ export function ImportSlipDocument({ slip, getTypeLabel }) {
                 <td className="px-3 py-2 text-right font-semibold">{formatStockQuantity(line.quantity)}</td>
                 <td className="px-3 py-2 text-slate-700">
                   <span className="font-mono">{line.warehouseBatchLotCode || '-'}</span>
-                  {line.warehouseBatchId ? (
-                    <span className="block break-all text-[11px] text-slate-400">{line.warehouseBatchId}</span>
-                  ) : null}
                 </td>
                 <td className="px-3 py-2 text-slate-700">
                   {formatStockQuantity(line.warehouseQtyBefore)} / {formatStockQuantity(line.warehouseQtyAfter)}
@@ -317,7 +358,7 @@ export function ImportSlipDocument({ slip, getTypeLabel }) {
         </table>
       </div>
 
-      <SignatureArea />
+      <SignatureArea creator={creator} />
     </article>
   )
 }

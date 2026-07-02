@@ -1,6 +1,7 @@
 using HuongVanTra.Shared.Auth;
 using InventoryService.Application.DTOs.Requests;
 using InventoryService.Application.UseCases;
+using InventoryService.WebAPI.Extensions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -53,7 +54,7 @@ public class StockAdjustmentRequestsController(InventoryLogic _logic) : Controll
     [Authorize(Policy = PermissionNames.ViewOrder)]
     public async Task<IActionResult> Approve(Guid id, CancellationToken ct)
     {
-        var result = await _logic.ApproveStockAdjustmentRequestAsync(id, User.GetUserId(), ct);
+        var result = await _logic.ApproveStockAdjustmentRequestAsync(id, User.GetUserId(), User.ToCreatorSnapshot(), ct);
         return Ok(result);
     }
 

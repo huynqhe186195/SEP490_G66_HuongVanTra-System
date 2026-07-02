@@ -11,10 +11,14 @@ export async function searchMaterials(search = '', pageSize = 20) {
 
 export function mapBomLine(row) {
   if (!row) return null
+  const materialUnitName =
+    row.materialUnitName ?? row.MaterialUnitName ?? row.materialUnit ?? row.MaterialUnit ?? row.baseUnit ?? row.BaseUnit ?? ''
   return {
     materialId: row.materialId ?? row.MaterialId,
     material_id: row.materialId ?? row.MaterialId,
     materialName: row.materialName ?? row.MaterialName ?? '',
+    materialUnitName,
+    baseUnit: materialUnitName,
     quantity: Number(row.quantity ?? row.Quantity ?? 0),
   }
 }

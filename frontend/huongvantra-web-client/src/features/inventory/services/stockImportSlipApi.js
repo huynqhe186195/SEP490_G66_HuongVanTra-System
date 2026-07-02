@@ -39,6 +39,9 @@ function mapImportSlip(row) {
     productionCode: row.productionCode ?? row.ProductionCode ?? '',
     note: row.note ?? row.Note ?? '',
     createdBy: row.createdBy ?? row.CreatedBy,
+    createdById: row.createdById ?? row.CreatedById ?? null,
+    createdByName: row.createdByName ?? row.CreatedByName ?? '',
+    createdByRoleName: row.createdByRoleName ?? row.CreatedByRoleName ?? '',
     createdAt: row.createdAt ?? row.CreatedAt ?? null,
     lines,
   }

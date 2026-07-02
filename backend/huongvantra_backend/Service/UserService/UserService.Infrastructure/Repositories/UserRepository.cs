@@ -19,6 +19,7 @@ public class UserRepository(UserDbContext context) : IUserRepository
 
     public async Task<User?> GetByUsernameAsync(string username) =>
         await context.Users
+            .Include(u => u.Employee)
             .Include(u => u.UserRoles)
                 .ThenInclude(ur => ur.Role)
                     .ThenInclude(r => r.RolePermissions)

@@ -18,6 +18,9 @@ public class StockExportSlip
     public int StoreQtyAfter { get; set; }
     public string? Note { get; set; }
     public Guid CreatedBy { get; set; }
+    public Guid? CreatedById { get; set; }
+    public string? CreatedByName { get; set; }
+    public string? CreatedByRoleName { get; set; }
     public DateTime CreatedAt { get; set; }
 
     public ICollection<StockExportBatchAllocation> BatchAllocations { get; set; } = new List<StockExportBatchAllocation>();

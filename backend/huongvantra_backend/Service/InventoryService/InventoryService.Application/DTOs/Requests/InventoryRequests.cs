@@ -58,3 +58,8 @@ public record CreateProductionOrderRequest(
 public record DeductMaterialItem(Guid SkuId, int Quantity);
 
 public record DeductMaterialsRequest(List<DeductMaterialItem> Items);
+
+public record CreatorSnapshot(
+    Guid CreatedById,
+    string? CreatedByName,
+    string? CreatedByRoleName);

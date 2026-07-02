@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { showError } from '../../../app/toast.js'
 import { searchMaterials } from '../services/bomApi.js'
+import { getBomQuantityValidationMessage, isCountBasedUnit } from '../utils/bomUnitRules.js'
 
 function useDebounce(value, delay = 300) {
   const [debounced, setDebounced] = useState(value)
@@ -11,12 +12,34 @@ function useDebounce(value, delay = 300) {
   return debounced
 }
 
+function getMaterialUnit(material) {
+  const baseUnit = material?.units?.find((u) => u.isBaseUnit) || material?.units?.[0]
+  return (
+    material?.materialUnitName ||
+    material?.materialUnit ||
+    baseUnit?.unitName ||
+    material?.baseUnit ||
+    material?.base_unit ||
+    ''
+  )
+}
+
 function normalizeInitialLine(line) {
   const materialId = line.material_id ?? line.materialId
+  const materialUnitName =
+    line.materialUnitName ??
+    line.MaterialUnitName ??
+    line.materialUnit ??
+    line.MaterialUnit ??
+    line.baseUnit ??
+    line.BaseUnit ??
+    line.base_unit ??
+    ''
   return {
     material_id: materialId,
-    materialName: line.materialName ?? line.name ?? '',
-    baseUnit: line.baseUnit ?? '',
+    materialName: line.materialName ?? line.MaterialName ?? line.name ?? '',
+    materialUnitName,
+    baseUnit: materialUnitName,
     quantity: line.quantity,
   }
 }
@@ -52,6 +75,7 @@ export default function ProductBomConfigModal({
         next[line.material_id] = {
           id: line.material_id,
           name: line.materialName,
+          materialUnitName: line.materialUnitName,
           baseUnit: line.baseUnit,
         }
       }
@@ -95,7 +119,7 @@ export default function ProductBomConfigModal({
   function addMaterial(product) {
     if (usedIds.has(String(product.id))) return
     setMaterialCache((prev) => ({ ...prev, [product.id]: product }))
-    setLines((prev) => [...prev, { material_id: product.id, quantity: 1 }])
+    setLines((prev) => [...prev, { material_id: product.id, materialUnitName: getMaterialUnit(product), quantity: 1 }])
     setSearchInput('')
     setSearchResults([])
   }
@@ -118,10 +142,14 @@ export default function ProductBomConfigModal({
       return
     }
 
-    const invalid = validLines.find((line) => !Number.isFinite(Number(line.quantity)) || Number(line.quantity) <= 0)
-    if (invalid) {
-      showError('Định mức cho 1 đơn vị thành phẩm phải lớn hơn 0.')
-      return
+    for (const line of validLines) {
+      const material = materialCache[line.material_id] ?? line
+      const unit = getMaterialUnit(material) || line.materialUnitName || line.baseUnit
+      const validationMessage = getBomQuantityValidationMessage(line.quantity, unit)
+      if (validationMessage) {
+        showError(validationMessage)
+        return
+      }
     }
 
     setIsSaving(true)
@@ -130,7 +158,7 @@ export default function ProductBomConfigModal({
         validLines.map((line) => ({
           material_id: line.material_id,
           materialId: line.material_id,
-          quantity: Number(line.quantity),
+          quantity: Number(String(line.quantity).replace(',', '.')),
         })),
       )
       onClose?.()
@@ -200,7 +228,7 @@ export default function ProductBomConfigModal({
                 ) : null}
                 {searchResults.map((product) => {
                   const isUsed = usedIds.has(String(product.id))
-                  const baseUnit = product.units?.find((u) => u.isBaseUnit) || product.units?.[0]
+                  const unitName = getMaterialUnit(product)
                   return (
                     <button
                       key={product.id}
@@ -214,7 +242,7 @@ export default function ProductBomConfigModal({
                         <span className="ml-2 font-medium text-slate-800">{product.name}</span>
                         {isUsed ? <span className="ml-2 text-xs text-slate-400">(đã có)</span> : null}
                       </span>
-                      <span className="shrink-0 text-xs text-slate-500">{baseUnit?.unitName || product.baseUnit || '—'}</span>
+                      <span className="shrink-0 text-xs text-slate-500">{unitName || '—'}</span>
                     </button>
                   )
                 })}
@@ -245,7 +273,8 @@ export default function ProductBomConfigModal({
                 <tbody className="divide-y divide-slate-100">
                   {lines.map((line, index) => {
                     const material = materialCache[line.material_id]
-                    const baseUnit = material?.units?.find((u) => u.isBaseUnit) || material?.units?.[0]
+                    const unitName = getMaterialUnit(material) || line.materialUnitName || line.baseUnit
+                    const countBased = isCountBasedUnit(unitName)
                     return (
                       <tr key={`${line.material_id}-${index}`} className="hover:bg-slate-50/60">
                         <td className="px-4 py-3 font-medium text-slate-800">
@@ -254,15 +283,21 @@ export default function ProductBomConfigModal({
                         <td className="px-4 py-3">
                           <input
                             type="number"
-                            min="0"
-                            step="0.01"
+                            min={countBased ? '1' : '0.001'}
+                            step={countBased ? '1' : '0.001'}
+                            inputMode={countBased ? 'numeric' : 'decimal'}
                             className="mx-auto block w-24 rounded-lg border border-slate-200 px-3 py-2 text-center text-sm focus:border-[#356647] focus:outline-none"
                             value={line.quantity}
                             onChange={(e) => updateQuantity(index, e.target.value)}
+                            onKeyDown={(event) => {
+                              if (['e', 'E', '+', '-'].includes(event.key) || (countBased && ['.', ','].includes(event.key))) {
+                                event.preventDefault()
+                              }
+                            }}
                           />
                         </td>
                         <td className="px-4 py-3 text-slate-600">
-                          {baseUnit?.unitName || material?.baseUnit || '—'}
+                          {unitName || '—'}
                         </td>
                         <td className="px-4 py-3 text-right">
                           <button

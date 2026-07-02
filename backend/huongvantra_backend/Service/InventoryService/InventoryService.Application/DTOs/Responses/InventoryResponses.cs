@@ -156,6 +156,9 @@ public record StockExportSlipResponse(
     int StoreQtyAfter,
     string? Note,
     Guid CreatedBy,
+    Guid? CreatedById,
+    string? CreatedByName,
+    string? CreatedByRoleName,
     DateTime CreatedAt,
     List<StockExportBatchAllocationResponse> BatchAllocations,
     List<StockExportSlipLineResponse> Lines);
@@ -194,6 +197,9 @@ public record StockImportSlipResponse(
     string? ProductionCode,
     string? Note,
     Guid CreatedBy,
+    Guid? CreatedById,
+    string? CreatedByName,
+    string? CreatedByRoleName,
     DateTime CreatedAt,
     List<StockImportSlipLineResponse> Lines);
 

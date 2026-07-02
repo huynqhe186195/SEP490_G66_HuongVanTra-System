@@ -62,11 +62,17 @@ export function mapProductVariant(item) {
     isActive: Boolean(item.isActive ?? item.IsActive ?? true),
     imageUrl: item.imageUrl ?? item.ImageUrl ?? '',
     units: toArray(rawUnits).map(mapProductUnit).filter(Boolean),
-    bomLines: toArray(rawBomLines).map((line) => ({
-      materialId: line.materialId ?? line.MaterialId,
-      materialName: line.materialName ?? line.MaterialName ?? '',
-      quantity: Number(line.quantity ?? line.Quantity ?? 0),
-    })),
+    bomLines: toArray(rawBomLines).map((line) => {
+      const materialUnitName =
+        line.materialUnitName ?? line.MaterialUnitName ?? line.materialUnit ?? line.MaterialUnit ?? line.baseUnit ?? line.BaseUnit ?? ''
+      return {
+        materialId: line.materialId ?? line.MaterialId,
+        materialName: line.materialName ?? line.MaterialName ?? '',
+        materialUnitName,
+        baseUnit: materialUnitName,
+        quantity: Number(line.quantity ?? line.Quantity ?? 0),
+      }
+    }),
   }
 }
 
