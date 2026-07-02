@@ -369,8 +369,9 @@ function InventoryImportPage() {
                       <button
                         type="button"
                         onClick={() => setSelectedSlip(slip)}
-                        className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                        className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
                       >
+                        <span className="material-symbols-outlined text-[16px]">visibility</span>
                         Chi tiết
                       </button>
                     </td>

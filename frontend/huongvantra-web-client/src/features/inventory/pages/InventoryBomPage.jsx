@@ -121,7 +121,7 @@ function InventoryBomPage() {
     <PageShell>
       <PageHeader
         title="Định mức BOM"
-        description="Cấu hình nguyên liệu tiêu hao cho từng finished ProductVariant/SKU."
+        description="Cấu hình nguyên liệu tiêu hao cho từng SKU thành phẩm."
         searchPlaceholder="Tìm theo SKU hoặc tên thành phẩm..."
         searchValue={searchInput}
         onSearchChange={setSearchInput}
@@ -140,10 +140,17 @@ function InventoryBomPage() {
       />
 
       <section className="rounded-[1rem] bg-white p-4 shadow-sm sm:p-6">
+        <div className="mb-4 rounded-xl border border-[#538463]/15 bg-[#f3f7f4] px-4 py-3 text-sm text-[#356647]">
+          <p className="font-semibold">BOM được lưu theo finished ProductVariant/SKU.</p>
+          <p className="mt-1 text-xs text-[#4d6f58]">
+            Khi tạo ProductionOrder, hệ thống đọc định mức của SKU thành phẩm để tính tổng nguyên liệu cần xuất.
+          </p>
+        </div>
+
         <div className="mb-4">
-          <h2 className="text-lg font-bold text-slate-800">Danh sách thành phẩm & định mức</h2>
+          <h2 className="text-lg font-bold text-slate-800">Danh sách SKU thành phẩm & định mức BOM</h2>
           <p className="mt-1 text-sm text-slate-500">
-            Mỗi dòng là một finished SKU. Bấm <strong>Cấu hình BOM</strong> để thêm, sửa hoặc xóa nguyên liệu.
+            Mỗi dòng là một SKU thành phẩm. Bấm <strong>Cấu hình BOM</strong> để thêm, sửa hoặc xóa nguyên liệu.
           </p>
         </div>
 
@@ -157,15 +164,15 @@ function InventoryBomPage() {
           </p>
         ) : (
           <div className="overflow-x-auto rounded-xl border border-slate-200">
-            <table className="min-w-full text-left text-sm">
+            <table className="min-w-[980px] text-left text-sm">
               <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                 <tr>
-                  <th className="px-4 py-3 font-semibold">Mã SKU</th>
+                  <th className="px-4 py-3 font-semibold">SKU thành phẩm</th>
                   <th className="px-4 py-3 font-semibold">Thành phẩm</th>
                   <th className="px-4 py-3 font-semibold">Biến thể</th>
                   <th className="px-4 py-3 text-right font-semibold">Giá bán</th>
-                  <th className="px-4 py-3 text-center font-semibold">Số NVL</th>
-                  <th className="px-4 py-3 font-semibold">Preview BOM</th>
+                  <th className="px-4 py-3 text-center font-semibold">Số nguyên liệu</th>
+                  <th className="px-4 py-3 font-semibold">Nguyên liệu</th>
                   <th className="px-4 py-3 text-center font-semibold">Thao tác</th>
                 </tr>
               </thead>
@@ -182,12 +189,23 @@ function InventoryBomPage() {
                     <td className="px-4 py-3 text-slate-700">{row.variantName || '-'}</td>
                     <td className="px-4 py-3 text-right font-medium">{formatProductPrice(row.retailPrice)}</td>
                     <td className="px-4 py-3 text-center font-semibold">{row.materialCount}</td>
-                    <td className="max-w-sm px-4 py-3 text-xs text-slate-500">
-                      {row.bomLines.length > 0
-                        ? row.bomLines
-                            .map((line) => `${line.materialName || line.materialId} x${line.quantity}`)
-                            .join(', ')
-                        : 'Chưa có BOM'}
+                    <td className="max-w-md px-4 py-3 text-xs text-slate-500">
+                      {row.bomLines.length > 0 ? (
+                        <div className="flex flex-wrap gap-1.5">
+                          {row.bomLines.map((line) => (
+                            <span
+                              key={`${row.variantId}-${line.materialId ?? line.material_id}`}
+                              className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-700"
+                            >
+                              {line.materialName || line.materialId || line.material_id} x{line.quantity}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="inline-flex rounded-full border border-dashed border-slate-200 px-2.5 py-1 text-slate-400">
+                          Chưa có BOM. Bấm Cấu hình BOM để thêm nguyên liệu.
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-center">
                       <button

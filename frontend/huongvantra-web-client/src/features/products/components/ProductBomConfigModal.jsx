@@ -120,7 +120,7 @@ export default function ProductBomConfigModal({
 
     const invalid = validLines.find((line) => !Number.isFinite(Number(line.quantity)) || Number(line.quantity) <= 0)
     if (invalid) {
-      showError('Số lượng tiêu hao phải lớn hơn 0.')
+      showError('Định mức cho 1 đơn vị thành phẩm phải lớn hơn 0.')
       return
     }
 
@@ -143,7 +143,8 @@ export default function ProductBomConfigModal({
 
   if (!isOpen || !variant) return null
 
-  const title = `Cấu hình BOM: ${variant.productName} — ${variant.attributeLabel}`
+  const title = `Định mức BOM: ${variant.sku || variant.skuCode || variant.attributeLabel || ''}`
+  const subtitle = [variant.productName, variant.attributeLabel].filter(Boolean).join(' - ')
 
   return (
     <div
@@ -159,9 +160,12 @@ export default function ProductBomConfigModal({
         aria-labelledby="bom-modal-title"
       >
         <header className="flex items-start justify-between gap-4 border-b border-slate-100 px-6 py-4">
-          <h2 id="bom-modal-title" className="text-base font-bold uppercase tracking-wide text-slate-800 sm:text-lg">
-            {title}
-          </h2>
+          <div>
+            <h2 id="bom-modal-title" className="text-base font-bold text-slate-800 sm:text-lg">
+              {title}
+            </h2>
+            {subtitle ? <p className="mt-1 text-xs text-slate-500">{subtitle}</p> : null}
+          </div>
           <button
             type="button"
             onClick={onClose}
@@ -173,7 +177,7 @@ export default function ProductBomConfigModal({
         </header>
 
         <div className="border-b border-slate-100 px-6 py-4">
-          <label className="block text-xs font-semibold text-slate-500">Tìm nguyên liệu / bao bì</label>
+          <label className="block text-xs font-semibold text-slate-500">Nguyên liệu</label>
           <div className="relative mt-2" ref={dropdownRef}>
             <span className="material-symbols-outlined pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[20px] text-slate-400">
               search
@@ -185,7 +189,7 @@ export default function ProductBomConfigModal({
             ) : null}
             <input
               className="w-full rounded-xl border border-slate-200 bg-[#f0eee6] py-3 pl-10 pr-10 text-sm focus:border-[#356647] focus:outline-none focus:ring-2 focus:ring-[#356647]/15"
-              placeholder="Gõ tên hoặc mã hàng nguyên liệu..."
+              placeholder="Tìm tên hoặc mã nguyên liệu..."
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
             />
@@ -225,15 +229,15 @@ export default function ProductBomConfigModal({
         <div className="flex-1 overflow-y-auto px-6 py-4">
           {lines.length === 0 ? (
             <p className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-400">
-              Chưa có nguyên liệu. Dùng ô tìm kiếm phía trên để thêm.
+              SKU thành phẩm này chưa có BOM. Dùng ô tìm kiếm phía trên để thêm nguyên liệu.
             </p>
           ) : (
             <div className="overflow-x-auto rounded-xl border border-slate-200">
               <table className="min-w-full text-left text-sm">
                 <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                   <tr>
-                    <th className="px-4 py-3 font-semibold">Tên nguyên liệu</th>
-                    <th className="px-4 py-3 text-center font-semibold">Số lượng tiêu hao</th>
+                    <th className="px-4 py-3 font-semibold">Nguyên liệu</th>
+                    <th className="px-4 py-3 text-center font-semibold">Định mức cho 1 đơn vị thành phẩm</th>
                     <th className="px-4 py-3 font-semibold">Đơn vị</th>
                     <th className="px-4 py-3 text-right font-semibold">Hành động</th>
                   </tr>
@@ -280,14 +284,14 @@ export default function ProductBomConfigModal({
         </div>
 
         <footer className="flex items-center justify-between border-t border-slate-100 px-6 py-4">
-          <span className="text-xs text-slate-500">{lines.length} nguyên liệu</span>
+          <span className="text-xs text-slate-500">{lines.length} nguyên liệu trong BOM</span>
           <button
             type="button"
             onClick={handleConfirm}
             disabled={isSaving}
             className="rounded-xl bg-[#538463] px-8 py-2.5 text-sm font-bold uppercase tracking-wide text-white hover:bg-[#457053]"
           >
-            {isSaving ? 'Đang lưu...' : 'Xác nhận'}
+            {isSaving ? 'Đang lưu...' : 'Lưu BOM'}
           </button>
         </footer>
       </div>

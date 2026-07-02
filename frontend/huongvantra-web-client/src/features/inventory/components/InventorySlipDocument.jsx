@@ -6,6 +6,13 @@ export function SlipPrintStyles() {
     <style>
       {`
         @media print {
+          @page {
+            margin: 14mm;
+          }
+          html,
+          body {
+            background: white !important;
+          }
           body * {
             visibility: hidden !important;
           }
@@ -42,7 +49,7 @@ export function SlipActionButtons() {
       <button
         type="button"
         onClick={printSlip}
-        className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+        className="inline-flex min-w-28 items-center justify-center gap-1.5 rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
       >
         <span className="material-symbols-outlined text-[18px]">print</span>
         In phiếu
@@ -50,7 +57,7 @@ export function SlipActionButtons() {
       <button
         type="button"
         onClick={printSlip}
-        className="inline-flex items-center gap-1.5 rounded-xl bg-[#538463] px-4 py-2 text-sm font-bold text-white hover:bg-[#457053]"
+        className="inline-flex min-w-28 items-center justify-center gap-1.5 rounded-xl bg-[#538463] px-4 py-2 text-sm font-bold text-white hover:bg-[#457053]"
       >
         <span className="material-symbols-outlined text-[18px]">picture_as_pdf</span>
         Xuất PDF

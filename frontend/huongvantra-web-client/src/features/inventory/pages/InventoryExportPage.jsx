@@ -95,7 +95,8 @@ function InventoryExportPage() {
                         SL: {formatStockQuantity(getSlipQuantity(slip))} · {formatVietnamDateTime(slip.createdAt)}
                       </p>
                     </div>
-                    <span className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-600">
+                    <span className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700">
+                      <span className="material-symbols-outlined text-[16px]">visibility</span>
                       Chi tiết
                     </span>
                   </div>
