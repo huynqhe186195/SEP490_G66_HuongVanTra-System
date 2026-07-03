@@ -16,7 +16,7 @@ import {
 
 const STATUS_TABS = [
   { key: '', label: 'Tất cả' },
-  { key: 'Draft', label: 'Nháp' },
+  { key: 'Draft', label: 'Chờ xác nhận' },
   { key: 'Completed', label: 'Hoàn thành' },
   { key: 'Cancelled', label: 'Đã hủy' },
 ]

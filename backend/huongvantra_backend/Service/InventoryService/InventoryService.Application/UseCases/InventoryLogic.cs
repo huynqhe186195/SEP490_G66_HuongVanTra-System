@@ -404,19 +404,26 @@ public class InventoryLogic(
     public async Task<WarehouseBatchResponse> CreateWarehouseBatchAsync(
         CreateWarehouseBatchRequest request,
         Guid createdBy,
+        CreatorSnapshot? creator,
         CancellationToken ct = default)
     {
         if (createdBy == Guid.Empty)
             throw new InventoryValidationException("Không xác định được người nhập lô.");
 
-        return await CreateWarehouseBatchInternalAsync(
-            request.LotCode,
-            request.Supplier,
-            request.ExpiresAt,
-            request.Note,
-            request.Items,
-            createdBy,
-            ct);
+        return await _unitOfWork.ExecuteInTransactionAsync(async innerCt =>
+        {
+            var batch = await CreateWarehouseBatchInternalAsync(
+                request.LotCode,
+                request.Supplier,
+                request.ExpiresAt,
+                request.Note,
+                request.Items,
+                createdBy,
+                innerCt);
+
+            await CreateManualMaterialImportSlipAsync(batch, request.Note, createdBy, creator, innerCt);
+            return batch;
+        }, ct);
     }
 
     public async Task<List<WarehouseBatchResponse>> GetWarehouseBatchesAsync(
@@ -831,6 +838,82 @@ public class InventoryLogic(
     {
         var slip = await _importSlipRepo.GetByIdAsync(id, ct);
         return slip == null ? null : MapImportSlip(slip);
+    }
+
+    private async Task CreateManualMaterialImportSlipAsync(
+        WarehouseBatchResponse batch,
+        string? note,
+        Guid createdBy,
+        CreatorSnapshot? creator,
+        CancellationToken ct)
+    {
+        if (batch.Items.Count == 0)
+            return;
+
+        var now = DateTime.UtcNow;
+        var importCountToday = await _importSlipRepo.CountCreatedSinceAsync(now.Date, ct);
+        var slipId = Guid.NewGuid();
+        var orderedItems = batch.Items.OrderBy(i => i.SkuCode).ToList();
+        var lines = new List<StockImportSlipLine>();
+
+        foreach (var item in orderedItems)
+        {
+            var stock = await _skuStockRepo.GetBySkuIdAsync(item.SkuId, ct);
+            var warehouseAfter = stock?.WarehouseQuantityOnHand ?? item.QuantityOnHand;
+            var storeAfter = stock?.QuantityOnHand ?? 0;
+            var quantity = item.InitialQuantity;
+
+            lines.Add(new StockImportSlipLine
+            {
+                Id = Guid.NewGuid(),
+                StockImportSlipId = slipId,
+                SkuId = item.SkuId,
+                SkuCode = item.SkuCode,
+                ProductSnapshotName = item.ProductSnapshotName ?? item.SkuCode,
+                Quantity = quantity,
+                WarehouseQtyBefore = Math.Max(0, warehouseAfter - quantity),
+                WarehouseQtyAfter = warehouseAfter,
+                StoreQtyBefore = storeAfter,
+                StoreQtyAfter = storeAfter,
+                WarehouseBatchId = batch.Id,
+                WarehouseBatchLotCode = batch.LotCode,
+                ProductionOrderOutputLineId = null,
+                Note = $"Nhập nguyên liệu vào kho - lô {batch.LotCode}",
+                CreatedAt = now,
+            });
+        }
+
+        var firstLine = lines[0];
+        var slip = new StockImportSlip
+        {
+            Id = slipId,
+            ImportCode = $"PN-{now:yyyyMMdd}-{(importCountToday + 1):D4}",
+            ImportType = "manual_material_import",
+            SkuId = firstLine.SkuId,
+            SkuCode = lines.Count == 1 ? firstLine.SkuCode : "MULTI",
+            ProductSnapshotName = lines.Count == 1 ? firstLine.ProductSnapshotName : $"{lines.Count} dòng nguyên liệu",
+            Quantity = lines.Sum(l => l.Quantity),
+            WarehouseQtyBefore = lines.Sum(l => l.WarehouseQtyBefore),
+            WarehouseQtyAfter = lines.Sum(l => l.WarehouseQtyAfter),
+            StoreQtyBefore = lines.Sum(l => l.StoreQtyBefore),
+            StoreQtyAfter = lines.Sum(l => l.StoreQtyAfter),
+            WarehouseBatchId = batch.Id,
+            WarehouseBatchLotCode = batch.LotCode,
+            ProductionOrderId = null,
+            ProductionCode = null,
+            Note = string.IsNullOrWhiteSpace(note)
+                ? $"Nhập nguyên liệu vào kho - lô {batch.LotCode}"
+                : note.Trim(),
+            CreatedBy = createdBy,
+            CreatedById = createdBy == Guid.Empty ? null : createdBy,
+            CreatedByName = NormalizeSnapshotText(creator?.CreatedByName),
+            CreatedByRoleName = NormalizeSnapshotText(creator?.CreatedByRoleName),
+            CreatedAt = now,
+            Lines = lines,
+        };
+
+        await _importSlipRepo.AddAsync(slip, ct);
+        await _importSlipRepo.SaveChangesAsync(ct);
     }
 
     private async Task<StockExportSlip> CreateExportSlipAsync(

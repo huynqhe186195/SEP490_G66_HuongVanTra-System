@@ -45,7 +45,7 @@ export function mapProductionOrder(row) {
 }
 
 export const PRODUCTION_STATUS_LABEL = {
-  Draft: 'Nháp',
+  Draft: 'Chờ xác nhận',
   Completed: 'Hoàn thành',
   Cancelled: 'Đã hủy',
 }

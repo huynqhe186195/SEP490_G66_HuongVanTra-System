@@ -49,6 +49,7 @@ function mapImportSlip(row) {
 
 export function getImportTypeLabel(type) {
   if (type === 'production_finished_goods_receipt') return 'Nhập thành phẩm sau sản xuất'
+  if (type === 'manual_material_import') return 'Nhập nguyên liệu thủ công'
   return type || '—'
 }
 

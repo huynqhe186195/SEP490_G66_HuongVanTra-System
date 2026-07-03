@@ -570,12 +570,12 @@ export default function ProductsWarehouseListPage() {
 
                 {isWarehouse ? (
                   <Link
-                    to="/inventory/import"
+                    to="/inventory/import/create"
                     className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-                    title="Nhập lô hàng"
+                    title="Nhập nguyên liệu vào kho"
                   >
                     <span className="material-symbols-outlined text-[18px]">inventory</span>
-                    Nhập lô
+                    Nhập nguyên liệu
                   </Link>
                 ) : null}
 
@@ -611,7 +611,7 @@ export default function ProductsWarehouseListPage() {
                   Đã lưu sản phẩm{createdBanner.name ? ` "${createdBanner.name}"` : ''}.
                 </p>
                 <p className="mt-0.5 text-sm text-[#356647]">
-                  Biến thể đã tự sinh từ đơn vị tính. Nhập lô để có tồn kho.
+                  Biến thể đã tự sinh từ đơn vị tính. Nhập nguyên liệu để có tồn kho.
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
@@ -782,11 +782,11 @@ export default function ProductsWarehouseListPage() {
                               {selectedVariant ? formatStockQuantity(stockQty) : '—'}
                               {selectedVariant && stockQty <= 0 && !product.isDeleted ? (
                                 <Link
-                                  to="/inventory/import"
+                                  to="/inventory/import/create"
                                   className="mt-0.5 block text-[10px] font-semibold text-amber-700 hover:underline"
                                   onClick={(e) => e.stopPropagation()}
                                 >
-                                  Nhập lô
+                                  Nhập nguyên liệu
                                 </Link>
                               ) : null}
                             </td>
