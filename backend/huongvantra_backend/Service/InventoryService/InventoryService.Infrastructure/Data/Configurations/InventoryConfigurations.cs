@@ -266,8 +266,6 @@ public class ProductionOrderConfiguration : IEntityTypeConfiguration<ProductionO
         builder.ToTable("ProductionOrders");
         builder.HasKey(e => e.Id);
         builder.Property(e => e.ProductionCode).HasMaxLength(30).IsRequired();
-        builder.Property(e => e.FinishedSkuCode).HasMaxLength(50).IsRequired();
-        builder.Property(e => e.FinishedSkuSnapshotName).HasMaxLength(255).IsRequired();
         builder.Property(e => e.Note).HasMaxLength(500);
         builder.Property(e => e.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
         builder.HasIndex(e => e.ProductionCode).IsUnique();
@@ -305,9 +303,12 @@ public class ProductionOrderOutputLineConfiguration : IEntityTypeConfiguration<P
         builder.HasKey(e => e.Id);
         builder.Property(e => e.FinishedSkuCode).HasMaxLength(50).IsRequired();
         builder.Property(e => e.FinishedSkuSnapshotName).HasMaxLength(255).IsRequired();
+        builder.Property(e => e.PlannedQuantity).IsRequired();
+        builder.Property(e => e.ExpiresAt);
         builder.Property(e => e.WarehouseBatchLotCode).HasMaxLength(50);
         builder.HasIndex(e => e.ProductionOrderId);
         builder.HasIndex(e => e.FinishedSkuId);
+        builder.HasIndex(e => new { e.ProductionOrderId, e.FinishedSkuId }).IsUnique();
         builder.HasIndex(e => e.WarehouseBatchId);
         builder.HasOne(e => e.WarehouseBatch)
             .WithMany()

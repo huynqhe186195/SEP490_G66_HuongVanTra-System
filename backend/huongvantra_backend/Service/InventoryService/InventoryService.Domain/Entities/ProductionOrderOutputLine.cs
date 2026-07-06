@@ -7,7 +7,8 @@ public class ProductionOrderOutputLine
     public Guid FinishedSkuId { get; set; }
     public string FinishedSkuCode { get; set; } = string.Empty;
     public string FinishedSkuSnapshotName { get; set; } = string.Empty;
-    public int Quantity { get; set; }
+    public int PlannedQuantity { get; set; }
+    public DateTime? ExpiresAt { get; set; }
     public Guid? WarehouseBatchId { get; set; }
     public string? WarehouseBatchLotCode { get; set; }
     public DateTime CreatedAt { get; set; }

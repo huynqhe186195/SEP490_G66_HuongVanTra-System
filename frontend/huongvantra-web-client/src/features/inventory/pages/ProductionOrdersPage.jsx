@@ -3,7 +3,7 @@ import PageShell from '../../../components/shared/PageShell.jsx'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
-import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
+import { formatVietnamDate, formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import InventoryNavTabs from '../components/InventoryNavTabs.jsx'
 import CreateProductionOrderModal from '../components/CreateProductionOrderModal.jsx'
 import {
@@ -58,19 +58,7 @@ function StatusChip({ status }) {
 
 function getOutputLines(order) {
   const outputLines = Array.isArray(order.outputLines) ? order.outputLines.filter(Boolean) : []
-  if (outputLines.length > 0) return outputLines
-
-  return [
-    {
-      id: `${order.id}-legacy-output`,
-      finishedSkuId: order.finishedSkuId,
-      finishedSkuCode: order.finishedSkuCode,
-      finishedSkuSnapshotName: order.finishedSkuSnapshotName,
-      quantity: order.quantity,
-      warehouseBatchId: null,
-      warehouseBatchLotCode: null,
-    },
-  ].filter((line) => line.finishedSkuId || line.finishedSkuCode || line.finishedSkuSnapshotName)
+  return outputLines
 }
 
 function formatQuantity(value) {
@@ -83,7 +71,7 @@ function formatOutputCompact(outputLines) {
   return outputLines
     .map((line) => {
       const name = line.finishedSkuCode || line.finishedSkuSnapshotName
-      return `${name} x${formatQuantity(line.quantity)}`
+      return `${name} x${formatQuantity(line.plannedQuantity)}`
     })
     .join(', ')
 }
@@ -146,10 +134,10 @@ function ProductionOrdersPage() {
     try {
       if (type === 'complete') {
         await completeProductionOrder(order.id)
-        showSuccess(`Hoàn thành lô sản xuất ${order.productionCode}. Kho đã được cập nhật.`)
+        showSuccess(`Hoàn thành lệnh sản xuất ${order.productionCode}. Kho đã được cập nhật.`)
       } else {
         await cancelProductionOrder(order.id)
-        showSuccess(`Đã hủy lô sản xuất ${order.productionCode}.`)
+        showSuccess(`Đã hủy lệnh sản xuất ${order.productionCode}.`)
       }
       loadOrders()
     } catch (err) {
@@ -160,7 +148,7 @@ function ProductionOrdersPage() {
   }
 
   function handleCreated(order) {
-    showSuccess(`Đã tạo lô sản xuất ${order.productionCode}.`)
+    showSuccess(`Đã tạo lệnh sản xuất ${order.productionCode}.`)
     setPage(1)
     loadOrders()
   }
@@ -168,8 +156,8 @@ function ProductionOrdersPage() {
   return (
     <PageShell>
       <PageHeader
-        title="Quản lý lô sản xuất"
-        description="Một lô sản xuất có thể chứa nhiều SKU thành phẩm; hệ thống xuất nguyên liệu và nhập lô thành phẩm về kho tổng."
+        title="Quản lý lệnh sản xuất"
+        description="Một lệnh sản xuất có thể chứa nhiều SKU thành phẩm; hệ thống xuất nguyên liệu và nhập lô thành phẩm về kho tổng."
         rightContent={
           <div className="flex items-center gap-3">
             <InventoryNavTabs />
@@ -178,7 +166,7 @@ function ProductionOrdersPage() {
               className="inline-flex items-center gap-1.5 rounded-xl bg-[#538463] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#457053]"
             >
               <span className="material-symbols-outlined text-[18px]">add</span>
-              Tạo lô sản xuất
+              Tạo lệnh sản xuất
             </button>
           </div>
         }
@@ -206,8 +194,8 @@ function ProductionOrdersPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-100 text-left text-xs font-semibold text-[#717971]">
-              <th className="px-4 py-3">Mã lô sản xuất</th>
-              <th className="px-4 py-3">SKU thành phẩm trong lô</th>
+              <th className="px-4 py-3">Mã lệnh sản xuất</th>
+              <th className="px-4 py-3">Thành phẩm đầu ra</th>
               <th className="px-4 py-3 text-right">Tổng SL</th>
               <th className="px-4 py-3">Trạng thái</th>
               <th className="px-4 py-3">Ngày tạo</th>
@@ -218,21 +206,21 @@ function ProductionOrdersPage() {
             {isLoading ? (
               <tr>
                 <td colSpan={6} className="py-12 text-center text-sm text-slate-400">
-                  Đang tải lô sản xuất...
+                  Đang tải lệnh sản xuất...
                 </td>
               </tr>
             ) : orders.length === 0 ? (
               <tr>
                 <td colSpan={6} className="px-4 py-12 text-center text-sm text-slate-500">
-                  <p className="font-semibold text-slate-700">Chưa có lô sản xuất.</p>
-                  <p className="mt-1 text-xs text-slate-400">Bấm Tạo lô sản xuất để bắt đầu Workflow 1.</p>
+                  <p className="font-semibold text-slate-700">Chưa có lệnh sản xuất.</p>
+                  <p className="mt-1 text-xs text-slate-400">Bấm Tạo lệnh sản xuất để bắt đầu Workflow 1.</p>
                 </td>
               </tr>
             ) : (
               orders.map((order) => {
                 const outputLines = getOutputLines(order)
                 const isMultiOutput = outputLines.length > 1
-                const totalOutputQuantity = outputLines.reduce((sum, line) => sum + Number(line.quantity || 0), 0)
+                const totalOutputQuantity = outputLines.reduce((sum, line) => sum + Number(line.plannedQuantity || 0), 0)
                 const finishedGoodsLots = getFinishedGoodsLots(outputLines)
                 return (
                 <Fragment key={order.id}>
@@ -247,7 +235,7 @@ function ProductionOrdersPage() {
                       {isMultiOutput ? (
                         <>
                           <p className="inline-flex rounded-full bg-[#f3f7f4] px-2.5 py-1 text-xs font-bold text-[#356647]">
-                            {outputLines.length} SKU thành phẩm trong lô
+                            {outputLines.length} thành phẩm đầu ra
                           </p>
                           <p className="mt-1 max-w-md truncate text-xs text-[#717971]">
                             {formatOutputCompact(outputLines)}
@@ -255,9 +243,9 @@ function ProductionOrdersPage() {
                         </>
                       ) : (
                         <>
-                          <p className="font-medium text-slate-800">{getOutputName(outputLines[0], order.finishedSkuSnapshotName)}</p>
+                          <p className="font-medium text-slate-800">{getOutputName(outputLines[0])}</p>
                           <p className="text-xs text-[#717971]">
-                            {getOutputSku(outputLines[0], order.finishedSkuCode)} · {formatQuantity(outputLines[0]?.quantity ?? order.quantity)} đơn vị
+                            {getOutputSku(outputLines[0])} · {formatQuantity(outputLines[0]?.plannedQuantity)} đơn vị
                           </p>
                         </>
                       )}
@@ -268,7 +256,7 @@ function ProductionOrdersPage() {
                           {formatQuantity(totalOutputQuantity)} tổng
                         </span>
                       ) : (
-                        formatQuantity(outputLines[0]?.quantity ?? order.quantity)
+                        formatQuantity(outputLines[0]?.plannedQuantity)
                       )}
                     </td>
                     <td className="px-4 py-3">
@@ -288,7 +276,7 @@ function ProductionOrdersPage() {
                             disabled={actingId === order.id}
                             className="rounded-lg bg-[#538463] px-3 py-1.5 text-xs font-bold text-white hover:bg-[#457053] disabled:opacity-50"
                           >
-                            Hoàn thành lô
+                            Hoàn thành
                           </button>
                           <button
                             onClick={(e) => {
@@ -311,7 +299,7 @@ function ProductionOrdersPage() {
                         <div className="mb-4 rounded-xl border border-slate-100 bg-white p-4">
                           <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
                             <div>
-                              <p className="text-xs font-bold uppercase tracking-wide text-[#717971]">Chi tiết lô sản xuất</p>
+                              <p className="text-xs font-bold uppercase tracking-wide text-[#717971]">Chi tiết lệnh sản xuất</p>
                               <p className="mt-1 font-mono text-sm font-bold text-[#356647]">{order.productionCode}</p>
                             </div>
                             <StatusChip status={order.status} />
@@ -346,7 +334,7 @@ function ProductionOrdersPage() {
 
                         <div className="mb-4 rounded-xl border border-slate-100 bg-white">
                           <div className="border-b border-slate-100 px-4 py-3">
-                            <p className="text-xs font-bold uppercase tracking-wide text-[#717971]">SKU thành phẩm trong lô</p>
+                            <p className="text-xs font-bold uppercase tracking-wide text-[#717971]">Thành phẩm đầu ra</p>
                           </div>
                           <div className="overflow-x-auto">
                             <table className="min-w-full text-left text-xs">
@@ -355,6 +343,7 @@ function ProductionOrdersPage() {
                                   <th className="px-4 py-2 font-semibold">SKU</th>
                                   <th className="px-4 py-2 font-semibold">Tên thành phẩm</th>
                                   <th className="px-4 py-2 text-right font-semibold">Số lượng SX</th>
+                                  <th className="px-4 py-2 font-semibold">Hạn sử dụng</th>
                                   <th className="px-4 py-2 font-semibold">Lô thành phẩm sinh ra</th>
                                 </tr>
                               </thead>
@@ -366,7 +355,10 @@ function ProductionOrdersPage() {
                                     </td>
                                     <td className="px-4 py-2 font-medium text-slate-800">{getOutputName(line)}</td>
                                     <td className="px-4 py-2 text-right font-semibold text-slate-800">
-                                      {formatQuantity(line.quantity)}
+                                      {formatQuantity(line.plannedQuantity)}
+                                    </td>
+                                    <td className="px-4 py-2 text-slate-600">
+                                      {line.expiresAt ? formatVietnamDate(line.expiresAt) : '-'}
                                     </td>
                                     <td className="px-4 py-2 text-slate-600">
                                       <span className="font-mono">{line.warehouseBatchLotCode || '-'}</span>
@@ -388,7 +380,7 @@ function ProductionOrdersPage() {
                             <div className="border-b border-emerald-100 px-4 py-3">
                               <p className="text-xs font-bold uppercase tracking-wide text-[#717971]">Lô thành phẩm sinh ra</p>
                               <p className="mt-1 text-xs text-slate-500">
-                                Mỗi SKU thành phẩm trong lô sản xuất tạo một WarehouseBatch riêng và cùng trace về {order.productionCode}.
+                                Mỗi SKU thành phẩm trong lệnh sản xuất tạo một WarehouseBatch riêng và cùng trace về {order.productionCode}.
                               </p>
                             </div>
                             <div className="overflow-x-auto">
@@ -398,7 +390,7 @@ function ProductionOrdersPage() {
                                     <th className="px-4 py-2 font-semibold">SKU thành phẩm</th>
                                     <th className="px-4 py-2 text-right font-semibold">Số lượng</th>
                                     <th className="px-4 py-2 font-semibold">Mã lô thành phẩm</th>
-                                    <th className="px-4 py-2 font-semibold">Mã lô sản xuất</th>
+                                    <th className="px-4 py-2 font-semibold">Mã lệnh sản xuất</th>
                                   </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
@@ -409,7 +401,7 @@ function ProductionOrdersPage() {
                                         <p className="mt-0.5 text-slate-600">{getOutputName(line)}</p>
                                       </td>
                                       <td className="px-4 py-2 text-right font-semibold text-slate-800">
-                                        {formatQuantity(line.quantity)}
+                                        {formatQuantity(line.plannedQuantity)}
                                       </td>
                                       <td className="px-4 py-2 font-mono text-slate-700">{line.warehouseBatchLotCode || '-'}</td>
                                       <td className="px-4 py-2 font-mono text-slate-700">{order.productionCode}</td>
@@ -477,7 +469,7 @@ function ProductionOrdersPage() {
               onPageChange={setPage}
               onPageSizeChange={(size) => { setPageSize(size); setPage(1) }}
               disabled={isLoading}
-              itemLabel="lô sản xuất"
+              itemLabel="lệnh sản xuất"
             />
           </div>
         )}
@@ -488,8 +480,8 @@ function ProductionOrdersPage() {
         <ConfirmDialog
           message={
             confirmAction.type === 'complete'
-              ? `Hoàn thành lô sản xuất "${confirmAction.order.productionCode}"? Hệ thống sẽ tự động xuất nguyên liệu theo FIFO và nhập thành phẩm vào kho tổng.`
-              : `Hủy lô sản xuất "${confirmAction.order.productionCode}"? Thao tác không thể hoàn tác.`
+              ? `Hoàn thành lệnh sản xuất "${confirmAction.order.productionCode}"? Hệ thống sẽ tự động xuất nguyên liệu theo FIFO và nhập thành phẩm vào kho tổng.`
+              : `Hủy lệnh sản xuất "${confirmAction.order.productionCode}"? Thao tác không thể hoàn tác.`
           }
           onConfirm={() => handleAction(confirmAction.type, confirmAction.order)}
           onCancel={() => setConfirmAction(null)}

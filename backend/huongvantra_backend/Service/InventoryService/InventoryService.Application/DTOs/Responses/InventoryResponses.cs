@@ -215,7 +215,8 @@ public record ProductionOrderOutputLineResponse(
     Guid FinishedSkuId,
     string FinishedSkuCode,
     string FinishedSkuSnapshotName,
-    int Quantity,
+    int PlannedQuantity,
+    DateTime? ExpiresAt,
     Guid? WarehouseBatchId,
     string? WarehouseBatchLotCode,
     DateTime CreatedAt);
@@ -223,10 +224,6 @@ public record ProductionOrderOutputLineResponse(
 public record ProductionOrderResponse(
     Guid Id,
     string ProductionCode,
-    Guid FinishedSkuId,
-    string FinishedSkuCode,
-    string FinishedSkuSnapshotName,
-    int Quantity,
     string? Note,
     string Status,
     Guid CreatedBy,

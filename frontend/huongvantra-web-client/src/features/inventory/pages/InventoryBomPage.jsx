@@ -156,7 +156,7 @@ function InventoryBomPage() {
         <div className="mb-4 rounded-xl border border-[#538463]/15 bg-[#f3f7f4] px-4 py-3 text-sm text-[#356647]">
           <p className="font-semibold">BOM được lưu theo finished ProductVariant/SKU.</p>
           <p className="mt-1 text-xs text-[#4d6f58]">
-            Khi tạo lô sản xuất, hệ thống đọc định mức của SKU thành phẩm để tính tổng nguyên liệu cần xuất.
+            Khi tạo lệnh sản xuất, hệ thống đọc định mức của SKU thành phẩm để tính tổng nguyên liệu cần xuất.
           </p>
         </div>
 

@@ -6,7 +6,7 @@ export const warehouseNavTabs = [
   { label: 'Phiếu nhập kho', to: '/inventory/import' },
   { label: 'Nhập nguyên liệu', to: '/inventory/import/create' },
   { label: 'Phiếu xuất', to: '/inventory/export' },
-  { label: 'Lô SX', to: '/inventory/production-orders' },
+  { label: 'Lệnh SX', to: '/inventory/production-orders' },
   { label: 'Định mức BOM', to: '/inventory/boms' },
 ]
 

@@ -3,7 +3,7 @@ import { showError } from '../../../app/toast.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import { formatStockQuantity } from '../../products/utils/productDisplay.js'
 
-const UNKNOWN_CREATOR_VALUE = 'Chưa xác định'
+export const UNKNOWN_CREATOR_VALUE = 'Chưa xác định'
 
 export function SlipPrintStyles() {
   return (
@@ -56,7 +56,7 @@ function normalizeRoleKey(roleName) {
     .replace(/[\s_-]+/g, '')
 }
 
-function formatCreatorRole(roleName) {
+export function formatCreatorRole(roleName) {
   const trimmed = String(roleName || '').trim()
   if (!trimmed) return UNKNOWN_CREATOR_VALUE
 
@@ -234,9 +234,6 @@ function formatQuantityTransition(before, after) {
 function normalizeProductionNote(note) {
   return String(note || '')
     .trim()
-    .replace(/lệnh sản xuất/gi, 'lô sản xuất')
-    .replace(/từ lệnh/gi, 'từ lô sản xuất')
-    .replace(/cho lệnh/gi, 'cho lô sản xuất')
 }
 
 function getProductionAwareNote(slip, fallbackText) {
@@ -255,7 +252,7 @@ export function ExportSlipDocument({ slip, getTypeLabel }) {
   const creator = getCreatorDisplay(slip)
   const note = getProductionAwareNote(
     slip,
-    `Xuất nguyên liệu cho lô sản xuất ${slip.productionCode}`,
+    `Xuất nguyên liệu cho lệnh sản xuất ${slip.productionCode}`,
   )
 
   return (
@@ -269,7 +266,7 @@ export function ExportSlipDocument({ slip, getTypeLabel }) {
       <div className="mt-5 grid grid-cols-2 gap-4 md:grid-cols-4">
         <HeaderField label="Mã phiếu" value={slip.exportCode} />
         <HeaderField label="Loại xuất" value={getTypeLabel(slip.exportType)} />
-        <HeaderField label="Mã lô SX" value={slip.productionCode} />
+        <HeaderField label="Mã lệnh SX" value={slip.productionCode} />
         <HeaderField label="Thời gian" value={slip.createdAt ? formatVietnamDateTime(slip.createdAt) : '-'} />
         <HeaderField label="Kho" value="Kho tổng" />
         <HeaderField label="Người lập phiếu" value={creator.name} />
@@ -330,7 +327,7 @@ export function ImportSlipDocument({ slip, getTypeLabel }) {
   const lotColumnLabel = isManualMaterialImport ? 'Mã lô nhập' : 'Lô thành phẩm'
   const note = getProductionAwareNote(
     slip,
-    `Nhập thành phẩm từ lô sản xuất ${slip.productionCode}`,
+    `Nhập thành phẩm từ lệnh sản xuất ${slip.productionCode}`,
   )
 
   return (
@@ -344,7 +341,7 @@ export function ImportSlipDocument({ slip, getTypeLabel }) {
       <div className="mt-5 grid grid-cols-2 gap-4 md:grid-cols-4">
         <HeaderField label="Mã phiếu" value={slip.importCode} />
         <HeaderField label="Loại nhập" value={getTypeLabel(slip.importType)} />
-        <HeaderField label="Mã lô SX" value={slip.productionCode} emptyFallback={isManualMaterialImport ? '' : '-'} />
+        <HeaderField label="Mã lệnh SX" value={slip.productionCode} emptyFallback={isManualMaterialImport ? '' : '-'} />
         <HeaderField label="Thời gian" value={slip.createdAt ? formatVietnamDateTime(slip.createdAt) : '-'} />
         <HeaderField label="Kho" value="Kho tổng" />
         <HeaderField label="Người lập phiếu" value={creator.name} />

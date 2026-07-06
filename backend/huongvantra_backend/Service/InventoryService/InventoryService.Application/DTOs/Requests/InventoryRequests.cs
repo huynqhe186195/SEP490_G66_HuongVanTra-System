@@ -44,16 +44,13 @@ public record ProductionOrderOutputLineInput(
     Guid FinishedSkuId,
     string FinishedSkuCode,
     string FinishedSkuSnapshotName,
-    int Quantity);
+    int PlannedQuantity,
+    DateTime? ExpiresAt = null);
 
 public record CreateProductionOrderRequest(
-    Guid FinishedSkuId,
-    string FinishedSkuCode,
-    string FinishedSkuSnapshotName,
-    int Quantity,
     string? Note,
-    List<ProductionOrderLineInput> Lines,
-    List<ProductionOrderOutputLineInput>? Outputs = null);
+    List<ProductionOrderOutputLineInput> OutputLines,
+    List<ProductionOrderLineInput> Lines);
 
 public record DeductMaterialItem(Guid SkuId, int Quantity);
 

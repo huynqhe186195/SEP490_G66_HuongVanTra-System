@@ -107,7 +107,7 @@ function InventoryImportPage() {
                 <th className="px-4 py-3 text-left">Loại nhập</th>
                 <th className="px-4 py-3 text-left">Nội dung</th>
                 <th className="px-4 py-3 text-right">Số lượng</th>
-                <th className="px-4 py-3 text-left">Mã lô SX</th>
+                <th className="px-4 py-3 text-left">Mã lệnh SX</th>
                 <th className="px-4 py-3 text-left">Thời gian</th>
                 <th className="px-4 py-3 text-right">Thao tác</th>
               </tr>

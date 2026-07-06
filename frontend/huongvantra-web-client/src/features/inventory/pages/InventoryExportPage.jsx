@@ -62,7 +62,7 @@ function InventoryExportPage() {
       <PageHeader
         title="Phiếu xuất kho"
         description="Chứng từ xuất nguyên liệu, gồm phiếu xuất sản xuất và các phiếu xuất kho khác."
-        searchPlaceholder="Tìm mã phiếu, SKU, mã lô SX..."
+        searchPlaceholder="Tìm mã phiếu, SKU, mã lệnh SX..."
         searchValue={searchInput}
         onSearchChange={setSearchInput}
         rightContent={<InventoryNavTabs />}
@@ -97,7 +97,7 @@ function InventoryExportPage() {
                       </p>
                       {slip.productionCode ? (
                         <p className="mt-1 text-xs text-slate-500">
-                          Mã lô SX: <span className="font-mono text-slate-700">{slip.productionCode}</span>
+                          Mã lệnh SX: <span className="font-mono text-slate-700">{slip.productionCode}</span>
                         </p>
                       ) : null}
                     </div>

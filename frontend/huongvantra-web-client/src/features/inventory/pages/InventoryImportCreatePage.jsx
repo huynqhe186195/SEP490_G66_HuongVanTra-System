@@ -464,7 +464,7 @@ function InventoryImportCreatePage() {
             <li>Một mã lô có thể gồm nhiều SKU.</li>
             <li>Mỗi SKU chỉ xuất hiện một lần trong cùng lô.</li>
             <li>Phiếu nhập kho sẽ được tạo tự động sau khi lưu lô.</li>
-            <li>Thành phẩm sau sản xuất vẫn được tạo từ lô sản xuất, không đổi luồng hiện tại.</li>
+            <li>Thành phẩm sau sản xuất vẫn được tạo từ lệnh sản xuất, không đổi luồng hiện tại.</li>
           </ul>
         </aside>
       </form>

@@ -13,12 +13,14 @@ export function mapProductionOrderLine(row) {
 
 export function mapProductionOrderOutputLine(row) {
   if (!row) return null
+  const plannedQuantity = Number(row.plannedQuantity ?? row.PlannedQuantity ?? row.quantity ?? row.Quantity ?? 0)
   return {
     id: row.id ?? row.Id,
     finishedSkuId: row.finishedSkuId ?? row.FinishedSkuId,
     finishedSkuCode: row.finishedSkuCode ?? row.FinishedSkuCode ?? '',
     finishedSkuSnapshotName: row.finishedSkuSnapshotName ?? row.FinishedSkuSnapshotName ?? '',
-    quantity: Number(row.quantity ?? row.Quantity ?? 0),
+    plannedQuantity,
+    expiresAt: row.expiresAt ?? row.ExpiresAt ?? null,
     warehouseBatchId: row.warehouseBatchId ?? row.WarehouseBatchId ?? null,
     warehouseBatchLotCode: row.warehouseBatchLotCode ?? row.WarehouseBatchLotCode ?? null,
   }
@@ -30,10 +32,6 @@ export function mapProductionOrder(row) {
   return {
     id: row.id ?? row.Id,
     productionCode: row.productionCode ?? row.ProductionCode ?? '',
-    finishedSkuId: row.finishedSkuId ?? row.FinishedSkuId,
-    finishedSkuCode: row.finishedSkuCode ?? row.FinishedSkuCode ?? '',
-    finishedSkuSnapshotName: row.finishedSkuSnapshotName ?? row.FinishedSkuSnapshotName ?? '',
-    quantity: Number(row.quantity ?? row.Quantity ?? 0),
     note: row.note ?? row.Note ?? null,
     status: row.status ?? row.Status ?? 'Draft',
     createdBy: row.createdBy ?? row.CreatedBy,
@@ -73,19 +71,17 @@ export async function fetchProductionOrderById(id) {
 }
 
 export async function createProductionOrder(payload) {
+  const outputLines = payload.outputLines ?? payload.outputs ?? []
   const data = await apiRequestAuth('/api/v1/inventory/production-orders', {
     method: 'POST',
     body: JSON.stringify({
-      finishedSkuId: payload.finishedSkuId,
-      finishedSkuCode: payload.finishedSkuCode,
-      finishedSkuSnapshotName: payload.finishedSkuSnapshotName,
-      quantity: Number(payload.quantity),
       note: payload.note?.trim() || null,
-      outputs: (payload.outputs ?? []).map((output) => ({
+      outputLines: outputLines.map((output) => ({
         finishedSkuId: output.finishedSkuId,
         finishedSkuCode: output.finishedSkuCode,
         finishedSkuSnapshotName: output.finishedSkuSnapshotName,
-        quantity: Number(output.quantity),
+        plannedQuantity: Number(output.plannedQuantity ?? output.quantity),
+        expiresAt: output.expiresAt || null,
       })),
       lines: (payload.lines ?? []).map((l) => ({
         materialSkuId: l.materialSkuId,
