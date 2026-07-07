@@ -3,7 +3,7 @@ import { showError } from '../../../app/toast.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import { formatStockQuantity } from '../../products/utils/productDisplay.js'
 
-const UNKNOWN_CREATOR_VALUE = 'Chưa xác định'
+export const UNKNOWN_CREATOR_VALUE = 'Chưa xác định'
 
 export function SlipPrintStyles() {
   return (
@@ -56,7 +56,7 @@ function normalizeRoleKey(roleName) {
     .replace(/[\s_-]+/g, '')
 }
 
-function formatCreatorRole(roleName) {
+export function formatCreatorRole(roleName) {
   const trimmed = String(roleName || '').trim()
   if (!trimmed) return UNKNOWN_CREATOR_VALUE
 
@@ -175,11 +175,11 @@ function SignatureArea({ creator }) {
   )
 }
 
-function HeaderField({ label, value }) {
+function HeaderField({ label, value, emptyFallback = '-' }) {
   return (
     <div>
       <span className="block text-[11px] font-semibold uppercase tracking-wide text-slate-400">{label}</span>
-      <span className="mt-1 block text-sm font-medium text-slate-800">{value || '-'}</span>
+      <span className="mt-1 block text-sm font-medium text-slate-800">{value || emptyFallback}</span>
     </div>
   )
 }
@@ -227,10 +227,33 @@ function formatAllocations(allocations = []) {
     .join(', ')
 }
 
+function formatQuantityTransition(before, after) {
+  return `${formatStockQuantity(before)} -> ${formatStockQuantity(after)}`
+}
+
+function normalizeProductionNote(note) {
+  return String(note || '')
+    .trim()
+}
+
+function getProductionAwareNote(slip, fallbackText) {
+  const normalizedNote = slip?.productionCode ? normalizeProductionNote(slip.note) : String(slip?.note || '').trim()
+  if (normalizedNote) return normalizedNote
+  return slip?.productionCode ? fallbackText : ''
+}
+
+function isManualMaterialImportSlip(slip) {
+  return slip?.importType === 'manual_material_import'
+}
+
 export function ExportSlipDocument({ slip, getTypeLabel }) {
   const lines = getExportLines(slip)
   const totalQuantity = lines.reduce((sum, line) => sum + Number(line.quantity || 0), 0)
   const creator = getCreatorDisplay(slip)
+  const note = getProductionAwareNote(
+    slip,
+    `Xuất nguyên liệu cho lệnh sản xuất ${slip.productionCode}`,
+  )
 
   return (
     <article className="inventory-slip-print rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -243,7 +266,7 @@ export function ExportSlipDocument({ slip, getTypeLabel }) {
       <div className="mt-5 grid grid-cols-2 gap-4 md:grid-cols-4">
         <HeaderField label="Mã phiếu" value={slip.exportCode} />
         <HeaderField label="Loại xuất" value={getTypeLabel(slip.exportType)} />
-        <HeaderField label="Lệnh SX" value={slip.productionCode} />
+        <HeaderField label="Mã lệnh SX" value={slip.productionCode} />
         <HeaderField label="Thời gian" value={slip.createdAt ? formatVietnamDateTime(slip.createdAt) : '-'} />
         <HeaderField label="Kho" value="Kho tổng" />
         <HeaderField label="Người lập phiếu" value={creator.name} />
@@ -252,9 +275,9 @@ export function ExportSlipDocument({ slip, getTypeLabel }) {
         <HeaderField label="Số dòng" value={`${lines.length} dòng nguyên liệu`} />
       </div>
 
-      {slip.note ? (
+      {note ? (
         <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-          <span className="font-semibold">Ghi chú:</span> {slip.note}
+          <span className="font-semibold">Ghi chú:</span> {note}
         </div>
       ) : null}
 
@@ -265,8 +288,8 @@ export function ExportSlipDocument({ slip, getTypeLabel }) {
               <th className="border-b border-slate-200 px-3 py-2">SKU</th>
               <th className="border-b border-slate-200 px-3 py-2">Nguyên liệu</th>
               <th className="border-b border-slate-200 px-3 py-2 text-right">Số lượng</th>
-              <th className="border-b border-slate-200 px-3 py-2">Kho trước/sau</th>
-              <th className="border-b border-slate-200 px-3 py-2">Cửa hàng trước/sau</th>
+              <th className="border-b border-slate-200 px-3 py-2">Kho trước {'->'} sau</th>
+              <th className="border-b border-slate-200 px-3 py-2">Cửa hàng trước {'->'} sau</th>
               <th className="border-b border-slate-200 px-3 py-2">Lô FIFO</th>
             </tr>
           </thead>
@@ -277,10 +300,10 @@ export function ExportSlipDocument({ slip, getTypeLabel }) {
                 <td className="px-3 py-2 text-slate-800">{line.productSnapshotName || '-'}</td>
                 <td className="px-3 py-2 text-right font-semibold">{formatStockQuantity(line.quantity)}</td>
                 <td className="px-3 py-2 text-slate-700">
-                  {formatStockQuantity(line.warehouseQtyBefore)} / {formatStockQuantity(line.warehouseQtyAfter)}
+                  {formatQuantityTransition(line.warehouseQtyBefore, line.warehouseQtyAfter)}
                 </td>
                 <td className="px-3 py-2 text-slate-700">
-                  {formatStockQuantity(line.storeQtyBefore)} / {formatStockQuantity(line.storeQtyAfter)}
+                  {formatQuantityTransition(line.storeQtyBefore, line.storeQtyAfter)}
                 </td>
                 <td className="px-3 py-2 text-slate-700">{formatAllocations(line.batchAllocations)}</td>
               </tr>
@@ -298,6 +321,14 @@ export function ImportSlipDocument({ slip, getTypeLabel }) {
   const lines = getImportLines(slip)
   const totalQuantity = lines.reduce((sum, line) => sum + Number(line.quantity || 0), 0)
   const creator = getCreatorDisplay(slip)
+  const isManualMaterialImport = isManualMaterialImportSlip(slip)
+  const lineKindLabel = isManualMaterialImport ? 'nguyên liệu' : 'thành phẩm'
+  const productColumnLabel = isManualMaterialImport ? 'Nguyên liệu' : 'Thành phẩm'
+  const lotColumnLabel = isManualMaterialImport ? 'Mã lô nhập' : 'Lô thành phẩm'
+  const note = getProductionAwareNote(
+    slip,
+    `Nhập thành phẩm từ lệnh sản xuất ${slip.productionCode}`,
+  )
 
   return (
     <article className="inventory-slip-print rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -310,18 +341,18 @@ export function ImportSlipDocument({ slip, getTypeLabel }) {
       <div className="mt-5 grid grid-cols-2 gap-4 md:grid-cols-4">
         <HeaderField label="Mã phiếu" value={slip.importCode} />
         <HeaderField label="Loại nhập" value={getTypeLabel(slip.importType)} />
-        <HeaderField label="Lệnh SX" value={slip.productionCode} />
+        <HeaderField label="Mã lệnh SX" value={slip.productionCode} emptyFallback={isManualMaterialImport ? '' : '-'} />
         <HeaderField label="Thời gian" value={slip.createdAt ? formatVietnamDateTime(slip.createdAt) : '-'} />
         <HeaderField label="Kho" value="Kho tổng" />
         <HeaderField label="Người lập phiếu" value={creator.name} />
         <HeaderField label="Chức vụ/Vai trò" value={creator.role} />
         <HeaderField label="Tổng số lượng" value={formatStockQuantity(totalQuantity)} />
-        <HeaderField label="Số dòng" value={`${lines.length} dòng thành phẩm`} />
+        <HeaderField label="Số dòng" value={`${lines.length} dòng ${lineKindLabel}`} />
       </div>
 
-      {slip.note ? (
+      {note ? (
         <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-          <span className="font-semibold">Ghi chú:</span> {slip.note}
+          <span className="font-semibold">Ghi chú:</span> {note}
         </div>
       ) : null}
 
@@ -330,11 +361,11 @@ export function ImportSlipDocument({ slip, getTypeLabel }) {
           <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
             <tr>
               <th className="border-b border-slate-200 px-3 py-2">SKU</th>
-              <th className="border-b border-slate-200 px-3 py-2">Thành phẩm</th>
+              <th className="border-b border-slate-200 px-3 py-2">{productColumnLabel}</th>
               <th className="border-b border-slate-200 px-3 py-2 text-right">Số lượng</th>
-              <th className="border-b border-slate-200 px-3 py-2">Lô thành phẩm</th>
-              <th className="border-b border-slate-200 px-3 py-2">Kho trước/sau</th>
-              <th className="border-b border-slate-200 px-3 py-2">Cửa hàng trước/sau</th>
+              <th className="border-b border-slate-200 px-3 py-2">{lotColumnLabel}</th>
+              <th className="border-b border-slate-200 px-3 py-2">Kho trước {'->'} sau</th>
+              <th className="border-b border-slate-200 px-3 py-2">Cửa hàng trước {'->'} sau</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -347,10 +378,10 @@ export function ImportSlipDocument({ slip, getTypeLabel }) {
                   <span className="font-mono">{line.warehouseBatchLotCode || '-'}</span>
                 </td>
                 <td className="px-3 py-2 text-slate-700">
-                  {formatStockQuantity(line.warehouseQtyBefore)} / {formatStockQuantity(line.warehouseQtyAfter)}
+                  {formatQuantityTransition(line.warehouseQtyBefore, line.warehouseQtyAfter)}
                 </td>
                 <td className="px-3 py-2 text-slate-700">
-                  {formatStockQuantity(line.storeQtyBefore)} / {formatStockQuantity(line.storeQtyAfter)}
+                  {formatQuantityTransition(line.storeQtyBefore, line.storeQtyAfter)}
                 </td>
               </tr>
             ))}

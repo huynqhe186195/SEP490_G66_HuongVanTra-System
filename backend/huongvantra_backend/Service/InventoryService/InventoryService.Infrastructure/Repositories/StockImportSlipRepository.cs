@@ -25,7 +25,11 @@ public class StockImportSlipRepository(InventoryDbContext _db) : IStockImportSli
                 (s.ProductionCode != null && s.ProductionCode.ToLower().Contains(keyword)) ||
                 (s.WarehouseBatchLotCode != null && s.WarehouseBatchLotCode.ToLower().Contains(keyword)) ||
                 s.SkuCode.ToLower().Contains(keyword) ||
-                s.ProductSnapshotName.ToLower().Contains(keyword));
+                s.ProductSnapshotName.ToLower().Contains(keyword) ||
+                s.Lines.Any(l =>
+                    l.SkuCode.ToLower().Contains(keyword) ||
+                    l.ProductSnapshotName.ToLower().Contains(keyword) ||
+                    (l.WarehouseBatchLotCode != null && l.WarehouseBatchLotCode.ToLower().Contains(keyword))));
         }
 
         return await query

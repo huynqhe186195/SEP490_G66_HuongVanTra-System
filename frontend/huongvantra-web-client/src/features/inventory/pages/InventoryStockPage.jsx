@@ -131,7 +131,7 @@ function InventoryStockPage() {
     <PageShell>
       <PageHeader
         title="Kho tổng"
-        description="Tồn kho tổng = tổng các lô còn hàng — nhập lô tại Nhập lô, xuất theo FIFO khi duyệt yêu cầu"
+        description="Tồn kho tổng = tổng các lô còn hàng — nhập nguyên liệu để tạo lô kho, xuất theo FIFO khi duyệt yêu cầu"
         searchPlaceholder="Tìm SKU, sản phẩm..."
         searchValue={searchInput}
         onSearchChange={setSearchInput}
@@ -140,11 +140,11 @@ function InventoryStockPage() {
 
       <div className="mb-4 flex flex-wrap gap-3">
         <Link
-          to="/inventory/import"
+          to="/inventory/import/create"
           className="inline-flex items-center gap-2 rounded-xl bg-[#538463] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#457053]"
         >
           <span className="material-symbols-outlined text-[18px]">add</span>
-          Nhập lô mới
+          Nhập nguyên liệu
         </Link>
         <Link
           to="/inventory/batches"

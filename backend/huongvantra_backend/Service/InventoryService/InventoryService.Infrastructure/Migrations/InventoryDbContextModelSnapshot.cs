@@ -896,19 +896,6 @@ namespace InventoryService.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
 
-                    b.Property<string>("FinishedSkuCode")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("varchar(50)");
-
-                    b.Property<Guid>("FinishedSkuId")
-                        .HasColumnType("char(36)");
-
-                    b.Property<string>("FinishedSkuSnapshotName")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("varchar(255)");
-
                     b.Property<string>("Note")
                         .HasMaxLength(500)
                         .HasColumnType("varchar(500)");
@@ -917,9 +904,6 @@ namespace InventoryService.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(30)
                         .HasColumnType("varchar(30)");
-
-                    b.Property<int>("Quantity")
-                        .HasColumnType("int");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -965,7 +949,10 @@ namespace InventoryService.Infrastructure.Migrations
                         .HasMaxLength(255)
                         .HasColumnType("varchar(255)");
 
-                    b.Property<int>("Quantity")
+                    b.Property<DateTime?>("ExpiresAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("PlannedQuantity")
                         .HasColumnType("int");
 
                     b.Property<Guid>("ProductionOrderId")
@@ -985,6 +972,10 @@ namespace InventoryService.Infrastructure.Migrations
 
                     b.HasIndex("ProductionOrderId")
                         .HasDatabaseName("IX_ProductionOrderOutputLines_ProductionOrderId");
+
+                    b.HasIndex("ProductionOrderId", "FinishedSkuId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ProductionOrderOutputLines_ProductionOrderId_FinishedSkuId");
 
                     b.HasIndex("WarehouseBatchId")
                         .HasDatabaseName("IX_ProductionOrderOutputLines_WarehouseBatchId");

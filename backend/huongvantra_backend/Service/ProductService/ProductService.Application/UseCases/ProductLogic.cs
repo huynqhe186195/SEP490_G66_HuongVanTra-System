@@ -422,12 +422,19 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
             : material.BaseUnit;
     }
 
-    private static ProductVariantResponse MapVariantResponse(ProductVariant v) => new(
-        v.Id, v.ProductId, v.SkuCode, v.Barcode, v.VariantName,
-        v.OptionValuesJson, v.CostPrice, v.RetailPrice, v.MinStock, v.MaxStock,
-        v.IsSellable, v.AllowRewardPoints, v.IsActive, v.ImageUrl,
-        v.Units.Where(u => !u.IsDeleted).Select(MapUnitResponse).ToList(),
-        v.BomLines.Where(b => !b.IsDeleted).Select(MapBomLineResponse).ToList());
+    private static ProductVariantResponse MapVariantResponse(ProductVariant v)
+    {
+        var activeBomLines = v.BomLines.Where(b => !b.IsDeleted).ToList();
+
+        return new ProductVariantResponse(
+            v.Id, v.ProductId, v.SkuCode, v.Barcode, v.VariantName,
+            v.OptionValuesJson, v.CostPrice, v.RetailPrice, v.MinStock, v.MaxStock,
+            v.IsSellable, v.AllowRewardPoints, v.IsActive, v.ImageUrl,
+            activeBomLines.Count > 0,
+            activeBomLines.Count,
+            v.Units.Where(u => !u.IsDeleted).Select(MapUnitResponse).ToList(),
+            activeBomLines.Select(MapBomLineResponse).ToList());
+    }
 
     private static ProductType? ParseProductTypeFilter(string? value)
     {

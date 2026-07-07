@@ -40,5 +40,7 @@ public record ProductVariantResponse(
     bool AllowRewardPoints,
     bool IsActive,
     string? ImageUrl,
+    bool HasBom,
+    int BomLineCount,
     List<ProductUnitResponse> Units,
     List<BomLineResponse> BomLines);

@@ -6,6 +6,8 @@ import PageHeader from '../../../components/shared/PageHeader.jsx'
 
 import PageShell from '../../../components/shared/PageShell.jsx'
 
+import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
+
 import { showError } from '../../../app/toast.js'
 
 import { formatStockQuantity } from '../../products/utils/productDisplay.js'
@@ -19,8 +21,61 @@ import { fetchWarehouseBatches } from '../services/warehouseBatchApi.js'
 
 
 function getBatchSourceLabel(sourceType) {
-  if (sourceType === 'production_finished_goods') return 'Lệnh SX'
+  if (sourceType === 'production_finished_goods') return 'Lô SX'
   return 'Nguồn'
+}
+
+function isProductionBatch(batch) {
+  const sourceType = String(batch?.sourceType || '').toLowerCase()
+  const sourceReferenceCode = String(batch?.sourceReferenceCode || '').toLowerCase()
+  return sourceType.includes('production') || sourceReferenceCode.startsWith('sx-')
+}
+
+function getBatchTypeLabel(batch) {
+  return isProductionBatch(batch) ? 'Sản xuất thành phẩm' : 'Nhập nguyên liệu'
+}
+
+function getBatchTypeClass(batch) {
+  return isProductionBatch(batch)
+    ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+    : 'bg-violet-50 text-violet-700 border border-violet-100'
+}
+
+function normalizeSearchText(value) {
+  return String(value ?? '').trim().toLowerCase()
+}
+
+function fieldMatchesSearch(value, keyword) {
+  return normalizeSearchText(value).includes(keyword)
+}
+
+function batchMatchesSearch(batch, searchValue) {
+  const keyword = normalizeSearchText(searchValue)
+  if (!keyword) return true
+
+  const visibleBatchFields = [
+    batch?.batchCode,
+    batch?.lotCode,
+    batch?.supplierName,
+    batch?.supplier,
+  ]
+
+  if (visibleBatchFields.some((value) => fieldMatchesSearch(value, keyword))) {
+    return true
+  }
+
+  return (batch?.items ?? []).some((item) => {
+    const visibleItemFields = [
+      item?.skuCode,
+      item?.skuName,
+      item?.productSnapshotName,
+      item?.productName,
+      item?.variantName,
+      item?.packagingType,
+    ]
+
+    return visibleItemFields.some((value) => fieldMatchesSearch(value, keyword))
+  })
 }
 
 
@@ -35,6 +90,10 @@ function InventoryBatchesPage() {
 
   const [availableOnly, setAvailableOnly] = useState(false)
 
+  const [page, setPage] = useState(1)
+
+  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE)
+
   const [expandedId, setExpandedId] = useState(null)
 
 
@@ -46,8 +105,6 @@ function InventoryBatchesPage() {
     try {
 
       const items = await fetchWarehouseBatches({
-
-        search: searchInput.trim() || undefined,
 
         availableOnly,
 
@@ -67,7 +124,7 @@ function InventoryBatchesPage() {
 
     }
 
-  }, [searchInput, availableOnly])
+  }, [availableOnly])
 
 
 
@@ -79,13 +136,33 @@ function InventoryBatchesPage() {
 
   }, [loadData])
 
+  useEffect(() => {
+    setPage(1)
+    setExpandedId(null)
+  }, [searchInput, availableOnly])
+
+  const filteredBatches = useMemo(
+    () => batches.filter((batch) => batchMatchesSearch(batch, searchInput)),
+    [batches, searchInput],
+  )
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(filteredBatches.length / pageSize))
+    if (page > totalPages) setPage(totalPages)
+  }, [filteredBatches.length, page, pageSize])
+
+  const pagedBatches = useMemo(() => {
+    const start = (page - 1) * pageSize
+    return filteredBatches.slice(start, start + pageSize)
+  }, [filteredBatches, page, pageSize])
+
 
 
   const totalQty = useMemo(
 
-    () => batches.reduce((sum, b) => sum + (b.totalQuantityOnHand || 0), 0),
+    () => filteredBatches.reduce((sum, b) => sum + (b.totalQuantityOnHand || 0), 0),
 
-    [batches],
+    [filteredBatches],
 
   )
 
@@ -135,7 +212,7 @@ function InventoryBatchesPage() {
 
         <p className="text-sm text-slate-500">
 
-          {batches.length} lô · tổng còn <strong>{formatStockQuantity(totalQty)}</strong> đơn vị
+          {filteredBatches.length} lô · tổng còn <strong>{formatStockQuantity(totalQty)}</strong> đơn vị
 
         </p>
 
@@ -157,6 +234,8 @@ function InventoryBatchesPage() {
 
                 <th className="px-4 py-3">Dòng SKU</th>
 
+                <th className="px-4 py-3">Loại lô</th>
+
                 <th className="px-4 py-3">Tổng còn</th>
 
                 <th className="px-4 py-3">HSD</th>
@@ -175,7 +254,7 @@ function InventoryBatchesPage() {
 
                 <tr>
 
-                  <td colSpan={6} className="px-6 py-8 text-slate-500">
+                  <td colSpan={7} className="px-6 py-8 text-slate-500">
 
                     Đang tải...
 
@@ -183,17 +262,17 @@ function InventoryBatchesPage() {
 
                 </tr>
 
-              ) : batches.length === 0 ? (
+              ) : filteredBatches.length === 0 ? (
 
                 <tr>
 
-                  <td colSpan={6} className="px-6 py-8 text-slate-500">
+                  <td colSpan={7} className="px-6 py-8 text-slate-500">
 
                     Chưa có lô —{' '}
 
-                    <Link to="/inventory/import" className="font-semibold text-[#356647] hover:underline">
+                    <Link to="/inventory/import/create" className="font-semibold text-[#356647] hover:underline">
 
-                      nhập lô mới
+                      nhập nguyên liệu
 
                     </Link>
 
@@ -203,7 +282,7 @@ function InventoryBatchesPage() {
 
               ) : (
 
-                batches.map((batch) => {
+                pagedBatches.map((batch) => {
 
                   const isOpen = expandedId === batch.id
 
@@ -247,6 +326,16 @@ function InventoryBatchesPage() {
 
                         <td className="px-4 py-4 text-slate-700">{batch.skuLineCount} SKU</td>
 
+                        <td className="px-4 py-4">
+
+                          <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${getBatchTypeClass(batch)}`}>
+
+                            {getBatchTypeLabel(batch)}
+
+                          </span>
+
+                        </td>
+
                         <td className="px-4 py-4 font-semibold text-slate-800">
 
                           {formatStockQuantity(batch.totalQuantityOnHand)}
@@ -289,7 +378,7 @@ function InventoryBatchesPage() {
 
                         <tr key={`${batch.id}-detail`}>
 
-                          <td colSpan={6} className="bg-[#fbf9f1]/40 px-6 py-4">
+                          <td colSpan={7} className="bg-[#fbf9f1]/40 px-6 py-4">
 
                             <table className="w-full text-sm">
 
@@ -364,6 +453,16 @@ function InventoryBatchesPage() {
           </table>
 
         </div>
+
+        <TablePagination
+          page={page}
+          pageSize={pageSize}
+          totalCount={filteredBatches.length}
+          itemLabel="lô"
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+          disabled={isLoading}
+        />
 
       </section>
 

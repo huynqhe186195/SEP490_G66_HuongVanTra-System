@@ -53,6 +53,7 @@ function InventoryBomPage() {
   const [rows, setRows] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [activeVariant, setActiveVariant] = useState(null)
+  const [handledOpenBomParam, setHandledOpenBomParam] = useState('')
 
   const loadRows = useCallback(async () => {
     setIsLoading(true)
@@ -82,12 +83,24 @@ function InventoryBomPage() {
 
   useEffect(() => {
     const variantId = searchParams.get('variantId')
-    if (!variantId || rows.length === 0) return
+    const openBom = searchParams.get('openBom')
+    const shouldOpenBom = Boolean(variantId) && (openBom === 'true' || openBom === null)
+    if (!shouldOpenBom) return
+
+    const paramKey = `${variantId}:${openBom ?? ''}`
+    if (handledOpenBomParam === paramKey || isLoading) return
+
+    setHandledOpenBomParam(paramKey)
     const row = rows.find((item) => String(item.variantId) === String(variantId))
-    if (!row) return
+    if (!row) {
+      showError('Không tìm thấy SKU thành phẩm để cấu hình BOM.')
+      setSearchParams({}, { replace: true })
+      return
+    }
+
     openBomModal(row)
     setSearchParams({}, { replace: true })
-  }, [searchParams, rows, setSearchParams])
+  }, [searchParams, rows, isLoading, handledOpenBomParam, setSearchParams])
 
   function openBomModal(row) {
     setActiveVariant({
@@ -143,7 +156,7 @@ function InventoryBomPage() {
         <div className="mb-4 rounded-xl border border-[#538463]/15 bg-[#f3f7f4] px-4 py-3 text-sm text-[#356647]">
           <p className="font-semibold">BOM được lưu theo finished ProductVariant/SKU.</p>
           <p className="mt-1 text-xs text-[#4d6f58]">
-            Khi tạo ProductionOrder, hệ thống đọc định mức của SKU thành phẩm để tính tổng nguyên liệu cần xuất.
+            Khi tạo lệnh sản xuất, hệ thống đọc định mức của SKU thành phẩm để tính tổng nguyên liệu cần xuất.
           </p>
         </div>
 

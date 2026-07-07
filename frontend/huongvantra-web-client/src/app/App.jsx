@@ -18,6 +18,7 @@ import InventoryBomPage from '../features/inventory/pages/InventoryBomPage.jsx'
 import InventoryBomCreatePage from '../features/inventory/pages/InventoryBomCreatePage.jsx'
 import InventoryPage from '../features/inventory/pages/InventoryPage.jsx'
 import InventoryBatchesPage from '../features/inventory/pages/InventoryBatchesPage.jsx'
+import InventoryImportCreatePage from '../features/inventory/pages/InventoryImportCreatePage.jsx'
 import InventoryImportPage from '../features/inventory/pages/InventoryImportPage.jsx'
 import InventoryStockPage from '../features/inventory/pages/InventoryStockPage.jsx'
 import ProfilePage from '../features/profile/pages/ProfilePage.jsx'
@@ -80,6 +81,7 @@ function App() {
         <Route path="/inventory/stock-requests" element={<StockAdjustmentRequestsPage />} />
         <Route path="/inventory/batches" element={<InventoryBatchesPage />} />
         <Route path="/inventory/import" element={<InventoryImportPage />} />
+        <Route path="/inventory/import/create" element={<InventoryImportCreatePage />} />
         <Route path="/inventory/export" element={<InventoryExportPage />} />
         <Route path="/inventory/production" element={<Navigate to="/inventory/production-orders" replace />} />
         <Route path="/inventory/production-orders" element={<ProductionOrdersPage />} />

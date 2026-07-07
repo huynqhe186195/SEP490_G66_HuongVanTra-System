@@ -1,10 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { showError } from '../../../app/toast.js'
+import { formatVietnamDate, formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
+import { useAuthSession } from '../../auth/hooks/useAuthSession.js'
+import { me } from '../../auth/services/authApi.js'
 import { fetchProductById, fetchProducts } from '../../products/services/productsApi.js'
 import { fetchSkusByProductId, fetchAllActiveSkus } from '../../products/services/productSkusApi.js'
+import { formatCreatorRole, UNKNOWN_CREATOR_VALUE } from './InventorySlipDocument.jsx'
 import { createProductionOrder } from '../services/productionOrderApi.js'
 
-const STEPS = ['Thành phẩm đầu ra', 'Nguyên liệu (BOM)', 'Xác nhận']
+const STEPS = ['Thành phẩm đầu ra', 'Nguyên liệu cần xuất', 'Xác nhận']
 
 function sameId(left, right) {
   return String(left ?? '') === String(right ?? '')
@@ -15,6 +19,7 @@ function createOutputRow() {
     key: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
     skuId: '',
     quantity: '',
+    expiresAt: '',
   }
 }
 
@@ -74,7 +79,23 @@ function getSkuDisplayName(sku) {
   return [sku.skuCode, sku.productName].filter(Boolean).join(' - ')
 }
 
+function getCreatorName(session, currentUser) {
+  const fullName = String(currentUser?.fullName || session?.fullName || '').trim()
+  const username = String(currentUser?.username || session?.username || '').trim()
+  return fullName || username || UNKNOWN_CREATOR_VALUE
+}
+
+function getCreatorRole(session, currentUser) {
+  const roles = currentUser?.roles?.length ? currentUser.roles : (session?.roles ?? [])
+  const labels = roles
+    .map(formatCreatorRole)
+    .filter((role) => role && role !== UNKNOWN_CREATOR_VALUE)
+
+  return labels.length ? [...new Set(labels)].join(', ') : UNKNOWN_CREATOR_VALUE
+}
+
 function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
+  const authSession = useAuthSession()
   const [step, setStep] = useState(0)
 
   // Step 0
@@ -91,6 +112,8 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
   // Step 2
   const [saving, setSaving] = useState(false)
   const [note, setNote] = useState('')
+  const [currentUser, setCurrentUser] = useState(null)
+  const [expectedCreatedAt, setExpectedCreatedAt] = useState('')
 
   const prevIsOpen = useRef(false)
 
@@ -101,6 +124,8 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
       setBomLines([])
       setBomError('')
       setNote('')
+      setCurrentUser(null)
+      setExpectedCreatedAt('')
       setLoadingSkus(true)
       Promise.all([fetchAllActiveSkus(), fetchFinishedProductsForProduction()])
         .then(([items, finishedProducts]) => {
@@ -118,6 +143,29 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
     prevIsOpen.current = isOpen
   }, [isOpen])
 
+  useEffect(() => {
+    let mounted = true
+
+    if (!isOpen || !authSession?.accessToken) {
+      setCurrentUser(null)
+      return () => {
+        mounted = false
+      }
+    }
+
+    me(authSession.accessToken)
+      .then((user) => {
+        if (mounted) setCurrentUser(user)
+      })
+      .catch(() => {
+        if (mounted) setCurrentUser(null)
+      })
+
+    return () => {
+      mounted = false
+    }
+  }, [isOpen, authSession?.accessToken])
+
   if (!isOpen) return null
 
   const selectedOutputs = outputRows
@@ -127,6 +175,17 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
       quantityNumber: Number(row.quantity),
     }))
     .filter((row) => row.skuId)
+  const totalOutputQuantity = selectedOutputs.reduce(
+    (sum, output) => sum + (Number.isFinite(output.quantityNumber) ? output.quantityNumber : 0),
+    0,
+  )
+  const totalMaterialQuantity = bomLines.reduce(
+    (sum, line) => sum + (Number(line.requiredQuantity) || 0),
+    0,
+  )
+  const creatorName = getCreatorName(authSession, currentUser)
+  const creatorRole = getCreatorRole(authSession, currentUser)
+  const expectedCreatedAtLabel = formatVietnamDateTime(expectedCreatedAt || new Date().toISOString())
 
   function updateOutputRow(key, changes) {
     setOutputRows((prev) =>
@@ -162,9 +221,9 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
 
     for (const row of rows) {
       if (!row.skuId) {
-      showError('Vui lòng chọn SKU thành phẩm cho tất cả dòng đầu ra.')
-      return null
-    }
+        showError('Vui lòng chọn SKU thành phẩm cho tất cả dòng đầu ra.')
+        return null
+      }
       if (!row.sku) {
         showError('SKU thành phẩm không hợp lệ.')
         return null
@@ -205,7 +264,7 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
 
         if (!selectedVariant) {
           throw new Error(
-            `Không xác định được biến thể của SKU ${output.sku?.skuCode ?? ''}. Vui lòng kiểm tra dữ liệu SKU/ProductVariant trước khi tạo lệnh.`,
+            `Không xác định được biến thể của SKU ${output.sku?.skuCode ?? ''}. Vui lòng kiểm tra dữ liệu SKU/ProductVariant trước khi tạo lệnh sản xuất.`,
           )
         }
 
@@ -304,6 +363,7 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
 
   function handleNextStep1() {
     if (!validateBomLines()) return
+    setExpectedCreatedAt(new Date().toISOString())
     setStep(2)
   }
 
@@ -311,20 +371,16 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
     const rows = validateOutputRows()
     if (!rows || !validateBomLines()) return
 
-    const firstOutput = rows[0]
     setSaving(true)
     try {
       const order = await createProductionOrder({
-        finishedSkuId: firstOutput.skuId,
-        finishedSkuCode: firstOutput.sku?.skuCode ?? '',
-        finishedSkuSnapshotName: firstOutput.sku?.productName ?? '',
-        quantity: firstOutput.quantityNumber,
         note,
-        outputs: rows.map((row) => ({
+        outputLines: rows.map((row) => ({
           finishedSkuId: row.skuId,
           finishedSkuCode: row.sku?.skuCode ?? '',
           finishedSkuSnapshotName: row.sku?.productName ?? '',
-          quantity: row.quantityNumber,
+          plannedQuantity: row.quantityNumber,
+          expiresAt: row.expiresAt || null,
         })),
         lines: bomLines.map((line) => ({
           materialSkuId: line.skuId,
@@ -395,7 +451,7 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
                         </button>
                       )}
                     </div>
-                    <div className="grid gap-3 sm:grid-cols-[1fr_140px]">
+                    <div className="grid gap-3 sm:grid-cols-[1fr_140px_160px]">
                       <label className="block space-y-1.5">
                         <span className="text-xs font-semibold text-[#717971]">SKU thành phẩm *</span>
                         <select
@@ -422,6 +478,15 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
                           placeholder="VD: 100"
                           value={row.quantity}
                           onChange={(event) => updateOutputRow(row.key, { quantity: event.target.value })}
+                        />
+                      </label>
+                      <label className="block space-y-1.5">
+                        <span className="text-xs font-semibold text-[#717971]">Hạn sử dụng</span>
+                        <input
+                          type="date"
+                          className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-sm"
+                          value={row.expiresAt}
+                          onChange={(event) => updateOutputRow(row.key, { expiresAt: event.target.value })}
                         />
                       </label>
                     </div>
@@ -459,6 +524,7 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
                           <tr>
                             <th className="px-4 py-2 font-semibold">SKU thành phẩm</th>
                             <th className="px-4 py-2 text-right font-semibold">Số lượng sản xuất</th>
+                            <th className="px-4 py-2 font-semibold">Hạn sử dụng</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
@@ -467,6 +533,9 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
                               <td className="px-4 py-2 font-medium text-slate-800">{getSkuDisplayName(output.sku)}</td>
                               <td className="px-4 py-2 text-right font-semibold text-slate-800">
                                 {formatQuantity(output.quantityNumber)}
+                              </td>
+                              <td className="px-4 py-2 text-slate-700">
+                                {output.expiresAt ? formatVietnamDate(output.expiresAt) : '—'}
                               </td>
                             </tr>
                           ))}
@@ -478,7 +547,7 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
                     <div className="border-b border-slate-100 px-4 py-3">
                       <p className="text-xs font-bold uppercase tracking-wide text-[#717971]">Tổng nguyên liệu theo BOM</p>
                       <p className="mt-1 text-xs text-slate-500">
-                        Nguyên liệu được cộng dồn từ BOM của tất cả thành phẩm đầu ra.
+                        Nguyên liệu được cộng dồn từ BOM của tất cả SKU thành phẩm trong lệnh sản xuất.
                       </p>
                     </div>
                     <div className="overflow-x-auto">
@@ -523,56 +592,141 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
                       </table>
                     </div>
                   </div>
+                  <label className="block space-y-1.5 rounded-xl border border-slate-100 bg-white p-4">
+                    <span className="text-xs font-semibold text-[#717971]">Ghi chú (tuỳ chọn)</span>
+                    <textarea
+                      rows={3}
+                      className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-sm"
+                      value={note}
+                      onChange={(event) => setNote(event.target.value)}
+                      placeholder="Ghi chú thêm về lệnh sản xuất..."
+                    />
+                  </label>
                 </div>
               )}
             </div>
           )}
 
           {step === 2 && (
-            <div className="space-y-4">
-              <div className="rounded-xl border border-slate-100 bg-white">
-                <div className="border-b border-slate-100 px-4 py-3">
-                  <p className="text-xs font-bold uppercase tracking-wide text-[#717971]">Thành phẩm đầu ra</p>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="min-w-full text-left text-xs">
-                    <thead className="bg-slate-50 text-[#717971]">
-                      <tr>
-                        <th className="px-4 py-2 font-semibold">SKU thành phẩm</th>
-                        <th className="px-4 py-2 text-right font-semibold">Số lượng sản xuất</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {selectedOutputs.map((output) => (
-                        <tr key={output.key}>
-                          <td className="px-4 py-2 font-medium text-slate-800">{getSkuDisplayName(output.sku)}</td>
-                          <td className="px-4 py-2 text-right font-semibold text-slate-800">
-                            {formatQuantity(output.quantityNumber)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+            <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+              <div className="border-b border-slate-200 px-5 py-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#717971]">
+                      Phiếu xác nhận
+                    </p>
+                    <h3 className="mt-1 text-lg font-bold uppercase text-slate-900">
+                      Lệnh sản xuất kho tổng
+                    </h3>
+                  </div>
+                  <div className="text-right text-xs text-slate-500">
+                    <p className="font-semibold text-slate-700">Mã lệnh</p>
+                    <p className="mt-1 font-mono text-[#356647]">Sinh tự động khi tạo</p>
+                  </div>
                 </div>
               </div>
 
-              {bomLines.length > 0 && (
-                <div className="rounded-xl border border-slate-100 bg-white">
-                  <div className="border-b border-slate-100 px-4 py-3">
-                    <p className="text-xs font-bold uppercase tracking-wide text-[#717971]">Nguyên liệu cần xuất</p>
+              <div className="space-y-5 px-5 py-4">
+                <div className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+                  <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2.5">
+                    <p className="text-[11px] font-bold uppercase tracking-wide text-[#717971]">Trạng thái</p>
+                    <p className="mt-1 font-semibold text-slate-900">Chờ xác nhận</p>
                   </div>
-                  <div className="overflow-x-auto">
+                  <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2.5">
+                    <p className="text-[11px] font-bold uppercase tracking-wide text-[#717971]">Phạm vi tồn kho</p>
+                    <p className="mt-1 font-semibold text-slate-900">Kho tổng</p>
+                  </div>
+                  <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2.5">
+                    <p className="text-[11px] font-bold uppercase tracking-wide text-[#717971]">Người tạo lệnh</p>
+                    <p className="mt-1 font-semibold text-slate-900">{creatorName}</p>
+                  </div>
+                  <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2.5">
+                    <p className="text-[11px] font-bold uppercase tracking-wide text-[#717971]">Vai trò</p>
+                    <p className="mt-1 font-semibold text-slate-900">{creatorRole}</p>
+                  </div>
+                  <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2.5">
+                    <p className="text-[11px] font-bold uppercase tracking-wide text-[#717971]">Thời gian lập</p>
+                    <p className="mt-1 font-semibold text-slate-900">{expectedCreatedAtLabel}</p>
+                  </div>
+                  <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2.5">
+                    <p className="text-[11px] font-bold uppercase tracking-wide text-[#717971]">Tổng SKU đầu ra</p>
+                    <p className="mt-1 font-semibold text-slate-900">{selectedOutputs.length}</p>
+                  </div>
+                  <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2.5">
+                    <p className="text-[11px] font-bold uppercase tracking-wide text-[#717971]">Tổng SL sản xuất</p>
+                    <p className="mt-1 font-semibold text-slate-900">{formatQuantity(totalOutputQuantity)}</p>
+                  </div>
+                  <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2.5">
+                    <p className="text-[11px] font-bold uppercase tracking-wide text-[#717971]">Số dòng nguyên liệu cần xuất</p>
+                    <p className="mt-1 font-semibold text-slate-900">
+                      {bomLines.length}
+                    </p>
+                  </div>
+                </div>
+
+                <section>
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <p className="text-xs font-bold uppercase tracking-wide text-[#717971]">Thành phẩm đầu ra</p>
+                    <p className="text-xs text-slate-500">Mỗi SKU tạo một lô thành phẩm riêng khi hoàn thành.</p>
+                  </div>
+                  <div className="overflow-x-auto rounded-lg border border-slate-100">
                     <table className="min-w-full text-left text-xs">
                       <thead className="bg-slate-50 text-[#717971]">
                         <tr>
+                          <th className="w-12 px-4 py-2 font-semibold">STT</th>
+                          <th className="px-4 py-2 font-semibold">SKU thành phẩm</th>
+                          <th className="px-4 py-2 font-semibold">Tên thành phẩm</th>
+                          <th className="px-4 py-2 text-right font-semibold">Số lượng sản xuất</th>
+                          <th className="px-4 py-2 font-semibold">Hạn sử dụng</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {selectedOutputs.map((output, index) => (
+                          <tr key={output.key}>
+                            <td className="px-4 py-2 text-slate-500">{index + 1}</td>
+                            <td className="px-4 py-2 font-mono font-semibold text-[#356647]">
+                              {output.sku?.skuCode || '—'}
+                            </td>
+                            <td className="px-4 py-2 font-medium text-slate-800">
+                              {output.sku?.productName || '—'}
+                              {output.sku?.variantName ? (
+                                <span className="block text-[11px] font-normal text-slate-500">
+                                  {output.sku.variantName}
+                                </span>
+                              ) : null}
+                            </td>
+                            <td className="px-4 py-2 text-right font-semibold text-slate-800">
+                              {formatQuantity(output.quantityNumber)}
+                            </td>
+                            <td className="px-4 py-2 text-slate-700">
+                              {output.expiresAt ? formatVietnamDate(output.expiresAt) : '—'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+
+                <section>
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <p className="text-xs font-bold uppercase tracking-wide text-[#717971]">Nguyên liệu cần xuất</p>
+                    <p className="text-xs text-slate-500">Tổng nguyên liệu theo BOM đã chọn.</p>
+                  </div>
+                  <div className="overflow-x-auto rounded-lg border border-slate-100">
+                    <table className="min-w-full text-left text-xs">
+                      <thead className="bg-slate-50 text-[#717971]">
+                        <tr>
+                          <th className="w-12 px-4 py-2 font-semibold">STT</th>
                           <th className="px-4 py-2 font-semibold">Nguyên liệu</th>
                           <th className="px-4 py-2 font-semibold">SKU xuất kho</th>
                           <th className="px-4 py-2 text-right font-semibold">Số lượng cần xuất</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {bomLines.map((line) => (
+                        {bomLines.map((line, index) => (
                           <tr key={line.materialId}>
+                            <td className="px-4 py-2 text-slate-500">{index + 1}</td>
                             <td className="px-4 py-2 font-medium text-slate-800">{line.materialName}</td>
                             <td className="px-4 py-2 font-mono font-semibold text-[#356647]">{line.skuCode}</td>
                             <td className="px-4 py-2 text-right font-semibold text-slate-800">
@@ -583,18 +737,38 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
                       </tbody>
                     </table>
                   </div>
+                </section>
+
+                <section className="grid gap-3 text-sm md:grid-cols-[1fr_220px]">
+                  <div className="rounded-lg border border-slate-100 bg-slate-50 px-4 py-3">
+                    <p className="text-xs font-bold uppercase tracking-wide text-[#717971]">Ghi chú</p>
+                    <p className="mt-2 min-h-10 whitespace-pre-wrap text-slate-700">
+                      {note.trim() || 'Không có ghi chú'}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-slate-100 bg-slate-50 px-4 py-3">
+                    <p className="text-xs font-bold uppercase tracking-wide text-[#717971]">Tổng nguyên liệu</p>
+                    <p className="mt-2 font-semibold text-slate-700">{formatQuantity(totalMaterialQuantity)}</p>
+                    <p className="mt-1 text-xs text-slate-500">Không nhập trực tiếp vào tồn POS/cửa hàng.</p>
+                  </div>
+                </section>
+
+                <div className="grid gap-4 pt-2 text-center text-xs text-slate-500 sm:grid-cols-3">
+                  <div className="border-t border-slate-200 pt-2">
+                    <p className="font-semibold text-slate-700">Người lập phiếu</p>
+                    <p className="mt-8 font-medium text-slate-800">{creatorName}</p>
+                    <p className="mt-1 text-[11px] text-slate-500">Vai trò: {creatorRole}</p>
+                  </div>
+                  <div className="border-t border-slate-200 pt-2">
+                    <p className="font-semibold text-slate-700">Thủ kho</p>
+                    <p className="mt-12 text-[11px] text-slate-400">(Ký, ghi rõ họ tên)</p>
+                  </div>
+                  <div className="border-t border-slate-200 pt-2">
+                    <p className="font-semibold text-slate-700">Quản lý xác nhận</p>
+                    <p className="mt-12 text-[11px] text-slate-400">(Ký, ghi rõ họ tên)</p>
+                  </div>
                 </div>
-              )}
-              <label className="block space-y-1.5">
-                <span className="text-xs font-semibold text-[#717971]">Ghi chú (tuỳ chọn)</span>
-                <textarea
-                  rows={3}
-                  className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-sm"
-                  value={note}
-                  onChange={(event) => setNote(event.target.value)}
-                  placeholder="Ghi chú thêm về lệnh sản xuất..."
-                />
-              </label>
+              </div>
             </div>
           )}
         </main>

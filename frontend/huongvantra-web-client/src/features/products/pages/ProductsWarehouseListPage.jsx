@@ -29,7 +29,6 @@ import {
   formatProductPrice,
   formatStockQuantity,
   getProductStatusMeta,
-  isSyncedToStore,
   pickProductImageUrl,
   summarizeProductVariants,
   summarizeProductSkus,
@@ -174,6 +173,78 @@ function getVariantLabel(variant, productName) {
   return name.startsWith(prefix) ? name.slice(prefix.length) : name || variant.skuCode || '—'
 }
 
+const MISSING_BOM_TITLE = 'Thành phẩm này chưa có định mức BOM, chưa nên dùng để tạo lệnh sản xuất.'
+const PRODUCT_FETCH_PAGE_SIZE = 100
+
+async function fetchAllProductsForWarehouseList(params = {}) {
+  const items = []
+  let requestPage = 1
+  let totalPages = 1
+
+  do {
+    const result = await fetchProducts({
+      ...params,
+      page: requestPage,
+      pageSize: PRODUCT_FETCH_PAGE_SIZE,
+    })
+    items.push(...(result.items ?? []))
+    totalPages = Number(result.totalPages ?? 1) || 1
+    requestPage += 1
+  } while (requestPage <= totalPages)
+
+  return items
+}
+
+function buildSkuRows(products = []) {
+  return products.flatMap((product) => {
+    const variants = product.variants?.length ? product.variants : (product.skus ?? [])
+
+    if (!variants.length) {
+      return [{
+        rowKey: `${product.id}:no-sku`,
+        product,
+        sku: null,
+        isFirstForProduct: true,
+      }]
+    }
+
+    return variants.map((sku, index) => ({
+      rowKey: `${product.id}:${sku.id}`,
+      product,
+      sku,
+      isFirstForProduct: index === 0,
+    }))
+  })
+}
+
+function matchesSkuRowSearch(row, keyword) {
+  const term = keyword.trim().toLowerCase()
+  if (!term) return true
+
+  const product = row.product
+  const sku = row.sku
+  const haystack = [
+    product.name,
+    product.categoryName,
+    product.origin,
+    product.description,
+    sku?.skuCode,
+    sku?.barcode,
+    sku?.variantName,
+    sku?.packagingType,
+  ].filter(Boolean).join(' ').toLowerCase()
+
+  return haystack.includes(term)
+}
+
+function matchesSkuRowStatus(row, statusFilter) {
+  if (statusFilter === 'active') {
+    return !row.product.isDeleted && row.product.isActive !== false && row.sku?.isActive !== false
+  }
+
+  return true
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 const COL = 11
@@ -206,7 +277,6 @@ export default function ProductsWarehouseListPage() {
   const [productTypeFilter, setProductTypeFilter] = useState('')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE)
-  const [totalCount, setTotalCount] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
   const [stockBySkuId, setStockBySkuId] = useState(() => new Map())
   const [storeStockBySkuId, setStoreStockBySkuId] = useState(() => new Map())
@@ -218,8 +288,7 @@ export default function ProductsWarehouseListPage() {
   const [transferTarget, setTransferTarget] = useState(null)
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
   const [focusProductId, setFocusProductId] = useState(() => initialState.focusId)
-  const [expandedProductId, setExpandedProductId] = useState(null)
-  const [selectedVariantByProductId, setSelectedVariantByProductId] = useState(() => new Map())
+  const [expandedRowKey, setExpandedRowKey] = useState(null)
   const [createdBanner, setCreatedBanner] = useState(() => ({
     open: initialState.showCreatedBanner,
     productId: initialState.focusId,
@@ -273,28 +342,23 @@ export default function ProductsWarehouseListPage() {
   const loadProducts = useCallback(async () => {
     try {
       setIsLoading(true)
-      const [result] = await Promise.all([
-        fetchProducts({
-          search: search || undefined,
+      const [items] = await Promise.all([
+        fetchAllProductsForWarehouseList({
           categoryId: categoryId ? Number(categoryId) : undefined,
           isActive: statusFilter === 'active' ? true : undefined,
           isDeleted: statusFilter === 'hidden' ? true : undefined,
           productType: productTypeFilter || undefined,
-          page,
-          pageSize,
         }),
         loadStocks(),
       ])
-      setProducts(result.items)
-      setTotalCount(result.totalCount)
+      setProducts(items)
     } catch (error) {
       setProducts([])
-      setTotalCount(0)
       showError(error.message)
     } finally {
       setIsLoading(false)
     }
-  }, [search, categoryId, statusFilter, productTypeFilter, page, pageSize, loadStocks])
+  }, [categoryId, statusFilter, productTypeFilter, loadStocks])
 
   const loadCategories = useCallback(async () => {
     try {
@@ -335,6 +399,22 @@ export default function ProductsWarehouseListPage() {
     if (found?.name && found.name !== createdBanner.name)
       setCreatedBanner((prev) => ({ ...prev, name: found.name }))
   }, [products, createdBanner.open, createdBanner.productId, createdBanner.name])
+
+  const skuRows = useMemo(() => buildSkuRows(products), [products])
+  const filteredSkuRows = useMemo(
+    () => skuRows.filter((row) => matchesSkuRowSearch(row, search) && matchesSkuRowStatus(row, statusFilter)),
+    [skuRows, search, statusFilter],
+  )
+  const totalCount = filteredSkuRows.length
+  const pagedSkuRows = useMemo(() => {
+    const start = (page - 1) * pageSize
+    return filteredSkuRows.slice(start, start + pageSize)
+  }, [filteredSkuRows, page, pageSize])
+
+  useEffect(() => {
+    const maxPage = Math.max(1, Math.ceil(totalCount / pageSize))
+    if (page > maxPage) setPage(maxPage)
+  }, [page, pageSize, totalCount])
 
   // ── Actions ────────────────────────────────────────────────────────────────
   async function handleSyncCatalog() {
@@ -385,28 +465,9 @@ export default function ProductsWarehouseListPage() {
     }
   }
 
-  // ── Variant selection ──────────────────────────────────────────────────────
-  function getSelectedVariant(product) {
-    const variants = product.variants ?? []
-    if (!variants.length) return null
-    const selectedId = selectedVariantByProductId.get(String(product.id))
-    if (selectedId) {
-      const found = variants.find((v) => String(v.id) === selectedId)
-      if (found) return found
-    }
-    return variants.find((v) => v.isActive) ?? variants[0]
-  }
-
-  function selectVariant(productId, variantId) {
-    setSelectedVariantByProductId((prev) => {
-      const next = new Map(prev)
-      next.set(String(productId), String(variantId))
-      return next
-    })
-  }
-
-  function toggleExpand(productId) {
-    setExpandedProductId((cur) => (cur === productId ? null : productId))
+  // ── Row expansion ─────────────────────────────────────────────────────────
+  function toggleExpand(rowKey) {
+    setExpandedRowKey((cur) => (cur === rowKey ? null : rowKey))
   }
 
   function openTransferToStore(product, sku) {
@@ -445,7 +506,7 @@ export default function ProductsWarehouseListPage() {
             <div>
               <h1 className="text-xl font-bold text-slate-900">Sản phẩm &amp; số lượng</h1>
               <p className="mt-0.5 text-xs text-slate-500">
-                Master catalog kho — tồn kho tổng cập nhật theo lô nhập ({totalCount} sản phẩm)
+                Master catalog kho — tồn kho tổng cập nhật theo từng SKU ({totalCount} SKU)
               </p>
             </div>
 
@@ -459,7 +520,7 @@ export default function ProductsWarehouseListPage() {
                   type="search"
                   value={searchInput}
                   onChange={(e) => setSearchInput(e.target.value)}
-                  placeholder="Tìm theo tên, xuất xứ..."
+                  placeholder="Tìm theo SKU, tên, biến thể..."
                   className="w-full rounded-lg border border-slate-200 bg-white py-2.5 pl-10 pr-3 text-sm outline-none focus:border-[#356647] focus:ring-2 focus:ring-[#356647]/15"
                 />
               </div>
@@ -509,12 +570,12 @@ export default function ProductsWarehouseListPage() {
 
                 {isWarehouse ? (
                   <Link
-                    to="/inventory/import"
+                    to="/inventory/import/create"
                     className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-                    title="Nhập lô hàng"
+                    title="Nhập nguyên liệu vào kho"
                   >
                     <span className="material-symbols-outlined text-[18px]">inventory</span>
-                    Nhập lô
+                    Nhập nguyên liệu
                   </Link>
                 ) : null}
 
@@ -550,7 +611,7 @@ export default function ProductsWarehouseListPage() {
                   Đã lưu sản phẩm{createdBanner.name ? ` "${createdBanner.name}"` : ''}.
                 </p>
                 <p className="mt-0.5 text-sm text-[#356647]">
-                  Biến thể đã tự sinh từ đơn vị tính. Nhập lô để có tồn kho.
+                  Biến thể đã tự sinh từ đơn vị tính. Nhập nguyên liệu để có tồn kho.
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
@@ -606,33 +667,42 @@ export default function ProductsWarehouseListPage() {
                         Đang tải...
                       </td>
                     </tr>
-                  ) : products.length === 0 ? (
+                  ) : filteredSkuRows.length === 0 ? (
                     <tr>
                       <td colSpan={COL} className="px-6 py-10 text-center text-slate-500">
-                        Không có sản phẩm phù hợp.
+                        Không có SKU phù hợp.
                       </td>
                     </tr>
                   ) : (
-                    products.map((product) => {
-                      const status = getProductStatusMeta(product.isActive, product.isDeleted)
+                    pagedSkuRows.map((row) => {
+                      const { product, sku: selectedVariant } = row
+                      const status = getProductStatusMeta(
+                        product.isActive !== false && selectedVariant?.isActive !== false,
+                        product.isDeleted,
+                      )
                       const variants = product.variants ?? []
-                      const selectedVariant = getSelectedVariant(product)
-                      const hasMultiple = variants.length > 1
                       const imageUrl = selectedVariant?.imageUrl || pickProductImageUrl(product)
                       const stockQty = selectedVariant ? Number(stockBySkuId.get(selectedVariant.id) ?? 0) : 0
                       const isOut = stockQty <= 0
                       const isLow = stockQty > 0 && stockQty <= 5
-                      const isExpanded = expandedProductId === product.id
+                      const isExpanded = expandedRowKey === row.rowKey
                       const isFocused = focusProductId && String(product.id) === focusProductId
                       const isNguyenLieu = product.productType === 'NGUYEN_LIEU'
+                      const isFinishedProduct = product.productType === 'THANH_PHAM'
+                      const selectedVariantBomLineCount = Number(selectedVariant?.bomLineCount ?? 0)
+                      const selectedVariantHasBom = selectedVariant
+                        ? Boolean(selectedVariant.hasBom || selectedVariantBomLineCount > 0)
+                        : false
                       const skuSummary = variants.length
                         ? summarizeProductVariants(variants)
                         : summarizeProductSkus(product.skus ?? [])
 
                       return (
-                        <Fragment key={product.id}>
+                        <Fragment key={row.rowKey}>
                           <tr
-                            id={`product-row-${product.id}`}
+                            id={row.isFirstForProduct ? `product-row-${product.id}` : `sku-row-${selectedVariant?.id ?? row.rowKey}`}
+                            data-product-id={product.id}
+                            data-sku-id={selectedVariant?.id ?? ''}
                             className={[
                               'cursor-pointer transition-colors hover:bg-[#f8faf8]',
                               isExpanded ? 'bg-[#f0f7f2] shadow-[inset_3px_0_0_0_#356647]' : '',
@@ -644,7 +714,7 @@ export default function ProductsWarehouseListPage() {
                             <td className="px-2 py-3">
                               <button
                                 type="button"
-                                onClick={() => toggleExpand(product.id)}
+                                onClick={() => toggleExpand(row.rowKey)}
                                 className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-[#356647]"
                                 aria-expanded={isExpanded}
                               >
@@ -655,7 +725,7 @@ export default function ProductsWarehouseListPage() {
                             </td>
 
                             {/* Image */}
-                            <td className="px-2 py-3" onClick={() => toggleExpand(product.id)}>
+                            <td className="px-2 py-3" onClick={() => toggleExpand(row.rowKey)}>
                               <ProductImage
                                 src={imageUrl}
                                 alt={product.name}
@@ -665,7 +735,7 @@ export default function ProductsWarehouseListPage() {
                             </td>
 
                             {/* SKU code */}
-                            <td className="px-3 py-3 font-mono text-xs font-bold text-[#356647]" onClick={() => toggleExpand(product.id)}>
+                            <td className="px-3 py-3 font-mono text-xs font-bold text-[#356647]" onClick={() => toggleExpand(row.rowKey)}>
                               {selectedVariant?.skuCode || (
                                 canCreate ? (
                                   <Link to={`/products/${product.id}/edit`} className="text-[11px] font-semibold text-[#356647] hover:underline" onClick={(e) => e.stopPropagation()}>
@@ -675,23 +745,10 @@ export default function ProductsWarehouseListPage() {
                               )}
                             </td>
 
-                            {/* Tên hàng + variant selector */}
-                            <td className="px-3 py-3" onClick={() => toggleExpand(product.id)}>
+                            {/* Tên hàng + variant */}
+                            <td className="px-3 py-3" onClick={() => toggleExpand(row.rowKey)}>
                               <span className="block font-semibold text-slate-900">{product.name}</span>
-                              {hasMultiple && selectedVariant ? (
-                                <select
-                                  value={String(selectedVariant.id)}
-                                  onChange={(e) => { e.stopPropagation(); selectVariant(product.id, e.target.value) }}
-                                  onClick={(e) => e.stopPropagation()}
-                                  className="mt-1 max-w-[160px] cursor-pointer rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs text-slate-600 outline-none focus:border-[#356647] focus:ring-1 focus:ring-[#356647]/20"
-                                >
-                                  {variants.map((v) => (
-                                    <option key={v.id} value={String(v.id)}>
-                                      {getVariantLabel(v, product.name)}
-                                    </option>
-                                  ))}
-                                </select>
-                              ) : selectedVariant ? (
+                              {selectedVariant ? (
                                 <span className="mt-0.5 block text-xs text-slate-400">
                                   {getVariantLabel(selectedVariant, product.name)}
                                 </span>
@@ -699,17 +756,17 @@ export default function ProductsWarehouseListPage() {
                             </td>
 
                             {/* Danh mục */}
-                            <td className="hidden px-3 py-3 text-slate-600 md:table-cell" onClick={() => toggleExpand(product.id)}>
+                            <td className="hidden px-3 py-3 text-slate-600 md:table-cell" onClick={() => toggleExpand(row.rowKey)}>
                               {product.categoryName || '—'}
                             </td>
 
                             {/* Giá vốn */}
-                            <td className="hidden px-3 py-3 text-right text-slate-600 lg:table-cell" onClick={() => toggleExpand(product.id)}>
+                            <td className="hidden px-3 py-3 text-right text-slate-600 lg:table-cell" onClick={() => toggleExpand(row.rowKey)}>
                               {selectedVariant ? formatProductPrice(selectedVariant.costPrice) : '—'}
                             </td>
 
                             {/* Giá bán */}
-                            <td className="px-3 py-3 text-right font-medium text-slate-800" onClick={() => toggleExpand(product.id)}>
+                            <td className="px-3 py-3 text-right font-medium text-slate-800" onClick={() => toggleExpand(row.rowKey)}>
                               {selectedVariant?.isSellable !== false
                                 ? formatProductPrice(selectedVariant?.retailPrice)
                                 : <span className="text-slate-400 text-xs">Không bán</span>}
@@ -720,40 +777,49 @@ export default function ProductsWarehouseListPage() {
                               className={`px-3 py-3 text-right font-semibold ${
                                 !selectedVariant ? 'text-slate-400' : isOut ? 'text-[#b42318]' : isLow ? 'text-[#7e5700]' : 'text-[#356647]'
                               }`}
-                              onClick={() => toggleExpand(product.id)}
+                              onClick={() => toggleExpand(row.rowKey)}
                             >
                               {selectedVariant ? formatStockQuantity(stockQty) : '—'}
                               {selectedVariant && stockQty <= 0 && !product.isDeleted ? (
                                 <Link
-                                  to="/inventory/import"
+                                  to="/inventory/import/create"
                                   className="mt-0.5 block text-[10px] font-semibold text-amber-700 hover:underline"
                                   onClick={(e) => e.stopPropagation()}
                                 >
-                                  Nhập lô
+                                  Nhập nguyên liệu
                                 </Link>
                               ) : null}
                             </td>
 
                             {/* Loại */}
-                            <td className="hidden px-3 py-3 sm:table-cell" onClick={() => toggleExpand(product.id)}>
+                            <td className="hidden px-3 py-3 sm:table-cell" onClick={() => toggleExpand(row.rowKey)}>
                               {isNguyenLieu ? (
                                 <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-violet-800">
                                   Nguyên liệu
                                 </span>
-                              ) : (
+                              ) : isFinishedProduct ? (
                                 <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700">
                                   Thành phẩm
                                 </span>
-                              )}
-                              {!isSyncedToStore(product) ? (
-                                <span className="mt-1 block rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-800">
-                                  Chưa ĐB
+                              ) : (
+                                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-700">
+                                  {product.productType || 'Khác'}
                                 </span>
+                              )}
+                              {isFinishedProduct && selectedVariant && !selectedVariantHasBom ? (
+                                <Link
+                                  to={`/inventory/boms?variantId=${encodeURIComponent(selectedVariant.id)}&openBom=true`}
+                                  title={MISSING_BOM_TITLE}
+                                  onClick={(event) => event.stopPropagation()}
+                                  className="mt-1 inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-800 hover:bg-amber-200 hover:text-amber-900"
+                                >
+                                  Thiếu BOM · Tạo ngay
+                                </Link>
                               ) : null}
                             </td>
 
                             {/* Trạng thái */}
-                            <td className="hidden px-3 py-3 sm:table-cell" onClick={() => toggleExpand(product.id)}>
+                            <td className="hidden px-3 py-3 sm:table-cell" onClick={() => toggleExpand(row.rowKey)}>
                               <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${status.className}`}>
                                 {status.label}
                               </span>
@@ -852,7 +918,7 @@ export default function ProductsWarehouseListPage() {
                 totalCount={totalCount}
                 onPageChange={setPage}
                 onPageSizeChange={setPageSize}
-                itemLabel="sản phẩm"
+                itemLabel="SKU"
               />
             </div>
           </div>
