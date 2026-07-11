@@ -1,562 +1,205 @@
-import { useCallback, useEffect, useState } from 'react'
-
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-
 import PageHeader from '../../../components/shared/PageHeader.jsx'
-
 import PageShell from '../../../components/shared/PageShell.jsx'
-
-import { showError, showSuccess } from '../../../app/toast.js'
-
-import { canCreateCatalog } from '../../auth/utils/permissions.js'
-
-import { loadAuthSession } from '../../auth/services/authSession.js'
-
-import { fetchAllActiveSkus } from '../../products/services/productSkusApi.js'
-
-import { fetchProducts } from '../../products/services/productsApi.js'
-
+import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
+import { showError } from '../../../app/toast.js'
+import { formatStockQuantity } from '../../products/utils/productDisplay.js'
+import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import InventoryNavTabs from '../components/InventoryNavTabs.jsx'
+import { fetchStockImportSlips, getImportTypeLabel } from '../services/stockImportSlipApi.js'
+import {
+  ImportSlipDocument,
+  SlipActionButtons,
+  SlipPrintStyles,
+} from '../components/InventorySlipDocument.jsx'
 
-import { createWarehouseBatch } from '../services/warehouseBatchApi.js'
-import { notifyInventoryStockChanged } from '../utils/inventoryStockEvents.js'
-
-
-
-const EMPTY_HEADER = {
-
-  lotCode: '',
-
-  supplier: '',
-
-  expiresAt: '',
-
-  note: '',
-
+function isProductionImport(slip) {
+  return slip?.importType === 'production_finished_goods_receipt'
 }
 
-
-
-function emptyLine() {
-
-  return { key: crypto.randomUUID(), skuId: '', quantity: '', unitCost: '' }
-
+function getSlipLineKind(slip) {
+  return isProductionImport(slip) ? 'thành phẩm' : 'nguyên liệu'
 }
 
+function getSlipContentLabel(slip) {
+  const lineKind = getSlipLineKind(slip)
+  if (slip.lines?.length > 1) return `${slip.lines.length} dòng ${lineKind}`
+  if (slip.lines?.length === 1) return slip.lines[0].productSnapshotName || slip.lines[0].skuCode
+  return slip.productSnapshotName || slip.skuCode
+}
 
+function getSlipQuantity(slip) {
+  if (slip.lines?.length) return slip.lines.reduce((sum, line) => sum + line.quantity, 0)
+  return slip.quantity
+}
+
+function getProductionCodeDisplay(slip) {
+  if (slip?.importType === 'manual_material_import') return ''
+  return slip?.productionCode || '-'
+}
 
 function InventoryImportPage() {
+  const [searchInput, setSearchInput] = useState('')
+  const [importSlips, setImportSlips] = useState([])
+  const [isLoadingImportSlips, setIsLoadingImportSlips] = useState(true)
+  const [selectedSlip, setSelectedSlip] = useState(null)
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE)
+  const importSlipDocumentRef = useRef(null)
 
-  const canManage = canCreateCatalog(loadAuthSession())
-
-  const [skus, setSkus] = useState([])
-
-  const [header, setHeader] = useState(EMPTY_HEADER)
-
-  const [lines, setLines] = useState([emptyLine()])
-
-  const [isLoading, setIsLoading] = useState(true)
-
-  const [isSaving, setIsSaving] = useState(false)
-
-
-
-  const loadSkus = useCallback(async () => {
-
-    setIsLoading(true)
-
+  const loadImportSlips = useCallback(async () => {
+    setIsLoadingImportSlips(true)
     try {
-
-      const [skuItems, productsResult] = await Promise.all([
-
-        fetchAllActiveSkus(),
-
-        fetchProducts({ page: 1, pageSize: 100, isActive: true }),
-
-      ])
-
-      const productNameById = new Map(productsResult.items.map((p) => [p.id, p.name]))
-
-      setSkus(
-
-        skuItems.map((sku) => ({
-
-          ...sku,
-
-          productName: productNameById.get(sku.productId) || sku.productName || '',
-
-        })),
-
-      )
-
+      const items = await fetchStockImportSlips({ search: searchInput.trim() || undefined })
+      setImportSlips(items)
     } catch (error) {
-
-      setSkus([])
-
+      setImportSlips([])
       showError(error.message)
-
     } finally {
-
-      setIsLoading(false)
-
+      setIsLoadingImportSlips(false)
     }
-
-  }, [])
-
-
+  }, [searchInput])
 
   useEffect(() => {
-
-    loadSkus()
-
-  }, [loadSkus])
-
-
-
-  function updateLine(key, patch) {
-
-    setLines((prev) => prev.map((line) => (line.key === key ? { ...line, ...patch } : line)))
-
-  }
-
-
-
-  function addLine() {
-
-    setLines((prev) => [...prev, emptyLine()])
-
-  }
-
-
-
-  function removeLine(key) {
-
-    setLines((prev) => (prev.length <= 1 ? prev : prev.filter((line) => line.key !== key)))
-
-  }
-
-
-
-  async function handleSubmit(event) {
-
-    event.preventDefault()
-
-    if (!canManage) {
-
-      showError('Chỉ Thủ kho được nhập lô.')
-
-      return
-
-    }
-
-    if (!header.lotCode.trim()) {
-
-      showError('Nhập mã lô.')
-
-      return
-
-    }
-
-
-
-    const payloadLines = []
-
-    const usedSkuIds = new Set()
-
-    for (const line of lines) {
-
-      const quantity = Number(line.quantity)
-
-      if (!line.skuId || !Number.isFinite(quantity) || quantity <= 0) continue
-
-      if (usedSkuIds.has(line.skuId)) {
-
-        showError('Mỗi SKU chỉ được xuất hiện một lần trong cùng lô.')
-
-        return
-
-      }
-
-      usedSkuIds.add(line.skuId)
-
-      const sku = skus.find((s) => s.id === line.skuId)
-
-      payloadLines.push({
-
-        skuId: line.skuId,
-
-        skuCode: sku?.skuCode,
-
-        productSnapshotName: sku?.productName,
-
-        quantity,
-
-        unitCost: line.unitCost,
-
-      })
-
-    }
-
-
-
-    if (payloadLines.length === 0) {
-
-      showError('Thêm ít nhất một dòng SKU với số lượng > 0.')
-
-      return
-
-    }
-
-
-
-    setIsSaving(true)
-
-    try {
-
-      await createWarehouseBatch({
-
-        lotCode: header.lotCode,
-
-        supplier: header.supplier,
-
-        expiresAt: header.expiresAt ? new Date(`${header.expiresAt}T00:00:00`).toISOString() : null,
-
-        note: header.note,
-
-        items: payloadLines,
-
-      })
-
-      const totalQty = payloadLines.reduce((sum, l) => sum + l.quantity, 0)
-
-      showSuccess(
-        `Đã nhập lô ${header.lotCode.trim().toUpperCase()} — ${payloadLines.length} SKU, tổng ${totalQty} đơn vị. Tồn kho tổng đã cập nhật trên Sản phẩm & số lượng.`,
-      )
-      notifyInventoryStockChanged()
-      setHeader(EMPTY_HEADER)
-
-      setLines([emptyLine()])
-
-    } catch (error) {
-
-      showError(error.message)
-
-    } finally {
-
-      setIsSaving(false)
-
-    }
-
-  }
-
-
+    const timer = setTimeout(loadImportSlips, 250)
+    return () => clearTimeout(timer)
+  }, [loadImportSlips])
+
+  useEffect(() => {
+    setPage(1)
+  }, [searchInput])
+
+  const pagedSlips = useMemo(() => {
+    const start = (page - 1) * pageSize
+    return importSlips.slice(start, start + pageSize)
+  }, [importSlips, page, pageSize])
 
   return (
-
     <PageShell>
-
+      <SlipPrintStyles />
       <PageHeader
-
-        title="Nhập lô vào kho"
-
-        description="Một mã lô có thể chứa nhiều SKU / sản phẩm — tồn kho tổng tăng theo từng dòng"
-
-        rightContent={<InventoryNavTabs />}
-
+        title="Phiếu nhập kho"
+        description="Theo dõi phiếu nhập nguyên liệu thủ công và phiếu nhập thành phẩm sau sản xuất."
+        searchPlaceholder="Tìm mã phiếu, SKU, mã lô..."
+        searchValue={searchInput}
+        onSearchChange={setSearchInput}
+        rightContent={
+          <div className="flex flex-wrap items-center gap-3">
+            <InventoryNavTabs />
+            <Link
+              to="/inventory/import/create"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-[#538463] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#457053]"
+            >
+              <span className="material-symbols-outlined text-[18px]">add</span>
+              Nhập nguyên liệu
+            </Link>
+          </div>
+        }
       />
 
-
-
-      {!canManage ? (
-
-        <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-
-          Chỉ tài khoản Thủ kho được nhập lô.
-
-        </p>
-
-      ) : null}
-
-
-
-      <form className="grid grid-cols-1 gap-6 xl:grid-cols-3" onSubmit={handleSubmit}>
-
-        <section className="rounded-2xl bg-white p-6 shadow-sm sm:p-8 xl:col-span-2">
-
-          <h2 className="mb-6 text-lg font-bold text-slate-800">Thông tin lô</h2>
-
-          <div className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-2">
-
-            <label className="space-y-2">
-
-              <span className="text-xs font-semibold text-[#717971]">Mã lô *</span>
-
-              <input
-
-                className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm uppercase"
-
-                placeholder="VD: LO-A05"
-
-                value={header.lotCode}
-
-                onChange={(e) => setHeader((p) => ({ ...p, lotCode: e.target.value }))}
-
-              />
-
-            </label>
-
-            <label className="space-y-2">
-
-              <span className="text-xs font-semibold text-[#717971]">Nhà cung cấp</span>
-
-              <input
-
-                className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm"
-
-                value={header.supplier}
-
-                onChange={(e) => setHeader((p) => ({ ...p, supplier: e.target.value }))}
-
-              />
-
-            </label>
-
-            <label className="space-y-2">
-
-              <span className="text-xs font-semibold text-[#717971]">Hạn sử dụng (chung cho lô)</span>
-
-              <input
-
-                type="date"
-
-                className="w-full rounded-xl border border-slate-200 bg-white p-3 text-sm"
-
-                value={header.expiresAt}
-
-                onChange={(e) => setHeader((p) => ({ ...p, expiresAt: e.target.value }))}
-
-              />
-
-            </label>
-
-            <label className="space-y-2 md:col-span-2">
-
-              <span className="text-xs font-semibold text-[#717971]">Ghi chú</span>
-
-              <textarea
-
-                className="min-h-[60px] w-full rounded-xl border border-slate-200 bg-white p-3 text-sm"
-
-                value={header.note}
-
-                onChange={(e) => setHeader((p) => ({ ...p, note: e.target.value }))}
-
-              />
-
-            </label>
-
-          </div>
-
-
-
-          <div className="mb-4 flex items-center justify-between">
-
-            <h2 className="text-lg font-bold text-slate-800">Danh sách SKU trong lô</h2>
-
-            <button
-
-              type="button"
-
-              onClick={addLine}
-
-              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-
-            >
-
-              + Thêm dòng
-
-            </button>
-
-          </div>
-
-
-
-          <div className="space-y-3">
-
-            {lines.map((line, index) => (
-
-              <div
-
-                key={line.key}
-
-                className="grid grid-cols-1 gap-3 rounded-xl border border-slate-100 bg-slate-50/50 p-4 md:grid-cols-12"
-
+      <section className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-left text-sm">
+            <thead className="bg-slate-50 text-xs font-bold uppercase tracking-wide text-slate-500">
+              <tr>
+                <th className="px-6 py-3 text-left">Mã phiếu</th>
+                <th className="px-4 py-3 text-left">Loại nhập</th>
+                <th className="px-4 py-3 text-left">Nội dung</th>
+                <th className="px-4 py-3 text-right">Số lượng</th>
+                <th className="px-4 py-3 text-left">Mã lệnh SX</th>
+                <th className="px-4 py-3 text-left">Thời gian</th>
+                <th className="px-4 py-3 text-right">Thao tác</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {isLoadingImportSlips ? (
+                <tr>
+                  <td colSpan={7} className="px-6 py-8 text-slate-500">
+                    Đang tải...
+                  </td>
+                </tr>
+              ) : importSlips.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-6 py-8 text-slate-500">
+                    Chưa có phiếu nhập kho.
+                  </td>
+                </tr>
+              ) : (
+                pagedSlips.map((slip) => (
+                  <tr key={slip.id} className="hover:bg-slate-50/80">
+                    <td className="px-6 py-4 text-left font-mono font-semibold text-[#356647]">{slip.importCode}</td>
+                    <td className="px-4 py-4 text-left text-slate-700">{getImportTypeLabel(slip.importType)}</td>
+                    <td className="px-4 py-4 text-left text-slate-700">{getSlipContentLabel(slip)}</td>
+                    <td className="px-4 py-4 text-right font-semibold text-slate-800">
+                      {formatStockQuantity(getSlipQuantity(slip))}
+                    </td>
+                    <td className="px-4 py-4 text-left font-mono text-slate-700">{getProductionCodeDisplay(slip)}</td>
+                    <td className="px-4 py-4 text-left text-slate-600">
+                      {slip.createdAt ? formatVietnamDateTime(slip.createdAt) : '-'}
+                    </td>
+                    <td className="px-4 py-4 text-right">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedSlip(slip)}
+                        className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                      >
+                        <span className="material-symbols-outlined text-[16px]">visibility</span>
+                        Chi tiết
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {importSlips.length > pageSize && (
+          <TablePagination
+            page={page}
+            pageSize={pageSize}
+            totalCount={importSlips.length}
+            onPageChange={setPage}
+            onPageSizeChange={(size) => { setPageSize(size); setPage(1) }}
+            disabled={isLoadingImportSlips}
+            itemLabel="phiếu nhập"
+          />
+        )}
+      </section>
+
+      {selectedSlip ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
+          onClick={() => setSelectedSlip(null)}
+        >
+          <div
+            className="max-h-[calc(100dvh-2rem)] w-full max-w-5xl overflow-y-auto rounded-2xl bg-white p-4 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="no-print mb-4 flex items-center justify-between gap-3">
+              <h2 className="text-lg font-bold text-slate-800">Chi tiết phiếu nhập</h2>
+              <button
+                type="button"
+                onClick={() => setSelectedSlip(null)}
+                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                aria-label="Đóng"
               >
-
-                <label className="space-y-1 md:col-span-5">
-
-                  <span className="text-xs font-semibold text-[#717971]">SKU / SP *</span>
-
-                  <select
-
-                    className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-sm"
-
-                    value={line.skuId}
-
-                    onChange={(e) => updateLine(line.key, { skuId: e.target.value })}
-
-                    disabled={isLoading}
-
-                  >
-
-                    <option value="">Chọn SKU</option>
-
-                    {skus.map((sku) => (
-
-                      <option key={sku.id} value={sku.id}>
-
-                        {sku.skuCode} — {sku.productName}
-
-                      </option>
-
-                    ))}
-
-                  </select>
-
-                </label>
-
-                <label className="space-y-1 md:col-span-2">
-
-                  <span className="text-xs font-semibold text-[#717971]">SL *</span>
-
-                  <input
-
-                    type="number"
-
-                    min="1"
-
-                    className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-sm"
-
-                    value={line.quantity}
-
-                    onChange={(e) => updateLine(line.key, { quantity: e.target.value })}
-
-                  />
-
-                </label>
-
-                <label className="space-y-1 md:col-span-3">
-
-                  <span className="text-xs font-semibold text-[#717971]">Giá vốn / đv</span>
-
-                  <input
-
-                    type="number"
-
-                    min="0"
-
-                    className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-sm"
-
-                    value={line.unitCost}
-
-                    onChange={(e) => updateLine(line.key, { unitCost: e.target.value })}
-
-                  />
-
-                </label>
-
-                <div className="flex items-end md:col-span-2">
-
-                  {lines.length > 1 ? (
-
-                    <button
-
-                      type="button"
-
-                      onClick={() => removeLine(line.key)}
-
-                      className="rounded-lg px-2 py-2 text-sm text-red-600 hover:bg-red-50"
-
-                    >
-
-                      Xóa dòng {index + 1}
-
-                    </button>
-
-                  ) : null}
-
-                </div>
-
-              </div>
-
-            ))}
-
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+            <SlipActionButtons
+              documentRef={importSlipDocumentRef}
+              filename={selectedSlip.importCode ? `${selectedSlip.importCode}.pdf` : 'phieu-kho.pdf'}
+            />
+            <div ref={importSlipDocumentRef}>
+              <ImportSlipDocument slip={selectedSlip} getTypeLabel={getImportTypeLabel} />
+            </div>
           </div>
-
-
-
-          <div className="mt-6 flex gap-3">
-
-            <button
-
-              type="submit"
-
-              disabled={isSaving || !canManage}
-
-              className="rounded-xl bg-[#538463] px-6 py-2.5 text-sm font-bold text-white hover:bg-[#457053] disabled:opacity-50"
-
-            >
-
-              {isSaving ? 'Đang lưu...' : 'Nhập lô vào kho'}
-
-            </button>
-
-            <Link
-
-              to="/inventory/batches"
-
-              className="rounded-xl border border-slate-200 px-6 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-
-            >
-
-              Xem danh sách lô
-
-            </Link>
-
-          </div>
-
-        </section>
-
-
-
-        <aside className="h-fit rounded-2xl bg-white p-6 shadow-sm">
-
-          <h2 className="mb-4 text-lg font-bold text-slate-800">Lưu ý</h2>
-
-          <ul className="space-y-2 text-sm text-slate-600">
-
-            <li>Một mã lô = một phiếu nhập, có thể gồm nhiều SKU.</li>
-
-            <li>Mỗi SKU chỉ xuất hiện một lần trong cùng lô.</li>
-
-            <li>Tồn kho tổng của từng SKU = tổng các dòng lô còn hàng.</li>
-
-            <li>Khi duyệt yêu cầu cửa hàng, trừ lô theo FIFO (HSD sớm trước).</li>
-
-          </ul>
-
-        </aside>
-
-      </form>
-
+        </div>
+      ) : null}
     </PageShell>
-
   )
-
 }
 
-
-
 export default InventoryImportPage
-
-

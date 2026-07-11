@@ -3,9 +3,11 @@ import { isWarehouseRole } from '../../auth/utils/permissions.js'
 export const warehouseNavTabs = [
   { label: 'Kho tổng', to: '/inventory' },
   { label: 'Theo lô', to: '/inventory/batches' },
-  { label: 'Nhập lô', to: '/inventory/import' },
+  { label: 'Phiếu nhập kho', to: '/inventory/import' },
+  { label: 'Nhập nguyên liệu', to: '/inventory/import/create' },
   { label: 'Phiếu xuất', to: '/inventory/export' },
-  { label: 'Lệnh SX', to: '/inventory/production' },
+  { label: 'Lệnh SX', to: '/inventory/production-orders' },
+  { label: 'Định mức BOM', to: '/inventory/boms' },
 ]
 
 export const stockRequestNavTab = {
@@ -31,6 +33,10 @@ export function isInventoryNavTabActive(pathname, tabTo) {
 
   if (target === '/inventory') {
     return path === '/inventory'
+  }
+
+  if (target === '/inventory/import') {
+    return path === target
   }
 
   return path === target || path.startsWith(`${target}/`)

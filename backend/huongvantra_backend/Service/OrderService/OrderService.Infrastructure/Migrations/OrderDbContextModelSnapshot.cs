@@ -19,6 +19,97 @@ namespace OrderService.Infrastructure.Migrations
                 .HasAnnotation("ProductVersion", "8.0.0")
                 .HasAnnotation("Relational:MaxIdentifierLength", 64);
 
+            modelBuilder.Entity("OrderService.Domain.Entities.CustomBundle", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<string>("Label")
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<DateTime?>("PackedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("PackingStatus")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)");
+
+                    b.Property<decimal>("TotalPrice")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrderId");
+
+                    b.HasIndex("PackingStatus");
+
+                    b.ToTable("CustomBundles", (string)null);
+                });
+
+            modelBuilder.Entity("OrderService.Domain.Entities.CustomBundleIngredient", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid>("CustomBundleId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<string>("MaterialSkuCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<Guid>("MaterialSkuId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("MaterialSnapshotName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("SubTotal")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("UnitPrice")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CustomBundleId");
+
+                    b.ToTable("CustomBundleIngredients", (string)null);
+                });
+
             modelBuilder.Entity("OrderService.Domain.Entities.Order", b =>
                 {
                     b.Property<Guid>("Id")
@@ -547,6 +638,28 @@ namespace OrderService.Infrastructure.Migrations
                     b.ToTable("ReturnOrderDetails", (string)null);
                 });
 
+            modelBuilder.Entity("OrderService.Domain.Entities.CustomBundle", b =>
+                {
+                    b.HasOne("OrderService.Domain.Entities.Order", "Order")
+                        .WithMany("CustomBundles")
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Order");
+                });
+
+            modelBuilder.Entity("OrderService.Domain.Entities.CustomBundleIngredient", b =>
+                {
+                    b.HasOne("OrderService.Domain.Entities.CustomBundle", "Bundle")
+                        .WithMany("Ingredients")
+                        .HasForeignKey("CustomBundleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Bundle");
+                });
+
             modelBuilder.Entity("OrderService.Domain.Entities.OrderActivity", b =>
                 {
                     b.HasOne("OrderService.Domain.Entities.Order", "Order")
@@ -624,8 +737,15 @@ namespace OrderService.Infrastructure.Migrations
                     b.Navigation("ReturnOrder");
                 });
 
+            modelBuilder.Entity("OrderService.Domain.Entities.CustomBundle", b =>
+                {
+                    b.Navigation("Ingredients");
+                });
+
             modelBuilder.Entity("OrderService.Domain.Entities.Order", b =>
                 {
+                    b.Navigation("CustomBundles");
+
                     b.Navigation("OrderDetails");
 
                     b.Navigation("Payments");

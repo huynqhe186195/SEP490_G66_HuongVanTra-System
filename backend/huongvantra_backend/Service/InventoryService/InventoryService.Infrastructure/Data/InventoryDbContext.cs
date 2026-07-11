@@ -12,11 +12,15 @@ public class InventoryDbContext(DbContextOptions<InventoryDbContext> options) : 
     public DbSet<StockAdjustmentRequest> StockAdjustmentRequests => Set<StockAdjustmentRequest>();
     public DbSet<StockAdjustmentRequestItem> StockAdjustmentRequestItems => Set<StockAdjustmentRequestItem>();
     public DbSet<StockExportSlip> StockExportSlips => Set<StockExportSlip>();
+    public DbSet<StockExportSlipLine> StockExportSlipLines => Set<StockExportSlipLine>();
+    public DbSet<StockImportSlip> StockImportSlips => Set<StockImportSlip>();
+    public DbSet<StockImportSlipLine> StockImportSlipLines => Set<StockImportSlipLine>();
     public DbSet<WarehouseBatch> WarehouseBatches => Set<WarehouseBatch>();
     public DbSet<WarehouseBatchItem> WarehouseBatchItems => Set<WarehouseBatchItem>();
     public DbSet<StockExportBatchAllocation> StockExportBatchAllocations => Set<StockExportBatchAllocation>();
     public DbSet<ProductionOrder> ProductionOrders => Set<ProductionOrder>();
     public DbSet<ProductionOrderLine> ProductionOrderLines => Set<ProductionOrderLine>();
+    public DbSet<ProductionOrderOutputLine> ProductionOrderOutputLines => Set<ProductionOrderOutputLine>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

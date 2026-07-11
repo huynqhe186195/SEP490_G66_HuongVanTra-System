@@ -11,6 +11,7 @@ public class ProductionOrderRepository(InventoryDbContext _db) : IProductionOrde
     public Task<ProductionOrder?> GetByIdAsync(Guid id, CancellationToken ct = default) =>
         _db.ProductionOrders
             .Include(o => o.Lines)
+            .Include(o => o.OutputLines)
             .FirstOrDefaultAsync(o => o.Id == id, ct);
 
     public async Task<(List<ProductionOrder> Items, int Total)> GetPagedAsync(
@@ -26,6 +27,7 @@ public class ProductionOrderRepository(InventoryDbContext _db) : IProductionOrde
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .Include(o => o.Lines)
+            .Include(o => o.OutputLines)
             .ToListAsync(ct);
 
         return (items, total);

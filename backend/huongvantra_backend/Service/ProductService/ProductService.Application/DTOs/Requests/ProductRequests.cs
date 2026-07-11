@@ -2,6 +2,8 @@ namespace ProductService.Application.DTOs.Requests;
 
 public record BomLineRequest(Guid MaterialId, decimal Quantity);
 
+public record UpdateVariantBomRequest(List<BomLineRequest>? Lines);
+
 public record GetProductsRequest(
     string? Search,
     int? CategoryId,

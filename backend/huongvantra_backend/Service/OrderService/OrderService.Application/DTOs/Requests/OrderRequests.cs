@@ -17,7 +17,8 @@ public record CreateOrderRequest(
     Guid? PromotionId = null,
     string? PromotionCode = null,
     string? CodDebtSettlementJson = null,
-    OrderKind OrderKind = OrderKind.Sale
+    OrderKind OrderKind = OrderKind.Sale,
+    List<CreateCustomBundleRequest>? CustomBundles = null
 );
 
 public record CreateOrderDetailRequest(
@@ -82,6 +83,18 @@ public record ReturnOrderRequest(
     decimal ExchangeManualDiscount = 0,
     List<string>? Reasons = null,
     string? OtherReason = null);
+
+public record CreateCustomBundleRequest(
+    string? Label,
+    string? Note,
+    List<CreateCustomBundleIngredientRequest> Ingredients);
+
+public record CreateCustomBundleIngredientRequest(
+    Guid MaterialSkuId,
+    string MaterialSkuCode,
+    string MaterialSnapshotName,
+    int Quantity,
+    decimal UnitPrice);
 
 public record GetOrdersRequest(
     string? Search,

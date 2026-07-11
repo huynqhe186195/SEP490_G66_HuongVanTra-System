@@ -1,5 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { showError } from '../../../app/toast.js'
+import { formatVietnamDate } from '../../../utils/vietnamDateTime.js'
+import { fetchWarehouseBatches } from '../../inventory/services/warehouseBatchApi.js'
 import ProductImage from './ProductImage.jsx'
 import {
   formatProductCreatedAt,
@@ -30,9 +33,38 @@ function InfoCell({ label, value }) {
   )
 }
 
+function sameId(left, right) {
+  return String(left ?? '') === String(right ?? '')
+}
+
+function buildSkuLotRows(batches, skuId) {
+  if (!skuId) return []
+
+  return (batches ?? [])
+    .flatMap((batch) => {
+      const item = (batch.items ?? []).find((line) => sameId(line.skuId, skuId))
+      const quantityOnHand = Number(item?.quantityOnHand ?? 0)
+      if (!item || quantityOnHand <= 0) return []
+
+      return [{
+        id: `${batch.id}-${item.id ?? item.skuId}`,
+        lotCode: batch.lotCode || '—',
+        productionDate: batch.createdAt ?? null,
+        expiresAt: batch.expiresAt ?? null,
+        quantityOnHand,
+      }]
+    })
+    .sort((left, right) => {
+      const leftTime = left.productionDate ? new Date(left.productionDate).getTime() : 0
+      const rightTime = right.productionDate ? new Date(right.productionDate).getTime() : 0
+      if (rightTime !== leftTime) return rightTime - leftTime
+      return String(left.lotCode).localeCompare(String(right.lotCode), 'vi')
+    })
+}
+
 export default function ProductExpandedPanel({
   product,
-  stockBySkuId,
+  stockBySkuId = new Map(),
   stockLabel = 'Tồn kho',
   activeSkuId = null,
   readOnly = false,
@@ -48,26 +80,69 @@ export default function ProductExpandedPanel({
   isHiding = false,
 }) {
   const [activeTab, setActiveTab] = useState('info')
+  const [inventoryLots, setInventoryLots] = useState([])
+  const [inventoryLotsLoading, setInventoryLotsLoading] = useState(false)
+  const [inventoryLotsError, setInventoryLotsError] = useState('')
+
+  // Use variants as the canonical SKU list; fall back to old skus for legacy data
+  const skus = product?.variants?.length ? product.variants : (product?.skus ?? [])
+  const skuSummary = product?.variants?.length
+    ? summarizeProductVariants(product.variants)
+    : summarizeProductSkus(product?.skus ?? [])
+  const status = getProductStatusMeta(product?.isActive, product?.isDeleted)
+  const imageUrl = pickProductImageUrl(product)
+  const primarySku = skus.find((sku) => sku.isActive) || skus[0]
+  const focusedSku =
+    (activeSkuId ? skus.find((sku) => sku.id === activeSkuId) : null) || primarySku
+  const focusedSkuId = focusedSku?.id ?? null
+  const brand = getProductBrandLabel(product)
+  const tags = [product?.flavorProfile, product?.baseUnit, focusedSku?.packagingType].filter(Boolean)
+  const focusedStock = focusedSku ? stockBySkuId.get(focusedSku.id) ?? 0 : 0
+  const skuLotRows = useMemo(
+    () => buildSkuLotRows(inventoryLots, focusedSkuId),
+    [inventoryLots, focusedSkuId],
+  )
 
   useEffect(() => {
     setActiveTab('info')
   }, [product?.id])
 
-  if (!product) return null
+  useEffect(() => {
+    let cancelled = false
 
-  // Use variants as the canonical SKU list; fall back to old skus for legacy data
-  const skus = product.variants?.length ? product.variants : (product?.skus ?? [])
-  const skuSummary = product.variants?.length
-    ? summarizeProductVariants(product.variants)
-    : summarizeProductSkus(product?.skus ?? [])
-  const status = getProductStatusMeta(product.isActive, product.isDeleted)
-  const imageUrl = pickProductImageUrl(product)
-  const primarySku = skus.find((sku) => sku.isActive) || skus[0]
-  const focusedSku =
-    (activeSkuId ? skus.find((sku) => sku.id === activeSkuId) : null) || primarySku
-  const brand = getProductBrandLabel(product)
-  const tags = [product.flavorProfile, product.baseUnit, focusedSku?.packagingType].filter(Boolean)
-  const focusedStock = focusedSku ? stockBySkuId.get(focusedSku.id) ?? 0 : 0
+    if (activeTab !== 'inventory' || !focusedSkuId) {
+      setInventoryLots([])
+      setInventoryLotsError('')
+      setInventoryLotsLoading(false)
+      return () => {
+        cancelled = true
+      }
+    }
+
+    setInventoryLots([])
+    setInventoryLotsError('')
+    setInventoryLotsLoading(true)
+
+    fetchWarehouseBatches({ skuId: focusedSkuId, availableOnly: true })
+      .then((batches) => {
+        if (!cancelled) setInventoryLots(batches)
+      })
+      .catch((err) => {
+        if (cancelled) return
+        setInventoryLots([])
+        setInventoryLotsError('Không tải được lô tồn kho cho SKU này.')
+        showError(err.message)
+      })
+      .finally(() => {
+        if (!cancelled) setInventoryLotsLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [activeTab, focusedSkuId])
+
+  if (!product) return null
 
   function rowClass(skuId) {
     return activeSkuId && skuId === activeSkuId ? 'bg-[#e8f1eb]/70' : ''
@@ -173,65 +248,72 @@ export default function ProductExpandedPanel({
 
       {activeTab === 'inventory' ? (
         <div className="space-y-3">
-          {canAdjustStock && skus.length > 1 ? (
-            <div className="flex justify-end">
-              <button
-                type="button"
-                onClick={() => onAddAllSkusToBatch?.(skus)}
-                className="rounded-lg border border-[#356647]/30 px-3 py-1.5 text-xs font-semibold text-[#356647] hover:bg-[#356647]/5"
-              >
-                Thêm tất cả {skus.length} SKU vào lô
-              </button>
+          <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 text-sm sm:grid-cols-3">
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">SKU đang xem</p>
+              <p className="mt-1 font-mono text-xs font-bold text-[#356647]">{focusedSku?.skuCode || '—'}</p>
             </div>
-          ) : null}
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Tên hàng</p>
+              <p className="mt-1 truncate font-medium text-slate-800">
+                {focusedSku?.variantName || focusedSku?.packagingType || product.name || '—'}
+              </p>
+            </div>
+            <div className="sm:text-right">
+              <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">{stockLabel}</p>
+              <p className="mt-1 font-semibold text-[#356647]">{formatStockQuantity(focusedStock)}</p>
+            </div>
+          </div>
+
           <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
           <table className="min-w-full text-left text-sm">
             <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
               <tr>
-                <th className="px-4 py-2.5">Mã SKU</th>
-                <th className="px-4 py-2.5">Quy cách</th>
-                <th className="px-4 py-2.5 text-right">Giá bán</th>
-                <th className="px-4 py-2.5 text-right">{stockLabel}</th>
-                {canAdjustStock ? <th className="px-4 py-2.5 text-right">Lô</th> : null}
+                <th className="px-4 py-2.5">Mã lô</th>
+                <th className="px-4 py-2.5">Ngày sản xuất</th>
+                <th className="px-4 py-2.5">Hạn sử dụng</th>
+                <th className="px-4 py-2.5 text-right">Tồn còn lại</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {skus.length === 0 ? (
+              {!focusedSku ? (
                 <tr>
-                  <td colSpan={canAdjustStock ? 5 : 4} className="px-4 py-6 text-center text-slate-500">
+                  <td colSpan={4} className="px-4 py-6 text-center text-slate-500">
                     Chưa có SKU.
                   </td>
                 </tr>
-              ) : (
-                skus.map((sku) => {
-                  const skuInBatch = isInBatch?.(sku.id) ?? false
-                  return (
-                  <tr key={sku.id} className={rowClass(sku.id)}>
-                    <td className="px-4 py-2.5 font-mono text-xs font-bold text-[#356647]">{sku.skuCode}</td>
-                    <td className="px-4 py-2.5">{sku.variantName || sku.packagingType || '—'}</td>
-                    <td className="px-4 py-2.5 text-right font-medium">{formatProductPrice(sku.retailPrice || sku.basePrice)}</td>
-                    <td className="px-4 py-2.5 text-right font-semibold text-[#356647]">
-                      {formatStockQuantity(stockBySkuId.get(sku.id) ?? 0)}
-                    </td>
-                    {canAdjustStock ? (
-                      <td className="px-4 py-2.5 text-right">
-                        <button
-                          type="button"
-                          onClick={() => onToggleBatchSkuItem?.(sku)}
-                          className={`rounded-lg px-2.5 py-1 text-xs font-semibold ${
-                            skuInBatch
-                              ? 'bg-[#356647]/10 text-[#356647]'
-                              : 'text-[#356647] hover:bg-[#356647]/5'
-                          }`}
-                        >
-                          {skuInBatch ? 'Đã thêm' : 'Thêm vào lô'}
-                        </button>
-                      </td>
-                    ) : null}
-                  </tr>
-                  )
-                })
-              )}
+              ) : inventoryLotsLoading ? (
+                <tr>
+                  <td colSpan={4} className="px-4 py-6 text-center text-slate-500">
+                    Đang tải lô tồn kho...
+                  </td>
+                </tr>
+              ) : inventoryLotsError ? (
+                <tr>
+                  <td colSpan={4} className="px-4 py-6 text-center text-red-600">
+                    {inventoryLotsError}
+                  </td>
+                </tr>
+              ) : skuLotRows.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="px-4 py-6 text-center text-slate-500">
+                    SKU này chưa có lô tồn kho.
+                  </td>
+                </tr>
+              ) : skuLotRows.map((row) => (
+                <tr key={row.id}>
+                  <td className="px-4 py-2.5 font-mono text-xs font-bold text-[#356647]">{row.lotCode}</td>
+                  <td className="px-4 py-2.5 text-slate-700">
+                    {row.productionDate ? formatVietnamDate(row.productionDate) : '—'}
+                  </td>
+                  <td className="px-4 py-2.5 text-slate-700">
+                    {row.expiresAt ? formatVietnamDate(row.expiresAt) : '—'}
+                  </td>
+                  <td className="px-4 py-2.5 text-right font-semibold text-[#356647]">
+                    {formatStockQuantity(row.quantityOnHand)}
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>

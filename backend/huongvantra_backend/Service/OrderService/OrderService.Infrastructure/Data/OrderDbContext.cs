@@ -14,6 +14,8 @@ public class OrderDbContext(DbContextOptions<OrderDbContext> options) : DbContex
     public DbSet<PromotionCustomerTierScope> PromotionCustomerTierScopes => Set<PromotionCustomerTierScope>();
     public DbSet<ReturnOrder> ReturnOrders => Set<ReturnOrder>();
     public DbSet<ReturnOrderDetail> ReturnOrderDetails => Set<ReturnOrderDetail>();
+    public DbSet<CustomBundle> CustomBundles => Set<CustomBundle>();
+    public DbSet<CustomBundleIngredient> CustomBundleIngredients => Set<CustomBundleIngredient>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -27,5 +29,7 @@ public class OrderDbContext(DbContextOptions<OrderDbContext> options) : DbContex
         modelBuilder.Entity<PromotionCustomerTierScope>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<ReturnOrder>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<ReturnOrderDetail>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<CustomBundle>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<CustomBundleIngredient>().HasQueryFilter(e => !e.IsDeleted);
     }
 }

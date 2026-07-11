@@ -18,6 +18,7 @@ import InventoryBomPage from '../features/inventory/pages/InventoryBomPage.jsx'
 import InventoryBomCreatePage from '../features/inventory/pages/InventoryBomCreatePage.jsx'
 import InventoryPage from '../features/inventory/pages/InventoryPage.jsx'
 import InventoryBatchesPage from '../features/inventory/pages/InventoryBatchesPage.jsx'
+import InventoryImportCreatePage from '../features/inventory/pages/InventoryImportCreatePage.jsx'
 import InventoryImportPage from '../features/inventory/pages/InventoryImportPage.jsx'
 import InventoryStockPage from '../features/inventory/pages/InventoryStockPage.jsx'
 import InventoryStatisticsPage from '../features/inventory/pages/InventoryStatisticsPage.jsx'
@@ -29,6 +30,7 @@ import CodOrdersPage from '../features/orders/pages/CodOrdersPage.jsx'
 import StockDeductQueuePage from '../features/inventory/pages/StockDeductQueuePage.jsx'
 import StockAdjustmentRequestsPage from '../features/inventory/pages/StockAdjustmentRequestsPage.jsx'
 import ProductionOrdersPage from '../features/inventory/pages/ProductionOrdersPage.jsx'
+import CustomBundlesPage from '../features/inventory/pages/CustomBundlesPage.jsx'
 import OrderDetailPage from '../features/orders/pages/OrderDetailPage.jsx'
 import PosPage from '../features/pos/pages/PosPage.jsx'
 import PosTransferQrPage from '../features/pos/pages/PosTransferQrPage.jsx'
@@ -81,9 +83,13 @@ function App() {
         <Route path="/inventory/stock-requests" element={<StockAdjustmentRequestsPage />} />
         <Route path="/inventory/batches" element={<InventoryBatchesPage />} />
         <Route path="/inventory/import" element={<InventoryImportPage />} />
+        <Route path="/inventory/import/create" element={<InventoryImportCreatePage />} />
         <Route path="/inventory/export" element={<InventoryExportPage />} />
-        <Route path="/inventory/production" element={<ProductionOrdersPage />} />
-        <Route path="/inventory/bom" element={<InventoryBomPage />} />
+        <Route path="/inventory/production" element={<Navigate to="/inventory/production-orders" replace />} />
+        <Route path="/inventory/production-orders" element={<ProductionOrdersPage />} />
+        <Route path="/inventory/custom-bundles" element={<CustomBundlesPage />} />
+        <Route path="/inventory/bom" element={<Navigate to="/inventory/boms" replace />} />
+        <Route path="/inventory/boms" element={<InventoryBomPage />} />
         <Route path="/inventory/bom/create" element={<InventoryBomCreatePage />} />
         <Route path="/inventory/bom/:bomId/edit" element={<InventoryBomCreatePage />} />
         <Route path="/inventory/deduction" element={<InventoryPage />} />

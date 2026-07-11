@@ -57,6 +57,7 @@ import {
 import ResizableSplitPane from '../../../components/shared/ResizableSplitPane.jsx'
 import LoadingIndicator from '../../../components/shared/LoadingIndicator.jsx'
 import { useNetworkStatus } from '../../../hooks/useNetworkStatus.js'
+import CustomBundlePanel from '../components/CustomBundlePanel.jsx'
 
 const SALES_MODES = [
     { id: "counter", label: "Bán trực tiếp", icon: "storefront" },
@@ -194,6 +195,7 @@ function createEmptySession(mode = "counter") {
     return {
         searchValue: "",
         cartItems: [],
+        customBundles: [],
         orderDiscountPercent: 0,
         orderDiscountAmountFixed: 0,
         promoCodeInput: "",
@@ -250,6 +252,7 @@ function PosPage() {
   const [isPriceFilterOpen, setIsPriceFilterOpen] = useState(false)
   const [priceFilter, setPriceFilter] = useState('')
   const [productPage, setProductPage] = useState(1)
+  const [posTab, setPosTab] = useState('products')
   const promotionCartSignatureRef = useRef('')
   const previousCustomerIdRef = useRef(null)
 
@@ -261,6 +264,7 @@ function PosPage() {
   const {
     searchValue = '',
     cartItems = [],
+    customBundles = [],
     orderDiscountPercent = 0,
     orderDiscountAmountFixed = 0,
     promoCodeInput = '',
@@ -1145,7 +1149,7 @@ function PosPage() {
         return `-${percent}%`;
     };
 
-    const hasCartItems = cartItems.length > 0;
+    const hasCartItems = cartItems.length > 0 || customBundles.length > 0;
     const hasCustomerSelected = Boolean(selectedCustomer?.customerId);
     const hasShippingAddress = Boolean(shippingAddress?.trim());
     const isZeroAmountSale = total === 0 && grossSubtotal > 0;
@@ -1462,6 +1466,7 @@ function PosPage() {
             shippingAddress: address,
             note: orderNote,
             cartItems,
+            customBundles,
             manualDiscount,
             promotionId: appliedPromotion?.id ?? null,
             promotionCode: appliedPromotion?.promoCode ?? null,
@@ -2164,93 +2169,111 @@ function PosPage() {
                     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                         <div className="flex min-h-0 flex-1 flex-col bg-white">
                             <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[#c1c9c0]/40 px-4 py-2.5">
-                                <p className="text-xs font-bold uppercase tracking-wider text-[#717971]">
-                                    Danh sách sản phẩm
-                                    {hasSearchQuery ?
-                                        <span className="ml-1 font-normal normal-case text-[#414942]">· &quot;{searchValue.trim()}&quot;</span>
-                                    :   null}
-                                    {selectedCategorySummary ?
-                                        <span className="ml-1 font-normal normal-case text-[#356647]">· {selectedCategorySummary}</span>
-                                    :   null}
-                                    {selectedPriceFilterLabel && priceFilter ?
-                                        <span className="ml-1 font-normal normal-case text-[#356647]">· {selectedPriceFilterLabel}</span>
-                                    :   null}
-                                </p>
-                                <div className="flex shrink-0 items-center gap-2">
-                                    {filteredSearchProducts.length > 0 ?
-                                        <div className="flex items-center overflow-hidden rounded-lg border border-[#c1c9c0] bg-white text-xs font-semibold text-[#414942]">
-                                            <button
-                                                type="button"
-                                                onClick={() => setProductPage((page) => Math.max(1, page - 1))}
-                                                disabled={isSearchLoading || productPage <= 1}
-                                                className="flex size-7 items-center justify-center hover:bg-[#f6f4ec] disabled:cursor-not-allowed disabled:text-[#a4aaa3]"
-                                                aria-label="Trang sản phẩm trước">
-                                                <Icon className="text-[16px]">chevron_left</Icon>
-                                            </button>
-                                            <span className="min-w-[44px] border-x border-[#f0eee6] px-2 text-center tabular-nums">
-                                                {Math.min(productPage, productTotalPages)} / {productTotalPages}
-                                            </span>
-                                            <button
-                                                type="button"
-                                                onClick={() => setProductPage((page) => Math.min(productTotalPages, page + 1))}
-                                                disabled={isSearchLoading || productPage >= productTotalPages}
-                                                className="flex size-7 items-center justify-center hover:bg-[#f6f4ec] disabled:cursor-not-allowed disabled:text-[#a4aaa3]"
-                                                aria-label="Trang sản phẩm sau">
-                                                <Icon className="text-[16px]">chevron_right</Icon>
-                                            </button>
-                                        </div>
-                                    :   null}
+                                <div className="flex items-center gap-1">
                                     <button
                                         type="button"
-                                        onClick={handleRefreshCatalog}
-                                        disabled={isSearchLoading || isCatalogSyncing}
-                                        className="inline-flex items-center gap-1 rounded-lg border border-[#c1c9c0] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#356647] hover:bg-[#f0eee6] disabled:opacity-50"
-                                        title="Tải DM/SP/SKU mới từ kho sang cửa hàng">
-                                        <Icon className={`text-[16px] ${isCatalogSyncing ? "animate-spin" : ""}`}>sync</Icon>
-                                        {isCatalogSyncing ? "Đang đồng bộ..." : "Đồng bộ"}
-                                        {pendingCatalogSync > 0 && !isCatalogSyncing ?
-                                            <span className="rounded-full bg-amber-100 px-1.5 text-[10px] font-bold text-amber-800">{pendingCatalogSync}</span>
+                                        onClick={() => setPosTab('products')}
+                                        className={`rounded-lg px-3 py-1.5 text-xs font-bold uppercase tracking-wider transition-colors ${posTab === 'products' ? 'bg-[#356647] text-white' : 'text-[#717971] hover:bg-[#f6f4ec]'}`}>
+                                        Thành phẩm
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setPosTab('bundles')}
+                                        className={`relative rounded-lg px-3 py-1.5 text-xs font-bold uppercase tracking-wider transition-colors ${posTab === 'bundles' ? 'bg-[#356647] text-white' : 'text-[#717971] hover:bg-[#f6f4ec]'}`}>
+                                        Nguyên liệu
+                                        {customBundles.length > 0 ?
+                                            <span className="absolute -right-1 -top-1 flex size-4 items-center justify-center rounded-full bg-[#7e5700] text-[9px] font-bold text-white">
+                                                {customBundles.length}
+                                            </span>
                                         :   null}
                                     </button>
-                                    <span className="text-xs text-[#717971]">{filteredSearchProducts.length} SP</span>
                                 </div>
+                                {posTab === 'products' ?
+                                    <div className="flex shrink-0 items-center gap-2">
+                                        {filteredSearchProducts.length > 0 ?
+                                            <div className="flex items-center overflow-hidden rounded-lg border border-[#c1c9c0] bg-white text-xs font-semibold text-[#414942]">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setProductPage((page) => Math.max(1, page - 1))}
+                                                    disabled={isSearchLoading || productPage <= 1}
+                                                    className="flex size-7 items-center justify-center hover:bg-[#f6f4ec] disabled:cursor-not-allowed disabled:text-[#a4aaa3]"
+                                                    aria-label="Trang sản phẩm trước">
+                                                    <Icon className="text-[16px]">chevron_left</Icon>
+                                                </button>
+                                                <span className="min-w-[44px] border-x border-[#f0eee6] px-2 text-center tabular-nums">
+                                                    {Math.min(productPage, productTotalPages)} / {productTotalPages}
+                                                </span>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setProductPage((page) => Math.min(productTotalPages, page + 1))}
+                                                    disabled={isSearchLoading || productPage >= productTotalPages}
+                                                    className="flex size-7 items-center justify-center hover:bg-[#f6f4ec] disabled:cursor-not-allowed disabled:text-[#a4aaa3]"
+                                                    aria-label="Trang sản phẩm sau">
+                                                    <Icon className="text-[16px]">chevron_right</Icon>
+                                                </button>
+                                            </div>
+                                        :   null}
+                                        <button
+                                            type="button"
+                                            onClick={handleRefreshCatalog}
+                                            disabled={isSearchLoading || isCatalogSyncing}
+                                            className="inline-flex items-center gap-1 rounded-lg border border-[#c1c9c0] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#356647] hover:bg-[#f0eee6] disabled:opacity-50"
+                                            title="Tải DM/SP/SKU mới từ kho sang cửa hàng">
+                                            <Icon className={`text-[16px] ${isCatalogSyncing ? "animate-spin" : ""}`}>sync</Icon>
+                                            {isCatalogSyncing ? "Đang đồng bộ..." : "Đồng bộ"}
+                                            {pendingCatalogSync > 0 && !isCatalogSyncing ?
+                                                <span className="rounded-full bg-amber-100 px-1.5 text-[10px] font-bold text-amber-800">{pendingCatalogSync}</span>
+                                            :   null}
+                                        </button>
+                                        <span className="text-xs text-[#717971]">{filteredSearchProducts.length} SP</span>
+                                    </div>
+                                :   null}
                             </div>
 
-                            <CustomScrollArea className="flex-1" contentClassName="flex h-full min-h-0 px-2.5 py-2">
-                                {isSearchLoading ?
-                                    <LoadingIndicator label="Đang tải sản phẩm..." className="min-h-[220px]" />
-                                : filteredSearchProducts.length === 0 ?
-                                    <p className="px-1 py-3 text-sm text-[#717971]">
-                                        {hasSearchQuery || selectedCategoryIds.length > 0 || priceFilter ?
-                                            "Không tìm thấy sản phẩm phù hợp."
-                                        :   "Chưa có sản phẩm để hiển thị."}
-                                    </p>
-                                :   <div className={`grid min-h-0 flex-1 grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 ${visibleProductPageItems.length >= POS_PRODUCT_PAGE_SIZE ? "xl:grid-rows-6" : "xl:auto-rows-max"}`}>
-                                        {visibleProductPageItems.map((item) => {
-                                            const outOfStock = Number(item.stockQuantity) <= 0;
-                                            const lowStock = outOfStock || Number(item.stockQuantity) <= 5;
-                                            return (
-                                                <button
-                                                    key={`${item.productId}-${item.sku}`}
-                                                    type="button"
-                                                    onClick={() => addToCart(item)}
-                                                    className="flex h-full min-h-[80px] w-full items-start gap-2 rounded-lg border border-[#c1c9c0]/50 bg-[#fbf9f1] p-2 text-left transition-colors hover:border-[#356647]/35 hover:bg-[#f6f4ec]">
-                                                    <div className="flex w-[52px] shrink-0 flex-col items-center gap-0.5">
-                                                        <ProductImage src={item.imageUrl} alt={item.name} className="h-12 w-12 rounded-lg" iconClassName="text-[18px]" />
-                                                        <p className={`max-w-[54px] text-center text-[9px] leading-tight ${lowStock ? "font-semibold text-[#7e5700]" : "text-[#717971]"}`}>
-                                                            {formatCompactStock(item.stockQuantity)}
-                                                        </p>
-                                                    </div>
-                                                    <div className="min-w-0 flex-1">
-                                                        <p className="line-clamp-2 min-h-[31px] text-[13px] font-semibold leading-tight text-[#1b1c17]" title={item.name}>{item.name}</p>
-                                                        <p className="mt-1 text-[13px] font-bold tabular-nums text-[#356647]">{formatMoney(item.price)} đ</p>
-                                                    </div>
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
-                                }
-                            </CustomScrollArea>
+                            {posTab === 'bundles' ?
+                                <CustomScrollArea className="flex-1" contentClassName="p-4">
+                                    <CustomBundlePanel
+                                        bundles={customBundles}
+                                        onChange={(b) => updateActiveSession({ customBundles: b })}
+                                    />
+                                </CustomScrollArea>
+                            :
+                                <CustomScrollArea className="flex-1" contentClassName="flex h-full min-h-0 px-2.5 py-2">
+                                    {isSearchLoading ?
+                                        <LoadingIndicator label="Đang tải sản phẩm..." className="min-h-[220px]" />
+                                    : filteredSearchProducts.length === 0 ?
+                                        <p className="px-1 py-3 text-sm text-[#717971]">
+                                            {hasSearchQuery || selectedCategoryIds.length > 0 || priceFilter ?
+                                                "Không tìm thấy sản phẩm phù hợp."
+                                            :   "Chưa có sản phẩm để hiển thị."}
+                                        </p>
+                                    :   <div className={`grid min-h-0 flex-1 grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 ${visibleProductPageItems.length >= POS_PRODUCT_PAGE_SIZE ? "xl:grid-rows-6" : "xl:auto-rows-max"}`}>
+                                            {visibleProductPageItems.map((item) => {
+                                                const outOfStock = Number(item.stockQuantity) <= 0;
+                                                const lowStock = outOfStock || Number(item.stockQuantity) <= 5;
+                                                return (
+                                                    <button
+                                                        key={`${item.productId}-${item.sku}`}
+                                                        type="button"
+                                                        onClick={() => addToCart(item)}
+                                                        className="flex h-full min-h-[80px] w-full items-start gap-2 rounded-lg border border-[#c1c9c0]/50 bg-[#fbf9f1] p-2 text-left transition-colors hover:border-[#356647]/35 hover:bg-[#f6f4ec]">
+                                                        <div className="flex w-[52px] shrink-0 flex-col items-center gap-0.5">
+                                                            <ProductImage src={item.imageUrl} alt={item.name} className="h-12 w-12 rounded-lg" iconClassName="text-[18px]" />
+                                                            <p className={`max-w-[54px] text-center text-[9px] leading-tight ${lowStock ? "font-semibold text-[#7e5700]" : "text-[#717971]"}`}>
+                                                                {formatCompactStock(item.stockQuantity)}
+                                                            </p>
+                                                        </div>
+                                                        <div className="min-w-0 flex-1">
+                                                            <p className="line-clamp-2 min-h-[31px] text-[13px] font-semibold leading-tight text-[#1b1c17]" title={item.name}>{item.name}</p>
+                                                            <p className="mt-1 text-[13px] font-bold tabular-nums text-[#356647]">{formatMoney(item.price)} đ</p>
+                                                        </div>
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    }
+                                </CustomScrollArea>
+                            }
                         </div>
                     </div>
 

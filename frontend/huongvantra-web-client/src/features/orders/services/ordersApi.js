@@ -184,6 +184,17 @@ export function buildCreateOrderBody(payload) {
       unitPrice: Number(line.unitPrice),
       isGift: Boolean(line.isGift),
     })),
+    customBundles: (payload.customBundles ?? []).map((b) => ({
+      label: b.label || null,
+      note: b.note || null,
+      ingredients: (b.ingredients ?? []).map((i) => ({
+        materialSkuId: i.materialSkuId,
+        materialSkuCode: i.materialSkuCode,
+        materialSnapshotName: i.materialSnapshotName,
+        quantity: Number(i.quantity),
+        unitPrice: Number(i.unitPrice),
+      })),
+    })),
   }
 }
 

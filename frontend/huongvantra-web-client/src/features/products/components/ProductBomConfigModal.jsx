@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { showError } from '../../../app/toast.js'
 import { searchMaterials } from '../services/bomApi.js'
+import { getBomQuantityValidationMessage, isCountBasedUnit } from '../utils/bomUnitRules.js'
 
 function useDebounce(value, delay = 300) {
   const [debounced, setDebounced] = useState(value)
@@ -8,6 +10,38 @@ function useDebounce(value, delay = 300) {
     return () => clearTimeout(timer)
   }, [value, delay])
   return debounced
+}
+
+function getMaterialUnit(material) {
+  const baseUnit = material?.units?.find((u) => u.isBaseUnit) || material?.units?.[0]
+  return (
+    material?.materialUnitName ||
+    material?.materialUnit ||
+    baseUnit?.unitName ||
+    material?.baseUnit ||
+    material?.base_unit ||
+    ''
+  )
+}
+
+function normalizeInitialLine(line) {
+  const materialId = line.material_id ?? line.materialId
+  const materialUnitName =
+    line.materialUnitName ??
+    line.MaterialUnitName ??
+    line.materialUnit ??
+    line.MaterialUnit ??
+    line.baseUnit ??
+    line.BaseUnit ??
+    line.base_unit ??
+    ''
+  return {
+    material_id: materialId,
+    materialName: line.materialName ?? line.MaterialName ?? line.name ?? '',
+    materialUnitName,
+    baseUnit: materialUnitName,
+    quantity: line.quantity,
+  }
 }
 
 export default function ProductBomConfigModal({
@@ -21,6 +55,7 @@ export default function ProductBomConfigModal({
   const [searchInput, setSearchInput] = useState('')
   const [searchResults, setSearchResults] = useState([])
   const [isSearching, setIsSearching] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
   const [materialCache, setMaterialCache] = useState({})
   const dropdownRef = useRef(null)
 
@@ -28,9 +63,24 @@ export default function ProductBomConfigModal({
 
   useEffect(() => {
     if (!isOpen) return
-    setLines(initialLines.length > 0 ? initialLines.map((line) => ({ ...line })) : [])
+    const normalizedLines = initialLines.length > 0 ? initialLines.map(normalizeInitialLine) : []
+    setLines(normalizedLines)
     setSearchInput('')
     setSearchResults([])
+    setIsSaving(false)
+    setMaterialCache(() => {
+      const next = {}
+      for (const line of normalizedLines) {
+        if (!line.material_id || !line.materialName) continue
+        next[line.material_id] = {
+          id: line.material_id,
+          name: line.materialName,
+          materialUnitName: line.materialUnitName,
+          baseUnit: line.baseUnit,
+        }
+      }
+      return next
+    })
   }, [isOpen])
 
   useEffect(() => {
@@ -69,7 +119,7 @@ export default function ProductBomConfigModal({
   function addMaterial(product) {
     if (usedIds.has(String(product.id))) return
     setMaterialCache((prev) => ({ ...prev, [product.id]: product }))
-    setLines((prev) => [...prev, { material_id: product.id, quantity: 1 }])
+    setLines((prev) => [...prev, { material_id: product.id, materialUnitName: getMaterialUnit(product), quantity: 1 }])
     setSearchInput('')
     setSearchResults([])
   }
@@ -82,21 +132,47 @@ export default function ProductBomConfigModal({
     setLines((prev) => prev.filter((_, i) => i !== index))
   }
 
-  function handleConfirm() {
-    onConfirm?.(
-      lines
-        .filter((line) => line.material_id)
-        .map((line) => ({
-          material_id: line.material_id,
-          quantity: Number(line.quantity) || 0,
-        })),
+  async function handleConfirm() {
+    const validLines = lines.filter((line) => line.material_id)
+    const duplicate = validLines.find(
+      (line, index) => validLines.findIndex((candidate) => String(candidate.material_id) === String(line.material_id)) !== index,
     )
-    onClose?.()
+    if (duplicate) {
+      showError('Không được chọn trùng nguyên liệu trong một BOM.')
+      return
+    }
+
+    for (const line of validLines) {
+      const material = materialCache[line.material_id] ?? line
+      const unit = getMaterialUnit(material) || line.materialUnitName || line.baseUnit
+      const validationMessage = getBomQuantityValidationMessage(line.quantity, unit)
+      if (validationMessage) {
+        showError(validationMessage)
+        return
+      }
+    }
+
+    setIsSaving(true)
+    try {
+      await onConfirm?.(
+        validLines.map((line) => ({
+          material_id: line.material_id,
+          materialId: line.material_id,
+          quantity: Number(String(line.quantity).replace(',', '.')),
+        })),
+      )
+      onClose?.()
+    } catch {
+      // Caller shows the API error toast; keep the modal open for correction.
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   if (!isOpen || !variant) return null
 
-  const title = `Cấu hình BOM: ${variant.productName} — ${variant.attributeLabel}`
+  const title = `Định mức BOM: ${variant.sku || variant.skuCode || variant.attributeLabel || ''}`
+  const subtitle = [variant.productName, variant.attributeLabel].filter(Boolean).join(' - ')
 
   return (
     <div
@@ -112,9 +188,12 @@ export default function ProductBomConfigModal({
         aria-labelledby="bom-modal-title"
       >
         <header className="flex items-start justify-between gap-4 border-b border-slate-100 px-6 py-4">
-          <h2 id="bom-modal-title" className="text-base font-bold uppercase tracking-wide text-slate-800 sm:text-lg">
-            {title}
-          </h2>
+          <div>
+            <h2 id="bom-modal-title" className="text-base font-bold text-slate-800 sm:text-lg">
+              {title}
+            </h2>
+            {subtitle ? <p className="mt-1 text-xs text-slate-500">{subtitle}</p> : null}
+          </div>
           <button
             type="button"
             onClick={onClose}
@@ -126,7 +205,7 @@ export default function ProductBomConfigModal({
         </header>
 
         <div className="border-b border-slate-100 px-6 py-4">
-          <label className="block text-xs font-semibold text-slate-500">Tìm nguyên liệu / bao bì</label>
+          <label className="block text-xs font-semibold text-slate-500">Nguyên liệu</label>
           <div className="relative mt-2" ref={dropdownRef}>
             <span className="material-symbols-outlined pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[20px] text-slate-400">
               search
@@ -138,7 +217,7 @@ export default function ProductBomConfigModal({
             ) : null}
             <input
               className="w-full rounded-xl border border-slate-200 bg-[#f0eee6] py-3 pl-10 pr-10 text-sm focus:border-[#356647] focus:outline-none focus:ring-2 focus:ring-[#356647]/15"
-              placeholder="Gõ tên hoặc mã hàng nguyên liệu..."
+              placeholder="Tìm tên hoặc mã nguyên liệu..."
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
             />
@@ -149,7 +228,7 @@ export default function ProductBomConfigModal({
                 ) : null}
                 {searchResults.map((product) => {
                   const isUsed = usedIds.has(String(product.id))
-                  const baseUnit = product.units?.find((u) => u.isBaseUnit) || product.units?.[0]
+                  const unitName = getMaterialUnit(product)
                   return (
                     <button
                       key={product.id}
@@ -163,7 +242,7 @@ export default function ProductBomConfigModal({
                         <span className="ml-2 font-medium text-slate-800">{product.name}</span>
                         {isUsed ? <span className="ml-2 text-xs text-slate-400">(đã có)</span> : null}
                       </span>
-                      <span className="shrink-0 text-xs text-slate-500">{baseUnit?.unitName || product.baseUnit || '—'}</span>
+                      <span className="shrink-0 text-xs text-slate-500">{unitName || '—'}</span>
                     </button>
                   )
                 })}
@@ -178,15 +257,15 @@ export default function ProductBomConfigModal({
         <div className="flex-1 overflow-y-auto px-6 py-4">
           {lines.length === 0 ? (
             <p className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-400">
-              Chưa có nguyên liệu. Dùng ô tìm kiếm phía trên để thêm.
+              SKU thành phẩm này chưa có BOM. Dùng ô tìm kiếm phía trên để thêm nguyên liệu.
             </p>
           ) : (
             <div className="overflow-x-auto rounded-xl border border-slate-200">
               <table className="min-w-full text-left text-sm">
                 <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                   <tr>
-                    <th className="px-4 py-3 font-semibold">Tên nguyên liệu</th>
-                    <th className="px-4 py-3 text-center font-semibold">Số lượng tiêu hao</th>
+                    <th className="px-4 py-3 font-semibold">Nguyên liệu</th>
+                    <th className="px-4 py-3 text-center font-semibold">Định mức cho 1 đơn vị thành phẩm</th>
                     <th className="px-4 py-3 font-semibold">Đơn vị</th>
                     <th className="px-4 py-3 text-right font-semibold">Hành động</th>
                   </tr>
@@ -194,7 +273,8 @@ export default function ProductBomConfigModal({
                 <tbody className="divide-y divide-slate-100">
                   {lines.map((line, index) => {
                     const material = materialCache[line.material_id]
-                    const baseUnit = material?.units?.find((u) => u.isBaseUnit) || material?.units?.[0]
+                    const unitName = getMaterialUnit(material) || line.materialUnitName || line.baseUnit
+                    const countBased = isCountBasedUnit(unitName)
                     return (
                       <tr key={`${line.material_id}-${index}`} className="hover:bg-slate-50/60">
                         <td className="px-4 py-3 font-medium text-slate-800">
@@ -203,15 +283,21 @@ export default function ProductBomConfigModal({
                         <td className="px-4 py-3">
                           <input
                             type="number"
-                            min="0"
-                            step="0.01"
+                            min={countBased ? '1' : '0.001'}
+                            step={countBased ? '1' : '0.001'}
+                            inputMode={countBased ? 'numeric' : 'decimal'}
                             className="mx-auto block w-24 rounded-lg border border-slate-200 px-3 py-2 text-center text-sm focus:border-[#356647] focus:outline-none"
                             value={line.quantity}
                             onChange={(e) => updateQuantity(index, e.target.value)}
+                            onKeyDown={(event) => {
+                              if (['e', 'E', '+', '-'].includes(event.key) || (countBased && ['.', ','].includes(event.key))) {
+                                event.preventDefault()
+                              }
+                            }}
                           />
                         </td>
                         <td className="px-4 py-3 text-slate-600">
-                          {baseUnit?.unitName || material?.baseUnit || '—'}
+                          {unitName || '—'}
                         </td>
                         <td className="px-4 py-3 text-right">
                           <button
@@ -233,13 +319,14 @@ export default function ProductBomConfigModal({
         </div>
 
         <footer className="flex items-center justify-between border-t border-slate-100 px-6 py-4">
-          <span className="text-xs text-slate-500">{lines.length} nguyên liệu</span>
+          <span className="text-xs text-slate-500">{lines.length} nguyên liệu trong BOM</span>
           <button
             type="button"
             onClick={handleConfirm}
+            disabled={isSaving}
             className="rounded-xl bg-[#538463] px-8 py-2.5 text-sm font-bold uppercase tracking-wide text-white hover:bg-[#457053]"
           >
-            Xác nhận
+            {isSaving ? 'Đang lưu...' : 'Lưu BOM'}
           </button>
         </footer>
       </div>

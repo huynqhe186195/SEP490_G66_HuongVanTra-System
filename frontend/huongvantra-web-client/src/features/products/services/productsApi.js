@@ -46,6 +46,7 @@ export function mapProductVariant(item) {
   if (!item || typeof item !== 'object') return null
   const rawUnits = item.units ?? item.Units ?? []
   const rawBomLines = item.bomLines ?? item.BomLines ?? []
+  const bomLineCount = Number(item.bomLineCount ?? item.BomLineCount ?? rawBomLines.length ?? 0)
   return {
     id: item.id ?? item.Id,
     productId: item.productId ?? item.ProductId,
@@ -61,12 +62,20 @@ export function mapProductVariant(item) {
     allowRewardPoints: Boolean(item.allowRewardPoints ?? item.AllowRewardPoints ?? true),
     isActive: Boolean(item.isActive ?? item.IsActive ?? true),
     imageUrl: item.imageUrl ?? item.ImageUrl ?? '',
+    hasBom: Boolean(item.hasBom ?? item.HasBom ?? bomLineCount > 0),
+    bomLineCount,
     units: toArray(rawUnits).map(mapProductUnit).filter(Boolean),
-    bomLines: toArray(rawBomLines).map((line) => ({
-      materialId: line.materialId ?? line.MaterialId,
-      materialName: line.materialName ?? line.MaterialName ?? '',
-      quantity: Number(line.quantity ?? line.Quantity ?? 0),
-    })),
+    bomLines: toArray(rawBomLines).map((line) => {
+      const materialUnitName =
+        line.materialUnitName ?? line.MaterialUnitName ?? line.materialUnit ?? line.MaterialUnit ?? line.baseUnit ?? line.BaseUnit ?? ''
+      return {
+        materialId: line.materialId ?? line.MaterialId,
+        materialName: line.materialName ?? line.MaterialName ?? '',
+        materialUnitName,
+        baseUnit: materialUnitName,
+        quantity: Number(line.quantity ?? line.Quantity ?? 0),
+      }
+    }),
   }
 }
 

@@ -22,6 +22,8 @@ public class OrderLogic(
     PromotionLogic _promotionLogic,
     IProductCatalogClient _productCatalogClient,
     ICustomerCatalogClient _customerCatalogClient,
+    IInventoryCatalogClient _inventoryCatalogClient,
+    ICustomBundleRepository _customBundleRepo,
     IEmailService _emailService,
     IOptions<SepayOptions> sepayOptions)
 {
@@ -260,6 +262,8 @@ public class OrderLogic(
 
         var orderCode = await _codeGen.GenerateAsync(req.OrderKind, ct);
         var totalAmount = detailInputs.Sum(i => i.UnitPrice * i.Quantity);
+        var bundleTotal = (req.CustomBundles ?? []).Sum(b => b.Ingredients.Sum(i => i.UnitPrice * i.Quantity));
+        totalAmount += bundleTotal;
         var manualDiscount = req.DiscountAmount;
         if (manualDiscount > totalAmount)
             throw new OrderValidationException("Giảm giá thủ công không được lớn hơn tổng tiền đơn hàng.");
@@ -337,6 +341,31 @@ public class OrderLogic(
             IsGift = i.IsGift,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
+        }).ToList();
+
+        var now = DateTime.UtcNow;
+        order.CustomBundles = (req.CustomBundles ?? []).Select(b => new CustomBundle
+        {
+            Id = Guid.NewGuid(),
+            OrderId = order.Id,
+            Label = b.Label?.Trim(),
+            Note = b.Note?.Trim(),
+            TotalPrice = b.Ingredients.Sum(i => i.UnitPrice * i.Quantity),
+            PackingStatus = PackingStatus.Pending,
+            Ingredients = b.Ingredients.Select(i => new CustomBundleIngredient
+            {
+                Id = Guid.NewGuid(),
+                MaterialSkuId = i.MaterialSkuId,
+                MaterialSkuCode = i.MaterialSkuCode,
+                MaterialSnapshotName = i.MaterialSnapshotName,
+                Quantity = i.Quantity,
+                UnitPrice = i.UnitPrice,
+                SubTotal = i.UnitPrice * i.Quantity,
+                CreatedAt = now,
+                UpdatedAt = now
+            }).ToList(),
+            CreatedAt = now,
+            UpdatedAt = now
         }).ToList();
 
         var debtAmount = req.PaymentMethod == PaymentMethod.COD
@@ -1256,6 +1285,44 @@ public class OrderLogic(
         return Task.FromResult(true);
     }
 
+    public async Task<PagedResponse<CustomBundleResponse>> GetPendingCustomBundlesAsync(
+        int page, int pageSize, CancellationToken ct = default)
+    {
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, 100);
+        var (items, total) = await _customBundleRepo.GetPagedByStatusAsync(PackingStatus.Pending, page, pageSize, ct);
+        var dtos = items.Select(MapBundle).ToList();
+        return new PagedResponse<CustomBundleResponse>(
+            dtos, page, pageSize, total,
+            (int)Math.Ceiling((double)total / pageSize));
+    }
+
+    public async Task<CustomBundleResponse> PackCustomBundleAsync(Guid bundleId, CancellationToken ct = default)
+    {
+        var bundle = await _customBundleRepo.GetByIdAsync(bundleId, ct)
+            ?? throw new OrderNotFoundException(bundleId);
+
+        if (bundle.PackingStatus == PackingStatus.Packed)
+            throw new OrderValidationException("Gói này đã được đóng gói.");
+
+        var ingredients = bundle.Ingredients.Select(i => (i.MaterialSkuId, i.Quantity));
+        await _inventoryCatalogClient.DeductMaterialsAsync(ingredients, ct);
+
+        bundle.PackingStatus = PackingStatus.Packed;
+        bundle.PackedAt = DateTime.UtcNow;
+        bundle.UpdatedAt = DateTime.UtcNow;
+        await _customBundleRepo.SaveChangesAsync(ct);
+
+        return MapBundle(bundle);
+    }
+
+    private static CustomBundleResponse MapBundle(CustomBundle b) => new(
+        b.Id, b.OrderId, b.Label, b.Note, b.TotalPrice,
+        b.PackingStatus.ToString(), b.PackedAt,
+        (b.Ingredients ?? []).Select(i => new CustomBundleIngredientResponse(
+            i.Id, i.MaterialSkuId, i.MaterialSkuCode, i.MaterialSnapshotName,
+            i.Quantity, i.UnitPrice, i.SubTotal)).ToList());
+
     private static OrderResponse MapToResponse(Order o) => new(
         o.Id, o.OrderCode, o.CustomerId, o.CustomerSnapshotName,
         o.EmployeeId, o.OrderChannel.ToString(), o.OrderKind.ToString(), o.OrderStatus.ToString(),
@@ -1268,7 +1335,13 @@ public class OrderLogic(
         (o.Payments ?? []).Select(p => new PaymentResponse(
             p.Id, p.OrderId, o.OrderCode, o.CustomerSnapshotName,
             p.PaymentMethod.ToString(), p.Amount, p.PaymentStatus.ToString(),
-            p.TransactionRef, p.IsCodVerified, p.CodWarningDate, p.PaidAt, p.CodDebtSettlementJson)).ToList()
+            p.TransactionRef, p.IsCodVerified, p.CodWarningDate, p.PaidAt, p.CodDebtSettlementJson)).ToList(),
+        (o.CustomBundles ?? []).Select(b => new CustomBundleResponse(
+            b.Id, b.OrderId, b.Label, b.Note, b.TotalPrice,
+            b.PackingStatus.ToString(), b.PackedAt,
+            (b.Ingredients ?? []).Select(i => new CustomBundleIngredientResponse(
+                i.Id, i.MaterialSkuId, i.MaterialSkuCode, i.MaterialSnapshotName,
+                i.Quantity, i.UnitPrice, i.SubTotal)).ToList())).ToList()
     );
 
     private static OrderSummaryResponse MapToSummary(Order o)

@@ -1,6 +1,7 @@
 using HuongVanTra.Shared.Auth;
 using InventoryService.Application.DTOs.Requests;
 using InventoryService.Application.UseCases;
+using InventoryService.WebAPI.Extensions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -37,7 +38,7 @@ public class ProductionOrdersController(InventoryLogic _logic) : ControllerBase
     [HttpPost("{id:guid}/complete")]
     public async Task<IActionResult> Complete(Guid id, CancellationToken ct)
     {
-        var result = await _logic.CompleteProductionOrderAsync(id, User.GetUserId(), ct);
+        var result = await _logic.CompleteProductionOrderAsync(id, User.GetUserId(), User.ToCreatorSnapshot(), ct);
         return Ok(result);
     }
 

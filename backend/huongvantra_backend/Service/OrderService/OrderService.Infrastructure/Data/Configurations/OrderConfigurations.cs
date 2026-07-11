@@ -200,3 +200,42 @@ public class OrderActivityConfiguration : IEntityTypeConfiguration<OrderActivity
         builder.HasOne(e => e.Order).WithMany().HasForeignKey(e => e.OrderId);
     }
 }
+
+public class CustomBundleConfiguration : IEntityTypeConfiguration<CustomBundle>
+{
+    public void Configure(EntityTypeBuilder<CustomBundle> builder)
+    {
+        builder.ToTable("CustomBundles");
+        builder.HasKey(e => e.Id);
+        builder.Property(e => e.Id).ValueGeneratedNever();
+        builder.Property(e => e.Label).HasMaxLength(200);
+        builder.Property(e => e.Note).HasMaxLength(500);
+        builder.Property(e => e.TotalPrice).HasColumnType("decimal(18,2)").IsRequired();
+        builder.Property(e => e.PackingStatus).HasConversion<string>().HasMaxLength(20).IsRequired();
+        builder.Property(e => e.PackedAt);
+        builder.Property(e => e.CreatedAt).IsRequired();
+        builder.Property(e => e.UpdatedAt).IsRequired();
+        builder.HasIndex(e => e.OrderId);
+        builder.HasIndex(e => e.PackingStatus);
+        builder.HasOne(e => e.Order).WithMany(o => o.CustomBundles).HasForeignKey(e => e.OrderId).OnDelete(DeleteBehavior.Cascade);
+        builder.HasMany(e => e.Ingredients).WithOne(i => i.Bundle).HasForeignKey(i => i.CustomBundleId).OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
+public class CustomBundleIngredientConfiguration : IEntityTypeConfiguration<CustomBundleIngredient>
+{
+    public void Configure(EntityTypeBuilder<CustomBundleIngredient> builder)
+    {
+        builder.ToTable("CustomBundleIngredients");
+        builder.HasKey(e => e.Id);
+        builder.Property(e => e.Id).ValueGeneratedNever();
+        builder.Property(e => e.MaterialSkuCode).HasMaxLength(50).IsRequired();
+        builder.Property(e => e.MaterialSnapshotName).HasMaxLength(255).IsRequired();
+        builder.Property(e => e.Quantity).IsRequired();
+        builder.Property(e => e.UnitPrice).HasColumnType("decimal(18,2)").IsRequired();
+        builder.Property(e => e.SubTotal).HasColumnType("decimal(18,2)").IsRequired();
+        builder.Property(e => e.CreatedAt).IsRequired();
+        builder.Property(e => e.UpdatedAt).IsRequired();
+        builder.HasIndex(e => e.CustomBundleId);
+    }
+}

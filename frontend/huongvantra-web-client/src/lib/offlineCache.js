@@ -73,16 +73,25 @@ async function fetchAllCustomers() {
   return all
 }
 
+const CUSTOMER_PERMISSIONS = new Set(['VIEW_CUSTOMER', 'VIEW_ALL_CUSTOMERS', 'CREATE_CUSTOMER'])
+
+function canViewCustomers(permissions) {
+  if (!Array.isArray(permissions) || permissions.length === 0) return false
+  return permissions.some(p => CUSTOMER_PERMISSIONS.has(p))
+}
+
 // ── Main sync function — called on "Chuẩn bị offline" or background timer ───
 
-export async function syncOfflineCache() {
+export async function syncOfflineCache({ permissions = [] } = {}) {
   const safe = fn => fn().catch(e => { console.warn('[offline-sync]', e.message); return [] })
+
+  const shouldSyncCustomers = canViewCustomers(permissions)
 
   const [skus, products, stocks, customers] = await Promise.all([
     safe(fetchAllSkus),
     safe(fetchAllProducts),
     safe(fetchAllStocks),
-    safe(fetchAllCustomers),
+    shouldSyncCustomers ? safe(fetchAllCustomers) : Promise.resolve([]),
   ])
 
   const productById = new Map(

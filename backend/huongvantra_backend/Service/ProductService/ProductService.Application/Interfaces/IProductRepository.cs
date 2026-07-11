@@ -17,10 +17,13 @@ public interface IProductRepository
     Task<int> CountPendingVariantSyncAsync(CancellationToken ct = default);
     Task<List<Domain.Entities.ProductVariant>> SyncPendingVariantsToStoreAsync(DateTime syncedAt, CancellationToken ct = default);
     Task<Product?> GetByIdAsync(Guid id, bool includeDeleted = false);
+    Task<ProductVariant?> GetVariantByIdAsync(Guid id, bool includeDeleted = false);
+    Task<List<Product>> GetProductsByIdsAsync(IEnumerable<Guid> ids, bool includeDeleted = false);
     Task<bool> ExistsNameAsync(string name, Guid? excludeProductId = null, bool includeDeleted = true);
     Task<bool> ExistsVariantSkuCodeAsync(string skuCode, Guid? excludeVariantId = null, Guid? excludeProductId = null);
     Task<Product> CreateAsync(Product product);
     Task<Product> UpdateAsync(Product product);
+    Task<ProductVariant> ReplaceVariantBomAsync(Guid variantId, List<ProductVariantBomLine> lines);
     Task DeleteAsync(Product product);
     Task RestoreAsync(Product product);
 }

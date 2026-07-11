@@ -1,6 +1,7 @@
 using HuongVanTra.Shared.Auth;
 using InventoryService.Application.DTOs.Requests;
 using InventoryService.Application.UseCases;
+using InventoryService.WebAPI.Extensions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -33,7 +34,7 @@ public class WarehouseBatchesController(InventoryLogic _logic) : ControllerBase
     [Authorize(Roles = "Warehouse")]
     public async Task<IActionResult> Create([FromBody] CreateWarehouseBatchRequest request, CancellationToken ct)
     {
-        var created = await _logic.CreateWarehouseBatchAsync(request, User.GetUserId(), ct);
+        var created = await _logic.CreateWarehouseBatchAsync(request, User.GetUserId(), User.ToCreatorSnapshot(), ct);
         return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
     }
 }
