@@ -34,7 +34,7 @@ import {
   isCorporateCustomerType,
 } from '../utils/customerDisplay.js'
 
-const VALID_CUSTOMER_SECTIONS = new Set(['general', 'vip'])
+const VALID_CUSTOMER_SECTIONS = new Set(['general', 'vip', 'corporate', 'inactive'])
 
 const corporateIcons = ['corporate_fare', 'business', 'domain', 'factory']
 const corporateIconClasses = [
