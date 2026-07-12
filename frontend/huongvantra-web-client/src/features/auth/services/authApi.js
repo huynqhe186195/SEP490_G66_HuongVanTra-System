@@ -15,6 +15,7 @@ const ROLE_MODULE_MAP = {
     'stock_adjustment_ops',
     'customers',
     'products',
+    'product_approvals_admin',
     'staff',
     'membership_tiers_admin',
     'promotions_admin',

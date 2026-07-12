@@ -37,6 +37,7 @@ builder.Services.AddScoped<BrandLogic>();
 builder.Services.AddScoped<AttributeNameLogic>();
 builder.Services.AddScoped<ProductLogic>();
 builder.Services.AddScoped<ProductSkuLogic>();
+builder.Services.AddScoped<ProductApprovalLogic>();
 builder.Services.AddScoped<PriceBookLogic>();
 builder.Services.AddScoped<CatalogSyncLogic>();
 

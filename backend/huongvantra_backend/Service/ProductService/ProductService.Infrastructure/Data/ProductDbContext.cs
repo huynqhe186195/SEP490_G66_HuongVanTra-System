@@ -16,6 +16,7 @@ public class ProductDbContext(DbContextOptions<ProductDbContext> options) : DbCo
     public DbSet<PriceBook> PriceBooks => Set<PriceBook>();
     public DbSet<PriceBookEntry> PriceBookEntries => Set<PriceBookEntry>();
     public DbSet<ProductVariantBomLine> ProductVariantBomLines => Set<ProductVariantBomLine>();
+    public DbSet<NewProductApprovalRequest> NewProductApprovalRequests => Set<NewProductApprovalRequest>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -29,5 +30,6 @@ public class ProductDbContext(DbContextOptions<ProductDbContext> options) : DbCo
         modelBuilder.ApplyConfiguration(new PriceBookConfiguration());
         modelBuilder.ApplyConfiguration(new PriceBookEntryConfiguration());
         modelBuilder.ApplyConfiguration(new ProductVariantBomLineConfiguration());
+        modelBuilder.ApplyConfiguration(new NewProductApprovalRequestConfiguration());
     }
 }

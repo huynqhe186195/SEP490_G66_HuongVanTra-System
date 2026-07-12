@@ -3,7 +3,7 @@
 ## Current Phase
 
 - Phase 2 - New Product Creation Approval for `/inventory/products/create`.
-- Phase 1 has been committed locally and Phase 2 is ready for source inspection/implementation.
+- Phase 2 source implemented; ProductService/Gateway/frontend builds passed; Docker migration/runtime verification passed; ready to commit.
 
 ## Completed Phases
 
@@ -184,11 +184,34 @@ OrderService latest detected migrations include:
   - `frontend/huongvantra-web-client/src/features/inventory/pages/StockDeductQueuePage.jsx`
   - `frontend/huongvantra-web-client/src/features/inventory/services/stockDeductQueueApi.js`
   - `frontend/huongvantra-web-client/src/features/orders/utils/orderDisplay.js`
+- Phase 2 implementation files currently changed but not committed:
+  - `backend/huongvantra_backend/Service/ProductService/ProductService.Domain/Entities/NewProductApprovalRequest.cs`
+  - `backend/huongvantra_backend/Service/ProductService/ProductService.Domain/Enums/NewProductApprovalStatus.cs`
+  - `backend/huongvantra_backend/Service/ProductService/ProductService.Domain/Enums/ProductCreationMethod.cs`
+  - `backend/huongvantra_backend/Service/ProductService/ProductService.Application/DTOs/Requests/ProductApprovalRequests.cs`
+  - `backend/huongvantra_backend/Service/ProductService/ProductService.Application/DTOs/Responses/ProductApprovalResponses.cs`
+  - `backend/huongvantra_backend/Service/ProductService/ProductService.Infrastructure/Data/Configurations/NewProductApprovalRequestConfiguration.cs`
+  - `backend/huongvantra_backend/Service/ProductService/ProductService.Infrastructure/Data/ProductDbContext.cs`
+  - `backend/huongvantra_backend/Service/ProductService/ProductService.Infrastructure/Migrations/20260712120000_AddNewProductApprovalRequests.cs`
+  - `backend/huongvantra_backend/Service/ProductService/ProductService.Infrastructure/Migrations/ProductDbContextModelSnapshot.cs`
+  - `backend/huongvantra_backend/Service/ProductService/ProductService.Infrastructure/UseCases/ProductApprovalLogic.cs`
+  - `backend/huongvantra_backend/Service/ProductService/ProductService.WebAPI/Controllers/ProductApprovalRequestsController.cs`
+  - `backend/huongvantra_backend/Service/ProductService/ProductService.WebAPI/Extensions/ProductClaimsExtensions.cs`
+  - `backend/huongvantra_backend/Service/ProductService/ProductService.WebAPI/Program.cs`
+  - `backend/huongvantra_backend/API_Gateway/HuongVanTra.Gateway/appsettings.json`
+  - `frontend/huongvantra-web-client/src/app/App.jsx`
+  - `frontend/huongvantra-web-client/src/app/navigation.js`
+  - `frontend/huongvantra-web-client/src/features/auth/services/authApi.js`
+  - `frontend/huongvantra-web-client/src/features/products/pages/ProductApprovalsPage.jsx`
+  - `frontend/huongvantra-web-client/src/features/products/pages/ProductFormPage.jsx`
+  - `frontend/huongvantra-web-client/src/features/products/services/productsApi.js`
 
 ## Migrations Added
 
 - Phase 1 added and applied:
   - `20260712100000_AddStockDeductQueueAuditAndInsufficientStatus`
+- Phase 2 added and applied:
+  - `20260712120000_AddNewProductApprovalRequests`
 
 ## Commands Run
 
@@ -222,6 +245,21 @@ OrderService latest detected migrations include:
 - Final `git diff --check` - passed; only Windows LF/CRLF warnings.
 - `git add -A` - passed; staged Phase 1 verified changes.
 - `git commit -m "feat(inventory): complete sell-first stock deduction flow"` - passed; created commit `e499e65`.
+- Phase 2 `dotnet build Service/ProductService/ProductService.WebAPI/ProductService.WebAPI.csproj` - first sandbox attempt failed with `NU1301`; escalated retry passed.
+- Phase 2 `npm.cmd run build` - passed with existing Vite dynamic import/chunk size warnings.
+- Phase 2 final `dotnet build Service/ProductService/ProductService.WebAPI/ProductService.WebAPI.csproj` - passed with 0 warnings and 0 errors.
+- Phase 2 `dotnet build API_Gateway/HuongVanTra.Gateway/HuongVanTra.Gateway.csproj` - passed with 0 warnings and 0 errors.
+- `docker compose build product-service gateway` - passed.
+- `docker compose up -d --no-deps product-service gateway` - passed; both containers recreated/started and `product-service` is healthy.
+- `docker compose logs product-service --tail 300` - passed; service started without migration/runtime failure.
+- `docker compose logs gateway --tail 200` - passed; gateway started and loaded proxy config.
+- DB verification through `docker exec -i hvt-mysql mysql ... hvt_product_db` - passed; migration exists and `NewProductApprovalRequests` table/columns/index exist.
+- Log filtering for ProductService/Gateway migration/runtime error patterns - passed; no matching service error lines.
+- `curl.exe -i http://localhost:5000/api/v1/product-approval-requests` - returned `401 Unauthorized`, confirming Gateway route exists.
+- `curl.exe -i http://localhost:5003/api/v1/product-approval-requests` - returned `401 Unauthorized`, confirming ProductService controller exists.
+- Admin API smoke check through Gateway - login `admin`, `GET /api/v1/product-approval-requests?page=1&pageSize=5&status=all` returned `HTTP 200`.
+- Manager permission smoke check through Gateway - login `manager01`, `POST /api/v1/product-approval-requests/validate-code` returned `HTTP 403`.
+- Phase 2 final `git diff --check` - passed; only Windows LF/CRLF warnings.
 
 ## Tests/Builds Run
 
@@ -251,11 +289,27 @@ OrderService latest detected migrations include:
   - `CancelReason`
   - `LastAttemptAt`
   - `LastShortageReason`
+- Phase 2 ProductService targeted build passed.
+- Phase 2 Gateway targeted build passed.
+- Phase 2 frontend production build passed.
+- Docker build/restart of `product-service` and `gateway` passed.
+- Phase 2 migration exists in `hvt_product_db.__EFMigrationsHistory`.
+- `NewProductApprovalRequests` contains:
+  - `ApprovalCode`
+  - `Status`
+  - `ProductSnapshotJson`
+  - `FinalProductSnapshotJson`
+  - `ManualModeReason`
+  - `CreatedProductId`
+- `IX_NewProductApprovalRequests_ApprovalCode` exists and is unique.
+- Gateway route `/api/v1/product-approval-requests` returns `401` without token instead of `404`.
+- Admin list API returns `HTTP 200`; Manager validate-code API returns `HTTP 403`.
 
 ## Tests/Builds Failed Or Blocked
 
 - Initial InventoryService build failed only because sandbox blocked NuGet network access (`NU1301`); escalated retry passed.
 - Earlier `docker compose ps` failed because Docker daemon/API was unavailable; retry after Docker startup passed.
+- Phase 2 initial ProductService build failed only because sandbox blocked NuGet network access (`NU1301`); escalated retry passed.
 
 ## Current Known Issues
 
@@ -265,12 +319,19 @@ OrderService latest detected migrations include:
   - cancel queue with reason
   - sales outbound voucher visible in export slips
   - OrderService status no longer pending after confirm/cancel
-- Product Approval workflow does not exist yet in ProductService or frontend; this is Phase 2.
+- Product Approval source implementation now exists; runtime migration/API verification is still pending.
+- Phase 2 manual API/UI verification is still pending:
+  - Admin create/authorize/cancel approval request
+  - Warehouse validate code
+  - Warehouse automatic create
+  - Warehouse manual fallback with reason
+  - reused/cancelled/Manager code usage blocked
 
 ## Next Recommended Action
 
-- Commit this docs-only Phase 1 progress update.
-- Start Phase 2 source inspection for New Product Creation Approval.
+- Commit Phase 2 with `feat(product): add new product approval workflow`.
+- After commit, update this file with the Phase 2 commit hash.
+- Then start Phase 3 role and wording cleanup.
 
 ## Last Safe Local Commit Hash
 

@@ -266,6 +266,124 @@ export async function createProduct(payload) {
   return mapProduct(data)
 }
 
+function mapProductApproval(item) {
+  if (!item || typeof item !== 'object') return null
+  const rawSkuIds = item.createdSkuIds ?? item.CreatedSkuIds ?? []
+  return {
+    id: item.id ?? item.Id,
+    approvalCode: item.approvalCode ?? item.ApprovalCode ?? '',
+    status: item.status ?? item.Status ?? '',
+    productSnapshot: item.productSnapshot ?? item.ProductSnapshot ?? null,
+    finalProductSnapshot: item.finalProductSnapshot ?? item.FinalProductSnapshot ?? null,
+    productName: item.productName ?? item.ProductName ?? '',
+    productType: item.productType ?? item.ProductType ?? '',
+    categoryId: item.categoryId ?? item.CategoryId ?? null,
+    initialPrice: numberOrNull(item.initialPrice ?? item.InitialPrice),
+    requestedByName: item.requestedByName ?? item.RequestedByName ?? '',
+    requestedByRoleName: item.requestedByRoleName ?? item.RequestedByRoleName ?? '',
+    requestedAt: item.requestedAt ?? item.RequestedAt ?? null,
+    authorisedByName: item.authorisedByName ?? item.AuthorisedByName ?? '',
+    authorisedByRoleName: item.authorisedByRoleName ?? item.AuthorisedByRoleName ?? '',
+    authorisedAt: item.authorisedAt ?? item.AuthorisedAt ?? null,
+    confirmedByName: item.confirmedByName ?? item.ConfirmedByName ?? '',
+    confirmedByRoleName: item.confirmedByRoleName ?? item.ConfirmedByRoleName ?? '',
+    confirmedAt: item.confirmedAt ?? item.ConfirmedAt ?? null,
+    cancelledByName: item.cancelledByName ?? item.CancelledByName ?? '',
+    cancelledByRoleName: item.cancelledByRoleName ?? item.CancelledByRoleName ?? '',
+    cancelledAt: item.cancelledAt ?? item.CancelledAt ?? null,
+    cancelReason: item.cancelReason ?? item.CancelReason ?? '',
+    creationMethod: item.creationMethod ?? item.CreationMethod ?? '',
+    manualModeReason: item.manualModeReason ?? item.ManualModeReason ?? '',
+    usedAt: item.usedAt ?? item.UsedAt ?? null,
+    createdProductId: item.createdProductId ?? item.CreatedProductId ?? null,
+    createdSkuIds: Array.isArray(rawSkuIds) ? rawSkuIds : [],
+    adminNotes: item.adminNotes ?? item.AdminNotes ?? '',
+    warehouseNotes: item.warehouseNotes ?? item.WarehouseNotes ?? '',
+    createdAt: item.createdAt ?? item.CreatedAt ?? null,
+    updatedAt: item.updatedAt ?? item.UpdatedAt ?? null,
+  }
+}
+
+export async function fetchProductApprovals(params = {}) {
+  const search = new URLSearchParams()
+  if (params.status) search.set('status', params.status)
+  if (params.search) search.set('search', params.search)
+  search.set('page', String(params.page ?? 1))
+  search.set('pageSize', String(Math.min(100, Math.max(1, params.pageSize ?? 20))))
+  const data = await apiRequestAuth(`/api/v1/product-approval-requests?${search.toString()}`, { method: 'GET' })
+  const paged = toPagedResult(data)
+  return {
+    ...paged,
+    items: paged.items.map(mapProductApproval).filter(Boolean),
+  }
+}
+
+export async function createProductApprovalRequest(payload) {
+  const data = await apiRequestAuth('/api/v1/product-approval-requests', {
+    method: 'POST',
+    body: JSON.stringify({
+      product: payload.product,
+      adminNotes: trimOrNull(payload.adminNotes),
+    }),
+  })
+  return mapProductApproval(data)
+}
+
+export async function authorizeProductApprovalRequest(id, adminNotes = '') {
+  const data = await apiRequestAuth(`/api/v1/product-approval-requests/${id}/authorize`, {
+    method: 'POST',
+    body: JSON.stringify({ adminNotes: trimOrNull(adminNotes) }),
+  })
+  return mapProductApproval(data)
+}
+
+export async function cancelProductApprovalRequest(id, reason) {
+  const data = await apiRequestAuth(`/api/v1/product-approval-requests/${id}/cancel`, {
+    method: 'POST',
+    body: JSON.stringify({ reason: String(reason || '').trim() }),
+  })
+  return mapProductApproval(data)
+}
+
+export async function validateProductApprovalCode(approvalCode) {
+  const data = await apiRequestAuth('/api/v1/product-approval-requests/validate-code', {
+    method: 'POST',
+    body: JSON.stringify({ approvalCode: String(approvalCode || '').trim().toUpperCase() }),
+  })
+  return {
+    isValid: Boolean(data?.isValid ?? data?.IsValid),
+    message: data?.message ?? data?.Message ?? '',
+    approval: mapProductApproval(data?.approval ?? data?.Approval),
+  }
+}
+
+export async function createProductFromApproval(approvalCode) {
+  const data = await apiRequestAuth('/api/v1/product-approval-requests/create-automatic', {
+    method: 'POST',
+    body: JSON.stringify({ approvalCode: String(approvalCode || '').trim().toUpperCase() }),
+  })
+  return {
+    approval: mapProductApproval(data?.approval ?? data?.Approval),
+    product: mapProduct(data?.product ?? data?.Product),
+  }
+}
+
+export async function createProductManualFromApproval({ approvalCode, product, manualModeReason, warehouseNotes }) {
+  const data = await apiRequestAuth('/api/v1/product-approval-requests/create-manual', {
+    method: 'POST',
+    body: JSON.stringify({
+      approvalCode: String(approvalCode || '').trim().toUpperCase(),
+      product: buildCreateProductBody(product),
+      manualModeReason: String(manualModeReason || '').trim(),
+      warehouseNotes: trimOrNull(warehouseNotes),
+    }),
+  })
+  return {
+    approval: mapProductApproval(data?.approval ?? data?.Approval),
+    product: mapProduct(data?.product ?? data?.Product),
+  }
+}
+
 export async function updateProduct(id, payload) {
   const data = await apiRequestAuth(`/api/v1/products/${id}`, {
     method: 'PUT',
