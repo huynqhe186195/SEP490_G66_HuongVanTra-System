@@ -2,8 +2,8 @@
 
 ## Current Phase
 
-- Phase 3 - Role and wording cleanup across Inventory.
-- Phase 3 source changes are implemented and verified; ready to commit locally.
+- Phase 4 - Integration stabilization and regression checks.
+- Phase 3 has been committed locally and Phase 4 is ready for source/runtime verification.
 
 ## Completed Phases
 
@@ -13,11 +13,10 @@
 - Phase 2 - New Product Creation Approval for `/inventory/products/create`.
   - Commit: `7f7c240 feat(product): add new product approval workflow`
 - Phase 3 - Role and wording cleanup across Inventory.
-  - Source implemented and verified; commit pending.
+  - Commit: `26bb277 chore(inventory): align warehouse and manager role scope`
 
 ## Pending Phases
 
-- Phase 4 - Integration stabilization and regression checks.
 - Phase 5 - Final report.
 
 ## Branch And Working Tree
@@ -208,7 +207,7 @@ OrderService latest detected migrations include:
   - `frontend/huongvantra-web-client/src/features/products/pages/ProductApprovalsPage.jsx`
   - `frontend/huongvantra-web-client/src/features/products/pages/ProductFormPage.jsx`
   - `frontend/huongvantra-web-client/src/features/products/services/productsApi.js`
-- Phase 3 wording cleanup files currently changed but not committed:
+- Phase 3 wording cleanup files committed in `26bb277`:
   - `backend/huongvantra_backend/Service/ProductService/ProductService.Application/CatalogViewScope.cs`
   - `backend/huongvantra_backend/Service/UserService/UserService.Infrastructure/Data/DataSeeder.cs`
   - `frontend/huongvantra-web-client/src/app/navigation.js`
@@ -279,6 +278,8 @@ OrderService latest detected migrations include:
 - Phase 3 `dotnet build Service/UserService/UserService.WebAPI/UserService.WebAPI.csproj` - first sandbox attempt failed with `NU1301`; escalated retry passed with 0 warnings and 0 errors.
 - Phase 3 `npm.cmd run build` - passed with existing Vite dynamic import/chunk size warnings.
 - Phase 3 `git diff --check` - passed; only Windows LF/CRLF warnings.
+- `git add -A` - passed; staged Phase 3 verified changes.
+- `git commit -m "chore(inventory): align warehouse and manager role scope"` - passed; created commit `26bb277`.
 
 ## Tests/Builds Run
 
@@ -352,9 +353,9 @@ OrderService latest detected migrations include:
 
 ## Next Recommended Action
 
-- Commit Phase 3 wording cleanup after this tracker update.
-- Then update this tracker with the Phase 3 commit hash and start Phase 4 integration stabilization/regression checks.
+- Commit this docs-only Phase 3 progress update.
+- Start Phase 4 integration stabilization and regression checks.
 
 ## Last Safe Local Commit Hash
 
-- `7f7c240 feat(product): add new product approval workflow`
+- `26bb277 chore(inventory): align warehouse and manager role scope`
