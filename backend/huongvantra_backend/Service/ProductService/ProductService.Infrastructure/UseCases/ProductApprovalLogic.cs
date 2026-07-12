@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using ProductService.Application;
 using ProductService.Application.DTOs.Requests;
 using ProductService.Application.DTOs.Responses;
 using ProductService.Application.UseCases;
@@ -149,12 +150,8 @@ public class ProductApprovalLogic(ProductDbContext _db, ProductLogic _productLog
 
     public async Task<ProductApprovalCreationResponse> CreateAutomaticAsync(CreateProductFromApprovalRequest request, ProductApprovalActorSnapshot actor, CancellationToken ct = default)
     {
-        var approval = await FindByCodeAsync(request?.ApprovalCode, asTracking: true, ct)
-            ?? throw new ProductValidationException("Mã phê duyệt không tồn tại.");
-        EnsureCanUse(approval);
-
-        var productRequest = DeserializeProduct(approval.ProductSnapshotJson);
-        return await CompleteCreationAsync(approval, productRequest, ProductCreationMethod.Automatic, null, null, actor, ct);
+        var approvalCode = NormalizeApprovalCode(request?.ApprovalCode);
+        return await CompleteCreationAsync(approvalCode, ProductCreationMethod.Automatic, null, null, null, actor, ct);
     }
 
     public async Task<ProductApprovalCreationResponse> CreateManualAsync(CreateProductManualFromApprovalRequest request, ProductApprovalActorSnapshot actor, CancellationToken ct = default)
@@ -163,14 +160,11 @@ public class ProductApprovalLogic(ProductDbContext _db, ProductLogic _productLog
         if (request?.Product is null)
             throw new ProductValidationException("Thông tin sản phẩm nhập thủ công là bắt buộc.");
 
-        var approval = await FindByCodeAsync(request.ApprovalCode, asTracking: true, ct)
-            ?? throw new ProductValidationException("Mã phê duyệt không tồn tại.");
-        EnsureCanUse(approval);
-
+        var approvalCode = NormalizeApprovalCode(request.ApprovalCode);
         return await CompleteCreationAsync(
-            approval,
-            request.Product,
+            approvalCode,
             ProductCreationMethod.Manual,
+            request.Product,
             reason,
             NormalizeText(request.WarehouseNotes),
             actor,
@@ -178,41 +172,71 @@ public class ProductApprovalLogic(ProductDbContext _db, ProductLogic _productLog
     }
 
     private async Task<ProductApprovalCreationResponse> CompleteCreationAsync(
-        NewProductApprovalRequest approval,
-        CreateProductRequest productRequest,
+        string approvalCode,
         ProductCreationMethod method,
+        CreateProductRequest? manualProductRequest,
         string? manualReason,
         string? warehouseNotes,
         ProductApprovalActorSnapshot actor,
         CancellationToken ct)
     {
-        await using var tx = await _db.Database.BeginTransactionAsync(ct);
-        var created = await _productLogic.CreateAsync(productRequest);
+        var strategy = _db.Database.CreateExecutionStrategy();
+        var attempt = 0;
 
-        var now = DateTime.UtcNow;
-        approval.Status = NewProductApprovalStatus.Completed;
-        approval.CreationMethod = method;
-        approval.ManualModeReason = manualReason;
-        approval.WarehouseNotes = warehouseNotes;
-        approval.UsedAt = now;
-        approval.ConfirmedBy = NormalizeActorId(actor);
-        approval.ConfirmedByName = NormalizeText(actor.FullName);
-        approval.ConfirmedByRoleName = NormalizeText(actor.RoleName);
-        approval.ConfirmedAt = now;
-        approval.CreatedProductId = created.Id;
-        approval.CreatedSkuIdsJson = JsonSerializer.Serialize(created.Variants.Select(v => v.Id).ToList(), JsonOptions);
-        approval.CreatedBomIdsJson = JsonSerializer.Serialize(
-            created.Variants
-                .SelectMany(v => v.BomLines.Select(b => new { v.Id, b.MaterialId }))
-                .ToList(),
-            JsonOptions);
-        approval.FinalProductSnapshotJson = SerializeProduct(productRequest);
-        approval.UpdatedAt = now;
+        return await strategy.ExecuteAsync(async () =>
+        {
+            attempt++;
+            _db.ChangeTracker.Clear();
 
-        await _db.SaveChangesAsync(ct);
-        await tx.CommitAsync(ct);
+            await using var tx = await _db.Database.BeginTransactionAsync(ct);
 
-        return new ProductApprovalCreationResponse(MapToResponse(approval), created);
+            var approval = await FindByCodeAsync(approvalCode, asTracking: true, ct)
+                ?? throw new ProductValidationException("Mã phê duyệt không tồn tại.");
+
+            if (attempt > 1
+                && approval.Status == NewProductApprovalStatus.Completed
+                && approval.CreatedProductId.HasValue)
+            {
+                var existingProduct = await _productLogic.GetByIdAsync(
+                    approval.CreatedProductId.Value,
+                    CatalogViewScope.Warehouse);
+                await tx.CommitAsync(ct);
+                return new ProductApprovalCreationResponse(MapToResponse(approval), existingProduct);
+            }
+
+            EnsureCanUse(approval);
+
+            var productRequest = method == ProductCreationMethod.Automatic
+                ? DeserializeProduct(approval.ProductSnapshotJson)
+                : manualProductRequest ?? throw new ProductValidationException("Thông tin sản phẩm nhập thủ công là bắt buộc.");
+
+            var created = await _productLogic.CreateAsync(productRequest);
+
+            var now = DateTime.UtcNow;
+            approval.Status = NewProductApprovalStatus.Completed;
+            approval.CreationMethod = method;
+            approval.ManualModeReason = manualReason;
+            approval.WarehouseNotes = warehouseNotes;
+            approval.UsedAt = now;
+            approval.ConfirmedBy = NormalizeActorId(actor);
+            approval.ConfirmedByName = NormalizeText(actor.FullName);
+            approval.ConfirmedByRoleName = NormalizeText(actor.RoleName);
+            approval.ConfirmedAt = now;
+            approval.CreatedProductId = created.Id;
+            approval.CreatedSkuIdsJson = JsonSerializer.Serialize(created.Variants.Select(v => v.Id).ToList(), JsonOptions);
+            approval.CreatedBomIdsJson = JsonSerializer.Serialize(
+                created.Variants
+                    .SelectMany(v => v.BomLines.Select(b => new { v.Id, b.MaterialId }))
+                    .ToList(),
+                JsonOptions);
+            approval.FinalProductSnapshotJson = SerializeProduct(productRequest);
+            approval.UpdatedAt = now;
+
+            await _db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+
+            return new ProductApprovalCreationResponse(MapToResponse(approval), created);
+        });
     }
 
     private async Task<NewProductApprovalRequest> GetTrackedAsync(Guid id, CancellationToken ct)
@@ -283,6 +307,9 @@ public class ProductApprovalLogic(ProductDbContext _db, ProductLogic _productLog
 
     private static Guid? NormalizeActorId(ProductApprovalActorSnapshot actor) =>
         actor.UserId.HasValue && actor.UserId.Value != Guid.Empty ? actor.UserId.Value : null;
+
+    private static string NormalizeApprovalCode(string? value) =>
+        NormalizeRequired(value, "Mã phê duyệt là bắt buộc.").ToUpperInvariant();
 
     private static string? NormalizeText(string? value)
     {
@@ -366,4 +393,3 @@ public class ProductApprovalLogic(ProductDbContext _db, ProductLogic _productLog
         x.CreatedAt,
         x.UpdatedAt);
 }
-
