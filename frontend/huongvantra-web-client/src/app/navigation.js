@@ -358,7 +358,7 @@ export function getAccessDeniedMessage(pathname) {
     return 'Chỉ Quản lý chi nhánh hoặc Admin mới được xử lý hàng chờ trừ tồn quầy.'
   }
   if (module === 'inventory') {
-    return 'Chỉ Thủ kho (Inventory) mới được truy cập module kho tổng.'
+    return 'Chỉ Thủ kho Kho tổng mới được truy cập module kho tổng.'
   }
   if (module === 'promotions_admin' || module === 'membership_tiers_admin') {
     return 'Chỉ Admin mới được quản lý hạng thẻ và mã giảm giá.'

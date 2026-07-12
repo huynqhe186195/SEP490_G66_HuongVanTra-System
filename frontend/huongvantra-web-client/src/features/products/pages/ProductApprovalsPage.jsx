@@ -169,7 +169,7 @@ export default function ProductApprovalsPage() {
       <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-extrabold text-slate-800">Duyệt sản phẩm mới</h1>
-          <p className="mt-1 text-sm text-slate-500">Admin tạo biên bản, cấp mã, sau đó Thủ kho dùng mã tại trang tạo hàng hóa.</p>
+          <p className="mt-1 text-sm text-slate-500">Admin tạo biên bản, cấp mã, sau đó Thủ kho Kho tổng dùng mã tại trang tạo hàng hóa.</p>
         </div>
 
         <section className="rounded-[1rem] bg-white p-4 shadow-sm sm:p-6">
@@ -257,4 +257,3 @@ export default function ProductApprovalsPage() {
     </PageShell>
   )
 }
-

@@ -3,7 +3,7 @@
 ## Current Phase
 
 - Phase 3 - Role and wording cleanup across Inventory.
-- Phase 2 has been committed locally and Phase 3 is ready for source inspection/implementation.
+- Phase 3 source changes are implemented and verified; ready to commit locally.
 
 ## Completed Phases
 
@@ -12,6 +12,8 @@
   - Commit: `e499e65 feat(inventory): complete sell-first stock deduction flow`
 - Phase 2 - New Product Creation Approval for `/inventory/products/create`.
   - Commit: `7f7c240 feat(product): add new product approval workflow`
+- Phase 3 - Role and wording cleanup across Inventory.
+  - Source implemented and verified; commit pending.
 
 ## Pending Phases
 
@@ -163,7 +165,7 @@ OrderService latest detected migrations include:
 ## Files Changed
 
 - `docs/codex-inventory-overnight-progress.md`
-- Phase 1 implementation files currently changed but not committed:
+- Phase 1 implementation files committed in `e499e65`:
   - `backend/huongvantra_backend/Shared_Libraries/HuongVanTra.Shared/Messages/StockDeductedEvent.cs`
   - `backend/huongvantra_backend/Service/InventoryService/InventoryService.Domain/Enums/QueueStatus.cs`
   - `backend/huongvantra_backend/Service/InventoryService/InventoryService.Domain/Entities/StockDeductQueue.cs`
@@ -185,7 +187,7 @@ OrderService latest detected migrations include:
   - `frontend/huongvantra-web-client/src/features/inventory/pages/StockDeductQueuePage.jsx`
   - `frontend/huongvantra-web-client/src/features/inventory/services/stockDeductQueueApi.js`
   - `frontend/huongvantra-web-client/src/features/orders/utils/orderDisplay.js`
-- Phase 2 implementation files currently changed but not committed:
+- Phase 2 implementation files committed in `7f7c240`:
   - `backend/huongvantra_backend/Service/ProductService/ProductService.Domain/Entities/NewProductApprovalRequest.cs`
   - `backend/huongvantra_backend/Service/ProductService/ProductService.Domain/Enums/NewProductApprovalStatus.cs`
   - `backend/huongvantra_backend/Service/ProductService/ProductService.Domain/Enums/ProductCreationMethod.cs`
@@ -206,6 +208,15 @@ OrderService latest detected migrations include:
   - `frontend/huongvantra-web-client/src/features/products/pages/ProductApprovalsPage.jsx`
   - `frontend/huongvantra-web-client/src/features/products/pages/ProductFormPage.jsx`
   - `frontend/huongvantra-web-client/src/features/products/services/productsApi.js`
+- Phase 3 wording cleanup files currently changed but not committed:
+  - `backend/huongvantra_backend/Service/ProductService/ProductService.Application/CatalogViewScope.cs`
+  - `backend/huongvantra_backend/Service/UserService/UserService.Infrastructure/Data/DataSeeder.cs`
+  - `frontend/huongvantra-web-client/src/app/navigation.js`
+  - `frontend/huongvantra-web-client/src/features/iam/utils/iamLabels.js`
+  - `frontend/huongvantra-web-client/src/features/inventory/components/InventorySlipDocument.jsx`
+  - `frontend/huongvantra-web-client/src/features/orders/pages/OrdersPage.jsx`
+  - `frontend/huongvantra-web-client/src/features/products/pages/ProductApprovalsPage.jsx`
+  - `frontend/huongvantra-web-client/src/features/products/pages/ProductFormPage.jsx`
 
 ## Migrations Added
 
@@ -263,6 +274,11 @@ OrderService latest detected migrations include:
 - Phase 2 final `git diff --check` - passed; only Windows LF/CRLF warnings.
 - `git add -A` - passed; staged Phase 2 verified changes.
 - `git commit -m "feat(product): add new product approval workflow"` - passed; created commit `7f7c240`.
+- Phase 3 `rg` searches for role wording and inventory/order/product labels - passed; no remaining `Chờ trừ kho` wording in inspected areas.
+- Phase 3 `dotnet build Service/ProductService/ProductService.WebAPI/ProductService.WebAPI.csproj` - first sandbox attempt failed with `NU1301`; escalated retry passed with 0 warnings and 0 errors.
+- Phase 3 `dotnet build Service/UserService/UserService.WebAPI/UserService.WebAPI.csproj` - first sandbox attempt failed with `NU1301`; escalated retry passed with 0 warnings and 0 errors.
+- Phase 3 `npm.cmd run build` - passed with existing Vite dynamic import/chunk size warnings.
+- Phase 3 `git diff --check` - passed; only Windows LF/CRLF warnings.
 
 ## Tests/Builds Run
 
@@ -307,6 +323,10 @@ OrderService latest detected migrations include:
 - `IX_NewProductApprovalRequests_ApprovalCode` exists and is unique.
 - Gateway route `/api/v1/product-approval-requests` returns `401` without token instead of `404`.
 - Admin list API returns `HTTP 200`; Manager validate-code API returns `HTTP 403`.
+- Phase 3 ProductService targeted build passed.
+- Phase 3 UserService targeted build passed.
+- Phase 3 frontend production build passed.
+- Phase 3 `git diff --check` passed.
 
 ## Tests/Builds Failed Or Blocked
 
@@ -332,8 +352,8 @@ OrderService latest detected migrations include:
 
 ## Next Recommended Action
 
-- Commit this docs-only Phase 2 progress update.
-- Start Phase 3 role and wording cleanup.
+- Commit Phase 3 wording cleanup after this tracker update.
+- Then update this tracker with the Phase 3 commit hash and start Phase 4 integration stabilization/regression checks.
 
 ## Last Safe Local Commit Hash
 

@@ -487,7 +487,7 @@ function ApprovalModeSelection({ approval, onSelectMode, onReset }) {
           <div>
             <h1 className="text-2xl font-extrabold text-slate-800">Mã phê duyệt hợp lệ</h1>
             <p className="mt-1 text-sm text-slate-500">
-              Mã <span className="font-mono font-semibold text-[#356647]">{approval.approvalCode}</span> đang chờ Thủ kho xác nhận tạo hàng hóa.
+              Mã <span className="font-mono font-semibold text-[#356647]">{approval.approvalCode}</span> đang chờ Thủ kho Kho tổng xác nhận tạo hàng hóa.
             </p>
           </div>
           <button type="button" onClick={onReset} className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50">
@@ -1271,7 +1271,7 @@ function ProductFormPage({ mode }) {
   async function handleSubmit(event) {
     event.preventDefault()
     if (!canEdit) {
-      showError('Chỉ Thủ kho được tạo và sửa sản phẩm.')
+      showError('Chỉ Thủ kho Kho tổng được tạo và sửa sản phẩm.')
       return
     }
 
@@ -1444,7 +1444,7 @@ function ProductFormPage({ mode }) {
                 className="mt-1 min-h-24 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-[#538463] focus:ring-2 focus:ring-[#538463]/15"
                 value={manualModeReason}
                 onChange={(event) => setManualModeReason(event.target.value)}
-                placeholder="VD: Admin duyệt theo biên bản giấy, Thủ kho nhập lại dữ liệu từ chứng từ đã ký."
+                placeholder="VD: Admin duyệt theo biên bản giấy, Thủ kho Kho tổng nhập lại dữ liệu từ chứng từ đã ký."
               />
             </label>
           </section>
