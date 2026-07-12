@@ -2,16 +2,17 @@
 
 ## Current Phase
 
-- Phase 1 - Complete Flow 2A: sell-first, deduct branch/counter stock later.
-- Source implemented, migration applied, runtime verified, DB columns verified, builds passed, ready to commit.
+- Phase 2 - New Product Creation Approval for `/inventory/products/create`.
+- Phase 1 has been committed locally and Phase 2 is ready for source inspection/implementation.
 
 ## Completed Phases
 
 - Phase 0 - Safety, baseline, and source inspection.
+- Phase 1 - Complete Flow 2A: sell-first, deduct branch/counter stock later.
+  - Commit: `e499e65 feat(inventory): complete sell-first stock deduction flow`
 
 ## Pending Phases
 
-- Phase 2 - New Product Creation Approval for `/inventory/products/create`.
 - Phase 3 - Role and wording cleanup across Inventory.
 - Phase 4 - Integration stabilization and regression checks.
 - Phase 5 - Final report.
@@ -219,6 +220,8 @@ OrderService latest detected migrations include:
 - Final `dotnet build Service/OrderService/OrderService.WebAPI/OrderService.WebAPI.csproj` - passed with 0 warnings and 0 errors.
 - Final `npm.cmd run build` - passed with existing Vite dynamic import/chunk size warnings.
 - Final `git diff --check` - passed; only Windows LF/CRLF warnings.
+- `git add -A` - passed; staged Phase 1 verified changes.
+- `git commit -m "feat(inventory): complete sell-first stock deduction flow"` - passed; created commit `e499e65`.
 
 ## Tests/Builds Run
 
@@ -266,10 +269,9 @@ OrderService latest detected migrations include:
 
 ## Next Recommended Action
 
-- Commit Phase 1 with `feat(inventory): complete sell-first stock deduction flow`.
-- After commit, update this file with the Phase 1 commit hash.
-- Then start Phase 2 source inspection for New Product Creation Approval.
+- Commit this docs-only Phase 1 progress update.
+- Start Phase 2 source inspection for New Product Creation Approval.
 
 ## Last Safe Local Commit Hash
 
-- `7ed93c9 chore(inventory): add overnight implementation progress tracker`
+- `e499e65 feat(inventory): complete sell-first stock deduction flow`
