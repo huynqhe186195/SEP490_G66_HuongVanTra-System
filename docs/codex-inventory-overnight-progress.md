@@ -2,18 +2,19 @@
 
 ## Current Phase
 
-- Phase 2 - New Product Creation Approval for `/inventory/products/create`.
-- Phase 2 source implemented; ProductService/Gateway/frontend builds passed; Docker migration/runtime verification passed; ready to commit.
+- Phase 3 - Role and wording cleanup across Inventory.
+- Phase 2 has been committed locally and Phase 3 is ready for source inspection/implementation.
 
 ## Completed Phases
 
 - Phase 0 - Safety, baseline, and source inspection.
 - Phase 1 - Complete Flow 2A: sell-first, deduct branch/counter stock later.
   - Commit: `e499e65 feat(inventory): complete sell-first stock deduction flow`
+- Phase 2 - New Product Creation Approval for `/inventory/products/create`.
+  - Commit: `7f7c240 feat(product): add new product approval workflow`
 
 ## Pending Phases
 
-- Phase 3 - Role and wording cleanup across Inventory.
 - Phase 4 - Integration stabilization and regression checks.
 - Phase 5 - Final report.
 
@@ -260,6 +261,8 @@ OrderService latest detected migrations include:
 - Admin API smoke check through Gateway - login `admin`, `GET /api/v1/product-approval-requests?page=1&pageSize=5&status=all` returned `HTTP 200`.
 - Manager permission smoke check through Gateway - login `manager01`, `POST /api/v1/product-approval-requests/validate-code` returned `HTTP 403`.
 - Phase 2 final `git diff --check` - passed; only Windows LF/CRLF warnings.
+- `git add -A` - passed; staged Phase 2 verified changes.
+- `git commit -m "feat(product): add new product approval workflow"` - passed; created commit `7f7c240`.
 
 ## Tests/Builds Run
 
@@ -329,10 +332,9 @@ OrderService latest detected migrations include:
 
 ## Next Recommended Action
 
-- Commit Phase 2 with `feat(product): add new product approval workflow`.
-- After commit, update this file with the Phase 2 commit hash.
-- Then start Phase 3 role and wording cleanup.
+- Commit this docs-only Phase 2 progress update.
+- Start Phase 3 role and wording cleanup.
 
 ## Last Safe Local Commit Hash
 
-- `e499e65 feat(inventory): complete sell-first stock deduction flow`
+- `7f7c240 feat(product): add new product approval workflow`
