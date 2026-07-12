@@ -290,8 +290,8 @@ export function getInventorySyncLabel(status) {
   const key = normalizeOrderKey(status)
   const map = {
     Synced: 'Đã đồng bộ kho',
-    PendingDeduction: 'Chờ trừ kho',
-    Cancelled: 'Không trừ kho (đã hủy)',
+    PendingDeduction: 'Chờ trừ tồn quầy',
+    Cancelled: 'Không trừ tồn quầy (đã hủy)',
   }
   return map[key] || status || '—'
 }
@@ -302,7 +302,7 @@ export function resolveInventorySyncMeta(order) {
 
   if (orderStatus === 'Cancelled' || syncStatus === 'Cancelled') {
     return {
-      label: 'Không trừ kho (đã hủy)',
+      label: 'Không trừ tồn quầy (đã hủy)',
       className: 'bg-slate-100 text-slate-500',
     }
   }
@@ -486,8 +486,8 @@ export function calcOrderFinalAmount(lines = [], discountAmount = 0) {
 
 // Legacy helpers still used by inventory stock-deduct pages
 export const STOCK_STATUS_OPTIONS = [
-  { value: 'pending_deduct', label: 'Chờ trừ kho' },
-  { value: 'deducted', label: 'Đã trừ kho' },
+  { value: 'pending_deduct', label: 'Chờ trừ tồn quầy' },
+  { value: 'deducted', label: 'Đã trừ tồn quầy' },
   { value: 'waiting_stock', label: 'Chờ hàng' },
   { value: 'cancelled', label: 'Đã hủy (kho)' },
 ]
@@ -495,10 +495,10 @@ export const STOCK_STATUS_OPTIONS = [
 export function getStockStatusLabel(status) {
   const key = String(status || '').toLowerCase()
   const map = {
-    pending_deduct: 'Chờ trừ kho',
-    pendingdeduction: 'Chờ trừ kho',
-    deducted: 'Đã trừ kho',
-    synced: 'Đã trừ kho',
+    pending_deduct: 'Chờ trừ tồn quầy',
+    pendingdeduction: 'Chờ trừ tồn quầy',
+    deducted: 'Đã trừ tồn quầy',
+    synced: 'Đã trừ tồn quầy',
     waiting_stock: 'Chờ hàng',
     cancelled: 'Đã hủy',
   }
@@ -508,8 +508,8 @@ export function getStockStatusLabel(status) {
 export function getQueueStatusLabel(status) {
   const key = String(status || '').toLowerCase()
   const map = {
-    waiting: 'Chờ trừ',
-    insufficient: 'Thiếu hàng',
+    waiting: 'Chờ xác nhận',
+    insufficient: 'Chờ hàng',
     confirmed: 'Đã trừ',
     cancelled: 'Đã hủy',
   }

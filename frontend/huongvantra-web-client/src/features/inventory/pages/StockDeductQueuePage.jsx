@@ -19,9 +19,11 @@ import {
 } from '../../orders/utils/orderDisplay.js'
 
 const TABS = [
-  { key: 'all', label: 'Tất cả chờ xử lý', status: undefined },
-  { key: 'waiting', label: 'Chờ trừ kho', status: 'waiting' },
+  { key: 'all', label: 'Tất cả', status: undefined },
+  { key: 'waiting', label: 'Chờ xác nhận', status: 'waiting' },
   { key: 'insufficient', label: 'Chờ hàng', status: 'insufficient' },
+  { key: 'confirmed', label: 'Đã trừ', status: 'confirmed' },
+  { key: 'cancelled', label: 'Đã hủy', status: 'cancelled' },
 ]
 
 function StockDeductQueuePage() {
@@ -66,26 +68,28 @@ function StockDeductQueuePage() {
   const stats = useMemo(() => {
     const waiting = queues.filter((q) => q.queueStatus === 'waiting').length
     const insufficient = queues.filter((q) => q.queueStatus === 'insufficient').length
+    const confirmed = queues.filter((q) => q.queueStatus === 'confirmed').length
+    const cancelled = queues.filter((q) => q.queueStatus === 'cancelled').length
     return [
-      { label: 'Chờ trừ kho', value: String(waiting), note: 'Queue waiting' },
+      { label: 'Chờ xác nhận', value: String(waiting), note: 'Manager/Admin xử lý' },
       {
         label: 'Chờ hàng',
         value: String(insufficient),
-        note: 'Thiếu NVL — cần nhập kho',
+        note: 'Thiếu tồn quầy - có thể thử lại',
         warning: insufficient > 0,
       },
-      { label: 'Tổng hiển thị', value: String(queues.length), note: 'Theo bộ lọc hiện tại' },
+      { label: 'Đã trừ / Đã hủy', value: `${confirmed} / ${cancelled}`, note: 'Theo bộ lọc hiện tại' },
     ]
   }, [queues])
 
   return (
     <PageShell>
       <PageHeader
-        title="Chờ trừ kho"
+        title="Chờ trừ tồn quầy"
         description={
           canExecuteDeduct
-            ? 'Xử lý đơn đã thu tiền nhưng chưa trừ kho hoặc đang thiếu nguyên liệu'
-            : 'Theo dõi đơn chờ trừ kho — thao tác trừ kho do Thủ kho thực hiện'
+            ? 'Manager/Admin xác nhận trừ QuantityOnHand cho đơn đã bán trước.'
+            : 'Theo dõi đơn chờ trừ tồn quầy.'
         }
         searchPlaceholder="Tìm mã đơn..."
         searchValue={searchValue}
@@ -149,7 +153,7 @@ function StockDeductQueuePage() {
               <tr>
                 <th className="px-8 py-4">Mã đơn</th>
                 <th className="px-4 py-4">Queue</th>
-                <th className="px-4 py-4">Trừ kho</th>
+                <th className="px-4 py-4">Tồn quầy</th>
                 <th className="px-4 py-4">Thanh toán</th>
                 <th className="px-4 py-4">Ngày tạo queue</th>
                 <th className="px-8 py-4 text-right">Tổng tiền</th>
@@ -167,7 +171,7 @@ function StockDeductQueuePage() {
               {!isLoading && queues.length === 0 ? (
                 <tr>
                   <td className="px-8 py-10 text-slate-500" colSpan={7}>
-                    Không có đơn chờ trừ kho trong mục này.
+                    Không có đơn chờ trừ tồn quầy trong mục này.
                   </td>
                 </tr>
               ) : null}
@@ -214,7 +218,7 @@ function StockDeductQueuePage() {
                               : 'bg-slate-500 hover:bg-slate-600'
                           }`}
                         >
-                          {canExecuteDeduct ? 'Xem & trừ' : 'Xem'}
+                          {canExecuteDeduct ? 'Xem & xử lý' : 'Xem'}
                         </button>
                       </td>
                     </tr>
@@ -227,7 +231,7 @@ function StockDeductQueuePage() {
           page={page}
           pageSize={pageSize}
           totalCount={totalCount}
-          itemLabel="đơn chờ trừ kho"
+          itemLabel="đơn chờ trừ tồn quầy"
           onPageChange={setPage}
           onPageSizeChange={setPageSize}
         />

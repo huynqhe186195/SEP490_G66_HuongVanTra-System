@@ -14,7 +14,6 @@ const ROLE_GROUPS = {
 const SIDEBAR_DISABLED_MODULES = new Set([
   'reports',
   'integrations',
-  'stock_deduct_ops',
 ])
 
 const HOME_MODULE_PRIORITY = [
@@ -41,7 +40,7 @@ export const navigationItems = [
   { label: 'Trả / đổi hàng', path: '/orders/exchange', module: 'orders', icon: 'swap_horiz', roles: ['admin', 'agencyManager', 'salesStaff'] },
   { label: 'Quản lý đơn COD', path: '/orders/cod', module: 'cod_ops', icon: 'local_shipping', roles: ['agencyManager'] },
   {
-    label: 'Chờ trừ kho',
+    label: 'Chờ trừ tồn quầy',
     path: '/orders/stock-deduct',
     module: 'stock_deduct_ops',
     icon: 'inventory_2',
@@ -331,18 +330,18 @@ export function canAccessPath(session, pathname) {
   return canAccessModule(session, module)
 }
 
-/** Xem danh sách / preview hàng chờ trừ kho (quản lý chi nhánh + thủ kho). */
+/** Xem danh sách / preview hàng chờ trừ tồn quầy (Manager/Admin). */
 export function canViewStockDeductOps(session) {
   return canAccessModule(session, 'stock_deduct_ops')
 }
 
-/** Xác nhận trừ kho — chỉ Admin và Thủ kho. */
+/** Xác nhận trừ tồn quầy - chỉ Admin và Manager. */
 export function canConfirmStockDeduct(session) {
   if (!session?.roles?.length) {
     return false
   }
 
-  return hasAnyRoleGroup(session.roles, ['admin', 'inventoryManager'])
+  return hasAnyRoleGroup(session.roles, ['admin', 'agencyManager'])
 }
 
 export function getAccessDeniedMessage(pathname) {
@@ -354,7 +353,7 @@ export function getAccessDeniedMessage(pathname) {
     return 'Chỉ Quản lý chi nhánh mới được truy cập Quản lý COD.'
   }
   if (module === 'stock_deduct_ops') {
-    return 'Chỉ Quản lý chi nhánh hoặc Thủ kho mới được xem hàng chờ trừ kho. Thao tác trừ kho do Thủ kho thực hiện.'
+    return 'Chỉ Quản lý chi nhánh hoặc Admin mới được xử lý hàng chờ trừ tồn quầy.'
   }
   if (module === 'inventory') {
     return 'Chỉ Thủ kho (Inventory) mới được truy cập module kho tổng.'

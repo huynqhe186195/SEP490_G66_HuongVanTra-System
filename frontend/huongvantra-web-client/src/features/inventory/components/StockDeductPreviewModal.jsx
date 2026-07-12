@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { getStockStatusLabel } from '../../orders/utils/orderDisplay.js'
 import {
+  cancelStockDeductQueue,
   confirmStockDeductQueue,
   previewStockDeductQueue,
 } from '../services/stockDeductQueueApi.js'
@@ -12,6 +13,10 @@ function StockDeductPreviewModal({ queueId, orderCode, readOnly = false, onClose
   const [isLoading, setIsLoading] = useState(true)
   const [isConfirming, setIsConfirming] = useState(false)
   const [confirmShortages, setConfirmShortages] = useState(null)
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false)
+  const [isCancelOpen, setIsCancelOpen] = useState(false)
+  const [cancelReason, setCancelReason] = useState('')
+  const [isCancelling, setIsCancelling] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -19,6 +24,9 @@ function StockDeductPreviewModal({ queueId, orderCode, readOnly = false, onClose
     async function loadPreview() {
       setIsLoading(true)
       setConfirmShortages(null)
+      setShowConfirmDialog(false)
+      setIsCancelOpen(false)
+      setCancelReason('')
       try {
         const data = await previewStockDeductQueue(queueId)
         if (!cancelled) setPreview(data)
@@ -41,15 +49,28 @@ function StockDeductPreviewModal({ queueId, orderCode, readOnly = false, onClose
   const handleConfirm = async () => {
     setIsConfirming(true)
     setConfirmShortages(null)
+    setShowConfirmDialog(false)
     try {
-      await confirmStockDeductQueue(queueId)
-      showSuccess('Đã trừ kho thành công.')
+      const result = await confirmStockDeductQueue(queueId)
+      if (result.canDeduct === false) {
+        setConfirmShortages(result.shortages || [])
+        setPreview((prev) =>
+          prev
+            ? { ...prev, queueStatus: result.queueStatus, orderStockStatus: result.orderStockStatus, canDeduct: false }
+            : prev,
+        )
+        showError('Chưa đủ tồn quầy. Queue đã chuyển sang Chờ hàng.')
+        onConfirmed?.()
+        return
+      }
+
+      showSuccess('Đã trừ tồn quầy thành công.')
       onConfirmed?.()
       onClose?.()
     } catch (error) {
       if (error.code === 'INSUFFICIENT_STOCK' && error.shortages?.length) {
         setConfirmShortages(error.shortages)
-        showError('Vẫn thiếu hàng — cần nhập kho trước khi trừ lại.')
+        showError('Vẫn thiếu tồn quầy — cần bổ sung tồn trước khi thử lại.')
       } else {
         showError(error.message)
       }
@@ -58,10 +79,31 @@ function StockDeductPreviewModal({ queueId, orderCode, readOnly = false, onClose
     }
   }
 
+  const handleCancel = async () => {
+    const reason = cancelReason.trim()
+    if (!reason) {
+      showError('Vui lòng nhập lý do hủy.')
+      return
+    }
+
+    setIsCancelling(true)
+    try {
+      await cancelStockDeductQueue(queueId, reason)
+      showSuccess('Đã hủy queue trừ tồn.')
+      onConfirmed?.()
+      onClose?.()
+    } catch (error) {
+      showError(error.message)
+    } finally {
+      setIsCancelling(false)
+    }
+  }
+
   const canConfirm =
     !readOnly &&
     preview &&
     (preview.queueStatus === 'waiting' || preview.queueStatus === 'insufficient')
+  const canCancel = canConfirm
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
@@ -74,7 +116,7 @@ function StockDeductPreviewModal({ queueId, orderCode, readOnly = false, onClose
         <div className="flex items-start justify-between border-b border-slate-100 px-6 py-4">
           <div>
             <h2 id="stock-deduct-preview-title" className="text-lg font-bold text-slate-800">
-              Xem trước trừ kho
+              Xem trước trừ tồn quầy
             </h2>
             <p className="mt-1 text-sm text-slate-500">
               {orderCode || preview?.orderCode ? (
@@ -116,10 +158,10 @@ function StockDeductPreviewModal({ queueId, orderCode, readOnly = false, onClose
                     preview.canDeduct ? 'bg-[#b9d4b0]/30 text-[#538463]' : 'bg-amber-50 text-amber-700'
                   }`}
                 >
-                  {preview.canDeduct ? 'Đủ hàng — có thể trừ' : 'Thiếu hàng'}
+                  {preview.canDeduct ? 'Đủ tồn quầy — có thể trừ' : 'Thiếu tồn quầy'}
                 </span>
                 <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-                  Kho đơn: {getStockStatusLabel(preview.orderStockStatus)}
+                  Tồn quầy: {getStockStatusLabel(preview.orderStockStatus)}
                 </span>
               </div>
 
@@ -127,9 +169,9 @@ function StockDeductPreviewModal({ queueId, orderCode, readOnly = false, onClose
                 <table className="w-full text-left text-sm">
                   <thead className="bg-[#fbf9f1]/50 text-xs font-bold uppercase tracking-wider text-slate-400">
                     <tr>
-                      <th className="px-4 py-3">Nguyên liệu</th>
-                      <th className="px-4 py-3 text-right">Cần</th>
-                      <th className="px-4 py-3 text-right">Có</th>
+                      <th className="px-4 py-3">SKU</th>
+                      <th className="px-4 py-3 text-right">Cần trừ</th>
+                      <th className="px-4 py-3 text-right">Tồn quầy hiện có</th>
                       <th className="px-4 py-3 text-right">Thiếu</th>
                     </tr>
                   </thead>
@@ -137,7 +179,7 @@ function StockDeductPreviewModal({ queueId, orderCode, readOnly = false, onClose
                     {preview.items.map((row) => (
                       <tr key={row.materialId} className={row.shortageQuantity > 0 ? 'bg-amber-50/40' : ''}>
                         <td className="px-4 py-3 font-medium text-slate-800">
-                          {row.materialName || `NVL #${row.materialId}`}
+                          {row.materialName || `SKU #${row.materialId}`}
                         </td>
                         <td className="px-4 py-3 text-right text-slate-700">{row.requiredQuantity}</td>
                         <td className="px-4 py-3 text-right text-slate-700">{row.availableQuantity}</td>
@@ -156,11 +198,11 @@ function StockDeductPreviewModal({ queueId, orderCode, readOnly = false, onClose
 
               {confirmShortages?.length ? (
                 <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-                  <p className="font-semibold">Thiếu hàng khi xác nhận:</p>
+                  <p className="font-semibold">Thiếu tồn quầy khi xác nhận:</p>
                   <ul className="mt-2 list-disc pl-5">
                     {confirmShortages.map((row) => (
                       <li key={row.materialId}>
-                        NVL #{row.materialId}: cần {row.requiredQuantity}, có {row.availableQuantity}, thiếu{' '}
+                        {row.materialName || `SKU #${row.materialId}`}: cần {row.requiredQuantity}, có {row.availableQuantity}, thiếu{' '}
                         {row.shortageQuantity}
                       </li>
                     ))}
@@ -170,8 +212,69 @@ function StockDeductPreviewModal({ queueId, orderCode, readOnly = false, onClose
 
               {readOnly ? (
                 <p className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                  Quản lý chi nhánh chỉ xem preview. Thao tác trừ kho do Thủ kho thực hiện.
+                  Chỉ Manager/Admin được xác nhận trừ tồn quầy.
                 </p>
+              ) : null}
+
+              {showConfirmDialog ? (
+                <div className="mt-4 rounded-xl border border-[#538463]/25 bg-[#f0f7f2] p-4 text-sm text-slate-700">
+                  <p className="font-semibold text-slate-900">Xác nhận trừ tồn quầy?</p>
+                  <p className="mt-1">
+                    Hệ thống sẽ trừ `QuantityOnHand` cho các SKU trong đơn này và tạo phiếu xuất
+                    `sales_deduct_later`. Tồn kho tổng không bị thay đổi.
+                  </p>
+                  <div className="mt-3 flex flex-wrap justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmDialog(false)}
+                      className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                    >
+                      Quay lại
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isConfirming}
+                      onClick={handleConfirm}
+                      className="rounded-lg bg-[#538463] px-3 py-1.5 text-xs font-bold text-white hover:bg-[#457053] disabled:opacity-50"
+                    >
+                      {isConfirming ? 'Đang trừ...' : 'Xác nhận cuối'}
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+
+              {isCancelOpen ? (
+                <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-950">
+                  <label className="block">
+                    <span className="font-semibold">Lý do hủy *</span>
+                    <textarea
+                      className="mt-2 min-h-24 w-full rounded-lg border border-red-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-red-400"
+                      value={cancelReason}
+                      onChange={(event) => setCancelReason(event.target.value)}
+                      placeholder="Nhập lý do hủy queue trừ tồn..."
+                    />
+                  </label>
+                  <div className="mt-3 flex flex-wrap justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsCancelOpen(false)
+                        setCancelReason('')
+                      }}
+                      className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                    >
+                      Quay lại
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isCancelling || !cancelReason.trim()}
+                      onClick={handleCancel}
+                      className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-700 disabled:opacity-50"
+                    >
+                      {isCancelling ? 'Đang hủy...' : 'Xác nhận hủy'}
+                    </button>
+                  </div>
+                </div>
               ) : null}
             </>
           ) : null}
@@ -189,14 +292,24 @@ function StockDeductPreviewModal({ queueId, orderCode, readOnly = false, onClose
           >
             Đóng
           </button>
-          {canConfirm ? (
+          {canCancel && !showConfirmDialog && !isCancelOpen ? (
+            <button
+              type="button"
+              disabled={isConfirming || isCancelling}
+              onClick={() => setIsCancelOpen(true)}
+              className="rounded-xl border border-red-200 px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50"
+            >
+              Hủy queue
+            </button>
+          ) : null}
+          {canConfirm && !showConfirmDialog && !isCancelOpen ? (
             <button
               type="button"
               disabled={isConfirming}
-              onClick={handleConfirm}
+              onClick={() => setShowConfirmDialog(true)}
               className="rounded-xl bg-[#538463] px-4 py-2 text-sm font-bold text-white hover:bg-[#457053] disabled:opacity-50"
             >
-              {isConfirming ? 'Đang trừ...' : preview.canDeduct ? 'Xác nhận trừ kho' : 'Thử trừ lại'}
+              {isConfirming ? 'Đang trừ...' : preview.canDeduct ? 'Xác nhận trừ tồn quầy' : 'Thử trừ lại'}
             </button>
           ) : null}
         </div>

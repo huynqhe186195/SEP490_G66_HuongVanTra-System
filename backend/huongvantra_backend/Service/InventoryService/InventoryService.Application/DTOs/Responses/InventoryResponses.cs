@@ -15,7 +15,16 @@ public record StockDeductQueueResponse(
     string OrderPaymentStatus,
     string OrderStockStatus,
     decimal TotalAmount,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    DateTime? ConfirmedAt = null,
+    string? ConfirmedByName = null,
+    string? ConfirmedByRoleName = null,
+    DateTime? CancelledAt = null,
+    string? CancelledByName = null,
+    string? CancelledByRoleName = null,
+    string? CancelReason = null,
+    DateTime? LastAttemptAt = null,
+    string? LastShortageReason = null);
 
 public record StockDeductPreviewItemResponse(
     Guid SkuId,
@@ -41,7 +50,11 @@ public record StockDeductConfirmResponse(
     string OrderCode,
     string QueueStatus,
     string OrderStockStatus,
-    DateTime? ConfirmedAt);
+    DateTime? ConfirmedAt,
+    bool CanDeduct = true,
+    List<StockDeductPreviewItemResponse>? Shortages = null,
+    DateTime? CancelledAt = null,
+    string? CancelReason = null);
 
 public record SkuStockResponse(
     Guid SkuId,

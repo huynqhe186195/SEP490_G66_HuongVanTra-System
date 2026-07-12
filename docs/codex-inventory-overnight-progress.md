@@ -2,15 +2,15 @@
 
 ## Current Phase
 
-- Phase 0 - Safety, baseline, and source inspection.
+- Phase 1 - Complete Flow 2A: sell-first, deduct branch/counter stock later.
+- Source implemented, migration applied, runtime verified, DB columns verified, builds passed, ready to commit.
 
 ## Completed Phases
 
-- None yet.
+- Phase 0 - Safety, baseline, and source inspection.
 
 ## Pending Phases
 
-- Phase 1 - Complete Flow 2A: sell-first, deduct branch/counter stock later.
 - Phase 2 - New Product Creation Approval for `/inventory/products/create`.
 - Phase 3 - Role and wording cleanup across Inventory.
 - Phase 4 - Integration stabilization and regression checks.
@@ -161,10 +161,33 @@ OrderService latest detected migrations include:
 ## Files Changed
 
 - `docs/codex-inventory-overnight-progress.md`
+- Phase 1 implementation files currently changed but not committed:
+  - `backend/huongvantra_backend/Shared_Libraries/HuongVanTra.Shared/Messages/StockDeductedEvent.cs`
+  - `backend/huongvantra_backend/Service/InventoryService/InventoryService.Domain/Enums/QueueStatus.cs`
+  - `backend/huongvantra_backend/Service/InventoryService/InventoryService.Domain/Entities/StockDeductQueue.cs`
+  - `backend/huongvantra_backend/Service/InventoryService/InventoryService.Application/DTOs/Responses/InventoryResponses.cs`
+  - `backend/huongvantra_backend/Service/InventoryService/InventoryService.Application/Interfaces/IInventoryEventPublisher.cs`
+  - `backend/huongvantra_backend/Service/InventoryService/InventoryService.Application/Interfaces/IStockDeductQueueRepository.cs`
+  - `backend/huongvantra_backend/Service/InventoryService/InventoryService.Application/UseCases/InventoryLogic.cs`
+  - `backend/huongvantra_backend/Service/InventoryService/InventoryService.Infrastructure/Data/Configurations/InventoryConfigurations.cs`
+  - `backend/huongvantra_backend/Service/InventoryService/InventoryService.Infrastructure/Messaging/InventoryEventPublisher.cs`
+  - `backend/huongvantra_backend/Service/InventoryService/InventoryService.Infrastructure/Repositories/StockDeductQueueRepository.cs`
+  - `backend/huongvantra_backend/Service/InventoryService/InventoryService.WebAPI/Controllers/StockDeductQueueController.cs`
+  - `backend/huongvantra_backend/Service/InventoryService/InventoryService.Infrastructure/Migrations/InventoryDbContextModelSnapshot.cs`
+  - `backend/huongvantra_backend/Service/InventoryService/InventoryService.Infrastructure/Migrations/20260712100000_AddStockDeductQueueAuditAndInsufficientStatus.cs`
+  - `backend/huongvantra_backend/Service/InventoryService/InventoryService.Infrastructure/Migrations/20260712100000_AddStockDeductQueueAuditAndInsufficientStatus.Designer.cs`
+  - `backend/huongvantra_backend/Service/OrderService/OrderService.Application/UseCases/OrderLogic.cs`
+  - `backend/huongvantra_backend/Service/OrderService/OrderService.Infrastructure/Messaging/StockDeductedConsumer.cs`
+  - `frontend/huongvantra-web-client/src/app/navigation.js`
+  - `frontend/huongvantra-web-client/src/features/inventory/components/StockDeductPreviewModal.jsx`
+  - `frontend/huongvantra-web-client/src/features/inventory/pages/StockDeductQueuePage.jsx`
+  - `frontend/huongvantra-web-client/src/features/inventory/services/stockDeductQueueApi.js`
+  - `frontend/huongvantra-web-client/src/features/orders/utils/orderDisplay.js`
 
 ## Migrations Added
 
-- None in Phase 0.
+- Phase 1 added and applied:
+  - `20260712100000_AddStockDeductQueueAuditAndInsufficientStatus`
 
 ## Commands Run
 
@@ -175,39 +198,78 @@ OrderService latest detected migrations include:
 - `docker compose ps` from `backend/huongvantra_backend` - failed because Docker API was unavailable.
 - `rg` searches for StockDeductQueue, Product Approval, routes, migrations, roles, permissions - passed.
 - `Get-Content` inspections for StockDeductQueue/Product/Order/User/frontend route and service files - passed.
+- `dotnet build Service/InventoryService/InventoryService.WebAPI/InventoryService.WebAPI.csproj` - first attempt failed in sandbox with `NU1301`; escalated retry passed with one existing nullable warning in `WarehouseBatchRepository.cs`.
+- `dotnet build Service/OrderService/OrderService.WebAPI/OrderService.WebAPI.csproj` - passed with one existing unused-variable warning in `OrderLogic.cs`.
+- `npm.cmd run build` from `frontend/huongvantra-web-client` - passed with existing Vite dynamic import/chunk size warnings.
+- `docker compose ps` retry from `backend/huongvantra_backend` - still failed because Docker API pipe was unavailable.
+- `git diff --check` - passed; only Windows LF/CRLF warnings.
+- Resume command `git branch --show-current` - passed, output `HuyTD`.
+- Resume command `git status --short` - passed, Phase 1 source changes present and uncommitted.
+- Resume command `git log --oneline -5` - passed, latest commit is `7ed93c9`.
+- `docker version` - passed, Docker Desktop is available.
+- `docker compose ps` - passed, backend containers are running; `hvt-inventory-service` and `hvt-order-service` are healthy before rebuild.
+- `docker compose build inventory-service order-service` - passed.
+- `docker compose up -d --no-deps inventory-service order-service` - passed, both containers recreated and started.
+- `docker compose logs inventory-service --tail 300` - passed; service started and no migration/runtime failure was observed.
+- `docker compose logs order-service --tail 300` - passed; service started and no runtime failure was observed.
+- DB verification through `docker exec -i hvt-mysql mysql ... hvt_inventory_db` - passed; migration exists and all Phase 1 columns exist.
+- Log filtering for `migration failure`, `duplicate column`, `unknown column`, `table already exists`, `unhandled exception`, `crash`, `fail`, `error`, `exception` - passed; no matching service error lines.
+- `docker compose ps inventory-service order-service` - passed; both services are healthy after restart.
+- Final `dotnet build Service/InventoryService/InventoryService.WebAPI/InventoryService.WebAPI.csproj` - first sandbox attempt failed with `NU1301`; escalated retry passed with one existing nullable warning in `WarehouseBatchRepository.cs`.
+- Final `dotnet build Service/OrderService/OrderService.WebAPI/OrderService.WebAPI.csproj` - passed with 0 warnings and 0 errors.
+- Final `npm.cmd run build` - passed with existing Vite dynamic import/chunk size warnings.
+- Final `git diff --check` - passed; only Windows LF/CRLF warnings.
 
 ## Tests/Builds Run
 
-- None in Phase 0; this phase was source inspection and progress tracker creation only.
+- Phase 0: source inspection only.
+- Phase 1:
+  - InventoryService targeted build.
+  - OrderService targeted build.
+  - Frontend production build.
+  - `git diff --check`.
+  - Docker availability check.
 
 ## Tests/Builds Passed
 
-- Not applicable for Phase 0.
+- InventoryService targeted build passed after running outside the restricted network sandbox.
+- OrderService targeted build passed.
+- Frontend production build passed.
+- `git diff --check` passed.
+- Docker build/restart of `inventory-service` and `order-service` passed.
+- Phase 1 migration exists in `__EFMigrationsHistory`.
+- `StockDeductQueues` contains:
+  - `ConfirmedBy`
+  - `ConfirmedByName`
+  - `ConfirmedByRoleName`
+  - `CancelledBy`
+  - `CancelledByName`
+  - `CancelledByRoleName`
+  - `CancelReason`
+  - `LastAttemptAt`
+  - `LastShortageReason`
 
-## Tests/Builds Failed
+## Tests/Builds Failed Or Blocked
 
-- `docker compose ps` failed due Docker daemon/API unavailable, not due source build failure.
+- Initial InventoryService build failed only because sandbox blocked NuGet network access (`NU1301`); escalated retry passed.
+- Earlier `docker compose ps` failed because Docker daemon/API was unavailable; retry after Docker startup passed.
 
 ## Current Known Issues
 
-- `/orders/stock-deduct` currently mixes role wording: UI says Thu kho/warehouse handles branch/counter deduction, but business rule requires Manager/Admin.
-- `StockDeductQueueController` uses broad `ViewOrder` authorization for confirm/cancel.
-- `QueueStatus.Insufficient` is missing.
-- Queue status filtering is not implemented in repository/controller despite frontend passing `status`.
-- Confirm insufficient stock does not persist an insufficient/waiting-stock state.
-- Cancel reason is ignored and not required.
-- Confirm/cancel audit fields are missing on `StockDeductQueue`.
-- Successful Flow 2A deduction currently does not create a `StockExportSlip` sales voucher.
-- Queue cancellation does not appear to sync back to OrderService.
-- Product Approval workflow does not exist yet in ProductService or frontend.
-- Docker is unavailable, so migration application cannot be verified until Docker is started.
+- Phase 1 manual browser/API verification still needs Huy data:
+  - enough-stock queue confirm
+  - insufficient-stock queue retry
+  - cancel queue with reason
+  - sales outbound voucher visible in export slips
+  - OrderService status no longer pending after confirm/cancel
+- Product Approval workflow does not exist yet in ProductService or frontend; this is Phase 2.
 
 ## Next Recommended Action
 
-- Continue to Phase 1 if the local environment can build .NET/frontend without Docker verification.
-- Before any migration or service restart, re-check Docker availability.
-- Implement Phase 1 in small backend-first slices: enum/schema/audit, status filtering, Manager/Admin authorization, confirm/cancel behavior, sales export slip, OrderService cancellation sync, then frontend wording/modals.
+- Commit Phase 1 with `feat(inventory): complete sell-first stock deduction flow`.
+- After commit, update this file with the Phase 1 commit hash.
+- Then start Phase 2 source inspection for New Product Creation Approval.
 
 ## Last Safe Local Commit Hash
 
-- None yet for this overnight task.
+- `7ed93c9 chore(inventory): add overnight implementation progress tracker`
