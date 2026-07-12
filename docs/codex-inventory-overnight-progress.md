@@ -3,7 +3,7 @@
 ## Current Phase
 
 - Phase 4 - Integration stabilization and regression checks.
-- Phase 3 has been committed locally and Phase 4 is ready for source/runtime verification.
+- Phase 4 source/build/runtime/API smoke checks passed; tracker update is ready to commit locally.
 
 ## Completed Phases
 
@@ -14,6 +14,10 @@
   - Commit: `7f7c240 feat(product): add new product approval workflow`
 - Phase 3 - Role and wording cleanup across Inventory.
   - Commit: `26bb277 chore(inventory): align warehouse and manager role scope`
+- Phase 4 - Integration stabilization and regression checks.
+  - Source/build/runtime/API smoke checks passed.
+  - No production code changes were required in this phase.
+  - Commit pending for this tracker update.
 
 ## Pending Phases
 
@@ -216,6 +220,8 @@ OrderService latest detected migrations include:
   - `frontend/huongvantra-web-client/src/features/orders/pages/OrdersPage.jsx`
   - `frontend/huongvantra-web-client/src/features/products/pages/ProductApprovalsPage.jsx`
   - `frontend/huongvantra-web-client/src/features/products/pages/ProductFormPage.jsx`
+- Phase 4 changed files:
+  - `docs/codex-inventory-overnight-progress.md`
 
 ## Migrations Added
 
@@ -280,6 +286,41 @@ OrderService latest detected migrations include:
 - Phase 3 `git diff --check` - passed; only Windows LF/CRLF warnings.
 - `git add -A` - passed; staged Phase 3 verified changes.
 - `git commit -m "chore(inventory): align warehouse and manager role scope"` - passed; created commit `26bb277`.
+- Phase 4 source regression inspection for Production Order expiry, exact-SKU warehouse lots, manual import slips, stock deduct queue, Product Approval routes, and OrderService stock sync consumer - passed; no new code changes required.
+- Phase 4 `dotnet build Service/InventoryService/InventoryService.WebAPI/InventoryService.WebAPI.csproj` - passed with one existing nullable warning in `WarehouseBatchRepository.cs`.
+- Phase 4 `dotnet build Service/ProductService/ProductService.WebAPI/ProductService.WebAPI.csproj` - passed with 0 warnings and 0 errors.
+- Phase 4 `dotnet build Service/OrderService/OrderService.WebAPI/OrderService.WebAPI.csproj` - passed with one existing unused-variable warning in `OrderLogic.cs`.
+- Phase 4 `dotnet build API_Gateway/HuongVanTra.Gateway/HuongVanTra.Gateway.csproj` - passed with 0 warnings and 0 errors.
+- Phase 4 `dotnet build Service/UserService/UserService.WebAPI/UserService.WebAPI.csproj` - passed with 0 warnings and 0 errors.
+- Phase 4 `npm.cmd run build` - passed with existing Vite dynamic import/chunk size warnings.
+- Phase 4 `git diff --check` - passed.
+- Phase 4 `docker compose ps` - passed; affected services were running before restart.
+- Phase 4 `docker compose build inventory-service product-service order-service gateway user-service` - passed.
+- Phase 4 `docker compose up -d --no-deps inventory-service product-service order-service gateway user-service` - passed.
+- Phase 4 logs for `inventory-service`, `product-service`, `order-service`, `gateway`, and `user-service` - passed; no migration failure/runtime crash observed.
+- Phase 4 log filtering for migration/runtime error patterns - passed; no matching service error lines.
+- Phase 4 `docker compose ps inventory-service product-service order-service gateway user-service` - passed; `inventory-service`, `product-service`, `order-service`, and `user-service` are healthy; `gateway` is running.
+- Phase 4 Inventory DB verification through `docker exec -i hvt-mysql mysql ... hvt_inventory_db` - passed:
+  - `20260706123000_AddProductionOrderOutputLineExpiry` exists.
+  - `20260712100000_AddStockDeductQueueAuditAndInsufficientStatus` exists.
+  - `ProductionOrderOutputLines.ExpiresAt` exists as nullable `datetime(6)`.
+  - `ProductionOrderOutputLines.PlannedQuantity` exists.
+  - unique index `IX_ProductionOrderOutputLines_ProductionOrderId_FinishedSkuId` exists.
+  - no `ProductionOrders` row is missing output lines.
+  - `StockDeductQueues` audit/shortage columns exist.
+- Phase 4 Product DB verification through `docker exec -i hvt-mysql mysql ... hvt_product_db` - passed:
+  - `20260712120000_AddNewProductApprovalRequests` exists.
+  - `NewProductApprovalRequests` table exists.
+  - `ApprovalCode`, `Status`, and `ManualModeReason` exist.
+  - unique index `IX_NewProductApprovalRequests_ApprovalCode` exists.
+- Phase 4 no-token Gateway smoke checks - passed:
+  - `/api/v1/product-approval-requests` returned `401`, not `404`.
+  - `/api/stock-deduct-queue/waiting` returned `401`, not `404`.
+  - `/api/v1/inventory/stock-import-slips` returned `401`, not `404`.
+- Phase 4 authenticated Gateway smoke checks - passed:
+  - Admin `GET /api/v1/product-approval-requests?page=1&pageSize=5&status=all` returned `HTTP 200`.
+  - Manager `GET /api/stock-deduct-queue/waiting?page=1&pageSize=5&status=all` returned `HTTP 200`.
+  - Manager `POST /api/v1/product-approval-requests/validate-code` returned `HTTP 403`.
 
 ## Tests/Builds Run
 
@@ -328,6 +369,12 @@ OrderService latest detected migrations include:
 - Phase 3 UserService targeted build passed.
 - Phase 3 frontend production build passed.
 - Phase 3 `git diff --check` passed.
+- Phase 4 InventoryService/ProductService/OrderService/Gateway/UserService targeted builds passed.
+- Phase 4 frontend production build passed.
+- Phase 4 source regression inspection passed without additional source changes.
+- Phase 4 Docker build/restart/log checks passed.
+- Phase 4 DB migration/schema checks passed.
+- Phase 4 Gateway API smoke checks passed.
 
 ## Tests/Builds Failed Or Blocked
 
@@ -350,11 +397,12 @@ OrderService latest detected migrations include:
   - Warehouse automatic create
   - Warehouse manual fallback with reason
   - reused/cancelled/Manager code usage blocked
+- Phase 4 did not create new sample business data. Warehouse automatic/manual product creation and end-to-end stock deduction still need Huy's browser test data/account tomorrow morning.
 
 ## Next Recommended Action
 
-- Commit this docs-only Phase 3 progress update.
-- Start Phase 4 integration stabilization and regression checks.
+- Commit this Phase 4 tracker update.
+- Move to Phase 5 final Vietnamese report.
 
 ## Last Safe Local Commit Hash
 
