@@ -2,8 +2,8 @@
 
 ## Current Phase
 
-- Phase 4 - Integration stabilization and regression checks.
-- Phase 4 source/build/runtime/API smoke checks passed; tracker update is ready to commit locally.
+- Phase 5 - Final report.
+- Phase 4 has been committed locally; ready for final Vietnamese report.
 
 ## Completed Phases
 
@@ -17,11 +17,11 @@
 - Phase 4 - Integration stabilization and regression checks.
   - Source/build/runtime/API smoke checks passed.
   - No production code changes were required in this phase.
-  - Commit pending for this tracker update.
+- Commit: `a5cc813 test(inventory): stabilize inventory integration flows`
 
 ## Pending Phases
 
-- Phase 5 - Final report.
+- None.
 
 ## Branch And Working Tree
 
@@ -321,6 +321,8 @@ OrderService latest detected migrations include:
   - Admin `GET /api/v1/product-approval-requests?page=1&pageSize=5&status=all` returned `HTTP 200`.
   - Manager `GET /api/stock-deduct-queue/waiting?page=1&pageSize=5&status=all` returned `HTTP 200`.
   - Manager `POST /api/v1/product-approval-requests/validate-code` returned `HTTP 403`.
+- `git add docs/codex-inventory-overnight-progress.md` - passed; staged Phase 4 tracker update.
+- `git commit -m "test(inventory): stabilize inventory integration flows"` - passed; created commit `a5cc813`.
 
 ## Tests/Builds Run
 
@@ -401,9 +403,9 @@ OrderService latest detected migrations include:
 
 ## Next Recommended Action
 
-- Commit this Phase 4 tracker update.
-- Move to Phase 5 final Vietnamese report.
+- Commit this docs-only Phase 4 hash update if needed.
+- Send Phase 5 final Vietnamese report.
 
 ## Last Safe Local Commit Hash
 
-- `26bb277 chore(inventory): align warehouse and manager role scope`
+- `a5cc813 test(inventory): stabilize inventory integration flows`
