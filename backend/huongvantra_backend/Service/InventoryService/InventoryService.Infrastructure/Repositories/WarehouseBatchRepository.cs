@@ -119,6 +119,13 @@ public class WarehouseBatchRepository(InventoryDbContext _db) : IWarehouseBatchR
             .Distinct()
             .CountAsync(ct);
 
+    public async Task<decimal> CalculateTotalWarehouseValueAsync(CancellationToken ct = default)
+    {
+        return await _db.WarehouseBatchItems
+            .Where(b => b.QuantityOnHand > 0 && b.UnitCost.HasValue)
+            .SumAsync(b => b.QuantityOnHand * b.UnitCost!.Value, ct);
+    }
+
     public async Task AddAsync(WarehouseBatch batch, CancellationToken ct = default) =>
         await _db.WarehouseBatches.AddAsync(batch, ct);
 

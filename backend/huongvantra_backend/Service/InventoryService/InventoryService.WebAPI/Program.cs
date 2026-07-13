@@ -44,7 +44,7 @@ builder.Services.AddScoped<IProcessedIntegrationEventRepository, ProcessedIntegr
 builder.Services.AddScoped<IProductionOrderRepository, ProductionOrderRepository>();
 builder.Services.AddScoped<IInventoryEventPublisher, InventoryEventPublisher>();
 builder.Services.AddScoped<InventoryLogic>();
-
+builder.Services.AddScoped<StatisticsLogic>();
 builder.Services.AddMassTransit(x =>
 {
     x.AddConsumer<SkuCreatedConsumer>();

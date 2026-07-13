@@ -61,10 +61,10 @@ export function formatCreatorRole(roleName) {
   if (!trimmed) return UNKNOWN_CREATOR_VALUE
 
   const roleMap = {
-    warehouse: 'Thủ kho',
-    warehousestaff: 'Thủ kho',
-    inventorystaff: 'Thủ kho',
-    inventorymanager: 'Quản lý kho',
+    warehouse: 'Thủ kho Kho tổng',
+    warehousestaff: 'Thủ kho Kho tổng',
+    inventorystaff: 'Thủ kho Kho tổng',
+    inventorymanager: 'Thủ kho Kho tổng',
     manager: 'Quản lý',
     agencymanager: 'Quản lý',
     admin: 'Quản trị viên',

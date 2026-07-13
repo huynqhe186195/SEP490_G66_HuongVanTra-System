@@ -29,7 +29,7 @@
 --   DELETE FROM hvt_inventory_db.SkuStocks WHERE SkuCode LIKE 'SKU-DEMO-%';
 --   DELETE FROM hvt_customer_db.CustomerAddresses WHERE CustomerId IN (SELECT Id FROM hvt_customer_db.Customers WHERE CustomerCode LIKE 'KH-DEMO-%');
 --   DELETE FROM hvt_customer_db.Customers WHERE CustomerCode LIKE 'KH-DEMO-%';
---   DELETE FROM hvt_product_db.ProductSKUs WHERE SkuCode LIKE 'SKU-DEMO-%';
+--   DELETE FROM hvt_product_db.ProductVariants WHERE SkuCode LIKE 'SKU-DEMO-%';
 --   DELETE FROM hvt_product_db.Products WHERE Id LIKE 'aaaaaaaa-%';
 --   DELETE FROM hvt_product_db.Categories WHERE Id BETWEEN 9001 AND 9105;
 -- =============================================================================
@@ -202,158 +202,158 @@ SELECT 9105, @CAT_AM_LY, @CAT_DESC_AM_LY, 9003, 1, @NOW, @NOW, @NOW, 0
 WHERE NOT EXISTS (SELECT 1 FROM Categories WHERE Id = 9105);
 
 -- Products (12)
-INSERT INTO Products (Id, CategoryId, Name, Origin, FlavorProfile, Description, BaseUnit, IsVariantParent, IsActive, SyncedToStoreAt, CreatedAt, UpdatedAt, IsDeleted)
-SELECT 'aaaaaaaa-0001-4000-8000-000000000001', 9101, @PROD_001, @ORIG_001, @FLAV_001, @DESC_001, @UNIT_BAG, 0, 1, @NOW, @NOW, @NOW, 0
+INSERT INTO Products (Id, CategoryId, ProductType, Name, Origin, FlavorProfile, BrewingGuide, Description, BaseUnit, WeightValue, WeightUnit, IsVariantParent, IsActive, SyncedToStoreAt, CreatedAt, UpdatedAt, IsDeleted)
+SELECT 'aaaaaaaa-0001-4000-8000-000000000001', 9101, 0, @PROD_001, @ORIG_001, @FLAV_001, NULL, @DESC_001, @UNIT_BAG, NULL, NULL, 0, 1, @NOW, @NOW, @NOW, 0
 WHERE NOT EXISTS (SELECT 1 FROM Products WHERE Id = 'aaaaaaaa-0001-4000-8000-000000000001');
 
-INSERT INTO Products (Id, CategoryId, Name, Origin, FlavorProfile, Description, BaseUnit, IsVariantParent, IsActive, SyncedToStoreAt, CreatedAt, UpdatedAt, IsDeleted)
-SELECT 'aaaaaaaa-0001-4000-8000-000000000002', 9101, @PROD_002, @ORIG_002, @FLAV_002, @DESC_002, @UNIT_BAG, 0, 1, @NOW, @NOW, @NOW, 0
+INSERT INTO Products (Id, CategoryId, ProductType, Name, Origin, FlavorProfile, BrewingGuide, Description, BaseUnit, WeightValue, WeightUnit, IsVariantParent, IsActive, SyncedToStoreAt, CreatedAt, UpdatedAt, IsDeleted)
+SELECT 'aaaaaaaa-0001-4000-8000-000000000002', 9101, 0, @PROD_002, @ORIG_002, @FLAV_002, NULL, @DESC_002, @UNIT_BAG, NULL, NULL, 0, 1, @NOW, @NOW, @NOW, 0
 WHERE NOT EXISTS (SELECT 1 FROM Products WHERE Id = 'aaaaaaaa-0001-4000-8000-000000000002');
 
-INSERT INTO Products (Id, CategoryId, Name, Origin, FlavorProfile, Description, BaseUnit, IsVariantParent, IsActive, SyncedToStoreAt, CreatedAt, UpdatedAt, IsDeleted)
-SELECT 'aaaaaaaa-0001-4000-8000-000000000003', 9101, @PROD_003, @ORIG_003, @FLAV_003, @DESC_003, @UNIT_BAG, 0, 1, @NOW, @NOW, @NOW, 0
+INSERT INTO Products (Id, CategoryId, ProductType, Name, Origin, FlavorProfile, BrewingGuide, Description, BaseUnit, WeightValue, WeightUnit, IsVariantParent, IsActive, SyncedToStoreAt, CreatedAt, UpdatedAt, IsDeleted)
+SELECT 'aaaaaaaa-0001-4000-8000-000000000003', 9101, 0, @PROD_003, @ORIG_003, @FLAV_003, NULL, @DESC_003, @UNIT_BAG, NULL, NULL, 0, 1, @NOW, @NOW, @NOW, 0
 WHERE NOT EXISTS (SELECT 1 FROM Products WHERE Id = 'aaaaaaaa-0001-4000-8000-000000000003');
 
-INSERT INTO Products (Id, CategoryId, Name, Origin, FlavorProfile, Description, BaseUnit, IsVariantParent, IsActive, SyncedToStoreAt, CreatedAt, UpdatedAt, IsDeleted)
-SELECT 'aaaaaaaa-0001-4000-8000-000000000004', 9102, @PROD_004, @ORIG_004, @FLAV_004, @DESC_004, @UNIT_BAG, 0, 1, @NOW, @NOW, @NOW, 0
+INSERT INTO Products (Id, CategoryId, ProductType, Name, Origin, FlavorProfile, BrewingGuide, Description, BaseUnit, WeightValue, WeightUnit, IsVariantParent, IsActive, SyncedToStoreAt, CreatedAt, UpdatedAt, IsDeleted)
+SELECT 'aaaaaaaa-0001-4000-8000-000000000004', 9102, 0, @PROD_004, @ORIG_004, @FLAV_004, NULL, @DESC_004, @UNIT_BAG, NULL, NULL, 0, 1, @NOW, @NOW, @NOW, 0
 WHERE NOT EXISTS (SELECT 1 FROM Products WHERE Id = 'aaaaaaaa-0001-4000-8000-000000000004');
 
-INSERT INTO Products (Id, CategoryId, Name, Origin, FlavorProfile, Description, BaseUnit, IsVariantParent, IsActive, SyncedToStoreAt, CreatedAt, UpdatedAt, IsDeleted)
-SELECT 'aaaaaaaa-0001-4000-8000-000000000005', 9102, @PROD_005, @ORIG_005, @FLAV_005, @DESC_005, @UNIT_BAG, 0, 1, @NOW, @NOW, @NOW, 0
+INSERT INTO Products (Id, CategoryId, ProductType, Name, Origin, FlavorProfile, BrewingGuide, Description, BaseUnit, WeightValue, WeightUnit, IsVariantParent, IsActive, SyncedToStoreAt, CreatedAt, UpdatedAt, IsDeleted)
+SELECT 'aaaaaaaa-0001-4000-8000-000000000005', 9102, 0, @PROD_005, @ORIG_005, @FLAV_005, NULL, @DESC_005, @UNIT_BAG, NULL, NULL, 0, 1, @NOW, @NOW, @NOW, 0
 WHERE NOT EXISTS (SELECT 1 FROM Products WHERE Id = 'aaaaaaaa-0001-4000-8000-000000000005');
 
-INSERT INTO Products (Id, CategoryId, Name, Origin, FlavorProfile, Description, BaseUnit, IsVariantParent, IsActive, SyncedToStoreAt, CreatedAt, UpdatedAt, IsDeleted)
-SELECT 'aaaaaaaa-0001-4000-8000-000000000006', 9103, @PROD_006, @ORIG_006, @FLAV_006, @DESC_006, @UNIT_BAG, 0, 1, @NOW, @NOW, @NOW, 0
+INSERT INTO Products (Id, CategoryId, ProductType, Name, Origin, FlavorProfile, BrewingGuide, Description, BaseUnit, WeightValue, WeightUnit, IsVariantParent, IsActive, SyncedToStoreAt, CreatedAt, UpdatedAt, IsDeleted)
+SELECT 'aaaaaaaa-0001-4000-8000-000000000006', 9103, 0, @PROD_006, @ORIG_006, @FLAV_006, NULL, @DESC_006, @UNIT_BAG, NULL, NULL, 0, 1, @NOW, @NOW, @NOW, 0
 WHERE NOT EXISTS (SELECT 1 FROM Products WHERE Id = 'aaaaaaaa-0001-4000-8000-000000000006');
 
-INSERT INTO Products (Id, CategoryId, Name, Origin, FlavorProfile, Description, BaseUnit, IsVariantParent, IsActive, SyncedToStoreAt, CreatedAt, UpdatedAt, IsDeleted)
-SELECT 'aaaaaaaa-0001-4000-8000-000000000007', 9103, @PROD_007, @ORIG_007, @FLAV_007, @DESC_007, @UNIT_BAG, 0, 1, @NOW, @NOW, @NOW, 0
+INSERT INTO Products (Id, CategoryId, ProductType, Name, Origin, FlavorProfile, BrewingGuide, Description, BaseUnit, WeightValue, WeightUnit, IsVariantParent, IsActive, SyncedToStoreAt, CreatedAt, UpdatedAt, IsDeleted)
+SELECT 'aaaaaaaa-0001-4000-8000-000000000007', 9103, 0, @PROD_007, @ORIG_007, @FLAV_007, NULL, @DESC_007, @UNIT_BAG, NULL, NULL, 0, 1, @NOW, @NOW, @NOW, 0
 WHERE NOT EXISTS (SELECT 1 FROM Products WHERE Id = 'aaaaaaaa-0001-4000-8000-000000000007');
 
-INSERT INTO Products (Id, CategoryId, Name, Origin, FlavorProfile, Description, BaseUnit, IsVariantParent, IsActive, SyncedToStoreAt, CreatedAt, UpdatedAt, IsDeleted)
-SELECT 'aaaaaaaa-0001-4000-8000-000000000008', 9103, @PROD_008, @ORIG_008, @FLAV_008, @DESC_008, @UNIT_BAG, 0, 1, @NOW, @NOW, @NOW, 0
+INSERT INTO Products (Id, CategoryId, ProductType, Name, Origin, FlavorProfile, BrewingGuide, Description, BaseUnit, WeightValue, WeightUnit, IsVariantParent, IsActive, SyncedToStoreAt, CreatedAt, UpdatedAt, IsDeleted)
+SELECT 'aaaaaaaa-0001-4000-8000-000000000008', 9103, 0, @PROD_008, @ORIG_008, @FLAV_008, NULL, @DESC_008, @UNIT_BAG, NULL, NULL, 0, 1, @NOW, @NOW, @NOW, 0
 WHERE NOT EXISTS (SELECT 1 FROM Products WHERE Id = 'aaaaaaaa-0001-4000-8000-000000000008');
 
-INSERT INTO Products (Id, CategoryId, Name, Origin, FlavorProfile, Description, BaseUnit, IsVariantParent, IsActive, SyncedToStoreAt, CreatedAt, UpdatedAt, IsDeleted)
-SELECT 'aaaaaaaa-0001-4000-8000-000000000009', 9104, @PROD_009, @ORIG_008, @FLAV_009, @DESC_009, @UNIT_SET, 0, 1, @NOW, @NOW, @NOW, 0
+INSERT INTO Products (Id, CategoryId, ProductType, Name, Origin, FlavorProfile, BrewingGuide, Description, BaseUnit, WeightValue, WeightUnit, IsVariantParent, IsActive, SyncedToStoreAt, CreatedAt, UpdatedAt, IsDeleted)
+SELECT 'aaaaaaaa-0001-4000-8000-000000000009', 9104, 0, @PROD_009, @ORIG_008, @FLAV_009, NULL, @DESC_009, @UNIT_SET, NULL, NULL, 0, 1, @NOW, @NOW, @NOW, 0
 WHERE NOT EXISTS (SELECT 1 FROM Products WHERE Id = 'aaaaaaaa-0001-4000-8000-000000000009');
 
-INSERT INTO Products (Id, CategoryId, Name, Origin, FlavorProfile, Description, BaseUnit, IsVariantParent, IsActive, SyncedToStoreAt, CreatedAt, UpdatedAt, IsDeleted)
-SELECT 'aaaaaaaa-0001-4000-8000-000000000010', 9104, @PROD_010, @ORIG_008, @FLAV_010, @DESC_010, @UNIT_SET, 0, 1, @NOW, @NOW, @NOW, 0
+INSERT INTO Products (Id, CategoryId, ProductType, Name, Origin, FlavorProfile, BrewingGuide, Description, BaseUnit, WeightValue, WeightUnit, IsVariantParent, IsActive, SyncedToStoreAt, CreatedAt, UpdatedAt, IsDeleted)
+SELECT 'aaaaaaaa-0001-4000-8000-000000000010', 9104, 0, @PROD_010, @ORIG_008, @FLAV_010, NULL, @DESC_010, @UNIT_SET, NULL, NULL, 0, 1, @NOW, @NOW, @NOW, 0
 WHERE NOT EXISTS (SELECT 1 FROM Products WHERE Id = 'aaaaaaaa-0001-4000-8000-000000000010');
 
-INSERT INTO Products (Id, CategoryId, Name, Origin, FlavorProfile, Description, BaseUnit, IsVariantParent, IsActive, SyncedToStoreAt, CreatedAt, UpdatedAt, IsDeleted)
-SELECT 'aaaaaaaa-0001-4000-8000-000000000011', 9105, @PROD_011, 'Bat Trang', NULL, @DESC_011, @UNIT_PIECE, 0, 1, @NOW, @NOW, @NOW, 0
+INSERT INTO Products (Id, CategoryId, ProductType, Name, Origin, FlavorProfile, BrewingGuide, Description, BaseUnit, WeightValue, WeightUnit, IsVariantParent, IsActive, SyncedToStoreAt, CreatedAt, UpdatedAt, IsDeleted)
+SELECT 'aaaaaaaa-0001-4000-8000-000000000011', 9105, 0, @PROD_011, 'Bat Trang', NULL, NULL, @DESC_011, @UNIT_PIECE, NULL, NULL, 0, 1, @NOW, @NOW, @NOW, 0
 WHERE NOT EXISTS (SELECT 1 FROM Products WHERE Id = 'aaaaaaaa-0001-4000-8000-000000000011');
 
-INSERT INTO Products (Id, CategoryId, Name, Origin, FlavorProfile, Description, BaseUnit, IsVariantParent, IsActive, SyncedToStoreAt, CreatedAt, UpdatedAt, IsDeleted)
-SELECT 'aaaaaaaa-0001-4000-8000-000000000012', 9105, @PROD_012, 'Bat Trang', NULL, @DESC_012, @UNIT_KIT, 0, 1, @NOW, @NOW, @NOW, 0
+INSERT INTO Products (Id, CategoryId, ProductType, Name, Origin, FlavorProfile, BrewingGuide, Description, BaseUnit, WeightValue, WeightUnit, IsVariantParent, IsActive, SyncedToStoreAt, CreatedAt, UpdatedAt, IsDeleted)
+SELECT 'aaaaaaaa-0001-4000-8000-000000000012', 9105, 0, @PROD_012, 'Bat Trang', NULL, NULL, @DESC_012, @UNIT_KIT, NULL, NULL, 0, 1, @NOW, @NOW, @NOW, 0
 WHERE NOT EXISTS (SELECT 1 FROM Products WHERE Id = 'aaaaaaaa-0001-4000-8000-000000000012');
 
 -- SKUs (15) — giá VNĐ
-INSERT INTO ProductSKUs (Id, ProductId, SkuCode, Barcode, PackagingType, WeightInGrams, BasePrice, CostPrice, RetailPrice, MinStock, MaxStock, IsActive, IsSellable, AllowRewardPoints, SyncedToStoreAt, CreatedAt, UpdatedAt, IsDeleted)
-SELECT 'bbbbbbbb-0001-4000-8000-000000000001', 'aaaaaaaa-0001-4000-8000-000000000001', 'SKU-DEMO-001', '8930000000001', @PKG_BAG_100, 100, 180000, 120000, 180000, 5, 200, 1, 1, 1, @NOW, @NOW, @NOW, 0
-WHERE NOT EXISTS (SELECT 1 FROM ProductSKUs WHERE SkuCode = 'SKU-DEMO-001');
+INSERT INTO ProductVariants (Id, ProductId, SkuCode, Barcode, VariantName, OptionValuesJson, CostPrice, RetailPrice, MinStock, MaxStock, IsSellable, AllowRewardPoints, IsActive, ImageUrl, WeightInGrams, SyncedToStoreAt, CreatedAt, UpdatedAt, IsDeleted)
+SELECT 'bbbbbbbb-0001-4000-8000-000000000001', 'aaaaaaaa-0001-4000-8000-000000000001', 'SKU-DEMO-001', '8930000000001', @PKG_BAG_100, '{}', 120000, 180000, 5, 200, 1, 1, 1, NULL, 100, @NOW, @NOW, @NOW, 0
+WHERE NOT EXISTS (SELECT 1 FROM ProductVariants WHERE SkuCode = 'SKU-DEMO-001');
 
-INSERT INTO ProductSKUs (Id, ProductId, SkuCode, Barcode, PackagingType, WeightInGrams, BasePrice, CostPrice, RetailPrice, MinStock, MaxStock, IsActive, IsSellable, AllowRewardPoints, SyncedToStoreAt, CreatedAt, UpdatedAt, IsDeleted)
-SELECT 'bbbbbbbb-0001-4000-8000-000000000002', 'aaaaaaaa-0001-4000-8000-000000000001', 'SKU-DEMO-002', '8930000000002', @PKG_BAG_250, 250, 420000, 280000, 420000, 5, 100, 1, 1, 1, @NOW, @NOW, @NOW, 0
-WHERE NOT EXISTS (SELECT 1 FROM ProductSKUs WHERE SkuCode = 'SKU-DEMO-002');
+INSERT INTO ProductVariants (Id, ProductId, SkuCode, Barcode, VariantName, OptionValuesJson, CostPrice, RetailPrice, MinStock, MaxStock, IsSellable, AllowRewardPoints, IsActive, ImageUrl, WeightInGrams, SyncedToStoreAt, CreatedAt, UpdatedAt, IsDeleted)
+SELECT 'bbbbbbbb-0001-4000-8000-000000000002', 'aaaaaaaa-0001-4000-8000-000000000001', 'SKU-DEMO-002', '8930000000002', @PKG_BAG_250, '{}', 280000, 420000, 5, 100, 1, 1, 1, NULL, 250, @NOW, @NOW, @NOW, 0
+WHERE NOT EXISTS (SELECT 1 FROM ProductVariants WHERE SkuCode = 'SKU-DEMO-002');
 
-INSERT INTO ProductSKUs (Id, ProductId, SkuCode, Barcode, PackagingType, WeightInGrams, BasePrice, CostPrice, RetailPrice, MinStock, MaxStock, IsActive, IsSellable, AllowRewardPoints, SyncedToStoreAt, CreatedAt, UpdatedAt, IsDeleted)
-SELECT 'bbbbbbbb-0001-4000-8000-000000000003', 'aaaaaaaa-0001-4000-8000-000000000002', 'SKU-DEMO-003', '8930000000003', @PKG_BAG_100, 100, 95000, 60000, 95000, 10, 300, 1, 1, 1, @NOW, @NOW, @NOW, 0
-WHERE NOT EXISTS (SELECT 1 FROM ProductSKUs WHERE SkuCode = 'SKU-DEMO-003');
+INSERT INTO ProductVariants (Id, ProductId, SkuCode, Barcode, VariantName, OptionValuesJson, CostPrice, RetailPrice, MinStock, MaxStock, IsSellable, AllowRewardPoints, IsActive, ImageUrl, WeightInGrams, SyncedToStoreAt, CreatedAt, UpdatedAt, IsDeleted)
+SELECT 'bbbbbbbb-0001-4000-8000-000000000003', 'aaaaaaaa-0001-4000-8000-000000000002', 'SKU-DEMO-003', '8930000000003', @PKG_BAG_100, '{}', 60000, 95000, 10, 300, 1, 1, 1, NULL, 100, @NOW, @NOW, @NOW, 0
+WHERE NOT EXISTS (SELECT 1 FROM ProductVariants WHERE SkuCode = 'SKU-DEMO-003');
 
-INSERT INTO ProductSKUs (Id, ProductId, SkuCode, Barcode, PackagingType, WeightInGrams, BasePrice, CostPrice, RetailPrice, MinStock, MaxStock, IsActive, IsSellable, AllowRewardPoints, SyncedToStoreAt, CreatedAt, UpdatedAt, IsDeleted)
-SELECT 'bbbbbbbb-0001-4000-8000-000000000004', 'aaaaaaaa-0001-4000-8000-000000000003', 'SKU-DEMO-004', '8930000000004', @PKG_BAG_100, 100, 150000, 95000, 150000, 5, 150, 1, 1, 1, @NOW, @NOW, @NOW, 0
-WHERE NOT EXISTS (SELECT 1 FROM ProductSKUs WHERE SkuCode = 'SKU-DEMO-004');
+INSERT INTO ProductVariants (Id, ProductId, SkuCode, Barcode, VariantName, OptionValuesJson, CostPrice, RetailPrice, MinStock, MaxStock, IsSellable, AllowRewardPoints, IsActive, ImageUrl, WeightInGrams, SyncedToStoreAt, CreatedAt, UpdatedAt, IsDeleted)
+SELECT 'bbbbbbbb-0001-4000-8000-000000000004', 'aaaaaaaa-0001-4000-8000-000000000003', 'SKU-DEMO-004', '8930000000004', @PKG_BAG_100, '{}', 95000, 150000, 5, 150, 1, 1, 1, NULL, 100, @NOW, @NOW, @NOW, 0
+WHERE NOT EXISTS (SELECT 1 FROM ProductVariants WHERE SkuCode = 'SKU-DEMO-004');
 
-INSERT INTO ProductSKUs (Id, ProductId, SkuCode, Barcode, PackagingType, WeightInGrams, BasePrice, CostPrice, RetailPrice, MinStock, MaxStock, IsActive, IsSellable, AllowRewardPoints, SyncedToStoreAt, CreatedAt, UpdatedAt, IsDeleted)
-SELECT 'bbbbbbbb-0001-4000-8000-000000000005', 'aaaaaaaa-0001-4000-8000-000000000004', 'SKU-DEMO-005', '8930000000005', @PKG_BAG_100, 100, 220000, 140000, 220000, 5, 120, 1, 1, 1, @NOW, @NOW, @NOW, 0
-WHERE NOT EXISTS (SELECT 1 FROM ProductSKUs WHERE SkuCode = 'SKU-DEMO-005');
+INSERT INTO ProductVariants (Id, ProductId, SkuCode, Barcode, VariantName, OptionValuesJson, CostPrice, RetailPrice, MinStock, MaxStock, IsSellable, AllowRewardPoints, IsActive, ImageUrl, WeightInGrams, SyncedToStoreAt, CreatedAt, UpdatedAt, IsDeleted)
+SELECT 'bbbbbbbb-0001-4000-8000-000000000005', 'aaaaaaaa-0001-4000-8000-000000000004', 'SKU-DEMO-005', '8930000000005', @PKG_BAG_100, '{}', 140000, 220000, 5, 120, 1, 1, 1, NULL, 100, @NOW, @NOW, @NOW, 0
+WHERE NOT EXISTS (SELECT 1 FROM ProductVariants WHERE SkuCode = 'SKU-DEMO-005');
 
-INSERT INTO ProductSKUs (Id, ProductId, SkuCode, Barcode, PackagingType, WeightInGrams, BasePrice, CostPrice, RetailPrice, MinStock, MaxStock, IsActive, IsSellable, AllowRewardPoints, SyncedToStoreAt, CreatedAt, UpdatedAt, IsDeleted)
-SELECT 'bbbbbbbb-0001-4000-8000-000000000006', 'aaaaaaaa-0001-4000-8000-000000000005', 'SKU-DEMO-006', '8930000000006', @PKG_BAG_75, 75, 280000, 180000, 280000, 3, 80, 1, 1, 1, @NOW, @NOW, @NOW, 0
-WHERE NOT EXISTS (SELECT 1 FROM ProductSKUs WHERE SkuCode = 'SKU-DEMO-006');
+INSERT INTO ProductVariants (Id, ProductId, SkuCode, Barcode, VariantName, OptionValuesJson, CostPrice, RetailPrice, MinStock, MaxStock, IsSellable, AllowRewardPoints, IsActive, ImageUrl, WeightInGrams, SyncedToStoreAt, CreatedAt, UpdatedAt, IsDeleted)
+SELECT 'bbbbbbbb-0001-4000-8000-000000000006', 'aaaaaaaa-0001-4000-8000-000000000005', 'SKU-DEMO-006', '8930000000006', @PKG_BAG_75, '{}', 180000, 280000, 3, 80, 1, 1, 1, NULL, 75, @NOW, @NOW, @NOW, 0
+WHERE NOT EXISTS (SELECT 1 FROM ProductVariants WHERE SkuCode = 'SKU-DEMO-006');
 
-INSERT INTO ProductSKUs (Id, ProductId, SkuCode, Barcode, PackagingType, WeightInGrams, BasePrice, CostPrice, RetailPrice, MinStock, MaxStock, IsActive, IsSellable, AllowRewardPoints, SyncedToStoreAt, CreatedAt, UpdatedAt, IsDeleted)
-SELECT 'bbbbbbbb-0001-4000-8000-000000000007', 'aaaaaaaa-0001-4000-8000-000000000006', 'SKU-DEMO-007', '8930000000007', @PKG_BAG_50, 50, 65000, 40000, 65000, 10, 250, 1, 1, 1, @NOW, @NOW, @NOW, 0
-WHERE NOT EXISTS (SELECT 1 FROM ProductSKUs WHERE SkuCode = 'SKU-DEMO-007');
+INSERT INTO ProductVariants (Id, ProductId, SkuCode, Barcode, VariantName, OptionValuesJson, CostPrice, RetailPrice, MinStock, MaxStock, IsSellable, AllowRewardPoints, IsActive, ImageUrl, WeightInGrams, SyncedToStoreAt, CreatedAt, UpdatedAt, IsDeleted)
+SELECT 'bbbbbbbb-0001-4000-8000-000000000007', 'aaaaaaaa-0001-4000-8000-000000000006', 'SKU-DEMO-007', '8930000000007', @PKG_BAG_50, '{}', 40000, 65000, 10, 250, 1, 1, 1, NULL, 50, @NOW, @NOW, @NOW, 0
+WHERE NOT EXISTS (SELECT 1 FROM ProductVariants WHERE SkuCode = 'SKU-DEMO-007');
 
-INSERT INTO ProductSKUs (Id, ProductId, SkuCode, Barcode, PackagingType, WeightInGrams, BasePrice, CostPrice, RetailPrice, MinStock, MaxStock, IsActive, IsSellable, AllowRewardPoints, SyncedToStoreAt, CreatedAt, UpdatedAt, IsDeleted)
-SELECT 'bbbbbbbb-0001-4000-8000-000000000008', 'aaaaaaaa-0001-4000-8000-000000000007', 'SKU-DEMO-008', '8930000000008', @PKG_BAG_30, 30, 45000, 25000, 45000, 10, 300, 1, 1, 1, @NOW, @NOW, @NOW, 0
-WHERE NOT EXISTS (SELECT 1 FROM ProductSKUs WHERE SkuCode = 'SKU-DEMO-008');
+INSERT INTO ProductVariants (Id, ProductId, SkuCode, Barcode, VariantName, OptionValuesJson, CostPrice, RetailPrice, MinStock, MaxStock, IsSellable, AllowRewardPoints, IsActive, ImageUrl, WeightInGrams, SyncedToStoreAt, CreatedAt, UpdatedAt, IsDeleted)
+SELECT 'bbbbbbbb-0001-4000-8000-000000000008', 'aaaaaaaa-0001-4000-8000-000000000007', 'SKU-DEMO-008', '8930000000008', @PKG_BAG_30, '{}', 25000, 45000, 10, 300, 1, 1, 1, NULL, 30, @NOW, @NOW, @NOW, 0
+WHERE NOT EXISTS (SELECT 1 FROM ProductVariants WHERE SkuCode = 'SKU-DEMO-008');
 
-INSERT INTO ProductSKUs (Id, ProductId, SkuCode, Barcode, PackagingType, WeightInGrams, BasePrice, CostPrice, RetailPrice, MinStock, MaxStock, IsActive, IsSellable, AllowRewardPoints, SyncedToStoreAt, CreatedAt, UpdatedAt, IsDeleted)
-SELECT 'bbbbbbbb-0001-4000-8000-000000000009', 'aaaaaaaa-0001-4000-8000-000000000008', 'SKU-DEMO-009', '8930000000009', @PKG_BAG_80, 80, 55000, 35000, 55000, 10, 200, 1, 1, 1, @NOW, @NOW, @NOW, 0
-WHERE NOT EXISTS (SELECT 1 FROM ProductSKUs WHERE SkuCode = 'SKU-DEMO-009');
+INSERT INTO ProductVariants (Id, ProductId, SkuCode, Barcode, VariantName, OptionValuesJson, CostPrice, RetailPrice, MinStock, MaxStock, IsSellable, AllowRewardPoints, IsActive, ImageUrl, WeightInGrams, SyncedToStoreAt, CreatedAt, UpdatedAt, IsDeleted)
+SELECT 'bbbbbbbb-0001-4000-8000-000000000009', 'aaaaaaaa-0001-4000-8000-000000000008', 'SKU-DEMO-009', '8930000000009', @PKG_BAG_80, '{}', 35000, 55000, 10, 200, 1, 1, 1, NULL, 80, @NOW, @NOW, @NOW, 0
+WHERE NOT EXISTS (SELECT 1 FROM ProductVariants WHERE SkuCode = 'SKU-DEMO-009');
 
-INSERT INTO ProductSKUs (Id, ProductId, SkuCode, Barcode, PackagingType, WeightInGrams, BasePrice, CostPrice, RetailPrice, MinStock, MaxStock, IsActive, IsSellable, AllowRewardPoints, SyncedToStoreAt, CreatedAt, UpdatedAt, IsDeleted)
-SELECT 'bbbbbbbb-0001-4000-8000-000000000010', 'aaaaaaaa-0001-4000-8000-000000000009', 'SKU-DEMO-010', '8930000000010', @PKG_GIFT_BOX, 500, 890000, 550000, 890000, 2, 50, 1, 1, 1, @NOW, @NOW, @NOW, 0
-WHERE NOT EXISTS (SELECT 1 FROM ProductSKUs WHERE SkuCode = 'SKU-DEMO-010');
+INSERT INTO ProductVariants (Id, ProductId, SkuCode, Barcode, VariantName, OptionValuesJson, CostPrice, RetailPrice, MinStock, MaxStock, IsSellable, AllowRewardPoints, IsActive, ImageUrl, WeightInGrams, SyncedToStoreAt, CreatedAt, UpdatedAt, IsDeleted)
+SELECT 'bbbbbbbb-0001-4000-8000-000000000010', 'aaaaaaaa-0001-4000-8000-000000000009', 'SKU-DEMO-010', '8930000000010', @PKG_GIFT_BOX, '{}', 550000, 890000, 2, 50, 1, 1, 1, NULL, 500, @NOW, @NOW, @NOW, 0
+WHERE NOT EXISTS (SELECT 1 FROM ProductVariants WHERE SkuCode = 'SKU-DEMO-010');
 
-INSERT INTO ProductSKUs (Id, ProductId, SkuCode, Barcode, PackagingType, WeightInGrams, BasePrice, CostPrice, RetailPrice, MinStock, MaxStock, IsActive, IsSellable, AllowRewardPoints, SyncedToStoreAt, CreatedAt, UpdatedAt, IsDeleted)
-SELECT 'bbbbbbbb-0001-4000-8000-000000000011', 'aaaaaaaa-0001-4000-8000-000000000010', 'SKU-DEMO-011', '8930000000011', @PKG_GIFT_BOX, 400, 520000, 320000, 520000, 3, 60, 1, 1, 1, @NOW, @NOW, @NOW, 0
-WHERE NOT EXISTS (SELECT 1 FROM ProductSKUs WHERE SkuCode = 'SKU-DEMO-011');
+INSERT INTO ProductVariants (Id, ProductId, SkuCode, Barcode, VariantName, OptionValuesJson, CostPrice, RetailPrice, MinStock, MaxStock, IsSellable, AllowRewardPoints, IsActive, ImageUrl, WeightInGrams, SyncedToStoreAt, CreatedAt, UpdatedAt, IsDeleted)
+SELECT 'bbbbbbbb-0001-4000-8000-000000000011', 'aaaaaaaa-0001-4000-8000-000000000010', 'SKU-DEMO-011', '8930000000011', @PKG_GIFT_BOX, '{}', 320000, 520000, 3, 60, 1, 1, 1, NULL, 400, @NOW, @NOW, @NOW, 0
+WHERE NOT EXISTS (SELECT 1 FROM ProductVariants WHERE SkuCode = 'SKU-DEMO-011');
 
-INSERT INTO ProductSKUs (Id, ProductId, SkuCode, Barcode, PackagingType, WeightInGrams, BasePrice, CostPrice, RetailPrice, MinStock, MaxStock, IsActive, IsSellable, AllowRewardPoints, SyncedToStoreAt, CreatedAt, UpdatedAt, IsDeleted)
-SELECT 'bbbbbbbb-0001-4000-8000-000000000012', 'aaaaaaaa-0001-4000-8000-000000000011', 'SKU-DEMO-012', '8930000000012', @PKG_PIECE, 200, 180000, 90000, 180000, 5, 40, 1, 1, 1, @NOW, @NOW, @NOW, 0
-WHERE NOT EXISTS (SELECT 1 FROM ProductSKUs WHERE SkuCode = 'SKU-DEMO-012');
+INSERT INTO ProductVariants (Id, ProductId, SkuCode, Barcode, VariantName, OptionValuesJson, CostPrice, RetailPrice, MinStock, MaxStock, IsSellable, AllowRewardPoints, IsActive, ImageUrl, WeightInGrams, SyncedToStoreAt, CreatedAt, UpdatedAt, IsDeleted)
+SELECT 'bbbbbbbb-0001-4000-8000-000000000012', 'aaaaaaaa-0001-4000-8000-000000000011', 'SKU-DEMO-012', '8930000000012', @PKG_PIECE, '{}', 90000, 180000, 5, 40, 1, 1, 1, NULL, 200, @NOW, @NOW, @NOW, 0
+WHERE NOT EXISTS (SELECT 1 FROM ProductVariants WHERE SkuCode = 'SKU-DEMO-012');
 
-INSERT INTO ProductSKUs (Id, ProductId, SkuCode, Barcode, PackagingType, WeightInGrams, BasePrice, CostPrice, RetailPrice, MinStock, MaxStock, IsActive, IsSellable, AllowRewardPoints, SyncedToStoreAt, CreatedAt, UpdatedAt, IsDeleted)
-SELECT 'bbbbbbbb-0001-4000-8000-000000000013', 'aaaaaaaa-0001-4000-8000-000000000012', 'SKU-DEMO-013', '8930000000013', @PKG_SET, 800, 350000, 200000, 350000, 3, 30, 1, 1, 1, @NOW, @NOW, @NOW, 0
-WHERE NOT EXISTS (SELECT 1 FROM ProductSKUs WHERE SkuCode = 'SKU-DEMO-013');
+INSERT INTO ProductVariants (Id, ProductId, SkuCode, Barcode, VariantName, OptionValuesJson, CostPrice, RetailPrice, MinStock, MaxStock, IsSellable, AllowRewardPoints, IsActive, ImageUrl, WeightInGrams, SyncedToStoreAt, CreatedAt, UpdatedAt, IsDeleted)
+SELECT 'bbbbbbbb-0001-4000-8000-000000000013', 'aaaaaaaa-0001-4000-8000-000000000012', 'SKU-DEMO-013', '8930000000013', @PKG_SET, '{}', 200000, 350000, 3, 30, 1, 1, 1, NULL, 800, @NOW, @NOW, @NOW, 0
+WHERE NOT EXISTS (SELECT 1 FROM ProductVariants WHERE SkuCode = 'SKU-DEMO-013');
 
-INSERT INTO ProductSKUs (Id, ProductId, SkuCode, Barcode, PackagingType, WeightInGrams, BasePrice, CostPrice, RetailPrice, MinStock, MaxStock, IsActive, IsSellable, AllowRewardPoints, SyncedToStoreAt, CreatedAt, UpdatedAt, IsDeleted)
-SELECT 'bbbbbbbb-0001-4000-8000-000000000014', 'aaaaaaaa-0001-4000-8000-000000000002', 'SKU-DEMO-014', '8930000000014', @PKG_BAG_500, 500, 420000, 260000, 420000, 3, 80, 1, 1, 1, @NOW, @NOW, @NOW, 0
-WHERE NOT EXISTS (SELECT 1 FROM ProductSKUs WHERE SkuCode = 'SKU-DEMO-014');
+INSERT INTO ProductVariants (Id, ProductId, SkuCode, Barcode, VariantName, OptionValuesJson, CostPrice, RetailPrice, MinStock, MaxStock, IsSellable, AllowRewardPoints, IsActive, ImageUrl, WeightInGrams, SyncedToStoreAt, CreatedAt, UpdatedAt, IsDeleted)
+SELECT 'bbbbbbbb-0001-4000-8000-000000000014', 'aaaaaaaa-0001-4000-8000-000000000002', 'SKU-DEMO-014', '8930000000014', @PKG_BAG_500, '{}', 260000, 420000, 3, 80, 1, 1, 1, NULL, 500, @NOW, @NOW, @NOW, 0
+WHERE NOT EXISTS (SELECT 1 FROM ProductVariants WHERE SkuCode = 'SKU-DEMO-014');
 
-INSERT INTO ProductSKUs (Id, ProductId, SkuCode, Barcode, PackagingType, WeightInGrams, BasePrice, CostPrice, RetailPrice, MinStock, MaxStock, IsActive, IsSellable, AllowRewardPoints, SyncedToStoreAt, CreatedAt, UpdatedAt, IsDeleted)
-SELECT 'bbbbbbbb-0001-4000-8000-000000000015', 'aaaaaaaa-0001-4000-8000-000000000004', 'SKU-DEMO-015', '8930000000015', @PKG_BAG_250, 250, 480000, 300000, 480000, 3, 60, 1, 1, 1, @NOW, @NOW, @NOW, 0
-WHERE NOT EXISTS (SELECT 1 FROM ProductSKUs WHERE SkuCode = 'SKU-DEMO-015');
+INSERT INTO ProductVariants (Id, ProductId, SkuCode, Barcode, VariantName, OptionValuesJson, CostPrice, RetailPrice, MinStock, MaxStock, IsSellable, AllowRewardPoints, IsActive, ImageUrl, WeightInGrams, SyncedToStoreAt, CreatedAt, UpdatedAt, IsDeleted)
+SELECT 'bbbbbbbb-0001-4000-8000-000000000015', 'aaaaaaaa-0001-4000-8000-000000000004', 'SKU-DEMO-015', '8930000000015', @PKG_BAG_250, '{}', 300000, 480000, 3, 60, 1, 1, 1, NULL, 250, @NOW, @NOW, @NOW, 0
+WHERE NOT EXISTS (SELECT 1 FROM ProductVariants WHERE SkuCode = 'SKU-DEMO-015');
 
 -- -----------------------------------------------------------------------------
 -- CUSTOMER DB — Khách hàng + địa chỉ
 -- -----------------------------------------------------------------------------
 USE `hvt_customer_db`;
 
-INSERT INTO Customers (Id, CustomerCode, FullName, PhoneNumber, Email, CustomerGroup, TierId, TotalSpending, CurrentDebt, AssignedSaleId, CreatedAt, UpdatedAt, IsDeleted)
-SELECT 'cccccccc-0001-4000-8000-000000000001', 'KH-DEMO-001', @CUST_001, '0901000001', 'lan.nguyen@demo.vn', 'PhoThong', @TIER_MEMBER, 2500000, 0, @SALE_USER_ID, @NOW, @NOW, 0
+INSERT INTO Customers (Id, CustomerCode, FullName, PhoneNumber, Email, CustomerGroup, TaxCode, TierId, TotalSpending, CurrentDebt, AssignedSaleId, Source, Department, CreatedAt, UpdatedAt, IsDeleted)
+SELECT 'cccccccc-0001-4000-8000-000000000001', 'KH-DEMO-001', @CUST_001, '0901000001', 'lan.nguyen@demo.vn', 'PhoThong', NULL, @TIER_MEMBER, 2500000, 0, @SALE_USER_ID, NULL, NULL, @NOW, @NOW, 0
 WHERE NOT EXISTS (SELECT 1 FROM Customers WHERE CustomerCode = 'KH-DEMO-001');
 
-INSERT INTO Customers (Id, CustomerCode, FullName, PhoneNumber, Email, CustomerGroup, TierId, TotalSpending, CurrentDebt, AssignedSaleId, CreatedAt, UpdatedAt, IsDeleted)
-SELECT 'cccccccc-0001-4000-8000-000000000002', 'KH-DEMO-002', @CUST_002, '0901000002', 'minh.tran@demo.vn', 'PhoThong', @TIER_SILVER, 8200000, 150000, @SALE_USER_ID, @NOW, @NOW, 0
+INSERT INTO Customers (Id, CustomerCode, FullName, PhoneNumber, Email, CustomerGroup, TaxCode, TierId, TotalSpending, CurrentDebt, AssignedSaleId, Source, Department, CreatedAt, UpdatedAt, IsDeleted)
+SELECT 'cccccccc-0001-4000-8000-000000000002', 'KH-DEMO-002', @CUST_002, '0901000002', 'minh.tran@demo.vn', 'PhoThong', NULL, @TIER_SILVER, 8200000, 150000, @SALE_USER_ID, NULL, NULL, @NOW, @NOW, 0
 WHERE NOT EXISTS (SELECT 1 FROM Customers WHERE CustomerCode = 'KH-DEMO-002');
 
-INSERT INTO Customers (Id, CustomerCode, FullName, PhoneNumber, Email, CustomerGroup, TierId, TotalSpending, CurrentDebt, AssignedSaleId, CreatedAt, UpdatedAt, IsDeleted)
-SELECT 'cccccccc-0001-4000-8000-000000000003', 'KH-DEMO-003', @CUST_003, '0901000003', 'anh.le@demo.vn', 'DoanhNghiep', @TIER_GOLD, 28500000, 0, @SALE_USER_ID, @NOW, @NOW, 0
+INSERT INTO Customers (Id, CustomerCode, FullName, PhoneNumber, Email, CustomerGroup, TaxCode, TierId, TotalSpending, CurrentDebt, AssignedSaleId, Source, Department, CreatedAt, UpdatedAt, IsDeleted)
+SELECT 'cccccccc-0001-4000-8000-000000000003', 'KH-DEMO-003', @CUST_003, '0901000003', 'anh.le@demo.vn', 'DoanhNghiep', NULL, @TIER_GOLD, 28500000, 0, @SALE_USER_ID, NULL, NULL, @NOW, @NOW, 0
 WHERE NOT EXISTS (SELECT 1 FROM Customers WHERE CustomerCode = 'KH-DEMO-003');
 
-INSERT INTO Customers (Id, CustomerCode, FullName, PhoneNumber, Email, CustomerGroup, TierId, TotalSpending, CurrentDebt, AssignedSaleId, CreatedAt, UpdatedAt, IsDeleted)
-SELECT 'cccccccc-0001-4000-8000-000000000004', 'KH-DEMO-004', @CUST_004, '0901000004', NULL, 'PhoThong', @TIER_MEMBER, 450000, 0, @SALE_USER_ID, @NOW, @NOW, 0
+INSERT INTO Customers (Id, CustomerCode, FullName, PhoneNumber, Email, CustomerGroup, TaxCode, TierId, TotalSpending, CurrentDebt, AssignedSaleId, Source, Department, CreatedAt, UpdatedAt, IsDeleted)
+SELECT 'cccccccc-0001-4000-8000-000000000004', 'KH-DEMO-004', @CUST_004, '0901000004', NULL, 'PhoThong', NULL, @TIER_MEMBER, 450000, 0, @SALE_USER_ID, NULL, NULL, @NOW, @NOW, 0
 WHERE NOT EXISTS (SELECT 1 FROM Customers WHERE CustomerCode = 'KH-DEMO-004');
 
-INSERT INTO Customers (Id, CustomerCode, FullName, PhoneNumber, Email, CustomerGroup, TierId, TotalSpending, CurrentDebt, AssignedSaleId, CreatedAt, UpdatedAt, IsDeleted)
-SELECT 'cccccccc-0001-4000-8000-000000000005', 'KH-DEMO-005', @CUST_005, '0901000005', 'bao.hoang@demo.vn', 'DoiNgoai', @TIER_SILVER, 6100000, 320000, @SALE_USER_ID, @NOW, @NOW, 0
+INSERT INTO Customers (Id, CustomerCode, FullName, PhoneNumber, Email, CustomerGroup, TaxCode, TierId, TotalSpending, CurrentDebt, AssignedSaleId, Source, Department, CreatedAt, UpdatedAt, IsDeleted)
+SELECT 'cccccccc-0001-4000-8000-000000000005', 'KH-DEMO-005', @CUST_005, '0901000005', 'bao.hoang@demo.vn', 'DoiNgoai', NULL, @TIER_SILVER, 6100000, 320000, @SALE_USER_ID, NULL, NULL, @NOW, @NOW, 0
 WHERE NOT EXISTS (SELECT 1 FROM Customers WHERE CustomerCode = 'KH-DEMO-005');
 
-INSERT INTO Customers (Id, CustomerCode, FullName, PhoneNumber, Email, CustomerGroup, TierId, TotalSpending, CurrentDebt, AssignedSaleId, CreatedAt, UpdatedAt, IsDeleted)
-SELECT 'cccccccc-0001-4000-8000-000000000006', 'KH-DEMO-006', @CUST_006, '0901000006', NULL, 'PhoThong', @TIER_MEMBER, 0, 0, @SALE_USER_ID, @NOW, @NOW, 0
+INSERT INTO Customers (Id, CustomerCode, FullName, PhoneNumber, Email, CustomerGroup, TaxCode, TierId, TotalSpending, CurrentDebt, AssignedSaleId, Source, Department, CreatedAt, UpdatedAt, IsDeleted)
+SELECT 'cccccccc-0001-4000-8000-000000000006', 'KH-DEMO-006', @CUST_006, '0901000006', NULL, 'PhoThong', NULL, @TIER_MEMBER, 0, 0, @SALE_USER_ID, NULL, NULL, @NOW, @NOW, 0
 WHERE NOT EXISTS (SELECT 1 FROM Customers WHERE CustomerCode = 'KH-DEMO-006');
 
-INSERT INTO Customers (Id, CustomerCode, FullName, PhoneNumber, Email, CustomerGroup, TierId, TotalSpending, CurrentDebt, AssignedSaleId, CreatedAt, UpdatedAt, IsDeleted)
-SELECT 'cccccccc-0001-4000-8000-000000000007', 'KH-DEMO-007', @CUST_007, '0901000007', 'kien.do@demo.vn', 'PhoThong', @TIER_MEMBER, 1200000, 0, @SALE_USER_ID, @NOW, @NOW, 0
+INSERT INTO Customers (Id, CustomerCode, FullName, PhoneNumber, Email, CustomerGroup, TaxCode, TierId, TotalSpending, CurrentDebt, AssignedSaleId, Source, Department, CreatedAt, UpdatedAt, IsDeleted)
+SELECT 'cccccccc-0001-4000-8000-000000000007', 'KH-DEMO-007', @CUST_007, '0901000007', 'kien.do@demo.vn', 'PhoThong', NULL, @TIER_MEMBER, 1200000, 0, @SALE_USER_ID, NULL, NULL, @NOW, @NOW, 0
 WHERE NOT EXISTS (SELECT 1 FROM Customers WHERE CustomerCode = 'KH-DEMO-007');
 
-INSERT INTO Customers (Id, CustomerCode, FullName, PhoneNumber, Email, CustomerGroup, TierId, TotalSpending, CurrentDebt, AssignedSaleId, CreatedAt, UpdatedAt, IsDeleted)
-SELECT 'cccccccc-0001-4000-8000-000000000008', 'KH-DEMO-008', @CUST_008, '0901000008', NULL, 'PhoThong', @TIER_SILVER, 9800000, 0, @SALE_USER_ID, @NOW, @NOW, 0
+INSERT INTO Customers (Id, CustomerCode, FullName, PhoneNumber, Email, CustomerGroup, TaxCode, TierId, TotalSpending, CurrentDebt, AssignedSaleId, Source, Department, CreatedAt, UpdatedAt, IsDeleted)
+SELECT 'cccccccc-0001-4000-8000-000000000008', 'KH-DEMO-008', @CUST_008, '0901000008', NULL, 'PhoThong', NULL, @TIER_SILVER, 9800000, 0, @SALE_USER_ID, NULL, NULL, @NOW, @NOW, 0
 WHERE NOT EXISTS (SELECT 1 FROM Customers WHERE CustomerCode = 'KH-DEMO-008');
 
-INSERT INTO Customers (Id, CustomerCode, FullName, PhoneNumber, Email, CustomerGroup, TierId, TotalSpending, CurrentDebt, AssignedSaleId, CreatedAt, UpdatedAt, IsDeleted)
-SELECT 'cccccccc-0001-4000-8000-000000000009', 'KH-DEMO-009', @CUST_009, '0901000009', 'huy.ngo@demo.vn', 'DoanhNghiep', @TIER_GOLD, 41000000, 0, @SALE_USER_ID, @NOW, @NOW, 0
+INSERT INTO Customers (Id, CustomerCode, FullName, PhoneNumber, Email, CustomerGroup, TaxCode, TierId, TotalSpending, CurrentDebt, AssignedSaleId, Source, Department, CreatedAt, UpdatedAt, IsDeleted)
+SELECT 'cccccccc-0001-4000-8000-000000000009', 'KH-DEMO-009', @CUST_009, '0901000009', 'huy.ngo@demo.vn', 'DoanhNghiep', NULL, @TIER_GOLD, 41000000, 0, @SALE_USER_ID, NULL, NULL, @NOW, @NOW, 0
 WHERE NOT EXISTS (SELECT 1 FROM Customers WHERE CustomerCode = 'KH-DEMO-009');
 
-INSERT INTO Customers (Id, CustomerCode, FullName, PhoneNumber, Email, CustomerGroup, TierId, TotalSpending, CurrentDebt, AssignedSaleId, CreatedAt, UpdatedAt, IsDeleted)
-SELECT 'cccccccc-0001-4000-8000-000000000010', 'KH-DEMO-010', @CUST_010, '0901000010', NULL, 'PhoThong', @TIER_MEMBER, 780000, 85000, @SALE_USER_ID, @NOW, @NOW, 0
+INSERT INTO Customers (Id, CustomerCode, FullName, PhoneNumber, Email, CustomerGroup, TaxCode, TierId, TotalSpending, CurrentDebt, AssignedSaleId, Source, Department, CreatedAt, UpdatedAt, IsDeleted)
+SELECT 'cccccccc-0001-4000-8000-000000000010', 'KH-DEMO-010', @CUST_010, '0901000010', NULL, 'PhoThong', NULL, @TIER_MEMBER, 780000, 85000, @SALE_USER_ID, NULL, NULL, @NOW, @NOW, 0
 WHERE NOT EXISTS (SELECT 1 FROM Customers WHERE CustomerCode = 'KH-DEMO-010');
 
 -- Địa chỉ giao (COD / trả hàng)
@@ -387,64 +387,64 @@ WHERE NOT EXISTS (SELECT 1 FROM CustomerDebtTransactions WHERE Id = '66666666-00
 -- -----------------------------------------------------------------------------
 USE `hvt_inventory_db`;
 
-INSERT INTO SkuStocks (SkuId, SkuCode, WeightInGrams, QuantityOnHand, WarehouseQuantityOnHand, CreatedAt, UpdatedAt)
-SELECT 'bbbbbbbb-0001-4000-8000-000000000001', 'SKU-DEMO-001', 100, 45, 120, @NOW, @NOW
+INSERT INTO SkuStocks (SkuId, SkuCode, WeightInGrams, QuantityOnHand, WarehouseQuantityOnHand, LowStockThreshold, CreatedAt, UpdatedAt)
+SELECT 'bbbbbbbb-0001-4000-8000-000000000001', 'SKU-DEMO-001', 100, 45, 120, 10, @NOW, @NOW
 WHERE NOT EXISTS (SELECT 1 FROM SkuStocks WHERE SkuId = 'bbbbbbbb-0001-4000-8000-000000000001');
 
-INSERT INTO SkuStocks (SkuId, SkuCode, WeightInGrams, QuantityOnHand, WarehouseQuantityOnHand, CreatedAt, UpdatedAt)
-SELECT 'bbbbbbbb-0001-4000-8000-000000000002', 'SKU-DEMO-002', 250, 18, 60, @NOW, @NOW
+INSERT INTO SkuStocks (SkuId, SkuCode, WeightInGrams, QuantityOnHand, WarehouseQuantityOnHand, LowStockThreshold, CreatedAt, UpdatedAt)
+SELECT 'bbbbbbbb-0001-4000-8000-000000000002', 'SKU-DEMO-002', 250, 18, 60, 10, @NOW, @NOW
 WHERE NOT EXISTS (SELECT 1 FROM SkuStocks WHERE SkuId = 'bbbbbbbb-0001-4000-8000-000000000002');
 
-INSERT INTO SkuStocks (SkuId, SkuCode, WeightInGrams, QuantityOnHand, WarehouseQuantityOnHand, CreatedAt, UpdatedAt)
-SELECT 'bbbbbbbb-0001-4000-8000-000000000003', 'SKU-DEMO-003', 100, 80, 200, @NOW, @NOW
+INSERT INTO SkuStocks (SkuId, SkuCode, WeightInGrams, QuantityOnHand, WarehouseQuantityOnHand, LowStockThreshold, CreatedAt, UpdatedAt)
+SELECT 'bbbbbbbb-0001-4000-8000-000000000003', 'SKU-DEMO-003', 100, 80, 200, 10, @NOW, @NOW
 WHERE NOT EXISTS (SELECT 1 FROM SkuStocks WHERE SkuId = 'bbbbbbbb-0001-4000-8000-000000000003');
 
-INSERT INTO SkuStocks (SkuId, SkuCode, WeightInGrams, QuantityOnHand, WarehouseQuantityOnHand, CreatedAt, UpdatedAt)
-SELECT 'bbbbbbbb-0001-4000-8000-000000000004', 'SKU-DEMO-004', 100, 35, 90, @NOW, @NOW
+INSERT INTO SkuStocks (SkuId, SkuCode, WeightInGrams, QuantityOnHand, WarehouseQuantityOnHand, LowStockThreshold, CreatedAt, UpdatedAt)
+SELECT 'bbbbbbbb-0001-4000-8000-000000000004', 'SKU-DEMO-004', 100, 35, 90, 10, @NOW, @NOW
 WHERE NOT EXISTS (SELECT 1 FROM SkuStocks WHERE SkuId = 'bbbbbbbb-0001-4000-8000-000000000004');
 
-INSERT INTO SkuStocks (SkuId, SkuCode, WeightInGrams, QuantityOnHand, WarehouseQuantityOnHand, CreatedAt, UpdatedAt)
-SELECT 'bbbbbbbb-0001-4000-8000-000000000005', 'SKU-DEMO-005', 100, 22, 55, @NOW, @NOW
+INSERT INTO SkuStocks (SkuId, SkuCode, WeightInGrams, QuantityOnHand, WarehouseQuantityOnHand, LowStockThreshold, CreatedAt, UpdatedAt)
+SELECT 'bbbbbbbb-0001-4000-8000-000000000005', 'SKU-DEMO-005', 100, 22, 55, 10, @NOW, @NOW
 WHERE NOT EXISTS (SELECT 1 FROM SkuStocks WHERE SkuId = 'bbbbbbbb-0001-4000-8000-000000000005');
 
-INSERT INTO SkuStocks (SkuId, SkuCode, WeightInGrams, QuantityOnHand, WarehouseQuantityOnHand, CreatedAt, UpdatedAt)
-SELECT 'bbbbbbbb-0001-4000-8000-000000000006', 'SKU-DEMO-006', 75, 15, 40, @NOW, @NOW
+INSERT INTO SkuStocks (SkuId, SkuCode, WeightInGrams, QuantityOnHand, WarehouseQuantityOnHand, LowStockThreshold, CreatedAt, UpdatedAt)
+SELECT 'bbbbbbbb-0001-4000-8000-000000000006', 'SKU-DEMO-006', 75, 15, 40, 10, @NOW, @NOW
 WHERE NOT EXISTS (SELECT 1 FROM SkuStocks WHERE SkuId = 'bbbbbbbb-0001-4000-8000-000000000006');
 
-INSERT INTO SkuStocks (SkuId, SkuCode, WeightInGrams, QuantityOnHand, WarehouseQuantityOnHand, CreatedAt, UpdatedAt)
-SELECT 'bbbbbbbb-0001-4000-8000-000000000007', 'SKU-DEMO-007', 50, 60, 150, @NOW, @NOW
+INSERT INTO SkuStocks (SkuId, SkuCode, WeightInGrams, QuantityOnHand, WarehouseQuantityOnHand, LowStockThreshold, CreatedAt, UpdatedAt)
+SELECT 'bbbbbbbb-0001-4000-8000-000000000007', 'SKU-DEMO-007', 50, 60, 150, 10, @NOW, @NOW
 WHERE NOT EXISTS (SELECT 1 FROM SkuStocks WHERE SkuId = 'bbbbbbbb-0001-4000-8000-000000000007');
 
-INSERT INTO SkuStocks (SkuId, SkuCode, WeightInGrams, QuantityOnHand, WarehouseQuantityOnHand, CreatedAt, UpdatedAt)
-SELECT 'bbbbbbbb-0001-4000-8000-000000000008', 'SKU-DEMO-008', 30, 90, 220, @NOW, @NOW
+INSERT INTO SkuStocks (SkuId, SkuCode, WeightInGrams, QuantityOnHand, WarehouseQuantityOnHand, LowStockThreshold, CreatedAt, UpdatedAt)
+SELECT 'bbbbbbbb-0001-4000-8000-000000000008', 'SKU-DEMO-008', 30, 90, 220, 10, @NOW, @NOW
 WHERE NOT EXISTS (SELECT 1 FROM SkuStocks WHERE SkuId = 'bbbbbbbb-0001-4000-8000-000000000008');
 
-INSERT INTO SkuStocks (SkuId, SkuCode, WeightInGrams, QuantityOnHand, WarehouseQuantityOnHand, CreatedAt, UpdatedAt)
-SELECT 'bbbbbbbb-0001-4000-8000-000000000009', 'SKU-DEMO-009', 80, 55, 130, @NOW, @NOW
+INSERT INTO SkuStocks (SkuId, SkuCode, WeightInGrams, QuantityOnHand, WarehouseQuantityOnHand, LowStockThreshold, CreatedAt, UpdatedAt)
+SELECT 'bbbbbbbb-0001-4000-8000-000000000009', 'SKU-DEMO-009', 80, 55, 130, 10, @NOW, @NOW
 WHERE NOT EXISTS (SELECT 1 FROM SkuStocks WHERE SkuId = 'bbbbbbbb-0001-4000-8000-000000000009');
 
-INSERT INTO SkuStocks (SkuId, SkuCode, WeightInGrams, QuantityOnHand, WarehouseQuantityOnHand, CreatedAt, UpdatedAt)
-SELECT 'bbbbbbbb-0001-4000-8000-000000000010', 'SKU-DEMO-010', 500, 8, 25, @NOW, @NOW
+INSERT INTO SkuStocks (SkuId, SkuCode, WeightInGrams, QuantityOnHand, WarehouseQuantityOnHand, LowStockThreshold, CreatedAt, UpdatedAt)
+SELECT 'bbbbbbbb-0001-4000-8000-000000000010', 'SKU-DEMO-010', 500, 8, 25, 10, @NOW, @NOW
 WHERE NOT EXISTS (SELECT 1 FROM SkuStocks WHERE SkuId = 'bbbbbbbb-0001-4000-8000-000000000010');
 
-INSERT INTO SkuStocks (SkuId, SkuCode, WeightInGrams, QuantityOnHand, WarehouseQuantityOnHand, CreatedAt, UpdatedAt)
-SELECT 'bbbbbbbb-0001-4000-8000-000000000011', 'SKU-DEMO-011', 400, 12, 30, @NOW, @NOW
+INSERT INTO SkuStocks (SkuId, SkuCode, WeightInGrams, QuantityOnHand, WarehouseQuantityOnHand, LowStockThreshold, CreatedAt, UpdatedAt)
+SELECT 'bbbbbbbb-0001-4000-8000-000000000011', 'SKU-DEMO-011', 400, 12, 30, 10, @NOW, @NOW
 WHERE NOT EXISTS (SELECT 1 FROM SkuStocks WHERE SkuId = 'bbbbbbbb-0001-4000-8000-000000000011');
 
-INSERT INTO SkuStocks (SkuId, SkuCode, WeightInGrams, QuantityOnHand, WarehouseQuantityOnHand, CreatedAt, UpdatedAt)
-SELECT 'bbbbbbbb-0001-4000-8000-000000000012', 'SKU-DEMO-012', 200, 10, 35, @NOW, @NOW
+INSERT INTO SkuStocks (SkuId, SkuCode, WeightInGrams, QuantityOnHand, WarehouseQuantityOnHand, LowStockThreshold, CreatedAt, UpdatedAt)
+SELECT 'bbbbbbbb-0001-4000-8000-000000000012', 'SKU-DEMO-012', 200, 10, 35, 10, @NOW, @NOW
 WHERE NOT EXISTS (SELECT 1 FROM SkuStocks WHERE SkuId = 'bbbbbbbb-0001-4000-8000-000000000012');
 
-INSERT INTO SkuStocks (SkuId, SkuCode, WeightInGrams, QuantityOnHand, WarehouseQuantityOnHand, CreatedAt, UpdatedAt)
-SELECT 'bbbbbbbb-0001-4000-8000-000000000013', 'SKU-DEMO-013', 800, 6, 18, @NOW, @NOW
+INSERT INTO SkuStocks (SkuId, SkuCode, WeightInGrams, QuantityOnHand, WarehouseQuantityOnHand, LowStockThreshold, CreatedAt, UpdatedAt)
+SELECT 'bbbbbbbb-0001-4000-8000-000000000013', 'SKU-DEMO-013', 800, 6, 18, 10, @NOW, @NOW
 WHERE NOT EXISTS (SELECT 1 FROM SkuStocks WHERE SkuId = 'bbbbbbbb-0001-4000-8000-000000000013');
 
-INSERT INTO SkuStocks (SkuId, SkuCode, WeightInGrams, QuantityOnHand, WarehouseQuantityOnHand, CreatedAt, UpdatedAt)
-SELECT 'bbbbbbbb-0001-4000-8000-000000000014', 'SKU-DEMO-014', 500, 14, 40, @NOW, @NOW
+INSERT INTO SkuStocks (SkuId, SkuCode, WeightInGrams, QuantityOnHand, WarehouseQuantityOnHand, LowStockThreshold, CreatedAt, UpdatedAt)
+SELECT 'bbbbbbbb-0001-4000-8000-000000000014', 'SKU-DEMO-014', 500, 14, 40, 10, @NOW, @NOW
 WHERE NOT EXISTS (SELECT 1 FROM SkuStocks WHERE SkuId = 'bbbbbbbb-0001-4000-8000-000000000014');
 
-INSERT INTO SkuStocks (SkuId, SkuCode, WeightInGrams, QuantityOnHand, WarehouseQuantityOnHand, CreatedAt, UpdatedAt)
-SELECT 'bbbbbbbb-0001-4000-8000-000000000015', 'SKU-DEMO-015', 250, 9, 28, @NOW, @NOW
+INSERT INTO SkuStocks (SkuId, SkuCode, WeightInGrams, QuantityOnHand, WarehouseQuantityOnHand, LowStockThreshold, CreatedAt, UpdatedAt)
+SELECT 'bbbbbbbb-0001-4000-8000-000000000015', 'SKU-DEMO-015', 250, 9, 28, 10, @NOW, @NOW
 WHERE NOT EXISTS (SELECT 1 FROM SkuStocks WHERE SkuId = 'bbbbbbbb-0001-4000-8000-000000000015');
 
 -- -----------------------------------------------------------------------------
@@ -461,140 +461,140 @@ SELECT 'eeeeeeee-0001-4000-8000-000000000002', 'DEMO50K', 'DEMO50K', 'FIXED', 50
 WHERE NOT EXISTS (SELECT 1 FROM Promotions WHERE PromoCode = 'DEMO50K');
 
 -- 1) POS hoàn tất — tiền mặt
-INSERT INTO Orders (Id, OrderCode, OrderKind, CustomerId, CustomerSnapshotName, EmployeeId, OrderChannel, OrderStatus, InventorySyncStatus, TotalAmount, DiscountAmount, PromotionId, PromotionCode, PromotionDiscountAmount, FinalAmount, ShippingAddress, Note, CreatedAt, UpdatedAt, IsDeleted)
-SELECT 'dddddddd-0001-4000-8000-000000000001', 'HVT-DEMO-001', 'Sale', 'cccccccc-0001-4000-8000-000000000001', @CUST_001, @SALE_USER_ID, 'POS', 'Completed', 'Synced', 275000, 0, NULL, NULL, 0, 275000, NULL, @NOTE_POS_001, DATE_SUB(@NOW, INTERVAL 5 DAY), DATE_SUB(@NOW, INTERVAL 5 DAY), 0
+INSERT INTO Orders (Id, OrderCode, OrderKind, CustomerId, CustomerSnapshotName, EmployeeId, OrderChannel, OrderStatus, InventorySyncStatus, TotalAmount, DiscountAmount, PromotionId, PromotionCode, PromotionDiscountAmount, FinalAmount, ShippingAddress, Note, IdempotencyKey, CreatedAt, UpdatedAt, IsDeleted)
+SELECT 'dddddddd-0001-4000-8000-000000000001', 'HVT-DEMO-001', 'Sale', 'cccccccc-0001-4000-8000-000000000001', @CUST_001, @SALE_USER_ID, 'POS', 'Completed', 'Synced', 275000, 0, NULL, NULL, 0, 275000, NULL, @NOTE_POS_001, NULL, DATE_SUB(@NOW, INTERVAL 5 DAY), DATE_SUB(@NOW, INTERVAL 5 DAY), 0
 WHERE NOT EXISTS (SELECT 1 FROM Orders WHERE OrderCode = 'HVT-DEMO-001');
 
-INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, CostPrice, CategorySnapshotName, SubTotal, CreatedAt, UpdatedAt, IsDeleted)
-SELECT '22222222-0001-4000-8000-000000000001', 'dddddddd-0001-4000-8000-000000000001', 'bbbbbbbb-0001-4000-8000-000000000003', @PROD_002, 'SKU-DEMO-003', 2, 0, 95000, 50000, 'Trà demo', 190000, DATE_SUB(@NOW, INTERVAL 5 DAY), DATE_SUB(@NOW, INTERVAL 5 DAY), 0
+INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, CostPrice, CategorySnapshotName, SubTotal, IsGift, CreatedAt, UpdatedAt, IsDeleted)
+SELECT '22222222-0001-4000-8000-000000000001', 'dddddddd-0001-4000-8000-000000000001', 'bbbbbbbb-0001-4000-8000-000000000003', @PROD_002, 'SKU-DEMO-003', 2, 0, 95000, 50000, 'Trà demo', 190000, 0, DATE_SUB(@NOW, INTERVAL 5 DAY), DATE_SUB(@NOW, INTERVAL 5 DAY), 0
 WHERE NOT EXISTS (SELECT 1 FROM OrderDetails WHERE Id = '22222222-0001-4000-8000-000000000001');
 
-INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, CostPrice, CategorySnapshotName, SubTotal, CreatedAt, UpdatedAt, IsDeleted)
-SELECT '22222222-0001-4000-8000-000000000002', 'dddddddd-0001-4000-8000-000000000001', 'bbbbbbbb-0001-4000-8000-000000000007', @PROD_006, 'SKU-DEMO-007', 1, 0, 65000, 50000, 'Trà demo', 65000, DATE_SUB(@NOW, INTERVAL 5 DAY), DATE_SUB(@NOW, INTERVAL 5 DAY), 0
+INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, CostPrice, CategorySnapshotName, SubTotal, IsGift, CreatedAt, UpdatedAt, IsDeleted)
+SELECT '22222222-0001-4000-8000-000000000002', 'dddddddd-0001-4000-8000-000000000001', 'bbbbbbbb-0001-4000-8000-000000000007', @PROD_006, 'SKU-DEMO-007', 1, 0, 65000, 50000, 'Trà demo', 65000, 0, DATE_SUB(@NOW, INTERVAL 5 DAY), DATE_SUB(@NOW, INTERVAL 5 DAY), 0
 WHERE NOT EXISTS (SELECT 1 FROM OrderDetails WHERE Id = '22222222-0001-4000-8000-000000000002');
 
-INSERT INTO Payments (Id, OrderId, PaymentMethod, Amount, PaymentStatus, TransactionRef, IsCodVerified, PaidAt, CreatedAt, UpdatedAt, IsDeleted)
-SELECT '33333333-0001-4000-8000-000000000001', 'dddddddd-0001-4000-8000-000000000001', 'Cash', 275000, 'Success', NULL, 0, DATE_SUB(@NOW, INTERVAL 5 DAY), DATE_SUB(@NOW, INTERVAL 5 DAY), DATE_SUB(@NOW, INTERVAL 5 DAY), 0
+INSERT INTO Payments (Id, OrderId, PaymentMethod, Amount, PaymentStatus, TransactionRef, IsCodVerified, PaidAt, TransferQrExpiresAtUtc, CodDebtSettlementJson, CreatedAt, UpdatedAt, IsDeleted)
+SELECT '33333333-0001-4000-8000-000000000001', 'dddddddd-0001-4000-8000-000000000001', 'Cash', 275000, 'Success', NULL, 0, DATE_SUB(@NOW, INTERVAL 5 DAY), NULL, NULL, DATE_SUB(@NOW, INTERVAL 5 DAY), DATE_SUB(@NOW, INTERVAL 5 DAY), 0
 WHERE NOT EXISTS (SELECT 1 FROM Payments WHERE Id = '33333333-0001-4000-8000-000000000001');
 
 -- 2) POS hoàn tất — có mã DEMO10
-INSERT INTO Orders (Id, OrderCode, OrderKind, CustomerId, CustomerSnapshotName, EmployeeId, OrderChannel, OrderStatus, InventorySyncStatus, TotalAmount, DiscountAmount, PromotionId, PromotionCode, PromotionDiscountAmount, FinalAmount, ShippingAddress, Note, CreatedAt, UpdatedAt, IsDeleted)
-SELECT 'dddddddd-0001-4000-8000-000000000002', 'HVT-DEMO-002', 'Sale', 'cccccccc-0001-4000-8000-000000000003', @CUST_003, @SALE_USER_ID, 'POS', 'Completed', 'Synced', 890000, 89000, 'eeeeeeee-0001-4000-8000-000000000001', 'DEMO10', 89000, 801000, NULL, @NOTE_POS_002, DATE_SUB(@NOW, INTERVAL 4 DAY), DATE_SUB(@NOW, INTERVAL 4 DAY), 0
+INSERT INTO Orders (Id, OrderCode, OrderKind, CustomerId, CustomerSnapshotName, EmployeeId, OrderChannel, OrderStatus, InventorySyncStatus, TotalAmount, DiscountAmount, PromotionId, PromotionCode, PromotionDiscountAmount, FinalAmount, ShippingAddress, Note, IdempotencyKey, CreatedAt, UpdatedAt, IsDeleted)
+SELECT 'dddddddd-0001-4000-8000-000000000002', 'HVT-DEMO-002', 'Sale', 'cccccccc-0001-4000-8000-000000000003', @CUST_003, @SALE_USER_ID, 'POS', 'Completed', 'Synced', 890000, 89000, 'eeeeeeee-0001-4000-8000-000000000001', 'DEMO10', 89000, 801000, NULL, @NOTE_POS_002, NULL, DATE_SUB(@NOW, INTERVAL 4 DAY), DATE_SUB(@NOW, INTERVAL 4 DAY), 0
 WHERE NOT EXISTS (SELECT 1 FROM Orders WHERE OrderCode = 'HVT-DEMO-002');
 
-INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, CostPrice, CategorySnapshotName, SubTotal, CreatedAt, UpdatedAt, IsDeleted)
-SELECT '22222222-0001-4000-8000-000000000003', 'dddddddd-0001-4000-8000-000000000002', 'bbbbbbbb-0001-4000-8000-000000000010', @PROD_009, 'SKU-DEMO-010', 1, 0, 890000, 50000, 'Trà demo', 890000, DATE_SUB(@NOW, INTERVAL 4 DAY), DATE_SUB(@NOW, INTERVAL 4 DAY), 0
+INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, CostPrice, CategorySnapshotName, SubTotal, IsGift, CreatedAt, UpdatedAt, IsDeleted)
+SELECT '22222222-0001-4000-8000-000000000003', 'dddddddd-0001-4000-8000-000000000002', 'bbbbbbbb-0001-4000-8000-000000000010', @PROD_009, 'SKU-DEMO-010', 1, 0, 890000, 50000, 'Trà demo', 890000, 0, DATE_SUB(@NOW, INTERVAL 4 DAY), DATE_SUB(@NOW, INTERVAL 4 DAY), 0
 WHERE NOT EXISTS (SELECT 1 FROM OrderDetails WHERE Id = '22222222-0001-4000-8000-000000000003');
 
-INSERT INTO Payments (Id, OrderId, PaymentMethod, Amount, PaymentStatus, TransactionRef, IsCodVerified, PaidAt, CreatedAt, UpdatedAt, IsDeleted)
-SELECT '33333333-0001-4000-8000-000000000002', 'dddddddd-0001-4000-8000-000000000002', 'Cash', 801000, 'Success', NULL, 0, DATE_SUB(@NOW, INTERVAL 4 DAY), DATE_SUB(@NOW, INTERVAL 4 DAY), DATE_SUB(@NOW, INTERVAL 4 DAY), 0
+INSERT INTO Payments (Id, OrderId, PaymentMethod, Amount, PaymentStatus, TransactionRef, IsCodVerified, PaidAt, TransferQrExpiresAtUtc, CodDebtSettlementJson, CreatedAt, UpdatedAt, IsDeleted)
+SELECT '33333333-0001-4000-8000-000000000002', 'dddddddd-0001-4000-8000-000000000002', 'Cash', 801000, 'Success', NULL, 0, DATE_SUB(@NOW, INTERVAL 4 DAY), NULL, NULL, DATE_SUB(@NOW, INTERVAL 4 DAY), DATE_SUB(@NOW, INTERVAL 4 DAY), 0
 WHERE NOT EXISTS (SELECT 1 FROM Payments WHERE Id = '33333333-0001-4000-8000-000000000002');
 
 -- 3) COD đang giao — chưa thu COD
-INSERT INTO Orders (Id, OrderCode, OrderKind, CustomerId, CustomerSnapshotName, EmployeeId, OrderChannel, OrderStatus, InventorySyncStatus, TotalAmount, DiscountAmount, PromotionId, PromotionCode, PromotionDiscountAmount, FinalAmount, ShippingAddress, Note, CreatedAt, UpdatedAt, IsDeleted)
-SELECT 'dddddddd-0001-4000-8000-000000000003', 'HVT-DEMO-003', 'Sale', 'cccccccc-0001-4000-8000-000000000002', @CUST_002, @SALE_USER_ID, 'COD', 'Shipping', 'PendingDeduction', 580000, 0, NULL, NULL, 0, 580000, @SHIP_003, @NOTE_COD_003, DATE_SUB(@NOW, INTERVAL 2 DAY), DATE_SUB(@NOW, INTERVAL 1 DAY), 0
+INSERT INTO Orders (Id, OrderCode, OrderKind, CustomerId, CustomerSnapshotName, EmployeeId, OrderChannel, OrderStatus, InventorySyncStatus, TotalAmount, DiscountAmount, PromotionId, PromotionCode, PromotionDiscountAmount, FinalAmount, ShippingAddress, Note, IdempotencyKey, CreatedAt, UpdatedAt, IsDeleted)
+SELECT 'dddddddd-0001-4000-8000-000000000003', 'HVT-DEMO-003', 'Sale', 'cccccccc-0001-4000-8000-000000000002', @CUST_002, @SALE_USER_ID, 'COD', 'Shipping', 'PendingDeduction', 580000, 0, NULL, NULL, 0, 580000, @SHIP_003, @NOTE_COD_003, NULL, DATE_SUB(@NOW, INTERVAL 2 DAY), DATE_SUB(@NOW, INTERVAL 1 DAY), 0
 WHERE NOT EXISTS (SELECT 1 FROM Orders WHERE OrderCode = 'HVT-DEMO-003');
 
-INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, CostPrice, CategorySnapshotName, SubTotal, CreatedAt, UpdatedAt, IsDeleted)
-SELECT '22222222-0001-4000-8000-000000000004', 'dddddddd-0001-4000-8000-000000000003', 'bbbbbbbb-0001-4000-8000-000000000001', @PROD_001, 'SKU-DEMO-001', 2, 0, 180000, 50000, 'Trà demo', 360000, DATE_SUB(@NOW, INTERVAL 2 DAY), DATE_SUB(@NOW, INTERVAL 2 DAY), 0
+INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, CostPrice, CategorySnapshotName, SubTotal, IsGift, CreatedAt, UpdatedAt, IsDeleted)
+SELECT '22222222-0001-4000-8000-000000000004', 'dddddddd-0001-4000-8000-000000000003', 'bbbbbbbb-0001-4000-8000-000000000001', @PROD_001, 'SKU-DEMO-001', 2, 0, 180000, 50000, 'Trà demo', 360000, 0, DATE_SUB(@NOW, INTERVAL 2 DAY), DATE_SUB(@NOW, INTERVAL 2 DAY), 0
 WHERE NOT EXISTS (SELECT 1 FROM OrderDetails WHERE Id = '22222222-0001-4000-8000-000000000004');
 
-INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, CostPrice, CategorySnapshotName, SubTotal, CreatedAt, UpdatedAt, IsDeleted)
-SELECT '22222222-0001-4000-8000-000000000005', 'dddddddd-0001-4000-8000-000000000003', 'bbbbbbbb-0001-4000-8000-000000000005', @PROD_004, 'SKU-DEMO-005', 1, 0, 220000, 50000, 'Trà demo', 220000, DATE_SUB(@NOW, INTERVAL 2 DAY), DATE_SUB(@NOW, INTERVAL 2 DAY), 0
+INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, CostPrice, CategorySnapshotName, SubTotal, IsGift, CreatedAt, UpdatedAt, IsDeleted)
+SELECT '22222222-0001-4000-8000-000000000005', 'dddddddd-0001-4000-8000-000000000003', 'bbbbbbbb-0001-4000-8000-000000000005', @PROD_004, 'SKU-DEMO-005', 1, 0, 220000, 50000, 'Trà demo', 220000, 0, DATE_SUB(@NOW, INTERVAL 2 DAY), DATE_SUB(@NOW, INTERVAL 2 DAY), 0
 WHERE NOT EXISTS (SELECT 1 FROM OrderDetails WHERE Id = '22222222-0001-4000-8000-000000000005');
 
-INSERT INTO Payments (Id, OrderId, PaymentMethod, Amount, PaymentStatus, TransactionRef, IsCodVerified, CodWarningDate, PaidAt, CreatedAt, UpdatedAt, IsDeleted)
-SELECT '33333333-0001-4000-8000-000000000003', 'dddddddd-0001-4000-8000-000000000003', 'COD', 580000, 'Pending', NULL, 0, DATE_ADD(@NOW, INTERVAL 5 DAY), NULL, DATE_SUB(@NOW, INTERVAL 2 DAY), DATE_SUB(@NOW, INTERVAL 1 DAY), 0
+INSERT INTO Payments (Id, OrderId, PaymentMethod, Amount, PaymentStatus, TransactionRef, IsCodVerified, CodWarningDate, PaidAt, TransferQrExpiresAtUtc, CodDebtSettlementJson, CreatedAt, UpdatedAt, IsDeleted)
+SELECT '33333333-0001-4000-8000-000000000003', 'dddddddd-0001-4000-8000-000000000003', 'COD', 580000, 'Pending', NULL, 0, DATE_ADD(@NOW, INTERVAL 5 DAY), NULL, NULL, NULL, DATE_SUB(@NOW, INTERVAL 2 DAY), DATE_SUB(@NOW, INTERVAL 1 DAY), 0
 WHERE NOT EXISTS (SELECT 1 FROM Payments WHERE Id = '33333333-0001-4000-8000-000000000003');
 
 -- 4) COD hoàn tất — đã xác nhận thu (dùng để test trả hàng)
-INSERT INTO Orders (Id, OrderCode, OrderKind, CustomerId, CustomerSnapshotName, EmployeeId, OrderChannel, OrderStatus, InventorySyncStatus, TotalAmount, DiscountAmount, PromotionId, PromotionCode, PromotionDiscountAmount, FinalAmount, ShippingAddress, Note, CreatedAt, UpdatedAt, IsDeleted)
-SELECT 'dddddddd-0001-4000-8000-000000000004', 'HVT-DEMO-004', 'Sale', 'cccccccc-0001-4000-8000-000000000005', @CUST_005, @SALE_USER_ID, 'COD', 'Completed', 'Synced', 420000, 0, NULL, NULL, 0, 420000, @SHIP_004, @NOTE_COD_004, DATE_SUB(@NOW, INTERVAL 7 DAY), DATE_SUB(@NOW, INTERVAL 6 DAY), 0
+INSERT INTO Orders (Id, OrderCode, OrderKind, CustomerId, CustomerSnapshotName, EmployeeId, OrderChannel, OrderStatus, InventorySyncStatus, TotalAmount, DiscountAmount, PromotionId, PromotionCode, PromotionDiscountAmount, FinalAmount, ShippingAddress, Note, IdempotencyKey, CreatedAt, UpdatedAt, IsDeleted)
+SELECT 'dddddddd-0001-4000-8000-000000000004', 'HVT-DEMO-004', 'Sale', 'cccccccc-0001-4000-8000-000000000005', @CUST_005, @SALE_USER_ID, 'COD', 'Completed', 'Synced', 420000, 0, NULL, NULL, 0, 420000, @SHIP_004, @NOTE_COD_004, NULL, DATE_SUB(@NOW, INTERVAL 7 DAY), DATE_SUB(@NOW, INTERVAL 6 DAY), 0
 WHERE NOT EXISTS (SELECT 1 FROM Orders WHERE OrderCode = 'HVT-DEMO-004');
 
-INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, CostPrice, CategorySnapshotName, SubTotal, CreatedAt, UpdatedAt, IsDeleted)
-SELECT '22222222-0001-4000-8000-000000000006', 'dddddddd-0001-4000-8000-000000000004', 'bbbbbbbb-0001-4000-8000-000000000002', @PROD_001, 'SKU-DEMO-002', 1, 0, 420000, 50000, 'Trà demo', 420000, DATE_SUB(@NOW, INTERVAL 7 DAY), DATE_SUB(@NOW, INTERVAL 7 DAY), 0
+INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, CostPrice, CategorySnapshotName, SubTotal, IsGift, CreatedAt, UpdatedAt, IsDeleted)
+SELECT '22222222-0001-4000-8000-000000000006', 'dddddddd-0001-4000-8000-000000000004', 'bbbbbbbb-0001-4000-8000-000000000002', @PROD_001, 'SKU-DEMO-002', 1, 0, 420000, 50000, 'Trà demo', 420000, 0, DATE_SUB(@NOW, INTERVAL 7 DAY), DATE_SUB(@NOW, INTERVAL 7 DAY), 0
 WHERE NOT EXISTS (SELECT 1 FROM OrderDetails WHERE Id = '22222222-0001-4000-8000-000000000006');
 
-INSERT INTO Payments (Id, OrderId, PaymentMethod, Amount, PaymentStatus, TransactionRef, IsCodVerified, CodWarningDate, PaidAt, CreatedAt, UpdatedAt, IsDeleted)
-SELECT '33333333-0001-4000-8000-000000000004', 'dddddddd-0001-4000-8000-000000000004', 'COD', 420000, 'Success', NULL, 1, DATE_SUB(@NOW, INTERVAL 6 DAY), DATE_SUB(@NOW, INTERVAL 6 DAY), DATE_SUB(@NOW, INTERVAL 7 DAY), DATE_SUB(@NOW, INTERVAL 6 DAY), 0
+INSERT INTO Payments (Id, OrderId, PaymentMethod, Amount, PaymentStatus, TransactionRef, IsCodVerified, CodWarningDate, PaidAt, TransferQrExpiresAtUtc, CodDebtSettlementJson, CreatedAt, UpdatedAt, IsDeleted)
+SELECT '33333333-0001-4000-8000-000000000004', 'dddddddd-0001-4000-8000-000000000004', 'COD', 420000, 'Success', NULL, 1, DATE_SUB(@NOW, INTERVAL 6 DAY), DATE_SUB(@NOW, INTERVAL 6 DAY), NULL, NULL, DATE_SUB(@NOW, INTERVAL 7 DAY), DATE_SUB(@NOW, INTERVAL 6 DAY), 0
 WHERE NOT EXISTS (SELECT 1 FROM Payments WHERE Id = '33333333-0001-4000-8000-000000000004');
 
 -- 5) COD chờ thanh toán
-INSERT INTO Orders (Id, OrderCode, OrderKind, CustomerId, CustomerSnapshotName, EmployeeId, OrderChannel, OrderStatus, InventorySyncStatus, TotalAmount, DiscountAmount, PromotionId, PromotionCode, PromotionDiscountAmount, FinalAmount, ShippingAddress, Note, CreatedAt, UpdatedAt, IsDeleted)
-SELECT 'dddddddd-0001-4000-8000-000000000005', 'HVT-DEMO-005', 'Sale', 'cccccccc-0001-4000-8000-000000000007', @CUST_007, @SALE_USER_ID, 'COD', 'PendingPayment', 'PendingDeduction', 350000, 0, NULL, NULL, 0, 350000, @SHIP_005, NULL, DATE_SUB(@NOW, INTERVAL 1 DAY), DATE_SUB(@NOW, INTERVAL 1 DAY), 0
+INSERT INTO Orders (Id, OrderCode, OrderKind, CustomerId, CustomerSnapshotName, EmployeeId, OrderChannel, OrderStatus, InventorySyncStatus, TotalAmount, DiscountAmount, PromotionId, PromotionCode, PromotionDiscountAmount, FinalAmount, ShippingAddress, Note, IdempotencyKey, CreatedAt, UpdatedAt, IsDeleted)
+SELECT 'dddddddd-0001-4000-8000-000000000005', 'HVT-DEMO-005', 'Sale', 'cccccccc-0001-4000-8000-000000000007', @CUST_007, @SALE_USER_ID, 'COD', 'PendingPayment', 'PendingDeduction', 350000, 0, NULL, NULL, 0, 350000, @SHIP_005, NULL, NULL, DATE_SUB(@NOW, INTERVAL 1 DAY), DATE_SUB(@NOW, INTERVAL 1 DAY), 0
 WHERE NOT EXISTS (SELECT 1 FROM Orders WHERE OrderCode = 'HVT-DEMO-005');
 
-INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, CostPrice, CategorySnapshotName, SubTotal, CreatedAt, UpdatedAt, IsDeleted)
-SELECT '22222222-0001-4000-8000-000000000007', 'dddddddd-0001-4000-8000-000000000005', 'bbbbbbbb-0001-4000-8000-000000000013', @PROD_012, 'SKU-DEMO-013', 1, 0, 350000, 50000, 'Trà demo', 350000, DATE_SUB(@NOW, INTERVAL 1 DAY), DATE_SUB(@NOW, INTERVAL 1 DAY), 0
+INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, CostPrice, CategorySnapshotName, SubTotal, IsGift, CreatedAt, UpdatedAt, IsDeleted)
+SELECT '22222222-0001-4000-8000-000000000007', 'dddddddd-0001-4000-8000-000000000005', 'bbbbbbbb-0001-4000-8000-000000000013', @PROD_012, 'SKU-DEMO-013', 1, 0, 350000, 50000, 'Trà demo', 350000, 0, DATE_SUB(@NOW, INTERVAL 1 DAY), DATE_SUB(@NOW, INTERVAL 1 DAY), 0
 WHERE NOT EXISTS (SELECT 1 FROM OrderDetails WHERE Id = '22222222-0001-4000-8000-000000000007');
 
-INSERT INTO Payments (Id, OrderId, PaymentMethod, Amount, PaymentStatus, TransactionRef, IsCodVerified, CodWarningDate, PaidAt, CreatedAt, UpdatedAt, IsDeleted)
-SELECT '33333333-0001-4000-8000-000000000005', 'dddddddd-0001-4000-8000-000000000005', 'COD', 350000, 'Pending', NULL, 0, DATE_ADD(@NOW, INTERVAL 7 DAY), NULL, DATE_SUB(@NOW, INTERVAL 1 DAY), DATE_SUB(@NOW, INTERVAL 1 DAY), 0
+INSERT INTO Payments (Id, OrderId, PaymentMethod, Amount, PaymentStatus, TransactionRef, IsCodVerified, CodWarningDate, PaidAt, TransferQrExpiresAtUtc, CodDebtSettlementJson, CreatedAt, UpdatedAt, IsDeleted)
+SELECT '33333333-0001-4000-8000-000000000005', 'dddddddd-0001-4000-8000-000000000005', 'COD', 350000, 'Pending', NULL, 0, DATE_ADD(@NOW, INTERVAL 7 DAY), NULL, NULL, NULL, DATE_SUB(@NOW, INTERVAL 1 DAY), DATE_SUB(@NOW, INTERVAL 1 DAY), 0
 WHERE NOT EXISTS (SELECT 1 FROM Payments WHERE Id = '33333333-0001-4000-8000-000000000005');
 
 -- 6) POS ghi nợ một phần
-INSERT INTO Orders (Id, OrderCode, OrderKind, CustomerId, CustomerSnapshotName, EmployeeId, OrderChannel, OrderStatus, InventorySyncStatus, TotalAmount, DiscountAmount, PromotionId, PromotionCode, PromotionDiscountAmount, FinalAmount, ShippingAddress, Note, CreatedAt, UpdatedAt, IsDeleted)
-SELECT 'dddddddd-0001-4000-8000-000000000006', 'HVT-DEMO-006', 'Sale', 'cccccccc-0001-4000-8000-000000000010', @CUST_010, @SALE_USER_ID, 'POS', 'Completed', 'Synced', 565000, 0, NULL, NULL, 0, 565000, NULL, @NOTE_POS_006, DATE_SUB(@NOW, INTERVAL 3 DAY), DATE_SUB(@NOW, INTERVAL 3 DAY), 0
+INSERT INTO Orders (Id, OrderCode, OrderKind, CustomerId, CustomerSnapshotName, EmployeeId, OrderChannel, OrderStatus, InventorySyncStatus, TotalAmount, DiscountAmount, PromotionId, PromotionCode, PromotionDiscountAmount, FinalAmount, ShippingAddress, Note, IdempotencyKey, CreatedAt, UpdatedAt, IsDeleted)
+SELECT 'dddddddd-0001-4000-8000-000000000006', 'HVT-DEMO-006', 'Sale', 'cccccccc-0001-4000-8000-000000000010', @CUST_010, @SALE_USER_ID, 'POS', 'Completed', 'Synced', 565000, 0, NULL, NULL, 0, 565000, NULL, @NOTE_POS_006, NULL, DATE_SUB(@NOW, INTERVAL 3 DAY), DATE_SUB(@NOW, INTERVAL 3 DAY), 0
 WHERE NOT EXISTS (SELECT 1 FROM Orders WHERE OrderCode = 'HVT-DEMO-006');
 
-INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, CostPrice, CategorySnapshotName, SubTotal, CreatedAt, UpdatedAt, IsDeleted)
-SELECT '22222222-0001-4000-8000-000000000008', 'dddddddd-0001-4000-8000-000000000006', 'bbbbbbbb-0001-4000-8000-000000000011', @PROD_010, 'SKU-DEMO-011', 1, 0, 520000, 50000, 'Trà demo', 520000, DATE_SUB(@NOW, INTERVAL 3 DAY), DATE_SUB(@NOW, INTERVAL 3 DAY), 0
+INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, CostPrice, CategorySnapshotName, SubTotal, IsGift, CreatedAt, UpdatedAt, IsDeleted)
+SELECT '22222222-0001-4000-8000-000000000008', 'dddddddd-0001-4000-8000-000000000006', 'bbbbbbbb-0001-4000-8000-000000000011', @PROD_010, 'SKU-DEMO-011', 1, 0, 520000, 50000, 'Trà demo', 520000, 0, DATE_SUB(@NOW, INTERVAL 3 DAY), DATE_SUB(@NOW, INTERVAL 3 DAY), 0
 WHERE NOT EXISTS (SELECT 1 FROM OrderDetails WHERE Id = '22222222-0001-4000-8000-000000000008');
 
-INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, CostPrice, CategorySnapshotName, SubTotal, CreatedAt, UpdatedAt, IsDeleted)
-SELECT '22222222-0001-4000-8000-000000000009', 'dddddddd-0001-4000-8000-000000000006', 'bbbbbbbb-0001-4000-8000-000000000008', @PROD_007, 'SKU-DEMO-008', 1, 0, 45000, 50000, 'Trà demo', 45000, DATE_SUB(@NOW, INTERVAL 3 DAY), DATE_SUB(@NOW, INTERVAL 3 DAY), 0
+INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, CostPrice, CategorySnapshotName, SubTotal, IsGift, CreatedAt, UpdatedAt, IsDeleted)
+SELECT '22222222-0001-4000-8000-000000000009', 'dddddddd-0001-4000-8000-000000000006', 'bbbbbbbb-0001-4000-8000-000000000008', @PROD_007, 'SKU-DEMO-008', 1, 0, 45000, 50000, 'Trà demo', 45000, 0, DATE_SUB(@NOW, INTERVAL 3 DAY), DATE_SUB(@NOW, INTERVAL 3 DAY), 0
 WHERE NOT EXISTS (SELECT 1 FROM OrderDetails WHERE Id = '22222222-0001-4000-8000-000000000009');
 
-INSERT INTO Payments (Id, OrderId, PaymentMethod, Amount, PaymentStatus, TransactionRef, IsCodVerified, PaidAt, CreatedAt, UpdatedAt, IsDeleted)
-SELECT '33333333-0001-4000-8000-000000000006', 'dddddddd-0001-4000-8000-000000000006', 'Cash', 200000, 'Success', NULL, 0, DATE_SUB(@NOW, INTERVAL 3 DAY), DATE_SUB(@NOW, INTERVAL 3 DAY), DATE_SUB(@NOW, INTERVAL 3 DAY), 0
+INSERT INTO Payments (Id, OrderId, PaymentMethod, Amount, PaymentStatus, TransactionRef, IsCodVerified, PaidAt, TransferQrExpiresAtUtc, CodDebtSettlementJson, CreatedAt, UpdatedAt, IsDeleted)
+SELECT '33333333-0001-4000-8000-000000000006', 'dddddddd-0001-4000-8000-000000000006', 'Cash', 200000, 'Success', NULL, 0, DATE_SUB(@NOW, INTERVAL 3 DAY), NULL, NULL, DATE_SUB(@NOW, INTERVAL 3 DAY), DATE_SUB(@NOW, INTERVAL 3 DAY), 0
 WHERE NOT EXISTS (SELECT 1 FROM Payments WHERE Id = '33333333-0001-4000-8000-000000000006');
 
 -- 6b) POS mua chịu — Trần Văn Minh (KH-DEMO-002, nợ 150.000)
-INSERT INTO Orders (Id, OrderCode, OrderKind, CustomerId, CustomerSnapshotName, EmployeeId, OrderChannel, OrderStatus, InventorySyncStatus, TotalAmount, DiscountAmount, PromotionId, PromotionCode, PromotionDiscountAmount, FinalAmount, ShippingAddress, Note, CreatedAt, UpdatedAt, IsDeleted)
-SELECT 'dddddddd-0001-4000-8000-000000000009', 'HVT-DEMO-DEBT-002', 'Sale', 'cccccccc-0001-4000-8000-000000000002', @CUST_002, @SALE_USER_ID, 'POS', 'Completed', 'Synced', 330000, 0, NULL, NULL, 0, 330000, NULL, @NOTE_POS_DEBT_002, DATE_SUB(@NOW, INTERVAL 8 DAY), DATE_SUB(@NOW, INTERVAL 8 DAY), 0
+INSERT INTO Orders (Id, OrderCode, OrderKind, CustomerId, CustomerSnapshotName, EmployeeId, OrderChannel, OrderStatus, InventorySyncStatus, TotalAmount, DiscountAmount, PromotionId, PromotionCode, PromotionDiscountAmount, FinalAmount, ShippingAddress, Note, IdempotencyKey, CreatedAt, UpdatedAt, IsDeleted)
+SELECT 'dddddddd-0001-4000-8000-000000000009', 'HVT-DEMO-DEBT-002', 'Sale', 'cccccccc-0001-4000-8000-000000000002', @CUST_002, @SALE_USER_ID, 'POS', 'Completed', 'Synced', 330000, 0, NULL, NULL, 0, 330000, NULL, @NOTE_POS_DEBT_002, NULL, DATE_SUB(@NOW, INTERVAL 8 DAY), DATE_SUB(@NOW, INTERVAL 8 DAY), 0
 WHERE NOT EXISTS (SELECT 1 FROM Orders WHERE OrderCode = 'HVT-DEMO-DEBT-002');
 
-INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, CostPrice, CategorySnapshotName, SubTotal, CreatedAt, UpdatedAt, IsDeleted)
-SELECT '22222222-0001-4000-8000-00000000000a', 'dddddddd-0001-4000-8000-000000000009', 'bbbbbbbb-0001-4000-8000-000000000001', @PROD_001, 'SKU-DEMO-001', 1, 0, 180000, 50000, 'Trà demo', 180000, DATE_SUB(@NOW, INTERVAL 8 DAY), DATE_SUB(@NOW, INTERVAL 8 DAY), 0
+INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, CostPrice, CategorySnapshotName, SubTotal, IsGift, CreatedAt, UpdatedAt, IsDeleted)
+SELECT '22222222-0001-4000-8000-00000000000a', 'dddddddd-0001-4000-8000-000000000009', 'bbbbbbbb-0001-4000-8000-000000000001', @PROD_001, 'SKU-DEMO-001', 1, 0, 180000, 50000, 'Trà demo', 180000, 0, DATE_SUB(@NOW, INTERVAL 8 DAY), DATE_SUB(@NOW, INTERVAL 8 DAY), 0
 WHERE NOT EXISTS (SELECT 1 FROM OrderDetails WHERE Id = '22222222-0001-4000-8000-00000000000a');
 
-INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, CostPrice, CategorySnapshotName, SubTotal, CreatedAt, UpdatedAt, IsDeleted)
-SELECT '22222222-0001-4000-8000-00000000000b', 'dddddddd-0001-4000-8000-000000000009', 'bbbbbbbb-0001-4000-8000-000000000007', @PROD_006, 'SKU-DEMO-007', 1, 0, 150000, 50000, 'Trà demo', 150000, DATE_SUB(@NOW, INTERVAL 8 DAY), DATE_SUB(@NOW, INTERVAL 8 DAY), 0
+INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, CostPrice, CategorySnapshotName, SubTotal, IsGift, CreatedAt, UpdatedAt, IsDeleted)
+SELECT '22222222-0001-4000-8000-00000000000b', 'dddddddd-0001-4000-8000-000000000009', 'bbbbbbbb-0001-4000-8000-000000000007', @PROD_006, 'SKU-DEMO-007', 1, 0, 150000, 50000, 'Trà demo', 150000, 0, DATE_SUB(@NOW, INTERVAL 8 DAY), DATE_SUB(@NOW, INTERVAL 8 DAY), 0
 WHERE NOT EXISTS (SELECT 1 FROM OrderDetails WHERE Id = '22222222-0001-4000-8000-00000000000b');
 
-INSERT INTO Payments (Id, OrderId, PaymentMethod, Amount, PaymentStatus, TransactionRef, IsCodVerified, PaidAt, CreatedAt, UpdatedAt, IsDeleted)
-SELECT '33333333-0001-4000-8000-000000000009', 'dddddddd-0001-4000-8000-000000000009', 'Cash', 180000, 'Success', NULL, 0, DATE_SUB(@NOW, INTERVAL 8 DAY), DATE_SUB(@NOW, INTERVAL 8 DAY), DATE_SUB(@NOW, INTERVAL 8 DAY), 0
+INSERT INTO Payments (Id, OrderId, PaymentMethod, Amount, PaymentStatus, TransactionRef, IsCodVerified, PaidAt, TransferQrExpiresAtUtc, CodDebtSettlementJson, CreatedAt, UpdatedAt, IsDeleted)
+SELECT '33333333-0001-4000-8000-000000000009', 'dddddddd-0001-4000-8000-000000000009', 'Cash', 180000, 'Success', NULL, 0, DATE_SUB(@NOW, INTERVAL 8 DAY), NULL, NULL, DATE_SUB(@NOW, INTERVAL 8 DAY), DATE_SUB(@NOW, INTERVAL 8 DAY), 0
 WHERE NOT EXISTS (SELECT 1 FROM Payments WHERE Id = '33333333-0001-4000-8000-000000000009');
 
 -- 6c) POS mua chịu — Hoàng Gia Bảo (KH-DEMO-005, nợ 320.000)
-INSERT INTO Orders (Id, OrderCode, OrderKind, CustomerId, CustomerSnapshotName, EmployeeId, OrderChannel, OrderStatus, InventorySyncStatus, TotalAmount, DiscountAmount, PromotionId, PromotionCode, PromotionDiscountAmount, FinalAmount, ShippingAddress, Note, CreatedAt, UpdatedAt, IsDeleted)
-SELECT 'dddddddd-0001-4000-8000-00000000000a', 'HVT-DEMO-DEBT-005', 'Sale', 'cccccccc-0001-4000-8000-000000000005', @CUST_005, @SALE_USER_ID, 'POS', 'Completed', 'Synced', 520000, 0, NULL, NULL, 0, 520000, NULL, @NOTE_POS_DEBT_005, DATE_SUB(@NOW, INTERVAL 9 DAY), DATE_SUB(@NOW, INTERVAL 9 DAY), 0
+INSERT INTO Orders (Id, OrderCode, OrderKind, CustomerId, CustomerSnapshotName, EmployeeId, OrderChannel, OrderStatus, InventorySyncStatus, TotalAmount, DiscountAmount, PromotionId, PromotionCode, PromotionDiscountAmount, FinalAmount, ShippingAddress, Note, IdempotencyKey, CreatedAt, UpdatedAt, IsDeleted)
+SELECT 'dddddddd-0001-4000-8000-00000000000a', 'HVT-DEMO-DEBT-005', 'Sale', 'cccccccc-0001-4000-8000-000000000005', @CUST_005, @SALE_USER_ID, 'POS', 'Completed', 'Synced', 520000, 0, NULL, NULL, 0, 520000, NULL, @NOTE_POS_DEBT_005, NULL, DATE_SUB(@NOW, INTERVAL 9 DAY), DATE_SUB(@NOW, INTERVAL 9 DAY), 0
 WHERE NOT EXISTS (SELECT 1 FROM Orders WHERE OrderCode = 'HVT-DEMO-DEBT-005');
 
-INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, CostPrice, CategorySnapshotName, SubTotal, CreatedAt, UpdatedAt, IsDeleted)
-SELECT '22222222-0001-4000-8000-00000000000c', 'dddddddd-0001-4000-8000-00000000000a', 'bbbbbbbb-0001-4000-8000-000000000005', @PROD_004, 'SKU-DEMO-005', 1, 0, 220000, 50000, 'Trà demo', 220000, DATE_SUB(@NOW, INTERVAL 9 DAY), DATE_SUB(@NOW, INTERVAL 9 DAY), 0
+INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, CostPrice, CategorySnapshotName, SubTotal, IsGift, CreatedAt, UpdatedAt, IsDeleted)
+SELECT '22222222-0001-4000-8000-00000000000c', 'dddddddd-0001-4000-8000-00000000000a', 'bbbbbbbb-0001-4000-8000-000000000005', @PROD_004, 'SKU-DEMO-005', 1, 0, 220000, 50000, 'Trà demo', 220000, 0, DATE_SUB(@NOW, INTERVAL 9 DAY), DATE_SUB(@NOW, INTERVAL 9 DAY), 0
 WHERE NOT EXISTS (SELECT 1 FROM OrderDetails WHERE Id = '22222222-0001-4000-8000-00000000000c');
 
-INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, CostPrice, CategorySnapshotName, SubTotal, CreatedAt, UpdatedAt, IsDeleted)
-SELECT '22222222-0001-4000-8000-00000000000d', 'dddddddd-0001-4000-8000-00000000000a', 'bbbbbbbb-0001-4000-8000-000000000006', @PROD_005, 'SKU-DEMO-006', 1, 0, 300000, 50000, 'Trà demo', 300000, DATE_SUB(@NOW, INTERVAL 9 DAY), DATE_SUB(@NOW, INTERVAL 9 DAY), 0
+INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, CostPrice, CategorySnapshotName, SubTotal, IsGift, CreatedAt, UpdatedAt, IsDeleted)
+SELECT '22222222-0001-4000-8000-00000000000d', 'dddddddd-0001-4000-8000-00000000000a', 'bbbbbbbb-0001-4000-8000-000000000006', @PROD_005, 'SKU-DEMO-006', 1, 0, 300000, 50000, 'Trà demo', 300000, 0, DATE_SUB(@NOW, INTERVAL 9 DAY), DATE_SUB(@NOW, INTERVAL 9 DAY), 0
 WHERE NOT EXISTS (SELECT 1 FROM OrderDetails WHERE Id = '22222222-0001-4000-8000-00000000000d');
 
-INSERT INTO Payments (Id, OrderId, PaymentMethod, Amount, PaymentStatus, TransactionRef, IsCodVerified, PaidAt, CreatedAt, UpdatedAt, IsDeleted)
-SELECT '33333333-0001-4000-8000-00000000000a', 'dddddddd-0001-4000-8000-00000000000a', 'Cash', 200000, 'Success', NULL, 0, DATE_SUB(@NOW, INTERVAL 9 DAY), DATE_SUB(@NOW, INTERVAL 9 DAY), DATE_SUB(@NOW, INTERVAL 9 DAY), 0
+INSERT INTO Payments (Id, OrderId, PaymentMethod, Amount, PaymentStatus, TransactionRef, IsCodVerified, PaidAt, TransferQrExpiresAtUtc, CodDebtSettlementJson, CreatedAt, UpdatedAt, IsDeleted)
+SELECT '33333333-0001-4000-8000-00000000000a', 'dddddddd-0001-4000-8000-00000000000a', 'Cash', 200000, 'Success', NULL, 0, DATE_SUB(@NOW, INTERVAL 9 DAY), NULL, NULL, DATE_SUB(@NOW, INTERVAL 9 DAY), DATE_SUB(@NOW, INTERVAL 9 DAY), 0
 WHERE NOT EXISTS (SELECT 1 FROM Payments WHERE Id = '33333333-0001-4000-8000-00000000000a');
 
 -- 7) Đơn đổi (Exchange)
-INSERT INTO Orders (Id, OrderCode, OrderKind, CustomerId, CustomerSnapshotName, EmployeeId, OrderChannel, OrderStatus, InventorySyncStatus, TotalAmount, DiscountAmount, PromotionId, PromotionCode, PromotionDiscountAmount, FinalAmount, ShippingAddress, Note, CreatedAt, UpdatedAt, IsDeleted)
-SELECT 'dddddddd-0001-4000-8000-000000000007', 'HVT-DEMO-DOI-001', 'Exchange', 'cccccccc-0001-4000-8000-000000000004', @CUST_004, @SALE_USER_ID, 'POS', 'Completed', 'Synced', 150000, 95000, NULL, NULL, 0, 55000, NULL, @NOTE_EXCH_007, DATE_SUB(@NOW, INTERVAL 1 DAY), DATE_SUB(@NOW, INTERVAL 1 DAY), 0
+INSERT INTO Orders (Id, OrderCode, OrderKind, CustomerId, CustomerSnapshotName, EmployeeId, OrderChannel, OrderStatus, InventorySyncStatus, TotalAmount, DiscountAmount, PromotionId, PromotionCode, PromotionDiscountAmount, FinalAmount, ShippingAddress, Note, IdempotencyKey, CreatedAt, UpdatedAt, IsDeleted)
+SELECT 'dddddddd-0001-4000-8000-000000000007', 'HVT-DEMO-DOI-001', 'Exchange', 'cccccccc-0001-4000-8000-000000000004', @CUST_004, @SALE_USER_ID, 'POS', 'Completed', 'Synced', 150000, 95000, NULL, NULL, 0, 55000, NULL, @NOTE_EXCH_007, NULL, DATE_SUB(@NOW, INTERVAL 1 DAY), DATE_SUB(@NOW, INTERVAL 1 DAY), 0
 WHERE NOT EXISTS (SELECT 1 FROM Orders WHERE OrderCode = 'HVT-DEMO-DOI-001');
 
-INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, CostPrice, CategorySnapshotName, SubTotal, CreatedAt, UpdatedAt, IsDeleted)
-SELECT '22222222-0001-4000-8000-000000000010', 'dddddddd-0001-4000-8000-000000000007', 'bbbbbbbb-0001-4000-8000-000000000004', @PROD_003, 'SKU-DEMO-004', 1, 0, 150000, 50000, 'Trà demo', 150000, DATE_SUB(@NOW, INTERVAL 1 DAY), DATE_SUB(@NOW, INTERVAL 1 DAY), 0
+INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, CostPrice, CategorySnapshotName, SubTotal, IsGift, CreatedAt, UpdatedAt, IsDeleted)
+SELECT '22222222-0001-4000-8000-000000000010', 'dddddddd-0001-4000-8000-000000000007', 'bbbbbbbb-0001-4000-8000-000000000004', @PROD_003, 'SKU-DEMO-004', 1, 0, 150000, 50000, 'Trà demo', 150000, 0, DATE_SUB(@NOW, INTERVAL 1 DAY), DATE_SUB(@NOW, INTERVAL 1 DAY), 0
 WHERE NOT EXISTS (SELECT 1 FROM OrderDetails WHERE Id = '22222222-0001-4000-8000-000000000010');
 
-INSERT INTO Payments (Id, OrderId, PaymentMethod, Amount, PaymentStatus, TransactionRef, IsCodVerified, PaidAt, CreatedAt, UpdatedAt, IsDeleted)
-SELECT '33333333-0001-4000-8000-000000000007', 'dddddddd-0001-4000-8000-000000000007', 'Cash', 55000, 'Success', NULL, 0, DATE_SUB(@NOW, INTERVAL 1 DAY), DATE_SUB(@NOW, INTERVAL 1 DAY), DATE_SUB(@NOW, INTERVAL 1 DAY), 0
+INSERT INTO Payments (Id, OrderId, PaymentMethod, Amount, PaymentStatus, TransactionRef, IsCodVerified, PaidAt, TransferQrExpiresAtUtc, CodDebtSettlementJson, CreatedAt, UpdatedAt, IsDeleted)
+SELECT '33333333-0001-4000-8000-000000000007', 'dddddddd-0001-4000-8000-000000000007', 'Cash', 55000, 'Success', NULL, 0, DATE_SUB(@NOW, INTERVAL 1 DAY), NULL, NULL, DATE_SUB(@NOW, INTERVAL 1 DAY), DATE_SUB(@NOW, INTERVAL 1 DAY), 0
 WHERE NOT EXISTS (SELECT 1 FROM Payments WHERE Id = '33333333-0001-4000-8000-000000000007');
 
 -- Phiếu trả hàng (từ đơn POS HVT-DEMO-001 — đã trả 1 SP, còn 1 SP)
@@ -613,16 +613,16 @@ WHERE Id = '22222222-0001-4000-8000-000000000001'
   AND ReturnedQuantity = 0;
 
 -- 8) COD hoàn tất lớn — doanh nghiệp
-INSERT INTO Orders (Id, OrderCode, OrderKind, CustomerId, CustomerSnapshotName, EmployeeId, OrderChannel, OrderStatus, InventorySyncStatus, TotalAmount, DiscountAmount, PromotionId, PromotionCode, PromotionDiscountAmount, FinalAmount, ShippingAddress, Note, CreatedAt, UpdatedAt, IsDeleted)
-SELECT 'dddddddd-0001-4000-8000-000000000008', 'HVT-DEMO-008', 'Sale', 'cccccccc-0001-4000-8000-000000000009', @CUST_009, @SALE_USER_ID, 'COD', 'Completed', 'Synced', 1780000, 50000, 'eeeeeeee-0001-4000-8000-000000000002', 'DEMO50K', 50000, 1730000, @SHIP_008, @NOTE_COD_008, DATE_SUB(@NOW, INTERVAL 10 DAY), DATE_SUB(@NOW, INTERVAL 9 DAY), 0
+INSERT INTO Orders (Id, OrderCode, OrderKind, CustomerId, CustomerSnapshotName, EmployeeId, OrderChannel, OrderStatus, InventorySyncStatus, TotalAmount, DiscountAmount, PromotionId, PromotionCode, PromotionDiscountAmount, FinalAmount, ShippingAddress, Note, IdempotencyKey, CreatedAt, UpdatedAt, IsDeleted)
+SELECT 'dddddddd-0001-4000-8000-000000000008', 'HVT-DEMO-008', 'Sale', 'cccccccc-0001-4000-8000-000000000009', @CUST_009, @SALE_USER_ID, 'COD', 'Completed', 'Synced', 1780000, 50000, 'eeeeeeee-0001-4000-8000-000000000002', 'DEMO50K', 50000, 1730000, @SHIP_008, @NOTE_COD_008, NULL, DATE_SUB(@NOW, INTERVAL 10 DAY), DATE_SUB(@NOW, INTERVAL 9 DAY), 0
 WHERE NOT EXISTS (SELECT 1 FROM Orders WHERE OrderCode = 'HVT-DEMO-008');
 
-INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, CostPrice, CategorySnapshotName, SubTotal, CreatedAt, UpdatedAt, IsDeleted)
-SELECT '22222222-0001-4000-8000-000000000011', 'dddddddd-0001-4000-8000-000000000008', 'bbbbbbbb-0001-4000-8000-000000000010', @PROD_009, 'SKU-DEMO-010', 2, 0, 890000, 50000, 'Trà demo', 1780000, DATE_SUB(@NOW, INTERVAL 10 DAY), DATE_SUB(@NOW, INTERVAL 10 DAY), 0
+INSERT INTO OrderDetails (Id, OrderId, SkuId, SkuSnapshotName, SkuSnapshotCode, Quantity, ReturnedQuantity, UnitPrice, CostPrice, CategorySnapshotName, SubTotal, IsGift, CreatedAt, UpdatedAt, IsDeleted)
+SELECT '22222222-0001-4000-8000-000000000011', 'dddddddd-0001-4000-8000-000000000008', 'bbbbbbbb-0001-4000-8000-000000000010', @PROD_009, 'SKU-DEMO-010', 2, 0, 890000, 50000, 'Trà demo', 1780000, 0, DATE_SUB(@NOW, INTERVAL 10 DAY), DATE_SUB(@NOW, INTERVAL 10 DAY), 0
 WHERE NOT EXISTS (SELECT 1 FROM OrderDetails WHERE Id = '22222222-0001-4000-8000-000000000011');
 
-INSERT INTO Payments (Id, OrderId, PaymentMethod, Amount, PaymentStatus, TransactionRef, IsCodVerified, CodWarningDate, PaidAt, CreatedAt, UpdatedAt, IsDeleted)
-SELECT '33333333-0001-4000-8000-000000000008', 'dddddddd-0001-4000-8000-000000000008', 'COD', 1730000, 'Success', NULL, 1, DATE_SUB(@NOW, INTERVAL 9 DAY), DATE_SUB(@NOW, INTERVAL 9 DAY), DATE_SUB(@NOW, INTERVAL 10 DAY), DATE_SUB(@NOW, INTERVAL 9 DAY), 0
+INSERT INTO Payments (Id, OrderId, PaymentMethod, Amount, PaymentStatus, TransactionRef, IsCodVerified, CodWarningDate, PaidAt, TransferQrExpiresAtUtc, CodDebtSettlementJson, CreatedAt, UpdatedAt, IsDeleted)
+SELECT '33333333-0001-4000-8000-000000000008', 'dddddddd-0001-4000-8000-000000000008', 'COD', 1730000, 'Success', NULL, 1, DATE_SUB(@NOW, INTERVAL 9 DAY), DATE_SUB(@NOW, INTERVAL 9 DAY), NULL, NULL, DATE_SUB(@NOW, INTERVAL 10 DAY), DATE_SUB(@NOW, INTERVAL 9 DAY), 0
 WHERE NOT EXISTS (SELECT 1 FROM Payments WHERE Id = '33333333-0001-4000-8000-000000000008');
 
 -- Hoạt động đơn hàng (mẫu)
@@ -664,16 +664,16 @@ UPDATE Products SET Name = @PROD_011, Origin = 'Bat Trang', FlavorProfile = NULL
 UPDATE Products SET Name = @PROD_012, Origin = 'Bat Trang', FlavorProfile = NULL, Description = @DESC_012, BaseUnit = @UNIT_KIT WHERE Id = 'aaaaaaaa-0001-4000-8000-000000000012';
 
 -- Product SKUs (PackagingType)
-UPDATE ProductSKUs SET PackagingType = @PKG_BAG_100, UpdatedAt = @NOW WHERE SkuCode IN ('SKU-DEMO-001','SKU-DEMO-003','SKU-DEMO-004','SKU-DEMO-005');
-UPDATE ProductSKUs SET PackagingType = @PKG_BAG_250, UpdatedAt = @NOW WHERE SkuCode IN ('SKU-DEMO-002','SKU-DEMO-015');
-UPDATE ProductSKUs SET PackagingType = @PKG_BAG_500, UpdatedAt = @NOW WHERE SkuCode = 'SKU-DEMO-014';
-UPDATE ProductSKUs SET PackagingType = @PKG_BAG_75, UpdatedAt = @NOW WHERE SkuCode = 'SKU-DEMO-006';
-UPDATE ProductSKUs SET PackagingType = @PKG_BAG_50, UpdatedAt = @NOW WHERE SkuCode = 'SKU-DEMO-007';
-UPDATE ProductSKUs SET PackagingType = @PKG_BAG_30, UpdatedAt = @NOW WHERE SkuCode = 'SKU-DEMO-008';
-UPDATE ProductSKUs SET PackagingType = @PKG_BAG_80, UpdatedAt = @NOW WHERE SkuCode = 'SKU-DEMO-009';
-UPDATE ProductSKUs SET PackagingType = @PKG_GIFT_BOX, UpdatedAt = @NOW WHERE SkuCode IN ('SKU-DEMO-010','SKU-DEMO-011');
-UPDATE ProductSKUs SET PackagingType = @PKG_PIECE, UpdatedAt = @NOW WHERE SkuCode = 'SKU-DEMO-012';
-UPDATE ProductSKUs SET PackagingType = @PKG_SET, UpdatedAt = @NOW WHERE SkuCode = 'SKU-DEMO-013';
+UPDATE ProductVariants SET VariantName = @PKG_BAG_100, UpdatedAt = @NOW WHERE SkuCode IN ('SKU-DEMO-001','SKU-DEMO-003','SKU-DEMO-004','SKU-DEMO-005');
+UPDATE ProductVariants SET VariantName = @PKG_BAG_250, UpdatedAt = @NOW WHERE SkuCode IN ('SKU-DEMO-002','SKU-DEMO-015');
+UPDATE ProductVariants SET VariantName = @PKG_BAG_500, UpdatedAt = @NOW WHERE SkuCode = 'SKU-DEMO-014';
+UPDATE ProductVariants SET VariantName = @PKG_BAG_75, UpdatedAt = @NOW WHERE SkuCode = 'SKU-DEMO-006';
+UPDATE ProductVariants SET VariantName = @PKG_BAG_50, UpdatedAt = @NOW WHERE SkuCode = 'SKU-DEMO-007';
+UPDATE ProductVariants SET VariantName = @PKG_BAG_30, UpdatedAt = @NOW WHERE SkuCode = 'SKU-DEMO-008';
+UPDATE ProductVariants SET VariantName = @PKG_BAG_80, UpdatedAt = @NOW WHERE SkuCode = 'SKU-DEMO-009';
+UPDATE ProductVariants SET VariantName = @PKG_GIFT_BOX, UpdatedAt = @NOW WHERE SkuCode IN ('SKU-DEMO-010','SKU-DEMO-011');
+UPDATE ProductVariants SET VariantName = @PKG_PIECE, UpdatedAt = @NOW WHERE SkuCode = 'SKU-DEMO-012';
+UPDATE ProductVariants SET VariantName = @PKG_SET, UpdatedAt = @NOW WHERE SkuCode = 'SKU-DEMO-013';
 
 USE `hvt_customer_db`;
 
@@ -727,7 +727,7 @@ WHERE r.ReturnCode LIKE 'TH-DEMO-%'
 
 UPDATE OrderDetails d
 INNER JOIN hvt_product_db.Products p ON p.Id = (
-  SELECT s.ProductId FROM hvt_product_db.ProductSKUs s WHERE s.SkuCode = d.SkuSnapshotCode LIMIT 1
+  SELECT s.ProductId FROM hvt_product_db.ProductVariants s WHERE s.SkuCode = d.SkuSnapshotCode LIMIT 1
 )
 SET d.SkuSnapshotName = p.Name,
     d.UpdatedAt = @NOW
@@ -735,7 +735,7 @@ WHERE d.SkuSnapshotCode LIKE 'SKU-DEMO-%';
 
 UPDATE ReturnOrderDetails d
 INNER JOIN hvt_product_db.Products p ON p.Id = (
-  SELECT s.ProductId FROM hvt_product_db.ProductSKUs s WHERE s.SkuCode = d.SkuSnapshotCode LIMIT 1
+  SELECT s.ProductId FROM hvt_product_db.ProductVariants s WHERE s.SkuCode = d.SkuSnapshotCode LIMIT 1
 )
 SET d.SkuSnapshotName = p.Name,
     d.UpdatedAt = @NOW

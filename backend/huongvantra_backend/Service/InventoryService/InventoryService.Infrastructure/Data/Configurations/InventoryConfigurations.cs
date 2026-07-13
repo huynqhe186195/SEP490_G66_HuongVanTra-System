@@ -26,8 +26,17 @@ public class StockDeductQueueConfiguration : IEntityTypeConfiguration<StockDeduc
         builder.Property(e => e.OrderPaymentStatus).HasMaxLength(30).IsRequired();
         builder.Property(e => e.OrderStockStatus).HasMaxLength(30).IsRequired();
         builder.Property(e => e.QueueStatus).HasConversion<string>().HasMaxLength(20).IsRequired();
+        builder.Property(e => e.ConfirmedByName).HasMaxLength(255);
+        builder.Property(e => e.ConfirmedByRoleName).HasMaxLength(100);
+        builder.Property(e => e.CancelledByName).HasMaxLength(255);
+        builder.Property(e => e.CancelledByRoleName).HasMaxLength(100);
+        builder.Property(e => e.CancelReason).HasMaxLength(500);
+        builder.Property(e => e.LastShortageReason).HasMaxLength(500);
         builder.Property(e => e.TotalAmount).HasColumnType("decimal(18,2)");
         builder.HasIndex(e => e.OrderId).IsUnique();
+        builder.HasIndex(e => e.QueueStatus);
+        builder.HasIndex(e => e.ConfirmedBy);
+        builder.HasIndex(e => e.CancelledBy);
         builder.HasMany(e => e.Items).WithOne(i => i.Queue).HasForeignKey(i => i.QueueId);
     }
 }

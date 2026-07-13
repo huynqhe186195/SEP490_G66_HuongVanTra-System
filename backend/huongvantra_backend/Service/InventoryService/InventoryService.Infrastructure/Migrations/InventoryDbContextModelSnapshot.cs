@@ -89,11 +89,47 @@ namespace InventoryService.Infrastructure.Migrations
                     b.Property<DateTime?>("ConfirmedAt")
                         .HasColumnType("datetime(6)");
 
+                    b.Property<Guid?>("ConfirmedBy")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("ConfirmedByName")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("ConfirmedByRoleName")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<DateTime?>("CancelledAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid?>("CancelledBy")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("CancelledByName")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("CancelledByRoleName")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<string>("CancelReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
 
                     b.Property<bool>("IsDeducted")
                         .HasColumnType("tinyint(1)");
+
+                    b.Property<DateTime?>("LastAttemptAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("LastShortageReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
 
                     b.Property<Guid>("OrderId")
                         .HasColumnType("char(36)");
@@ -126,6 +162,15 @@ namespace InventoryService.Infrastructure.Migrations
                     b.HasIndex("OrderId")
                         .IsUnique()
                         .HasDatabaseName("IX_StockDeductQueues_OrderId");
+
+                    b.HasIndex("CancelledBy")
+                        .HasDatabaseName("IX_StockDeductQueues_CancelledBy");
+
+                    b.HasIndex("ConfirmedBy")
+                        .HasDatabaseName("IX_StockDeductQueues_ConfirmedBy");
+
+                    b.HasIndex("QueueStatus")
+                        .HasDatabaseName("IX_StockDeductQueues_QueueStatus");
 
                     b.ToTable("StockDeductQueues");
                 });

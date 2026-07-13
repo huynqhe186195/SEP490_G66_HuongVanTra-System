@@ -1,6 +1,7 @@
 using HuongVanTra.Shared.Auth;
 using InventoryService.Application.DTOs.Requests;
 using InventoryService.Application.UseCases;
+using InventoryService.WebAPI.Extensions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -12,7 +13,7 @@ namespace InventoryService.WebAPI.Controllers;
 public class StockDeductQueueController(InventoryLogic _logic) : ControllerBase
 {
     [HttpGet("waiting")]
-    [Authorize(Policy = PermissionNames.ViewOrder)]
+    [Authorize(Roles = "Manager,Admin")]
     public async Task<IActionResult> GetWaiting(
         [FromQuery] string? status,
         [FromQuery] string? search,
@@ -20,13 +21,12 @@ public class StockDeductQueueController(InventoryLogic _logic) : ControllerBase
         [FromQuery] int pageSize = 10,
         CancellationToken ct = default)
     {
-        _ = status;
-        var result = await _logic.GetWaitingQueuesPagedAsync(search, page, pageSize, ct);
+        var result = await _logic.GetWaitingQueuesPagedAsync(status, search, page, pageSize, ct);
         return Ok(result);
     }
 
     [HttpGet("{queueId:guid}/preview")]
-    [Authorize(Policy = PermissionNames.ViewOrder)]
+    [Authorize(Roles = "Manager,Admin")]
     public async Task<IActionResult> Preview(Guid queueId, CancellationToken ct)
     {
         var preview = await _logic.PreviewQueueAsync(queueId, ct);
@@ -34,19 +34,18 @@ public class StockDeductQueueController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpPatch("{queueId:guid}/confirm")]
-    [Authorize(Policy = PermissionNames.ViewOrder)]
+    [Authorize(Roles = "Manager,Admin")]
     public async Task<IActionResult> Confirm(Guid queueId, CancellationToken ct)
     {
-        var result = await _logic.ConfirmQueueAsync(queueId, ct);
+        var result = await _logic.ConfirmQueueAsync(queueId, User.GetUserId(), User.ToCreatorSnapshot(), ct);
         return Ok(result);
     }
 
     [HttpPatch("{queueId:guid}/cancel")]
-    [Authorize(Policy = PermissionNames.ViewOrder)]
+    [Authorize(Roles = "Manager,Admin")]
     public async Task<IActionResult> Cancel(Guid queueId, [FromBody] CancelStockDeductRequest? request, CancellationToken ct)
     {
-        _ = request;
-        var result = await _logic.CancelQueueAsync(queueId, ct);
+        var result = await _logic.CancelQueueAsync(queueId, request, User.GetUserId(), User.ToCreatorSnapshot(), ct);
         return Ok(result);
     }
 }

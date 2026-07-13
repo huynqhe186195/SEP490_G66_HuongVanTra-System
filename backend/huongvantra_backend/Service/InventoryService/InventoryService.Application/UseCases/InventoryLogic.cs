@@ -63,16 +63,7 @@ public class InventoryLogic(
     public async Task HandleOrderPlacedAsync(OrderPlacedEvent message, CancellationToken ct = default)
     {
         if (await _processedEvents.ExistsAsync(OrderPlacedEventType, message.OrderId, ct))
-        {
-            if (string.Equals(message.OrderStatus, "Completed", StringComparison.OrdinalIgnoreCase))
-            {
-                var existingQueue = await _queueRepo.GetByOrderIdAsync(message.OrderId, ct);
-                if (existingQueue is { IsDeducted: false })
-                    await TryAutoConfirmQueueAsync(existingQueue.Id, ct);
-            }
-
             return;
-        }
 
         if (await _queueRepo.GetByOrderIdAsync(message.OrderId, ct) != null)
         {
@@ -109,15 +100,13 @@ public class InventoryLogic(
         await _processedEvents.AddAsync(OrderPlacedEventType, message.OrderId, ct);
         await _queueRepo.SaveChangesAsync(ct);
 
-        if (string.Equals(message.OrderStatus, "Completed", StringComparison.OrdinalIgnoreCase))
-            await TryAutoConfirmQueueAsync(queue.Id, ct);
     }
 
     private async Task TryAutoConfirmQueueAsync(Guid queueId, CancellationToken ct)
     {
         try
         {
-            await ConfirmQueueAsync(queueId, ct);
+            await ConfirmQueueAsync(queueId, Guid.Empty, null, ct);
         }
         catch (InsufficientStockException)
         {
@@ -176,20 +165,24 @@ public class InventoryLogic(
         await _queueRepo.SaveChangesAsync(ct);
     }
 
-    public async Task<List<StockDeductQueueResponse>> GetWaitingQueuesAsync(string? search, CancellationToken ct = default)
+    public async Task<List<StockDeductQueueResponse>> GetWaitingQueuesAsync(
+        string? status,
+        string? search,
+        CancellationToken ct = default)
     {
-        var queues = await _queueRepo.GetWaitingAsync(search, ct);
+        var queues = await _queueRepo.GetWaitingAsync(status, search, ct);
         return queues.Select(MapQueue).ToList();
     }
 
     public async Task<PagedResponse<StockDeductQueueResponse>> GetWaitingQueuesPagedAsync(
+        string? status,
         string? search,
         int page,
         int pageSize,
         CancellationToken ct = default)
     {
         var (safePage, safePageSize) = NormalizePagination(page, pageSize);
-        var (queues, totalCount) = await _queueRepo.GetWaitingPagedAsync(search, safePage, safePageSize, ct);
+        var (queues, totalCount) = await _queueRepo.GetWaitingPagedAsync(status, search, safePage, safePageSize, ct);
         var totalPages = Math.Max(1, (int)Math.Ceiling(totalCount / (double)safePageSize));
         return new PagedResponse<StockDeductQueueResponse>(
             queues.Select(MapQueue).ToList(),
@@ -216,18 +209,24 @@ public class InventoryLogic(
             previewItems);
     }
 
-    public async Task<StockDeductConfirmResponse> ConfirmQueueAsync(Guid queueId, CancellationToken ct = default)
+    public async Task<StockDeductConfirmResponse> ConfirmQueueAsync(
+        Guid queueId,
+        Guid confirmedBy,
+        CreatorSnapshot? confirmer,
+        CancellationToken ct = default)
     {
         var queue = await _queueRepo.GetByIdAsync(queueId, ct)
             ?? throw new InventoryNotFoundException($"Queue '{queueId}' not found.");
 
-        if (queue.QueueStatus != QueueStatus.Waiting)
-            throw new InventoryNotFoundException("Chỉ có thể trừ kho cho hàng chờ xử lý.");
+        if (queue.QueueStatus is not (QueueStatus.Waiting or QueueStatus.Insufficient))
+            throw new InventoryValidationException("Chỉ có thể trừ tồn cho queue đang chờ xử lý hoặc chờ hàng.");
 
         var result = await _unitOfWork.ExecuteInTransactionAsync(async innerCt =>
         {
+            var now = DateTime.UtcNow;
             var shortages = new List<StockShortage>();
             var stockBySkuId = new Dictionary<Guid, SkuStock>();
+            queue.LastAttemptAt = now;
 
             foreach (var item in queue.Items)
             {
@@ -248,53 +247,176 @@ public class InventoryLogic(
             }
 
             if (shortages.Count > 0)
-                throw new InsufficientStockException("Không đủ tồn kho để trừ.", shortages);
+            {
+                queue.IsDeducted = false;
+                queue.QueueStatus = QueueStatus.Insufficient;
+                queue.OrderStockStatus = "waiting_stock";
+                queue.LastShortageReason = BuildShortageReason(shortages);
+                await _queueRepo.SaveChangesAsync(innerCt);
+                return new StockDeductOperationResult(queue, false, shortages);
+            }
 
-            foreach (var item in queue.Items)
+            var orderedItems = queue.Items.OrderBy(i => i.SkuSnapshotCode ?? i.SkuSnapshotName).ToList();
+            var exportCountToday = await _exportSlipRepo.CountCreatedSinceAsync(now.Date, innerCt);
+            var slipId = Guid.NewGuid();
+            var slipLines = new List<StockExportSlipLine>();
+
+            foreach (var item in orderedItems)
             {
                 var stock = stockBySkuId[item.SkuId];
-                stock.QuantityOnHand -= item.Quantity;
-                stock.UpdatedAt = DateTime.UtcNow;
+                var warehouseBefore = stock.WarehouseQuantityOnHand;
+                var storeBefore = stock.QuantityOnHand;
+                var storeAfter = storeBefore - item.Quantity;
+
+                slipLines.Add(new StockExportSlipLine
+                {
+                    Id = Guid.NewGuid(),
+                    StockExportSlipId = slipId,
+                    SkuId = item.SkuId,
+                    SkuCode = item.SkuSnapshotCode ?? item.SkuId.ToString()[..8],
+                    ProductSnapshotName = item.SkuSnapshotName,
+                    Quantity = item.Quantity,
+                    WarehouseQtyBefore = warehouseBefore,
+                    WarehouseQtyAfter = warehouseBefore,
+                    StoreQtyBefore = storeBefore,
+                    StoreQtyAfter = storeAfter,
+                    Note = $"Trừ tồn quầy cho đơn hàng {queue.OrderCode}",
+                    CreatedAt = now,
+                });
+
+                stock.QuantityOnHand = storeAfter;
+                stock.UpdatedAt = now;
             }
+
+            var firstLine = slipLines[0];
+            var effectiveConfirmedBy = confirmedBy == Guid.Empty ? Guid.Empty : confirmedBy;
+            var exportSlip = new StockExportSlip
+            {
+                Id = slipId,
+                ExportCode = $"PX-{now:yyyyMMdd}-{(exportCountToday + 1):D4}",
+                ExportType = "sales_deduct_later",
+                StockAdjustmentRequestId = null,
+                ProductionOrderId = null,
+                ProductionCode = null,
+                SkuId = slipLines.Count == 1 ? firstLine.SkuId : Guid.Empty,
+                SkuCode = slipLines.Count == 1 ? firstLine.SkuCode : "MULTI",
+                SkuSnapshotName = slipLines.Count == 1 ? firstLine.ProductSnapshotName : $"{slipLines.Count} dòng hàng bán",
+                Quantity = slipLines.Sum(l => l.Quantity),
+                WarehouseQtyBefore = slipLines.Sum(l => l.WarehouseQtyBefore),
+                WarehouseQtyAfter = slipLines.Sum(l => l.WarehouseQtyAfter),
+                StoreQtyBefore = slipLines.Sum(l => l.StoreQtyBefore),
+                StoreQtyAfter = slipLines.Sum(l => l.StoreQtyAfter),
+                Note = $"Trừ tồn quầy cho đơn hàng {queue.OrderCode}",
+                CreatedBy = effectiveConfirmedBy,
+                CreatedById = effectiveConfirmedBy == Guid.Empty ? null : effectiveConfirmedBy,
+                CreatedByName = NormalizeSnapshotText(confirmer?.CreatedByName),
+                CreatedByRoleName = NormalizeSnapshotText(confirmer?.CreatedByRoleName),
+                CreatedAt = now,
+                Lines = slipLines,
+            };
 
             queue.IsDeducted = true;
             queue.QueueStatus = QueueStatus.Confirmed;
             queue.OrderStockStatus = "deducted";
-            queue.ConfirmedAt = DateTime.UtcNow;
+            queue.ConfirmedAt = now;
+            queue.ConfirmedBy = effectiveConfirmedBy == Guid.Empty ? null : effectiveConfirmedBy;
+            queue.ConfirmedByName = NormalizeSnapshotText(confirmer?.CreatedByName);
+            queue.ConfirmedByRoleName = NormalizeSnapshotText(confirmer?.CreatedByRoleName);
+            queue.LastShortageReason = null;
 
+            await _exportSlipRepo.AddAsync(exportSlip, innerCt);
             await _queueRepo.SaveChangesAsync(innerCt);
-            return queue;
+            return new StockDeductOperationResult(queue, true, []);
         }, ct);
 
-        await _eventPublisher.PublishStockDeductedAsync(result.OrderId, result.OrderCode, true, ct);
-        await CheckAndNotifyLowStockAsync(result.Items, ct);
+        if (!result.CanDeduct)
+        {
+            return new StockDeductConfirmResponse(
+                result.Queue.Id,
+                result.Queue.OrderId,
+                result.Queue.OrderCode,
+                result.Queue.QueueStatus.ToString().ToLowerInvariant(),
+                result.Queue.OrderStockStatus,
+                result.Queue.ConfirmedAt,
+                false,
+                MapShortageResponses(result.Shortages));
+        }
+
+        await _eventPublisher.PublishStockDeductedAsync(result.Queue.OrderId, result.Queue.OrderCode, true, ct);
+        await CheckAndNotifyLowStockAsync(result.Queue.Items, ct);
 
         return new StockDeductConfirmResponse(
-            result.Id, result.OrderId, result.OrderCode,
-            result.QueueStatus.ToString().ToLowerInvariant(),
-            result.OrderStockStatus,
-            result.ConfirmedAt);
+            result.Queue.Id, result.Queue.OrderId, result.Queue.OrderCode,
+            result.Queue.QueueStatus.ToString().ToLowerInvariant(),
+            result.Queue.OrderStockStatus,
+            result.Queue.ConfirmedAt);
     }
 
-    public async Task<StockDeductConfirmResponse> CancelQueueAsync(Guid queueId, CancellationToken ct = default)
+    public async Task<StockDeductConfirmResponse> CancelQueueAsync(
+        Guid queueId,
+        CancelStockDeductRequest? request,
+        Guid cancelledBy,
+        CreatorSnapshot? canceller,
+        CancellationToken ct = default)
     {
         var queue = await _queueRepo.GetByIdAsync(queueId, ct)
             ?? throw new InventoryNotFoundException($"Queue '{queueId}' not found.");
 
-        if (queue.QueueStatus != QueueStatus.Waiting)
-            throw new InventoryNotFoundException("Chỉ có thể hủy hàng chờ xử lý.");
+        if (queue.QueueStatus is not (QueueStatus.Waiting or QueueStatus.Insufficient))
+            throw new InventoryValidationException("Chỉ có thể hủy queue đang chờ xử lý hoặc chờ hàng.");
+
+        var reason = request?.Reason?.Trim();
+        if (string.IsNullOrWhiteSpace(reason))
+            throw new InventoryValidationException("Lý do hủy là bắt buộc.");
 
         queue.QueueStatus = QueueStatus.Cancelled;
         queue.OrderStockStatus = "cancelled";
-        queue.ConfirmedAt = DateTime.UtcNow;
+        queue.CancelledAt = DateTime.UtcNow;
+        queue.CancelledBy = cancelledBy == Guid.Empty ? null : cancelledBy;
+        queue.CancelledByName = NormalizeSnapshotText(canceller?.CreatedByName);
+        queue.CancelledByRoleName = NormalizeSnapshotText(canceller?.CreatedByRoleName);
+        queue.CancelReason = reason;
+        queue.LastShortageReason = null;
         await _queueRepo.SaveChangesAsync(ct);
+
+        await _eventPublisher.PublishStockDeductionCancelledAsync(
+            queue.OrderId,
+            queue.OrderCode,
+            reason,
+            ct);
 
         return new StockDeductConfirmResponse(
             queue.Id, queue.OrderId, queue.OrderCode,
             queue.QueueStatus.ToString().ToLowerInvariant(),
             queue.OrderStockStatus,
-            queue.ConfirmedAt);
+            queue.ConfirmedAt,
+            false,
+            [],
+            queue.CancelledAt,
+            queue.CancelReason);
     }
+
+    private sealed record StockDeductOperationResult(
+        StockDeductQueue Queue,
+        bool CanDeduct,
+        List<StockShortage> Shortages);
+
+    private static string BuildShortageReason(IEnumerable<StockShortage> shortages)
+    {
+        var text = string.Join("; ", shortages.Select(s =>
+            $"{s.SkuName}: cần {s.RequiredQuantity}, có {s.AvailableQuantity}, thiếu {s.ShortageQuantity}"));
+        return text.Length <= 500 ? text : text[..500];
+    }
+
+    private static List<StockDeductPreviewItemResponse> MapShortageResponses(IEnumerable<StockShortage> shortages) =>
+        shortages.Select(s => new StockDeductPreviewItemResponse(
+            s.SkuId,
+            s.SkuId,
+            s.SkuName,
+            s.RequiredQuantity,
+            s.AvailableQuantity,
+            s.ShortageQuantity,
+            "insufficient")).ToList();
 
     public async Task<SkuStockResponse> UpdateLowStockThresholdAsync(
         Guid skuId, int threshold, CancellationToken ct = default)
@@ -507,7 +629,16 @@ public class InventoryLogic(
         q.OrderPaymentStatus,
         q.OrderStockStatus,
         q.TotalAmount,
-        q.CreatedAt);
+        q.CreatedAt,
+        q.ConfirmedAt,
+        q.ConfirmedByName,
+        q.ConfirmedByRoleName,
+        q.CancelledAt,
+        q.CancelledByName,
+        q.CancelledByRoleName,
+        q.CancelReason,
+        q.LastAttemptAt,
+        q.LastShortageReason);
 
     public async Task<StockAdjustmentRequestResponse> CreateStockAdjustmentRequestAsync(
         CreateStockAdjustmentRequest request,

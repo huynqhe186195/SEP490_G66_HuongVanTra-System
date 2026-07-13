@@ -18,20 +18,28 @@ public class StockDeductQueueRepository(InventoryDbContext _db) : IStockDeductQu
             .Include(q => q.Items)
             .FirstOrDefaultAsync(q => q.OrderId == orderId, ct);
 
-    public async Task<List<StockDeductQueue>> GetWaitingAsync(string? search, CancellationToken ct = default)
+    public async Task<List<StockDeductQueue>> GetWaitingAsync(string? status, string? search, CancellationToken ct = default)
     {
-        var query = BuildWaitingQuery(search);
+        var query = BuildWaitingQuery(status, search);
 
         return await query.OrderByDescending(q => q.CreatedAt).ToListAsync(ct);
     }
 
+    public async Task<int> CountWaitingAsync(CancellationToken ct = default)
+    {
+        return await _db.StockDeductQueues
+            .CountAsync(q => !q.IsDeducted &&
+                (q.QueueStatus == QueueStatus.Waiting || q.QueueStatus == QueueStatus.Insufficient), ct);
+    }
+
     public async Task<(List<StockDeductQueue> Items, int TotalCount)> GetWaitingPagedAsync(
+        string? status,
         string? search,
         int page,
         int pageSize,
         CancellationToken ct = default)
     {
-        var query = BuildWaitingQuery(search);
+        var query = BuildWaitingQuery(status, search);
         var totalCount = await query.CountAsync(ct);
         var items = await query
             .OrderByDescending(q => q.CreatedAt)
@@ -42,10 +50,20 @@ public class StockDeductQueueRepository(InventoryDbContext _db) : IStockDeductQu
         return (items, totalCount);
     }
 
-    private IQueryable<StockDeductQueue> BuildWaitingQuery(string? search)
+    private IQueryable<StockDeductQueue> BuildWaitingQuery(string? status, string? search)
     {
         var query = _db.StockDeductQueues
-            .Where(q => q.QueueStatus == QueueStatus.Waiting);
+            .AsQueryable();
+
+        var normalizedStatus = status?.Trim().ToLowerInvariant();
+        query = normalizedStatus switch
+        {
+            "waiting" => query.Where(q => q.QueueStatus == QueueStatus.Waiting),
+            "insufficient" => query.Where(q => q.QueueStatus == QueueStatus.Insufficient),
+            "confirmed" => query.Where(q => q.QueueStatus == QueueStatus.Confirmed),
+            "cancelled" or "canceled" => query.Where(q => q.QueueStatus == QueueStatus.Cancelled),
+            _ => query
+        };
 
         if (!string.IsNullOrWhiteSpace(search))
         {

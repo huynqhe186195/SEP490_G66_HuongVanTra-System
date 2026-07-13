@@ -5,7 +5,7 @@ export const ROLE_LABELS = {
   CooperativeOwner: 'Chủ hợp tác xã',
   Manager: 'Quản lý chi nhánh',
   Sale: 'Nhân viên bán hàng',
-  Warehouse: 'Thủ kho',
+  Warehouse: 'Thủ kho Kho tổng',
   Accountant: 'Kế toán',
 }
 

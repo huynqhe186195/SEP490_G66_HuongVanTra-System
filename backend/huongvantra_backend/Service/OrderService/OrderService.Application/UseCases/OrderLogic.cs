@@ -1077,6 +1077,35 @@ public class OrderLogic(
         await _orderRepo.SaveChangesAsync(ct);
     }
 
+    public async Task MarkInventoryDeductionCancelledAsync(
+        Guid orderId,
+        string? reason,
+        CancellationToken ct = default)
+    {
+        var order = await _orderRepo.GetByIdAsync(orderId, ct)
+            ?? throw new OrderNotFoundException(orderId);
+
+        if (order.InventorySyncStatus == InventorySyncStatus.Cancelled)
+            return;
+
+        order.InventorySyncStatus = InventorySyncStatus.Cancelled;
+        order.UpdatedAt = DateTime.UtcNow;
+
+        var description = string.IsNullOrWhiteSpace(reason)
+            ? "Đã hủy trừ tồn kho cho đơn hàng."
+            : $"Đã hủy trừ tồn kho cho đơn hàng. Lý do: {reason.Trim()}";
+
+        await RecordActivityAsync(
+            order.Id,
+            OrderActivityType.InventorySynced,
+            description,
+            actorId: null,
+            actorName: "Hệ thống",
+            ct);
+
+        await _orderRepo.SaveChangesAsync(ct);
+    }
+
     private async Task PublishOrderCompletedAsync(Order order, decimal debtAmount, CancellationToken ct)
     {
         if (!order.CustomerId.HasValue) return;
