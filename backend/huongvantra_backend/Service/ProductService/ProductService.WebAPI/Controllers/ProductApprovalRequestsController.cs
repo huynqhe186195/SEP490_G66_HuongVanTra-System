@@ -1,3 +1,4 @@
+using HuongVanTra.Shared.Auth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using ProductService.Application.DTOs.Requests;
@@ -11,7 +12,7 @@ namespace ProductService.WebAPI.Controllers;
 public class ProductApprovalRequestsController(ProductApprovalLogic _logic) : ControllerBase
 {
     [HttpGet]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Policy = PermissionNames.ManageBusinessPolicy)]
     public async Task<IActionResult> GetPaged(
         [FromQuery] string? status,
         [FromQuery] string? search,
@@ -21,12 +22,12 @@ public class ProductApprovalRequestsController(ProductApprovalLogic _logic) : Co
         Ok(await _logic.GetPagedAsync(new GetProductApprovalRequestsRequest(status, search, page, pageSize), ct));
 
     [HttpGet("{id:guid}")]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Policy = PermissionNames.ManageBusinessPolicy)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct = default) =>
         Ok(await _logic.GetByIdAsync(id, ct));
 
     [HttpPost]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Policy = PermissionNames.ManageBusinessPolicy)]
     public async Task<IActionResult> Create([FromBody] CreateNewProductApprovalRequest request, CancellationToken ct = default)
     {
         var result = await _logic.CreateAsync(request, User.ToProductApprovalActorSnapshot(), ct);
@@ -34,12 +35,12 @@ public class ProductApprovalRequestsController(ProductApprovalLogic _logic) : Co
     }
 
     [HttpPost("{id:guid}/authorize")]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Policy = PermissionNames.ManageBusinessPolicy)]
     public async Task<IActionResult> Authorize(Guid id, [FromBody] AuthorizeProductApprovalRequest request, CancellationToken ct = default) =>
         Ok(await _logic.AuthorizeAsync(id, request, User.ToProductApprovalActorSnapshot(), ct));
 
     [HttpPost("{id:guid}/cancel")]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Policy = PermissionNames.ManageBusinessPolicy)]
     public async Task<IActionResult> Cancel(Guid id, [FromBody] CancelProductApprovalRequest request, CancellationToken ct = default) =>
         Ok(await _logic.CancelAsync(id, request, User.ToProductApprovalActorSnapshot(), ct));
 

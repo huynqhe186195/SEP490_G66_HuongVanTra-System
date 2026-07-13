@@ -239,7 +239,7 @@ function validateApprovalForm(form, { existingSkuCodes }) {
     if (!trimText(form.weightUnit)) addError('weightUnit', 'Đơn vị khối lượng là bắt buộc khi nhập khối lượng.')
   }
 
-  if (trimText(form.adminNotes).length > 1000) addError('adminNotes', 'Ghi chú Admin tối đa 1000 ký tự.')
+  if (trimText(form.adminNotes).length > 1000) addError('adminNotes', 'Ghi chú Chủ HTX tối đa 1000 ký tự.')
 
   if (!form.units.length) addError('units', 'Cần ít nhất một đơn vị bán.')
   const baseUnits = form.units.filter((unit) => unit.isBaseUnit)
@@ -422,7 +422,7 @@ function SnapshotPreview({ product, categories, adminNotes, compact = false }) {
             <PreviewItem label="Hồ sơ hương vị" value={product?.flavorProfile || '-'} />
             <PreviewItem label="Hướng dẫn pha" value={product?.brewingGuide || '-'} />
             <PreviewItem label="Mô tả" value={product?.description || '-'} />
-            <PreviewItem label="Ghi chú Admin" value={adminNotes || '-'} />
+            <PreviewItem label="Ghi chú Chủ HTX" value={adminNotes || '-'} />
           </div>
         </>
       ) : null}
@@ -802,7 +802,7 @@ export default function ProductApprovalsPage() {
         <div>
           <h1 className="text-2xl font-extrabold text-slate-800">Duyệt sản phẩm mới</h1>
           <p className="mt-1 text-sm text-slate-500">
-            Admin tạo biên bản, cấp mã, sau đó Thủ kho Kho tổng dùng mã tại trang tạo hàng hóa.
+            Chủ hợp tác xã tạo biên bản, cấp mã, sau đó Thủ kho Kho tổng dùng mã tại trang tạo hàng hóa.
           </p>
         </div>
 
@@ -1056,7 +1056,7 @@ export default function ProductApprovalsPage() {
             </div>
           </SectionCard>
 
-          <SectionCard title="4. Ghi chú Admin">
+          <SectionCard title="4. Ghi chú Chủ HTX">
             <textarea className="min-h-24 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#538463]" value={form.adminNotes} onChange={(event) => updateFormField('adminNotes', event.target.value)} placeholder="Ghi chú nội bộ cho biên bản phê duyệt" />
             <FieldError message={errors.adminNotes} />
           </SectionCard>

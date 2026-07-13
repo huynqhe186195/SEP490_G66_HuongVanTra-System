@@ -275,7 +275,7 @@ public class ProductApprovalLogic(ProductDbContext _db, ProductLogic _productLog
         return approval.Status switch
         {
             NewProductApprovalStatus.AwaitingWarehouseConfirmation when approval.UsedAt is null && approval.CreatedProductId is null => null,
-            NewProductApprovalStatus.Draft => "Mã phê duyệt chưa được Admin xác nhận.",
+            NewProductApprovalStatus.Draft => "Mã phê duyệt chưa được Chủ hợp tác xã xác nhận.",
             NewProductApprovalStatus.Completed => "Mã phê duyệt đã được sử dụng.",
             NewProductApprovalStatus.Cancelled => "Mã phê duyệt đã bị hủy.",
             NewProductApprovalStatus.Rejected => "Biên bản phê duyệt đã bị từ chối.",

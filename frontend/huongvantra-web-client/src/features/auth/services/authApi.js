@@ -21,7 +21,7 @@ const ROLE_MODULE_MAP = {
     'accountant_ops',
     'price_approval',
   ],
-  manager: ['pos', 'orders', 'cod_ops', 'stock_deduct_ops', 'stock_adjustment_ops', 'customers', 'products', 'staff', 'dashboard'],
+  manager: ['pos', 'orders', 'cod_ops', 'stock_deduct_ops', 'stock_adjustment_ops', 'customers', 'contracts', 'products', 'staff', 'dashboard'],
   sale: ['pos', 'orders', 'customers', 'dashboard'],
   warehouse: ['products', 'stock_adjustment_ops', 'inventory', 'dashboard'],
   accountant: ['orders', 'customers', 'reports', 'dashboard', 'accountant_ops'],

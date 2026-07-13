@@ -62,9 +62,9 @@ export const navigationItems = [
       sectionScope: 'customers',
     })),
   },
-  { label: 'Hợp đồng', path: '/contracts', module: 'contracts', icon: 'description', roles: ['cooperativeOwner', 'admin', 'agencyManager'] },
-  { label: 'Hàng hóa', path: '/inventory/products', module: 'products', icon: 'inventory_2', roles: ['admin', 'agencyManager', 'inventoryManager'] },
-  { label: 'Duyệt sản phẩm mới', path: '/inventory/product-approvals', module: 'product_approvals_admin', icon: 'verified', roles: ['admin'] },
+  { label: 'Hợp đồng', path: '/contracts', module: 'contracts', icon: 'description', roles: ['cooperativeOwner', 'agencyManager'] },
+  { label: 'Hàng hóa', path: '/inventory/products', module: 'products', icon: 'inventory_2', roles: ['cooperativeOwner', 'agencyManager', 'inventoryManager'] },
+  { label: 'Duyệt sản phẩm mới', path: '/inventory/product-approvals', module: 'product_approvals_admin', icon: 'verified', roles: ['cooperativeOwner'] },
   { label: 'Kho tổng', path: '/inventory', module: 'inventory', icon: 'warehouse', roles: ['inventoryManager'] },
   { label: 'Lô sản xuất', path: '/inventory/production-orders', module: 'inventory', icon: 'precision_manufacturing', roles: ['inventoryManager'] },
   { label: 'Định mức BOM', path: '/inventory/boms', module: 'inventory', icon: 'schema', roles: ['inventoryManager'] },
@@ -300,6 +300,11 @@ export function getModuleForPath(pathname) {
   return null
 }
 
+function canReadInventoryStocks(session) {
+  const permissions = session?.permissions ?? []
+  return permissions.includes('VIEW_ORDER') || permissions.includes('MANAGE_CATALOG')
+}
+
 export function canAccessModule(session, module) {
   if (!module) {
     return true
@@ -316,6 +321,14 @@ export function canAccessModule(session, module) {
   if (String(module).toLowerCase() === 'inventory') {
     if (!session?.roles?.length) return false
     return hasAnyRoleGroup(session.roles, ['inventoryManager'])
+  }
+
+  if (String(module).toLowerCase() === 'products' && !canReadInventoryStocks(session)) {
+    return false
+  }
+
+  if (String(module).toLowerCase() === 'product_approvals_admin') {
+    return (session?.permissions ?? []).includes('MANAGE_BUSINESS_POLICY')
   }
 
   if (session?.modules?.length) {
@@ -372,6 +385,15 @@ export function getAccessDeniedMessage(pathname) {
   }
   if (module === 'inventory') {
     return 'Chỉ Thủ kho Kho tổng mới được truy cập module kho tổng.'
+  }
+  if (module === 'products') {
+    return 'Tài khoản không có quyền xem tồn kho (VIEW_ORDER). Vui lòng đăng nhập bằng Quản lý, Chủ HTX hoặc Thủ kho.'
+  }
+  if (module === 'contracts') {
+    return 'Chỉ Chủ hợp tác xã hoặc Quản lý chi nhánh mới được truy cập Hợp đồng.'
+  }
+  if (module === 'product_approvals_admin') {
+    return 'Chỉ Chủ hợp tác xã mới được duyệt sản phẩm mới.'
   }
   if (module === 'promotions_admin' || module === 'membership_tiers_admin') {
     return 'Chỉ Chủ hợp tác xã mới được quản lý hạng thẻ và mã giảm giá.'

@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
-import { canAdjustStoreStock, canSyncCatalog } from '../../auth/utils/permissions.js'
+import { canAdjustStoreStock, canSyncCatalog, canViewOrders } from '../../auth/utils/permissions.js'
 import { fetchCategories } from '../services/categoriesApi.js'
 import { buildStockBySkuIdMap, fetchSkuStocks } from '../../inventory/services/inventoryStockApi.js'
 import { fetchPendingCatalogSync, syncCatalogToStore } from '../services/catalogSyncApi.js'
@@ -62,6 +62,7 @@ export default function ProductsStoreListPage() {
   const [session, setSession] = useState(() => loadAuthSession())
   const canSync = canSyncCatalog(session)
   const canAdjustStock = canAdjustStoreStock(session)
+  const canLoadInventory = canViewOrders(session)
 
   const [isSyncing, setIsSyncing] = useState(false)
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
@@ -111,13 +112,17 @@ export default function ProductsStoreListPage() {
   }, [])
 
   const loadStocks = useCallback(async () => {
+    if (!canLoadInventory) {
+      setStockBySkuId(new Map())
+      return
+    }
     try {
       const stocks = await fetchSkuStocks()
       setStockBySkuId(buildStockBySkuIdMap(stocks))
     } catch {
       setStockBySkuId(new Map())
     }
-  }, [])
+  }, [canLoadInventory])
 
   const loadCatalog = useCallback(async () => {
     try {
@@ -148,8 +153,10 @@ export default function ProductsStoreListPage() {
   useEffect(() => {
     loadCategories()
     loadPendingSync()
-    fetchInventorySettings().then((s) => setSimulateWarehouse(s.simulateWarehouse)).catch(() => { })
-  }, [loadCategories, loadPendingSync])
+    if (canLoadInventory) {
+      fetchInventorySettings().then((s) => setSimulateWarehouse(s.simulateWarehouse)).catch(() => { })
+    }
+  }, [loadCategories, loadPendingSync, canLoadInventory])
 
   useEffect(() => {
     loadCatalog()

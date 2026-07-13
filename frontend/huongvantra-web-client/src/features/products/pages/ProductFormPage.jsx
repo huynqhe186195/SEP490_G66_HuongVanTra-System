@@ -444,7 +444,7 @@ function ApprovalCodeGate({ approvalCode, onCodeChange, onValidate, isLoading })
             <span className="material-symbols-outlined rounded-xl bg-[#e8f1eb] p-2 text-[#356647]">verified</span>
             <div>
               <h1 className="text-2xl font-extrabold text-slate-800">Tạo hàng hóa mới</h1>
-              <p className="mt-1 text-sm text-slate-500">Sản phẩm mới cần mã xác nhận do Admin cấp.</p>
+              <p className="mt-1 text-sm text-slate-500">Sản phẩm mới cần mã xác nhận do Chủ hợp tác xã cấp.</p>
             </div>
           </div>
 
@@ -507,7 +507,7 @@ function ApprovalModeSelection({ approval, onSelectMode, onReset }) {
           >
             <span className="material-symbols-outlined text-[#356647]">auto_awesome</span>
             <span className="mt-3 block text-base font-bold text-slate-800">Tạo tự động từ biên bản</span>
-            <span className="mt-1 block text-sm text-slate-500">Dùng đúng snapshot Product/SKU/BOM đã được Admin phê duyệt.</span>
+            <span className="mt-1 block text-sm text-slate-500">Dùng đúng snapshot Product/SKU/BOM đã được Chủ hợp tác xã phê duyệt.</span>
           </button>
           <button
             type="button"
@@ -1291,7 +1291,7 @@ function ProductFormPage({ mode }) {
         showSuccess('Đã cập nhật sản phẩm.')
       } else {
         if (!approvalRecord?.approvalCode) {
-          showError('Sản phẩm mới cần mã phê duyệt hợp lệ do Admin cấp.')
+          showError('Sản phẩm mới cần mã phê duyệt hợp lệ do Chủ hợp tác xã cấp.')
           return
         }
         if (approvalMode !== 'manual') {
@@ -1431,7 +1431,7 @@ function ProductFormPage({ mode }) {
                 <p className="text-xs font-bold uppercase tracking-wide text-[#356647]">Mã phê duyệt</p>
                 <p className="mt-1 font-mono text-lg font-bold text-slate-800">{approvalRecord.approvalCode}</p>
                 <p className="mt-1 text-sm text-slate-500">
-                  Nhập thủ công theo biên bản Admin đã duyệt cho <span className="font-semibold text-slate-800">{approvalRecord.productName}</span>.
+                  Nhập thủ công theo biên bản Chủ hợp tác xã đã duyệt cho <span className="font-semibold text-slate-800">{approvalRecord.productName}</span>.
                 </p>
               </div>
               <button type="button" onClick={() => setApprovalMode('')} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
@@ -1444,7 +1444,7 @@ function ProductFormPage({ mode }) {
                 className="mt-1 min-h-24 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-[#538463] focus:ring-2 focus:ring-[#538463]/15"
                 value={manualModeReason}
                 onChange={(event) => setManualModeReason(event.target.value)}
-                placeholder="VD: Admin duyệt theo biên bản giấy, Thủ kho Kho tổng nhập lại dữ liệu từ chứng từ đã ký."
+                placeholder="VD: Chủ HTX duyệt theo biên bản giấy, Thủ kho Kho tổng nhập lại dữ liệu từ chứng từ đã ký."
               />
             </label>
           </section>
