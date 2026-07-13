@@ -35,10 +35,11 @@ function AdminLayout() {
   const isOnline = useNetworkStatus()
   const isPosPage = location.pathname === '/pos'
 
-  // Background sync mỗi 30 phút khi online, và khi tab được focus lại
+  // Background sync cho POS (Sale/Manager) — bỏ qua role không có CREATE_ORDER (Admin KT, Chủ HTX, Kế toán…)
   useEffect(() => {
-    if (!isOnline) return
-    const permissions = authSession?.permissions ?? []
+    if (!isOnline || !authSession?.permissions?.includes('CREATE_ORDER')) return
+
+    const permissions = authSession.permissions
     syncOfflineCache({ permissions }).catch(() => {})
     const interval = setInterval(() => {
       if (navigator.onLine) syncOfflineCache({ permissions }).catch(() => {})
@@ -53,7 +54,7 @@ function AdminLayout() {
       clearInterval(interval)
       document.removeEventListener('visibilitychange', handleVisibility)
     }
-  }, [isOnline])
+  }, [isOnline, authSession?.permissions])
 
   const toggleSidebarCollapsed = () => {
     setSidebarCollapsed((prev) => {

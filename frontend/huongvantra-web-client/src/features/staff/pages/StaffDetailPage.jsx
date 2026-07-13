@@ -3,7 +3,11 @@ import { useNavigate, useParams } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
-import { fetchStaffAccount, updateStaffAccount } from '../services/staffApi.js'
+import { loadAuthSession } from '../../auth/services/authSession.js'
+import { canChangeStaffRole } from '../../auth/utils/permissions.js'
+import { formatRoleName } from '../../iam/utils/iamLabels.js'
+import { fetchRoleOptions, fetchStaffAccount, updateStaffAccount } from '../services/staffApi.js'
+import { getPhoneMaxLength, normalizePhoneInput, validateStaffEditForm } from '../utils/staffValidation.js'
 
 const loginHistory = [
   { id: '1', channel: 'He thong POS 02', time: '14:20', date: 'Lan cuoi: Hom nay', icon: 'devices', active: true },
@@ -13,15 +17,20 @@ const loginHistory = [
 function StaffDetailPage() {
   const navigate = useNavigate()
   const { id: employeeId } = useParams()
+  const session = loadAuthSession()
+  const allowRoleChange = canChangeStaffRole(session)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
-  const [currentRoles, setCurrentRoles] = useState([])
+  const [roleOptions, setRoleOptions] = useState([])
+  const [initialRole, setInitialRole] = useState('')
+  const [fieldErrors, setFieldErrors] = useState({})
   const [form, setForm] = useState({
     fullName: '',
     phone: '',
     username: '',
     employeeCode: '',
     note: '',
+    role: '',
     newPassword: '',
     active: true,
   })
@@ -36,16 +45,22 @@ function StaffDetailPage() {
     let mounted = true
     const loadData = async () => {
       try {
-        const account = await fetchStaffAccount(employeeId)
+        const [account, roles] = await Promise.all([
+          fetchStaffAccount(employeeId),
+          allowRoleChange ? fetchRoleOptions() : Promise.resolve([]),
+        ])
         if (!mounted) return
 
-        setCurrentRoles(account.roles || [])
+        const currentRole = account.roles?.[0] || ''
+        setRoleOptions(roles || [])
+        setInitialRole(currentRole)
         setForm({
           fullName: account.fullName || '',
           phone: account.phone || '',
           username: account.username || '',
           employeeCode: account.employeeCode || '',
           note: account.note || '',
+          role: currentRole,
           newPassword: '',
           active: Boolean(account.isActive),
         })
@@ -58,15 +73,27 @@ function StaffDetailPage() {
 
     loadData()
     return () => { mounted = false }
-  }, [employeeId])
+  }, [employeeId, allowRoleChange])
 
-  const canSave = useMemo(() => {
-    if (!form.active) return true
-    return Boolean(form.fullName.trim() && form.phone.trim() && form.username.trim())
-  }, [form.active, form.fullName, form.phone, form.username])
+  const validation = useMemo(
+    () => validateStaffEditForm({
+      fullName: form.fullName,
+      phone: form.phone,
+      role: form.role,
+      allowRoleChange,
+      active: form.active,
+    }),
+    [form.fullName, form.phone, form.role, form.active, allowRoleChange],
+  )
+
+  const canSave = validation.valid
 
   const handleChange = (field) => (event) => {
-    setForm((current) => ({ ...current, [field]: event.target.value }))
+    const value = field === 'phone' ? normalizePhoneInput(event.target.value) : event.target.value
+    setForm((current) => ({ ...current, [field]: value }))
+    if (fieldErrors[field]) {
+      setFieldErrors((current) => ({ ...current, [field]: undefined }))
+    }
   }
 
   const handleSave = async () => {
@@ -74,23 +101,35 @@ function StaffDetailPage() {
 
     const isDeactivating = !form.active
 
-    if (!isDeactivating) {
-      if (!canSave) {
-        showError('Vui lòng nhập đủ họ tên, số điện thoại và tên đăng nhập.')
-        return
-      }
+    const result = validateStaffEditForm({
+      fullName: form.fullName,
+      phone: form.phone,
+      role: form.role,
+      allowRoleChange,
+      active: form.active,
+    })
+    setFieldErrors(result.errors)
+
+    if (!isDeactivating && !result.valid) {
+      showError(result.message)
+      return
     }
 
     setIsSaving(true)
     try {
-      await updateStaffAccount(employeeId, {
+      const payload = {
         fullName: form.fullName,
         phone: form.phone,
         note: form.note,
-        username: form.username,
         isActive: form.active,
         newPassword: isDeactivating ? null : form.newPassword || null,
-      })
+      }
+
+      if (allowRoleChange && form.role && form.role !== initialRole) {
+        payload.role = form.role
+      }
+
+      await updateStaffAccount(employeeId, payload)
 
       showSuccess(isDeactivating ? 'Đã ngừng hoạt động nhân viên.' : 'Cập nhật nhân viên thành công.')
       navigate('/staff')
@@ -162,29 +201,55 @@ function StaffDetailPage() {
                 <label className="flex flex-col gap-2">
                   <span className="text-xs font-semibold text-[#414942]">So dien thoai</span>
                   <input
-                    required
-                    className="rounded-lg border-none bg-[#f6f4ec] p-3 text-sm shadow-inner outline-none focus:ring-2 focus:ring-[#356647]/30"
+                    inputMode="numeric"
+                    maxLength={getPhoneMaxLength(form.phone)}
+                    className={`rounded-lg border-none bg-[#f6f4ec] p-3 text-sm shadow-inner outline-none focus:ring-2 focus:ring-[#356647]/30 ${fieldErrors.phone ? 'ring-2 ring-[#ba1a1a]/40' : ''}`}
                     value={form.phone}
                     onChange={handleChange('phone')}
+                    placeholder="VD: 0912345678"
                   />
+                  {fieldErrors.phone ? (
+                    <span className="text-xs text-[#93000a]">{fieldErrors.phone}</span>
+                  ) : (
+                    <span className="text-xs text-[#717971]">Để trống nếu chưa có; nếu nhập phải đúng 10 số (di động) hoặc 11 số (máy bàn 02...).</span>
+                  )}
                 </label>
 
                 <label className="flex flex-col gap-2">
                   <span className="text-xs font-semibold text-[#414942]">Tên đăng nhập</span>
                   <input
-                    className="rounded-lg border-none bg-[#f6f4ec] p-3 text-sm shadow-inner outline-none focus:ring-2 focus:ring-[#356647]/30"
+                    className="rounded-lg border-none bg-[#f0eee6] p-3 text-sm text-[#414942] shadow-inner"
                     value={form.username}
-                    onChange={handleChange('username')}
+                    readOnly
                   />
+                  <span className="text-xs text-[#717971]">Tên đăng nhập không thể thay đổi sau khi tạo.</span>
                 </label>
 
                 <label className="flex flex-col gap-2">
                   <span className="text-xs font-semibold text-[#414942]">Vai trò</span>
-                  <input
-                    className="rounded-lg border-none bg-[#f0eee6] p-3 text-sm text-[#414942] shadow-inner"
-                    value={currentRoles.join(', ') || '—'}
-                    readOnly
-                  />
+                  {allowRoleChange ? (
+                    <div className="relative">
+                      <select
+                        className="w-full appearance-none rounded-lg border-none bg-[#f6f4ec] p-3 text-sm shadow-inner outline-none focus:ring-2 focus:ring-[#356647]/30"
+                        value={form.role}
+                        onChange={handleChange('role')}
+                      >
+                        <option value="">Chọn vai trò</option>
+                        {roleOptions.map((role) => (
+                          <option key={role.id ?? role.name} value={role.name}>
+                            {formatRoleName(role.name)}
+                          </option>
+                        ))}
+                      </select>
+                      <span className="material-symbols-outlined pointer-events-none absolute right-3 top-3 text-[#414942]">expand_more</span>
+                    </div>
+                  ) : (
+                    <input
+                      className="rounded-lg border-none bg-[#f0eee6] p-3 text-sm text-[#414942] shadow-inner"
+                      value={formatRoleName(form.role) || '—'}
+                      readOnly
+                    />
+                  )}
                 </label>
 
                 <label className="flex flex-col gap-2">

@@ -24,7 +24,8 @@ function DashboardPage() {
 
     const session = loadAuthSession();
     const roles = (session?.roles || []).map(r => String(r || '').toLowerCase().trim());
-    const isAdmin = roles.includes('admin') || roles.includes('agencymanager') || roles.includes('agency manager');
+    const isCooperativeOwner = roles.includes('cooperativeowner') || roles.includes('cooperative owner');
+    const isAdmin = isCooperativeOwner || roles.includes('agencymanager') || roles.includes('agency manager');
     const isAccountant = roles.includes('accountant');
     const isSalesStaff = roles.includes('salesstaff') || roles.includes('sale') || roles.includes('sales staff');
     

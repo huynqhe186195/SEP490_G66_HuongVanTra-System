@@ -20,7 +20,7 @@ public class CustomersController : ControllerBase
     private CustomerAccessContext AccessContext() => new(
         User.GetUserId(),
         User.HasPermission(PermissionNames.ViewAllCustomers),
-        User.HasPermission(PermissionNames.ManageRole));
+        User.HasPermission(PermissionNames.ApproveContract));
 
     [HttpGet("statistics")]
     [Authorize(Policy = PermissionNames.ViewCustomer)]
@@ -184,7 +184,7 @@ public class CustomersController : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
-    [Authorize(Policy = PermissionNames.ManageRole)]
+    [Authorize(Policy = PermissionNames.ApproveContract)]
     public async Task<IActionResult> Delete(Guid id, CancellationToken ct = default)
     {
         await _logic.DeleteAsync(id, AccessContext(), ct);
@@ -192,7 +192,7 @@ public class CustomersController : ControllerBase
     }
 
     [HttpPost("{id:guid}/restore")]
-    [Authorize(Policy = PermissionNames.ManageRole)]
+    [Authorize(Policy = PermissionNames.ApproveContract)]
     public async Task<IActionResult> Restore(Guid id, CancellationToken ct = default)
     {
         var result = await _logic.RestoreAsync(id, AccessContext(), ct);

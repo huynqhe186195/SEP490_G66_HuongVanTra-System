@@ -137,7 +137,7 @@ export async function fetchStaffAccount(employeeId) {
     employeeCode: String(mapped.employeeId),
     department: mapped.department,
     roles: mapped.roles ?? [],
-    note: '',
+    note: mapped.department || '',
     isActive: mapped.isActive,
     status: mapped.status,
   }
@@ -184,7 +184,7 @@ export async function updateStaffAccount(employeeId, payload) {
       await unlockUser(current.userGuid)
     }
 
-    if (payload.role !== undefined) {
+    if (payload.role !== undefined && payload.role !== (current.roles?.[0] || '')) {
       const options = await fetchRoleOptions()
       const roleIds = resolveRoleIds(options, [payload.role])
       if (!roleIds.length) {

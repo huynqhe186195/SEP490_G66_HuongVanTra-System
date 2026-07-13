@@ -11,31 +11,31 @@ namespace OrderService.WebAPI.Controllers;
 public class PromotionsController(PromotionLogic _promotionLogic) : ControllerBase
 {
     [HttpGet("api/admin/promotions")]
-    [Authorize(Policy = PermissionNames.ManageEmployee)]
+    [Authorize(Policy = PermissionNames.ManageBusinessPolicy)]
     public async Task<IActionResult> GetAdminPromotions(
         [FromQuery] GetAdminPromotionsRequest request,
         CancellationToken ct = default) =>
         Ok(await _promotionLogic.GetAdminPromotionsAsync(request, ct));
 
     [HttpPost("api/admin/promotions")]
-    [Authorize(Policy = PermissionNames.ManageEmployee)]
+    [Authorize(Policy = PermissionNames.ManageBusinessPolicy)]
     public async Task<IActionResult> Create(
         [FromBody] CreatePromotionRequest request, CancellationToken ct = default) =>
         Ok(await _promotionLogic.CreateAsync(request, ct));
 
     [HttpPut("api/admin/promotions/{id:guid}")]
-    [Authorize(Policy = PermissionNames.ManageEmployee)]
+    [Authorize(Policy = PermissionNames.ManageBusinessPolicy)]
     public async Task<IActionResult> Update(
         Guid id, [FromBody] UpdatePromotionRequest request, CancellationToken ct = default) =>
         Ok(await _promotionLogic.UpdateAsync(id, request, ct));
 
     [HttpDelete("api/admin/promotions/{id:guid}")]
-    [Authorize(Policy = PermissionNames.ManageEmployee)]
+    [Authorize(Policy = PermissionNames.ManageBusinessPolicy)]
     public async Task<IActionResult> Deactivate(Guid id, CancellationToken ct = default) =>
         Ok(await _promotionLogic.DeactivateAsync(id, ct));
 
     [HttpPost("api/admin/promotions/{id:guid}/reactivate")]
-    [Authorize(Policy = PermissionNames.ManageEmployee)]
+    [Authorize(Policy = PermissionNames.ManageBusinessPolicy)]
     public async Task<IActionResult> Reactivate(Guid id, CancellationToken ct = default) =>
         Ok(await _promotionLogic.ReactivateAsync(id, ct));
 

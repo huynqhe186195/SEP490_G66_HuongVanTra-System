@@ -10,6 +10,8 @@ public static class DataSeeder
     public const string AdminUsername = "admin";
     public const string AdminPassword = "123456";
     public const string AdminRoleName = "Admin";
+    public const string CooperativeOwnerUsername = "owner01";
+    public const string CooperativeOwnerRoleName = "CooperativeOwner";
     public const string DemoPassword = "123456";
 
     private static readonly (string RoleName, string Description, string[] Permissions)[] DefaultRoles =
@@ -22,13 +24,17 @@ public static class DataSeeder
         [PermissionNames.ViewOrder, PermissionNames.ViewAllCustomers]),
         ("Manager", "Quản lý",
         [PermissionNames.CreateOrder, PermissionNames.ViewOrder, PermissionNames.ViewAllCustomers, PermissionNames.ManageEmployee,
-         PermissionNames.CreateCustomer, PermissionNames.ViewCustomer])
+         PermissionNames.CreateCustomer, PermissionNames.ViewCustomer]),
+        (CooperativeOwnerRoleName, "Chủ hợp tác xã",
+        [PermissionNames.ManageEmployee, PermissionNames.ViewAllCustomers, PermissionNames.ViewCustomer, PermissionNames.ViewOrder,
+         PermissionNames.CreateCustomer, PermissionNames.ApprovePrice, PermissionNames.ApproveContract, PermissionNames.ManageBusinessPolicy])
     ];
 
     private static readonly (string Username, string FullName, string Department, string RoleName)[] DemoUsers =
     [
         ("sale01", "Nguyen Van Sale", "Sales", "Sale"),
-        ("manager01", "Tran Thi Manager", "Operations", "Manager")
+        ("manager01", "Tran Thi Manager", "Operations", "Manager"),
+        (CooperativeOwnerUsername, "Nguyen Van Chu HTX", "Board", CooperativeOwnerRoleName)
     ];
 
     public static async Task SeedAsync(UserDbContext context)
@@ -64,9 +70,11 @@ public static class DataSeeder
 
     private static async Task<Role> SeedAdminRoleAsync(UserDbContext context)
     {
-        var permissions = await context.Permissions.Where(p => !p.IsDeleted).ToListAsync();
-        return await SeedRoleAsync(context, AdminRoleName, "System administrator",
-            permissions.Select(p => p.PermissionName).ToArray());
+        return await SeedRoleAsync(context, AdminRoleName, "Quản trị kỹ thuật",
+        [
+            PermissionNames.ManageUser,
+            PermissionNames.ManageRole
+        ]);
     }
 
     private static async Task<Role> SeedRoleAsync(

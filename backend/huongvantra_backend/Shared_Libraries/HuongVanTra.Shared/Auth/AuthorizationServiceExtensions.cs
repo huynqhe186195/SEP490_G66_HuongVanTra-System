@@ -33,6 +33,15 @@ public static class AuthorizationServiceExtensions
                     PermissionNames.CreateOrder,
                     PermissionNames.CreateCustomer,
                     PermissionNames.ManageRole)));
+
+            options.AddPolicy(PermissionNames.ApproveContract, policy =>
+                policy.Requirements.Add(new PermissionRequirement(PermissionNames.ApproveContract)));
+
+            options.AddPolicy(PermissionNames.ApprovePrice, policy =>
+                policy.Requirements.Add(new PermissionRequirement(PermissionNames.ApprovePrice)));
+
+            options.AddPolicy(PermissionNames.ManageBusinessPolicy, policy =>
+                policy.Requirements.Add(new PermissionRequirement(PermissionNames.ManageBusinessPolicy)));
         });
 
         return services;

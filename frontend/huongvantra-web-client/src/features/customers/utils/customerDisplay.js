@@ -4,7 +4,7 @@ export const CUSTOMER_TYPE_BY_TAB = {
   corporate: 'CORPORATE',
 }
 
-/** Bật module khách doanh nghiệp — chỉ Admin được tạo/sửa (xem: mọi role có VIEW_CUSTOMER). */
+/** Bật module khách doanh nghiệp — chỉ Chủ hợp tác xã được tạo/sửa (xem: mọi role có VIEW_CUSTOMER). */
 export const CUSTOMER_CORPORATE_ENABLED = true
 
 export const CUSTOMER_LIST_TABS = [

@@ -80,9 +80,18 @@ function canViewCustomers(permissions) {
   return permissions.some(p => CUSTOMER_PERMISSIONS.has(p))
 }
 
+function canSyncPosOfflineData(permissions) {
+  if (!Array.isArray(permissions) || permissions.length === 0) return false
+  return permissions.includes('CREATE_ORDER')
+}
+
 // ── Main sync function — called on "Chuẩn bị offline" or background timer ───
 
 export async function syncOfflineCache({ permissions = [] } = {}) {
+  if (!canSyncPosOfflineData(permissions)) {
+    return
+  }
+
   const safe = fn => fn().catch(e => { console.warn('[offline-sync]', e.message); return [] })
 
   const shouldSyncCustomers = canViewCustomers(permissions)

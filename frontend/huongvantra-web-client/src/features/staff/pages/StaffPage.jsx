@@ -84,6 +84,15 @@ function StaffPage() {
       <PageHeader
         title="Nhân viên"
         description={scopeLabel}
+        rightContent={(
+          <Link
+            to="/staff/create"
+            className="inline-flex items-center gap-2 rounded-lg bg-[#4a6242] px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:brightness-110"
+          >
+            <span className="material-symbols-outlined text-[18px]">person_add</span>
+            Tạo nhân viên
+          </Link>
+        )}
       />
 
       <section className="rounded-[24px] border border-[#c1c9c0]/30 bg-white p-6 shadow-sm">

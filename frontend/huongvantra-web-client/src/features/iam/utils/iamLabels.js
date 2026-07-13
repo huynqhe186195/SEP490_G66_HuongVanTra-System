@@ -1,7 +1,8 @@
 /** Nhãn tiếng Việt cho vai trò và quyền — dễ hiểu cho người dùng lớn tuổi. */
 
 export const ROLE_LABELS = {
-  Admin: 'Quản trị viên',
+  Admin: 'Quản trị kỹ thuật',
+  CooperativeOwner: 'Chủ hợp tác xã',
   Manager: 'Quản lý chi nhánh',
   Sale: 'Nhân viên bán hàng',
   Warehouse: 'Thủ kho',
@@ -44,6 +45,18 @@ export const PERMISSION_LABELS = {
   MANAGE_CATALOG: {
     label: 'Quản lý danh mục hàng',
     hint: 'Tạo và cập nhật sản phẩm, danh mục, biến thể SKU',
+  },
+  APPROVE_PRICE: {
+    label: 'Duyệt giá bán',
+    hint: 'Duyệt hoặc từ chối đề xuất giá từ kế toán',
+  },
+  APPROVE_CONTRACT: {
+    label: 'Duyệt hợp đồng',
+    hint: 'Duyệt hợp đồng và quản lý khách doanh nghiệp',
+  },
+  MANAGE_BUSINESS_POLICY: {
+    label: 'Chính sách kinh doanh',
+    hint: 'Quản lý hạng thẻ khách hàng và mã giảm giá',
   },
 }
 

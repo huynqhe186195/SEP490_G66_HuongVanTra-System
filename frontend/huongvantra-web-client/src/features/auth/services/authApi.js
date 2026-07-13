@@ -7,32 +7,32 @@ import {
 import { loadAuthSession } from './authSession.js'
 
 const ROLE_MODULE_MAP = {
-  admin: [
-    'pos',
+  admin: ['users_admin', 'phan_quyen_admin'],
+  cooperativeOwner: [
     'orders',
-    'cod_ops',
-    'stock_deduct_ops',
-    'stock_adjustment_ops',
     'customers',
-    'products',
+    'contracts',
     'staff',
     'membership_tiers_admin',
     'promotions_admin',
-    'users_admin',
-    'phan_quyen_admin',
     'dashboard',
+    'accountant_ops',
+    'price_approval',
   ],
   manager: ['pos', 'orders', 'cod_ops', 'stock_deduct_ops', 'stock_adjustment_ops', 'customers', 'products', 'staff', 'dashboard'],
   sale: ['pos', 'orders', 'customers', 'dashboard'],
   warehouse: ['products', 'stock_adjustment_ops', 'inventory', 'dashboard'],
-  accountant: ['orders', 'customers', 'reports', 'dashboard'],
+  accountant: ['orders', 'customers', 'reports', 'dashboard', 'accountant_ops'],
 }
 
 const ROLE_ALIAS_TO_MAP_KEY = {
   agencymanager: 'manager',
   branchmanager: 'manager',
-  owner: 'manager',
   manager: 'manager',
+  cooperativeowner: 'cooperativeOwner',
+  chuhtx: 'cooperativeOwner',
+  chuhoptacxa: 'cooperativeOwner',
+  owner: 'cooperativeOwner',
   salesstaff: 'sale',
   sale: 'sale',
   inventorymanager: 'warehouse',
@@ -152,6 +152,10 @@ export async function resetPassword(username, newPassword) {
 
 export function isWarehouseUserRole(roles = []) {
   return (roles ?? []).some((role) => resolveRoleMapKey(role) === 'warehouse')
+}
+
+export function isCooperativeOwnerRole(roles = []) {
+  return (roles ?? []).some((role) => resolveRoleMapKey(role) === 'cooperativeOwner')
 }
 
 function hasCatalogPermission(session) {

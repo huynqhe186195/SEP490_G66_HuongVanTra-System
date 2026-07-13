@@ -17,7 +17,7 @@ public class ContractsController : ControllerBase
 
     private DocumentAccessContext AccessContext() => new(
         User.GetUserId(),
-        User.HasPermission(PermissionNames.ManageRole));
+        User.HasPermission(PermissionNames.ApproveContract));
 
     [HttpGet]
     [Authorize(Policy = PermissionNames.ViewCustomer)]
@@ -70,7 +70,7 @@ public class ContractsController : ControllerBase
     }
 
     [HttpPost("{id:guid}/review")]
-    [Authorize(Policy = PermissionNames.ManageRole)]
+    [Authorize(Policy = PermissionNames.ApproveContract)]
     public async Task<IActionResult> Review(Guid id, [FromBody] ReviewContractRequest request, CancellationToken ct = default)
     {
         var result = await _logic.ReviewAsync(id, request, AccessContext(), ct);

@@ -48,6 +48,9 @@ import MembershipTiersPage from '../features/admin/pages/MembershipTiersPage.jsx
 import PromotionsPage from '../features/admin/pages/PromotionsPage.jsx'
 import AccessControlPage from '../features/iam/pages/AccessControlPage.jsx'
 import UsersPage from '../features/iam/pages/UsersPage.jsx'
+import AccountantImportCostPage from '../features/accounting/pages/AccountantImportCostPage.jsx'
+import AccountantPricingPage from '../features/accounting/pages/AccountantPricingPage.jsx'
+import AccountantPriceProposalsPage from '../features/accounting/pages/AccountantPriceProposalsPage.jsx'
 
 function App() {
   return (
@@ -114,6 +117,10 @@ function App() {
         <Route path="/reports" element={<ReportsOverviewPage />} />
         <Route path="/reports/customers" element={<ReportsCustomersPage />} />
         <Route path="/integrations" element={<IntegrationsPage />} />
+        <Route path="/accounting/import-costs" element={<AccountantImportCostPage />} />
+        <Route path="/accounting/pricing" element={<AccountantPricingPage />} />
+        <Route path="/accounting/price-proposals" element={<AccountantPriceProposalsPage />} />
+        <Route path="/admin/price-proposals" element={<AccountantPriceProposalsPage adminMode />} />
       </Route>
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
