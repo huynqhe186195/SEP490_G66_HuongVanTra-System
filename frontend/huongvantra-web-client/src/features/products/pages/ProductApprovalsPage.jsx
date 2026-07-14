@@ -11,6 +11,12 @@ import {
 import { fetchCategories } from '../services/categoriesApi.js'
 import { fetchAllActiveSkus } from '../services/productSkusApi.js'
 import { searchMaterials } from '../services/bomApi.js'
+import { formatDateTimeVN } from '../../../utils/vietnamDateTime.js'
+import {
+  flattenCategoryTreeForSelect,
+  getCategoryById,
+  getCategoryPathLabel,
+} from '../utils/categoryTreeUtils.js'
 
 const PRODUCT_TYPES = [
   { value: 'THANH_PHAM', label: 'Thành phẩm' },
@@ -142,19 +148,6 @@ function CurrencyInput({ value, onChange, className, placeholder = '0 đ' }) {
   )
 }
 
-function formatDateTime(value) {
-  if (!value) return '-'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return '-'
-  return date.toLocaleString('vi-VN', {
-    hour: '2-digit',
-    minute: '2-digit',
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  })
-}
-
 function normalizeSkuInput(value) {
   return String(value ?? '').toUpperCase().replace(/\s+/g, '')
 }
@@ -275,12 +268,8 @@ function statusLabel(status) {
   }
 }
 
-function getCategoryById(categories, categoryId) {
-  return categories.find((item) => String(item.id) === String(categoryId))
-}
-
 function getCategoryName(categories, categoryId, fallbackName) {
-  return fallbackName || getCategoryById(categories, categoryId)?.name || (categoryId ? `Danh mục #${categoryId}` : '-')
+  return getCategoryPathLabel(categories, categoryId, fallbackName, '-')
 }
 
 function getDefaultUnitPriceSource(units = []) {
@@ -668,11 +657,11 @@ function DetailModal({ item, categories, onClose, onAuthorize, onCancel, onCopy,
             <PreviewItem label="Trạng thái" value={statusLabel(item.status)} />
             <PreviewItem label="Phương thức tạo" value={creationMethodLabel} />
             <PreviewItem label="Người tạo" value={item.requestedByName || '-'} />
-            <PreviewItem label="Thời gian tạo" value={formatDateTime(item.requestedAt || item.createdAt)} />
+            <PreviewItem label="Thời gian tạo" value={formatDateTimeVN(item.requestedAt || item.createdAt)} />
             <PreviewItem label="Người cấp mã" value={item.authorisedByName || '-'} />
-            <PreviewItem label="Cấp mã lúc" value={formatDateTime(item.authorisedAt)} />
+            <PreviewItem label="Cấp mã lúc" value={formatDateTimeVN(item.authorisedAt)} />
             <PreviewItem label="Người xác nhận" value={item.confirmedByName || '-'} />
-            <PreviewItem label="Xác nhận lúc" value={formatDateTime(item.confirmedAt)} />
+            <PreviewItem label="Xác nhận lúc" value={formatDateTimeVN(item.confirmedAt)} />
             <PreviewItem label="Sản phẩm đã tạo" value={item.createdProductId || '-'} />
             <PreviewItem label="SKU đã tạo" value={createdSkuIds.length ? `${createdSkuIds.length} SKU` : '-'} />
           </div>
@@ -680,7 +669,7 @@ function DetailModal({ item, categories, onClose, onAuthorize, onCancel, onCopy,
             <div className="grid gap-3 md:grid-cols-3">
               <PreviewItem label="Lý do hủy" value={item.cancelReason || '-'} />
               <PreviewItem label="Người hủy" value={item.cancelledByName || '-'} />
-              <PreviewItem label="Hủy lúc" value={formatDateTime(item.cancelledAt)} />
+              <PreviewItem label="Hủy lúc" value={formatDateTimeVN(item.cancelledAt)} />
             </div>
           ) : null}
           {item.creationMethod === 'Manual' ? (
@@ -742,14 +731,29 @@ export default function ProductApprovalsPage() {
 
   const productSnapshot = useMemo(() => buildProductSnapshot(form, existingSkuCodes), [form, existingSkuCodes])
 
-  const selectedCategory = useMemo(() => getCategoryById(categories, form.categoryId), [categories, form.categoryId])
+  const selectedCategory = useMemo(() => {
+    const category = getCategoryById(categories, form.categoryId)
+    if (!category) return null
+    return {
+      ...category,
+      pathLabel: getCategoryPathLabel(categories, category.id, category.name),
+    }
+  }, [categories, form.categoryId])
+
+  const activeCategoryOptions = useMemo(
+    () => flattenCategoryTreeForSelect(
+      categories.filter((item) => !item.isDeleted && item.isActive !== false),
+    ),
+    [categories],
+  )
 
   const visibleCategories = useMemo(() => {
     const search = categorySearch.trim().toLowerCase()
-    return categories
-      .filter((item) => !item.isDeleted && item.isActive !== false)
-      .filter((item) => !search || item.name.toLowerCase().includes(search))
-  }, [categories, categorySearch])
+    return activeCategoryOptions.filter((item) => {
+      if (!search) return true
+      return item.name.toLowerCase().includes(search) || item.pathLabel.toLowerCase().includes(search)
+    })
+  }, [activeCategoryOptions, categorySearch])
 
   async function loadItems() {
     try {
@@ -805,7 +809,7 @@ export default function ProductApprovalsPage() {
 
   function selectCategory(category) {
     updateFormField('categoryId', String(category.id))
-    setCategorySearch(category.name)
+    setCategorySearch(category.pathLabel || getCategoryPathLabel(categories, category.id, category.name))
     setShowCategoryOptions(false)
   }
 
@@ -1115,15 +1119,18 @@ export default function ProductApprovalsPage() {
                 <div className="relative mt-1">
                   <input
                     className={`w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#538463] ${errors.categoryId ? 'border-rose-300 ring-2 ring-rose-100' : ''}`}
-                    value={categorySearch || selectedCategory?.name || ''}
+                    value={categorySearch || selectedCategory?.pathLabel || ''}
                     onFocus={() => setShowCategoryOptions(true)}
                     onBlur={() => setTimeout(() => setShowCategoryOptions(false), 120)}
                     onChange={(event) => {
                       const value = event.target.value
-                      const exact = categories.find((category) =>
+                      const exact = activeCategoryOptions.find((category) =>
                         !category.isDeleted
                         && category.isActive !== false
-                        && category.name.toLowerCase() === value.trim().toLowerCase(),
+                        && (
+                          category.name.toLowerCase() === value.trim().toLowerCase()
+                          || category.pathLabel.toLowerCase() === value.trim().toLowerCase()
+                        ),
                       )
                       setCategorySearch(value)
                       setShowCategoryOptions(true)
@@ -1142,7 +1149,12 @@ export default function ProductApprovalsPage() {
                           onClick={() => selectCategory(category)}
                           className={`block w-full px-3 py-2 text-left text-sm hover:bg-[#f0eee6] ${String(category.id) === String(form.categoryId) ? 'bg-[#e8f1eb] font-semibold text-[#356647]' : 'text-slate-700'}`}
                         >
-                          {category.name}
+                          <span className="block font-medium">{category.selectLabel}</span>
+                          {category.depth > 0 ? (
+                            <span className="block text-xs text-slate-400">{category.pathLabel}</span>
+                          ) : (
+                            <span className="block text-xs text-slate-400">Danh mục cha</span>
+                          )}
                         </button>
                       )) : (
                         <p className="px-3 py-3 text-sm text-slate-400">Không tìm thấy danh mục phù hợp.</p>
@@ -1507,7 +1519,7 @@ export default function ProductApprovalsPage() {
                     </td>
                     <td className="px-4 py-3 font-mono text-xs font-semibold text-slate-700">{item.status === 'Draft' ? '-' : item.approvalCode}</td>
                     <td className="px-4 py-3 text-slate-600">{item.requestedByName || '-'}</td>
-                    <td className="px-4 py-3 text-slate-600">{formatDateTime(item.requestedAt || item.createdAt)}</td>
+                    <td className="px-4 py-3 text-slate-600">{formatDateTimeVN(item.requestedAt || item.createdAt)}</td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex flex-wrap justify-end gap-2">
                         <button type="button" onClick={() => setDetailItem(item)} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Xem chi tiết</button>

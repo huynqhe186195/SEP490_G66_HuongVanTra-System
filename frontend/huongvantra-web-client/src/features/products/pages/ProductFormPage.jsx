@@ -20,6 +20,12 @@ import {
 } from '../services/productsApi.js'
 import { mapProductApiError, validateProductForm } from '../utils/productValidation.js'
 import { setProductListFocus } from '../utils/productListFocus.js'
+import { formatDateTimeVN } from '../../../utils/vietnamDateTime.js'
+import {
+  flattenCategoryTreeForSelect,
+  getCategoryPathLabel,
+  isCategoryUnavailable,
+} from '../utils/categoryTreeUtils.js'
 
 const PRODUCT_TYPES = { NGUYEN_LIEU: 'NGUYEN_LIEU', THANH_PHAM: 'THANH_PHAM' }
 
@@ -112,25 +118,6 @@ function FieldError({ message }) {
   return <p className="mt-1 text-xs text-[#b42318]">{message}</p>
 }
 
-// Build a flat list with depth info from a nested category tree
-function buildCategoryTree(categories) {
-  const byId = {}
-  for (const cat of categories) byId[String(cat.id)] = { ...cat, children: [] }
-  const roots = []
-  for (const cat of categories) {
-    const pid = cat.parentId ? String(cat.parentId) : null
-    if (pid && byId[pid]) byId[pid].children.push(byId[String(cat.id)])
-    else roots.push(byId[String(cat.id)])
-  }
-  const flat = []
-  function walk(node, depth) {
-    flat.push({ ...node, depth })
-    for (const child of node.children) walk(child, depth + 1)
-  }
-  for (const root of roots) walk(root, 0)
-  return flat
-}
-
 // Modal for creating a category
 function CreateCategoryModal({ isOpen, onClose, categories, onCreated }) {
   const [name, setName] = useState('')
@@ -163,7 +150,7 @@ function CreateCategoryModal({ isOpen, onClose, categories, onCreated }) {
 
   if (!isOpen) return null
 
-  const treeOptions = buildCategoryTree(
+  const treeOptions = flattenCategoryTreeForSelect(
     categories.filter((c) => !c.isDeleted && c.isActive !== false),
   )
 
@@ -207,7 +194,7 @@ function CreateCategoryModal({ isOpen, onClose, categories, onCreated }) {
               <option value="">Không có — tạo nhóm gốc</option>
               {treeOptions.map((cat) => (
                 <option key={cat.id} value={String(cat.id)}>
-                  {'  '.repeat(cat.depth)}{cat.depth > 0 ? '└ ' : ''}{cat.name}
+                  {cat.pathLabel}
                 </option>
               ))}
             </select>
@@ -361,36 +348,11 @@ function CreateAttributeNameModal({ isOpen, onClose, onCreated }) {
   )
 }
 
-function formatDateTime(value) {
-  if (!value) return '—'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return '—'
-  return date.toLocaleString('vi-VN', {
-    hour: '2-digit',
-    minute: '2-digit',
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  })
-}
-
 function getProductTypeLabel(value) {
   return value === PRODUCT_TYPES.NGUYEN_LIEU ? 'Nguyên liệu / Bao bì' : 'Thành phẩm kinh doanh'
 }
 
 const APPROVAL_CATEGORY_UNAVAILABLE_MESSAGE = 'Danh mục trong biên bản không còn tồn tại hoặc đã bị vô hiệu hóa.'
-
-function getCategoryDisplayName(categories, categoryId, fallbackName) {
-  return fallbackName
-    || categories.find((category) => String(category.id) === String(categoryId))?.name
-    || (categoryId ? `Danh mục #${categoryId}` : '—')
-}
-
-function isCategoryUnavailable(categories, categoryId) {
-  if (!categoryId || !categories.length) return false
-  const category = categories.find((item) => String(item.id) === String(categoryId))
-  return !category || category.isDeleted || category.isActive === false
-}
 
 function parseOptionValuesJson(value) {
   if (!value) return {}
@@ -501,7 +463,7 @@ function ApprovalProductPreview({ product, categories = [] }) {
         </div>
         <div>
           <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Nhóm hàng</p>
-          <p className="mt-1 font-semibold text-slate-800">{getCategoryDisplayName(categories, product?.categoryId, product?.categoryName)}</p>
+          <p className="mt-1 font-semibold text-slate-800">{getCategoryPathLabel(categories, product?.categoryId, product?.categoryName)}</p>
         </div>
         <div>
           <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Đơn vị gốc</p>
@@ -596,9 +558,9 @@ function ApprovalCodeGate({ approvalCode, onCodeChange, onValidate, isLoading, p
                   <span className="font-mono text-xs font-bold text-[#356647]">{approval.approvalCode}</span>
                   <span className="mt-1 block text-sm font-semibold text-slate-800">{approval.productName || approval.productSnapshot?.name || '—'}</span>
                   <span className="mt-1 block text-xs text-slate-500">
-                    {getCategoryDisplayName(categories, approval.categoryId || approval.productSnapshot?.categoryId, approval.productSnapshot?.categoryName)}
+                    {getCategoryPathLabel(categories, approval.categoryId || approval.productSnapshot?.categoryId, approval.productSnapshot?.categoryName)}
                     {' · '}
-                    Cấp mã lúc {formatDateTime(approval.authorisedAt)}
+                    Cấp mã lúc {formatDateTimeVN(approval.authorisedAt)}
                   </span>
                 </button>
               ))}
@@ -716,7 +678,7 @@ function ManualCreationConfirmModal({ payload, approval, reason, categories = []
             </div>
             <div>
               <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Nhóm hàng</p>
-              <p className="mt-1 font-semibold text-slate-800">{getCategoryDisplayName(categories, payload.categoryId, payload.categoryName)}</p>
+              <p className="mt-1 font-semibold text-slate-800">{getCategoryPathLabel(categories, payload.categoryId, payload.categoryName)}</p>
             </div>
             <div>
               <p className="text-xs font-bold uppercase tracking-wide text-slate-500">SKU</p>
@@ -948,7 +910,7 @@ function ProductFormPage({ mode }) {
     const visible = categories.filter(
       (c) => (!c.isDeleted && c.isActive !== false) || String(c.id) === String(form.categoryId),
     )
-    return buildCategoryTree(visible)
+    return flattenCategoryTreeForSelect(visible)
   }, [categories, form.categoryId])
 
   const allBrands = useMemo(() => dbBrands.map((b) => b.name), [dbBrands])
@@ -1831,7 +1793,7 @@ function ProductFormPage({ mode }) {
                   <option value="">Chọn nhóm hàng</option>
                   {categoryTreeOptions.map((cat) => (
                     <option key={cat.id} value={String(cat.id)}>
-                      {'  '.repeat(cat.depth * 2)}{cat.depth > 0 ? '└ ' : ''}{cat.name}{cat.isActive === false || cat.isDeleted ? ' (đã ẩn)' : ''}
+                      {cat.pathLabel}{cat.isActive === false || cat.isDeleted ? ' (đã ẩn)' : ''}
                     </option>
                   ))}
                 </select>
