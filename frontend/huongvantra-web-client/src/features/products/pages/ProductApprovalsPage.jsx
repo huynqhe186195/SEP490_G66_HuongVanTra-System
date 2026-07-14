@@ -19,6 +19,11 @@ const PRODUCT_TYPES = [
 
 const DEFAULT_MAX_STOCK = '999999999'
 const SKU_PATTERN = /^[A-Z0-9\-_]{3,50}$/
+const MAX_VARIANT_IMAGE_SIZE = 2 * 1024 * 1024
+const ALLOWED_VARIANT_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+
+const BASE_UNIT_OPTIONS = ['gói', 'túi', 'hộp', 'chai', 'lọ', 'hũ', 'thùng', 'cái', 'bộ', 'kg', 'g', 'lít', 'ml']
+const MEASUREMENT_UNIT_OPTIONS = ['g', 'kg', 'ml', 'lít']
 
 function createKey(prefix) {
   return `${prefix}_${Date.now()}_${Math.random().toString(16).slice(2)}`
@@ -40,7 +45,7 @@ function createUnit(overrides = {}) {
 function createOptionRow(overrides = {}) {
   return {
     key: createKey('option'),
-    name: 'Unit',
+    name: 'Quy cách',
     value: 'gói',
     ...overrides,
   }
@@ -60,17 +65,21 @@ function createBomLine(overrides = {}) {
 function createVariant(overrides = {}) {
   return {
     key: createKey('variant'),
+    autoSku: true,
     skuCode: '',
     barcode: '',
     variantName: '',
     costPrice: '0',
-    retailPrice: '0',
+    retailPrice: '',
+    retailPriceTouched: false,
     minStock: '0',
     maxStock: DEFAULT_MAX_STOCK,
     isSellable: true,
     allowRewardPoints: true,
     isActive: true,
     imageUrl: '',
+    imagePreviewUrl: '',
+    imageFileName: '',
     optionRows: [createOptionRow()],
     bomLines: [],
     ...overrides,
@@ -127,6 +136,60 @@ function normalizeSkuInput(value) {
   return String(value ?? '').toUpperCase().replace(/\s+/g, '')
 }
 
+function normalizeSkuSegment(value) {
+  return String(value ?? '')
+    .replace(/[đĐ]/g, (char) => (char === 'đ' ? 'd' : 'D'))
+    .normalize('NFD')
+    .replace(/\p{Mn}/gu, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
+function buildAutoSkuBase(form, variant) {
+  const prefix = form.productType === 'NGUYEN_LIEU' ? 'RM' : 'FG'
+  const nameSegment = normalizeSkuSegment(form.name).slice(0, 28) || 'SKU'
+  const weightSegment = form.weightValue && form.weightUnit
+    ? normalizeSkuSegment(`${form.weightValue}${form.weightUnit}`)
+    : normalizeSkuSegment(form.baseUnit)
+  const optionSegment = normalizeSkuSegment(
+    variant.optionRows
+      ?.map((row) => row.value)
+      .filter(Boolean)
+      .join('-'),
+  )
+  return [prefix, nameSegment, weightSegment || optionSegment].filter(Boolean).join('-').replace(/-+/g, '-')
+}
+
+function makeUniqueSku(baseSku, usedSkuCodes, existingSkuCodes) {
+  let candidate = baseSku || 'SKU'
+  let suffix = 1
+  while (usedSkuCodes.has(candidate) || existingSkuCodes.has(candidate)) {
+    candidate = `${baseSku || 'SKU'}-${suffix}`
+    suffix += 1
+  }
+  usedSkuCodes.add(candidate)
+  return candidate
+}
+
+function resolveVariantSku(form, variant, usedSkuCodes, existingSkuCodes) {
+  const manualSku = normalizeSkuInput(variant.skuCode)
+  if (!variant.autoSku && manualSku) {
+    usedSkuCodes.add(manualSku)
+    return manualSku
+  }
+  return makeUniqueSku(buildAutoSkuBase(form, variant), usedSkuCodes, existingSkuCodes)
+}
+
+function previewSkuForVariant(form, variantKey, existingSkuCodes) {
+  const usedSkuCodes = new Set()
+  for (const variant of form.variants) {
+    const skuCode = resolveVariantSku(form, variant, usedSkuCodes, existingSkuCodes)
+    if (variant.key === variantKey) return skuCode
+  }
+  return ''
+}
+
 function getProductTypeLabel(value) {
   return PRODUCT_TYPES.find((item) => item.value === value)?.label || value || '-'
 }
@@ -151,7 +214,7 @@ function statusLabel(status) {
 }
 
 function getCategoryName(categories, categoryId) {
-  return categories.find((item) => String(item.id) === String(categoryId))?.name || (categoryId ? `#${categoryId}` : '-')
+  return categories.find((item) => String(item.id) === String(categoryId))?.name || (categoryId ? `Danh mục #${categoryId}` : '-')
 }
 
 function getMaterialUnit(material) {
@@ -169,7 +232,29 @@ function buildOptionValuesJson(optionRows = []) {
   return JSON.stringify(values)
 }
 
-function buildProductSnapshot(form) {
+function syncWeightOptionRows(variants, weightValue, weightUnit) {
+  const weight = trimText(weightValue)
+  const unit = trimText(weightUnit)
+  const weightLabel = weight ? `${weight}${unit}` : ''
+  return variants.map((variant) => {
+    const hasWeightOption = variant.optionRows.some((option) => option.name === 'Khối lượng')
+    if (!weightLabel) {
+      return {
+        ...variant,
+        optionRows: variant.optionRows.filter((option) => option.name !== 'Khối lượng'),
+      }
+    }
+    return {
+      ...variant,
+      optionRows: hasWeightOption
+        ? variant.optionRows.map((option) => (option.name === 'Khối lượng' ? { ...option, value: weightLabel } : option))
+        : [...variant.optionRows, createOptionRow({ name: 'Khối lượng', value: weightLabel })],
+    }
+  })
+}
+
+function buildProductSnapshot(form, existingSkuCodes = new Set()) {
+  const usedSkuCodes = new Set()
   const product = {
     categoryId: Number(form.categoryId),
     name: trimText(form.name),
@@ -193,7 +278,7 @@ function buildProductSnapshot(form) {
       isBaseUnit: Boolean(unit.isBaseUnit),
     })),
     variants: form.variants.map((variant) => ({
-      skuCode: normalizeSkuInput(variant.skuCode),
+      skuCode: resolveVariantSku(form, variant, usedSkuCodes, existingSkuCodes),
       barcode: trimText(variant.barcode) || null,
       variantName: trimText(variant.variantName),
       optionValuesJson: buildOptionValuesJson(variant.optionRows),
@@ -261,6 +346,7 @@ function validateApprovalForm(form, { existingSkuCodes }) {
     if (unit.isDirectSell && trimText(unit.price) === '') addError(`${prefix}.price`, 'Đơn vị bán trực tiếp cần có giá bán.')
     const price = Number(unit.price || 0)
     if (!Number.isFinite(price) || price < 0) addError(`${prefix}.price`, 'Giá bán phải lớn hơn hoặc bằng 0.')
+    if (unit.isDirectSell && price <= 0) addError(`${prefix}.price`, 'Giá bán đơn vị bán phải lớn hơn 0.')
 
     const barcode = trimText(unit.barcode).toLowerCase()
     if (barcode) {
@@ -275,12 +361,12 @@ function validateApprovalForm(form, { existingSkuCodes }) {
 
   form.variants.forEach((variant) => {
     const prefix = `variant.${variant.key}`
-    const skuCode = normalizeSkuInput(variant.skuCode)
+    const skuCode = variant.autoSku ? makeUniqueSku(buildAutoSkuBase(form, variant), skuCodes, existingSkuCodes) : normalizeSkuInput(variant.skuCode)
     if (!skuCode) addError(`${prefix}.skuCode`, 'Mã SKU không được để trống.')
     else if (!SKU_PATTERN.test(skuCode)) addError(`${prefix}.skuCode`, 'SKU chỉ gồm chữ in hoa, số, gạch ngang hoặc gạch dưới, 3-50 ký tự.')
-    else if (skuCodes.has(skuCode)) addError(`${prefix}.skuCode`, 'Mã SKU bị trùng trong biên bản.')
-    else if (existingSkuCodes.has(skuCode)) addError(`${prefix}.skuCode`, 'Mã SKU đã tồn tại.')
-    else skuCodes.add(skuCode)
+    else if (!variant.autoSku && skuCodes.has(skuCode)) addError(`${prefix}.skuCode`, 'Mã SKU bị trùng trong biên bản.')
+    else if (!variant.autoSku && existingSkuCodes.has(skuCode)) addError(`${prefix}.skuCode`, 'Mã SKU đã tồn tại.')
+    else if (!variant.autoSku) skuCodes.add(skuCode)
 
     if (!trimText(variant.variantName)) addError(`${prefix}.variantName`, 'Tên biến thể là bắt buộc.')
 
@@ -288,6 +374,7 @@ function validateApprovalForm(form, { existingSkuCodes }) {
     if (!Number.isFinite(costPrice) || costPrice < 0) addError(`${prefix}.costPrice`, 'Giá vốn phải lớn hơn hoặc bằng 0.')
     const retailPrice = Number(variant.retailPrice || 0)
     if (!Number.isFinite(retailPrice) || retailPrice < 0) addError(`${prefix}.retailPrice`, 'Giá bán phải lớn hơn hoặc bằng 0.')
+    if ((form.productType === 'THANH_PHAM' || variant.isSellable) && retailPrice <= 0) addError(`${prefix}.retailPrice`, 'Giá bán biến thể phải lớn hơn 0.')
 
     const minStock = Number(variant.minStock || 0)
     const maxStock = Number(variant.maxStock || 0)
@@ -306,7 +393,7 @@ function validateApprovalForm(form, { existingSkuCodes }) {
       const optionName = trimText(option.name)
       const optionValue = trimText(option.value)
       if ((optionName && !optionValue) || (!optionName && optionValue)) {
-        addError(`${optionPrefix}.name`, 'Option cần đủ tên và giá trị.')
+        addError(`${optionPrefix}.name`, 'Thuộc tính cần đủ tên và giá trị.')
       }
     })
 
@@ -469,6 +556,12 @@ function ConfirmModal({ product, categories, adminNotes, onClose, onConfirm, isS
 function DetailModal({ item, categories, onClose, onAuthorize, onCancel, onCopy, isSaving }) {
   if (!item) return null
   const product = item.finalProductSnapshot || item.productSnapshot
+  const creationMethodLabel = item.creationMethod === 'Manual'
+    ? 'Nhập thủ công'
+    : item.creationMethod === 'Automatic'
+      ? 'Tự động từ biên bản'
+      : '-'
+  const createdSkuIds = Array.isArray(item.createdSkuIds) ? item.createdSkuIds : []
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm" role="presentation" onClick={onClose}>
       <div className="flex max-h-[min(780px,calc(100dvh-2rem))] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
@@ -485,26 +578,39 @@ function DetailModal({ item, categories, onClose, onAuthorize, onCancel, onCopy,
         </header>
         <div className="flex-1 space-y-5 overflow-y-auto px-6 py-5">
           <div className="grid gap-3 md:grid-cols-4">
+            <PreviewItem label="Mã biên bản" value={item.approvalCode || '-'} />
+            <PreviewItem label="Mã phê duyệt" value={item.status === 'Draft' ? '-' : item.approvalCode || '-'} />
+            <PreviewItem label="Trạng thái" value={statusLabel(item.status)} />
+            <PreviewItem label="Phương thức tạo" value={creationMethodLabel} />
             <PreviewItem label="Người tạo" value={item.requestedByName || '-'} />
             <PreviewItem label="Thời gian tạo" value={formatDateTime(item.requestedAt || item.createdAt)} />
             <PreviewItem label="Người cấp mã" value={item.authorisedByName || '-'} />
             <PreviewItem label="Cấp mã lúc" value={formatDateTime(item.authorisedAt)} />
+            <PreviewItem label="Người xác nhận" value={item.confirmedByName || '-'} />
+            <PreviewItem label="Xác nhận lúc" value={formatDateTime(item.confirmedAt)} />
+            <PreviewItem label="Sản phẩm đã tạo" value={item.createdProductId || '-'} />
+            <PreviewItem label="SKU đã tạo" value={createdSkuIds.length ? `${createdSkuIds.length} SKU` : '-'} />
           </div>
+          {item.status === 'Cancelled' ? (
+            <div className="grid gap-3 md:grid-cols-3">
+              <PreviewItem label="Lý do hủy" value={item.cancelReason || '-'} />
+              <PreviewItem label="Người hủy" value={item.cancelledByName || '-'} />
+              <PreviewItem label="Hủy lúc" value={formatDateTime(item.cancelledAt)} />
+            </div>
+          ) : null}
+          {item.creationMethod === 'Manual' ? (
+            <div className="grid gap-3 md:grid-cols-2">
+              <PreviewItem label="Lý do nhập thủ công" value={item.manualModeReason || '-'} />
+              <PreviewItem label="Ghi chú Kho tổng" value={item.warehouseNotes || '-'} />
+            </div>
+          ) : null}
           {product ? (
             <SnapshotPreview product={product} categories={categories} adminNotes={item.adminNotes} />
           ) : (
             <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700">
-              Không đọc được snapshot sản phẩm. Vui lòng kiểm tra JSON nâng cao.
+              Không đọc được snapshot sản phẩm.
             </p>
           )}
-          <details className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-            <summary className="cursor-pointer text-sm font-bold text-slate-700">Advanced / JSON Preview</summary>
-            <textarea
-              readOnly
-              className="mt-3 min-h-64 w-full rounded-xl border border-slate-200 bg-slate-950 px-3 py-2.5 font-mono text-xs text-slate-100 outline-none"
-              value={JSON.stringify(product || {}, null, 2)}
-            />
-          </details>
         </div>
         <footer className="flex flex-wrap justify-end gap-2 border-t border-slate-100 px-6 py-4">
           {item.status === 'Draft' ? (
@@ -548,7 +654,7 @@ export default function ProductApprovalsPage() {
     [existingSkus],
   )
 
-  const productSnapshot = useMemo(() => buildProductSnapshot(form), [form])
+  const productSnapshot = useMemo(() => buildProductSnapshot(form, existingSkuCodes), [form, existingSkuCodes])
 
   const visibleCategories = useMemo(() => {
     const search = categorySearch.trim().toLowerCase()
@@ -595,7 +701,31 @@ export default function ProductApprovalsPage() {
   }, [materialSearch, form.productType])
 
   function updateFormField(field, value) {
-    setForm((prev) => ({ ...prev, [field]: value }))
+    setForm((prev) => {
+      const next = { ...prev, [field]: value }
+      if (field === 'weightValue' || field === 'weightUnit') {
+        next.variants = syncWeightOptionRows(
+          prev.variants,
+          field === 'weightValue' ? value : prev.weightValue,
+          field === 'weightUnit' ? value : prev.weightUnit,
+        )
+      }
+      return next
+    })
+  }
+
+  function updateBaseUnit(value) {
+    setForm((prev) => ({
+      ...prev,
+      baseUnit: value,
+      units: prev.units.map((unit) => (unit.isBaseUnit ? { ...unit, unitName: value } : unit)),
+      variants: prev.variants.map((variant) => ({
+        ...variant,
+        optionRows: variant.optionRows.map((option) => (
+          option.name === 'Quy cách' ? { ...option, value } : option
+        )),
+      })),
+    }))
   }
 
   function updateUnit(key, field, value) {
@@ -607,6 +737,11 @@ export default function ProductApprovalsPage() {
         if (field === 'isBaseUnit' && value) next.conversionRate = '1'
         return next
       }),
+      variants: field === 'price'
+        ? prev.variants.map((variant) => (
+          variant.retailPriceTouched ? variant : { ...variant, retailPrice: value }
+        ))
+        : prev.variants,
     }))
   }
 
@@ -624,7 +759,45 @@ export default function ProductApprovalsPage() {
   function updateVariant(key, field, value) {
     setForm((prev) => ({
       ...prev,
-      variants: prev.variants.map((variant) => (variant.key === key ? { ...variant, [field]: value } : variant)),
+      variants: prev.variants.map((variant) => (
+        variant.key === key
+          ? { ...variant, [field]: value, retailPriceTouched: field === 'retailPrice' ? true : variant.retailPriceTouched }
+          : variant
+      )),
+    }))
+  }
+
+  function handleVariantImageChange(key, file) {
+    if (!file) return
+    if (!ALLOWED_VARIANT_IMAGE_TYPES.includes(file.type)) {
+      setErrors((prev) => ({ ...prev, [`variant.${key}.imageUrl`]: 'Chỉ hỗ trợ ảnh JPG, PNG hoặc WEBP.' }))
+      return
+    }
+    if (file.size > MAX_VARIANT_IMAGE_SIZE) {
+      setErrors((prev) => ({ ...prev, [`variant.${key}.imageUrl`]: 'Ảnh biến thể tối đa 2MB.' }))
+      return
+    }
+
+    const previewUrl = URL.createObjectURL(file)
+    setForm((prev) => ({
+      ...prev,
+      variants: prev.variants.map((variant) => (
+        variant.key === key
+          ? { ...variant, imagePreviewUrl: previewUrl, imageFileName: file.name, imageUrl: '' }
+          : variant
+      )),
+    }))
+    setErrors((prev) => ({ ...prev, [`variant.${key}.imageUrl`]: undefined }))
+  }
+
+  function removeVariantImage(key) {
+    setForm((prev) => ({
+      ...prev,
+      variants: prev.variants.map((variant) => (
+        variant.key === key
+          ? { ...variant, imagePreviewUrl: '', imageFileName: '', imageUrl: '' }
+          : variant
+      )),
     }))
   }
 
@@ -637,7 +810,7 @@ export default function ProductApprovalsPage() {
         createVariant({
           variantName: prev.name ? `${trimText(prev.name)} - ${unit}` : '',
           retailPrice: prev.units.find((unitRow) => unitRow.isBaseUnit)?.price ?? '0',
-          optionRows: [createOptionRow({ name: 'Unit', value: unit })],
+          optionRows: [createOptionRow({ name: 'Quy cách', value: unit })],
         }),
       ],
     }))
@@ -736,7 +909,7 @@ export default function ProductApprovalsPage() {
       showError('Vui lòng kiểm tra các trường còn thiếu hoặc chưa hợp lệ.')
       return
     }
-    setPendingProduct(buildProductSnapshot(form))
+    setPendingProduct(buildProductSnapshot(form, existingSkuCodes))
   }
 
   async function handleConfirmCreate() {
@@ -835,7 +1008,10 @@ export default function ProductApprovalsPage() {
               </label>
               <label className="block">
                 <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Đơn vị gốc *</span>
-                <input className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#538463]" value={form.baseUnit} onChange={(event) => updateFormField('baseUnit', event.target.value)} />
+                <select className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#538463]" value={form.baseUnit} onChange={(event) => updateBaseUnit(event.target.value)}>
+                  {BASE_UNIT_OPTIONS.map((unit) => <option key={unit} value={unit}>{unit}</option>)}
+                </select>
+                <p className="mt-1 text-xs text-slate-400">Đơn vị quản lý/bán chính của sản phẩm.</p>
                 <FieldError message={errors.baseUnit} />
               </label>
               <label className="block">
@@ -845,7 +1021,10 @@ export default function ProductApprovalsPage() {
               </label>
               <label className="block">
                 <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Đơn vị khối lượng</span>
-                <input className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#538463]" value={form.weightUnit} onChange={(event) => updateFormField('weightUnit', event.target.value)} />
+                <select className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#538463]" value={form.weightUnit} onChange={(event) => updateFormField('weightUnit', event.target.value)}>
+                  {MEASUREMENT_UNIT_OPTIONS.map((unit) => <option key={unit} value={unit}>{unit}</option>)}
+                </select>
+                <p className="mt-1 text-xs text-slate-400">Dùng cùng khối lượng để mô tả quy cách, ví dụ 50 g.</p>
                 <FieldError message={errors.weightUnit} />
               </label>
               <label className="block">
@@ -914,6 +1093,7 @@ export default function ProductApprovalsPage() {
             <div className="space-y-4">
               {form.variants.map((variant, index) => {
                 const prefix = `variant.${variant.key}`
+                const skuPreview = previewSkuForVariant(form, variant.key, existingSkuCodes)
                 return (
                   <div key={variant.key} className="rounded-2xl border border-slate-200 p-4">
                     <div className="mb-3 flex items-center justify-between gap-3">
@@ -924,8 +1104,18 @@ export default function ProductApprovalsPage() {
                     </div>
                     <div className="grid gap-3 md:grid-cols-4">
                       <label className="block">
-                        <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Mã SKU *</span>
-                        <input className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 font-mono text-sm outline-none focus:border-[#538463]" value={variant.skuCode} onChange={(event) => updateVariant(variant.key, 'skuCode', normalizeSkuInput(event.target.value))} placeholder="FG-TRA-SEN-50G" />
+                        <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Mã SKU</span>
+                        <input
+                          className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 font-mono text-sm outline-none focus:border-[#538463] disabled:bg-slate-100 disabled:text-slate-500"
+                          value={variant.autoSku ? skuPreview : variant.skuCode}
+                          onChange={(event) => updateVariant(variant.key, 'skuCode', normalizeSkuInput(event.target.value))}
+                          placeholder="FG-TRA-SEN-50G"
+                          disabled={variant.autoSku}
+                        />
+                        <label className="mt-2 flex items-center gap-2 text-xs font-semibold text-slate-600">
+                          <input type="checkbox" checked={variant.autoSku} onChange={(event) => updateVariant(variant.key, 'autoSku', event.target.checked)} />
+                          Tự động sinh mã SKU
+                        </label>
                         <FieldError message={errors[`${prefix}.skuCode`]} />
                       </label>
                       <label className="block md:col-span-2">
@@ -958,10 +1148,35 @@ export default function ProductApprovalsPage() {
                         <input type="number" min="0" className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#538463]" value={variant.maxStock} onChange={(event) => updateVariant(variant.key, 'maxStock', event.target.value)} />
                         <FieldError message={errors[`${prefix}.maxStock`]} />
                       </label>
-                      <label className="block md:col-span-2">
+                      <div className="block md:col-span-2">
                         <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Ảnh biến thể</span>
-                        <input className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#538463]" value={variant.imageUrl} onChange={(event) => updateVariant(variant.key, 'imageUrl', event.target.value)} placeholder="https://..." />
-                      </label>
+                        <div className="mt-1 flex flex-wrap items-center gap-3">
+                          {variant.imagePreviewUrl ? (
+                            <img src={variant.imagePreviewUrl} alt={variant.imageFileName || 'Ảnh biến thể'} className="h-16 w-16 rounded-lg border border-slate-200 object-cover" />
+                          ) : (
+                            <div className="flex h-16 w-16 items-center justify-center rounded-lg border border-dashed border-slate-200 text-xs text-slate-400">Ảnh</div>
+                          )}
+                          <label className="cursor-pointer rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">
+                            Chọn ảnh
+                            <input
+                              type="file"
+                              accept="image/jpeg,image/png,image/webp"
+                              className="hidden"
+                              onChange={(event) => {
+                                handleVariantImageChange(variant.key, event.target.files?.[0])
+                                event.target.value = ''
+                              }}
+                            />
+                          </label>
+                          {variant.imagePreviewUrl ? (
+                            <button type="button" onClick={() => removeVariantImage(variant.key)} className="rounded-lg px-3 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50">
+                              Xóa ảnh
+                            </button>
+                          ) : null}
+                        </div>
+                        <p className="mt-1 text-xs text-slate-400">Ảnh được preview trên form. Hệ thống chưa lưu ảnh local nếu chưa có API upload.</p>
+                        <FieldError message={errors[`${prefix}.imageUrl`]} />
+                      </div>
                       <div className="flex flex-wrap items-end gap-4 text-xs font-semibold text-slate-600 md:col-span-2">
                         <label className="flex items-center gap-2"><input type="checkbox" checked={variant.isSellable} onChange={(event) => updateVariant(variant.key, 'isSellable', event.target.checked)} /> Có bán</label>
                         <label className="flex items-center gap-2"><input type="checkbox" checked={variant.allowRewardPoints} onChange={(event) => updateVariant(variant.key, 'allowRewardPoints', event.target.checked)} /> Tích điểm</label>
@@ -971,16 +1186,19 @@ export default function ProductApprovalsPage() {
 
                     <div className="mt-4 rounded-xl bg-slate-50 p-3">
                       <div className="mb-3 flex items-center justify-between">
-                        <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Option values</p>
-                        <button type="button" onClick={() => addOption(variant.key)} className="text-xs font-bold text-[#356647]">Thêm option</button>
+                        <div>
+                          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Thuộc tính biến thể</p>
+                          <p className="mt-1 text-xs text-slate-400">Dùng để phân biệt các SKU, ví dụ Quy cách = gói, Khối lượng = 50g.</p>
+                        </div>
+                        <button type="button" onClick={() => addOption(variant.key)} className="text-xs font-bold text-[#356647]">Thêm thuộc tính</button>
                       </div>
                       <div className="space-y-2">
                         {variant.optionRows.map((option) => {
                           const optionPrefix = `${prefix}.option.${option.key}`
                           return (
                             <div key={option.key} className="grid gap-2 md:grid-cols-[1fr_1fr_auto]">
-                              <input className="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#538463]" value={option.name} onChange={(event) => updateOption(variant.key, option.key, 'name', event.target.value)} placeholder="Unit" />
-                              <input className="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#538463]" value={option.value} onChange={(event) => updateOption(variant.key, option.key, 'value', event.target.value)} placeholder="gói" />
+                              <input className="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#538463]" value={option.name} onChange={(event) => updateOption(variant.key, option.key, 'name', event.target.value)} placeholder="Quy cách" />
+                              <input className="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#538463]" value={option.value} onChange={(event) => updateOption(variant.key, option.key, 'value', event.target.value)} placeholder="gói / 50g" />
                               <button type="button" onClick={() => removeOption(variant.key, option.key)} className="rounded-lg px-3 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50">Xóa</button>
                               <FieldError message={errors[`${optionPrefix}.name`]} />
                             </div>
@@ -1063,10 +1281,6 @@ export default function ProductApprovalsPage() {
 
           <SectionCard title="5. Xem trước biên bản">
             <SnapshotPreview product={productSnapshot} categories={categories} adminNotes={form.adminNotes} />
-            <details className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <summary className="cursor-pointer text-sm font-bold text-slate-700">Advanced / JSON Preview</summary>
-              <textarea readOnly className="mt-3 min-h-72 w-full rounded-xl border border-slate-200 bg-slate-950 px-3 py-2.5 font-mono text-xs text-slate-100 outline-none" value={JSON.stringify(productSnapshot, null, 2)} />
-            </details>
             <div className="mt-4 flex justify-end">
               <button type="submit" disabled={isSaving} className="rounded-xl bg-[#538463] px-6 py-2.5 text-sm font-bold text-white hover:bg-[#457053] disabled:opacity-50">
                 Tạo biên bản
@@ -1090,6 +1304,7 @@ export default function ProductApprovalsPage() {
                   <th className="px-4 py-3 font-semibold">Mã biên bản</th>
                   <th className="px-4 py-3 font-semibold">Tên sản phẩm</th>
                   <th className="px-4 py-3 font-semibold">Loại hàng</th>
+                  <th className="px-4 py-3 font-semibold">Nhóm hàng / Danh mục</th>
                   <th className="px-4 py-3 font-semibold">Trạng thái</th>
                   <th className="px-4 py-3 font-semibold">Mã phê duyệt</th>
                   <th className="px-4 py-3 font-semibold">Người tạo</th>
@@ -1100,13 +1315,14 @@ export default function ProductApprovalsPage() {
               <tbody className="divide-y divide-slate-100">
                 {isLoading ? (
                   <tr>
-                    <td colSpan={8} className="px-4 py-8 text-center text-slate-400">Đang tải...</td>
+                    <td colSpan={9} className="px-4 py-8 text-center text-slate-400">Đang tải...</td>
                   </tr>
                 ) : items.length ? items.map((item) => (
                   <tr key={item.id}>
                     <td className="px-4 py-3 font-mono text-xs font-semibold text-[#356647]">{item.approvalCode}</td>
                     <td className="px-4 py-3 font-medium text-slate-800">{item.productName || item.productSnapshot?.name || '-'}</td>
                     <td className="px-4 py-3">{getProductTypeLabel(item.productType || item.productSnapshot?.productType)}</td>
+                    <td className="px-4 py-3 text-slate-600">{getCategoryName(categories, item.categoryId || item.productSnapshot?.categoryId)}</td>
                     <td className="px-4 py-3">{statusLabel(item.status)}</td>
                     <td className="px-4 py-3 font-mono text-xs font-semibold text-slate-700">{item.status === 'Draft' ? '-' : item.approvalCode}</td>
                     <td className="px-4 py-3 text-slate-600">{item.requestedByName || '-'}</td>
@@ -1128,7 +1344,7 @@ export default function ProductApprovalsPage() {
                   </tr>
                 )) : (
                   <tr>
-                    <td colSpan={8} className="px-4 py-8 text-center text-slate-400">Chưa có biên bản phê duyệt.</td>
+                    <td colSpan={9} className="px-4 py-8 text-center text-slate-400">Chưa có biên bản phê duyệt.</td>
                   </tr>
                 )}
               </tbody>

@@ -13,6 +13,7 @@ import { createAttributeName, fetchAttributeNames } from '../services/attributeN
 import {
   createProductFromApproval,
   createProductManualFromApproval,
+  fetchProductApprovals,
   fetchProductById,
   updateProduct,
   validateProductApprovalCode,
@@ -377,7 +378,104 @@ function getProductTypeLabel(value) {
   return value === PRODUCT_TYPES.NGUYEN_LIEU ? 'Nguyên liệu / Bao bì' : 'Thành phẩm kinh doanh'
 }
 
-function ApprovalProductPreview({ product }) {
+function getCategoryDisplayName(categories, categoryId) {
+  return categories.find((category) => String(category.id) === String(categoryId))?.name
+    || (categoryId ? `Danh mục #${categoryId}` : '—')
+}
+
+function parseOptionValuesJson(value) {
+  if (!value) return {}
+  try {
+    const parsed = JSON.parse(value)
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+
+function normalizeComparableText(value) {
+  return String(value ?? '').trim()
+}
+
+function normalizeComparableSku(value) {
+  return normalizeComparableText(value).toUpperCase()
+}
+
+function normalizeComparableNumber(value) {
+  if (value === null || value === undefined || value === '') return null
+  const number = Number(value)
+  return Number.isFinite(number) ? Number(number.toFixed(3)) : null
+}
+
+function canonicalApprovalProduct(product) {
+  const variants = Array.isArray(product?.variants) ? product.variants : []
+  const units = Array.isArray(product?.units) ? product.units : []
+  return {
+    name: normalizeComparableText(product?.name),
+    productType: normalizeComparableText(product?.productType),
+    categoryId: Number(product?.categoryId || 0),
+    baseUnit: normalizeComparableText(product?.baseUnit),
+    weightValue: normalizeComparableNumber(product?.weightValue),
+    weightUnit: normalizeComparableText(product?.weightUnit),
+    units: units
+      .map((unit) => ({
+        unitName: normalizeComparableText(unit.unitName).toLowerCase(),
+        conversionRate: normalizeComparableNumber(unit.conversionRate),
+        price: normalizeComparableNumber(unit.price),
+        isDirectSell: unit.isDirectSell !== false,
+        isBaseUnit: Boolean(unit.isBaseUnit),
+      }))
+      .sort((a, b) => a.unitName.localeCompare(b.unitName)),
+    variants: variants
+      .map((variant) => ({
+        skuCode: normalizeComparableSku(variant.skuCode),
+        variantName: normalizeComparableText(variant.variantName),
+        costPrice: normalizeComparableNumber(variant.costPrice),
+        retailPrice: normalizeComparableNumber(variant.retailPrice),
+        minStock: normalizeComparableNumber(variant.minStock),
+        maxStock: normalizeComparableNumber(variant.maxStock),
+        bomLines: (Array.isArray(variant.bomLines) ? variant.bomLines : [])
+          .map((line) => ({
+            materialId: normalizeComparableText(line.materialId ?? line.MaterialId),
+            quantity: normalizeComparableNumber(line.quantity ?? line.Quantity),
+          }))
+          .sort((a, b) => a.materialId.localeCompare(b.materialId)),
+      }))
+      .sort((a, b) => a.skuCode.localeCompare(b.skuCode)),
+  }
+}
+
+function compareApprovalProducts(approved, manual) {
+  const left = canonicalApprovalProduct(approved)
+  const right = canonicalApprovalProduct(manual)
+  const diffs = []
+  if (left.name !== right.name) diffs.push('Tên sản phẩm khác')
+  if (left.productType !== right.productType) diffs.push('Loại hàng khác')
+  if (left.categoryId !== right.categoryId) diffs.push('Danh mục khác')
+  if (left.baseUnit !== right.baseUnit) diffs.push('Đơn vị gốc khác')
+  if (left.weightValue !== right.weightValue || left.weightUnit !== right.weightUnit) diffs.push('Khối lượng/quy cách khác')
+  if (JSON.stringify(left.units) !== JSON.stringify(right.units)) diffs.push('Đơn vị bán khác')
+  if (left.variants.length !== right.variants.length) {
+    diffs.push('Số lượng SKU khác')
+  } else {
+    const rightBySku = new Map(right.variants.map((variant) => [variant.skuCode, variant]))
+    for (const approvedVariant of left.variants) {
+      const manualVariant = rightBySku.get(approvedVariant.skuCode)
+      if (!manualVariant) {
+        diffs.push(`SKU ${approvedVariant.skuCode || '(trống)'} khác`)
+        continue
+      }
+      if (approvedVariant.variantName !== manualVariant.variantName) diffs.push(`Tên biến thể ${approvedVariant.skuCode} khác`)
+      if (approvedVariant.costPrice !== manualVariant.costPrice) diffs.push(`Giá vốn ${approvedVariant.skuCode} khác`)
+      if (approvedVariant.retailPrice !== manualVariant.retailPrice) diffs.push(`Giá bán ${approvedVariant.skuCode} khác`)
+      if (approvedVariant.minStock !== manualVariant.minStock || approvedVariant.maxStock !== manualVariant.maxStock) diffs.push(`Tồn min/max ${approvedVariant.skuCode} khác`)
+      if (JSON.stringify(approvedVariant.bomLines) !== JSON.stringify(manualVariant.bomLines)) diffs.push(`BOM ${approvedVariant.skuCode} khác`)
+    }
+  }
+  return Array.from(new Set(diffs))
+}
+
+function ApprovalProductPreview({ product, categories = [] }) {
   const variants = Array.isArray(product?.variants) ? product.variants : []
   const units = Array.isArray(product?.units) ? product.units : []
 
@@ -394,7 +492,7 @@ function ApprovalProductPreview({ product }) {
         </div>
         <div>
           <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Nhóm hàng</p>
-          <p className="mt-1 font-semibold text-slate-800">#{product?.categoryId || '—'}</p>
+          <p className="mt-1 font-semibold text-slate-800">{getCategoryDisplayName(categories, product?.categoryId)}</p>
         </div>
         <div>
           <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Đơn vị gốc</p>
@@ -435,7 +533,7 @@ function ApprovalProductPreview({ product }) {
   )
 }
 
-function ApprovalCodeGate({ approvalCode, onCodeChange, onValidate, isLoading }) {
+function ApprovalCodeGate({ approvalCode, onCodeChange, onValidate, isLoading, pendingApprovals = [], categories = [] }) {
   return (
     <PageShell>
       <div className="mx-auto max-w-3xl space-y-6">
@@ -474,12 +572,36 @@ function ApprovalCodeGate({ approvalCode, onCodeChange, onValidate, isLoading })
             Quay lại danh sách
           </Link>
         </div>
+
+        {pendingApprovals.length ? (
+          <section className="rounded-[1rem] bg-white p-5 shadow-sm">
+            <h2 className="text-base font-bold text-slate-800">Biên bản chờ tạo hàng hóa</h2>
+            <div className="mt-4 space-y-3">
+              {pendingApprovals.map((approval) => (
+                <button
+                  key={approval.id}
+                  type="button"
+                  onClick={() => onCodeChange(approval.approvalCode)}
+                  className="w-full rounded-xl border border-slate-200 p-3 text-left hover:border-[#538463] hover:bg-[#f7fbf8]"
+                >
+                  <span className="font-mono text-xs font-bold text-[#356647]">{approval.approvalCode}</span>
+                  <span className="mt-1 block text-sm font-semibold text-slate-800">{approval.productName || approval.productSnapshot?.name || '—'}</span>
+                  <span className="mt-1 block text-xs text-slate-500">
+                    {getCategoryDisplayName(categories, approval.categoryId || approval.productSnapshot?.categoryId)}
+                    {' · '}
+                    Cấp mã lúc {formatDateTime(approval.authorisedAt)}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </section>
+        ) : null}
       </div>
     </PageShell>
   )
 }
 
-function ApprovalModeSelection({ approval, onSelectMode, onReset }) {
+function ApprovalModeSelection({ approval, categories = [], onSelectMode, onReset }) {
   return (
     <PageShell>
       <div className="space-y-6">
@@ -496,7 +618,7 @@ function ApprovalModeSelection({ approval, onSelectMode, onReset }) {
         </div>
 
         <section className="rounded-[1rem] bg-white p-4 shadow-sm sm:p-6">
-          <ApprovalProductPreview product={approval.productSnapshot} />
+          <ApprovalProductPreview product={approval.productSnapshot} categories={categories} />
         </section>
 
         <section className="grid gap-4 md:grid-cols-2">
@@ -524,7 +646,7 @@ function ApprovalModeSelection({ approval, onSelectMode, onReset }) {
   )
 }
 
-function AutomaticApprovalCreatePage({ approval, onCreate, onBack, isSaving }) {
+function AutomaticApprovalCreatePage({ approval, categories = [], onCreate, onBack, isSaving }) {
   return (
     <PageShell>
       <div className="space-y-6">
@@ -546,14 +668,17 @@ function AutomaticApprovalCreatePage({ approval, onCreate, onBack, isSaving }) {
         </div>
 
         <section className="rounded-[1rem] bg-white p-4 shadow-sm sm:p-6">
-          <ApprovalProductPreview product={approval.productSnapshot} />
+          <div className="mb-4 rounded-xl border border-[#356647]/20 bg-[#f7fbf8] p-4 text-sm text-slate-600">
+            Hệ thống sẽ tạo hàng hóa đúng theo thông tin Product/SKU/BOM đã được Admin cấp mã. Thủ kho chỉ xác nhận tạo, không chỉnh sửa dữ liệu trong chế độ tự động.
+          </div>
+          <ApprovalProductPreview product={approval.productSnapshot} categories={categories} />
         </section>
       </div>
     </PageShell>
   )
 }
 
-function ManualCreationConfirmModal({ payload, approval, reason, onClose, onConfirm, isSaving }) {
+function ManualCreationConfirmModal({ payload, approval, reason, categories = [], onClose, onConfirm, isSaving }) {
   if (!payload) return null
   const variants = Array.isArray(payload.variants) ? payload.variants : []
   const totalBomLines = variants.reduce((sum, variant) => sum + (Array.isArray(variant.bomLines) ? variant.bomLines.length : 0), 0)
@@ -579,6 +704,10 @@ function ManualCreationConfirmModal({ payload, approval, reason, onClose, onConf
             <div>
               <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Loại hàng</p>
               <p className="mt-1 font-semibold text-slate-800">{getProductTypeLabel(payload.productType)}</p>
+            </div>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Nhóm hàng</p>
+              <p className="mt-1 font-semibold text-slate-800">{getCategoryDisplayName(categories, payload.categoryId)}</p>
             </div>
             <div>
               <p className="text-xs font-bold uppercase tracking-wide text-slate-500">SKU</p>
@@ -666,6 +795,7 @@ function ProductFormPage({ mode }) {
   const [isAutomaticCreating, setIsAutomaticCreating] = useState(false)
   const [manualModeReason, setManualModeReason] = useState('')
   const [pendingManualPayload, setPendingManualPayload] = useState(null)
+  const [pendingApprovals, setPendingApprovals] = useState([])
   const isFinishedProduct = productType === PRODUCT_TYPES.THANH_PHAM
 
   const [form, setForm] = useState(() => ({
@@ -733,6 +863,19 @@ function ProductFormPage({ mode }) {
     fetchAttributeNames().then((list) => { if (mounted) setDbAttributeNames(list) }).catch(() => {})
     return () => { mounted = false }
   }, [])
+
+  useEffect(() => {
+    if (isEditMode || !canEdit) return undefined
+    let mounted = true
+    fetchProductApprovals({ status: 'AwaitingWarehouseConfirmation', page: 1, pageSize: 8 })
+      .then((result) => {
+        if (mounted) setPendingApprovals(result.items || [])
+      })
+      .catch(() => {
+        if (mounted) setPendingApprovals([])
+      })
+    return () => { mounted = false }
+  }, [canEdit, isEditMode])
 
   useEffect(() => {
     if (!isEditMode || !id) return undefined
@@ -832,6 +975,7 @@ function ProductFormPage({ mode }) {
           unit,
           attributes,
           skuCode: draft.skuCode ?? '',
+          variantName: draft.variantName ?? '',
           skuSuggestion,
           barcode: draft.barcode ?? (unit.isBaseUnit ? form.barcode : unit.barcode) ?? '',
           costPrice,
@@ -852,6 +996,7 @@ function ProductFormPage({ mode }) {
       for (const row of generatedRows) {
         next[row.key] = {
           skuCode: previous[row.key]?.skuCode ?? row.skuCode ?? '',
+          variantName: previous[row.key]?.variantName ?? row.variantName ?? '',
           barcode: previous[row.key]?.barcode ?? row.barcode ?? '',
           salePrice: previous[row.key]?.salePrice ?? row.salePrice ?? 0,
         }
@@ -1124,7 +1269,7 @@ function ProductFormPage({ mode }) {
       return {
         skuCode: normalizeText(row.skuCode).toUpperCase(),
         barcode: normalizeText(row.barcode) || null,
-        variantName: variantName || normalizeText(form.name) || row.unit.unitName,
+        variantName: normalizeText(row.variantName) || variantName || normalizeText(form.name) || row.unit.unitName,
         optionValuesJson: JSON.stringify(optionValues),
         costPrice: toNumber(row.costPrice),
         retailPrice: toNumber(row.salePrice),
@@ -1180,6 +1325,133 @@ function ProductFormPage({ mode }) {
     }
   }
 
+  function buildManualRowsForSnapshot(units, attributes) {
+    const validSnapshotAttributes = attributes
+      .filter((attribute) => normalizeText(attribute.name) && attribute.values.length)
+      .map((attribute) => ({ name: normalizeText(attribute.name), values: attribute.values }))
+    const combinations = cartesianProduct(validSnapshotAttributes)
+    return units.map((unit) => ({
+      ...unit,
+      conversionRate: toNumber(unit.conversionRate, 1) || 1,
+      unitName: normalizeText(unit.unitName) || '—',
+    })).flatMap((unit) =>
+      combinations.map((rowAttributes) => ({
+        key: buildVariantKey(unit, rowAttributes),
+        unit,
+        attributes: rowAttributes,
+      })),
+    )
+  }
+
+  function findSnapshotVariantForRow(variants, row, fallbackIndex) {
+    const matched = variants.find((variant) => {
+      const options = parseOptionValuesJson(variant.optionValuesJson)
+      const attributeMatched = row.attributes.every((attribute) =>
+        normalizeComparableText(options[attribute.name]).toLowerCase() === normalizeComparableText(attribute.value).toLowerCase(),
+      )
+      if (!attributeMatched) return false
+
+      const unitOptions = [options.Unit, options['Đơn vị'], options['Quy cách']].map(normalizeComparableText).filter(Boolean)
+      return !unitOptions.length || unitOptions.some((value) => value.toLowerCase() === normalizeComparableText(row.unit.unitName).toLowerCase())
+    })
+    return matched || variants[fallbackIndex] || null
+  }
+
+  function applyApprovalSnapshotToManualForm(snapshot) {
+    if (!snapshot) return
+    const variants = Array.isArray(snapshot.variants) ? snapshot.variants : []
+    const firstVariant = variants[0] || {}
+    const snapshotUnits = Array.isArray(snapshot.units) && snapshot.units.length
+      ? snapshot.units
+      : [{
+          unitName: snapshot.baseUnit || 'cái',
+          conversionRate: 1,
+          price: firstVariant.retailPrice ?? 0,
+          barcode: '',
+          isDirectSell: true,
+          isBaseUnit: true,
+        }]
+    const mappedUnits = snapshotUnits.map((unit, index) => ({
+      id: createLocalId('unit'),
+      unitName: unit.unitName || (index === 0 ? snapshot.baseUnit : ''),
+      conversionRate: String(unit.conversionRate || 1),
+      price: String(unit.price ?? firstVariant.retailPrice ?? 0),
+      barcode: unit.barcode || '',
+      isDirectSell: unit.isDirectSell !== false,
+      isBaseUnit: Boolean(unit.isBaseUnit || index === 0),
+    }))
+
+    const attributeValues = new Map()
+    for (const variant of variants) {
+      const options = parseOptionValuesJson(variant.optionValuesJson)
+      for (const [name, value] of Object.entries(options)) {
+        if (name === 'Unit' || !normalizeText(value)) continue
+        if (!attributeValues.has(name)) attributeValues.set(name, new Set())
+        attributeValues.get(name).add(String(value))
+      }
+    }
+    const mappedAttributes = Array.from(attributeValues.entries()).map(([name, values]) => ({
+      ...EMPTY_ATTRIBUTE,
+      id: createLocalId('attr'),
+      name,
+      values: Array.from(values),
+    }))
+    const attributes = mappedAttributes.length ? mappedAttributes : [{ ...EMPTY_ATTRIBUTE, id: createLocalId('attr') }]
+    const rows = buildManualRowsForSnapshot(mappedUnits, attributes)
+    const nextVariantDrafts = {}
+    const nextBomByVariant = {}
+    rows.forEach((row, index) => {
+      const variant = findSnapshotVariantForRow(variants, row, index)
+      nextVariantDrafts[row.key] = {
+        skuCode: variant?.skuCode || '',
+        variantName: variant?.variantName || '',
+        barcode: variant?.barcode || '',
+        salePrice: String(variant?.retailPrice ?? row.unit.price ?? 0),
+      }
+      nextBomByVariant[row.key] = (Array.isArray(variant?.bomLines) ? variant.bomLines : []).map((line) => ({
+        material_id: line.materialId ?? line.MaterialId,
+        materialId: line.materialId ?? line.MaterialId,
+        quantity: Number(line.quantity ?? line.Quantity ?? 0),
+      }))
+    })
+
+    setProductType(snapshot.productType || PRODUCT_TYPES.THANH_PHAM)
+    setForm((prev) => ({
+      ...prev,
+      productCode: '',
+      barcode: firstVariant.barcode || '',
+      name: snapshot.name || '',
+      categoryId: snapshot.categoryId ? String(snapshot.categoryId) : '',
+      brandId: '',
+      brandName: '',
+      origin: snapshot.origin || '',
+      flavorProfile: snapshot.flavorProfile || '',
+      brewingGuide: snapshot.brewingGuide || '',
+      description: snapshot.description || '',
+      costPrice: String(firstVariant.costPrice ?? 0),
+      salePrice: String(firstVariant.retailPrice ?? mappedUnits.find((unit) => unit.isBaseUnit)?.price ?? 0),
+      minStock: String(firstVariant.minStock ?? 0),
+      maxStock: String(firstVariant.maxStock ?? 999999999),
+      weightValue: snapshot.weightValue ?? '',
+      weightUnit: snapshot.weightUnit || 'g',
+      images: [],
+      units: mappedUnits,
+      attributes,
+      isActive: true,
+    }))
+    setVariantDrafts(nextVariantDrafts)
+    setBomByVariant(nextBomByVariant)
+    setFieldErrors({})
+    setDuplicateProductName('')
+  }
+
+  function handleSelectApprovalMode(mode) {
+    setApprovalMode(mode)
+    if (mode === 'manual') {
+      applyApprovalSnapshotToManualForm(approvalRecord?.productSnapshot)
+    }
+  }
+
   async function handleValidateApprovalCode(event) {
     event.preventDefault()
     const code = approvalCode.trim().toUpperCase()
@@ -1199,6 +1471,7 @@ function ProductFormPage({ mode }) {
       setApprovalCode(result.approval.approvalCode || code)
       setApprovalRecord(result.approval)
       setApprovalMode('')
+      setPendingManualPayload(null)
       showSuccess('Mã phê duyệt hợp lệ.')
     } catch (error) {
       showError(error.message)
@@ -1298,8 +1571,22 @@ function ProductFormPage({ mode }) {
           showError('Vui lòng chọn chế độ tạo sản phẩm.')
           return
         }
-        if (!manualModeReason.trim()) {
+        const reason = manualModeReason.trim()
+        if (!reason) {
           showError('Vui lòng nhập lý do nhập thủ công.')
+          return
+        }
+        if (reason.length < 5) {
+          showError('Lý do nhập thủ công phải có ít nhất 5 ký tự.')
+          return
+        }
+        if (reason.length > 1000) {
+          showError('Lý do nhập thủ công tối đa 1000 ký tự.')
+          return
+        }
+        const differences = compareApprovalProducts(approvalRecord.productSnapshot, payload)
+        if (differences.length) {
+          showError(`Dữ liệu nhập thủ công khác với biên bản đã được Admin phê duyệt. ${differences.slice(0, 6).join('; ')}.`)
           return
         }
         setPendingManualPayload(payload)
@@ -1335,6 +1622,8 @@ function ProductFormPage({ mode }) {
         onCodeChange={setApprovalCode}
         onValidate={handleValidateApprovalCode}
         isLoading={isApprovalLoading}
+        pendingApprovals={pendingApprovals}
+        categories={categories}
       />
     )
   }
@@ -1343,7 +1632,8 @@ function ProductFormPage({ mode }) {
     return (
       <ApprovalModeSelection
         approval={approvalRecord}
-        onSelectMode={setApprovalMode}
+        categories={categories}
+        onSelectMode={handleSelectApprovalMode}
         onReset={resetApprovalCode}
       />
     )
@@ -1353,6 +1643,7 @@ function ProductFormPage({ mode }) {
     return (
       <AutomaticApprovalCreatePage
         approval={approvalRecord}
+        categories={categories}
         onCreate={handleAutomaticCreation}
         onBack={() => setApprovalMode('')}
         isSaving={isAutomaticCreating}
@@ -1437,6 +1728,12 @@ function ProductFormPage({ mode }) {
               <button type="button" onClick={() => setApprovalMode('')} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
                 Chọn lại chế độ
               </button>
+            </div>
+            <div className="mt-4 rounded-xl border border-slate-200 bg-white p-4">
+              <h2 className="text-sm font-bold text-slate-800">Thông tin đã được Admin phê duyệt</h2>
+              <div className="mt-3">
+                <ApprovalProductPreview product={approvalRecord.productSnapshot} categories={categories} />
+              </div>
             </div>
             <label className="mt-4 block">
               <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Lý do nhập thủ công *</span>
@@ -1873,6 +2170,7 @@ function ProductFormPage({ mode }) {
         payload={pendingManualPayload}
         approval={approvalRecord}
         reason={manualModeReason}
+        categories={categories}
         onClose={() => setPendingManualPayload(null)}
         onConfirm={handleManualConfirmSubmit}
         isSaving={isSaving}

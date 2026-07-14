@@ -163,6 +163,10 @@ public class ProductApprovalLogic(ProductDbContext _db, ProductLogic _productLog
     public async Task<ProductApprovalCreationResponse> CreateManualAsync(CreateProductManualFromApprovalRequest request, ProductApprovalActorSnapshot actor, CancellationToken ct = default)
     {
         var reason = NormalizeRequired(request?.ManualModeReason, "Lý do nhập thủ công là bắt buộc.");
+        if (reason.Length < 5)
+            throw new ProductValidationException("Lý do nhập thủ công phải có ít nhất 5 ký tự.");
+        if (reason.Length > 1000)
+            throw new ProductValidationException("Lý do nhập thủ công tối đa 1000 ký tự.");
         if (request?.Product is null)
             throw new ProductValidationException("Thông tin sản phẩm nhập thủ công là bắt buộc.");
 
@@ -212,9 +216,24 @@ public class ProductApprovalLogic(ProductDbContext _db, ProductLogic _productLog
 
             EnsureCanUse(approval);
 
+            var approvedProduct = DeserializeProduct(approval.ProductSnapshotJson);
             var productRequest = method == ProductCreationMethod.Automatic
-                ? DeserializeProduct(approval.ProductSnapshotJson)
+                ? approvedProduct
                 : manualProductRequest ?? throw new ProductValidationException("Thông tin sản phẩm nhập thủ công là bắt buộc.");
+
+            if (method == ProductCreationMethod.Manual)
+            {
+                await ValidateApprovalSnapshotAsync(productRequest, ct);
+                var differences = CompareApprovedProduct(approvedProduct, productRequest);
+                if (differences.Count > 0)
+                {
+                    throw new ProductValidationException(
+                        new[]
+                        {
+                            "Dữ liệu nhập thủ công khác với biên bản đã được Admin phê duyệt. Vui lòng kiểm tra lại hoặc yêu cầu Admin tạo/cấp lại biên bản mới."
+                        }.Concat(differences.Take(10)));
+                }
+            }
 
             var created = await _productLogic.CreateAsync(productRequest);
 
@@ -382,6 +401,8 @@ public class ProductApprovalLogic(ProductDbContext _db, ProductLogic _productLog
 
             if (variant.RetailPrice < 0)
                 errors.Add($"Dòng SKU {row}: Giá bán phải lớn hơn hoặc bằng 0.");
+            if ((productType == ProductType.THANH_PHAM || variant.IsSellable) && variant.RetailPrice <= 0)
+                errors.Add($"Dòng SKU {row}: Giá bán biến thể phải lớn hơn 0.");
 
             if (variant.MinStock.HasValue && variant.MinStock.Value < 0)
                 errors.Add($"Dòng SKU {row}: Tồn tối thiểu phải lớn hơn hoặc bằng 0.");
@@ -472,6 +493,8 @@ public class ProductApprovalLogic(ProductDbContext _db, ProductLogic _productLog
 
             if (unit.IsDirectSell && !unit.Price.HasValue)
                 errors.Add($"Dòng đơn vị {row}: Đơn vị bán trực tiếp cần có giá bán.");
+            if (unit.IsDirectSell && unit.Price.HasValue && unit.Price.Value <= 0)
+                errors.Add($"Dòng đơn vị {row}: Giá bán đơn vị bán phải lớn hơn 0.");
 
             var barcode = NormalizeText(unit.Barcode);
             if (barcode is not null && !barcodes.Add(barcode))
@@ -488,7 +511,7 @@ public class ProductApprovalLogic(ProductDbContext _db, ProductLogic _productLog
         }
         catch
         {
-            errors.Add($"Dòng SKU {row}: Option values JSON không hợp lệ.");
+            errors.Add($"Dòng SKU {row}: Thuộc tính biến thể không hợp lệ.");
         }
     }
 
@@ -525,6 +548,116 @@ public class ProductApprovalLogic(ProductDbContext _db, ProductLogic _productLog
                 errors.Add($"SKU {variantRow}, BOM dòng {row}: Số lượng BOM phải lớn hơn 0.");
         }
     }
+
+    private static List<string> CompareApprovedProduct(CreateProductRequest approved, CreateProductRequest manual)
+    {
+        var differences = new List<string>();
+
+        if (!StringEquals(approved.Name, manual.Name))
+            differences.Add("Tên sản phẩm khác.");
+        if (!StringEquals(approved.ProductType, manual.ProductType))
+            differences.Add("Loại hàng khác.");
+        if (approved.CategoryId != manual.CategoryId)
+            differences.Add("Danh mục khác.");
+        if (!StringEquals(approved.BaseUnit, manual.BaseUnit))
+            differences.Add("Đơn vị gốc khác.");
+        if (NormalizeDecimal(approved.WeightValue) != NormalizeDecimal(manual.WeightValue)
+            || !StringEquals(approved.WeightUnit, manual.WeightUnit))
+            differences.Add("Khối lượng/quy cách khác.");
+
+        var approvedUnits = BuildComparableUnits(approved.Units);
+        var manualUnits = BuildComparableUnits(manual.Units);
+        if (!approvedUnits.SequenceEqual(manualUnits))
+            differences.Add("Đơn vị bán khác.");
+
+        var approvedVariants = BuildComparableVariants(approved.Variants);
+        var manualVariants = BuildComparableVariants(manual.Variants);
+        if (approvedVariants.Count != manualVariants.Count)
+        {
+            differences.Add("Số lượng SKU khác.");
+        }
+
+        var manualBySku = manualVariants.ToDictionary(x => x.SkuCode, StringComparer.OrdinalIgnoreCase);
+        foreach (var approvedVariant in approvedVariants)
+        {
+            if (!manualBySku.TryGetValue(approvedVariant.SkuCode, out var manualVariant))
+            {
+                differences.Add($"SKU {approvedVariant.SkuCode} khác.");
+                continue;
+            }
+
+            if (!StringEquals(approvedVariant.VariantName, manualVariant.VariantName))
+                differences.Add($"Tên biến thể {approvedVariant.SkuCode} khác.");
+            if (approvedVariant.CostPrice != manualVariant.CostPrice)
+                differences.Add($"Giá vốn {approvedVariant.SkuCode} khác.");
+            if (approvedVariant.RetailPrice != manualVariant.RetailPrice)
+                differences.Add($"Giá bán {approvedVariant.SkuCode} khác.");
+            if (approvedVariant.MinStock != manualVariant.MinStock || approvedVariant.MaxStock != manualVariant.MaxStock)
+                differences.Add($"Tồn min/max {approvedVariant.SkuCode} khác.");
+            if (!approvedVariant.BomLines.SequenceEqual(manualVariant.BomLines))
+                differences.Add($"BOM {approvedVariant.SkuCode} khác.");
+        }
+
+        return differences.Distinct().ToList();
+    }
+
+    private static List<ComparableUnit> BuildComparableUnits(List<ProductUnitRequest>? units) =>
+        (units ?? [])
+            .Select(x => new ComparableUnit(
+                NormalizeComparableText(x.UnitName).ToLowerInvariant(),
+                NormalizeDecimal(x.ConversionRate),
+                NormalizeDecimal(x.Price),
+                x.IsDirectSell,
+                x.IsBaseUnit))
+            .OrderBy(x => x.UnitName)
+            .ThenBy(x => x.ConversionRate)
+            .ToList();
+
+    private static List<ComparableVariant> BuildComparableVariants(List<ProductVariantRequest>? variants) =>
+        (variants ?? [])
+            .Select(x => new ComparableVariant(
+                NormalizeComparableText(x.SkuCode).ToUpperInvariant(),
+                NormalizeComparableText(x.VariantName),
+                NormalizeDecimal(x.CostPrice),
+                NormalizeDecimal(x.RetailPrice),
+                x.MinStock,
+                x.MaxStock,
+                (x.BomLines ?? [])
+                    .Select(line => new ComparableBomLine(line.MaterialId, NormalizeDecimal(line.Quantity)))
+                    .OrderBy(line => line.MaterialId)
+                    .ToList()))
+            .OrderBy(x => x.SkuCode)
+            .ToList();
+
+    private static bool StringEquals(string? left, string? right) =>
+        string.Equals(NormalizeComparableText(left), NormalizeComparableText(right), StringComparison.OrdinalIgnoreCase);
+
+    private static string NormalizeComparableText(string? value) =>
+        NormalizeText(value) ?? string.Empty;
+
+    private static decimal NormalizeDecimal(decimal value) =>
+        decimal.Round(value, 3, MidpointRounding.AwayFromZero);
+
+    private static decimal? NormalizeDecimal(decimal? value) =>
+        value.HasValue ? NormalizeDecimal(value.Value) : null;
+
+    private sealed record ComparableUnit(
+        string UnitName,
+        decimal ConversionRate,
+        decimal? Price,
+        bool IsDirectSell,
+        bool IsBaseUnit);
+
+    private sealed record ComparableBomLine(Guid MaterialId, decimal Quantity);
+
+    private sealed record ComparableVariant(
+        string SkuCode,
+        string VariantName,
+        decimal CostPrice,
+        decimal RetailPrice,
+        int? MinStock,
+        int? MaxStock,
+        List<ComparableBomLine> BomLines);
 
     private static Guid? NormalizeActorId(ProductApprovalActorSnapshot actor) =>
         actor.UserId.HasValue && actor.UserId.Value != Guid.Empty ? actor.UserId.Value : null;

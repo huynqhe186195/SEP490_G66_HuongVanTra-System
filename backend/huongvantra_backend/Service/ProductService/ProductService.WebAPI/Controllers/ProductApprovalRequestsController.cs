@@ -11,7 +11,7 @@ namespace ProductService.WebAPI.Controllers;
 public class ProductApprovalRequestsController(ProductApprovalLogic _logic) : ControllerBase
 {
     [HttpGet]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Admin,Warehouse")]
     public async Task<IActionResult> GetPaged(
         [FromQuery] string? status,
         [FromQuery] string? search,
@@ -58,4 +58,3 @@ public class ProductApprovalRequestsController(ProductApprovalLogic _logic) : Co
     public async Task<IActionResult> CreateManual([FromBody] CreateProductManualFromApprovalRequest request, CancellationToken ct = default) =>
         Ok(await _logic.CreateManualAsync(request, User.ToProductApprovalActorSnapshot(), ct));
 }
-
