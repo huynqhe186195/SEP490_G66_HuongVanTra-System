@@ -378,9 +378,18 @@ function getProductTypeLabel(value) {
   return value === PRODUCT_TYPES.NGUYEN_LIEU ? 'Nguyên liệu / Bao bì' : 'Thành phẩm kinh doanh'
 }
 
-function getCategoryDisplayName(categories, categoryId) {
-  return categories.find((category) => String(category.id) === String(categoryId))?.name
+const APPROVAL_CATEGORY_UNAVAILABLE_MESSAGE = 'Danh mục trong biên bản không còn tồn tại hoặc đã bị vô hiệu hóa.'
+
+function getCategoryDisplayName(categories, categoryId, fallbackName) {
+  return fallbackName
+    || categories.find((category) => String(category.id) === String(categoryId))?.name
     || (categoryId ? `Danh mục #${categoryId}` : '—')
+}
+
+function isCategoryUnavailable(categories, categoryId) {
+  if (!categoryId || !categories.length) return false
+  const category = categories.find((item) => String(item.id) === String(categoryId))
+  return !category || category.isDeleted || category.isActive === false
 }
 
 function parseOptionValuesJson(value) {
@@ -492,7 +501,7 @@ function ApprovalProductPreview({ product, categories = [] }) {
         </div>
         <div>
           <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Nhóm hàng</p>
-          <p className="mt-1 font-semibold text-slate-800">{getCategoryDisplayName(categories, product?.categoryId)}</p>
+          <p className="mt-1 font-semibold text-slate-800">{getCategoryDisplayName(categories, product?.categoryId, product?.categoryName)}</p>
         </div>
         <div>
           <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Đơn vị gốc</p>
@@ -587,7 +596,7 @@ function ApprovalCodeGate({ approvalCode, onCodeChange, onValidate, isLoading, p
                   <span className="font-mono text-xs font-bold text-[#356647]">{approval.approvalCode}</span>
                   <span className="mt-1 block text-sm font-semibold text-slate-800">{approval.productName || approval.productSnapshot?.name || '—'}</span>
                   <span className="mt-1 block text-xs text-slate-500">
-                    {getCategoryDisplayName(categories, approval.categoryId || approval.productSnapshot?.categoryId)}
+                    {getCategoryDisplayName(categories, approval.categoryId || approval.productSnapshot?.categoryId, approval.productSnapshot?.categoryName)}
                     {' · '}
                     Cấp mã lúc {formatDateTime(approval.authorisedAt)}
                   </span>
@@ -707,7 +716,7 @@ function ManualCreationConfirmModal({ payload, approval, reason, categories = []
             </div>
             <div>
               <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Nhóm hàng</p>
-              <p className="mt-1 font-semibold text-slate-800">{getCategoryDisplayName(categories, payload.categoryId)}</p>
+              <p className="mt-1 font-semibold text-slate-800">{getCategoryDisplayName(categories, payload.categoryId, payload.categoryName)}</p>
             </div>
             <div>
               <p className="text-xs font-bold uppercase tracking-wide text-slate-500">SKU</p>
@@ -832,7 +841,7 @@ function ProductFormPage({ mode }) {
     let mounted = true
     async function loadCategories() {
       try {
-        const items = await fetchCategories()
+        const items = await fetchCategories({ isDeleted: false })
         if (mounted) setCategories(items)
       } catch (error) {
         if (mounted) showError(error.message)
@@ -1493,6 +1502,10 @@ function ProductFormPage({ mode }) {
       showError('Vui lòng kiểm tra mã phê duyệt trước khi tạo tự động.')
       return
     }
+    if (isCategoryUnavailable(categories, approvalRecord.productSnapshot?.categoryId)) {
+      showError(APPROVAL_CATEGORY_UNAVAILABLE_MESSAGE)
+      return
+    }
 
     try {
       setIsAutomaticCreating(true)
@@ -1569,6 +1582,11 @@ function ProductFormPage({ mode }) {
         }
         if (approvalMode !== 'manual') {
           showError('Vui lòng chọn chế độ tạo sản phẩm.')
+          return
+        }
+        if (isCategoryUnavailable(categories, approvalRecord.productSnapshot?.categoryId)) {
+          setFieldErrors((prev) => ({ ...prev, categoryId: APPROVAL_CATEGORY_UNAVAILABLE_MESSAGE }))
+          showError(APPROVAL_CATEGORY_UNAVAILABLE_MESSAGE)
           return
         }
         const reason = manualModeReason.trim()
