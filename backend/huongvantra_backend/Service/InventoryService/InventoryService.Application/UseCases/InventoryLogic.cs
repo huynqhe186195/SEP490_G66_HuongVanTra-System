@@ -7,6 +7,7 @@ using InventoryService.Domain.Entities;
 using InventoryService.Domain.Enums;
 using InventoryService.Domain.Exceptions;
 using Microsoft.Extensions.Options;
+using System.Text.Json;
 
 namespace InventoryService.Application.UseCases;
 
@@ -22,6 +23,7 @@ public class InventoryLogic(
     IInventoryEventPublisher _eventPublisher,
     IInventoryUnitOfWork _unitOfWork,
     IProductionOrderRepository _productionOrderRepo,
+    IProductCatalogClient _productCatalogClient,
     IOptions<InventoryOptions> inventoryOptions)
 {
     private readonly InventoryOptions _inventoryOptions = inventoryOptions.Value;
@@ -32,6 +34,14 @@ public class InventoryLogic(
     public const string OrderPlacedEventType = "OrderPlaced";
     public const string OrderCancelledEventType = "OrderCancelled";
     public const string OrderReturnedEventType = "OrderReturned";
+    private const string StockHandlingModeImmediate = "ImmediateFinishedStockOnly";
+    private const string StockHandlingModeFullBomPending = "FullBomPending";
+    private const string StockHandlingModePartialBomPending = "PartialFinishedDeductedBomPending";
+    private const string StockHandlingModeLegacy = "LegacyPendingFinishedStock";
+    private static readonly JsonSerializerOptions MaterialSnapshotJsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        PropertyNameCaseInsensitive = true,
+    };
 
     public async Task HandleSkuCreatedAsync(SkuCreatedEvent message, CancellationToken ct = default)
     {
@@ -112,6 +122,131 @@ public class InventoryLogic(
         {
             // POS đã bán xong nhưng thiếu tồn — giữ hàng chờ để nhập kho / xử lý thủ công.
         }
+    }
+
+    public async Task<PosStockHandlingResponse> PreparePosStockDeductionAsync(
+        PreparePosStockDeductionRequest request,
+        Guid createdBy,
+        CreatorSnapshot? creator,
+        CancellationToken ct = default)
+    {
+        if (request.OrderId == Guid.Empty)
+            throw new InventoryValidationException("OrderId là bắt buộc khi xử lý tồn POS.");
+        if (string.IsNullOrWhiteSpace(request.OrderCode))
+            throw new InventoryValidationException("Mã đơn hàng là bắt buộc khi xử lý tồn POS.");
+
+        var normalizedItems = NormalizePosStockItems(request.Items);
+        var catalog = await _productCatalogClient.GetCatalogAsync(ct);
+
+        return await _unitOfWork.ExecuteInTransactionAsync(async innerCt =>
+        {
+            var existingQueue = await _queueRepo.GetByOrderIdAsync(request.OrderId, innerCt);
+            if (existingQueue != null)
+            {
+                var existingLines = BuildQueueLineResponses(existingQueue);
+                return new PosStockHandlingResponse(
+                    request.OrderId,
+                    request.OrderCode.Trim(),
+                    "ExistingPendingReconciliation",
+                    true,
+                    "Đơn đã có queue chờ đối soát/trừ tồn, không tạo lại.",
+                    [existingQueue.Id],
+                    existingLines.Select(MapQueueLineToPosLine).ToList());
+            }
+
+            var decisions = new List<PosStockDecision>();
+            foreach (var item in normalizedItems)
+            {
+                var stock = await _skuStockRepo.GetBySkuIdWithLockAsync(item.SkuId, innerCt);
+                var counterQty = Math.Max(0, stock?.QuantityOnHand ?? 0);
+                var immediateQty = Math.Min(item.Quantity, counterQty);
+                var pendingQty = Math.Max(0, item.Quantity - immediateQty);
+
+                decisions.Add(new PosStockDecision
+                {
+                    SkuId = item.SkuId,
+                    SkuCode = NormalizeSnapshotText(item.SkuSnapshotCode),
+                    SkuName = NormalizeSnapshotText(item.SkuSnapshotName) ?? item.SkuSnapshotCode ?? item.SkuId.ToString(),
+                    OrderedQuantity = item.Quantity,
+                    FinishedDeductedQuantity = immediateQty,
+                    PendingBomQuantity = pendingQty,
+                    Stock = stock
+                });
+            }
+
+            await ResolvePendingBomMaterialSnapshotsAsync(decisions, catalog, innerCt);
+
+            var now = DateTime.UtcNow;
+            await DeductImmediateFinishedStockAsync(
+                request.OrderCode.Trim(),
+                decisions,
+                createdBy,
+                creator,
+                now,
+                innerCt);
+
+            var queueIds = new List<Guid>();
+            var pendingDecisions = decisions.Where(d => d.PendingBomQuantity > 0).ToList();
+            if (pendingDecisions.Count > 0)
+            {
+                var queue = new StockDeductQueue
+                {
+                    Id = Guid.NewGuid(),
+                    OrderId = request.OrderId,
+                    OrderCode = request.OrderCode.Trim(),
+                    OrderPaymentStatus = string.IsNullOrWhiteSpace(request.OrderStatus)
+                        ? "completed"
+                        : request.OrderStatus.Trim().ToLowerInvariant(),
+                    OrderStockStatus = "pending_bom_reconciliation",
+                    QueueStatus = QueueStatus.Waiting,
+                    TotalAmount = request.TotalAmount,
+                    IsDeducted = false,
+                    CreatedAt = now,
+                    Items = pendingDecisions.Select(d => new StockDeductQueueItem
+                    {
+                        Id = Guid.NewGuid(),
+                        SkuId = d.SkuId,
+                        SkuSnapshotName = d.SkuName,
+                        SkuSnapshotCode = d.SkuCode,
+                        Quantity = d.PendingBomQuantity,
+                        OrderedQuantity = d.OrderedQuantity,
+                        FinishedDeductedQuantity = d.FinishedDeductedQuantity,
+                        PendingBomQuantity = d.PendingBomQuantity,
+                        StockHandlingMode = d.FinishedDeductedQuantity > 0
+                            ? StockHandlingModePartialBomPending
+                            : StockHandlingModeFullBomPending,
+                        MaterialRequirementSnapshotJson = JsonSerializer.Serialize(
+                            d.MaterialRequirements,
+                            MaterialSnapshotJsonOptions)
+                    }).ToList()
+                };
+
+                foreach (var item in queue.Items)
+                    item.QueueId = queue.Id;
+
+                await _queueRepo.AddAsync(queue, innerCt);
+                queueIds.Add(queue.Id);
+            }
+
+            await _skuStockRepo.SaveChangesAsync(innerCt);
+
+            var hasPending = pendingDecisions.Count > 0;
+            var mode = hasPending ? "PartialOrFullPendingBomReconciliation" : StockHandlingModeImmediate;
+            return new PosStockHandlingResponse(
+                request.OrderId,
+                request.OrderCode.Trim(),
+                mode,
+                hasPending,
+                BuildPosStockHandlingMessage(decisions),
+                queueIds,
+                decisions.Select(d => new PosStockHandlingLineResponse(
+                    d.SkuId,
+                    d.SkuCode,
+                    d.SkuName,
+                    d.OrderedQuantity,
+                    d.FinishedDeductedQuantity,
+                    d.PendingBomQuantity)).ToList());
+        }, ct);
     }
 
     public async Task HandleOrderCancelledAsync(OrderCancelledEvent message, CancellationToken ct = default)
@@ -199,14 +334,18 @@ public class InventoryLogic(
 
         var previewItems = await BuildPreviewItemsAsync(queue, ct);
         var canDeduct = previewItems.All(i => i.ShortageQuantity <= 0);
-        var orderStockStatus = canDeduct ? queue.OrderStockStatus : "waiting_stock";
+        var orderStockStatus = canDeduct
+            ? queue.OrderStockStatus
+            : IsBomReconciliationQueue(queue) ? "waiting_materials" : "waiting_stock";
 
         return new StockDeductPreviewResponse(
             queue.Id, queue.OrderId, queue.OrderCode,
             queue.QueueStatus.ToString().ToLowerInvariant(),
             orderStockStatus,
             canDeduct,
-            previewItems);
+            previewItems,
+            BuildQueueLineResponses(queue),
+            IsBomReconciliationQueue(queue));
     }
 
     public async Task<StockDeductConfirmResponse> ConfirmQueueAsync(
@@ -220,6 +359,9 @@ public class InventoryLogic(
 
         if (queue.QueueStatus is not (QueueStatus.Waiting or QueueStatus.Insufficient))
             throw new InventoryValidationException("Chỉ có thể trừ tồn cho queue đang chờ xử lý hoặc chờ hàng.");
+
+        if (IsBomReconciliationQueue(queue))
+            return await ConfirmBomReconciliationQueueAsync(queue, confirmedBy, confirmer, ct);
 
         var result = await _unitOfWork.ExecuteInTransactionAsync(async innerCt =>
         {
@@ -347,6 +489,195 @@ public class InventoryLogic(
 
         return new StockDeductConfirmResponse(
             result.Queue.Id, result.Queue.OrderId, result.Queue.OrderCode,
+            result.Queue.QueueStatus.ToString().ToLowerInvariant(),
+            result.Queue.OrderStockStatus,
+            result.Queue.ConfirmedAt);
+    }
+
+    private async Task<StockDeductConfirmResponse> ConfirmBomReconciliationQueueAsync(
+        StockDeductQueue queue,
+        Guid confirmedBy,
+        CreatorSnapshot? confirmer,
+        CancellationToken ct)
+    {
+        var result = await _unitOfWork.ExecuteInTransactionAsync(async innerCt =>
+        {
+            var currentQueue = await _queueRepo.GetByIdAsync(queue.Id, innerCt)
+                ?? throw new InventoryNotFoundException($"Queue '{queue.Id}' not found.");
+            var now = DateTime.UtcNow;
+            currentQueue.LastAttemptAt = now;
+
+            var materialGroups = BuildMaterialRequirementGroups(currentQueue);
+            if (materialGroups.Count == 0)
+                throw new InventoryValidationException("Queue không có snapshot nguyên liệu để đối soát.");
+
+            var shortages = new List<StockShortage>();
+            foreach (var group in materialGroups)
+            {
+                var stock = await _skuStockRepo.GetBySkuIdWithLockAsync(group.MaterialSkuId, innerCt);
+                var available = _inventoryOptions.SimulateWarehouse
+                    ? Math.Max(0, stock?.WarehouseQuantityOnHand ?? 0)
+                    : Math.Max(0, await _batchRepo.SumQuantityOnHandAsync(group.MaterialSkuId, innerCt));
+
+                if (stock == null || available < group.RequiredQuantity)
+                {
+                    shortages.Add(new StockShortage(
+                        group.MaterialSkuId,
+                        group.MaterialName,
+                        group.RequiredQuantity,
+                        available,
+                        group.RequiredQuantity - available));
+                }
+            }
+
+            if (shortages.Count > 0)
+            {
+                currentQueue.IsDeducted = false;
+                currentQueue.QueueStatus = QueueStatus.Insufficient;
+                currentQueue.OrderStockStatus = "waiting_materials";
+                currentQueue.LastShortageReason = BuildShortageReason(shortages);
+                await _queueRepo.SaveChangesAsync(innerCt);
+                return new StockDeductOperationResult(currentQueue, false, shortages);
+            }
+
+            var slipId = Guid.NewGuid();
+            var slipLines = new List<StockExportSlipLine>();
+            var allAllocations = new List<StockExportBatchAllocation>();
+            var touchedSkuIds = new List<Guid>();
+
+            foreach (var group in materialGroups.OrderBy(g => g.MaterialSkuCode ?? g.MaterialName))
+            {
+                var stock = await _skuStockRepo.GetBySkuIdWithLockAsync(group.MaterialSkuId, innerCt)
+                    ?? throw new InventoryValidationException($"Không tìm thấy tồn kho nguyên liệu {group.MaterialName}.");
+
+                var warehouseBefore = _inventoryOptions.SimulateWarehouse
+                    ? stock.WarehouseQuantityOnHand
+                    : await _batchRepo.SumQuantityOnHandAsync(group.MaterialSkuId, innerCt);
+                var storeBefore = stock.QuantityOnHand;
+                List<StockExportBatchAllocation> allocations = [];
+
+                if (_inventoryOptions.SimulateWarehouse)
+                {
+                    stock.WarehouseQuantityOnHand -= group.RequiredQuantity;
+                    if (stock.WarehouseQuantityOnHand < 0)
+                        throw new InventoryValidationException($"Nguyên liệu {group.MaterialName} không đủ tồn kho tổng.");
+                    stock.UpdatedAt = now;
+                }
+                else
+                {
+                    allocations = await AllocateAndDeductBatchesFifoAsync(
+                        group.MaterialSkuId,
+                        group.RequiredQuantity,
+                        innerCt);
+                    await SyncWarehouseQtyFromBatchesAsync(stock, innerCt);
+                }
+
+                var warehouseAfter = stock.WarehouseQuantityOnHand;
+                var slipLine = new StockExportSlipLine
+                {
+                    Id = Guid.NewGuid(),
+                    StockExportSlipId = slipId,
+                    SkuId = group.MaterialSkuId,
+                    SkuCode = group.MaterialSkuCode ?? group.MaterialSkuId.ToString()[..8],
+                    ProductSnapshotName = group.MaterialName,
+                    Quantity = group.RequiredQuantity,
+                    WarehouseQtyBefore = warehouseBefore,
+                    WarehouseQtyAfter = warehouseAfter,
+                    StoreQtyBefore = storeBefore,
+                    StoreQtyAfter = storeBefore,
+                    Note = $"Đối soát nguyên liệu bán trước cho đơn hàng {currentQueue.OrderCode}",
+                    CreatedAt = now,
+                };
+
+                foreach (var allocation in allocations)
+                {
+                    allocation.StockExportSlipId = slipId;
+                    allocation.StockExportSlipLineId = slipLine.Id;
+                }
+
+                slipLines.Add(slipLine);
+                allAllocations.AddRange(allocations);
+                touchedSkuIds.Add(group.MaterialSkuId);
+            }
+
+            var firstLine = slipLines[0];
+            var exportCountToday = await _exportSlipRepo.CountCreatedSinceAsync(now.Date, innerCt);
+            var effectiveConfirmedBy = confirmedBy == Guid.Empty ? Guid.Empty : confirmedBy;
+            var exportSlip = new StockExportSlip
+            {
+                Id = slipId,
+                ExportCode = $"PX-{now:yyyyMMdd}-{(exportCountToday + 1):D4}",
+                ExportType = "sales_bom_reconciliation",
+                StockAdjustmentRequestId = null,
+                ProductionOrderId = null,
+                ProductionCode = null,
+                SkuId = slipLines.Count == 1 ? firstLine.SkuId : Guid.Empty,
+                SkuCode = slipLines.Count == 1 ? firstLine.SkuCode : "MULTI",
+                SkuSnapshotName = slipLines.Count == 1 ? firstLine.ProductSnapshotName : $"{slipLines.Count} dòng nguyên liệu",
+                Quantity = slipLines.Sum(l => l.Quantity),
+                WarehouseQtyBefore = slipLines.Sum(l => l.WarehouseQtyBefore),
+                WarehouseQtyAfter = slipLines.Sum(l => l.WarehouseQtyAfter),
+                StoreQtyBefore = slipLines.Sum(l => l.StoreQtyBefore),
+                StoreQtyAfter = slipLines.Sum(l => l.StoreQtyAfter),
+                Note = $"Xuất nguyên liệu đối soát bán trước cho đơn hàng {currentQueue.OrderCode}",
+                CreatedBy = effectiveConfirmedBy,
+                CreatedById = effectiveConfirmedBy == Guid.Empty ? null : effectiveConfirmedBy,
+                CreatedByName = NormalizeSnapshotText(confirmer?.CreatedByName),
+                CreatedByRoleName = NormalizeSnapshotText(confirmer?.CreatedByRoleName),
+                CreatedAt = now,
+                Lines = slipLines,
+            };
+
+            currentQueue.IsDeducted = true;
+            currentQueue.QueueStatus = QueueStatus.Confirmed;
+            currentQueue.OrderStockStatus = "deducted";
+            currentQueue.ConfirmedAt = now;
+            currentQueue.ConfirmedBy = effectiveConfirmedBy == Guid.Empty ? null : effectiveConfirmedBy;
+            currentQueue.ConfirmedByName = NormalizeSnapshotText(confirmer?.CreatedByName);
+            currentQueue.ConfirmedByRoleName = NormalizeSnapshotText(confirmer?.CreatedByRoleName);
+            currentQueue.LastShortageReason = null;
+
+            await _exportSlipRepo.AddAsync(exportSlip, innerCt);
+            await _exportSlipRepo.SaveChangesAsync(innerCt);
+
+            if (allAllocations.Count > 0)
+            {
+                await _exportAllocationRepo.AddRangeAsync(allAllocations, innerCt);
+                await _exportAllocationRepo.SaveChangesAsync(innerCt);
+            }
+
+            await _queueRepo.SaveChangesAsync(innerCt);
+
+            foreach (var skuId in touchedSkuIds.Distinct())
+            {
+                var stock = await _skuStockRepo.GetBySkuIdAsync(skuId, innerCt);
+                if (stock != null && stock.WarehouseQuantityOnHand <= stock.LowStockThreshold)
+                    await _eventPublisher.PublishLowStockAsync(
+                        stock.SkuId, stock.SkuCode, stock.WarehouseQuantityOnHand, stock.LowStockThreshold, innerCt);
+            }
+
+            return new StockDeductOperationResult(currentQueue, true, []);
+        }, ct);
+
+        if (!result.CanDeduct)
+        {
+            return new StockDeductConfirmResponse(
+                result.Queue.Id,
+                result.Queue.OrderId,
+                result.Queue.OrderCode,
+                result.Queue.QueueStatus.ToString().ToLowerInvariant(),
+                result.Queue.OrderStockStatus,
+                result.Queue.ConfirmedAt,
+                false,
+                MapShortageResponses(result.Shortages));
+        }
+
+        await _eventPublisher.PublishStockDeductedAsync(result.Queue.OrderId, result.Queue.OrderCode, true, ct);
+
+        return new StockDeductConfirmResponse(
+            result.Queue.Id,
+            result.Queue.OrderId,
+            result.Queue.OrderCode,
             result.Queue.QueueStatus.ToString().ToLowerInvariant(),
             result.Queue.OrderStockStatus,
             result.Queue.ConfirmedAt);
@@ -598,9 +929,240 @@ public class InventoryLogic(
         }
     }
 
+    private static List<PreparePosStockDeductionItemRequest> NormalizePosStockItems(
+        List<PreparePosStockDeductionItemRequest>? items)
+    {
+        if (items == null || items.Count == 0)
+            throw new InventoryValidationException("Đơn hàng phải có ít nhất một SKU để xử lý tồn POS.");
+
+        var normalized = items
+            .Where(i => i.SkuId != Guid.Empty && i.Quantity > 0)
+            .GroupBy(i => i.SkuId)
+            .Select(group =>
+            {
+                var first = group.First();
+                return new PreparePosStockDeductionItemRequest(
+                    group.Key,
+                    first.SkuSnapshotName,
+                    first.SkuSnapshotCode,
+                    group.Sum(i => i.Quantity));
+            })
+            .OrderBy(i => i.SkuSnapshotCode ?? i.SkuSnapshotName ?? i.SkuId.ToString())
+            .ToList();
+
+        if (normalized.Count == 0)
+            throw new InventoryValidationException("Đơn hàng không có SKU hợp lệ để xử lý tồn POS.");
+
+        return normalized;
+    }
+
+    private async Task ResolvePendingBomMaterialSnapshotsAsync(
+        List<PosStockDecision> decisions,
+        ProductCatalogSnapshot catalog,
+        CancellationToken ct)
+    {
+        var pendingDecisions = decisions.Where(d => d.PendingBomQuantity > 0).ToList();
+        if (pendingDecisions.Count == 0)
+            return;
+
+        var reservations = await BuildMaterialReservationsAsync(null, ct);
+        var availableBySku = new Dictionary<Guid, int>();
+        var effectiveAvailableBySku = new Dictionary<Guid, int>();
+        var shortages = new List<StockShortage>();
+
+        async Task EnsureMaterialAvailabilityAsync(CatalogVariant variant)
+        {
+            if (availableBySku.ContainsKey(variant.Id))
+                return;
+
+            var stock = await _skuStockRepo.GetBySkuIdWithLockAsync(variant.Id, ct);
+            var available = _inventoryOptions.SimulateWarehouse
+                ? Math.Max(0, stock?.WarehouseQuantityOnHand ?? 0)
+                : Math.Max(0, await _batchRepo.SumQuantityOnHandAsync(variant.Id, ct));
+            var reserved = reservations.GetValueOrDefault(variant.Id);
+
+            availableBySku[variant.Id] = available;
+            effectiveAvailableBySku[variant.Id] = Math.Max(0, available - reserved);
+        }
+
+        foreach (var decision in pendingDecisions)
+        {
+            var finishedProduct = catalog.FindProductByVariant(decision.SkuId);
+            var finishedVariant = finishedProduct?.Variants.FirstOrDefault(v => v.Id == decision.SkuId);
+
+            if (finishedVariant == null || finishedVariant.BomLineCount <= 0 || finishedVariant.BomLines.Count == 0)
+            {
+                throw new InventoryValidationException(
+                    $"Sản phẩm {decision.SkuCode ?? decision.SkuName} thiếu tồn quầy nhưng chưa có BOM hợp lệ để xử lý bán trước/trừ sau.");
+            }
+
+            foreach (var bomLine in finishedVariant.BomLines)
+            {
+                var required = CeilRequiredQuantity(bomLine.Quantity * decision.PendingBomQuantity);
+                var materialProduct = catalog.FindProduct(bomLine.MaterialId);
+                if (materialProduct == null)
+                {
+                    throw new InventoryValidationException(
+                        $"Không tìm thấy nguyên liệu BOM: {bomLine.MaterialName}.");
+                }
+
+                var candidateVariants = materialProduct.Variants
+                    .Where(v => v.IsActive)
+                    .OrderBy(v => v.SkuCode)
+                    .ThenBy(v => v.VariantName)
+                    .ToList();
+
+                if (candidateVariants.Count == 0)
+                {
+                    throw new InventoryValidationException(
+                        $"Không xác định được SKU nguyên liệu cho BOM: {bomLine.MaterialName}.");
+                }
+
+                foreach (var variant in candidateVariants)
+                    await EnsureMaterialAvailabilityAsync(variant);
+
+                var effectiveAvailable = candidateVariants.Sum(v => effectiveAvailableBySku.GetValueOrDefault(v.Id));
+                if (effectiveAvailable < required)
+                {
+                    shortages.Add(new StockShortage(
+                        bomLine.MaterialId,
+                        string.IsNullOrWhiteSpace(bomLine.MaterialName) ? materialProduct.Name : bomLine.MaterialName,
+                        required,
+                        effectiveAvailable,
+                        required - effectiveAvailable));
+                    continue;
+                }
+
+                var remaining = required;
+                foreach (var variant in candidateVariants)
+                {
+                    if (remaining <= 0) break;
+
+                    var effective = effectiveAvailableBySku.GetValueOrDefault(variant.Id);
+                    var take = Math.Min(effective, remaining);
+                    if (take <= 0) continue;
+
+                    decision.MaterialRequirements.Add(new MaterialRequirementSnapshot(
+                        bomLine.MaterialId,
+                        variant.Id,
+                        variant.SkuCode,
+                        string.IsNullOrWhiteSpace(bomLine.MaterialName) ? materialProduct.Name : bomLine.MaterialName,
+                        bomLine.MaterialUnitName ?? materialProduct.BaseUnit,
+                        take,
+                        availableBySku.GetValueOrDefault(variant.Id),
+                        reservations.GetValueOrDefault(variant.Id)));
+
+                    effectiveAvailableBySku[variant.Id] = effective - take;
+                    remaining -= take;
+                }
+            }
+        }
+
+        if (shortages.Count > 0)
+            throw new InsufficientStockException(BuildMaterialShortageMessage(decisions, shortages), shortages);
+    }
+
+    private async Task<Dictionary<Guid, int>> BuildMaterialReservationsAsync(
+        Guid? excludeQueueId,
+        CancellationToken ct)
+    {
+        var queues = await _queueRepo.GetUnresolvedBomReconciliationQueuesAsync(excludeQueueId, ct);
+        var result = new Dictionary<Guid, int>();
+
+        foreach (var snapshot in queues
+            .SelectMany(q => q.Items)
+            .SelectMany(DeserializeMaterialSnapshots))
+        {
+            result[snapshot.MaterialSkuId] = result.GetValueOrDefault(snapshot.MaterialSkuId) + snapshot.RequiredQuantity;
+        }
+
+        return result;
+    }
+
+    private async Task DeductImmediateFinishedStockAsync(
+        string orderCode,
+        List<PosStockDecision> decisions,
+        Guid createdBy,
+        CreatorSnapshot? creator,
+        DateTime now,
+        CancellationToken ct)
+    {
+        var immediateDecisions = decisions
+            .Where(d => d.FinishedDeductedQuantity > 0)
+            .OrderBy(d => d.SkuCode ?? d.SkuName)
+            .ToList();
+        if (immediateDecisions.Count == 0)
+            return;
+
+        var slipId = Guid.NewGuid();
+        var slipLines = new List<StockExportSlipLine>();
+
+        foreach (var decision in immediateDecisions)
+        {
+            var stock = decision.Stock
+                ?? throw new InventoryValidationException($"Không tìm thấy tồn quầy cho SKU {decision.SkuCode ?? decision.SkuId.ToString()}.");
+
+            var warehouseBefore = stock.WarehouseQuantityOnHand;
+            var storeBefore = stock.QuantityOnHand;
+            if (storeBefore < decision.FinishedDeductedQuantity)
+                throw new InventoryValidationException("Tồn quầy POS đã thay đổi, vui lòng thử checkout lại.");
+
+            stock.QuantityOnHand = storeBefore - decision.FinishedDeductedQuantity;
+            stock.UpdatedAt = now;
+
+            slipLines.Add(new StockExportSlipLine
+            {
+                Id = Guid.NewGuid(),
+                StockExportSlipId = slipId,
+                SkuId = decision.SkuId,
+                SkuCode = decision.SkuCode ?? decision.SkuId.ToString()[..8],
+                ProductSnapshotName = decision.SkuName,
+                Quantity = decision.FinishedDeductedQuantity,
+                WarehouseQtyBefore = warehouseBefore,
+                WarehouseQtyAfter = warehouseBefore,
+                StoreQtyBefore = storeBefore,
+                StoreQtyAfter = stock.QuantityOnHand,
+                Note = $"Trừ tồn quầy ngay cho đơn hàng {orderCode}",
+                CreatedAt = now,
+            });
+        }
+
+        var firstLine = slipLines[0];
+        var exportCountToday = await _exportSlipRepo.CountCreatedSinceAsync(now.Date, ct);
+        var exportSlip = new StockExportSlip
+        {
+            Id = slipId,
+            ExportCode = $"PX-{now:yyyyMMdd}-{(exportCountToday + 1):D4}",
+            ExportType = "pos_finished_goods_sale",
+            StockAdjustmentRequestId = null,
+            ProductionOrderId = null,
+            ProductionCode = null,
+            SkuId = slipLines.Count == 1 ? firstLine.SkuId : Guid.Empty,
+            SkuCode = slipLines.Count == 1 ? firstLine.SkuCode : "MULTI",
+            SkuSnapshotName = slipLines.Count == 1 ? firstLine.ProductSnapshotName : $"{slipLines.Count} dòng hàng bán POS",
+            Quantity = slipLines.Sum(l => l.Quantity),
+            WarehouseQtyBefore = slipLines.Sum(l => l.WarehouseQtyBefore),
+            WarehouseQtyAfter = slipLines.Sum(l => l.WarehouseQtyAfter),
+            StoreQtyBefore = slipLines.Sum(l => l.StoreQtyBefore),
+            StoreQtyAfter = slipLines.Sum(l => l.StoreQtyAfter),
+            Note = $"Trừ tồn quầy ngay cho đơn hàng {orderCode}",
+            CreatedBy = createdBy == Guid.Empty ? Guid.Empty : createdBy,
+            CreatedById = createdBy == Guid.Empty ? null : createdBy,
+            CreatedByName = NormalizeSnapshotText(creator?.CreatedByName),
+            CreatedByRoleName = NormalizeSnapshotText(creator?.CreatedByRoleName),
+            CreatedAt = now,
+            Lines = slipLines,
+        };
+
+        await _exportSlipRepo.AddAsync(exportSlip, ct);
+    }
+
     private async Task<List<StockDeductPreviewItemResponse>> BuildPreviewItemsAsync(
         StockDeductQueue queue, CancellationToken ct)
     {
+        if (IsBomReconciliationQueue(queue))
+            return await BuildBomPreviewItemsAsync(queue, ct);
+
         var result = new List<StockDeductPreviewItemResponse>();
 
         foreach (var item in queue.Items)
@@ -623,6 +1185,36 @@ public class InventoryLogic(
         return result;
     }
 
+    private async Task<List<StockDeductPreviewItemResponse>> BuildBomPreviewItemsAsync(
+        StockDeductQueue queue,
+        CancellationToken ct)
+    {
+        var groups = BuildMaterialRequirementGroups(queue);
+        var result = new List<StockDeductPreviewItemResponse>();
+
+        foreach (var group in groups.OrderBy(g => g.MaterialName).ThenBy(g => g.MaterialSkuCode))
+        {
+            var stock = await _skuStockRepo.GetBySkuIdAsync(group.MaterialSkuId, ct);
+            var available = _inventoryOptions.SimulateWarehouse
+                ? Math.Max(0, stock?.WarehouseQuantityOnHand ?? 0)
+                : Math.Max(0, await _batchRepo.SumQuantityOnHandAsync(group.MaterialSkuId, ct));
+            var shortage = Math.Max(0, group.RequiredQuantity - available);
+
+            result.Add(new StockDeductPreviewItemResponse(
+                group.MaterialSkuId,
+                group.MaterialProductId,
+                string.IsNullOrWhiteSpace(group.MaterialSkuCode)
+                    ? group.MaterialName
+                    : $"{group.MaterialName} ({group.MaterialSkuCode})",
+                group.RequiredQuantity,
+                available,
+                shortage,
+                shortage > 0 ? "insufficient" : "ok"));
+        }
+
+        return result;
+    }
+
     private static StockDeductQueueResponse MapQueue(StockDeductQueue q) => new(
         q.Id, q.OrderId, q.OrderCode,
         q.QueueStatus.ToString().ToLowerInvariant(),
@@ -638,7 +1230,8 @@ public class InventoryLogic(
         q.CancelledByRoleName,
         q.CancelReason,
         q.LastAttemptAt,
-        q.LastShortageReason);
+        q.LastShortageReason,
+        BuildQueueLineResponses(q));
 
     public async Task<StockAdjustmentRequestResponse> CreateStockAdjustmentRequestAsync(
         CreateStockAdjustmentRequest request,
@@ -1258,6 +1851,148 @@ public class InventoryLogic(
     {
         var normalized = value?.Trim();
         return string.IsNullOrWhiteSpace(normalized) ? null : normalized;
+    }
+
+    private static int CeilRequiredQuantity(decimal quantity)
+    {
+        if (quantity <= 0)
+            throw new InventoryValidationException("Định mức BOM phải lớn hơn 0.");
+        if (quantity > int.MaxValue)
+            throw new InventoryValidationException("Số lượng BOM cần trừ vượt quá giới hạn hệ thống.");
+
+        return (int)Math.Ceiling(quantity);
+    }
+
+    private static bool IsBomReconciliationQueue(StockDeductQueue queue) =>
+        queue.Items.Any(i =>
+            i.PendingBomQuantity.HasValue &&
+            i.PendingBomQuantity.Value > 0 &&
+            !string.IsNullOrWhiteSpace(i.MaterialRequirementSnapshotJson));
+
+    private static List<MaterialRequirementSnapshot> DeserializeMaterialSnapshots(StockDeductQueueItem item)
+    {
+        if (string.IsNullOrWhiteSpace(item.MaterialRequirementSnapshotJson))
+            return [];
+
+        try
+        {
+            return JsonSerializer.Deserialize<List<MaterialRequirementSnapshot>>(
+                item.MaterialRequirementSnapshotJson,
+                MaterialSnapshotJsonOptions) ?? [];
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
+    }
+
+    private static List<MaterialRequirementGroup> BuildMaterialRequirementGroups(StockDeductQueue queue)
+    {
+        var groups = new Dictionary<Guid, MaterialRequirementGroup>();
+
+        foreach (var snapshot in queue.Items.SelectMany(DeserializeMaterialSnapshots))
+        {
+            if (!groups.TryGetValue(snapshot.MaterialSkuId, out var group))
+            {
+                group = new MaterialRequirementGroup
+                {
+                    MaterialProductId = snapshot.MaterialProductId,
+                    MaterialSkuId = snapshot.MaterialSkuId,
+                    MaterialSkuCode = snapshot.MaterialSkuCode,
+                    MaterialName = snapshot.MaterialName,
+                    UnitName = snapshot.UnitName
+                };
+                groups[snapshot.MaterialSkuId] = group;
+            }
+
+            group.RequiredQuantity += snapshot.RequiredQuantity;
+            group.AvailableAtCheckout += snapshot.AvailableAtCheckout;
+            group.ReservedByOtherPendingAtCheckout += snapshot.ReservedByOtherPendingAtCheckout;
+        }
+
+        return groups.Values.ToList();
+    }
+
+    private static List<StockDeductQueueLineResponse> BuildQueueLineResponses(StockDeductQueue queue) =>
+        queue.Items
+            .OrderBy(i => i.SkuSnapshotCode ?? i.SkuSnapshotName)
+            .Select(i => new StockDeductQueueLineResponse(
+                i.SkuId,
+                i.SkuSnapshotCode,
+                i.SkuSnapshotName,
+                i.OrderedQuantity ?? i.Quantity,
+                i.FinishedDeductedQuantity ?? 0,
+                i.PendingBomQuantity ?? i.Quantity,
+                i.StockHandlingMode ?? StockHandlingModeLegacy))
+            .ToList();
+
+    private static PosStockHandlingLineResponse MapQueueLineToPosLine(StockDeductQueueLineResponse line) => new(
+        line.SkuId,
+        line.SkuCode,
+        line.SkuName,
+        line.OrderedQuantity,
+        line.FinishedDeductedQuantity,
+        line.PendingBomQuantity);
+
+    private static string BuildPosStockHandlingMessage(List<PosStockDecision> decisions)
+    {
+        var immediateQty = decisions.Sum(d => d.FinishedDeductedQuantity);
+        var pendingQty = decisions.Sum(d => d.PendingBomQuantity);
+
+        if (pendingQty <= 0)
+            return "Đơn đã hoàn tất. Đã trừ tồn quầy POS mặc định ngay khi checkout.";
+
+        if (immediateQty <= 0)
+            return $"Đơn đã hoàn tất. {pendingQty} sản phẩm chờ đối soát/trừ nguyên liệu theo BOM.";
+
+        return $"Đơn đã hoàn tất. {immediateQty} sản phẩm đã trừ tồn quầy, {pendingQty} sản phẩm chờ đối soát/trừ nguyên liệu theo BOM.";
+    }
+
+    private static string BuildMaterialShortageMessage(
+        List<PosStockDecision> decisions,
+        IEnumerable<StockShortage> shortages)
+    {
+        var lineText = string.Join("; ", decisions
+            .Where(d => d.PendingBomQuantity > 0)
+            .Select(d => $"{d.SkuCode ?? d.SkuName}: tồn quầy {d.FinishedDeductedQuantity}, khách mua {d.OrderedQuantity}, thiếu {d.PendingBomQuantity}"));
+        var shortageText = string.Join("; ", shortages.Select(s =>
+            $"{s.SkuName} thiếu {s.ShortageQuantity} (cần {s.RequiredQuantity}, khả dụng {s.AvailableQuantity})"));
+
+        return $"Không đủ tồn để hoàn tất đơn. {lineText}. Nguyên liệu không đủ để đóng gói phần còn thiếu: {shortageText}. Vui lòng giảm số lượng hoặc bổ sung tồn/nguyên liệu.";
+    }
+
+    private sealed class PosStockDecision
+    {
+        public Guid SkuId { get; init; }
+        public string? SkuCode { get; init; }
+        public string SkuName { get; init; } = string.Empty;
+        public int OrderedQuantity { get; init; }
+        public int FinishedDeductedQuantity { get; init; }
+        public int PendingBomQuantity { get; init; }
+        public SkuStock? Stock { get; init; }
+        public List<MaterialRequirementSnapshot> MaterialRequirements { get; } = [];
+    }
+
+    private sealed record MaterialRequirementSnapshot(
+        Guid MaterialProductId,
+        Guid MaterialSkuId,
+        string? MaterialSkuCode,
+        string MaterialName,
+        string? UnitName,
+        int RequiredQuantity,
+        int AvailableAtCheckout,
+        int ReservedByOtherPendingAtCheckout);
+
+    private sealed class MaterialRequirementGroup
+    {
+        public Guid MaterialProductId { get; init; }
+        public Guid MaterialSkuId { get; init; }
+        public string? MaterialSkuCode { get; init; }
+        public string MaterialName { get; init; } = string.Empty;
+        public string? UnitName { get; init; }
+        public int RequiredQuantity { get; set; }
+        public int AvailableAtCheckout { get; set; }
+        public int ReservedByOtherPendingAtCheckout { get; set; }
     }
 
     private async Task<SkuStock> GetOrCreateSkuStockAsync(

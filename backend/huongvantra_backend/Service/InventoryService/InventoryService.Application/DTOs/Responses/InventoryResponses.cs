@@ -24,7 +24,17 @@ public record StockDeductQueueResponse(
     string? CancelledByRoleName = null,
     string? CancelReason = null,
     DateTime? LastAttemptAt = null,
-    string? LastShortageReason = null);
+    string? LastShortageReason = null,
+    List<StockDeductQueueLineResponse>? Lines = null);
+
+public record StockDeductQueueLineResponse(
+    Guid SkuId,
+    string? SkuCode,
+    string SkuName,
+    int OrderedQuantity,
+    int FinishedDeductedQuantity,
+    int PendingBomQuantity,
+    string StockHandlingMode);
 
 public record StockDeductPreviewItemResponse(
     Guid SkuId,
@@ -42,7 +52,9 @@ public record StockDeductPreviewResponse(
     string QueueStatus,
     string OrderStockStatus,
     bool CanDeduct,
-    List<StockDeductPreviewItemResponse> Items);
+    List<StockDeductPreviewItemResponse> Items,
+    List<StockDeductQueueLineResponse>? Lines = null,
+    bool IsBomReconciliation = false);
 
 public record StockDeductConfirmResponse(
     Guid QueueId,
@@ -55,6 +67,23 @@ public record StockDeductConfirmResponse(
     List<StockDeductPreviewItemResponse>? Shortages = null,
     DateTime? CancelledAt = null,
     string? CancelReason = null);
+
+public record PosStockHandlingLineResponse(
+    Guid SkuId,
+    string? SkuCode,
+    string SkuName,
+    int OrderedQuantity,
+    int FinishedDeductedQuantity,
+    int PendingBomQuantity);
+
+public record PosStockHandlingResponse(
+    Guid OrderId,
+    string OrderCode,
+    string StockHandlingMode,
+    bool HasPendingStockReconciliation,
+    string Message,
+    List<Guid> QueueIds,
+    List<PosStockHandlingLineResponse> Lines);
 
 public record SkuStockResponse(
     Guid SkuId,

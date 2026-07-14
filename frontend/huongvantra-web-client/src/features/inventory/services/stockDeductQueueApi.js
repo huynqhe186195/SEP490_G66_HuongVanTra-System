@@ -70,6 +70,19 @@ function mapQueueItem(item) {
     cancelReason: item.cancelReason ?? item.CancelReason ?? '',
     lastAttemptAt: item.lastAttemptAt ?? item.LastAttemptAt ?? null,
     lastShortageReason: item.lastShortageReason ?? item.LastShortageReason ?? '',
+    lines: (item.lines ?? item.Lines ?? []).map(mapQueueLine),
+  }
+}
+
+function mapQueueLine(item) {
+  return {
+    skuId: item.skuId ?? item.SkuId,
+    skuCode: item.skuCode ?? item.SkuCode ?? '',
+    skuName: item.skuName ?? item.SkuName ?? '',
+    orderedQuantity: Number(item.orderedQuantity ?? item.OrderedQuantity ?? 0),
+    finishedDeductedQuantity: Number(item.finishedDeductedQuantity ?? item.FinishedDeductedQuantity ?? 0),
+    pendingBomQuantity: Number(item.pendingBomQuantity ?? item.PendingBomQuantity ?? 0),
+    stockHandlingMode: String(item.stockHandlingMode ?? item.StockHandlingMode ?? '').toLowerCase(),
   }
 }
 
@@ -105,6 +118,8 @@ function mapPreview(data) {
     orderStockStatus: String(data.orderStockStatus ?? data.OrderStockStatus ?? '').toLowerCase(),
     canDeduct: Boolean(data.canDeduct ?? data.CanDeduct),
     items: (data.items ?? data.Items ?? []).map(mapPreviewItem),
+    lines: (data.lines ?? data.Lines ?? []).map(mapQueueLine),
+    isBomReconciliation: Boolean(data.isBomReconciliation ?? data.IsBomReconciliation),
   }
 }
 

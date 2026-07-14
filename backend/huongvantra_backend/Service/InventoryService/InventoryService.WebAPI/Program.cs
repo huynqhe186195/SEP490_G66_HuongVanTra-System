@@ -5,6 +5,7 @@ using InventoryService.Application.UseCases;
 using InventoryService.Infrastructure.Data;
 using InventoryService.Infrastructure.Messaging;
 using InventoryService.Infrastructure.Repositories;
+using InventoryService.Infrastructure.Services;
 using InventoryService.WebAPI.Middlewares;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
@@ -43,6 +44,11 @@ builder.Services.AddScoped<IStockExportBatchAllocationRepository, StockExportBat
 builder.Services.AddScoped<IProcessedIntegrationEventRepository, ProcessedIntegrationEventRepository>();
 builder.Services.AddScoped<IProductionOrderRepository, ProductionOrderRepository>();
 builder.Services.AddScoped<IInventoryEventPublisher, InventoryEventPublisher>();
+builder.Services.AddHttpClient<IProductCatalogClient, ProductCatalogClient>(client =>
+{
+    var baseUrl = builder.Configuration["ProductService:BaseUrl"] ?? "http://product-service:8080";
+    client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
+});
 builder.Services.AddScoped<InventoryLogic>();
 builder.Services.AddScoped<StatisticsLogic>();
 builder.Services.AddMassTransit(x =>

@@ -183,6 +183,18 @@ namespace InventoryService.Infrastructure.Migrations
                     b.Property<Guid>("QueueId")
                         .HasColumnType("char(36)");
 
+                    b.Property<int?>("FinishedDeductedQuantity")
+                        .HasColumnType("int");
+
+                    b.Property<string>("MaterialRequirementSnapshotJson")
+                        .HasColumnType("longtext");
+
+                    b.Property<int?>("OrderedQuantity")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("PendingBomQuantity")
+                        .HasColumnType("int");
+
                     b.Property<int>("Quantity")
                         .HasColumnType("int");
 
@@ -197,6 +209,10 @@ namespace InventoryService.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(255)
                         .HasColumnType("varchar(255)");
+
+                    b.Property<string>("StockHandlingMode")
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
 
                     b.HasKey("Id");
 

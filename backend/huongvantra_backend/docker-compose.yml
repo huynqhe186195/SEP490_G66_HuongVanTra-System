@@ -199,6 +199,7 @@ services:
       Jwt__Issuer: HuongVanTra
       Jwt__Audience: HuongVanTra
       Inventory__SimulateWarehouse: "false"
+      ProductService__BaseUrl: http://product-service:8080
     ports:
       - "5005:8080"
     networks:

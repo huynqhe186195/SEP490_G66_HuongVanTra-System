@@ -26,6 +26,12 @@ const TABS = [
   { key: 'cancelled', label: 'Đã hủy', status: 'cancelled' },
 ]
 
+function getStockDeductTabLabel(tab) {
+  if (tab?.key === 'waiting') return 'Chờ đối soát'
+  if (tab?.key === 'insufficient') return 'Chờ nguyên liệu'
+  return tab?.label ?? ''
+}
+
 function StockDeductQueuePage() {
   const canExecuteDeduct = canConfirmStockDeduct(loadAuthSession())
   const [activeTab, setActiveTab] = useState('all')
@@ -114,7 +120,7 @@ function StockDeductQueuePage() {
                 : 'bg-white text-slate-600 hover:bg-slate-100'
             }`}
           >
-            {tab.label}
+            {getStockDeductTabLabel(tab)}
           </button>
         ))}
         <Link
@@ -143,7 +149,7 @@ function StockDeductQueuePage() {
       <section className="rounded-3xl border border-slate-100 bg-white shadow-sm">
         <div className="border-b border-slate-50 p-6">
           <h2 className="text-xl font-bold text-slate-800">
-            {TABS.find((t) => t.key === activeTab)?.label}
+            {getStockDeductTabLabel(TABS.find((t) => t.key === activeTab))}
           </h2>
         </div>
 
@@ -182,6 +188,17 @@ function StockDeductQueuePage() {
                         <Link className="hover:text-[#538463] hover:underline" to={`/orders/${row.orderId}`}>
                           {row.orderCode}
                         </Link>
+                        {row.lines?.length ? (
+                          <div className="mt-2 space-y-1 text-xs font-medium text-slate-500">
+                            {row.lines.slice(0, 2).map((line) => (
+                              <p key={line.skuId}>
+                                {line.skuCode || line.skuName}: bán {line.orderedQuantity}, đã trừ{' '}
+                                {line.finishedDeductedQuantity}, chờ BOM {line.pendingBomQuantity}
+                              </p>
+                            ))}
+                            {row.lines.length > 2 ? <p>+{row.lines.length - 2} dòng khác</p> : null}
+                          </div>
+                        ) : null}
                       </td>
                       <td className="px-4 py-5">
                         <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">

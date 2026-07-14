@@ -122,6 +122,7 @@ function mapOrderDetailToPosResult(order) {
     qrExpiresAtUtc: null,
     invoiceCode: null,
     createdAt: order.createdAt,
+    stockHandlingSummary: order.stockHandlingSummary ?? null,
     items: (order.items ?? []).map((row) => ({
       productId: row.skuId,
       productName: row.skuSnapshotName,
@@ -154,6 +155,7 @@ export function mapPosOrderResult(item) {
     qrExpiresAtUtc: item.qrExpiresAtUtc ?? item.QrExpiresAtUtc ?? null,
     invoiceCode: item.invoiceCode ?? item.InvoiceCode ?? null,
     createdAt: item.createdAt ?? item.CreatedAt,
+    stockHandlingSummary: item.stockHandlingSummary ?? item.StockHandlingSummary ?? null,
     items: (item.items ?? item.Items ?? []).map((row) => ({
       productId: row.productId ?? row.ProductId,
       productName: row.productName ?? row.ProductName ?? '',

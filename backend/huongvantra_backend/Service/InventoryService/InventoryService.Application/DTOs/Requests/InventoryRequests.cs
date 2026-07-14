@@ -6,6 +6,19 @@ public record AdjustWarehouseStockRequest(int QuantityDelta);
 
 public record CancelStockDeductRequest(string? Reason);
 
+public record PreparePosStockDeductionItemRequest(
+    Guid SkuId,
+    string? SkuSnapshotName,
+    string? SkuSnapshotCode,
+    int Quantity);
+
+public record PreparePosStockDeductionRequest(
+    Guid OrderId,
+    string OrderCode,
+    string OrderStatus,
+    decimal TotalAmount,
+    List<PreparePosStockDeductionItemRequest> Items);
+
 public record UpdateLowStockThresholdRequest(int Threshold);
 
 public record CreateStockAdjustmentRequestItem(

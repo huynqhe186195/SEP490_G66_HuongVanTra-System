@@ -165,6 +165,35 @@ function StockDeductPreviewModal({ queueId, orderCode, readOnly = false, onClose
                 </span>
               </div>
 
+              {preview.lines?.length ? (
+                <div className="mb-4 overflow-x-auto rounded-xl border border-slate-100">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-[#fbf9f1]/50 text-xs font-bold uppercase tracking-wider text-slate-400">
+                      <tr>
+                        <th className="px-4 py-3">SKU bán</th>
+                        <th className="px-4 py-3 text-right">Đã bán</th>
+                        <th className="px-4 py-3 text-right">Đã trừ thành phẩm</th>
+                        <th className="px-4 py-3 text-right">Chờ xử lý BOM</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                      {preview.lines.map((line) => (
+                        <tr key={line.skuId}>
+                          <td className="px-4 py-3 font-medium text-slate-800">
+                            {line.skuCode || line.skuName}
+                          </td>
+                          <td className="px-4 py-3 text-right text-slate-700">{line.orderedQuantity}</td>
+                          <td className="px-4 py-3 text-right text-slate-700">{line.finishedDeductedQuantity}</td>
+                          <td className="px-4 py-3 text-right font-semibold text-amber-700">
+                            {line.pendingBomQuantity}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : null}
+
               <div className="overflow-x-auto rounded-xl border border-slate-100">
                 <table className="w-full text-left text-sm">
                   <thead className="bg-[#fbf9f1]/50 text-xs font-bold uppercase tracking-wider text-slate-400">
@@ -220,6 +249,10 @@ function StockDeductPreviewModal({ queueId, orderCode, readOnly = false, onClose
                 <div className="mt-4 rounded-xl border border-[#538463]/25 bg-[#f0f7f2] p-4 text-sm text-slate-700">
                   <p className="font-semibold text-slate-900">Xác nhận trừ Tồn quầy POS mặc định?</p>
                   <p className="mt-1">
+                    Hệ thống sẽ trừ nguyên liệu kho tổng theo snapshot BOM của phần thiếu và tạo phiếu xuất
+                    `sales_bom_reconciliation`. Thành phẩm đã trừ ở checkout sẽ không bị trừ lại.
+                  </p>
+                  <p className="mt-1 hidden">
                     Hệ thống sẽ trừ `QuantityOnHand` cho các SKU trong đơn này và tạo phiếu xuất
                     `sales_deduct_later`. Tồn kho tổng không bị thay đổi.
                   </p>

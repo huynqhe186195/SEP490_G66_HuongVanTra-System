@@ -49,6 +49,8 @@ public class StockDeductQueueItemConfiguration : IEntityTypeConfiguration<StockD
         builder.HasKey(e => e.Id);
         builder.Property(e => e.SkuSnapshotName).HasMaxLength(255).IsRequired();
         builder.Property(e => e.SkuSnapshotCode).HasMaxLength(50);
+        builder.Property(e => e.MaterialRequirementSnapshotJson).HasColumnType("LONGTEXT");
+        builder.Property(e => e.StockHandlingMode).HasMaxLength(50);
     }
 }
 
