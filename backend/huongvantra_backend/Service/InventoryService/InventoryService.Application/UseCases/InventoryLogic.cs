@@ -656,9 +656,6 @@ public class InventoryLogic(
             throw new InventoryValidationException("Mỗi SKU chỉ được xuất hiện một lần trong cùng một yêu cầu.");
 
         var reason = request.Reason?.Trim();
-        var hasDecrease = request.Items.Any(i => i.QuantityDelta < 0);
-        if (hasDecrease && string.IsNullOrWhiteSpace(reason))
-            throw new InventoryValidationException("Yêu cầu có giảm tồn cần ghi rõ lý do chung cho lô.");
 
         var today = DateTime.UtcNow.Date;
         var countToday = await _adjustmentRequestRepo.CountCreatedSinceAsync(today, ct);
@@ -674,8 +671,8 @@ public class InventoryLogic(
 
         foreach (var line in request.Items)
         {
-            if (line.QuantityDelta == 0)
-                throw new InventoryValidationException("Số lượng thay đổi phải khác 0.");
+            if (line.QuantityDelta <= 0)
+                throw new InventoryValidationException("Số lượng yêu cầu bổ sung tồn quầy phải lớn hơn 0.");
 
             var stock = await _skuStockRepo.GetBySkuIdAsync(line.SkuId, ct);
             var onHand = stock?.QuantityOnHand ?? 0;
@@ -780,115 +777,104 @@ public class InventoryLogic(
         CreatorSnapshot? creator,
         CancellationToken ct = default)
     {
-        var entity = await _adjustmentRequestRepo.GetByIdAsync(id, ct)
-            ?? throw new InventoryNotFoundException("Không tìm thấy yêu cầu điều chỉnh tồn.");
+        if (reviewedBy == Guid.Empty)
+            throw new InventoryValidationException("Không xác định được người duyệt yêu cầu.");
 
-        if (entity.Status != StockAdjustmentRequestStatus.Pending)
-            throw new InventoryValidationException("Yêu cầu không còn ở trạng thái chờ duyệt.");
-
-        if (entity.Items.Count == 0)
-            throw new InventoryValidationException("Yêu cầu không có dòng SKU.");
-
-        var exportSlips = new List<StockAdjustmentExportSlipSummary>();
-
-        foreach (var line in entity.Items)
+        return await _unitOfWork.ExecuteInTransactionAsync(async innerCt =>
         {
-            var stock = await GetOrCreateSkuStockAsync(line.SkuId, line.SkuCode, ct);
-            StockExportSlip? exportSlip = null;
+            var entity = await _adjustmentRequestRepo.GetByIdAsync(id, innerCt)
+                ?? throw new InventoryNotFoundException("Không tìm thấy yêu cầu bổ sung tồn quầy.");
 
-            if (line.QuantityDelta > 0)
+            if (entity.Status != StockAdjustmentRequestStatus.Pending)
+                throw new InventoryValidationException("Yêu cầu đã được xử lý, không thể duyệt lại.");
+
+            if (entity.RequestedBy == reviewedBy)
+                throw new InventoryValidationException("Người tạo yêu cầu không được tự duyệt yêu cầu của mình.");
+
+            if (entity.Items.Count == 0)
+                throw new InventoryValidationException("Yêu cầu không có dòng SKU.");
+
+            var exportSlips = new List<StockAdjustmentExportSlipSummary>();
+
+            foreach (var line in entity.Items)
             {
+                if (line.QuantityDelta <= 0)
+                    throw new InventoryValidationException("Yêu cầu bổ sung tồn quầy chỉ được dùng số lượng lớn hơn 0.");
+
+                var stock = await _skuStockRepo.GetBySkuIdWithLockAsync(line.SkuId, innerCt);
+                if (stock == null)
+                {
+                    stock = await GetOrCreateSkuStockAsync(line.SkuId, line.SkuCode, innerCt);
+                }
+
                 var warehouseBefore = stock.WarehouseQuantityOnHand;
                 var storeBefore = stock.QuantityOnHand;
 
+                if (warehouseBefore < line.QuantityDelta)
+                {
+                    throw new InventoryValidationException("Kho tổng không đủ tồn để bổ sung tồn quầy.");
+                }
+
+                List<StockExportBatchAllocation>? allocations = null;
+
                 if (_inventoryOptions.SimulateWarehouse)
                 {
-                    stock.QuantityOnHand += line.QuantityDelta;
-                    stock.UpdatedAt = DateTime.UtcNow;
-
-                    exportSlip = await CreateExportSlipAsync(
-                        entity,
-                        line,
-                        line.QuantityDelta,
-                        warehouseBefore,
-                        warehouseBefore,
-                        storeBefore,
-                        stock.QuantityOnHand,
-                        reviewedBy,
-                        creator,
-                        "Giả lập — chưa trừ kho tổng (module kho đang phát triển).",
-                        null,
-                        ct);
+                    stock.WarehouseQuantityOnHand -= line.QuantityDelta;
                 }
                 else
                 {
-                    var batchTotal = await _batchRepo.SumQuantityOnHandAsync(line.SkuId, ct);
+                    var batchTotal = await _batchRepo.SumQuantityOnHandAsync(line.SkuId, innerCt);
                     if (batchTotal < line.QuantityDelta)
-                    {
-                        throw new InventoryValidationException(
-                            $"SKU {line.SkuCode}: tồn lô trong kho không đủ để xuất. Có {batchTotal}, yêu cầu {line.QuantityDelta}. Hãy nhập lô trước.");
-                    }
+                        throw new InventoryValidationException("Kho tổng không đủ tồn để bổ sung tồn quầy.");
 
-                    var allocations = await AllocateAndDeductBatchesFifoAsync(
-                        line.SkuId, line.QuantityDelta, ct);
+                    allocations = await AllocateAndDeductBatchesFifoAsync(
+                        line.SkuId, line.QuantityDelta, innerCt);
 
-                    await SyncWarehouseQtyFromBatchesAsync(stock, ct);
-                    stock.QuantityOnHand += line.QuantityDelta;
-                    stock.UpdatedAt = DateTime.UtcNow;
-
-                    exportSlip = await CreateExportSlipAsync(
-                        entity,
-                        line,
-                        line.QuantityDelta,
-                        warehouseBefore,
-                        stock.WarehouseQuantityOnHand,
-                        storeBefore,
-                        stock.QuantityOnHand,
-                        reviewedBy,
-                        creator,
-                        entity.Reason,
-                        allocations,
-                        ct);
+                    await SyncWarehouseQtyFromBatchesAsync(stock, innerCt);
                 }
+
+                stock.QuantityOnHand += line.QuantityDelta;
+                stock.UpdatedAt = DateTime.UtcNow;
+
+                var exportSlip = await CreateExportSlipAsync(
+                    entity,
+                    line,
+                    line.QuantityDelta,
+                    warehouseBefore,
+                    stock.WarehouseQuantityOnHand,
+                    storeBefore,
+                    stock.QuantityOnHand,
+                    reviewedBy,
+                    creator,
+                    entity.Reason,
+                    allocations,
+                    innerCt);
 
                 line.ExportSlipId = exportSlip.Id;
-                if (exportSlip != null)
-                {
-                    exportSlips.Add(new StockAdjustmentExportSlipSummary(
-                        exportSlip.Id,
-                        exportSlip.ExportCode,
-                        line.SkuId,
-                        line.SkuCode));
-                }
-            }
-            else
-            {
-                if (stock.QuantityOnHand + line.QuantityDelta < 0)
-                {
-                    throw new InventoryValidationException(
-                        $"SKU {line.SkuCode}: tồn cửa hàng không đủ. Hiện có {stock.QuantityOnHand}, yêu cầu giảm {Math.Abs(line.QuantityDelta)}.");
-                }
+                line.QuantityOnHandAfter = stock.QuantityOnHand;
+                line.WarehouseQuantityOnHandAfter = stock.WarehouseQuantityOnHand;
 
-                stock.QuantityOnHand = Math.Max(0, stock.QuantityOnHand + line.QuantityDelta);
-                stock.UpdatedAt = DateTime.UtcNow;
+                exportSlips.Add(new StockAdjustmentExportSlipSummary(
+                    exportSlip.Id,
+                    exportSlip.ExportCode,
+                    line.SkuId,
+                    line.SkuCode));
             }
 
-            line.QuantityOnHandAfter = stock.QuantityOnHand;
-            line.WarehouseQuantityOnHandAfter = stock.WarehouseQuantityOnHand;
-        }
+            entity.Status = StockAdjustmentRequestStatus.Approved;
+            entity.ReviewedBy = reviewedBy;
+            entity.ReviewedAt = DateTime.UtcNow;
+            entity.ReviewNote = null;
+            await _skuStockRepo.SaveChangesAsync(innerCt);
+            await _adjustmentRequestRepo.SaveChangesAsync(innerCt);
 
-        entity.Status = StockAdjustmentRequestStatus.Approved;
-        entity.ReviewedBy = reviewedBy == Guid.Empty ? null : reviewedBy;
-        entity.ReviewedAt = DateTime.UtcNow;
-        await _skuStockRepo.SaveChangesAsync(ct);
-        await _adjustmentRequestRepo.SaveChangesAsync(ct);
-
-        return new StockAdjustmentReviewResponse(
-            entity.Id,
-            entity.RequestCode,
-            entity.Status.ToString().ToLowerInvariant(),
-            entity.ReviewedAt,
-            exportSlips);
+            return new StockAdjustmentReviewResponse(
+                entity.Id,
+                entity.RequestCode,
+                entity.Status.ToString().ToLowerInvariant(),
+                entity.ReviewedAt,
+                exportSlips);
+        }, ct);
     }
 
     public async Task<StockAdjustmentReviewResponse> RejectStockAdjustmentRequestAsync(
@@ -898,15 +884,19 @@ public class InventoryLogic(
         CancellationToken ct = default)
     {
         var entity = await _adjustmentRequestRepo.GetByIdAsync(id, ct)
-            ?? throw new InventoryNotFoundException("Không tìm thấy yêu cầu điều chỉnh tồn.");
+            ?? throw new InventoryNotFoundException("Không tìm thấy yêu cầu bổ sung tồn quầy.");
 
         if (entity.Status != StockAdjustmentRequestStatus.Pending)
-            throw new InventoryValidationException("Yêu cầu không còn ở trạng thái chờ duyệt.");
+            throw new InventoryValidationException("Yêu cầu đã được xử lý, không thể từ chối.");
+
+        var reason = request.Reason?.Trim();
+        if (string.IsNullOrWhiteSpace(reason))
+            throw new InventoryValidationException("Vui lòng nhập lý do từ chối.");
 
         entity.Status = StockAdjustmentRequestStatus.Rejected;
         entity.ReviewedBy = reviewedBy == Guid.Empty ? null : reviewedBy;
         entity.ReviewedAt = DateTime.UtcNow;
-        entity.ReviewNote = request.Reason?.Trim();
+        entity.ReviewNote = reason;
         await _adjustmentRequestRepo.SaveChangesAsync(ct);
 
         return new StockAdjustmentReviewResponse(
@@ -920,19 +910,27 @@ public class InventoryLogic(
     public async Task<StockAdjustmentReviewResponse> CancelStockAdjustmentRequestAsync(
         Guid id,
         Guid requestedBy,
+        bool isAdmin,
+        CancelStockAdjustmentRequest? request,
         CancellationToken ct = default)
     {
         var entity = await _adjustmentRequestRepo.GetByIdAsync(id, ct)
-            ?? throw new InventoryNotFoundException("Không tìm thấy yêu cầu điều chỉnh tồn.");
+            ?? throw new InventoryNotFoundException("Không tìm thấy yêu cầu bổ sung tồn quầy.");
 
         if (entity.Status != StockAdjustmentRequestStatus.Pending)
             throw new InventoryValidationException("Chỉ có thể hủy yêu cầu đang chờ duyệt.");
 
-        if (entity.RequestedBy != requestedBy)
+        if (!isAdmin && entity.RequestedBy != requestedBy)
             throw new InventoryValidationException("Bạn không thể hủy yêu cầu của người khác.");
 
+        var reason = request?.Reason?.Trim();
+        if (string.IsNullOrWhiteSpace(reason))
+            throw new InventoryValidationException("Vui lòng nhập lý do hủy.");
+
         entity.Status = StockAdjustmentRequestStatus.Cancelled;
+        entity.ReviewedBy = requestedBy == Guid.Empty ? null : requestedBy;
         entity.ReviewedAt = DateTime.UtcNow;
+        entity.ReviewNote = reason;
         await _adjustmentRequestRepo.SaveChangesAsync(ct);
 
         return new StockAdjustmentReviewResponse(
@@ -1068,7 +1066,7 @@ public class InventoryLogic(
         {
             Id = Guid.NewGuid(),
             ExportCode = $"PX-{today:yyyyMMdd}-{(countToday + 1):D4}",
-            ExportType = _inventoryOptions.SimulateWarehouse ? "simulated_transfer" : "transfer_to_store",
+            ExportType = "counter_replenishment_export",
             StockAdjustmentRequestId = request.Id,
             SkuId = line.SkuId,
             SkuCode = line.SkuCode,

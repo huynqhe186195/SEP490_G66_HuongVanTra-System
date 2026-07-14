@@ -11,7 +11,7 @@ export const warehouseNavTabs = [
 ]
 
 export const stockRequestNavTab = {
-  label: 'Yêu cầu tồn',
+  label: 'Bổ sung tồn quầy',
   to: '/inventory/stock-requests',
 }
 

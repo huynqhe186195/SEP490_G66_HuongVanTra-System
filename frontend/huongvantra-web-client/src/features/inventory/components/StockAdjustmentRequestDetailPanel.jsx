@@ -22,6 +22,9 @@ function formatDelta(delta) {
 export default function StockAdjustmentRequestDetailPanel({
   request,
   canReview,
+  canCancel,
+  canCancelAny,
+  currentUserId,
   activeTab,
   actingId,
   onApprove,
@@ -34,8 +37,9 @@ export default function StockAdjustmentRequestDetailPanel({
     return <p className="text-sm text-slate-500">Chọn một yêu cầu để xem chi tiết lô.</p>
   }
 
-  const showReviewActions = request.status === 'pending' && canReview && activeTab !== 'mine'
-  const showCancelAction = request.status === 'pending' && activeTab === 'mine'
+  const isOwnRequest = currentUserId && String(request.requestedBy).toLowerCase() === String(currentUserId).toLowerCase()
+  const showReviewActions = request.status === 'pending' && canReview && !isOwnRequest
+  const showCancelAction = request.status === 'pending' && canCancel && (canCancelAny || isOwnRequest || activeTab === 'mine')
 
   return (
     <div className="space-y-6">
@@ -54,6 +58,8 @@ export default function StockAdjustmentRequestDetailPanel({
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <DetailField label="Kho xuất" value="Kho tổng" />
+        <DetailField label="Kho nhận" value="Tồn quầy POS mặc định" />
         <DetailField label="Lý do gửi" value={request.reason} />
         <DetailField
           label="Thời gian duyệt"
@@ -71,9 +77,9 @@ export default function StockAdjustmentRequestDetailPanel({
           <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
             <tr>
               <th className="px-4 py-3">SKU</th>
-              <th className="px-4 py-3 text-right">Thay đổi</th>
-              <th className="px-4 py-3 text-right">Tồn CH lúc gửi</th>
-              <th className="px-4 py-3 text-right">Tồn CH sau duyệt</th>
+              <th className="px-4 py-3 text-right">SL bổ sung</th>
+              <th className="px-4 py-3 text-right">Tồn quầy POS lúc gửi</th>
+              <th className="px-4 py-3 text-right">Tồn quầy POS sau duyệt</th>
               <th className="px-4 py-3 text-right">Kho tổng sau duyệt</th>
               <th className="px-4 py-3">Phiếu xuất</th>
             </tr>
@@ -136,7 +142,7 @@ export default function StockAdjustmentRequestDetailPanel({
                 onClick={() => onApprove?.(request.id)}
                 className="rounded-xl bg-[#538463] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#457053] disabled:opacity-50"
               >
-                Duyệt lô
+                Duyệt bổ sung
               </button>
               <button
                 type="button"
@@ -153,9 +159,9 @@ export default function StockAdjustmentRequestDetailPanel({
               type="button"
               disabled={actingId === request.id}
               onClick={() => onCancel?.(request.id)}
-              className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-            >
-              Hủy lô
+                className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              >
+              Hủy yêu cầu
             </button>
           ) : null}
         </div>

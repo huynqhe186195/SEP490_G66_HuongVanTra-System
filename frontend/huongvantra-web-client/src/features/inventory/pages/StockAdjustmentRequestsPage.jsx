@@ -4,8 +4,13 @@ import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
-import { canConfirmStockDeduct } from '../../../app/navigation.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
+import {
+  canCancelStockReplenishmentRequest,
+  canCreateStockReplenishmentRequest,
+  canReviewStockReplenishmentRequest,
+  isSystemAdmin,
+} from '../../auth/utils/permissions.js'
 import { formatStockQuantity } from '../../products/utils/productDisplay.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import InventorySimulationBanner from '../components/InventorySimulationBanner.jsx'
@@ -46,8 +51,8 @@ function formatDelta(delta) {
 }
 
 function getRequestMovementLabel(row) {
-  if (row.hasIncrease && row.hasDecrease) return ' · xuất sang CH & giảm'
-  if (row.hasIncrease) return ' · xuất sang cửa hàng'
+  if (row.hasIncrease && row.hasDecrease) return ' · bổ sung tồn quầy & giảm'
+  if (row.hasIncrease) return ' · bổ sung tồn quầy'
   if (row.hasDecrease) return ' · giảm tồn'
   return ''
 }
@@ -70,7 +75,7 @@ function CreateStockRequestModal({ onClose, onSubmitted }) {
   const [skuOptions, setSkuOptions] = useState([])
   const [selectedOption, setSelectedOption] = useState(null)
   const [quantity, setQuantity] = useState('')
-  const [reason, setReason] = useState('Yêu cầu xuất tồn kho tổng sang cửa hàng')
+  const [reason, setReason] = useState('Bổ sung tồn quầy POS mặc định từ Kho tổng')
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
 
@@ -114,15 +119,19 @@ function CreateStockRequestModal({ onClose, onSubmitted }) {
     event.preventDefault()
 
     if (!selectedOption?.sku?.id) {
-      showError('Vui lòng chọn SKU cần yêu cầu tồn.')
+      showError('Vui lòng chọn SKU cần bổ sung tồn quầy.')
       return
     }
     if (!Number.isFinite(parsedQuantity) || parsedQuantity <= 0) {
-      showError('Số lượng yêu cầu phải lớn hơn 0.')
+      showError('Số lượng bổ sung tồn quầy phải lớn hơn 0.')
       return
     }
     if (!Number.isInteger(parsedQuantity)) {
-      showError('Số lượng yêu cầu phải là số nguyên.')
+      showError('Số lượng bổ sung tồn quầy phải là số nguyên.')
+      return
+    }
+    if (parsedQuantity > Number(selectedOption.warehouseQuantityOnHand ?? 0)) {
+      showError('Kho tổng không đủ tồn để bổ sung tồn quầy.')
       return
     }
 
@@ -139,7 +148,7 @@ function CreateStockRequestModal({ onClose, onSubmitted }) {
           },
         ],
       })
-      showSuccess(`Đã gửi yêu cầu tồn ${created.requestCode}.`)
+      showSuccess(`Đã gửi yêu cầu bổ sung tồn quầy ${created.requestCode}.`)
       onSubmitted?.(created)
       onClose?.()
     } catch (error) {
@@ -154,8 +163,8 @@ function CreateStockRequestModal({ onClose, onSubmitted }) {
       <div className="flex max-h-[min(90dvh,720px)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl">
         <div className="flex shrink-0 items-start justify-between border-b border-slate-100 px-6 py-4">
           <div>
-            <h2 className="text-lg font-bold text-slate-800">Tạo yêu cầu tồn</h2>
-            <p className="mt-1 text-sm text-slate-500">Chọn SKU và gửi yêu cầu xuất tồn kho tổng sang cửa hàng.</p>
+            <h2 className="text-lg font-bold text-slate-800">Tạo yêu cầu bổ sung tồn quầy</h2>
+            <p className="mt-1 text-sm text-slate-500">Kho tổng cấp hàng cho Tồn quầy POS mặc định. Không chọn chi nhánh/cửa hàng.</p>
           </div>
           <button type="button" onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600">
             <span className="material-symbols-outlined text-[22px]">close</span>
@@ -176,6 +185,22 @@ function CreateStockRequestModal({ onClose, onSubmitted }) {
                 placeholder="VD: FG-TRA-NHAI-50G hoặc tên sản phẩm"
               />
             </label>
+
+            <div className="grid gap-3 sm:grid-cols-[1fr_auto_1fr] sm:items-stretch">
+              <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 p-4">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-700">Kho xuất</p>
+                <p className="mt-1 text-sm font-bold text-slate-800">Kho tổng</p>
+                <p className="mt-1 text-xs text-slate-500">WarehouseQuantityOnHand</p>
+              </div>
+              <div className="hidden items-center justify-center px-1 text-slate-400 sm:flex">
+                <span className="material-symbols-outlined text-[24px]">arrow_forward</span>
+              </div>
+              <div className="rounded-xl border border-sky-100 bg-sky-50/80 p-4">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-sky-700">Kho nhận</p>
+                <p className="mt-1 text-sm font-bold text-slate-800">Tồn quầy POS mặc định</p>
+                <p className="mt-1 text-xs text-slate-500">QuantityOnHand</p>
+              </div>
+            </div>
 
             <div className="rounded-xl border border-slate-100">
               <div className="border-b border-slate-100 bg-slate-50 px-4 py-2 text-xs font-bold uppercase tracking-wide text-slate-500">
@@ -206,7 +231,7 @@ function CreateStockRequestModal({ onClose, onSubmitted }) {
                         <span className="shrink-0 text-right text-xs text-slate-500">
                           Kho tổng: <strong>{formatStockQuantity(option.warehouseQuantityOnHand)}</strong>
                           <br />
-                          Cửa hàng: <strong>{formatStockQuantity(option.quantityOnHand)}</strong>
+                          Tồn quầy POS: <strong>{formatStockQuantity(option.quantityOnHand)}</strong>
                         </span>
                       </button>
                     )
@@ -217,7 +242,7 @@ function CreateStockRequestModal({ onClose, onSubmitted }) {
 
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="block space-y-2">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Số lượng yêu cầu *</span>
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Số lượng bổ sung *</span>
                 <input
                   type="number"
                   inputMode="numeric"
@@ -259,9 +284,121 @@ function CreateStockRequestModal({ onClose, onSubmitted }) {
   )
 }
 
+function ApproveStockRequestModal({ request, onClose, onConfirm, isSaving }) {
+  const [stockBySkuId, setStockBySkuId] = useState(new Map())
+  const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    let mounted = true
+    fetchSkuStocks()
+      .then((stocks) => {
+        if (!mounted) return
+        setStockBySkuId(new Map(stocks.map((stock) => [stock.skuId, stock])))
+      })
+      .catch((error) => showError(error.message))
+      .finally(() => {
+        if (mounted) setIsLoading(false)
+      })
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  if (!request) return null
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+      <div className="flex max-h-[min(90dvh,720px)] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl">
+        <div className="flex shrink-0 items-start justify-between border-b border-slate-100 px-6 py-4">
+          <div>
+            <h3 className="text-lg font-bold text-slate-800">Duyệt yêu cầu bổ sung tồn quầy</h3>
+            <p className="mt-1 font-mono text-sm font-semibold text-[#356647]">{request.requestCode}</p>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600">
+            <span className="material-symbols-outlined text-[22px]">close</span>
+          </button>
+        </div>
+
+        <div className="custom-scrollbar min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4">
+          <div className="grid gap-3 sm:grid-cols-[1fr_auto_1fr] sm:items-stretch">
+            <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 p-4">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-700">Kho xuất</p>
+              <p className="mt-1 text-sm font-bold text-slate-800">Kho tổng</p>
+            </div>
+            <div className="hidden items-center justify-center px-1 text-slate-400 sm:flex">
+              <span className="material-symbols-outlined text-[24px]">arrow_forward</span>
+            </div>
+            <div className="rounded-xl border border-sky-100 bg-sky-50/80 p-4">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-sky-700">Kho nhận</p>
+              <p className="mt-1 text-sm font-bold text-slate-800">Tồn quầy POS mặc định</p>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto rounded-xl border border-slate-200">
+            <table className="min-w-full text-left text-sm">
+              <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="px-4 py-3">SKU</th>
+                  <th className="px-4 py-3 text-right">SL yêu cầu</th>
+                  <th className="px-4 py-3 text-right">Kho tổng trước {'->'} sau</th>
+                  <th className="px-4 py-3 text-right">Tồn quầy POS trước {'->'} sau</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {request.items.map((item) => {
+                  const stock = stockBySkuId.get(item.skuId)
+                  const warehouseBefore = Number(stock?.warehouseQuantityOnHand ?? 0)
+                  const counterBefore = Number(stock?.quantityOnHand ?? item.quantityOnHandSnapshot ?? 0)
+                  const quantity = Number(item.quantityDelta ?? 0)
+                  const insufficient = warehouseBefore < quantity
+                  return (
+                    <tr key={item.id ?? item.skuId}>
+                      <td className="px-4 py-3">
+                        <p className="font-mono text-xs font-bold text-[#356647]">{item.skuCode}</p>
+                        <p className="mt-0.5 text-xs text-slate-500">{item.skuSnapshotName}</p>
+                        {insufficient ? <p className="mt-1 text-xs font-semibold text-rose-600">Kho tổng không đủ tồn.</p> : null}
+                      </td>
+                      <td className="px-4 py-3 text-right font-bold text-slate-800">{formatStockQuantity(quantity)}</td>
+                      <td className={`px-4 py-3 text-right ${insufficient ? 'font-semibold text-rose-700' : 'text-slate-600'}`}>
+                        {isLoading ? 'Đang tải...' : `${formatStockQuantity(warehouseBefore)} -> ${formatStockQuantity(Math.max(0, warehouseBefore - quantity))}`}
+                      </td>
+                      <td className="px-4 py-3 text-right text-slate-600">
+                        {isLoading ? 'Đang tải...' : `${formatStockQuantity(counterBefore)} -> ${formatStockQuantity(counterBefore + quantity)}`}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="flex shrink-0 justify-end gap-2 border-t border-slate-100 px-6 py-4">
+          <button type="button" onClick={onClose} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700">
+            Đóng
+          </button>
+          <button
+            type="button"
+            disabled={isSaving || isLoading}
+            onClick={() => onConfirm?.(request.id)}
+            className="rounded-xl bg-[#538463] px-4 py-2 text-sm font-bold text-white hover:bg-[#457053] disabled:opacity-50"
+          >
+            {isSaving ? 'Đang duyệt...' : 'Xác nhận duyệt'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function StockAdjustmentRequestsPage() {
   const location = useLocation()
-  const canReview = canConfirmStockDeduct(loadAuthSession())
+  const session = loadAuthSession()
+  const canReview = canReviewStockReplenishmentRequest(session)
+  const canCreateRequest = canCreateStockReplenishmentRequest(session)
+  const canCancelRequest = canCancelStockReplenishmentRequest(session)
+  const canCancelAnyRequest = isSystemAdmin(session)
+  const currentUserId = session?.userId ? String(session.userId) : ''
   const [activeTab, setActiveTab] = useState(canReview ? 'pending' : 'mine')
   const [searchValue, setSearchValue] = useState(() => location.state?.search ?? '')
   const [requests, setRequests] = useState([])
@@ -275,6 +412,9 @@ function StockAdjustmentRequestsPage() {
   const [actingId, setActingId] = useState(null)
   const [rejectTarget, setRejectTarget] = useState(null)
   const [rejectReason, setRejectReason] = useState('')
+  const [cancelTarget, setCancelTarget] = useState(null)
+  const [cancelReason, setCancelReason] = useState('')
+  const [approveTarget, setApproveTarget] = useState(null)
   const [simulateWarehouse, setSimulateWarehouse] = useState(true)
   const [showCreateModal, setShowCreateModal] = useState(false)
 
@@ -373,12 +513,13 @@ function StockAdjustmentRequestsPage() {
       const result = await approveStockAdjustmentRequest(id)
       const slips = result?.exportSlips ?? []
       if (slips.length === 1) {
-        showSuccess(`Đã duyệt lô. Đã tạo phiếu xuất kho ${slips[0].exportSlipCode}.`)
+        showSuccess(`Đã duyệt yêu cầu bổ sung tồn quầy. Đã tạo phiếu xuất kho ${slips[0].exportSlipCode}.`)
       } else if (slips.length > 1) {
-        showSuccess(`Đã duyệt lô. Đã tạo ${slips.length} phiếu xuất kho.`)
+        showSuccess(`Đã duyệt yêu cầu bổ sung tồn quầy. Đã tạo ${slips.length} phiếu xuất kho.`)
       } else {
-        showSuccess('Đã duyệt lô và cập nhật tồn cửa hàng.')
+        showSuccess('Đã duyệt yêu cầu và cập nhật Tồn quầy POS mặc định.')
       }
+      setApproveTarget(null)
       notifyInventoryStockChanged()
       await loadData()
       if (selectedId === id) {
@@ -394,6 +535,10 @@ function StockAdjustmentRequestsPage() {
 
   async function handleReject() {
     if (!rejectTarget) return
+    if (!rejectReason.trim()) {
+      showError('Vui lòng nhập lý do từ chối.')
+      return
+    }
     setActingId(rejectTarget.id)
     try {
       await rejectStockAdjustmentRequest(rejectTarget.id, rejectReason)
@@ -409,10 +554,16 @@ function StockAdjustmentRequestsPage() {
   }
 
   async function handleCancel(id) {
+    if (!cancelReason.trim()) {
+      showError('Vui lòng nhập lý do hủy.')
+      return
+    }
     setActingId(id)
     try {
-      await cancelStockAdjustmentRequest(id)
+      await cancelStockAdjustmentRequest(id, cancelReason)
       showSuccess('Đã hủy yêu cầu.')
+      setCancelTarget(null)
+      setCancelReason('')
       await loadData()
     } catch (error) {
       showError(error.message)
@@ -424,11 +575,11 @@ function StockAdjustmentRequestsPage() {
   return (
     <PageShell>
       <PageHeader
-        title="Yêu cầu tồn & xuất sang cửa hàng"
+        title="Yêu cầu bổ sung tồn quầy"
         description={
           canReview
-            ? 'Duyệt lô xuất kho tổng sang cửa hàng hoặc điều chỉnh tồn — bấm thẻ để xem chi tiết từng lô'
-            : 'Theo dõi lô yêu cầu bạn đã gửi — bấm thẻ để xem chi tiết'
+            ? 'Thủ kho Kho tổng hoặc Admin duyệt yêu cầu điều chuyển từ Kho tổng sang Tồn quầy POS mặc định.'
+            : 'Manager gửi yêu cầu bổ sung tồn quầy POS mặc định từ Kho tổng.'
         }
         searchPlaceholder="Tìm mã yêu cầu, SKU..."
         searchValue={searchValue}
@@ -459,13 +610,15 @@ function StockAdjustmentRequestsPage() {
             {tab.label}
           </button>
         ))}
-        <button
-          type="button"
-          onClick={() => setShowCreateModal(true)}
-          className="ml-auto rounded-xl bg-[#538463] px-5 py-2.5 text-sm font-bold text-white hover:bg-[#457053]"
-        >
-          Yêu cầu tồn
-        </button>
+        {canCreateRequest ? (
+          <button
+            type="button"
+            onClick={() => setShowCreateModal(true)}
+            className="ml-auto rounded-xl bg-[#538463] px-5 py-2.5 text-sm font-bold text-white hover:bg-[#457053]"
+          >
+            Yêu cầu tồn
+          </button>
+        ) : <span className="ml-auto" />}
         <Link
           className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
           to="/inventory/products"
@@ -526,6 +679,7 @@ function StockAdjustmentRequestsPage() {
                         {row.itemCount} SKU
                         {getRequestMovementLabel(row)}
                       </p>
+                      <p className="mt-1 text-xs text-slate-500">Kho tổng {'->'} Tồn quầy POS mặc định</p>
                       {preview ? (
                         <p className="mt-1 truncate text-xs text-slate-500">
                           {preview.skuCode}
@@ -567,11 +721,14 @@ function StockAdjustmentRequestsPage() {
             <StockAdjustmentRequestDetailPanel
               request={selectedDetail}
               canReview={canReview}
+              canCancel={canCancelRequest}
+              canCancelAny={canCancelAnyRequest}
+              currentUserId={currentUserId}
               activeTab={activeTab}
               actingId={actingId}
-              onApprove={handleApprove}
+              onApprove={setApproveTarget}
               onReject={setRejectTarget}
-              onCancel={handleCancel}
+              onCancel={setCancelTarget}
             />
           )}
         </section>
@@ -580,21 +737,22 @@ function StockAdjustmentRequestsPage() {
       {rejectTarget ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
-            <h3 className="text-lg font-bold text-slate-800">Từ chối lô {rejectTarget.requestCode}</h3>
+            <h3 className="text-lg font-bold text-slate-800">Từ chối yêu cầu {rejectTarget.requestCode}</h3>
             <p className="mt-2 text-sm text-slate-600">
               {rejectTarget.itemCount} SKU trong lô
               {rejectTarget.hasIncrease && rejectTarget.hasDecrease
-                ? ' (có xuất sang cửa hàng và giảm tồn)'
+                ? ' (có bổ sung tồn quầy và giảm tồn)'
                 : rejectTarget.hasIncrease
-                  ? ' (xuất sang cửa hàng)'
+                  ? ' (bổ sung tồn quầy)'
                   : rejectTarget.hasDecrease
                     ? ' (giảm tồn)'
                     : ''}
             </p>
             <label className="mt-4 block space-y-2">
-              <span className="text-xs font-semibold text-slate-500">Lý do từ chối (tùy chọn)</span>
+              <span className="text-xs font-semibold text-slate-500">Lý do từ chối *</span>
               <textarea
                 rows={3}
+                required
                 value={rejectReason}
                 onChange={(event) => setRejectReason(event.target.value)}
                 className="w-full resize-none rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20"
@@ -622,6 +780,54 @@ function StockAdjustmentRequestsPage() {
             </div>
           </div>
         </div>
+      ) : null}
+
+      {cancelTarget ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+            <h3 className="text-lg font-bold text-slate-800">Hủy yêu cầu {cancelTarget.requestCode}</h3>
+            <p className="mt-2 text-sm text-slate-600">Hủy yêu cầu đang chờ duyệt, không thay đổi tồn kho.</p>
+            <label className="mt-4 block space-y-2">
+              <span className="text-xs font-semibold text-slate-500">Lý do hủy *</span>
+              <textarea
+                rows={3}
+                required
+                value={cancelReason}
+                onChange={(event) => setCancelReason(event.target.value)}
+                className="w-full resize-none rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20"
+              />
+            </label>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setCancelTarget(null)
+                  setCancelReason('')
+                }}
+                className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700"
+              >
+                Đóng
+              </button>
+              <button
+                type="button"
+                disabled={actingId === cancelTarget.id}
+                onClick={() => handleCancel(cancelTarget.id)}
+                className="rounded-xl bg-rose-600 px-4 py-2 text-sm font-bold text-white hover:bg-rose-700 disabled:opacity-50"
+              >
+                Xác nhận hủy
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {approveTarget ? (
+        <ApproveStockRequestModal
+          request={approveTarget}
+          isSaving={actingId === approveTarget.id}
+          onClose={() => setApproveTarget(null)}
+          onConfirm={handleApprove}
+        />
       ) : null}
 
       {showCreateModal ? (

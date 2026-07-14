@@ -6,6 +6,7 @@ import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/Tab
 import { showError, showSuccess } from '../../../app/toast.js'
 import {
   canCreateCatalog,
+  canCreateStockReplenishmentRequest,
   canHideCatalog,
   canSyncCatalog,
   isWarehouseRole,
@@ -259,6 +260,7 @@ export default function ProductsWarehouseListPage() {
   const canCreate = canCreateCatalog(session)
   const canHide = canHideCatalog(session)
   const canSync = canSyncCatalog(session)
+  const canRequestCounterReplenishment = canCreateStockReplenishmentRequest(session)
   const isWarehouse = isWarehouseRole(session)
 
   useEffect(() => {
@@ -838,16 +840,16 @@ export default function ProductsWarehouseListPage() {
                                     <span className="material-symbols-outlined text-[18px]">inventory_2</span>
                                   </button>
                                 ) : null}
-                                {isWarehouse && selectedVariant && !product.isDeleted ? (
+                                {canRequestCounterReplenishment && selectedVariant && !product.isDeleted ? (
                                   <button
                                     type="button"
-                                    title={stockQty > 0 ? 'Xuất sang cửa hàng' : 'Kho tổng hết hàng'}
+                                    title={stockQty > 0 ? 'Bổ sung tồn quầy POS mặc định' : 'Kho tổng hết hàng'}
                                     disabled={stockQty <= 0}
                                     className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-semibold text-[#356647] hover:bg-[#356647]/8 disabled:cursor-not-allowed disabled:opacity-40"
                                     onClick={() => openTransferToStore(product, selectedVariant)}
                                   >
                                     <span className="material-symbols-outlined text-[18px]">output</span>
-                                    <span>Xuất sang CH</span>
+                                    <span>Bổ sung quầy</span>
                                   </button>
                                 ) : null}
                                 {!product.isDeleted && canCreate ? (

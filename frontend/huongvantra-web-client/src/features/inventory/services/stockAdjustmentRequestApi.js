@@ -123,9 +123,10 @@ export async function rejectStockAdjustmentRequest(id, reason) {
   return data
 }
 
-export async function cancelStockAdjustmentRequest(id) {
+export async function cancelStockAdjustmentRequest(id, reason) {
   const data = await apiRequestAuth(`/api/v1/inventory/stock-adjustment-requests/${id}/cancel`, {
     method: 'POST',
+    body: JSON.stringify({ reason: reason?.trim() || null }),
   })
   return data
 }

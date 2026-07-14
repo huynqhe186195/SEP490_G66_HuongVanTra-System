@@ -78,7 +78,7 @@ export const navigationItems = [
     ],
   },
   {
-    label: 'Yêu cầu điều chỉnh tồn',
+    label: 'Bổ sung tồn quầy',
     path: '/inventory/stock-requests',
     module: 'stock_adjustment_ops',
     icon: 'edit_note',

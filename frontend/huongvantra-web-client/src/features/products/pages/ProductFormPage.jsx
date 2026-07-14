@@ -1637,7 +1637,7 @@ function ProductFormPage({ mode }) {
         <div className="space-y-6">
           <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-start">
             <div>
-              <h1 className="text-2xl font-extrabold text-slate-800">Gửi yêu cầu điều chỉnh tồn</h1>
+              <h1 className="text-2xl font-extrabold text-slate-800">Gửi yêu cầu bổ sung tồn quầy</h1>
               <p className="mt-1 text-sm text-slate-500">
                 {form.name ? (
                   <>
@@ -1645,7 +1645,7 @@ function ProductFormPage({ mode }) {
                     (có thể quay lại danh sách hàng hóa thêm SKU khác trước khi gửi).
                   </>
                 ) : (
-                  'Thêm SKU vào lô chung (giữ khi chuyển trang), rồi gửi một yêu cầu cho Thủ kho duyệt.'
+                  'Thêm SKU vào lô chung (giữ khi chuyển trang), rồi gửi yêu cầu để Thủ kho Kho tổng duyệt bổ sung tồn quầy POS mặc định.'
                 )}
               </p>
             </div>

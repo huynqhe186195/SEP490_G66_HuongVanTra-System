@@ -289,7 +289,7 @@ export function ExportSlipDocument({ slip, getTypeLabel }) {
               <th className="border-b border-slate-200 px-3 py-2">Nguyên liệu</th>
               <th className="border-b border-slate-200 px-3 py-2 text-right">Số lượng</th>
               <th className="border-b border-slate-200 px-3 py-2">Kho trước {'->'} sau</th>
-              <th className="border-b border-slate-200 px-3 py-2">Cửa hàng trước {'->'} sau</th>
+              <th className="border-b border-slate-200 px-3 py-2">Tồn quầy POS trước {'->'} sau</th>
               <th className="border-b border-slate-200 px-3 py-2">Lô FIFO</th>
             </tr>
           </thead>
@@ -365,7 +365,7 @@ export function ImportSlipDocument({ slip, getTypeLabel }) {
               <th className="border-b border-slate-200 px-3 py-2 text-right">Số lượng</th>
               <th className="border-b border-slate-200 px-3 py-2">{lotColumnLabel}</th>
               <th className="border-b border-slate-200 px-3 py-2">Kho trước {'->'} sau</th>
-              <th className="border-b border-slate-200 px-3 py-2">Cửa hàng trước {'->'} sau</th>
+              <th className="border-b border-slate-200 px-3 py-2">Tồn quầy POS trước {'->'} sau</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">

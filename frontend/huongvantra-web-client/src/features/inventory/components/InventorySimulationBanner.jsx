@@ -7,13 +7,12 @@ function InventorySimulationBanner({ simulateWarehouse = true, warehouseView = f
       <p className="mt-1 text-amber-800/90">
         {warehouseView ? (
           <>
-            Màn Thủ kho chỉ hiển thị <strong>tồn kho tổng</strong>. Duyệt yêu cầu từ cửa hàng vẫn cộng tồn CH (giả
-            lập) và tạo phiếu xuất — chưa trừ kho tổng thật.
+            Màn Thủ kho hiển thị <strong>Kho tổng</strong>. Duyệt yêu cầu sẽ chuyển tồn sang{' '}
+            <strong>Tồn quầy POS mặc định</strong> và tạo phiếu xuất.
           </>
         ) : (
           <>
-            Module kho chưa vận hành đầy đủ. Tồn hiển thị là <strong>tồn cửa hàng</strong>. Gửi yêu cầu để Thủ kho
-            duyệt.
+            Tồn hiển thị là <strong>Tồn quầy POS mặc định</strong>. Gửi yêu cầu để Thủ kho Kho tổng duyệt bổ sung.
           </>
         )}
       </p>

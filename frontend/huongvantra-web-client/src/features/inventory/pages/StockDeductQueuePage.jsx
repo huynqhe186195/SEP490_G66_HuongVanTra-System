@@ -75,7 +75,7 @@ function StockDeductQueuePage() {
       {
         label: 'Chờ hàng',
         value: String(insufficient),
-        note: 'Thiếu tồn quầy - có thể thử lại',
+        note: 'Thiếu Tồn quầy POS mặc định - có thể thử lại',
         warning: insufficient > 0,
       },
       { label: 'Đã trừ / Đã hủy', value: `${confirmed} / ${cancelled}`, note: 'Theo bộ lọc hiện tại' },
@@ -88,8 +88,8 @@ function StockDeductQueuePage() {
         title="Chờ trừ tồn quầy"
         description={
           canExecuteDeduct
-            ? 'Manager/Admin xác nhận trừ QuantityOnHand cho đơn đã bán trước.'
-            : 'Theo dõi đơn chờ trừ tồn quầy.'
+            ? 'Manager/Admin xác nhận trừ QuantityOnHand của Tồn quầy POS mặc định cho đơn đã bán trước.'
+            : 'Theo dõi đơn chờ trừ Tồn quầy POS mặc định.'
         }
         searchPlaceholder="Tìm mã đơn..."
         searchValue={searchValue}
@@ -153,7 +153,7 @@ function StockDeductQueuePage() {
               <tr>
                 <th className="px-8 py-4">Mã đơn</th>
                 <th className="px-4 py-4">Queue</th>
-                <th className="px-4 py-4">Tồn quầy</th>
+                <th className="px-4 py-4">Tồn quầy POS</th>
                 <th className="px-4 py-4">Thanh toán</th>
                 <th className="px-4 py-4">Ngày tạo queue</th>
                 <th className="px-8 py-4 text-right">Tổng tiền</th>

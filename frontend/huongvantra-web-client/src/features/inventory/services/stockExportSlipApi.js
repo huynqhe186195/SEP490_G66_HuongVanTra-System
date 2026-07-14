@@ -59,8 +59,9 @@ function mapExportSlip(row) {
 }
 
 export function getExportTypeLabel(type) {
-  if (type === 'transfer_to_store') return 'Xuất sang cửa hàng'
-  if (type === 'simulated_transfer') return 'Xuất giả lập (CH)'
+  if (type === 'counter_replenishment_export') return 'Xuất bổ sung tồn quầy'
+  if (type === 'transfer_to_store') return 'Xuất bổ sung tồn quầy'
+  if (type === 'simulated_transfer') return 'Xuất bổ sung tồn quầy (giả lập)'
   if (type === 'production') return 'Xuất nguyên liệu sản xuất'
   return type || '—'
 }

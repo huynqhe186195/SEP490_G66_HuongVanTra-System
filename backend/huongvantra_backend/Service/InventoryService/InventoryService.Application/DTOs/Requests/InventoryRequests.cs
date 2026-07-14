@@ -20,6 +20,8 @@ public record CreateStockAdjustmentRequest(
 
 public record RejectStockAdjustmentRequest(string? Reason);
 
+public record CancelStockAdjustmentRequest(string? Reason);
+
 public record CreateWarehouseBatchItemRequest(
     Guid SkuId,
     string? SkuCode,
