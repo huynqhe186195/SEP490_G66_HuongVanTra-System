@@ -306,13 +306,16 @@ function ApproveStockRequestModal({ request, onClose, onConfirm, isSaving }) {
 
   if (!request) return null
 
+  const items = Array.isArray(request.items) ? request.items : []
+  const requestCode = request.requestCode || '—'
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
       <div className="flex max-h-[min(90dvh,720px)] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl">
         <div className="flex shrink-0 items-start justify-between border-b border-slate-100 px-6 py-4">
           <div>
             <h3 className="text-lg font-bold text-slate-800">Duyệt yêu cầu bổ sung tồn quầy</h3>
-            <p className="mt-1 font-mono text-sm font-semibold text-[#356647]">{request.requestCode}</p>
+            <p className="mt-1 font-mono text-sm font-semibold text-[#356647]">{requestCode}</p>
           </div>
           <button type="button" onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600">
             <span className="material-symbols-outlined text-[22px]">close</span>
@@ -345,29 +348,37 @@ function ApproveStockRequestModal({ request, onClose, onConfirm, isSaving }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {request.items.map((item) => {
-                  const stock = stockBySkuId.get(item.skuId)
-                  const warehouseBefore = Number(stock?.warehouseQuantityOnHand ?? 0)
-                  const counterBefore = Number(stock?.quantityOnHand ?? item.quantityOnHandSnapshot ?? 0)
-                  const quantity = Number(item.quantityDelta ?? 0)
-                  const insufficient = warehouseBefore < quantity
-                  return (
-                    <tr key={item.id ?? item.skuId}>
-                      <td className="px-4 py-3">
-                        <p className="font-mono text-xs font-bold text-[#356647]">{item.skuCode}</p>
-                        <p className="mt-0.5 text-xs text-slate-500">{item.skuSnapshotName}</p>
-                        {insufficient ? <p className="mt-1 text-xs font-semibold text-rose-600">Kho tổng không đủ tồn.</p> : null}
-                      </td>
-                      <td className="px-4 py-3 text-right font-bold text-slate-800">{formatStockQuantity(quantity)}</td>
-                      <td className={`px-4 py-3 text-right ${insufficient ? 'font-semibold text-rose-700' : 'text-slate-600'}`}>
-                        {isLoading ? 'Đang tải...' : `${formatStockQuantity(warehouseBefore)} -> ${formatStockQuantity(Math.max(0, warehouseBefore - quantity))}`}
-                      </td>
-                      <td className="px-4 py-3 text-right text-slate-600">
-                        {isLoading ? 'Đang tải...' : `${formatStockQuantity(counterBefore)} -> ${formatStockQuantity(counterBefore + quantity)}`}
-                      </td>
-                    </tr>
-                  )
-                })}
+                {items.length > 0 ? (
+                  items.map((item) => {
+                    const stock = stockBySkuId.get(item.skuId)
+                    const warehouseBefore = Number(stock?.warehouseQuantityOnHand ?? 0)
+                    const counterBefore = Number(stock?.quantityOnHand ?? item.quantityOnHandSnapshot ?? 0)
+                    const quantity = Number(item.quantityDelta ?? 0)
+                    const insufficient = warehouseBefore < quantity
+                    return (
+                      <tr key={item.id ?? item.skuId ?? item.skuCode}>
+                        <td className="px-4 py-3">
+                          <p className="font-mono text-xs font-bold text-[#356647]">{item.skuCode || '—'}</p>
+                          <p className="mt-0.5 text-xs text-slate-500">{item.skuSnapshotName || '—'}</p>
+                          {insufficient ? <p className="mt-1 text-xs font-semibold text-rose-600">Kho tổng không đủ tồn.</p> : null}
+                        </td>
+                        <td className="px-4 py-3 text-right font-bold text-slate-800">{formatStockQuantity(quantity)}</td>
+                        <td className={`px-4 py-3 text-right ${insufficient ? 'font-semibold text-rose-700' : 'text-slate-600'}`}>
+                          {isLoading ? 'Đang tải...' : `${formatStockQuantity(warehouseBefore)} -> ${formatStockQuantity(Math.max(0, warehouseBefore - quantity))}`}
+                        </td>
+                        <td className="px-4 py-3 text-right text-slate-600">
+                          {isLoading ? 'Đang tải...' : `${formatStockQuantity(counterBefore)} -> ${formatStockQuantity(counterBefore + quantity)}`}
+                        </td>
+                      </tr>
+                    )
+                  })
+                ) : (
+                  <tr>
+                    <td colSpan={4} className="px-4 py-6 text-center text-sm text-slate-500">
+                      Chưa có dòng SKU để duyệt.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -379,7 +390,7 @@ function ApproveStockRequestModal({ request, onClose, onConfirm, isSaving }) {
           </button>
           <button
             type="button"
-            disabled={isSaving || isLoading}
+            disabled={isSaving || isLoading || items.length === 0 || !request.id}
             onClick={() => onConfirm?.(request.id)}
             className="rounded-xl bg-[#538463] px-4 py-2 text-sm font-bold text-white hover:bg-[#457053] disabled:opacity-50"
           >
@@ -508,6 +519,11 @@ function StockAdjustmentRequestsPage() {
   }, [requests])
 
   async function handleApprove(id) {
+    if (!id) {
+      showError('Không xác định được yêu cầu cần duyệt.')
+      return
+    }
+
     setActingId(id)
     try {
       const result = await approveStockAdjustmentRequest(id)
@@ -521,10 +537,22 @@ function StockAdjustmentRequestsPage() {
       }
       setApproveTarget(null)
       notifyInventoryStockChanged()
-      await loadData()
-      if (selectedId === id) {
+
+      if (activeTab === 'pending') {
+        setActiveTab('processed')
+        setPage(1)
+        setSelectedId(id)
+      } else {
+        await loadData()
+        setSelectedId(id)
+      }
+
+      try {
         const detail = await fetchStockAdjustmentRequestById(id)
         setSelectedDetail(detail)
+      } catch (detailError) {
+        showError(detailError.message)
+        setSelectedDetail(null)
       }
     } catch (error) {
       showError(error.message)
@@ -824,7 +852,7 @@ function StockAdjustmentRequestsPage() {
       {approveTarget ? (
         <ApproveStockRequestModal
           request={approveTarget}
-          isSaving={actingId === approveTarget.id}
+          isSaving={actingId === approveTarget?.id}
           onClose={() => setApproveTarget(null)}
           onConfirm={handleApprove}
         />
