@@ -28,7 +28,7 @@ import {
   getAdjustmentStatusLabel,
   rejectStockAdjustmentRequest,
 } from '../services/stockAdjustmentRequestApi.js'
-import { fetchProducts } from '../../products/services/productsApi.js'
+import { fetchSkus } from '../../products/services/productSkusApi.js'
 import { buildSkuSnapshotName } from '../../products/components/BatchStockAdjustmentModal.jsx'
 
 const TABS = [
@@ -42,6 +42,7 @@ const REQUEST_TABS = TABS.map((tab) =>
     ? { ...tab, status: 'processed', excludePending: false }
     : tab,
 )
+const SKU_PICKER_PAGE_SIZE = 30
 
 function formatDelta(delta) {
   const value = Number(delta)
@@ -57,52 +58,107 @@ function getRequestMovementLabel(row) {
   return ''
 }
 
-function flattenProductSkuOptions(products = [], stockBySkuId = new Map()) {
-  return products.flatMap((product) => {
-    const skus = product.variants?.length ? product.variants : (product.skus ?? [])
-    return skus.map((sku) => ({
-      sku,
-      productName: product.name,
-      skuSnapshotName: buildSkuSnapshotName(sku, product.name),
-      warehouseQuantityOnHand: Number(stockBySkuId.get(sku.id)?.warehouseQuantityOnHand ?? 0),
-      quantityOnHand: Number(stockBySkuId.get(sku.id)?.quantityOnHand ?? 0),
-    }))
+function normalizeSkuSearchTerm(value) {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, ' ')
+}
+
+function buildSkuSearchTerms(search) {
+  const raw = String(search ?? '').trim()
+  if (!raw) return [undefined]
+
+  const normalized = normalizeSkuSearchTerm(raw)
+  const hyphenated = normalized.replace(/\s+/g, '-')
+  return [...new Set([raw, normalized, hyphenated].filter(Boolean))]
+}
+
+function toSkuOption(sku, stockBySkuId = new Map()) {
+  return {
+    sku,
+    productName: sku.productName ?? '',
+    skuSnapshotName: buildSkuSnapshotName(sku, sku.productName ?? ''),
+    warehouseQuantityOnHand: Number(stockBySkuId.get(sku.id)?.warehouseQuantityOnHand ?? 0),
+    quantityOnHand: Number(stockBySkuId.get(sku.id)?.quantityOnHand ?? 0),
+  }
+}
+
+function mergeSkuOptions(current = [], next = []) {
+  const byId = new Map()
+  current.forEach((option) => {
+    if (option?.sku?.id) byId.set(option.sku.id, option)
   })
+  next.forEach((option) => {
+    if (option?.sku?.id) byId.set(option.sku.id, option)
+  })
+  return [...byId.values()]
 }
 
 function CreateStockRequestModal({ onClose, onSubmitted }) {
   const [search, setSearch] = useState('')
   const [skuOptions, setSkuOptions] = useState([])
+  const [skuPage, setSkuPage] = useState(1)
+  const [skuHasMore, setSkuHasMore] = useState(false)
+  const [skuTotalCount, setSkuTotalCount] = useState(null)
   const [selectedOption, setSelectedOption] = useState(null)
   const [quantity, setQuantity] = useState('')
   const [reason, setReason] = useState('Bổ sung tồn quầy POS mặc định từ Kho tổng')
   const [isLoading, setIsLoading] = useState(true)
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const searchTerm = search.trim()
+  const isSearchingSku = searchTerm.length > 0
 
   useEffect(() => {
     let mounted = true
     const timer = window.setTimeout(async () => {
-      setIsLoading(true)
+      if (skuPage === 1) setIsLoading(true)
+      else setIsLoadingMore(true)
+
       try {
-        const [products, stocks] = await Promise.all([
-          fetchProducts({
-            search: search.trim() || undefined,
-            page: 1,
-            pageSize: 20,
-            isDeleted: false,
-          }),
+        const searchTerms = buildSkuSearchTerms(searchTerm)
+        const [stocks, ...skuResponses] = await Promise.all([
           fetchSkuStocks(),
+          ...searchTerms.map((term) =>
+            fetchSkus({
+              search: term,
+              page: skuPage,
+              pageSize: SKU_PICKER_PAGE_SIZE,
+              isActive: true,
+            }),
+          ),
         ])
         if (!mounted) return
         const stockBySkuId = new Map(stocks.map((stock) => [stock.skuId, stock]))
-        setSkuOptions(flattenProductSkuOptions(products.items ?? [], stockBySkuId))
+        const nextOptions = mergeSkuOptions(
+          [],
+          skuResponses.flatMap((response) =>
+            (response.items ?? []).map((sku) => toSkuOption(sku, stockBySkuId)),
+          ),
+        )
+        const hasMore = skuResponses.some((response) =>
+          Number(response.page ?? skuPage) < Number(response.totalPages ?? 1),
+        )
+        setSkuOptions((current) => (skuPage === 1 ? nextOptions : mergeSkuOptions(current, nextOptions)))
+        setSkuHasMore(hasMore)
+        setSkuTotalCount(searchTerms.length === 1 ? Number(skuResponses[0]?.totalCount ?? 0) : null)
       } catch (error) {
         if (mounted) {
-          setSkuOptions([])
+          if (skuPage === 1) setSkuOptions([])
+          setSkuHasMore(false)
+          setSkuTotalCount(null)
           showError(error.message)
         }
       } finally {
-        if (mounted) setIsLoading(false)
+        if (mounted) {
+          setIsLoading(false)
+          setIsLoadingMore(false)
+        }
       }
     }, 250)
 
@@ -110,7 +166,7 @@ function CreateStockRequestModal({ onClose, onSubmitted }) {
       mounted = false
       window.clearTimeout(timer)
     }
-  }, [search])
+  }, [searchTerm, skuPage])
 
   const parsedQuantity = Number(quantity)
   const canSubmit = selectedOption?.sku?.id && Number.isFinite(parsedQuantity) && parsedQuantity > 0
@@ -158,6 +214,11 @@ function CreateStockRequestModal({ onClose, onSubmitted }) {
     }
   }
 
+  const skuListCountText =
+    isSearchingSku && skuTotalCount !== null
+      ? `${skuTotalCount} kết quả`
+      : `${skuOptions.length} SKU`
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
       <div className="flex max-h-[min(90dvh,720px)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl">
@@ -179,11 +240,16 @@ function CreateStockRequestModal({ onClose, onSubmitted }) {
                 value={search}
                 onChange={(event) => {
                   setSearch(event.target.value)
-                  setSelectedOption(null)
+                  setSkuPage(1)
+                  setSkuHasMore(false)
+                  setSkuTotalCount(null)
                 }}
                 className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-[#538463]"
                 placeholder="VD: FG-TRA-NHAI-50G hoặc tên sản phẩm"
               />
+              <span className="block text-xs text-slate-500">
+                Nhập mã SKU, tên sản phẩm hoặc tên biến thể để tìm trong toàn bộ danh sách. Có thể nhập không dấu, ví dụ: tra nhai.
+              </span>
             </label>
 
             <div className="grid gap-3 sm:grid-cols-[1fr_auto_1fr] sm:items-stretch">
@@ -203,42 +269,94 @@ function CreateStockRequestModal({ onClose, onSubmitted }) {
             </div>
 
             <div className="rounded-xl border border-slate-100">
-              <div className="border-b border-slate-100 bg-slate-50 px-4 py-2 text-xs font-bold uppercase tracking-wide text-slate-500">
-                SKU có thể yêu cầu
+              <div className="flex flex-wrap items-start justify-between gap-2 border-b border-slate-100 bg-slate-50 px-4 py-3">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                    {isSearchingSku ? 'Kết quả SKU' : 'SKU gợi ý'}
+                  </p>
+                  <p className="mt-1 text-xs font-medium normal-case tracking-normal text-slate-500">
+                    {isSearchingSku
+                      ? 'Kết quả được tìm theo mã SKU, tên sản phẩm và tên biến thể.'
+                      : 'Đang hiển thị các SKU gợi ý. Hãy tìm kiếm để xem thêm SKU khác.'}
+                  </p>
+                </div>
+                <span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-slate-500">
+                  {skuListCountText}
+                </span>
               </div>
               <div className="max-h-56 overflow-y-auto custom-scrollbar">
                 {isLoading ? (
                   <p className="px-4 py-6 text-sm text-slate-500">Đang tải SKU...</p>
                 ) : skuOptions.length === 0 ? (
-                  <p className="px-4 py-6 text-sm text-slate-500">Không tìm thấy SKU phù hợp.</p>
+                  <p className="px-4 py-6 text-sm text-slate-500">
+                    {isSearchingSku
+                      ? 'Không tìm thấy SKU phù hợp. Hãy thử nhập mã SKU hoặc tên sản phẩm khác.'
+                      : 'Chưa có SKU gợi ý để hiển thị.'}
+                  </p>
                 ) : (
-                  skuOptions.map((option) => {
-                    const selected = selectedOption?.sku?.id === option.sku.id
-                    return (
-                      <button
-                        key={option.sku.id}
-                        type="button"
-                        onClick={() => setSelectedOption(option)}
-                        className={`flex w-full items-start justify-between gap-3 border-b border-slate-50 px-4 py-3 text-left text-sm last:border-b-0 hover:bg-[#fbf9f1] ${
-                          selected ? 'bg-[#e8f1eb] text-[#356647]' : 'text-slate-700'
-                        }`}
-                      >
-                        <span className="min-w-0">
-                          <span className="block font-mono text-xs font-bold">{option.sku.skuCode}</span>
-                          <span className="mt-0.5 block truncate font-semibold">{option.skuSnapshotName}</span>
-                          <span className="mt-0.5 block text-xs text-slate-500">{option.productName}</span>
-                        </span>
-                        <span className="shrink-0 text-right text-xs text-slate-500">
-                          Kho tổng: <strong>{formatStockQuantity(option.warehouseQuantityOnHand)}</strong>
-                          <br />
-                          Tồn quầy POS: <strong>{formatStockQuantity(option.quantityOnHand)}</strong>
-                        </span>
-                      </button>
-                    )
-                  })
+                  <>
+                    {skuOptions.map((option) => {
+                      const selected = selectedOption?.sku?.id === option.sku.id
+                      return (
+                        <button
+                          key={option.sku.id}
+                          type="button"
+                          onClick={() => setSelectedOption(option)}
+                          className={`flex w-full items-start justify-between gap-3 border-b border-slate-50 px-4 py-3 text-left text-sm hover:bg-[#fbf9f1] ${
+                            selected ? 'bg-[#e8f1eb] text-[#356647]' : 'text-slate-700'
+                          }`}
+                        >
+                          <span className="min-w-0">
+                            <span className="block font-mono text-xs font-bold">{option.sku.skuCode}</span>
+                            <span className="mt-0.5 block truncate font-semibold">{option.skuSnapshotName}</span>
+                            <span className="mt-0.5 block text-xs text-slate-500">{option.productName}</span>
+                            {selected ? (
+                              <span className="mt-1 inline-flex rounded-full bg-[#356647] px-2 py-0.5 text-[10px] font-bold text-white">
+                                Đã chọn
+                              </span>
+                            ) : null}
+                          </span>
+                          <span className="shrink-0 text-right text-xs text-slate-500">
+                            Kho tổng: <strong>{formatStockQuantity(option.warehouseQuantityOnHand)}</strong>
+                            <br />
+                            Tồn quầy POS: <strong>{formatStockQuantity(option.quantityOnHand)}</strong>
+                          </span>
+                        </button>
+                      )
+                    })}
+                    {skuHasMore ? (
+                      <div className="border-t border-slate-100 bg-white px-4 py-3 text-center">
+                        <button
+                          type="button"
+                          disabled={isLoadingMore}
+                          onClick={() => setSkuPage((current) => current + 1)}
+                          className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                        >
+                          {isLoadingMore ? 'Đang tải thêm...' : 'Xem thêm SKU'}
+                        </button>
+                      </div>
+                    ) : null}
+                  </>
                 )}
               </div>
             </div>
+
+            {selectedOption ? (
+              <div className="rounded-xl border border-[#538463]/20 bg-[#f0f7f2] p-4">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-[#356647]">SKU đã chọn</p>
+                <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-mono text-sm font-bold text-[#356647]">{selectedOption.sku.skuCode}</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-800">{selectedOption.skuSnapshotName}</p>
+                    <p className="mt-0.5 text-xs text-slate-500">{selectedOption.productName}</p>
+                  </div>
+                  <div className="shrink-0 text-right text-xs text-slate-600">
+                    <p>Kho tổng: <strong>{formatStockQuantity(selectedOption.warehouseQuantityOnHand)}</strong></p>
+                    <p className="mt-1">Tồn quầy POS: <strong>{formatStockQuantity(selectedOption.quantityOnHand)}</strong></p>
+                  </div>
+                </div>
+              </div>
+            ) : null}
 
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="block space-y-2">
