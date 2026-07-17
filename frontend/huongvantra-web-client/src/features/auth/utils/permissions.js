@@ -91,15 +91,15 @@ export function canAdjustStoreStock(session) {
 }
 
 export function canCreateStockReplenishmentRequest(session) {
-  return isBranchManager(session) || isManagerRole(session)
+  return isBranchManager(session) || isManagerRole(session) || isWarehouseRole(session) || isSystemAdmin(session)
 }
 
 export function canReviewStockReplenishmentRequest(session) {
-  return isWarehouseRole(session) || isSystemAdmin(session)
+  return isBranchManager(session) || isManagerRole(session) || isWarehouseRole(session) || isSystemAdmin(session)
 }
 
 export function canCancelStockReplenishmentRequest(session) {
-  return isBranchManager(session) || isManagerRole(session) || isSystemAdmin(session)
+  return isBranchManager(session) || isManagerRole(session) || isWarehouseRole(session) || isSystemAdmin(session)
 }
 
 export function isSystemAdmin(session) {

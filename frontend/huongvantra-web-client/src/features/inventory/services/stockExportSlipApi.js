@@ -39,6 +39,9 @@ function mapExportSlip(row) {
     stockAdjustmentRequestCode: row.stockAdjustmentRequestCode ?? row.StockAdjustmentRequestCode ?? '',
     productionOrderId: row.productionOrderId ?? row.ProductionOrderId ?? null,
     productionCode: row.productionCode ?? row.ProductionCode ?? '',
+    referenceType: row.referenceType ?? row.ReferenceType ?? '',
+    referenceId: row.referenceId ?? row.ReferenceId ?? null,
+    referenceCode: row.referenceCode ?? row.ReferenceCode ?? '',
     skuId: row.skuId ?? row.SkuId,
     skuCode: row.skuCode ?? row.SkuCode ?? '',
     skuSnapshotName: row.skuSnapshotName ?? row.SkuSnapshotName ?? '',
@@ -63,6 +66,9 @@ export function getExportTypeLabel(type) {
   if (type === 'transfer_to_store') return 'Xuất bổ sung tồn quầy'
   if (type === 'simulated_transfer') return 'Xuất bổ sung tồn quầy (giả lập)'
   if (type === 'production') return 'Xuất nguyên liệu sản xuất'
+  if (type === 'shelf_return_export') return 'Xuất hoàn Kệ Hàng'
+  if (type === 'supplier_return') return 'Trả nhà cung cấp'
+  if (type === 'inbound_data_correction') return 'Điều chỉnh dữ liệu nhập'
   return type || '—'
 }
 

@@ -45,6 +45,8 @@ builder.Services.AddScoped<IWarehouseBatchRepository, WarehouseBatchRepository>(
 builder.Services.AddScoped<IStockExportBatchAllocationRepository, StockExportBatchAllocationRepository>();
 builder.Services.AddScoped<IInventoryLedgerRepository, InventoryLedgerRepository>();
 builder.Services.AddScoped<ISupplierReceiptRepository, SupplierReceiptRepository>();
+builder.Services.AddScoped<IShelfReturnRequestRepository, ShelfReturnRequestRepository>();
+builder.Services.AddScoped<ISupplierReturnRequestRepository, SupplierReturnRequestRepository>();
 builder.Services.AddScoped<IProcessedIntegrationEventRepository, ProcessedIntegrationEventRepository>();
 builder.Services.AddScoped<IProductionOrderRepository, ProductionOrderRepository>();
 builder.Services.AddScoped<IInventoryEventPublisher, InventoryEventPublisher>();

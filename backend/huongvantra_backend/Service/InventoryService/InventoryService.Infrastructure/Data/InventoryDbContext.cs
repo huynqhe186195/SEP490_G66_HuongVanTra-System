@@ -21,6 +21,10 @@ public class InventoryDbContext(DbContextOptions<InventoryDbContext> options) : 
     public DbSet<InventoryLedgerEntry> InventoryLedgerEntries => Set<InventoryLedgerEntry>();
     public DbSet<SupplierReceipt> SupplierReceipts => Set<SupplierReceipt>();
     public DbSet<SupplierReceiptItem> SupplierReceiptItems => Set<SupplierReceiptItem>();
+    public DbSet<ShelfReturnRequest> ShelfReturnRequests => Set<ShelfReturnRequest>();
+    public DbSet<ShelfReturnRequestItem> ShelfReturnRequestItems => Set<ShelfReturnRequestItem>();
+    public DbSet<SupplierReturnRequest> SupplierReturnRequests => Set<SupplierReturnRequest>();
+    public DbSet<SupplierReturnRequestItem> SupplierReturnRequestItems => Set<SupplierReturnRequestItem>();
     public DbSet<ProductionOrder> ProductionOrders => Set<ProductionOrder>();
     public DbSet<ProductionOrderLine> ProductionOrderLines => Set<ProductionOrderLine>();
     public DbSet<ProductionOrderOutputLine> ProductionOrderOutputLines => Set<ProductionOrderOutputLine>();

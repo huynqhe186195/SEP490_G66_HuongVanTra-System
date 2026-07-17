@@ -24,6 +24,7 @@ public class StockImportSlipRepository(InventoryDbContext _db) : IStockImportSli
                 s.ImportCode.ToLower().Contains(keyword) ||
                 (s.ProductionCode != null && s.ProductionCode.ToLower().Contains(keyword)) ||
                 (s.SupplierReceiptCode != null && s.SupplierReceiptCode.ToLower().Contains(keyword)) ||
+                (s.ReferenceCode != null && s.ReferenceCode.ToLower().Contains(keyword)) ||
                 (s.WarehouseBatchLotCode != null && s.WarehouseBatchLotCode.ToLower().Contains(keyword)) ||
                 s.SkuCode.ToLower().Contains(keyword) ||
                 s.ProductSnapshotName.ToLower().Contains(keyword) ||

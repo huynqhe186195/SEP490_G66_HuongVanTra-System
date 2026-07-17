@@ -40,7 +40,7 @@ public class StockAdjustmentRequestsController(InventoryLogic _logic) : Controll
     }
 
     [HttpPost]
-    [Authorize(Roles = "Manager")]
+    [Authorize(Roles = "Manager,Warehouse,Admin")]
     public async Task<IActionResult> Create([FromBody] CreateStockAdjustmentRequest request, CancellationToken ct)
     {
         var userId = User.GetUserId();
@@ -51,7 +51,7 @@ public class StockAdjustmentRequestsController(InventoryLogic _logic) : Controll
     }
 
     [HttpPost("{id:guid}/approve")]
-    [Authorize(Roles = "Warehouse,Admin")]
+    [Authorize(Roles = "Manager,Warehouse,Admin")]
     public async Task<IActionResult> Approve(Guid id, CancellationToken ct)
     {
         var result = await _logic.ApproveStockAdjustmentRequestAsync(id, User.GetUserId(), User.ToCreatorSnapshot(), ct);
@@ -59,7 +59,7 @@ public class StockAdjustmentRequestsController(InventoryLogic _logic) : Controll
     }
 
     [HttpPost("{id:guid}/reject")]
-    [Authorize(Roles = "Warehouse,Admin")]
+    [Authorize(Roles = "Manager,Warehouse,Admin")]
     public async Task<IActionResult> Reject(Guid id, [FromBody] RejectStockAdjustmentRequest request, CancellationToken ct)
     {
         var result = await _logic.RejectStockAdjustmentRequestAsync(id, User.GetUserId(), request, ct);
@@ -67,7 +67,7 @@ public class StockAdjustmentRequestsController(InventoryLogic _logic) : Controll
     }
 
     [HttpPost("{id:guid}/cancel")]
-    [Authorize(Roles = "Manager,Admin")]
+    [Authorize(Roles = "Manager,Warehouse,Admin")]
     public async Task<IActionResult> Cancel(Guid id, [FromBody] CancelStockAdjustmentRequest? request, CancellationToken ct)
     {
         var userId = User.GetUserId();

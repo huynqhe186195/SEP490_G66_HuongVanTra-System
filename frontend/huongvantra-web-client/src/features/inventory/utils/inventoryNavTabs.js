@@ -25,8 +25,19 @@ export const inventoryLedgerNavTab = {
   to: '/inventory/ledger',
 }
 
+export const inventoryReturnNavTab = {
+  label: 'Trả hàng nhập',
+  to: '/inventory/returns',
+}
+
 /** @deprecated use getInventoryNavTabs(session) */
-export const inventoryNavTabs = [...warehouseNavTabs, supplierReceiptNavTab, inventoryLedgerNavTab, stockRequestNavTab]
+export const inventoryNavTabs = [
+  ...warehouseNavTabs,
+  supplierReceiptNavTab,
+  inventoryReturnNavTab,
+  inventoryLedgerNavTab,
+  stockRequestNavTab,
+]
 
 function normalizeRole(role) {
   return String(role || '').trim().toLowerCase().replace(/[._-]+/g, ' ').replace(/\s+/g, ' ')
@@ -43,6 +54,9 @@ export function getInventoryNavTabs(session) {
   }
   if (isSystemAdmin(session) || isManagerLike(session)) {
     tabs.push(supplierReceiptNavTab)
+  }
+  if (isSystemAdmin(session) || isManagerLike(session) || isWarehouseRole(session)) {
+    tabs.push(inventoryReturnNavTab)
   }
   if (isSystemAdmin(session) || isManagerLike(session) || isWarehouseRole(session)) {
     tabs.push(inventoryLedgerNavTab)

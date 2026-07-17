@@ -104,3 +104,32 @@ public record UpsertSupplierReceiptRequest(
     List<SupplierReceiptItemRequest> Items);
 
 public record ReviewSupplierReceiptRequest(string? Reason);
+
+public record InventoryReturnItemRequest(
+    Guid SkuId,
+    string? SkuCode,
+    string? SkuSnapshotName,
+    int Quantity,
+    Guid? BatchId,
+    string? LotCode,
+    string? Note);
+
+public record CreateShelfReturnRequest(
+    string ReturnMode,
+    Guid? OriginalStockAdjustmentRequestId,
+    string? OriginalStockAdjustmentRequestCode,
+    string? Reason,
+    string? Note,
+    List<InventoryReturnItemRequest> Items);
+
+public record CreateSupplierReturnRequest(
+    string ReturnMode,
+    Guid? SupplierReceiptId,
+    string? SupplierReceiptCode,
+    string? SupplierName,
+    string? SupplierReference,
+    string? Reason,
+    string? Note,
+    List<InventoryReturnItemRequest> Items);
+
+public record ReviewInventoryReturnRequest(string? Reason);

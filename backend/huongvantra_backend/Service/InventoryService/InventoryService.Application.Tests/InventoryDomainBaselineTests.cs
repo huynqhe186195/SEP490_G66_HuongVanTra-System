@@ -31,6 +31,7 @@ public class InventoryDomainBaselineTests
         var batch = InventoryWorkflowTestBuilders.WarehouseBatch();
 
         Assert.Equal("active", batch.Status);
+        Assert.Equal("Warehouse", batch.Location);
         Assert.Single(batch.Items);
         Assert.Equal(batch.Id, batch.Items.First().WarehouseBatchId);
     }
@@ -53,6 +54,15 @@ public class InventoryDomainBaselineTests
         Assert.Equal(2, (int)SupplierReceiptStatus.Completed);
         Assert.Equal(3, (int)SupplierReceiptStatus.Rejected);
         Assert.Equal(4, (int)SupplierReceiptStatus.Cancelled);
+    }
+
+    [Fact]
+    public void InventoryReturnRequestStatusEnum_DocumentsReturnLifecycle()
+    {
+        Assert.Equal(0, (int)InventoryReturnRequestStatus.Pending);
+        Assert.Equal(1, (int)InventoryReturnRequestStatus.Completed);
+        Assert.Equal(2, (int)InventoryReturnRequestStatus.Rejected);
+        Assert.Equal(3, (int)InventoryReturnRequestStatus.Cancelled);
     }
 
     [Fact]

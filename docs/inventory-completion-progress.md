@@ -588,6 +588,76 @@ This document tracks the current-scope Inventory / Warehouse / Product Master co
   - `feat(inventory): add ledger and controlled supplier receipts`
 - No push is allowed.
 
+## Batch 6 - Shelf Replenishment, Shelf Return, and Supplier Return
+
+### Starting State
+
+- Started after clean worktree at local commit `f300f4b`.
+- Existing `StockAdjustmentRequest` already performs a pending approval style movement from `WarehouseQuantityOnHand` to `QuantityOnHand`.
+- Existing replenishment approval creates export slips and ledger entries, but warehouse batches are still warehouse-only and no Shelf batch is created.
+- Existing `WarehouseBatch` has no `Location`, `ParentBatchId`, or `SourceBatchId` fields.
+- No dedicated Shelf Return or Supplier Return workflow exists yet.
+- No unified "Trả hàng nhập" UI exists yet.
+
+### Files Changed So Far
+
+- InventoryService:
+  - Added `WarehouseBatch.Location`, `ParentBatchId`, and `SourceBatchId` for location-aware lot lineage.
+  - Added slip reference fields on `StockImportSlip` and `StockExportSlip`.
+  - Added `ShelfReturnRequest`, `ShelfReturnRequestItem`, `SupplierReturnRequest`, `SupplierReturnRequestItem`, and `InventoryReturnRequestStatus`.
+  - Added repositories, controllers, DTOs, DI, and `InventoryLogic` flows for shelf return and supplier return.
+  - Existing shelf replenishment approval now creates Shelf-location batches from FEFO warehouse allocations.
+  - Existing shelf replenishment status now completes as `Completed`; `Approved` remains for backward compatibility.
+  - Added migration `20260717150000_AddInventoryReturnFlowsAndBatchLocations`.
+- Gateway:
+  - Added routes for `/api/v1/inventory/shelf-return-requests`.
+  - Added routes for `/api/v1/inventory/supplier-return-requests`.
+- Frontend:
+  - Added `/inventory/returns` unified page for `Tra hang nhap`.
+  - Added `inventoryReturnApi.js`.
+  - Added Inventory navigation/sidebar entry for `Tra hang nhap`.
+  - Added batch `location`/lineage mapping.
+  - Added slip type labels for shelf return, supplier return, and inbound data correction.
+  - Added `completed` display mapping for stock replenishment requests.
+
+### Gate Results So Far
+
+- `dotnet build Service\InventoryService\InventoryService.WebAPI\InventoryService.WebAPI.csproj --no-restore`: passed, 0 warnings, 0 errors.
+- `dotnet build huongvantra_backend.sln --no-restore`: passed with 1 pre-existing warning outside Batch 6.
+  - `OrderService.Application/UseCases/OrderLogic.cs`: unused `ex`.
+- Host `dotnet test Service\InventoryService\InventoryService.Application.Tests\InventoryService.Application.Tests.csproj --no-restore`: blocked by Windows Application Control policy loading the copied test `InventoryService.Domain.dll` (`0x800711C7`), not by test assertions.
+- Scoped frontend lint on Batch 6 changed frontend files via `npx.cmd eslint ...`: passed.
+- `npm.cmd run lint`: still fails on pre-existing cross-application lint debt.
+  - Current count after Batch 6 changes: 127 errors, 14 warnings.
+  - This does not increase the Batch 5 count of 127 errors, 14 warnings and remains below Batch 0 baseline of 149 errors, 15 warnings.
+- `npm.cmd run build`: passed with existing chunk/dynamic import warnings.
+- `git diff --check`: passed; Git emitted Windows LF-to-CRLF warnings only.
+- Container backend test gate:
+  - `docker run --rm ... dotnet test Service/InventoryService/InventoryService.Application.Tests/InventoryService.Application.Tests.csproj --no-restore`: exit code 0; Docker produced no detailed console output.
+  - `docker run --rm ... dotnet test huongvantra_backend.sln --no-restore`: exit code 0; Docker produced no detailed console output.
+- Docker Compose rebuild/restart:
+  - Rebuilt/restarted `inventory-service`, `audit-service`, `gateway`, and `web-client`.
+  - Compose recreated dependency services as part of the dependency graph, but no DB reset or volume deletion was performed.
+- Docker health:
+  - `inventory-service`: Up, healthy.
+  - `audit-service`: Up, healthy.
+  - `gateway`: Up.
+  - `web-client`: Up.
+  - Related dependency services remained Up/healthy after recreate.
+- Relevant logs:
+  - Inventory migration `20260717150000_AddInventoryReturnFlowsAndBatchLocations` applied successfully.
+  - Gateway proxied `/api/v1/inventory/shelf-return-requests` and `/api/v1/inventory/supplier-return-requests` to `inventory-service` and received expected HTTP 401 without token.
+- DB verification:
+  - `hvt_inventory_db.__EFMigrationsHistory` contains `20260717150000_AddInventoryReturnFlowsAndBatchLocations`.
+  - `WarehouseBatches.Location`, `ParentBatchId`, and `SourceBatchId` exist.
+  - `ShelfReturnRequests` and `SupplierReturnRequests` exist.
+  - `StockImportSlips.ReferenceCode` and `StockExportSlips.ReferenceCode` exist.
+- Gateway route probes:
+  - `curl.exe -i http://localhost:5000/api/v1/inventory/shelf-return-requests`: returned HTTP 401 without token, confirming the route exists and requires auth.
+  - `curl.exe -i http://localhost:5000/api/v1/inventory/supplier-return-requests`: returned HTTP 401 without token, confirming the route exists and requires auth.
+- Frontend route probe:
+  - `curl.exe -I http://localhost:3000/inventory/returns`: returned HTTP 200.
+
 ## Remaining Risks
 
 - Generic audit middleware records authenticated non-GET request metadata only; detailed before/after snapshots for each business action can be added in later targeted instrumentation batches.

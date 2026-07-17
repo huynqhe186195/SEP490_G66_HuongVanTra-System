@@ -41,6 +41,7 @@ export function getAdjustmentStatusLabel(status) {
   const key = String(status || '').toLowerCase()
   if (key === 'pending') return 'Chờ duyệt'
   if (key === 'approved') return 'Đã duyệt'
+  if (key === 'completed') return 'Hoàn tất'
   if (key === 'rejected') return 'Từ chối'
   if (key === 'cancelled') return 'Đã hủy'
   return status || '—'
@@ -49,7 +50,7 @@ export function getAdjustmentStatusLabel(status) {
 export function getAdjustmentStatusClass(status) {
   const key = String(status || '').toLowerCase()
   if (key === 'pending') return 'bg-amber-100 text-amber-800'
-  if (key === 'approved') return 'bg-emerald-100 text-emerald-800'
+  if (key === 'approved' || key === 'completed') return 'bg-emerald-100 text-emerald-800'
   if (key === 'rejected') return 'bg-rose-100 text-rose-800'
   if (key === 'cancelled') return 'bg-slate-100 text-slate-600'
   return 'bg-slate-100 text-slate-600'
