@@ -10,6 +10,7 @@ using OrderService.Infrastructure.Services;
 using OrderService.WebAPI.Services;
 using OrderService.WebAPI.Middlewares;
 using HuongVanTra.Shared.Auth;
+using HuongVanTra.Shared.Audit;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json.Serialization;
 
@@ -25,6 +26,7 @@ builder.Services.AddSwaggerGen();
 
 builder.Services.AddHvtJwtAuthentication(builder.Configuration);
 builder.Services.AddHvtPermissionPolicies();
+builder.Services.AddHvtSystemActivityAudit("OrderService");
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 builder.Services.AddDbContext<OrderDbContext>(options =>
@@ -131,6 +133,7 @@ if (app.Environment.IsDevelopment())
 app.UseMiddleware<GlobalExceptionMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseHvtSystemActivityAudit();
 app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
 app.MapControllers();
 

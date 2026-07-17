@@ -389,8 +389,111 @@ This document tracks the current-scope Inventory / Warehouse / Product Master co
   - `feat(product): enforce master data locking and deletion approval`
 - No push is allowed.
 
+## Batch 4 - Centralized Immutable System Activity Log
+
+### Files Changed
+
+- Added a dedicated `AuditService` with Domain/Application/Infrastructure/WebAPI/Test projects and registered it in `huongvantra_backend.sln`.
+- Added `SystemActivityLog` storage, `AuditDbContext`, EF configuration, migration, query DTOs, query logic, idempotent writer, and RabbitMQ consumer.
+- Added shared audit contract and middleware in `HuongVanTra.Shared`:
+  - `SystemActivityEvent`
+  - `SystemActivityAuditMiddleware`
+  - `SystemActivityAuditExtensions`
+  - `SensitiveDataRedactor`
+- Wired audit middleware into:
+  - `ProductService`
+  - `InventoryService`
+  - `OrderService`
+  - `CustomerService`
+  - `UserService`
+  - `DocumentService`
+- Added RabbitMQ publish configuration for `UserService` and `DocumentService`.
+- Added `AuditService` Dockerfile and fixed `UserService` Dockerfile so shared project references build in Docker.
+- Added `hvt_audit_db` to `Scripts/init-databases.sql` and `audit-service` to `docker-compose.yml`.
+- Added gateway route/cluster for `/api/v1/audit/system-activities`.
+- Added Admin frontend page `/admin/system-activities`:
+  - read-only log list
+  - filters
+  - server-side pagination
+  - detail modal
+  - CSV export
+  - sidebar entry `Nhật ký hệ thống`
+
+### Migrations Added
+
+- AuditService: `20260717130000_CreateAuditService`
+  - Adds `SystemActivityLogs`.
+  - Adds unique index on `EventId`.
+  - Adds indexes for time, actor, role, service, module, action, entity code, result, and correlation id.
+
+### Tests Added/Updated
+
+- Added AuditService baseline tests for:
+  - duplicate `EventId` idempotency through `SystemActivityWriter`
+  - filters and pagination through `SystemActivityLogic`
+  - sensitive value redaction
+
+### Gate Results
+
+- `dotnet build Service/AuditService/AuditService.WebAPI/AuditService.WebAPI.csproj`: passed, 0 warnings, 0 errors.
+- `dotnet build huongvantra_backend.sln`: passed with 2 warnings outside the new AuditService code.
+  - `OrderService.Application/UseCases/OrderLogic.cs`: unused `ex`.
+  - `InventoryService.Infrastructure/Repositories/WarehouseBatchRepository.cs`: nullable value warning.
+- Host `dotnet test Service/AuditService/AuditService.Application.Tests/AuditService.Application.Tests.csproj --no-restore`: test assembly built, but testhost could not run on Windows host because x64 `Microsoft.AspNetCore.App` 8.0 runtime is missing.
+- Container backend test gate:
+  - `docker run --rm -v "${PWD}:/src" -w /src mcr.microsoft.com/dotnet/sdk:8.0-alpine dotnet test huongvantra_backend.sln --no-restore`: passed.
+- Scoped frontend lint on Batch 4 changed frontend files: passed.
+- `npm.cmd run lint`: failed on remaining pre-existing cross-application lint debt.
+  - Current count after Batch 4: 130 errors, 14 warnings.
+  - This matches the Batch 3 count and remains below the Batch 0 baseline of 149 errors, 15 warnings.
+- `npm.cmd run build`: passed.
+- `git diff --check`: passed.
+- Database preparation for existing Docker volume:
+  - `docker exec hvt-mysql mysql ... CREATE DATABASE IF NOT EXISTS hvt_audit_db ...`: passed.
+  - No DB reset and no Docker volume deletion were performed.
+- Docker Compose rebuild/restart:
+  - First run exposed missing shared project copy in `UserService.WebAPI/Dockerfile`.
+  - Dockerfile was fixed and the second `docker compose up -d --build ...` passed.
+- Docker health:
+  - `audit-service`: Up, healthy.
+  - `product-service`: Up, healthy.
+  - `inventory-service`: Up, healthy.
+  - `order-service`: Up, healthy.
+  - `customer-service`: Up, healthy.
+  - `document-service`: Up, healthy.
+  - `user-service`: Up, healthy.
+  - `mysql`: Up, healthy.
+  - `rabbitmq`: Up, healthy.
+  - `gateway`: Up.
+  - `web-client`: Up.
+- Relevant logs:
+  - Audit migration `20260717130000_CreateAuditService` applied successfully.
+  - MassTransit configured endpoint `audit-service.system-activity`.
+  - Audit bus started on RabbitMQ.
+- DB verification:
+  - `hvt_audit_db.__EFMigrationsHistory` contains `20260717130000_CreateAuditService`.
+  - `SystemActivityLogs` exists.
+- Gateway route probes:
+  - `curl.exe -i http://localhost:5000/api/v1/audit/system-activities`: returned HTTP 401 without token, confirming the route exists and requires auth.
+  - `curl.exe -i http://localhost:5000/api/v1/inventory/sku-stocks`: returned HTTP 401 without token, confirming existing inventory route still works.
+- Manual health smoke:
+  - `CustomerService /health`: HTTP 200.
+  - `UserService /health`: HTTP 200.
+  - `ProductService /health`: HTTP 200.
+  - `OrderService /health`: HTTP 200.
+  - `InventoryService /health`: HTTP 200.
+  - `DocumentService /health`: HTTP 200.
+  - `AuditService /health`: HTTP 200.
+- The previously referenced `Scripts\test-inventory-completion.ps1` was not present in the current repo checkout, so manual health and gateway smoke checks were used instead.
+
+### Checkpoint Commit
+
+- Batch 4 checkpoint commit will be created with message:
+  - `feat(audit): add centralized immutable system activity log`
+- No push is allowed.
+
 ## Remaining Risks
 
-- The requested full scope is significantly larger than the current codebase.
-- AuditService is referenced by the target scope but is not present in the current repo.
-- Multiple future batches require schema, API, UI, tests, and migration work.
+- Generic audit middleware records authenticated non-GET request metadata only; detailed before/after snapshots for each business action can be added in later targeted instrumentation batches.
+- The Admin audit UI is read-only and query/export focused; it intentionally does not support update/delete.
+- Host Windows test execution is still blocked by missing x64 ASP.NET Core 8 runtime; container test gate is the reliable backend test path.

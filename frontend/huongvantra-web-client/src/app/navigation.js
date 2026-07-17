@@ -101,6 +101,13 @@ export const navigationItems = [
     roles: ['admin'],
   },
   {
+    label: 'Nhật ký hệ thống',
+    path: '/admin/system-activities',
+    module: 'system_activity_log',
+    icon: 'manage_search',
+    roles: ['admin'],
+  },
+  {
     label: 'Thống kê bán hàng',
     path: '/dashboard',
     module: 'dashboard',
@@ -262,6 +269,7 @@ const MODULE_PATH_PREFIXES = [
   { module: 'staff', prefix: '/staff' },
   { module: 'membership_tiers_admin', prefix: '/admin/membership-tiers' },
   { module: 'promotions_admin', prefix: '/admin/promotions' },
+  { module: 'system_activity_log', prefix: '/admin/system-activities' },
   { module: 'users_admin', prefix: '/admin/users' },
   { module: 'phan_quyen_admin', prefix: '/admin/phan-quyen' },
   { module: 'customers', prefix: '/customers' },
@@ -362,7 +370,7 @@ export function getAccessDeniedMessage(pathname) {
   if (module === 'inventory') {
     return 'Chỉ Thủ kho Kho tổng mới được truy cập module kho tổng.'
   }
-  if (module === 'promotions_admin' || module === 'membership_tiers_admin') {
+  if (module === 'promotions_admin' || module === 'membership_tiers_admin' || module === 'system_activity_log') {
     return 'Chỉ Admin mới được quản lý hạng thẻ và mã giảm giá.'
   }
   if (module === 'users_admin' || module === 'phan_quyen_admin') {

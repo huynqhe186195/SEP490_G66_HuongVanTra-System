@@ -1,4 +1,5 @@
 using HuongVanTra.Shared.Auth;
+using HuongVanTra.Shared.Audit;
 using InventoryService.Application.Interfaces;
 using InventoryService.Application.Options;
 using InventoryService.Application.UseCases;
@@ -23,6 +24,7 @@ builder.Services.AddSwaggerGen();
 
 builder.Services.AddHvtJwtAuthentication(builder.Configuration);
 builder.Services.AddHvtPermissionPolicies();
+builder.Services.AddHvtSystemActivityAudit("InventoryService");
 builder.Services.Configure<InventoryOptions>(builder.Configuration.GetSection(InventoryOptions.SectionName));
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
@@ -112,6 +114,7 @@ if (app.Environment.IsDevelopment())
 app.UseMiddleware<GlobalExceptionMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseHvtSystemActivityAudit();
 app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
 app.MapControllers();
 

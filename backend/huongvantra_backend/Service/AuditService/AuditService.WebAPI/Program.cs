@@ -1,10 +1,6 @@
-using DocumentService.Application.Interfaces;
-using DocumentService.Application.UseCases;
-using DocumentService.Infrastructure.Data;
-using DocumentService.Infrastructure.Repositories;
-using DocumentService.Infrastructure.Services;
-using DocumentService.WebAPI.Middlewares;
-using HuongVanTra.Shared.Audit;
+using AuditService.Infrastructure.Data;
+using AuditService.Infrastructure.Messaging;
+using AuditService.Infrastructure.UseCases;
 using HuongVanTra.Shared.Auth;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
@@ -22,35 +18,33 @@ builder.Services.AddSwaggerGen();
 
 builder.Services.AddHvtJwtAuthentication(builder.Configuration);
 builder.Services.AddHvtPermissionPolicies();
-builder.Services.AddHvtSystemActivityAudit("DocumentService");
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-builder.Services.AddDbContext<DocumentDbContext>(options =>
+builder.Services.AddDbContext<AuditDbContext>(options =>
     options.UseMySql(connectionString, new MySqlServerVersion(new Version(8, 0, 0)),
         mySqlOptions => mySqlOptions.EnableRetryOnFailure(
             maxRetryCount: 5,
             maxRetryDelay: TimeSpan.FromSeconds(10),
             errorNumbersToAdd: null)));
 
-builder.Services.AddScoped<IContractRepository, ContractRepository>();
-builder.Services.AddScoped<ContractLogic>();
-
-builder.Services.AddHttpContextAccessor();
-builder.Services.AddTransient<ForwardAuthorizationHeaderHandler>();
-builder.Services.AddHttpClient<ICustomerCatalogClient, CustomerCatalogClient>(client =>
-{
-    var baseUrl = builder.Configuration["CustomerService:BaseUrl"] ?? "http://customer-service:8080";
-    client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
-}).AddHttpMessageHandler<ForwardAuthorizationHeaderHandler>();
+builder.Services.AddScoped<SystemActivityLogic>();
+builder.Services.AddScoped<SystemActivityWriter>();
 
 builder.Services.AddMassTransit(x =>
 {
+    x.AddConsumer<SystemActivityConsumer>();
+
     x.UsingRabbitMq((context, cfg) =>
     {
         cfg.Host(builder.Configuration["RabbitMQ:Host"] ?? "rabbitmq", "/", h =>
         {
             h.Username(builder.Configuration["RabbitMQ:Username"] ?? "hvt");
             h.Password(builder.Configuration["RabbitMQ:Password"] ?? "hvtrabbit123");
+        });
+
+        cfg.ReceiveEndpoint("audit-service.system-activity", e =>
+        {
+            e.ConfigureConsumer<SystemActivityConsumer>(context);
         });
     });
 });
@@ -59,7 +53,7 @@ var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
 {
-    var db = scope.ServiceProvider.GetRequiredService<DocumentDbContext>();
+    var db = scope.ServiceProvider.GetRequiredService<AuditDbContext>();
     var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
     var retries = 0;
     while (retries < 10)
@@ -80,25 +74,9 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseMiddleware<GlobalExceptionMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
-app.UseHvtSystemActivityAudit();
 app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
 app.MapControllers();
 
 app.Run();
-
-public sealed class ForwardAuthorizationHeaderHandler(IHttpContextAccessor httpContextAccessor) : DelegatingHandler
-{
-    protected override Task<HttpResponseMessage> SendAsync(
-        HttpRequestMessage request,
-        CancellationToken cancellationToken)
-    {
-        var authorization = httpContextAccessor.HttpContext?.Request.Headers.Authorization.ToString();
-        if (!string.IsNullOrWhiteSpace(authorization))
-            request.Headers.TryAddWithoutValidation("Authorization", authorization);
-
-        return base.SendAsync(request, cancellationToken);
-    }
-}

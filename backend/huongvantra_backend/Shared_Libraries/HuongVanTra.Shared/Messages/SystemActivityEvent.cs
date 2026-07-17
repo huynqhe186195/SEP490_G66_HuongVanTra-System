@@ -1,0 +1,25 @@
+namespace HuongVanTra.Shared.Messages;
+
+public sealed record SystemActivityEvent(
+    Guid EventId,
+    DateTime OccurredAtUtc,
+    Guid? ActorId,
+    string? ActorName,
+    string? ActorRole,
+    string ServiceName,
+    string Module,
+    string Action,
+    string? EntityType,
+    string? EntityId,
+    string? EntityCode,
+    string? Description,
+    string Result,
+    string? Reason,
+    string? BeforeSnapshotJson,
+    string? AfterSnapshotJson,
+    string CorrelationId,
+    string RequestPath,
+    string HttpMethod,
+    int StatusCode,
+    string? ClientIp,
+    string? UserAgent);

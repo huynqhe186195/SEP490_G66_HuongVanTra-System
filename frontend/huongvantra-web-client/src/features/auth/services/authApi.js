@@ -20,6 +20,7 @@ const ROLE_MODULE_MAP = {
     'staff',
     'membership_tiers_admin',
     'promotions_admin',
+    'system_activity_log',
     'users_admin',
     'phan_quyen_admin',
     'dashboard',
