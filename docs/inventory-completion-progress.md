@@ -793,7 +793,7 @@ This document tracks the current-scope Inventory / Warehouse / Product Master co
 ### Checkpoint Commit
 
 - Batch 8 checkpoint commit was created:
-  - `bb098bf feat(inventory): add stocktake controls alerts and reporting`
+  - `1021a77 feat(inventory): add stocktake controls alerts and reporting`
 - No push will be performed.
 
 ## Remaining Risks
