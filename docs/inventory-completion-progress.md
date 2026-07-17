@@ -867,9 +867,9 @@ This document tracks the current-scope Inventory / Warehouse / Product Master co
 
 ### Checkpoint Commit
 
-- Batch 9 checkpoint commit will be created with message:
-  - `feat(inventory): integrate shelf stock with POS and order workflows`
-- No push will be performed.
+- Batch 9 checkpoint commit was created:
+  - `456879a feat(inventory): integrate shelf stock with POS and order workflows`
+- No push was performed.
 
 ## Remaining Risks
 
