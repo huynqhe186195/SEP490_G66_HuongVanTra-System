@@ -871,6 +871,87 @@ This document tracks the current-scope Inventory / Warehouse / Product Master co
   - `456879a feat(inventory): integrate shelf stock with POS and order workflows`
 - No push was performed.
 
+## Batch 10 - Final Cleanup, Documentation, and Full System Acceptance
+
+### Starting State
+
+- Started after Batch 9 docs checkpoint commit `cfbb6ce`.
+- Current scope already includes Warehouse/Shelf stock separation, Product creation/deletion approval, Supplier Receipt, return flows, production approval/destination, stocktake, POS integration, custom bundle material export, and audit log.
+- Batch 10 focuses on removing/deprecating visible obsolete UI paths, setting safe simulation defaults, adding final acceptance documentation, and running full acceptance gates.
+
+### Files Changed So Far
+
+- Frontend cleanup:
+  - Redirected legacy `/products/:id/edit` route back to `/inventory/products`.
+  - Removed direct Product/SKU edit action links from `ProductExpandedPanel.jsx` and `ProductSkusDetailModal.jsx`.
+  - Removed obsolete frontend API helpers for direct/simulation stock adjustment because UI no longer exposes those business actions.
+  - Changed frontend inventory settings fallback so missing settings do not show legacy simulation mode by default.
+  - Fixed scoped lint issues in the edited Product panel/modal files.
+- Backend cleanup:
+  - Changed `InventoryOptions.SimulateWarehouse` default to `false`; appsettings and Docker already use `false`.
+  - Removed the unused `ex` variable in `OrderLogic` so final backend build is warning-free.
+- Documentation:
+  - Added `docs/inventory-acceptance-guide.md` with current scope, future scope, API/workflow map, data dictionary notes, migration notes, role/permission matrix, stock-effect matrix, UAT script, and final acceptance commands.
+  - Added a README Inventory/Warehouse section linking to the acceptance guide.
+
+### Migrations Added
+
+- None.
+
+### Gate Results So Far
+
+- Backend restore:
+  - `dotnet restore` inside sandbox failed with `NU1301` because sandbox network blocked `api.nuget.org`.
+  - Re-run with approved external execution: `dotnet restore` passed.
+- Backend build:
+  - `dotnet build --no-restore`: passed, 0 warnings, 0 errors.
+- Backend tests:
+  - Host `dotnet test --no-restore`:
+    - `OrderService.Application.Tests`: passed, 3 tests.
+    - `ProductService.Application.Tests`: passed, 27 tests.
+    - `InventoryService.Application.Tests`: blocked by Windows Application Control loading the test assembly (`0x800711C7`).
+    - `AuditService.Application.Tests`: aborted because host x64 `Microsoft.AspNetCore.App 8.0.0` is missing.
+  - Docker SDK fallback for affected tests:
+    - `docker run --rm ... dotnet test Service/InventoryService/InventoryService.Application.Tests/InventoryService.Application.Tests.csproj`: passed, 13 tests.
+    - `docker run --rm ... dotnet test Service/AuditService/AuditService.Application.Tests/AuditService.Application.Tests.csproj`: passed, 3 tests.
+- Frontend scoped lint:
+  - `npx.cmd eslint src/app/App.jsx src/features/products/components/ProductExpandedPanel.jsx src/features/products/components/ProductSkusDetailModal.jsx src/features/inventory/services/inventoryStockApi.js`: passed.
+- Frontend full lint:
+  - `npm.cmd run lint`: still fails on baseline cross-application lint debt, now `114 errors, 14 warnings`.
+  - This is lower than Batch 9 `120 errors, 14 warnings`; no error is from Batch 10 edited frontend files.
+- Frontend build:
+  - `npm.cmd run build`: passed with existing dynamic-import and chunk-size warnings.
+- Docker Compose rebuild/restart:
+  - `docker compose up -d --build product-service inventory-service order-service audit-service user-service customer-service document-service gateway web-client`: passed.
+- Docker health:
+  - `docker compose ps` showed `hvt-inventory-service`, `hvt-product-service`, `hvt-order-service`, `hvt-audit-service`, `hvt-user-service`, `hvt-customer-service`, `hvt-document-service`, `hvt-mysql`, and `hvt-rabbitmq` running and healthy where health checks exist; `hvt-gateway` and `hvt-web-client` were running.
+- Relevant logs:
+  - `inventory-service`, `product-service`, `order-service`, and `audit-service` reported no pending migrations and started successfully.
+  - `inventory-service`, `product-service`, `order-service`, and `audit-service` MassTransit buses started.
+  - `gateway` loaded YARP proxy config and started successfully.
+- Migration verification:
+  - MySQL query confirmed latest Inventory migrations include `20260717170000_AddStocktakeRequests`, `20260717160000_AddProductionApprovalAndOutputDestination`, `20260717150000_AddInventoryReturnFlowsAndBatchLocations`, `20260717140000_AddInventoryLedgerAndSupplierReceipts`, and `20260717101000_AddSkuStockLocationThresholds`.
+  - Product migrations include `20260717120000_AddProductDeletionRequests`, `20260717110000_AddProductCreationRequests`, and `20260717100000_AddInventoryUnitToProducts`.
+  - Audit migration includes `20260717130000_CreateAuditService`.
+- Gateway and UI smoke:
+  - `curl.exe -i http://localhost:5000/api/v1/inventory/stocktake-requests`: returned `401 Unauthorized`, not 404.
+  - `curl.exe -i http://localhost:5000/api/v1/inventory/ledger`: returned `401 Unauthorized`, not 404.
+  - `curl.exe -i -X POST http://localhost:5000/api/v1/inventory/pos-stock-handling -H "Content-Type: application/json" -d "{}"`: returned `401 Unauthorized`, not 404.
+  - `curl.exe -i "http://localhost:5000/api/v1/products?page=1&pageSize=1"`: returned `200 OK`.
+  - `curl.exe -i "http://localhost:5000/api/v1/skus?page=1&pageSize=1&isActive=true"`: returned `200 OK`.
+  - `curl.exe -i http://localhost:5000/api/v1/audit/system-activities`: returned `401 Unauthorized`, not 404.
+  - `curl.exe -i http://localhost:3000/inventory/products`: returned `200 OK`.
+  - `curl.exe -i http://localhost:3000/inventory/stocktake`: returned `200 OK`.
+  - Direct `/health` checks for inventory, product, order, audit, user, customer, and document services returned `200 OK` with `{"status":"healthy"}`.
+- Repo checks:
+  - `git diff --check`: passed; Git emitted Windows LF-to-CRLF warnings only.
+
+### Checkpoint Commit
+
+- Batch 10 checkpoint commit will be created with message:
+  - `feat(inventory): complete warehouse and shelf management scope`
+- No push will be performed.
+
 ## Remaining Risks
 
 - Generic audit middleware records authenticated non-GET request metadata only; detailed before/after snapshots for each business action can be added in later targeted instrumentation batches.

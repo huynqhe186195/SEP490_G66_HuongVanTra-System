@@ -76,27 +76,11 @@ export async function fetchInventorySettings() {
   try {
     const data = await apiRequestAuth('/api/v1/inventory/settings', { method: 'GET' })
     return {
-      simulateWarehouse: Boolean(data?.simulateWarehouse ?? data?.SimulateWarehouse ?? true),
+      simulateWarehouse: Boolean(data?.simulateWarehouse ?? data?.SimulateWarehouse ?? false),
     }
   } catch {
-    return { simulateWarehouse: true }
+    return { simulateWarehouse: false }
   }
-}
-
-export async function simulateAdjustStoreStock(skuId, quantityDelta) {
-  const data = await apiRequestAuth(`/api/v1/inventory/sku-stocks/${skuId}/simulate-adjust-store`, {
-    method: 'POST',
-    body: JSON.stringify({ quantityDelta: Number(quantityDelta) }),
-  })
-  return mapSkuStock(data)
-}
-
-export async function adjustWarehouseStock(skuId, quantityDelta) {
-  const data = await apiRequestAuth(`/api/v1/inventory/sku-stocks/${skuId}/adjust-warehouse`, {
-    method: 'POST',
-    body: JSON.stringify({ quantityDelta: Number(quantityDelta) }),
-  })
-  return mapSkuStock(data)
 }
 
 export async function fetchLowStockSkus() {

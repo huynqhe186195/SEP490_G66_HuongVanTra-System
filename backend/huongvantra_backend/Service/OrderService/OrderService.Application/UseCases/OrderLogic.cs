@@ -1165,7 +1165,7 @@ public class OrderLogic(
                 _ = Task.Run(() => _emailService.SendInvoiceEmailAsync(customer.Email, customer.FullName ?? "Quý khách", customer.TierName, order, CancellationToken.None));
             }
         }
-        catch (Exception ex)
+        catch
         {
             // Log if needed, but don't prevent the event from being published
         }

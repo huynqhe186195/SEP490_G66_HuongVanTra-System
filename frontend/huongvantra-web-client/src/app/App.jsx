@@ -85,7 +85,7 @@ function App() {
         <Route path="/inventory/products/create" element={<ProductApprovalsPage />} />
         <Route path="/inventory/product-approvals" element={<ProductApprovalsPage />} />
         <Route path="/inventory/product-deletion-requests" element={<ProductDeletionRequestsPage />} />
-        <Route path="/products/:id/edit" element={<ProductsListPage />} />
+        <Route path="/products/:id/edit" element={<Navigate to="/inventory/products" replace />} />
         <Route path="/inventory" element={<InventoryStockPage />} />
         <Route path="/inventory/statistics" element={<InventoryStatisticsPage />} />
         <Route path="/inventory/stock-requests" element={<StockAdjustmentRequestsPage />} />
