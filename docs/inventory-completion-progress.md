@@ -218,6 +218,85 @@ This document tracks the current-scope Inventory / Warehouse / Product Master co
 
 - Batch 1 checkpoint commit will be created with message:
   - `feat(inventory): align item types locations and base stock units`
+
+## Batch 2 - Warehouse Product Creation Request Workflow
+
+### Files Changed
+
+- ProductService:
+  - Added `ProductCreationRequest`, `ProductCreationRequestItem`, `ProductCreationRequestRevision`, and `ProductCreationRequestStatus`.
+  - Added EF configurations, `ProductDbContext` DbSets, migration, and model snapshot entries.
+  - Added Product Creation Request request/response DTOs, `ProductCreationRequestLogic`, and `ProductCreationRequestsController`.
+  - Registered `ProductCreationRequestLogic` in `Program.cs`.
+  - Disabled legacy Product Approval write/bypass routes with HTTP 410 while preserving legacy GET history.
+  - Reused `ProductLogic.CreateAsync()` for approved Product/SKU/BOM creation and tightened creation-path BOM validation/normalization.
+- Gateway:
+  - Added `/api/v1/product-creation-requests` Gateway routes.
+- Frontend:
+  - Replaced the old approval-code page with Warehouse-first multi-product request UI at `/inventory/product-approvals` and `/inventory/products/create`.
+  - Added Draft save, submit, Admin approve/reject/cancel, BOM rows per SKU, Excel template/import/export, and request list display.
+  - Updated navigation/auth module mapping so Admin and Warehouse can access the new request workflow.
+
+### Migrations Added
+
+- ProductService: `20260717110000_AddProductCreationRequests`
+  - Adds `ProductCreationRequests`.
+  - Adds `ProductCreationRequestItems`.
+  - Adds `ProductCreationRequestRevisions`.
+
+### Tests Added/Updated
+
+- Product workflow baseline tests now cover `ProductCreationRequest` builder and stable status enum values.
+- Product workflow test builders now include a multi-product Product Creation Request draft.
+
+### Gate Results
+
+- `dotnet build Service\ProductService\ProductService.WebAPI\ProductService.WebAPI.csproj --no-restore`: passed, 0 warnings, 0 errors.
+- `dotnet build huongvantra_backend.sln --no-restore`: passed with 2 pre-existing warnings outside Batch 2.
+  - `OrderService.Application/UseCases/OrderLogic.cs`: unused `ex`.
+  - `InventoryService.Infrastructure/Repositories/WarehouseBatchRepository.cs`: nullable value may be null.
+- `dotnet test huongvantra_backend.sln --no-build`: passed.
+  - ProductService tests: 25 passed.
+  - InventoryService tests: 4 passed.
+  - OrderService tests: 2 passed.
+- Scoped frontend lint on Batch 2 changed frontend files: passed.
+- `npm.cmd run lint`: failed on remaining pre-existing cross-application lint debt outside Batch 2 changed files.
+  - Current count after Batch 2: 130 errors, 14 warnings.
+  - This is lower than Batch 1 count of 131 errors, 14 warnings and Batch 0 baseline of 149 errors, 15 warnings.
+- `npm.cmd run build`: passed.
+- `git diff --check`: passed.
+- Docker Compose rebuild/restart:
+  - Rebuilt/restarted `product-service`, `gateway`, and `web-client`.
+  - Compose also recreated dependent services, but no DB reset or volume deletion was performed.
+- Docker health:
+  - `product-service`: Up, healthy.
+  - `inventory-service`: Up, healthy.
+  - `order-service`: Up, healthy.
+  - `customer-service`: Up, healthy.
+  - `document-service`: Up, healthy.
+  - `user-service`: Up, healthy.
+  - `mysql`: Up, healthy.
+  - `rabbitmq`: Up, healthy.
+  - `gateway`: Up.
+  - `web-client`: Up.
+- Relevant logs:
+  - Product migration `20260717110000_AddProductCreationRequests` applied successfully.
+  - Gateway loaded YARP proxy config successfully.
+- DB verification:
+  - `__EFMigrationsHistory` contains `20260717110000_AddProductCreationRequests`.
+  - `ProductCreationRequests`, `ProductCreationRequestItems`, and `ProductCreationRequestRevisions` exist.
+- Gateway route probe:
+  - `curl.exe -i http://localhost:5000/api/v1/product-creation-requests`: returned HTTP 401 without token, confirming the route exists and requires auth.
+- `powershell -ExecutionPolicy Bypass -File Scripts\test-inventory-completion.ps1`: passed.
+  - ProductService `/health`: HTTP 200.
+  - OrderService `/health`: HTTP 200.
+  - InventoryService `/health`: HTTP 200.
+  - Gateway inventory route probe `/api/v1/inventory/sku-stocks`: HTTP 401 without token.
+
+### Checkpoint Commit
+
+- Batch 2 checkpoint commit will be created with message:
+  - `feat(product): implement warehouse product creation approval workflow`
 - No push is allowed.
 
 ## Remaining Risks

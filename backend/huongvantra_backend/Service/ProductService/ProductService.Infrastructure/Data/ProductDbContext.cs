@@ -17,6 +17,9 @@ public class ProductDbContext(DbContextOptions<ProductDbContext> options) : DbCo
     public DbSet<PriceBookEntry> PriceBookEntries => Set<PriceBookEntry>();
     public DbSet<ProductVariantBomLine> ProductVariantBomLines => Set<ProductVariantBomLine>();
     public DbSet<NewProductApprovalRequest> NewProductApprovalRequests => Set<NewProductApprovalRequest>();
+    public DbSet<ProductCreationRequest> ProductCreationRequests => Set<ProductCreationRequest>();
+    public DbSet<ProductCreationRequestItem> ProductCreationRequestItems => Set<ProductCreationRequestItem>();
+    public DbSet<ProductCreationRequestRevision> ProductCreationRequestRevisions => Set<ProductCreationRequestRevision>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -31,5 +34,8 @@ public class ProductDbContext(DbContextOptions<ProductDbContext> options) : DbCo
         modelBuilder.ApplyConfiguration(new PriceBookEntryConfiguration());
         modelBuilder.ApplyConfiguration(new ProductVariantBomLineConfiguration());
         modelBuilder.ApplyConfiguration(new NewProductApprovalRequestConfiguration());
+        modelBuilder.ApplyConfiguration(new ProductCreationRequestConfiguration());
+        modelBuilder.ApplyConfiguration(new ProductCreationRequestItemConfiguration());
+        modelBuilder.ApplyConfiguration(new ProductCreationRequestRevisionConfiguration());
     }
 }

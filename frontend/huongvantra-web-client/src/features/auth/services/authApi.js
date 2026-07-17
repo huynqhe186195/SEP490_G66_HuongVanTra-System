@@ -15,7 +15,7 @@ const ROLE_MODULE_MAP = {
     'stock_adjustment_ops',
     'customers',
     'products',
-    'product_approvals_admin',
+    'product_creation_requests',
     'staff',
     'membership_tiers_admin',
     'promotions_admin',
@@ -25,7 +25,7 @@ const ROLE_MODULE_MAP = {
   ],
   manager: ['pos', 'orders', 'cod_ops', 'stock_deduct_ops', 'stock_adjustment_ops', 'customers', 'products', 'staff', 'dashboard'],
   sale: ['pos', 'orders', 'customers', 'dashboard'],
-  warehouse: ['products', 'stock_adjustment_ops', 'inventory', 'dashboard'],
+  warehouse: ['products', 'product_creation_requests', 'stock_adjustment_ops', 'inventory', 'dashboard'],
   accountant: ['orders', 'customers', 'reports', 'dashboard'],
 }
 

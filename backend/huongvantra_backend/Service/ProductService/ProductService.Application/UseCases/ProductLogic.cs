@@ -142,6 +142,7 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
             throw new ProductValidationException(
                 $"Sản phẩm '{input.Name}' đã tồn tại (kể cả đang ngừng kinh doanh hoặc đã xóa mềm). Hãy kích hoạt lại bản cũ thay vì tạo mới.");
 
+        var productType = ParseProductType(request.ProductType);
         var product = new Product
         {
             CategoryId = input.CategoryId,
@@ -155,10 +156,10 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
             WeightValue = input.WeightValue,
             WeightUnit = input.WeightUnit,
             IsVariantParent = input.IsVariantParent || variants.Count > 0,
-            ProductType = ParseProductType(request.ProductType),
+            ProductType = productType,
             Images = images.Select(MapImage).ToList(),
             Units = units.Select(MapUnit).ToList(),
-            Variants = await MapVariantsAsync(input.Name, variants, request.Variants)
+            Variants = await MapVariantsAsync(input.Name, variants, request.Variants, productType)
         };
 
         var created = await _productRepository.CreateAsync(product);
@@ -213,7 +214,7 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
 
         Replace(product.Images, images.Select(MapImage));
         Replace(product.Units, units.Select(MapUnit));
-        Replace(product.Variants, await MapVariantsAsync(input.Name, variants, request.Variants));
+        Replace(product.Variants, await MapVariantsAsync(input.Name, variants, request.Variants, product.ProductType));
 
         var updated = await _productRepository.UpdateAsync(product);
         return MapToResponse(updated, CatalogViewScope.Warehouse);
@@ -246,7 +247,8 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
     private async Task<List<ProductVariant>> MapVariantsAsync(
         string productName,
         List<ValidatedProductVariantInput> inputs,
-        List<ProductVariantRequest>? rawRequests = null)
+        List<ProductVariantRequest>? rawRequests = null,
+        ProductType productType = ProductType.THANH_PHAM)
     {
         var variants = new List<ProductVariant>();
         var usedInBatch = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -261,14 +263,8 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
             usedInBatch.Add(skuCode);
 
             var bomLines = rawRequests != null && i < rawRequests.Count
-                ? (rawRequests[i].BomLines ?? [])
-                    .Where(b => b.Quantity > 0)
-                    .Select(b => new ProductVariantBomLine
-                    {
-                        MaterialId = b.MaterialId,
-                        Quantity = b.Quantity
-                    }).ToList()
-                : new List<ProductVariantBomLine>();
+                ? await BuildVariantBomLinesAsync(rawRequests[i].BomLines, productType)
+                : [];
 
             variants.Add(new ProductVariant
             {
@@ -290,6 +286,41 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
         }
 
         return variants;
+    }
+
+    private async Task<List<ProductVariantBomLine>> BuildVariantBomLinesAsync(
+        List<BomLineRequest>? rawLines,
+        ProductType productType)
+    {
+        var lines = (rawLines ?? []).Where(line => line.Quantity > 0).ToList();
+        if (lines.Count == 0) return [];
+
+        if (productType != ProductType.THANH_PHAM)
+            throw new ProductValidationException("BOM chỉ áp dụng cho SKU Sản phẩm kệ.");
+
+        var duplicate = lines
+            .GroupBy(line => line.MaterialId)
+            .FirstOrDefault(group => group.Count() > 1);
+        if (duplicate is not null)
+            throw new ProductValidationException("Không được chọn trùng component trong một BOM.");
+
+        var materialIds = lines.Select(line => line.MaterialId).ToHashSet();
+        var materials = await _productRepository.GetProductsByIdsAsync(materialIds);
+        if (materials.Count != materialIds.Count)
+            throw new ProductValidationException("Có component BOM không tồn tại hoặc đã bị xóa.");
+
+        var nonMaterial = materials.FirstOrDefault(product =>
+            product.ProductType != ProductType.NGUYEN_LIEU && product.ProductType != ProductType.BAO_BI);
+        if (nonMaterial is not null)
+            throw new ProductValidationException($"'{nonMaterial.Name}' không phải là Nguyên liệu hoặc Bao bì.");
+
+        return NormalizeBomQuantities(lines, materials)
+            .Select(line => new ProductVariantBomLine
+            {
+                MaterialId = line.MaterialId,
+                Quantity = line.Quantity
+            })
+            .ToList();
     }
 
     private async Task<string> GenerateUniqueVariantSkuAsync(string productName, string variantName, HashSet<string>? usedInBatch = null)

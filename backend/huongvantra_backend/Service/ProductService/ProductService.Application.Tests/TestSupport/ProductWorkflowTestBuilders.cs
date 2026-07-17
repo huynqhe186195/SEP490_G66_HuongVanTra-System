@@ -28,6 +28,43 @@ public static class ProductWorkflowTestBuilders
         };
     }
 
+    public static ProductCreationRequest DraftProductCreationRequest(int itemCount = 2)
+    {
+        var request = new ProductCreationRequest
+        {
+            Id = Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc"),
+            RequestCode = "PCR-BASELINE-0001",
+            Title = "Baseline multi-product request",
+            Status = ProductCreationRequestStatus.Draft,
+            CreatedBy = WarehouseActorId,
+            CreatedByName = "Warehouse Tester",
+            CreatedByRoleName = "Warehouse",
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+        };
+
+        for (var i = 1; i <= itemCount; i++)
+        {
+            request.Items.Add(new ProductCreationRequestItem
+            {
+                Id = Guid.Parse($"dddddddd-dddd-dddd-dddd-dddddddddd{i:00}"),
+                RequestId = request.Id,
+                ClientKey = $"item-{i}",
+                SortOrder = i - 1,
+                ProductSnapshotJson = "{}",
+                ProductName = $"Baseline product {i}",
+                ProductType = ProductType.THANH_PHAM.ToString(),
+                BaseUnit = "unit",
+                InventoryUnit = InventoryUnit.Piece.ToString(),
+                VariantCount = 1,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+            });
+        }
+
+        return request;
+    }
+
     public static Product ShelfProduct(Guid? id = null, string name = "Baseline finished product")
     {
         return new Product

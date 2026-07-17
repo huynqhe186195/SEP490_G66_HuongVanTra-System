@@ -306,6 +306,151 @@ function mapProductApproval(item) {
   }
 }
 
+function mapProductCreationRequestItem(item) {
+  if (!item || typeof item !== 'object') return null
+  return {
+    id: item.id ?? item.Id,
+    clientKey: item.clientKey ?? item.ClientKey ?? '',
+    sortOrder: Number(item.sortOrder ?? item.SortOrder ?? 0),
+    productSnapshot: item.productSnapshot ?? item.ProductSnapshot ?? null,
+    productName: item.productName ?? item.ProductName ?? '',
+    productType: item.productType ?? item.ProductType ?? '',
+    categoryId: item.categoryId ?? item.CategoryId ?? null,
+    baseUnit: item.baseUnit ?? item.BaseUnit ?? '',
+    inventoryUnit: item.inventoryUnit ?? item.InventoryUnit ?? '',
+    variantCount: Number(item.variantCount ?? item.VariantCount ?? 0),
+    bomLineCount: Number(item.bomLineCount ?? item.BomLineCount ?? 0),
+    validationStatus: item.validationStatus ?? item.ValidationStatus ?? '',
+    validationMessage: item.validationMessage ?? item.ValidationMessage ?? '',
+  }
+}
+
+function mapProductCreationRevision(item) {
+  if (!item || typeof item !== 'object') return null
+  const rawItems = item.submittedItems ?? item.SubmittedItems ?? []
+  return {
+    id: item.id ?? item.Id,
+    revisionNumber: Number(item.revisionNumber ?? item.RevisionNumber ?? 0),
+    submittedItems: Array.isArray(rawItems) ? rawItems.map(mapProductCreationRequestItem).filter(Boolean) : [],
+    submittedByName: item.submittedByName ?? item.SubmittedByName ?? '',
+    submittedByRoleName: item.submittedByRoleName ?? item.SubmittedByRoleName ?? '',
+    submittedAt: item.submittedAt ?? item.SubmittedAt ?? null,
+    decision: item.decision ?? item.Decision ?? '',
+    decisionReason: item.decisionReason ?? item.DecisionReason ?? '',
+    decidedByName: item.decidedByName ?? item.DecidedByName ?? '',
+    decidedByRoleName: item.decidedByRoleName ?? item.DecidedByRoleName ?? '',
+    decidedAt: item.decidedAt ?? item.DecidedAt ?? null,
+  }
+}
+
+function mapProductCreationRequest(item) {
+  if (!item || typeof item !== 'object') return null
+  const rawItems = item.items ?? item.Items ?? []
+  const rawRevisions = item.revisions ?? item.Revisions ?? []
+  const rawCreatedIds = item.createdProductIds ?? item.CreatedProductIds ?? []
+  return {
+    id: item.id ?? item.Id,
+    requestCode: item.requestCode ?? item.RequestCode ?? '',
+    title: item.title ?? item.Title ?? '',
+    status: item.status ?? item.Status ?? '',
+    revisionNumber: Number(item.revisionNumber ?? item.RevisionNumber ?? 0),
+    createdByName: item.createdByName ?? item.CreatedByName ?? '',
+    createdByRoleName: item.createdByRoleName ?? item.CreatedByRoleName ?? '',
+    createdAt: item.createdAt ?? item.CreatedAt ?? null,
+    updatedAt: item.updatedAt ?? item.UpdatedAt ?? null,
+    submittedAt: item.submittedAt ?? item.SubmittedAt ?? null,
+    reviewedByName: item.reviewedByName ?? item.ReviewedByName ?? '',
+    reviewedByRoleName: item.reviewedByRoleName ?? item.ReviewedByRoleName ?? '',
+    reviewedAt: item.reviewedAt ?? item.ReviewedAt ?? null,
+    rejectReason: item.rejectReason ?? item.RejectReason ?? '',
+    cancelReason: item.cancelReason ?? item.CancelReason ?? '',
+    warehouseNote: item.warehouseNote ?? item.WarehouseNote ?? '',
+    adminNote: item.adminNote ?? item.AdminNote ?? '',
+    completedAt: item.completedAt ?? item.CompletedAt ?? null,
+    createdProductIds: Array.isArray(rawCreatedIds) ? rawCreatedIds : [],
+    items: Array.isArray(rawItems) ? rawItems.map(mapProductCreationRequestItem).filter(Boolean) : [],
+    revisions: Array.isArray(rawRevisions) ? rawRevisions.map(mapProductCreationRevision).filter(Boolean) : [],
+  }
+}
+
+function buildProductCreationItems(items = []) {
+  return items.map((item, index) => ({
+    clientKey: item.clientKey || `item-${index + 1}`,
+    product: buildCreateProductBody(item.product ?? item.productSnapshot ?? item),
+  }))
+}
+
+export async function fetchProductCreationRequests(params = {}) {
+  const search = new URLSearchParams()
+  if (params.status) search.set('status', params.status)
+  if (params.search) search.set('search', params.search)
+  if (params.mineOnly) search.set('mineOnly', 'true')
+  search.set('page', String(params.page ?? 1))
+  search.set('pageSize', String(Math.min(100, Math.max(1, params.pageSize ?? 20))))
+  const data = await apiRequestAuth(`/api/v1/product-creation-requests?${search.toString()}`, { method: 'GET' })
+  const paged = toPagedResult(data)
+  return {
+    ...paged,
+    items: paged.items.map(mapProductCreationRequest).filter(Boolean),
+  }
+}
+
+export async function createProductCreationRequest(payload) {
+  const data = await apiRequestAuth('/api/v1/product-creation-requests', {
+    method: 'POST',
+    body: JSON.stringify({
+      title: trimOrNull(payload.title),
+      warehouseNote: trimOrNull(payload.warehouseNote),
+      items: buildProductCreationItems(payload.items),
+    }),
+  })
+  return mapProductCreationRequest(data)
+}
+
+export async function updateProductCreationRequest(id, payload) {
+  const data = await apiRequestAuth(`/api/v1/product-creation-requests/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      title: trimOrNull(payload.title),
+      warehouseNote: trimOrNull(payload.warehouseNote),
+      items: buildProductCreationItems(payload.items),
+    }),
+  })
+  return mapProductCreationRequest(data)
+}
+
+export async function submitProductCreationRequest(id, warehouseNote = '') {
+  const data = await apiRequestAuth(`/api/v1/product-creation-requests/${id}/submit`, {
+    method: 'POST',
+    body: JSON.stringify({ warehouseNote: trimOrNull(warehouseNote) }),
+  })
+  return mapProductCreationRequest(data)
+}
+
+export async function approveProductCreationRequest(id, adminNote = '') {
+  const data = await apiRequestAuth(`/api/v1/product-creation-requests/${id}/approve`, {
+    method: 'POST',
+    body: JSON.stringify({ adminNote: trimOrNull(adminNote) }),
+  })
+  return mapProductCreationRequest(data)
+}
+
+export async function rejectProductCreationRequest(id, reason, adminNote = '') {
+  const data = await apiRequestAuth(`/api/v1/product-creation-requests/${id}/reject`, {
+    method: 'POST',
+    body: JSON.stringify({ reason: String(reason || '').trim(), adminNote: trimOrNull(adminNote) }),
+  })
+  return mapProductCreationRequest(data)
+}
+
+export async function cancelProductCreationRequest(id, reason, adminNote = '') {
+  const data = await apiRequestAuth(`/api/v1/product-creation-requests/${id}/cancel`, {
+    method: 'POST',
+    body: JSON.stringify({ reason: String(reason || '').trim(), adminNote: trimOrNull(adminNote) }),
+  })
+  return mapProductCreationRequest(data)
+}
+
 export async function fetchProductApprovals(params = {}) {
   const search = new URLSearchParams()
   if (params.status) search.set('status', params.status)
