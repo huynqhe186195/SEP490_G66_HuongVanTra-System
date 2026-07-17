@@ -2,7 +2,13 @@ namespace OrderService.Application.Interfaces;
 
 public interface IInventoryCatalogClient
 {
-    Task DeductMaterialsAsync(IEnumerable<(Guid SkuId, int Quantity)> items, CancellationToken ct = default);
+    Task DeductMaterialsAsync(
+        IEnumerable<(Guid SkuId, string? SkuCode, string? SkuName, int Quantity)> items,
+        string? referenceType,
+        Guid? referenceId,
+        string? referenceCode,
+        string? note,
+        CancellationToken ct = default);
     Task<InventoryStockHandlingResponse> PreparePosStockDeductionAsync(
         InventoryStockHandlingRequest request,
         CancellationToken ct = default);

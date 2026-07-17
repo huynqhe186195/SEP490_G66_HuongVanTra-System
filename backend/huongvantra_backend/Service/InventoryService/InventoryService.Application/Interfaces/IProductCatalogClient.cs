@@ -32,6 +32,7 @@ public sealed record CatalogVariant(
     string SkuCode,
     string VariantName,
     bool IsActive,
+    bool IsSellable,
     bool HasBom,
     int BomLineCount,
     List<CatalogBomLine> BomLines);

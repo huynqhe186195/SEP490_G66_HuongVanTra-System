@@ -12,10 +12,20 @@ public class InventoryCatalogClient(HttpClient httpClient, ILogger<InventoryCata
         PropertyNameCaseInsensitive = true,
     };
 
-    public async Task DeductMaterialsAsync(IEnumerable<(Guid SkuId, int Quantity)> items, CancellationToken ct = default)
+    public async Task DeductMaterialsAsync(
+        IEnumerable<(Guid SkuId, string? SkuCode, string? SkuName, int Quantity)> items,
+        string? referenceType,
+        Guid? referenceId,
+        string? referenceCode,
+        string? note,
+        CancellationToken ct = default)
     {
         var body = new DeductMaterialsRequest(
-            items.Select(i => new DeductMaterialItem(i.SkuId, i.Quantity)).ToList());
+            items.Select(i => new DeductMaterialItem(i.SkuId, i.Quantity, i.SkuCode, i.SkuName)).ToList(),
+            referenceType,
+            referenceId,
+            referenceCode,
+            note);
 
         var response = await httpClient.PostAsJsonAsync("api/v1/inventory/deduct-materials", body, ct);
 
@@ -75,6 +85,16 @@ public class InventoryCatalogClient(HttpClient httpClient, ILogger<InventoryCata
         return raw.Trim();
     }
 
-    private sealed record DeductMaterialsRequest(List<DeductMaterialItem> Items);
-    private sealed record DeductMaterialItem(Guid SkuId, int Quantity);
+    private sealed record DeductMaterialsRequest(
+        List<DeductMaterialItem> Items,
+        string? ReferenceType,
+        Guid? ReferenceId,
+        string? ReferenceCode,
+        string? Note);
+
+    private sealed record DeductMaterialItem(
+        Guid SkuId,
+        int Quantity,
+        string? SkuCode,
+        string? SkuName);
 }

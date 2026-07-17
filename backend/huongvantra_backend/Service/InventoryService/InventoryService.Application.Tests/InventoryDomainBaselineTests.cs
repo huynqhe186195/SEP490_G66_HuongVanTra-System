@@ -127,4 +127,41 @@ public class InventoryDomainBaselineTests
         Assert.Equal("SUPPLIER_RECEIPT", entry.TransactionType);
         Assert.Equal("SupplierReceipt", entry.ReferenceType);
     }
+
+    [Fact]
+    public void PosSaleExportAllocation_DocumentsShelfBatchTraceability()
+    {
+        var slipId = Guid.NewGuid();
+        var lineId = Guid.NewGuid();
+        var allocation = new StockExportBatchAllocation
+        {
+            StockExportSlipId = slipId,
+            StockExportSlipLineId = lineId,
+            LotCode = "SHELF-LOT-001",
+            Quantity = 5,
+        };
+
+        Assert.Equal(slipId, allocation.StockExportSlipId);
+        Assert.Equal(lineId, allocation.StockExportSlipLineId);
+        Assert.Equal("SHELF-LOT-001", allocation.LotCode);
+        Assert.Equal(5, allocation.Quantity);
+    }
+
+    [Fact]
+    public void CustomerReturnImportLine_DocumentsShelfReceiptDestination()
+    {
+        var line = new StockImportSlipLine
+        {
+            DestinationLocation = "Shelf",
+            StoreQtyBefore = 0,
+            StoreQtyAfter = 3,
+            Quantity = 3,
+            WarehouseQtyBefore = 10,
+            WarehouseQtyAfter = 10,
+        };
+
+        Assert.Equal("Shelf", line.DestinationLocation);
+        Assert.Equal(line.StoreQtyBefore + line.Quantity, line.StoreQtyAfter);
+        Assert.Equal(line.WarehouseQtyBefore, line.WarehouseQtyAfter);
+    }
 }

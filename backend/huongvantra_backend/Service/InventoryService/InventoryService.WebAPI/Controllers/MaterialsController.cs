@@ -19,7 +19,9 @@ public class MaterialsController(InventoryLogic _logic) : ControllerBase
         CancellationToken ct)
     {
         await _logic.DeductMaterialsAsync(
-            request.Items.Select(i => (i.SkuId, i.Quantity)),
+            request,
+            User.GetUserId(),
+            User.ToCreatorSnapshot(),
             ct);
         return NoContent();
     }

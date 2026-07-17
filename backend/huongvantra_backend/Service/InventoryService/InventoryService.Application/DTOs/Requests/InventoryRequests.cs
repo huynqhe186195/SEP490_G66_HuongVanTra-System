@@ -74,9 +74,18 @@ public record CreateProductionOrderRequest(
 
 public record ReviewProductionOrderRequest(string? Reason);
 
-public record DeductMaterialItem(Guid SkuId, int Quantity);
+public record DeductMaterialItem(
+    Guid SkuId,
+    int Quantity,
+    string? SkuCode = null,
+    string? SkuName = null);
 
-public record DeductMaterialsRequest(List<DeductMaterialItem> Items);
+public record DeductMaterialsRequest(
+    List<DeductMaterialItem> Items,
+    string? ReferenceType = null,
+    Guid? ReferenceId = null,
+    string? ReferenceCode = null,
+    string? Note = null);
 
 public record CreatorSnapshot(
     Guid CreatedById,

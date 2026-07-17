@@ -473,6 +473,10 @@ export function mapPosProduct(item) {
     categoryId: item.categoryId ?? item.CategoryId ?? null,
     categoryName: item.categoryName ?? item.CategoryName ?? '',
     costPrice: Number(item.costPrice ?? item.CostPrice ?? 0),
+    productType: item.productType ?? item.ProductType ?? '',
+    inventoryUnit: item.inventoryUnit ?? item.InventoryUnit ?? '',
+    isSellable: item.isSellable ?? item.IsSellable ?? true,
+    priceUnit: item.priceUnit ?? item.PriceUnit ?? item.inventoryUnit ?? item.InventoryUnit ?? '',
   }
 }
 
@@ -756,7 +760,7 @@ async function fetchStoreProductsForPos() {
   const pageSize = 100
   let page = 1
   let allItems = []
-  let totalCount = 0
+  let totalCount
 
   do {
     const data = await apiRequestAuth(
@@ -788,7 +792,10 @@ export async function fetchPosProducts({ storeId, search, limit = 30 }) {
       imageUrl: p.imageUrl ?? '',
       categoryId: p.categoryId ?? null,
       productType: p.productType ?? '',
-    }))
+      inventoryUnit: p.inventoryUnit ?? '',
+      isSellable: p.isSellable ?? true,
+      priceUnit: p.priceUnit ?? p.inventoryUnit ?? '',
+    })).filter((product) => product.isSellable !== false)
   }
 
   void storeId
@@ -850,9 +857,14 @@ export async function fetchPosProducts({ storeId, search, limit = 30 }) {
         categoryId: sku.categoryId ?? sku.CategoryId ?? product?.categoryId ?? product?.CategoryId ?? null,
         categoryName: sku.categoryName ?? sku.CategoryName ?? product?.categoryName ?? product?.CategoryName ?? '',
         costPrice: sku.costPrice ?? sku.CostPrice ?? 0,
+        productType: sku.productType ?? sku.ProductType ?? product?.productType ?? product?.ProductType ?? '',
+        inventoryUnit: sku.inventoryUnit ?? sku.InventoryUnit ?? product?.inventoryUnit ?? product?.InventoryUnit ?? '',
+        isSellable: sku.isSellable ?? sku.IsSellable ?? product?.isSellable ?? product?.IsSellable ?? true,
+        priceUnit: sku.priceUnit ?? sku.PriceUnit ?? product?.priceUnit ?? product?.PriceUnit ?? sku.inventoryUnit ?? sku.InventoryUnit ?? '',
       })
     })
     .filter(Boolean)
+    .filter((product) => product.isSellable !== false)
 }
 
 export function resolvePosStoreId() {

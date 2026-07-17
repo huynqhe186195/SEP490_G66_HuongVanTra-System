@@ -52,6 +52,7 @@ public class ProductCatalogClient(HttpClient httpClient, ILogger<ProductCatalogC
             v.SkuCode ?? string.Empty,
             v.VariantName ?? string.Empty,
             v.IsActive,
+            v.IsSellable,
             v.HasBom,
             v.BomLineCount,
             (v.BomLines ?? []).Select(b => new CatalogBomLine(
@@ -82,6 +83,7 @@ public class ProductCatalogClient(HttpClient httpClient, ILogger<ProductCatalogC
         string? SkuCode,
         string? VariantName,
         bool IsActive,
+        bool IsSellable,
         bool HasBom,
         int BomLineCount,
         List<BomLineResponse>? BomLines);

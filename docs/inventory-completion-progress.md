@@ -796,6 +796,81 @@ This document tracks the current-scope Inventory / Warehouse / Product Master co
   - `1021a77 feat(inventory): add stocktake controls alerts and reporting`
 - No push will be performed.
 
+## Batch 9 - POS, Sell-First Reconciliation, Returns, Offline Catalog, and Custom Bundle Regression
+
+### Starting State
+
+- Started after Batch 8 docs checkpoint commit `24adf07`.
+- Existing POS/order flows still needed tighter alignment with the split stock model:
+  - POS immediate sale should consume only Shelf sellable stock and physical Shelf batches.
+  - Sell-first/BOM reconciliation should consume Warehouse raw material/packaging batches only when confirmed.
+  - Customer returns should create traceable Shelf receipt batches/slips instead of only restoring aggregate stock.
+  - Custom bundle material deduction should create traceable export slips, lines, allocations, and ledger entries.
+  - Offline POS catalog should preserve stock/catalog flags needed for safe sync validation.
+
+### Files Changed So Far
+
+- Backend Inventory:
+  - `PreparePosStockDeductionAsync` now validates catalog status/sellability and uses physical Shelf batch quantity for POS immediate-sale availability when not in warehouse simulation.
+  - `DeductImmediateFinishedStockAsync` now deducts Shelf batches FEFO, creates `pos_finished_goods_sale` export slip lines, records `StockExportBatchAllocation`, writes `POS_SALE` ledger entries, and syncs `QuantityOnHand` from Shelf batch quantity.
+  - `ConfirmBomReconciliationQueueAsync` now records `sales_bom_reconciliation` export references and `SALES_BOM_RECONCILIATION` ledger entries while still deducting Warehouse raw material/packaging batches.
+  - `HandleOrderReturnedAsync` now creates Shelf return receipt batches/slips through customer-return receipt logic instead of only restoring aggregate stock.
+  - Added traceable customer return receipt handling with `customer_return_receipt` import slips, lines, `CUSTOMER_RETURN_RECEIPT` ledger entries, and Shelf destination.
+  - Added full `DeductMaterialsRequest` support for item snapshots and references.
+  - `MaterialsController` now passes authenticated actor and creator snapshot into material deduction logic.
+  - New material deduction overload creates one `custom_bundle_material_export` slip per request, with multiple lines, FEFO batch allocations, `CUSTOM_BUNDLE_MATERIAL_EXPORT` ledger entries, and all-or-nothing availability precheck.
+  - Product catalog client now maps `IsSellable` into Inventory catalog snapshots.
+- Backend Order:
+  - Return event publishing now carries returned SKU name/code snapshots.
+  - Custom bundle packing now sends item snapshots and `CustomBundle` reference metadata to Inventory material deduction.
+- Gateway:
+  - Added exact Inventory routes for `/api/v1/inventory/pos-stock-handling` and `/api/v1/inventory/deduct-materials`.
+- Frontend POS/offline:
+  - POS product mapping now preserves `productType`, `inventoryUnit`, `isSellable`, and `priceUnit`.
+  - Online/offline POS catalog now filters out `isSellable === false`.
+  - Offline cache stores sellability/unit metadata alongside Shelf sellable stock.
+- Tests:
+  - Added Inventory baseline tests for POS sale export allocation and customer return Shelf receipt documentation.
+  - Added Order baseline test for return-line SKU snapshot data used by Inventory return receipt events.
+
+### Gate Results So Far
+
+- Backend build:
+  - `dotnet build --no-restore`: passed, 0 warnings, 0 errors.
+- Backend scoped tests:
+  - `dotnet test Service\InventoryService\InventoryService.Application.Tests\InventoryService.Application.Tests.csproj --no-restore`: passed, 13 tests.
+  - `dotnet test Service\OrderService\OrderService.Application.Tests\OrderService.Application.Tests.csproj --no-restore`: passed, 3 tests.
+- Backend full test:
+  - `dotnet test --no-restore`: Inventory, Product, and Order test projects passed.
+  - `AuditService.Application.Tests` aborted on this Windows host because x64 `Microsoft.AspNetCore.App 8.0.0` is missing; the host currently has x64 10.0.8 and x86 8.0.14. This remains the same host runtime issue recorded in earlier batches.
+- Frontend scoped lint:
+  - `npx.cmd eslint src/features/pos/services/posApi.js src/lib/offlineCache.js`: passed.
+- Frontend full lint:
+  - `npm.cmd run lint`: failed with baseline cross-application lint debt, now `120 errors, 14 warnings`.
+  - No lint errors were reported in the Batch 9 changed frontend files.
+- Frontend build:
+  - `npm.cmd run build`: passed with existing dynamic-import and chunk-size warnings.
+- Docker Compose rebuild/restart:
+  - `docker compose up -d --build inventory-service order-service product-service audit-service gateway web-client`: passed.
+  - After adding missing Gateway routes, `docker compose up -d --build gateway`: passed.
+- Docker health/logs:
+  - `docker compose ps` showed `hvt-inventory-service`, `hvt-order-service`, `hvt-product-service`, and `hvt-audit-service` running and healthy; `hvt-gateway` and `hvt-web-client` were running.
+  - `inventory-service`, `order-service`, and `gateway` logs showed successful startup; Inventory and Order buses started.
+- Gateway smoke:
+  - `curl.exe -i http://localhost:5000/api/v1/inventory/sku-stocks`: returned `401 Unauthorized`, confirming route presence/protection.
+  - `curl.exe -i -X POST http://localhost:5000/api/v1/inventory/pos-stock-handling -H "Content-Type: application/json" -d "{}"`: returned `401 Unauthorized` after Gateway route fix, confirming it no longer returns 404.
+  - `curl.exe -i -X POST http://localhost:5000/api/v1/inventory/deduct-materials -H "Content-Type: application/json" -d "{}"`: returned `401 Unauthorized` after Gateway route fix, confirming it no longer returns 404.
+  - `curl.exe -i http://localhost:5000/api/v1/orders`: returned `401 Unauthorized`, confirming route presence/protection.
+  - `curl.exe -i "http://localhost:5000/api/v1/skus?page=1&pageSize=1&isActive=true"`: returned `200 OK`.
+- Repo checks:
+  - `git diff --check`: passed; Git emitted Windows LF-to-CRLF warnings only.
+
+### Checkpoint Commit
+
+- Batch 9 checkpoint commit will be created with message:
+  - `feat(inventory): integrate shelf stock with POS and order workflows`
+- No push will be performed.
+
 ## Remaining Risks
 
 - Generic audit middleware records authenticated non-GET request metadata only; detailed before/after snapshots for each business action can be added in later targeted instrumentation batches.

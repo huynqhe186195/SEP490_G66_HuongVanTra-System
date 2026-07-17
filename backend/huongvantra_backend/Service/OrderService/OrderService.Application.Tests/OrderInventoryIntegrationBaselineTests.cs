@@ -1,4 +1,5 @@
 using OrderService.Application.Tests.TestSupport;
+using OrderService.Domain.Entities;
 using OrderService.Domain.Enums;
 using Xunit;
 
@@ -25,5 +26,21 @@ public class OrderInventoryIntegrationBaselineTests
         Assert.Contains(nameof(InventorySyncStatus.PendingDeduction), values);
         Assert.Contains(nameof(InventorySyncStatus.PendingReconciliation), values);
         Assert.Contains(nameof(InventorySyncStatus.Cancelled), values);
+    }
+
+    [Fact]
+    public void ReturnLineSnapshot_DocumentsSkuDataForInventoryReceiptEvent()
+    {
+        var detail = new OrderDetail
+        {
+            SkuId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+            SkuSnapshotCode = "FG-TRA-NHAI-50G",
+            SkuSnapshotName = "Tra nhai 50g",
+            Quantity = 2,
+        };
+
+        Assert.Equal("FG-TRA-NHAI-50G", detail.SkuSnapshotCode);
+        Assert.Equal("Tra nhai 50g", detail.SkuSnapshotName);
+        Assert.Equal(2, detail.Quantity);
     }
 }

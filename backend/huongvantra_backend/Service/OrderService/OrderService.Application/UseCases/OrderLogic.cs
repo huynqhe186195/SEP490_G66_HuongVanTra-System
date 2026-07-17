@@ -1020,7 +1020,11 @@ public class OrderLogic(
             returnAmount,
             order.FinalAmount,
             refundAmount,
-            returnLines.Select(x => (x.Detail.SkuId, x.Quantity)),
+            returnLines.Select(x => (
+                x.Detail.SkuId,
+                x.Detail.SkuSnapshotName,
+                x.Detail.SkuSnapshotCode,
+                x.Quantity)),
             ct);
 
         string? exchangeOrderCode = null;
@@ -1426,8 +1430,23 @@ public class OrderLogic(
         if (bundle.PackingStatus == PackingStatus.Packed)
             throw new OrderValidationException("Gói này đã được đóng gói.");
 
-        var ingredients = bundle.Ingredients.Select(i => (i.MaterialSkuId, i.Quantity));
-        await _inventoryCatalogClient.DeductMaterialsAsync(ingredients, ct);
+        List<(Guid SkuId, string? SkuCode, string? SkuName, int Quantity)> ingredients = bundle.Ingredients
+            .Select(i => (
+                SkuId: i.MaterialSkuId,
+                SkuCode: (string?)i.MaterialSkuCode,
+                SkuName: (string?)i.MaterialSnapshotName,
+                Quantity: i.Quantity))
+            .ToList();
+        var referenceCode = !string.IsNullOrWhiteSpace(bundle.Order?.OrderCode)
+            ? bundle.Order.OrderCode
+            : bundle.Label ?? bundle.Id.ToString("N")[..8];
+        await _inventoryCatalogClient.DeductMaterialsAsync(
+            ingredients,
+            "CustomBundle",
+            bundle.Id,
+            referenceCode,
+            $"Dong goi custom bundle {bundle.Label ?? bundle.Id.ToString("N")[..8]}",
+            ct);
 
         bundle.PackingStatus = PackingStatus.Packed;
         bundle.PackedAt = DateTime.UtcNow;
