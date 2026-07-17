@@ -47,7 +47,7 @@ public class SkuStockController(InventoryLogic _logic) : ControllerBase
     [Authorize(Roles = "Warehouse")]
     public async Task<IActionResult> UpdateThreshold(Guid skuId, [FromBody] UpdateLowStockThresholdRequest request, CancellationToken ct)
     {
-        var result = await _logic.UpdateLowStockThresholdAsync(skuId, request.Threshold, ct);
+        var result = await _logic.UpdateLowStockThresholdAsync(skuId, request, ct);
         return Ok(result);
     }
 }

@@ -13,6 +13,7 @@ public class Product : BaseEntity
     public string? BrewingGuide { get; set; }
     public string? Description { get; set; }
     public string BaseUnit { get; set; } = "unit";
+    public InventoryUnit InventoryUnit { get; set; } = InventoryUnit.Piece;
     public decimal? WeightValue { get; set; }
     public string? WeightUnit { get; set; }
     public bool IsVariantParent { get; set; }

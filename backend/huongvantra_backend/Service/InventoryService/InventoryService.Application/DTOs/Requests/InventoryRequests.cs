@@ -19,7 +19,11 @@ public record PreparePosStockDeductionRequest(
     decimal TotalAmount,
     List<PreparePosStockDeductionItemRequest> Items);
 
-public record UpdateLowStockThresholdRequest(int Threshold);
+public record UpdateLowStockThresholdRequest(
+    int Threshold,
+    string? Location = null,
+    int? WarehouseLowStockThreshold = null,
+    int? ShelfLowStockThreshold = null);
 
 public record CreateStockAdjustmentRequestItem(
     Guid SkuId,

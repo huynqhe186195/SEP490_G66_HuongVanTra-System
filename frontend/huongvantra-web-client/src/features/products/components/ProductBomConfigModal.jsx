@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { showError } from '../../../app/toast.js'
 import { searchMaterials } from '../services/bomApi.js'
 import { getBomQuantityValidationMessage, isCountBasedUnit } from '../utils/bomUnitRules.js'
+import { getInventoryUnitShortLabel } from '../utils/productTypes.js'
 
 function useDebounce(value, delay = 300) {
   const [debounced, setDebounced] = useState(value)
@@ -13,6 +14,9 @@ function useDebounce(value, delay = 300) {
 }
 
 function getMaterialUnit(material) {
+  const inventoryUnit = getInventoryUnitShortLabel(material?.inventoryUnit)
+  if (inventoryUnit) return inventoryUnit
+
   const baseUnit = material?.units?.find((u) => u.isBaseUnit) || material?.units?.[0]
   return (
     material?.materialUnitName ||
@@ -62,13 +66,9 @@ export default function ProductBomConfigModal({
   const debouncedSearch = useDebounce(searchInput, 300)
 
   useEffect(() => {
-    if (!isOpen) return
+    if (!isOpen) return undefined
     const normalizedLines = initialLines.length > 0 ? initialLines.map(normalizeInitialLine) : []
-    setLines(normalizedLines)
-    setSearchInput('')
-    setSearchResults([])
-    setIsSaving(false)
-    setMaterialCache(() => {
+    const timer = window.setTimeout(() => {
       const next = {}
       for (const line of normalizedLines) {
         if (!line.material_id || !line.materialName) continue
@@ -79,38 +79,49 @@ export default function ProductBomConfigModal({
           baseUnit: line.baseUnit,
         }
       }
-      return next
-    })
-  }, [isOpen])
+      setLines(normalizedLines)
+      setSearchInput('')
+      setSearchResults([])
+      setIsSaving(false)
+      setMaterialCache(next)
+    }, 0)
+
+    return () => window.clearTimeout(timer)
+  }, [isOpen, initialLines])
 
   useEffect(() => {
-    if (!isOpen) return
+    if (!isOpen) return undefined
     const term = debouncedSearch.trim()
     if (!term) {
-      setSearchResults([])
-      return
+      const timer = window.setTimeout(() => setSearchResults([]), 0)
+      return () => window.clearTimeout(timer)
     }
 
     let cancelled = false
-    setIsSearching(true)
-    searchMaterials(term, 20)
-      .then((items) => {
-        if (cancelled) return
-        setSearchResults(items)
-        setMaterialCache((prev) => {
-          const next = { ...prev }
-          for (const item of items) next[item.id] = item
-          return next
+    const timer = window.setTimeout(() => {
+      if (cancelled) return
+      setIsSearching(true)
+      searchMaterials(term, 20)
+        .then((items) => {
+          if (cancelled) return
+          setSearchResults(items)
+          setMaterialCache((prev) => {
+            const next = { ...prev }
+            for (const item of items) next[item.id] = item
+            return next
+          })
         })
-      })
-      .catch(() => {
-        if (!cancelled) setSearchResults([])
-      })
-      .finally(() => {
-        if (!cancelled) setIsSearching(false)
-      })
+        .catch(() => {
+          if (!cancelled) setSearchResults([])
+        })
+        .finally(() => {
+          if (!cancelled) setIsSearching(false)
+        })
+    }, 0)
+
     return () => {
       cancelled = true
+      window.clearTimeout(timer)
     }
   }, [debouncedSearch, isOpen])
 
@@ -205,7 +216,7 @@ export default function ProductBomConfigModal({
         </header>
 
         <div className="border-b border-slate-100 px-6 py-4">
-          <label className="block text-xs font-semibold text-slate-500">Nguyên liệu</label>
+          <label className="block text-xs font-semibold text-slate-500">Nguyên liệu / Bao bì</label>
           <div className="relative mt-2" ref={dropdownRef}>
             <span className="material-symbols-outlined pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[20px] text-slate-400">
               search
@@ -217,7 +228,7 @@ export default function ProductBomConfigModal({
             ) : null}
             <input
               className="w-full rounded-xl border border-slate-200 bg-[#f0eee6] py-3 pl-10 pr-10 text-sm focus:border-[#356647] focus:outline-none focus:ring-2 focus:ring-[#356647]/15"
-              placeholder="Tìm tên hoặc mã nguyên liệu..."
+              placeholder="Tìm tên hoặc mã nguyên liệu / bao bì..."
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
             />
@@ -247,7 +258,7 @@ export default function ProductBomConfigModal({
                   )
                 })}
                 {!isSearching && searchResults.length === 0 ? (
-                  <p className="px-4 py-3 text-sm text-slate-400">Không tìm thấy nguyên liệu.</p>
+                  <p className="px-4 py-3 text-sm text-slate-400">Không tìm thấy nguyên liệu / bao bì.</p>
                 ) : null}
               </div>
             ) : null}
@@ -257,15 +268,15 @@ export default function ProductBomConfigModal({
         <div className="flex-1 overflow-y-auto px-6 py-4">
           {lines.length === 0 ? (
             <p className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-sm text-slate-400">
-              SKU thành phẩm này chưa có BOM. Dùng ô tìm kiếm phía trên để thêm nguyên liệu.
+              SKU Sản phẩm kệ này chưa có BOM. Dùng ô tìm kiếm phía trên để thêm nguyên liệu / bao bì.
             </p>
           ) : (
             <div className="overflow-x-auto rounded-xl border border-slate-200">
               <table className="min-w-full text-left text-sm">
                 <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                   <tr>
-                    <th className="px-4 py-3 font-semibold">Nguyên liệu</th>
-                    <th className="px-4 py-3 text-center font-semibold">Định mức cho 1 đơn vị thành phẩm</th>
+                    <th className="px-4 py-3 font-semibold">Nguyên liệu / Bao bì</th>
+                    <th className="px-4 py-3 text-center font-semibold">Định mức cho 1 đơn vị Sản phẩm kệ</th>
                     <th className="px-4 py-3 font-semibold">Đơn vị</th>
                     <th className="px-4 py-3 text-right font-semibold">Hành động</th>
                   </tr>
@@ -319,7 +330,7 @@ export default function ProductBomConfigModal({
         </div>
 
         <footer className="flex items-center justify-between border-t border-slate-100 px-6 py-4">
-          <span className="text-xs text-slate-500">{lines.length} nguyên liệu trong BOM</span>
+          <span className="text-xs text-slate-500">{lines.length} component trong BOM</span>
           <button
             type="button"
             onClick={handleConfirm}

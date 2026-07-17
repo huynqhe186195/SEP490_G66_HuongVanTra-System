@@ -1,7 +1,7 @@
 import { isWarehouseRole } from '../../auth/utils/permissions.js'
 
 export const warehouseNavTabs = [
-  { label: 'Kho tổng', to: '/inventory' },
+  { label: 'Kho', to: '/inventory' },
   { label: 'Theo lô', to: '/inventory/batches' },
   { label: 'Phiếu nhập kho', to: '/inventory/import' },
   { label: 'Nhập nguyên liệu', to: '/inventory/import/create' },
@@ -11,7 +11,7 @@ export const warehouseNavTabs = [
 ]
 
 export const stockRequestNavTab = {
-  label: 'Bổ sung tồn quầy',
+  label: 'Bổ sung Kệ Hàng',
   to: '/inventory/stock-requests',
 }
 

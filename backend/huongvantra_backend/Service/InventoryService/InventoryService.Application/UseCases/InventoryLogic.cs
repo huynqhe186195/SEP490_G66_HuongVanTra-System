@@ -651,9 +651,9 @@ public class InventoryLogic(
             foreach (var skuId in touchedSkuIds.Distinct())
             {
                 var stock = await _skuStockRepo.GetBySkuIdAsync(skuId, innerCt);
-                if (stock != null && stock.WarehouseQuantityOnHand <= stock.LowStockThreshold)
+                if (stock != null && stock.WarehouseQuantityOnHand <= stock.WarehouseLowStockThreshold)
                     await _eventPublisher.PublishLowStockAsync(
-                        stock.SkuId, stock.SkuCode, stock.WarehouseQuantityOnHand, stock.LowStockThreshold, innerCt);
+                        stock.SkuId, stock.SkuCode, stock.WarehouseQuantityOnHand, stock.WarehouseLowStockThreshold, innerCt);
             }
 
             return new StockDeductOperationResult(currentQueue, true, []);
@@ -750,15 +750,51 @@ public class InventoryLogic(
             "insufficient")).ToList();
 
     public async Task<SkuStockResponse> UpdateLowStockThresholdAsync(
-        Guid skuId, int threshold, CancellationToken ct = default)
+        Guid skuId,
+        UpdateLowStockThresholdRequest request,
+        CancellationToken ct = default)
     {
-        if (threshold < 0)
-            throw new InventoryValidationException("Ngưỡng tồn thấp không được âm.");
+        if (request is null)
+            throw new InventoryValidationException("Request body là bắt buộc.");
+
+        var location = ParseInventoryLocation(request.Location);
+        var threshold = request.Threshold;
+
+        if (request.WarehouseLowStockThreshold.HasValue)
+            ValidateThreshold(request.WarehouseLowStockThreshold.Value);
+        if (request.ShelfLowStockThreshold.HasValue)
+            ValidateThreshold(request.ShelfLowStockThreshold.Value);
+        ValidateThreshold(threshold);
+
+        static void ValidateThreshold(int value)
+        {
+            if (value < 0)
+                throw new InventoryValidationException("Ngưỡng tồn thấp không được âm.");
+        }
 
         var stock = await _skuStockRepo.GetBySkuIdAsync(skuId, ct)
             ?? throw new InventoryNotFoundException($"Không tìm thấy tồn kho cho SKU '{skuId}'.");
 
-        stock.LowStockThreshold = threshold;
+        if (request.WarehouseLowStockThreshold.HasValue || request.ShelfLowStockThreshold.HasValue)
+        {
+            if (request.WarehouseLowStockThreshold.HasValue)
+                stock.WarehouseLowStockThreshold = request.WarehouseLowStockThreshold.Value;
+            if (request.ShelfLowStockThreshold.HasValue)
+            {
+                stock.ShelfLowStockThreshold = request.ShelfLowStockThreshold.Value;
+                stock.LowStockThreshold = request.ShelfLowStockThreshold.Value;
+            }
+        }
+        else if (location == InventoryLocation.Warehouse)
+        {
+            stock.WarehouseLowStockThreshold = threshold;
+        }
+        else
+        {
+            stock.ShelfLowStockThreshold = threshold;
+            stock.LowStockThreshold = threshold;
+        }
+
         stock.UpdatedAt = DateTime.UtcNow;
         await _skuStockRepo.SaveChangesAsync(ct);
         return MapSkuStock(stock);
@@ -901,9 +937,9 @@ public class InventoryLogic(
         foreach (var item in items)
         {
             var stock = await _skuStockRepo.GetBySkuIdAsync(item.SkuId, ct);
-            if (stock != null && stock.QuantityOnHand <= stock.LowStockThreshold)
+            if (stock != null && stock.QuantityOnHand <= stock.ShelfLowStockThreshold)
                 await _eventPublisher.PublishLowStockAsync(
-                    stock.SkuId, stock.SkuCode, stock.QuantityOnHand, stock.LowStockThreshold, ct);
+                    stock.SkuId, stock.SkuCode, stock.QuantityOnHand, stock.ShelfLowStockThreshold, ct);
         }
     }
 
@@ -2024,6 +2060,8 @@ public class InventoryLogic(
         stock.QuantityOnHand,
         stock.WarehouseQuantityOnHand,
         stock.LowStockThreshold,
+        stock.WarehouseLowStockThreshold,
+        stock.ShelfLowStockThreshold,
         stock.UpdatedAt);
 
     private static WarehouseBatchResponse MapWarehouseBatch(WarehouseBatch batch)
@@ -2210,9 +2248,22 @@ public class InventoryLogic(
     {
         var stocks = await _skuStockRepo.GetAllAsync(ct);
         return stocks
-            .Where(s => s.QuantityOnHand <= s.LowStockThreshold)
+            .Where(s =>
+                s.QuantityOnHand <= s.ShelfLowStockThreshold ||
+                s.WarehouseQuantityOnHand <= s.WarehouseLowStockThreshold)
             .Select(MapSkuStock)
             .ToList();
+    }
+
+    private static InventoryLocation ParseInventoryLocation(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return InventoryLocation.Shelf;
+
+        if (Enum.TryParse<InventoryLocation>(value, ignoreCase: true, out var parsed))
+            return parsed;
+
+        throw new InventoryValidationException("Location chỉ hỗ trợ Warehouse hoặc Shelf.");
     }
 
     // ── Production Orders ──────────────────────────────────────────────────────
@@ -2552,9 +2603,9 @@ public class InventoryLogic(
             foreach (var skuId in materialSkuIds)
             {
                 var stock = await _skuStockRepo.GetBySkuIdAsync(skuId, innerCt);
-                if (stock != null && stock.WarehouseQuantityOnHand <= stock.LowStockThreshold)
+                if (stock != null && stock.WarehouseQuantityOnHand <= stock.WarehouseLowStockThreshold)
                     await _eventPublisher.PublishLowStockAsync(
-                        stock.SkuId, stock.SkuCode, stock.WarehouseQuantityOnHand, stock.LowStockThreshold, innerCt);
+                        stock.SkuId, stock.SkuCode, stock.WarehouseQuantityOnHand, stock.WarehouseLowStockThreshold, innerCt);
             }
 
             return MapProductionOrder(order);
@@ -2700,9 +2751,9 @@ public class InventoryLogic(
         foreach (var (skuId, _) in itemList)
         {
             var stock = await _skuStockRepo.GetBySkuIdAsync(skuId, ct);
-            if (stock != null && stock.WarehouseQuantityOnHand <= stock.LowStockThreshold)
+            if (stock != null && stock.WarehouseQuantityOnHand <= stock.WarehouseLowStockThreshold)
                 await _eventPublisher.PublishLowStockAsync(
-                    stock.SkuId, stock.SkuCode, stock.WarehouseQuantityOnHand, stock.LowStockThreshold, ct);
+                    stock.SkuId, stock.SkuCode, stock.WarehouseQuantityOnHand, stock.WarehouseLowStockThreshold, ct);
         }
     }
 }

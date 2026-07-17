@@ -1,4 +1,5 @@
 using ProductService.Application.Validation;
+using ProductService.Domain.Enums;
 using ProductService.Domain.Exceptions;
 using Xunit;
 
@@ -166,6 +167,40 @@ public class ProductInputValidatorTests
         var ex = AssertValidation(() => ProductInputValidator.ValidateCategory("", null, null));
 
         Assert.Contains(ex.Errors, e => e.Contains("danh"));
+    }
+
+    [Fact]
+    public void ValidateProduct_InfersGramInventoryUnitFromKg()
+    {
+        var result = ProductInputValidator.ValidateProduct(
+            1,
+            "Tra nhai",
+            null,
+            null,
+            null,
+            null,
+            baseUnitValue: "kg",
+            weightValue: null,
+            weightUnitValue: null);
+
+        Assert.Equal(InventoryUnit.Gram, result.InventoryUnit);
+    }
+
+    [Fact]
+    public void InventoryUnitConverter_ConvertsKgToIntegerGrams()
+    {
+        var quantity = InventoryUnitConverter.NormalizeQuantity(0.48m, InventoryUnit.Gram, "kg");
+
+        Assert.Equal(480, quantity);
+    }
+
+    [Fact]
+    public void InventoryUnitConverter_RejectsDecimalPieces()
+    {
+        var ex = Assert.Throws<ProductValidationException>(() =>
+            InventoryUnitConverter.NormalizeQuantity(1.5m, InventoryUnit.Piece, "cái"));
+
+        Assert.NotEmpty(ex.Errors);
     }
 }
 

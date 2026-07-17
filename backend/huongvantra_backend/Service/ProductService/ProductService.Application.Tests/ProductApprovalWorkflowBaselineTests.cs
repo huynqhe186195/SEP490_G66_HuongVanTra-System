@@ -17,12 +17,10 @@ public class ProductApprovalWorkflowBaselineTests
     }
 
     [Fact]
-    public void CurrentProductTypeEnum_DocumentsPreBatchOneBaseline()
+    public void ProductTypeEnum_UsesStableCurrentBusinessValues()
     {
-        var values = Enum.GetNames<ProductType>();
-
-        Assert.Contains(nameof(ProductType.THANH_PHAM), values);
-        Assert.Contains(nameof(ProductType.NGUYEN_LIEU), values);
-        Assert.DoesNotContain("BAO_BI", values);
+        Assert.Equal(0, (int)ProductType.THANH_PHAM);
+        Assert.Equal(1, (int)ProductType.NGUYEN_LIEU);
+        Assert.Equal(2, (int)ProductType.BAO_BI);
     }
 }

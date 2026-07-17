@@ -389,6 +389,11 @@ namespace ProductService.Infrastructure.Migrations
                         .HasColumnType("varchar(50)")
                         .HasDefaultValue("unit");
 
+                    b.Property<string>("InventoryUnit")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)");
+
                     b.Property<string>("BrewingGuide")
                         .HasColumnType("TEXT");
 

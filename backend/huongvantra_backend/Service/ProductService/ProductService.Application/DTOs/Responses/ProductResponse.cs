@@ -10,6 +10,7 @@ public record ProductResponse(
     string? BrewingGuide,
     string? Description,
     string BaseUnit,
+    string InventoryUnit,
     decimal? WeightValue,
     string? WeightUnit,
     bool IsVariantParent,

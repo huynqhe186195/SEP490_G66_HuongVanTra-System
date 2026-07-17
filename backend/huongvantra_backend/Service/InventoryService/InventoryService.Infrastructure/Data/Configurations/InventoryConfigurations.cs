@@ -12,6 +12,9 @@ public class SkuStockConfiguration : IEntityTypeConfiguration<SkuStock>
         builder.ToTable("SkuStocks");
         builder.HasKey(e => e.SkuId);
         builder.Property(e => e.SkuCode).HasMaxLength(50).IsRequired();
+        builder.Property(e => e.LowStockThreshold).HasDefaultValue(0);
+        builder.Property(e => e.WarehouseLowStockThreshold).HasDefaultValue(0);
+        builder.Property(e => e.ShelfLowStockThreshold).HasDefaultValue(0);
         builder.HasIndex(e => e.SkuCode);
     }
 }

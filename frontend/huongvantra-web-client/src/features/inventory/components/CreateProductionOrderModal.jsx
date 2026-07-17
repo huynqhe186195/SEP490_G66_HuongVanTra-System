@@ -8,7 +8,7 @@ import { fetchSkusByProductId, fetchAllActiveSkus } from '../../products/service
 import { formatCreatorRole, UNKNOWN_CREATOR_VALUE } from './InventorySlipDocument.jsx'
 import { createProductionOrder } from '../services/productionOrderApi.js'
 
-const STEPS = ['Thành phẩm đầu ra', 'Nguyên liệu cần xuất', 'Xác nhận']
+const STEPS = ['Sản phẩm kệ đầu ra', 'Nguyên liệu / Bao bì cần xuất', 'Xác nhận']
 
 function sameId(left, right) {
   return String(left ?? '') === String(right ?? '')
@@ -51,7 +51,7 @@ async function fetchFinishedProductsForProduction() {
   const pageSize = 100
   const products = []
   let page = 1
-  let totalPages = 1
+  let totalPages
 
   do {
     const result = await fetchProducts({
@@ -147,9 +147,12 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
     let mounted = true
 
     if (!isOpen || !authSession?.accessToken) {
-      setCurrentUser(null)
+      const timer = window.setTimeout(() => {
+        if (mounted) setCurrentUser(null)
+      }, 0)
       return () => {
         mounted = false
+        window.clearTimeout(timer)
       }
     }
 
@@ -277,7 +280,7 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
           const materialId = bomLine.materialId
           const bomQty = Number(bomLine.quantity)
           if (!materialId || !Number.isFinite(bomQty) || bomQty <= 0) {
-            throw new Error(`BOM của SKU ${output.sku?.skuCode ?? ''} có dòng nguyên liệu không hợp lệ.`)
+            throw new Error(`BOM của SKU ${output.sku?.skuCode ?? ''} có dòng nguyên liệu / bao bì không hợp lệ.`)
           }
 
           const key = String(materialId)
@@ -350,12 +353,12 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
     }
     const withoutSkuOptions = bomLines.find((line) => line.skuOptions.length === 0)
     if (withoutSkuOptions) {
-      showError(`Nguyên liệu "${withoutSkuOptions.materialName}" chưa có SKU để xuất kho.`)
+      showError(`Nguyên liệu / Bao bì "${withoutSkuOptions.materialName}" chưa có SKU để xuất kho.`)
       return false
     }
     const missing = bomLines.find((line) => !line.skuId)
     if (missing) {
-      showError(`Chọn SKU cho nguyên liệu "${missing.materialName}".`)
+      showError(`Chọn SKU cho nguyên liệu / bao bì "${missing.materialName}".`)
       return false
     }
     return true
@@ -545,16 +548,16 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
                   </div>
                   <div className="rounded-xl border border-slate-100 bg-white">
                     <div className="border-b border-slate-100 px-4 py-3">
-                      <p className="text-xs font-bold uppercase tracking-wide text-[#717971]">Tổng nguyên liệu theo BOM</p>
+                      <p className="text-xs font-bold uppercase tracking-wide text-[#717971]">Tổng nguyên liệu / bao bì theo BOM</p>
                       <p className="mt-1 text-xs text-slate-500">
-                        Nguyên liệu được cộng dồn từ BOM của tất cả SKU thành phẩm trong lệnh sản xuất.
+                        Nguyên liệu / Bao bì được cộng dồn từ BOM của tất cả SKU Sản phẩm kệ trong lệnh sản xuất.
                       </p>
                     </div>
                     <div className="overflow-x-auto">
                       <table className="min-w-full text-left text-xs">
                         <thead className="bg-slate-50 text-[#717971]">
                           <tr>
-                            <th className="px-4 py-2 font-semibold">Nguyên liệu</th>
+                            <th className="px-4 py-2 font-semibold">Nguyên liệu / Bao bì</th>
                             <th className="px-4 py-2 font-semibold">SKU xuất kho</th>
                             <th className="px-4 py-2 text-right font-semibold">Số lượng cần xuất</th>
                           </tr>
@@ -565,7 +568,7 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
                               <td className="px-4 py-2 font-medium text-slate-800">{line.materialName}</td>
                               <td className="px-4 py-2">
                                 {line.skuOptions.length === 0 ? (
-                                  <span className="text-red-600">Nguyên liệu chưa có SKU nào.</span>
+                                  <span className="text-red-600">Nguyên liệu / Bao bì chưa có SKU nào.</span>
                                 ) : line.skuOptions.length === 1 ? (
                                   <span className="font-mono font-semibold text-[#356647]">{line.skuCode}</span>
                                 ) : (
@@ -634,7 +637,7 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
                   </div>
                   <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2.5">
                     <p className="text-[11px] font-bold uppercase tracking-wide text-[#717971]">Phạm vi tồn kho</p>
-                    <p className="mt-1 font-semibold text-slate-900">Kho tổng</p>
+                    <p className="mt-1 font-semibold text-slate-900">Kho</p>
                   </div>
                   <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2.5">
                     <p className="text-[11px] font-bold uppercase tracking-wide text-[#717971]">Người tạo lệnh</p>
@@ -657,7 +660,7 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
                     <p className="mt-1 font-semibold text-slate-900">{formatQuantity(totalOutputQuantity)}</p>
                   </div>
                   <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2.5">
-                    <p className="text-[11px] font-bold uppercase tracking-wide text-[#717971]">Số dòng nguyên liệu cần xuất</p>
+                    <p className="text-[11px] font-bold uppercase tracking-wide text-[#717971]">Số dòng nguyên liệu / bao bì cần xuất</p>
                     <p className="mt-1 font-semibold text-slate-900">
                       {bomLines.length}
                     </p>
@@ -710,15 +713,15 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
 
                 <section>
                   <div className="mb-2 flex items-center justify-between gap-3">
-                    <p className="text-xs font-bold uppercase tracking-wide text-[#717971]">Nguyên liệu cần xuất</p>
-                    <p className="text-xs text-slate-500">Tổng nguyên liệu theo BOM đã chọn.</p>
+                    <p className="text-xs font-bold uppercase tracking-wide text-[#717971]">Nguyên liệu / Bao bì cần xuất</p>
+                    <p className="text-xs text-slate-500">Tổng nguyên liệu / bao bì theo BOM đã chọn.</p>
                   </div>
                   <div className="overflow-x-auto rounded-lg border border-slate-100">
                     <table className="min-w-full text-left text-xs">
                       <thead className="bg-slate-50 text-[#717971]">
                         <tr>
                           <th className="w-12 px-4 py-2 font-semibold">STT</th>
-                          <th className="px-4 py-2 font-semibold">Nguyên liệu</th>
+                          <th className="px-4 py-2 font-semibold">Nguyên liệu / Bao bì</th>
                           <th className="px-4 py-2 font-semibold">SKU xuất kho</th>
                           <th className="px-4 py-2 text-right font-semibold">Số lượng cần xuất</th>
                         </tr>
@@ -747,9 +750,9 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
                     </p>
                   </div>
                   <div className="rounded-lg border border-slate-100 bg-slate-50 px-4 py-3">
-                    <p className="text-xs font-bold uppercase tracking-wide text-[#717971]">Tổng nguyên liệu</p>
+                    <p className="text-xs font-bold uppercase tracking-wide text-[#717971]">Tổng nguyên liệu / bao bì</p>
                     <p className="mt-2 font-semibold text-slate-700">{formatQuantity(totalMaterialQuantity)}</p>
-                    <p className="mt-1 text-xs text-slate-500">Không nhập trực tiếp vào tồn POS/cửa hàng.</p>
+                    <p className="mt-1 text-xs text-slate-500">Không nhập trực tiếp vào Kệ Hàng.</p>
                   </div>
                 </section>
 

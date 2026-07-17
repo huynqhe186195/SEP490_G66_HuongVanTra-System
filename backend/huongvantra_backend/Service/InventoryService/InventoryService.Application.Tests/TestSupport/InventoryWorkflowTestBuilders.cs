@@ -19,6 +19,8 @@ public static class InventoryWorkflowTestBuilders
             WarehouseQuantityOnHand = warehouseQuantity,
             QuantityOnHand = shelfQuantity,
             LowStockThreshold = 5,
+            WarehouseLowStockThreshold = 10,
+            ShelfLowStockThreshold = 5,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
         };

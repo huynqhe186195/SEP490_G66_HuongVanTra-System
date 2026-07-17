@@ -49,7 +49,9 @@ function InventoryStockPage() {
           productName: productNameById.get(sku.productId) || '—',
           packagingType: sku.packagingType || '',
           warehouseQuantityOnHand: stock?.warehouseQuantityOnHand ?? 0,
-          lowStockThreshold: stock?.lowStockThreshold ?? 0,
+          lowStockThreshold: stock?.warehouseLowStockThreshold ?? 0,
+          warehouseLowStockThreshold: stock?.warehouseLowStockThreshold ?? 0,
+          shelfLowStockThreshold: stock?.shelfLowStockThreshold ?? 0,
           activeLotCount: batchCountBySku.get(sku.id) || 0,
         }
       })
@@ -64,7 +66,8 @@ function InventoryStockPage() {
   }, [])
 
   useEffect(() => {
-    loadData()
+    const timer = window.setTimeout(() => loadData(), 0)
+    return () => window.clearTimeout(timer)
   }, [loadData])
 
   const filteredRows = useMemo(() => {
@@ -77,12 +80,15 @@ function InventoryStockPage() {
   }, [rows, searchInput])
 
   useEffect(() => {
-    setPage(1)
+    const timer = window.setTimeout(() => setPage(1), 0)
+    return () => window.clearTimeout(timer)
   }, [searchInput])
 
   useEffect(() => {
     const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize))
-    if (page > totalPages) setPage(totalPages)
+    if (page <= totalPages) return undefined
+    const timer = window.setTimeout(() => setPage(totalPages), 0)
+    return () => window.clearTimeout(timer)
   }, [filteredRows.length, page, pageSize])
 
   const pagedRows = useMemo(() => {
@@ -112,9 +118,9 @@ function InventoryStockPage() {
     setSavingSkuId(skuId)
     setEditingThreshold(null)
     try {
-      await updateLowStockThreshold(skuId, parsed)
-      setRows((prev) => prev.map((r) => (r.skuId === skuId ? { ...r, lowStockThreshold: parsed } : r)))
-      showSuccess('Đã cập nhật ngưỡng cảnh báo')
+      await updateLowStockThreshold(skuId, parsed, 'Warehouse')
+      setRows((prev) => prev.map((r) => (r.skuId === skuId ? { ...r, lowStockThreshold: parsed, warehouseLowStockThreshold: parsed } : r)))
+      showSuccess('Đã cập nhật ngưỡng cảnh báo Kho')
     } catch (err) {
       showError(err.message)
     } finally {
@@ -130,8 +136,8 @@ function InventoryStockPage() {
   return (
     <PageShell>
       <PageHeader
-        title="Kho tổng"
-        description="Tồn kho tổng = tổng các lô còn hàng — nhập nguyên liệu để tạo lô kho, xuất theo FIFO khi duyệt yêu cầu"
+        title="Kho"
+        description="Tồn Kho = tổng các lô còn hàng. Nhà cung cấp nhập vào Kho trước, xuất theo FIFO khi có yêu cầu hợp lệ."
         searchPlaceholder="Tìm SKU, sản phẩm..."
         searchValue={searchInput}
         onSearchChange={setSearchInput}
@@ -161,9 +167,9 @@ function InventoryStockPage() {
               <tr>
                 <th className="px-6 py-3">SKU</th>
                 <th className="px-4 py-3">Sản phẩm</th>
-                <th className="px-4 py-3">Tồn kho tổng</th>
+                <th className="px-4 py-3">Tồn Kho</th>
                 <th className="px-4 py-3">Lô đang còn</th>
-                <th className="px-4 py-3">Ngưỡng cảnh báo</th>
+                <th className="px-4 py-3">Ngưỡng cảnh báo Kho</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">

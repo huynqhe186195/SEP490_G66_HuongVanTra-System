@@ -74,37 +74,37 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
             ?? throw new ProductValidationException("Không tìm thấy SKU/ProductVariant.");
 
         if (variant.Product.ProductType != ProductType.THANH_PHAM)
-            throw new ProductValidationException("Chỉ SKU thành phẩm mới được cấu hình BOM.");
+            throw new ProductValidationException("Chỉ SKU Sản phẩm kệ mới được cấu hình BOM.");
 
         var lines = request.Lines ?? [];
         var normalized = lines
             .Select(line => new BomLineRequest(line.MaterialId, line.Quantity))
             .ToList();
 
-        var invalidQuantity = normalized.FirstOrDefault(line => line.Quantity <= 0);
-        if (invalidQuantity is not null)
-            throw new ProductValidationException("Định mức phải lớn hơn 0.");
+        if (normalized.Any(line => line.MaterialId == variant.ProductId))
+            throw new ProductValidationException("BOM component không được tham chiếu chính sản phẩm đầu ra.");
 
         var duplicate = normalized
             .GroupBy(line => line.MaterialId)
             .FirstOrDefault(group => group.Count() > 1);
         if (duplicate is not null)
-            throw new ProductValidationException("Không được chọn trùng nguyên liệu trong một BOM.");
+            throw new ProductValidationException("Không được chọn trùng component trong một BOM.");
 
         var materialIds = normalized.Select(line => line.MaterialId).ToHashSet();
         var materials = await _productRepository.GetProductsByIdsAsync(materialIds);
         if (materials.Count != materialIds.Count)
-            throw new ProductValidationException("Có nguyên liệu không tồn tại hoặc đã bị xóa.");
+            throw new ProductValidationException("Có component BOM không tồn tại hoặc đã bị xóa.");
 
-        var nonMaterial = materials.FirstOrDefault(product => product.ProductType != ProductType.NGUYEN_LIEU);
+        var nonMaterial = materials.FirstOrDefault(product =>
+            product.ProductType != ProductType.NGUYEN_LIEU && product.ProductType != ProductType.BAO_BI);
         if (nonMaterial is not null)
-            throw new ProductValidationException($"'{nonMaterial.Name}' không phải là nguyên liệu.");
+            throw new ProductValidationException($"'{nonMaterial.Name}' không phải là Nguyên liệu hoặc Bao bì.");
 
-        ValidateBomQuantities(normalized, materials);
+        var normalizedBomLines = NormalizeBomQuantities(normalized, materials);
 
         var updated = await _productRepository.ReplaceVariantBomAsync(
             variantId,
-            normalized.Select(line => new ProductVariantBomLine
+            normalizedBomLines.Select(line => new ProductVariantBomLine
             {
                 MaterialId = line.MaterialId,
                 Quantity = line.Quantity
@@ -124,7 +124,11 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
         var input = ProductInputValidator.ValidateProduct(
             request.CategoryId, request.Name, request.Origin,
             request.FlavorProfile, request.BrewingGuide, request.Description,
-            request.BaseUnit, request.WeightValue, request.WeightUnit, request.IsVariantParent);
+            baseUnitValue: request.BaseUnit,
+            weightValue: request.WeightValue,
+            weightUnitValue: request.WeightUnit,
+            inventoryUnitValue: request.InventoryUnit,
+            isVariantParent: request.IsVariantParent);
         var images = ProductInputValidator.ValidateImages(request.Images);
         var units = ProductInputValidator.ValidateUnits(request.Units);
         var variants = MergeVariants(
@@ -147,6 +151,7 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
             BrewingGuide = input.BrewingGuide,
             Description = input.Description,
             BaseUnit = input.BaseUnit,
+            InventoryUnit = input.InventoryUnit,
             WeightValue = input.WeightValue,
             WeightUnit = input.WeightUnit,
             IsVariantParent = input.IsVariantParent || variants.Count > 0,
@@ -173,8 +178,12 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
         var input = ProductInputValidator.ValidateProduct(
             request.CategoryId, request.Name, request.Origin,
             request.FlavorProfile, request.BrewingGuide, request.Description,
-            request.BaseUnit, request.WeightValue, request.WeightUnit, request.IsVariantParent,
-            request.IsActive);
+            baseUnitValue: request.BaseUnit,
+            weightValue: request.WeightValue,
+            weightUnitValue: request.WeightUnit,
+            inventoryUnitValue: request.InventoryUnit,
+            isVariantParent: request.IsVariantParent,
+            isActive: request.IsActive);
         var images = ProductInputValidator.ValidateImages(request.Images);
         var units = ProductInputValidator.ValidateUnits(request.Units);
         var variants = MergeVariants(
@@ -194,6 +203,7 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
         product.BrewingGuide = input.BrewingGuide;
         product.Description = input.Description;
         product.BaseUnit = input.BaseUnit;
+        product.InventoryUnit = input.InventoryUnit;
         product.WeightValue = input.WeightValue;
         product.WeightUnit = input.WeightUnit;
         product.IsVariantParent = input.IsVariantParent || variants.Count > 0;
@@ -354,7 +364,7 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
     private static ProductResponse MapToResponse(Product p, CatalogViewScope scope) => new(
         p.Id, p.CategoryId, p.Category?.Name ?? string.Empty,
         p.Name, p.Origin, p.FlavorProfile, p.BrewingGuide, p.Description,
-        p.BaseUnit, p.WeightValue, p.WeightUnit, p.IsVariantParent,
+        p.BaseUnit, p.InventoryUnit.ToString(), p.WeightValue, p.WeightUnit, p.IsVariantParent,
         p.IsActive, p.IsDeleted, p.CreatedAt, p.SyncedToStoreAt,
         p.ProductType.ToString(),
         new List<ProductSkuResponse>(),
@@ -375,10 +385,11 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
         ResolveMaterialUnit(b.Material),
         b.Quantity);
 
-    private static void ValidateBomQuantities(List<BomLineRequest> lines, List<Product> materials)
+    private static List<BomLineRequest> NormalizeBomQuantities(List<BomLineRequest> lines, List<Product> materials)
     {
         var materialById = materials.ToDictionary(material => material.Id);
         var errors = new List<string>();
+        var result = new List<BomLineRequest>();
 
         foreach (var line in lines)
         {
@@ -386,40 +397,31 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
             var unit = ResolveMaterialUnit(material);
             var unitLabel = string.IsNullOrWhiteSpace(unit) ? "đơn vị" : unit.Trim();
 
-            if (line.Quantity <= 0)
+            try
             {
-                errors.Add("Định mức phải lớn hơn 0.");
-                continue;
+                var normalized = InventoryUnitConverter.NormalizeQuantity(
+                    line.Quantity,
+                    material.InventoryUnit,
+                    unit);
+                result.Add(new BomLineRequest(line.MaterialId, normalized));
             }
-
-            if (BomUnitRules.IsCountBasedUnit(unit) && !BomUnitRules.IsIntegerQuantity(line.Quantity))
+            catch (ProductValidationException ex)
             {
-                errors.Add($"Đơn vị \"{unitLabel}\" chỉ cho phép số nguyên.");
-                continue;
+                errors.AddRange(ex.Errors.Select(error => $"{material.Name} ({unitLabel}): {error}"));
             }
-
-            if (!BomUnitRules.HasMaxDecimalPlaces(line.Quantity))
-                errors.Add("Định mức chỉ được tối đa 3 chữ số thập phân.");
         }
 
         if (errors.Count > 0)
             throw new ProductValidationException(errors.Distinct());
+
+        return result;
     }
 
     private static string ResolveMaterialUnit(Product? material)
     {
         if (material is null) return string.Empty;
 
-        var baseUnit = material.Units
-            .Where(unit => !unit.IsDeleted && !string.IsNullOrWhiteSpace(unit.UnitName))
-            .OrderByDescending(unit => unit.IsBaseUnit)
-            .ThenBy(unit => unit.CreatedAt)
-            .Select(unit => unit.UnitName.Trim())
-            .FirstOrDefault();
-
-        return !string.IsNullOrWhiteSpace(baseUnit)
-            ? baseUnit
-            : material.BaseUnit;
+        return InventoryUnitConverter.GetDisplayUnit(material.InventoryUnit);
     }
 
     private static ProductVariantResponse MapVariantResponse(ProductVariant v)

@@ -92,6 +92,8 @@ public record SkuStockResponse(
     int QuantityOnHand,
     int WarehouseQuantityOnHand,
     int LowStockThreshold,
+    int WarehouseLowStockThreshold,
+    int ShelfLowStockThreshold,
     DateTime UpdatedAt);
 
 public record StockAdjustmentRequestItemResponse(

@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using ProductService.Domain.Enums;
 using ProductService.Domain.Exceptions;
 
 namespace ProductService.Application.Validation;
@@ -59,6 +60,7 @@ public static class ProductInputValidator
         string? baseUnitValue = null,
         decimal? weightValue = null,
         string? weightUnitValue = null,
+        string? inventoryUnitValue = null,
         bool isVariantParent = false,
         bool? isActive = null)
     {
@@ -87,11 +89,21 @@ public static class ProductInputValidator
         if (weightValue.HasValue && weightValue.Value < 0)
             errors.Add("Khối lượng không được âm.");
 
+        InventoryUnit inventoryUnit = InventoryUnit.Piece;
+        try
+        {
+            inventoryUnit = InventoryUnitConverter.ParseOrInfer(inventoryUnitValue, baseUnit, weightUnit);
+        }
+        catch (ProductValidationException ex)
+        {
+            errors.AddRange(ex.Errors);
+        }
+
         if (errors.Count > 0) throw new ProductValidationException(errors);
 
         return new ValidatedProductInput(
             categoryId, name!, origin, flavorProfile, brewingGuide, description,
-            baseUnit!, weightValue, weightUnit, isVariantParent, isActive);
+            baseUnit!, inventoryUnit, weightValue, weightUnit, isVariantParent, isActive);
     }
 
 
@@ -375,6 +387,7 @@ public record ValidatedProductInput(
     string? BrewingGuide,
     string? Description,
     string BaseUnit,
+    InventoryUnit InventoryUnit,
     decimal? WeightValue,
     string? WeightUnit,
     bool IsVariantParent,

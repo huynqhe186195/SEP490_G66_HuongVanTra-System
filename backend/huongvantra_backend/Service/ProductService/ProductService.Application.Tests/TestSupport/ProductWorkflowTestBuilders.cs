@@ -37,6 +37,7 @@ public static class ProductWorkflowTestBuilders
             Name = name,
             ProductType = ProductType.THANH_PHAM,
             BaseUnit = "unit",
+            InventoryUnit = InventoryUnit.Piece,
             IsActive = true,
             IsVariantParent = true,
         };

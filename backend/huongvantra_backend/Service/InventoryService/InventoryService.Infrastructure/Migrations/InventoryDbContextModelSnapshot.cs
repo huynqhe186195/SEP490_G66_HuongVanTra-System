@@ -53,13 +53,21 @@ namespace InventoryService.Infrastructure.Migrations
                         .HasColumnType("datetime(6)");
 
                     b.Property<int>("LowStockThreshold")
-                        .HasDefaultValue(5)
+                        .HasDefaultValue(0)
                         .HasColumnType("int");
 
                     b.Property<int>("QuantityOnHand")
                         .HasColumnType("int");
 
+                    b.Property<int>("ShelfLowStockThreshold")
+                        .HasDefaultValue(0)
+                        .HasColumnType("int");
+
                     b.Property<int>("WarehouseQuantityOnHand")
+                        .HasColumnType("int");
+
+                    b.Property<int>("WarehouseLowStockThreshold")
+                        .HasDefaultValue(0)
                         .HasColumnType("int");
 
                     b.Property<string>("SkuCode")

@@ -17,11 +17,17 @@ import {
   getCategoryById,
   getCategoryPathLabel,
 } from '../utils/categoryTreeUtils.js'
+import {
+  PRODUCT_TYPE,
+  PRODUCT_TYPE_OPTIONS,
+  INVENTORY_UNIT_OPTIONS,
+  getDefaultSellableByType,
+  getInventoryUnitLabel,
+  getInventoryUnitShortLabel,
+  getProductSkuPrefix,
+} from '../utils/productTypes.js'
 
-const PRODUCT_TYPES = [
-  { value: 'THANH_PHAM', label: 'Thành phẩm' },
-  { value: 'NGUYEN_LIEU', label: 'Nguyên liệu' },
-]
+const PRODUCT_TYPES = PRODUCT_TYPE_OPTIONS
 
 const DEFAULT_MAX_STOCK = '999999999'
 const SKU_PATTERN = /^[A-Z0-9\-_]{3,50}$/
@@ -96,8 +102,9 @@ function createInitialForm() {
   return {
     name: '',
     categoryId: '',
-    productType: 'THANH_PHAM',
+    productType: PRODUCT_TYPE.THANH_PHAM,
     baseUnit: 'gói',
+    inventoryUnit: 'Piece',
     weightValue: '',
     weightUnit: 'g',
     origin: '',
@@ -163,7 +170,7 @@ function normalizeSkuSegment(value) {
 }
 
 function buildAutoSkuBase(form, variant) {
-  const prefix = form.productType === 'NGUYEN_LIEU' ? 'RM' : 'FG'
+  const prefix = getProductSkuPrefix(form.productType)
   const nameSegment = normalizeSkuSegment(form.name).slice(0, 28) || 'SKU'
   const weightSegment = form.weightValue && form.weightUnit
     ? normalizeSkuSegment(`${form.weightValue}${form.weightUnit}`)
@@ -246,7 +253,7 @@ function statusTone(status) {
 }
 
 function productTypeTone(value) {
-  return value === 'NGUYEN_LIEU' ? 'amber' : value === 'THANH_PHAM' ? 'green' : 'neutral'
+  return value === PRODUCT_TYPE.NGUYEN_LIEU ? 'amber' : value === PRODUCT_TYPE.THANH_PHAM ? 'green' : value === PRODUCT_TYPE.BAO_BI ? 'blue' : 'neutral'
 }
 
 function statusLabel(status) {
@@ -284,6 +291,9 @@ function getDefaultSkuPrice(form) {
 }
 
 function getMaterialUnit(material) {
+  const inventoryUnit = getInventoryUnitShortLabel(material?.inventoryUnit)
+  if (inventoryUnit) return inventoryUnit
+
   const baseUnit = material?.units?.find((unit) => unit.isBaseUnit) || material?.units?.[0]
   return material?.materialUnitName || material?.baseUnit || baseUnit?.unitName || ''
 }
@@ -329,6 +339,7 @@ function buildProductSnapshot(form, existingSkuCodes = new Set()) {
     brewingGuide: trimText(form.brewingGuide) || null,
     description: trimText(form.description) || null,
     baseUnit: trimText(form.baseUnit),
+    inventoryUnit: form.inventoryUnit || null,
     weightValue: numberOrNull(form.weightValue),
     weightUnit: trimText(form.weightUnit) || null,
     isVariantParent: form.variants.length > 1,
@@ -357,7 +368,7 @@ function buildProductSnapshot(form, existingSkuCodes = new Set()) {
       isActive: variant.isActive !== false,
       imageUrl: trimText(variant.imageUrl) || null,
       units: [],
-      bomLines: form.productType === 'THANH_PHAM'
+      bomLines: form.productType === PRODUCT_TYPE.THANH_PHAM
         ? variant.bomLines.map((line) => ({
           materialId: line.materialId,
           quantity: Number(line.quantity),
@@ -389,6 +400,7 @@ function validateApprovalForm(form, { existingSkuCodes, categories = [] }) {
     }
   }
   if (!form.productType) addError('productType', 'Loại hàng là bắt buộc.')
+  if (!form.inventoryUnit) addError('inventoryUnit', 'Đơn vị tồn kho là bắt buộc.')
   if (!trimText(form.baseUnit)) addError('baseUnit', 'Đơn vị gốc là bắt buộc.')
 
   if (trimText(form.weightValue)) {
@@ -448,7 +460,7 @@ function validateApprovalForm(form, { existingSkuCodes, categories = [] }) {
     if (!Number.isFinite(costPrice) || costPrice < 0) addError(`${prefix}.costPrice`, 'Giá vốn phải lớn hơn hoặc bằng 0.')
     const retailPrice = Number(variant.retailPrice || 0)
     if (!Number.isFinite(retailPrice) || retailPrice < 0) addError(`${prefix}.retailPrice`, 'Giá bán phải lớn hơn hoặc bằng 0.')
-    if ((form.productType === 'THANH_PHAM' || variant.isSellable) && retailPrice <= 0) addError(`${prefix}.retailPrice`, 'Giá bán biến thể phải lớn hơn 0.')
+    if ((form.productType === PRODUCT_TYPE.THANH_PHAM || variant.isSellable) && retailPrice <= 0) addError(`${prefix}.retailPrice`, 'Giá bán biến thể phải lớn hơn 0.')
 
     const minStock = Number(variant.minStock || 0)
     const maxStock = Number(variant.maxStock || 0)
@@ -471,12 +483,12 @@ function validateApprovalForm(form, { existingSkuCodes, categories = [] }) {
       }
     })
 
-    if (form.productType === 'THANH_PHAM') {
+    if (form.productType === PRODUCT_TYPE.THANH_PHAM) {
       const usedMaterials = new Set()
       variant.bomLines.forEach((line) => {
         const linePrefix = `${prefix}.bom.${line.key}`
-        if (!line.materialId) addError(`${linePrefix}.materialId`, 'BOM có dòng nguyên liệu chưa chọn.')
-        else if (usedMaterials.has(String(line.materialId))) addError(`${linePrefix}.materialId`, 'Không được chọn trùng nguyên liệu trong cùng BOM.')
+        if (!line.materialId) addError(`${linePrefix}.materialId`, 'BOM có dòng component chưa chọn.')
+        else if (usedMaterials.has(String(line.materialId))) addError(`${linePrefix}.materialId`, 'Không được chọn trùng component trong cùng BOM.')
         else usedMaterials.add(String(line.materialId))
 
         const quantity = Number(line.quantity)
@@ -517,13 +529,14 @@ function SnapshotPreview({ product, categories, adminNotes, compact = false }) {
         <PreviewItem label="Danh mục" value={getCategoryName(categories, product?.categoryId, product?.categoryName)} />
         <PreviewItem label="Loại hàng" value={getProductTypeLabel(product?.productType)} />
         <PreviewItem label="Đơn vị gốc" value={product?.baseUnit || '-'} />
+        <PreviewItem label="Đơn vị tồn kho" value={getInventoryUnitLabel(product?.inventoryUnit)} />
       </div>
 
       {!compact ? (
         <div className="grid gap-3 md:grid-cols-3">
           <PreviewItem label="Khối lượng" value={product?.weightValue ? `${product.weightValue} ${product.weightUnit || ''}` : '-'} />
           <PreviewItem label="Xuất xứ" value={product?.origin || '-'} />
-          <PreviewItem label="BOM" value={totalBomLines ? `${totalBomLines} dòng nguyên liệu` : 'Chưa có BOM'} />
+          <PreviewItem label="BOM" value={totalBomLines ? `${totalBomLines} dòng component` : 'Chưa có BOM'} />
         </div>
       ) : null}
 
@@ -608,7 +621,7 @@ function ConfirmModal({ product, categories, adminNotes, onClose, onConfirm, isS
         <header className="border-b border-slate-100 px-6 py-4">
           <h2 className="text-lg font-bold text-slate-800">Xác nhận tạo biên bản phê duyệt</h2>
           <p className="mt-1 text-sm text-slate-500">
-            Vui lòng kiểm tra thông tin sản phẩm, SKU và BOM trước khi tạo biên bản. Sau khi cấp mã, Thủ kho Kho tổng sẽ dùng mã này để tạo hàng hóa.
+            Vui lòng kiểm tra thông tin sản phẩm, SKU và BOM trước khi tạo biên bản. Sau khi cấp mã, Thủ kho Kho sẽ dùng mã này để tạo hàng hóa.
           </p>
         </header>
         <div className="max-h-[540px] overflow-y-auto px-6 py-5">
@@ -675,7 +688,7 @@ function DetailModal({ item, categories, onClose, onAuthorize, onCancel, onCopy,
           {item.creationMethod === 'Manual' ? (
             <div className="grid gap-3 md:grid-cols-2">
               <PreviewItem label="Lý do nhập thủ công" value={item.manualModeReason || '-'} />
-              <PreviewItem label="Ghi chú Kho tổng" value={item.warehouseNotes || '-'} />
+              <PreviewItem label="Ghi chú Kho" value={item.warehouseNotes || '-'} />
             </div>
           ) : null}
           {product ? (
@@ -768,19 +781,22 @@ export default function ProductApprovalsPage() {
   }
 
   useEffect(() => {
-    loadItems()
-    fetchCategories({ isDeleted: false })
-      .then(setCategories)
-      .catch((error) => showError(error.message))
-    fetchAllActiveSkus(100)
-      .then(setExistingSkus)
-      .catch(() => setExistingSkus([]))
+    const timer = window.setTimeout(() => {
+      loadItems()
+      fetchCategories({ isDeleted: false })
+        .then(setCategories)
+        .catch((error) => showError(error.message))
+      fetchAllActiveSkus(100)
+        .then(setExistingSkus)
+        .catch(() => setExistingSkus([]))
+    }, 0)
+    return () => window.clearTimeout(timer)
   }, [])
 
   useEffect(() => {
-    if (form.productType !== 'THANH_PHAM') {
-      setMaterialOptions([])
-      return
+    if (form.productType !== PRODUCT_TYPE.THANH_PHAM) {
+      const resetTimer = window.setTimeout(() => setMaterialOptions([]), 0)
+      return () => window.clearTimeout(resetTimer)
     }
     const timer = setTimeout(() => {
       setIsMaterialLoading(true)
@@ -795,6 +811,15 @@ export default function ProductApprovalsPage() {
   function updateFormField(field, value) {
     setForm((prev) => {
       const next = { ...prev, [field]: value }
+      if (field === 'productType') {
+        const isSellable = getDefaultSellableByType(value)
+        next.variants = prev.variants.map((variant) => ({
+          ...variant,
+          isSellable,
+          bomLines: value === PRODUCT_TYPE.THANH_PHAM ? variant.bomLines : [],
+        }))
+        if (value === PRODUCT_TYPE.BAO_BI) next.inventoryUnit = 'Piece'
+      }
       if (field === 'weightValue' || field === 'weightUnit') {
         next.variants = syncWeightOptionRows(
           prev.variants,
@@ -1095,7 +1120,7 @@ export default function ProductApprovalsPage() {
         <div>
           <h1 className="text-2xl font-extrabold text-slate-800">Duyệt sản phẩm mới</h1>
           <p className="mt-1 text-sm text-slate-500">
-            Admin tạo biên bản, cấp mã, sau đó Thủ kho Kho tổng dùng mã tại trang tạo hàng hóa.
+            Admin tạo biên bản, cấp mã, sau đó Thủ kho Kho dùng mã tại trang tạo hàng hóa.
           </p>
         </div>
 
@@ -1183,6 +1208,14 @@ export default function ProductApprovalsPage() {
                   placeholder="50"
                 />
                 <FieldError message={errors.weightValue} />
+              </label>
+              <label className="block">
+                <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Đơn vị tồn kho *</span>
+                <select className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#538463]" value={form.inventoryUnit} onChange={(event) => updateFormField('inventoryUnit', event.target.value)}>
+                  {INVENTORY_UNIT_OPTIONS.map((unit) => <option key={unit.value} value={unit.value}>{unit.label}</option>)}
+                </select>
+                <p className="mt-1 text-xs text-slate-400">GRAM cho hàng cân đo; PIECE cho hàng đếm chiếc/gói/hộp.</p>
+                <FieldError message={errors.inventoryUnit} />
               </label>
               <label className="block">
                 <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Đơn vị khối lượng</span>
@@ -1392,15 +1425,15 @@ export default function ProductApprovalsPage() {
                       </div>
                     </div>
 
-                    {form.productType === 'THANH_PHAM' ? (
+                    {form.productType === PRODUCT_TYPE.THANH_PHAM ? (
                       <div className="mt-4 rounded-xl border border-slate-200 p-3">
                         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                           <div>
-                            <p className="text-xs font-bold uppercase tracking-wide text-slate-500">BOM nguyên liệu</p>
-                            {!variant.bomLines.length ? <p className="mt-1 text-xs text-amber-600">Thành phẩm chưa có BOM. Vẫn có thể tạo biên bản nếu sản phẩm chưa cần định mức.</p> : null}
+                            <p className="text-xs font-bold uppercase tracking-wide text-slate-500">BOM nguyên liệu / bao bì</p>
+                            {!variant.bomLines.length ? <p className="mt-1 text-xs text-amber-600">Sản phẩm kệ chưa có BOM. Vẫn có thể tạo biên bản nếu sản phẩm chưa cần định mức.</p> : null}
                           </div>
                           <div className="flex gap-2">
-                            <input className="w-52 rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#538463]" value={materialSearch} onChange={(event) => setMaterialSearch(event.target.value)} placeholder="Tìm nguyên liệu" />
+                            <input className="w-52 rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#538463]" value={materialSearch} onChange={(event) => setMaterialSearch(event.target.value)} placeholder="Tìm nguyên liệu / bao bì" />
                             <button type="button" onClick={() => addBomLine(variant.key)} className="rounded-lg bg-[#538463] px-3 py-2 text-xs font-bold text-white hover:bg-[#457053]">Thêm BOM</button>
                           </div>
                         </div>
@@ -1409,7 +1442,7 @@ export default function ProductApprovalsPage() {
                             <table className="min-w-full text-left text-sm">
                               <thead className="bg-slate-50 text-xs uppercase text-slate-500">
                                 <tr>
-                                  <th className="px-3 py-2 font-semibold">Nguyên liệu</th>
+                                  <th className="px-3 py-2 font-semibold">Nguyên liệu / Bao bì</th>
                                   <th className="px-3 py-2 text-center font-semibold">Số lượng</th>
                                   <th className="px-3 py-2 font-semibold">Đơn vị</th>
                                   <th className="px-3 py-2 text-right font-semibold">Hành động</th>
@@ -1423,7 +1456,7 @@ export default function ProductApprovalsPage() {
                                     <tr key={line.key}>
                                       <td className="px-3 py-2">
                                         <select className="w-64 rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#538463]" value={line.materialId} onChange={(event) => updateBomLine(variant.key, line.key, 'materialId', event.target.value)}>
-                                          <option value="">Chọn nguyên liệu</option>
+                                          <option value="">Chọn nguyên liệu / bao bì</option>
                                           {selectedMissing ? <option value={line.materialId}>{line.materialName || line.materialId}</option> : null}
                                           {materialOptions.map((material) => (
                                             <option key={material.id} value={material.id}>{material.name}</option>
@@ -1446,11 +1479,11 @@ export default function ProductApprovalsPage() {
                             </table>
                           </div>
                         ) : null}
-                        {isMaterialLoading ? <p className="mt-2 text-xs text-slate-400">Đang tải nguyên liệu...</p> : null}
+                        {isMaterialLoading ? <p className="mt-2 text-xs text-slate-400">Đang tải nguyên liệu / bao bì...</p> : null}
                       </div>
                     ) : (
                       <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-500">
-                        BOM không áp dụng cho nguyên liệu.
+                        BOM chỉ áp dụng cho Sản phẩm kệ.
                       </div>
                     )}
                   </div>

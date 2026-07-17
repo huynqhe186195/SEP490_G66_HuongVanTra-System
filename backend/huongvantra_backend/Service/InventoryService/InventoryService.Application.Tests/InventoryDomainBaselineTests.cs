@@ -13,6 +13,15 @@ public class InventoryDomainBaselineTests
 
         Assert.Equal(125, stock.WarehouseQuantityOnHand);
         Assert.Equal(7, stock.QuantityOnHand);
+        Assert.Equal(10, stock.WarehouseLowStockThreshold);
+        Assert.Equal(5, stock.ShelfLowStockThreshold);
+    }
+
+    [Fact]
+    public void InventoryLocationEnum_DocumentsFixedCurrentScopeLocations()
+    {
+        Assert.Equal(0, (int)InventoryLocation.Warehouse);
+        Assert.Equal(1, (int)InventoryLocation.Shelf);
     }
 
     [Fact]
