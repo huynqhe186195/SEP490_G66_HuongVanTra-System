@@ -658,6 +658,73 @@ This document tracks the current-scope Inventory / Warehouse / Product Master co
 - Frontend route probe:
   - `curl.exe -I http://localhost:3000/inventory/returns`: returned HTTP 200.
 
+### Checkpoint Commit
+
+- Batch 6 checkpoint commit was created:
+  - `6897ffa feat(inventory): implement warehouse shelf and inbound return flows`
+- No push was performed.
+
+## Batch 7 - Production Order Approval and Output Destination
+
+### Starting State
+
+- Started after clean worktree at local commit `6897ffa`.
+- Current `ProductionOrderStatus` supports only `Draft`, `Completed`, and `Cancelled`.
+- Current `ProductionOrder` completion can move directly from `Draft` to `Completed`.
+- Current `ProductionOrderOutputLine` has expiry and finished batch trace fields, but no output destination field.
+- Current production completion creates finished-goods `WarehouseBatch` records in Warehouse only.
+- Current production completion deducts materials from Warehouse batches via FEFO and creates export/import slips, but does not create production ledger entries.
+- Batch 7 will keep existing multi-output, expiry, BOM aggregation, FEFO material deduction, slip creation, and batch traceability while adding approval gates and selectable Warehouse/Shelf output destination.
+
+### Files Changed So Far
+
+- InventoryService:
+  - Added `ProductionOrderStatus.PendingApproval`, `Approved`, and `Rejected`.
+  - Added creator/reviewer/submission snapshots to `ProductionOrder`.
+  - Added `DestinationLocation` to `ProductionOrderOutputLine`.
+  - Added `DestinationLocation` to `StockImportSlipLine`.
+  - Added migration `20260717160000_AddProductionApprovalAndOutputDestination`.
+  - `CreateProductionOrderAsync` stores creator snapshot and per-output destination.
+  - Added `SubmitProductionOrderAsync`, `ApproveProductionOrderAsync`, and `RejectProductionOrderAsync`.
+  - `CancelProductionOrderAsync` now records actor snapshot/reason and blocks completed orders.
+  - `CompleteProductionOrderAsync` now only completes `Approved` orders, returns existing response for already completed orders, pre-validates Warehouse material shortages before FEFO deduction, creates output batches in either Warehouse or Shelf, writes production ledger entries, and keeps export/import slip traceability.
+  - Product deletion validation now counts `Draft`, `PendingApproval`, `Approved`, and `Rejected` production orders as active blockers.
+  - Added domain baseline tests for `ProductionOrderStatus` lifecycle and output destination default.
+- Frontend:
+  - Production order API mapper now reads creator/reviewer metadata and output `destinationLocation`.
+  - Create Production Order modal now supports per-output destination (`Kho` or `Kệ Hàng`) and can either save draft or create-and-submit for approval.
+  - Production Orders page now shows status/actions for submit, approve, reject, complete, and cancel.
+  - Production order detail output tables now show destination location.
+  - Stock import slip line mapper/document now supports/display destination location.
+  - Moved creator role display helper to `inventoryCreatorDisplay.js` to satisfy scoped lint.
+
+### Gate Results So Far
+
+- `dotnet build Service\InventoryService\InventoryService.WebAPI\InventoryService.WebAPI.csproj --no-restore`: passed, 0 warnings, 0 errors.
+- `dotnet test Service\InventoryService\InventoryService.Application.Tests\InventoryService.Application.Tests.csproj --no-restore`: passed, 9 tests.
+- `dotnet build huongvantra_backend.sln --no-restore`: passed with 1 pre-existing warning outside Batch 7.
+  - `OrderService.Application/UseCases/OrderLogic.cs`: unused `ex`.
+- Host `dotnet test huongvantra_backend.sln --no-restore`: partially passed, then aborted on host environment.
+  - InventoryService tests passed: 9/9.
+  - ProductService tests passed: 27/27.
+  - OrderService tests passed: 2/2.
+  - AuditService testhost aborted because this host has x64 `Microsoft.AspNetCore.App` 10.0.8 only, while tests require x64 8.0.0. This is an environment/runtime issue, not a Batch 7 assertion failure.
+- Scoped frontend lint on Batch 7 changed frontend files via `npx.cmd eslint ...`: passed.
+- `npm.cmd run lint`: still fails on pre-existing cross-application lint debt.
+  - Current count after Batch 7 changes: 124 errors, 14 warnings.
+  - This is lower than the Batch 6 count of 127 errors, 14 warnings and remains below the Batch 0 baseline of 149 errors, 15 warnings.
+- `npm.cmd run build`: passed with existing chunk/dynamic import warnings.
+- `git diff --check`: passed; Git emitted Windows LF-to-CRLF warnings only.
+- Docker gate is blocked in this Codex session:
+  - `docker ps --format ...` failed with Docker config/API permission errors.
+  - Escalation request to run Docker was rejected by the environment with usage-limit message.
+  - No Docker rebuild/restart, DB migration verification, service health, logs, or HTTP smoke probes were run from this session for Batch 7.
+
+### Checkpoint Commit
+
+- Batch 7 checkpoint commit has not been created yet because Docker health/smoke/DB verification gates are still blocked.
+- No push was performed.
+
 ## Remaining Risks
 
 - Generic audit middleware records authenticated non-GET request metadata only; detailed before/after snapshots for each business action can be added in later targeted instrumentation batches.

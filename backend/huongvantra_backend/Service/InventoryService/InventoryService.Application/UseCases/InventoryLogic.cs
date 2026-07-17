@@ -51,10 +51,13 @@ public class InventoryLogic(
     private const string TransactionShelfReturnIn = "SHELF_RETURN_IN";
     private const string TransactionSupplierReturn = "SUPPLIER_RETURN";
     private const string TransactionInboundDataCorrection = "INBOUND_DATA_CORRECTION";
+    private const string TransactionProductionMaterialExport = "PRODUCTION_MATERIAL_EXPORT";
+    private const string TransactionProductionFinishedReceipt = "PRODUCTION_FINISHED_RECEIPT";
     private const string ReferenceSupplierReceipt = "SupplierReceipt";
     private const string ReferenceShelfReplenishment = "ShelfReplenishment";
     private const string ReferenceShelfReturn = "ShelfReturn";
     private const string ReferenceSupplierReturn = "SupplierReturn";
+    private const string ReferenceProductionOrder = "ProductionOrder";
     private static readonly JsonSerializerOptions MaterialSnapshotJsonOptions = new(JsonSerializerDefaults.Web)
     {
         PropertyNameCaseInsensitive = true,
@@ -1990,6 +1993,7 @@ public class InventoryLogic(
                     WarehouseQtyAfter = stockAfter.WarehouseQuantityOnHand,
                     StoreQtyBefore = shelfBefore,
                     StoreQtyAfter = stockAfter.QuantityOnHand,
+                    DestinationLocation = LocationWarehouse,
                     WarehouseBatchId = batch.Id,
                     WarehouseBatchLotCode = batch.LotCode,
                     ProductionOrderOutputLineId = null,
@@ -2900,6 +2904,7 @@ public class InventoryLogic(
             WarehouseQtyAfter = warehouseAfter,
             StoreQtyBefore = storeBefore,
             StoreQtyAfter = storeAfter,
+            DestinationLocation = LocationWarehouse,
             WarehouseBatchId = warehouseBatch?.Id,
             WarehouseBatchLotCode = warehouseBatch?.LotCode,
             Note = note,
@@ -3021,6 +3026,7 @@ public class InventoryLogic(
                 WarehouseQtyAfter = warehouseAfter,
                 StoreQtyBefore = storeAfter,
                 StoreQtyAfter = storeAfter,
+                DestinationLocation = LocationWarehouse,
                 WarehouseBatchId = batch.Id,
                 WarehouseBatchLotCode = batch.LotCode,
                 ProductionOrderOutputLineId = null,
@@ -3301,7 +3307,8 @@ public class InventoryLogic(
         CancellationToken ct,
         string? sourceType = null,
         Guid? sourceReferenceId = null,
-        string? sourceReferenceCode = null)
+        string? sourceReferenceCode = null,
+        string location = LocationWarehouse)
     {
         if (items == null || items.Count == 0)
             throw new InventoryValidationException("Lô phải có ít nhất một dòng SKU.");
@@ -3318,6 +3325,7 @@ public class InventoryLogic(
             throw new InventoryValidationException("Mỗi SKU chỉ xuất hiện một lần trong cùng một lô.");
 
         var now = DateTime.UtcNow;
+        var normalizedLocation = NormalizeInventoryLocationName(location);
         var batch = new WarehouseBatch
         {
             Id = Guid.NewGuid(),
@@ -3328,6 +3336,7 @@ public class InventoryLogic(
             SourceType = sourceType?.Trim(),
             SourceReferenceId = sourceReferenceId,
             SourceReferenceCode = sourceReferenceCode?.Trim(),
+            Location = normalizedLocation,
             Status = "active",
             CreatedBy = createdBy == Guid.Empty ? Guid.Empty : createdBy,
             CreatedAt = now,
@@ -3365,11 +3374,20 @@ public class InventoryLogic(
         foreach (var skuId in touchedSkuIds)
         {
             var stock = await _skuStockRepo.GetBySkuIdAsync(skuId, ct);
-            if (stock != null)
+            if (stock != null && normalizedLocation == LocationWarehouse)
                 await SyncWarehouseQtyFromBatchesAsync(stock, ct);
+            else if (stock != null)
+            {
+                stock.QuantityOnHand = await _batchRepo.SumQuantityOnHandAsync(stock.SkuId, LocationShelf, ct);
+                stock.UpdatedAt = DateTime.UtcNow;
+                await _skuStockRepo.SaveChangesAsync(ct);
+            }
 
-            var newMac = await _batchRepo.CalculateMovingAverageCostAsync(skuId, ct);
-            await _eventPublisher.PublishCostPriceUpdatedAsync(skuId, newMac, ct);
+            if (normalizedLocation == LocationWarehouse)
+            {
+                var newMac = await _batchRepo.CalculateMovingAverageCostAsync(skuId, ct);
+                await _eventPublisher.PublishCostPriceUpdatedAsync(skuId, newMac, ct);
+            }
         }
 
         return MapWarehouseBatch(batch);
@@ -3935,6 +3953,7 @@ public class InventoryLogic(
                 slip.WarehouseQtyAfter,
                 slip.StoreQtyBefore,
                 slip.StoreQtyAfter,
+                null,
                 slip.WarehouseBatchId,
                 slip.WarehouseBatchLotCode,
                 null,
@@ -3953,6 +3972,7 @@ public class InventoryLogic(
         line.WarehouseQtyAfter,
         line.StoreQtyBefore,
         line.StoreQtyAfter,
+        line.DestinationLocation,
         line.WarehouseBatchId,
         line.WarehouseBatchLotCode,
         line.ProductionOrderOutputLineId,
@@ -4195,11 +4215,26 @@ public class InventoryLogic(
         throw new InventoryValidationException("Location chỉ hỗ trợ Warehouse hoặc Shelf.");
     }
 
+    private static string NormalizeInventoryLocationName(string? value, string defaultLocation = LocationWarehouse)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return defaultLocation;
+
+        var trimmed = value.Trim();
+        if (string.Equals(trimmed, LocationWarehouse, StringComparison.OrdinalIgnoreCase))
+            return LocationWarehouse;
+        if (string.Equals(trimmed, LocationShelf, StringComparison.OrdinalIgnoreCase))
+            return LocationShelf;
+
+        throw new InventoryValidationException("Vị trí tồn kho chỉ hỗ trợ Warehouse hoặc Shelf.");
+    }
+
     // ── Production Orders ──────────────────────────────────────────────────────
 
     public async Task<ProductionOrderResponse> CreateProductionOrderAsync(
         CreateProductionOrderRequest request,
         Guid userId,
+        CreatorSnapshot? creator,
         CancellationToken ct = default)
     {
         var outputs = ResolveProductionOutputs(request.OutputLines);
@@ -4225,6 +4260,8 @@ public class InventoryLogic(
             Note = request.Note?.Trim(),
             Status = ProductionOrderStatus.Draft,
             CreatedBy = userId,
+            CreatedByName = NormalizeSnapshotText(creator?.CreatedByName),
+            CreatedByRoleName = NormalizeSnapshotText(creator?.CreatedByRoleName),
             CreatedAt = now,
             UpdatedAt = now,
             OutputLines = outputs.Select(output => new ProductionOrderOutputLine
@@ -4236,6 +4273,7 @@ public class InventoryLogic(
                 FinishedSkuSnapshotName = output.FinishedSkuSnapshotName,
                 PlannedQuantity = output.PlannedQuantity,
                 ExpiresAt = output.ExpiresAt,
+                DestinationLocation = output.DestinationLocation ?? LocationWarehouse,
                 CreatedAt = now,
             }).ToList(),
             Lines = materialLines.Select(l => new ProductionOrderLine
@@ -4281,7 +4319,8 @@ public class InventoryLogic(
                 output.FinishedSkuCode.Trim(),
                 output.FinishedSkuSnapshotName.Trim(),
                 output.PlannedQuantity,
-                output.ExpiresAt));
+                output.ExpiresAt,
+                NormalizeInventoryLocationName(output.DestinationLocation)));
         }
 
         return normalized;
@@ -4327,6 +4366,114 @@ public class InventoryLogic(
             .ToList();
     }
 
+    public async Task<ProductionOrderResponse> SubmitProductionOrderAsync(
+        Guid id,
+        Guid userId,
+        CreatorSnapshot? submitter,
+        CancellationToken ct = default)
+    {
+        var order = await _productionOrderRepo.GetByIdAsync(id, ct)
+            ?? throw new InventoryNotFoundException("Không tìm thấy lệnh sản xuất.");
+
+        if (order.Status is not (ProductionOrderStatus.Draft or ProductionOrderStatus.Rejected))
+            throw new InventoryValidationException("Chỉ có thể gửi duyệt lệnh đang ở trạng thái Nháp hoặc Bị từ chối.");
+
+        ResolveCompletionOutputLines(order);
+        if (order.Lines.Count == 0)
+            throw new InventoryValidationException("Lệnh sản xuất phải có ít nhất một dòng nguyên liệu.");
+
+        var now = DateTime.UtcNow;
+        order.Status = ProductionOrderStatus.PendingApproval;
+        order.SubmittedBy = userId == Guid.Empty ? null : userId;
+        order.SubmittedAt = now;
+        order.CreatedByName ??= NormalizeSnapshotText(submitter?.CreatedByName);
+        order.CreatedByRoleName ??= NormalizeSnapshotText(submitter?.CreatedByRoleName);
+        order.ReviewedBy = null;
+        order.ReviewedByName = null;
+        order.ReviewedByRoleName = null;
+        order.ReviewedAt = null;
+        order.ReviewNote = null;
+        order.UpdatedAt = now;
+
+        await _productionOrderRepo.SaveChangesAsync(ct);
+        return MapProductionOrder(order);
+    }
+
+    public async Task<ProductionOrderResponse> ApproveProductionOrderAsync(
+        Guid id,
+        Guid reviewerId,
+        CreatorSnapshot? reviewer,
+        ReviewProductionOrderRequest? request,
+        CancellationToken ct = default)
+    {
+        if (reviewerId == Guid.Empty)
+            throw new InventoryValidationException("Không xác định được người duyệt lệnh sản xuất.");
+
+        var order = await _productionOrderRepo.GetByIdAsync(id, ct)
+            ?? throw new InventoryNotFoundException("Không tìm thấy lệnh sản xuất.");
+
+        if (order.Status != ProductionOrderStatus.PendingApproval)
+            throw new InventoryValidationException("Chỉ có thể duyệt lệnh sản xuất đang chờ duyệt.");
+        if (order.CreatedBy == reviewerId)
+            throw new InventoryValidationException("Người tạo lệnh không được tự duyệt lệnh sản xuất của mình.");
+
+        ResolveCompletionOutputLines(order);
+        if (order.Lines.Count == 0)
+            throw new InventoryValidationException("Lệnh sản xuất phải có ít nhất một dòng nguyên liệu.");
+
+        var now = DateTime.UtcNow;
+        order.Status = ProductionOrderStatus.Approved;
+        order.ReviewedBy = reviewerId;
+        order.ReviewedByName = NormalizeSnapshotText(reviewer?.CreatedByName);
+        order.ReviewedByRoleName = NormalizeSnapshotText(reviewer?.CreatedByRoleName);
+        order.ReviewedAt = now;
+        order.ReviewNote = NormalizeSnapshotText(request?.Reason);
+        order.UpdatedAt = now;
+
+        await _productionOrderRepo.SaveChangesAsync(ct);
+        return MapProductionOrder(order);
+    }
+
+    public async Task<ProductionOrderResponse> RejectProductionOrderAsync(
+        Guid id,
+        Guid reviewerId,
+        CreatorSnapshot? reviewer,
+        ReviewProductionOrderRequest request,
+        CancellationToken ct = default)
+    {
+        if (reviewerId == Guid.Empty)
+            throw new InventoryValidationException("Không xác định được người duyệt lệnh sản xuất.");
+
+        var reason = RequireProductionReviewReason(request?.Reason, "Lý do từ chối là bắt buộc.");
+        var order = await _productionOrderRepo.GetByIdAsync(id, ct)
+            ?? throw new InventoryNotFoundException("Không tìm thấy lệnh sản xuất.");
+
+        if (order.Status != ProductionOrderStatus.PendingApproval)
+            throw new InventoryValidationException("Chỉ có thể từ chối lệnh sản xuất đang chờ duyệt.");
+        if (order.CreatedBy == reviewerId)
+            throw new InventoryValidationException("Người tạo lệnh không được tự từ chối lệnh sản xuất của mình.");
+
+        var now = DateTime.UtcNow;
+        order.Status = ProductionOrderStatus.Rejected;
+        order.ReviewedBy = reviewerId;
+        order.ReviewedByName = NormalizeSnapshotText(reviewer?.CreatedByName);
+        order.ReviewedByRoleName = NormalizeSnapshotText(reviewer?.CreatedByRoleName);
+        order.ReviewedAt = now;
+        order.ReviewNote = reason;
+        order.UpdatedAt = now;
+
+        await _productionOrderRepo.SaveChangesAsync(ct);
+        return MapProductionOrder(order);
+    }
+
+    private static string RequireProductionReviewReason(string? reason, string message)
+    {
+        var normalized = NormalizeSnapshotText(reason);
+        if (normalized == null)
+            throw new InventoryValidationException(message);
+        return normalized;
+    }
+
     public async Task<ProductionOrderResponse> CompleteProductionOrderAsync(
         Guid id,
         Guid userId,
@@ -4336,8 +4483,11 @@ public class InventoryLogic(
         var order = await _productionOrderRepo.GetByIdAsync(id, ct)
             ?? throw new InventoryNotFoundException("Không tìm thấy lệnh sản xuất.");
 
-        if (order.Status != ProductionOrderStatus.Draft)
-            throw new InventoryValidationException("Chỉ có thể hoàn thành lệnh đang ở trạng thái Chờ xác nhận.");
+        if (order.Status == ProductionOrderStatus.Completed)
+            return MapProductionOrder(order);
+
+        if (order.Status != ProductionOrderStatus.Approved)
+            throw new InventoryValidationException("Chỉ có thể hoàn thành lệnh sản xuất đã được duyệt.");
 
         return await _unitOfWork.ExecuteInTransactionAsync(async innerCt =>
         {
@@ -4353,6 +4503,17 @@ public class InventoryLogic(
                     throw new InventoryValidationException($"Số lượng nguyên liệu {line.MaterialSkuCode} phải lớn hơn 0.");
             }
 
+            var shortages = new List<string>();
+            foreach (var line in materialLines)
+            {
+                var available = await _batchRepo.SumQuantityOnHandAsync(line.MaterialSkuId, LocationWarehouse, innerCt);
+                if (available < line.PlannedQuantity)
+                    shortages.Add($"{line.MaterialSkuCode}: cần {line.PlannedQuantity}, còn {available}, thiếu {line.PlannedQuantity - available}");
+            }
+
+            if (shortages.Count > 0)
+                throw new InventoryValidationException($"Không đủ tồn Kho để hoàn thành lệnh sản xuất {order.ProductionCode}: {string.Join("; ", shortages)}.");
+
             var firstMaterialLine = materialLines[0];
             var exportCountToday = await _exportSlipRepo.CountCreatedSinceAsync(now.Date, innerCt);
             var exportSlip = new StockExportSlip
@@ -4363,6 +4524,9 @@ public class InventoryLogic(
                 StockAdjustmentRequestId = null,
                 ProductionOrderId = order.Id,
                 ProductionCode = order.ProductionCode,
+                ReferenceType = ReferenceProductionOrder,
+                ReferenceId = order.Id,
+                ReferenceCode = order.ProductionCode,
                 SkuId = materialLines.Count == 1 ? firstMaterialLine.MaterialSkuId : Guid.Empty,
                 SkuCode = materialLines.Count == 1 ? firstMaterialLine.MaterialSkuCode : "MULTI",
                 SkuSnapshotName = materialLines.Count == 1
@@ -4381,6 +4545,8 @@ public class InventoryLogic(
                 CreatedAt = now,
             };
             var allAllocations = new List<StockExportBatchAllocation>();
+            var ledgerEntries = new List<InventoryLedgerEntry>();
+            var transactionGroupId = Guid.NewGuid();
 
             foreach (var line in materialLines)
             {
@@ -4419,6 +4585,28 @@ public class InventoryLogic(
                     alloc.StockExportSlipLineId = slipLine.Id;
                 }
 
+                ledgerEntries.Add(CreateLedgerEntry(
+                    transactionGroupId,
+                    line.MaterialSkuId,
+                    line.MaterialSkuCode,
+                    line.MaterialSnapshotName,
+                    LocationWarehouse,
+                    warehouseBefore,
+                    -line.PlannedQuantity,
+                    warehouseAfter,
+                    TransactionProductionMaterialExport,
+                    LocationWarehouse,
+                    null,
+                    ReferenceProductionOrder,
+                    order.Id,
+                    order.ProductionCode,
+                    null,
+                    null,
+                    userId,
+                    creator,
+                    $"Xuất nguyên liệu cho lệnh sản xuất {order.ProductionCode}",
+                    slipLine.Note));
+
                 exportSlip.WarehouseQtyBefore += warehouseBefore;
                 exportSlip.WarehouseQtyAfter += warehouseAfter;
                 exportSlip.StoreQtyBefore += storeBefore;
@@ -4442,6 +4630,8 @@ public class InventoryLogic(
             for (var i = 0; i < outputLines.Count; i++)
             {
                 var outputLine = outputLines[i];
+                var destinationLocation = NormalizeInventoryLocationName(outputLine.DestinationLocation);
+                outputLine.DestinationLocation = destinationLocation;
                 var finishedStockBefore = await _skuStockRepo.GetBySkuIdAsync(outputLine.FinishedSkuId, innerCt);
                 var finishedWarehouseBefore = finishedStockBefore?.WarehouseQuantityOnHand ?? 0;
                 var finishedStoreBefore = finishedStockBefore?.QuantityOnHand ?? 0;
@@ -4461,7 +4651,8 @@ public class InventoryLogic(
                     ct: innerCt,
                     sourceType: "production_finished_goods",
                     sourceReferenceId: order.Id,
-                    sourceReferenceCode: order.ProductionCode);
+                    sourceReferenceCode: order.ProductionCode,
+                    location: destinationLocation);
 
                 outputLine.WarehouseBatchId = finishedBatch.Id;
                 outputLine.WarehouseBatchLotCode = finishedBatch.LotCode;
@@ -4482,12 +4673,35 @@ public class InventoryLogic(
                     WarehouseQtyAfter = finishedWarehouseAfter,
                     StoreQtyBefore = finishedStoreBefore,
                     StoreQtyAfter = finishedStoreAfter,
+                    DestinationLocation = destinationLocation,
                     WarehouseBatchId = finishedBatch.Id,
                     WarehouseBatchLotCode = finishedBatch.LotCode,
                     ProductionOrderOutputLineId = outputLine.Id,
                     Note = $"Nhập thành phẩm từ lệnh {order.ProductionCode}",
                     CreatedAt = now,
                 });
+
+                ledgerEntries.Add(CreateLedgerEntry(
+                    transactionGroupId,
+                    outputLine.FinishedSkuId,
+                    outputLine.FinishedSkuCode,
+                    outputLine.FinishedSkuSnapshotName,
+                    destinationLocation,
+                    destinationLocation == LocationShelf ? finishedStoreBefore : finishedWarehouseBefore,
+                    outputLine.PlannedQuantity,
+                    destinationLocation == LocationShelf ? finishedStoreAfter : finishedWarehouseAfter,
+                    TransactionProductionFinishedReceipt,
+                    null,
+                    destinationLocation,
+                    ReferenceProductionOrder,
+                    order.Id,
+                    order.ProductionCode,
+                    finishedBatch.Id,
+                    finishedBatch.LotCode,
+                    userId,
+                    creator,
+                    $"Nhập thành phẩm từ lệnh sản xuất {order.ProductionCode}",
+                    outputLine.FinishedSkuCode));
             }
 
             await _productionOrderRepo.SaveChangesAsync(innerCt);
@@ -4513,6 +4727,9 @@ public class InventoryLogic(
                 ProductionCode = order.ProductionCode,
                 SupplierReceiptId = null,
                 SupplierReceiptCode = null,
+                ReferenceType = ReferenceProductionOrder,
+                ReferenceId = order.Id,
+                ReferenceCode = order.ProductionCode,
                 Note = outputLines.Count == 1
                     ? $"Nhập thành phẩm từ lệnh {order.ProductionCode}"
                     : $"Nhập thành phẩm từ lệnh {order.ProductionCode} ({outputLines.Count} dòng thành phẩm)",
@@ -4525,6 +4742,12 @@ public class InventoryLogic(
             };
             await _importSlipRepo.AddAsync(importSlip, innerCt);
             await _importSlipRepo.SaveChangesAsync(innerCt);
+
+            if (ledgerEntries.Count > 0)
+            {
+                await _ledgerRepo.AddRangeAsync(ledgerEntries, innerCt);
+                await _ledgerRepo.SaveChangesAsync(innerCt);
+            }
 
             order.Status = ProductionOrderStatus.Completed;
             order.CompletedAt = now;
@@ -4569,6 +4792,7 @@ public class InventoryLogic(
 
             output.FinishedSkuCode = output.FinishedSkuCode.Trim();
             output.FinishedSkuSnapshotName = output.FinishedSkuSnapshotName.Trim();
+            output.DestinationLocation = NormalizeInventoryLocationName(output.DestinationLocation);
         }
 
         return outputLines;
@@ -4583,16 +4807,30 @@ public class InventoryLogic(
     public async Task<ProductionOrderResponse> CancelProductionOrderAsync(
         Guid id,
         Guid userId,
+        bool isAdmin,
+        CreatorSnapshot? actor,
+        ReviewProductionOrderRequest? request,
         CancellationToken ct = default)
     {
+        var reason = RequireProductionReviewReason(request?.Reason, "Lý do hủy là bắt buộc.");
         var order = await _productionOrderRepo.GetByIdAsync(id, ct)
             ?? throw new InventoryNotFoundException("Không tìm thấy lệnh sản xuất.");
 
-        if (order.Status != ProductionOrderStatus.Draft)
-            throw new InventoryValidationException("Chỉ có thể hủy lệnh đang ở trạng thái Chờ xác nhận.");
+        if (order.Status == ProductionOrderStatus.Completed)
+            throw new InventoryValidationException("Không thể hủy lệnh sản xuất đã hoàn thành.");
+        if (order.Status == ProductionOrderStatus.Cancelled)
+            return MapProductionOrder(order);
+        if (!isAdmin && order.Status == ProductionOrderStatus.Draft && userId != order.CreatedBy)
+            throw new InventoryValidationException("Chỉ người tạo hoặc Admin được hủy lệnh nháp.");
 
+        var now = DateTime.UtcNow;
         order.Status = ProductionOrderStatus.Cancelled;
-        order.UpdatedAt = DateTime.UtcNow;
+        order.ReviewedBy = userId == Guid.Empty ? null : userId;
+        order.ReviewedByName = NormalizeSnapshotText(actor?.CreatedByName);
+        order.ReviewedByRoleName = NormalizeSnapshotText(actor?.CreatedByRoleName);
+        order.ReviewedAt = now;
+        order.ReviewNote = reason;
+        order.UpdatedAt = now;
         await _productionOrderRepo.SaveChangesAsync(ct);
 
         return MapProductionOrder(order);
@@ -4631,7 +4869,17 @@ public class InventoryLogic(
         order.Note,
         order.Status.ToString(),
         order.CreatedBy,
+        order.CreatedByName,
+        order.CreatedByRoleName,
         order.CreatedAt,
+        order.UpdatedAt,
+        order.SubmittedBy,
+        order.SubmittedAt,
+        order.ReviewedBy,
+        order.ReviewedByName,
+        order.ReviewedByRoleName,
+        order.ReviewedAt,
+        order.ReviewNote,
         order.CompletedAt,
         order.Lines
             .OrderBy(l => l.MaterialSkuCode)
@@ -4655,6 +4903,7 @@ public class InventoryLogic(
                 l.FinishedSkuSnapshotName,
                 l.PlannedQuantity,
                 l.ExpiresAt,
+                NormalizeInventoryLocationName(l.DestinationLocation),
                 l.WarehouseBatchId,
                 l.WarehouseBatchLotCode,
                 l.CreatedAt))

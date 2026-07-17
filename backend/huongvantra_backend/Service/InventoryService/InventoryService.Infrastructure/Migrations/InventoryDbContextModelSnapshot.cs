@@ -484,6 +484,10 @@ namespace InventoryService.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
 
+                    b.Property<string>("DestinationLocation")
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)");
+
                     b.Property<string>("Note")
                         .HasMaxLength(500)
                         .HasColumnType("varchar(500)");
@@ -1804,6 +1808,14 @@ namespace InventoryService.Infrastructure.Migrations
                     b.Property<Guid>("CreatedBy")
                         .HasColumnType("char(36)");
 
+                    b.Property<string>("CreatedByName")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("CreatedByRoleName")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
 
@@ -1816,10 +1828,34 @@ namespace InventoryService.Infrastructure.Migrations
                         .HasMaxLength(30)
                         .HasColumnType("varchar(30)");
 
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid?>("ReviewedBy")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("ReviewedByName")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("ReviewedByRoleName")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<string>("ReviewNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("varchar(20)");
+
+                    b.Property<DateTime?>("SubmittedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid?>("SubmittedBy")
+                        .HasColumnType("char(36)");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("datetime(6)");
@@ -1836,6 +1872,15 @@ namespace InventoryService.Infrastructure.Migrations
                     b.HasIndex("CreatedAt")
                         .HasDatabaseName("IX_ProductionOrders_CreatedAt");
 
+                    b.HasIndex("SubmittedAt")
+                        .HasDatabaseName("IX_ProductionOrders_SubmittedAt");
+
+                    b.HasIndex("ReviewedBy")
+                        .HasDatabaseName("IX_ProductionOrders_ReviewedBy");
+
+                    b.HasIndex("ReviewedAt")
+                        .HasDatabaseName("IX_ProductionOrders_ReviewedAt");
+
                     b.ToTable("ProductionOrders");
                 });
 
@@ -1846,6 +1891,12 @@ namespace InventoryService.Infrastructure.Migrations
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
+
+                    b.Property<string>("DestinationLocation")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)")
+                        .HasDefaultValue("Warehouse");
 
                     b.Property<string>("FinishedSkuCode")
                         .IsRequired()
@@ -1887,6 +1938,9 @@ namespace InventoryService.Infrastructure.Migrations
                     b.HasIndex("ProductionOrderId", "FinishedSkuId")
                         .IsUnique()
                         .HasDatabaseName("IX_ProductionOrderOutputLines_ProductionOrderId_FinishedSkuId");
+
+                    b.HasIndex("DestinationLocation")
+                        .HasDatabaseName("IX_ProductionOrderOutputLines_DestinationLocation");
 
                     b.HasIndex("WarehouseBatchId")
                         .HasDatabaseName("IX_ProductionOrderOutputLines_WarehouseBatchId");

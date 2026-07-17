@@ -40,8 +40,16 @@ public class ProductDeletionValidationController(InventoryDbContext _db) : Contr
             .Where(stock => skuIds.Contains(stock.SkuId))
             .ToListAsync(ct);
 
+        var activeProductionStatuses = new[]
+        {
+            ProductionOrderStatus.Draft,
+            ProductionOrderStatus.PendingApproval,
+            ProductionOrderStatus.Approved,
+            ProductionOrderStatus.Rejected,
+        };
+
         var activeProductionCounts = await _db.ProductionOrders.AsNoTracking()
-            .Where(order => order.Status == ProductionOrderStatus.Draft)
+            .Where(order => activeProductionStatuses.Contains(order.Status))
             .SelectMany(order => order.Lines.Select(line => new { line.MaterialSkuId, order.Id })
                 .Concat(order.OutputLines.Select(line => new { MaterialSkuId = line.FinishedSkuId, order.Id })))
             .Where(row => skuIds.Contains(row.MaterialSkuId))

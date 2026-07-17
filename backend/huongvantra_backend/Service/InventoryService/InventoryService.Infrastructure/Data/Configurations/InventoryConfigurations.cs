@@ -205,6 +205,7 @@ public class StockImportSlipLineConfiguration : IEntityTypeConfiguration<StockIm
         builder.Property(e => e.SkuCode).HasMaxLength(50).IsRequired();
         builder.Property(e => e.ProductSnapshotName).HasMaxLength(255).IsRequired();
         builder.Property(e => e.WarehouseBatchLotCode).HasMaxLength(50);
+        builder.Property(e => e.DestinationLocation).HasMaxLength(20);
         builder.Property(e => e.Note).HasMaxLength(500);
         builder.HasIndex(e => e.StockImportSlipId);
         builder.HasIndex(e => e.SkuId);
@@ -519,9 +520,17 @@ public class ProductionOrderConfiguration : IEntityTypeConfiguration<ProductionO
         builder.Property(e => e.ProductionCode).HasMaxLength(30).IsRequired();
         builder.Property(e => e.Note).HasMaxLength(500);
         builder.Property(e => e.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+        builder.Property(e => e.CreatedByName).HasMaxLength(255);
+        builder.Property(e => e.CreatedByRoleName).HasMaxLength(100);
+        builder.Property(e => e.ReviewedByName).HasMaxLength(255);
+        builder.Property(e => e.ReviewedByRoleName).HasMaxLength(100);
+        builder.Property(e => e.ReviewNote).HasMaxLength(500);
         builder.HasIndex(e => e.ProductionCode).IsUnique();
         builder.HasIndex(e => e.Status);
         builder.HasIndex(e => e.CreatedAt);
+        builder.HasIndex(e => e.SubmittedAt);
+        builder.HasIndex(e => e.ReviewedBy);
+        builder.HasIndex(e => e.ReviewedAt);
         builder.HasMany(e => e.Lines)
             .WithOne(l => l.Order)
             .HasForeignKey(l => l.ProductionOrderId)
@@ -556,9 +565,11 @@ public class ProductionOrderOutputLineConfiguration : IEntityTypeConfiguration<P
         builder.Property(e => e.FinishedSkuSnapshotName).HasMaxLength(255).IsRequired();
         builder.Property(e => e.PlannedQuantity).IsRequired();
         builder.Property(e => e.ExpiresAt);
+        builder.Property(e => e.DestinationLocation).HasMaxLength(20).HasDefaultValue("Warehouse").IsRequired();
         builder.Property(e => e.WarehouseBatchLotCode).HasMaxLength(50);
         builder.HasIndex(e => e.ProductionOrderId);
         builder.HasIndex(e => e.FinishedSkuId);
+        builder.HasIndex(e => e.DestinationLocation);
         builder.HasIndex(e => new { e.ProductionOrderId, e.FinishedSkuId }).IsUnique();
         builder.HasIndex(e => e.WarehouseBatchId);
         builder.HasOne(e => e.WarehouseBatch)

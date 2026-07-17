@@ -11,6 +11,7 @@ function mapImportSlipLine(row) {
     warehouseQtyAfter: Number(row.warehouseQtyAfter ?? row.WarehouseQtyAfter ?? 0),
     storeQtyBefore: Number(row.storeQtyBefore ?? row.StoreQtyBefore ?? 0),
     storeQtyAfter: Number(row.storeQtyAfter ?? row.StoreQtyAfter ?? 0),
+    destinationLocation: row.destinationLocation ?? row.DestinationLocation ?? '',
     warehouseBatchId: row.warehouseBatchId ?? row.WarehouseBatchId ?? null,
     warehouseBatchLotCode: row.warehouseBatchLotCode ?? row.WarehouseBatchLotCode ?? '',
     productionOrderOutputLineId: row.productionOrderOutputLineId ?? row.ProductionOrderOutputLineId ?? null,

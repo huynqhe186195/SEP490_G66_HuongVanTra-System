@@ -5,8 +5,8 @@ import { useAuthSession } from '../../auth/hooks/useAuthSession.js'
 import { me } from '../../auth/services/authApi.js'
 import { fetchProductById, fetchProducts } from '../../products/services/productsApi.js'
 import { fetchSkusByProductId, fetchAllActiveSkus } from '../../products/services/productSkusApi.js'
-import { formatCreatorRole, UNKNOWN_CREATOR_VALUE } from './InventorySlipDocument.jsx'
-import { createProductionOrder } from '../services/productionOrderApi.js'
+import { formatCreatorRole, UNKNOWN_CREATOR_VALUE } from '../utils/inventoryCreatorDisplay.js'
+import { createProductionOrder, submitProductionOrder } from '../services/productionOrderApi.js'
 
 const STEPS = ['Sản phẩm kệ đầu ra', 'Nguyên liệu / Bao bì cần xuất', 'Xác nhận']
 
@@ -20,6 +20,7 @@ function createOutputRow() {
     skuId: '',
     quantity: '',
     expiresAt: '',
+    destinationLocation: 'Warehouse',
   }
 }
 
@@ -72,6 +73,10 @@ function formatQuantity(value) {
   const number = Number(value)
   if (!Number.isFinite(number)) return '0'
   return number.toLocaleString('vi-VN', { maximumFractionDigits: 4 })
+}
+
+function formatDestinationLocation(value) {
+  return value === 'Shelf' ? 'Kệ Hàng' : 'Kho'
 }
 
 function getSkuDisplayName(sku) {
@@ -235,6 +240,10 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
         showError('Số lượng sản xuất phải lớn hơn 0.')
         return null
       }
+      if (!['Warehouse', 'Shelf'].includes(row.destinationLocation)) {
+        showError('Chọn nơi nhập thành phẩm là bắt buộc.')
+        return null
+      }
     }
 
     const duplicate = rows.find(
@@ -370,7 +379,7 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
     setStep(2)
   }
 
-  async function handleSubmit() {
+  async function handleSubmit({ submitForApproval = false } = {}) {
     const rows = validateOutputRows()
     if (!rows || !validateBomLines()) return
 
@@ -384,6 +393,7 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
           finishedSkuSnapshotName: row.sku?.productName ?? '',
           plannedQuantity: row.quantityNumber,
           expiresAt: row.expiresAt || null,
+          destinationLocation: row.destinationLocation,
         })),
         lines: bomLines.map((line) => ({
           materialSkuId: line.skuId,
@@ -392,7 +402,8 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
           plannedQuantity: line.requiredQuantity,
         })),
       })
-      onCreated?.(order)
+      const finalOrder = submitForApproval ? await submitProductionOrder(order.id) : order
+      onCreated?.(finalOrder)
       onClose()
     } catch (err) {
       showError(err.message)
@@ -454,7 +465,7 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
                         </button>
                       )}
                     </div>
-                    <div className="grid gap-3 sm:grid-cols-[1fr_140px_160px]">
+                    <div className="grid gap-3 sm:grid-cols-[1fr_140px_150px_160px]">
                       <label className="block space-y-1.5">
                         <span className="text-xs font-semibold text-[#717971]">SKU thành phẩm *</span>
                         <select
@@ -482,6 +493,17 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
                           value={row.quantity}
                           onChange={(event) => updateOutputRow(row.key, { quantity: event.target.value })}
                         />
+                      </label>
+                      <label className="block space-y-1.5">
+                        <span className="text-xs font-semibold text-[#717971]">Nhập thành phẩm vào *</span>
+                        <select
+                          className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-sm"
+                          value={row.destinationLocation}
+                          onChange={(event) => updateOutputRow(row.key, { destinationLocation: event.target.value })}
+                        >
+                          <option value="Warehouse">Kho</option>
+                          <option value="Shelf">Kệ Hàng</option>
+                        </select>
                       </label>
                       <label className="block space-y-1.5">
                         <span className="text-xs font-semibold text-[#717971]">Hạn sử dụng</span>
@@ -527,6 +549,7 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
                           <tr>
                             <th className="px-4 py-2 font-semibold">SKU thành phẩm</th>
                             <th className="px-4 py-2 text-right font-semibold">Số lượng sản xuất</th>
+                            <th className="px-4 py-2 font-semibold">Nơi nhập thành phẩm</th>
                             <th className="px-4 py-2 font-semibold">Hạn sử dụng</th>
                           </tr>
                         </thead>
@@ -536,6 +559,9 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
                               <td className="px-4 py-2 font-medium text-slate-800">{getSkuDisplayName(output.sku)}</td>
                               <td className="px-4 py-2 text-right font-semibold text-slate-800">
                                 {formatQuantity(output.quantityNumber)}
+                              </td>
+                              <td className="px-4 py-2 text-slate-700">
+                                {formatDestinationLocation(output.destinationLocation)}
                               </td>
                               <td className="px-4 py-2 text-slate-700">
                                 {output.expiresAt ? formatVietnamDate(output.expiresAt) : '—'}
@@ -680,6 +706,7 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
                           <th className="px-4 py-2 font-semibold">SKU thành phẩm</th>
                           <th className="px-4 py-2 font-semibold">Tên thành phẩm</th>
                           <th className="px-4 py-2 text-right font-semibold">Số lượng sản xuất</th>
+                          <th className="px-4 py-2 font-semibold">Nơi nhập thành phẩm</th>
                           <th className="px-4 py-2 font-semibold">Hạn sử dụng</th>
                         </tr>
                       </thead>
@@ -700,6 +727,9 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
                             </td>
                             <td className="px-4 py-2 text-right font-semibold text-slate-800">
                               {formatQuantity(output.quantityNumber)}
+                            </td>
+                            <td className="px-4 py-2 text-slate-700">
+                              {formatDestinationLocation(output.destinationLocation)}
                             </td>
                             <td className="px-4 py-2 text-slate-700">
                               {output.expiresAt ? formatVietnamDate(output.expiresAt) : '—'}
@@ -806,14 +836,24 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
             </button>
           )}
           {step === 2 && (
-            <button
-              type="button"
-              onClick={handleSubmit}
-              disabled={saving}
-              className="rounded-xl bg-[#538463] px-5 py-2 text-sm font-bold text-white hover:bg-[#457053] disabled:opacity-50"
-            >
-              {saving ? 'Đang tạo...' : 'Tạo lệnh sản xuất'}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => handleSubmit({ submitForApproval: false })}
+                disabled={saving}
+                className="rounded-xl border border-[#538463]/30 px-5 py-2 text-sm font-bold text-[#356647] hover:bg-[#f3f7f4] disabled:opacity-50"
+              >
+                {saving ? 'Đang tạo...' : 'Lưu nháp'}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSubmit({ submitForApproval: true })}
+                disabled={saving}
+                className="rounded-xl bg-[#538463] px-5 py-2 text-sm font-bold text-white hover:bg-[#457053] disabled:opacity-50"
+              >
+                {saving ? 'Đang tạo...' : 'Tạo và gửi duyệt'}
+              </button>
+            </div>
           )}
         </footer>
       </div>

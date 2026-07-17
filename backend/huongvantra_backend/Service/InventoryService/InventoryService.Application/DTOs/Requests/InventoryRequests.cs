@@ -64,12 +64,15 @@ public record ProductionOrderOutputLineInput(
     string FinishedSkuCode,
     string FinishedSkuSnapshotName,
     int PlannedQuantity,
-    DateTime? ExpiresAt = null);
+    DateTime? ExpiresAt = null,
+    string? DestinationLocation = null);
 
 public record CreateProductionOrderRequest(
     string? Note,
     List<ProductionOrderOutputLineInput> OutputLines,
     List<ProductionOrderLineInput> Lines);
+
+public record ReviewProductionOrderRequest(string? Reason);
 
 public record DeductMaterialItem(Guid SkuId, int Quantity);
 

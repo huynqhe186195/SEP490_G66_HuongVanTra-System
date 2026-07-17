@@ -57,6 +57,25 @@ public class InventoryDomainBaselineTests
     }
 
     [Fact]
+    public void ProductionOrderStatusEnum_DocumentsApprovalLifecycle()
+    {
+        Assert.Equal(0, (int)ProductionOrderStatus.Draft);
+        Assert.Equal(1, (int)ProductionOrderStatus.PendingApproval);
+        Assert.Equal(2, (int)ProductionOrderStatus.Approved);
+        Assert.Equal(3, (int)ProductionOrderStatus.Completed);
+        Assert.Equal(4, (int)ProductionOrderStatus.Rejected);
+        Assert.Equal(5, (int)ProductionOrderStatus.Cancelled);
+    }
+
+    [Fact]
+    public void ProductionOrderOutputLine_DefaultsDestinationToWarehouse()
+    {
+        var output = new ProductionOrderOutputLine();
+
+        Assert.Equal("Warehouse", output.DestinationLocation);
+    }
+
+    [Fact]
     public void InventoryReturnRequestStatusEnum_DocumentsReturnLifecycle()
     {
         Assert.Equal(0, (int)InventoryReturnRequestStatus.Pending);
