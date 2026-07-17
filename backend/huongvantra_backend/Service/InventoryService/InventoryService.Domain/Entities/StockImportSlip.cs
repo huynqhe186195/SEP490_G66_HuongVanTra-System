@@ -17,6 +17,8 @@ public class StockImportSlip
     public string? WarehouseBatchLotCode { get; set; }
     public Guid? ProductionOrderId { get; set; }
     public string? ProductionCode { get; set; }
+    public Guid? SupplierReceiptId { get; set; }
+    public string? SupplierReceiptCode { get; set; }
     public string? Note { get; set; }
     public Guid CreatedBy { get; set; }
     public Guid? CreatedById { get; set; }

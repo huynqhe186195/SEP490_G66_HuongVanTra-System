@@ -43,6 +43,7 @@ public class ProductCatalogClient(HttpClient httpClient, ILogger<ProductCatalogC
         product.Id,
         product.Name ?? string.Empty,
         product.ProductType ?? string.Empty,
+        product.InventoryUnit ?? string.Empty,
         product.BaseUnit,
         product.IsActive,
         (product.Variants ?? []).Select(v => new CatalogVariant(
@@ -70,6 +71,7 @@ public class ProductCatalogClient(HttpClient httpClient, ILogger<ProductCatalogC
         Guid Id,
         string? Name,
         string? BaseUnit,
+        string? InventoryUnit,
         bool IsActive,
         string? ProductType,
         List<ProductVariantResponse>? Variants);

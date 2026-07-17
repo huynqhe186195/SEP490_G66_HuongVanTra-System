@@ -37,6 +37,8 @@ function mapImportSlip(row) {
     warehouseBatchLotCode: row.warehouseBatchLotCode ?? row.WarehouseBatchLotCode ?? '',
     productionOrderId: row.productionOrderId ?? row.ProductionOrderId ?? null,
     productionCode: row.productionCode ?? row.ProductionCode ?? '',
+    supplierReceiptId: row.supplierReceiptId ?? row.SupplierReceiptId ?? null,
+    supplierReceiptCode: row.supplierReceiptCode ?? row.SupplierReceiptCode ?? '',
     note: row.note ?? row.Note ?? '',
     createdBy: row.createdBy ?? row.CreatedBy,
     createdById: row.createdById ?? row.CreatedById ?? null,
@@ -49,6 +51,7 @@ function mapImportSlip(row) {
 
 export function getImportTypeLabel(type) {
   if (type === 'production_finished_goods_receipt') return 'Nhập thành phẩm sau sản xuất'
+  if (type === 'supplier_receipt') return 'Nhập hàng từ nhà cung cấp'
   if (type === 'manual_material_import') return 'Nhập nguyên liệu thủ công'
   return type || '—'
 }

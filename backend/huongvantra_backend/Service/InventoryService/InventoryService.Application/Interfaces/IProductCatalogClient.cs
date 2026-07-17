@@ -21,6 +21,7 @@ public sealed record CatalogProduct(
     Guid Id,
     string Name,
     string ProductType,
+    string InventoryUnit,
     string? BaseUnit,
     bool IsActive,
     List<CatalogVariant> Variants);

@@ -492,6 +492,102 @@ This document tracks the current-scope Inventory / Warehouse / Product Master co
   - `feat(audit): add centralized immutable system activity log`
 - No push is allowed.
 
+## Batch 5 - Inventory Ledger and Controlled Supplier Receipts
+
+### Files Changed
+
+- InventoryService:
+  - Added `InventoryLedgerEntry` and repository/query APIs for immutable stock movement history.
+  - Added `SupplierReceipt`, `SupplierReceiptItem`, and `SupplierReceiptStatus`.
+  - Added Supplier Receipt request/response DTOs and controller endpoints.
+  - Added read-only Inventory Ledger controller endpoints.
+  - Added supplier receipt approval flow in `InventoryLogic`.
+  - Supplier receipt approval creates warehouse batches, one `StockImportSlip` header, multiple `StockImportSlipLine` rows, ledger entries, and audit-visible HTTP activity in one transaction.
+  - Draft/Pending supplier receipts do not change stock.
+  - Creator self-approval is rejected.
+  - Completed approval is idempotent and returns existing completed receipt.
+  - Existing shelf replenishment approval now records warehouse out / shelf in ledger entries.
+  - Legacy direct warehouse batch creation is restricted to Admin.
+  - `StockImportSlip` now stores optional `SupplierReceiptId` and `SupplierReceiptCode`.
+- Gateway:
+  - Added routes for `/api/v1/inventory/supplier-receipts`.
+  - Added routes for `/api/v1/inventory/ledger`.
+- Frontend:
+  - `/inventory/import/create` now creates and submits a controlled Supplier Receipt instead of directly creating manual warehouse batches.
+  - Added `/inventory/supplier-receipts` management page with list, filters, pagination, detail modal, submit, approve, reject, and cancel actions.
+  - Added `/inventory/ledger` read-only page with filters, pagination, and CSV export.
+  - Added Supplier Receipt and Inventory Ledger API services.
+  - Added Inventory navigation/sidebar entries for Supplier Receipts and Ledger.
+  - Import slip type mapping now displays `supplier_receipt` as supplier receipt import.
+
+### Migrations Added
+
+- InventoryService: `20260717140000_AddInventoryLedgerAndSupplierReceipts`
+  - Adds `InventoryLedgerEntries`.
+  - Adds `SupplierReceipts`.
+  - Adds `SupplierReceiptItems`.
+  - Adds `StockImportSlips.SupplierReceiptId`.
+  - Adds `StockImportSlips.SupplierReceiptCode`.
+
+### Tests Added/Updated
+
+- Inventory domain baseline tests now cover:
+  - Stable `SupplierReceiptStatus` lifecycle values.
+  - Ledger before/delta/after movement invariant.
+
+### Gate Results
+
+- `dotnet build Service\InventoryService\InventoryService.WebAPI\InventoryService.WebAPI.csproj --no-restore`: passed, 0 warnings, 0 errors.
+- `dotnet test Service\InventoryService\InventoryService.Application.Tests\InventoryService.Application.Tests.csproj --no-restore`: passed, 6 tests.
+- `dotnet build huongvantra_backend.sln --no-restore`: passed with 1 pre-existing warning outside Batch 5.
+  - `OrderService.Application/UseCases/OrderLogic.cs`: unused `ex`.
+- Host `dotnet test huongvantra_backend.sln --no-restore`: Inventory/Product/Order tests passed before abort, but AuditService host test execution is blocked by missing x64 `Microsoft.AspNetCore.App` 8.0 runtime on Windows.
+- Container backend test gate:
+  - `docker run --rm ... mcr.microsoft.com/dotnet/sdk:8.0-alpine dotnet test huongvantra_backend.sln --no-restore`: exit code 0. In this environment the command produced no detailed console output, so host targeted test results above remain the detailed evidence.
+- Scoped frontend lint on Batch 5 changed frontend files: passed.
+- `npm.cmd run lint`: failed on remaining pre-existing cross-application lint debt.
+  - Current count after Batch 5: 127 errors, 14 warnings.
+  - This is lower than Batch 4 count of 130 errors, 14 warnings and remains below Batch 0 baseline of 149 errors, 15 warnings.
+- `npm.cmd run build`: passed.
+- Docker Compose rebuild/restart:
+  - Rebuilt/restarted `inventory-service`, `gateway`, and `web-client`.
+  - Compose recreated dependent services as part of the dependency graph, but no DB reset or volume deletion was performed.
+- Docker health:
+  - `inventory-service`: Up, healthy.
+  - `product-service`: Up, healthy.
+  - `order-service`: Up, healthy.
+  - `audit-service`: Up, healthy.
+  - `customer-service`: Up, healthy.
+  - `document-service`: Up, healthy.
+  - `user-service`: Up, healthy.
+  - `mysql`: Up, healthy.
+  - `rabbitmq`: Up, healthy.
+  - `gateway`: Up.
+  - `web-client`: Up.
+- Relevant logs:
+  - Inventory migration `20260717140000_AddInventoryLedgerAndSupplierReceipts` applied successfully.
+  - Gateway loaded YARP proxy config and proxied supplier receipt / ledger smoke requests.
+  - AuditService started successfully and reported database already up to date.
+- DB verification:
+  - `hvt_inventory_db.__EFMigrationsHistory` contains `20260717140000_AddInventoryLedgerAndSupplierReceipts`.
+  - `InventoryLedgerEntries`, `SupplierReceipts`, and `SupplierReceiptItems` exist.
+  - `StockImportSlips.SupplierReceiptId` exists.
+  - `StockImportSlips.SupplierReceiptCode` exists.
+- Gateway route probes:
+  - `curl.exe -i http://localhost:5000/api/v1/inventory/supplier-receipts`: returned HTTP 401 without token, confirming the route exists and requires auth.
+  - `curl.exe -i http://localhost:5000/api/v1/inventory/ledger`: returned HTTP 401 without token, confirming the route exists and requires auth.
+  - `curl.exe -i http://localhost:5000/api/v1/inventory/supplier-receipts/template`: returned HTTP 200 and CSV content.
+- Frontend route probes:
+  - `curl.exe -I http://localhost:3000/inventory/supplier-receipts`: returned HTTP 200.
+  - `curl.exe -I http://localhost:3000/inventory/ledger`: returned HTTP 200.
+  - `curl.exe -I http://localhost:3000/inventory/import/create`: returned HTTP 200.
+
+### Checkpoint Commit
+
+- Batch 5 checkpoint commit will be created with message:
+  - `feat(inventory): add ledger and controlled supplier receipts`
+- No push is allowed.
+
 ## Remaining Risks
 
 - Generic audit middleware records authenticated non-GET request metadata only; detailed before/after snapshots for each business action can be added in later targeted instrumentation batches.

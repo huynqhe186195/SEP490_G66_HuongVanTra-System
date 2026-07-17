@@ -79,3 +79,28 @@ public record CreatorSnapshot(
     Guid CreatedById,
     string? CreatedByName,
     string? CreatedByRoleName);
+
+public record SupplierReceiptItemRequest(
+    Guid SkuId,
+    string? SkuCode,
+    string? SkuNameSnapshot,
+    string? ProductTypeSnapshot,
+    string? InventoryUnitSnapshot,
+    string? SubmittedUnit,
+    decimal SubmittedQuantity,
+    decimal? UnitCost,
+    string LotCode,
+    DateTime? ManufacturedAt,
+    DateTime? ExpiresAt,
+    string? QualityNote);
+
+public record UpsertSupplierReceiptRequest(
+    string? SupplierName,
+    string? SupplierReference,
+    string? SupplierDocumentNumber,
+    DateTime? SupplierDocumentDate,
+    DateTime? ReceivedDate,
+    string? Note,
+    List<SupplierReceiptItemRequest> Items);
+
+public record ReviewSupplierReceiptRequest(string? Reason);

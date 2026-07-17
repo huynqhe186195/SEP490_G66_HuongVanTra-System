@@ -1,4 +1,5 @@
 using InventoryService.Application.Tests.TestSupport;
+using InventoryService.Domain.Entities;
 using InventoryService.Domain.Enums;
 using Xunit;
 
@@ -42,5 +43,35 @@ public class InventoryDomainBaselineTests
         Assert.Equal(StockAdjustmentRequestStatus.Pending, request.Status);
         Assert.Single(request.Items);
         Assert.True(request.Items.First().QuantityDelta > 0);
+    }
+
+    [Fact]
+    public void SupplierReceiptStatusEnum_DocumentsControlledReceiptLifecycle()
+    {
+        Assert.Equal(0, (int)SupplierReceiptStatus.Draft);
+        Assert.Equal(1, (int)SupplierReceiptStatus.PendingApproval);
+        Assert.Equal(2, (int)SupplierReceiptStatus.Completed);
+        Assert.Equal(3, (int)SupplierReceiptStatus.Rejected);
+        Assert.Equal(4, (int)SupplierReceiptStatus.Cancelled);
+    }
+
+    [Fact]
+    public void InventoryLedgerEntry_DocumentsBeforeDeltaAfterMovement()
+    {
+        var entry = new InventoryLedgerEntry
+        {
+            Location = "Warehouse",
+            QuantityBefore = 120,
+            QuantityDelta = 30,
+            QuantityAfter = 150,
+            TransactionType = "SUPPLIER_RECEIPT",
+            ReferenceType = "SupplierReceipt",
+            ReferenceCode = "SR-000001",
+        };
+
+        Assert.Equal(entry.QuantityBefore + entry.QuantityDelta, entry.QuantityAfter);
+        Assert.Equal("Warehouse", entry.Location);
+        Assert.Equal("SUPPLIER_RECEIPT", entry.TransactionType);
+        Assert.Equal("SupplierReceipt", entry.ReferenceType);
     }
 }

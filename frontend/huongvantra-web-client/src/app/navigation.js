@@ -24,6 +24,8 @@ const HOME_MODULE_PRIORITY = [
   'customers',
   'products',
   'stock_adjustment_ops',
+  'supplier_receipts',
+  'inventory_ledger',
   'inventory',
   'staff',
 ]
@@ -64,7 +66,9 @@ export const navigationItems = [
   { label: 'Yêu cầu tạo hàng hóa', path: '/inventory/product-approvals', module: 'product_creation_requests', icon: 'verified', roles: ['admin', 'inventoryManager'] },
   { label: 'Yêu cầu xóa hàng hóa', path: '/inventory/product-deletion-requests', module: 'product_deletion_requests', icon: 'inventory_2', roles: ['admin', 'inventoryManager'] },
   { label: 'Kho tổng', path: '/inventory', module: 'inventory', icon: 'warehouse', roles: ['inventoryManager'] },
+  { label: 'Phiếu nhập NCC', path: '/inventory/supplier-receipts', module: 'supplier_receipts', icon: 'assignment_turned_in', roles: ['admin', 'agencyManager'] },
   { label: 'Lô sản xuất', path: '/inventory/production-orders', module: 'inventory', icon: 'precision_manufacturing', roles: ['inventoryManager'] },
+  { label: 'Sổ kho', path: '/inventory/ledger', module: 'inventory_ledger', icon: 'fact_check', roles: ['admin', 'agencyManager', 'inventoryManager'] },
   { label: 'Định mức BOM', path: '/inventory/boms', module: 'inventory', icon: 'schema', roles: ['inventoryManager'] },
   { label: 'Gói custom', path: '/inventory/custom-bundles', module: 'inventory', icon: 'package_2', roles: ['inventoryManager'] },
   {
@@ -277,6 +281,8 @@ const MODULE_PATH_PREFIXES = [
   { module: 'product_deletion_requests', prefix: '/inventory/product-deletion-requests' },
   { module: 'products', prefix: '/inventory/products' },
   { module: 'stock_adjustment_ops', prefix: '/inventory/stock-requests' },
+  { module: 'supplier_receipts', prefix: '/inventory/supplier-receipts' },
+  { module: 'inventory_ledger', prefix: '/inventory/ledger' },
   { module: 'inventory', prefix: '/inventory' },
   { module: 'cod_ops', prefix: '/orders/cod' },
   { module: 'stock_deduct_ops', prefix: '/orders/stock-deduct' },

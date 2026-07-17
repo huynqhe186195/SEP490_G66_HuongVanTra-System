@@ -156,6 +156,7 @@ public class StockImportSlipConfiguration : IEntityTypeConfiguration<StockImport
         builder.Property(e => e.ProductSnapshotName).HasMaxLength(255).IsRequired();
         builder.Property(e => e.WarehouseBatchLotCode).HasMaxLength(50);
         builder.Property(e => e.ProductionCode).HasMaxLength(30);
+        builder.Property(e => e.SupplierReceiptCode).HasMaxLength(30);
         builder.Property(e => e.Note).HasMaxLength(500);
         builder.Property(e => e.CreatedByName).HasMaxLength(255);
         builder.Property(e => e.CreatedByRoleName).HasMaxLength(100);
@@ -165,6 +166,8 @@ public class StockImportSlipConfiguration : IEntityTypeConfiguration<StockImport
         builder.HasIndex(e => e.WarehouseBatchId);
         builder.HasIndex(e => e.ProductionOrderId);
         builder.HasIndex(e => e.ProductionCode);
+        builder.HasIndex(e => e.SupplierReceiptId);
+        builder.HasIndex(e => e.SupplierReceiptCode);
         builder.HasIndex(e => e.CreatedAt);
         builder.HasOne<WarehouseBatch>()
             .WithMany()
@@ -173,6 +176,10 @@ public class StockImportSlipConfiguration : IEntityTypeConfiguration<StockImport
         builder.HasOne<ProductionOrder>()
             .WithMany()
             .HasForeignKey(e => e.ProductionOrderId)
+            .OnDelete(DeleteBehavior.SetNull);
+        builder.HasOne<SupplierReceipt>()
+            .WithMany()
+            .HasForeignKey(e => e.SupplierReceiptId)
             .OnDelete(DeleteBehavior.SetNull);
         builder.HasMany(e => e.Lines)
             .WithOne(l => l.ImportSlip)
@@ -270,6 +277,100 @@ public class StockExportBatchAllocationConfiguration : IEntityTypeConfiguration<
             .WithMany()
             .HasForeignKey(e => e.WarehouseBatchItemId)
             .OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
+public class InventoryLedgerEntryConfiguration : IEntityTypeConfiguration<InventoryLedgerEntry>
+{
+    public void Configure(EntityTypeBuilder<InventoryLedgerEntry> builder)
+    {
+        builder.ToTable("InventoryLedgerEntries");
+        builder.HasKey(e => e.Id);
+        builder.Property(e => e.SkuCode).HasMaxLength(50).IsRequired();
+        builder.Property(e => e.SkuNameSnapshot).HasMaxLength(255).IsRequired();
+        builder.Property(e => e.ProductTypeSnapshot).HasMaxLength(30);
+        builder.Property(e => e.InventoryUnitSnapshot).HasMaxLength(20);
+        builder.Property(e => e.Location).HasMaxLength(20).IsRequired();
+        builder.Property(e => e.TransactionType).HasMaxLength(50).IsRequired();
+        builder.Property(e => e.SourceLocation).HasMaxLength(20);
+        builder.Property(e => e.DestinationLocation).HasMaxLength(20);
+        builder.Property(e => e.ReferenceType).HasMaxLength(50);
+        builder.Property(e => e.ReferenceCode).HasMaxLength(50);
+        builder.Property(e => e.LotCode).HasMaxLength(50);
+        builder.Property(e => e.ActorName).HasMaxLength(255);
+        builder.Property(e => e.ActorRole).HasMaxLength(100);
+        builder.Property(e => e.Reason).HasMaxLength(500);
+        builder.Property(e => e.Note).HasMaxLength(500);
+        builder.Property(e => e.CorrelationId).HasMaxLength(100);
+        builder.HasIndex(e => e.TransactionGroupId);
+        builder.HasIndex(e => e.OccurredAtUtc);
+        builder.HasIndex(e => e.SkuId);
+        builder.HasIndex(e => e.SkuCode);
+        builder.HasIndex(e => e.Location);
+        builder.HasIndex(e => e.TransactionType);
+        builder.HasIndex(e => e.ReferenceCode);
+        builder.HasIndex(e => e.ActorId);
+        builder.HasIndex(e => e.CorrelationId);
+        builder.HasIndex(e => e.BatchId);
+    }
+}
+
+public class SupplierReceiptConfiguration : IEntityTypeConfiguration<SupplierReceipt>
+{
+    public void Configure(EntityTypeBuilder<SupplierReceipt> builder)
+    {
+        builder.ToTable("SupplierReceipts");
+        builder.HasKey(e => e.Id);
+        builder.Property(e => e.ReceiptCode).HasMaxLength(30).IsRequired();
+        builder.Property(e => e.SupplierName).HasMaxLength(255);
+        builder.Property(e => e.SupplierReference).HasMaxLength(100);
+        builder.Property(e => e.SupplierDocumentNumber).HasMaxLength(100);
+        builder.Property(e => e.Note).HasMaxLength(500);
+        builder.Property(e => e.Status).HasConversion<string>().HasMaxLength(30).IsRequired();
+        builder.Property(e => e.CreatedByName).HasMaxLength(255);
+        builder.Property(e => e.CreatedByRoleName).HasMaxLength(100);
+        builder.Property(e => e.ReviewedByName).HasMaxLength(255);
+        builder.Property(e => e.ReviewedByRoleName).HasMaxLength(100);
+        builder.Property(e => e.ReviewNote).HasMaxLength(500);
+        builder.Property(e => e.StockImportSlipCode).HasMaxLength(30);
+        builder.HasIndex(e => e.ReceiptCode).IsUnique();
+        builder.HasIndex(e => e.SupplierName);
+        builder.HasIndex(e => e.Status);
+        builder.HasIndex(e => e.CreatedBy);
+        builder.HasIndex(e => e.CreatedAt);
+        builder.HasIndex(e => e.ReceivedDate);
+        builder.HasIndex(e => e.StockImportSlipId);
+        builder.HasMany(e => e.Items)
+            .WithOne(i => i.SupplierReceipt)
+            .HasForeignKey(i => i.SupplierReceiptId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
+public class SupplierReceiptItemConfiguration : IEntityTypeConfiguration<SupplierReceiptItem>
+{
+    public void Configure(EntityTypeBuilder<SupplierReceiptItem> builder)
+    {
+        builder.ToTable("SupplierReceiptItems");
+        builder.HasKey(e => e.Id);
+        builder.Property(e => e.SkuCode).HasMaxLength(50).IsRequired();
+        builder.Property(e => e.SkuNameSnapshot).HasMaxLength(255).IsRequired();
+        builder.Property(e => e.ProductTypeSnapshot).HasMaxLength(30).IsRequired();
+        builder.Property(e => e.InventoryUnitSnapshot).HasMaxLength(20).IsRequired();
+        builder.Property(e => e.SubmittedUnit).HasMaxLength(20);
+        builder.Property(e => e.SubmittedQuantity).HasColumnType("decimal(18,3)");
+        builder.Property(e => e.UnitCost).HasColumnType("decimal(18,2)");
+        builder.Property(e => e.LotCode).HasMaxLength(50).IsRequired();
+        builder.Property(e => e.WarehouseBatchLotCode).HasMaxLength(50);
+        builder.Property(e => e.QualityNote).HasMaxLength(500);
+        builder.HasIndex(e => e.SupplierReceiptId);
+        builder.HasIndex(e => e.SkuId);
+        builder.HasIndex(e => e.LotCode);
+        builder.HasIndex(e => e.WarehouseBatchId);
+        builder.HasOne(e => e.WarehouseBatch)
+            .WithMany()
+            .HasForeignKey(e => e.WarehouseBatchId)
+            .OnDelete(DeleteBehavior.SetNull);
     }
 }
 

@@ -1,4 +1,4 @@
-import { isWarehouseRole } from '../../auth/utils/permissions.js'
+import { isSystemAdmin, isWarehouseRole } from '../../auth/utils/permissions.js'
 
 export const warehouseNavTabs = [
   { label: 'Kho', to: '/inventory' },
@@ -15,13 +15,37 @@ export const stockRequestNavTab = {
   to: '/inventory/stock-requests',
 }
 
+export const supplierReceiptNavTab = {
+  label: 'Nhập NCC',
+  to: '/inventory/supplier-receipts',
+}
+
+export const inventoryLedgerNavTab = {
+  label: 'Sổ kho',
+  to: '/inventory/ledger',
+}
+
 /** @deprecated use getInventoryNavTabs(session) */
-export const inventoryNavTabs = [...warehouseNavTabs, stockRequestNavTab]
+export const inventoryNavTabs = [...warehouseNavTabs, supplierReceiptNavTab, inventoryLedgerNavTab, stockRequestNavTab]
+
+function normalizeRole(role) {
+  return String(role || '').trim().toLowerCase().replace(/[._-]+/g, ' ').replace(/\s+/g, ' ')
+}
+
+function isManagerLike(session) {
+  return (session?.roles ?? []).some((role) => ['manager', 'agency manager', 'branch manager', 'owner'].includes(normalizeRole(role)))
+}
 
 export function getInventoryNavTabs(session) {
   const tabs = []
   if (isWarehouseRole(session)) {
     tabs.push(...warehouseNavTabs)
+  }
+  if (isSystemAdmin(session) || isManagerLike(session)) {
+    tabs.push(supplierReceiptNavTab)
+  }
+  if (isSystemAdmin(session) || isManagerLike(session) || isWarehouseRole(session)) {
+    tabs.push(inventoryLedgerNavTab)
   }
   tabs.push(stockRequestNavTab)
   return tabs

@@ -31,7 +31,7 @@ public class WarehouseBatchesController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "Warehouse")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> Create([FromBody] CreateWarehouseBatchRequest request, CancellationToken ct)
     {
         var created = await _logic.CreateWarehouseBatchAsync(request, User.GetUserId(), User.ToCreatorSnapshot(), ct);

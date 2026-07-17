@@ -20,6 +20,7 @@ import InventoryPage from '../features/inventory/pages/InventoryPage.jsx'
 import InventoryBatchesPage from '../features/inventory/pages/InventoryBatchesPage.jsx'
 import InventoryImportCreatePage from '../features/inventory/pages/InventoryImportCreatePage.jsx'
 import InventoryImportPage from '../features/inventory/pages/InventoryImportPage.jsx'
+import InventoryLedgerPage from '../features/inventory/pages/InventoryLedgerPage.jsx'
 import InventoryStockPage from '../features/inventory/pages/InventoryStockPage.jsx'
 import InventoryStatisticsPage from '../features/inventory/pages/InventoryStatisticsPage.jsx'
 import ProfilePage from '../features/profile/pages/ProfilePage.jsx'
@@ -29,6 +30,7 @@ import ReturnOrderDetailPage from '../features/orders/pages/ReturnOrderDetailPag
 import CodOrdersPage from '../features/orders/pages/CodOrdersPage.jsx'
 import StockDeductQueuePage from '../features/inventory/pages/StockDeductQueuePage.jsx'
 import StockAdjustmentRequestsPage from '../features/inventory/pages/StockAdjustmentRequestsPage.jsx'
+import SupplierReceiptsPage from '../features/inventory/pages/SupplierReceiptsPage.jsx'
 import ProductionOrdersPage from '../features/inventory/pages/ProductionOrdersPage.jsx'
 import CustomBundlesPage from '../features/inventory/pages/CustomBundlesPage.jsx'
 import OrderDetailPage from '../features/orders/pages/OrderDetailPage.jsx'
@@ -85,8 +87,10 @@ function App() {
         <Route path="/inventory/statistics" element={<InventoryStatisticsPage />} />
         <Route path="/inventory/stock-requests" element={<StockAdjustmentRequestsPage />} />
         <Route path="/inventory/batches" element={<InventoryBatchesPage />} />
+        <Route path="/inventory/supplier-receipts" element={<SupplierReceiptsPage />} />
         <Route path="/inventory/import" element={<InventoryImportPage />} />
         <Route path="/inventory/import/create" element={<InventoryImportCreatePage />} />
+        <Route path="/inventory/ledger" element={<InventoryLedgerPage />} />
         <Route path="/inventory/export" element={<InventoryExportPage />} />
         <Route path="/inventory/production" element={<Navigate to="/inventory/production-orders" replace />} />
         <Route path="/inventory/production-orders" element={<ProductionOrdersPage />} />
