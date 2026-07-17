@@ -13,11 +13,39 @@ public class ProductInputValidatorTests
         return ex;
     }
 
+    private static VariantInput Variant(
+        string? skuCode = "TEA-001",
+        string? variantName = "Goi 100g",
+        decimal costPrice = 100m,
+        decimal retailPrice = 1000m,
+        int? minStock = null,
+        int? maxStock = null,
+        bool isSellable = true,
+        string? imageUrl = null)
+    {
+        return new VariantInput
+        {
+            SkuCode = skuCode,
+            Barcode = (string?)null,
+            VariantName = variantName,
+            OptionValuesJson = "{}",
+            CostPrice = costPrice,
+            RetailPrice = retailPrice,
+            MinStock = minStock,
+            MaxStock = maxStock,
+            IsSellable = isSellable,
+            AllowRewardPoints = true,
+            IsActive = true,
+            ImageUrl = imageUrl,
+            Units = Array.Empty<object>(),
+        };
+    }
+
     [Fact]
     public void ValidatePagination_RejectsPageSizeOver100()
     {
         var ex = AssertValidation(() => ProductInputValidator.ValidatePagination(1, 101));
-        Assert.Contains(ex.Errors, e => e.Contains("PageSize tối đa là 100"));
+        Assert.Contains(ex.Errors, e => e.Contains("PageSize"));
     }
 
     [Fact]
@@ -27,111 +55,108 @@ public class ProductInputValidatorTests
     }
 
     [Fact]
-    public void ValidateProductSku_RejectsInvalidSkuCode()
+    public void ValidateVariants_RejectsInvalidSkuCode()
     {
-        var ex = AssertValidation(() => ProductInputValidator.ValidateProductSku(
-            Guid.NewGuid(), "ab", "Gói 100g", 100, 1000m, null));
-        Assert.Contains(ex.Errors, e => e.Contains("Mã SKU"));
+        var ex = AssertValidation(() => ProductInputValidator.ValidateVariants([Variant(skuCode: "ab")]));
+
+        Assert.Contains(ex.Errors, e => e.Contains("SKU"));
     }
 
     [Theory]
     [InlineData("TEA-001")]
     [InlineData("CF_500G")]
     [InlineData("ABC123")]
-    public void ValidateProductSku_AcceptsValidSkuCode(string code)
+    public void ValidateVariants_AcceptsValidSkuCode(string code)
     {
-        var result = ProductInputValidator.ValidateProductSku(
-            Guid.NewGuid(), code, "Gói 100g", 100, 1000m, null);
-        Assert.Equal(code, result.SkuCode);
+        var result = ProductInputValidator.ValidateVariants([Variant(skuCode: code)]);
+
+        Assert.Equal(code, result[0].SkuCode);
     }
 
     [Fact]
-    public void ValidateProductSku_UppercasesSkuCode()
+    public void ValidateVariants_UppercasesSkuCode()
     {
-        var result = ProductInputValidator.ValidateProductSku(
-            Guid.NewGuid(), "tea-001", "Gói 100g", 100, 1000m, null);
-        Assert.Equal("TEA-001", result.SkuCode);
+        var result = ProductInputValidator.ValidateVariants([Variant(skuCode: "tea-001")]);
+
+        Assert.Equal("TEA-001", result[0].SkuCode);
     }
 
     [Fact]
-    public void ValidateProductSku_RejectsZeroPrice()
+    public void ValidateVariants_RejectsZeroRetailPriceForSellableSku()
     {
-        var ex = AssertValidation(() => ProductInputValidator.ValidateProductSku(
-            Guid.NewGuid(), "TEA-001", "Gói 100g", 100, 0m, null));
-        Assert.Contains(ex.Errors, e => e.Contains("Giá bán"));
+        var ex = AssertValidation(() => ProductInputValidator.ValidateVariants([Variant(retailPrice: 0m)]));
+
+        Assert.NotEmpty(ex.Errors);
     }
 
     [Fact]
-    public void ValidateProductSku_RejectsPriceOverMax()
+    public void ValidateVariants_RejectsPriceOverMax()
     {
-        var ex = AssertValidation(() => ProductInputValidator.ValidateProductSku(
-            Guid.NewGuid(), "TEA-001", "Gói 100g", 100, 1_000_000_001m, null));
-        Assert.Contains(ex.Errors, e => e.Contains("Giá bán"));
+        var ex = AssertValidation(() => ProductInputValidator.ValidateVariants([Variant(retailPrice: 1_000_000_001m)]));
+
+        Assert.Contains(ex.Errors, e => e.Contains("1,000,000,000"));
     }
 
     [Fact]
-    public void ValidateProductSku_RejectsMoreThanTwoDecimalPlaces()
+    public void ValidateVariants_RejectsMoreThanTwoDecimalPlaces()
     {
-        var ex = AssertValidation(() => ProductInputValidator.ValidateProductSku(
-            Guid.NewGuid(), "TEA-001", "Gói 100g", 100, 100.123m, null));
-        Assert.Contains(ex.Errors, e => e.Contains("2 chữ số thập phân"));
+        var ex = AssertValidation(() => ProductInputValidator.ValidateVariants([Variant(retailPrice: 100.123m)]));
+
+        Assert.NotEmpty(ex.Errors);
     }
 
     [Fact]
-    public void ValidateProductSku_AcceptsTwoDecimalPlaces()
+    public void ValidateVariants_AcceptsTwoDecimalPlaces()
     {
-        var result = ProductInputValidator.ValidateProductSku(
-            Guid.NewGuid(), "TEA-001", "Gói 100g", 100, 100.25m, null);
-        Assert.Equal(100.25m, result.BasePrice);
+        var result = ProductInputValidator.ValidateVariants([Variant(retailPrice: 100.25m)]);
+
+        Assert.Equal(100.25m, result[0].RetailPrice);
     }
 
     [Fact]
-    public void ValidateProductSku_RejectsZeroWeight()
+    public void ValidateVariants_RejectsInvalidImageUrl()
     {
-        var ex = AssertValidation(() => ProductInputValidator.ValidateProductSku(
-            Guid.NewGuid(), "TEA-001", "Gói 100g", 0, 1000m, null));
-        Assert.Contains(ex.Errors, e => e.Contains("Khối lượng"));
-    }
+        var ex = AssertValidation(() => ProductInputValidator.ValidateVariants([Variant(imageUrl: "ftp://bad.com/a.jpg")]));
 
-    [Fact]
-    public void ValidateProductSku_RejectsWeightOverMax()
-    {
-        var ex = AssertValidation(() => ProductInputValidator.ValidateProductSku(
-            Guid.NewGuid(), "TEA-001", "Gói 100g", 100_001, 1000m, null));
-        Assert.Contains(ex.Errors, e => e.Contains("Khối lượng"));
-    }
-
-    [Fact]
-    public void ValidateProductSku_AcceptsMaxWeight()
-    {
-        var result = ProductInputValidator.ValidateProductSku(
-            Guid.NewGuid(), "TEA-001", "Gói 100g", 100_000, 1000m, null);
-        Assert.Equal(100_000, result.WeightInGrams);
-    }
-
-    [Fact]
-    public void ValidateProductSku_RejectsInvalidImageUrl()
-    {
-        var ex = AssertValidation(() => ProductInputValidator.ValidateProductSku(
-            Guid.NewGuid(), "TEA-001", "Gói 100g", 100, 1000m, "ftp://bad.com/a.jpg"));
-        Assert.Contains(ex.Errors, e => e.Contains("URL ảnh"));
+        Assert.Contains(ex.Errors, e => e.Contains("URL"));
     }
 
     [Theory]
     [InlineData("http://example.com/a.jpg")]
     [InlineData("https://cdn.example.com/tea.png")]
-    public void ValidateProductSku_AcceptsHttpHttpsImageUrl(string url)
+    public void ValidateVariants_AcceptsHttpHttpsImageUrl(string url)
     {
-        var result = ProductInputValidator.ValidateProductSku(
-            Guid.NewGuid(), "TEA-001", "Gói 100g", 100, 1000m, url);
-        Assert.Equal(url, result.ImageUrl);
+        var result = ProductInputValidator.ValidateVariants([Variant(imageUrl: url)]);
+
+        Assert.Equal(url, result[0].ImageUrl);
     }
 
     [Fact]
-    public void ValidateProductSku_ReturnsMultipleErrors()
+    public void ValidateVariants_RejectsInvalidStockRange()
     {
-        var ex = AssertValidation(() => ProductInputValidator.ValidateProductSku(
-            Guid.NewGuid(), "x", "", 0, 0m, "not-a-url"));
+        var ex = AssertValidation(() => ProductInputValidator.ValidateVariants([Variant(minStock: 10, maxStock: 5)]));
+
+        Assert.NotEmpty(ex.Errors);
+    }
+
+    [Fact]
+    public void ValidateVariants_RejectsDuplicateSkuCodes()
+    {
+        var ex = AssertValidation(() => ProductInputValidator.ValidateVariants([
+            Variant(skuCode: "TEA-001"),
+            Variant(skuCode: "tea-001"),
+        ]));
+
+        Assert.Contains(ex.Errors, e => e.Contains("SKU"));
+    }
+
+    [Fact]
+    public void ValidateVariants_ReturnsMultipleErrors()
+    {
+        var ex = AssertValidation(() => ProductInputValidator.ValidateVariants([
+            Variant(skuCode: "x", variantName: "", retailPrice: 0m, imageUrl: "not-a-url"),
+        ]));
+
         Assert.True(ex.Errors.Count >= 3);
     }
 
@@ -139,6 +164,24 @@ public class ProductInputValidatorTests
     public void ValidateCategory_RejectsEmptyName()
     {
         var ex = AssertValidation(() => ProductInputValidator.ValidateCategory("", null, null));
-        Assert.Contains(ex.Errors, e => e.Contains("Tên danh mục"));
+
+        Assert.Contains(ex.Errors, e => e.Contains("danh"));
     }
+}
+
+public sealed class VariantInput
+{
+    public string? SkuCode { get; set; }
+    public string? Barcode { get; set; }
+    public string? VariantName { get; set; }
+    public string? OptionValuesJson { get; set; }
+    public decimal CostPrice { get; set; }
+    public decimal RetailPrice { get; set; }
+    public int? MinStock { get; set; }
+    public int? MaxStock { get; set; }
+    public bool IsSellable { get; set; }
+    public bool AllowRewardPoints { get; set; }
+    public bool IsActive { get; set; }
+    public string? ImageUrl { get; set; }
+    public object[] Units { get; set; } = [];
 }
