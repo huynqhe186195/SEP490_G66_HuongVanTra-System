@@ -419,6 +419,58 @@ public record SupplierReturnRequestResponse(
     int TotalQuantity,
     List<SupplierReturnRequestItemResponse> Items);
 
+public record StocktakeReasonCodeResponse(
+    string Code,
+    string Label);
+
+public record StocktakeRequestItemResponse(
+    Guid Id,
+    Guid SkuId,
+    string SkuCode,
+    string SkuSnapshotName,
+    string? ProductTypeSnapshot,
+    string? InventoryUnitSnapshot,
+    int SystemQuantitySnapshot,
+    int ActualQuantity,
+    int Variance,
+    string ReasonCode,
+    string? Note,
+    int? WarehouseQtyBefore,
+    int? WarehouseQtyAfter,
+    int? ShelfQtyBefore,
+    int? ShelfQtyAfter,
+    Guid? StockExportSlipId,
+    string? StockExportSlipCode,
+    Guid? StockImportSlipId,
+    string? StockImportSlipCode,
+    Guid? WarehouseBatchId,
+    string? WarehouseBatchLotCode);
+
+public record StocktakeRequestResponse(
+    Guid Id,
+    string RequestCode,
+    string Location,
+    DateTime CountDate,
+    string? Reason,
+    string? Note,
+    string Status,
+    Guid CreatedBy,
+    string? CreatedByName,
+    string? CreatedByRoleName,
+    DateTime CreatedAt,
+    DateTime UpdatedAt,
+    Guid? SubmittedBy,
+    DateTime? SubmittedAt,
+    Guid? ReviewedBy,
+    string? ReviewedByName,
+    string? ReviewedByRoleName,
+    DateTime? ReviewedAt,
+    string? ReviewNote,
+    int TotalPositiveVariance,
+    int TotalNegativeVariance,
+    int TotalAbsoluteVariance,
+    List<StocktakeRequestItemResponse> Items);
+
 public record ProductionOrderLineResponse(
     Guid Id,
     Guid MaterialSkuId,

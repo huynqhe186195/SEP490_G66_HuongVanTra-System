@@ -6,6 +6,8 @@ export const warehouseNavTabs = [
   { label: 'Phiếu nhập kho', to: '/inventory/import' },
   { label: 'Nhập nguyên liệu', to: '/inventory/import/create' },
   { label: 'Phiếu xuất', to: '/inventory/export' },
+  { label: 'Kiểm kê', to: '/inventory/stocktake' },
+  { label: 'Báo cáo', to: '/inventory/reports' },
   { label: 'Lệnh SX', to: '/inventory/production-orders' },
   { label: 'Định mức BOM', to: '/inventory/boms' },
 ]
@@ -28,6 +30,16 @@ export const inventoryLedgerNavTab = {
 export const inventoryReturnNavTab = {
   label: 'Trả hàng nhập',
   to: '/inventory/returns',
+}
+
+export const stocktakeNavTab = {
+  label: 'Kiểm kê',
+  to: '/inventory/stocktake',
+}
+
+export const inventoryReportNavTab = {
+  label: 'Báo cáo',
+  to: '/inventory/reports',
 }
 
 /** @deprecated use getInventoryNavTabs(session) */
@@ -57,6 +69,12 @@ export function getInventoryNavTabs(session) {
   }
   if (isSystemAdmin(session) || isManagerLike(session) || isWarehouseRole(session)) {
     tabs.push(inventoryReturnNavTab)
+  }
+  if (!isWarehouseRole(session) && (isSystemAdmin(session) || isManagerLike(session))) {
+    tabs.push(stocktakeNavTab)
+  }
+  if (!isWarehouseRole(session) && (isSystemAdmin(session) || isManagerLike(session))) {
+    tabs.push(inventoryReportNavTab)
   }
   if (isSystemAdmin(session) || isManagerLike(session) || isWarehouseRole(session)) {
     tabs.push(inventoryLedgerNavTab)

@@ -511,6 +511,72 @@ public class SupplierReturnRequestItemConfiguration : IEntityTypeConfiguration<S
     }
 }
 
+public class StocktakeRequestConfiguration : IEntityTypeConfiguration<StocktakeRequest>
+{
+    public void Configure(EntityTypeBuilder<StocktakeRequest> builder)
+    {
+        builder.ToTable("StocktakeRequests");
+        builder.HasKey(e => e.Id);
+        builder.Property(e => e.RequestCode).HasMaxLength(30).IsRequired();
+        builder.Property(e => e.Location).HasMaxLength(20).IsRequired();
+        builder.Property(e => e.Reason).HasMaxLength(500);
+        builder.Property(e => e.Note).HasMaxLength(500);
+        builder.Property(e => e.Status).HasConversion<string>().HasMaxLength(30).IsRequired();
+        builder.Property(e => e.CreatedByName).HasMaxLength(255);
+        builder.Property(e => e.CreatedByRoleName).HasMaxLength(100);
+        builder.Property(e => e.ReviewedByName).HasMaxLength(255);
+        builder.Property(e => e.ReviewedByRoleName).HasMaxLength(100);
+        builder.Property(e => e.ReviewNote).HasMaxLength(500);
+        builder.HasIndex(e => e.RequestCode).IsUnique();
+        builder.HasIndex(e => e.Location);
+        builder.HasIndex(e => e.Status);
+        builder.HasIndex(e => e.CreatedBy);
+        builder.HasIndex(e => e.CreatedAt);
+        builder.HasIndex(e => e.CountDate);
+        builder.HasIndex(e => e.SubmittedAt);
+        builder.HasIndex(e => e.ReviewedAt);
+        builder.HasMany(e => e.Items)
+            .WithOne(i => i.Request)
+            .HasForeignKey(i => i.StocktakeRequestId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
+public class StocktakeRequestItemConfiguration : IEntityTypeConfiguration<StocktakeRequestItem>
+{
+    public void Configure(EntityTypeBuilder<StocktakeRequestItem> builder)
+    {
+        builder.ToTable("StocktakeRequestItems");
+        builder.HasKey(e => e.Id);
+        builder.Property(e => e.SkuCode).HasMaxLength(50).IsRequired();
+        builder.Property(e => e.SkuSnapshotName).HasMaxLength(255).IsRequired();
+        builder.Property(e => e.ProductTypeSnapshot).HasMaxLength(30);
+        builder.Property(e => e.InventoryUnitSnapshot).HasMaxLength(20);
+        builder.Property(e => e.ReasonCode).HasMaxLength(50).IsRequired();
+        builder.Property(e => e.Note).HasMaxLength(500);
+        builder.Property(e => e.StockExportSlipCode).HasMaxLength(30);
+        builder.Property(e => e.StockImportSlipCode).HasMaxLength(30);
+        builder.Property(e => e.WarehouseBatchLotCode).HasMaxLength(50);
+        builder.HasIndex(e => e.StocktakeRequestId);
+        builder.HasIndex(e => e.SkuId);
+        builder.HasIndex(e => e.StockExportSlipId);
+        builder.HasIndex(e => e.StockImportSlipId);
+        builder.HasIndex(e => e.WarehouseBatchId);
+        builder.HasOne(e => e.StockExportSlip)
+            .WithMany()
+            .HasForeignKey(e => e.StockExportSlipId)
+            .OnDelete(DeleteBehavior.SetNull);
+        builder.HasOne(e => e.StockImportSlip)
+            .WithMany()
+            .HasForeignKey(e => e.StockImportSlipId)
+            .OnDelete(DeleteBehavior.SetNull);
+        builder.HasOne(e => e.WarehouseBatch)
+            .WithMany()
+            .HasForeignKey(e => e.WarehouseBatchId)
+            .OnDelete(DeleteBehavior.SetNull);
+    }
+}
+
 public class ProductionOrderConfiguration : IEntityTypeConfiguration<ProductionOrder>
 {
     public void Configure(EntityTypeBuilder<ProductionOrder> builder)

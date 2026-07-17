@@ -715,15 +715,86 @@ This document tracks the current-scope Inventory / Warehouse / Product Master co
   - This is lower than the Batch 6 count of 127 errors, 14 warnings and remains below the Batch 0 baseline of 149 errors, 15 warnings.
 - `npm.cmd run build`: passed with existing chunk/dynamic import warnings.
 - `git diff --check`: passed; Git emitted Windows LF-to-CRLF warnings only.
-- Docker gate is blocked in this Codex session:
-  - `docker ps --format ...` failed with Docker config/API permission errors.
-  - Escalation request to run Docker was rejected by the environment with usage-limit message.
-  - No Docker rebuild/restart, DB migration verification, service health, logs, or HTTP smoke probes were run from this session for Batch 7.
+- Docker gate was completed manually by Huy after the previous Codex session:
+  - `docker compose up -d --build inventory-service product-service audit-service gateway web-client` passed.
+  - `docker ps` / `docker compose ps` showed affected containers running and healthy where health checks exist.
+  - Inventory migration `20260717160000_AddProductionApprovalAndOutputDestination` applied successfully.
+  - `hvt-inventory-service` started successfully and RabbitMQ bus started.
 
 ### Checkpoint Commit
 
-- Batch 7 checkpoint commit has not been created yet because Docker health/smoke/DB verification gates are still blocked.
+- Batch 7 checkpoint commit was created:
+  - `5882197 feat(inventory): complete approved production with selectable destination`
 - No push was performed.
+
+## Batch 8 - Stocktake, True Stock Adjustment, Alerts, and Inventory Reports
+
+### Starting State
+
+- Started after clean worktree at local commit `5882197`.
+- Current code has `StockAdjustmentRequest`, but it is used for Kho -> Kệ Hàng replenishment, not true physical stocktake.
+- Existing stock model separates `WarehouseQuantityOnHand` and `QuantityOnHand`, with location-aware `WarehouseBatch.Location`.
+- Existing batch FEFO helpers and `StockExportBatchAllocation` can be reused for stocktake decreases.
+- Existing `CreateWarehouseBatchInternalAsync` can create Warehouse or Shelf batches with source traceability.
+- Existing `InventoryLedgerEntry` already supports source/destination location, reference, actor snapshot, batch, and lot code.
+- Existing low-stock thresholds are already split into `WarehouseLowStockThreshold` and `ShelfLowStockThreshold`.
+- Batch 8 must not reintroduce direct quantity mutation as normal business workflow.
+
+### Files Changed So Far
+
+- Backend Inventory:
+  - Added stocktake domain model, status enum, repository, controller, DTOs, EF configuration, migration, and model snapshot entries.
+  - Added migration `20260717170000_AddStocktakeRequests` for `StocktakeRequests` and `StocktakeRequestItems`.
+  - Added stocktake lifecycle methods in `InventoryLogic`: create draft, submit, approve, reject, cancel, list/detail, and reason-code lookup.
+  - Stocktake approval adjusts only the selected location, creates traceable import/export slips, creates ledger entries with transaction type `STOCKTAKE_ADJUSTMENT`, and republishes low-stock signals.
+  - Direct `AdjustStoreStockAsync` / `AdjustWarehouseStockAsync` calls are now guarded unless `InventoryOptions.SimulateWarehouse` is enabled.
+- Gateway:
+  - Added `/api/v1/inventory/stocktake-requests` and catch-all child route forwarding to InventoryService.
+- Frontend Inventory:
+  - Added `/inventory/stocktake` page for stocktake request list, create/import template, submit/review actions, detail view, and CSV export.
+  - Added `/inventory/reports` page for current stock, low stock, near-expiry batch, movement, and stocktake-history reports.
+  - Added Inventory navigation entries for `Kiểm kê tồn kho` and `Báo cáo kho`.
+  - Added `STOCKTAKE_ADJUSTMENT` ledger label.
+- Tests:
+  - Added baseline domain tests for stocktake lifecycle enum and variance formula.
+
+### Gate Results So Far
+
+- Backend scoped tests:
+  - `dotnet test Service\InventoryService\InventoryService.Application.Tests\InventoryService.Application.Tests.csproj --no-restore`: passed, 11 tests.
+- Backend build:
+  - `dotnet build`: passed with 1 pre-existing warning in `OrderService.Application/UseCases/OrderLogic.cs`.
+- Backend full test:
+  - `dotnet test`: Inventory, Product, and Order test projects passed.
+  - `AuditService.Application.Tests` aborted because this Windows host has x64 `Microsoft.AspNetCore.App` 10.0.8 installed, while that testhost requires x64 8.0.0. This is recorded as a host runtime issue outside Batch 8 Inventory code.
+- Frontend scoped lint:
+  - `npx.cmd eslint src/features/inventory/pages/InventoryStocktakePage.jsx src/features/inventory/pages/InventoryReportsPage.jsx src/features/inventory/services/stocktakeApi.js src/app/App.jsx src/app/navigation.js src/features/inventory/utils/inventoryNavTabs.js src/features/inventory/pages/InventoryLedgerPage.jsx`: passed.
+- Frontend full lint:
+  - `npm.cmd run lint`: failed with baseline `124 errors, 14 warnings`.
+  - No lint errors were reported in Batch 8 changed frontend files.
+- Frontend build:
+  - `npm.cmd run build`: passed with existing dynamic-import and chunk-size warnings.
+- Docker Compose rebuild/restart:
+  - `docker compose up -d --build inventory-service audit-service gateway web-client`: passed.
+- Docker health:
+  - `docker compose ps` showed `hvt-inventory-service`, `hvt-audit-service`, `hvt-mysql`, `hvt-rabbitmq`, and other service dependencies running and healthy where health checks exist.
+- Relevant logs:
+  - `inventory-service` applied migration `20260717170000_AddStocktakeRequests`, started successfully, and RabbitMQ bus started.
+  - `gateway` loaded proxy config and started successfully.
+- Database verification:
+  - MySQL query confirmed `__EFMigrationsHistory` contains `20260717170000_AddStocktakeRequests`.
+  - MySQL query confirmed `StocktakeRequests` and `StocktakeRequestItems` exist in `hvt_inventory_db`.
+- Gateway smoke:
+  - `curl.exe -i http://localhost:5000/api/v1/inventory/stocktake-requests`: returned `401 Unauthorized`, confirming the route is present and protected instead of 404.
+  - `curl.exe -i http://localhost:5000/api/v1/inventory/stocktake-requests/reason-codes`: returned `401 Unauthorized`, confirming the child route is present and protected instead of 404.
+- Repo checks:
+  - `git diff --check`: passed; Git emitted Windows LF-to-CRLF warnings only.
+
+### Checkpoint Commit
+
+- Batch 8 checkpoint commit was created:
+  - `bb098bf feat(inventory): add stocktake controls alerts and reporting`
+- No push will be performed.
 
 ## Remaining Risks
 

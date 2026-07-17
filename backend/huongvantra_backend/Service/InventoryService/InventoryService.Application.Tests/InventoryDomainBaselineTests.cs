@@ -85,6 +85,30 @@ public class InventoryDomainBaselineTests
     }
 
     [Fact]
+    public void StocktakeStatusEnum_DocumentsApprovalLifecycle()
+    {
+        Assert.Equal(0, (int)StocktakeStatus.Draft);
+        Assert.Equal(1, (int)StocktakeStatus.PendingApproval);
+        Assert.Equal(2, (int)StocktakeStatus.Completed);
+        Assert.Equal(3, (int)StocktakeStatus.Rejected);
+        Assert.Equal(4, (int)StocktakeStatus.Cancelled);
+    }
+
+    [Fact]
+    public void StocktakeRequestItem_DocumentsVarianceFormula()
+    {
+        var item = new StocktakeRequestItem
+        {
+            SystemQuantitySnapshot = 125,
+            ActualQuantity = 118,
+        };
+
+        item.Variance = item.ActualQuantity - item.SystemQuantitySnapshot;
+
+        Assert.Equal(-7, item.Variance);
+    }
+
+    [Fact]
     public void InventoryLedgerEntry_DocumentsBeforeDeltaAfterMovement()
     {
         var entry = new InventoryLedgerEntry

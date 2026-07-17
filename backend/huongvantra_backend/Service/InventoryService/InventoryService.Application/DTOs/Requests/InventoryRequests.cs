@@ -136,3 +136,20 @@ public record CreateSupplierReturnRequest(
     List<InventoryReturnItemRequest> Items);
 
 public record ReviewInventoryReturnRequest(string? Reason);
+
+public record StocktakeItemRequest(
+    Guid SkuId,
+    string? SkuCode,
+    string? SkuSnapshotName,
+    int ActualQuantity,
+    string ReasonCode,
+    string? Note);
+
+public record CreateStocktakeRequest(
+    string Location,
+    DateTime? CountDate,
+    string? Reason,
+    string? Note,
+    List<StocktakeItemRequest> Items);
+
+public record ReviewStocktakeRequest(string? Reason);

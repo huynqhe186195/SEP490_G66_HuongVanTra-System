@@ -21,8 +21,10 @@ import InventoryBatchesPage from '../features/inventory/pages/InventoryBatchesPa
 import InventoryImportCreatePage from '../features/inventory/pages/InventoryImportCreatePage.jsx'
 import InventoryImportPage from '../features/inventory/pages/InventoryImportPage.jsx'
 import InventoryLedgerPage from '../features/inventory/pages/InventoryLedgerPage.jsx'
+import InventoryReportsPage from '../features/inventory/pages/InventoryReportsPage.jsx'
 import InventoryReturnsPage from '../features/inventory/pages/InventoryReturnsPage.jsx'
 import InventoryStockPage from '../features/inventory/pages/InventoryStockPage.jsx'
+import InventoryStocktakePage from '../features/inventory/pages/InventoryStocktakePage.jsx'
 import InventoryStatisticsPage from '../features/inventory/pages/InventoryStatisticsPage.jsx'
 import ProfilePage from '../features/profile/pages/ProfilePage.jsx'
 import OrdersPage from '../features/orders/pages/OrdersPage.jsx'
@@ -92,6 +94,8 @@ function App() {
         <Route path="/inventory/import" element={<InventoryImportPage />} />
         <Route path="/inventory/import/create" element={<InventoryImportCreatePage />} />
         <Route path="/inventory/returns" element={<InventoryReturnsPage />} />
+        <Route path="/inventory/stocktake" element={<InventoryStocktakePage />} />
+        <Route path="/inventory/reports" element={<InventoryReportsPage />} />
         <Route path="/inventory/ledger" element={<InventoryLedgerPage />} />
         <Route path="/inventory/export" element={<InventoryExportPage />} />
         <Route path="/inventory/production" element={<Navigate to="/inventory/production-orders" replace />} />

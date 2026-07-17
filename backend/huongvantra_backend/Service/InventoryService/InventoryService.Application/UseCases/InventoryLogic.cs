@@ -23,6 +23,7 @@ public class InventoryLogic(
     ISupplierReceiptRepository _supplierReceiptRepo,
     IShelfReturnRequestRepository _shelfReturnRepo,
     ISupplierReturnRequestRepository _supplierReturnRepo,
+    IStocktakeRequestRepository _stocktakeRepo,
     IProcessedIntegrationEventRepository _processedEvents,
     IInventoryEventPublisher _eventPublisher,
     IInventoryUnitOfWork _unitOfWork,
@@ -53,11 +54,24 @@ public class InventoryLogic(
     private const string TransactionInboundDataCorrection = "INBOUND_DATA_CORRECTION";
     private const string TransactionProductionMaterialExport = "PRODUCTION_MATERIAL_EXPORT";
     private const string TransactionProductionFinishedReceipt = "PRODUCTION_FINISHED_RECEIPT";
+    private const string TransactionStocktakeAdjustment = "STOCKTAKE_ADJUSTMENT";
     private const string ReferenceSupplierReceipt = "SupplierReceipt";
     private const string ReferenceShelfReplenishment = "ShelfReplenishment";
     private const string ReferenceShelfReturn = "ShelfReturn";
     private const string ReferenceSupplierReturn = "SupplierReturn";
     private const string ReferenceProductionOrder = "ProductionOrder";
+    private const string ReferenceStocktake = "Stocktake";
+    private static readonly IReadOnlyDictionary<string, string> StocktakeReasonCodes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+    {
+        ["NATURAL_SHRINKAGE"] = "Hao hut tu nhien",
+        ["SPOILAGE_OR_DAMAGE"] = "Hu hong",
+        ["LOSS_OR_THEFT"] = "Mat mat",
+        ["DATA_ENTRY_ERROR"] = "Sai lech nhap lieu",
+        ["PRODUCTION_WASTE"] = "Hao hut san xuat",
+        ["FOUND_STOCK"] = "Tim thay ton",
+        ["INBOUND_NOT_RECORDED"] = "Nhap kho chua ghi nhan",
+        ["OTHER"] = "Khac",
+    };
     private static readonly JsonSerializerOptions MaterialSnapshotJsonOptions = new(JsonSerializerDefaults.Web)
     {
         PropertyNameCaseInsensitive = true,
@@ -845,6 +859,12 @@ public class InventoryLogic(
     public async Task<SkuStockResponse> AdjustStoreStockAsync(
         Guid skuId, int quantityDelta, string? skuCode = null, CancellationToken ct = default)
     {
+        if (!_inventoryOptions.SimulateWarehouse)
+        {
+            throw new InventoryValidationException(
+                "Direct store stock adjustment is disabled. Use stocktake adjustment instead.");
+        }
+
         if (quantityDelta == 0)
             throw new InventoryValidationException("Số lượng thay đổi phải khác 0.");
 
@@ -876,6 +896,12 @@ public class InventoryLogic(
     public async Task<SkuStockResponse> AdjustWarehouseStockAsync(
         Guid skuId, int quantityDelta, string? skuCode = null, CancellationToken ct = default)
     {
+        if (!_inventoryOptions.SimulateWarehouse)
+        {
+            throw new InventoryValidationException(
+                "Direct warehouse stock adjustment is disabled. Use stocktake adjustment instead.");
+        }
+
         if (quantityDelta == 0)
             throw new InventoryValidationException("Số lượng thay đổi phải khác 0.");
 
@@ -2618,6 +2644,680 @@ public class InventoryLogic(
         return MapSupplierReturnRequest(entity);
     }
 
+    public static List<StocktakeReasonCodeResponse> GetStocktakeReasonCodes() =>
+        StocktakeReasonCodes
+            .OrderBy(kvp => kvp.Key)
+            .Select(kvp => new StocktakeReasonCodeResponse(kvp.Key, kvp.Value))
+            .ToList();
+
+    public async Task<PagedResponse<StocktakeRequestResponse>> GetStocktakeRequestsAsync(
+        string? status,
+        string? location,
+        Guid? createdBy,
+        string? search,
+        int page,
+        int pageSize,
+        CancellationToken ct = default)
+    {
+        var parsedStatus = ParseStocktakeStatus(status);
+        var normalizedLocation = string.IsNullOrWhiteSpace(location)
+            ? null
+            : NormalizeInventoryLocationName(location);
+        var (safePage, safePageSize) = NormalizePagination(page, pageSize);
+        var (items, totalCount) = await _stocktakeRepo.GetPagedAsync(
+            parsedStatus,
+            normalizedLocation,
+            createdBy,
+            search,
+            safePage,
+            safePageSize,
+            ct);
+        var totalPages = Math.Max(1, (int)Math.Ceiling(totalCount / (double)safePageSize));
+        return new PagedResponse<StocktakeRequestResponse>(
+            items.Select(MapStocktakeRequest).ToList(),
+            safePage,
+            safePageSize,
+            totalCount,
+            totalPages);
+    }
+
+    public async Task<StocktakeRequestResponse?> GetStocktakeRequestAsync(Guid id, CancellationToken ct = default)
+    {
+        var request = await _stocktakeRepo.GetByIdAsync(id, ct);
+        return request == null ? null : MapStocktakeRequest(request);
+    }
+
+    public async Task<StocktakeRequestResponse> CreateStocktakeRequestAsync(
+        CreateStocktakeRequest request,
+        Guid createdBy,
+        CreatorSnapshot? creator,
+        CancellationToken ct = default)
+    {
+        if (createdBy == Guid.Empty)
+            throw new InventoryValidationException("Cannot identify stocktake creator.");
+
+        var location = NormalizeInventoryLocationName(request.Location);
+        var normalizedItems = await NormalizeStocktakeItemsAsync(request.Items, location, ct);
+        var now = DateTime.UtcNow;
+        var countToday = await _stocktakeRepo.CountCreatedSinceAsync(now.Date, ct);
+        var entity = new StocktakeRequest
+        {
+            Id = Guid.NewGuid(),
+            RequestCode = $"KK-{now:yyyyMMdd}-{(countToday + 1):D4}",
+            Location = location,
+            CountDate = request.CountDate?.Date ?? now.Date,
+            Reason = NormalizeSnapshotText(request.Reason),
+            Note = NormalizeSnapshotText(request.Note),
+            Status = StocktakeStatus.Draft,
+            CreatedBy = createdBy,
+            CreatedByName = NormalizeSnapshotText(creator?.CreatedByName),
+            CreatedByRoleName = NormalizeSnapshotText(creator?.CreatedByRoleName),
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+
+        foreach (var item in normalizedItems)
+        {
+            entity.Items.Add(new StocktakeRequestItem
+            {
+                Id = Guid.NewGuid(),
+                StocktakeRequestId = entity.Id,
+                SkuId = item.SkuId,
+                SkuCode = item.SkuCode,
+                SkuSnapshotName = item.SkuSnapshotName,
+                ProductTypeSnapshot = item.ProductTypeSnapshot,
+                InventoryUnitSnapshot = item.InventoryUnitSnapshot,
+                SystemQuantitySnapshot = item.SystemQuantitySnapshot,
+                ActualQuantity = item.ActualQuantity,
+                Variance = item.ActualQuantity - item.SystemQuantitySnapshot,
+                ReasonCode = item.ReasonCode,
+                Note = item.Note,
+            });
+        }
+
+        await _stocktakeRepo.AddAsync(entity, ct);
+        await _stocktakeRepo.SaveChangesAsync(ct);
+        return MapStocktakeRequest(entity);
+    }
+
+    public async Task<StocktakeRequestResponse> SubmitStocktakeRequestAsync(
+        Guid id,
+        Guid submittedBy,
+        CreatorSnapshot? _,
+        CancellationToken ct = default)
+    {
+        if (submittedBy == Guid.Empty)
+            throw new InventoryValidationException("Cannot identify stocktake submitter.");
+
+        var request = await _stocktakeRepo.GetByIdAsync(id, ct)
+            ?? throw new InventoryNotFoundException("Stocktake request was not found.");
+        if (request.Status == StocktakeStatus.PendingApproval)
+            return MapStocktakeRequest(request);
+        if (request.Status != StocktakeStatus.Draft && request.Status != StocktakeStatus.Rejected)
+            throw new InventoryValidationException("Only draft or rejected stocktake requests can be submitted.");
+        if (request.Items.Count == 0)
+            throw new InventoryValidationException("Stocktake request must contain at least one SKU line.");
+
+        request.Status = StocktakeStatus.PendingApproval;
+        request.SubmittedBy = submittedBy;
+        request.SubmittedAt = DateTime.UtcNow;
+        request.UpdatedAt = DateTime.UtcNow;
+        request.ReviewedBy = null;
+        request.ReviewedByName = null;
+        request.ReviewedByRoleName = null;
+        request.ReviewedAt = null;
+        request.ReviewNote = null;
+        await _stocktakeRepo.SaveChangesAsync(ct);
+        return MapStocktakeRequest(request);
+    }
+
+    public async Task<StocktakeRequestResponse> ApproveStocktakeRequestAsync(
+        Guid id,
+        Guid reviewerId,
+        CreatorSnapshot? reviewer,
+        ReviewStocktakeRequest? review,
+        CancellationToken ct = default)
+    {
+        if (reviewerId == Guid.Empty)
+            throw new InventoryValidationException("Cannot identify stocktake reviewer.");
+
+        return await _unitOfWork.ExecuteInTransactionAsync(async innerCt =>
+        {
+            var request = await _stocktakeRepo.GetByIdAsync(id, innerCt)
+                ?? throw new InventoryNotFoundException("Stocktake request was not found.");
+            if (request.Status == StocktakeStatus.Completed)
+                throw new InventoryValidationException("Stocktake request was already completed.");
+            if (request.Status != StocktakeStatus.PendingApproval)
+                throw new InventoryValidationException("Only pending stocktake requests can be approved.");
+            if (request.CreatedBy == reviewerId)
+                throw new InventoryValidationException("Stocktake creator cannot approve their own request.");
+            if (request.Items.Count == 0)
+                throw new InventoryValidationException("Stocktake request must contain at least one SKU line.");
+
+            var location = NormalizeInventoryLocationName(request.Location);
+            var decreases = new List<AppliedStocktakeLine>();
+            var increases = new List<AppliedStocktakeLine>();
+            var transactionGroupId = Guid.NewGuid();
+            var touchedSkuIds = new HashSet<Guid>();
+
+            foreach (var item in request.Items.OrderBy(i => i.SkuCode))
+            {
+                EnsureValidStocktakeReason(item.ReasonCode);
+                var currentSystemQuantity = await GetSystemQuantityForLocationAsync(item.SkuId, location, innerCt);
+                if (currentSystemQuantity != item.SystemQuantitySnapshot)
+                {
+                    throw new InventoryValidationException(
+                        $"System quantity for SKU {item.SkuCode} changed after counting. Create a new stocktake request.");
+                }
+
+                if (item.Variance == 0)
+                {
+                    ApplyStocktakeBeforeAfter(item, location, currentSystemQuantity, currentSystemQuantity);
+                    continue;
+                }
+
+                var stock = await _skuStockRepo.GetBySkuIdWithLockAsync(item.SkuId, innerCt)
+                    ?? await GetOrCreateSkuStockAsync(item.SkuId, item.SkuCode, innerCt);
+                var warehouseBefore = location == LocationWarehouse ? currentSystemQuantity : stock.WarehouseQuantityOnHand;
+                var shelfBefore = location == LocationShelf ? currentSystemQuantity : stock.QuantityOnHand;
+
+                if (item.Variance < 0)
+                {
+                    var quantity = Math.Abs(item.Variance);
+                    var allocations = _inventoryOptions.SimulateWarehouse
+                        ? new List<StockExportBatchAllocation>()
+                        : await AllocateAndDeductBatchesFifoAsync(item.SkuId, quantity, innerCt, location);
+
+                    if (location == LocationWarehouse)
+                    {
+                        if (_inventoryOptions.SimulateWarehouse)
+                            stock.WarehouseQuantityOnHand = Math.Max(0, stock.WarehouseQuantityOnHand - quantity);
+                        else
+                            await SyncWarehouseQtyFromBatchesAsync(stock, innerCt);
+                    }
+                    else
+                    {
+                        stock.QuantityOnHand = _inventoryOptions.SimulateWarehouse
+                            ? Math.Max(0, stock.QuantityOnHand - quantity)
+                            : await _batchRepo.SumQuantityOnHandAsync(item.SkuId, LocationShelf, innerCt);
+                        stock.UpdatedAt = DateTime.UtcNow;
+                        await _skuStockRepo.SaveChangesAsync(innerCt);
+                    }
+
+                    var warehouseAfter = location == LocationWarehouse ? stock.WarehouseQuantityOnHand : warehouseBefore;
+                    var shelfAfter = location == LocationShelf ? stock.QuantityOnHand : shelfBefore;
+                    ApplyStocktakeBeforeAfter(item, location, currentSystemQuantity, currentSystemQuantity - quantity);
+                    decreases.Add(new AppliedStocktakeLine(item, quantity, warehouseBefore, warehouseAfter, shelfBefore, shelfAfter, allocations, null));
+                }
+                else
+                {
+                    var quantity = item.Variance;
+                    var lotCode = BuildStocktakeLotCode(request.RequestCode, item);
+                    var batch = await CreateWarehouseBatchInternalAsync(
+                        lotCode,
+                        null,
+                        null,
+                        $"Stocktake adjustment {request.RequestCode}",
+                        [
+                            new CreateWarehouseBatchItemRequest(
+                                item.SkuId,
+                                item.SkuCode,
+                                item.SkuSnapshotName,
+                                quantity,
+                                null)
+                        ],
+                        reviewerId,
+                        innerCt,
+                        "stocktake_adjustment",
+                        request.Id,
+                        request.RequestCode,
+                        location);
+
+                    stock = await _skuStockRepo.GetBySkuIdWithLockAsync(item.SkuId, innerCt)
+                        ?? throw new InventoryValidationException($"SKU {item.SkuCode} was not found after stocktake adjustment.");
+                    var warehouseAfter = location == LocationWarehouse ? stock.WarehouseQuantityOnHand : warehouseBefore;
+                    var shelfAfter = location == LocationShelf ? stock.QuantityOnHand : shelfBefore;
+                    ApplyStocktakeBeforeAfter(item, location, currentSystemQuantity, currentSystemQuantity + quantity);
+                    item.WarehouseBatchId = batch.Id;
+                    item.WarehouseBatchLotCode = batch.LotCode;
+                    increases.Add(new AppliedStocktakeLine(item, quantity, warehouseBefore, warehouseAfter, shelfBefore, shelfAfter, [], batch));
+                }
+
+                touchedSkuIds.Add(item.SkuId);
+            }
+
+            await CreateStocktakeExportSlipAsync(request, decreases, reviewerId, reviewer, review?.Reason, innerCt);
+            await CreateStocktakeImportSlipAsync(request, increases, reviewerId, reviewer, review?.Reason, innerCt);
+            var ledgerEntries = BuildStocktakeLedgerEntries(
+                request,
+                decreases.Concat(increases),
+                transactionGroupId,
+                reviewerId,
+                reviewer,
+                review?.Reason);
+
+            request.Status = StocktakeStatus.Completed;
+            request.ReviewedBy = reviewerId;
+            request.ReviewedByName = NormalizeSnapshotText(reviewer?.CreatedByName);
+            request.ReviewedByRoleName = NormalizeSnapshotText(reviewer?.CreatedByRoleName);
+            request.ReviewedAt = DateTime.UtcNow;
+            request.ReviewNote = NormalizeSnapshotText(review?.Reason);
+            request.UpdatedAt = DateTime.UtcNow;
+            await _stocktakeRepo.SaveChangesAsync(innerCt);
+
+            if (ledgerEntries.Count > 0)
+            {
+                await _ledgerRepo.AddRangeAsync(ledgerEntries, innerCt);
+                await _ledgerRepo.SaveChangesAsync(innerCt);
+            }
+
+            foreach (var skuId in touchedSkuIds)
+                await PublishLowStockForSkuLocationAsync(skuId, location, innerCt);
+
+            return MapStocktakeRequest(request);
+        }, ct);
+    }
+
+    public async Task<StocktakeRequestResponse> RejectStocktakeRequestAsync(
+        Guid id,
+        Guid reviewerId,
+        CreatorSnapshot? reviewer,
+        ReviewStocktakeRequest request,
+        CancellationToken ct = default)
+    {
+        var entity = await _stocktakeRepo.GetByIdAsync(id, ct)
+            ?? throw new InventoryNotFoundException("Stocktake request was not found.");
+        if (entity.Status != StocktakeStatus.PendingApproval)
+            throw new InventoryValidationException("Only pending stocktake requests can be rejected.");
+        if (entity.CreatedBy == reviewerId)
+            throw new InventoryValidationException("Stocktake creator cannot reject their own request.");
+        var reason = NormalizeSnapshotText(request.Reason);
+        if (string.IsNullOrWhiteSpace(reason))
+            throw new InventoryValidationException("Reject reason is required.");
+
+        entity.Status = StocktakeStatus.Rejected;
+        entity.ReviewedBy = reviewerId == Guid.Empty ? null : reviewerId;
+        entity.ReviewedByName = NormalizeSnapshotText(reviewer?.CreatedByName);
+        entity.ReviewedByRoleName = NormalizeSnapshotText(reviewer?.CreatedByRoleName);
+        entity.ReviewedAt = DateTime.UtcNow;
+        entity.ReviewNote = reason;
+        entity.UpdatedAt = DateTime.UtcNow;
+        await _stocktakeRepo.SaveChangesAsync(ct);
+        return MapStocktakeRequest(entity);
+    }
+
+    public async Task<StocktakeRequestResponse> CancelStocktakeRequestAsync(
+        Guid id,
+        Guid actorId,
+        bool isAdmin,
+        CreatorSnapshot? actor,
+        ReviewStocktakeRequest request,
+        CancellationToken ct = default)
+    {
+        var entity = await _stocktakeRepo.GetByIdAsync(id, ct)
+            ?? throw new InventoryNotFoundException("Stocktake request was not found.");
+        if (entity.Status == StocktakeStatus.Completed)
+            throw new InventoryValidationException("Completed stocktake requests cannot be cancelled.");
+        if (!isAdmin && entity.CreatedBy != actorId)
+            throw new InventoryValidationException("Only the creator or Admin can cancel this stocktake request.");
+        var reason = NormalizeSnapshotText(request.Reason);
+        if (string.IsNullOrWhiteSpace(reason))
+            throw new InventoryValidationException("Cancel reason is required.");
+
+        entity.Status = StocktakeStatus.Cancelled;
+        entity.ReviewedBy = actorId == Guid.Empty ? null : actorId;
+        entity.ReviewedByName = NormalizeSnapshotText(actor?.CreatedByName);
+        entity.ReviewedByRoleName = NormalizeSnapshotText(actor?.CreatedByRoleName);
+        entity.ReviewedAt = DateTime.UtcNow;
+        entity.ReviewNote = reason;
+        entity.UpdatedAt = DateTime.UtcNow;
+        await _stocktakeRepo.SaveChangesAsync(ct);
+        return MapStocktakeRequest(entity);
+    }
+
+    private sealed record NormalizedStocktakeItem(
+        Guid SkuId,
+        string SkuCode,
+        string SkuSnapshotName,
+        string? ProductTypeSnapshot,
+        string? InventoryUnitSnapshot,
+        int SystemQuantitySnapshot,
+        int ActualQuantity,
+        string ReasonCode,
+        string? Note);
+
+    private sealed record AppliedStocktakeLine(
+        StocktakeRequestItem Item,
+        int Quantity,
+        int WarehouseBefore,
+        int WarehouseAfter,
+        int ShelfBefore,
+        int ShelfAfter,
+        List<StockExportBatchAllocation> Allocations,
+        WarehouseBatchResponse? Batch);
+
+    private async Task<List<NormalizedStocktakeItem>> NormalizeStocktakeItemsAsync(
+        List<StocktakeItemRequest>? items,
+        string location,
+        CancellationToken ct)
+    {
+        if (items == null || items.Count == 0)
+            throw new InventoryValidationException("Stocktake request must contain at least one SKU line.");
+
+        var catalog = await _productCatalogClient.GetCatalogAsync(ct);
+        var usedSkuIds = new HashSet<Guid>();
+        var normalized = new List<NormalizedStocktakeItem>();
+
+        foreach (var (line, index) in items.Select((value, i) => (value, i)))
+        {
+            if (line.SkuId == Guid.Empty)
+                throw new InventoryValidationException($"Line {index + 1}: SKU is required.");
+            if (!usedSkuIds.Add(line.SkuId))
+                throw new InventoryValidationException($"Line {index + 1}: Duplicate SKU in the same stocktake request.");
+            if (line.ActualQuantity < 0)
+                throw new InventoryValidationException($"Line {index + 1}: Actual quantity must be non-negative.");
+
+            var reasonCode = NormalizeStocktakeReasonCode(line.ReasonCode);
+            var product = catalog.FindProductByVariant(line.SkuId);
+            var variant = catalog.FindVariant(line.SkuId);
+            var skuCode = NormalizeSnapshotText(line.SkuCode)
+                ?? NormalizeSnapshotText(variant?.SkuCode)
+                ?? line.SkuId.ToString()[..8];
+            var skuName = NormalizeSnapshotText(line.SkuSnapshotName)
+                ?? BuildCatalogSkuName(product, variant)
+                ?? skuCode;
+            var systemQuantity = await GetSystemQuantityForLocationAsync(line.SkuId, location, ct);
+
+            normalized.Add(new NormalizedStocktakeItem(
+                line.SkuId,
+                skuCode,
+                skuName,
+                NormalizeSnapshotText(product?.ProductType),
+                NormalizeSnapshotText(product?.InventoryUnit) ?? NormalizeSnapshotText(product?.BaseUnit),
+                systemQuantity,
+                line.ActualQuantity,
+                reasonCode,
+                NormalizeSnapshotText(line.Note)));
+        }
+
+        return normalized;
+    }
+
+    private static string? BuildCatalogSkuName(CatalogProduct? product, CatalogVariant? variant)
+    {
+        if (product == null && variant == null)
+            return null;
+        if (product == null)
+            return NormalizeSnapshotText(variant?.VariantName) ?? NormalizeSnapshotText(variant?.SkuCode);
+        var variantName = NormalizeSnapshotText(variant?.VariantName);
+        if (string.IsNullOrWhiteSpace(variantName))
+            return product.Name;
+        return $"{product.Name} - {variantName}";
+    }
+
+    private async Task<int> GetSystemQuantityForLocationAsync(Guid skuId, string location, CancellationToken ct)
+    {
+        if (_inventoryOptions.SimulateWarehouse)
+        {
+            var stock = await _skuStockRepo.GetBySkuIdAsync(skuId, ct);
+            return location == LocationWarehouse
+                ? stock?.WarehouseQuantityOnHand ?? 0
+                : stock?.QuantityOnHand ?? 0;
+        }
+
+        return await _batchRepo.SumQuantityOnHandAsync(skuId, location, ct);
+    }
+
+    private static StocktakeStatus? ParseStocktakeStatus(string? status)
+    {
+        if (!string.IsNullOrWhiteSpace(status) &&
+            Enum.TryParse<StocktakeStatus>(status, true, out var parsed))
+        {
+            return parsed;
+        }
+
+        return null;
+    }
+
+    private static string NormalizeStocktakeReasonCode(string? reasonCode)
+    {
+        var normalized = NormalizeSnapshotText(reasonCode)?.ToUpperInvariant();
+        if (normalized == null || !StocktakeReasonCodes.ContainsKey(normalized))
+            throw new InventoryValidationException("Stocktake reason code is invalid.");
+        return normalized;
+    }
+
+    private static void EnsureValidStocktakeReason(string reasonCode) =>
+        _ = NormalizeStocktakeReasonCode(reasonCode);
+
+    private static void ApplyStocktakeBeforeAfter(StocktakeRequestItem item, string location, int before, int after)
+    {
+        if (location == LocationWarehouse)
+        {
+            item.WarehouseQtyBefore = before;
+            item.WarehouseQtyAfter = after;
+        }
+        else
+        {
+            item.ShelfQtyBefore = before;
+            item.ShelfQtyAfter = after;
+        }
+    }
+
+    private static string BuildStocktakeLotCode(string requestCode, StocktakeRequestItem item)
+    {
+        var value = $"KK-{requestCode}-{item.Id:N}";
+        return NormalizeLotCode(value[..Math.Min(50, value.Length)]);
+    }
+
+    private async Task<StockExportSlip?> CreateStocktakeExportSlipAsync(
+        StocktakeRequest request,
+        List<AppliedStocktakeLine> lines,
+        Guid createdBy,
+        CreatorSnapshot? creator,
+        string? note,
+        CancellationToken ct)
+    {
+        if (lines.Count == 0)
+            return null;
+
+        var now = DateTime.UtcNow;
+        var countToday = await _exportSlipRepo.CountCreatedSinceAsync(now.Date, ct);
+        var slipId = Guid.NewGuid();
+        var slipLines = new List<StockExportSlipLine>();
+        foreach (var line in lines)
+        {
+            var slipLine = new StockExportSlipLine
+            {
+                Id = Guid.NewGuid(),
+                StockExportSlipId = slipId,
+                SkuId = line.Item.SkuId,
+                SkuCode = line.Item.SkuCode,
+                ProductSnapshotName = line.Item.SkuSnapshotName,
+                Quantity = line.Quantity,
+                WarehouseQtyBefore = line.WarehouseBefore,
+                WarehouseQtyAfter = line.WarehouseAfter,
+                StoreQtyBefore = line.ShelfBefore,
+                StoreQtyAfter = line.ShelfAfter,
+                Note = line.Item.Note,
+                CreatedAt = now,
+            };
+            slipLines.Add(slipLine);
+            foreach (var allocation in line.Allocations)
+            {
+                allocation.StockExportSlipId = slipId;
+                allocation.StockExportSlipLineId = slipLine.Id;
+            }
+        }
+
+        var firstLine = lines[0];
+        var slip = new StockExportSlip
+        {
+            Id = slipId,
+            ExportCode = $"PX-{now:yyyyMMdd}-{(countToday + 1):D4}",
+            ExportType = "stocktake_adjustment",
+            ReferenceType = ReferenceStocktake,
+            ReferenceId = request.Id,
+            ReferenceCode = request.RequestCode,
+            SkuId = firstLine.Item.SkuId,
+            SkuCode = lines.Count == 1 ? firstLine.Item.SkuCode : "MULTI",
+            SkuSnapshotName = lines.Count == 1 ? firstLine.Item.SkuSnapshotName : $"{lines.Count} stocktake decrease lines",
+            Quantity = lines.Sum(l => l.Quantity),
+            WarehouseQtyBefore = lines.Sum(l => l.WarehouseBefore),
+            WarehouseQtyAfter = lines.Sum(l => l.WarehouseAfter),
+            StoreQtyBefore = lines.Sum(l => l.ShelfBefore),
+            StoreQtyAfter = lines.Sum(l => l.ShelfAfter),
+            Note = NormalizeSnapshotText(note) ?? request.Reason ?? request.Note,
+            CreatedBy = createdBy,
+            CreatedById = createdBy == Guid.Empty ? null : createdBy,
+            CreatedByName = NormalizeSnapshotText(creator?.CreatedByName),
+            CreatedByRoleName = NormalizeSnapshotText(creator?.CreatedByRoleName),
+            CreatedAt = now,
+            Lines = slipLines,
+        };
+
+        await _exportSlipRepo.AddAsync(slip, ct);
+        await _exportSlipRepo.SaveChangesAsync(ct);
+        var allocations = lines.SelectMany(l => l.Allocations).ToList();
+        if (allocations.Count > 0)
+        {
+            await _exportAllocationRepo.AddRangeAsync(allocations, ct);
+            await _exportAllocationRepo.SaveChangesAsync(ct);
+        }
+
+        foreach (var line in lines)
+        {
+            line.Item.StockExportSlipId = slip.Id;
+            line.Item.StockExportSlipCode = slip.ExportCode;
+        }
+
+        return slip;
+    }
+
+    private async Task<StockImportSlip?> CreateStocktakeImportSlipAsync(
+        StocktakeRequest request,
+        List<AppliedStocktakeLine> lines,
+        Guid createdBy,
+        CreatorSnapshot? creator,
+        string? note,
+        CancellationToken ct)
+    {
+        if (lines.Count == 0)
+            return null;
+
+        var now = DateTime.UtcNow;
+        var countToday = await _importSlipRepo.CountCreatedSinceAsync(now.Date, ct);
+        var slipId = Guid.NewGuid();
+        var slipLines = lines.Select(line => new StockImportSlipLine
+        {
+            Id = Guid.NewGuid(),
+            StockImportSlipId = slipId,
+            SkuId = line.Item.SkuId,
+            SkuCode = line.Item.SkuCode,
+            ProductSnapshotName = line.Item.SkuSnapshotName,
+            Quantity = line.Quantity,
+            WarehouseQtyBefore = line.WarehouseBefore,
+            WarehouseQtyAfter = line.WarehouseAfter,
+            StoreQtyBefore = line.ShelfBefore,
+            StoreQtyAfter = line.ShelfAfter,
+            DestinationLocation = request.Location,
+            WarehouseBatchId = line.Batch?.Id,
+            WarehouseBatchLotCode = line.Batch?.LotCode,
+            Note = line.Item.Note,
+            CreatedAt = now,
+        }).ToList();
+
+        var firstLine = lines[0];
+        var slip = new StockImportSlip
+        {
+            Id = slipId,
+            ImportCode = $"PN-{now:yyyyMMdd}-{(countToday + 1):D4}",
+            ImportType = "stocktake_adjustment_receipt",
+            ReferenceType = ReferenceStocktake,
+            ReferenceId = request.Id,
+            ReferenceCode = request.RequestCode,
+            SkuId = firstLine.Item.SkuId,
+            SkuCode = lines.Count == 1 ? firstLine.Item.SkuCode : "MULTI",
+            ProductSnapshotName = lines.Count == 1 ? firstLine.Item.SkuSnapshotName : $"{lines.Count} stocktake increase lines",
+            Quantity = lines.Sum(l => l.Quantity),
+            WarehouseQtyBefore = lines.Sum(l => l.WarehouseBefore),
+            WarehouseQtyAfter = lines.Sum(l => l.WarehouseAfter),
+            StoreQtyBefore = lines.Sum(l => l.ShelfBefore),
+            StoreQtyAfter = lines.Sum(l => l.ShelfAfter),
+            WarehouseBatchId = firstLine.Batch?.Id,
+            WarehouseBatchLotCode = firstLine.Batch?.LotCode,
+            Note = NormalizeSnapshotText(note) ?? request.Reason ?? request.Note,
+            CreatedBy = createdBy,
+            CreatedById = createdBy == Guid.Empty ? null : createdBy,
+            CreatedByName = NormalizeSnapshotText(creator?.CreatedByName),
+            CreatedByRoleName = NormalizeSnapshotText(creator?.CreatedByRoleName),
+            CreatedAt = now,
+            Lines = slipLines,
+        };
+
+        await _importSlipRepo.AddAsync(slip, ct);
+        await _importSlipRepo.SaveChangesAsync(ct);
+        foreach (var line in lines)
+        {
+            line.Item.StockImportSlipId = slip.Id;
+            line.Item.StockImportSlipCode = slip.ImportCode;
+        }
+
+        return slip;
+    }
+
+    private static List<InventoryLedgerEntry> BuildStocktakeLedgerEntries(
+        StocktakeRequest request,
+        IEnumerable<AppliedStocktakeLine> lines,
+        Guid transactionGroupId,
+        Guid actorId,
+        CreatorSnapshot? actor,
+        string? reviewReason)
+    {
+        return lines
+            .Select(line => CreateLedgerEntry(
+                transactionGroupId,
+                line.Item.SkuId,
+                line.Item.SkuCode,
+                line.Item.SkuSnapshotName,
+                request.Location,
+                request.Location == LocationWarehouse ? line.WarehouseBefore : line.ShelfBefore,
+                line.Item.Variance,
+                request.Location == LocationWarehouse ? line.WarehouseAfter : line.ShelfAfter,
+                TransactionStocktakeAdjustment,
+                null,
+                null,
+                ReferenceStocktake,
+                request.Id,
+                request.RequestCode,
+                line.Batch?.Id ?? line.Allocations.FirstOrDefault()?.WarehouseBatchId,
+                line.Batch?.LotCode ?? line.Allocations.FirstOrDefault()?.LotCode,
+                actorId,
+                actor,
+                reviewReason ?? request.Reason ?? line.Item.ReasonCode,
+                line.Item.StockImportSlipCode ?? line.Item.StockExportSlipCode,
+                line.Item.ProductTypeSnapshot,
+                line.Item.InventoryUnitSnapshot))
+            .ToList();
+    }
+
+    private async Task PublishLowStockForSkuLocationAsync(Guid skuId, string location, CancellationToken ct)
+    {
+        var stock = await _skuStockRepo.GetBySkuIdAsync(skuId, ct);
+        if (stock == null)
+            return;
+
+        var quantity = location == LocationWarehouse
+            ? stock.WarehouseQuantityOnHand
+            : stock.QuantityOnHand;
+        var threshold = location == LocationWarehouse
+            ? stock.WarehouseLowStockThreshold
+            : stock.ShelfLowStockThreshold;
+
+        if (quantity <= threshold)
+            await _eventPublisher.PublishLowStockAsync(stock.SkuId, stock.SkuCode, quantity, threshold, ct);
+    }
+
     private static InventoryReturnRequestStatus? ParseInventoryReturnStatus(string? status)
     {
         if (!string.IsNullOrWhiteSpace(status) &&
@@ -2963,7 +3663,9 @@ public class InventoryLogic(
         Guid actorId,
         CreatorSnapshot? actor,
         string? reason,
-        string? note) => new()
+        string? note,
+        string? productTypeSnapshot = null,
+        string? inventoryUnitSnapshot = null) => new()
         {
             Id = Guid.NewGuid(),
             TransactionGroupId = transactionGroupId,
@@ -2971,6 +3673,8 @@ public class InventoryLogic(
             SkuId = skuId,
             SkuCode = skuCode,
             SkuNameSnapshot = skuName,
+            ProductTypeSnapshot = NormalizeSnapshotText(productTypeSnapshot),
+            InventoryUnitSnapshot = NormalizeSnapshotText(inventoryUnitSnapshot),
             Location = location,
             QuantityBefore = before,
             QuantityDelta = delta,
@@ -3978,6 +4682,60 @@ public class InventoryLogic(
         line.ProductionOrderOutputLineId,
         line.Note,
         line.CreatedAt);
+
+    private static StocktakeRequestResponse MapStocktakeRequest(StocktakeRequest request)
+    {
+        var items = request.Items
+            .OrderBy(i => i.SkuCode)
+            .Select(i => new StocktakeRequestItemResponse(
+                i.Id,
+                i.SkuId,
+                i.SkuCode,
+                i.SkuSnapshotName,
+                i.ProductTypeSnapshot,
+                i.InventoryUnitSnapshot,
+                i.SystemQuantitySnapshot,
+                i.ActualQuantity,
+                i.Variance,
+                i.ReasonCode,
+                i.Note,
+                i.WarehouseQtyBefore,
+                i.WarehouseQtyAfter,
+                i.ShelfQtyBefore,
+                i.ShelfQtyAfter,
+                i.StockExportSlipId,
+                i.StockExportSlipCode,
+                i.StockImportSlipId,
+                i.StockImportSlipCode,
+                i.WarehouseBatchId,
+                i.WarehouseBatchLotCode))
+            .ToList();
+
+        return new StocktakeRequestResponse(
+            request.Id,
+            request.RequestCode,
+            request.Location,
+            request.CountDate,
+            request.Reason,
+            request.Note,
+            request.Status.ToString(),
+            request.CreatedBy,
+            request.CreatedByName,
+            request.CreatedByRoleName,
+            request.CreatedAt,
+            request.UpdatedAt,
+            request.SubmittedBy,
+            request.SubmittedAt,
+            request.ReviewedBy,
+            request.ReviewedByName,
+            request.ReviewedByRoleName,
+            request.ReviewedAt,
+            request.ReviewNote,
+            items.Where(i => i.Variance > 0).Sum(i => i.Variance),
+            Math.Abs(items.Where(i => i.Variance < 0).Sum(i => i.Variance)),
+            items.Sum(i => Math.Abs(i.Variance)),
+            items);
+    }
 
     private static InventoryLedgerEntryResponse MapLedgerEntry(InventoryLedgerEntry entry) => new(
         entry.Id,

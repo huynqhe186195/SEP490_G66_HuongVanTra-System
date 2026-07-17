@@ -19,6 +19,7 @@ const TRANSACTION_OPTIONS = [
   { value: 'SUPPLIER_RECEIPT', label: 'Nhập NCC' },
   { value: 'SHELF_REPLENISHMENT_OUT', label: 'Xuất Kho → Kệ' },
   { value: 'SHELF_REPLENISHMENT_IN', label: 'Nhập Kệ từ Kho' },
+  { value: 'STOCKTAKE_ADJUSTMENT', label: 'Kiểm kê điều chỉnh' },
   { value: 'PRODUCTION_CONSUME', label: 'Sản xuất tiêu hao' },
   { value: 'PRODUCTION_RECEIPT', label: 'Nhập sau sản xuất' },
 ]
