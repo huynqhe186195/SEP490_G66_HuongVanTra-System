@@ -6,6 +6,7 @@ using ProductService.Application.UseCases;
 using ProductService.Infrastructure.Data;
 using ProductService.Infrastructure.Messaging;
 using ProductService.Infrastructure.Repositories;
+using ProductService.Infrastructure.Services;
 using ProductService.Infrastructure.UseCases;
 using ProductService.WebAPI.Middlewares;
 
@@ -32,6 +33,11 @@ builder.Services.AddScoped<IAttributeNameRepository, AttributeNameRepository>();
 builder.Services.AddScoped<IProductRepository, ProductRepository>();
 builder.Services.AddScoped<IPriceBookRepository, PriceBookRepository>();
 builder.Services.AddScoped<IProductEventPublisher, ProductEventPublisher>();
+builder.Services.AddHttpClient<IInventoryProductDeletionValidationClient, InventoryProductDeletionValidationClient>(client =>
+{
+    var baseUrl = builder.Configuration["InventoryService:BaseUrl"] ?? "http://inventory-service:8080";
+    client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
+});
 builder.Services.AddScoped<CategoryLogic>();
 builder.Services.AddScoped<BrandLogic>();
 builder.Services.AddScoped<AttributeNameLogic>();
@@ -39,6 +45,7 @@ builder.Services.AddScoped<ProductLogic>();
 builder.Services.AddScoped<ProductSkuLogic>();
 builder.Services.AddScoped<ProductApprovalLogic>();
 builder.Services.AddScoped<ProductCreationRequestLogic>();
+builder.Services.AddScoped<ProductDeletionRequestLogic>();
 builder.Services.AddScoped<PriceBookLogic>();
 builder.Services.AddScoped<CatalogSyncLogic>();
 

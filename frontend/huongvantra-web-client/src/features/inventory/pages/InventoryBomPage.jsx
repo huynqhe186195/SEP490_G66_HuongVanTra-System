@@ -2,10 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
-import { showError, showSuccess } from '../../../app/toast.js'
-import ProductBomConfigModal from '../../products/components/ProductBomConfigModal.jsx'
+import { showError } from '../../../app/toast.js'
 import { fetchProducts } from '../../products/services/productsApi.js'
-import { updateVariantBom } from '../../products/services/bomApi.js'
 import { formatProductPrice } from '../../products/utils/productDisplay.js'
 import InventoryNavTabs from '../components/InventoryNavTabs.jsx'
 
@@ -52,7 +50,6 @@ function InventoryBomPage() {
   const [searchInput, setSearchInput] = useState('')
   const [rows, setRows] = useState([])
   const [isLoading, setIsLoading] = useState(true)
-  const [activeVariant, setActiveVariant] = useState(null)
   const [handledOpenBomParam, setHandledOpenBomParam] = useState('')
 
   const loadRows = useCallback(async () => {
@@ -108,31 +105,7 @@ function InventoryBomPage() {
   }, [searchParams, rows, isLoading, handledOpenBomParam, setSearchParams])
 
   function openBomModal(row) {
-    setActiveVariant({
-      ...row,
-      sku: row.skuCode,
-      productName: row.productName,
-      attributeLabel: row.variantName || row.skuCode,
-      initialLines: row.bomLines,
-    })
-  }
-
-  async function handleBomConfirm(lines) {
-    if (!activeVariant) return
-    try {
-      const updatedLines = await updateVariantBom(activeVariant.variantId, lines)
-      setRows((current) =>
-        current.map((row) =>
-          String(row.variantId) === String(activeVariant.variantId)
-            ? { ...row, bomLines: updatedLines, materialCount: updatedLines.length }
-            : row,
-        ),
-      )
-      showSuccess(`Đã cập nhật định mức BOM cho ${activeVariant.skuCode}.`)
-    } catch (error) {
-      showError(error.message)
-      throw error
-    }
+    showError(`BOM của ${row.skuCode} chỉ được thay đổi qua workflow phê duyệt Product Creation Request.`)
   }
 
   return (
@@ -168,7 +141,7 @@ function InventoryBomPage() {
         <div className="mb-4">
           <h2 className="text-lg font-bold text-slate-800">Danh sách SKU Sản phẩm kệ & định mức BOM</h2>
           <p className="mt-1 text-sm text-slate-500">
-            Mỗi dòng là một SKU Sản phẩm kệ. Bấm <strong>Cấu hình BOM</strong> để thêm, sửa hoặc xóa nguyên liệu / bao bì.
+            Mỗi dòng là một SKU Sản phẩm kệ. BOM hiện chỉ được cập nhật qua workflow phê duyệt Product Creation Request.
           </p>
         </div>
 
@@ -231,7 +204,7 @@ function InventoryBomPage() {
                         </div>
                       ) : (
                         <span className="inline-flex rounded-full border border-dashed border-slate-200 px-2.5 py-1 text-slate-400">
-                          Chưa có BOM. Bấm Cấu hình BOM để thêm nguyên liệu / bao bì.
+                          Chưa có BOM. Tạo Product Creation Request để bổ sung nguyên liệu / bao bì.
                         </span>
                       )}
                     </td>
@@ -241,8 +214,8 @@ function InventoryBomPage() {
                         onClick={() => openBomModal(row)}
                         className="inline-flex items-center gap-1.5 rounded-lg border border-[#356647]/30 bg-[#356647]/5 px-3 py-1.5 text-xs font-bold text-[#356647] hover:bg-[#356647]/10"
                       >
-                        <span className="material-symbols-outlined text-[16px]">settings</span>
-                        Cấu hình BOM
+                        <span className="material-symbols-outlined text-[16px]">lock</span>
+                        Read-only
                       </button>
                     </td>
                   </tr>
@@ -252,14 +225,6 @@ function InventoryBomPage() {
           </div>
         )}
       </section>
-
-      <ProductBomConfigModal
-        isOpen={Boolean(activeVariant)}
-        variant={activeVariant}
-        initialLines={activeVariant?.initialLines ?? []}
-        onClose={() => setActiveVariant(null)}
-        onConfirm={handleBomConfirm}
-      />
     </PageShell>
   )
 }

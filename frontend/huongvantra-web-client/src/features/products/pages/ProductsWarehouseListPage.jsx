@@ -19,7 +19,7 @@ import {
   fetchSkuStocks,
 } from '../../inventory/services/inventoryStockApi.js'
 import { fetchPendingCatalogSync, syncCatalogToStore } from '../services/catalogSyncApi.js'
-import { deleteProduct, fetchProducts, restoreProduct } from '../services/productsApi.js'
+import { createProductDeletionRequest, fetchProducts, submitProductDeletionRequest } from '../services/productsApi.js'
 import ProductImage from '../components/ProductImage.jsx'
 import ProductSkusDetailModal from '../components/ProductSkusDetailModal.jsx'
 import ProductExpandedPanel from '../components/ProductExpandedPanel.jsx'
@@ -456,11 +456,17 @@ export default function ProductsWarehouseListPage() {
 
   async function handleHide(product) {
     if (!canHide || product.isDeleted) return
-    if (!window.confirm(`Ẩn sản phẩm "${product.name}"?`)) return
+    const reason = window.prompt(`Nhập lý do yêu cầu xóa sản phẩm "${product.name}":`)
+    if (!String(reason || '').trim()) return
     try {
       setTogglingId(product.id)
-      await deleteProduct(product.id)
-      showSuccess('Đã ẩn sản phẩm.')
+      const request = await createProductDeletionRequest({
+        title: `Yêu cầu xóa ${product.name}`,
+        reason,
+        items: [{ productId: product.id, reason }],
+      })
+      await submitProductDeletionRequest(request.id, reason)
+      showSuccess('Đã gửi yêu cầu xóa hàng hóa cho Admin duyệt.')
       await loadProducts()
     } catch (error) {
       showError(error.message)
@@ -471,17 +477,7 @@ export default function ProductsWarehouseListPage() {
 
   async function handleRestore(product) {
     if (!canHide || !product.isDeleted) return
-    if (!window.confirm(`Kích hoạt lại sản phẩm "${product.name}"?`)) return
-    try {
-      setTogglingId(product.id)
-      await restoreProduct(product.id)
-      showSuccess('Đã kích hoạt lại sản phẩm.')
-      await loadProducts()
-    } catch (error) {
-      showError(error.message)
-    } finally {
-      setTogglingId(null)
-    }
+    showError('Khôi phục Product đã bị khóa khỏi UI thường. Cần quy trình Admin khẩn cấp riêng.')
   }
 
   // ── Row expansion ─────────────────────────────────────────────────────────
@@ -635,11 +631,11 @@ export default function ProductsWarehouseListPage() {
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <Link
-                  to={`/products/${createdBanner.productId}/edit`}
+                  to={`/inventory/products?highlight=${encodeURIComponent(createdBanner.productId)}`}
                   className="inline-flex items-center gap-1.5 rounded-xl bg-[#538463] px-4 py-2 text-sm font-bold text-white hover:bg-[#457053]"
                 >
-                  <span className="material-symbols-outlined text-[18px]">edit</span>
-                  Xem / Sửa
+                  <span className="material-symbols-outlined text-[18px]">visibility</span>
+                  Xem
                 </Link>
                 <button
                   type="button"
@@ -756,13 +752,7 @@ export default function ProductsWarehouseListPage() {
 
                             {/* SKU code */}
                             <td className="px-3 py-3 font-mono text-xs font-bold text-[#356647]" onClick={() => toggleExpand(row.rowKey)}>
-                              {selectedVariant?.skuCode || (
-                                canCreate ? (
-                                  <Link to={`/products/${product.id}/edit`} className="text-[11px] font-semibold text-[#356647] hover:underline" onClick={(e) => e.stopPropagation()}>
-                                    Chưa có
-                                  </Link>
-                                ) : '—'
-                              )}
+                              {selectedVariant?.skuCode || '—'}
                             </td>
 
                             {/* Tên hàng + variant */}
@@ -831,14 +821,12 @@ export default function ProductsWarehouseListPage() {
                                 </span>
                               )}
                               {isFinishedProduct && selectedVariant && !selectedVariantHasBom ? (
-                                <Link
-                                  to={`/inventory/boms?variantId=${encodeURIComponent(selectedVariant.id)}&openBom=true`}
+                                <span
                                   title={MISSING_BOM_TITLE}
-                                  onClick={(event) => event.stopPropagation()}
-                                  className="mt-1 inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-800 hover:bg-amber-200 hover:text-amber-900"
+                                  className="mt-1 inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-800"
                                 >
-                                  Thiếu BOM · Tạo ngay
-                                </Link>
+                                  Thiếu BOM
+                                </span>
                               ) : null}
                             </td>
 
@@ -875,13 +863,14 @@ export default function ProductsWarehouseListPage() {
                                   </button>
                                 ) : null}
                                 {!product.isDeleted && canCreate ? (
-                                  <Link
-                                    to={`/products/${product.id}/edit`}
-                                    title="Sửa sản phẩm"
-                                    className="rounded-full p-1.5 text-[#717971] hover:bg-[#e4e3db] hover:text-[#356647]"
+                                  <button
+                                    type="button"
+                                    title="Master data chỉ sửa qua workflow phê duyệt"
+                                    className="rounded-full p-1.5 text-slate-400"
+                                    onClick={() => showError('Sửa Product/SKU/BOM trực tiếp đã bị khóa. Vui lòng tạo yêu cầu Product Creation mới nếu cần thay đổi master data.')}
                                   >
-                                    <span className="material-symbols-outlined text-[18px]">edit</span>
-                                  </Link>
+                                    <span className="material-symbols-outlined text-[18px]">lock</span>
+                                  </button>
                                 ) : null}
                                 {canHide && product.isDeleted ? (
                                   <button

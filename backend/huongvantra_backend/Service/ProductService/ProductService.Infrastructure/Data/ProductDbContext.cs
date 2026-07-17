@@ -20,6 +20,9 @@ public class ProductDbContext(DbContextOptions<ProductDbContext> options) : DbCo
     public DbSet<ProductCreationRequest> ProductCreationRequests => Set<ProductCreationRequest>();
     public DbSet<ProductCreationRequestItem> ProductCreationRequestItems => Set<ProductCreationRequestItem>();
     public DbSet<ProductCreationRequestRevision> ProductCreationRequestRevisions => Set<ProductCreationRequestRevision>();
+    public DbSet<ProductDeletionRequest> ProductDeletionRequests => Set<ProductDeletionRequest>();
+    public DbSet<ProductDeletionRequestItem> ProductDeletionRequestItems => Set<ProductDeletionRequestItem>();
+    public DbSet<ProductDeletionRequestRevision> ProductDeletionRequestRevisions => Set<ProductDeletionRequestRevision>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -37,5 +40,8 @@ public class ProductDbContext(DbContextOptions<ProductDbContext> options) : DbCo
         modelBuilder.ApplyConfiguration(new ProductCreationRequestConfiguration());
         modelBuilder.ApplyConfiguration(new ProductCreationRequestItemConfiguration());
         modelBuilder.ApplyConfiguration(new ProductCreationRequestRevisionConfiguration());
+        modelBuilder.ApplyConfiguration(new ProductDeletionRequestConfiguration());
+        modelBuilder.ApplyConfiguration(new ProductDeletionRequestItemConfiguration());
+        modelBuilder.ApplyConfiguration(new ProductDeletionRequestRevisionConfiguration());
     }
 }

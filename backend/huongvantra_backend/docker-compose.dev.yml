@@ -74,6 +74,7 @@ services:
       Jwt__Secret: ${JWT_SECRET:-your-super-secret-key-at-least-32-chars!!}
       Jwt__Issuer: HuongVanTra
       Jwt__Audience: HuongVanTra
+      InventoryService__BaseUrl: http://inventory-service:8080
     ports:
       - "5003:8080"
     networks:

@@ -60,6 +60,7 @@ services:
       Jwt__Secret: ${JWT_SECRET:-your-super-secret-key-at-least-32-chars!!}
       Jwt__Issuer: HuongVanTra
       Jwt__Audience: HuongVanTra
+      InventoryService__BaseUrl: http://inventory-service:8080
       RabbitMQ__Host: rabbitmq
       RabbitMQ__Username: ${RABBITMQ_USER:-hvt}
       RabbitMQ__Password: ${RABBITMQ_PASS:-hvtrabbit123}

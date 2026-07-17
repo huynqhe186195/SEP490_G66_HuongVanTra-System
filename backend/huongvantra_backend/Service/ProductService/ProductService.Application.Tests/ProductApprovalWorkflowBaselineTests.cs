@@ -44,4 +44,25 @@ public class ProductApprovalWorkflowBaselineTests
         Assert.Equal(3, (int)ProductCreationRequestStatus.Completed);
         Assert.Equal(4, (int)ProductCreationRequestStatus.Cancelled);
     }
+
+    [Fact]
+    public void DraftProductDeletionRequestBuilder_CreatesWarehouseOwnedMultiProductDraft()
+    {
+        var request = ProductWorkflowTestBuilders.DraftProductDeletionRequest();
+
+        Assert.Equal(ProductDeletionRequestStatus.Draft, request.Status);
+        Assert.Equal(ProductWorkflowTestBuilders.WarehouseActorId, request.CreatedBy);
+        Assert.Equal(2, request.Items.Count);
+        Assert.All(request.Items, item => Assert.Equal("not_validated", item.ValidationStatus));
+    }
+
+    [Fact]
+    public void ProductDeletionRequestStatus_UsesStableWorkflowValues()
+    {
+        Assert.Equal(0, (int)ProductDeletionRequestStatus.Draft);
+        Assert.Equal(1, (int)ProductDeletionRequestStatus.PendingApproval);
+        Assert.Equal(2, (int)ProductDeletionRequestStatus.Rejected);
+        Assert.Equal(3, (int)ProductDeletionRequestStatus.Completed);
+        Assert.Equal(4, (int)ProductDeletionRequestStatus.Cancelled);
+    }
 }

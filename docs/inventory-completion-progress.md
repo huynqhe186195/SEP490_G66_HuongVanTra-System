@@ -299,6 +299,96 @@ This document tracks the current-scope Inventory / Warehouse / Product Master co
   - `feat(product): implement warehouse product creation approval workflow`
 - No push is allowed.
 
+## Batch 3 - Product Master Data Locking and Deletion Approval
+
+### Files Changed
+
+- ProductService:
+  - Added `ProductDeletionRequest`, `ProductDeletionRequestItem`, `ProductDeletionRequestRevision`, and `ProductDeletionRequestStatus`.
+  - Added EF configurations, `ProductDbContext` DbSets, migration, and model snapshot entries.
+  - Added Product Deletion Request request/response DTOs, `ProductDeletionRequestLogic`, and `ProductDeletionRequestsController`.
+  - Registered `ProductDeletionRequestLogic` and `InventoryProductDeletionValidationClient` in `Program.cs`.
+  - Disabled direct Product create/update/delete/restore, direct SKU mutation, and direct BOM update routes with HTTP 410.
+  - Kept internal approved-workflow creation paths intact.
+  - Updated repository soft-delete behavior to set `Products.IsDeleted=true`, `Products.IsActive=false`, and deactivate active variants.
+- InventoryService:
+  - Added `/api/v1/inventory/product-deletion-validation` for ProductService approval-time validation.
+  - Validation reports warehouse stock, shelf stock, active production orders, pending stock deduct queue, and pending stock adjustment requests per SKU.
+- Gateway:
+  - Added `/api/v1/product-deletion-requests` routes.
+  - Added `/api/v1/inventory/product-deletion-validation` route.
+- Frontend:
+  - Added `/inventory/product-deletion-requests` management page for Warehouse/Admin.
+  - Warehouse can create multi-product deletion requests, save draft, edit Draft/Rejected requests, and submit for Admin review.
+  - Admin can review request detail and approve/reject/cancel PendingApproval requests.
+  - Product list delete action now creates/submits a Product Deletion Request instead of direct delete.
+  - Product detail/edit route no longer opens the old edit form.
+  - BOM page is read-only; direct BOM editing is blocked in UI and points users to Product Creation Request workflow.
+  - Added navigation/auth module access for `product_deletion_requests`.
+
+### Migrations Added
+
+- ProductService: `20260717120000_AddProductDeletionRequests`
+  - Adds `ProductDeletionRequests`.
+  - Adds `ProductDeletionRequestItems`.
+  - Adds `ProductDeletionRequestRevisions`.
+
+### Tests Added/Updated
+
+- Product workflow baseline tests now cover `ProductDeletionRequest` builder and stable status enum values.
+- Product workflow test builders now include a multi-product Product Deletion Request draft.
+
+### Gate Results
+
+- `dotnet build Service\ProductService\ProductService.WebAPI\ProductService.WebAPI.csproj --no-restore`: passed, 0 warnings, 0 errors.
+- `dotnet build Service\InventoryService\InventoryService.WebAPI\InventoryService.WebAPI.csproj --no-restore`: passed, 0 warnings, 0 errors.
+- `dotnet build huongvantra_backend.sln --no-restore`: passed with 1 pre-existing warning outside Batch 3.
+  - `OrderService.Application/UseCases/OrderLogic.cs`: unused `ex`.
+- `dotnet test Service\ProductService\ProductService.Application.Tests\ProductService.Application.Tests.csproj --no-restore`: passed, 27 tests.
+- Host `dotnet test huongvantra_backend.sln --no-build`: ProductService and InventoryService tests passed, but OrderService tests were blocked by Windows Application Control loading `OrderService.Domain.dll` with `0x800711C7`.
+- Container backend test gate:
+  - `docker run --rm -v "${PWD}:/src" -w /src mcr.microsoft.com/dotnet/sdk:8.0-alpine dotnet test huongvantra_backend.sln --no-restore`: passed.
+- Scoped frontend lint on Batch 3 changed frontend files: passed.
+- `npm.cmd run lint`: failed on remaining pre-existing cross-application lint debt.
+  - Current count after Batch 3: 130 errors, 14 warnings.
+  - This does not increase the Batch 2 count of 130 errors, 14 warnings and remains below Batch 0 baseline of 149 errors, 15 warnings.
+- `npm.cmd run build`: passed.
+- `git diff --check`: passed.
+- Docker Compose rebuild/restart:
+  - Rebuilt/restarted `product-service`, `inventory-service`, `gateway`, and `web-client`.
+  - Compose also recreated dependent services, but no DB reset or volume deletion was performed.
+- Docker health:
+  - `product-service`: Up, healthy.
+  - `inventory-service`: Up, healthy.
+  - `order-service`: Up, healthy.
+  - `customer-service`: Up, healthy.
+  - `document-service`: Up, healthy.
+  - `user-service`: Up, healthy.
+  - `mysql`: Up, healthy.
+  - `rabbitmq`: Up, healthy.
+  - `gateway`: Up.
+  - `web-client`: Up.
+- Relevant logs:
+  - Product migration `20260717120000_AddProductDeletionRequests` applied successfully.
+  - InventoryService started with no new migration required.
+- DB verification:
+  - `__EFMigrationsHistory` contains `20260717120000_AddProductDeletionRequests`.
+  - `ProductDeletionRequests`, `ProductDeletionRequestItems`, and `ProductDeletionRequestRevisions` exist.
+- Gateway route probes:
+  - `curl.exe -i http://localhost:5000/api/v1/product-deletion-requests`: returned HTTP 401 without token, confirming the route exists and requires auth.
+  - `curl.exe -i -X POST http://localhost:5000/api/v1/inventory/product-deletion-validation ...`: returned HTTP 401 without token, confirming the route exists and requires auth.
+- `powershell -ExecutionPolicy Bypass -File Scripts\test-inventory-completion.ps1`: passed.
+  - ProductService `/health`: HTTP 200.
+  - OrderService `/health`: HTTP 200.
+  - InventoryService `/health`: HTTP 200.
+  - Gateway inventory route probe `/api/v1/inventory/sku-stocks`: HTTP 401 without token.
+
+### Checkpoint Commit
+
+- Batch 3 checkpoint commit will be created with message:
+  - `feat(product): enforce master data locking and deletion approval`
+- No push is allowed.
+
 ## Remaining Risks
 
 - The requested full scope is significantly larger than the current codebase.

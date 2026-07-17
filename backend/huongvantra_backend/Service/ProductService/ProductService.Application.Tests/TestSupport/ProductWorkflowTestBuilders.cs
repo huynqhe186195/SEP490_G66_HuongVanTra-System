@@ -65,6 +65,41 @@ public static class ProductWorkflowTestBuilders
         return request;
     }
 
+    public static ProductDeletionRequest DraftProductDeletionRequest(int itemCount = 2)
+    {
+        var request = new ProductDeletionRequest
+        {
+            Id = Guid.Parse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"),
+            RequestCode = "PDR-BASELINE-0001",
+            Title = "Baseline deletion request",
+            Status = ProductDeletionRequestStatus.Draft,
+            CreatedBy = WarehouseActorId,
+            CreatedByName = "Warehouse Tester",
+            CreatedByRoleName = "Warehouse",
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+        };
+
+        for (var i = 1; i <= itemCount; i++)
+        {
+            request.Items.Add(new ProductDeletionRequestItem
+            {
+                Id = Guid.Parse($"ffffffff-ffff-ffff-ffff-fffffffff{i:000}"),
+                RequestId = request.Id,
+                ProductId = Guid.Parse($"99999999-9999-9999-9999-9999999999{i:00}"),
+                ProductSnapshotJson = "{}",
+                ProductName = $"Baseline deleted product {i}",
+                ProductType = ProductType.THANH_PHAM.ToString(),
+                VariantCount = 1,
+                ValidationStatus = "not_validated",
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+            });
+        }
+
+        return request;
+    }
+
     public static Product ShelfProduct(Guid? id = null, string name = "Baseline finished product")
     {
         return new Product

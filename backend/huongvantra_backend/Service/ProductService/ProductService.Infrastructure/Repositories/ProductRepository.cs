@@ -227,9 +227,15 @@ public class ProductRepository(ProductDbContext _db) : IProductRepository
 
     public async Task DeleteAsync(Product product)
     {
+        var now = DateTime.UtcNow;
         product.IsDeleted = true;
         product.IsActive = false;
-        product.UpdatedAt = DateTime.UtcNow;
+        product.UpdatedAt = now;
+        foreach (var variant in product.Variants.Where(variant => !variant.IsDeleted))
+        {
+            variant.IsActive = false;
+            variant.UpdatedAt = now;
+        }
         await _db.SaveChangesAsync();
     }
 

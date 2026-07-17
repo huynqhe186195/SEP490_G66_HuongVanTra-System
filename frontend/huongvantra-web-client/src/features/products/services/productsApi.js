@@ -373,6 +373,69 @@ function mapProductCreationRequest(item) {
   }
 }
 
+function mapProductDeletionRequestItem(item) {
+  if (!item || typeof item !== 'object') return null
+  return {
+    id: item.id ?? item.Id,
+    productId: item.productId ?? item.ProductId,
+    productName: item.productName ?? item.ProductName ?? '',
+    productType: item.productType ?? item.ProductType ?? '',
+    categoryName: item.categoryName ?? item.CategoryName ?? '',
+    variantCount: Number(item.variantCount ?? item.VariantCount ?? 0),
+    reason: item.reason ?? item.Reason ?? '',
+    validationStatus: item.validationStatus ?? item.ValidationStatus ?? '',
+    validationMessage: item.validationMessage ?? item.ValidationMessage ?? '',
+  }
+}
+
+function mapProductDeletionRevision(item) {
+  if (!item || typeof item !== 'object') return null
+  const rawItems = item.submittedItems ?? item.SubmittedItems ?? []
+  return {
+    id: item.id ?? item.Id,
+    revisionNumber: Number(item.revisionNumber ?? item.RevisionNumber ?? 0),
+    submittedItems: Array.isArray(rawItems) ? rawItems.map(mapProductDeletionRequestItem).filter(Boolean) : [],
+    submittedByName: item.submittedByName ?? item.SubmittedByName ?? '',
+    submittedByRoleName: item.submittedByRoleName ?? item.SubmittedByRoleName ?? '',
+    submittedAt: item.submittedAt ?? item.SubmittedAt ?? null,
+    decision: item.decision ?? item.Decision ?? '',
+    decisionReason: item.decisionReason ?? item.DecisionReason ?? '',
+    decidedByName: item.decidedByName ?? item.DecidedByName ?? '',
+    decidedByRoleName: item.decidedByRoleName ?? item.DecidedByRoleName ?? '',
+    decidedAt: item.decidedAt ?? item.DecidedAt ?? null,
+  }
+}
+
+function mapProductDeletionRequest(item) {
+  if (!item || typeof item !== 'object') return null
+  const rawItems = item.items ?? item.Items ?? []
+  const rawRevisions = item.revisions ?? item.Revisions ?? []
+  const rawDeletedIds = item.deletedProductIds ?? item.DeletedProductIds ?? []
+  return {
+    id: item.id ?? item.Id,
+    requestCode: item.requestCode ?? item.RequestCode ?? '',
+    title: item.title ?? item.Title ?? '',
+    status: item.status ?? item.Status ?? '',
+    revisionNumber: Number(item.revisionNumber ?? item.RevisionNumber ?? 0),
+    createdByName: item.createdByName ?? item.CreatedByName ?? '',
+    createdByRoleName: item.createdByRoleName ?? item.CreatedByRoleName ?? '',
+    createdAt: item.createdAt ?? item.CreatedAt ?? null,
+    updatedAt: item.updatedAt ?? item.UpdatedAt ?? null,
+    submittedAt: item.submittedAt ?? item.SubmittedAt ?? null,
+    reviewedByName: item.reviewedByName ?? item.ReviewedByName ?? '',
+    reviewedByRoleName: item.reviewedByRoleName ?? item.ReviewedByRoleName ?? '',
+    reviewedAt: item.reviewedAt ?? item.ReviewedAt ?? null,
+    rejectReason: item.rejectReason ?? item.RejectReason ?? '',
+    cancelReason: item.cancelReason ?? item.CancelReason ?? '',
+    reason: item.reason ?? item.Reason ?? '',
+    adminNote: item.adminNote ?? item.AdminNote ?? '',
+    completedAt: item.completedAt ?? item.CompletedAt ?? null,
+    deletedProductIds: Array.isArray(rawDeletedIds) ? rawDeletedIds : [],
+    items: Array.isArray(rawItems) ? rawItems.map(mapProductDeletionRequestItem).filter(Boolean) : [],
+    revisions: Array.isArray(rawRevisions) ? rawRevisions.map(mapProductDeletionRevision).filter(Boolean) : [],
+  }
+}
+
 function buildProductCreationItems(items = []) {
   return items.map((item, index) => ({
     clientKey: item.clientKey || `item-${index + 1}`,
@@ -449,6 +512,83 @@ export async function cancelProductCreationRequest(id, reason, adminNote = '') {
     body: JSON.stringify({ reason: String(reason || '').trim(), adminNote: trimOrNull(adminNote) }),
   })
   return mapProductCreationRequest(data)
+}
+
+export async function fetchProductDeletionRequests(params = {}) {
+  const search = new URLSearchParams()
+  if (params.status) search.set('status', params.status)
+  if (params.search) search.set('search', params.search)
+  if (params.mineOnly) search.set('mineOnly', 'true')
+  search.set('page', String(params.page ?? 1))
+  search.set('pageSize', String(Math.min(100, Math.max(1, params.pageSize ?? 20))))
+  const data = await apiRequestAuth(`/api/v1/product-deletion-requests?${search.toString()}`, { method: 'GET' })
+  const paged = toPagedResult(data)
+  return {
+    ...paged,
+    items: paged.items.map(mapProductDeletionRequest).filter(Boolean),
+  }
+}
+
+export async function createProductDeletionRequest(payload) {
+  const data = await apiRequestAuth('/api/v1/product-deletion-requests', {
+    method: 'POST',
+    body: JSON.stringify({
+      title: trimOrNull(payload.title),
+      reason: trimOrNull(payload.reason),
+      items: toArray(payload.items).map((item) => ({
+        productId: item.productId,
+        reason: trimOrNull(item.reason),
+      })),
+    }),
+  })
+  return mapProductDeletionRequest(data)
+}
+
+export async function updateProductDeletionRequest(id, payload) {
+  const data = await apiRequestAuth(`/api/v1/product-deletion-requests/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      title: trimOrNull(payload.title),
+      reason: trimOrNull(payload.reason),
+      items: toArray(payload.items).map((item) => ({
+        productId: item.productId,
+        reason: trimOrNull(item.reason),
+      })),
+    }),
+  })
+  return mapProductDeletionRequest(data)
+}
+
+export async function submitProductDeletionRequest(id, reason = '') {
+  const data = await apiRequestAuth(`/api/v1/product-deletion-requests/${id}/submit`, {
+    method: 'POST',
+    body: JSON.stringify({ reason: trimOrNull(reason) }),
+  })
+  return mapProductDeletionRequest(data)
+}
+
+export async function approveProductDeletionRequest(id, adminNote = '') {
+  const data = await apiRequestAuth(`/api/v1/product-deletion-requests/${id}/approve`, {
+    method: 'POST',
+    body: JSON.stringify({ adminNote: trimOrNull(adminNote) }),
+  })
+  return mapProductDeletionRequest(data)
+}
+
+export async function rejectProductDeletionRequest(id, reason, adminNote = '') {
+  const data = await apiRequestAuth(`/api/v1/product-deletion-requests/${id}/reject`, {
+    method: 'POST',
+    body: JSON.stringify({ reason: String(reason || '').trim(), adminNote: trimOrNull(adminNote) }),
+  })
+  return mapProductDeletionRequest(data)
+}
+
+export async function cancelProductDeletionRequest(id, reason, adminNote = '') {
+  const data = await apiRequestAuth(`/api/v1/product-deletion-requests/${id}/cancel`, {
+    method: 'POST',
+    body: JSON.stringify({ reason: String(reason || '').trim(), adminNote: trimOrNull(adminNote) }),
+  })
+  return mapProductDeletionRequest(data)
 }
 
 export async function fetchProductApprovals(params = {}) {
