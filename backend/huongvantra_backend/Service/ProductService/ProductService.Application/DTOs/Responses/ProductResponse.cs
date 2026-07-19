@@ -22,4 +22,12 @@ public record ProductResponse(
     List<ProductSkuResponse> Skus,
     List<ProductImageResponse> Images,
     List<ProductUnitResponse> Units,
-    List<ProductVariantResponse> Variants);
+    List<ProductVariantResponse> Variants,
+    List<ProductAttributeValueResponse> Attributes);
+
+public record ProductAttributeValueResponse(
+    Guid Id,
+    Guid ProductId,
+    int? AttributeNameId,
+    string AttributeName,
+    string Value);

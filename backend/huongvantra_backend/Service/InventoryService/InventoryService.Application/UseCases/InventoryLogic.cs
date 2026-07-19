@@ -1273,18 +1273,36 @@ public class InventoryLogic(
             foreach (var bomLine in finishedVariant.BomLines)
             {
                 var required = CeilRequiredQuantity(bomLine.Quantity * decision.PendingBomQuantity);
-                var materialProduct = catalog.FindProduct(bomLine.MaterialId);
+                CatalogProduct? materialProduct;
+                List<CatalogVariant> candidateVariants;
+                if (bomLine.ComponentVariantId.HasValue)
+                {
+                    materialProduct = catalog.FindProductByVariant(bomLine.ComponentVariantId.Value);
+                    var componentVariant = materialProduct?.Variants
+                        .FirstOrDefault(v => v.Id == bomLine.ComponentVariantId.Value && v.IsActive);
+                    if (materialProduct == null || componentVariant == null)
+                    {
+                        throw new InventoryValidationException(
+                            $"Khong tim thay component SKU BOM: {bomLine.ComponentSkuCode ?? bomLine.ComponentVariantId.Value.ToString()}.");
+                    }
+
+                    candidateVariants = [componentVariant];
+                }
+                else
+                {
+                materialProduct = catalog.FindProduct(bomLine.MaterialId);
                 if (materialProduct == null)
                 {
                     throw new InventoryValidationException(
                         $"Không tìm thấy nguyên liệu BOM: {bomLine.MaterialName}.");
                 }
 
-                var candidateVariants = materialProduct.Variants
+                candidateVariants = materialProduct.Variants
                     .Where(v => v.IsActive)
                     .OrderBy(v => v.SkuCode)
                     .ThenBy(v => v.VariantName)
                     .ToList();
+                }
 
                 if (candidateVariants.Count == 0)
                 {
@@ -1299,8 +1317,8 @@ public class InventoryLogic(
                 if (effectiveAvailable < required)
                 {
                     shortages.Add(new StockShortage(
-                        bomLine.MaterialId,
-                        string.IsNullOrWhiteSpace(bomLine.MaterialName) ? materialProduct.Name : bomLine.MaterialName,
+                        materialProduct.Id,
+                        ResolveBomMaterialDisplayName(bomLine, materialProduct),
                         required,
                         effectiveAvailable,
                         required - effectiveAvailable));
@@ -1317,10 +1335,10 @@ public class InventoryLogic(
                     if (take <= 0) continue;
 
                     decision.MaterialRequirements.Add(new MaterialRequirementSnapshot(
-                        bomLine.MaterialId,
+                        materialProduct.Id,
                         variant.Id,
                         variant.SkuCode,
-                        string.IsNullOrWhiteSpace(bomLine.MaterialName) ? materialProduct.Name : bomLine.MaterialName,
+                        ResolveBomMaterialDisplayName(bomLine, materialProduct),
                         bomLine.MaterialUnitName ?? materialProduct.BaseUnit,
                         take,
                         availableBySku.GetValueOrDefault(variant.Id),
@@ -4705,6 +4723,13 @@ public class InventoryLogic(
 
         return $"Không đủ tồn để hoàn tất đơn. {lineText}. Nguyên liệu không đủ để đóng gói phần còn thiếu: {shortageText}. Vui lòng giảm số lượng hoặc bổ sung tồn/nguyên liệu.";
     }
+
+    private static string ResolveBomMaterialDisplayName(CatalogBomLine bomLine, CatalogProduct materialProduct) =>
+        !string.IsNullOrWhiteSpace(bomLine.ComponentVariantName)
+            ? bomLine.ComponentVariantName
+            : !string.IsNullOrWhiteSpace(bomLine.MaterialName)
+                ? bomLine.MaterialName
+                : materialProduct.Name;
 
     private sealed class PosStockDecision
     {

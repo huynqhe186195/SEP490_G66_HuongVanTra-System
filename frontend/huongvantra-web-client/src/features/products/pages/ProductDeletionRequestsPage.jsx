@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { useAuthSession } from '../../auth/hooks/useAuthSession.js'
+import { canCreateProductDeletionRequest, isSystemAdmin } from '../../auth/utils/permissions.js'
 import { formatDateTimeVN } from '../../../utils/vietnamDateTime.js'
 import {
   approveProductDeletionRequest,
@@ -28,20 +29,6 @@ const STATUS_LABELS = Object.fromEntries(STATUS_OPTIONS.map((option) => [option.
 
 function normalizeText(value) {
   return String(value ?? '').trim()
-}
-
-function normalizeRole(role) {
-  return normalizeText(role).toLowerCase().replace(/\s+/g, '')
-}
-
-function isAdmin(session) {
-  return (session?.roles ?? []).some((role) => normalizeRole(role) === 'admin')
-}
-
-function isWarehouse(session) {
-  return (session?.roles ?? []).some((role) =>
-    ['warehouse', 'inventorymanager', 'warehousemanager', 'thukho'].includes(normalizeRole(role)),
-  )
 }
 
 function statusLabel(status) {
@@ -77,10 +64,15 @@ function itemStatusClassName(status) {
   return 'text-slate-500'
 }
 
+function normalizeId(value) {
+  return normalizeText(value).toLowerCase()
+}
+
 export default function ProductDeletionRequestsPage() {
-  const { session } = useAuthSession()
-  const canAdmin = isAdmin(session)
-  const canWarehouse = isWarehouse(session)
+  const session = useAuthSession()
+  const canAdmin = isSystemAdmin(session)
+  const canWarehouse = canCreateProductDeletionRequest(session)
+  const formRef = useRef(null)
   const [products, setProducts] = useState([])
   const [requests, setRequests] = useState([])
   const [selectedRequest, setSelectedRequest] = useState(null)
@@ -92,8 +84,10 @@ export default function ProductDeletionRequestsPage() {
   const [selectedProductIds, setSelectedProductIds] = useState([])
   const [itemReasons, setItemReasons] = useState({})
   const [activeRequestId, setActiveRequestId] = useState('')
+  const [isFormOpen, setIsFormOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+  const [productLoadError, setProductLoadError] = useState('')
 
   const loadRequests = useCallback(async () => {
     const result = await fetchProductDeletionRequests({
@@ -107,11 +101,15 @@ export default function ProductDeletionRequestsPage() {
 
   const loadInitialData = useCallback(async () => {
     setIsLoading(true)
+    setProductLoadError('')
     try {
-      const [productResult] = await Promise.all([
-        fetchProducts({ isActive: true, page: 1, pageSize: 100 }),
-        loadRequests(),
-      ])
+      const productPromise = fetchProducts({ isActive: true, page: 1, pageSize: 100 })
+        .catch((error) => {
+          setProductLoadError(error.message)
+          showError(`Không thể tải danh sách Product: ${error.message}`)
+          return { items: [] }
+        })
+      const [productResult] = await Promise.all([productPromise, loadRequests()])
       setProducts(productResult.items ?? [])
     } catch (error) {
       showError(error.message)
@@ -141,6 +139,29 @@ export default function ProductDeletionRequestsPage() {
     () => selectedProductIds.map((id) => productById.get(String(id))).filter(Boolean),
     [productById, selectedProductIds],
   )
+  const hasDeletionReason = useMemo(
+    () =>
+      Boolean(normalizeText(reason)) ||
+      selectedProductIds.some((productId) => Boolean(normalizeText(itemReasons[String(productId)]))),
+    [itemReasons, reason, selectedProductIds],
+  )
+  const isDeletionFormReady = Boolean(normalizeText(title)) && selectedProductIds.length > 0 && hasDeletionReason
+
+  function isOwnRequest(request) {
+    const actorId = normalizeId(session?.userId ?? session?.id)
+    const createdBy = normalizeId(request?.createdBy)
+    return Boolean(actorId && createdBy && actorId === createdBy)
+  }
+
+  function canEditRequest(request) {
+    return canWarehouse && ['Draft', 'Rejected'].includes(request?.status) && isOwnRequest(request)
+  }
+
+  function scrollFormIntoView() {
+    window.setTimeout(() => {
+      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 0)
+  }
 
   function resetForm() {
     setActiveRequestId('')
@@ -148,6 +169,18 @@ export default function ProductDeletionRequestsPage() {
     setReason('')
     setSelectedProductIds([])
     setItemReasons({})
+  }
+
+  function openNewRequestForm() {
+    resetForm()
+    setIsFormOpen(true)
+    setSelectedRequest(null)
+    scrollFormIntoView()
+  }
+
+  function closeForm() {
+    resetForm()
+    setIsFormOpen(false)
   }
 
   function toggleProduct(productId) {
@@ -165,8 +198,25 @@ export default function ProductDeletionRequestsPage() {
     return { title, reason, items }
   }
 
+  function validateDeletionForm() {
+    if (!normalizeText(title)) {
+      showError('Vui lòng nhập tiêu đề yêu cầu.')
+      return false
+    }
+    if (selectedProductIds.length === 0) {
+      showError('Vui lòng chọn ít nhất một Product.')
+      return false
+    }
+    if (!hasDeletionReason) {
+      showError('Vui lòng nhập lý do chung hoặc lý do riêng cho Product.')
+      return false
+    }
+    return true
+  }
+
   async function saveDraft() {
     if (!canWarehouse) return
+    if (!validateDeletionForm()) return
     setIsSaving(true)
     try {
       const payload = buildPayload()
@@ -185,6 +235,7 @@ export default function ProductDeletionRequestsPage() {
 
   async function submitRequest() {
     if (!canWarehouse) return
+    if (!validateDeletionForm()) return
     setIsSaving(true)
     try {
       const payload = buildPayload()
@@ -193,7 +244,7 @@ export default function ProductDeletionRequestsPage() {
         : await createProductDeletionRequest(payload)
       await submitProductDeletionRequest(saved.id, reason)
       showSuccess('Đã gửi yêu cầu xóa hàng hóa cho Admin duyệt.')
-      resetForm()
+      closeForm()
       await loadRequests()
     } catch (error) {
       showError(error.message)
@@ -203,6 +254,7 @@ export default function ProductDeletionRequestsPage() {
   }
 
   function editRequest(request) {
+    if (!canEditRequest(request)) return
     setActiveRequestId(request.id)
     setTitle(request.title || '')
     setReason(request.reason || '')
@@ -210,7 +262,8 @@ export default function ProductDeletionRequestsPage() {
     setItemReasons(
       Object.fromEntries((request.items ?? []).map((item) => [String(item.productId), item.reason || ''])),
     )
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+    setIsFormOpen(true)
+    scrollFormIntoView()
   }
 
   async function handleAdminAction(request, action) {
@@ -246,6 +299,16 @@ export default function ProductDeletionRequestsPage() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            {canWarehouse ? (
+              <button
+                type="button"
+                onClick={openNewRequestForm}
+                className="inline-flex items-center gap-2 rounded-xl bg-[#538463] px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-[#457053]"
+              >
+                <span className="material-symbols-outlined text-[18px]">add</span>
+                Tạo yêu cầu xóa
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={loadInitialData}
@@ -257,18 +320,23 @@ export default function ProductDeletionRequestsPage() {
           </div>
         </div>
 
-        {canWarehouse ? (
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        {canWarehouse && isFormOpen ? (
+          <section ref={formRef} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div>
                 <h2 className="text-lg font-bold text-slate-900">{activeRequestId ? 'Sửa yêu cầu xóa' : 'Tạo yêu cầu xóa'}</h2>
                 <p className="mt-1 text-sm text-slate-500">Chọn một hoặc nhiều Product. Hệ thống sẽ chặn nếu còn tồn kho hoặc còn ràng buộc nghiệp vụ.</p>
               </div>
-              {activeRequestId ? (
-                <button type="button" onClick={resetForm} className="text-sm font-bold text-slate-500 hover:text-slate-800">
-                  Tạo yêu cầu mới
+              <div className="flex flex-wrap gap-2">
+                {activeRequestId ? (
+                  <button type="button" onClick={openNewRequestForm} className="text-sm font-bold text-slate-500 hover:text-slate-800">
+                    Tạo yêu cầu mới
+                  </button>
+                ) : null}
+                <button type="button" onClick={closeForm} className="text-sm font-bold text-slate-500 hover:text-slate-800">
+                  {activeRequestId ? 'Hủy thao tác' : 'Đóng'}
                 </button>
-              ) : null}
+              </div>
             </div>
 
             <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_1.2fr]">
@@ -297,9 +365,16 @@ export default function ProductDeletionRequestsPage() {
                   className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#538463]"
                   placeholder="Tìm Product/SKU để chọn..."
                 />
+                {productLoadError ? (
+                  <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                    Không thể tải danh sách Product: {productLoadError}
+                  </div>
+                ) : null}
                 <div className="max-h-72 overflow-auto rounded-xl border border-slate-200">
                   {filteredProducts.length === 0 ? (
-                    <p className="p-4 text-sm text-slate-500">Không có Product phù hợp.</p>
+                    <p className="p-4 text-sm text-slate-500">
+                      {products.length === 0 ? 'Không có Product đang hoạt động để chọn.' : 'Không có Product phù hợp.'}
+                    </p>
                   ) : (
                     filteredProducts.map((product) => {
                       const checked = selectedProductIds.includes(String(product.id))
@@ -362,7 +437,7 @@ export default function ProductDeletionRequestsPage() {
               <button
                 type="button"
                 onClick={saveDraft}
-                disabled={isSaving}
+                disabled={isSaving || !isDeletionFormReady}
                 className="rounded-xl border border-[#538463]/30 px-4 py-2 text-sm font-bold text-[#356647] hover:bg-[#f3f7f4] disabled:opacity-60"
               >
                 Lưu draft
@@ -370,7 +445,7 @@ export default function ProductDeletionRequestsPage() {
               <button
                 type="button"
                 onClick={submitRequest}
-                disabled={isSaving}
+                disabled={isSaving || !isDeletionFormReady}
                 className="rounded-xl bg-[#538463] px-4 py-2 text-sm font-bold text-white hover:bg-[#457053] disabled:opacity-60"
               >
                 {isSaving ? 'Đang xử lý...' : 'Gửi Admin duyệt'}
@@ -458,7 +533,7 @@ export default function ProductDeletionRequestsPage() {
                           >
                             Chi tiết
                           </button>
-                          {canWarehouse && ['Draft', 'Rejected'].includes(request.status) ? (
+                          {canEditRequest(request) ? (
                             <button
                               type="button"
                               onClick={() => editRequest(request)}

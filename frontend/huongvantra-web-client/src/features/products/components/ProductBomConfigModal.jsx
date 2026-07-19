@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { showError } from '../../../app/toast.js'
 import { searchMaterials } from '../services/bomApi.js'
-import { getBomQuantityValidationMessage, isCountBasedUnit } from '../utils/bomUnitRules.js'
+import { getBomQuantityValidationMessage } from '../utils/bomUnitRules.js'
 import { getInventoryUnitShortLabel } from '../utils/productTypes.js'
 
 function useDebounce(value, delay = 300) {
@@ -28,8 +28,25 @@ function getMaterialUnit(material) {
   )
 }
 
+function getComponentSkuOptions(products) {
+  return products.flatMap((product) => {
+    const variants = product.variants?.length ? product.variants : product.skus ?? []
+    return variants.map((variant) => ({
+      id: variant.id,
+      material_id: product.id,
+      materialName: product.name,
+      materialUnitName: getMaterialUnit(product),
+      componentVariantId: variant.id,
+      componentSkuCode: variant.skuCode,
+      componentVariantName: variant.variantName || variant.packagingType || variant.unitName || product.name,
+      unitName: variant.unitName || '',
+    }))
+  })
+}
+
 function normalizeInitialLine(line) {
   const materialId = line.material_id ?? line.materialId
+  const componentVariantId = line.componentVariantId ?? line.ComponentVariantId ?? null
   const materialUnitName =
     line.materialUnitName ??
     line.MaterialUnitName ??
@@ -45,6 +62,10 @@ function normalizeInitialLine(line) {
     materialUnitName,
     baseUnit: materialUnitName,
     quantity: line.quantity,
+    componentVariantId,
+    componentSkuCode: line.componentSkuCode ?? line.ComponentSkuCode ?? '',
+    componentVariantName: line.componentVariantName ?? line.ComponentVariantName ?? '',
+    isRequiredBaseComponent: Boolean(line.isRequiredBaseComponent ?? line.IsRequiredBaseComponent ?? false),
   }
 }
 
@@ -71,13 +92,19 @@ export default function ProductBomConfigModal({
     const timer = window.setTimeout(() => {
       const next = {}
       for (const line of normalizedLines) {
-        if (!line.material_id || !line.materialName) continue
-        next[line.material_id] = {
+        if ((!line.material_id && !line.componentVariantId) || !line.materialName) continue
+        const cached = {
           id: line.material_id,
+          componentVariantId: line.componentVariantId,
+          componentSkuCode: line.componentSkuCode,
+          componentVariantName: line.componentVariantName,
           name: line.materialName,
+          materialName: line.materialName,
           materialUnitName: line.materialUnitName,
           baseUnit: line.baseUnit,
         }
+        if (line.material_id) next[line.material_id] = cached
+        if (line.componentVariantId) next[line.componentVariantId] = cached
       }
       setLines(normalizedLines)
       setSearchInput('')
@@ -104,10 +131,12 @@ export default function ProductBomConfigModal({
       searchMaterials(term, 20)
         .then((items) => {
           if (cancelled) return
-          setSearchResults(items)
+          const options = getComponentSkuOptions(items)
+          setSearchResults(options)
           setMaterialCache((prev) => {
             const next = { ...prev }
             for (const item of items) next[item.id] = item
+            for (const option of options) next[option.componentVariantId] = option
             return next
           })
         })
@@ -125,12 +154,24 @@ export default function ProductBomConfigModal({
     }
   }, [debouncedSearch, isOpen])
 
-  const usedIds = useMemo(() => new Set(lines.map((line) => String(line.material_id))), [lines])
+  const usedIds = useMemo(
+    () => new Set(lines.map((line) => String(line.componentVariantId || line.material_id))),
+    [lines],
+  )
 
-  function addMaterial(product) {
-    if (usedIds.has(String(product.id))) return
-    setMaterialCache((prev) => ({ ...prev, [product.id]: product }))
-    setLines((prev) => [...prev, { material_id: product.id, materialUnitName: getMaterialUnit(product), quantity: 1 }])
+  function addMaterial(option) {
+    if (usedIds.has(String(option.componentVariantId || option.material_id))) return
+    setMaterialCache((prev) => ({ ...prev, [option.componentVariantId]: option, [option.material_id]: option }))
+    setLines((prev) => [...prev, {
+      material_id: option.material_id,
+      materialName: option.materialName,
+      materialUnitName: option.materialUnitName,
+      quantity: 1,
+      componentVariantId: option.componentVariantId,
+      componentSkuCode: option.componentSkuCode,
+      componentVariantName: option.componentVariantName,
+      isRequiredBaseComponent: false,
+    }])
     setSearchInput('')
     setSearchResults([])
   }
@@ -144,9 +185,11 @@ export default function ProductBomConfigModal({
   }
 
   async function handleConfirm() {
-    const validLines = lines.filter((line) => line.material_id)
+    const validLines = lines.filter((line) => line.material_id || line.componentVariantId || line.componentSkuCode)
     const duplicate = validLines.find(
-      (line, index) => validLines.findIndex((candidate) => String(candidate.material_id) === String(line.material_id)) !== index,
+      (line, index) => validLines.findIndex((candidate) =>
+        String(candidate.componentVariantId || candidate.componentSkuCode || candidate.material_id)
+        === String(line.componentVariantId || line.componentSkuCode || line.material_id)) !== index,
     )
     if (duplicate) {
       showError('Không được chọn trùng nguyên liệu trong một BOM.')
@@ -154,7 +197,7 @@ export default function ProductBomConfigModal({
     }
 
     for (const line of validLines) {
-      const material = materialCache[line.material_id] ?? line
+      const material = materialCache[line.componentVariantId] ?? materialCache[line.material_id] ?? line
       const unit = getMaterialUnit(material) || line.materialUnitName || line.baseUnit
       const validationMessage = getBomQuantityValidationMessage(line.quantity, unit)
       if (validationMessage) {
@@ -169,7 +212,10 @@ export default function ProductBomConfigModal({
         validLines.map((line) => ({
           material_id: line.material_id,
           materialId: line.material_id,
-          quantity: Number(String(line.quantity).replace(',', '.')),
+          quantity: Number(line.quantity),
+          componentVariantId: line.componentVariantId ?? null,
+          componentSkuCode: line.componentSkuCode || null,
+          isRequiredBaseComponent: Boolean(line.isRequiredBaseComponent),
         })),
       )
       onClose?.()
@@ -237,20 +283,20 @@ export default function ProductBomConfigModal({
                 {isSearching && searchResults.length === 0 ? (
                   <p className="px-4 py-3 text-sm text-slate-400">Đang tìm...</p>
                 ) : null}
-                {searchResults.map((product) => {
-                  const isUsed = usedIds.has(String(product.id))
-                  const unitName = getMaterialUnit(product)
+                {searchResults.map((option) => {
+                  const isUsed = usedIds.has(String(option.componentVariantId || option.material_id))
+                  const unitName = option.unitName || option.materialUnitName
                   return (
                     <button
-                      key={product.id}
+                      key={option.componentVariantId}
                       type="button"
                       disabled={isUsed}
-                      onClick={() => addMaterial(product)}
+                      onClick={() => addMaterial(option)}
                       className="flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left text-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <span>
-                        <span className="font-mono text-xs text-[#356647]">{product.id}</span>
-                        <span className="ml-2 font-medium text-slate-800">{product.name}</span>
+                        <span className="font-mono text-xs text-[#356647]">{option.componentSkuCode}</span>
+                        <span className="ml-2 font-medium text-slate-800">{option.materialName}</span>
                         {isUsed ? <span className="ml-2 text-xs text-slate-400">(đã có)</span> : null}
                       </span>
                       <span className="shrink-0 text-xs text-slate-500">{unitName || '—'}</span>
@@ -283,25 +329,31 @@ export default function ProductBomConfigModal({
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {lines.map((line, index) => {
-                    const material = materialCache[line.material_id]
+                    const material = materialCache[line.componentVariantId] ?? materialCache[line.material_id]
                     const unitName = getMaterialUnit(material) || line.materialUnitName || line.baseUnit
-                    const countBased = isCountBasedUnit(unitName)
                     return (
-                      <tr key={`${line.material_id}-${index}`} className="hover:bg-slate-50/60">
+                      <tr key={`${line.componentVariantId || line.material_id}-${index}`} className={line.isRequiredBaseComponent ? 'bg-emerald-50/45' : 'hover:bg-slate-50/60'}>
                         <td className="px-4 py-3 font-medium text-slate-800">
-                          {material?.name ?? `#${line.material_id}`}
+                          <span className="font-mono text-xs text-[#356647]">{line.componentSkuCode || line.material_id}</span>
+                          <span className="ml-2">{line.componentVariantName || material?.materialName || material?.name || `#${line.material_id}`}</span>
+                          {line.isRequiredBaseComponent ? (
+                            <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-bold text-emerald-700">
+                              <span className="material-symbols-outlined text-[14px]">lock</span>
+                              Tự động theo quy đổi
+                            </span>
+                          ) : null}
                         </td>
                         <td className="px-4 py-3">
                           <input
-                            type="number"
-                            min={countBased ? '1' : '0.001'}
-                            step={countBased ? '1' : '0.001'}
-                            inputMode={countBased ? 'numeric' : 'decimal'}
-                            className="mx-auto block w-24 rounded-lg border border-slate-200 px-3 py-2 text-center text-sm focus:border-[#356647] focus:outline-none"
+                            type="text"
+                            inputMode="numeric"
+                            pattern="[0-9]*"
+                            disabled={line.isRequiredBaseComponent}
+                            className="mx-auto block w-24 rounded-lg border border-slate-200 px-3 py-2 text-center text-sm focus:border-[#356647] focus:outline-none disabled:border-emerald-100 disabled:bg-emerald-50 disabled:font-semibold disabled:text-emerald-800"
                             value={line.quantity}
                             onChange={(e) => updateQuantity(index, e.target.value)}
                             onKeyDown={(event) => {
-                              if (['e', 'E', '+', '-'].includes(event.key) || (countBased && ['.', ','].includes(event.key))) {
+                              if (['e', 'E', '+', '-', '.', ','].includes(event.key)) {
                                 event.preventDefault()
                               }
                             }}
@@ -311,14 +363,18 @@ export default function ProductBomConfigModal({
                           {unitName || '—'}
                         </td>
                         <td className="px-4 py-3 text-right">
-                          <button
-                            type="button"
-                            onClick={() => removeLine(index)}
-                            className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-rose-600 hover:bg-rose-50"
-                          >
-                            <span className="material-symbols-outlined text-[18px]">delete</span>
-                            Xóa
-                          </button>
+                          {line.isRequiredBaseComponent ? (
+                            <span className="text-xs font-semibold text-slate-400">Bắt buộc</span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => removeLine(index)}
+                              className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-rose-600 hover:bg-rose-50"
+                            >
+                              <span className="material-symbols-outlined text-[18px]">delete</span>
+                              Xóa
+                            </button>
+                          )}
                         </td>
                       </tr>
                     )

@@ -59,7 +59,11 @@ public class ProductCatalogClient(HttpClient httpClient, ILogger<ProductCatalogC
                 b.MaterialId,
                 b.MaterialName ?? string.Empty,
                 b.MaterialUnitName,
-                b.Quantity)).ToList())).ToList());
+                b.Quantity,
+                b.ComponentVariantId,
+                b.ComponentSkuCode,
+                b.ComponentVariantName,
+                b.IsRequiredBaseComponent)).ToList())).ToList());
 
     private sealed record ProductPagedResponse(
         List<ProductResponse> Items,
@@ -92,5 +96,9 @@ public class ProductCatalogClient(HttpClient httpClient, ILogger<ProductCatalogC
         Guid MaterialId,
         string? MaterialName,
         string? MaterialUnitName,
-        decimal Quantity);
+        decimal Quantity,
+        Guid? ComponentVariantId,
+        string? ComponentSkuCode,
+        string? ComponentVariantName,
+        bool IsRequiredBaseComponent);
 }

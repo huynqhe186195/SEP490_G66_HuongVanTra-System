@@ -25,21 +25,10 @@ export function hasMaxDecimalPlaces(value, maxDecimalPlaces = 3) {
   return decimalPart.length <= maxDecimalPlaces
 }
 
-export function getBomQuantityValidationMessage(quantity, unit) {
+export function getBomQuantityValidationMessage(quantity) {
   const text = String(quantity ?? '').trim()
-  const normalizedText = text.replace(',', '.')
-  const value = Number(normalizedText)
-
-  if (!text || !Number.isFinite(value) || value <= 0) {
-    return 'Định mức phải lớn hơn 0.'
-  }
-
-  if (isCountBasedUnit(unit) && !Number.isInteger(value)) {
-    return `Đơn vị "${unit || 'đơn vị'}" chỉ cho phép số nguyên.`
-  }
-
-  if (!hasMaxDecimalPlaces(normalizedText)) {
-    return 'Định mức chỉ được tối đa 3 chữ số thập phân.'
+  if (!/^[1-9]\d*$/.test(text)) {
+    return 'Định mức phải là số nguyên dương.'
   }
 
   return ''

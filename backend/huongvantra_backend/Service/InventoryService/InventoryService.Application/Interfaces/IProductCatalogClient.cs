@@ -41,4 +41,8 @@ public sealed record CatalogBomLine(
     Guid MaterialId,
     string MaterialName,
     string? MaterialUnitName,
-    decimal Quantity);
+    decimal Quantity,
+    Guid? ComponentVariantId,
+    string? ComponentSkuCode,
+    string? ComponentVariantName,
+    bool IsRequiredBaseComponent);

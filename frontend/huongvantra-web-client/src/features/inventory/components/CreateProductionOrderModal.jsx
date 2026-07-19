@@ -287,20 +287,31 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
 
         for (const bomLine of bomLinesDef) {
           const materialId = bomLine.materialId
+          const componentVariantId = bomLine.componentVariantId
+          const componentSkuCode = bomLine.componentSkuCode || ''
+          const componentName = bomLine.componentVariantName || bomLine.materialName
           const bomQty = Number(bomLine.quantity)
-          if (!materialId || !Number.isFinite(bomQty) || bomQty <= 0) {
+          if ((!materialId && !componentVariantId) || !Number.isFinite(bomQty) || bomQty <= 0) {
             throw new Error(`BOM của SKU ${output.sku?.skuCode ?? ''} có dòng nguyên liệu / bao bì không hợp lệ.`)
           }
 
-          const key = String(materialId)
+          const key = componentVariantId ? `sku:${componentVariantId}` : `material:${materialId}`
           const current = aggregated.get(key) ?? {
+            key,
             materialId,
-            materialName: bomLine.materialName,
+            componentVariantId,
+            materialName: componentName,
             requiredQuantity: 0,
-            skuId: '',
-            skuCode: '',
-            snapshotName: '',
-            skuOptions: [],
+            skuId: componentVariantId || '',
+            skuCode: componentSkuCode,
+            snapshotName: componentName,
+            skuOptions: componentVariantId
+              ? [{
+                id: componentVariantId,
+                skuCode: componentSkuCode,
+                productName: componentName,
+              }]
+              : [],
           }
           current.requiredQuantity += bomQty * output.quantityNumber
           aggregated.set(key, current)
@@ -309,6 +320,8 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
 
       const enriched = await Promise.all(
         Array.from(aggregated.values()).map(async (line) => {
+          if (line.componentVariantId) return line
+
           const key = String(line.materialId)
           let skuOptions = materialSkuOptionsCache.get(key)
           if (!skuOptions) {
@@ -343,7 +356,7 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
   function updateBomLineSku(materialId, skuId) {
     setBomLines((prev) =>
       prev.map((line) => {
-        if (!sameId(line.materialId, materialId)) return line
+        if (!sameId(line.key ?? line.materialId, materialId)) return line
         const sku = line.skuOptions.find((item) => sameId(item.id, skuId))
         return {
           ...line,
@@ -398,7 +411,7 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
         lines: bomLines.map((line) => ({
           materialSkuId: line.skuId,
           materialSkuCode: line.skuCode,
-          materialSnapshotName: line.snapshotName,
+          materialSnapshotName: line.snapshotName || line.materialName,
           plannedQuantity: line.requiredQuantity,
         })),
       })
@@ -590,7 +603,7 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                           {bomLines.map((line) => (
-                            <tr key={line.materialId}>
+                            <tr key={line.key ?? line.materialId}>
                               <td className="px-4 py-2 font-medium text-slate-800">{line.materialName}</td>
                               <td className="px-4 py-2">
                                 {line.skuOptions.length === 0 ? (
@@ -601,7 +614,7 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
                                   <select
                                     className="w-full min-w-44 rounded-lg border border-slate-200 bg-white p-2 text-xs"
                                     value={line.skuId}
-                                    onChange={(event) => updateBomLineSku(line.materialId, event.target.value)}
+                                    onChange={(event) => updateBomLineSku(line.key ?? line.materialId, event.target.value)}
                                   >
                                     <option value="">- Chọn SKU -</option>
                                     {line.skuOptions.map((sku) => (
@@ -758,7 +771,7 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
                       </thead>
                       <tbody className="divide-y divide-slate-100">
                         {bomLines.map((line, index) => (
-                          <tr key={line.materialId}>
+                          <tr key={line.key ?? line.materialId}>
                             <td className="px-4 py-2 text-slate-500">{index + 1}</td>
                             <td className="px-4 py-2 font-medium text-slate-800">{line.materialName}</td>
                             <td className="px-4 py-2 font-mono font-semibold text-[#356647]">{line.skuCode}</td>

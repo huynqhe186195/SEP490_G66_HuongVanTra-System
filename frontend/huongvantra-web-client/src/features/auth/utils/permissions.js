@@ -65,6 +65,10 @@ export function canHideCatalog(session) {
   return canCreateCatalog(session)
 }
 
+export function canCreateProductDeletionRequest(session) {
+  return isWarehouseRole(session)
+}
+
 export function canAccessWarehouseInventory(session) {
   return isWarehouseRole(session)
 }

@@ -380,13 +380,16 @@ public class ProductDeletionRequestLogic(
         }
 
         var bomDependencies = await _db.ProductVariantBomLines.AsNoTracking()
-            .Where(line => productIds.Contains(line.MaterialId)
+            .Where(line => (productIds.Contains(line.MaterialId)
+                    || (line.ComponentVariantId.HasValue && selectedSkuIds.Contains(line.ComponentVariantId.Value)))
                 && !productIds.Contains(line.Variant.ProductId)
                 && !line.Variant.Product.IsDeleted
                 && line.Variant.Product.IsActive)
             .Select(line => new
             {
                 MaterialId = line.MaterialId,
+                ComponentVariantId = line.ComponentVariantId,
+                ComponentSkuCode = line.ComponentVariant != null ? line.ComponentVariant.SkuCode : null,
                 ProductName = line.Variant.Product.Name,
                 SkuCode = line.Variant.SkuCode
             })
@@ -395,8 +398,15 @@ public class ProductDeletionRequestLogic(
         var selectedProductIds = products.Select(product => product.Id).ToHashSet();
         foreach (var dependency in bomDependencies)
         {
-            if (!selectedProductIds.Contains(dependency.MaterialId)) continue;
-            result[dependency.MaterialId].Add($"Đang là component BOM của {dependency.ProductName} ({dependency.SkuCode}).");
+            var targetProductId = dependency.ComponentVariantId.HasValue
+                && productIdBySkuId.TryGetValue(dependency.ComponentVariantId.Value, out var productId)
+                    ? productId
+                    : dependency.MaterialId;
+            var componentLabel = string.IsNullOrWhiteSpace(dependency.ComponentSkuCode)
+                ? string.Empty
+                : $" SKU {dependency.ComponentSkuCode}";
+            if (!selectedProductIds.Contains(targetProductId)) continue;
+            result[targetProductId].Add($"Đang là component BOM{componentLabel} của {dependency.ProductName} ({dependency.SkuCode}).");
         }
 
         return result

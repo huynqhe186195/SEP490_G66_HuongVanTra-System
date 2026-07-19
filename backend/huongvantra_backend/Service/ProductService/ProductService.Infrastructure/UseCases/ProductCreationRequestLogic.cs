@@ -208,10 +208,12 @@ public class ProductCreationRequestLogic(ProductDbContext _db, ProductLogic _pro
                 .ToList();
 
             await ValidateProductsAsync(itemInputs, ct);
+            var attributeNameCache = await ProductAttributeNameResolver.LoadAsync(_db, ct);
             var createdIds = new List<Guid>();
             foreach (var item in itemInputs)
             {
-                var created = await _productLogic.CreateAsync(item.Product);
+                var product = await ProductAttributeNameResolver.ResolveAsync(_db, item.Product, attributeNameCache, ct);
+                var created = await _productLogic.CreateAsync(product);
                 createdIds.Add(created.Id);
             }
 
@@ -329,9 +331,12 @@ public class ProductCreationRequestLogic(ProductDbContext _db, ProductLogic _pro
             errors.Add("Yêu cầu cần ít nhất một sản phẩm.");
 
         var requestSkuCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var requestSkuKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var requestProductNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var categoryIds = new HashSet<int>();
         var materialIds = new HashSet<Guid>();
+        var componentVariantIds = new HashSet<Guid>();
+        var componentSkuCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var (item, itemIndex) in items.Select((value, index) => (value, index)))
         {
@@ -373,6 +378,8 @@ public class ProductCreationRequestLogic(ProductDbContext _db, ProductLogic _pro
                     product?.IsVariantParent ?? false);
                 ProductInputValidator.ValidateUnits(product?.Units);
                 ProductInputValidator.ValidateVariants(product?.Variants);
+                ProductInputValidator.ValidateDerivedSkuRetailPrices(product, prefix);
+                ProductInputValidator.ValidateAttributes(product?.Attributes, prefix);
             }
             catch (ProductValidationException ex)
             {
@@ -397,22 +404,38 @@ public class ProductCreationRequestLogic(ProductDbContext _db, ProductLogic _pro
                         errors.Add($"{row}: Mã SKU '{skuCode}' bị trùng trong cùng yêu cầu.");
                 }
 
+                var requestSkuKey = NormalizeText(variant.RequestSkuKey);
+                if (requestSkuKey is not null && !requestSkuKeys.Add(requestSkuKey))
+                    errors.Add($"{row}: RequestSkuKey '{requestSkuKey}' bi trung trong cung yeu cau.");
+
                 var bomLines = variant.BomLines ?? [];
                 if (bomLines.Count > 0 && productType != ProductType.THANH_PHAM)
                     errors.Add($"{row}: BOM chỉ áp dụng cho Sản phẩm kệ.");
 
                 var usedMaterials = new HashSet<Guid>();
+                var usedComponents = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 foreach (var (bomLine, bomIndex) in bomLines.Select((value, index) => (value, index)))
                 {
-                    if (bomLine.MaterialId == Guid.Empty)
+                    var componentKey = GetBomLineDedupKey(bomLine);
+                    if (componentKey is not null && !usedComponents.Add(componentKey))
+                        errors.Add($"{row}: Khong duoc chon trung component trong mot BOM.");
+
+                    if (bomLine.ComponentVariantId.HasValue && bomLine.ComponentVariantId.Value != Guid.Empty)
+                        componentVariantIds.Add(bomLine.ComponentVariantId.Value);
+
+                    var componentSkuCode = NormalizeText(bomLine.ComponentSkuCode)?.ToUpperInvariant();
+                    if (componentSkuCode is not null)
+                        componentSkuCodes.Add(componentSkuCode);
+
+                    if (bomLine.MaterialId == Guid.Empty && componentKey is null)
                         errors.Add($"{row}, BOM {bomIndex + 1}: Chưa chọn Nguyên liệu/Bao bì.");
-                    else if (!usedMaterials.Add(bomLine.MaterialId))
+                    else if (bomLine.MaterialId != Guid.Empty && !usedMaterials.Add(bomLine.MaterialId))
                         errors.Add($"{row}: Không được chọn trùng component trong một BOM.");
-                    else
+                    else if (bomLine.MaterialId != Guid.Empty)
                         materialIds.Add(bomLine.MaterialId);
 
-                    if (bomLine.Quantity <= 0)
-                        errors.Add($"{row}, BOM {bomIndex + 1}: Định mức BOM phải lớn hơn 0.");
+                    if (bomLine.Quantity <= 0 || !BomUnitRules.IsIntegerQuantity(bomLine.Quantity))
+                        errors.Add($"{row}, BOM {bomIndex + 1}: Định mức phải là số nguyên dương.");
                 }
             }
         }
@@ -463,13 +486,82 @@ public class ProductCreationRequestLogic(ProductDbContext _db, ProductLogic _pro
                     continue;
                 }
 
-                if (material.ProductType != ProductType.NGUYEN_LIEU && material.ProductType != ProductType.BAO_BI)
+                if (material.ProductType != ProductType.NGUYEN_LIEU
+                    && material.ProductType != ProductType.BAO_BI
+                    && material.ProductType != ProductType.THANH_PHAM)
                     errors.Add($"'{material.Name}' không phải là Nguyên liệu hoặc Bao bì.");
+            }
+        }
+
+        if (componentVariantIds.Count > 0)
+        {
+            var components = await _db.ProductVariants.AsNoTracking()
+                .Include(x => x.Product)
+                .Where(x => componentVariantIds.Contains(x.Id) && !x.IsDeleted && x.IsActive)
+                .Select(x => new { x.Id, x.SkuCode, ProductType = x.Product.ProductType })
+                .ToListAsync(ct);
+            var componentById = components.ToDictionary(x => x.Id);
+
+            foreach (var componentVariantId in componentVariantIds)
+            {
+                if (!componentById.TryGetValue(componentVariantId, out var component))
+                {
+                    errors.Add($"Component SKU '{componentVariantId}' khong ton tai hoac da bi khoa.");
+                    continue;
+                }
+
+                if (component.ProductType != ProductType.NGUYEN_LIEU
+                    && component.ProductType != ProductType.BAO_BI
+                    && component.ProductType != ProductType.THANH_PHAM)
+                    errors.Add($"SKU component '{component.SkuCode}' khong hop le cho BOM.");
+            }
+        }
+
+        var externalComponentSkuCodes = componentSkuCodes
+            .Where(code => !requestSkuCodes.Contains(code))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (externalComponentSkuCodes.Count > 0)
+        {
+            var components = await _db.ProductVariants.AsNoTracking()
+                .Include(x => x.Product)
+                .Where(x => externalComponentSkuCodes.Contains(x.SkuCode) && !x.IsDeleted && x.IsActive)
+                .Select(x => new { x.SkuCode, ProductType = x.Product.ProductType })
+                .ToListAsync(ct);
+            var componentBySku = components.ToDictionary(x => x.SkuCode, StringComparer.OrdinalIgnoreCase);
+
+            foreach (var componentSkuCode in externalComponentSkuCodes)
+            {
+                if (!componentBySku.TryGetValue(componentSkuCode, out var component))
+                {
+                    errors.Add($"Component SKU '{componentSkuCode}' khong ton tai hoac da bi khoa.");
+                    continue;
+                }
+
+                if (component.ProductType != ProductType.NGUYEN_LIEU
+                    && component.ProductType != ProductType.BAO_BI
+                    && component.ProductType != ProductType.THANH_PHAM)
+                    errors.Add($"SKU component '{component.SkuCode}' khong hop le cho BOM.");
             }
         }
 
         if (errors.Count > 0)
             throw new ProductValidationException(errors.Distinct());
+    }
+
+    private static string? GetBomLineDedupKey(BomLineRequest line)
+    {
+        if (line.ComponentVariantId.HasValue && line.ComponentVariantId.Value != Guid.Empty)
+            return $"variant:{line.ComponentVariantId.Value}";
+
+        var componentSkuCode = NormalizeText(line.ComponentSkuCode)?.ToUpperInvariant();
+        if (componentSkuCode is not null)
+            return $"sku:{componentSkuCode}";
+
+        var componentRequestSkuKey = NormalizeText(line.ComponentRequestSkuKey);
+        if (componentRequestSkuKey is not null)
+            return $"request:{componentRequestSkuKey}";
+
+        return line.MaterialId == Guid.Empty ? null : $"material:{line.MaterialId}";
     }
 
     private static List<ProductCreationRequestItemInput> NormalizeItemInputs(List<ProductCreationRequestItemInput>? items)
@@ -483,7 +575,11 @@ public class ProductCreationRequestLogic(ProductDbContext _db, ProductLogic _pro
                 throw new ProductValidationException($"Sản phẩm {index + 1}: dữ liệu sản phẩm là bắt buộc.");
 
             var clientKey = NormalizeText(item.ClientKey) ?? $"item-{index + 1}";
-            return new ProductCreationRequestItemInput(clientKey, item.Product);
+            var product = item.Product with
+            {
+                Attributes = ProductInputValidator.ValidateAttributes(item.Product.Attributes, $"Sản phẩm {index + 1}")
+            };
+            return new ProductCreationRequestItemInput(clientKey, product);
         }).ToList();
     }
 

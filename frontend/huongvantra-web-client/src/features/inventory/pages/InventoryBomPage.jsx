@@ -194,11 +194,12 @@ function InventoryBomPage() {
                         <div className="flex w-full flex-wrap gap-1.5">
                           {row.bomLines.map((line) => (
                             <span
-                              key={`${row.variantId}-${line.materialId ?? line.material_id}`}
+                              key={`${row.variantId}-${line.componentVariantId ?? line.materialId ?? line.material_id}`}
                               className="max-w-full break-words rounded-full bg-slate-100 px-2.5 py-1 leading-5 text-slate-700"
                             >
-                              {line.materialName || line.materialId || line.material_id} x{line.quantity}
+                              {line.componentSkuCode || line.materialName || line.materialId || line.material_id} x{line.quantity}
                               {line.materialUnitName || line.baseUnit ? ` ${line.materialUnitName || line.baseUnit}` : ''}
+                              {line.isRequiredBaseComponent ? ' · Tự động theo quy đổi' : ''}
                             </span>
                           ))}
                         </div>

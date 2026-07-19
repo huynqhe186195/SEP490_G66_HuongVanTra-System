@@ -235,6 +235,8 @@ public class ProductApprovalLogic(ProductDbContext _db, ProductLogic _productLog
                 }
             }
 
+            var attributeNameCache = await ProductAttributeNameResolver.LoadAsync(_db, ct);
+            productRequest = await ProductAttributeNameResolver.ResolveAsync(_db, productRequest, attributeNameCache, ct);
             var created = await _productLogic.CreateAsync(productRequest);
 
             var now = DateTime.UtcNow;
@@ -370,6 +372,15 @@ public class ProductApprovalLogic(ProductDbContext _db, ProductLogic _productLog
             errors.Add("Đơn vị khối lượng là bắt buộc khi nhập khối lượng.");
 
         ValidateApprovalUnits(product.Units, errors);
+        try
+        {
+            ProductInputValidator.ValidateDerivedSkuRetailPrices(product);
+            ProductInputValidator.ValidateAttributes(product.Attributes);
+        }
+        catch (ProductValidationException ex)
+        {
+            errors.AddRange(ex.Errors);
+        }
 
         var variants = product.Variants ?? [];
         if (variants.Count == 0)
@@ -448,7 +459,9 @@ public class ProductApprovalLogic(ProductDbContext _db, ProductLogic _productLog
                     continue;
                 }
 
-                if (material.ProductType != ProductType.NGUYEN_LIEU)
+                if (material.ProductType != ProductType.NGUYEN_LIEU
+                    && material.ProductType != ProductType.BAO_BI
+                    && material.ProductType != ProductType.THANH_PHAM)
                     errors.Add($"'{material.Name}' không phải là nguyên liệu.");
             }
         }
@@ -532,21 +545,43 @@ public class ProductApprovalLogic(ProductDbContext _db, ProductLogic _productLog
         }
 
         var usedMaterials = new HashSet<Guid>();
+        var usedComponents = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var (line, index) in rows.Select((value, index) => (value, index)))
         {
             var row = index + 1;
-            if (line.MaterialId == Guid.Empty)
+            var componentKey = GetBomLineDedupKey(line);
+            if (componentKey is not null && !usedComponents.Add(componentKey))
+                errors.Add($"SKU {variantRow}: Khong duoc chon trung component trong cung BOM.");
+
+            if (line.MaterialId == Guid.Empty && componentKey is null)
                 errors.Add($"SKU {variantRow}, BOM dòng {row}: Chưa chọn nguyên liệu.");
             else
             {
-                if (!usedMaterials.Add(line.MaterialId))
+                if (line.MaterialId != Guid.Empty && !usedMaterials.Add(line.MaterialId))
                     errors.Add($"SKU {variantRow}: Không được chọn trùng nguyên liệu trong cùng BOM.");
-                materialIds.Add(line.MaterialId);
+                if (line.MaterialId != Guid.Empty)
+                    materialIds.Add(line.MaterialId);
             }
 
-            if (line.Quantity <= 0)
-                errors.Add($"SKU {variantRow}, BOM dòng {row}: Số lượng BOM phải lớn hơn 0.");
+            if (line.Quantity <= 0 || !BomUnitRules.IsIntegerQuantity(line.Quantity))
+                errors.Add($"SKU {variantRow}, BOM dòng {row}: Định mức phải là số nguyên dương.");
         }
+    }
+
+    private static string? GetBomLineDedupKey(BomLineRequest line)
+    {
+        if (line.ComponentVariantId.HasValue && line.ComponentVariantId.Value != Guid.Empty)
+            return $"variant:{line.ComponentVariantId.Value}";
+
+        var componentSkuCode = NormalizeText(line.ComponentSkuCode)?.ToUpperInvariant();
+        if (componentSkuCode is not null)
+            return $"sku:{componentSkuCode}";
+
+        var componentRequestSkuKey = NormalizeText(line.ComponentRequestSkuKey);
+        if (componentRequestSkuKey is not null)
+            return $"request:{componentRequestSkuKey}";
+
+        return line.MaterialId == Guid.Empty ? null : $"material:{line.MaterialId}";
     }
 
     private static List<string> CompareApprovedProduct(CreateProductRequest approved, CreateProductRequest manual)
@@ -623,8 +658,8 @@ public class ProductApprovalLogic(ProductDbContext _db, ProductLogic _productLog
                 x.MinStock,
                 x.MaxStock,
                 (x.BomLines ?? [])
-                    .Select(line => new ComparableBomLine(line.MaterialId, NormalizeDecimal(line.Quantity)))
-                    .OrderBy(line => line.MaterialId)
+                    .Select(line => new ComparableBomLine(GetBomLineDedupKey(line) ?? $"material:{line.MaterialId}", NormalizeDecimal(line.Quantity), line.IsRequiredBaseComponent))
+                    .OrderBy(line => line.ComponentKey)
                     .ToList()))
             .OrderBy(x => x.SkuCode)
             .ToList();
@@ -648,7 +683,7 @@ public class ProductApprovalLogic(ProductDbContext _db, ProductLogic _productLog
         bool IsDirectSell,
         bool IsBaseUnit);
 
-    private sealed record ComparableBomLine(Guid MaterialId, decimal Quantity);
+    private sealed record ComparableBomLine(string ComponentKey, decimal Quantity, bool IsRequiredBaseComponent);
 
     private sealed record ComparableVariant(
         string SkuCode,

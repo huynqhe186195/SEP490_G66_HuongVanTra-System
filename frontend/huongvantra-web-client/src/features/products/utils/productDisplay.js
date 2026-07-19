@@ -8,6 +8,37 @@ export function formatProductPrice(value) {
   return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 2 }).format(amount)
 }
 
+const WHOLE_VND_FORMATTER = new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 })
+
+export function normalizeWholeVndDigits(raw) {
+  const text = String(raw ?? '')
+    .trim()
+    .replace(/\s*(đ|vnđ|vnd)\s*$/i, '')
+  const digits = text.replace(/[^\d]/g, '')
+  return digits.replace(/^0+(?=\d)/, '')
+}
+
+export function parseWholeVndInput(raw) {
+  const digits = normalizeWholeVndDigits(raw)
+  if (!digits) return null
+  const amount = Number(digits)
+  return Number.isSafeInteger(amount) ? amount : null
+}
+
+export function formatWholeVndInput(raw) {
+  const amount = parseWholeVndInput(raw)
+  if (amount === null) return ''
+  return WHOLE_VND_FORMATTER.format(amount)
+}
+
+export function formatWholeVnd(value) {
+  const amount = typeof value === 'number' && Number.isFinite(value)
+    ? Math.trunc(value)
+    : parseWholeVndInput(value)
+  if (amount === null || amount < 0) return '—'
+  return `${WHOLE_VND_FORMATTER.format(amount)} ₫`
+}
+
 export function parseProductPriceInput(raw) {
   const text = String(raw || '')
     .trim()

@@ -25,4 +25,5 @@ public class Product : BaseEntity
     public ICollection<ProductImage> Images { get; set; } = new List<ProductImage>();
     public ICollection<ProductUnit> Units { get; set; } = new List<ProductUnit>();
     public ICollection<ProductVariant> Variants { get; set; } = new List<ProductVariant>();
+    public ICollection<ProductAttributeValue> AttributeValues { get; set; } = new List<ProductAttributeValue>();
 }

@@ -169,8 +169,53 @@ public class ProductRepository(ProductDbContext _db) : IProductRepository
             .Include(v => v.BomLines)
                 .ThenInclude(b => b.Material)
                     .ThenInclude(m => m.Units)
+            .Include(v => v.BomLines)
+                .ThenInclude(b => b.ComponentVariant)
             .FirstOrDefaultAsync(v => v.Id == id);
     }
+
+    public async Task<List<ProductVariant>> GetVariantsByIdsAsync(IEnumerable<Guid> ids, bool includeDeleted = false)
+    {
+        var targetIds = ids.Where(id => id != Guid.Empty).ToHashSet();
+        if (targetIds.Count == 0) return [];
+
+        var query = includeDeleted
+            ? _db.ProductVariants.IgnoreQueryFilters()
+            : _db.ProductVariants;
+
+        return await query
+            .Include(v => v.Product)
+            .Include(v => v.BomLines)
+            .Where(v => targetIds.Contains(v.Id))
+            .ToListAsync();
+    }
+
+    public async Task<List<ProductVariant>> GetVariantsBySkuCodesAsync(IEnumerable<string> skuCodes, bool includeDeleted = false)
+    {
+        var normalized = skuCodes
+            .Select(code => code?.Trim().ToUpperInvariant())
+            .Where(code => !string.IsNullOrWhiteSpace(code))
+            .Cast<string>()
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (normalized.Count == 0) return [];
+
+        var query = includeDeleted
+            ? _db.ProductVariants.IgnoreQueryFilters()
+            : _db.ProductVariants;
+
+        return await query
+            .Include(v => v.Product)
+            .Include(v => v.BomLines)
+            .Where(v => normalized.Contains(v.SkuCode))
+            .ToListAsync();
+    }
+
+    public Task<List<ProductVariantBomEdge>> GetActiveBomEdgesAsync() =>
+        _db.ProductVariantBomLines
+            .AsNoTracking()
+            .Where(line => line.ComponentVariantId.HasValue)
+            .Select(line => new ProductVariantBomEdge(line.ProductVariantId, line.ComponentVariantId!.Value))
+            .ToListAsync();
 
     public async Task<List<Product>> GetProductsByIdsAsync(IEnumerable<Guid> ids, bool includeDeleted = false)
     {
@@ -181,6 +226,7 @@ public class ProductRepository(ProductDbContext _db) : IProductRepository
 
         return await query
             .Include(p => p.Units)
+            .Include(p => p.Variants)
             .Where(p => targetIds.Contains(p.Id))
             .ToListAsync();
     }
@@ -250,11 +296,15 @@ public class ProductRepository(ProductDbContext _db) : IProductRepository
     private static IQueryable<Product> IncludeAggregate(IQueryable<Product> query) =>
         query.Include(p => p.Category)
             .Include(p => p.Images)
+            .Include(p => p.AttributeValues)
             .Include(p => p.Units)
             .Include(p => p.Variants)
                 .ThenInclude(v => v.Units)
             .Include(p => p.Variants)
                 .ThenInclude(v => v.BomLines)
                     .ThenInclude(b => b.Material)
-                        .ThenInclude(m => m.Units);
+                        .ThenInclude(m => m.Units)
+            .Include(p => p.Variants)
+                .ThenInclude(v => v.BomLines)
+                    .ThenInclude(b => b.ComponentVariant);
 }
