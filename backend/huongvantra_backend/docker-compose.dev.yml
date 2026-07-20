@@ -42,8 +42,12 @@ services:
 
   product-service:
     build: null
-    image: mcr.microsoft.com/dotnet/sdk:8.0-alpine
-    pull_policy: always
+    # Tag riêng (KHÔNG mượn tên public base image). Nếu để "mcr.microsoft.com/dotnet/sdk:8.0-alpine"
+    # thì mỗi lần `docker compose --build` (bake) sẽ tag output build của Dockerfile đè lên image SDK
+    # → image SDK biến thành runtime image → dotnet watch chết ("No .NET SDKs were found").
+    # Tạo tag này 1 lần: docker tag mcr.microsoft.com/dotnet/sdk:8.0-alpine hvt-dotnet-sdk:8.0-alpine-dev
+    image: hvt-dotnet-sdk:8.0-alpine-dev
+    pull_policy: never
     container_name: hvt-product-service-dev
     entrypoint: []
     working_dir: /src
@@ -93,7 +97,7 @@ services:
 
   # customer-service:
   #   build: null
-  #   image: mcr.microsoft.com/dotnet/sdk:8.0-alpine
+  #   image: hvt-dotnet-sdk:8.0-alpine-dev   # tag riêng, xem ghi chú ở product-service
   #   container_name: hvt-customer-service-dev
   #   working_dir: /src
   #   volumes:
@@ -126,7 +130,7 @@ services:
 
   # user-service:
   #   build: null
-  #   image: mcr.microsoft.com/dotnet/sdk:8.0-alpine
+  #   image: hvt-dotnet-sdk:8.0-alpine-dev   # tag riêng, xem ghi chú ở product-service
   #   container_name: hvt-user-service-dev
   #   working_dir: /src
   #   volumes:
@@ -155,7 +159,7 @@ services:
 
   # order-service:
   #   build: null
-  #   image: mcr.microsoft.com/dotnet/sdk:8.0-alpine
+  #   image: hvt-dotnet-sdk:8.0-alpine-dev   # tag riêng, xem ghi chú ở product-service
   #   container_name: hvt-order-service-dev
   #   working_dir: /src
   #   volumes:
@@ -188,7 +192,7 @@ services:
 
   # inventory-service:
   #   build: null
-  #   image: mcr.microsoft.com/dotnet/sdk:8.0-alpine
+  #   image: hvt-dotnet-sdk:8.0-alpine-dev   # tag riêng, xem ghi chú ở product-service
   #   container_name: hvt-inventory-service-dev
   #   working_dir: /src
   #   volumes:

@@ -1180,7 +1180,9 @@ public class OrderLogic(
     }
 
     private static bool ShouldHandlePosStockSynchronously(Order order) =>
-        order.OrderChannel == OrderChannel.POS && order.OrderStatus == OrderStatus.Completed;
+        order.OrderChannel == OrderChannel.POS
+        && order.OrderStatus == OrderStatus.Completed
+        && (order.OrderDetails?.Count ?? 0) > 0;
 
     private static bool ShouldSuppressLegacyOrderPlacedEvent(Order order) =>
         order.OrderChannel == OrderChannel.POS;

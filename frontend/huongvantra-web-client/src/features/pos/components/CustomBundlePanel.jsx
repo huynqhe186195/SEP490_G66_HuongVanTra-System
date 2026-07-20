@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { apiRequestAuth, toPagedResult } from '../../../lib/apiClient.js'
+import { fetchSkuStocks, buildWarehouseStockBySkuIdMap } from '../../inventory/services/inventoryStockApi.js'
 
 function fmt(amount) {
   return Number(amount || 0).toLocaleString('vi-VN') + ' đ'
@@ -8,16 +9,24 @@ function fmt(amount) {
 async function fetchMaterials(search = '') {
   const query = new URLSearchParams({ pageSize: '100', page: '1', isActive: 'true', productType: 'NGUYEN_LIEU' })
   if (search.trim()) query.set('search', search.trim())
-  const data = await apiRequestAuth(`/api/v1/skus?${query.toString()}`, { method: 'GET' })
+  const [data, stocks] = await Promise.all([
+    apiRequestAuth(`/api/v1/skus?${query.toString()}`, { method: 'GET' }),
+    fetchSkuStocks().catch(() => []),
+  ])
+  const stockBySkuId = buildWarehouseStockBySkuIdMap(stocks)
   const paged = toPagedResult(data)
-  return (paged.items ?? []).map((item) => ({
-    skuId: item.id ?? item.Id ?? item.skuId ?? item.SkuId,
-    skuCode: item.skuCode ?? item.SkuCode ?? item.code ?? item.Code ?? '',
-    name: item.productName ?? item.ProductName ?? item.name ?? item.Name ?? '',
-    unitPrice: Number(item.retailPrice ?? item.RetailPrice ?? item.price ?? item.Price ?? 0),
-    packagingType: item.packagingType ?? item.PackagingType ?? '',
-    description: item.description ?? item.Description ?? '',
-  }))
+  return (paged.items ?? []).map((item) => {
+    const skuId = item.id ?? item.Id ?? item.skuId ?? item.SkuId
+    return {
+      skuId,
+      skuCode: item.skuCode ?? item.SkuCode ?? item.code ?? item.Code ?? '',
+      name: item.productName ?? item.ProductName ?? item.name ?? item.Name ?? '',
+      unitPrice: Number(item.retailPrice ?? item.RetailPrice ?? item.price ?? item.Price ?? 0),
+      packagingType: item.packagingType ?? item.PackagingType ?? '',
+      description: item.description ?? item.Description ?? '',
+      stockOnHand: Number(stockBySkuId.get(skuId) ?? 0),
+    }
+  })
 }
 
 function DetailModal({ material, onClose }) {
@@ -239,6 +248,7 @@ export default function CustomBundlePanel({ bundles, onChange }) {
                     <th className="w-8 px-3 py-2" />
                     <th className="px-3 py-2 text-left text-xs font-semibold text-[#717971]">Tên nguyên liệu</th>
                     <th className="px-3 py-2 text-left text-xs font-semibold text-[#717971]">Mã SKU</th>
+                    <th className="px-3 py-2 text-right text-xs font-semibold text-[#717971]">Tồn đang có</th>
                     <th className="px-3 py-2 text-right text-xs font-semibold text-[#717971]">Giá/đv</th>
                     <th className="w-24 px-3 py-2 text-center text-xs font-semibold text-[#717971]">Số lượng</th>
                     <th className="px-3 py-2 text-right text-xs font-semibold text-[#717971]">Thành tiền</th>
@@ -272,6 +282,11 @@ export default function CustomBundlePanel({ bundles, onChange }) {
                         </td>
                         <td className="px-3 py-2.5 font-medium text-[#1b1c17]">{m.name}</td>
                         <td className="px-3 py-2.5 text-[#717971]">{m.skuCode}</td>
+                        <td className="px-3 py-2.5 text-right">
+                          <span className={m.stockOnHand <= 0 ? 'font-semibold text-red-500' : 'text-[#1b1c17]'}>
+                            {m.stockOnHand.toLocaleString('vi-VN')}
+                          </span>
+                        </td>
                         <td className="px-3 py-2.5 text-right text-[#717971]">{fmt(m.unitPrice)}</td>
                         <td
                           className="w-24 px-3 py-2.5 text-center"
