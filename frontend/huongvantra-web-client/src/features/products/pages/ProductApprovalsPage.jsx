@@ -138,6 +138,39 @@ function calculateDerivedRetailPrice(baseRetailPrice, conversionRate) {
   return Number.isSafeInteger(amount) && amount >= 0 ? String(amount) : ''
 }
 
+function stripVietnameseMarks(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+}
+
+function getProductNameInitials(name) {
+  return stripVietnameseMarks(name)
+    .replace(/[^A-Za-z0-9\s]/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => word[0])
+    .join('')
+    .toUpperCase()
+}
+
+function compactPriceToken(value) {
+  const price = moneyOrNull(value)
+  if (!price || price <= 0) return ''
+  if (price >= 1_000_000 && price % 1_000_000 === 0) return `${price / 1_000_000}M`
+  if (price >= 1_000 && price % 1_000 === 0) return `${price / 1_000}K`
+  return String(price)
+}
+
+function buildGeneratedProductCode(productName, baseRetailPrice) {
+  const nameToken = getProductNameInitials(productName)
+  const priceToken = compactPriceToken(baseRetailPrice)
+  return nameToken && priceToken ? `${nameToken}${priceToken}` : ''
+}
+
 function normalizeText(value) {
   return String(value ?? '').trim()
 }
@@ -597,8 +630,9 @@ function fromProductSnapshot(item, materialsById) {
   }, skuRows.length ? skuRows : fallbackSkuRows)
 }
 
-function validateForm(title, rows) {
+function validateForm(title, rows, options = {}) {
   const errors = []
+  const requireFinishedBom = options.requireFinishedBom === true
   if (!title.trim()) errors.push('Tiêu đề yêu cầu là bắt buộc.')
   if (!rows.length) errors.push('Cần ít nhất một sản phẩm.')
 
@@ -620,6 +654,9 @@ function validateForm(title, rows) {
     if (!skuRows.length) errors.push(`${prefix}: cần ít nhất một SKU.`)
     const baseCount = skuRows.filter((sku) => sku.isBaseUnitVariant).length
     if (skuRows.length && baseCount !== 1) errors.push(`${prefix}: cần đúng một SKU đơn vị cơ bản.`)
+    if (requireFinishedBom && isFinishedProduct && !skuRows.some((sku) => (sku.bomLines ?? []).length > 0)) {
+      errors.push('Sản phẩm kệ bắt buộc phải có BOM trước khi gửi duyệt.')
+    }
 
     skuRows.forEach((sku, skuIndex) => {
       const skuPrefix = `${prefix}, SKU ${skuIndex + 1}`
@@ -999,6 +1036,8 @@ function AttributeNameCombobox({
 function ProductRow({ row, categories, materials, attributeNameOptions, onChange, onRemove, canRemove }) {
   const isFinishedProduct = row.productType === PRODUCT_TYPE.THANH_PHAM
   const skuRows = syncSkuRows(row, getSkuRows(row))
+  const baseSku = skuRows.find((sku) => sku.isBaseUnitVariant) ?? skuRows[0]
+  const generatedProductCode = buildGeneratedProductCode(row.name, baseSku?.retailPrice ?? row.retailPrice)
   const componentSkuOptions = getComponentSkuOptions(materials)
   const attributes = row.attributes ?? []
   const [pendingAttributeFocusKey, setPendingAttributeFocusKey] = useState(null)
@@ -1197,6 +1236,11 @@ function ProductRow({ row, categories, materials, attributeNameOptions, onChange
         <label className="text-xs font-semibold text-slate-500">
           Tên sản phẩm
           <input className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={row.name} onChange={(event) => updateProduct({ name: event.target.value })} />
+        </label>
+        <label className="text-xs font-semibold text-slate-500">
+          Mã hàng hóa
+          <input className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-sm font-semibold text-[#356647]" value={generatedProductCode} readOnly placeholder="Tự động" />
+          <span className="mt-1 block text-[11px] font-medium text-slate-400">Tự động sinh từ tên sản phẩm và giá bán.</span>
         </label>
         <label className="text-xs font-semibold text-slate-500">
           Loại hàng
@@ -1518,6 +1562,12 @@ export default function ProductApprovalsPage() {
   }
 
   async function handleSubmit() {
+    const submitErrors = validateForm(title, rows, { requireFinishedBom: true })
+    if (submitErrors.length) {
+      showError(submitErrors[0])
+      return
+    }
+
     const saved = await saveDraft({ showToast: false })
     if (!saved?.id) return
 

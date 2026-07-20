@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
@@ -6,6 +6,7 @@ import { showError, showSuccess } from '../../../app/toast.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import { formatStockQuantity } from '../../products/utils/productDisplay.js'
 import { fetchAllActiveSkus } from '../../products/services/productSkusApi.js'
+import { PRODUCT_TYPE, getProductTypeLabel } from '../../products/utils/productTypes.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import InventoryNavTabs from '../components/InventoryNavTabs.jsx'
 import { fetchSkuStocks } from '../services/inventoryStockApi.js'
@@ -24,6 +25,9 @@ const LOCATION_OPTIONS = [
   { value: 'Warehouse', label: 'Kho' },
   { value: 'Shelf', label: 'Kệ Hàng' },
 ]
+
+const WAREHOUSE_PRODUCT_TYPES = new Set([PRODUCT_TYPE.NGUYEN_LIEU, PRODUCT_TYPE.BAO_BI])
+const SHELF_PRODUCT_TYPES = new Set([PRODUCT_TYPE.THANH_PHAM])
 
 const STATUS_OPTIONS = [
   { value: '', label: 'Tất cả trạng thái' },
@@ -67,6 +71,28 @@ function getReasonLabel(code) {
 function getSkuName(sku) {
   const parts = [sku?.productName, sku?.variantName].filter(Boolean)
   return parts.join(' - ') || sku?.skuCode || '—'
+}
+
+function getSkuProductType(sku) {
+  return sku?.productType || sku?.ProductType || ''
+}
+
+function isSkuAllowedForLocation(sku, location) {
+  const productType = getSkuProductType(sku)
+  if (location === 'Warehouse') return WAREHOUSE_PRODUCT_TYPES.has(productType)
+  if (location === 'Shelf') return SHELF_PRODUCT_TYPES.has(productType)
+  return true
+}
+
+function matchesSkuSearch(sku, keyword) {
+  const query = keyword.trim().toLowerCase()
+  if (!query) return true
+  return [
+    sku?.skuCode,
+    sku?.productName,
+    sku?.variantName,
+    getProductTypeLabel(getSkuProductType(sku)),
+  ].some((value) => String(value || '').toLowerCase().includes(query))
 }
 
 function getSystemQuantity(stock, location) {
@@ -243,8 +269,15 @@ function CreateStocktakeModal({ onClose, onSaved }) {
   const [stocks, setStocks] = useState([])
   const [rows, setRows] = useState([])
   const [selectedSkuId, setSelectedSkuId] = useState('')
+  const [skuSearch, setSkuSearch] = useState('')
+  const [isSkuComboboxOpen, setIsSkuComboboxOpen] = useState(false)
+  const [skuDropdownStyle, setSkuDropdownStyle] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+  const skuComboboxRef = useRef(null)
+  const skuInputWrapRef = useRef(null)
+  const skuInputRef = useRef(null)
+  const suppressNextSkuFocusOpenRef = useRef(false)
 
   useEffect(() => {
     let mounted = true
@@ -269,37 +302,129 @@ function CreateStocktakeModal({ onClose, onSaved }) {
   }, [])
 
   const skuById = useMemo(() => new Map(skus.map((sku) => [sku.id, sku])), [skus])
+  const eligibleSkus = useMemo(
+    () => skus
+      .filter((sku) => isSkuAllowedForLocation(sku, location))
+      .filter((sku) => matchesSkuSearch(sku, skuSearch))
+      .slice(0, 80),
+    [location, skuSearch, skus],
+  )
   const stockBySkuId = useMemo(() => new Map(stocks.map((stock) => [stock.skuId, stock])), [stocks])
+  const updateSkuDropdownPosition = useCallback(() => {
+    const rect = skuInputWrapRef.current?.getBoundingClientRect()
+    if (!rect) return
+    const viewportPadding = 16
+    const availableBelow = window.innerHeight - rect.bottom - viewportPadding
+    setSkuDropdownStyle({
+      left: rect.left,
+      top: rect.bottom + 4,
+      width: rect.width,
+      maxHeight: Math.min(288, Math.max(180, availableBelow)),
+    })
+  }, [])
+
+  useEffect(() => {
+    function handlePointerDown(event) {
+      if (!skuComboboxRef.current?.contains(event.target)) {
+        setIsSkuComboboxOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handlePointerDown)
+    return () => document.removeEventListener('mousedown', handlePointerDown)
+  }, [])
+
+  useEffect(() => {
+    if (!isSkuComboboxOpen) return undefined
+
+    function handleViewportChange() {
+      updateSkuDropdownPosition()
+    }
+
+    window.addEventListener('resize', handleViewportChange)
+    window.addEventListener('scroll', handleViewportChange, true)
+    return () => {
+      window.removeEventListener('resize', handleViewportChange)
+      window.removeEventListener('scroll', handleViewportChange, true)
+    }
+  }, [isSkuComboboxOpen, updateSkuDropdownPosition])
+
   const rowErrors = useMemo(() => {
     const errors = new Map()
     rows.forEach((row, index) => {
       const messages = []
-      if (!row.skuId || !skuById.has(row.skuId)) messages.push('SKU không hợp lệ')
+      const sku = skuById.get(row.skuId)
+      if (!row.skuId || !sku) messages.push('SKU không hợp lệ')
+      if (sku && !isSkuAllowedForLocation(sku, location)) messages.push('SKU không thuộc vị trí kiểm kê đã chọn')
       const actual = Number(row.actualQuantity)
       if (!Number.isInteger(actual) || actual < 0) messages.push('Thực đếm phải là số nguyên không âm')
       if (!row.reasonCode) messages.push('Thiếu lý do')
       if (messages.length) errors.set(index, messages.join('; '))
     })
     return errors
-  }, [rows, skuById])
+  }, [location, rows, skuById])
   const canSubmit = rows.length > 0 && rowErrors.size === 0
 
-  function addSelectedSku() {
-    if (!selectedSkuId) return
-    if (rows.some((row) => row.skuId === selectedSkuId)) {
+  function addSkuToRows(sku) {
+    if (!sku || !isSkuAllowedForLocation(sku, location)) {
+      showError('SKU không thuộc vị trí kiểm kê đã chọn.')
+      return
+    }
+    if (rows.some((row) => row.skuId === sku.id)) {
       showError('SKU đã có trong phiếu kiểm kê.')
       return
     }
     setRows((current) => [
       ...current,
       {
-        skuId: selectedSkuId,
+        skuId: sku.id,
         actualQuantity: '',
         reasonCode: 'OTHER',
         note: '',
       },
     ])
     setSelectedSkuId('')
+    setSkuSearch('')
+    setIsSkuComboboxOpen(false)
+  }
+
+  function handleLocationChange(value) {
+    setLocation(value)
+    setSelectedSkuId('')
+    setSkuSearch('')
+    setIsSkuComboboxOpen(false)
+  }
+
+  function handleSkuSearchChange(value) {
+    setSkuSearch(value)
+    setSelectedSkuId('')
+    updateSkuDropdownPosition()
+    setIsSkuComboboxOpen(true)
+  }
+
+  function handleSelectSku(sku) {
+    addSkuToRows(sku)
+    setSelectedSkuId('')
+    setSkuSearch('')
+    setIsSkuComboboxOpen(false)
+    suppressNextSkuFocusOpenRef.current = true
+    window.setTimeout(() => skuInputRef.current?.focus(), 0)
+  }
+
+  function toggleSkuCombobox() {
+    if (isLoading) return
+    updateSkuDropdownPosition()
+    setIsSkuComboboxOpen((current) => !current)
+  }
+
+  function openSkuCombobox() {
+    if (isLoading) return
+    if (suppressNextSkuFocusOpenRef.current) {
+      suppressNextSkuFocusOpenRef.current = false
+      return
+    }
+    updateSkuDropdownPosition()
+    setIsSkuComboboxOpen(true)
   }
 
   function updateRow(index, patch) {
@@ -322,14 +447,16 @@ function CreateStocktakeModal({ onClose, onSaved }) {
     const text = await file.text()
     const rowsFromFile = parseCsv(text)
     const [, ...dataRows] = rowsFromFile
-    const skuByCode = new Map(skus.map((sku) => [String(sku.skuCode || '').toUpperCase(), sku]))
+    const skuByCode = new Map(skus
+      .filter((sku) => isSkuAllowedForLocation(sku, location))
+      .map((sku) => [String(sku.skuCode || '').toUpperCase(), sku]))
     const imported = []
     const errors = []
     dataRows.forEach((row, index) => {
       const [skuCode, actualQuantity, reasonCode = 'OTHER', note = ''] = row
       const sku = skuByCode.get(String(skuCode || '').toUpperCase())
       if (!sku) {
-        errors.push(`Dòng ${index + 2}: không tìm thấy SKU ${skuCode}`)
+        errors.push(`Dòng ${index + 2}: không tìm thấy SKU phù hợp vị trí ${skuCode}`)
         return
       }
       imported.push({
@@ -388,7 +515,7 @@ function CreateStocktakeModal({ onClose, onSaved }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-      <div className="flex max-h-[min(92dvh,820px)] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl">
+      <div className="flex max-h-[min(94dvh,900px)] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl">
         <div className="flex shrink-0 items-start justify-between border-b border-slate-100 px-6 py-4">
           <div>
             <p className="text-xs font-bold uppercase tracking-wide text-[#538463]">Kiểm kê tồn kho</p>
@@ -404,7 +531,7 @@ function CreateStocktakeModal({ onClose, onSaved }) {
           <div className="grid gap-4 md:grid-cols-4">
             <label className="space-y-1">
               <span className="text-xs font-semibold uppercase text-slate-500">Vị trí kiểm kê</span>
-              <select value={location} onChange={(event) => setLocation(event.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm">
+              <select value={location} onChange={(event) => handleLocationChange(event.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm">
                 {LOCATION_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
               </select>
             </label>
@@ -419,18 +546,58 @@ function CreateStocktakeModal({ onClose, onSaved }) {
           </div>
 
           <div className="mt-4 flex flex-wrap items-end gap-3 rounded-xl bg-slate-50 p-4">
-            <label className="min-w-[260px] flex-1 space-y-1">
-              <span className="text-xs font-semibold uppercase text-slate-500">Thêm SKU</span>
-              <select value={selectedSkuId} onChange={(event) => setSelectedSkuId(event.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" disabled={isLoading}>
-                <option value="">{isLoading ? 'Đang tải SKU...' : 'Chọn SKU'}</option>
-                {skus.map((sku) => (
-                  <option key={sku.id} value={sku.id}>{sku.skuCode} · {getSkuName(sku)}</option>
-                ))}
-              </select>
-            </label>
-            <button type="button" onClick={addSelectedSku} className="rounded-xl bg-[#538463] px-4 py-2 text-sm font-bold text-white hover:bg-[#426d50]">
-              Thêm dòng
-            </button>
+            <div className="relative min-w-[280px] flex-1 space-y-1" ref={skuComboboxRef}>
+              <span className="text-xs font-semibold uppercase text-slate-500">Chọn</span>
+              <div className="relative" ref={skuInputWrapRef}>
+                <input
+                  ref={skuInputRef}
+                  value={skuSearch}
+                  onChange={(event) => handleSkuSearchChange(event.target.value)}
+                  onFocus={openSkuCombobox}
+                  className="w-full rounded-xl border border-slate-200 bg-white py-2 pl-3 pr-11 text-sm outline-none focus:border-[#538463]"
+                  placeholder={isLoading ? 'Đang tải SKU...' : 'Tìm theo tên hàng hoặc mã SKU...'}
+                  disabled={isLoading}
+                  role="combobox"
+                  aria-expanded={isSkuComboboxOpen}
+                  aria-controls="stocktake-sku-options"
+                />
+                <button
+                  type="button"
+                  className="absolute inset-y-0 right-1 my-1 inline-flex w-9 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 disabled:opacity-40"
+                  onClick={toggleSkuCombobox}
+                  disabled={isLoading}
+                  aria-label="Mở danh sách SKU"
+                >
+                  <span className="material-symbols-outlined text-[20px]">
+                    {isSkuComboboxOpen ? 'keyboard_arrow_up' : 'keyboard_arrow_down'}
+                  </span>
+                </button>
+              </div>
+              {isSkuComboboxOpen ? (
+                <div
+                  id="stocktake-sku-options"
+                  className="fixed z-[60] overflow-y-auto rounded-xl border border-slate-200 bg-white py-1 shadow-lg"
+                  style={skuDropdownStyle ?? undefined}
+                >
+                  {eligibleSkus.length === 0 ? (
+                    <div className="px-3 py-3 text-sm text-slate-400">Không có SKU phù hợp vị trí kiểm kê.</div>
+                  ) : eligibleSkus.map((sku) => (
+                    <button
+                      key={sku.id}
+                      type="button"
+                      className={`block w-full px-3 py-2.5 text-left hover:bg-slate-50 ${sku.id === selectedSkuId ? 'bg-[#f0eee6]' : ''}`}
+                      onClick={() => handleSelectSku(sku)}
+                    >
+                      <span className="block text-sm font-semibold text-slate-800">{getSkuName(sku)}</span>
+                      <span className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                        <span className="font-mono font-semibold text-[#356647]">{sku.skuCode}</span>
+                        <span>{getProductTypeLabel(getSkuProductType(sku))}</span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
             <button type="button" onClick={downloadTemplate} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">
               Tải mẫu CSV
             </button>
@@ -444,7 +611,7 @@ function CreateStocktakeModal({ onClose, onSaved }) {
             <table className="min-w-full text-left text-sm">
               <thead className="bg-slate-50 text-xs font-bold uppercase tracking-wide text-slate-500">
                 <tr>
-                  <th className="px-4 py-3">SKU</th>
+                  <th className="px-4 py-3">Tên</th>
                   <th className="px-4 py-3 text-right">Tồn hệ thống</th>
                   <th className="px-4 py-3 text-right">Thực đếm</th>
                   <th className="px-4 py-3 text-right">Chênh lệch</th>
@@ -464,8 +631,9 @@ function CreateStocktakeModal({ onClose, onSaved }) {
                   return (
                     <tr key={row.skuId} className={rowErrors.has(index) ? 'bg-rose-50/40' : ''}>
                       <td className="px-4 py-3">
-                        <p className="font-mono font-semibold text-[#356647]">{sku?.skuCode || '—'}</p>
-                        <p className="text-xs text-slate-500">{getSkuName(sku)}</p>
+                        <p className="font-semibold text-slate-800">{getSkuName(sku)}</p>
+                        <p className="font-mono text-xs font-semibold text-[#356647]">{sku?.skuCode || '—'}</p>
+                        <p className="text-xs text-slate-400">{getProductTypeLabel(getSkuProductType(sku))}</p>
                         {rowErrors.has(index) ? <p className="mt-1 text-xs text-rose-600">{rowErrors.get(index)}</p> : null}
                       </td>
                       <td className="px-4 py-3 text-right">{formatStockQuantity(systemQuantity)}</td>

@@ -11,14 +11,14 @@ import { fetchInventoryLedger } from '../services/inventoryLedgerApi.js'
 const LOCATION_OPTIONS = [
   { value: '', label: 'Tất cả vị trí' },
   { value: 'Warehouse', label: 'Kho' },
-  { value: 'Shelf', label: 'Kệ Hàng' },
+  { value: 'Shelf', label: 'Quầy/Kệ hàng' },
 ]
 
 const TRANSACTION_OPTIONS = [
   { value: '', label: 'Tất cả giao dịch' },
   { value: 'SUPPLIER_RECEIPT', label: 'Nhập NCC' },
-  { value: 'SHELF_REPLENISHMENT_OUT', label: 'Xuất Kho → Kệ' },
-  { value: 'SHELF_REPLENISHMENT_IN', label: 'Nhập Kệ từ Kho' },
+  { value: 'SHELF_REPLENISHMENT_OUT', label: 'Xuất Kho → Quầy/Kệ' },
+  { value: 'SHELF_REPLENISHMENT_IN', label: 'Nhập Quầy/Kệ từ Kho' },
   { value: 'STOCKTAKE_ADJUSTMENT', label: 'Kiểm kê điều chỉnh' },
   { value: 'PRODUCTION_CONSUME', label: 'Sản xuất tiêu hao' },
   { value: 'PRODUCTION_RECEIPT', label: 'Nhập sau sản xuất' },
@@ -26,7 +26,7 @@ const TRANSACTION_OPTIONS = [
 
 function getLocationLabel(location) {
   if (location === 'Warehouse') return 'Kho'
-  if (location === 'Shelf') return 'Kệ Hàng'
+  if (location === 'Shelf') return 'Quầy/Kệ hàng'
   return location || '—'
 }
 
@@ -83,7 +83,7 @@ function InventoryLedgerPage() {
 
   function exportCsv() {
     const rows = [
-      ['Time', 'SKU', 'Name', 'Location', 'Before', 'Delta', 'After', 'Type', 'Reference', 'Lot', 'Actor'],
+      ['Thời gian tạo', 'SKU', 'Tên hàng', 'Vị trí', 'Tồn trước', 'Chênh lệch', 'Tồn sau', 'Loại giao dịch', 'Tham chiếu', 'Mã lô', 'Người thực hiện'],
       ...data.items.map((entry) => [
         entry.occurredAtUtc,
         entry.skuCode,
@@ -116,8 +116,8 @@ function InventoryLedgerPage() {
   return (
     <PageShell>
       <PageHeader
-        title="Sổ kho"
-        description="Nhật ký bất biến các lần thay đổi tồn Kho/Kệ Hàng."
+        title="Nhật Ký Kho"
+        description="Nhật ký bất biến các lần thay đổi tồn Kho/Quầy/Kệ hàng."
         searchPlaceholder="Tìm SKU, tên hàng, mã chứng từ, mã lô..."
         searchValue={searchInput}
         onSearchChange={(value) => resetPageAndSet(setSearchInput, value)}
@@ -173,7 +173,7 @@ function InventoryLedgerPage() {
               {isLoading ? (
                 <tr><td colSpan={9} className="px-6 py-8 text-slate-500">Đang tải...</td></tr>
               ) : data.items.length === 0 ? (
-                <tr><td colSpan={9} className="px-6 py-8 text-slate-500">Chưa có ledger phù hợp.</td></tr>
+                <tr><td colSpan={9} className="px-6 py-8 text-slate-500">Chưa có dòng nhật ký phù hợp.</td></tr>
               ) : (
                 data.items.map((entry) => (
                   <tr key={entry.id} className="hover:bg-slate-50/80">
@@ -205,7 +205,7 @@ function InventoryLedgerPage() {
           onPageChange={setPage}
           onPageSizeChange={(size) => { setPageSize(size); setPage(1) }}
           disabled={isLoading}
-          itemLabel="dòng ledger"
+          itemLabel="dòng nhật ký"
         />
       </section>
     </PageShell>
