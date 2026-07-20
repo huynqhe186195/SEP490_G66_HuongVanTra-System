@@ -27,6 +27,12 @@ public class ProductSkusController(ProductSkuLogic _skuLogic) : ControllerBase
             new GetProductSkusRequest(search, productId, isActive, page, pageSize),
             User.GetCatalogViewScope()));
 
+    [HttpGet("bom-catalog")]
+    public async Task<IActionResult> GetBomCatalog(
+        [FromQuery] List<Guid>? skuIds,
+        CancellationToken ct) =>
+        Ok(await _skuLogic.GetBomCatalogBySkuIdsAsync(skuIds, User.GetCatalogViewScope(), ct));
+
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetById(Guid id) =>
         Ok(await _skuLogic.GetByIdAsync(id, User.GetCatalogViewScope()));

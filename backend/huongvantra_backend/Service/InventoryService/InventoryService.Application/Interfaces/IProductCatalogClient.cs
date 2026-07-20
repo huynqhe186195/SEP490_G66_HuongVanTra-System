@@ -3,6 +3,9 @@ namespace InventoryService.Application.Interfaces;
 public interface IProductCatalogClient
 {
     Task<ProductCatalogSnapshot> GetCatalogAsync(CancellationToken ct = default);
+    Task<ProductCatalogSnapshot> GetCatalogForVariantIdsAsync(
+        IEnumerable<Guid> variantIds,
+        CancellationToken ct = default);
 }
 
 public sealed record ProductCatalogSnapshot(List<CatalogProduct> Products)
