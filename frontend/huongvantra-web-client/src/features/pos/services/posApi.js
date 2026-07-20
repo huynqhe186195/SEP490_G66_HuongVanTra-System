@@ -764,7 +764,7 @@ async function fetchStoreProductsForPos() {
 
   do {
     const data = await apiRequestAuth(
-      `/api/v1/products?page=${page}&pageSize=${pageSize}`,
+      `/api/v1/store/products?page=${page}&pageSize=${pageSize}`,
       { method: 'GET' },
     )
     const paged = toPagedResult(data)
@@ -808,7 +808,7 @@ export async function fetchPosProducts({ storeId, search, limit = 30 }) {
   query.set('isActive', 'true')
 
   const [data, productItems] = await Promise.all([
-    apiRequestAuth(`/api/v1/skus?${query.toString()}`, { method: 'GET' }),
+    apiRequestAuth(`/api/v1/store/skus?${query.toString()}`, { method: 'GET' }),
     fetchStoreProductsForPos().catch(() => []),
   ])
   const paged = toPagedResult(data)
@@ -822,7 +822,7 @@ export async function fetchPosProducts({ storeId, search, limit = 30 }) {
 
   let stockBySkuId = new Map()
   try {
-    const stocks = await apiRequestAuth('/api/v1/inventory/sku-stocks', { method: 'GET' })
+    const stocks = await apiRequestAuth('/api/v1/store/sku-stocks', { method: 'GET' })
     if (Array.isArray(stocks)) {
       stockBySkuId = new Map(
         stocks.map((row) => [row.skuId ?? row.SkuId, Number(row.quantityOnHand ?? row.QuantityOnHand ?? 0)]),

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { showError } from '../../../app/toast.js'
-import { fetchProductById } from '../services/productsApi.js'
+import { fetchStoreProductById } from '../services/productsApi.js'
 import ProductExpandedPanel from './ProductExpandedPanel.jsx'
 
 export default function StoreProductExpandedLoader({
@@ -27,7 +27,7 @@ export default function StoreProductExpandedLoader({
     async function load() {
       try {
         setIsLoading(true)
-        const item = await fetchProductById(sku.productId)
+        const item = await fetchStoreProductById(sku.productId)
         if (mounted) setProduct(item)
       } catch (error) {
         if (mounted) {

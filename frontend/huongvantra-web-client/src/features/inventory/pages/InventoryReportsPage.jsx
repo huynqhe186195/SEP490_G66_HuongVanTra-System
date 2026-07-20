@@ -5,11 +5,13 @@ import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/Tab
 import { showError } from '../../../app/toast.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import { formatStockQuantity } from '../../products/utils/productDisplay.js'
-import { fetchAllActiveSkus } from '../../products/services/productSkusApi.js'
-import { fetchProducts } from '../../products/services/productsApi.js'
+import { fetchAllActiveSkus, fetchAllActiveStoreSkus } from '../../products/services/productSkusApi.js'
+import { fetchProducts, fetchStoreProducts } from '../../products/services/productsApi.js'
 import InventoryNavTabs from '../components/InventoryNavTabs.jsx'
 import { fetchInventoryLedger } from '../services/inventoryLedgerApi.js'
-import { fetchSkuStocks } from '../services/inventoryStockApi.js'
+import { fetchSkuStocks, fetchStoreSkuStocks } from '../services/inventoryStockApi.js'
+import { isWarehouseRole } from '../../auth/utils/permissions.js'
+import { loadAuthSession } from '../../auth/services/authSession.js'
 import { fetchStocktakeRequests } from '../services/stocktakeApi.js'
 import { fetchWarehouseBatches } from '../services/warehouseBatchApi.js'
 
@@ -180,10 +182,11 @@ function InventoryReportsPage() {
     async function loadReports() {
       setIsLoading(true)
       try {
+        const isWarehouse = isWarehouseRole(loadAuthSession())
         const [stocks, skus, productsResult, batches, ledgerResult, stocktakeResult] = await Promise.all([
-          fetchSkuStocks(),
-          fetchAllActiveSkus(200),
-          fetchProducts({ page: 1, pageSize: 500, isActive: true }),
+          isWarehouse ? fetchSkuStocks() : fetchStoreSkuStocks(),
+          isWarehouse ? fetchAllActiveSkus(200) : fetchAllActiveStoreSkus(200),
+          isWarehouse ? fetchProducts({ page: 1, pageSize: 500, isActive: true }) : fetchStoreProducts({ page: 1, pageSize: 500, isActive: true }),
           fetchWarehouseBatches({ availableOnly: true }),
           fetchInventoryLedger({ page: 1, pageSize: 500 }),
           fetchStocktakeRequests({ status: 'Completed', page: 1, pageSize: 500 }),

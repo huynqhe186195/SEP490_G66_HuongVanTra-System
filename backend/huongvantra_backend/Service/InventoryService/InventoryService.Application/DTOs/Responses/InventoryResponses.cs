@@ -96,6 +96,16 @@ public record SkuStockResponse(
     int ShelfLowStockThreshold,
     DateTime UpdatedAt);
 
+/// <summary>Response chỉ trả tồn quầy — dùng cho Admin/Manager (không expose thông tin kho tổng).</summary>
+public record StoreSkuStockResponse(
+    Guid SkuId,
+    string SkuCode,
+    int WeightInGrams,
+    int QuantityOnHand,
+    int LowStockThreshold,
+    int ShelfLowStockThreshold,
+    DateTime UpdatedAt);
+
 public record StockAdjustmentRequestItemResponse(
     Guid Id,
     Guid SkuId,

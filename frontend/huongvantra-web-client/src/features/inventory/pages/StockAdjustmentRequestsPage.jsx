@@ -10,6 +10,7 @@ import {
   canCreateStockReplenishmentRequest,
   canReviewStockReplenishmentRequest,
   isSystemAdmin,
+  isWarehouseRole,
 } from '../../auth/utils/permissions.js'
 import { formatStockQuantity } from '../../products/utils/productDisplay.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
@@ -17,7 +18,7 @@ import InventorySimulationBanner from '../components/InventorySimulationBanner.j
 import StockAdjustmentRequestDetailPanel from '../components/StockAdjustmentRequestDetailPanel.jsx'
 import InventoryNavTabs from '../components/InventoryNavTabs.jsx'
 import { notifyInventoryStockChanged } from '../utils/inventoryStockEvents.js'
-import { fetchInventorySettings, fetchSkuStocks } from '../services/inventoryStockApi.js'
+import { fetchInventorySettings, fetchSkuStocks, fetchStoreSkuStocks } from '../services/inventoryStockApi.js'
 import {
   approveStockAdjustmentRequest,
   cancelStockAdjustmentRequest,
@@ -28,7 +29,7 @@ import {
   getAdjustmentStatusLabel,
   rejectStockAdjustmentRequest,
 } from '../services/stockAdjustmentRequestApi.js'
-import { fetchSkus } from '../../products/services/productSkusApi.js'
+import { fetchSkus, fetchStoreSkus } from '../../products/services/productSkusApi.js'
 import { buildSkuSnapshotName } from '../../products/components/BatchStockAdjustmentModal.jsx'
 
 const TABS = [
@@ -122,10 +123,13 @@ function CreateStockRequestModal({ onClose, onSubmitted }) {
 
       try {
         const searchTerms = buildSkuSearchTerms(searchTerm)
+        const isWarehouse = isWarehouseRole(loadAuthSession())
+        const fetchStockFn = isWarehouse ? fetchSkuStocks : fetchStoreSkuStocks
+        const fetchSkuFn = isWarehouse ? fetchSkus : fetchStoreSkus
         const [stocks, ...skuResponses] = await Promise.all([
-          fetchSkuStocks(),
+          fetchStockFn(),
           ...searchTerms.map((term) =>
-            fetchSkus({
+            fetchSkuFn({
               search: term,
               page: skuPage,
               pageSize: SKU_PICKER_PAGE_SIZE,
@@ -408,7 +412,8 @@ function ApproveStockRequestModal({ request, onClose, onConfirm, isSaving }) {
 
   useEffect(() => {
     let mounted = true
-    fetchSkuStocks()
+    const fetchFn = isWarehouseRole(loadAuthSession()) ? fetchSkuStocks : fetchStoreSkuStocks
+    fetchFn()
       .then((stocks) => {
         if (!mounted) return
         setStockBySkuId(new Map(stocks.map((stock) => [stock.skuId, stock])))

@@ -17,6 +17,7 @@ public class ProductSkusController(ProductSkuLogic _skuLogic) : ControllerBase
     };
 
     [HttpGet]
+    [Authorize(Roles = "Warehouse")]
     public async Task<IActionResult> GetPaged(
         [FromQuery] string? search,
         [FromQuery] Guid? productId,
@@ -28,14 +29,17 @@ public class ProductSkusController(ProductSkuLogic _skuLogic) : ControllerBase
             User.GetCatalogViewScope()));
 
     [HttpGet("{id:guid}")]
+    [Authorize(Roles = "Warehouse")]
     public async Task<IActionResult> GetById(Guid id) =>
         Ok(await _skuLogic.GetByIdAsync(id, User.GetCatalogViewScope()));
 
     [HttpGet("by-code/{skuCode}")]
+    [Authorize(Roles = "Warehouse")]
     public async Task<IActionResult> GetBySkuCode(string skuCode) =>
         Ok(await _skuLogic.GetBySkuCodeAsync(skuCode, User.GetCatalogViewScope()));
 
     [HttpGet("by-product/{productId:guid}")]
+    [Authorize(Roles = "Warehouse")]
     public async Task<IActionResult> GetByProductId(Guid productId) =>
         Ok(await _skuLogic.GetByProductIdAsync(productId, User.GetCatalogViewScope()));
 

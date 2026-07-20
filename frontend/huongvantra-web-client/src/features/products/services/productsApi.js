@@ -189,8 +189,26 @@ export async function fetchProducts(params = {}) {
   }
 }
 
+/** Danh sách hàng hóa cho Admin/Manager — gọi endpoint riêng, luôn trả catalog cửa hàng. */
+export async function fetchStoreProducts(params = {}) {
+  const query = buildProductQuery(params)
+  const data = await apiRequestAuth(`/api/v1/store/products?${query}`, { method: 'GET' })
+  const paged = toPagedResult(data)
+  return {
+    ...paged,
+    items: paged.items.map(mapProduct).filter(Boolean),
+    totalPages: Number(data?.totalPages ?? data?.TotalPages ?? (Math.ceil(paged.totalCount / paged.pageSize) || 1)),
+  }
+}
+
 export async function fetchProductById(id) {
   const data = await apiRequestAuth(`/api/v1/products/${id}`, { method: 'GET' })
+  return mapProduct(data)
+}
+
+/** Chi tiết sản phẩm cho Admin/Manager/Sale — catalog cửa hàng. */
+export async function fetchStoreProductById(id) {
+  const data = await apiRequestAuth(`/api/v1/store/products/${id}`, { method: 'GET' })
   return mapProduct(data)
 }
 

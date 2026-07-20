@@ -896,6 +896,20 @@ public class InventoryLogic(
         return stocks.Select(MapSkuStock).ToList();
     }
 
+    /// <summary>Chỉ trả thông tin tồn quầy — dành cho Admin/Manager, không expose số liệu kho tổng.</summary>
+    public async Task<List<StoreSkuStockResponse>> GetStoreSkuStocksAsync(CancellationToken ct = default)
+    {
+        var stocks = await _skuStockRepo.GetAllAsync(ct);
+        return stocks.Select(s => new StoreSkuStockResponse(
+            s.SkuId,
+            s.SkuCode,
+            s.WeightInGrams,
+            s.QuantityOnHand,
+            s.LowStockThreshold,
+            s.ShelfLowStockThreshold,
+            s.UpdatedAt)).ToList();
+    }
+
     public async Task<SkuStockResponse> AdjustStoreStockAsync(
         Guid skuId, int quantityDelta, string? skuCode = null, CancellationToken ct = default)
     {

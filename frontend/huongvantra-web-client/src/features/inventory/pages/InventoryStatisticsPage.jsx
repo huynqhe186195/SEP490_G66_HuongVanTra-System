@@ -8,9 +8,11 @@ import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
 import { apiRequestAuth } from '../../../lib/apiClient.js'
-import { fetchAllActiveSkus } from '../../products/services/productSkusApi.js'
-import { fetchProducts } from '../../products/services/productsApi.js'
+import { fetchAllActiveSkus, fetchAllActiveStoreSkus } from '../../products/services/productSkusApi.js'
+import { fetchProducts, fetchStoreProducts } from '../../products/services/productsApi.js'
 import { fetchWarehouseBatches } from '../services/warehouseBatchApi.js'
+import { isWarehouseRole } from '../../auth/utils/permissions.js'
+import { loadAuthSession } from '../../auth/services/authSession.js'
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#ffc658'];
 
@@ -46,11 +48,12 @@ function InventoryStatisticsPage() {
         if (filterPeriod === 'month') params.append('month', filterMonth)
         if (filterPeriod === 'quarter') params.append('quarter', filterQuarter)
 
+        const isWarehouse = isWarehouseRole(loadAuthSession())
         const [data, stocksData, skusData, productsData, batchesData] = await Promise.all([
           apiRequestAuth(`/api/v1/inventory/statistics?${params.toString()}`, { method: 'GET' }),
-          apiRequestAuth('/api/v1/inventory/sku-stocks', { method: 'GET' }),
-          fetchAllActiveSkus(),
-          fetchProducts({ page: 1, pageSize: 100, isActive: true }),
+          apiRequestAuth(isWarehouse ? '/api/v1/inventory/sku-stocks' : '/api/v1/store/sku-stocks', { method: 'GET' }),
+          isWarehouse ? fetchAllActiveSkus() : fetchAllActiveStoreSkus(),
+          isWarehouse ? fetchProducts({ page: 1, pageSize: 100, isActive: true }) : fetchStoreProducts({ page: 1, pageSize: 100, isActive: true }),
           fetchWarehouseBatches({ availableOnly: true })
         ])
 

@@ -12,7 +12,7 @@ import {
   formatPromotionDiscountText,
   formatPromotionLabel,
 } from '../../pos/utils/posPromotionUtils.js'
-import { fetchAllActiveSkus } from '../../products/services/productSkusApi.js'
+import { fetchAllActiveStoreSkus } from '../../products/services/productSkusApi.js'
 import { fetchCategories } from '../../products/services/categoriesApi.js'
 import {
   createAdminPromotion,
@@ -304,7 +304,7 @@ function PromotionsPage() {
 
     setIsSkuLoading(true)
     try {
-      const items = await fetchAllActiveSkus(100)
+      const items = await fetchAllActiveStoreSkus(100)
       setSkuOptions(items)
     } catch (error) {
       setSkuOptions([])

@@ -17,6 +17,7 @@ public class ProductsController(ProductLogic _productLogic) : ControllerBase
     };
 
     [HttpGet]
+    [Authorize(Roles = "Warehouse")]
     public async Task<IActionResult> GetPaged(
         [FromQuery] string? search,
         [FromQuery] int? categoryId,
@@ -30,6 +31,7 @@ public class ProductsController(ProductLogic _productLogic) : ControllerBase
             User.GetCatalogViewScope()));
 
     [HttpGet("{id:guid}")]
+    [Authorize(Roles = "Warehouse")]
     public async Task<IActionResult> GetById(Guid id) =>
         Ok(await _productLogic.GetByIdAsync(id, User.GetCatalogViewScope()));
 

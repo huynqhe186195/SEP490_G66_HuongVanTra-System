@@ -5,10 +5,11 @@ import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/Tab
 import { showError, showSuccess } from '../../../app/toast.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import { formatStockQuantity } from '../../products/utils/productDisplay.js'
-import { fetchAllActiveSkus } from '../../products/services/productSkusApi.js'
+import { fetchAllActiveSkus, fetchAllActiveStoreSkus } from '../../products/services/productSkusApi.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
+import { isWarehouseRole } from '../../auth/utils/permissions.js'
 import InventoryNavTabs from '../components/InventoryNavTabs.jsx'
-import { fetchSkuStocks } from '../services/inventoryStockApi.js'
+import { fetchSkuStocks, fetchStoreSkuStocks } from '../services/inventoryStockApi.js'
 import {
   approveStocktakeRequest,
   cancelStocktakeRequest,
@@ -251,9 +252,10 @@ function CreateStocktakeModal({ onClose, onSaved }) {
     async function loadOptions() {
       setIsLoading(true)
       try {
+        const isWarehouse = isWarehouseRole(loadAuthSession())
         const [skuItems, stockItems] = await Promise.all([
-          fetchAllActiveSkus(200),
-          fetchSkuStocks(),
+          isWarehouse ? fetchAllActiveSkus(200) : fetchAllActiveStoreSkus(200),
+          isWarehouse ? fetchSkuStocks() : fetchStoreSkuStocks(),
         ])
         if (!mounted) return
         setSkus(skuItems)

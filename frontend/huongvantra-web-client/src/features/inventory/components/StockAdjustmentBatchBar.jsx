@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { loadAuthSession } from '../../auth/services/authSession.js'
-import { canAdjustStoreStock } from '../../auth/utils/permissions.js'
+import { canAdjustStoreStock, isWarehouseRole } from '../../auth/utils/permissions.js'
 import BatchStockAdjustmentModal from '../../products/components/BatchStockAdjustmentModal.jsx'
-import { buildStockBySkuIdMap, fetchSkuStocks } from '../services/inventoryStockApi.js'
+import { buildStockBySkuIdMap, fetchSkuStocks, fetchStoreSkuStocks } from '../services/inventoryStockApi.js'
 import { batchLinesToModalInput } from '../utils/stockAdjustmentBatchStore.js'
 import { useStockAdjustmentBatch } from '../hooks/useStockAdjustmentBatch.js'
 
@@ -16,7 +16,8 @@ export default function StockAdjustmentBatchBar() {
   useEffect(() => {
     if (!canAdjust || count === 0) return undefined
     let mounted = true
-    fetchSkuStocks()
+    const fetchFn = isWarehouseRole(session) ? fetchSkuStocks : fetchStoreSkuStocks
+    fetchFn()
       .then((stocks) => {
         if (mounted) setStockBySkuId(buildStockBySkuIdMap(stocks))
       })

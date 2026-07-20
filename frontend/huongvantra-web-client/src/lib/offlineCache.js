@@ -11,7 +11,7 @@ async function fetchAllSkus() {
   let total
   do {
     const data = await apiRequestAuth(
-      `/api/v1/skus?page=${page}&pageSize=${pageSize}&isActive=true`,
+      `/api/v1/store/skus?page=${page}&pageSize=${pageSize}&isActive=true`,
       { method: 'GET' }
     )
     const paged = toPagedResult(data)
@@ -31,7 +31,7 @@ async function fetchAllProducts() {
   let total
   do {
     const data = await apiRequestAuth(
-      `/api/v1/products?page=${page}&pageSize=${pageSize}`,
+      `/api/v1/store/products?page=${page}&pageSize=${pageSize}`,
       { method: 'GET' }
     )
     const paged = toPagedResult(data)
@@ -46,7 +46,7 @@ async function fetchAllProducts() {
 
 async function fetchAllStocks() {
   try {
-    const data = await apiRequestAuth('/api/v1/inventory/sku-stocks', { method: 'GET' })
+    const data = await apiRequestAuth('/api/v1/store/sku-stocks', { method: 'GET' })
     return Array.isArray(data) ? data : []
   } catch {
     return []

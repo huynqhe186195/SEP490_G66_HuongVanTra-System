@@ -20,6 +20,20 @@ export async function fetchSkuStocks() {
   return data.map(mapSkuStock)
 }
 
+/** Tồn quầy cho Admin/Manager — gọi endpoint riêng, không trả thông tin kho tổng. */
+export async function fetchStoreSkuStocks() {
+  const data = await apiRequestAuth('/api/v1/store/sku-stocks', { method: 'GET' })
+  if (!Array.isArray(data)) return []
+  return data.map(mapSkuStock)
+}
+
+/** Low-stock tồn quầy cho Admin/Manager. */
+export async function fetchStoreLowStockSkus() {
+  const data = await apiRequestAuth('/api/v1/store/sku-stocks/low-stock', { method: 'GET' })
+  if (!Array.isArray(data)) return []
+  return data.map(mapSkuStock)
+}
+
 export function buildStockBySkuIdMap(stocks = []) {
   return new Map(stocks.map((row) => [row.skuId, row.quantityOnHand]))
 }

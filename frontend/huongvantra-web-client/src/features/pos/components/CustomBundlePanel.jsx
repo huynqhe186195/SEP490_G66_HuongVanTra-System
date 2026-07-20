@@ -8,7 +8,7 @@ function fmt(amount) {
 async function fetchMaterials(search = '') {
   const query = new URLSearchParams({ pageSize: '100', page: '1', isActive: 'true', productType: 'NGUYEN_LIEU' })
   if (search.trim()) query.set('search', search.trim())
-  const data = await apiRequestAuth(`/api/v1/skus?${query.toString()}`, { method: 'GET' })
+  const data = await apiRequestAuth(`/api/v1/store/skus?${query.toString()}`, { method: 'GET' })
   const paged = toPagedResult(data)
   return (paged.items ?? []).map((item) => ({
     skuId: item.id ?? item.Id ?? item.skuId ?? item.SkuId,

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { useAuthSession } from '../../auth/hooks/useAuthSession.js'
-import { canCreateProductDeletionRequest, isSystemAdmin } from '../../auth/utils/permissions.js'
+import { canCreateProductDeletionRequest, isSystemAdmin, isWarehouseRole } from '../../auth/utils/permissions.js'
 import { formatDateTimeVN } from '../../../utils/vietnamDateTime.js'
 import {
   approveProductDeletionRequest,
@@ -10,6 +10,7 @@ import {
   createProductDeletionRequest,
   fetchProductDeletionRequests,
   fetchProducts,
+  fetchStoreProducts,
   rejectProductDeletionRequest,
   submitProductDeletionRequest,
   updateProductDeletionRequest,
@@ -103,7 +104,8 @@ export default function ProductDeletionRequestsPage() {
     setIsLoading(true)
     setProductLoadError('')
     try {
-      const productPromise = fetchProducts({ isActive: true, page: 1, pageSize: 100 })
+      const fetchProductsFn = isWarehouseRole(session) ? fetchProducts : fetchStoreProducts
+      const productPromise = fetchProductsFn({ isActive: true, page: 1, pageSize: 100 })
         .catch((error) => {
           setProductLoadError(error.message)
           showError(`Không thể tải danh sách Product: ${error.message}`)
