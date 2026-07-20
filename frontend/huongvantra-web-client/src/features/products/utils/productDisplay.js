@@ -27,7 +27,7 @@ export function parseWholeVndInput(raw) {
 
 export function formatWholeVndInput(raw) {
   const amount = parseWholeVndInput(raw)
-  if (amount === null) return ''
+  if (amount === null) return '' 
   return WHOLE_VND_FORMATTER.format(amount)
 }
 
