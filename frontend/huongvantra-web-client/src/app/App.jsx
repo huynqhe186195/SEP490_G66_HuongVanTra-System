@@ -31,6 +31,7 @@ import StockAdjustmentRequestsPage from '../features/inventory/pages/StockAdjust
 import ProductionOrdersPage from '../features/inventory/pages/ProductionOrdersPage.jsx'
 import CustomBundlesPage from '../features/inventory/pages/CustomBundlesPage.jsx'
 import OrderDetailPage from '../features/orders/pages/OrderDetailPage.jsx'
+import CustomerDisplayPage from '../features/pos/pages/CustomerDisplayPage.jsx'
 import PosPage from '../features/pos/pages/PosPage.jsx'
 import PosTransferQrPage from '../features/pos/pages/PosTransferQrPage.jsx'
 import ReturnOrderPage from '../features/pos/pages/ReturnOrderPage.jsx'
@@ -56,6 +57,7 @@ function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/forgot-password/otp" element={<OtpVerificationPage />} />
+      <Route path="/customer-display" element={<CustomerDisplayPage />} />
 
       <Route element={<AdminLayout />}>
         <Route index element={<HomeRedirect />} />
