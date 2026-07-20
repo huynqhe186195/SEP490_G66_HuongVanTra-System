@@ -28,6 +28,12 @@ public class ProductSkusController(ProductSkuLogic _skuLogic) : ControllerBase
             new GetProductSkusRequest(search, productId, isActive, page, pageSize),
             User.GetCatalogViewScope()));
 
+    [HttpGet("bom-catalog")]
+    public async Task<IActionResult> GetBomCatalog(
+        [FromQuery] List<Guid>? skuIds,
+        CancellationToken ct) =>
+        Ok(await _skuLogic.GetBomCatalogBySkuIdsAsync(skuIds, User.GetCatalogViewScope(), ct));
+
     [HttpGet("{id:guid}")]
     [Authorize(Roles = "Warehouse,Accountant,Admin")]
     public async Task<IActionResult> GetById(Guid id) =>

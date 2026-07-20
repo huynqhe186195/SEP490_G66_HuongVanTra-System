@@ -390,6 +390,10 @@ public class ProductCreationRequestLogic(ProductDbContext _db, ProductLogic _pro
             if (variants.Count == 0)
                 errors.Add($"{prefix}: Cần ít nhất một SKU.");
 
+            if (productType == ProductType.THANH_PHAM
+                && !variants.Any(variant => (variant.BomLines ?? []).Count > 0))
+                errors.Add("Sản phẩm kệ bắt buộc phải có BOM trước khi gửi duyệt.");
+
             foreach (var (variant, variantIndex) in variants.Select((value, index) => (value, index)))
             {
                 var row = $"{prefix}, SKU {variantIndex + 1}";

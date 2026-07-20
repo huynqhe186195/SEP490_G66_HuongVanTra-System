@@ -793,6 +793,7 @@ function buildValidationXml(sqref, formula1) {
 function buildGuidedInputValidations(referenceData, lastRowNumber) {
   const lastRow = Math.max(13, lastRowNumber)
   const validations = [
+    buildValidationXml(`A13:A${lastRow}`, '"SẢN PHẨM,SKU,THUỘC TÍNH,BOM"'),
     buildValidationXml(`E13:E${lastRow}`, '"THANH_PHAM,NGUYEN_LIEU,BAO_BI"'),
     buildValidationXml(`F13:F${lastRow}`, referenceFormula('A', referenceData.categories.length)),
     buildValidationXml(`G13:G${lastRow}`, '"Piece,Gram"'),

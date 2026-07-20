@@ -13,4 +13,6 @@ public record StockShortage(
     string SkuName,
     int RequiredQuantity,
     int AvailableQuantity,
-    int ShortageQuantity);
+    int ShortageQuantity,
+    string? AffectedSkuCode = null,
+    string? ComponentSkuCode = null);

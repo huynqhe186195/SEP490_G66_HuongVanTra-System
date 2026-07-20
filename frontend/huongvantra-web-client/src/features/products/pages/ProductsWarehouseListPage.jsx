@@ -290,7 +290,7 @@ export default function ProductsWarehouseListPage() {
   const [transferTarget, setTransferTarget] = useState(null)
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
   const [focusProductId, setFocusProductId] = useState(() => initialState.focusId)
-  const [expandedRowKey, setExpandedRowKey] = useState(null)
+  const [expandedRowKeys, setExpandedRowKeys] = useState(() => new Set())
   const [createdBanner, setCreatedBanner] = useState(() => ({
     open: initialState.showCreatedBanner,
     productId: initialState.focusId,
@@ -482,7 +482,12 @@ export default function ProductsWarehouseListPage() {
 
   // ── Row expansion ─────────────────────────────────────────────────────────
   function toggleExpand(rowKey) {
-    setExpandedRowKey((cur) => (cur === rowKey ? null : rowKey))
+    setExpandedRowKeys((current) => {
+      const next = new Set(current)
+      if (next.has(rowKey)) next.delete(rowKey)
+      else next.add(rowKey)
+      return next
+    })
   }
 
   function openTransferToStore(product, sku) {
@@ -664,8 +669,8 @@ export default function ProductsWarehouseListPage() {
                   <tr>
                     <th className="w-10 px-2 py-3" />
                     <th className="w-14 px-2 py-3" />
-                    <th className="px-3 py-3">Mã SKU</th>
                     <th className="min-w-[180px] px-3 py-3">Tên hàng</th>
+                    <th className="px-3 py-3">Mã SKU</th>
                     <th className="hidden px-3 py-3 md:table-cell">Nhóm hàng</th>
                     <th className="hidden px-3 py-3 text-right lg:table-cell">Giá vốn</th>
                     <th className="px-3 py-3 text-right">Giá bán</th>
@@ -700,7 +705,7 @@ export default function ProductsWarehouseListPage() {
                       const stockQty = selectedVariant ? Number(stockBySkuId.get(selectedVariant.id) ?? 0) : 0
                       const isOut = stockQty <= 0
                       const isLow = stockQty > 0 && stockQty <= 5
-                      const isExpanded = expandedRowKey === row.rowKey
+                      const isExpanded = expandedRowKeys.has(row.rowKey)
                       const isFocused = focusProductId && String(product.id) === focusProductId
                       const isNguyenLieu = product.productType === PRODUCT_TYPE.NGUYEN_LIEU
                       const isBaoBi = product.productType === PRODUCT_TYPE.BAO_BI
@@ -750,11 +755,6 @@ export default function ProductsWarehouseListPage() {
                               />
                             </td>
 
-                            {/* SKU code */}
-                            <td className="px-3 py-3 font-mono text-xs font-bold text-[#356647]" onClick={() => toggleExpand(row.rowKey)}>
-                              {selectedVariant?.skuCode || '—'}
-                            </td>
-
                             {/* Tên hàng + variant */}
                             <td className="px-3 py-3" onClick={() => toggleExpand(row.rowKey)}>
                               <span className="block font-semibold text-slate-900">{product.name}</span>
@@ -763,6 +763,11 @@ export default function ProductsWarehouseListPage() {
                                   {getVariantLabel(selectedVariant, product.name)}
                                 </span>
                               ) : null}
+                            </td>
+
+                            {/* SKU code */}
+                            <td className="px-3 py-3 font-mono text-xs font-bold text-[#356647]" onClick={() => toggleExpand(row.rowKey)}>
+                              {selectedVariant?.skuCode || '—'}
                             </td>
 
                             {/* Danh mục */}
