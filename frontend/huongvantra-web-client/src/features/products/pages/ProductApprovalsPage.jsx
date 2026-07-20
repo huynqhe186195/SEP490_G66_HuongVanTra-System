@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import * as XLSX from 'xlsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
-import { showError, showSuccess } from '../../../app/toast.js'
+import { showError, showSuccess, showToast } from '../../../app/toast.js'
 import { useAuthSession } from '../../auth/hooks/useAuthSession.js'
 import { isSystemAdmin, isWarehouseRole } from '../../auth/utils/permissions.js'
 import VndCurrencyInput from '../components/VndCurrencyInput.jsx'
@@ -19,6 +18,16 @@ import {
 } from '../services/productsApi.js'
 import { formatDateTimeVN } from '../../../utils/vietnamDateTime.js'
 import {
+  PRODUCT_CREATION_TEMPLATE_FILENAME,
+  buildGeneratedSkuCode,
+  downloadOfficialProductCreationTemplate,
+  exportProductCreationDraftToTemplate,
+  formatProductCreationDraftExportFilename,
+  hasMeaningfulProductCreationDraftData,
+  parseOfficialProductCreationFile,
+  validateAppendProductCreationImport,
+} from '../utils/productCreationExcelWorkflow.js'
+import {
   INVENTORY_UNIT_OPTIONS,
   PRODUCT_TYPE,
   PRODUCT_TYPE_OPTIONS,
@@ -35,8 +44,6 @@ const STATUS_LABELS = {
   Completed: 'Đã tạo hàng hóa',
   Cancelled: 'Đã hủy',
 }
-
-const TRUE_VALUES = new Set(['true', '1', 'yes', 'y', 'co', 'có', 'x'])
 
 const EMPTY_GUID = '00000000-0000-0000-0000-000000000000'
 const BOM_INTEGER_MESSAGE = 'Định mức phải là số nguyên dương.'
@@ -72,6 +79,7 @@ function createDraftProduct() {
     categoryId: '',
     baseUnit: 'gói',
     inventoryUnit: 'Piece',
+    description: '',
     skuCode: '',
     variantName: '',
     retailPrice: '',
@@ -189,33 +197,6 @@ function validateAttributeRows(attributes = [], prefix) {
     if (key) usedKeys.add(key)
   })
   return errors
-}
-
-function normalizeBoolean(value, fallback = true) {
-  if (typeof value === 'boolean') return value
-  const text = normalizeText(value).toLowerCase()
-  if (!text) return fallback
-  return TRUE_VALUES.has(text)
-}
-
-function toSkuToken(value) {
-  return normalizeText(value)
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/đ/g, 'd')
-    .replace(/Đ/g, 'D')
-    .toUpperCase()
-    .replace(/[^A-Z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .replace(/-{2,}/g, '-')
-}
-
-function buildGeneratedSkuCode(productName, unitName, conversionRate) {
-  const productToken = toSkuToken(productName) || 'SKU'
-  const unitToken = toSkuToken(unitName) || 'UNIT'
-  const conversion = Number(conversionRate)
-  const suffix = Number.isFinite(conversion) && conversion > 1 ? `-${conversion}` : ''
-  return `${productToken}-${unitToken}${suffix}`.replace(/-{2,}/g, '-').slice(0, 50)
 }
 
 function createSkuRow(row, { isBase = false } = {}) {
@@ -486,7 +467,7 @@ function toProductPayload(row) {
     origin: '',
     flavorProfile: '',
     brewingGuide: '',
-    description: '',
+    description: row.description?.trim() || '',
     baseUnit,
     inventoryUnit: row.inventoryUnit || 'Piece',
     weightValue: null,
@@ -592,6 +573,7 @@ function fromProductSnapshot(item, materialsById) {
     clientKey: item.clientKey || `item-${Date.now()}`,
     variantClientKey: baseSku.requestSkuKey || `${item.clientKey || Date.now()}-sku`,
     name: product.name || '',
+    description: product.description || '',
     productType: product.productType || PRODUCT_TYPE.THANH_PHAM,
     categoryId: product.categoryId ? String(product.categoryId) : '',
     baseUnit: baseSku.unitName || product.baseUnit || 'gói',
@@ -674,257 +656,6 @@ function validateForm(title, rows) {
   return errors
 }
 
-function workbookRows(workbook, sheetName) {
-  const sheet = workbook.Sheets[sheetName]
-  if (!sheet) return []
-  return XLSX.utils.sheet_to_json(sheet, { defval: '' })
-}
-
-function firstCell(row, names) {
-  for (const name of names) {
-    const value = row[name]
-    if (value !== undefined && value !== null && String(value).trim() !== '') return value
-  }
-  return ''
-}
-
-function parseProductCreationWorkbook(workbook, materialsById, attributeNameByKey = new Map()) {
-  const productRows = workbookRows(workbook, 'Products')
-  const variantRows = workbookRows(workbook, 'Variants')
-  const bomRows = workbookRows(workbook, 'BOM')
-  const attributeRows = workbookRows(workbook, 'Attributes')
-  const errors = []
-
-  if (!productRows.length) errors.push('Sheet Products không có dữ liệu.')
-  if (!variantRows.length) errors.push('Sheet Variants không có dữ liệu.')
-
-  const productsByKey = new Map()
-  productRows.forEach((row, index) => {
-    const productClientKey = normalizeText(firstCell(row, ['ProductClientKey', 'ProductKey']))
-    if (!productClientKey) {
-      errors.push(`Products dòng ${index + 2}: thiếu ProductClientKey.`)
-      return
-    }
-    if (productsByKey.has(productClientKey)) errors.push(`Products dòng ${index + 2}: ProductClientKey bị trùng.`)
-    productsByKey.set(productClientKey, { row, index, variants: [], attributes: [] })
-  })
-
-  attributeRows.forEach((row, index) => {
-    const productClientKey = normalizeText(firstCell(row, ['ProductClientKey', 'ProductKey']))
-    const attributeName = normalizeAttributeName(firstCell(row, ['AttributeName', 'Name']))
-    const value = normalizeText(firstCell(row, ['Value', 'AttributeValue']))
-    if (!productClientKey) errors.push(`Attributes dòng ${index + 2}: thiếu ProductClientKey.`)
-    if (productClientKey && !productsByKey.has(productClientKey)) errors.push(`Attributes dòng ${index + 2}: ProductClientKey không tồn tại trong Products.`)
-    if (attributeName && !value) errors.push(`Attributes dòng ${index + 2}: ${ATTRIBUTE_VALUE_REQUIRED_MESSAGE}`)
-    if (!attributeName && value) errors.push(`Attributes dòng ${index + 2}: thiếu tên thuộc tính.`)
-    if (attributeName && value && productClientKey && productsByKey.has(productClientKey)) {
-      const attributeKey = getAttributeNameKey(attributeName)
-      const product = productsByKey.get(productClientKey)
-      if (product.attributes.some((attribute) => getAttributeNameKey(attribute.attributeName) === attributeKey)) {
-        errors.push(`Attributes dòng ${index + 2}: ${ATTRIBUTE_DUPLICATE_MESSAGE}`)
-        return
-      }
-      const existingAttribute = attributeNameByKey.get(attributeKey)
-      product.attributes.push(createAttributeRow({
-        attributeNameId: existingAttribute?.id ?? null,
-        attributeName: existingAttribute?.name ?? attributeName,
-        value,
-      }))
-    }
-  })
-
-  const variantsByKey = new Map()
-  variantRows.forEach((row, index) => {
-    const productClientKey = normalizeText(firstCell(row, ['ProductClientKey', 'ProductKey']))
-    const variantClientKey = normalizeText(firstCell(row, ['VariantClientKey', 'VariantKey']))
-    if (!productClientKey) errors.push(`Variants dòng ${index + 2}: thiếu ProductClientKey.`)
-    if (!variantClientKey) errors.push(`Variants dòng ${index + 2}: thiếu VariantClientKey.`)
-    if (!productsByKey.has(productClientKey)) errors.push(`Variants dòng ${index + 2}: ProductClientKey không tồn tại trong Products.`)
-    if (variantClientKey && variantsByKey.has(variantClientKey)) errors.push(`Variants dòng ${index + 2}: VariantClientKey bị trùng.`)
-
-    const product = productsByKey.get(productClientKey)
-    if (product && variantClientKey) {
-      const variant = { row, index, bomLines: [] }
-      product.variants.push(variant)
-      variantsByKey.set(variantClientKey, variant)
-    }
-  })
-
-  bomRows.forEach((row, index) => {
-    const variantClientKey = normalizeText(firstCell(row, ['VariantClientKey', 'VariantKey']))
-    const materialId = normalizeText(firstCell(row, ['MaterialId', 'MaterialProductId']))
-    const componentSkuCode = normalizeText(firstCell(row, ['ComponentSkuCode', 'ComponentSKU']))
-    const componentRequestSkuKey = normalizeText(firstCell(row, ['ComponentRequestSkuKey', 'ComponentVariantKey']))
-    const isRequiredBaseComponent = normalizeBoolean(firstCell(row, ['IsRequiredBaseComponent', 'RequiredBaseComponent']), false)
-    const quantity = positiveIntegerOrNull(firstCell(row, ['Quantity', 'BomQuantity']))
-    if (!variantClientKey) errors.push(`BOM dòng ${index + 2}: thiếu VariantClientKey.`)
-    if (!materialId && !componentSkuCode && !componentRequestSkuKey) errors.push(`BOM dòng ${index + 2}: thiếu MaterialId hoặc ComponentSkuCode.`)
-    if (!quantity) errors.push(`BOM dòng ${index + 2}: ${BOM_INTEGER_MESSAGE}`)
-    if (variantClientKey && !variantsByKey.has(variantClientKey)) errors.push(`BOM dòng ${index + 2}: VariantClientKey không tồn tại.`)
-
-    const variant = variantsByKey.get(variantClientKey)
-    if (variant && (materialId || componentSkuCode || componentRequestSkuKey) && quantity && quantity > 0) {
-      const material = materialsById.get(materialId)
-      variant.bomLines.push({
-        materialId: materialId || EMPTY_GUID,
-        materialName: material?.name ?? '',
-        materialUnitName: getMaterialUnit(material),
-        quantity,
-        componentSkuCode,
-        componentRequestSkuKey,
-        isRequiredBaseComponent,
-      })
-    }
-  })
-
-  const rows = Array.from(productsByKey.values()).flatMap((productEntry) => {
-    if (productEntry.variants.length === 0) {
-      errors.push(`Products dòng ${productEntry.index + 2}: cần ít nhất một SKU trong sheet Variants.`)
-      return []
-    }
-
-    const productRow = productEntry.row
-    const productType = normalizeText(firstCell(productRow, ['ProductType'])) || PRODUCT_TYPE.THANH_PHAM
-    const productKey = normalizeText(firstCell(productRow, ['ProductClientKey', 'ProductKey']))
-    const skuRows = productEntry.variants.map((variantEntry, variantIndex) => {
-      const variantRow = variantEntry.row
-      const variantKey = normalizeText(firstCell(variantRow, ['VariantClientKey', 'VariantKey']))
-      const retailPriceCell = firstCell(variantRow, ['RetailPrice', 'Price'])
-      const costPriceCell = firstCell(variantRow, ['CostPrice'])
-      const unitName = normalizeText(firstCell(variantRow, ['UnitName', 'BaseUnit'])) || normalizeText(firstCell(productRow, ['BaseUnit'])) || 'gói'
-      const conversionRate = normalizeText(firstCell(variantRow, ['ConversionRate'])) || (variantIndex === 0 ? '1' : '')
-      const isBaseUnitVariant = normalizeBoolean(firstCell(variantRow, ['IsBaseUnit', 'IsBaseUnitVariant']), variantIndex === 0)
-      return {
-        requestSkuKey: variantKey,
-        unitName,
-        conversionRate,
-        skuCode: normalizeText(firstCell(variantRow, ['SkuCode', 'SKU'])).toUpperCase(),
-        variantName: normalizeText(firstCell(variantRow, ['VariantName', 'SkuName'])) || `${normalizeText(firstCell(productRow, ['ProductName', 'Name']))} - ${unitName}`,
-        retailPrice: retailPriceCell === '' ? '' : String(retailPriceCell),
-        costPrice: costPriceCell === '' ? '0' : String(costPriceCell),
-        barcode: normalizeText(firstCell(variantRow, ['Barcode'])),
-        minStock: String(firstCell(variantRow, ['MinStock']) || '0'),
-        maxStock: String(firstCell(variantRow, ['MaxStock']) || ''),
-        isSellable: normalizeBoolean(firstCell(variantRow, ['IsSellable']), getDefaultSellableByType(productType)),
-        isBaseUnitVariant,
-        isAutoGeneratedSku: false,
-        bomLines: productType === PRODUCT_TYPE.THANH_PHAM ? variantEntry.bomLines : [],
-      }
-    })
-    const baseSku = skuRows.find((sku) => sku.isBaseUnitVariant) ?? skuRows[0]
-    return [syncLegacySkuFields({
-      ...createDraftProduct(),
-      clientKey: productKey,
-      variantClientKey: baseSku?.requestSkuKey || `${productKey}-sku`,
-      name: normalizeText(firstCell(productRow, ['ProductName', 'Name'])),
-      productType,
-      categoryId: normalizeText(firstCell(productRow, ['CategoryId'])),
-      baseUnit: baseSku?.unitName || normalizeText(firstCell(productRow, ['BaseUnit'])) || 'gói',
-      inventoryUnit: normalizeText(firstCell(productRow, ['InventoryUnit'])) || 'Piece',
-      skuRows,
-      attributes: productEntry.attributes,
-    }, skuRows)]
-  })
-
-  return { rows, errors }
-}
-
-function buildTemplateWorkbook() {
-  const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
-    ['Hướng dẫn'],
-    ['1. Điền Products trước, mỗi ProductClientKey là một sản phẩm trong request.'],
-    ['2. Điền Variants, mỗi dòng là một đơn vị đóng gói và một SKU tồn kho riêng.'],
-    ['3. Điền BOM theo VariantClientKey; ComponentSkuCode có thể là SKU có sẵn hoặc SKU cùng request.'],
-    ['4. Import chỉ nạp vào Draft UI; backend sẽ validate lại khi Submit/Approve.'],
-  ]), 'Instructions')
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([
-    {
-      ProductClientKey: 'P001',
-      ProductName: 'Trà nhài túi 50g',
-      ProductType: 'THANH_PHAM',
-      CategoryId: 1,
-      BaseUnit: 'gói',
-      InventoryUnit: 'Piece',
-    },
-  ]), 'Products')
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([
-    {
-      ProductClientKey: 'P001',
-      VariantClientKey: 'V001',
-      SkuCode: 'FG-TRA-NHAI-50G',
-      VariantName: 'Gói 50g',
-      UnitName: 'gói',
-      ConversionRate: 1,
-      IsBaseUnit: true,
-      RetailPrice: 75000,
-      CostPrice: 0,
-      Barcode: '',
-      MinStock: 0,
-      MaxStock: '',
-      IsSellable: true,
-    },
-  ]), 'Variants')
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([
-    {
-      VariantClientKey: 'V001',
-      MaterialId: '',
-      ComponentSkuCode: '',
-      Quantity: 50,
-    },
-  ]), 'BOM')
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([
-    {
-      ProductClientKey: 'P001',
-      AttributeName: 'Hương vị',
-      Value: 'Nhài',
-    },
-  ]), 'Attributes')
-  return wb
-}
-
-function exportRowsToWorkbook({ title, warehouseNote, rows }) {
-  const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([{ Title: title, WarehouseNote: warehouseNote }]), 'Request')
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows.map((row) => ({
-    ProductClientKey: row.clientKey,
-    ProductName: row.name,
-    ProductType: row.productType,
-    CategoryId: row.categoryId,
-    BaseUnit: row.baseUnit,
-    InventoryUnit: row.inventoryUnit,
-  }))), 'Products')
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows.flatMap((row) => syncSkuRows(row, getSkuRows(row)).map((sku) => ({
-    ProductClientKey: row.clientKey,
-    VariantClientKey: sku.requestSkuKey,
-    SkuCode: sku.skuCode,
-    VariantName: sku.variantName,
-    UnitName: sku.unitName,
-    ConversionRate: sku.conversionRate,
-    IsBaseUnit: sku.isBaseUnitVariant,
-    RetailPrice: moneyOrNull(sku.retailPrice) ?? '',
-    CostPrice: moneyOrNull(sku.costPrice) ?? 0,
-    Barcode: sku.barcode,
-    MinStock: sku.minStock,
-    MaxStock: sku.maxStock,
-    IsSellable: sku.isSellable,
-  })))), 'Variants')
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows.flatMap((row) => syncSkuRows(row, getSkuRows(row)).flatMap((sku) => (sku.bomLines ?? []).map((line) => ({
-    VariantClientKey: sku.requestSkuKey,
-    MaterialId: line.materialId,
-    MaterialName: line.materialName,
-    ComponentSkuCode: line.componentSkuCode,
-    Quantity: line.quantity,
-    IsRequiredBaseComponent: Boolean(line.isRequiredBaseComponent),
-  }))))), 'BOM')
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows.flatMap((row) => getSubmittableAttributes(row.attributes).map((attribute) => ({
-    ProductClientKey: row.clientKey,
-    AttributeName: attribute.attributeName,
-    Value: attribute.value,
-  })))), 'Attributes')
-  return wb
-}
-
 function buildAttributeNameOptions(attributeNames = [], rows = []) {
   const byKey = new Map()
   const addOption = (name, source, id = null) => {
@@ -934,9 +665,13 @@ function buildAttributeNameOptions(attributeNames = [], rows = []) {
     byKey.set(key, { key, id, name: label, source })
   }
 
-  attributeNames
+  toReferenceArray(attributeNames)
     .filter((item) => item && (item.isDeleted ?? item.IsDeleted) !== true && (item.isActive ?? item.IsActive) !== false)
-    .forEach((item) => addOption(item.name ?? item.Name, 'existing', item.id ?? item.Id))
+    .forEach((item) => addOption(
+      item.name ?? item.Name ?? item.attributeName ?? item.AttributeName ?? item.displayName ?? item.DisplayName,
+      'existing',
+      item.id ?? item.Id,
+    ))
   ATTRIBUTE_NAME_SUGGESTIONS.forEach((name) => addOption(name, 'suggestion'))
   rows.forEach((row) => {
     ;(row.attributes ?? []).forEach((attribute) => addOption(attribute.attributeName, 'request', attribute.attributeNameId ?? null))
@@ -947,6 +682,81 @@ function buildAttributeNameOptions(attributeNames = [], rows = []) {
 
 function buildAttributeNameLookup(options = []) {
   return new Map(options.map((option) => [option.key, option]))
+}
+
+function toReferenceArray(value) {
+  if (Array.isArray(value)) return value
+  if (!value || typeof value !== 'object') return []
+
+  const candidateKeys = ['items', 'Items', 'records', 'Records', 'list', 'List', 'result', 'Result', 'data', 'Data']
+  for (const key of candidateKeys) {
+    const candidate = value[key]
+    if (Array.isArray(candidate)) return candidate
+    const nested = toReferenceArray(candidate)
+    if (nested.length) return nested
+  }
+
+  return []
+}
+
+const EXCEL_REFERENCE_SOURCES = {
+  categories: {
+    label: 'Categories',
+    userMessage: 'Không tải được danh mục sản phẩm.',
+  },
+  componentSkus: {
+    label: 'Component SKUs',
+    userMessage: 'Không tải được danh sách Component SKU.',
+  },
+  attributeNames: {
+    label: 'Attribute Names',
+    userMessage: 'Không tải được danh sách tên thuộc tính.',
+  },
+}
+
+function getReferenceFailureMessage(error) {
+  return normalizeText(error?.message ?? error?.Message ?? error?.statusText ?? error) || 'Không rõ nguyên nhân'
+}
+
+function buildReferenceLoadEntry(sourceKey, result, fallbackItems = []) {
+  const source = EXCEL_REFERENCE_SOURCES[sourceKey]
+  if (result.status === 'fulfilled') {
+    const items = toReferenceArray(result.value)
+    return {
+      items,
+      failure: null,
+      status: {
+        source: source.label,
+        status: 'OK',
+        message: `OK: ${items.length} items`,
+      },
+    }
+  }
+
+  const items = toReferenceArray(fallbackItems)
+  const message = getReferenceFailureMessage(result.reason)
+  return {
+    items,
+    failure: {
+      source: sourceKey,
+      message: source.userMessage,
+      detail: message,
+    },
+    status: {
+      source: source.label,
+      status: 'Failed',
+      message: `Failed: ${message}`,
+    },
+  }
+}
+
+function showReferenceWarningToast(failures = []) {
+  if (!failures.length) return
+  const details = failures.map((failure) => failure.message).join(' ')
+  showToast(
+    `File mẫu đã được tải nhưng thiếu một số dữ liệu tham chiếu. Vui lòng kiểm tra sheet tham chiếu hoặc nhập tay nếu cần. ${details}`,
+    'warning',
+  )
 }
 
 function SkuComponentCombobox({ options, onSelect }) {
@@ -1412,6 +1222,14 @@ function ProductRow({ row, categories, materials, attributeNameOptions, onChange
           </select>
         </label>
       </div>
+      <label className="mt-3 block text-xs font-semibold text-slate-500">
+        Mô tả
+        <input
+          className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+          value={row.description || ''}
+          onChange={(event) => updateProduct({ description: event.target.value })}
+        />
+      </label>
 
       <div className="mt-4 rounded-lg border border-slate-100 bg-slate-50 p-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1427,7 +1245,7 @@ function ProductRow({ row, categories, materials, attributeNameOptions, onChange
             <div key={sku.requestSkuKey || index} className="rounded-lg border border-slate-200 bg-white p-3">
               <div className="grid gap-3 md:grid-cols-6">
                 <label className="text-xs font-semibold text-slate-500">
-                  Tên đơn vị
+                  {sku.isBaseUnitVariant ? 'Tên đơn vị cơ bản' : 'Tên đơn vị'}
                   <input className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={sku.unitName} onChange={(event) => updateSku(index, { unitName: event.target.value })} />
                 </label>
                 <label className="text-xs font-semibold text-slate-500">
@@ -1584,16 +1402,29 @@ export default function ProductApprovalsPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [activeRequestId, setActiveRequestId] = useState(null)
-  const [activeRequestCode, setActiveRequestCode] = useState('')
   const [title, setTitle] = useState('')
   const [warehouseNote, setWarehouseNote] = useState('')
   const [rows, setRows] = useState([createDraftProduct()])
   const [statusFilter, setStatusFilter] = useState('all')
-  const [importErrors, setImportErrors] = useState([])
+  const [importPreview, setImportPreview] = useState(null)
+  const [importMode, setImportMode] = useState('replace')
+  const [isImporting, setIsImporting] = useState(false)
+  const [isExporting, setIsExporting] = useState(false)
+  const [isTemplateGenerating, setIsTemplateGenerating] = useState(false)
 
   const materialsById = useMemo(() => new Map(materials.map((material) => [String(material.id), material])), [materials])
   const attributeNameOptions = useMemo(() => buildAttributeNameOptions(attributeNames, rows), [attributeNames, rows])
   const attributeNameByKey = useMemo(() => buildAttributeNameLookup(attributeNameOptions), [attributeNameOptions])
+  const hasCurrentDraftData = useMemo(() => hasMeaningfulProductCreationDraftData(rows), [rows])
+  const importAppendErrors = useMemo(() => (
+    importPreview && importMode === 'append'
+      ? validateAppendProductCreationImport(rows, importPreview.rows, { getSkuRows, syncSkuRows })
+      : []
+  ), [importMode, importPreview, rows])
+  const importBlockingErrors = useMemo(() => [
+    ...(importPreview?.errors ?? []),
+    ...importAppendErrors,
+  ], [importAppendErrors, importPreview])
 
   const loadRequests = useCallback(async (nextStatus) => {
     setIsLoading(true)
@@ -1644,20 +1475,20 @@ export default function ProductApprovalsPage() {
 
   function resetForm() {
     setActiveRequestId(null)
-    setActiveRequestCode('')
     setTitle('')
     setWarehouseNote('')
     setRows([createDraftProduct()])
-    setImportErrors([])
+    setImportPreview(null)
+    setImportMode('replace')
   }
 
   function loadIntoForm(request) {
     setActiveRequestId(request.id)
-    setActiveRequestCode(request.requestCode)
     setTitle(request.title)
     setWarehouseNote(request.warehouseNote || '')
     setRows(request.items.length ? request.items.map((item) => fromProductSnapshot(item, materialsById)) : [createDraftProduct()])
-    setImportErrors([])
+    setImportPreview(null)
+    setImportMode('replace')
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
@@ -1675,7 +1506,6 @@ export default function ProductApprovalsPage() {
         ? await updateProductCreationRequest(activeRequestId, payload)
         : await createProductCreationRequest(payload)
       setActiveRequestId(saved.id)
-      setActiveRequestCode(saved.requestCode)
       if (showToast) showSuccess('Đã lưu yêu cầu tạo hàng hóa.')
       await loadRequests(statusFilter)
       return saved
@@ -1722,19 +1552,96 @@ export default function ProductApprovalsPage() {
     }
   }
 
-  function downloadTemplate() {
-    XLSX.writeFile(buildTemplateWorkbook(), 'Mau_ProductCreationRequest.xlsx')
+  async function loadExcelReferenceData() {
+    const [categoryResult, materialResult, attributeNameResult] = await Promise.allSettled([
+      fetchCategories({ isDeleted: false }),
+      searchMaterials('', 500),
+      fetchAttributeNames(),
+    ])
+
+    const categoryReference = buildReferenceLoadEntry('categories', categoryResult, categories)
+    const materialReference = buildReferenceLoadEntry('componentSkus', materialResult, materials)
+    const attributeNameReference = buildReferenceLoadEntry('attributeNames', attributeNameResult, attributeNames)
+
+    const categoryItems = categoryReference.items
+    const materialItems = materialReference.items
+    const attributeNameItems = attributeNameReference.items
+    const failures = [
+      categoryReference.failure,
+      materialReference.failure,
+      attributeNameReference.failure,
+    ].filter(Boolean)
+    const referenceLoadStatuses = [
+      categoryReference.status,
+      materialReference.status,
+      attributeNameReference.status,
+    ]
+
+    setCategories(categoryItems)
+    setMaterials(materialItems)
+    setAttributeNames(attributeNameItems)
+
+    return {
+      categoryItems,
+      materialItems,
+      attributeNameItems,
+      failures,
+      referenceLoadStatuses,
+    }
   }
 
-  function exportCurrentDraft() {
+  async function downloadTemplate() {
+    setIsTemplateGenerating(true)
+    try {
+      const { categoryItems, materialItems, attributeNameItems, failures, referenceLoadStatuses } = await loadExcelReferenceData()
+      await downloadOfficialProductCreationTemplate({
+        categories: categoryItems,
+        materials: materialItems,
+        attributeNameOptions: buildAttributeNameOptions(attributeNameItems, []),
+        referenceLoadStatuses,
+      })
+      showReferenceWarningToast(failures)
+    } catch {
+      showError('Không tạo được file mẫu Excel. Vui lòng thử lại.')
+    } finally {
+      setIsTemplateGenerating(false)
+    }
+  }
+
+  async function exportCurrentDraft() {
     const errors = validateForm(title || 'Yêu cầu tạo hàng hóa', rows)
     if (errors.length) {
       showError(errors[0])
       return
     }
 
-    const safeCode = activeRequestCode || normalizeText(title).replace(/[^\w-]+/g, '-') || 'ProductCreationRequest'
-    XLSX.writeFile(exportRowsToWorkbook({ title, warehouseNote, rows }), `${safeCode}.xlsx`)
+    setIsExporting(true)
+    try {
+      const { categoryItems, materialItems, attributeNameItems, failures, referenceLoadStatuses } = await loadExcelReferenceData()
+      await exportProductCreationDraftToTemplate({
+        rows,
+        categories: categoryItems,
+        materials: materialItems,
+        attributeNameOptions: buildAttributeNameOptions(attributeNameItems, rows),
+        referenceLoadStatuses,
+        filename: formatProductCreationDraftExportFilename(),
+        helpers: {
+          getSkuRows,
+          syncSkuRows,
+          getSubmittableAttributes,
+          moneyOrNull,
+        },
+      })
+      if (failures.length) {
+        showReferenceWarningToast(failures)
+      } else {
+        showSuccess('Đã export bản nháp theo file mẫu chính thức.')
+      }
+    } catch (error) {
+      showError(error.message || 'Không thể export file Excel.')
+    } finally {
+      setIsExporting(false)
+    }
   }
 
   async function handleImportFile(event) {
@@ -1742,21 +1649,46 @@ export default function ProductApprovalsPage() {
     event.target.value = ''
     if (!file) return
 
+    setIsImporting(true)
     try {
-      const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array' })
-      const parsed = parseProductCreationWorkbook(workbook, materialsById, attributeNameByKey)
-      setImportErrors(parsed.errors)
-      if (parsed.errors.length) {
-        showError(parsed.errors[0])
-        return
+      const preview = await parseOfficialProductCreationFile(file, {
+        categories,
+        materials,
+        attributeNameByKey,
+        createDraftProduct,
+        createAttributeRow,
+        syncLegacySkuFields,
+      })
+      setImportPreview(preview)
+      setImportMode(hasCurrentDraftData ? 'replace' : 'replace')
+      if (preview.errors.length) {
+        showError(preview.errors[0])
+      } else {
+        showSuccess('Đã đọc file Excel. Kiểm tra preview trước khi áp dụng vào bản nháp.')
       }
-
-      setRows(parsed.rows.length ? parsed.rows : [createDraftProduct()])
-      if (!title.trim()) setTitle(file.name.replace(/\.xlsx$/i, ''))
-      showSuccess('Đã import dữ liệu vào draft. Backend sẽ validate lại khi gửi duyệt.')
     } catch (error) {
       showError(error.message || 'Không thể đọc file Excel.')
+    } finally {
+      setIsImporting(false)
     }
+  }
+
+  function applyImportPreview() {
+    if (!importPreview) return
+    if (importBlockingErrors.length) {
+      showError(importBlockingErrors[0])
+      return
+    }
+
+    const nextRows = importMode === 'append'
+      ? [...rows, ...importPreview.rows]
+      : importPreview.rows
+
+    setRows(nextRows.length ? nextRows : [createDraftProduct()])
+    if (!title.trim()) setTitle(importPreview.suggestedTitle || importPreview.sourceFilename?.replace(/\.xlsx$/i, '') || '')
+    setImportPreview(null)
+    setImportMode('replace')
+    showSuccess('Đã áp dụng dữ liệu import vào bản nháp.')
   }
 
   return (
@@ -1778,24 +1710,102 @@ export default function ProductApprovalsPage() {
         <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h2 className="text-base font-bold text-slate-900">{activeRequestId ? 'Sửa yêu cầu' : 'Tạo yêu cầu mới'}</h2>
+              <h2 className="text-base font-bold text-slate-900">{activeRequestId ? 'Sửa yêu cầu' : 'Tạo biên bản yêu cầu thêm sản phẩm kho mới'}</h2>
               <p className="text-sm text-slate-500">Không dùng approval code. Admin chỉ duyệt/từ chối nội dung Warehouse gửi.</p>
             </div>
             <div className="flex flex-wrap gap-2">
               <input ref={fileInputRef} type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="hidden" onChange={handleImportFile} />
-              <button type="button" className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold" onClick={downloadTemplate}>Tải mẫu Excel</button>
-              <button type="button" className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold" onClick={() => fileInputRef.current?.click()}>Import Excel</button>
-              <button type="button" className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold" onClick={exportCurrentDraft}>Export Excel</button>
+              <button type="button" disabled={isTemplateGenerating} className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold disabled:opacity-50" onClick={downloadTemplate}>{isTemplateGenerating ? 'Đang tạo file mẫu...' : 'Tải file mẫu'}</button>
+              <button type="button" disabled={isImporting} className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold disabled:opacity-50" onClick={() => fileInputRef.current?.click()}>{isImporting ? 'Đang đọc...' : 'Import Excel'}</button>
+              <button type="button" disabled={isExporting} className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold disabled:opacity-50" onClick={exportCurrentDraft}>{isExporting ? 'Đang export...' : 'Export Excel'}</button>
               {activeRequestId ? <button type="button" className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold" onClick={resetForm}>Tạo yêu cầu khác</button> : null}
             </div>
           </div>
 
-          {importErrors.length ? (
-            <div className="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-              <p className="font-semibold">Import Excel chưa hợp lệ</p>
-              <ul className="mt-2 list-disc space-y-1 pl-5">
-                {importErrors.slice(0, 6).map((error) => <li key={error}>{error}</li>)}
-              </ul>
+          {importPreview ? (
+            <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="font-bold text-slate-900">Preview import Excel</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    File: <span className="font-semibold text-slate-700">{importPreview.sourceFilename || '—'}</span>
+                    <span className="mx-2">•</span>
+                    Sheet: <span className="font-semibold text-slate-700">{importPreview.sheetName || '—'}</span>
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">File mẫu chính thức: {PRODUCT_CREATION_TEMPLATE_FILENAME}</p>
+                </div>
+                <button type="button" className="font-semibold text-slate-500 hover:text-slate-700" onClick={() => setImportPreview(null)}>Đóng</button>
+              </div>
+
+              <div className="mt-3 grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
+                <div className="rounded-lg bg-white px-3 py-2">
+                  <p className="text-[11px] font-bold uppercase text-slate-400">Sản phẩm</p>
+                  <p className="text-lg font-bold text-slate-900">{importPreview.counts.products}</p>
+                </div>
+                <div className="rounded-lg bg-white px-3 py-2">
+                  <p className="text-[11px] font-bold uppercase text-slate-400">SKU</p>
+                  <p className="text-lg font-bold text-slate-900">{importPreview.counts.skus}</p>
+                </div>
+                <div className="rounded-lg bg-white px-3 py-2">
+                  <p className="text-[11px] font-bold uppercase text-slate-400">Thuộc tính</p>
+                  <p className="text-lg font-bold text-slate-900">{importPreview.counts.attributes}</p>
+                </div>
+                <div className="rounded-lg bg-white px-3 py-2">
+                  <p className="text-[11px] font-bold uppercase text-slate-400">BOM component</p>
+                  <p className="text-lg font-bold text-slate-900">{importPreview.counts.manualBomLines}</p>
+                </div>
+                <div className="rounded-lg bg-white px-3 py-2">
+                  <p className="text-[11px] font-bold uppercase text-slate-400">Cảnh báo</p>
+                  <p className="text-lg font-bold text-amber-700">{importPreview.warnings.length}</p>
+                </div>
+                <div className="rounded-lg bg-white px-3 py-2">
+                  <p className="text-[11px] font-bold uppercase text-slate-400">Lỗi</p>
+                  <p className="text-lg font-bold text-rose-700">{importBlockingErrors.length}</p>
+                </div>
+              </div>
+
+              {hasCurrentDraftData && importPreview.errors.length === 0 ? (
+                <div className="mt-3 flex flex-wrap gap-3 rounded-lg border border-slate-200 bg-white p-3">
+                  <label className="flex items-center gap-2 font-semibold text-slate-700">
+                    <input type="radio" name="product-import-mode" checked={importMode === 'replace'} onChange={() => setImportMode('replace')} />
+                    Thay thế dữ liệu hiện tại
+                  </label>
+                  <label className="flex items-center gap-2 font-semibold text-slate-700">
+                    <input type="radio" name="product-import-mode" checked={importMode === 'append'} onChange={() => setImportMode('append')} />
+                    Nối thêm vào bản nháp
+                  </label>
+                </div>
+              ) : null}
+
+              {importPreview.warnings.length ? (
+                <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-amber-800">
+                  <p className="font-semibold">Cảnh báo</p>
+                  <ul className="mt-2 list-disc space-y-1 pl-5">
+                    {importPreview.warnings.slice(0, 8).map((warning) => <li key={warning}>{warning}</li>)}
+                  </ul>
+                </div>
+              ) : null}
+
+              {importBlockingErrors.length ? (
+                <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-rose-700">
+                  <p className="font-semibold">Import Excel chưa hợp lệ</p>
+                  <ul className="mt-2 list-disc space-y-1 pl-5">
+                    {importBlockingErrors.slice(0, 12).map((error) => <li key={error}>{error}</li>)}
+                  </ul>
+                </div>
+              ) : null}
+
+              <div className="mt-3 flex flex-wrap justify-end gap-2">
+                <button type="button" className="rounded-lg border border-slate-200 bg-white px-4 py-2 font-semibold" onClick={() => setImportPreview(null)}>Hủy</button>
+                <button
+                  type="button"
+                  disabled={importBlockingErrors.length > 0}
+                  className="rounded-lg bg-[#356647] px-4 py-2 font-semibold text-white disabled:opacity-50"
+                  onClick={applyImportPreview}
+                >
+                  Áp dụng vào bản nháp
+                </button>
+              </div>
             </div>
           ) : null}
 
