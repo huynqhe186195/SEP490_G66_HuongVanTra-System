@@ -4,6 +4,8 @@ import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
+import { canWriteInventory } from '../../auth/utils/permissions.js'
+import { loadAuthSession } from '../../auth/services/authSession.js'
 import { formatStockQuantity } from '../../products/utils/productDisplay.js'
 import InventoryNavTabs from '../components/InventoryNavTabs.jsx'
 import { fetchStockAdjustmentRequests } from '../services/stockAdjustmentRequestApi.js'
@@ -491,6 +493,7 @@ export default function InventoryReturnsPage() {
   const [selectedRequest, setSelectedRequest] = useState(null)
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [actionId, setActionId] = useState(null)
+  const canWrite = canWriteInventory(loadAuthSession())
   const config = getFlowConfig(flow)
 
   const loadRequests = useCallback(async () => {
@@ -576,21 +579,25 @@ export default function InventoryReturnsPage() {
     <PageShell>
       <PageHeader
         title="Trả hàng nhập"
-        description="Tạo và duyệt yêu cầu trả hàng từ Kệ Hàng về Kho hoặc từ Kho về nhà cung cấp."
+        description={canWrite
+          ? 'Tạo và duyệt yêu cầu trả hàng từ Kệ Hàng về Kho hoặc từ Kho về nhà cung cấp.'
+          : 'Xem yêu cầu trả hàng từ Kệ Hàng về Kho hoặc từ Kho về nhà cung cấp (chỉ xem).'}
         searchPlaceholder="Tìm mã yêu cầu, phiếu gốc, SKU, lô..."
         searchValue={searchInput}
         onSearchChange={handleSearchChange}
         rightContent={(
           <div className="flex flex-wrap items-center gap-3">
             <InventoryNavTabs />
-            <button
-              type="button"
-              onClick={() => setIsCreateOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-[#538463] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#457053]"
-            >
-              <span className="material-symbols-outlined text-[18px]">add</span>
-              Tạo yêu cầu
-            </button>
+            {canWrite ? (
+              <button
+                type="button"
+                onClick={() => setIsCreateOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-[#538463] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#457053]"
+              >
+                <span className="material-symbols-outlined text-[18px]">add</span>
+                Tạo yêu cầu
+              </button>
+            ) : null}
           </div>
         )}
       />
@@ -679,7 +686,7 @@ export default function InventoryReturnsPage() {
                         >
                           Chi tiết
                         </button>
-                        {request.status === 'pending' ? (
+                        {canWrite && request.status === 'pending' ? (
                           <>
                             <button
                               type="button"
@@ -727,7 +734,7 @@ export default function InventoryReturnsPage() {
         />
       </section>
 
-      {isCreateOpen ? (
+      {isCreateOpen && canWrite ? (
         <CreateReturnModal
           flow={flow}
           onClose={() => setIsCreateOpen(false)}

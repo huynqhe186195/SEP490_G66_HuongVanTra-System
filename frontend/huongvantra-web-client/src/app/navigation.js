@@ -39,8 +39,8 @@ const HOME_MODULE_PRIORITY = [
 
 export const navigationItems = [
   { label: 'POS bán hàng', path: '/pos', module: 'pos', icon: 'point_of_sale', roles: ['agencyManager', 'salesStaff', 'customer'] },
-  { label: 'Đơn hàng', path: '/orders', module: 'orders', icon: 'receipt_long', roles: ['admin', 'agencyManager', 'salesStaff'] },
-  { label: 'Trả / đổi hàng', path: '/orders/exchange', module: 'orders', icon: 'swap_horiz', roles: ['admin', 'agencyManager', 'salesStaff'] },
+  { label: 'Đơn hàng', path: '/orders', module: 'orders', icon: 'receipt_long', roles: ['admin', 'agencyManager', 'salesStaff', 'accountant'] },
+  { label: 'Trả / đổi hàng', path: '/orders/exchange', module: 'orders', icon: 'swap_horiz', roles: ['admin', 'agencyManager', 'salesStaff', 'accountant'] },
   { label: 'Quản lý đơn COD', path: '/orders/cod', module: 'cod_ops', icon: 'local_shipping', roles: ['agencyManager'] },
   {
     label: 'Chờ trừ tồn quầy',
@@ -68,12 +68,12 @@ export const navigationItems = [
   { label: 'Yêu cầu tạo hàng hóa', path: '/inventory/product-approvals', module: 'product_creation_requests', icon: 'verified', roles: ['admin', 'inventoryManager'] },
   { label: 'Yêu cầu xóa hàng hóa', path: '/inventory/product-deletion-requests', module: 'product_deletion_requests', icon: 'inventory_2', roles: ['admin', 'inventoryManager'] },
   { label: 'Kho tổng', path: '/inventory', module: 'inventory', icon: 'warehouse', roles: ['inventoryManager'] },
-  { label: 'Phiếu nhập NCC', path: '/inventory/supplier-receipts', module: 'supplier_receipts', icon: 'assignment_turned_in', roles: ['admin', 'agencyManager'] },
+  { label: 'Phiếu nhập NCC', path: '/inventory/supplier-receipts', module: 'supplier_receipts', icon: 'assignment_turned_in', roles: ['admin', 'agencyManager', 'accountant'] },
   { label: 'Trả hàng nhập', path: '/inventory/returns', module: 'inventory_returns', icon: 'assignment_return', roles: ['admin', 'agencyManager', 'inventoryManager'] },
   { label: 'Kiểm kê tồn kho', path: '/inventory/stocktake', module: 'inventory_stocktake', icon: 'fact_check', roles: ['admin', 'agencyManager', 'inventoryManager'] },
-  { label: 'Báo cáo kho', path: '/inventory/reports', module: 'inventory_reports', icon: 'analytics', roles: ['admin', 'agencyManager', 'inventoryManager'] },
+  { label: 'Báo cáo kho', path: '/inventory/reports', module: 'inventory_reports', icon: 'analytics', roles: ['admin', 'agencyManager', 'inventoryManager', 'accountant'] },
   { label: 'Lô sản xuất', path: '/inventory/production-orders', module: 'inventory', icon: 'precision_manufacturing', roles: ['inventoryManager'] },
-  { label: 'Sổ kho', path: '/inventory/ledger', module: 'inventory_ledger', icon: 'fact_check', roles: ['admin', 'agencyManager', 'inventoryManager'] },
+  { label: 'Sổ kho', path: '/inventory/ledger', module: 'inventory_ledger', icon: 'fact_check', roles: ['admin', 'agencyManager', 'inventoryManager', 'accountant'] },
   { label: 'Định mức BOM', path: '/inventory/boms', module: 'inventory', icon: 'schema', roles: ['inventoryManager'] },
   { label: 'Gói custom', path: '/inventory/custom-bundles', module: 'inventory', icon: 'package_2', roles: ['inventoryManager'] },
   {
@@ -81,7 +81,7 @@ export const navigationItems = [
     path: '/inventory/statistics',
     module: 'inventory_statistics',
     icon: 'analytics',
-    roles: ['inventoryManager'],
+    roles: ['inventoryManager', 'accountant'],
     children: [
       { label: 'Tổng quan', path: '/inventory/statistics?section=overview', section: 'overview', sectionScope: 'inventory_statistics' },
       { label: 'Trạng thái hàng hoá', path: '/inventory/statistics?section=alerts', section: 'alerts', sectionScope: 'inventory_statistics' },
@@ -93,6 +93,13 @@ export const navigationItems = [
     module: 'stock_adjustment_ops',
     icon: 'edit_note',
     roles: ['admin', 'agencyManager', 'inventoryManager'],
+  },
+  {
+    label: 'Bảng giá vốn & giá bán',
+    path: '/accounting/cost-profit',
+    module: 'accounting_cost',
+    icon: 'sell',
+    roles: ['accountant', 'admin', 'agencyManager'],
   },
   { label: 'Nhân sự', path: '/staff', module: 'staff', icon: 'badge', roles: ['admin', 'agencyManager'] },
   {
@@ -357,6 +364,7 @@ export function resolveHomeRoute(authSession) {
 }
 
 const MODULE_PATH_PREFIXES = [
+  { module: 'accounting_cost', prefix: '/accounting' },
   { module: 'integrations', prefix: '/integrations' },
   { module: 'reports', prefix: '/reports' },
   { module: 'contracts', prefix: '/contracts' },
@@ -412,7 +420,7 @@ export function canAccessModule(session, module) {
 
   if (String(module).toLowerCase() === 'inventory') {
     if (!session?.roles?.length) return false
-    return hasAnyRoleGroup(session.roles, ['inventoryManager'])
+    return hasAnyRoleGroup(session.roles, ['inventoryManager', 'accountant'])
   }
 
   if (session?.modules?.length) {

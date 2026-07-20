@@ -9,10 +9,11 @@ namespace InventoryService.WebAPI.Controllers;
 
 [ApiController]
 [Route("api/v1/inventory/supplier-return-requests")]
-[Authorize(Roles = "Manager,Admin")]
+[Authorize]
 public class SupplierReturnRequestsController(InventoryLogic _logic) : ControllerBase
 {
     [HttpGet]
+    [Authorize(Roles = "Manager,Admin,Accountant")]
     public async Task<IActionResult> GetList(
         CancellationToken ct,
         [FromQuery] string? status,
@@ -29,6 +30,7 @@ public class SupplierReturnRequestsController(InventoryLogic _logic) : Controlle
     }
 
     [HttpGet("{id:guid}")]
+    [Authorize(Roles = "Manager,Admin,Accountant")]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
     {
         var item = await _logic.GetSupplierReturnRequestAsync(id, ct);
@@ -36,6 +38,7 @@ public class SupplierReturnRequestsController(InventoryLogic _logic) : Controlle
     }
 
     [HttpPost]
+    [Authorize(Roles = "Manager,Admin")]
     public async Task<IActionResult> Create([FromBody] CreateSupplierReturnRequest request, CancellationToken ct)
     {
         var userId = User.GetUserId();
@@ -45,6 +48,7 @@ public class SupplierReturnRequestsController(InventoryLogic _logic) : Controlle
     }
 
     [HttpPost("{id:guid}/approve")]
+    [Authorize(Roles = "Manager,Admin")]
     public async Task<IActionResult> Approve(Guid id, CancellationToken ct)
     {
         var result = await _logic.ApproveSupplierReturnRequestAsync(id, User.GetUserId(), User.ToCreatorSnapshot(), ct);
@@ -52,6 +56,7 @@ public class SupplierReturnRequestsController(InventoryLogic _logic) : Controlle
     }
 
     [HttpPost("{id:guid}/reject")]
+    [Authorize(Roles = "Manager,Admin")]
     public async Task<IActionResult> Reject(Guid id, [FromBody] ReviewInventoryReturnRequest request, CancellationToken ct)
     {
         var result = await _logic.RejectSupplierReturnRequestAsync(id, User.GetUserId(), User.ToCreatorSnapshot(), request, ct);
@@ -59,6 +64,7 @@ public class SupplierReturnRequestsController(InventoryLogic _logic) : Controlle
     }
 
     [HttpPost("{id:guid}/cancel")]
+    [Authorize(Roles = "Manager,Admin")]
     public async Task<IActionResult> Cancel(Guid id, [FromBody] ReviewInventoryReturnRequest request, CancellationToken ct)
     {
         var userId = User.GetUserId();

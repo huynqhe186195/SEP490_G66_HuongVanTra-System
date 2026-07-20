@@ -4,6 +4,23 @@ export function isWarehouseRole(session) {
   return isWarehouseUserRole(session?.roles ?? [])
 }
 
+export function isAccountantRole(session) {
+  return (session?.roles ?? []).some((role) => {
+    const normalized = String(role || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[._-]+/g, ' ')
+      .replace(/\s+/g, ' ')
+    return ['accountant', 'ke toan', 'kế toán'].includes(normalized)
+  })
+}
+
+/** Kế toán chỉ xem kho — không tạo/duyệt phiếu, không chỉnh tồn. */
+export function canWriteInventory(session) {
+  if (isAccountantRole(session)) return false
+  return isWarehouseRole(session) || isBranchManager(session) || isManagerRole(session) || isSystemAdmin(session)
+}
+
 export function hasPermission(session, permission) {
   if (!session?.permissions?.length) return false
   return session.permissions.includes(permission)
@@ -21,9 +38,9 @@ export function canCreateCustomer(session) {
   return hasPermission(session, 'CREATE_CUSTOMER')
 }
 
-/** Sửa hồ sơ KH: chỉ Admin/Manager/Kế toán (VIEW_ALL_CUSTOMERS). Sale chỉ xem. */
+/** Sửa hồ sơ KH: Admin (MANAGE_ROLE) hoặc Manager (CREATE_CUSTOMER). Kế toán chỉ xem. */
 export function canEditCustomer(session) {
-  return canViewAllCustomers(session)
+  return hasPermission(session, 'CREATE_CUSTOMER') || hasPermission(session, 'MANAGE_ROLE')
 }
 
 /** Sale (hoặc NV chỉ có VIEW_CUSTOMER): xem tệp KH được gán, không thêm/sửa hồ sơ. */
@@ -31,8 +48,9 @@ export function isAssignedCustomerViewer(session) {
   return canViewCustomer(session) && !canViewAllCustomers(session)
 }
 
+/** Xóa/khôi phục KH — chỉ Admin. */
 export function canDeleteCustomer(session) {
-  return canViewAllCustomers(session)
+  return hasPermission(session, 'MANAGE_ROLE')
 }
 
 /** Manager/Admin/Kế toán xem mọi đơn; Sale chỉ đơn do mình tạo (EmployeeId). */

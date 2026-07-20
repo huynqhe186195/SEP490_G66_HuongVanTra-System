@@ -17,7 +17,7 @@ public class ProductsController(ProductLogic _productLogic) : ControllerBase
     };
 
     [HttpGet]
-    [Authorize(Roles = "Warehouse")]
+    [Authorize(Roles = "Warehouse,Accountant,Admin")]
     public async Task<IActionResult> GetPaged(
         [FromQuery] string? search,
         [FromQuery] int? categoryId,
@@ -31,12 +31,12 @@ public class ProductsController(ProductLogic _productLogic) : ControllerBase
             User.GetCatalogViewScope()));
 
     [HttpGet("{id:guid}")]
-    [Authorize(Roles = "Warehouse")]
+    [Authorize(Roles = "Warehouse,Accountant,Admin")]
     public async Task<IActionResult> GetById(Guid id) =>
         Ok(await _productLogic.GetByIdAsync(id, User.GetCatalogViewScope()));
 
     [HttpGet("variants/{variantId:guid}/bom")]
-    [Authorize(Roles = "Warehouse")]
+    [Authorize(Roles = "Warehouse,Accountant,Admin")]
     public async Task<IActionResult> GetVariantBom(Guid variantId) =>
         Ok(await _productLogic.GetVariantBomAsync(variantId));
 

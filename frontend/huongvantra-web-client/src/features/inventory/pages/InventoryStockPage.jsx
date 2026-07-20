@@ -4,6 +4,8 @@ import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
+import { canWriteInventory } from '../../auth/utils/permissions.js'
+import { loadAuthSession } from '../../auth/services/authSession.js'
 import { fetchAllActiveSkus } from '../../products/services/productSkusApi.js'
 import { fetchProducts } from '../../products/services/productsApi.js'
 import { formatStockQuantity } from '../../products/utils/productDisplay.js'
@@ -20,6 +22,7 @@ function InventoryStockPage() {
   const [editingThreshold, setEditingThreshold] = useState(null) // { skuId, value }
   const [savingSkuId, setSavingSkuId] = useState(null)
   const inputRef = useRef(null)
+  const canWrite = canWriteInventory(loadAuthSession())
 
   const loadData = useCallback(async () => {
     setIsLoading(true)
@@ -145,13 +148,15 @@ function InventoryStockPage() {
       />
 
       <div className="mb-4 flex flex-wrap gap-3">
-        <Link
-          to="/inventory/import/create"
-          className="inline-flex items-center gap-2 rounded-xl bg-[#538463] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#457053]"
-        >
-          <span className="material-symbols-outlined text-[18px]">add</span>
-          Nhập nguyên liệu
-        </Link>
+        {canWrite ? (
+          <Link
+            to="/inventory/import/create"
+            className="inline-flex items-center gap-2 rounded-xl bg-[#538463] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#457053]"
+          >
+            <span className="material-symbols-outlined text-[18px]">add</span>
+            Nhập nguyên liệu
+          </Link>
+        ) : null}
         <Link
           to="/inventory/batches"
           className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
@@ -208,7 +213,7 @@ function InventoryStockPage() {
                       )}
                     </td>
                     <td className="px-4 py-4">
-                      {editingThreshold?.skuId === row.skuId ? (
+                      {canWrite && editingThreshold?.skuId === row.skuId ? (
                         <input
                           ref={inputRef}
                           type="number"
@@ -219,7 +224,7 @@ function InventoryStockPage() {
                           onKeyDown={(e) => handleKeyDown(e, row.skuId)}
                           onBlur={() => commitEdit(row.skuId)}
                         />
-                      ) : (
+                      ) : canWrite ? (
                         <button
                           type="button"
                           title="Click để sửa ngưỡng"
@@ -240,6 +245,10 @@ function InventoryStockPage() {
                             </>
                           )}
                         </button>
+                      ) : (
+                        <span className={row.lowStockThreshold === 0 ? 'text-slate-400' : 'font-semibold text-slate-800'}>
+                          {row.lowStockThreshold === 0 ? 'Chưa đặt' : row.lowStockThreshold}
+                        </span>
                       )}
                     </td>
                   </tr>

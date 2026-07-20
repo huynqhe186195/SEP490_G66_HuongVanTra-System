@@ -9,10 +9,11 @@ namespace InventoryService.WebAPI.Controllers;
 
 [ApiController]
 [Route("api/v1/inventory/shelf-return-requests")]
-[Authorize(Roles = "Warehouse,Manager,Admin")]
+[Authorize]
 public class ShelfReturnRequestsController(InventoryLogic _logic) : ControllerBase
 {
     [HttpGet]
+    [Authorize(Roles = "Warehouse,Manager,Admin,Accountant")]
     public async Task<IActionResult> GetList(
         CancellationToken ct,
         [FromQuery] string? status,
@@ -29,6 +30,7 @@ public class ShelfReturnRequestsController(InventoryLogic _logic) : ControllerBa
     }
 
     [HttpGet("{id:guid}")]
+    [Authorize(Roles = "Warehouse,Manager,Admin,Accountant")]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
     {
         var item = await _logic.GetShelfReturnRequestAsync(id, ct);
@@ -36,6 +38,7 @@ public class ShelfReturnRequestsController(InventoryLogic _logic) : ControllerBa
     }
 
     [HttpPost]
+    [Authorize(Roles = "Warehouse,Manager,Admin")]
     public async Task<IActionResult> Create([FromBody] CreateShelfReturnRequest request, CancellationToken ct)
     {
         var userId = User.GetUserId();
@@ -45,6 +48,7 @@ public class ShelfReturnRequestsController(InventoryLogic _logic) : ControllerBa
     }
 
     [HttpPost("{id:guid}/approve")]
+    [Authorize(Roles = "Warehouse,Manager,Admin")]
     public async Task<IActionResult> Approve(Guid id, CancellationToken ct)
     {
         var result = await _logic.ApproveShelfReturnRequestAsync(id, User.GetUserId(), User.ToCreatorSnapshot(), ct);
@@ -52,6 +56,7 @@ public class ShelfReturnRequestsController(InventoryLogic _logic) : ControllerBa
     }
 
     [HttpPost("{id:guid}/reject")]
+    [Authorize(Roles = "Warehouse,Manager,Admin")]
     public async Task<IActionResult> Reject(Guid id, [FromBody] ReviewInventoryReturnRequest request, CancellationToken ct)
     {
         var result = await _logic.RejectShelfReturnRequestAsync(id, User.GetUserId(), User.ToCreatorSnapshot(), request, ct);
@@ -59,6 +64,7 @@ public class ShelfReturnRequestsController(InventoryLogic _logic) : ControllerBa
     }
 
     [HttpPost("{id:guid}/cancel")]
+    [Authorize(Roles = "Warehouse,Manager,Admin")]
     public async Task<IActionResult> Cancel(Guid id, [FromBody] ReviewInventoryReturnRequest request, CancellationToken ct)
     {
         var userId = User.GetUserId();

@@ -28,7 +28,16 @@ const ROLE_MODULE_MAP = {
   manager: ['pos', 'orders', 'cod_ops', 'stock_deduct_ops', 'stock_adjustment_ops', 'customers', 'products', 'staff', 'dashboard'],
   sale: ['pos', 'orders', 'customers', 'dashboard'],
   warehouse: ['products', 'product_creation_requests', 'product_deletion_requests', 'stock_adjustment_ops', 'inventory', 'dashboard'],
-  accountant: ['orders', 'customers', 'reports', 'dashboard'],
+  accountant: [
+    'orders',
+    'customers',
+    'dashboard',
+    'inventory_ledger',
+    'inventory_reports',
+    'inventory_statistics',
+    'supplier_receipts',
+    'accounting_cost',
+  ],
 }
 
 const ROLE_ALIAS_TO_MAP_KEY = {

@@ -23,7 +23,7 @@ public class CustomersController : ControllerBase
         User.HasPermission(PermissionNames.ManageRole));
 
     [HttpGet("statistics")]
-    [Authorize(Policy = PermissionNames.ViewCustomer)]
+    [Authorize(Policy = PermissionNames.ViewCustomerAccess)]
     public async Task<IActionResult> GetStatistics(CancellationToken ct = default)
     {
         var result = await _logic.GetStatisticsAsync(AccessContext(), ct);
@@ -31,7 +31,7 @@ public class CustomersController : ControllerBase
     }
 
     [HttpGet]
-    [Authorize(Policy = PermissionNames.ViewCustomer)]
+    [Authorize(Policy = PermissionNames.ViewCustomerAccess)]
     public async Task<IActionResult> GetAll([FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken ct = default)
     {
         var result = await _logic.GetAllAsync(page, pageSize, AccessContext(), ct);
@@ -39,7 +39,7 @@ public class CustomersController : ControllerBase
     }
 
     [HttpGet("inactive")]
-    [Authorize(Policy = PermissionNames.ViewCustomer)]
+    [Authorize(Policy = PermissionNames.ViewCustomerAccess)]
     public async Task<IActionResult> GetInactive([FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken ct = default)
     {
         var result = await _logic.GetInactiveAsync(page, pageSize, AccessContext(), ct);
@@ -47,7 +47,7 @@ public class CustomersController : ControllerBase
     }
 
     [HttpGet("lookup")]
-    [Authorize(Policy = PermissionNames.ViewCustomer)]
+    [Authorize(Policy = PermissionNames.ViewCustomerAccess)]
     public async Task<IActionResult> LookupByPhone([FromQuery] string phone, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(phone))
@@ -88,7 +88,7 @@ public class CustomersController : ControllerBase
     }
 
     [HttpGet("export")]
-    [Authorize(Policy = PermissionNames.ViewCustomer)]
+    [Authorize(Policy = PermissionNames.ViewCustomerAccess)]
     public async Task<IActionResult> ExportCustomers([FromQuery] CustomerExportRequest request, CancellationToken ct = default)
     {
         var result = await _logic.ExportToExcelAsync(request, AccessContext(), ct);
@@ -96,7 +96,7 @@ public class CustomersController : ControllerBase
     }
 
     [HttpGet("{id:guid}")]
-    [Authorize(Policy = PermissionNames.ViewCustomer)]
+    [Authorize(Policy = PermissionNames.ViewCustomerAccess)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct = default)
     {
         var result = await _logic.GetByIdAsync(id, AccessContext(), ct);
@@ -104,7 +104,7 @@ public class CustomersController : ControllerBase
     }
 
     [HttpGet("{id:guid}/debts")]
-    [Authorize(Policy = PermissionNames.ViewCustomer)]
+    [Authorize(Policy = PermissionNames.ViewCustomerAccess)]
     public async Task<IActionResult> GetDebts(Guid id, CancellationToken ct = default)
     {
         var result = await _logic.GetDebtsAsync(id, AccessContext(), ct);
@@ -112,7 +112,7 @@ public class CustomersController : ControllerBase
     }
 
     [HttpGet("{id:guid}/debt-summary")]
-    [Authorize(Policy = PermissionNames.ViewCustomer)]
+    [Authorize(Policy = PermissionNames.ViewCustomerAccess)]
     public async Task<IActionResult> GetDebtSummary(Guid id, CancellationToken ct = default)
     {
         var result = await _logic.GetDebtSummaryAsync(id, AccessContext(), ct);
@@ -128,7 +128,7 @@ public class CustomersController : ControllerBase
     }
 
     [HttpGet("{id:guid}/open-debts")]
-    [Authorize(Policy = PermissionNames.ViewCustomer)]
+    [Authorize(Policy = PermissionNames.ViewCustomerAccess)]
     public async Task<IActionResult> GetOpenDebts(Guid id, CancellationToken ct = default)
     {
         var result = await _logic.GetOpenDebtsAsync(id, AccessContext(), ct);
@@ -136,7 +136,7 @@ public class CustomersController : ControllerBase
     }
 
     [HttpGet("{id:guid}/debt-payments/preview")]
-    [Authorize(Policy = PermissionNames.ViewCustomer)]
+    [Authorize(Policy = PermissionNames.ViewCustomerAccess)]
     public async Task<IActionResult> PreviewDebtPayment(Guid id, [FromQuery] decimal amount, CancellationToken ct = default)
     {
         var result = await _logic.PreviewDebtPaymentAsync(id, amount, AccessContext(), ct);
@@ -152,7 +152,7 @@ public class CustomersController : ControllerBase
     }
 
     [HttpGet("{id:guid}/activities")]
-    [Authorize(Policy = PermissionNames.ViewCustomer)]
+    [Authorize(Policy = PermissionNames.ViewCustomerAccess)]
     public async Task<IActionResult> GetActivities(Guid id, CancellationToken ct = default)
     {
         var result = await _logic.GetActivitiesAsync(id, AccessContext(), ct);

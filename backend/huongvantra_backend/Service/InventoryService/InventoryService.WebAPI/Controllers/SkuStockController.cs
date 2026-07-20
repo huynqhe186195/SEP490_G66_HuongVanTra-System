@@ -12,7 +12,7 @@ namespace InventoryService.WebAPI.Controllers;
 public class SkuStockController(InventoryLogic _logic) : ControllerBase
 {
     [HttpGet]
-    [Authorize(Roles = "Warehouse")]
+    [Authorize(Roles = "Warehouse,Accountant")]
     public async Task<IActionResult> GetAll(CancellationToken ct)
     {
         var items = await _logic.GetSkuStocksAsync(ct);
@@ -20,7 +20,7 @@ public class SkuStockController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpGet("low-stock")]
-    [Authorize(Roles = "Warehouse")]
+    [Authorize(Roles = "Warehouse,Accountant")]
     public async Task<IActionResult> GetLowStock(CancellationToken ct)
     {
         var items = await _logic.GetLowStockSkusAsync(ct);

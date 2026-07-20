@@ -13,7 +13,7 @@ namespace InventoryService.WebAPI.Controllers;
 public class StockAdjustmentRequestsController(InventoryLogic _logic) : ControllerBase
 {
     [HttpGet]
-    [Authorize(Roles = "Manager,Warehouse,Admin")]
+    [Authorize(Roles = "Manager,Warehouse,Admin,Accountant")]
     public async Task<IActionResult> GetList(
         CancellationToken ct,
         [FromQuery] string? status,
@@ -31,7 +31,7 @@ public class StockAdjustmentRequestsController(InventoryLogic _logic) : Controll
     }
 
     [HttpGet("{id:guid}")]
-    [Authorize(Roles = "Manager,Warehouse,Admin")]
+    [Authorize(Roles = "Manager,Warehouse,Admin,Accountant")]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
     {
         var item = await _logic.GetStockAdjustmentRequestAsync(id, ct);

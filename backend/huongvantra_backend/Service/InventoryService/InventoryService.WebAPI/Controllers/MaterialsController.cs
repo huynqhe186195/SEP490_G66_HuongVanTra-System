@@ -13,7 +13,7 @@ namespace InventoryService.WebAPI.Controllers;
 public class MaterialsController(InventoryLogic _logic) : ControllerBase
 {
     [HttpPost("deduct-materials")]
-    [Authorize(Policy = PermissionNames.ViewOrder)]
+    [Authorize(Roles = "Warehouse,Manager,Admin")]
     public async Task<IActionResult> DeductMaterials(
         [FromBody] DeductMaterialsRequest request,
         CancellationToken ct)

@@ -16,7 +16,7 @@ public class CustomerTiersController : ControllerBase
     public CustomerTiersController(CustomerTierLogic logic) => _logic = logic;
 
     [HttpGet]
-    [Authorize(Policy = PermissionNames.ViewCustomer)]
+    [Authorize(Policy = PermissionNames.ViewCustomerAccess)]
     public async Task<IActionResult> GetAll(
         [FromQuery] bool includeInactive = false,
         CancellationToken ct = default)

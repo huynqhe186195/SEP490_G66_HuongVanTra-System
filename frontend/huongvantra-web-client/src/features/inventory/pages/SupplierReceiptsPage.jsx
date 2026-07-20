@@ -6,6 +6,8 @@ import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/Tab
 import { showError, showSuccess } from '../../../app/toast.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import { formatStockQuantity } from '../../products/utils/productDisplay.js'
+import { loadAuthSession } from '../../auth/services/authSession.js'
+import { canWriteInventory } from '../../auth/utils/permissions.js'
 import InventoryNavTabs from '../components/InventoryNavTabs.jsx'
 import {
   approveSupplierReceipt,
@@ -57,6 +59,7 @@ function SupplierReceiptsPage() {
   const [selectedReceipt, setSelectedReceipt] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [actionId, setActionId] = useState(null)
+  const canWrite = canWriteInventory(loadAuthSession())
 
   const loadReceipts = useCallback(async () => {
     setIsLoading(true)
@@ -128,13 +131,15 @@ function SupplierReceiptsPage() {
         rightContent={(
           <div className="flex flex-wrap items-center gap-3">
             <InventoryNavTabs />
-            <Link
-              to="/inventory/import/create"
-              className="inline-flex items-center gap-1.5 rounded-xl bg-[#538463] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#457053]"
-            >
-              <span className="material-symbols-outlined text-[18px]">add</span>
-              Tạo phiếu nhập
-            </Link>
+            {canWrite ? (
+              <Link
+                to="/inventory/import/create"
+                className="inline-flex items-center gap-1.5 rounded-xl bg-[#538463] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#457053]"
+              >
+                <span className="material-symbols-outlined text-[18px]">add</span>
+                Tạo phiếu nhập
+              </Link>
+            ) : null}
           </div>
         )}
       />
@@ -198,7 +203,7 @@ function SupplierReceiptsPage() {
                         >
                           Chi tiết
                         </button>
-                        {receipt.status === 'draft' || receipt.status === 'rejected' ? (
+                        {canWrite && (receipt.status === 'draft' || receipt.status === 'rejected') ? (
                           <button
                             type="button"
                             disabled={Boolean(actionId)}
@@ -208,7 +213,7 @@ function SupplierReceiptsPage() {
                             Gửi duyệt
                           </button>
                         ) : null}
-                        {receipt.status === 'pendingapproval' ? (
+                        {canWrite && receipt.status === 'pendingapproval' ? (
                           <>
                             <button
                               type="button"
@@ -228,7 +233,7 @@ function SupplierReceiptsPage() {
                             </button>
                           </>
                         ) : null}
-                        {receipt.status !== 'completed' && receipt.status !== 'cancelled' ? (
+                        {canWrite && receipt.status !== 'completed' && receipt.status !== 'cancelled' ? (
                           <button
                             type="button"
                             disabled={Boolean(actionId)}

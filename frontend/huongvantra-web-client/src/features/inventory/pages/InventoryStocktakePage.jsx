@@ -7,7 +7,7 @@ import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import { formatStockQuantity } from '../../products/utils/productDisplay.js'
 import { fetchAllActiveSkus, fetchAllActiveStoreSkus } from '../../products/services/productSkusApi.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
-import { isWarehouseRole } from '../../auth/utils/permissions.js'
+import { isWarehouseRole, canWriteInventory } from '../../auth/utils/permissions.js'
 import InventoryNavTabs from '../components/InventoryNavTabs.jsx'
 import { fetchSkuStocks, fetchStoreSkuStocks } from '../services/inventoryStockApi.js'
 import {
@@ -538,6 +538,7 @@ function InventoryStocktakePage() {
   const [detail, setDetail] = useState(null)
   const session = loadAuthSession()
   const currentUserId = session?.userId
+  const canWrite = canWriteInventory(session)
 
   const loadRequests = useCallback(async () => {
     setIsLoading(true)
@@ -623,10 +624,12 @@ function InventoryStocktakePage() {
         rightContent={(
           <div className="flex flex-wrap items-center gap-3">
             <InventoryNavTabs />
-            <button type="button" onClick={() => setIsCreateOpen(true)} className="inline-flex items-center gap-1.5 rounded-xl bg-[#538463] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#426d50]">
-              <span className="material-symbols-outlined text-[18px]">add</span>
-              Tạo phiếu kiểm kê
-            </button>
+            {canWrite ? (
+              <button type="button" onClick={() => setIsCreateOpen(true)} className="inline-flex items-center gap-1.5 rounded-xl bg-[#538463] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#426d50]">
+                <span className="material-symbols-outlined text-[18px]">add</span>
+                Tạo phiếu kiểm kê
+              </button>
+            ) : null}
           </div>
         )}
       />
@@ -695,7 +698,7 @@ function InventoryStocktakePage() {
                       <button type="button" onClick={() => openDetail(item.id)} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">
                         Chi tiết
                       </button>
-                      {item.status === 'PendingApproval' && item.createdBy !== currentUserId ? (
+                      {canWrite && item.status === 'PendingApproval' && item.createdBy !== currentUserId ? (
                         <button type="button" onClick={() => handleAction('approve', item)} className="rounded-lg bg-[#538463] px-3 py-1.5 text-xs font-bold text-white hover:bg-[#426d50]">
                           Duyệt
                         </button>

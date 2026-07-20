@@ -1,4 +1,4 @@
-import { isSystemAdmin, isWarehouseRole } from '../../auth/utils/permissions.js'
+import { isSystemAdmin, isWarehouseRole, isAccountantRole } from '../../auth/utils/permissions.js'
 
 export const warehouseNavTabs = [
   { label: 'Kho', to: '/inventory' },
@@ -61,10 +61,12 @@ function isManagerLike(session) {
 
 export function getInventoryNavTabs(session) {
   const tabs = []
+  const accountant = isAccountantRole(session)
+
   if (isWarehouseRole(session)) {
     tabs.push(...warehouseNavTabs)
   }
-  if (isSystemAdmin(session) || isManagerLike(session)) {
+  if (isSystemAdmin(session) || isManagerLike(session) || accountant) {
     tabs.push(supplierReceiptNavTab)
   }
   if (isSystemAdmin(session) || isManagerLike(session) || isWarehouseRole(session)) {
@@ -73,13 +75,16 @@ export function getInventoryNavTabs(session) {
   if (!isWarehouseRole(session) && (isSystemAdmin(session) || isManagerLike(session))) {
     tabs.push(stocktakeNavTab)
   }
-  if (!isWarehouseRole(session) && (isSystemAdmin(session) || isManagerLike(session))) {
+  if (!isWarehouseRole(session) && (isSystemAdmin(session) || isManagerLike(session) || accountant)) {
     tabs.push(inventoryReportNavTab)
   }
-  if (isSystemAdmin(session) || isManagerLike(session) || isWarehouseRole(session)) {
+  if (isSystemAdmin(session) || isManagerLike(session) || isWarehouseRole(session) || accountant) {
     tabs.push(inventoryLedgerNavTab)
   }
-  tabs.push(stockRequestNavTab)
+  // Kế toán không thao tác bổ sung kệ
+  if (!accountant) {
+    tabs.push(stockRequestNavTab)
+  }
   return tabs
 }
 

@@ -12,6 +12,7 @@ import CustomerFormPage from '../features/customers/pages/CustomerFormPage.jsx'
 import CustomerAddressesPage from '../features/customers/pages/CustomerAddressesPage.jsx'
 import CustomersPage from '../features/customers/pages/CustomersPage.jsx'
 import DashboardPage from '../features/dashboard/pages/DashboardPage.jsx'
+import CostProfitReportPage from '../features/accounting/pages/CostProfitReportPage.jsx'
 import IntegrationsPage from '../features/integrations/pages/IntegrationsPage.jsx'
 import InventoryExportPage from '../features/inventory/pages/InventoryExportPage.jsx'
 import InventoryBomPage from '../features/inventory/pages/InventoryBomPage.jsx'
@@ -69,6 +70,7 @@ function App() {
       <Route element={<AdminLayout />}>
         <Route index element={<HomeRedirect />} />
         <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/accounting/cost-profit" element={<CostProfitReportPage />} />
         <Route path="/pos" element={<PosPage />} />
         <Route path="/pos/receipt/print" element={<Navigate to="/pos" replace />} />
         <Route path="/pos/payment/qr" element={<PosTransferQrPage />} />

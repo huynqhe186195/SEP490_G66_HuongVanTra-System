@@ -28,7 +28,8 @@ public static class DataSeeder
     private static readonly (string Username, string FullName, string Department, string RoleName)[] DemoUsers =
     [
         ("sale01", "Nguyen Van Sale", "Sales", "Sale"),
-        ("manager01", "Tran Thi Manager", "Operations", "Manager")
+        ("manager01", "Tran Thi Manager", "Operations", "Manager"),
+        ("accountant01", "Le Thi Ke Toan", "Accounting", "Accountant")
     ];
 
     public static async Task SeedAsync(UserDbContext context)

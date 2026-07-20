@@ -6,7 +6,7 @@ namespace InventoryService.WebAPI.Controllers;
 
 [ApiController]
 [Route("api/v1/inventory/ledger")]
-[Authorize(Roles = "Admin,Warehouse,Manager")]
+[Authorize(Roles = "Admin,Warehouse,Manager,Accountant")]
 public class InventoryLedgerController(InventoryLogic _logic) : ControllerBase
 {
     [HttpGet]

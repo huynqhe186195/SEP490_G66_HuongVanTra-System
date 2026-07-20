@@ -9,10 +9,11 @@ namespace InventoryService.WebAPI.Controllers;
 
 [ApiController]
 [Route("api/v1/inventory/supplier-receipts")]
-[Authorize(Roles = "Manager,Admin")]
+[Authorize]
 public class SupplierReceiptsController(InventoryLogic _logic) : ControllerBase
 {
     [HttpGet]
+    [Authorize(Roles = "Manager,Admin,Accountant")]
     public async Task<IActionResult> GetList(
         CancellationToken ct,
         [FromQuery] string? status = null,
@@ -30,6 +31,7 @@ public class SupplierReceiptsController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpGet("{id:guid}")]
+    [Authorize(Roles = "Manager,Admin,Accountant")]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
     {
         var item = await _logic.GetSupplierReceiptAsync(id, ct);
@@ -38,6 +40,7 @@ public class SupplierReceiptsController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpPost]
+    [Authorize(Roles = "Manager,Admin")]
     public async Task<IActionResult> Create([FromBody] UpsertSupplierReceiptRequest request, CancellationToken ct)
     {
         var userId = User.GetUserId();
@@ -48,6 +51,7 @@ public class SupplierReceiptsController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
+    [Authorize(Roles = "Manager,Admin")]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpsertSupplierReceiptRequest request, CancellationToken ct)
     {
         var userId = User.GetUserId();
@@ -57,6 +61,7 @@ public class SupplierReceiptsController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpPost("{id:guid}/submit")]
+    [Authorize(Roles = "Manager,Admin")]
     public async Task<IActionResult> Submit(Guid id, CancellationToken ct)
     {
         var userId = User.GetUserId();
@@ -66,6 +71,7 @@ public class SupplierReceiptsController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpPost("{id:guid}/approve")]
+    [Authorize(Roles = "Manager,Admin")]
     public async Task<IActionResult> Approve(Guid id, CancellationToken ct)
     {
         var userId = User.GetUserId();
@@ -75,6 +81,7 @@ public class SupplierReceiptsController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpPost("{id:guid}/reject")]
+    [Authorize(Roles = "Manager,Admin")]
     public async Task<IActionResult> Reject(Guid id, [FromBody] ReviewSupplierReceiptRequest request, CancellationToken ct)
     {
         var userId = User.GetUserId();
@@ -84,6 +91,7 @@ public class SupplierReceiptsController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpPost("{id:guid}/cancel")]
+    [Authorize(Roles = "Manager,Admin")]
     public async Task<IActionResult> Cancel(Guid id, [FromBody] ReviewSupplierReceiptRequest request, CancellationToken ct)
     {
         var userId = User.GetUserId();

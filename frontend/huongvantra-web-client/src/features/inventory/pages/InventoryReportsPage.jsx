@@ -14,6 +14,7 @@ import { isWarehouseRole } from '../../auth/utils/permissions.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import { fetchStocktakeRequests } from '../services/stocktakeApi.js'
 import { fetchWarehouseBatches } from '../services/warehouseBatchApi.js'
+import { fetchSupplierReceipts } from '../services/supplierReceiptApi.js'
 
 const REPORT_TYPES = [
   { value: 'current', label: 'Tồn hiện tại' },
@@ -21,6 +22,7 @@ const REPORT_TYPES = [
   { value: 'expiry', label: 'Lô sắp hết hạn' },
   { value: 'movement', label: 'Biến động tồn' },
   { value: 'stocktake', label: 'Lịch sử kiểm kê' },
+  { value: 'supplier', label: 'Nhà cung cấp' },
 ]
 
 const LOCATION_OPTIONS = [
@@ -156,6 +158,11 @@ function buildReportRows(reportType, source, filters) {
       .filter((row) => !keyword || normalizeText(`${row.skuCode} ${row.skuNameSnapshot} ${row.referenceCode} ${row.lotCode}`).includes(keyword))
   }
 
+  if (reportType === 'supplier') {
+    return (source.suppliers ?? [])
+      .filter((row) => !keyword || normalizeText(`${row.supplierName} ${row.receiptCodes}`).includes(keyword))
+  }
+
   return source.stocktakes
     .filter((row) => (!location || row.location === location))
     .filter((row) => !keyword || normalizeText(`${row.requestCode} ${row.reason} ${(row.items ?? []).map((item) => item.skuCode).join(' ')}`).includes(keyword))
@@ -173,6 +180,7 @@ function InventoryReportsPage() {
     batches: [],
     ledger: [],
     stocktakes: [],
+    suppliers: [],
     skuProductTypeById: new Map(),
   })
   const [isLoading, setIsLoading] = useState(true)
@@ -183,23 +191,59 @@ function InventoryReportsPage() {
       setIsLoading(true)
       try {
         const isWarehouse = isWarehouseRole(loadAuthSession())
-        const [stocks, skus, productsResult, batches, ledgerResult, stocktakeResult] = await Promise.all([
+        const [stocks, skus, productsResult, batches, ledgerResult, stocktakeResult, receiptResult] = await Promise.all([
           isWarehouse ? fetchSkuStocks() : fetchStoreSkuStocks(),
           isWarehouse ? fetchAllActiveSkus(200) : fetchAllActiveStoreSkus(200),
           isWarehouse ? fetchProducts({ page: 1, pageSize: 500, isActive: true }) : fetchStoreProducts({ page: 1, pageSize: 500, isActive: true }),
           fetchWarehouseBatches({ availableOnly: true }),
           fetchInventoryLedger({ page: 1, pageSize: 500 }),
           fetchStocktakeRequests({ status: 'Completed', page: 1, pageSize: 500 }),
+          fetchSupplierReceipts({ page: 1, pageSize: 500 }),
         ])
         if (!mounted) return
         const products = productsResult.items ?? []
         const productById = new Map(products.map((product) => [product.id, product]))
         const skuProductTypeById = new Map(skus.map((sku) => [sku.id, productById.get(sku.productId)?.productType || '']))
+        const receipts = receiptResult.items ?? []
+        const supplierMap = new Map()
+        for (const receipt of receipts) {
+          const name = (receipt.supplierName || 'Chưa ghi tên NCC').trim() || 'Chưa ghi tên NCC'
+          const current = supplierMap.get(name) || {
+            id: name,
+            supplierName: name,
+            receiptCount: 0,
+            totalQuantity: 0,
+            totalCost: 0,
+            receiptCodes: [],
+            lastReceivedAt: null,
+          }
+          current.receiptCount += 1
+          current.receiptCodes.push(receipt.receiptCode || '')
+          for (const item of receipt.items ?? []) {
+            current.totalQuantity += Number(item.quantity ?? item.submittedQuantity ?? 0)
+            const qty = Number(item.quantity ?? 0)
+            const unitCost = Number(item.unitCost ?? 0)
+            current.totalCost += qty * unitCost
+          }
+          const when = receipt.receivedDate || receipt.approvedAt || receipt.createdAt
+          if (when && (!current.lastReceivedAt || new Date(when) > new Date(current.lastReceivedAt))) {
+            current.lastReceivedAt = when
+          }
+          supplierMap.set(name, current)
+        }
+        const suppliers = [...supplierMap.values()]
+          .map((row) => ({
+            ...row,
+            receiptCodes: row.receiptCodes.filter(Boolean).join(', '),
+          }))
+          .sort((a, b) => b.receiptCount - a.receiptCount)
+
         setSource({
           stockRows: buildStockRows({ stocks, skus, products }),
           batches,
           ledger: ledgerResult.items ?? [],
           stocktakes: stocktakeResult.items ?? [],
+          suppliers,
           skuProductTypeById,
         })
       } catch (error) {
@@ -230,11 +274,13 @@ function InventoryReportsPage() {
       expiry: ['LotCode', 'Location', 'ProductType', 'SKU', 'Name', 'Quantity', 'ExpiresAt'],
       movement: ['Time', 'SKU', 'Name', 'Location', 'Before', 'Delta', 'After', 'Type', 'Reference', 'Lot'],
       stocktake: ['RequestCode', 'Location', 'CreatedAt', 'ReviewedAt', 'Increase', 'Decrease', 'Reason'],
+      supplier: ['SupplierName', 'ReceiptCount', 'TotalQuantity', 'TotalCost', 'LastReceivedAt', 'ReceiptCodes'],
     }[reportType]
     const values = rows.map((row) => {
       if (reportType === 'expiry') return [row.lotCode, getLocationLabel(row.location), getProductTypeLabel(row.productType), row.skuSummary, row.name, row.quantity, row.expiresAt]
       if (reportType === 'movement') return [row.occurredAtUtc, row.skuCode, row.skuNameSnapshot, getLocationLabel(row.location), row.quantityBefore, row.quantityDelta, row.quantityAfter, row.transactionType, row.referenceCode, row.lotCode]
       if (reportType === 'stocktake') return [row.requestCode, getLocationLabel(row.location), row.createdAt, row.reviewedAt, row.totalPositiveVariance, row.totalNegativeVariance, row.reason]
+      if (reportType === 'supplier') return [row.supplierName, row.receiptCount, row.totalQuantity, Math.round(row.totalCost), row.lastReceivedAt, row.receiptCodes]
       return [row.skuCode, row.name, getLocationLabel(row.location), getProductTypeLabel(row.productType), row.unit, row.quantity, row.threshold, row.updatedAt]
     })
     downloadCsv(`inventory-${reportType}-report.csv`, [headers, ...values])
@@ -244,8 +290,8 @@ function InventoryReportsPage() {
     <PageShell>
       <PageHeader
         title="Báo cáo kho"
-        description="Báo cáo tồn hiện tại, cảnh báo tồn thấp, lô sắp hết hạn, biến động tồn và lịch sử kiểm kê."
-        searchPlaceholder="Tìm SKU, tên hàng, mã lô, mã chứng từ..."
+        description="Báo cáo tồn hiện tại, cảnh báo tồn thấp, lô sắp hết hạn, biến động tồn, kiểm kê và nhà cung cấp."
+        searchPlaceholder="Tìm SKU, tên hàng, mã lô, mã chứng từ, nhà cung cấp..."
         searchValue={search}
         onSearchChange={(value) => resetPageAndSet(setSearch, value)}
         rightContent={(
@@ -263,10 +309,20 @@ function InventoryReportsPage() {
         <select value={reportType} onChange={(event) => resetPageAndSet(setReportType, event.target.value)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm">
           {REPORT_TYPES.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
         </select>
-        <select value={location} onChange={(event) => resetPageAndSet(setLocation, event.target.value)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm">
+        <select
+          value={location}
+          onChange={(event) => resetPageAndSet(setLocation, event.target.value)}
+          className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
+          disabled={reportType === 'supplier'}
+        >
           {LOCATION_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
         </select>
-        <select value={productType} onChange={(event) => resetPageAndSet(setProductType, event.target.value)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm" disabled={reportType === 'stocktake'}>
+        <select
+          value={productType}
+          onChange={(event) => resetPageAndSet(setProductType, event.target.value)}
+          className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
+          disabled={reportType === 'stocktake' || reportType === 'supplier'}
+        >
           {PRODUCT_TYPE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
         </select>
       </div>
@@ -311,6 +367,37 @@ function InventoryReportsPage() {
               <tbody className="divide-y divide-slate-100">
                 {isLoading ? <tr><td colSpan={5} className="px-6 py-8 text-slate-500">Đang tải...</td></tr> : pageRows.map((row) => (
                   <tr key={row.id}><td className="px-6 py-4 font-mono font-semibold text-[#356647]">{row.requestCode}</td><td className="px-4 py-4">{getLocationLabel(row.location)}</td><td className="px-4 py-4 text-right text-emerald-700">+{formatStockQuantity(row.totalPositiveVariance)}</td><td className="px-4 py-4 text-right text-rose-700">-{formatStockQuantity(row.totalNegativeVariance)}</td><td className="px-4 py-4">{formatVietnamDateTime(row.reviewedAt)}</td></tr>
+                ))}
+              </tbody>
+            </table>
+          ) : reportType === 'supplier' ? (
+            <table className="min-w-full text-left text-sm">
+              <thead className="bg-slate-50 text-xs font-bold uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="px-6 py-3">Nhà cung cấp</th>
+                  <th className="px-4 py-3 text-right">Số phiếu nhập</th>
+                  <th className="px-4 py-3 text-right">Tổng SL nhập</th>
+                  <th className="px-4 py-3 text-right">Tổng tiền vốn</th>
+                  <th className="px-4 py-3">Nhập gần nhất</th>
+                  <th className="px-4 py-3">Mã phiếu</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {isLoading ? (
+                  <tr><td colSpan={6} className="px-6 py-8 text-slate-500">Đang tải...</td></tr>
+                ) : pageRows.map((row) => (
+                  <tr key={row.id}>
+                    <td className="px-6 py-4 font-semibold text-slate-800">{row.supplierName}</td>
+                    <td className="px-4 py-4 text-right">{row.receiptCount}</td>
+                    <td className="px-4 py-4 text-right">{formatStockQuantity(row.totalQuantity)}</td>
+                    <td className="px-4 py-4 text-right font-semibold text-[#356647]">
+                      {Number(row.totalCost || 0).toLocaleString('vi-VN')} đ
+                    </td>
+                    <td className="px-4 py-4">{row.lastReceivedAt ? formatVietnamDateTime(row.lastReceivedAt) : '—'}</td>
+                    <td className="px-4 py-4 font-mono text-xs text-slate-600 max-w-xs truncate" title={row.receiptCodes}>
+                      {row.receiptCodes || '—'}
+                    </td>
+                  </tr>
                 ))}
               </tbody>
             </table>
