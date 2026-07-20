@@ -1,3 +1,4 @@
+using HuongVanTra.Shared.Auth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using ProductService.Application;
@@ -7,14 +8,16 @@ using ProductService.Application.UseCases;
 namespace ProductService.WebAPI.Controllers;
 
 /// <summary>
-/// Endpoint hàng hóa dành riêng cho Admin và Manager.
+/// Endpoint hàng hóa catalog cửa hàng — mọi role có VIEW_ORDER trừ Thủ kho.
 /// Luôn trả catalog cửa hàng (SKU đã đồng bộ), không expose master catalog kho.
 /// </summary>
 [ApiController]
 [Route("api/v1/store/products")]
-[Authorize(Roles = "Admin,Manager,Sale")]
+[Authorize(Policy = PermissionNames.ViewOrder)]
 public class StoreProductsController(ProductLogic _productLogic) : ControllerBase
 {
+    private bool IsWarehouse => User.IsInRole("Warehouse");
+
     [HttpGet]
     public async Task<IActionResult> GetPaged(
         [FromQuery] string? search,
@@ -22,12 +25,18 @@ public class StoreProductsController(ProductLogic _productLogic) : ControllerBas
         [FromQuery] bool? isActive,
         [FromQuery] string? productType,
         [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 20) =>
-        Ok(await _productLogic.GetPagedAsync(
+        [FromQuery] int pageSize = 20)
+    {
+        if (IsWarehouse) return Forbid();
+        return Ok(await _productLogic.GetPagedAsync(
             new GetProductsRequest(search, categoryId, isActive, null, productType, page, pageSize),
             CatalogViewScope.Store));
+    }
 
     [HttpGet("{id:guid}")]
-    public async Task<IActionResult> GetById(Guid id) =>
-        Ok(await _productLogic.GetByIdAsync(id, CatalogViewScope.Store));
+    public async Task<IActionResult> GetById(Guid id)
+    {
+        if (IsWarehouse) return Forbid();
+        return Ok(await _productLogic.GetByIdAsync(id, CatalogViewScope.Store));
+    }
 }
