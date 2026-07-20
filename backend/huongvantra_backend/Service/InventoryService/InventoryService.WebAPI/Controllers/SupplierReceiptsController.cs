@@ -13,7 +13,7 @@ namespace InventoryService.WebAPI.Controllers;
 public class SupplierReceiptsController(InventoryLogic _logic) : ControllerBase
 {
     [HttpGet]
-    [Authorize(Roles = "Manager,Admin,Accountant")]
+    [Authorize(Roles = "Manager,Admin,Accountant,Warehouse")]
     public async Task<IActionResult> GetList(
         CancellationToken ct,
         [FromQuery] string? status = null,
@@ -31,7 +31,7 @@ public class SupplierReceiptsController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpGet("{id:guid}")]
-    [Authorize(Roles = "Manager,Admin,Accountant")]
+    [Authorize(Roles = "Manager,Admin,Accountant,Warehouse")]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
     {
         var item = await _logic.GetSupplierReceiptAsync(id, ct);
