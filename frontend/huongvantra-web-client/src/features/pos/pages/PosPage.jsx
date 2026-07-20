@@ -164,11 +164,16 @@ function getPromotionApplyErrorMessage(error) {
     return message || "Có lỗi xảy ra.";
 }
 
-function computePosTotals(cartItems, orderDiscountPercent, orderDiscountAmountFixed, tierDiscountPercent, appliedPromotion = null) {
+function computePosTotals(cartItems, orderDiscountPercent, orderDiscountAmountFixed, tierDiscountPercent, appliedPromotion = null, customBundles = []) {
     const items = Array.isArray(cartItems) ? cartItems : [];
-    const grossSubtotal = items.reduce((sum, item) => sum + getLineGross(item), 0);
+    const bundles = Array.isArray(customBundles) ? customBundles : [];
+    const bundlesTotal = bundles.reduce(
+        (sum, bundle) => sum + (bundle.ingredients ?? []).reduce((s, ing) => s + (Number(ing.subTotal) || Number(ing.unitPrice) * Number(ing.quantity) || 0), 0),
+        0,
+    );
+    const grossSubtotal = items.reduce((sum, item) => sum + getLineGross(item), 0) + bundlesTotal;
     const itemDiscountTotal = items.reduce((sum, item) => sum + getLineDiscount(item), 0);
-    const subtotalAfterItemDiscount = items.reduce((sum, item) => sum + getLineTotal(item), 0);
+    const subtotalAfterItemDiscount = items.reduce((sum, item) => sum + getLineTotal(item), 0) + bundlesTotal;
     const fixedOrderDiscount = Math.max(0, Math.round(Number(orderDiscountAmountFixed) || 0));
     const orderDiscountAmount =
         fixedOrderDiscount > 0 ? Math.min(fixedOrderDiscount, subtotalAfterItemDiscount) : Math.round((subtotalAfterItemDiscount * orderDiscountPercent) / 100);
@@ -420,6 +425,7 @@ function PosPage() {
     effectiveOrderDiscountAmountFixed,
     tierDiscountPercent,
     appliedPromotion,
+    customBundles,
   )
   const usesFixedOrderDiscount = canUseOrderDiscount && (orderDiscountAmountFixed || 0) > 0
   const cartItemQuantity = cartItems.reduce((sum, item) => sum + (Number(item.qty) || 0), 0)
@@ -1253,6 +1259,7 @@ function PosPage() {
           amount,
         },
       ],
+      customBundles,
     }
   }
 
@@ -1724,6 +1731,7 @@ function PosPage() {
     const selectCustomer = (customer) => {
         const keepVipAdjustments = isVipCustomerType(customer?.customerType);
         updateActiveSession((prev) => ({
+            ...prev,
             selectedCustomer: customer,
             customerSearchValue: "",
             shippingAddress: "",
@@ -1846,7 +1854,7 @@ function PosPage() {
                         <div className="flex shrink-0 items-center justify-between gap-2 px-4 py-2.5">
                             <p className="text-xs font-bold uppercase tracking-wider text-[#717971]">Giỏ hàng</p>
                             <span className="shrink-0 text-xs text-[#717971]">
-                                {cartItems.length} SP · {activeTab.label}
+                                {cartItems.length + customBundles.length} SP · {activeTab.label}
                             </span>
                         </div>
 
@@ -1858,6 +1866,43 @@ function PosPage() {
                                     <p className="mt-1 text-xs text-[#717971]">Chọn sản phẩm bên phải để thêm.</p>
                                 </div>
                             :   <div className="space-y-2">
+                                    {customBundles.map((bundle, bundleIndex) => {
+                                        const bundleTotal = (bundle.ingredients ?? []).reduce(
+                                            (s, ing) => s + (Number(ing.subTotal) || Number(ing.unitPrice) * Number(ing.quantity) || 0),
+                                            0,
+                                        );
+                                        return (
+                                            <div
+                                                key={`bundle-${bundleIndex}`}
+                                                className="relative rounded-xl border border-[#356647]/30 bg-[#f0f5f1] px-3 py-2.5">
+                                                <div className="flex items-start justify-between gap-2">
+                                                    <div className="min-w-0 flex-1">
+                                                        <p className="flex items-center gap-1.5 text-sm font-semibold text-[#1b1c17]">
+                                                            <Icon className="text-[18px] text-[#356647]">blender</Icon>
+                                                            {bundle.label || "Gói trà tự chọn"}
+                                                        </p>
+                                                        <ul className="mt-1 space-y-0.5">
+                                                            {(bundle.ingredients ?? []).map((ing, ingIndex) => (
+                                                                <li key={`bundle-${bundleIndex}-ing-${ingIndex}`} className="truncate text-xs text-[#717971]">
+                                                                    {ing.materialSnapshotName} × {ing.quantity} — {formatMoney(Number(ing.subTotal) || Number(ing.unitPrice) * Number(ing.quantity) || 0)} đ
+                                                                </li>
+                                                            ))}
+                                                        </ul>
+                                                    </div>
+                                                    <div className="flex shrink-0 flex-col items-end gap-1">
+                                                        <span className="text-sm font-bold text-[#356647]">{formatMoney(bundleTotal)} đ</span>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => updateActiveSession({ customBundles: customBundles.filter((_, i) => i !== bundleIndex) })}
+                                                            className="p-1 text-[#ba1a1a] opacity-60 hover:opacity-100"
+                                                            aria-label="Xóa gói">
+                                                            <Icon className="text-[20px]">close</Icon>
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
                                     {cartItems.map((item) => {
                                         const lineGross = getLineGross(item);
                                         const lineTotal = getLineTotal(item);

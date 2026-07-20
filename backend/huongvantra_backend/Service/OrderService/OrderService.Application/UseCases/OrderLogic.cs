@@ -252,7 +252,8 @@ public class OrderLogic(
 
         OrderInputValidator.ValidateCreateOrder(
             detailInputs, req.DiscountAmount, req.PaidAmount,
-            req.OrderChannel, req.ShippingAddress);
+            req.OrderChannel, req.ShippingAddress,
+            hasCustomBundles: (req.CustomBundles ?? []).Any(b => (b.Ingredients ?? []).Count > 0));
 
         if (detailInputs.Any(i => i.IsGift))
             await EnsureVipCustomerAsync(req.CustomerId, ct);
@@ -1179,7 +1180,9 @@ public class OrderLogic(
     }
 
     private static bool ShouldHandlePosStockSynchronously(Order order) =>
-        order.OrderChannel == OrderChannel.POS && order.OrderStatus == OrderStatus.Completed;
+        order.OrderChannel == OrderChannel.POS
+        && order.OrderStatus == OrderStatus.Completed
+        && (order.OrderDetails?.Count ?? 0) > 0;
 
     private static bool ShouldSuppressLegacyOrderPlacedEvent(Order order) =>
         order.OrderChannel == OrderChannel.POS;

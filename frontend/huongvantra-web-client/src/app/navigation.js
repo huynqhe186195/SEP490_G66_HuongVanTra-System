@@ -145,6 +145,88 @@ export const navigationItems = [
   },
 ]
 
+/**
+ * Gom nhóm sidebar cho role Thủ kho: 3 nhóm cha có thể mở/gập.
+ * Mỗi entry con trỏ tới path đã có trong navigationItems; `label` (nếu có) ghi đè nhãn hiển thị.
+ */
+const INVENTORY_SIDEBAR_GROUPS = [
+  {
+    key: '__grp_inventory_products',
+    label: 'Hàng hóa',
+    icon: 'inventory_2',
+    entries: [
+      { path: '/inventory/products' },
+      { path: '/products/categories', label: 'Danh mục sản phẩm' },
+      { path: '/inventory/boms' },
+      { path: '/inventory/product-approvals' },
+      { path: '/inventory/product-deletion-requests' },
+    ],
+  },
+  {
+    key: '__grp_inventory_warehouse',
+    label: 'Kho tổng',
+    icon: 'warehouse',
+    entries: [
+      { path: '/inventory', label: 'Tồn kho tổng' },
+      { path: '/inventory/returns' },
+      { path: '/inventory/stocktake' },
+      { path: '/inventory/ledger' },
+      { path: '/inventory/stock-requests' },
+    ],
+  },
+  {
+    key: '__grp_inventory_production',
+    label: 'Sản xuất & đóng gói',
+    icon: 'precision_manufacturing',
+    entries: [
+      { path: '/inventory/production-orders' },
+      { path: '/inventory/custom-bundles' },
+    ],
+  },
+]
+
+function isInventoryOnlySession(roles = []) {
+  if (!roles.length) return false
+  return (
+    hasAnyRoleGroup(roles, ['inventoryManager']) && !hasAnyRoleGroup(roles, ['admin', 'agencyManager'])
+  )
+}
+
+/** Fold các mục kho phẳng thành 3 nhóm cha; giữ nguyên các mục còn lại theo thứ tự gốc. */
+function groupInventorySidebar(items) {
+  const byPath = new Map(items.map((item) => [item.path, item]))
+  const consumed = new Set()
+
+  const groups = INVENTORY_SIDEBAR_GROUPS.map((spec) => {
+    const children = spec.entries
+      .map(({ path, label }) => {
+        const found = byPath.get(path)
+        if (!found) return null
+        consumed.add(path)
+        return {
+          label: label || found.label,
+          path: found.path,
+          module: found.module,
+        }
+      })
+      .filter(Boolean)
+
+    if (!children.length) return null
+
+    return {
+      label: spec.label,
+      icon: spec.icon,
+      path: spec.key,
+      module: 'inventory',
+      isGroup: true,
+      children,
+    }
+  }).filter(Boolean)
+
+  const rest = items.filter((item) => !consumed.has(item.path))
+  return [...groups, ...rest]
+}
+
 function isSidebarModuleEnabled(module) {
   return !SIDEBAR_DISABLED_MODULES.has(String(module || '').toLowerCase())
 }
@@ -210,11 +292,12 @@ function withRoleAwareProductLabel(items, roles = []) {
 }
 
 export function getNavigationItemsForSession(session) {
-  if (session?.modules?.length) {
-    return withRoleAwareProductLabel(getNavigationItemsForModules(session.modules, session.roles ?? []), session?.roles ?? [])
-  }
+  const roles = session?.roles ?? []
+  const items = session?.modules?.length
+    ? withRoleAwareProductLabel(getNavigationItemsForModules(session.modules, roles), roles)
+    : withRoleAwareProductLabel(getNavigationItemsForRoles(roles), roles)
 
-  return withRoleAwareProductLabel(getNavigationItemsForRoles(session?.roles ?? []), session?.roles ?? [])
+  return isInventoryOnlySession(roles) ? groupInventorySidebar(items) : items
 }
 
 export function getHomeRouteForModules(modules = []) {
@@ -265,7 +348,9 @@ export function resolveHomeRoute(authSession) {
 
   if (homeRoute === '/login') {
     const items = getNavigationItemsForSession(authSession)
-    return items[0]?.path ?? '/profile'
+    const first = items[0]
+    if (!first) return '/profile'
+    return first.isGroup ? first.children?.[0]?.path ?? '/profile' : first.path ?? '/profile'
   }
 
   return homeRoute
@@ -415,6 +500,14 @@ function getOrderDetailContext(pathname, search = '') {
 /** Sidebar highlight: /orders/cod must not activate the /orders item. */
 export function isNavigationItemActive(pathname, item, search = '') {
   const path = (pathname || '').toLowerCase()
+
+  // Nhóm cha của role kho: active khi bất kỳ mục con nào đang active (theo path).
+  if (item?.isGroup) {
+    return (item.children || []).some((child) =>
+      isNavigationItemActive(pathname, { path: child.path, module: child.module }, search),
+    )
+  }
+
   const target = (item?.path || '').toLowerCase()
   const orderDetailContext = getOrderDetailContext(pathname, search)
 
@@ -498,6 +591,11 @@ export function isNavigationItemActive(pathname, item, search = '') {
 }
 
 export function isNavigationChildActive(pathname, search, child) {
+  // Nhóm cha của role kho: mục con điều hướng theo path riêng (không có section).
+  if (child && !child.section && child.path) {
+    return isNavigationItemActive(pathname, { path: child.path, module: child.module }, search)
+  }
+
   if (!child?.section) {
     return false
   }
