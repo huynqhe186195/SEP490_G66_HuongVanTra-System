@@ -102,6 +102,7 @@ function buildOrderRequestFromPosPayload(
       unitPrice: line.isGift ? 0 : line.unitPrice,
       isGift: Boolean(line.isGift),
     })),
+    customBundles: payload.customBundles ?? [],
   })
 }
 

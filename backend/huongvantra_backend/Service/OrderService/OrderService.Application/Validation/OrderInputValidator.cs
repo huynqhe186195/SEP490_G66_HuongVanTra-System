@@ -11,11 +11,12 @@ public static class OrderInputValidator
         decimal discountAmount,
         decimal paidAmount,
         OrderChannel channel,
-        string? shippingAddress)
+        string? shippingAddress,
+        bool hasCustomBundles = false)
     {
         var errors = new List<string>();
 
-        if (items == null || items.Count == 0)
+        if ((items == null || items.Count == 0) && !hasCustomBundles)
             errors.Add("Đơn hàng phải có ít nhất 1 sản phẩm.");
 
         if (items != null)

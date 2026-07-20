@@ -252,7 +252,8 @@ public class OrderLogic(
 
         OrderInputValidator.ValidateCreateOrder(
             detailInputs, req.DiscountAmount, req.PaidAmount,
-            req.OrderChannel, req.ShippingAddress);
+            req.OrderChannel, req.ShippingAddress,
+            hasCustomBundles: (req.CustomBundles ?? []).Any(b => (b.Ingredients ?? []).Count > 0));
 
         if (detailInputs.Any(i => i.IsGift))
             await EnsureVipCustomerAsync(req.CustomerId, ct);
