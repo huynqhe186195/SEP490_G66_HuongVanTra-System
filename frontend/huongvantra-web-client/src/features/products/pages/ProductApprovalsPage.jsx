@@ -50,6 +50,9 @@ const EMPTY_GUID = '00000000-0000-0000-0000-000000000000'
 const BOM_INTEGER_MESSAGE = 'Định mức phải là số nguyên dương.'
 const ADMIN_REQUEST_PAGE_SIZE = TABLE_PAGE_SIZE
 const PRODUCT_CREATION_REQUEST_FETCH_PAGE_SIZE = 100
+const MAX_IMAGE_UPLOAD_BYTES = 5 * 1024 * 1024
+const CLOUDINARY_CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME
+const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET
 const PRODUCT_CREATION_STATUS_FILTERS = [
   { value: 'PendingApproval', label: 'Chờ xử lý' },
   { value: 'all', label: 'Tất cả' },
@@ -57,6 +60,11 @@ const PRODUCT_CREATION_STATUS_FILTERS = [
   { value: 'Completed', label: 'Đã tạo hàng hóa' },
   { value: 'Rejected', label: 'Đã từ chối' },
   { value: 'Cancelled', label: 'Đã hủy' },
+]
+const SALES_TAX_OPTIONS = [
+  { value: '8', label: '8%' },
+  { value: '10', label: '10%' },
+  { value: 'custom', label: 'Tùy chỉnh' },
 ]
 const ATTRIBUTE_DUPLICATE_MESSAGE = 'Thuộc tính này đã được sử dụng cho sản phẩm.'
 const ATTRIBUTE_VALUE_REQUIRED_MESSAGE = 'Vui lòng nhập giá trị thuộc tính.'
@@ -91,9 +99,12 @@ function createDraftProduct() {
     baseUnit: 'gói',
     inventoryUnit: 'Piece',
     description: '',
+    imageUrl: '',
     skuCode: '',
     variantName: '',
     retailPrice: '',
+    salesTaxMode: 'custom',
+    salesTaxPercent: '0',
     costPrice: '0',
     minStock: '0',
     maxStock: '',
@@ -106,6 +117,8 @@ function createDraftProduct() {
       skuCode: '',
       variantName: '',
       retailPrice: '',
+      salesTaxMode: 'custom',
+      salesTaxPercent: '0',
       costPrice: '0',
       barcode: '',
       minStock: '0',
@@ -149,41 +162,131 @@ function calculateDerivedRetailPrice(baseRetailPrice, conversionRate) {
   return Number.isSafeInteger(amount) && amount >= 0 ? String(amount) : ''
 }
 
-function stripVietnameseMarks(value) {
-  return String(value || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/đ/g, 'd')
-    .replace(/Đ/g, 'D')
-}
-
-function getProductNameInitials(name) {
-  return stripVietnameseMarks(name)
-    .replace(/[^A-Za-z0-9\s]/g, ' ')
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((word) => word[0])
-    .join('')
-    .toUpperCase()
-}
-
-function compactPriceToken(value) {
-  const price = moneyOrNull(value)
-  if (!price || price <= 0) return ''
-  if (price >= 1_000_000 && price % 1_000_000 === 0) return `${price / 1_000_000}M`
-  if (price >= 1_000 && price % 1_000 === 0) return `${price / 1_000}K`
-  return String(price)
-}
-
-function buildGeneratedProductCode(productName, baseRetailPrice) {
-  const nameToken = getProductNameInitials(productName)
-  const priceToken = compactPriceToken(baseRetailPrice)
-  return nameToken && priceToken ? `${nameToken}${priceToken}` : ''
-}
-
 function normalizeText(value) {
   return String(value ?? '').trim()
+}
+
+function hasCloudinaryUploadConfig() {
+  return Boolean(CLOUDINARY_CLOUD_NAME && CLOUDINARY_UPLOAD_PRESET)
+}
+
+async function uploadImageToCloudinary(file) {
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET)
+
+  const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, {
+    method: 'POST',
+    body: formData,
+  })
+
+  if (!response.ok) {
+    throw new Error('Không upload được ảnh lên Cloudinary.')
+  }
+
+  const data = await response.json()
+  const imageUrl = data.secure_url || data.url
+  if (!imageUrl) {
+    throw new Error('Cloudinary không trả về đường dẫn ảnh.')
+  }
+
+  return imageUrl
+}
+
+function getProductImageUrl(product) {
+  const directUrl = product?.imageUrl ?? product?.ImageUrl ?? product?.thumbnailUrl ?? product?.ThumbnailUrl ?? ''
+  if (directUrl) return directUrl
+  const images = product?.images ?? product?.Images ?? []
+  const firstImage = Array.isArray(images) ? images.find((image) => image?.imageUrl || image?.ImageUrl) : null
+  return firstImage?.imageUrl ?? firstImage?.ImageUrl ?? ''
+}
+
+function isHttpImageUrl(value) {
+  const text = normalizeText(value)
+  if (!text) return true
+  try {
+    const url = new URL(text)
+    return url.protocol === 'http:' || url.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
+function normalizeTaxPercent(value) {
+  const number = numberOrNull(value)
+  if (number === null || number < 0) return null
+  return number
+}
+
+function getSkuTaxPercent(sku) {
+  return normalizeTaxPercent(sku?.salesTaxPercent ?? sku?.taxPercent ?? sku?.SalesTaxPercent ?? sku?.TaxPercent) ?? 0
+}
+
+function getPriceAfterTax(priceBeforeTax, taxPercent) {
+  const price = moneyOrNull(priceBeforeTax)
+  const tax = normalizeTaxPercent(taxPercent) ?? 0
+  if (price === null) return null
+  return Math.round(price * (1 + tax / 100))
+}
+
+function getVariantPriceBeforeTax(variant) {
+  return getVariantValue(variant, 'priceBeforeTax', getVariantValue(variant, 'retailPrice', 0))
+}
+
+function getVariantTaxPercent(variant) {
+  return normalizeTaxPercent(getVariantValue(variant, 'salesTaxPercent', getVariantValue(variant, 'taxPercent', 0))) ?? 0
+}
+
+function getVariantPriceAfterTax(variant) {
+  const explicitPrice = getVariantValue(variant, 'retailPrice', null)
+  const priceBeforeTax = getVariantPriceBeforeTax(variant)
+  const taxPercent = getVariantTaxPercent(variant)
+  return explicitPrice ?? getPriceAfterTax(priceBeforeTax, taxPercent) ?? 0
+}
+
+function getCostNumber(value) {
+  const number = moneyOrNull(value)
+  return number === null ? 0 : number
+}
+
+function getComponentUnitCostFromOption(option) {
+  return getCostNumber(
+    option?.costPrice ??
+    option?.purchasePrice ??
+    option?.averageCost ??
+    option?.importCost ??
+    option?.unitCost ??
+    0,
+  )
+}
+
+function getBomLineUnitCost(line, skuRows = []) {
+  const componentRequestKey = normalizeText(line?.componentRequestSkuKey ?? line?.ComponentRequestSkuKey)
+  const componentSkuCode = normalizeText(line?.componentSkuCode ?? line?.ComponentSkuCode).toUpperCase()
+  const localSku = skuRows.find((sku) =>
+    (componentRequestKey && normalizeText(sku.requestSkuKey) === componentRequestKey) ||
+    (componentSkuCode && normalizeText(sku.skuCode).toUpperCase() === componentSkuCode))
+
+  if (localSku) return getCostNumber(localSku.costPrice)
+
+  const explicitCost = line?.componentUnitCost ?? line?.ComponentUnitCost ?? line?.costPrice ?? line?.CostPrice
+  if (explicitCost !== null && explicitCost !== undefined && explicitCost !== '') return getCostNumber(explicitCost)
+
+  return 0
+}
+
+function calculateSkuBomCost(sku, skuRows = []) {
+  return (sku?.bomLines ?? []).reduce((total, line) => {
+    const quantity = positiveIntegerOrNull(line.quantity) ?? 0
+    return total + getBomLineUnitCost(line, skuRows) * quantity
+  }, 0)
+}
+
+function hasMissingBomCost(sku, skuRows = []) {
+  return (sku?.bomLines ?? []).some((line) => {
+    const quantity = positiveIntegerOrNull(line.quantity) ?? 0
+    return quantity > 0 && getBomLineUnitCost(line, skuRows) <= 0
+  })
 }
 
 function normalizeAttributeName(value) {
@@ -256,6 +359,8 @@ function createSkuRow(row, { isBase = false } = {}) {
     skuCode: buildGeneratedSkuCode(row.name, unitName, conversionRate),
     variantName: unitName ? `${row.name || 'Sản phẩm'} - ${unitName}` : row.name,
     retailPrice: basePrice > 0 ? String(basePrice * conversionRate) : '',
+    salesTaxMode: baseSku?.salesTaxMode ?? row.salesTaxMode ?? 'custom',
+    salesTaxPercent: baseSku?.salesTaxPercent ?? row.salesTaxPercent ?? '0',
     costPrice: String(moneyOrNull(row.costPrice) ?? 0),
     barcode: '',
     minStock: String(row.minStock ?? 0),
@@ -289,6 +394,8 @@ function getSkuRows(row) {
     skuCode: row.skuCode || '',
     variantName: row.variantName || row.name || '',
     retailPrice: row.retailPrice ?? '',
+    salesTaxMode: row.salesTaxMode ?? 'custom',
+    salesTaxPercent: row.salesTaxPercent ?? '0',
     costPrice: row.costPrice ?? '0',
     barcode: '',
     minStock: row.minStock ?? '0',
@@ -311,6 +418,8 @@ function syncLegacySkuFields(row, skuRows) {
     skuCode: baseSku.skuCode || '',
     variantName: baseSku.variantName || '',
     retailPrice: baseSku.retailPrice ?? '',
+    salesTaxMode: baseSku.salesTaxMode ?? row.salesTaxMode ?? 'custom',
+    salesTaxPercent: baseSku.salesTaxPercent ?? row.salesTaxPercent ?? '0',
     costPrice: baseSku.costPrice ?? '0',
     minStock: baseSku.minStock ?? '0',
     maxStock: baseSku.maxStock ?? '',
@@ -332,9 +441,11 @@ function getPrimarySnapshotVariant(item) {
 function requestItemPriceSummary(item) {
   const variant = getPrimarySnapshotVariant(item)
   if (!variant) return ''
+  const priceBeforeTax = variant.priceBeforeTax ?? variant.PriceBeforeTax ?? variant.retailPrice ?? variant.RetailPrice
+  const salesTaxPercent = variant.salesTaxPercent ?? variant.SalesTaxPercent ?? 0
   const retailPrice = variant.retailPrice ?? variant.RetailPrice
   const costPrice = variant.costPrice ?? variant.CostPrice
-  return `Giá bán: ${formatWholeVnd(retailPrice)} · Giá vốn: ${formatWholeVnd(costPrice)}`
+  return `Giá trước thuế: ${formatWholeVnd(priceBeforeTax)} · Thuế: ${salesTaxPercent}% · Giá sau thuế: ${formatWholeVnd(retailPrice)} · Giá vốn: ${formatWholeVnd(costPrice)}`
 }
 
 function getMaterialUnit(material) {
@@ -357,6 +468,7 @@ function getComponentSkuOptions(materials) {
       skuCode: variant.skuCode,
       variantName: variant.variantName || variant.packagingType || variant.unitName || material.name,
       unitName: variant.unitName || '',
+      costPrice: getComponentUnitCostFromOption(variant) || getComponentUnitCostFromOption(material),
     }))
   })
 }
@@ -370,6 +482,7 @@ function createBomLineFromComponentSku(option, quantity = 1) {
     componentVariantId: option.variantId,
     componentSkuCode: option.skuCode,
     componentVariantName: option.variantName,
+    componentUnitCost: getComponentUnitCostFromOption(option),
     isRequiredBaseComponent: false,
   }
 }
@@ -405,6 +518,7 @@ function createRequiredBaseBomLine(row, sku, baseSku) {
     componentRequestSkuKey: baseSku.requestSkuKey,
     componentSkuCode: baseSku.skuCode,
     componentVariantName: baseSku.variantName || baseSku.unitName,
+    componentUnitCost: getCostNumber(baseSku.costPrice),
     isRequiredBaseComponent: true,
   }
 }
@@ -468,12 +582,26 @@ function syncDerivedSkuRetailPrices(skuRows) {
       ...sku,
       isBaseUnitVariant: false,
       retailPrice: calculateDerivedRetailPrice(baseSku.retailPrice, sku.conversionRate),
+      salesTaxMode: baseSku.salesTaxMode ?? 'custom',
+      salesTaxPercent: baseSku.salesTaxPercent ?? '0',
     }
   })
 }
 
 function syncSkuRows(row, skuRows) {
-  return syncRequiredBaseBomLines(row, syncDerivedSkuRetailPrices(skuRows))
+  const withRetailPrices = syncDerivedSkuRetailPrices(skuRows)
+  const withBomLines = syncRequiredBaseBomLines(row, withRetailPrices)
+  if (row.productType !== PRODUCT_TYPE.THANH_PHAM) return withBomLines
+
+  const withDirectCosts = withBomLines.map((sku) => ({
+    ...sku,
+    costPrice: String(Math.round(calculateSkuBomCost(sku, withBomLines))),
+  }))
+
+  return withDirectCosts.map((sku) => ({
+    ...sku,
+    costPrice: String(Math.round(calculateSkuBomCost(sku, withDirectCosts))),
+  }))
 }
 
 function normalizeBomLine(line, materialsById) {
@@ -495,6 +623,7 @@ function normalizeBomLine(line, materialsById) {
     componentSkuCode,
     componentRequestSkuKey: line.componentRequestSkuKey ?? line.ComponentRequestSkuKey ?? null,
     componentVariantName,
+    componentUnitCost: line.componentUnitCost ?? line.ComponentUnitCost ?? line.costPrice ?? line.CostPrice ?? 0,
     isRequiredBaseComponent: Boolean(line.isRequiredBaseComponent ?? line.IsRequiredBaseComponent ?? false),
   }
 }
@@ -518,9 +647,16 @@ function toProductPayload(row) {
     weightUnit: null,
     isVariantParent: true,
     productType: row.productType,
-    images: [],
+    images: normalizeText(row.imageUrl)
+      ? [{
+        imageUrl: normalizeText(row.imageUrl),
+        altText: row.name.trim(),
+        sortOrder: 0,
+        isThumbnail: true,
+      }]
+      : [],
     units: skuRows.map((sku) => {
-      const price = moneyOrNull(sku.retailPrice)
+      const price = getPriceAfterTax(sku.retailPrice, getSkuTaxPercent(sku))
       return {
         unitName: sku.unitName || baseUnit,
         conversionRate: Number(sku.conversionRate || 1),
@@ -531,7 +667,9 @@ function toProductPayload(row) {
       }
     }),
     variants: skuRows.map((sku) => {
-      const retailPrice = moneyOrNull(sku.retailPrice) ?? 0
+      const priceBeforeTax = moneyOrNull(sku.retailPrice) ?? 0
+      const salesTaxPercent = getSkuTaxPercent(sku)
+      const retailPrice = getPriceAfterTax(sku.retailPrice, salesTaxPercent) ?? 0
       const costPrice = moneyOrNull(sku.costPrice) ?? 0
       return {
         requestSkuKey: sku.requestSkuKey,
@@ -541,6 +679,9 @@ function toProductPayload(row) {
         optionValuesJson: '{}',
         costPrice,
         retailPrice,
+        priceBeforeTax,
+        salesTaxPercent,
+        salesTaxMode: sku.salesTaxMode ?? 'custom',
         minStock: numberOrNull(sku.minStock),
         maxStock: numberOrNull(sku.maxStock),
         isSellable: sku.isSellable !== false,
@@ -570,6 +711,7 @@ function toProductPayload(row) {
               componentVariantId: line.componentVariantId || null,
               componentSkuCode: normalizeText(line.componentSkuCode),
               componentRequestSkuKey: normalizeText(line.componentRequestSkuKey),
+              componentUnitCost: getBomLineUnitCost(line, skuRows),
               isRequiredBaseComponent: Boolean(line.isRequiredBaseComponent),
             }))
           : [],
@@ -588,27 +730,32 @@ function toProductPayload(row) {
 function fromProductSnapshot(item, materialsById) {
   const product = item.productSnapshot ?? {}
   const variants = Array.isArray(product.variants) ? product.variants : []
-  const skuRows = variants.map((variant, index) => ({
-    variantId: variant.id ?? variant.variantId ?? null,
-    requestSkuKey: variant.requestSkuKey || variant.skuCode || `${item.clientKey || Date.now()}-sku-${index + 1}`,
-    unitName: variant.unitName || variant.units?.[0]?.unitName || product.baseUnit || 'gói',
-    conversionRate: String(variant.conversionRate ?? (index === 0 ? 1 : '')),
-    skuCode: variant.skuCode || '',
-    variantName: variant.variantName || '',
-    retailPrice: String(variant.retailPrice ?? ''),
-    costPrice: String(variant.costPrice ?? 0),
-    barcode: variant.barcode || '',
-    minStock: String(variant.minStock ?? 0),
-    maxStock: variant.maxStock == null ? '' : String(variant.maxStock),
-    isSellable: variant.isSellable !== false,
-    isBaseUnitVariant: Boolean(variant.isBaseUnitVariant ?? index === 0),
-    isAutoGeneratedSku: variant.isAutoGeneratedSku !== false,
-    baseRequestSkuKey: variant.baseRequestSkuKey ?? null,
-    baseSkuCode: variant.baseSkuCode ?? null,
-    bomLines: Array.isArray(variant.bomLines)
-      ? variant.bomLines.map((line) => normalizeBomLine(line, materialsById))
-      : [],
-  }))
+  const skuRows = variants.map((variant, index) => {
+    const salesTaxPercent = normalizeTaxPercent(variant.salesTaxPercent ?? variant.taxPercent) ?? 0
+    return {
+      variantId: variant.id ?? variant.variantId ?? null,
+      requestSkuKey: variant.requestSkuKey || variant.skuCode || `${item.clientKey || Date.now()}-sku-${index + 1}`,
+      unitName: variant.unitName || variant.units?.[0]?.unitName || product.baseUnit || 'gói',
+      conversionRate: String(variant.conversionRate ?? (index === 0 ? 1 : '')),
+      skuCode: variant.skuCode || '',
+      variantName: variant.variantName || '',
+      retailPrice: String(variant.priceBeforeTax ?? variant.retailPrice ?? ''),
+      salesTaxMode: variant.salesTaxMode ?? ([8, 10].includes(salesTaxPercent) ? String(salesTaxPercent) : 'custom'),
+      salesTaxPercent: String(salesTaxPercent),
+      costPrice: String(variant.costPrice ?? 0),
+      barcode: variant.barcode || '',
+      minStock: String(variant.minStock ?? 0),
+      maxStock: variant.maxStock == null ? '' : String(variant.maxStock),
+      isSellable: variant.isSellable !== false,
+      isBaseUnitVariant: Boolean(variant.isBaseUnitVariant ?? index === 0),
+      isAutoGeneratedSku: variant.isAutoGeneratedSku !== false,
+      baseRequestSkuKey: variant.baseRequestSkuKey ?? null,
+      baseSkuCode: variant.baseSkuCode ?? null,
+      bomLines: Array.isArray(variant.bomLines)
+        ? variant.bomLines.map((line) => normalizeBomLine(line, materialsById))
+        : [],
+    }
+  })
   const baseSku = skuRows.find((sku) => sku.isBaseUnitVariant) ?? skuRows[0] ?? {}
   const fallbackDraft = { ...createDraftProduct(), name: product.name || '' }
   const fallbackSkuRows = getSkuRows(fallbackDraft)
@@ -618,6 +765,7 @@ function fromProductSnapshot(item, materialsById) {
     variantClientKey: baseSku.requestSkuKey || `${item.clientKey || Date.now()}-sku`,
     name: product.name || '',
     description: product.description || '',
+    imageUrl: getProductImageUrl(product),
     productType: product.productType || PRODUCT_TYPE.THANH_PHAM,
     categoryId: product.categoryId ? String(product.categoryId) : '',
     baseUnit: baseSku.unitName || product.baseUnit || 'gói',
@@ -625,6 +773,8 @@ function fromProductSnapshot(item, materialsById) {
     skuCode: baseSku.skuCode || '',
     variantName: baseSku.variantName || '',
     retailPrice: baseSku.retailPrice ?? '',
+    salesTaxMode: baseSku.salesTaxMode ?? 'custom',
+    salesTaxPercent: baseSku.salesTaxPercent ?? '0',
     costPrice: baseSku.costPrice ?? '0',
     minStock: baseSku.minStock ?? '0',
     maxStock: baseSku.maxStock ?? '',
@@ -655,6 +805,7 @@ function validateForm(title, rows, options = {}) {
     const skuRows = syncSkuRows(row, getSkuRows(row))
     if (!row.name.trim()) errors.push(`${prefix}: thiếu tên sản phẩm.`)
     if (!row.categoryId) errors.push(`${prefix}: thiếu danh mục.`)
+    if (!isHttpImageUrl(row.imageUrl)) errors.push(`${prefix}: URL ảnh phải bắt đầu bằng http:// hoặc https://.`)
     if (row.name.trim()) {
       const nameKey = row.name.trim().toLowerCase()
       if (names.has(nameKey)) errors.push(`${prefix}: tên sản phẩm bị trùng trong yêu cầu.`)
@@ -684,9 +835,11 @@ function validateForm(title, rows, options = {}) {
 
       const retailPrice = moneyOrNull(sku.retailPrice)
       const costPrice = moneyOrNull(sku.costPrice)
-      if (normalizeText(sku.retailPrice) && retailPrice === null) errors.push(`${skuPrefix}: giá bán không hợp lệ.`)
+      const salesTaxPercent = normalizeTaxPercent(sku.salesTaxPercent)
+      if (normalizeText(sku.retailPrice) && retailPrice === null) errors.push(`${skuPrefix}: giá trước thuế không hợp lệ.`)
+      if (salesTaxPercent === null) errors.push(`${skuPrefix}: thuế bán hàng không hợp lệ.`)
       if (normalizeText(sku.costPrice) && costPrice === null) errors.push(`${skuPrefix}: giá vốn không hợp lệ.`)
-      if ((retailPrice ?? 0) <= 0 && sku.isSellable) errors.push(`${skuPrefix}: SKU bán trực tiếp cần giá bán > 0.`)
+      if ((getPriceAfterTax(sku.retailPrice, getSkuTaxPercent(sku)) ?? 0) <= 0 && sku.isSellable) errors.push(`${skuPrefix}: SKU bán trực tiếp cần giá sau thuế > 0.`)
       if (!isFinishedProduct && (sku.bomLines ?? []).length > 0) errors.push(`${skuPrefix}: BOM chỉ áp dụng cho Sản phẩm kệ.`)
 
       const components = new Set()
@@ -1047,11 +1200,10 @@ function AttributeNameCombobox({
 function ProductRow({ row, categories, materials, attributeNameOptions, onChange, onRemove, canRemove }) {
   const isFinishedProduct = row.productType === PRODUCT_TYPE.THANH_PHAM
   const skuRows = syncSkuRows(row, getSkuRows(row))
-  const baseSku = skuRows.find((sku) => sku.isBaseUnitVariant) ?? skuRows[0]
-  const generatedProductCode = buildGeneratedProductCode(row.name, baseSku?.retailPrice ?? row.retailPrice)
   const componentSkuOptions = getComponentSkuOptions(materials)
   const attributes = row.attributes ?? []
   const [pendingAttributeFocusKey, setPendingAttributeFocusKey] = useState(null)
+  const [isUploadingImage, setIsUploadingImage] = useState(false)
 
   function applySkuRows(nextRow, nextSkuRows) {
     onChange(syncLegacySkuFields(nextRow, nextSkuRows))
@@ -1083,6 +1235,10 @@ function ProductRow({ row, categories, materials, attributeNameOptions, onChange
         ? 1
         : (changes.conversionRate ?? sku.conversionRate)
       const autoSku = changes.isAutoGeneratedSku ?? sku.isAutoGeneratedSku ?? true
+      const salesTaxMode = changes.salesTaxMode ?? sku.salesTaxMode ?? 'custom'
+      const salesTaxPercent = salesTaxMode === 'custom'
+        ? (changes.salesTaxPercent ?? sku.salesTaxPercent ?? '0')
+        : salesTaxMode
       return {
         ...sku,
         ...changes,
@@ -1090,10 +1246,41 @@ function ProductRow({ row, categories, materials, attributeNameOptions, onChange
         conversionRate: String(conversionRate),
         skuCode: autoSku ? buildGeneratedSkuCode(row.name, unitName, conversionRate) : (changes.skuCode ?? sku.skuCode),
         variantName: changes.variantName ?? `${row.name || 'Sản phẩm'} - ${unitName || 'đơn vị'}`,
+        salesTaxMode,
+        salesTaxPercent,
         isAutoGeneratedSku: autoSku,
       }
     })
     applySkuRows(row, nextSkuRows)
+  }
+
+  async function handleImageUpload(event) {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      showError('Vui lòng chọn file hình ảnh.')
+      return
+    }
+    if (file.size > MAX_IMAGE_UPLOAD_BYTES) {
+      showError('Ảnh tối đa 5MB.')
+      return
+    }
+    if (!hasCloudinaryUploadConfig()) {
+      showError('Chưa cấu hình Cloudinary, vui lòng nhập URL ảnh thủ công.')
+      return
+    }
+
+    setIsUploadingImage(true)
+    try {
+      const imageUrl = await uploadImageToCloudinary(file)
+      updateProduct({ imageUrl })
+      showSuccess('Đã upload ảnh sản phẩm lên Cloudinary.')
+    } catch (error) {
+      showError(error.message)
+    } finally {
+      setIsUploadingImage(false)
+    }
   }
 
   function addSku() {
@@ -1131,6 +1318,7 @@ function ProductRow({ row, categories, materials, attributeNameOptions, onChange
         productName: row.name,
         variantName: option.variantName || option.unitName,
         unitName: option.unitName,
+        costPrice: getCostNumber(option.costPrice),
         productType: row.productType,
         productTypeLabel: getProductTypeLabel(row.productType),
         sourceLabel: 'SKU cùng request',
@@ -1172,6 +1360,7 @@ function ProductRow({ row, categories, materials, attributeNameOptions, onChange
         componentRequestSkuKey: localSku.requestSkuKey,
         componentSkuCode: localSku.skuCode,
         componentVariantName: localSku.variantName || localSku.unitName,
+        componentUnitCost: getCostNumber(localSku.costPrice),
         isRequiredBaseComponent: false,
       }
     } else {
@@ -1249,11 +1438,6 @@ function ProductRow({ row, categories, materials, attributeNameOptions, onChange
           <input className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={row.name} onChange={(event) => updateProduct({ name: event.target.value })} />
         </label>
         <label className="text-xs font-semibold text-slate-500">
-          Mã hàng hóa
-          <input className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-sm font-semibold text-[#356647]" value={generatedProductCode} readOnly placeholder="Tự động" />
-          <span className="mt-1 block text-[11px] font-medium text-slate-400">Tự động sinh từ tên sản phẩm và giá bán.</span>
-        </label>
-        <label className="text-xs font-semibold text-slate-500">
           Loại hàng
           <select
             className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
@@ -1286,6 +1470,44 @@ function ProductRow({ row, categories, materials, attributeNameOptions, onChange
         />
       </label>
 
+      <div className="mt-3 rounded-lg border border-slate-100 bg-slate-50 p-3">
+        <div className="grid gap-3 lg:grid-cols-[120px_1fr]">
+          <div className="flex h-28 w-28 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-white">
+            {row.imageUrl ? (
+              <img
+                src={row.imageUrl}
+                alt={row.name || 'Hình ảnh sản phẩm'}
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <span className="material-symbols-outlined text-3xl text-slate-300">image</span>
+            )}
+          </div>
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Hình ảnh sản phẩm</p>
+            <p className="mt-1 text-xs text-slate-500">Ảnh được lưu trên Cloudinary. Hệ thống chỉ lưu đường dẫn ảnh.</p>
+            {!hasCloudinaryUploadConfig() ? (
+              <p className="mt-1 text-xs font-semibold text-amber-700">Chưa cấu hình Cloudinary, có thể nhập URL ảnh thủ công.</p>
+            ) : null}
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <input
+                className="min-w-[260px] flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                placeholder="https://res.cloudinary.com/..."
+                value={row.imageUrl || ''}
+                onChange={(event) => updateProduct({ imageUrl: event.target.value })}
+              />
+              <label className={`inline-flex cursor-pointer items-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 ${!hasCloudinaryUploadConfig() || isUploadingImage ? 'pointer-events-none opacity-50' : 'hover:bg-slate-50'}`}>
+                {isUploadingImage ? 'Đang upload...' : 'Upload ảnh'}
+                <input type="file" accept="image/*" className="hidden" disabled={!hasCloudinaryUploadConfig() || isUploadingImage} onChange={handleImageUpload} />
+              </label>
+              {row.imageUrl ? (
+                <button type="button" className="text-sm font-semibold text-rose-600" onClick={() => updateProduct({ imageUrl: '' })}>Xóa ảnh</button>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div className="mt-4 rounded-lg border border-slate-100 bg-slate-50 p-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -1312,7 +1534,7 @@ function ProductRow({ row, categories, materials, attributeNameOptions, onChange
                   <input className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 font-mono text-sm uppercase" value={sku.skuCode} onChange={(event) => updateSku(index, { skuCode: event.target.value.toUpperCase(), isAutoGeneratedSku: false })} />
                 </label>
                 <label className="text-xs font-semibold text-slate-500">
-                  Giá bán
+                  Giá trước thuế
                   <VndCurrencyInput className="mt-1" value={sku.retailPrice} readOnly={!sku.isBaseUnitVariant} onChange={(value) => updateSku(index, { retailPrice: value })} />
                   {!sku.isBaseUnitVariant ? (
                     <span className="mt-1 block text-[11px] font-medium text-slate-400">
@@ -1321,10 +1543,51 @@ function ProductRow({ row, categories, materials, attributeNameOptions, onChange
                   ) : null}
                 </label>
                 <label className="text-xs font-semibold text-slate-500">
-                  Giá vốn
-                  <VndCurrencyInput className="mt-1" value={sku.costPrice} onChange={(value) => updateSku(index, { costPrice: value })} />
+                  Thuế bán hàng
+                  <select
+                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-100"
+                    value={sku.salesTaxMode ?? 'custom'}
+                    disabled={!sku.isBaseUnitVariant}
+                    onChange={(event) => updateSku(index, { salesTaxMode: event.target.value })}
+                  >
+                    {SALES_TAX_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                  </select>
+                  {(sku.salesTaxMode ?? 'custom') === 'custom' ? (
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-100"
+                      value={sku.salesTaxPercent ?? '0'}
+                      disabled={!sku.isBaseUnitVariant}
+                      onKeyDown={(event) => {
+                        if (['e', 'E', '+', '-'].includes(event.key)) event.preventDefault()
+                      }}
+                      onChange={(event) => updateSku(index, { salesTaxPercent: event.target.value })}
+                    />
+                  ) : null}
+                </label>
+                <label className="text-xs font-semibold text-slate-500">
+                  Giá sau thuế
+                  <input
+                    className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700"
+                    value={formatWholeVnd(getPriceAfterTax(sku.retailPrice, getSkuTaxPercent(sku)) ?? 0)}
+                    readOnly
+                  />
+                </label>
+                <label className="text-xs font-semibold text-slate-500">
+                  {isFinishedProduct ? 'Giá vốn tự động' : 'Giá vốn'}
+                  <VndCurrencyInput className="mt-1" value={sku.costPrice} readOnly={isFinishedProduct} onChange={(value) => updateSku(index, { costPrice: value })} />
+                  {isFinishedProduct ? (
+                    <span className="mt-1 block text-[11px] font-medium text-slate-400">
+                      Tự động tính theo tổng giá vốn của các thành phần BOM.
+                    </span>
+                  ) : null}
                 </label>
               </div>
+              {isFinishedProduct && hasMissingBomCost(sku, skuRows) ? (
+                <p className="mt-2 text-xs font-semibold text-amber-700">Một số thành phần chưa có giá vốn nên giá vốn có thể chưa đầy đủ.</p>
+              ) : null}
               <div className="mt-3 grid gap-3 md:grid-cols-6">
                 <label className="text-xs font-semibold text-slate-500 md:col-span-2">
                   Barcode
@@ -1471,15 +1734,6 @@ function getVariantValue(variant, key, fallback = '') {
   return variant?.[key] ?? variant?.[pascalKey] ?? fallback
 }
 
-function getRequestProductCode(item) {
-  const product = getSnapshotProduct(item)
-  const variants = getSnapshotVariants(item)
-  const baseVariant = variants.find((variant) => Boolean(getVariantValue(variant, 'isBaseUnitVariant', false))) ?? variants[0]
-  return product.productCode
-    ?? product.ProductCode
-    ?? buildGeneratedProductCode(product.name ?? product.Name ?? item.productName, getVariantValue(baseVariant, 'retailPrice', ''))
-}
-
 function ProductCreationRequestDetailModal({ request, onClose, onApprove, onReject, isSaving }) {
   if (!request) return null
   const canDecide = request.status === 'PendingApproval'
@@ -1514,13 +1768,21 @@ function ProductCreationRequestDetailModal({ request, onClose, onApprove, onReje
             const attributes = getSnapshotAttributes(item)
             const productName = product.name ?? product.Name ?? item.productName
             const productType = product.productType ?? product.ProductType ?? item.productType
-            const productCode = getRequestProductCode(item)
+            const imageUrl = getProductImageUrl(product)
 
             return (
               <section key={item.clientKey || item.id || itemIndex} className="rounded-xl border border-slate-200 bg-white p-4">
+                {imageUrl ? (
+                  <div className="mb-4 flex items-start gap-3 rounded-lg border border-slate-100 bg-slate-50 p-3">
+                    <img src={imageUrl} alt={productName || 'Hình ảnh sản phẩm'} className="h-20 w-20 rounded-lg object-cover" />
+                    <div>
+                      <p className="text-xs font-bold uppercase text-slate-400">Hình ảnh sản phẩm</p>
+                      <p className="mt-1 break-all text-xs text-slate-500">{imageUrl}</p>
+                    </div>
+                  </div>
+                ) : null}
                 <div className="grid gap-3 text-sm md:grid-cols-3">
                   <div><p className="text-xs font-bold uppercase text-slate-400">Tên sản phẩm</p><p className="font-semibold text-slate-900">{productName || '—'}</p></div>
-                  <div><p className="text-xs font-bold uppercase text-slate-400">Mã hàng hóa</p><p className="font-mono font-semibold text-[#356647]">{productCode || '—'}</p></div>
                   <div><p className="text-xs font-bold uppercase text-slate-400">Loại hàng</p><p>{getProductTypeLabel(productType)}</p></div>
                   <div><p className="text-xs font-bold uppercase text-slate-400">Danh mục</p><p>{product.categoryName ?? product.CategoryName ?? item.categoryId ?? '—'}</p></div>
                   <div><p className="text-xs font-bold uppercase text-slate-400">Đơn vị tồn kho</p><p>{product.inventoryUnit ?? product.InventoryUnit ?? item.inventoryUnit ?? '—'}</p></div>
@@ -1535,22 +1797,26 @@ function ProductCreationRequestDetailModal({ request, onClose, onApprove, onReje
                         <th className="px-3 py-2 text-right">Quy đổi</th>
                         <th className="px-3 py-2">Đơn vị cơ bản</th>
                         <th className="px-3 py-2">Mã SKU</th>
-                        <th className="px-3 py-2 text-right">Giá bán</th>
-                        <th className="px-3 py-2 text-right">Giá vốn</th>
+                        <th className="px-3 py-2 text-right">Giá trước thuế</th>
+                        <th className="px-3 py-2 text-right">Thuế bán hàng</th>
+                        <th className="px-3 py-2 text-right">Giá sau thuế</th>
+                        <th className="px-3 py-2 text-right">Giá vốn tự động</th>
                         <th className="px-3 py-2">Bán trực tiếp</th>
                         <th className="px-3 py-2">Tồn min/max</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {variants.length === 0 ? (
-                        <tr><td colSpan={8} className="px-3 py-4 text-slate-400">Chưa có SKU.</td></tr>
+                        <tr><td colSpan={10} className="px-3 py-4 text-slate-400">Chưa có SKU.</td></tr>
                       ) : variants.map((variant, variantIndex) => (
                         <tr key={getVariantValue(variant, 'requestSkuKey', variantIndex)}>
                           <td className="px-3 py-2">{getVariantValue(variant, 'unitName', getVariantValue(variant, 'variantName', '—'))}</td>
                           <td className="px-3 py-2 text-right">{getVariantValue(variant, 'conversionRate', '—')}</td>
                           <td className="px-3 py-2">{getVariantValue(variant, 'isBaseUnitVariant', false) ? 'Có' : 'Không'}</td>
                           <td className="px-3 py-2 font-mono font-semibold text-[#356647]">{getVariantValue(variant, 'skuCode', '—')}</td>
-                          <td className="px-3 py-2 text-right">{formatWholeVnd(getVariantValue(variant, 'retailPrice', 0))}</td>
+                          <td className="px-3 py-2 text-right">{formatWholeVnd(getVariantPriceBeforeTax(variant))}</td>
+                          <td className="px-3 py-2 text-right">{getVariantTaxPercent(variant)}%</td>
+                          <td className="px-3 py-2 text-right">{formatWholeVnd(getVariantPriceAfterTax(variant))}</td>
                           <td className="px-3 py-2 text-right">{formatWholeVnd(getVariantValue(variant, 'costPrice', 0))}</td>
                           <td className="px-3 py-2">{getVariantValue(variant, 'isSellable', true) !== false ? 'Có' : 'Không'}</td>
                           <td className="px-3 py-2">{getVariantValue(variant, 'minStock', '—')} / {getVariantValue(variant, 'maxStock', '—')}</td>
