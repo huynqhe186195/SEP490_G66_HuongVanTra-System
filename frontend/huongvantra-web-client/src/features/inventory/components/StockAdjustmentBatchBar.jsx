@@ -47,10 +47,10 @@ export default function StockAdjustmentBatchBar() {
         <div className="pointer-events-auto flex w-full max-w-3xl flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#356647]/25 bg-white px-4 py-3 shadow-lg">
           <div className="min-w-0">
             <p className="text-sm font-semibold text-slate-800">
-              Lô điều chỉnh đang soạn: <span className="text-[#356647]">{count} SKU</span>
+              Yêu cầu bổ sung tồn quầy đang soạn: <span className="text-[#356647]">{count} SKU</span>
             </p>
             <p className="text-xs text-slate-500">
-              Thêm SKU từ bất kỳ trang nào — vẫn cùng một lô cho đến khi gửi hoặc xóa.
+              Kho tổng cấp sang Tồn quầy POS mặc định — giữ cùng một yêu cầu cho đến khi gửi hoặc xóa.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -66,7 +66,7 @@ export default function StockAdjustmentBatchBar() {
               className="rounded-xl bg-[#538463] px-4 py-2 text-sm font-bold text-white hover:bg-[#457053]"
               onClick={() => setShowModal(true)}
             >
-              Gửi yêu cầu lô
+              Gửi yêu cầu
             </button>
           </div>
         </div>

@@ -8,7 +8,7 @@ async function fetchAllSkus() {
   const pageSize = 100
   let page = 1
   let all = []
-  let total = 0
+  let total
   do {
     const data = await apiRequestAuth(
       `/api/v1/skus?page=${page}&pageSize=${pageSize}&isActive=true`,
@@ -28,7 +28,7 @@ async function fetchAllProducts() {
   const pageSize = 100
   let page = 1
   let all = []
-  let total = 0
+  let total
   do {
     const data = await apiRequestAuth(
       `/api/v1/products?page=${page}&pageSize=${pageSize}`,
@@ -57,7 +57,7 @@ async function fetchAllCustomers() {
   const pageSize = 100
   let page = 1
   let all = []
-  let total = 0
+  let total
   do {
     const data = await apiRequestAuth(
       `/api/customers?page=${page}&pageSize=${pageSize}`,
@@ -113,6 +113,9 @@ export async function syncOfflineCache({ permissions = [] } = {}) {
         price: sku.basePrice ?? sku.BasePrice ?? sku.retailPrice ?? sku.RetailPrice ?? 0,
         unit: sku.packagingType ?? sku.PackagingType ?? '',
         productType: sku.productType ?? sku.ProductType ?? product?.productType ?? product?.ProductType ?? '',
+        inventoryUnit: sku.inventoryUnit ?? sku.InventoryUnit ?? product?.inventoryUnit ?? product?.InventoryUnit ?? '',
+        isSellable: Boolean(sku.isSellable ?? sku.IsSellable ?? product?.isSellable ?? product?.IsSellable ?? true),
+        priceUnit: sku.priceUnit ?? sku.PriceUnit ?? product?.priceUnit ?? product?.PriceUnit ?? sku.inventoryUnit ?? sku.InventoryUnit ?? '',
         imageUrl: sku.imageUrl ?? sku.ImageUrl ?? product?.imageUrl ?? product?.ImageUrl ?? '',
         categoryId: sku.categoryId ?? sku.CategoryId ?? product?.categoryId ?? product?.CategoryId ?? null,
         qtyOnHand: stockBySkuId.get(skuId) ?? 0,

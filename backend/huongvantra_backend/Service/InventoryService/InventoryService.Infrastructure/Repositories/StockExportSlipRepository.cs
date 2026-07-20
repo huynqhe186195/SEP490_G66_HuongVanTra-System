@@ -28,6 +28,7 @@ public class StockExportSlipRepository(InventoryDbContext _db) : IStockExportSli
             query = query.Where(s =>
                 s.ExportCode.ToLower().Contains(keyword) ||
                 (s.ProductionCode != null && s.ProductionCode.ToLower().Contains(keyword)) ||
+                (s.ReferenceCode != null && s.ReferenceCode.ToLower().Contains(keyword)) ||
                 s.SkuCode.ToLower().Contains(keyword) ||
                 s.SkuSnapshotName.ToLower().Contains(keyword) ||
                 s.Lines.Any(l =>

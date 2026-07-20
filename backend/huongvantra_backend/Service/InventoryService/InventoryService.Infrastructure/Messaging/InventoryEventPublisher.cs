@@ -12,7 +12,19 @@ public class InventoryEventPublisher(IPublishEndpoint _publishEndpoint) : IInven
         {
             OrderId = orderId,
             OrderCode = orderCode,
-            Success = success
+            Success = success,
+            Status = success ? "deducted" : "failed"
+        }, ct);
+
+    public Task PublishStockDeductionCancelledAsync(
+        Guid orderId, string orderCode, string reason, CancellationToken ct = default) =>
+        _publishEndpoint.Publish(new StockDeductedEvent
+        {
+            OrderId = orderId,
+            OrderCode = orderCode,
+            Success = false,
+            Status = "cancelled",
+            Reason = reason
         }, ct);
 
     public Task PublishCostPriceUpdatedAsync(Guid skuId, decimal newCostPrice, CancellationToken ct = default) =>

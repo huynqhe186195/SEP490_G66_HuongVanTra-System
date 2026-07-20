@@ -8,6 +8,8 @@ export function mapSkuStock(row) {
     quantityOnHand: Number(row.quantityOnHand ?? row.QuantityOnHand ?? 0),
     warehouseQuantityOnHand: Number(row.warehouseQuantityOnHand ?? row.WarehouseQuantityOnHand ?? 0),
     lowStockThreshold: Number(row.lowStockThreshold ?? row.LowStockThreshold ?? 0),
+    warehouseLowStockThreshold: Number(row.warehouseLowStockThreshold ?? row.WarehouseLowStockThreshold ?? 0),
+    shelfLowStockThreshold: Number(row.shelfLowStockThreshold ?? row.ShelfLowStockThreshold ?? row.lowStockThreshold ?? row.LowStockThreshold ?? 0),
     updatedAt: row.updatedAt ?? row.UpdatedAt ?? null,
   }
 }
@@ -41,6 +43,8 @@ export function mergeCatalogSkusWithStocks(skus = [], stocks = [], productNameBy
       weightInGrams: stock?.weightInGrams ?? sku.weightInGrams ?? 0,
       quantityOnHand: stock?.quantityOnHand ?? 0,
       warehouseQuantityOnHand: stock?.warehouseQuantityOnHand ?? 0,
+      warehouseLowStockThreshold: stock?.warehouseLowStockThreshold ?? 0,
+      shelfLowStockThreshold: stock?.shelfLowStockThreshold ?? stock?.lowStockThreshold ?? 0,
       updatedAt: stock?.updatedAt ?? null,
     }
   })
@@ -55,6 +59,8 @@ export function mergeCatalogSkusWithStocks(skus = [], stocks = [], productNameBy
       weightInGrams: stock.weightInGrams ?? 0,
       quantityOnHand: stock.quantityOnHand ?? 0,
       warehouseQuantityOnHand: stock.warehouseQuantityOnHand ?? 0,
+      warehouseLowStockThreshold: stock.warehouseLowStockThreshold ?? 0,
+      shelfLowStockThreshold: stock.shelfLowStockThreshold ?? stock.lowStockThreshold ?? 0,
       updatedAt: stock.updatedAt ?? null,
     })
   }
@@ -70,27 +76,11 @@ export async function fetchInventorySettings() {
   try {
     const data = await apiRequestAuth('/api/v1/inventory/settings', { method: 'GET' })
     return {
-      simulateWarehouse: Boolean(data?.simulateWarehouse ?? data?.SimulateWarehouse ?? true),
+      simulateWarehouse: Boolean(data?.simulateWarehouse ?? data?.SimulateWarehouse ?? false),
     }
   } catch {
-    return { simulateWarehouse: true }
+    return { simulateWarehouse: false }
   }
-}
-
-export async function simulateAdjustStoreStock(skuId, quantityDelta) {
-  const data = await apiRequestAuth(`/api/v1/inventory/sku-stocks/${skuId}/simulate-adjust-store`, {
-    method: 'POST',
-    body: JSON.stringify({ quantityDelta: Number(quantityDelta) }),
-  })
-  return mapSkuStock(data)
-}
-
-export async function adjustWarehouseStock(skuId, quantityDelta) {
-  const data = await apiRequestAuth(`/api/v1/inventory/sku-stocks/${skuId}/adjust-warehouse`, {
-    method: 'POST',
-    body: JSON.stringify({ quantityDelta: Number(quantityDelta) }),
-  })
-  return mapSkuStock(data)
 }
 
 export async function fetchLowStockSkus() {
@@ -99,9 +89,9 @@ export async function fetchLowStockSkus() {
   return data.map(mapSkuStock)
 }
 
-export async function updateLowStockThreshold(skuId, threshold) {
+export async function updateLowStockThreshold(skuId, threshold, location = 'Shelf') {
   await apiRequestAuth(`/api/v1/inventory/sku-stocks/${skuId}/threshold`, {
     method: 'PUT',
-    body: JSON.stringify({ threshold: Number(threshold) }),
+    body: JSON.stringify({ threshold: Number(threshold), location }),
   })
 }

@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
+using HuongVanTra.Shared.Audit;
+using MassTransit;
 using UserService.Application.Authorization;
 using UserService.Application.Interfaces;
 using UserService.Application.UseCases;
@@ -35,6 +37,7 @@ builder.Services.AddScoped<UserLogic>();
 builder.Services.AddScoped<RoleLogic>();
 builder.Services.AddScoped<PermissionLogic>();
 builder.Services.AddScoped<EmployeeLogic>();
+builder.Services.AddHvtSystemActivityAudit("UserService");
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -60,6 +63,18 @@ builder.Services.AddAuthorization(options =>
         options.AddPolicy(permission, policy =>
             policy.Requirements.Add(new PermissionRequirement(permission)));
     }
+});
+
+builder.Services.AddMassTransit(x =>
+{
+    x.UsingRabbitMq((context, cfg) =>
+    {
+        cfg.Host(builder.Configuration["RabbitMQ:Host"] ?? "rabbitmq", "/", h =>
+        {
+            h.Username(builder.Configuration["RabbitMQ:Username"] ?? "hvt");
+            h.Password(builder.Configuration["RabbitMQ:Password"] ?? "hvtrabbit123");
+        });
+    });
 });
 
 var app = builder.Build();
@@ -103,6 +118,7 @@ if (app.Environment.IsDevelopment())
 app.UseMiddleware<GlobalExceptionMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseHvtSystemActivityAudit();
 app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
 app.MapControllers();
 

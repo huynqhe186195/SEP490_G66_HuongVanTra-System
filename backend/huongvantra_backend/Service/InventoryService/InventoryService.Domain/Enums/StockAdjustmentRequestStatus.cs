@@ -4,6 +4,7 @@ public enum StockAdjustmentRequestStatus
 {
     Pending,
     Approved,
+    Completed,
     Rejected,
     Cancelled
 }

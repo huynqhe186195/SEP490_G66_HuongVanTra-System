@@ -10,9 +10,22 @@ import ProductVariantsPanel from '../components/ProductVariantsPanel.jsx'
 import { createCategory, fetchCategories } from '../services/categoriesApi.js'
 import { createBrand, fetchBrands } from '../services/brandsApi.js'
 import { createAttributeName, fetchAttributeNames } from '../services/attributeNamesApi.js'
-import { createProduct, fetchProductById, updateProduct } from '../services/productsApi.js'
+import {
+  createProductFromApproval,
+  createProductManualFromApproval,
+  fetchProductApprovals,
+  fetchProductById,
+  updateProduct,
+  validateProductApprovalCode,
+} from '../services/productsApi.js'
 import { mapProductApiError, validateProductForm } from '../utils/productValidation.js'
 import { setProductListFocus } from '../utils/productListFocus.js'
+import { formatDateTimeVN } from '../../../utils/vietnamDateTime.js'
+import {
+  flattenCategoryTreeForSelect,
+  getCategoryPathLabel,
+  isCategoryUnavailable,
+} from '../utils/categoryTreeUtils.js'
 
 const PRODUCT_TYPES = { NGUYEN_LIEU: 'NGUYEN_LIEU', THANH_PHAM: 'THANH_PHAM' }
 
@@ -105,25 +118,6 @@ function FieldError({ message }) {
   return <p className="mt-1 text-xs text-[#b42318]">{message}</p>
 }
 
-// Build a flat list with depth info from a nested category tree
-function buildCategoryTree(categories) {
-  const byId = {}
-  for (const cat of categories) byId[String(cat.id)] = { ...cat, children: [] }
-  const roots = []
-  for (const cat of categories) {
-    const pid = cat.parentId ? String(cat.parentId) : null
-    if (pid && byId[pid]) byId[pid].children.push(byId[String(cat.id)])
-    else roots.push(byId[String(cat.id)])
-  }
-  const flat = []
-  function walk(node, depth) {
-    flat.push({ ...node, depth })
-    for (const child of node.children) walk(child, depth + 1)
-  }
-  for (const root of roots) walk(root, 0)
-  return flat
-}
-
 // Modal for creating a category
 function CreateCategoryModal({ isOpen, onClose, categories, onCreated }) {
   const [name, setName] = useState('')
@@ -156,7 +150,7 @@ function CreateCategoryModal({ isOpen, onClose, categories, onCreated }) {
 
   if (!isOpen) return null
 
-  const treeOptions = buildCategoryTree(
+  const treeOptions = flattenCategoryTreeForSelect(
     categories.filter((c) => !c.isDeleted && c.isActive !== false),
   )
 
@@ -200,7 +194,7 @@ function CreateCategoryModal({ isOpen, onClose, categories, onCreated }) {
               <option value="">Không có — tạo nhóm gốc</option>
               {treeOptions.map((cat) => (
                 <option key={cat.id} value={String(cat.id)}>
-                  {'  '.repeat(cat.depth)}{cat.depth > 0 ? '└ ' : ''}{cat.name}
+                  {cat.pathLabel}
                 </option>
               ))}
             </select>
@@ -354,6 +348,392 @@ function CreateAttributeNameModal({ isOpen, onClose, onCreated }) {
   )
 }
 
+function getProductTypeLabel(value) {
+  return value === PRODUCT_TYPES.NGUYEN_LIEU ? 'Nguyên liệu / Bao bì' : 'Thành phẩm kinh doanh'
+}
+
+const APPROVAL_CATEGORY_UNAVAILABLE_MESSAGE = 'Danh mục trong biên bản không còn tồn tại hoặc đã bị vô hiệu hóa.'
+
+function parseOptionValuesJson(value) {
+  if (!value) return {}
+  try {
+    const parsed = JSON.parse(value)
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+
+function normalizeComparableText(value) {
+  return String(value ?? '').trim()
+}
+
+function normalizeComparableSku(value) {
+  return normalizeComparableText(value).toUpperCase()
+}
+
+function normalizeComparableNumber(value) {
+  if (value === null || value === undefined || value === '') return null
+  const number = Number(value)
+  return Number.isFinite(number) ? Number(number.toFixed(3)) : null
+}
+
+function canonicalApprovalProduct(product) {
+  const variants = Array.isArray(product?.variants) ? product.variants : []
+  const units = Array.isArray(product?.units) ? product.units : []
+  return {
+    name: normalizeComparableText(product?.name),
+    productType: normalizeComparableText(product?.productType),
+    categoryId: Number(product?.categoryId || 0),
+    baseUnit: normalizeComparableText(product?.baseUnit),
+    weightValue: normalizeComparableNumber(product?.weightValue),
+    weightUnit: normalizeComparableText(product?.weightUnit),
+    units: units
+      .map((unit) => ({
+        unitName: normalizeComparableText(unit.unitName).toLowerCase(),
+        conversionRate: normalizeComparableNumber(unit.conversionRate),
+        price: normalizeComparableNumber(unit.price),
+        isDirectSell: unit.isDirectSell !== false,
+        isBaseUnit: Boolean(unit.isBaseUnit),
+      }))
+      .sort((a, b) => a.unitName.localeCompare(b.unitName)),
+    variants: variants
+      .map((variant) => ({
+        skuCode: normalizeComparableSku(variant.skuCode),
+        variantName: normalizeComparableText(variant.variantName),
+        costPrice: normalizeComparableNumber(variant.costPrice),
+        retailPrice: normalizeComparableNumber(variant.retailPrice),
+        minStock: normalizeComparableNumber(variant.minStock),
+        maxStock: normalizeComparableNumber(variant.maxStock),
+        bomLines: (Array.isArray(variant.bomLines) ? variant.bomLines : [])
+          .map((line) => ({
+            materialId: normalizeComparableText(line.materialId ?? line.MaterialId),
+            quantity: normalizeComparableNumber(line.quantity ?? line.Quantity),
+          }))
+          .sort((a, b) => a.materialId.localeCompare(b.materialId)),
+      }))
+      .sort((a, b) => a.skuCode.localeCompare(b.skuCode)),
+  }
+}
+
+function compareApprovalProducts(approved, manual) {
+  const left = canonicalApprovalProduct(approved)
+  const right = canonicalApprovalProduct(manual)
+  const diffs = []
+  if (left.name !== right.name) diffs.push('Tên sản phẩm khác')
+  if (left.productType !== right.productType) diffs.push('Loại hàng khác')
+  if (left.categoryId !== right.categoryId) diffs.push('Danh mục khác')
+  if (left.baseUnit !== right.baseUnit) diffs.push('Đơn vị gốc khác')
+  if (left.weightValue !== right.weightValue || left.weightUnit !== right.weightUnit) diffs.push('Khối lượng/quy cách khác')
+  if (JSON.stringify(left.units) !== JSON.stringify(right.units)) diffs.push('Đơn vị bán khác')
+  if (left.variants.length !== right.variants.length) {
+    diffs.push('Số lượng SKU khác')
+  } else {
+    const rightBySku = new Map(right.variants.map((variant) => [variant.skuCode, variant]))
+    for (const approvedVariant of left.variants) {
+      const manualVariant = rightBySku.get(approvedVariant.skuCode)
+      if (!manualVariant) {
+        diffs.push(`SKU ${approvedVariant.skuCode || '(trống)'} khác`)
+        continue
+      }
+      if (approvedVariant.variantName !== manualVariant.variantName) diffs.push(`Tên biến thể ${approvedVariant.skuCode} khác`)
+      if (approvedVariant.costPrice !== manualVariant.costPrice) diffs.push(`Giá vốn ${approvedVariant.skuCode} khác`)
+      if (approvedVariant.retailPrice !== manualVariant.retailPrice) diffs.push(`Giá bán ${approvedVariant.skuCode} khác`)
+      if (approvedVariant.minStock !== manualVariant.minStock || approvedVariant.maxStock !== manualVariant.maxStock) diffs.push(`Tồn min/max ${approvedVariant.skuCode} khác`)
+      if (JSON.stringify(approvedVariant.bomLines) !== JSON.stringify(manualVariant.bomLines)) diffs.push(`BOM ${approvedVariant.skuCode} khác`)
+    }
+  }
+  return Array.from(new Set(diffs))
+}
+
+function ApprovalProductPreview({ product, categories = [] }) {
+  const variants = Array.isArray(product?.variants) ? product.variants : []
+  const units = Array.isArray(product?.units) ? product.units : []
+
+  return (
+    <div className="space-y-5">
+      <div className="grid gap-3 rounded-xl border border-slate-100 bg-[#fbf9f1] p-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Tên hàng</p>
+          <p className="mt-1 font-semibold text-slate-800">{product?.name || '—'}</p>
+        </div>
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Loại hàng</p>
+          <p className="mt-1 font-semibold text-slate-800">{getProductTypeLabel(product?.productType)}</p>
+        </div>
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Nhóm hàng</p>
+          <p className="mt-1 font-semibold text-slate-800">{getCategoryPathLabel(categories, product?.categoryId, product?.categoryName)}</p>
+        </div>
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Đơn vị gốc</p>
+          <p className="mt-1 font-semibold text-slate-800">{product?.baseUnit || units.find((u) => u.isBaseUnit)?.unitName || '—'}</p>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+        <table className="min-w-full text-left text-sm">
+          <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+            <tr>
+              <th className="px-4 py-3 font-semibold">SKU</th>
+              <th className="px-4 py-3 font-semibold">Tên biến thể</th>
+              <th className="px-4 py-3 text-right font-semibold">Giá bán</th>
+              <th className="px-4 py-3 text-center font-semibold">BOM</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {variants.length ? variants.map((variant, index) => {
+              const bomLines = Array.isArray(variant.bomLines) ? variant.bomLines : []
+              return (
+                <tr key={`${variant.skuCode || index}-${index}`}>
+                  <td className="px-4 py-3 font-mono text-xs font-semibold text-[#356647]">{variant.skuCode || 'Tự sinh'}</td>
+                  <td className="px-4 py-3 font-medium text-slate-800">{variant.variantName || '—'}</td>
+                  <td className="px-4 py-3 text-right text-slate-700">{formatCurrency(variant.retailPrice)} đ</td>
+                  <td className="px-4 py-3 text-center text-slate-600">{bomLines.length ? `${bomLines.length} dòng` : '—'}</td>
+                </tr>
+              )
+            }) : (
+              <tr>
+                <td colSpan={4} className="px-4 py-8 text-center text-sm text-slate-400">Chưa có SKU trong snapshot.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+function ApprovalCodeGate({ approvalCode, onCodeChange, onValidate, isLoading, pendingApprovals = [], categories = [] }) {
+  return (
+    <PageShell>
+      <div className="mx-auto max-w-3xl space-y-6">
+        <div className="rounded-[1rem] bg-white p-6 shadow-sm">
+          <div className="flex items-start gap-3">
+            <span className="material-symbols-outlined rounded-xl bg-[#e8f1eb] p-2 text-[#356647]">verified</span>
+            <div>
+              <h1 className="text-2xl font-extrabold text-slate-800">Tạo hàng hóa mới</h1>
+              <p className="mt-1 text-sm text-slate-500">Sản phẩm mới cần mã xác nhận do Admin cấp.</p>
+            </div>
+          </div>
+
+          <form onSubmit={onValidate} className="mt-6 grid gap-3 sm:grid-cols-[1fr_auto]">
+            <label>
+              <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Mã phê duyệt</span>
+              <input
+                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 font-mono text-sm uppercase outline-none transition focus:border-[#538463] focus:ring-2 focus:ring-[#538463]/15"
+                placeholder="NPA-YYYYMMDD-XXXXXX"
+                value={approvalCode}
+                onChange={(event) => onCodeChange(event.target.value.toUpperCase())}
+              />
+            </label>
+            <div className="flex items-end">
+              <button
+                type="submit"
+                disabled={isLoading || !approvalCode.trim()}
+                className="w-full rounded-xl bg-[#538463] px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-[#457053] disabled:opacity-50"
+              >
+                {isLoading ? 'Đang kiểm tra...' : 'Kiểm tra mã'}
+              </button>
+            </div>
+          </form>
+
+          <Link to="/inventory/products" className="mt-5 inline-flex items-center gap-1 text-sm font-semibold text-slate-600 hover:text-[#356647]">
+            <span className="material-symbols-outlined text-[18px]">arrow_back</span>
+            Quay lại danh sách
+          </Link>
+        </div>
+
+        {pendingApprovals.length ? (
+          <section className="rounded-[1rem] bg-white p-5 shadow-sm">
+            <h2 className="text-base font-bold text-slate-800">Biên bản chờ tạo hàng hóa</h2>
+            <div className="mt-4 space-y-3">
+              {pendingApprovals.map((approval) => (
+                <button
+                  key={approval.id}
+                  type="button"
+                  onClick={() => onCodeChange(approval.approvalCode)}
+                  className="w-full rounded-xl border border-slate-200 p-3 text-left hover:border-[#538463] hover:bg-[#f7fbf8]"
+                >
+                  <span className="font-mono text-xs font-bold text-[#356647]">{approval.approvalCode}</span>
+                  <span className="mt-1 block text-sm font-semibold text-slate-800">{approval.productName || approval.productSnapshot?.name || '—'}</span>
+                  <span className="mt-1 block text-xs text-slate-500">
+                    {getCategoryPathLabel(categories, approval.categoryId || approval.productSnapshot?.categoryId, approval.productSnapshot?.categoryName)}
+                    {' · '}
+                    Cấp mã lúc {formatDateTimeVN(approval.authorisedAt)}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </section>
+        ) : null}
+      </div>
+    </PageShell>
+  )
+}
+
+function ApprovalModeSelection({ approval, categories = [], onSelectMode, onReset }) {
+  return (
+    <PageShell>
+      <div className="space-y-6">
+        <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-start">
+          <div>
+            <h1 className="text-2xl font-extrabold text-slate-800">Mã phê duyệt hợp lệ</h1>
+            <p className="mt-1 text-sm text-slate-500">
+              Mã <span className="font-mono font-semibold text-[#356647]">{approval.approvalCode}</span> đang chờ Thủ kho Kho tổng xác nhận tạo hàng hóa.
+            </p>
+          </div>
+          <button type="button" onClick={onReset} className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50">
+            Đổi mã
+          </button>
+        </div>
+
+        <section className="rounded-[1rem] bg-white p-4 shadow-sm sm:p-6">
+          <ApprovalProductPreview product={approval.productSnapshot} categories={categories} />
+        </section>
+
+        <section className="grid gap-4 md:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => onSelectMode('automatic')}
+            className="rounded-[1rem] border border-[#356647]/30 bg-white p-5 text-left shadow-sm hover:border-[#356647] hover:bg-[#f7fbf8]"
+          >
+            <span className="material-symbols-outlined text-[#356647]">auto_awesome</span>
+            <span className="mt-3 block text-base font-bold text-slate-800">Tạo tự động từ biên bản</span>
+            <span className="mt-1 block text-sm text-slate-500">Dùng đúng snapshot Product/SKU/BOM đã được Admin phê duyệt.</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => onSelectMode('manual')}
+            className="rounded-[1rem] border border-slate-200 bg-white p-5 text-left shadow-sm hover:border-[#356647] hover:bg-[#f7fbf8]"
+          >
+            <span className="material-symbols-outlined text-[#356647]">edit_document</span>
+            <span className="mt-3 block text-base font-bold text-slate-800">Nhập thủ công</span>
+            <span className="mt-1 block text-sm text-slate-500">Chỉ dùng khi cần nhập lại theo biên bản đã được cấp mã.</span>
+          </button>
+        </section>
+      </div>
+    </PageShell>
+  )
+}
+
+function AutomaticApprovalCreatePage({ approval, categories = [], onCreate, onBack, isSaving }) {
+  return (
+    <PageShell>
+      <div className="space-y-6">
+        <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-start">
+          <div>
+            <h1 className="text-2xl font-extrabold text-slate-800">Tạo tự động từ biên bản</h1>
+            <p className="mt-1 text-sm text-slate-500">
+              Mã phê duyệt: <span className="font-mono font-semibold text-[#356647]">{approval.approvalCode}</span>
+            </p>
+          </div>
+          <div className="flex gap-3">
+            <button type="button" onClick={onBack} className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50">
+              Chọn lại
+            </button>
+            <button type="button" onClick={onCreate} disabled={isSaving} className="rounded-xl bg-[#538463] px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-[#457053] disabled:opacity-50">
+              {isSaving ? 'Đang tạo...' : 'Xác nhận tạo hàng hóa'}
+            </button>
+          </div>
+        </div>
+
+        <section className="rounded-[1rem] bg-white p-4 shadow-sm sm:p-6">
+          <div className="mb-4 rounded-xl border border-[#356647]/20 bg-[#f7fbf8] p-4 text-sm text-slate-600">
+            Hệ thống sẽ tạo hàng hóa đúng theo thông tin Product/SKU/BOM đã được Admin cấp mã. Thủ kho chỉ xác nhận tạo, không chỉnh sửa dữ liệu trong chế độ tự động.
+          </div>
+          <ApprovalProductPreview product={approval.productSnapshot} categories={categories} />
+        </section>
+      </div>
+    </PageShell>
+  )
+}
+
+function ManualCreationConfirmModal({ payload, approval, reason, categories = [], onClose, onConfirm, isSaving }) {
+  if (!payload) return null
+  const variants = Array.isArray(payload.variants) ? payload.variants : []
+  const totalBomLines = variants.reduce((sum, variant) => sum + (Array.isArray(variant.bomLines) ? variant.bomLines.length : 0), 0)
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm" role="presentation" onClick={onClose}>
+      <div className="max-h-[min(760px,calc(100dvh-2rem))] w-full max-w-4xl overflow-hidden rounded-2xl bg-white shadow-2xl" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+        <header className="flex items-start justify-between border-b border-slate-100 px-6 py-4">
+          <div>
+            <h2 className="text-lg font-bold text-slate-800">Xác nhận tạo hàng hóa thủ công</h2>
+            <p className="mt-1 text-sm text-slate-500">Mã phê duyệt: <span className="font-mono font-semibold text-[#356647]">{approval?.approvalCode}</span></p>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100">
+            <span className="material-symbols-outlined">close</span>
+          </button>
+        </header>
+        <div className="max-h-[calc(100dvh-220px)] space-y-5 overflow-y-auto px-6 py-5">
+          <div className="grid gap-3 rounded-xl border border-slate-100 bg-[#fbf9f1] p-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Tên hàng</p>
+              <p className="mt-1 font-semibold text-slate-800">{payload.name || '—'}</p>
+            </div>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Loại hàng</p>
+              <p className="mt-1 font-semibold text-slate-800">{getProductTypeLabel(payload.productType)}</p>
+            </div>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Nhóm hàng</p>
+              <p className="mt-1 font-semibold text-slate-800">{getCategoryPathLabel(categories, payload.categoryId, payload.categoryName)}</p>
+            </div>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">SKU</p>
+              <p className="mt-1 font-semibold text-slate-800">{variants.length}</p>
+            </div>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">BOM</p>
+              <p className="mt-1 font-semibold text-slate-800">{totalBomLines} dòng</p>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto rounded-xl border border-slate-200">
+            <table className="min-w-full text-left text-sm">
+              <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="px-4 py-3 font-semibold">SKU</th>
+                  <th className="px-4 py-3 font-semibold">Tên biến thể</th>
+                  <th className="px-4 py-3 text-right font-semibold">Giá bán</th>
+                  <th className="px-4 py-3 text-center font-semibold">BOM</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {variants.map((variant, index) => (
+                  <tr key={`${variant.skuCode || index}-${index}`}>
+                    <td className="px-4 py-3 font-mono text-xs font-semibold text-[#356647]">{variant.skuCode || 'Tự sinh'}</td>
+                    <td className="px-4 py-3 font-medium text-slate-800">{variant.variantName || '—'}</td>
+                    <td className="px-4 py-3 text-right">{formatCurrency(variant.retailPrice)} đ</td>
+                    <td className="px-4 py-3 text-center">{variant.bomLines?.length ? `${variant.bomLines.length} dòng` : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+            <p className="font-semibold">Lý do nhập thủ công</p>
+            <p className="mt-1 whitespace-pre-wrap">{reason}</p>
+          </div>
+          <p className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700">
+            Tôi xác nhận thông tin nhập thủ công khớp với biên bản đã được duyệt.
+          </p>
+        </div>
+        <footer className="flex justify-end gap-3 border-t border-slate-100 px-6 py-4">
+          <button type="button" onClick={onClose} className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+            Quay lại sửa
+          </button>
+          <button type="button" onClick={onConfirm} disabled={isSaving} className="rounded-xl bg-[#538463] px-5 py-2.5 text-sm font-bold text-white hover:bg-[#457053] disabled:opacity-50">
+            {isSaving ? 'Đang tạo...' : 'Xác nhận tạo hàng hóa'}
+          </button>
+        </footer>
+      </div>
+    </div>
+  )
+}
+
 function ProductFormPage({ mode }) {
   const navigate = useNavigate()
   const { id } = useParams()
@@ -379,6 +759,14 @@ function ProductFormPage({ mode }) {
   const [customAttrNames, setCustomAttrNames] = useState([])
   const [addAttrNameModal, setAddAttrNameModal] = useState({ open: false, forIndex: null })
   const [duplicateProductName, setDuplicateProductName] = useState('')
+  const [approvalCode, setApprovalCode] = useState('')
+  const [approvalRecord, setApprovalRecord] = useState(null)
+  const [approvalMode, setApprovalMode] = useState('')
+  const [isApprovalLoading, setIsApprovalLoading] = useState(false)
+  const [isAutomaticCreating, setIsAutomaticCreating] = useState(false)
+  const [manualModeReason, setManualModeReason] = useState('')
+  const [pendingManualPayload, setPendingManualPayload] = useState(null)
+  const [pendingApprovals, setPendingApprovals] = useState([])
   const isFinishedProduct = productType === PRODUCT_TYPES.THANH_PHAM
 
   const [form, setForm] = useState(() => ({
@@ -415,7 +803,7 @@ function ProductFormPage({ mode }) {
     let mounted = true
     async function loadCategories() {
       try {
-        const items = await fetchCategories()
+        const items = await fetchCategories({ isDeleted: false })
         if (mounted) setCategories(items)
       } catch (error) {
         if (mounted) showError(error.message)
@@ -446,6 +834,19 @@ function ProductFormPage({ mode }) {
     fetchAttributeNames().then((list) => { if (mounted) setDbAttributeNames(list) }).catch(() => {})
     return () => { mounted = false }
   }, [])
+
+  useEffect(() => {
+    if (isEditMode || !canEdit) return undefined
+    let mounted = true
+    fetchProductApprovals({ status: 'AwaitingWarehouseConfirmation', page: 1, pageSize: 8 })
+      .then((result) => {
+        if (mounted) setPendingApprovals(result.items || [])
+      })
+      .catch(() => {
+        if (mounted) setPendingApprovals([])
+      })
+    return () => { mounted = false }
+  }, [canEdit, isEditMode])
 
   useEffect(() => {
     if (!isEditMode || !id) return undefined
@@ -509,7 +910,7 @@ function ProductFormPage({ mode }) {
     const visible = categories.filter(
       (c) => (!c.isDeleted && c.isActive !== false) || String(c.id) === String(form.categoryId),
     )
-    return buildCategoryTree(visible)
+    return flattenCategoryTreeForSelect(visible)
   }, [categories, form.categoryId])
 
   const allBrands = useMemo(() => dbBrands.map((b) => b.name), [dbBrands])
@@ -545,6 +946,7 @@ function ProductFormPage({ mode }) {
           unit,
           attributes,
           skuCode: draft.skuCode ?? '',
+          variantName: draft.variantName ?? '',
           skuSuggestion,
           barcode: draft.barcode ?? (unit.isBaseUnit ? form.barcode : unit.barcode) ?? '',
           costPrice,
@@ -554,12 +956,18 @@ function ProductFormPage({ mode }) {
     )
   }, [form.units, form.costPrice, form.salePrice, form.barcode, form.name, validAttributes, variantDrafts])
 
+  const bomModalLines = useMemo(() => {
+    if (!bomModalVariant) return []
+    return bomByVariant[bomModalVariant.rowKey] ?? []
+  }, [bomByVariant, bomModalVariant])
+
   useEffect(() => {
     setVariantDrafts((previous) => {
       const next = {}
       for (const row of generatedRows) {
         next[row.key] = {
           skuCode: previous[row.key]?.skuCode ?? row.skuCode ?? '',
+          variantName: previous[row.key]?.variantName ?? row.variantName ?? '',
           barcode: previous[row.key]?.barcode ?? row.barcode ?? '',
           salePrice: previous[row.key]?.salePrice ?? row.salePrice ?? 0,
         }
@@ -752,6 +1160,8 @@ function ProductFormPage({ mode }) {
   function openBomModal(row) {
     setBomModalVariant({
       rowKey: row.key,
+      sku: normalizeText(row.skuCode) || row.skuSuggestion,
+      skuCode: normalizeText(row.skuCode) || row.skuSuggestion,
       productName: normalizeText(form.name) || 'Sản phẩm',
       attributeLabel: row.attributes.map((a) => a.value).join(' / ') || row.unit.unitName,
     })
@@ -830,7 +1240,7 @@ function ProductFormPage({ mode }) {
       return {
         skuCode: normalizeText(row.skuCode).toUpperCase(),
         barcode: normalizeText(row.barcode) || null,
-        variantName: variantName || normalizeText(form.name) || row.unit.unitName,
+        variantName: normalizeText(row.variantName) || variantName || normalizeText(form.name) || row.unit.unitName,
         optionValuesJson: JSON.stringify(optionValues),
         costPrice: toNumber(row.costPrice),
         retailPrice: toNumber(row.salePrice),
@@ -886,10 +1296,230 @@ function ProductFormPage({ mode }) {
     }
   }
 
+  function buildManualRowsForSnapshot(units, attributes) {
+    const validSnapshotAttributes = attributes
+      .filter((attribute) => normalizeText(attribute.name) && attribute.values.length)
+      .map((attribute) => ({ name: normalizeText(attribute.name), values: attribute.values }))
+    const combinations = cartesianProduct(validSnapshotAttributes)
+    return units.map((unit) => ({
+      ...unit,
+      conversionRate: toNumber(unit.conversionRate, 1) || 1,
+      unitName: normalizeText(unit.unitName) || '—',
+    })).flatMap((unit) =>
+      combinations.map((rowAttributes) => ({
+        key: buildVariantKey(unit, rowAttributes),
+        unit,
+        attributes: rowAttributes,
+      })),
+    )
+  }
+
+  function findSnapshotVariantForRow(variants, row, fallbackIndex) {
+    const matched = variants.find((variant) => {
+      const options = parseOptionValuesJson(variant.optionValuesJson)
+      const attributeMatched = row.attributes.every((attribute) =>
+        normalizeComparableText(options[attribute.name]).toLowerCase() === normalizeComparableText(attribute.value).toLowerCase(),
+      )
+      if (!attributeMatched) return false
+
+      const unitOptions = [options.Unit, options['Đơn vị'], options['Quy cách']].map(normalizeComparableText).filter(Boolean)
+      return !unitOptions.length || unitOptions.some((value) => value.toLowerCase() === normalizeComparableText(row.unit.unitName).toLowerCase())
+    })
+    return matched || variants[fallbackIndex] || null
+  }
+
+  function applyApprovalSnapshotToManualForm(snapshot) {
+    if (!snapshot) return
+    const variants = Array.isArray(snapshot.variants) ? snapshot.variants : []
+    const firstVariant = variants[0] || {}
+    const snapshotUnits = Array.isArray(snapshot.units) && snapshot.units.length
+      ? snapshot.units
+      : [{
+          unitName: snapshot.baseUnit || 'cái',
+          conversionRate: 1,
+          price: firstVariant.retailPrice ?? 0,
+          barcode: '',
+          isDirectSell: true,
+          isBaseUnit: true,
+        }]
+    const mappedUnits = snapshotUnits.map((unit, index) => ({
+      id: createLocalId('unit'),
+      unitName: unit.unitName || (index === 0 ? snapshot.baseUnit : ''),
+      conversionRate: String(unit.conversionRate || 1),
+      price: String(unit.price ?? firstVariant.retailPrice ?? 0),
+      barcode: unit.barcode || '',
+      isDirectSell: unit.isDirectSell !== false,
+      isBaseUnit: Boolean(unit.isBaseUnit || index === 0),
+    }))
+
+    const attributeValues = new Map()
+    for (const variant of variants) {
+      const options = parseOptionValuesJson(variant.optionValuesJson)
+      for (const [name, value] of Object.entries(options)) {
+        if (name === 'Unit' || !normalizeText(value)) continue
+        if (!attributeValues.has(name)) attributeValues.set(name, new Set())
+        attributeValues.get(name).add(String(value))
+      }
+    }
+    const mappedAttributes = Array.from(attributeValues.entries()).map(([name, values]) => ({
+      ...EMPTY_ATTRIBUTE,
+      id: createLocalId('attr'),
+      name,
+      values: Array.from(values),
+    }))
+    const attributes = mappedAttributes.length ? mappedAttributes : [{ ...EMPTY_ATTRIBUTE, id: createLocalId('attr') }]
+    const rows = buildManualRowsForSnapshot(mappedUnits, attributes)
+    const nextVariantDrafts = {}
+    const nextBomByVariant = {}
+    rows.forEach((row, index) => {
+      const variant = findSnapshotVariantForRow(variants, row, index)
+      nextVariantDrafts[row.key] = {
+        skuCode: variant?.skuCode || '',
+        variantName: variant?.variantName || '',
+        barcode: variant?.barcode || '',
+        salePrice: String(variant?.retailPrice ?? row.unit.price ?? 0),
+      }
+      nextBomByVariant[row.key] = (Array.isArray(variant?.bomLines) ? variant.bomLines : []).map((line) => ({
+        material_id: line.materialId ?? line.MaterialId,
+        materialId: line.materialId ?? line.MaterialId,
+        quantity: Number(line.quantity ?? line.Quantity ?? 0),
+      }))
+    })
+
+    setProductType(snapshot.productType || PRODUCT_TYPES.THANH_PHAM)
+    setForm((prev) => ({
+      ...prev,
+      productCode: '',
+      barcode: firstVariant.barcode || '',
+      name: snapshot.name || '',
+      categoryId: snapshot.categoryId ? String(snapshot.categoryId) : '',
+      brandId: '',
+      brandName: '',
+      origin: snapshot.origin || '',
+      flavorProfile: snapshot.flavorProfile || '',
+      brewingGuide: snapshot.brewingGuide || '',
+      description: snapshot.description || '',
+      costPrice: String(firstVariant.costPrice ?? 0),
+      salePrice: String(firstVariant.retailPrice ?? mappedUnits.find((unit) => unit.isBaseUnit)?.price ?? 0),
+      minStock: String(firstVariant.minStock ?? 0),
+      maxStock: String(firstVariant.maxStock ?? 999999999),
+      weightValue: snapshot.weightValue ?? '',
+      weightUnit: snapshot.weightUnit || 'g',
+      images: [],
+      units: mappedUnits,
+      attributes,
+      isActive: true,
+    }))
+    setVariantDrafts(nextVariantDrafts)
+    setBomByVariant(nextBomByVariant)
+    setFieldErrors({})
+    setDuplicateProductName('')
+  }
+
+  function handleSelectApprovalMode(mode) {
+    setApprovalMode(mode)
+    if (mode === 'manual') {
+      applyApprovalSnapshotToManualForm(approvalRecord?.productSnapshot)
+    }
+  }
+
+  async function handleValidateApprovalCode(event) {
+    event.preventDefault()
+    const code = approvalCode.trim().toUpperCase()
+    if (!code) {
+      showError('Vui lòng nhập mã phê duyệt.')
+      return
+    }
+
+    try {
+      setIsApprovalLoading(true)
+      const result = await validateProductApprovalCode(code)
+      if (!result.isValid || !result.approval) {
+        showError(result.message || 'Mã phê duyệt không hợp lệ.')
+        return
+      }
+
+      setApprovalCode(result.approval.approvalCode || code)
+      setApprovalRecord(result.approval)
+      setApprovalMode('')
+      setPendingManualPayload(null)
+      showSuccess('Mã phê duyệt hợp lệ.')
+    } catch (error) {
+      showError(error.message)
+    } finally {
+      setIsApprovalLoading(false)
+    }
+  }
+
+  function resetApprovalCode() {
+    setApprovalRecord(null)
+    setApprovalMode('')
+    setApprovalCode('')
+    setManualModeReason('')
+    setPendingManualPayload(null)
+  }
+
+  async function handleAutomaticCreation() {
+    if (!approvalRecord?.approvalCode) {
+      showError('Vui lòng kiểm tra mã phê duyệt trước khi tạo tự động.')
+      return
+    }
+    if (isCategoryUnavailable(categories, approvalRecord.productSnapshot?.categoryId)) {
+      showError(APPROVAL_CATEGORY_UNAVAILABLE_MESSAGE)
+      return
+    }
+
+    try {
+      setIsAutomaticCreating(true)
+      const result = await createProductFromApproval(approvalRecord.approvalCode)
+      const created = result.product
+      setProductListFocus(created, { showBanner: true })
+      showSuccess(`Đã tạo "${created.name}" từ biên bản phê duyệt.`)
+      navigate(`/inventory/products?highlight=${created.id}`, {
+        replace: true,
+        state: { createdName: created.name },
+      })
+    } catch (error) {
+      showError(error.message)
+    } finally {
+      setIsAutomaticCreating(false)
+    }
+  }
+
+  async function handleManualConfirmSubmit() {
+    if (!pendingManualPayload || !approvalRecord?.approvalCode) return
+    try {
+      setIsSaving(true)
+      const result = await createProductManualFromApproval({
+        approvalCode: approvalRecord.approvalCode,
+        product: pendingManualPayload,
+        manualModeReason,
+      })
+      const created = result.product
+      setProductListFocus(created, { showBanner: true })
+      showSuccess(`Đã tạo "${created.name}" bằng nhập thủ công theo mã phê duyệt.`)
+      navigate(`/inventory/products?highlight=${created.id}`, {
+        replace: true,
+        state: { createdName: created.name },
+      })
+    } catch (error) {
+      const mapped = mapProductApiError(error.message, error.apiErrors)
+      if (Object.keys(mapped.errors).length) setFieldErrors((prev) => ({ ...prev, ...mapped.errors }))
+      else if (mapped.field) setFieldErrors((prev) => ({ ...prev, [mapped.field]: mapped.message }))
+      if (mapped.duplicateProduct) {
+        setDuplicateProductName(normalizeText(form.name))
+      }
+      showError(mapped.message)
+    } finally {
+      setIsSaving(false)
+      setPendingManualPayload(null)
+    }
+  }
+
   async function handleSubmit(event) {
     event.preventDefault()
     if (!canEdit) {
-      showError('Chỉ Thủ kho được tạo và sửa sản phẩm.')
+      showError('Chỉ Thủ kho Kho tổng được tạo và sửa sản phẩm.')
       return
     }
 
@@ -908,13 +1538,39 @@ function ProductFormPage({ mode }) {
         await updateProduct(id, payload)
         showSuccess('Đã cập nhật sản phẩm.')
       } else {
-        const created = await createProduct(payload)
-        setProductListFocus(created, { showBanner: true })
-        showSuccess(`Đã tạo "${created.name}". Xem trong danh sách bên dưới.`)
-        navigate(`/inventory/products?highlight=${created.id}`, {
-          replace: true,
-          state: { createdName: created.name },
-        })
+        if (!approvalRecord?.approvalCode) {
+          showError('Sản phẩm mới cần mã phê duyệt hợp lệ do Admin cấp.')
+          return
+        }
+        if (approvalMode !== 'manual') {
+          showError('Vui lòng chọn chế độ tạo sản phẩm.')
+          return
+        }
+        if (isCategoryUnavailable(categories, approvalRecord.productSnapshot?.categoryId)) {
+          setFieldErrors((prev) => ({ ...prev, categoryId: APPROVAL_CATEGORY_UNAVAILABLE_MESSAGE }))
+          showError(APPROVAL_CATEGORY_UNAVAILABLE_MESSAGE)
+          return
+        }
+        const reason = manualModeReason.trim()
+        if (!reason) {
+          showError('Vui lòng nhập lý do nhập thủ công.')
+          return
+        }
+        if (reason.length < 5) {
+          showError('Lý do nhập thủ công phải có ít nhất 5 ký tự.')
+          return
+        }
+        if (reason.length > 1000) {
+          showError('Lý do nhập thủ công tối đa 1000 ký tự.')
+          return
+        }
+        const differences = compareApprovalProducts(approvalRecord.productSnapshot, payload)
+        if (differences.length) {
+          showError(`Dữ liệu nhập thủ công khác với biên bản đã được Admin phê duyệt. ${differences.slice(0, 6).join('; ')}.`)
+          return
+        }
+        setPendingManualPayload(payload)
+        return
       }
     } catch (error) {
       const mapped = mapProductApiError(error.message, error.apiErrors)
@@ -939,13 +1595,49 @@ function ProductFormPage({ mode }) {
     )
   }
 
+  if (!isEditMode && canEdit && !approvalRecord) {
+    return (
+      <ApprovalCodeGate
+        approvalCode={approvalCode}
+        onCodeChange={setApprovalCode}
+        onValidate={handleValidateApprovalCode}
+        isLoading={isApprovalLoading}
+        pendingApprovals={pendingApprovals}
+        categories={categories}
+      />
+    )
+  }
+
+  if (!isEditMode && canEdit && approvalRecord && !approvalMode) {
+    return (
+      <ApprovalModeSelection
+        approval={approvalRecord}
+        categories={categories}
+        onSelectMode={handleSelectApprovalMode}
+        onReset={resetApprovalCode}
+      />
+    )
+  }
+
+  if (!isEditMode && canEdit && approvalRecord && approvalMode === 'automatic') {
+    return (
+      <AutomaticApprovalCreatePage
+        approval={approvalRecord}
+        categories={categories}
+        onCreate={handleAutomaticCreation}
+        onBack={() => setApprovalMode('')}
+        isSaving={isAutomaticCreating}
+      />
+    )
+  }
+
   if (stockOnlyAccess && id) {
     return (
       <PageShell>
         <div className="space-y-6">
           <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-start">
             <div>
-              <h1 className="text-2xl font-extrabold text-slate-800">Gửi yêu cầu điều chỉnh tồn</h1>
+              <h1 className="text-2xl font-extrabold text-slate-800">Gửi yêu cầu bổ sung tồn quầy</h1>
               <p className="mt-1 text-sm text-slate-500">
                 {form.name ? (
                   <>
@@ -953,7 +1645,7 @@ function ProductFormPage({ mode }) {
                     (có thể quay lại danh sách hàng hóa thêm SKU khác trước khi gửi).
                   </>
                 ) : (
-                  'Thêm SKU vào lô chung (giữ khi chuyển trang), rồi gửi một yêu cầu cho Thủ kho duyệt.'
+                  'Thêm SKU vào lô chung (giữ khi chuyển trang), rồi gửi yêu cầu để Thủ kho Kho tổng duyệt bổ sung tồn quầy POS mặc định.'
                 )}
               </p>
             </div>
@@ -998,10 +1690,42 @@ function ProductFormPage({ mode }) {
               Quay lại
             </Link>
             <button type="submit" disabled={isSaving} className="rounded-xl bg-[#538463] px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-[#457053] disabled:opacity-50">
-              {isSaving ? 'Đang lưu...' : isEditMode ? 'Cập nhật' : 'Lưu hàng hóa'}
+              {isSaving ? 'Đang lưu...' : isEditMode ? 'Cập nhật' : 'Tiếp tục xác nhận'}
             </button>
           </div>
         </div>
+
+        {!isEditMode && approvalRecord ? (
+          <section className="rounded-[1rem] border border-[#356647]/20 bg-[#f7fbf8] p-4 shadow-sm sm:p-5">
+            <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide text-[#356647]">Mã phê duyệt</p>
+                <p className="mt-1 font-mono text-lg font-bold text-slate-800">{approvalRecord.approvalCode}</p>
+                <p className="mt-1 text-sm text-slate-500">
+                  Nhập thủ công theo biên bản Admin đã duyệt cho <span className="font-semibold text-slate-800">{approvalRecord.productName}</span>.
+                </p>
+              </div>
+              <button type="button" onClick={() => setApprovalMode('')} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                Chọn lại chế độ
+              </button>
+            </div>
+            <div className="mt-4 rounded-xl border border-slate-200 bg-white p-4">
+              <h2 className="text-sm font-bold text-slate-800">Thông tin đã được Admin phê duyệt</h2>
+              <div className="mt-3">
+                <ApprovalProductPreview product={approvalRecord.productSnapshot} categories={categories} />
+              </div>
+            </div>
+            <label className="mt-4 block">
+              <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Lý do nhập thủ công *</span>
+              <textarea
+                className="mt-1 min-h-24 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-[#538463] focus:ring-2 focus:ring-[#538463]/15"
+                value={manualModeReason}
+                onChange={(event) => setManualModeReason(event.target.value)}
+                placeholder="VD: Admin duyệt theo biên bản giấy, Thủ kho Kho tổng nhập lại dữ liệu từ chứng từ đã ký."
+              />
+            </label>
+          </section>
+        ) : null}
 
         <section className="rounded-[1rem] bg-white p-4 shadow-sm sm:p-6 lg:p-8">
           <h2 className="text-lg font-bold text-slate-800">Thông tin cơ bản</h2>
@@ -1069,7 +1793,7 @@ function ProductFormPage({ mode }) {
                   <option value="">Chọn nhóm hàng</option>
                   {categoryTreeOptions.map((cat) => (
                     <option key={cat.id} value={String(cat.id)}>
-                      {'  '.repeat(cat.depth * 2)}{cat.depth > 0 ? '└ ' : ''}{cat.name}{cat.isActive === false || cat.isDeleted ? ' (đã ẩn)' : ''}
+                      {cat.pathLabel}{cat.isActive === false || cat.isDeleted ? ' (đã ẩn)' : ''}
                     </option>
                   ))}
                 </select>
@@ -1313,6 +2037,66 @@ function ProductFormPage({ mode }) {
               </div>
             </section>
         ) : null}
+
+        {isFinishedProduct ? (
+          <section className="rounded-[1rem] bg-white p-4 shadow-sm sm:p-6 lg:p-8">
+            <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+              <div>
+                <h2 className="text-lg font-bold text-slate-800">SKU & BOM thành phẩm</h2>
+                <p className="text-sm text-slate-500">SKU được tạo theo đơn vị tính và thuộc tính. Có thể để trống mã SKU để backend tự sinh.</p>
+              </div>
+            </div>
+            <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
+              <table className="min-w-full text-left text-sm">
+                <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                  <tr>
+                    <th className="px-4 py-3 font-semibold">SKU</th>
+                    <th className="px-4 py-3 font-semibold">Tên biến thể</th>
+                    <th className="px-4 py-3 text-right font-semibold">Giá bán</th>
+                    <th className="px-4 py-3 text-center font-semibold">BOM</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {generatedRows.map((row) => {
+                    const bomLines = bomByVariant[row.key] ?? []
+                    const attributeLabel = row.attributes.map((attribute) => attribute.value).join(' / ')
+                    const variantName = [form.name, row.unit.unitName, attributeLabel].map(normalizeText).filter(Boolean).join(' - ')
+                    return (
+                      <tr key={row.key}>
+                        <td className="px-4 py-3">
+                          <input
+                            className="w-44 rounded-lg border border-slate-200 px-3 py-2 font-mono text-xs uppercase outline-none focus:border-[#538463]"
+                            value={row.skuCode}
+                            onChange={(event) => updateVariantDraft(row.key, 'skuCode', event.target.value.toUpperCase())}
+                            placeholder={row.skuSuggestion || 'Tự sinh'}
+                          />
+                        </td>
+                        <td className="px-4 py-3 font-medium text-slate-800">{variantName || '—'}</td>
+                        <td className="px-4 py-3 text-right">
+                          <CurrencyInput
+                            className="ml-auto w-32 rounded-lg border border-slate-200 px-3 py-2 text-right text-sm outline-none focus:border-[#538463]"
+                            value={row.salePrice}
+                            onChange={(value) => updateVariantDraft(row.key, 'salePrice', value)}
+                          />
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <button
+                            type="button"
+                            onClick={() => openBomModal(row)}
+                            className="inline-flex items-center justify-center gap-1 rounded-lg border border-[#356647]/30 px-3 py-2 text-xs font-bold text-[#356647] hover:bg-[#f0eee6]"
+                          >
+                            <span className="material-symbols-outlined text-[16px]">schema</span>
+                            {bomLines.length ? `${bomLines.length} dòng` : 'Cấu hình'}
+                          </button>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        ) : null}
       </form>
 
         {isEditMode && id ? (
@@ -1352,6 +2136,24 @@ function ProductFormPage({ mode }) {
             updateAttribute(addAttrNameModal.forIndex, 'name', created.name)
           }
         }}
+      />
+
+      <ProductBomConfigModal
+        isOpen={Boolean(bomModalVariant)}
+        variant={bomModalVariant}
+        initialLines={bomModalLines}
+        onClose={() => setBomModalVariant(null)}
+        onConfirm={handleBomConfirm}
+      />
+
+      <ManualCreationConfirmModal
+        payload={pendingManualPayload}
+        approval={approvalRecord}
+        reason={manualModeReason}
+        categories={categories}
+        onClose={() => setPendingManualPayload(null)}
+        onConfirm={handleManualConfirmSubmit}
+        isSaving={isSaving}
       />
     </PageShell>
   )

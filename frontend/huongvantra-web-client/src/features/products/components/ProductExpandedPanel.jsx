@@ -24,6 +24,8 @@ const TABS = [
   { id: 'variants', label: 'Hàng hóa cùng loại' },
 ]
 
+const EMPTY_LOTS = []
+
 function InfoCell({ label, value }) {
   return (
     <div className="min-w-0">
@@ -69,20 +71,21 @@ export default function ProductExpandedPanel({
   activeSkuId = null,
   readOnly = false,
   canAdjustStock = false,
-  canManage = false,
   canHide = false,
   inBatch = false,
-  isInBatch,
   onToggleBatchSku,
-  onToggleBatchSkuItem,
-  onAddAllSkusToBatch,
   onHide,
   isHiding = false,
 }) {
-  const [activeTab, setActiveTab] = useState('info')
-  const [inventoryLots, setInventoryLots] = useState([])
-  const [inventoryLotsLoading, setInventoryLotsLoading] = useState(false)
-  const [inventoryLotsError, setInventoryLotsError] = useState('')
+  const [tabState, setTabState] = useState(() => ({
+    productId: product?.id ?? null,
+    activeTab: 'info',
+  }))
+  const [inventoryLotState, setInventoryLotState] = useState(() => ({
+    key: '',
+    lots: [],
+    error: '',
+  }))
 
   // Use variants as the canonical SKU list; fall back to old skus for legacy data
   const skus = product?.variants?.length ? product.variants : (product?.skus ?? [])
@@ -95,6 +98,11 @@ export default function ProductExpandedPanel({
   const focusedSku =
     (activeSkuId ? skus.find((sku) => sku.id === activeSkuId) : null) || primarySku
   const focusedSkuId = focusedSku?.id ?? null
+  const activeTab = tabState.productId === product?.id ? tabState.activeTab : 'info'
+  const inventoryLotsKey = activeTab === 'inventory' && focusedSkuId ? String(focusedSkuId) : ''
+  const inventoryLots = inventoryLotState.key === inventoryLotsKey ? inventoryLotState.lots : EMPTY_LOTS
+  const inventoryLotsLoading = Boolean(inventoryLotsKey && inventoryLotState.key !== inventoryLotsKey)
+  const inventoryLotsError = inventoryLotState.key === inventoryLotsKey ? inventoryLotState.error : ''
   const brand = getProductBrandLabel(product)
   const tags = [product?.flavorProfile, product?.baseUnit, focusedSku?.packagingType].filter(Boolean)
   const focusedStock = focusedSku ? stockBySkuId.get(focusedSku.id) ?? 0 : 0
@@ -103,44 +111,42 @@ export default function ProductExpandedPanel({
     [inventoryLots, focusedSkuId],
   )
 
-  useEffect(() => {
-    setActiveTab('info')
-  }, [product?.id])
+  function selectTab(tabId) {
+    setTabState({
+      productId: product?.id ?? null,
+      activeTab: tabId,
+    })
+  }
 
   useEffect(() => {
     let cancelled = false
 
-    if (activeTab !== 'inventory' || !focusedSkuId) {
-      setInventoryLots([])
-      setInventoryLotsError('')
-      setInventoryLotsLoading(false)
+    if (!inventoryLotsKey) {
       return () => {
         cancelled = true
       }
     }
 
-    setInventoryLots([])
-    setInventoryLotsError('')
-    setInventoryLotsLoading(true)
-
     fetchWarehouseBatches({ skuId: focusedSkuId, availableOnly: true })
       .then((batches) => {
-        if (!cancelled) setInventoryLots(batches)
+        if (!cancelled) {
+          setInventoryLotState({ key: inventoryLotsKey, lots: batches, error: '' })
+        }
       })
       .catch((err) => {
         if (cancelled) return
-        setInventoryLots([])
-        setInventoryLotsError('Không tải được lô tồn kho cho SKU này.')
+        setInventoryLotState({
+          key: inventoryLotsKey,
+          lots: [],
+          error: 'Không tải được lô tồn kho cho SKU này.',
+        })
         showError(err.message)
-      })
-      .finally(() => {
-        if (!cancelled) setInventoryLotsLoading(false)
       })
 
     return () => {
       cancelled = true
     }
-  }, [activeTab, focusedSkuId])
+  }, [focusedSkuId, inventoryLotsKey])
 
   if (!product) return null
 
@@ -156,7 +162,7 @@ export default function ProductExpandedPanel({
           <button
             key={tab.id}
             type="button"
-            onClick={() => setActiveTab(tab.id)}
+            onClick={() => selectTab(tab.id)}
             className={`shrink-0 rounded-t-lg px-3 py-2.5 text-sm font-semibold transition ${
               activeTab === tab.id
                 ? 'border border-b-white border-slate-200 bg-white text-[#356647] shadow-sm'
@@ -363,14 +369,6 @@ export default function ProductExpandedPanel({
         ) : null}
         {readOnly && canAdjustStock ? (
           <Link
-            to={`/products/${product.id}/edit`}
-            className="rounded-lg border border-[#356647]/30 px-4 py-2 text-sm font-semibold text-[#356647] hover:bg-[#356647]/5"
-          >
-            Gửi lô nhiều SKU cùng sản phẩm
-          </Link>
-        ) : null}
-        {readOnly && canAdjustStock ? (
-          <Link
             to="/inventory/stock-requests"
             className="rounded-lg border border-[#356647]/30 px-4 py-2 text-sm font-semibold text-[#356647] hover:bg-[#356647]/5"
           >
@@ -386,29 +384,6 @@ export default function ProductExpandedPanel({
           >
             Ẩn
           </button>
-        ) : null}
-        {!readOnly && canManage ? (
-          <>
-            <button
-              type="button"
-              className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50"
-              title="Tính năng sao chép đang phát triển"
-            >
-              Sao chép
-            </button>
-            <Link
-              to={`/products/${product.id}/edit`}
-              className="rounded-lg bg-[#356647] px-5 py-2 text-sm font-bold text-white hover:bg-[#2d5539]"
-            >
-              Chỉnh sửa
-            </Link>
-            <Link
-              to={`/products/${product.id}/edit`}
-              className="rounded-lg border border-[#356647]/30 px-4 py-2 text-sm font-semibold text-[#356647] hover:bg-[#356647]/5"
-            >
-              + Thêm hàng cùng loại
-            </Link>
-          </>
         ) : null}
       </div>
       </div>

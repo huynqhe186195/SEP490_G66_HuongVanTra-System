@@ -1,4 +1,5 @@
 using HuongVanTra.Shared.Auth;
+using HuongVanTra.Shared.Audit;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using ProductService.Application.Interfaces;
@@ -6,6 +7,7 @@ using ProductService.Application.UseCases;
 using ProductService.Infrastructure.Data;
 using ProductService.Infrastructure.Messaging;
 using ProductService.Infrastructure.Repositories;
+using ProductService.Infrastructure.Services;
 using ProductService.Infrastructure.UseCases;
 using ProductService.WebAPI.Middlewares;
 
@@ -17,6 +19,7 @@ builder.Services.AddSwaggerGen();
 
 builder.Services.AddHvtJwtAuthentication(builder.Configuration);
 builder.Services.AddHvtPermissionPolicies();
+builder.Services.AddHvtSystemActivityAudit("ProductService");
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 builder.Services.AddDbContext<ProductDbContext>(options =>
@@ -32,11 +35,19 @@ builder.Services.AddScoped<IAttributeNameRepository, AttributeNameRepository>();
 builder.Services.AddScoped<IProductRepository, ProductRepository>();
 builder.Services.AddScoped<IPriceBookRepository, PriceBookRepository>();
 builder.Services.AddScoped<IProductEventPublisher, ProductEventPublisher>();
+builder.Services.AddHttpClient<IInventoryProductDeletionValidationClient, InventoryProductDeletionValidationClient>(client =>
+{
+    var baseUrl = builder.Configuration["InventoryService:BaseUrl"] ?? "http://inventory-service:8080";
+    client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
+});
 builder.Services.AddScoped<CategoryLogic>();
 builder.Services.AddScoped<BrandLogic>();
 builder.Services.AddScoped<AttributeNameLogic>();
 builder.Services.AddScoped<ProductLogic>();
 builder.Services.AddScoped<ProductSkuLogic>();
+builder.Services.AddScoped<ProductApprovalLogic>();
+builder.Services.AddScoped<ProductCreationRequestLogic>();
+builder.Services.AddScoped<ProductDeletionRequestLogic>();
 builder.Services.AddScoped<PriceBookLogic>();
 builder.Services.AddScoped<CatalogSyncLogic>();
 
@@ -96,6 +107,7 @@ if (app.Environment.IsDevelopment())
 app.UseMiddleware<GlobalExceptionMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseHvtSystemActivityAudit();
 app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
 app.MapControllers();
 

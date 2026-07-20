@@ -65,6 +65,10 @@ export function canHideCatalog(session) {
   return canCreateCatalog(session)
 }
 
+export function canCreateProductDeletionRequest(session) {
+  return isWarehouseRole(session)
+}
+
 export function canAccessWarehouseInventory(session) {
   return isWarehouseRole(session)
 }
@@ -87,7 +91,19 @@ export function canCreateOrder(session) {
 }
 
 export function canAdjustStoreStock(session) {
-  return hasPermission(session, 'VIEW_ORDER') || hasPermission(session, 'MANAGE_ROLE')
+  return canCreateStockReplenishmentRequest(session)
+}
+
+export function canCreateStockReplenishmentRequest(session) {
+  return isBranchManager(session) || isManagerRole(session) || isWarehouseRole(session) || isSystemAdmin(session)
+}
+
+export function canReviewStockReplenishmentRequest(session) {
+  return isBranchManager(session) || isManagerRole(session) || isWarehouseRole(session) || isSystemAdmin(session)
+}
+
+export function canCancelStockReplenishmentRequest(session) {
+  return isBranchManager(session) || isManagerRole(session) || isWarehouseRole(session) || isSystemAdmin(session)
 }
 
 export function isSystemAdmin(session) {
@@ -101,6 +117,14 @@ export function canManageCorporateCustomers(session) {
 
 export function isBranchManager(session) {
   return hasPermission(session, 'MANAGE_EMPLOYEE') && !isSystemAdmin(session)
+}
+
+function isManagerRole(session) {
+  if (isSystemAdmin(session) || isWarehouseRole(session)) return false
+  return (session?.roles ?? []).some((role) => {
+    const normalized = String(role || '').trim().toLowerCase().replace(/[._-]+/g, ' ').replace(/\s+/g, ' ')
+    return ['manager', 'agency manager', 'branch manager', 'owner', 'chu co so', 'chủ cơ sở'].includes(normalized)
+  })
 }
 
 export function canViewContracts(session) {

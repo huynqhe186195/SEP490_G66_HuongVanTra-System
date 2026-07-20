@@ -2,10 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
-import { showError, showSuccess } from '../../../app/toast.js'
-import ProductBomConfigModal from '../../products/components/ProductBomConfigModal.jsx'
+import { showError } from '../../../app/toast.js'
 import { fetchProducts } from '../../products/services/productsApi.js'
-import { updateVariantBom } from '../../products/services/bomApi.js'
 import { formatProductPrice } from '../../products/utils/productDisplay.js'
 import InventoryNavTabs from '../components/InventoryNavTabs.jsx'
 
@@ -13,7 +11,7 @@ async function fetchFinishedProductsForBom() {
   const pageSize = 100
   const products = []
   let page = 1
-  let totalPages = 1
+  let totalPages
 
   do {
     const result = await fetchProducts({
@@ -52,7 +50,6 @@ function InventoryBomPage() {
   const [searchInput, setSearchInput] = useState('')
   const [rows, setRows] = useState([])
   const [isLoading, setIsLoading] = useState(true)
-  const [activeVariant, setActiveVariant] = useState(null)
   const [handledOpenBomParam, setHandledOpenBomParam] = useState('')
 
   const loadRows = useCallback(async () => {
@@ -69,7 +66,8 @@ function InventoryBomPage() {
   }, [])
 
   useEffect(() => {
-    loadRows()
+    const timer = window.setTimeout(() => loadRows(), 0)
+    return () => window.clearTimeout(timer)
   }, [loadRows])
 
   const filteredRows = useMemo(() => {
@@ -90,52 +88,32 @@ function InventoryBomPage() {
     const paramKey = `${variantId}:${openBom ?? ''}`
     if (handledOpenBomParam === paramKey || isLoading) return
 
-    setHandledOpenBomParam(paramKey)
-    const row = rows.find((item) => String(item.variantId) === String(variantId))
-    if (!row) {
-      showError('Không tìm thấy SKU thành phẩm để cấu hình BOM.')
-      setSearchParams({}, { replace: true })
-      return
-    }
+    const timer = window.setTimeout(() => {
+      setHandledOpenBomParam(paramKey)
+      const row = rows.find((item) => String(item.variantId) === String(variantId))
+      if (!row) {
+        showError('Không tìm thấy SKU Sản phẩm kệ để cấu hình BOM.')
+        setSearchParams({}, { replace: true })
+        return
+      }
 
-    openBomModal(row)
-    setSearchParams({}, { replace: true })
+      openBomModal(row)
+      setSearchParams({}, { replace: true })
+    }, 0)
+
+    return () => window.clearTimeout(timer)
   }, [searchParams, rows, isLoading, handledOpenBomParam, setSearchParams])
 
   function openBomModal(row) {
-    setActiveVariant({
-      ...row,
-      sku: row.skuCode,
-      productName: row.productName,
-      attributeLabel: row.variantName || row.skuCode,
-      initialLines: row.bomLines,
-    })
-  }
-
-  async function handleBomConfirm(lines) {
-    if (!activeVariant) return
-    try {
-      const updatedLines = await updateVariantBom(activeVariant.variantId, lines)
-      setRows((current) =>
-        current.map((row) =>
-          String(row.variantId) === String(activeVariant.variantId)
-            ? { ...row, bomLines: updatedLines, materialCount: updatedLines.length }
-            : row,
-        ),
-      )
-      showSuccess(`Đã cập nhật định mức BOM cho ${activeVariant.skuCode}.`)
-    } catch (error) {
-      showError(error.message)
-      throw error
-    }
+    showError(`BOM của ${row.skuCode} chỉ được thay đổi qua workflow phê duyệt Product Creation Request.`)
   }
 
   return (
     <PageShell>
       <PageHeader
         title="Định mức BOM"
-        description="Cấu hình nguyên liệu tiêu hao cho từng SKU thành phẩm."
-        searchPlaceholder="Tìm theo SKU hoặc tên thành phẩm..."
+        description="Cấu hình nguyên liệu / bao bì tiêu hao cho từng SKU Sản phẩm kệ."
+        searchPlaceholder="Tìm theo SKU hoặc tên Sản phẩm kệ..."
         searchValue={searchInput}
         onSearchChange={setSearchInput}
         rightContent={
@@ -156,14 +134,14 @@ function InventoryBomPage() {
         <div className="mb-4 rounded-xl border border-[#538463]/15 bg-[#f3f7f4] px-4 py-3 text-sm text-[#356647]">
           <p className="font-semibold">BOM được lưu theo finished ProductVariant/SKU.</p>
           <p className="mt-1 text-xs text-[#4d6f58]">
-            Khi tạo lệnh sản xuất, hệ thống đọc định mức của SKU thành phẩm để tính tổng nguyên liệu cần xuất.
+            Khi tạo lệnh sản xuất, hệ thống đọc định mức của SKU Sản phẩm kệ để tính tổng nguyên liệu / bao bì cần xuất.
           </p>
         </div>
 
         <div className="mb-4">
-          <h2 className="text-lg font-bold text-slate-800">Danh sách SKU thành phẩm & định mức BOM</h2>
+          <h2 className="text-lg font-bold text-slate-800">Danh sách SKU Sản phẩm kệ & định mức BOM</h2>
           <p className="mt-1 text-sm text-slate-500">
-            Mỗi dòng là một SKU thành phẩm. Bấm <strong>Cấu hình BOM</strong> để thêm, sửa hoặc xóa nguyên liệu.
+            Mỗi dòng là một SKU Sản phẩm kệ. BOM hiện chỉ được cập nhật qua workflow phê duyệt Product Creation Request.
           </p>
         </div>
 
@@ -189,12 +167,12 @@ function InventoryBomPage() {
               </colgroup>
               <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                 <tr>
-                  <th className="px-4 py-3 font-semibold">SKU thành phẩm</th>
-                  <th className="px-4 py-3 font-semibold">Thành phẩm</th>
+                  <th className="px-4 py-3 font-semibold">SKU Sản phẩm kệ</th>
+                  <th className="px-4 py-3 font-semibold">Sản phẩm kệ</th>
                   <th className="px-4 py-3 font-semibold">Biến thể</th>
                   <th className="px-4 py-3 text-right font-semibold">Giá bán</th>
-                  <th className="px-4 py-3 text-center font-semibold">Số nguyên liệu</th>
-                  <th className="px-4 py-3 font-semibold">Nguyên liệu</th>
+                  <th className="px-4 py-3 text-center font-semibold">Số component</th>
+                  <th className="px-4 py-3 font-semibold">Nguyên liệu / Bao bì</th>
                   <th className="px-4 py-3 text-right font-semibold">Thao tác</th>
                 </tr>
               </thead>
@@ -216,17 +194,18 @@ function InventoryBomPage() {
                         <div className="flex w-full flex-wrap gap-1.5">
                           {row.bomLines.map((line) => (
                             <span
-                              key={`${row.variantId}-${line.materialId ?? line.material_id}`}
+                              key={`${row.variantId}-${line.componentVariantId ?? line.materialId ?? line.material_id}`}
                               className="max-w-full break-words rounded-full bg-slate-100 px-2.5 py-1 leading-5 text-slate-700"
                             >
-                              {line.materialName || line.materialId || line.material_id} x{line.quantity}
+                              {line.componentSkuCode || line.materialName || line.materialId || line.material_id} x{line.quantity}
                               {line.materialUnitName || line.baseUnit ? ` ${line.materialUnitName || line.baseUnit}` : ''}
+                              {line.isRequiredBaseComponent ? ' · Tự động theo quy đổi' : ''}
                             </span>
                           ))}
                         </div>
                       ) : (
                         <span className="inline-flex rounded-full border border-dashed border-slate-200 px-2.5 py-1 text-slate-400">
-                          Chưa có BOM. Bấm Cấu hình BOM để thêm nguyên liệu.
+                          Chưa có BOM. Tạo Product Creation Request để bổ sung nguyên liệu / bao bì.
                         </span>
                       )}
                     </td>
@@ -236,8 +215,8 @@ function InventoryBomPage() {
                         onClick={() => openBomModal(row)}
                         className="inline-flex items-center gap-1.5 rounded-lg border border-[#356647]/30 bg-[#356647]/5 px-3 py-1.5 text-xs font-bold text-[#356647] hover:bg-[#356647]/10"
                       >
-                        <span className="material-symbols-outlined text-[16px]">settings</span>
-                        Cấu hình BOM
+                        <span className="material-symbols-outlined text-[16px]">lock</span>
+                        Read-only
                       </button>
                     </td>
                   </tr>
@@ -247,14 +226,6 @@ function InventoryBomPage() {
           </div>
         )}
       </section>
-
-      <ProductBomConfigModal
-        isOpen={Boolean(activeVariant)}
-        variant={activeVariant}
-        initialLines={activeVariant?.initialLines ?? []}
-        onClose={() => setActiveVariant(null)}
-        onConfirm={handleBomConfirm}
-      />
     </PageShell>
   )
 }

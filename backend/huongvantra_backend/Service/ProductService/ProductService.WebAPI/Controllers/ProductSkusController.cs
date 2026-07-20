@@ -11,6 +11,11 @@ namespace ProductService.WebAPI.Controllers;
 [Route("api/v1/skus")]
 public class ProductSkusController(ProductSkuLogic _skuLogic) : ControllerBase
 {
+    private static readonly object MasterDataWriteDisabled = new
+    {
+        message = "SKU master data phải đi qua workflow phê duyệt Product. Vui lòng dùng /api/v1/product-creation-requests."
+    };
+
     [HttpGet]
     public async Task<IActionResult> GetPaged(
         [FromQuery] string? search,
@@ -36,22 +41,16 @@ public class ProductSkusController(ProductSkuLogic _skuLogic) : ControllerBase
 
     [HttpPost]
     [Authorize(Roles = "Warehouse")]
-    public async Task<IActionResult> Create([FromBody] CreateProductSkuRequest request)
-    {
-        var result = await _skuLogic.CreateAsync(request);
-        return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
-    }
+    public IActionResult Create([FromBody] CreateProductSkuRequest request) =>
+        StatusCode(StatusCodes.Status410Gone, MasterDataWriteDisabled);
 
     [HttpPut("{id:guid}")]
     [Authorize(Roles = "Warehouse")]
-    public async Task<IActionResult> Update(Guid id, [FromBody] UpdateProductSkuRequest request) =>
-        Ok(await _skuLogic.UpdateAsync(id, request));
+    public IActionResult Update(Guid id, [FromBody] UpdateProductSkuRequest request) =>
+        StatusCode(StatusCodes.Status410Gone, MasterDataWriteDisabled);
 
     [HttpDelete("{id:guid}")]
     [Authorize(Roles = "Warehouse")]
-    public async Task<IActionResult> Delete(Guid id)
-    {
-        await _skuLogic.DeleteAsync(id);
-        return NoContent();
-    }
+    public IActionResult Delete(Guid id) =>
+        StatusCode(StatusCodes.Status410Gone, MasterDataWriteDisabled);
 }

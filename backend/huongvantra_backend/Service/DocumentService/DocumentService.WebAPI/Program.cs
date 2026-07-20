@@ -4,7 +4,9 @@ using DocumentService.Infrastructure.Data;
 using DocumentService.Infrastructure.Repositories;
 using DocumentService.Infrastructure.Services;
 using DocumentService.WebAPI.Middlewares;
+using HuongVanTra.Shared.Audit;
 using HuongVanTra.Shared.Auth;
+using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json.Serialization;
 
@@ -20,6 +22,7 @@ builder.Services.AddSwaggerGen();
 
 builder.Services.AddHvtJwtAuthentication(builder.Configuration);
 builder.Services.AddHvtPermissionPolicies();
+builder.Services.AddHvtSystemActivityAudit("DocumentService");
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 builder.Services.AddDbContext<DocumentDbContext>(options =>
@@ -39,6 +42,18 @@ builder.Services.AddHttpClient<ICustomerCatalogClient, CustomerCatalogClient>(cl
     var baseUrl = builder.Configuration["CustomerService:BaseUrl"] ?? "http://customer-service:8080";
     client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
 }).AddHttpMessageHandler<ForwardAuthorizationHeaderHandler>();
+
+builder.Services.AddMassTransit(x =>
+{
+    x.UsingRabbitMq((context, cfg) =>
+    {
+        cfg.Host(builder.Configuration["RabbitMQ:Host"] ?? "rabbitmq", "/", h =>
+        {
+            h.Username(builder.Configuration["RabbitMQ:Username"] ?? "hvt");
+            h.Password(builder.Configuration["RabbitMQ:Password"] ?? "hvtrabbit123");
+        });
+    });
+});
 
 var app = builder.Build();
 
@@ -68,6 +83,7 @@ if (app.Environment.IsDevelopment())
 app.UseMiddleware<GlobalExceptionMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseHvtSystemActivityAudit();
 app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
 app.MapControllers();
 

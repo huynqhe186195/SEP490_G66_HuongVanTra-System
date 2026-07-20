@@ -1,6 +1,8 @@
 export const CUSTOMER_SIDEBAR_SECTIONS = [
   { key: 'general', label: 'Phổ thông' },
   { key: 'vip', label: 'VIP' },
+  { key: 'corporate', label: 'Doanh nghiệp' },
+  { key: 'inactive', label: 'Ngừng hoạt động' },
 ]
 
 export function getCustomerSectionFromSearch(search = '') {

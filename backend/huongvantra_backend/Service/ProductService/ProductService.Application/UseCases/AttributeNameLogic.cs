@@ -1,6 +1,7 @@
 using ProductService.Application.DTOs.Requests;
 using ProductService.Application.DTOs.Responses;
 using ProductService.Application.Interfaces;
+using ProductService.Application.Validation;
 using ProductService.Domain.Entities;
 using ProductService.Domain.Exceptions;
 
@@ -26,7 +27,7 @@ public class AttributeNameLogic(IAttributeNameRepository _repository)
         if (request is null)
             throw new ProductValidationException("Request body là bắt buộc.");
 
-        var name = request.Name?.Trim();
+        var name = ProductInputValidator.NormalizeAttributeDisplayName(request.Name);
         if (string.IsNullOrWhiteSpace(name))
             throw new ProductValidationException("Tên thuộc tính là bắt buộc.");
         if (name.Length < 2)
@@ -53,7 +54,7 @@ public class AttributeNameLogic(IAttributeNameRepository _repository)
         if (entity.IsDeleted)
             throw new ProductValidationException("Không thể sửa tên thuộc tính đã xóa. Hãy kích hoạt lại trước.");
 
-        var name = request.Name?.Trim();
+        var name = ProductInputValidator.NormalizeAttributeDisplayName(request.Name);
         if (string.IsNullOrWhiteSpace(name))
             throw new ProductValidationException("Tên thuộc tính là bắt buộc.");
         if (name.Length < 2)

@@ -29,6 +29,7 @@ public enum InventorySyncStatus
 {
     Synced,
     PendingDeduction,
+    PendingReconciliation,
     Cancelled
 }
 

@@ -12,6 +12,7 @@ public class ProductVariantBomLineConfiguration : IEntityTypeConfiguration<Produ
         builder.HasKey(b => b.Id);
         builder.Property(b => b.Id).ValueGeneratedOnAdd();
         builder.Property(b => b.Quantity).HasColumnType("decimal(18,4)").IsRequired();
+        builder.Property(b => b.IsRequiredBaseComponent).HasDefaultValue(false);
         builder.Property(b => b.CreatedAt).IsRequired();
         builder.Property(b => b.UpdatedAt).IsRequired(false);
         builder.Property(b => b.IsDeleted).HasDefaultValue(false);
@@ -25,6 +26,13 @@ public class ProductVariantBomLineConfiguration : IEntityTypeConfiguration<Produ
             .WithMany()
             .HasForeignKey(b => b.MaterialId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne(b => b.ComponentVariant)
+            .WithMany()
+            .HasForeignKey(b => b.ComponentVariantId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasIndex(b => b.ComponentVariantId);
 
         builder.HasQueryFilter(b => !b.IsDeleted);
     }

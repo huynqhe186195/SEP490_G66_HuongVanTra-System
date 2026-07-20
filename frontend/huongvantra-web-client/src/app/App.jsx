@@ -20,7 +20,12 @@ import InventoryPage from '../features/inventory/pages/InventoryPage.jsx'
 import InventoryBatchesPage from '../features/inventory/pages/InventoryBatchesPage.jsx'
 import InventoryImportCreatePage from '../features/inventory/pages/InventoryImportCreatePage.jsx'
 import InventoryImportPage from '../features/inventory/pages/InventoryImportPage.jsx'
+import InventoryLedgerPage from '../features/inventory/pages/InventoryLedgerPage.jsx'
+import InventoryReportsPage from '../features/inventory/pages/InventoryReportsPage.jsx'
+import InventoryReturnsPage from '../features/inventory/pages/InventoryReturnsPage.jsx'
 import InventoryStockPage from '../features/inventory/pages/InventoryStockPage.jsx'
+import InventoryStocktakePage from '../features/inventory/pages/InventoryStocktakePage.jsx'
+import InventoryStatisticsPage from '../features/inventory/pages/InventoryStatisticsPage.jsx'
 import ProfilePage from '../features/profile/pages/ProfilePage.jsx'
 import OrdersPage from '../features/orders/pages/OrdersPage.jsx'
 import ExchangeOrdersPage from '../features/orders/pages/ExchangeOrdersPage.jsx'
@@ -28,6 +33,7 @@ import ReturnOrderDetailPage from '../features/orders/pages/ReturnOrderDetailPag
 import CodOrdersPage from '../features/orders/pages/CodOrdersPage.jsx'
 import StockDeductQueuePage from '../features/inventory/pages/StockDeductQueuePage.jsx'
 import StockAdjustmentRequestsPage from '../features/inventory/pages/StockAdjustmentRequestsPage.jsx'
+import SupplierReceiptsPage from '../features/inventory/pages/SupplierReceiptsPage.jsx'
 import ProductionOrdersPage from '../features/inventory/pages/ProductionOrdersPage.jsx'
 import CustomBundlesPage from '../features/inventory/pages/CustomBundlesPage.jsx'
 import OrderDetailPage from '../features/orders/pages/OrderDetailPage.jsx'
@@ -35,8 +41,8 @@ import CustomerDisplayPage from '../features/pos/pages/CustomerDisplayPage.jsx'
 import PosPage from '../features/pos/pages/PosPage.jsx'
 import PosTransferQrPage from '../features/pos/pages/PosTransferQrPage.jsx'
 import ReturnOrderPage from '../features/pos/pages/ReturnOrderPage.jsx'
-import ProductFormPage from '../features/products/pages/ProductFormPage.jsx'
-import ProductItemCreatePage from '../features/products/pages/ProductItemCreatePage.jsx'
+import ProductApprovalsPage from '../features/products/pages/ProductApprovalsPage.jsx'
+import ProductDeletionRequestsPage from '../features/products/pages/ProductDeletionRequestsPage.jsx'
 import ProductsListPage from '../features/products/pages/ProductsListPage.jsx'
 import ProductsCategoriesPage from '../features/products/pages/ProductsCategoriesPage.jsx'
 import ProductsPricingPage from '../features/products/pages/ProductsPricingPage.jsx'
@@ -47,6 +53,7 @@ import StaffDetailPage from '../features/staff/pages/StaffDetailPage.jsx'
 import StaffPage from '../features/staff/pages/StaffPage.jsx'
 import MembershipTiersPage from '../features/admin/pages/MembershipTiersPage.jsx'
 import PromotionsPage from '../features/admin/pages/PromotionsPage.jsx'
+import SystemActivityLogPage from '../features/admin/pages/SystemActivityLogPage.jsx'
 import AccessControlPage from '../features/iam/pages/AccessControlPage.jsx'
 import UsersPage from '../features/iam/pages/UsersPage.jsx'
 
@@ -77,13 +84,21 @@ function App() {
         <Route path="/inventory/products" element={<ProductsListPage />} />
         <Route path="/products/pricing" element={<ProductsPricingPage />} />
         <Route path="/products/categories" element={<ProductsCategoriesPage />} />
-        <Route path="/inventory/products/create" element={<ProductFormPage mode="create" />} />
-        <Route path="/products/:id/edit" element={<ProductFormPage mode="edit" />} />
+        <Route path="/inventory/products/create" element={<ProductApprovalsPage />} />
+        <Route path="/inventory/product-approvals" element={<ProductApprovalsPage />} />
+        <Route path="/inventory/product-deletion-requests" element={<ProductDeletionRequestsPage />} />
+        <Route path="/products/:id/edit" element={<Navigate to="/inventory/products" replace />} />
         <Route path="/inventory" element={<InventoryStockPage />} />
+        <Route path="/inventory/statistics" element={<InventoryStatisticsPage />} />
         <Route path="/inventory/stock-requests" element={<StockAdjustmentRequestsPage />} />
         <Route path="/inventory/batches" element={<InventoryBatchesPage />} />
+        <Route path="/inventory/supplier-receipts" element={<SupplierReceiptsPage />} />
         <Route path="/inventory/import" element={<InventoryImportPage />} />
         <Route path="/inventory/import/create" element={<InventoryImportCreatePage />} />
+        <Route path="/inventory/returns" element={<InventoryReturnsPage />} />
+        <Route path="/inventory/stocktake" element={<InventoryStocktakePage />} />
+        <Route path="/inventory/reports" element={<InventoryReportsPage />} />
+        <Route path="/inventory/ledger" element={<InventoryLedgerPage />} />
         <Route path="/inventory/export" element={<InventoryExportPage />} />
         <Route path="/inventory/production" element={<Navigate to="/inventory/production-orders" replace />} />
         <Route path="/inventory/production-orders" element={<ProductionOrdersPage />} />
@@ -105,6 +120,7 @@ function App() {
         <Route path="/staff/:id" element={<StaffDetailPage />} />
         <Route path="/admin/membership-tiers" element={<MembershipTiersPage />} />
         <Route path="/admin/promotions" element={<PromotionsPage />} />
+        <Route path="/admin/system-activities" element={<SystemActivityLogPage />} />
         <Route path="/admin/users" element={<UsersPage />} />
         <Route path="/admin/phan-quyen" element={<AccessControlPage />} />
         <Route path="/admin/roles" element={<Navigate to="/admin/phan-quyen?tab=vai-tro" replace />} />

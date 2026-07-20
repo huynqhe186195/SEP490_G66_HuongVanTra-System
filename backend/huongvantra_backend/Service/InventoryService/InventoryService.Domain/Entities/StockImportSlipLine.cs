@@ -12,6 +12,7 @@ public class StockImportSlipLine
     public int WarehouseQtyAfter { get; set; }
     public int StoreQtyBefore { get; set; }
     public int StoreQtyAfter { get; set; }
+    public string? DestinationLocation { get; set; }
     public Guid? WarehouseBatchId { get; set; }
     public string? WarehouseBatchLotCode { get; set; }
     public Guid? ProductionOrderOutputLineId { get; set; }

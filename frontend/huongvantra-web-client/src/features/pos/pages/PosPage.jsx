@@ -1382,6 +1382,10 @@ function PosPage() {
       }
     }
 
+        const stockNote = result.stockHandlingSummary?.message
+            ? ` Â· ${result.stockHandlingSummary.message}`
+            : "";
+
         if (recordedPaymentAmount >= total) {
             const debtNote =
                 debtApplyAmount > 0 ? ` · In phiếu thu nợ ${formatMoney(debtApplyAmount)} đ`
@@ -1390,15 +1394,15 @@ function PosPage() {
             showSuccess(
                 result.invoiceCode ?
                     total === 0 ?
-                        `Hoàn tất đơn 0 đ. Đơn: ${result.orderCode} · Số HĐ: ${result.invoiceCode}${debtNote}`
-                    :   `Thanh toán thành công. Đơn: ${result.orderCode} · Số HĐ: ${result.invoiceCode}${debtNote}`
-                : total === 0 ? `Hoàn tất đơn 0 đ. Đơn: ${result.orderCode}${debtNote}`
-                : `Thanh toán thành công. Đơn: ${result.orderCode}${debtNote}`,
+                        `Hoàn tất đơn 0 đ. Đơn: ${result.orderCode} · Số HĐ: ${result.invoiceCode}${debtNote}${stockNote}`
+                    :   `Thanh toán thành công. Đơn: ${result.orderCode} · Số HĐ: ${result.invoiceCode}${debtNote}${stockNote}`
+                : total === 0 ? `Hoàn tất đơn 0 đ. Đơn: ${result.orderCode}${debtNote}${stockNote}`
+                : `Thanh toán thành công. Đơn: ${result.orderCode}${debtNote}${stockNote}`,
             );
         } else if (isDebtSale) {
-            showSuccess(`Ghi đơn ${result.orderCode} thành công. Dư nợ: ${formatMoney(debtAmount)} đ.`);
+            showSuccess(`Ghi đơn ${result.orderCode} thành công. Dư nợ: ${formatMoney(debtAmount)} đ.${stockNote}`);
         } else {
-            showSuccess(`Ghi đơn ${result.orderCode}. Đã thu ${formatMoney(recordedPaymentAmount)} đ, còn nợ ${formatMoney(debtAmount)} đ.`);
+            showSuccess(`Ghi đơn ${result.orderCode}. Đã thu ${formatMoney(recordedPaymentAmount)} đ, còn nợ ${formatMoney(debtAmount)} đ.${stockNote}`);
         }
 
         const receipts = [

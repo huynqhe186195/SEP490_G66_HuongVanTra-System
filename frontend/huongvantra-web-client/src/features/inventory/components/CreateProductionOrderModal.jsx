@@ -5,10 +5,10 @@ import { useAuthSession } from '../../auth/hooks/useAuthSession.js'
 import { me } from '../../auth/services/authApi.js'
 import { fetchProductById, fetchProducts } from '../../products/services/productsApi.js'
 import { fetchSkusByProductId, fetchAllActiveSkus } from '../../products/services/productSkusApi.js'
-import { formatCreatorRole, UNKNOWN_CREATOR_VALUE } from './InventorySlipDocument.jsx'
-import { createProductionOrder } from '../services/productionOrderApi.js'
+import { formatCreatorRole, UNKNOWN_CREATOR_VALUE } from '../utils/inventoryCreatorDisplay.js'
+import { createProductionOrder, submitProductionOrder } from '../services/productionOrderApi.js'
 
-const STEPS = ['Thành phẩm đầu ra', 'Nguyên liệu cần xuất', 'Xác nhận']
+const STEPS = ['Sản phẩm kệ đầu ra', 'Nguyên liệu / Bao bì cần xuất', 'Xác nhận']
 
 function sameId(left, right) {
   return String(left ?? '') === String(right ?? '')
@@ -20,6 +20,7 @@ function createOutputRow() {
     skuId: '',
     quantity: '',
     expiresAt: '',
+    destinationLocation: 'Warehouse',
   }
 }
 
@@ -51,7 +52,7 @@ async function fetchFinishedProductsForProduction() {
   const pageSize = 100
   const products = []
   let page = 1
-  let totalPages = 1
+  let totalPages
 
   do {
     const result = await fetchProducts({
@@ -72,6 +73,10 @@ function formatQuantity(value) {
   const number = Number(value)
   if (!Number.isFinite(number)) return '0'
   return number.toLocaleString('vi-VN', { maximumFractionDigits: 4 })
+}
+
+function formatDestinationLocation(value) {
+  return value === 'Shelf' ? 'Kệ Hàng' : 'Kho'
 }
 
 function getSkuDisplayName(sku) {
@@ -147,9 +152,12 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
     let mounted = true
 
     if (!isOpen || !authSession?.accessToken) {
-      setCurrentUser(null)
+      const timer = window.setTimeout(() => {
+        if (mounted) setCurrentUser(null)
+      }, 0)
       return () => {
         mounted = false
+        window.clearTimeout(timer)
       }
     }
 
@@ -232,6 +240,10 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
         showError('Số lượng sản xuất phải lớn hơn 0.')
         return null
       }
+      if (!['Warehouse', 'Shelf'].includes(row.destinationLocation)) {
+        showError('Chọn nơi nhập thành phẩm là bắt buộc.')
+        return null
+      }
     }
 
     const duplicate = rows.find(
@@ -275,20 +287,31 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
 
         for (const bomLine of bomLinesDef) {
           const materialId = bomLine.materialId
+          const componentVariantId = bomLine.componentVariantId
+          const componentSkuCode = bomLine.componentSkuCode || ''
+          const componentName = bomLine.componentVariantName || bomLine.materialName
           const bomQty = Number(bomLine.quantity)
-          if (!materialId || !Number.isFinite(bomQty) || bomQty <= 0) {
-            throw new Error(`BOM của SKU ${output.sku?.skuCode ?? ''} có dòng nguyên liệu không hợp lệ.`)
+          if ((!materialId && !componentVariantId) || !Number.isFinite(bomQty) || bomQty <= 0) {
+            throw new Error(`BOM của SKU ${output.sku?.skuCode ?? ''} có dòng nguyên liệu / bao bì không hợp lệ.`)
           }
 
-          const key = String(materialId)
+          const key = componentVariantId ? `sku:${componentVariantId}` : `material:${materialId}`
           const current = aggregated.get(key) ?? {
+            key,
             materialId,
-            materialName: bomLine.materialName,
+            componentVariantId,
+            materialName: componentName,
             requiredQuantity: 0,
-            skuId: '',
-            skuCode: '',
-            snapshotName: '',
-            skuOptions: [],
+            skuId: componentVariantId || '',
+            skuCode: componentSkuCode,
+            snapshotName: componentName,
+            skuOptions: componentVariantId
+              ? [{
+                id: componentVariantId,
+                skuCode: componentSkuCode,
+                productName: componentName,
+              }]
+              : [],
           }
           current.requiredQuantity += bomQty * output.quantityNumber
           aggregated.set(key, current)
@@ -297,6 +320,8 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
 
       const enriched = await Promise.all(
         Array.from(aggregated.values()).map(async (line) => {
+          if (line.componentVariantId) return line
+
           const key = String(line.materialId)
           let skuOptions = materialSkuOptionsCache.get(key)
           if (!skuOptions) {
@@ -331,7 +356,7 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
   function updateBomLineSku(materialId, skuId) {
     setBomLines((prev) =>
       prev.map((line) => {
-        if (!sameId(line.materialId, materialId)) return line
+        if (!sameId(line.key ?? line.materialId, materialId)) return line
         const sku = line.skuOptions.find((item) => sameId(item.id, skuId))
         return {
           ...line,
@@ -350,12 +375,12 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
     }
     const withoutSkuOptions = bomLines.find((line) => line.skuOptions.length === 0)
     if (withoutSkuOptions) {
-      showError(`Nguyên liệu "${withoutSkuOptions.materialName}" chưa có SKU để xuất kho.`)
+      showError(`Nguyên liệu / Bao bì "${withoutSkuOptions.materialName}" chưa có SKU để xuất kho.`)
       return false
     }
     const missing = bomLines.find((line) => !line.skuId)
     if (missing) {
-      showError(`Chọn SKU cho nguyên liệu "${missing.materialName}".`)
+      showError(`Chọn SKU cho nguyên liệu / bao bì "${missing.materialName}".`)
       return false
     }
     return true
@@ -367,7 +392,7 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
     setStep(2)
   }
 
-  async function handleSubmit() {
+  async function handleSubmit({ submitForApproval = false } = {}) {
     const rows = validateOutputRows()
     if (!rows || !validateBomLines()) return
 
@@ -381,15 +406,17 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
           finishedSkuSnapshotName: row.sku?.productName ?? '',
           plannedQuantity: row.quantityNumber,
           expiresAt: row.expiresAt || null,
+          destinationLocation: row.destinationLocation,
         })),
         lines: bomLines.map((line) => ({
           materialSkuId: line.skuId,
           materialSkuCode: line.skuCode,
-          materialSnapshotName: line.snapshotName,
+          materialSnapshotName: line.snapshotName || line.materialName,
           plannedQuantity: line.requiredQuantity,
         })),
       })
-      onCreated?.(order)
+      const finalOrder = submitForApproval ? await submitProductionOrder(order.id) : order
+      onCreated?.(finalOrder)
       onClose()
     } catch (err) {
       showError(err.message)
@@ -451,7 +478,7 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
                         </button>
                       )}
                     </div>
-                    <div className="grid gap-3 sm:grid-cols-[1fr_140px_160px]">
+                    <div className="grid gap-3 sm:grid-cols-[1fr_140px_150px_160px]">
                       <label className="block space-y-1.5">
                         <span className="text-xs font-semibold text-[#717971]">SKU thành phẩm *</span>
                         <select
@@ -479,6 +506,17 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
                           value={row.quantity}
                           onChange={(event) => updateOutputRow(row.key, { quantity: event.target.value })}
                         />
+                      </label>
+                      <label className="block space-y-1.5">
+                        <span className="text-xs font-semibold text-[#717971]">Nhập thành phẩm vào *</span>
+                        <select
+                          className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-sm"
+                          value={row.destinationLocation}
+                          onChange={(event) => updateOutputRow(row.key, { destinationLocation: event.target.value })}
+                        >
+                          <option value="Warehouse">Kho</option>
+                          <option value="Shelf">Kệ Hàng</option>
+                        </select>
                       </label>
                       <label className="block space-y-1.5">
                         <span className="text-xs font-semibold text-[#717971]">Hạn sử dụng</span>
@@ -524,6 +562,7 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
                           <tr>
                             <th className="px-4 py-2 font-semibold">SKU thành phẩm</th>
                             <th className="px-4 py-2 text-right font-semibold">Số lượng sản xuất</th>
+                            <th className="px-4 py-2 font-semibold">Nơi nhập thành phẩm</th>
                             <th className="px-4 py-2 font-semibold">Hạn sử dụng</th>
                           </tr>
                         </thead>
@@ -533,6 +572,9 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
                               <td className="px-4 py-2 font-medium text-slate-800">{getSkuDisplayName(output.sku)}</td>
                               <td className="px-4 py-2 text-right font-semibold text-slate-800">
                                 {formatQuantity(output.quantityNumber)}
+                              </td>
+                              <td className="px-4 py-2 text-slate-700">
+                                {formatDestinationLocation(output.destinationLocation)}
                               </td>
                               <td className="px-4 py-2 text-slate-700">
                                 {output.expiresAt ? formatVietnamDate(output.expiresAt) : '—'}
@@ -545,34 +587,34 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
                   </div>
                   <div className="rounded-xl border border-slate-100 bg-white">
                     <div className="border-b border-slate-100 px-4 py-3">
-                      <p className="text-xs font-bold uppercase tracking-wide text-[#717971]">Tổng nguyên liệu theo BOM</p>
+                      <p className="text-xs font-bold uppercase tracking-wide text-[#717971]">Tổng nguyên liệu / bao bì theo BOM</p>
                       <p className="mt-1 text-xs text-slate-500">
-                        Nguyên liệu được cộng dồn từ BOM của tất cả SKU thành phẩm trong lệnh sản xuất.
+                        Nguyên liệu / Bao bì được cộng dồn từ BOM của tất cả SKU Sản phẩm kệ trong lệnh sản xuất.
                       </p>
                     </div>
                     <div className="overflow-x-auto">
                       <table className="min-w-full text-left text-xs">
                         <thead className="bg-slate-50 text-[#717971]">
                           <tr>
-                            <th className="px-4 py-2 font-semibold">Nguyên liệu</th>
+                            <th className="px-4 py-2 font-semibold">Nguyên liệu / Bao bì</th>
                             <th className="px-4 py-2 font-semibold">SKU xuất kho</th>
                             <th className="px-4 py-2 text-right font-semibold">Số lượng cần xuất</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                           {bomLines.map((line) => (
-                            <tr key={line.materialId}>
+                            <tr key={line.key ?? line.materialId}>
                               <td className="px-4 py-2 font-medium text-slate-800">{line.materialName}</td>
                               <td className="px-4 py-2">
                                 {line.skuOptions.length === 0 ? (
-                                  <span className="text-red-600">Nguyên liệu chưa có SKU nào.</span>
+                                  <span className="text-red-600">Nguyên liệu / Bao bì chưa có SKU nào.</span>
                                 ) : line.skuOptions.length === 1 ? (
                                   <span className="font-mono font-semibold text-[#356647]">{line.skuCode}</span>
                                 ) : (
                                   <select
                                     className="w-full min-w-44 rounded-lg border border-slate-200 bg-white p-2 text-xs"
                                     value={line.skuId}
-                                    onChange={(event) => updateBomLineSku(line.materialId, event.target.value)}
+                                    onChange={(event) => updateBomLineSku(line.key ?? line.materialId, event.target.value)}
                                   >
                                     <option value="">- Chọn SKU -</option>
                                     {line.skuOptions.map((sku) => (
@@ -634,7 +676,7 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
                   </div>
                   <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2.5">
                     <p className="text-[11px] font-bold uppercase tracking-wide text-[#717971]">Phạm vi tồn kho</p>
-                    <p className="mt-1 font-semibold text-slate-900">Kho tổng</p>
+                    <p className="mt-1 font-semibold text-slate-900">Kho</p>
                   </div>
                   <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2.5">
                     <p className="text-[11px] font-bold uppercase tracking-wide text-[#717971]">Người tạo lệnh</p>
@@ -657,7 +699,7 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
                     <p className="mt-1 font-semibold text-slate-900">{formatQuantity(totalOutputQuantity)}</p>
                   </div>
                   <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2.5">
-                    <p className="text-[11px] font-bold uppercase tracking-wide text-[#717971]">Số dòng nguyên liệu cần xuất</p>
+                    <p className="text-[11px] font-bold uppercase tracking-wide text-[#717971]">Số dòng nguyên liệu / bao bì cần xuất</p>
                     <p className="mt-1 font-semibold text-slate-900">
                       {bomLines.length}
                     </p>
@@ -677,6 +719,7 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
                           <th className="px-4 py-2 font-semibold">SKU thành phẩm</th>
                           <th className="px-4 py-2 font-semibold">Tên thành phẩm</th>
                           <th className="px-4 py-2 text-right font-semibold">Số lượng sản xuất</th>
+                          <th className="px-4 py-2 font-semibold">Nơi nhập thành phẩm</th>
                           <th className="px-4 py-2 font-semibold">Hạn sử dụng</th>
                         </tr>
                       </thead>
@@ -699,6 +742,9 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
                               {formatQuantity(output.quantityNumber)}
                             </td>
                             <td className="px-4 py-2 text-slate-700">
+                              {formatDestinationLocation(output.destinationLocation)}
+                            </td>
+                            <td className="px-4 py-2 text-slate-700">
                               {output.expiresAt ? formatVietnamDate(output.expiresAt) : '—'}
                             </td>
                           </tr>
@@ -710,22 +756,22 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
 
                 <section>
                   <div className="mb-2 flex items-center justify-between gap-3">
-                    <p className="text-xs font-bold uppercase tracking-wide text-[#717971]">Nguyên liệu cần xuất</p>
-                    <p className="text-xs text-slate-500">Tổng nguyên liệu theo BOM đã chọn.</p>
+                    <p className="text-xs font-bold uppercase tracking-wide text-[#717971]">Nguyên liệu / Bao bì cần xuất</p>
+                    <p className="text-xs text-slate-500">Tổng nguyên liệu / bao bì theo BOM đã chọn.</p>
                   </div>
                   <div className="overflow-x-auto rounded-lg border border-slate-100">
                     <table className="min-w-full text-left text-xs">
                       <thead className="bg-slate-50 text-[#717971]">
                         <tr>
                           <th className="w-12 px-4 py-2 font-semibold">STT</th>
-                          <th className="px-4 py-2 font-semibold">Nguyên liệu</th>
+                          <th className="px-4 py-2 font-semibold">Nguyên liệu / Bao bì</th>
                           <th className="px-4 py-2 font-semibold">SKU xuất kho</th>
                           <th className="px-4 py-2 text-right font-semibold">Số lượng cần xuất</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
                         {bomLines.map((line, index) => (
-                          <tr key={line.materialId}>
+                          <tr key={line.key ?? line.materialId}>
                             <td className="px-4 py-2 text-slate-500">{index + 1}</td>
                             <td className="px-4 py-2 font-medium text-slate-800">{line.materialName}</td>
                             <td className="px-4 py-2 font-mono font-semibold text-[#356647]">{line.skuCode}</td>
@@ -747,9 +793,9 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
                     </p>
                   </div>
                   <div className="rounded-lg border border-slate-100 bg-slate-50 px-4 py-3">
-                    <p className="text-xs font-bold uppercase tracking-wide text-[#717971]">Tổng nguyên liệu</p>
+                    <p className="text-xs font-bold uppercase tracking-wide text-[#717971]">Tổng nguyên liệu / bao bì</p>
                     <p className="mt-2 font-semibold text-slate-700">{formatQuantity(totalMaterialQuantity)}</p>
-                    <p className="mt-1 text-xs text-slate-500">Không nhập trực tiếp vào tồn POS/cửa hàng.</p>
+                    <p className="mt-1 text-xs text-slate-500">Không nhập trực tiếp vào Kệ Hàng.</p>
                   </div>
                 </section>
 
@@ -803,14 +849,24 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
             </button>
           )}
           {step === 2 && (
-            <button
-              type="button"
-              onClick={handleSubmit}
-              disabled={saving}
-              className="rounded-xl bg-[#538463] px-5 py-2 text-sm font-bold text-white hover:bg-[#457053] disabled:opacity-50"
-            >
-              {saving ? 'Đang tạo...' : 'Tạo lệnh sản xuất'}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => handleSubmit({ submitForApproval: false })}
+                disabled={saving}
+                className="rounded-xl border border-[#538463]/30 px-5 py-2 text-sm font-bold text-[#356647] hover:bg-[#f3f7f4] disabled:opacity-50"
+              >
+                {saving ? 'Đang tạo...' : 'Lưu nháp'}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSubmit({ submitForApproval: true })}
+                disabled={saving}
+                className="rounded-xl bg-[#538463] px-5 py-2 text-sm font-bold text-white hover:bg-[#457053] disabled:opacity-50"
+              >
+                {saving ? 'Đang tạo...' : 'Tạo và gửi duyệt'}
+              </button>
+            </div>
           )}
         </footer>
       </div>

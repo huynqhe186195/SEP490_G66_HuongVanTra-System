@@ -34,8 +34,23 @@ public record OrderResponse(
     DateTime UpdatedAt,
     List<OrderDetailResponse> Items,
     List<PaymentResponse> Payments,
-    List<CustomBundleResponse>? CustomBundles = null
+    List<CustomBundleResponse>? CustomBundles = null,
+    StockHandlingSummaryResponse? StockHandlingSummary = null
 );
+
+public record StockHandlingLineResponse(
+    Guid SkuId,
+    string? SkuCode,
+    string SkuName,
+    int OrderedQuantity,
+    int FinishedDeductedQuantity,
+    int PendingBomQuantity);
+
+public record StockHandlingSummaryResponse(
+    bool HasPendingStockReconciliation,
+    string StockHandlingMode,
+    string Message,
+    List<StockHandlingLineResponse> Lines);
 
 public record OrderDetailResponse(
     Guid Id,

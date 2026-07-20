@@ -1,6 +1,7 @@
 FROM mcr.microsoft.com/dotnet/sdk:8.0-alpine AS restore
 WORKDIR /src
 
+COPY Shared_Libraries/HuongVanTra.Shared/HuongVanTra.Shared.csproj Shared_Libraries/HuongVanTra.Shared/
 COPY Service/UserService/UserService.Domain/UserService.Domain.csproj Service/UserService/UserService.Domain/
 COPY Service/UserService/UserService.Application/UserService.Application.csproj Service/UserService/UserService.Application/
 COPY Service/UserService/UserService.Infrastructure/UserService.Infrastructure.csproj Service/UserService/UserService.Infrastructure/
@@ -13,6 +14,7 @@ RUN dotnet restore Service/UserService/UserService.WebAPI/UserService.WebAPI.csp
 FROM restore AS build
 
 COPY Service/UserService/ Service/UserService/
+COPY Shared_Libraries/HuongVanTra.Shared/ Shared_Libraries/HuongVanTra.Shared/
 
 RUN dotnet publish Service/UserService/UserService.WebAPI/UserService.WebAPI.csproj \
     -c Release -o /app/publish \

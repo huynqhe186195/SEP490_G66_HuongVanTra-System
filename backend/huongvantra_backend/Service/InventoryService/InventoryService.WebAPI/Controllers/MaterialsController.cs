@@ -1,6 +1,7 @@
 using HuongVanTra.Shared.Auth;
 using InventoryService.Application.DTOs.Requests;
 using InventoryService.Application.UseCases;
+using InventoryService.WebAPI.Extensions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -18,8 +19,24 @@ public class MaterialsController(InventoryLogic _logic) : ControllerBase
         CancellationToken ct)
     {
         await _logic.DeductMaterialsAsync(
-            request.Items.Select(i => (i.SkuId, i.Quantity)),
+            request,
+            User.GetUserId(),
+            User.ToCreatorSnapshot(),
             ct);
         return NoContent();
+    }
+
+    [HttpPost("pos-stock-handling")]
+    [Authorize(Policy = PermissionNames.CreateOrder)]
+    public async Task<IActionResult> PreparePosStockDeduction(
+        [FromBody] PreparePosStockDeductionRequest request,
+        CancellationToken ct)
+    {
+        var result = await _logic.PreparePosStockDeductionAsync(
+            request,
+            User.GetUserId(),
+            User.ToCreatorSnapshot(),
+            ct);
+        return Ok(result);
     }
 }

@@ -60,6 +60,7 @@ services:
       Jwt__Secret: ${JWT_SECRET:-your-super-secret-key-at-least-32-chars!!}
       Jwt__Issuer: HuongVanTra
       Jwt__Audience: HuongVanTra
+      InventoryService__BaseUrl: http://inventory-service:8080
       RabbitMQ__Host: rabbitmq
       RabbitMQ__Username: ${RABBITMQ_USER:-hvt}
       RabbitMQ__Password: ${RABBITMQ_PASS:-hvtrabbit123}
@@ -93,12 +94,17 @@ services:
       Jwt__Issuer: HuongVanTra
       Jwt__Audience: HuongVanTra
       CustomerService__BaseUrl: http://customer-service:8080
+      RabbitMQ__Host: rabbitmq
+      RabbitMQ__Username: ${RABBITMQ_USER:-hvt}
+      RabbitMQ__Password: ${RABBITMQ_PASS:-hvtrabbit123}
     ports:
       - "5002:8080"
     networks:
       - hvt-network
     depends_on:
       mysql:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
@@ -199,6 +205,7 @@ services:
       Jwt__Issuer: HuongVanTra
       Jwt__Audience: HuongVanTra
       Inventory__SimulateWarehouse: "false"
+      ProductService__BaseUrl: http://product-service:8080
     ports:
       - "5005:8080"
     networks:
@@ -226,6 +233,9 @@ services:
       ASPNETCORE_URLS: http://+:8080
       ConnectionStrings__DefaultConnection: "Server=mysql;Port=3306;Database=hvt_document_db;User=${MYSQL_USER:-hvtuser};Password=${MYSQL_PASSWORD:-hvtpass123};CharSet=utf8mb4;"
       CustomerService__BaseUrl: http://customer-service:8080
+      RabbitMQ__Host: rabbitmq
+      RabbitMQ__Username: ${RABBITMQ_USER:-hvt}
+      RabbitMQ__Password: ${RABBITMQ_PASS:-hvtrabbit123}
       Jwt__Secret: ${JWT_SECRET:-your-super-secret-key-at-least-32-chars!!}
       Jwt__Issuer: HuongVanTra
       Jwt__Audience: HuongVanTra
@@ -235,6 +245,8 @@ services:
       - hvt-network
     depends_on:
       mysql:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
       customer-service:
         condition: service_healthy
@@ -246,6 +258,38 @@ services:
       start_period: 40s
 
   # ─── API Gateway ──────────────────────────────────────────────────────────────
+
+  audit-service:
+    build:
+      context: .
+      dockerfile: Service/AuditService/AuditService.WebAPI/Dockerfile
+    container_name: hvt-audit-service
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__DefaultConnection: "Server=mysql;Port=3306;Database=hvt_audit_db;User=${MYSQL_USER:-hvtuser};Password=${MYSQL_PASSWORD:-hvtpass123};CharSet=utf8mb4;"
+      RabbitMQ__Host: rabbitmq
+      RabbitMQ__Username: ${RABBITMQ_USER:-hvt}
+      RabbitMQ__Password: ${RABBITMQ_PASS:-hvtrabbit123}
+      Jwt__Secret: ${JWT_SECRET:-your-super-secret-key-at-least-32-chars!!}
+      Jwt__Issuer: HuongVanTra
+      Jwt__Audience: HuongVanTra
+    ports:
+      - "5007:8080"
+    networks:
+      - hvt-network
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
 
   gateway:
     build:
@@ -267,6 +311,7 @@ services:
       ReverseProxy__Clusters__order-cluster__Destinations__destination1__Address: http://order-service:8080
       ReverseProxy__Clusters__inventory-cluster__Destinations__destination1__Address: http://inventory-service:8080
       ReverseProxy__Clusters__document-cluster__Destinations__destination1__Address: http://document-service:8080
+      ReverseProxy__Clusters__audit-cluster__Destinations__destination1__Address: http://audit-service:8080
     ports:
       - "5000:8080"
     networks:
@@ -283,6 +328,8 @@ services:
       inventory-service:
         condition: service_healthy
       document-service:
+        condition: service_healthy
+      audit-service:
         condition: service_healthy
 
   # ─── Frontend ─────────────────────────────────────────────────────────────────

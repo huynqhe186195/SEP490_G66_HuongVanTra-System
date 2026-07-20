@@ -421,6 +421,15 @@ public class OrderLogic(
 
         order.Payments = [payment];
 
+        InventoryStockHandlingResponse? stockHandling = null;
+        if (ShouldHandlePosStockSynchronously(order))
+        {
+            stockHandling = await PreparePosStockHandlingAsync(order, ct);
+            order.InventorySyncStatus = stockHandling.HasPendingStockReconciliation
+                ? InventorySyncStatus.PendingReconciliation
+                : InventorySyncStatus.Synced;
+        }
+
         await _orderRepo.AddAsync(order, ct);
 
         await RecordActivityAsync(
@@ -468,17 +477,31 @@ public class OrderLogic(
                 ct);
         }
 
+        if (stockHandling != null)
+        {
+            await RecordActivityAsync(
+                order.Id,
+                OrderActivityType.InventorySynced,
+                stockHandling.Message,
+                actorId,
+                actorName,
+                ct);
+        }
+
         await _orderRepo.SaveChangesAsync(ct);
 
-        await _eventPublisher.PublishOrderPlacedAsync(
-            order.Id, order.OrderCode, order.OrderStatus.ToString(), finalAmount,
-            order.OrderDetails.Select(d => (d.SkuId, d.SkuSnapshotName, d.SkuSnapshotCode, d.Quantity)),
-            ct);
+        if (!ShouldSuppressLegacyOrderPlacedEvent(order))
+        {
+            await _eventPublisher.PublishOrderPlacedAsync(
+                order.Id, order.OrderCode, order.OrderStatus.ToString(), finalAmount,
+                order.OrderDetails.Select(d => (d.SkuId, d.SkuSnapshotName, d.SkuSnapshotCode, d.Quantity)),
+                ct);
+        }
 
         if (order.OrderStatus == OrderStatus.Completed && order.CustomerId.HasValue)
             await PublishOrderCompletedAsync(order, debtAmount, ct);
 
-        return MapToResponse(order);
+        return MapToResponse(order, MapStockHandlingSummary(stockHandling));
     }
 
     private async Task EnsureVipCustomerAsync(Guid? customerId, CancellationToken ct)
@@ -816,12 +839,32 @@ public class OrderLogic(
             actorName,
             ct);
 
+        InventoryStockHandlingResponse? stockHandling = null;
+        if (ShouldHandlePosStockSynchronously(order))
+        {
+            stockHandling = await PreparePosStockHandlingAsync(order, ct);
+            order.InventorySyncStatus = stockHandling.HasPendingStockReconciliation
+                ? InventorySyncStatus.PendingReconciliation
+                : InventorySyncStatus.Synced;
+
+            await RecordActivityAsync(
+                order.Id,
+                OrderActivityType.InventorySynced,
+                stockHandling.Message,
+                actorId,
+                actorName,
+                ct);
+        }
+
         await _orderRepo.SaveChangesAsync(ct);
 
-        await _eventPublisher.PublishOrderPlacedAsync(
-            order.Id, order.OrderCode, OrderStatus.Completed.ToString(), order.FinalAmount,
-            (order.OrderDetails ?? []).Select(d => (d.SkuId, d.SkuSnapshotName, d.SkuSnapshotCode, d.Quantity)),
-            ct);
+        if (!ShouldSuppressLegacyOrderPlacedEvent(order))
+        {
+            await _eventPublisher.PublishOrderPlacedAsync(
+                order.Id, order.OrderCode, OrderStatus.Completed.ToString(), order.FinalAmount,
+                (order.OrderDetails ?? []).Select(d => (d.SkuId, d.SkuSnapshotName, d.SkuSnapshotCode, d.Quantity)),
+                ct);
+        }
 
         if (order.CustomerId.HasValue)
         {
@@ -977,7 +1020,11 @@ public class OrderLogic(
             returnAmount,
             order.FinalAmount,
             refundAmount,
-            returnLines.Select(x => (x.Detail.SkuId, x.Quantity)),
+            returnLines.Select(x => (
+                x.Detail.SkuId,
+                x.Detail.SkuSnapshotName,
+                x.Detail.SkuSnapshotCode,
+                x.Quantity)),
             ct);
 
         string? exchangeOrderCode = null;
@@ -1077,6 +1124,35 @@ public class OrderLogic(
         await _orderRepo.SaveChangesAsync(ct);
     }
 
+    public async Task MarkInventoryDeductionCancelledAsync(
+        Guid orderId,
+        string? reason,
+        CancellationToken ct = default)
+    {
+        var order = await _orderRepo.GetByIdAsync(orderId, ct)
+            ?? throw new OrderNotFoundException(orderId);
+
+        if (order.InventorySyncStatus == InventorySyncStatus.Cancelled)
+            return;
+
+        order.InventorySyncStatus = InventorySyncStatus.Cancelled;
+        order.UpdatedAt = DateTime.UtcNow;
+
+        var description = string.IsNullOrWhiteSpace(reason)
+            ? "Đã hủy trừ tồn kho cho đơn hàng."
+            : $"Đã hủy trừ tồn kho cho đơn hàng. Lý do: {reason.Trim()}";
+
+        await RecordActivityAsync(
+            order.Id,
+            OrderActivityType.InventorySynced,
+            description,
+            actorId: null,
+            actorName: "Hệ thống",
+            ct);
+
+        await _orderRepo.SaveChangesAsync(ct);
+    }
+
     private async Task PublishOrderCompletedAsync(Order order, decimal debtAmount, CancellationToken ct)
     {
         if (!order.CustomerId.HasValue) return;
@@ -1089,7 +1165,7 @@ public class OrderLogic(
                 _ = Task.Run(() => _emailService.SendInvoiceEmailAsync(customer.Email, customer.FullName ?? "Quý khách", customer.TierName, order, CancellationToken.None));
             }
         }
-        catch (Exception ex)
+        catch
         {
             // Log if needed, but don't prevent the event from being published
         }
@@ -1100,6 +1176,55 @@ public class OrderLogic(
             (order.OrderDetails ?? []).Select(d => (d.SkuId, d.Quantity)),
             null,
             ct);
+    }
+
+    private static bool ShouldHandlePosStockSynchronously(Order order) =>
+        order.OrderChannel == OrderChannel.POS && order.OrderStatus == OrderStatus.Completed;
+
+    private static bool ShouldSuppressLegacyOrderPlacedEvent(Order order) =>
+        order.OrderChannel == OrderChannel.POS;
+
+    private async Task<InventoryStockHandlingResponse> PreparePosStockHandlingAsync(
+        Order order,
+        CancellationToken ct)
+    {
+        try
+        {
+            return await _inventoryCatalogClient.PreparePosStockDeductionAsync(
+                new InventoryStockHandlingRequest(
+                    order.Id,
+                    order.OrderCode,
+                    order.OrderStatus.ToString(),
+                    order.FinalAmount,
+                    (order.OrderDetails ?? []).Select(d => new InventoryStockHandlingItemRequest(
+                        d.SkuId,
+                        d.SkuSnapshotName,
+                        d.SkuSnapshotCode,
+                        d.Quantity)).ToList()),
+                ct);
+        }
+        catch (InventoryStockHandlingException ex)
+        {
+            throw new OrderValidationException(ex.Message);
+        }
+    }
+
+    private static StockHandlingSummaryResponse? MapStockHandlingSummary(
+        InventoryStockHandlingResponse? response)
+    {
+        if (response == null) return null;
+
+        return new StockHandlingSummaryResponse(
+            response.HasPendingStockReconciliation,
+            response.StockHandlingMode,
+            response.Message,
+            response.Lines.Select(line => new StockHandlingLineResponse(
+                line.SkuId,
+                line.SkuCode,
+                line.SkuName,
+                line.OrderedQuantity,
+                line.FinishedDeductedQuantity,
+                line.PendingBomQuantity)).ToList());
     }
 
     private async Task<List<Payment>> GetPaymentsInternal(Guid orderId, CancellationToken ct)
@@ -1305,8 +1430,23 @@ public class OrderLogic(
         if (bundle.PackingStatus == PackingStatus.Packed)
             throw new OrderValidationException("Gói này đã được đóng gói.");
 
-        var ingredients = bundle.Ingredients.Select(i => (i.MaterialSkuId, i.Quantity));
-        await _inventoryCatalogClient.DeductMaterialsAsync(ingredients, ct);
+        List<(Guid SkuId, string? SkuCode, string? SkuName, int Quantity)> ingredients = bundle.Ingredients
+            .Select(i => (
+                SkuId: i.MaterialSkuId,
+                SkuCode: (string?)i.MaterialSkuCode,
+                SkuName: (string?)i.MaterialSnapshotName,
+                Quantity: i.Quantity))
+            .ToList();
+        var referenceCode = !string.IsNullOrWhiteSpace(bundle.Order?.OrderCode)
+            ? bundle.Order.OrderCode
+            : bundle.Label ?? bundle.Id.ToString("N")[..8];
+        await _inventoryCatalogClient.DeductMaterialsAsync(
+            ingredients,
+            "CustomBundle",
+            bundle.Id,
+            referenceCode,
+            $"Dong goi custom bundle {bundle.Label ?? bundle.Id.ToString("N")[..8]}",
+            ct);
 
         bundle.PackingStatus = PackingStatus.Packed;
         bundle.PackedAt = DateTime.UtcNow;
@@ -1323,7 +1463,7 @@ public class OrderLogic(
             i.Id, i.MaterialSkuId, i.MaterialSkuCode, i.MaterialSnapshotName,
             i.Quantity, i.UnitPrice, i.SubTotal)).ToList());
 
-    private static OrderResponse MapToResponse(Order o) => new(
+    private static OrderResponse MapToResponse(Order o, StockHandlingSummaryResponse? stockHandlingSummary = null) => new(
         o.Id, o.OrderCode, o.CustomerId, o.CustomerSnapshotName,
         o.EmployeeId, o.OrderChannel.ToString(), o.OrderKind.ToString(), o.OrderStatus.ToString(),
         o.InventorySyncStatus.ToString(), o.TotalAmount, o.DiscountAmount,
@@ -1341,7 +1481,8 @@ public class OrderLogic(
             b.PackingStatus.ToString(), b.PackedAt,
             (b.Ingredients ?? []).Select(i => new CustomBundleIngredientResponse(
                 i.Id, i.MaterialSkuId, i.MaterialSkuCode, i.MaterialSnapshotName,
-                i.Quantity, i.UnitPrice, i.SubTotal)).ToList())).ToList()
+                i.Quantity, i.UnitPrice, i.SubTotal)).ToList())).ToList(),
+        stockHandlingSummary
     );
 
     private static OrderSummaryResponse MapToSummary(Order o)

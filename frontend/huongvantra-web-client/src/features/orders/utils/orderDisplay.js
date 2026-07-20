@@ -288,10 +288,11 @@ export function getOrderRemainingDebt(order) {
 
 export function getInventorySyncLabel(status) {
   const key = normalizeOrderKey(status)
+  if (key === 'PendingReconciliation') return 'Chờ đối soát nguyên liệu'
   const map = {
     Synced: 'Đã đồng bộ kho',
-    PendingDeduction: 'Chờ trừ kho',
-    Cancelled: 'Không trừ kho (đã hủy)',
+    PendingDeduction: 'Chờ trừ tồn quầy',
+    Cancelled: 'Không trừ tồn quầy (đã hủy)',
   }
   return map[key] || status || '—'
 }
@@ -302,7 +303,7 @@ export function resolveInventorySyncMeta(order) {
 
   if (orderStatus === 'Cancelled' || syncStatus === 'Cancelled') {
     return {
-      label: 'Không trừ kho (đã hủy)',
+      label: 'Không trừ tồn quầy (đã hủy)',
       className: 'bg-slate-100 text-slate-500',
     }
   }
@@ -343,6 +344,7 @@ export function getPaymentStatusClass(status) {
 export function getInventorySyncClass(status) {
   const key = normalizeOrderKey(status)
   if (key === 'Synced') return 'bg-emerald-50 text-emerald-700'
+  if (key === 'PendingReconciliation') return 'bg-amber-50 text-amber-700'
   if (key === 'Cancelled') return 'bg-slate-100 text-slate-500'
   return 'bg-slate-100 text-slate-600'
 }
@@ -486,19 +488,21 @@ export function calcOrderFinalAmount(lines = [], discountAmount = 0) {
 
 // Legacy helpers still used by inventory stock-deduct pages
 export const STOCK_STATUS_OPTIONS = [
-  { value: 'pending_deduct', label: 'Chờ trừ kho' },
-  { value: 'deducted', label: 'Đã trừ kho' },
+  { value: 'pending_deduct', label: 'Chờ trừ tồn quầy' },
+  { value: 'deducted', label: 'Đã trừ tồn quầy' },
   { value: 'waiting_stock', label: 'Chờ hàng' },
   { value: 'cancelled', label: 'Đã hủy (kho)' },
 ]
 
 export function getStockStatusLabel(status) {
   const key = String(status || '').toLowerCase()
+  if (key === 'pendingreconciliation' || key === 'pending_bom_reconciliation') return 'Chờ đối soát nguyên liệu'
+  if (key === 'waiting_materials') return 'Chờ nguyên liệu'
   const map = {
-    pending_deduct: 'Chờ trừ kho',
-    pendingdeduction: 'Chờ trừ kho',
-    deducted: 'Đã trừ kho',
-    synced: 'Đã trừ kho',
+    pending_deduct: 'Chờ trừ tồn quầy',
+    pendingdeduction: 'Chờ trừ tồn quầy',
+    deducted: 'Đã trừ tồn quầy',
+    synced: 'Đã trừ tồn quầy',
     waiting_stock: 'Chờ hàng',
     cancelled: 'Đã hủy',
   }
@@ -508,8 +512,8 @@ export function getStockStatusLabel(status) {
 export function getQueueStatusLabel(status) {
   const key = String(status || '').toLowerCase()
   const map = {
-    waiting: 'Chờ trừ',
-    insufficient: 'Thiếu hàng',
+    waiting: 'Chờ xác nhận',
+    insufficient: 'Chờ hàng',
     confirmed: 'Đã trừ',
     cancelled: 'Đã hủy',
   }
@@ -519,6 +523,7 @@ export function getQueueStatusLabel(status) {
 export function getStockStatusClass(status) {
   const key = String(status || '').toLowerCase()
   if (key === 'deducted' || key === 'synced') return 'bg-[#b9d4b0]/30 text-[#538463]'
+  if (key === 'pending_bom_reconciliation' || key === 'waiting_materials') return 'bg-amber-50 text-amber-700'
   if (key === 'waiting_stock' || key === 'insufficient') return 'bg-amber-50 text-amber-700'
   if (key === 'cancelled') return 'bg-red-50 text-red-600'
   return 'bg-slate-100 text-slate-600'

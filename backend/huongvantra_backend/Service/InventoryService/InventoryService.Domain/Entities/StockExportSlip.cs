@@ -8,6 +8,9 @@ public class StockExportSlip
     public Guid? StockAdjustmentRequestId { get; set; }
     public Guid? ProductionOrderId { get; set; }
     public string? ProductionCode { get; set; }
+    public string? ReferenceType { get; set; }
+    public Guid? ReferenceId { get; set; }
+    public string? ReferenceCode { get; set; }
     public Guid SkuId { get; set; }
     public string SkuCode { get; set; } = string.Empty;
     public string SkuSnapshotName { get; set; } = string.Empty;

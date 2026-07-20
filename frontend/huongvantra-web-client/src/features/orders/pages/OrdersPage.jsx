@@ -285,7 +285,7 @@ function OrdersPage() {
               className="inline-flex items-center gap-2 rounded-xl border border-[#538463]/30 bg-[#538463]/5 px-4 py-2.5 text-sm font-bold text-[#538463] hover:bg-[#538463]/10"
               to="/orders/stock-deduct"
             >
-              Chờ trừ kho
+              Chờ trừ tồn quầy
             </Link>
           ) : null}
         </div>

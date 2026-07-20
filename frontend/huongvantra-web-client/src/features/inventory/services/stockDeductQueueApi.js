@@ -61,6 +61,28 @@ function mapQueueItem(item) {
     orderStockStatus: String(item.orderStockStatus ?? item.OrderStockStatus ?? '').toLowerCase(),
     totalAmount: Number(item.totalAmount ?? item.TotalAmount ?? 0),
     createdAt: item.createdAt ?? item.CreatedAt,
+    confirmedAt: item.confirmedAt ?? item.ConfirmedAt ?? null,
+    confirmedByName: item.confirmedByName ?? item.ConfirmedByName ?? '',
+    confirmedByRoleName: item.confirmedByRoleName ?? item.ConfirmedByRoleName ?? '',
+    cancelledAt: item.cancelledAt ?? item.CancelledAt ?? null,
+    cancelledByName: item.cancelledByName ?? item.CancelledByName ?? '',
+    cancelledByRoleName: item.cancelledByRoleName ?? item.CancelledByRoleName ?? '',
+    cancelReason: item.cancelReason ?? item.CancelReason ?? '',
+    lastAttemptAt: item.lastAttemptAt ?? item.LastAttemptAt ?? null,
+    lastShortageReason: item.lastShortageReason ?? item.LastShortageReason ?? '',
+    lines: (item.lines ?? item.Lines ?? []).map(mapQueueLine),
+  }
+}
+
+function mapQueueLine(item) {
+  return {
+    skuId: item.skuId ?? item.SkuId,
+    skuCode: item.skuCode ?? item.SkuCode ?? '',
+    skuName: item.skuName ?? item.SkuName ?? '',
+    orderedQuantity: Number(item.orderedQuantity ?? item.OrderedQuantity ?? 0),
+    finishedDeductedQuantity: Number(item.finishedDeductedQuantity ?? item.FinishedDeductedQuantity ?? 0),
+    pendingBomQuantity: Number(item.pendingBomQuantity ?? item.PendingBomQuantity ?? 0),
+    stockHandlingMode: String(item.stockHandlingMode ?? item.StockHandlingMode ?? '').toLowerCase(),
   }
 }
 
@@ -80,6 +102,7 @@ function mapShortageItem(item) {
   return {
     productId: item.productId ?? item.ProductId,
     materialId: item.materialId ?? item.MaterialId,
+    materialName: item.materialName ?? item.MaterialName ?? '',
     requiredQuantity: Number(item.requiredQuantity ?? item.RequiredQuantity ?? 0),
     availableQuantity: Number(item.availableQuantity ?? item.AvailableQuantity ?? 0),
     shortageQuantity: Number(item.shortageQuantity ?? item.ShortageQuantity ?? 0),
@@ -95,6 +118,8 @@ function mapPreview(data) {
     orderStockStatus: String(data.orderStockStatus ?? data.OrderStockStatus ?? '').toLowerCase(),
     canDeduct: Boolean(data.canDeduct ?? data.CanDeduct),
     items: (data.items ?? data.Items ?? []).map(mapPreviewItem),
+    lines: (data.lines ?? data.Lines ?? []).map(mapQueueLine),
+    isBomReconciliation: Boolean(data.isBomReconciliation ?? data.IsBomReconciliation),
   }
 }
 
@@ -106,6 +131,10 @@ function mapConfirmResult(data) {
     queueStatus: String(data.queueStatus ?? data.QueueStatus ?? '').toLowerCase(),
     orderStockStatus: String(data.orderStockStatus ?? data.OrderStockStatus ?? '').toLowerCase(),
     confirmedAt: data.confirmedAt ?? data.ConfirmedAt,
+    canDeduct: data.canDeduct ?? data.CanDeduct ?? true,
+    shortages: (data.shortages ?? data.Shortages ?? []).map(mapShortageItem),
+    cancelledAt: data.cancelledAt ?? data.CancelledAt ?? null,
+    cancelReason: data.cancelReason ?? data.CancelReason ?? '',
   }
 }
 
@@ -150,7 +179,7 @@ export async function confirmStockDeductQueue(queueId) {
 export async function cancelStockDeductQueue(queueId, reason = '') {
   const data = await requestWithAuth(`/api/stock-deduct-queue/${queueId}/cancel`, {
     method: 'PATCH',
-    body: JSON.stringify({ reason: reason || undefined }),
+    body: JSON.stringify({ reason: reason.trim() || undefined }),
   })
   return mapConfirmResult(data)
 }

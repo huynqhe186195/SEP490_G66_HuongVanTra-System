@@ -127,6 +127,621 @@ namespace ProductService.Infrastructure.Migrations
                     b.ToTable("Categories", (string)null);
                 });
 
+            modelBuilder.Entity("ProductService.Domain.Entities.NewProductApprovalRequest", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("AdminNotes")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ApprovalCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<DateTime?>("AuthorisedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid?>("AuthorisedBy")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("AuthorisedByName")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("AuthorisedByRoleName")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<DateTime?>("CancelledAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid?>("CancelledBy")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("CancelledByName")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("CancelledByRoleName")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<string>("CancelReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<DateTime?>("ConfirmedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid?>("ConfirmedBy")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("ConfirmedByName")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("ConfirmedByRoleName")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("CreatedBomIdsJson")
+                        .HasColumnType("LONGTEXT");
+
+                    b.Property<Guid?>("CreatedProductId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("CreatedSkuIdsJson")
+                        .HasColumnType("LONGTEXT");
+
+                    b.Property<string>("CreationMethod")
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)");
+
+                    b.Property<string>("FinalProductSnapshotJson")
+                        .HasColumnType("LONGTEXT");
+
+                    b.Property<decimal?>("InitialPrice")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("tinyint(1)")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("ManualModeReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<int?>("CategoryId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ProductName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("ProductSnapshotJson")
+                        .IsRequired()
+                        .HasColumnType("LONGTEXT");
+
+                    b.Property<string>("ProductType")
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<DateTime?>("RequestedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid?>("RequestedBy")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("RequestedByName")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("RequestedByRoleName")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<DateTime?>("UsedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("WarehouseNotes")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ApprovalCode")
+                        .IsUnique();
+
+                    b.HasIndex("ProductName");
+
+                    b.HasIndex("Status");
+
+                    b.ToTable("NewProductApprovalRequests", (string)null);
+                });
+
+            modelBuilder.Entity("ProductService.Domain.Entities.ProductCreationRequest", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("AdminNote")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CancelReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("varchar(1000)");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("CreatedByName")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("CreatedByRoleName")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<string>("CreatedProductIdsJson")
+                        .HasColumnType("LONGTEXT");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("tinyint(1)")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("RejectReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("varchar(1000)");
+
+                    b.Property<string>("RequestCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid?>("ReviewedBy")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("ReviewedByName")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("ReviewedByRoleName")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<int>("RevisionNumber")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<DateTime?>("SubmittedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("WarehouseNote")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedBy");
+
+                    b.HasIndex("RequestCode")
+                        .IsUnique();
+
+                    b.HasIndex("Status");
+
+                    b.ToTable("ProductCreationRequests", (string)null);
+                });
+
+            modelBuilder.Entity("ProductService.Domain.Entities.ProductCreationRequestItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("BaseUnit")
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<int>("BomLineCount")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("CategoryId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ClientKey")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("InventoryUnit")
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("tinyint(1)")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("ProductName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("ProductSnapshotJson")
+                        .IsRequired()
+                        .HasColumnType("LONGTEXT");
+
+                    b.Property<string>("ProductType")
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<Guid>("RequestId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("ValidationMessage")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ValidationStatus")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<int>("VariantCount")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProductName");
+
+                    b.HasIndex("RequestId", "ClientKey")
+                        .IsUnique();
+
+                    b.ToTable("ProductCreationRequestItems", (string)null);
+                });
+
+            modelBuilder.Entity("ProductService.Domain.Entities.ProductCreationRequestRevision", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("DecidedByName")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("DecidedByRoleName")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<DateTime?>("DecidedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid?>("DecidedBy")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("Decision")
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<string>("DecisionReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("varchar(1000)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid?>("ComponentVariantId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("tinyint(1)")
+                        .HasDefaultValue(false);
+
+                    b.Property<Guid>("RequestId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<int>("RevisionNumber")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("SubmittedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid?>("SubmittedBy")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("SubmittedByName")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("SubmittedByRoleName")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<string>("SubmittedSnapshotJson")
+                        .IsRequired()
+                        .HasColumnType("LONGTEXT");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RequestId", "RevisionNumber")
+                        .IsUnique();
+
+                    b.ToTable("ProductCreationRequestRevisions", (string)null);
+                });
+
+            modelBuilder.Entity("ProductService.Domain.Entities.ProductDeletionRequest", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("AdminNote")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CancelReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("varchar(1000)");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("CreatedByName")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("CreatedByRoleName")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<string>("DeletedProductIdsJson")
+                        .HasColumnType("LONGTEXT");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("tinyint(1)")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("Reason")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RejectReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("varchar(1000)");
+
+                    b.Property<string>("RequestCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid?>("ReviewedBy")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("ReviewedByName")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("ReviewedByRoleName")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<int>("RevisionNumber")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<DateTime?>("SubmittedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedBy");
+
+                    b.HasIndex("RequestCode")
+                        .IsUnique();
+
+                    b.HasIndex("Status");
+
+                    b.ToTable("ProductDeletionRequests", (string)null);
+                });
+
+            modelBuilder.Entity("ProductService.Domain.Entities.ProductDeletionRequestItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("CategoryName")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("tinyint(1)")
+                        .HasDefaultValue(false);
+
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("ProductName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("ProductSnapshotJson")
+                        .IsRequired()
+                        .HasColumnType("LONGTEXT");
+
+                    b.Property<string>("ProductType")
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<string>("Reason")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("RequestId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("ValidationMessage")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ValidationStatus")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<int>("VariantCount")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProductName");
+
+                    b.HasIndex("RequestId", "ProductId")
+                        .IsUnique();
+
+                    b.ToTable("ProductDeletionRequestItems", (string)null);
+                });
+
+            modelBuilder.Entity("ProductService.Domain.Entities.ProductDeletionRequestRevision", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("DecidedByName")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("DecidedByRoleName")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<DateTime?>("DecidedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid?>("DecidedBy")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("Decision")
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<string>("DecisionReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("varchar(1000)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("tinyint(1)")
+                        .HasDefaultValue(false);
+
+                    b.Property<Guid>("RequestId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<int>("RevisionNumber")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("SubmittedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid?>("SubmittedBy")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("SubmittedByName")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("SubmittedByRoleName")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<string>("SubmittedSnapshotJson")
+                        .IsRequired()
+                        .HasColumnType("LONGTEXT");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RequestId", "RevisionNumber")
+                        .IsUnique();
+
+                    b.ToTable("ProductDeletionRequestRevisions", (string)null);
+                });
+
             modelBuilder.Entity("ProductService.Domain.Entities.PriceBook", b =>
                 {
                     b.Property<Guid>("Id")
@@ -243,6 +858,11 @@ namespace ProductService.Infrastructure.Migrations
                         .HasColumnType("varchar(50)")
                         .HasDefaultValue("unit");
 
+                    b.Property<string>("InventoryUnit")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)");
+
                     b.Property<string>("BrewingGuide")
                         .HasColumnType("TEXT");
 
@@ -308,6 +928,49 @@ namespace ProductService.Infrastructure.Migrations
                     b.HasIndex("CategoryId");
 
                     b.ToTable("Products", (string)null);
+                });
+
+            modelBuilder.Entity("ProductService.Domain.Entities.ProductAttributeValue", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)");
+
+                    b.Property<int?>("AttributeNameId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("AttributeName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("tinyint(1)")
+                        .HasDefaultValue(false);
+
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AttributeNameId");
+
+                    b.HasIndex("ProductId");
+
+                    b.HasIndex("ProductId", "AttributeName", "Value");
+
+                    b.ToTable("ProductAttributeValues", (string)null);
                 });
 
             modelBuilder.Entity("ProductService.Domain.Entities.ProductImage", b =>
@@ -514,6 +1177,14 @@ namespace ProductService.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("varchar(100)");
 
+                    b.Property<Guid?>("BaseVariantId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<decimal>("ConversionRate")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(18,4)")
+                        .HasDefaultValue(1m);
+
                     b.Property<decimal>("CostPrice")
                         .HasColumnType("decimal(18,2)");
 
@@ -528,6 +1199,16 @@ namespace ProductService.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("tinyint(1)")
                         .HasDefaultValue(true);
+
+                    b.Property<bool>("IsAutoGeneratedSku")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("tinyint(1)")
+                        .HasDefaultValue(false);
+
+                    b.Property<bool>("IsBaseUnitVariant")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("tinyint(1)")
+                        .HasDefaultValue(false);
 
                     b.Property<bool>("IsDeleted")
                         .ValueGeneratedOnAdd()
@@ -563,6 +1244,10 @@ namespace ProductService.Infrastructure.Migrations
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime(6)");
 
+                    b.Property<string>("UnitName")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
                     b.Property<string>("VariantName")
                         .IsRequired()
                         .HasMaxLength(255)
@@ -572,6 +1257,8 @@ namespace ProductService.Infrastructure.Migrations
 
                     b.HasIndex("Barcode")
                         .IsUnique();
+
+                    b.HasIndex("BaseVariantId");
 
                     b.HasIndex("ProductId");
 
@@ -595,6 +1282,11 @@ namespace ProductService.Infrastructure.Migrations
                         .HasColumnType("tinyint(1)")
                         .HasDefaultValue(false);
 
+                    b.Property<bool>("IsRequiredBaseComponent")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("tinyint(1)")
+                        .HasDefaultValue(false);
+
                     b.Property<Guid>("MaterialId")
                         .HasColumnType("char(36)");
 
@@ -611,6 +1303,8 @@ namespace ProductService.Infrastructure.Migrations
 
                     b.HasIndex("MaterialId");
 
+                    b.HasIndex("ComponentVariantId");
+
                     b.HasIndex("ProductVariantId");
 
                     b.ToTable("ProductVariantBomLines", (string)null);
@@ -624,6 +1318,68 @@ namespace ProductService.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("Parent");
+                });
+
+            modelBuilder.Entity("ProductService.Domain.Entities.ProductCreationRequestItem", b =>
+                {
+                    b.HasOne("ProductService.Domain.Entities.ProductCreationRequest", "Request")
+                        .WithMany("Items")
+                        .HasForeignKey("RequestId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Request");
+                });
+
+            modelBuilder.Entity("ProductService.Domain.Entities.ProductCreationRequestRevision", b =>
+                {
+                    b.HasOne("ProductService.Domain.Entities.ProductCreationRequest", "Request")
+                        .WithMany("Revisions")
+                        .HasForeignKey("RequestId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Request");
+                });
+
+            modelBuilder.Entity("ProductService.Domain.Entities.ProductDeletionRequestItem", b =>
+                {
+                    b.HasOne("ProductService.Domain.Entities.ProductDeletionRequest", "Request")
+                        .WithMany("Items")
+                        .HasForeignKey("RequestId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Request");
+                });
+
+            modelBuilder.Entity("ProductService.Domain.Entities.ProductDeletionRequestRevision", b =>
+                {
+                    b.HasOne("ProductService.Domain.Entities.ProductDeletionRequest", "Request")
+                        .WithMany("Revisions")
+                        .HasForeignKey("RequestId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Request");
+                });
+
+            modelBuilder.Entity("ProductService.Domain.Entities.ProductAttributeValue", b =>
+                {
+                    b.HasOne("ProductService.Domain.Entities.AttributeName", "AttributeNameRef")
+                        .WithMany()
+                        .HasForeignKey("AttributeNameId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("ProductService.Domain.Entities.Product", "Product")
+                        .WithMany("AttributeValues")
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("AttributeNameRef");
+
+                    b.Navigation("Product");
                 });
 
             modelBuilder.Entity("ProductService.Domain.Entities.PriceBookEntry", b =>
@@ -711,17 +1467,29 @@ namespace ProductService.Infrastructure.Migrations
 
             modelBuilder.Entity("ProductService.Domain.Entities.ProductVariant", b =>
                 {
+                    b.HasOne("ProductService.Domain.Entities.ProductVariant", "BaseVariant")
+                        .WithMany("DerivedVariants")
+                        .HasForeignKey("BaseVariantId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("ProductService.Domain.Entities.Product", "Product")
                         .WithMany("Variants")
                         .HasForeignKey("ProductId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.Navigation("BaseVariant");
+
                     b.Navigation("Product");
                 });
 
             modelBuilder.Entity("ProductService.Domain.Entities.ProductVariantBomLine", b =>
                 {
+                    b.HasOne("ProductService.Domain.Entities.ProductVariant", "ComponentVariant")
+                        .WithMany()
+                        .HasForeignKey("ComponentVariantId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("ProductService.Domain.Entities.Product", "Material")
                         .WithMany()
                         .HasForeignKey("MaterialId")
@@ -733,6 +1501,8 @@ namespace ProductService.Infrastructure.Migrations
                         .HasForeignKey("ProductVariantId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("ComponentVariant");
 
                     b.Navigation("Material");
 
@@ -751,8 +1521,24 @@ namespace ProductService.Infrastructure.Migrations
                     b.Navigation("Entries");
                 });
 
+            modelBuilder.Entity("ProductService.Domain.Entities.ProductCreationRequest", b =>
+                {
+                    b.Navigation("Items");
+
+                    b.Navigation("Revisions");
+                });
+
+            modelBuilder.Entity("ProductService.Domain.Entities.ProductDeletionRequest", b =>
+                {
+                    b.Navigation("Items");
+
+                    b.Navigation("Revisions");
+                });
+
             modelBuilder.Entity("ProductService.Domain.Entities.Product", b =>
                 {
+                    b.Navigation("AttributeValues");
+
                     b.Navigation("Images");
 
                     b.Navigation("Skus");
@@ -775,6 +1561,8 @@ namespace ProductService.Infrastructure.Migrations
             modelBuilder.Entity("ProductService.Domain.Entities.ProductVariant", b =>
                 {
                     b.Navigation("BomLines");
+
+                    b.Navigation("DerivedVariants");
 
                     b.Navigation("PriceBookEntries");
 

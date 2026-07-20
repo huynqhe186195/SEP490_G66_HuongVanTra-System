@@ -22,6 +22,9 @@ function formatDelta(delta) {
 export default function StockAdjustmentRequestDetailPanel({
   request,
   canReview,
+  canCancel,
+  canCancelAny,
+  currentUserId,
   activeTab,
   actingId,
   onApprove,
@@ -34,8 +37,10 @@ export default function StockAdjustmentRequestDetailPanel({
     return <p className="text-sm text-slate-500">Chọn một yêu cầu để xem chi tiết lô.</p>
   }
 
-  const showReviewActions = request.status === 'pending' && canReview && activeTab !== 'mine'
-  const showCancelAction = request.status === 'pending' && activeTab === 'mine'
+  const items = Array.isArray(request.items) ? request.items : []
+  const isOwnRequest = currentUserId && String(request.requestedBy).toLowerCase() === String(currentUserId).toLowerCase()
+  const showReviewActions = request.status === 'pending' && canReview && !isOwnRequest
+  const showCancelAction = request.status === 'pending' && canCancel && (canCancelAny || isOwnRequest || activeTab === 'mine')
 
   return (
     <div className="space-y-6">
@@ -43,7 +48,7 @@ export default function StockAdjustmentRequestDetailPanel({
         <div>
           <p className="font-mono text-xl font-bold text-[#356647]">{request.requestCode}</p>
           <p className="mt-1 text-sm text-slate-500">
-            {request.itemCount} SKU · gửi {formatVietnamDateTime(request.requestedAt)}
+            {items.length || request.itemCount || 0} SKU · gửi {formatVietnamDateTime(request.requestedAt)}
           </p>
         </div>
         <span
@@ -54,6 +59,8 @@ export default function StockAdjustmentRequestDetailPanel({
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <DetailField label="Kho xuất" value="Kho tổng" />
+        <DetailField label="Kho nhận" value="Tồn quầy POS mặc định" />
         <DetailField label="Lý do gửi" value={request.reason} />
         <DetailField
           label="Thời gian duyệt"
@@ -71,57 +78,65 @@ export default function StockAdjustmentRequestDetailPanel({
           <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
             <tr>
               <th className="px-4 py-3">SKU</th>
-              <th className="px-4 py-3 text-right">Thay đổi</th>
-              <th className="px-4 py-3 text-right">Tồn CH lúc gửi</th>
-              <th className="px-4 py-3 text-right">Tồn CH sau duyệt</th>
+              <th className="px-4 py-3 text-right">SL bổ sung</th>
+              <th className="px-4 py-3 text-right">Tồn quầy POS lúc gửi</th>
+              <th className="px-4 py-3 text-right">Tồn quầy POS sau duyệt</th>
               <th className="px-4 py-3 text-right">Kho tổng sau duyệt</th>
               <th className="px-4 py-3">Phiếu xuất</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {request.items.map((item) => (
-              <tr key={item.id ?? item.skuId}>
-                <td className="px-4 py-3">
-                  <p className="font-mono text-xs font-bold text-[#356647]">{item.skuCode}</p>
-                  <p className="mt-0.5 text-xs text-slate-500">{item.skuSnapshotName}</p>
-                </td>
-                <td
-                  className={`px-4 py-3 text-right font-bold ${
-                    item.quantityDelta > 0 ? 'text-emerald-700' : 'text-rose-700'
-                  }`}
-                >
-                  {formatDelta(item.quantityDelta)}
-                </td>
-                <td className="px-4 py-3 text-right text-slate-600">
-                  {formatStockQuantity(item.quantityOnHandSnapshot)}
-                </td>
-                <td className="px-4 py-3 text-right text-slate-600">
-                  {item.quantityOnHandAfter != null
-                    ? formatStockQuantity(item.quantityOnHandAfter)
-                    : '—'}
-                </td>
-                <td className="px-4 py-3 text-right text-slate-600">
-                  {item.warehouseQuantityOnHandAfter != null
-                    ? formatStockQuantity(item.warehouseQuantityOnHandAfter)
-                    : '—'}
-                </td>
-                <td className="px-4 py-3">
-                  {item.exportSlipCode ? (
-                    <button
-                      type="button"
-                      className="font-semibold text-[#356647] hover:underline"
-                      onClick={() =>
-                        navigate('/inventory/export', { state: { search: item.exportSlipCode } })
-                      }
-                    >
-                      {item.exportSlipCode}
-                    </button>
-                  ) : (
-                    <span className="text-slate-400">—</span>
-                  )}
+            {items.length > 0 ? (
+              items.map((item) => (
+                <tr key={item.id ?? item.skuId ?? item.skuCode}>
+                  <td className="px-4 py-3">
+                    <p className="font-mono text-xs font-bold text-[#356647]">{item.skuCode || '—'}</p>
+                    <p className="mt-0.5 text-xs text-slate-500">{item.skuSnapshotName || '—'}</p>
+                  </td>
+                  <td
+                    className={`px-4 py-3 text-right font-bold ${
+                      item.quantityDelta > 0 ? 'text-emerald-700' : 'text-rose-700'
+                    }`}
+                  >
+                    {formatDelta(item.quantityDelta)}
+                  </td>
+                  <td className="px-4 py-3 text-right text-slate-600">
+                    {formatStockQuantity(item.quantityOnHandSnapshot)}
+                  </td>
+                  <td className="px-4 py-3 text-right text-slate-600">
+                    {item.quantityOnHandAfter != null
+                      ? formatStockQuantity(item.quantityOnHandAfter)
+                      : '—'}
+                  </td>
+                  <td className="px-4 py-3 text-right text-slate-600">
+                    {item.warehouseQuantityOnHandAfter != null
+                      ? formatStockQuantity(item.warehouseQuantityOnHandAfter)
+                      : '—'}
+                  </td>
+                  <td className="px-4 py-3">
+                    {item.exportSlipCode ? (
+                      <button
+                        type="button"
+                        className="font-semibold text-[#356647] hover:underline"
+                        onClick={() =>
+                          navigate('/inventory/export', { state: { search: item.exportSlipCode } })
+                        }
+                      >
+                        {item.exportSlipCode}
+                      </button>
+                    ) : (
+                      <span className="text-slate-400">—</span>
+                    )}
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan={6} className="px-4 py-6 text-center text-sm text-slate-500">
+                  Chưa có dòng SKU trong yêu cầu này.
                 </td>
               </tr>
-            ))}
+            )}
           </tbody>
         </table>
       </div>
@@ -133,10 +148,10 @@ export default function StockAdjustmentRequestDetailPanel({
               <button
                 type="button"
                 disabled={actingId === request.id}
-                onClick={() => onApprove?.(request.id)}
+                onClick={() => onApprove?.(request)}
                 className="rounded-xl bg-[#538463] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#457053] disabled:opacity-50"
               >
-                Duyệt lô
+                Duyệt bổ sung
               </button>
               <button
                 type="button"
@@ -152,10 +167,10 @@ export default function StockAdjustmentRequestDetailPanel({
             <button
               type="button"
               disabled={actingId === request.id}
-              onClick={() => onCancel?.(request.id)}
+              onClick={() => onCancel?.(request)}
               className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
             >
-              Hủy lô
+              Hủy yêu cầu
             </button>
           ) : null}
         </div>

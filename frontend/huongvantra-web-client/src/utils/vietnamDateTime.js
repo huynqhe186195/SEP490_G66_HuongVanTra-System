@@ -1,20 +1,16 @@
+export const VIETNAM_TIME_ZONE = 'Asia/Ho_Chi_Minh'
 /** Giờ Việt Nam = UTC + 7 */
 export const VIETNAM_UTC_OFFSET_HOURS = 7
 
-const OFFSET_MS = VIETNAM_UTC_OFFSET_HOURS * 60 * 60 * 1000
-
-function pad(value) {
-  return String(value).padStart(2, '0')
-}
-
 function hasTimezoneSuffix(value) {
-  return /[zZ]$|[+-]\d{2}(:?\d{2})?$/.test(value)
+  return /[zZ]$|[+-]\d{2}:?\d{2}$/.test(value)
 }
 
 /**
- * Parse chuỗi/ngày API (thường lưu UTC) thành Date UTC.
+ * Parse chuỗi/ngày API (thường lưu UTC) thành Date.
+ * DateTime không có timezone được xem là UTC để tránh lệch ngày ở UI Việt Nam.
  */
-export function parseUtcDateTime(value) {
+export function parseApiDateTime(value) {
   if (value == null || value === '') return null
   if (value instanceof Date) {
     return Number.isNaN(value.getTime()) ? null : value
@@ -23,44 +19,91 @@ export function parseUtcDateTime(value) {
   const raw = String(value).trim()
   if (!raw) return null
 
-  const iso = hasTimezoneSuffix(raw) ? raw : `${raw}${raw.includes('T') ? 'Z' : ''}`
-  const date = new Date(iso)
+  const normalized = raw.includes(' ') && !raw.includes('T') ? raw.replace(' ', 'T') : raw
+  if (/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+    const dateOnly = new Date(`${normalized}T00:00:00Z`)
+    return Number.isNaN(dateOnly.getTime()) ? null : dateOnly
+  }
+  const iso = hasTimezoneSuffix(normalized) ? normalized : `${normalized}Z`
+  const safeIso = iso.replace(/(\.\d{3})\d+(?=Z|[+-]\d{2}:?\d{2}$|$)/, '$1')
+  const date = new Date(safeIso)
   return Number.isNaN(date.getTime()) ? null : date
 }
 
-/**
- * Cộng 7 giờ lên mốc UTC → dùng getUTC* khi format để ra giờ VN.
- */
-export function addUtcPlus7(value) {
-  const utc = parseUtcDateTime(value)
-  if (!utc) return null
-  return new Date(utc.getTime() + OFFSET_MS)
+export const parseUtcDateTime = parseApiDateTime
+
+function vietnamParts(value, options = {}) {
+  const date = parseApiDateTime(value)
+  if (!date) return null
+
+  const formatter = new Intl.DateTimeFormat('vi-VN', {
+    timeZone: VIETNAM_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour12: false,
+    ...options,
+  })
+  const parts = Object.fromEntries(
+    formatter.formatToParts(date).map((part) => [part.type, part.value]),
+  )
+  return {
+    day: parts.day,
+    month: parts.month,
+    year: parts.year,
+    hour: parts.hour === '24' ? '00' : parts.hour,
+    minute: parts.minute,
+    second: parts.second,
+  }
 }
 
 /**
- * Hiển thị ngày giờ theo giờ Việt Nam (UTC+7).
+ * Trả về Date đã dịch sang lịch giờ Việt Nam cho những nơi còn cần getUTC*.
+ */
+export function addUtcPlus7(value) {
+  const parts = vietnamParts(value, {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  })
+  if (!parts) return null
+
+  return new Date(Date.UTC(
+    Number(parts.year),
+    Number(parts.month) - 1,
+    Number(parts.day),
+    Number(parts.hour),
+    Number(parts.minute),
+    Number(parts.second),
+  ))
+}
+
+/**
+ * Hiển thị ngày giờ theo giờ Việt Nam (dd/mm/yyyy hh:mm:ss).
  */
 export function formatVietnamDateTime(value) {
-  const vn = value == null ? addUtcPlus7(new Date()) : addUtcPlus7(value)
-  if (!vn) return '—'
+  const parts = vietnamParts(value, {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  })
+  if (!parts) return '—'
 
-  const day = pad(vn.getUTCDate())
-  const month = pad(vn.getUTCMonth() + 1)
-  const year = vn.getUTCFullYear()
-  const hour = pad(vn.getUTCHours())
-  const minute = pad(vn.getUTCMinutes())
-  const second = pad(vn.getUTCSeconds())
-
-  return `${day}/${month}/${year}, ${hour}:${minute}:${second}`
+  return `${parts.day}/${parts.month}/${parts.year} ${parts.hour}:${parts.minute}:${parts.second}`
 }
 
 /** Hiển thị ngày giờ VN không có giây (dd/mm/yyyy hh:mm). */
 export function formatVietnamDateTimeMinute(value) {
-  const vn = addUtcPlus7(value)
-  if (!vn) return '—'
+  const parts = vietnamParts(value, {
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+  if (!parts) return '—'
 
-  return `${pad(vn.getUTCDate())}/${pad(vn.getUTCMonth() + 1)}/${vn.getUTCFullYear()} ${pad(vn.getUTCHours())}:${pad(vn.getUTCMinutes())}`
+  return `${parts.day}/${parts.month}/${parts.year} ${parts.hour}:${parts.minute}`
 }
+
+export const formatDateTimeVN = formatVietnamDateTimeMinute
 
 /** Giờ hiện tại (VN) cho biên lai / UI */
 export function vietnamNowLabel() {
@@ -69,26 +112,31 @@ export function vietnamNowLabel() {
 
 /** Chỉ ngày theo giờ Việt Nam (dd/mm/yyyy). */
 export function formatVietnamDate(value) {
-  const vn = addUtcPlus7(value)
-  if (!vn) return '—'
+  const parts = vietnamParts(value)
+  if (!parts) return '—'
 
-  return `${pad(vn.getUTCDate())}/${pad(vn.getUTCMonth() + 1)}/${vn.getUTCFullYear()}`
+  return `${parts.day}/${parts.month}/${parts.year}`
 }
+
+export const formatDateVN = formatVietnamDate
 
 /** Giá trị cho input type="date" theo lịch VN. */
 export function toVietnamDateInputValue(value) {
-  const vn = addUtcPlus7(value)
-  if (!vn) return ''
+  const parts = vietnamParts(value)
+  if (!parts) return ''
 
-  return `${vn.getUTCFullYear()}-${pad(vn.getUTCMonth() + 1)}-${pad(vn.getUTCDate())}`
+  return `${parts.year}-${parts.month}-${parts.day}`
 }
 
 /** Giá trị cho input type="datetime-local" theo giờ VN. */
 export function toDatetimeLocalValue(value) {
-  const vn = addUtcPlus7(value)
-  if (!vn) return ''
+  const parts = vietnamParts(value, {
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+  if (!parts) return ''
 
-  return `${vn.getUTCFullYear()}-${pad(vn.getUTCMonth() + 1)}-${pad(vn.getUTCDate())}T${pad(vn.getUTCHours())}:${pad(vn.getUTCMinutes())}`
+  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`
 }
 
 /** Chuyển datetime-local (giờ VN) sang UTC ISO cho API. */

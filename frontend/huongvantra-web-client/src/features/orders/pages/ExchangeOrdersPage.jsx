@@ -66,11 +66,7 @@ function ExchangeOrdersPage() {
 
   function switchViewTab(nextTab) {
     setPage(1)
-    if (nextTab === 'returns') {
-      setSearchParams({ tab: 'returns' })
-      return
-    }
-    setSearchParams({})
+    setSearchParams({ tab: nextTab })
   }
 
   useEffect(() => {
