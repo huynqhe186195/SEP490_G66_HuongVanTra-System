@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import PageShell from '../../../components/shared/PageShell.jsx'
+import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
 import { showError, showSuccess, showToast } from '../../../app/toast.js'
 import { useAuthSession } from '../../auth/hooks/useAuthSession.js'
 import { isSystemAdmin, isWarehouseRole } from '../../auth/utils/permissions.js'
@@ -47,6 +48,16 @@ const STATUS_LABELS = {
 
 const EMPTY_GUID = '00000000-0000-0000-0000-000000000000'
 const BOM_INTEGER_MESSAGE = 'Định mức phải là số nguyên dương.'
+const ADMIN_REQUEST_PAGE_SIZE = TABLE_PAGE_SIZE
+const PRODUCT_CREATION_REQUEST_FETCH_PAGE_SIZE = 100
+const PRODUCT_CREATION_STATUS_FILTERS = [
+  { value: 'PendingApproval', label: 'Chờ xử lý' },
+  { value: 'all', label: 'Tất cả' },
+  { value: 'Draft', label: 'Nháp' },
+  { value: 'Completed', label: 'Đã tạo hàng hóa' },
+  { value: 'Rejected', label: 'Đã từ chối' },
+  { value: 'Cancelled', label: 'Đã hủy' },
+]
 const ATTRIBUTE_DUPLICATE_MESSAGE = 'Thuộc tính này đã được sử dụng cho sản phẩm.'
 const ATTRIBUTE_VALUE_REQUIRED_MESSAGE = 'Vui lòng nhập giá trị thuộc tính.'
 const ATTRIBUTE_NAME_SUGGESTIONS = [
@@ -1434,11 +1445,248 @@ function ProductRow({ row, categories, materials, attributeNameOptions, onChange
   )
 }
 
+function getSnapshotProduct(item) {
+  return item?.productSnapshot ?? item?.ProductSnapshot ?? {}
+}
+
+function getSnapshotVariants(item) {
+  const product = getSnapshotProduct(item)
+  const variants = product.variants ?? product.Variants ?? []
+  return Array.isArray(variants) ? variants : []
+}
+
+function getSnapshotAttributes(item) {
+  const product = getSnapshotProduct(item)
+  const attributes = product.attributes ?? product.Attributes ?? []
+  return Array.isArray(attributes) ? attributes : []
+}
+
+function getSnapshotBomLines(variant) {
+  const lines = variant?.bomLines ?? variant?.BomLines ?? []
+  return Array.isArray(lines) ? lines : []
+}
+
+function getVariantValue(variant, key, fallback = '') {
+  const pascalKey = `${key[0].toUpperCase()}${key.slice(1)}`
+  return variant?.[key] ?? variant?.[pascalKey] ?? fallback
+}
+
+function getRequestProductCode(item) {
+  const product = getSnapshotProduct(item)
+  const variants = getSnapshotVariants(item)
+  const baseVariant = variants.find((variant) => Boolean(getVariantValue(variant, 'isBaseUnitVariant', false))) ?? variants[0]
+  return product.productCode
+    ?? product.ProductCode
+    ?? buildGeneratedProductCode(product.name ?? product.Name ?? item.productName, getVariantValue(baseVariant, 'retailPrice', ''))
+}
+
+function ProductCreationRequestDetailModal({ request, onClose, onApprove, onReject, isSaving }) {
+  if (!request) return null
+  const canDecide = request.status === 'PendingApproval'
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 p-4">
+      <div className="flex max-h-[min(92dvh,880px)] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div className="flex shrink-0 items-start justify-between border-b border-slate-100 px-6 py-4">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wide text-[#538463]">Chi tiết yêu cầu tạo hàng hóa</p>
+            <h2 className="mt-1 text-xl font-bold text-slate-900">{request.requestCode}</h2>
+            <p className="mt-1 text-sm text-slate-500">{request.title}</p>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100">
+            <span className="material-symbols-outlined text-[22px]">close</span>
+          </button>
+        </div>
+
+        <div className="custom-scrollbar flex-1 space-y-4 overflow-y-auto p-6">
+          <section className="grid gap-3 rounded-xl border border-slate-100 bg-slate-50 p-4 text-sm md:grid-cols-3">
+            <div><p className="text-xs font-bold uppercase text-slate-400">Mã yêu cầu</p><p className="font-mono font-semibold text-[#356647]">{request.requestCode}</p></div>
+            <div><p className="text-xs font-bold uppercase text-slate-400">Trạng thái</p><p className="font-semibold text-slate-800">{statusLabel(request.status)}</p></div>
+            <div><p className="text-xs font-bold uppercase text-slate-400">Người gửi</p><p className="font-semibold text-slate-800">{request.createdByName || '—'}</p></div>
+            <div><p className="text-xs font-bold uppercase text-slate-400">Ngày tạo</p><p>{formatDateTimeVN(request.createdAt)}</p></div>
+            <div><p className="text-xs font-bold uppercase text-slate-400">Ngày gửi</p><p>{formatDateTimeVN(request.submittedAt || request.createdAt)}</p></div>
+            <div><p className="text-xs font-bold uppercase text-slate-400">Ghi chú Warehouse</p><p className="line-clamp-2">{request.warehouseNote || '—'}</p></div>
+          </section>
+
+          {request.items.map((item, itemIndex) => {
+            const product = getSnapshotProduct(item)
+            const variants = getSnapshotVariants(item)
+            const attributes = getSnapshotAttributes(item)
+            const productName = product.name ?? product.Name ?? item.productName
+            const productType = product.productType ?? product.ProductType ?? item.productType
+            const productCode = getRequestProductCode(item)
+
+            return (
+              <section key={item.clientKey || item.id || itemIndex} className="rounded-xl border border-slate-200 bg-white p-4">
+                <div className="grid gap-3 text-sm md:grid-cols-3">
+                  <div><p className="text-xs font-bold uppercase text-slate-400">Tên sản phẩm</p><p className="font-semibold text-slate-900">{productName || '—'}</p></div>
+                  <div><p className="text-xs font-bold uppercase text-slate-400">Mã hàng hóa</p><p className="font-mono font-semibold text-[#356647]">{productCode || '—'}</p></div>
+                  <div><p className="text-xs font-bold uppercase text-slate-400">Loại hàng</p><p>{getProductTypeLabel(productType)}</p></div>
+                  <div><p className="text-xs font-bold uppercase text-slate-400">Danh mục</p><p>{product.categoryName ?? product.CategoryName ?? item.categoryId ?? '—'}</p></div>
+                  <div><p className="text-xs font-bold uppercase text-slate-400">Đơn vị tồn kho</p><p>{product.inventoryUnit ?? product.InventoryUnit ?? item.inventoryUnit ?? '—'}</p></div>
+                  <div><p className="text-xs font-bold uppercase text-slate-400">Mô tả</p><p className="line-clamp-2">{product.description ?? product.Description ?? '—'}</p></div>
+                </div>
+
+                <div className="mt-4 overflow-x-auto rounded-lg border border-slate-100">
+                  <table className="min-w-full text-left text-xs">
+                    <thead className="bg-slate-50 text-slate-500">
+                      <tr>
+                        <th className="px-3 py-2">Tên đơn vị</th>
+                        <th className="px-3 py-2 text-right">Quy đổi</th>
+                        <th className="px-3 py-2">Đơn vị cơ bản</th>
+                        <th className="px-3 py-2">Mã SKU</th>
+                        <th className="px-3 py-2 text-right">Giá bán</th>
+                        <th className="px-3 py-2 text-right">Giá vốn</th>
+                        <th className="px-3 py-2">Bán trực tiếp</th>
+                        <th className="px-3 py-2">Tồn min/max</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {variants.length === 0 ? (
+                        <tr><td colSpan={8} className="px-3 py-4 text-slate-400">Chưa có SKU.</td></tr>
+                      ) : variants.map((variant, variantIndex) => (
+                        <tr key={getVariantValue(variant, 'requestSkuKey', variantIndex)}>
+                          <td className="px-3 py-2">{getVariantValue(variant, 'unitName', getVariantValue(variant, 'variantName', '—'))}</td>
+                          <td className="px-3 py-2 text-right">{getVariantValue(variant, 'conversionRate', '—')}</td>
+                          <td className="px-3 py-2">{getVariantValue(variant, 'isBaseUnitVariant', false) ? 'Có' : 'Không'}</td>
+                          <td className="px-3 py-2 font-mono font-semibold text-[#356647]">{getVariantValue(variant, 'skuCode', '—')}</td>
+                          <td className="px-3 py-2 text-right">{formatWholeVnd(getVariantValue(variant, 'retailPrice', 0))}</td>
+                          <td className="px-3 py-2 text-right">{formatWholeVnd(getVariantValue(variant, 'costPrice', 0))}</td>
+                          <td className="px-3 py-2">{getVariantValue(variant, 'isSellable', true) !== false ? 'Có' : 'Không'}</td>
+                          <td className="px-3 py-2">{getVariantValue(variant, 'minStock', '—')} / {getVariantValue(variant, 'maxStock', '—')}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                  <div className="rounded-lg border border-slate-100 p-3">
+                    <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Thuộc tính</p>
+                    {attributes.length === 0 ? <p className="mt-2 text-xs text-slate-400">Không có thuộc tính.</p> : null}
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {attributes.map((attribute, attributeIndex) => (
+                        <span key={attributeIndex} className="rounded-full bg-[#f0eee6] px-2 py-1 text-xs font-semibold text-slate-700">
+                          {attribute.attributeName || attribute.AttributeName}: {attribute.value || attribute.Value}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg border border-slate-100 p-3">
+                    <p className="text-xs font-bold uppercase tracking-wide text-slate-500">BOM</p>
+                    <div className="mt-2 space-y-2 text-xs">
+                      {variants.some((variant) => getSnapshotBomLines(variant).length > 0) ? (
+                        variants.flatMap((variant) => getSnapshotBomLines(variant).map((line, lineIndex) => (
+                          <div key={`${getVariantValue(variant, 'skuCode', 'sku')}-${lineIndex}`} className="rounded-lg bg-slate-50 p-2">
+                            <p><span className="font-semibold">Output SKU:</span> <span className="font-mono text-[#356647]">{getVariantValue(variant, 'skuCode', '—')}</span></p>
+                            <p><span className="font-semibold">Component SKU:</span> {line.componentSkuCode || line.ComponentSkuCode || '—'}</p>
+                            <p><span className="font-semibold">Tên component:</span> {line.componentVariantName || line.ComponentVariantName || line.materialName || line.MaterialName || '—'}</p>
+                            <p><span className="font-semibold">Định mức:</span> {line.quantity ?? line.Quantity ?? '—'} {line.materialUnitName || line.MaterialUnitName || ''}</p>
+                            {line.note || line.Note ? <p><span className="font-semibold">Ghi chú:</span> {line.note || line.Note}</p> : null}
+                            {line.isRequiredBaseComponent || line.IsRequiredBaseComponent ? <p className="font-semibold text-emerald-700">Tự động theo quy đổi</p> : null}
+                          </div>
+                        )))
+                      ) : <p className="text-slate-400">Không có BOM.</p>}
+                    </div>
+                  </div>
+                </div>
+              </section>
+            )
+          })}
+        </div>
+
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-slate-100 px-6 py-4">
+          {canDecide ? (
+            <>
+              <button type="button" disabled={isSaving} className="rounded-lg bg-[#356647] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" onClick={() => onApprove(request)}>Duyệt</button>
+              <button type="button" disabled={isSaving} className="rounded-lg bg-amber-100 px-4 py-2 text-sm font-semibold text-amber-700 disabled:opacity-50" onClick={() => onReject(request)}>Từ chối</button>
+            </>
+          ) : null}
+          <button type="button" className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700" onClick={onClose}>Đóng</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function AdminProductCreationRequestsTable({
+  requests,
+  isLoading,
+  page,
+  pageSize,
+  totalCount,
+  onPageChange,
+  onDetail,
+  onDecision,
+}) {
+  return (
+    <>
+      <div className="overflow-x-auto">
+        <table className="min-w-full text-left text-sm">
+          <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+            <tr>
+              <th className="px-4 py-3">Mã yêu cầu</th>
+              <th className="px-4 py-3">Tiêu đề</th>
+              <th className="px-4 py-3">Người gửi</th>
+              <th className="px-4 py-3">Thời gian gửi</th>
+              <th className="px-4 py-3 text-right">Số sản phẩm</th>
+              <th className="px-4 py-3">Trạng thái</th>
+              <th className="px-4 py-3 text-right">Thao tác</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {isLoading ? (
+              <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-400">Đang tải...</td></tr>
+            ) : null}
+            {!isLoading && requests.length === 0 ? (
+              <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-400">Chưa có yêu cầu tạo hàng hóa.</td></tr>
+            ) : null}
+            {requests.map((request) => (
+              <tr key={request.id} className="align-middle hover:bg-slate-50/70">
+                <td className="px-4 py-3 font-mono text-xs font-semibold text-[#356647]">{request.requestCode}</td>
+                <td className="max-w-[320px] px-4 py-3">
+                  <p className="truncate font-semibold text-slate-800">{request.title}</p>
+                  {request.warehouseNote ? <p className="mt-1 truncate text-xs text-slate-500">{request.warehouseNote}</p> : null}
+                </td>
+                <td className="px-4 py-3 text-slate-700">{request.createdByName || '—'}</td>
+                <td className="px-4 py-3 text-xs text-slate-500">{formatDateTimeVN(request.submittedAt || request.createdAt)}</td>
+                <td className="px-4 py-3 text-right font-semibold">{request.items.length}</td>
+                <td className="px-4 py-3">{statusLabel(request.status)}</td>
+                <td className="px-4 py-3 text-right">
+                  <div className="flex flex-wrap justify-end gap-2">
+                    <button type="button" className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50" onClick={() => onDetail(request)}>Chi tiết</button>
+                    {request.status === 'PendingApproval' ? (
+                      <>
+                        <button type="button" className="rounded-lg bg-[#356647] px-3 py-1.5 text-xs font-semibold text-white" onClick={() => onDecision(request, 'approve')}>Duyệt</button>
+                        <button type="button" className="rounded-lg bg-amber-100 px-3 py-1.5 text-xs font-semibold text-amber-700" onClick={() => onDecision(request, 'reject')}>Từ chối</button>
+                        <button type="button" className="rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-50" onClick={() => onDecision(request, 'cancel')}>Hủy</button>
+                      </>
+                    ) : null}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <TablePagination
+        page={page}
+        pageSize={pageSize}
+        totalCount={totalCount}
+        onPageChange={onPageChange}
+        itemLabel="yêu cầu"
+      />
+    </>
+  )
+}
+
 export default function ProductApprovalsPage() {
   const session = useAuthSession()
   const admin = isSystemAdmin(session)
   const warehouse = isWarehouseRole(session)
   const fileInputRef = useRef(null)
+  const initialRequestStatus = admin ? 'PendingApproval' : 'all'
   const [categories, setCategories] = useState([])
   const [materials, setMaterials] = useState([])
   const [attributeNames, setAttributeNames] = useState([])
@@ -1449,7 +1697,9 @@ export default function ProductApprovalsPage() {
   const [title, setTitle] = useState('')
   const [warehouseNote, setWarehouseNote] = useState('')
   const [rows, setRows] = useState([createDraftProduct()])
-  const [statusFilter, setStatusFilter] = useState('all')
+  const [statusFilter, setStatusFilter] = useState(initialRequestStatus)
+  const [adminPage, setAdminPage] = useState(1)
+  const [detailRequest, setDetailRequest] = useState(null)
   const [importPreview, setImportPreview] = useState(null)
   const [importMode, setImportMode] = useState('replace')
   const [isImporting, setIsImporting] = useState(false)
@@ -1469,11 +1719,22 @@ export default function ProductApprovalsPage() {
     ...(importPreview?.errors ?? []),
     ...importAppendErrors,
   ], [importAppendErrors, importPreview])
+  const adminPagedRequests = useMemo(() => {
+    const start = (adminPage - 1) * ADMIN_REQUEST_PAGE_SIZE
+    return requests.slice(start, start + ADMIN_REQUEST_PAGE_SIZE)
+  }, [adminPage, requests])
+
+  useEffect(() => {
+    const maxPage = Math.max(1, Math.ceil(requests.length / ADMIN_REQUEST_PAGE_SIZE))
+    if (adminPage <= maxPage) return undefined
+    const timer = window.setTimeout(() => setAdminPage(maxPage), 0)
+    return () => window.clearTimeout(timer)
+  }, [adminPage, requests.length])
 
   const loadRequests = useCallback(async (nextStatus) => {
     setIsLoading(true)
     try {
-      const result = await fetchProductCreationRequests({ status: nextStatus, page: 1, pageSize: 50 })
+      const result = await fetchProductCreationRequests({ status: nextStatus, page: 1, pageSize: PRODUCT_CREATION_REQUEST_FETCH_PAGE_SIZE })
       setRequests(result.items)
     } catch (error) {
       showError(error.message)
@@ -1492,7 +1753,7 @@ export default function ProductApprovalsPage() {
           showError(`Không tải được danh sách thuộc tính: ${error.message}`)
           return []
         }),
-        fetchProductCreationRequests({ status: 'all', page: 1, pageSize: 50 }),
+        fetchProductCreationRequests({ status: initialRequestStatus, page: 1, pageSize: PRODUCT_CREATION_REQUEST_FETCH_PAGE_SIZE }),
       ])
         .then(([categoryItems, materialItems, attributeNameItems, requestResult]) => {
           if (cancelled) return
@@ -1511,7 +1772,7 @@ export default function ProductApprovalsPage() {
       cancelled = true
       window.clearTimeout(timer)
     }
-  }, [])
+  }, [initialRequestStatus])
 
   function updateRow(index, changes) {
     setRows((current) => current.map((row, rowIndex) => (rowIndex === index ? { ...row, ...changes } : row)))
@@ -1524,6 +1785,12 @@ export default function ProductApprovalsPage() {
     setRows([createDraftProduct()])
     setImportPreview(null)
     setImportMode('replace')
+  }
+
+  function handleStatusFilterChange(value) {
+    setStatusFilter(value)
+    setAdminPage(1)
+    loadRequests(value)
   }
 
   function loadIntoForm(request) {
@@ -1594,6 +1861,7 @@ export default function ProductApprovalsPage() {
       if (action === 'reject') await rejectProductCreationRequest(request.id, reason, '')
       if (action === 'cancel') await cancelProductCreationRequest(request.id, reason, '')
       showSuccess('Đã cập nhật yêu cầu.')
+      setDetailRequest(null)
       await loadRequests(statusFilter)
     } catch (error) {
       showError(error.message)
@@ -1745,16 +2013,13 @@ export default function ProductApprovalsPage() {
     <PageShell
       title="Yêu cầu tạo hàng hóa"
       description="Warehouse tạo yêu cầu nhiều sản phẩm, Admin duyệt và hệ thống tạo Product/SKU/BOM atomically."
-      actions={(
-        <select className="rounded-lg border border-slate-200 px-3 py-2 text-sm" value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value); loadRequests(event.target.value) }}>
-          <option value="all">Tất cả</option>
-          <option value="Draft">Nháp</option>
-          <option value="PendingApproval">Chờ duyệt</option>
-          <option value="Rejected">Bị từ chối</option>
-          <option value="Completed">Đã tạo</option>
-          <option value="Cancelled">Đã hủy</option>
+      actions={!admin && warehouse ? (
+        <select className="rounded-lg border border-slate-200 px-3 py-2 text-sm" value={statusFilter} onChange={(event) => handleStatusFilterChange(event.target.value)}>
+          {PRODUCT_CREATION_STATUS_FILTERS.map((option) => (
+            <option key={option.value} value={option.value}>{option.label}</option>
+          ))}
         </select>
-      )}
+      ) : null}
     >
       {warehouse ? (
         <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -1892,9 +2157,38 @@ export default function ProductApprovalsPage() {
       ) : null}
 
       <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="border-b border-slate-100 px-5 py-4">
-          <h2 className="text-base font-bold text-slate-900">{admin ? 'Yêu cầu chờ xử lý' : 'Yêu cầu tạo hàng hóa'}</h2>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
+          <div>
+            <h2 className="text-base font-bold text-slate-900">{admin ? 'Yêu cầu chờ xử lý' : 'Yêu cầu tạo hàng hóa'}</h2>
+            {admin ? (
+              <p className="mt-1 text-sm text-slate-500">
+                Đang xem: {PRODUCT_CREATION_STATUS_FILTERS.find((option) => option.value === statusFilter)?.label ?? 'Tất cả'}
+              </p>
+            ) : null}
+          </div>
+          {admin ? (
+            <label className="flex items-center gap-2 text-sm font-semibold text-slate-600">
+              Trạng thái
+              <select className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700" value={statusFilter} onChange={(event) => handleStatusFilterChange(event.target.value)}>
+                {PRODUCT_CREATION_STATUS_FILTERS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </label>
+          ) : null}
         </div>
+        {admin ? (
+          <AdminProductCreationRequestsTable
+            requests={adminPagedRequests}
+            isLoading={isLoading}
+            page={adminPage}
+            pageSize={ADMIN_REQUEST_PAGE_SIZE}
+            totalCount={requests.length}
+            onPageChange={setAdminPage}
+            onDetail={setDetailRequest}
+            onDecision={handleDecision}
+          />
+        ) : (
         <div className="overflow-x-auto">
           <table className="min-w-full text-left text-sm">
             <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
@@ -1990,7 +2284,15 @@ export default function ProductApprovalsPage() {
             </tbody>
           </table>
         </div>
+        )}
       </section>
+      <ProductCreationRequestDetailModal
+        request={detailRequest}
+        onClose={() => setDetailRequest(null)}
+        onApprove={(request) => handleDecision(request, 'approve')}
+        onReject={(request) => handleDecision(request, 'reject')}
+        isSaving={isSaving}
+      />
     </PageShell>
   )
 }
