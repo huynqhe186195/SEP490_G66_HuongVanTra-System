@@ -4,7 +4,6 @@ import PageHeader from '../../../components/shared/PageHeader.jsx'
 import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { formatVietnamDate, formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
-import InventoryNavTabs from '../components/InventoryNavTabs.jsx'
 import CreateProductionOrderModal from '../components/CreateProductionOrderModal.jsx'
 import {
   approveProductionOrder,
@@ -268,7 +267,6 @@ function ProductionOrdersPage() {
         description="Một lệnh sản xuất có thể chứa nhiều SKU thành phẩm; hệ thống xuất nguyên liệu và nhập lô thành phẩm về kho tổng."
         rightContent={
           <div className="flex items-center gap-3">
-            <InventoryNavTabs />
             <button
               onClick={() => setShowCreateModal(true)}
               className="inline-flex items-center gap-1.5 rounded-xl bg-[#538463] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#457053]"

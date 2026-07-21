@@ -9,7 +9,6 @@ import { fetchAllActiveSkus, fetchAllActiveStoreSkus } from '../../products/serv
 import { PRODUCT_TYPE, getProductTypeLabel } from '../../products/utils/productTypes.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import { isWarehouseRole, canWriteInventory } from '../../auth/utils/permissions.js'
-import InventoryNavTabs from '../components/InventoryNavTabs.jsx'
 import { fetchSkuStocks, fetchStoreSkuStocks } from '../services/inventoryStockApi.js'
 import {
   approveStocktakeRequest,
@@ -791,7 +790,6 @@ function InventoryStocktakePage() {
         onSearchChange={(value) => resetPageAndSet(setSearchInput, value)}
         rightContent={(
           <div className="flex flex-wrap items-center gap-3">
-            <InventoryNavTabs />
             {canWrite ? (
               <button type="button" onClick={() => setIsCreateOpen(true)} className="inline-flex items-center gap-1.5 rounded-xl bg-[#538463] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#426d50]">
                 <span className="material-symbols-outlined text-[18px]">add</span>

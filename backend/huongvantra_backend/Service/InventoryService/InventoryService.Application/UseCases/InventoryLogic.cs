@@ -917,6 +917,7 @@ public class InventoryLogic(
             s.SkuCode,
             s.WeightInGrams,
             s.QuantityOnHand,
+            s.WarehouseQuantityOnHand,
             s.LowStockThreshold,
             s.ShelfLowStockThreshold,
             s.UpdatedAt)).ToList();

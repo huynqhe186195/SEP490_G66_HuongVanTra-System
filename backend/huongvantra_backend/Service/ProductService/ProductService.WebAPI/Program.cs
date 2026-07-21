@@ -40,6 +40,7 @@ builder.Services.AddHttpClient<IInventoryProductDeletionValidationClient, Invent
     var baseUrl = builder.Configuration["InventoryService:BaseUrl"] ?? "http://inventory-service:8080";
     client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
 });
+builder.Services.AddHttpClient<ICloudinaryImageService, CloudinaryImageService>();
 builder.Services.AddScoped<CategoryLogic>();
 builder.Services.AddScoped<BrandLogic>();
 builder.Services.AddScoped<AttributeNameLogic>();

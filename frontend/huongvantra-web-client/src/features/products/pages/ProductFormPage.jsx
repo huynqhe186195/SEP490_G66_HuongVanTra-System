@@ -54,6 +54,36 @@ function createLocalId(prefix) {
   return `${prefix}_${Date.now()}_${Math.random().toString(16).slice(2)}`
 }
 
+const CLOUDINARY_CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME
+const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET
+
+function hasCloudinaryUploadConfig() {
+  return Boolean(CLOUDINARY_CLOUD_NAME && CLOUDINARY_UPLOAD_PRESET)
+}
+
+async function uploadImageToCloudinary(file) {
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET)
+
+  const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, {
+    method: 'POST',
+    body: formData,
+  })
+
+  if (!response.ok) {
+    throw new Error('Không upload được ảnh lên Cloudinary.')
+  }
+
+  const data = await response.json()
+  const imageUrl = data.secure_url || data.url
+  if (!imageUrl) {
+    throw new Error('Cloudinary không trả về đường dẫn ảnh.')
+  }
+
+  return imageUrl
+}
+
 function toNumber(value, fallback = 0) {
   const number = Number(value)
   return Number.isFinite(number) ? number : fallback
@@ -748,6 +778,7 @@ function ProductFormPage({ mode }) {
   const [dbAttributeNames, setDbAttributeNames] = useState([])
   const [isLoading, setIsLoading] = useState(isEditMode)
   const [isSaving, setIsSaving] = useState(false)
+  const [uploadingImages, setUploadingImages] = useState(0)
   const [fieldErrors, setFieldErrors] = useState({})
   const [variantDrafts, setVariantDrafts] = useState({})
   const [productType, setProductType] = useState(PRODUCT_TYPES.THANH_PHAM)
@@ -1174,23 +1205,65 @@ function ProductFormPage({ mode }) {
 
   function handleImagesChange(event) {
     const files = Array.from(event.target.files || [])
+    event.target.value = ''
     const accepted = files.filter((file) => file.size <= MAX_IMAGE_SIZE)
     if (accepted.length !== files.length) showError('Một số ảnh vượt quá 2MB nên đã bị bỏ qua.')
+    if (!accepted.length) return
 
+    if (!hasCloudinaryUploadConfig()) {
+      showError('Chưa cấu hình Cloudinary (VITE_CLOUDINARY_CLOUD_NAME / VITE_CLOUDINARY_UPLOAD_PRESET). Không thể upload ảnh.')
+      return
+    }
+
+    const queued = []
     setForm((prev) => {
       const available = MAX_IMAGES - prev.images.length
-      const nextImages = accepted.slice(0, available).map((file, index) => ({
-        id: createLocalId('image'),
-        file,
-        name: file.name,
-        previewUrl: URL.createObjectURL(file),
-        imageUrl: '',
-        sortOrder: prev.images.length + index,
-        isThumbnail: prev.images.length === 0 && index === 0,
-      }))
+      const nextImages = accepted.slice(0, available).map((file, index) => {
+        const entry = {
+          id: createLocalId('image'),
+          file,
+          name: file.name,
+          previewUrl: URL.createObjectURL(file),
+          imageUrl: '',
+          uploading: true,
+          sortOrder: prev.images.length + index,
+          isThumbnail: prev.images.length === 0 && index === 0,
+        }
+        queued.push(entry)
+        return entry
+      })
       return { ...prev, images: [...prev.images, ...nextImages] }
     })
-    event.target.value = ''
+
+    queued.forEach((entry) => {
+      setUploadingImages((count) => count + 1)
+      uploadImageToCloudinary(entry.file)
+        .then((imageUrl) => {
+          setForm((prev) => ({
+            ...prev,
+            images: prev.images.map((image) =>
+              image.id === entry.id ? { ...image, imageUrl, uploading: false } : image,
+            ),
+          }))
+        })
+        .catch(() => {
+          showError(`Không upload được ảnh "${entry.name}".`)
+          setForm((prev) => {
+            const images = prev.images.filter((image) => image.id !== entry.id)
+            return {
+              ...prev,
+              images: images.map((image, index) => ({
+                ...image,
+                sortOrder: index,
+                isThumbnail: images.some((item) => item.isThumbnail) ? image.isThumbnail : index === 0,
+              })),
+            }
+          })
+        })
+        .finally(() => {
+          setUploadingImages((count) => Math.max(0, count - 1))
+        })
+    })
   }
 
   function removeImage(imageId) {
@@ -1523,6 +1596,11 @@ function ProductFormPage({ mode }) {
       return
     }
 
+    if (uploadingImages > 0) {
+      showError('Vui lòng đợi ảnh tải lên hoàn tất trước khi lưu.')
+      return
+    }
+
     const payload = buildSubmitPayload()
 
     const validation = validateProductForm(payload)
@@ -1689,8 +1767,8 @@ function ProductFormPage({ mode }) {
             <Link className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50" to="/inventory/products">
               Quay lại
             </Link>
-            <button type="submit" disabled={isSaving} className="rounded-xl bg-[#538463] px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-[#457053] disabled:opacity-50">
-              {isSaving ? 'Đang lưu...' : isEditMode ? 'Cập nhật' : 'Tiếp tục xác nhận'}
+            <button type="submit" disabled={isSaving || uploadingImages > 0} className="rounded-xl bg-[#538463] px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-[#457053] disabled:opacity-50">
+              {isSaving ? 'Đang lưu...' : uploadingImages > 0 ? 'Đang tải ảnh...' : isEditMode ? 'Cập nhật' : 'Tiếp tục xác nhận'}
             </button>
           </div>
         </div>
@@ -1839,10 +1917,10 @@ function ProductFormPage({ mode }) {
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="text-sm font-bold text-slate-700">Upload ảnh</p>
-                <p className="text-xs text-slate-500">Tối đa {MAX_IMAGES} ảnh, mỗi ảnh nhỏ hơn 2MB. Nếu backend chưa có upload file, ảnh sẽ chỉ preview local.</p>
+                <p className="text-xs text-slate-500">Tối đa {MAX_IMAGES} ảnh, mỗi ảnh nhỏ hơn 2MB. Ảnh được lưu trên Cloudinary, hệ thống chỉ lưu đường dẫn ảnh.</p>
               </div>
               <label className="inline-flex cursor-pointer items-center justify-center rounded-xl bg-[#538463] px-4 py-2 text-sm font-bold text-white hover:bg-[#457053]">
-                Chọn ảnh
+                {uploadingImages > 0 ? 'Đang tải ảnh...' : 'Chọn ảnh'}
                 <input type="file" accept="image/*" multiple disabled={form.images.length >= MAX_IMAGES} onChange={handleImagesChange} className="hidden" />
               </label>
             </div>
@@ -1851,6 +1929,11 @@ function ProductFormPage({ mode }) {
                 {form.images.map((image) => (
                   <div key={image.id} className="relative overflow-hidden rounded-xl border border-slate-200 bg-white">
                     <img src={image.previewUrl || image.imageUrl} alt={image.name} className="h-28 w-full object-cover" />
+                    {image.uploading ? (
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/40 text-[11px] font-bold text-white">
+                        Đang tải...
+                      </div>
+                    ) : null}
                     <div className="absolute inset-x-0 bottom-0 flex items-center justify-between bg-white/90 px-2 py-1">
                       <label className="flex items-center gap-1 text-[11px] font-semibold text-slate-700">
                         <input type="radio" checked={image.isThumbnail} onChange={() => setThumbnail(image.id)} />

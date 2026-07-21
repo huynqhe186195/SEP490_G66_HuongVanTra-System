@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using ProductService.Application;
 using ProductService.Application.DTOs.Requests;
 using ProductService.Application.DTOs.Responses;
+using ProductService.Application.Interfaces;
 using ProductService.Application.UseCases;
 using ProductService.Application.Validation;
 using ProductService.Domain.Entities;
@@ -14,7 +15,7 @@ using ProductService.Infrastructure.Data;
 
 namespace ProductService.Infrastructure.UseCases;
 
-public class ProductCreationRequestLogic(ProductDbContext _db, ProductLogic _productLogic)
+public class ProductCreationRequestLogic(ProductDbContext _db, ProductLogic _productLogic, ICloudinaryImageService _cloudinaryImageService)
 {
     private static readonly Regex SkuCodeRegex = new(@"^[A-Z0-9\-_]{3,50}$", RegexOptions.Compiled);
 
@@ -257,7 +258,10 @@ public class ProductCreationRequestLogic(ProductDbContext _db, ProductLogic _pro
         request.UpdatedAt = now;
         MarkLatestRevision(request, "Rejected", reason, actor, now);
 
+        var imageUrls = StripSnapshotImages(request);
+
         await _db.SaveChangesAsync(ct);
+        await _cloudinaryImageService.DeleteByUrlsAsync(imageUrls, ct);
         return await GetByIdAsync(request.Id, actor, ct);
     }
 
@@ -283,8 +287,45 @@ public class ProductCreationRequestLogic(ProductDbContext _db, ProductLogic _pro
         request.UpdatedAt = now;
         MarkLatestRevision(request, "Cancelled", reason, actor, now);
 
+        var imageUrls = StripSnapshotImages(request);
+
         await _db.SaveChangesAsync(ct);
+        await _cloudinaryImageService.DeleteByUrlsAsync(imageUrls, ct);
         return await GetByIdAsync(request.Id, actor, ct);
+    }
+
+    // Thu thập tất cả imageUrl từ snapshot của mỗi item rồi xóa khỏi snapshot,
+    // để nếu yêu cầu bị từ chối được mở lại chỉnh sửa thì không còn URL ảnh chết.
+    private static List<string> StripSnapshotImages(ProductCreationRequest request)
+    {
+        var urls = new List<string>();
+        foreach (var item in request.Items)
+        {
+            var product = TryDeserializeProduct(item.ProductSnapshotJson);
+            if (product is null) continue;
+
+            if (product.Images is { Count: > 0 })
+                urls.AddRange(product.Images
+                    .Select(i => i.ImageUrl)
+                    .Where(u => !string.IsNullOrWhiteSpace(u)));
+
+            var variants = product.Variants;
+            if (variants is { Count: > 0 })
+                urls.AddRange(variants
+                    .Select(v => v.ImageUrl)
+                    .Where(u => !string.IsNullOrWhiteSpace(u))!);
+
+            var strippedVariants = variants?
+                .Select(v => v with { ImageUrl = null })
+                .ToList();
+            item.ProductSnapshotJson = SerializeProduct(
+                product with { Images = [], Variants = strippedVariants });
+        }
+
+        return urls
+            .Where(u => !string.IsNullOrWhiteSpace(u))
+            .Distinct()
+            .ToList();
     }
 
     private async Task<ProductCreationRequest> GetTrackedAsync(Guid id, CancellationToken ct)

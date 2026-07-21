@@ -5,7 +5,6 @@ import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/Tab
 import { showError } from '../../../app/toast.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import { formatStockQuantity } from '../../products/utils/productDisplay.js'
-import InventoryNavTabs from '../components/InventoryNavTabs.jsx'
 import { fetchInventoryLedger } from '../services/inventoryLedgerApi.js'
 
 const LOCATION_OPTIONS = [
@@ -123,7 +122,6 @@ function InventoryLedgerPage() {
         onSearchChange={(value) => resetPageAndSet(setSearchInput, value)}
         rightContent={(
           <div className="flex flex-wrap items-center gap-3">
-            <InventoryNavTabs />
             <button
               type="button"
               onClick={exportCsv}

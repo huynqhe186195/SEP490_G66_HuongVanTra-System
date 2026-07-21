@@ -7,7 +7,6 @@ import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import { canWriteInventory } from '../../auth/utils/permissions.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import { formatStockQuantity } from '../../products/utils/productDisplay.js'
-import InventoryNavTabs from '../components/InventoryNavTabs.jsx'
 import { fetchStockAdjustmentRequests } from '../services/stockAdjustmentRequestApi.js'
 import { fetchSupplierReceipts } from '../services/supplierReceiptApi.js'
 import { fetchWarehouseBatches } from '../services/warehouseBatchApi.js'
@@ -587,7 +586,6 @@ export default function InventoryReturnsPage() {
         onSearchChange={handleSearchChange}
         rightContent={(
           <div className="flex flex-wrap items-center gap-3">
-            <InventoryNavTabs />
             {canWrite ? (
               <button
                 type="button"

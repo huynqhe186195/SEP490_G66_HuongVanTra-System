@@ -129,6 +129,9 @@ services:
       Jwt__Secret: ${JWT_SECRET:-your-super-secret-key-at-least-32-chars!!}
       Jwt__Issuer: HuongVanTra
       Jwt__Audience: HuongVanTra
+      Cloudinary__CloudName: ${CLOUDINARY_CLOUD_NAME:-dpxbfgxqq}
+      Cloudinary__ApiKey: ${CLOUDINARY_API_KEY}
+      Cloudinary__ApiSecret: ${CLOUDINARY_API_SECRET}
     ports:
       - "5003:8080"
     networks:

@@ -30,7 +30,7 @@ public class CatalogSyncController(CatalogSyncLogic _syncLogic) : ControllerBase
     }
 
     [HttpPost("sync")]
-    [Authorize(Roles = "Manager,Admin")]
+    [Authorize(Roles = "Manager,Admin,Sale")]
     public async Task<IActionResult> Sync(CancellationToken ct)
     {
         CatalogSyncLogic.EnsureNotWarehouseSource(User.GetCatalogViewScope() == CatalogViewScope.Warehouse);

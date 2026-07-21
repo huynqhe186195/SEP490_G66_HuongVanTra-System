@@ -14,8 +14,6 @@ import { formatStockQuantity } from '../../products/utils/productDisplay.js'
 
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 
-import InventoryNavTabs from '../components/InventoryNavTabs.jsx'
-
 import { fetchWarehouseBatches } from '../services/warehouseBatchApi.js'
 
 
@@ -183,8 +181,6 @@ function InventoryBatchesPage() {
         searchValue={searchInput}
 
         onSearchChange={setSearchInput}
-
-        rightContent={<InventoryNavTabs />}
 
       />
 

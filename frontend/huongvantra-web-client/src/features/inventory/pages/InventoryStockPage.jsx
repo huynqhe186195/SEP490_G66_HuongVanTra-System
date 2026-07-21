@@ -9,7 +9,6 @@ import { loadAuthSession } from '../../auth/services/authSession.js'
 import { fetchAllActiveSkus } from '../../products/services/productSkusApi.js'
 import { fetchProducts } from '../../products/services/productsApi.js'
 import { formatStockQuantity } from '../../products/utils/productDisplay.js'
-import InventoryNavTabs from '../components/InventoryNavTabs.jsx'
 import { fetchSkuStocks, updateLowStockThreshold } from '../services/inventoryStockApi.js'
 import { fetchWarehouseBatches } from '../services/warehouseBatchApi.js'
 
@@ -144,7 +143,6 @@ function InventoryStockPage() {
         searchPlaceholder="Tìm SKU, sản phẩm..."
         searchValue={searchInput}
         onSearchChange={setSearchInput}
-        rightContent={<InventoryNavTabs />}
       />
 
       <div className="mb-4 flex flex-wrap gap-3">

@@ -15,7 +15,7 @@ public static class DataSeeder
     private static readonly (string RoleName, string Description, string[] Permissions)[] DefaultRoles =
     [
         ("Sale", "Nhân viên kinh doanh",
-        [PermissionNames.CreateOrder, PermissionNames.ViewOrder, PermissionNames.ViewCustomer]),
+        [PermissionNames.CreateOrder, PermissionNames.ViewOrder, PermissionNames.ViewCustomer, PermissionNames.ViewAllCustomers]),
         ("Warehouse", "Thủ kho Kho tổng",
         [PermissionNames.ViewOrder, PermissionNames.ManageCatalog]),
         ("Accountant", "Kế toán",

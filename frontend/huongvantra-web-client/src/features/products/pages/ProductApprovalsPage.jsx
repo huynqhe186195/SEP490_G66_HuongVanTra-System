@@ -51,6 +51,7 @@ const BOM_INTEGER_MESSAGE = 'Định mức phải là số nguyên dương.'
 const ADMIN_REQUEST_PAGE_SIZE = TABLE_PAGE_SIZE
 const PRODUCT_CREATION_REQUEST_FETCH_PAGE_SIZE = 100
 const MAX_IMAGE_UPLOAD_BYTES = 5 * 1024 * 1024
+const MAX_PRODUCT_IMAGES = 5
 const CLOUDINARY_CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME
 const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET
 const PRODUCT_CREATION_STATUS_FILTERS = [
@@ -99,7 +100,7 @@ function createDraftProduct() {
     baseUnit: 'gói',
     inventoryUnit: 'Piece',
     description: '',
-    imageUrl: '',
+    images: [],
     skuCode: '',
     variantName: '',
     retailPrice: '',
@@ -193,12 +194,47 @@ async function uploadImageToCloudinary(file) {
   return imageUrl
 }
 
-function getProductImageUrl(product) {
-  const directUrl = product?.imageUrl ?? product?.ImageUrl ?? product?.thumbnailUrl ?? product?.ThumbnailUrl ?? ''
-  if (directUrl) return directUrl
-  const images = product?.images ?? product?.Images ?? []
-  const firstImage = Array.isArray(images) ? images.find((image) => image?.imageUrl || image?.ImageUrl) : null
-  return firstImage?.imageUrl ?? firstImage?.ImageUrl ?? ''
+function createLocalImageId() {
+  return `img-${Date.now()}-${Math.random().toString(16).slice(2)}`
+}
+
+function normalizeProductImages(product) {
+  const rawImages = product?.images ?? product?.Images ?? []
+  const list = Array.isArray(rawImages)
+    ? rawImages
+        .map((image, index) => {
+          const imageUrl = normalizeText(image?.imageUrl ?? image?.ImageUrl ?? '')
+          if (!imageUrl) return null
+          return {
+            id: createLocalImageId(),
+            imageUrl,
+            altText: image?.altText ?? image?.AltText ?? '',
+            sortOrder: Number(image?.sortOrder ?? image?.SortOrder ?? index) || index,
+            isThumbnail: Boolean(image?.isThumbnail ?? image?.IsThumbnail),
+            uploading: false,
+          }
+        })
+        .filter(Boolean)
+    : []
+
+  if (list.length === 0) {
+    const directUrl = normalizeText(product?.imageUrl ?? product?.ImageUrl ?? product?.thumbnailUrl ?? product?.ThumbnailUrl ?? '')
+    if (directUrl) {
+      list.push({ id: createLocalImageId(), imageUrl: directUrl, altText: '', sortOrder: 0, isThumbnail: true, uploading: false })
+    }
+  }
+
+  list.sort((a, b) => a.sortOrder - b.sortOrder)
+  return reindexProductImages(list)
+}
+
+function reindexProductImages(images) {
+  const list = images.map((image, index) => ({ ...image, sortOrder: index }))
+  if (list.length > 0 && !list.some((image) => image.isThumbnail && !image.uploading)) {
+    const firstReady = list.find((image) => !image.uploading)
+    if (firstReady) firstReady.isThumbnail = true
+  }
+  return list
 }
 
 function isHttpImageUrl(value) {
@@ -647,14 +683,14 @@ function toProductPayload(row) {
     weightUnit: null,
     isVariantParent: true,
     productType: row.productType,
-    images: normalizeText(row.imageUrl)
-      ? [{
-        imageUrl: normalizeText(row.imageUrl),
-        altText: row.name.trim(),
-        sortOrder: 0,
-        isThumbnail: true,
-      }]
-      : [],
+    images: (Array.isArray(row.images) ? row.images : [])
+      .filter((image) => !image.uploading && normalizeText(image.imageUrl))
+      .map((image, index) => ({
+        imageUrl: normalizeText(image.imageUrl),
+        altText: normalizeText(image.altText) || row.name.trim(),
+        sortOrder: index,
+        isThumbnail: Boolean(image.isThumbnail),
+      })),
     units: skuRows.map((sku) => {
       const price = getPriceAfterTax(sku.retailPrice, getSkuTaxPercent(sku))
       return {
@@ -765,7 +801,7 @@ function fromProductSnapshot(item, materialsById) {
     variantClientKey: baseSku.requestSkuKey || `${item.clientKey || Date.now()}-sku`,
     name: product.name || '',
     description: product.description || '',
-    imageUrl: getProductImageUrl(product),
+    images: normalizeProductImages(product),
     productType: product.productType || PRODUCT_TYPE.THANH_PHAM,
     categoryId: product.categoryId ? String(product.categoryId) : '',
     baseUnit: baseSku.unitName || product.baseUnit || 'gói',
@@ -805,7 +841,9 @@ function validateForm(title, rows, options = {}) {
     const skuRows = syncSkuRows(row, getSkuRows(row))
     if (!row.name.trim()) errors.push(`${prefix}: thiếu tên sản phẩm.`)
     if (!row.categoryId) errors.push(`${prefix}: thiếu danh mục.`)
-    if (!isHttpImageUrl(row.imageUrl)) errors.push(`${prefix}: URL ảnh phải bắt đầu bằng http:// hoặc https://.`)
+    const images = Array.isArray(row.images) ? row.images : []
+    if (images.some((image) => image.uploading)) errors.push(`${prefix}: vui lòng đợi ảnh upload xong.`)
+    if (images.some((image) => !isHttpImageUrl(image.imageUrl))) errors.push(`${prefix}: URL ảnh phải bắt đầu bằng http:// hoặc https://.`)
     if (row.name.trim()) {
       const nameKey = row.name.trim().toLowerCase()
       if (names.has(nameKey)) errors.push(`${prefix}: tên sản phẩm bị trùng trong yêu cầu.`)
@@ -1197,13 +1235,14 @@ function AttributeNameCombobox({
   )
 }
 
-function ProductRow({ row, categories, materials, attributeNameOptions, onChange, onRemove, canRemove }) {
+function ProductRow({ row, categories, materials, attributeNameOptions, onChange, onImagesChange, onRemove, canRemove }) {
   const isFinishedProduct = row.productType === PRODUCT_TYPE.THANH_PHAM
   const skuRows = syncSkuRows(row, getSkuRows(row))
   const componentSkuOptions = getComponentSkuOptions(materials)
   const attributes = row.attributes ?? []
+  const images = Array.isArray(row.images) ? row.images : []
+  const uploadingImageCount = images.filter((image) => image.uploading).length
   const [pendingAttributeFocusKey, setPendingAttributeFocusKey] = useState(null)
-  const [isUploadingImage, setIsUploadingImage] = useState(false)
 
   function applySkuRows(nextRow, nextSkuRows) {
     onChange(syncLegacySkuFields(nextRow, nextSkuRows))
@@ -1254,33 +1293,60 @@ function ProductRow({ row, categories, materials, attributeNameOptions, onChange
     applySkuRows(row, nextSkuRows)
   }
 
-  async function handleImageUpload(event) {
-    const file = event.target.files?.[0]
+  function handleImageUpload(event) {
+    const files = Array.from(event.target.files ?? [])
     event.target.value = ''
-    if (!file) return
-    if (!file.type.startsWith('image/')) {
-      showError('Vui lòng chọn file hình ảnh.')
-      return
-    }
-    if (file.size > MAX_IMAGE_UPLOAD_BYTES) {
-      showError('Ảnh tối đa 5MB.')
-      return
-    }
-    if (!hasCloudinaryUploadConfig()) {
-      showError('Chưa cấu hình Cloudinary, vui lòng nhập URL ảnh thủ công.')
+    if (!files.length) return
+
+    const availableSlots = MAX_PRODUCT_IMAGES - images.length
+    if (availableSlots <= 0) {
+      showError(`Tối đa ${MAX_PRODUCT_IMAGES} ảnh cho mỗi sản phẩm.`)
       return
     }
 
-    setIsUploadingImage(true)
-    try {
-      const imageUrl = await uploadImageToCloudinary(file)
-      updateProduct({ imageUrl })
-      showSuccess('Đã upload ảnh sản phẩm lên Cloudinary.')
-    } catch (error) {
-      showError(error.message)
-    } finally {
-      setIsUploadingImage(false)
+    const accepted = []
+    for (const file of files) {
+      if (accepted.length >= availableSlots) {
+        showError(`Chỉ thêm được tối đa ${MAX_PRODUCT_IMAGES} ảnh, một số ảnh đã bị bỏ qua.`)
+        break
+      }
+      if (!file.type.startsWith('image/')) {
+        showError(`"${file.name}": vui lòng chọn file hình ảnh.`)
+        continue
+      }
+      if (file.size > MAX_IMAGE_UPLOAD_BYTES) {
+        showError(`"${file.name}": ảnh tối đa 5MB.`)
+        continue
+      }
+      accepted.push(file)
     }
+    if (!accepted.length) return
+
+    // Ảnh chỉ giữ local (preview) tại thời điểm thêm — CHƯA upload lên Cloudinary.
+    // Việc upload được hoãn tới khi bấm "Gửi biên bản" (xem uploadPendingImagesForSubmit).
+    const pendingEntries = accepted.map((file) => ({
+      id: createLocalImageId(),
+      file,
+      previewUrl: URL.createObjectURL(file),
+      imageUrl: '',
+      altText: '',
+      sortOrder: 0,
+      isThumbnail: false,
+      uploading: false,
+      pending: true,
+    }))
+
+    onImagesChange((current) => reindexProductImages([...current, ...pendingEntries]))
+  }
+
+  function removeImage(imageId) {
+    const target = images.find((image) => image.id === imageId)
+    if (target?.previewUrl) URL.revokeObjectURL(target.previewUrl)
+    onImagesChange((current) => reindexProductImages(current.filter((image) => image.id !== imageId)))
+  }
+
+  function setThumbnail(imageId) {
+    onImagesChange((current) => current.map((image) => ({ ...image, isThumbnail: image.id === imageId })))
   }
 
   function addSku() {
@@ -1471,41 +1537,58 @@ function ProductRow({ row, categories, materials, attributeNameOptions, onChange
       </label>
 
       <div className="mt-3 rounded-lg border border-slate-100 bg-slate-50 p-3">
-        <div className="grid gap-3 lg:grid-cols-[120px_1fr]">
-          <div className="flex h-28 w-28 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-white">
-            {row.imageUrl ? (
-              <img
-                src={row.imageUrl}
-                alt={row.name || 'Hình ảnh sản phẩm'}
-                className="h-full w-full object-cover"
-              />
-            ) : (
-              <span className="material-symbols-outlined text-3xl text-slate-300">image</span>
-            )}
-          </div>
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Hình ảnh sản phẩm</p>
-            <p className="mt-1 text-xs text-slate-500">Ảnh được lưu trên Cloudinary. Hệ thống chỉ lưu đường dẫn ảnh.</p>
-            {!hasCloudinaryUploadConfig() ? (
-              <p className="mt-1 text-xs font-semibold text-amber-700">Chưa cấu hình Cloudinary, có thể nhập URL ảnh thủ công.</p>
-            ) : null}
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <input
-                className="min-w-[260px] flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
-                placeholder="https://res.cloudinary.com/..."
-                value={row.imageUrl || ''}
-                onChange={(event) => updateProduct({ imageUrl: event.target.value })}
-              />
-              <label className={`inline-flex cursor-pointer items-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 ${!hasCloudinaryUploadConfig() || isUploadingImage ? 'pointer-events-none opacity-50' : 'hover:bg-slate-50'}`}>
-                {isUploadingImage ? 'Đang upload...' : 'Upload ảnh'}
-                <input type="file" accept="image/*" className="hidden" disabled={!hasCloudinaryUploadConfig() || isUploadingImage} onChange={handleImageUpload} />
-              </label>
-              {row.imageUrl ? (
-                <button type="button" className="text-sm font-semibold text-rose-600" onClick={() => updateProduct({ imageUrl: '' })}>Xóa ảnh</button>
-              ) : null}
-            </div>
+            <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Hình ảnh sản phẩm ({images.length}/{MAX_PRODUCT_IMAGES})</p>
+            <p className="mt-1 text-xs text-slate-500">Ảnh chỉ được tải lên Cloudinary khi bạn bấm "Gửi biên bản". Nhấn vào ảnh để đặt làm ảnh đại diện.</p>
           </div>
+          <label className={`inline-flex cursor-pointer items-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 ${uploadingImageCount > 0 || images.length >= MAX_PRODUCT_IMAGES ? 'pointer-events-none opacity-50' : 'hover:bg-slate-50'}`}>
+            {uploadingImageCount > 0 ? `Đang upload (${uploadingImageCount})...` : '+ Thêm ảnh'}
+            <input type="file" accept="image/*" multiple className="hidden" disabled={uploadingImageCount > 0 || images.length >= MAX_PRODUCT_IMAGES} onChange={handleImageUpload} />
+          </label>
         </div>
+        {!hasCloudinaryUploadConfig() ? (
+          <p className="mt-2 text-xs font-semibold text-amber-700">Chưa cấu hình Cloudinary — sẽ không gửi được biên bản có ảnh cho tới khi cấu hình.</p>
+        ) : null}
+        {images.some((image) => image.pending) ? (
+          <p className="mt-2 text-xs font-semibold text-[#356647]">Có {images.filter((image) => image.pending).length} ảnh đang chờ — sẽ tải lên khi gửi biên bản.</p>
+        ) : null}
+
+        {images.length ? (
+          <div className="mt-3 flex flex-wrap gap-3">
+            {images.map((image) => (
+              <div key={image.id} className="w-32">
+                <button
+                  type="button"
+                  onClick={() => !image.uploading && setThumbnail(image.id)}
+                  className={`relative flex h-28 w-32 items-center justify-center overflow-hidden rounded-lg border bg-white ${image.isThumbnail ? 'border-[#356647] ring-2 ring-[#356647]/30' : 'border-slate-200'}`}
+                >
+                  {image.uploading ? (
+                    <span className="material-symbols-outlined animate-spin text-2xl text-slate-300">progress_activity</span>
+                  ) : (image.imageUrl || image.previewUrl) ? (
+                    <img src={image.imageUrl || image.previewUrl} alt={image.altText || row.name || 'Hình ảnh sản phẩm'} className="h-full w-full object-cover" />
+                  ) : (
+                    <span className="material-symbols-outlined text-3xl text-slate-300">image</span>
+                  )}
+                  {image.isThumbnail && !image.uploading ? (
+                    <span className="absolute left-1 top-1 rounded bg-[#356647] px-1.5 py-0.5 text-[10px] font-bold text-white">Đại diện</span>
+                  ) : null}
+                  {image.pending && !image.uploading ? (
+                    <span className="absolute right-1 top-1 rounded bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold text-white">Chờ tải lên</span>
+                  ) : null}
+                </button>
+                <div className="mt-1 flex items-center justify-between">
+                  <span className="text-[11px] text-slate-400">{image.uploading ? 'Đang tải...' : image.isThumbnail ? 'Ảnh chính' : 'Đặt làm chính'}</span>
+                  <button type="button" className="text-xs font-semibold text-rose-600" onClick={() => removeImage(image.id)}>Xóa</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="mt-3 flex h-24 items-center justify-center rounded-lg border border-dashed border-slate-200 bg-white text-xs text-slate-400">
+            Chưa có ảnh nào.
+          </div>
+        )}
       </div>
 
       <div className="mt-4 rounded-lg border border-slate-100 bg-slate-50 p-3">
@@ -1768,16 +1851,22 @@ function ProductCreationRequestDetailModal({ request, onClose, onApprove, onReje
             const attributes = getSnapshotAttributes(item)
             const productName = product.name ?? product.Name ?? item.productName
             const productType = product.productType ?? product.ProductType ?? item.productType
-            const imageUrl = getProductImageUrl(product)
+            const productImages = normalizeProductImages(product)
 
             return (
               <section key={item.clientKey || item.id || itemIndex} className="rounded-xl border border-slate-200 bg-white p-4">
-                {imageUrl ? (
-                  <div className="mb-4 flex items-start gap-3 rounded-lg border border-slate-100 bg-slate-50 p-3">
-                    <img src={imageUrl} alt={productName || 'Hình ảnh sản phẩm'} className="h-20 w-20 rounded-lg object-cover" />
-                    <div>
-                      <p className="text-xs font-bold uppercase text-slate-400">Hình ảnh sản phẩm</p>
-                      <p className="mt-1 break-all text-xs text-slate-500">{imageUrl}</p>
+                {productImages.length ? (
+                  <div className="mb-4 rounded-lg border border-slate-100 bg-slate-50 p-3">
+                    <p className="text-xs font-bold uppercase text-slate-400">Hình ảnh sản phẩm ({productImages.length})</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {productImages.map((image) => (
+                        <div key={image.id} className="relative">
+                          <img src={image.imageUrl} alt={image.altText || productName || 'Hình ảnh sản phẩm'} className="h-20 w-20 rounded-lg object-cover" />
+                          {image.isThumbnail ? (
+                            <span className="absolute left-1 top-1 rounded bg-[#356647] px-1 py-0.5 text-[9px] font-bold text-white">Đại diện</span>
+                          ) : null}
+                        </div>
+                      ))}
                     </div>
                   </div>
                 ) : null}
@@ -2044,6 +2133,14 @@ export default function ProductApprovalsPage() {
     setRows((current) => current.map((row, rowIndex) => (rowIndex === index ? { ...row, ...changes } : row)))
   }
 
+  function updateRowImages(index, updater) {
+    setRows((current) => current.map((row, rowIndex) => {
+      if (rowIndex !== index) return row
+      const currentImages = Array.isArray(row.images) ? row.images : []
+      return { ...row, images: updater(currentImages) }
+    }))
+  }
+
   function resetForm() {
     setActiveRequestId(null)
     setTitle('')
@@ -2069,8 +2166,9 @@ export default function ProductApprovalsPage() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  async function saveDraft({ showToast = true } = {}) {
-    const errors = validateForm(title, rows)
+  async function saveDraft({ showToast = true, rowsOverride } = {}) {
+    const effectiveRows = rowsOverride ?? rows
+    const errors = validateForm(title, effectiveRows)
     if (errors.length) {
       showError(errors[0])
       return null
@@ -2078,7 +2176,7 @@ export default function ProductApprovalsPage() {
 
     setIsSaving(true)
     try {
-      const payload = { title, warehouseNote, items: rows.map((row) => ({ clientKey: row.clientKey, product: toProductPayload(row) })) }
+      const payload = { title, warehouseNote, items: effectiveRows.map((row) => ({ clientKey: row.clientKey, product: toProductPayload(row) })) }
       const saved = activeRequestId
         ? await updateProductCreationRequest(activeRequestId, payload)
         : await createProductCreationRequest(payload)
@@ -2094,6 +2192,40 @@ export default function ProductApprovalsPage() {
     }
   }
 
+  async function uploadPendingImages() {
+    const pendingCount = rows.reduce(
+      (total, row) => total + (Array.isArray(row.images) ? row.images.filter((image) => image.pending && image.file).length : 0),
+      0,
+    )
+    if (pendingCount === 0) return rows
+
+    if (!hasCloudinaryUploadConfig()) {
+      showError('Chưa cấu hình Cloudinary nên không thể tải ảnh lên. Vui lòng cấu hình trước khi gửi biên bản.')
+      return null
+    }
+
+    // Đánh dấu tất cả ảnh pending là đang upload để UI phản hồi.
+    setRows((current) => current.map((row) => ({
+      ...row,
+      images: (Array.isArray(row.images) ? row.images : []).map((image) =>
+        image.pending && image.file ? { ...image, uploading: true } : image),
+    })))
+
+    const uploadedRows = await Promise.all(rows.map(async (row) => {
+      const images = Array.isArray(row.images) ? row.images : []
+      const nextImages = await Promise.all(images.map(async (image) => {
+        if (!image.pending || !image.file) return image
+        const imageUrl = await uploadImageToCloudinary(image.file)
+        if (image.previewUrl) URL.revokeObjectURL(image.previewUrl)
+        return { ...image, imageUrl, uploading: false, pending: false, file: null, previewUrl: null }
+      }))
+      return { ...row, images: reindexProductImages(nextImages) }
+    }))
+
+    setRows(uploadedRows)
+    return uploadedRows
+  }
+
   async function handleSubmit() {
     const submitErrors = validateForm(title, rows, { requireFinishedBom: true })
     if (submitErrors.length) {
@@ -2101,7 +2233,28 @@ export default function ProductApprovalsPage() {
       return
     }
 
-    const saved = await saveDraft({ showToast: false })
+    setIsSaving(true)
+    let uploadedRows
+    try {
+      uploadedRows = await uploadPendingImages()
+    } catch (error) {
+      // Rollback trạng thái uploading để người dùng thử lại.
+      setRows((current) => current.map((row) => ({
+        ...row,
+        images: (Array.isArray(row.images) ? row.images : []).map((image) =>
+          image.uploading && image.file ? { ...image, uploading: false } : image),
+      })))
+      showError(error.message || 'Không tải được ảnh lên Cloudinary. Vui lòng thử lại.')
+      setIsSaving(false)
+      return
+    }
+    if (!uploadedRows) {
+      setIsSaving(false)
+      return
+    }
+
+    setIsSaving(false)
+    const saved = await saveDraft({ showToast: false, rowsOverride: uploadedRows })
     if (!saved?.id) return
 
     setIsSaving(true)
@@ -2409,6 +2562,7 @@ export default function ProductApprovalsPage() {
                 materials={materials}
                 attributeNameOptions={attributeNameOptions}
                 onChange={(changes) => updateRow(index, changes)}
+                onImagesChange={(updater) => updateRowImages(index, updater)}
                 onRemove={() => setRows((current) => current.filter((_, rowIndex) => rowIndex !== index))}
                 canRemove={rows.length > 1}
               />

@@ -16,7 +16,6 @@ import { formatStockQuantity } from '../../products/utils/productDisplay.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import InventorySimulationBanner from '../components/InventorySimulationBanner.jsx'
 import StockAdjustmentRequestDetailPanel from '../components/StockAdjustmentRequestDetailPanel.jsx'
-import InventoryNavTabs from '../components/InventoryNavTabs.jsx'
 import { notifyInventoryStockChanged } from '../utils/inventoryStockEvents.js'
 import { fetchInventorySettings, fetchSkuStocks, fetchStoreSkuStocks } from '../services/inventoryStockApi.js'
 import {
@@ -738,7 +737,6 @@ function StockAdjustmentRequestsPage() {
           setSearchValue(value)
           setPage(1)
         }}
-        rightContent={<InventoryNavTabs />}
       />
 
       <InventorySimulationBanner simulateWarehouse={simulateWarehouse} warehouseView={canReview} />

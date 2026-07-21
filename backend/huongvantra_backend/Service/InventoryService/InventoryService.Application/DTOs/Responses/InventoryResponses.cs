@@ -102,6 +102,7 @@ public record StoreSkuStockResponse(
     string SkuCode,
     int WeightInGrams,
     int QuantityOnHand,
+    int WarehouseQuantityOnHand,
     int LowStockThreshold,
     int ShelfLowStockThreshold,
     DateTime UpdatedAt);
