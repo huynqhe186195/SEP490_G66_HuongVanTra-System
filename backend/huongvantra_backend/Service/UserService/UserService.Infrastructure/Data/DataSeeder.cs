@@ -14,20 +14,33 @@ public static class DataSeeder
 
     private static readonly (string RoleName, string Description, string[] Permissions)[] DefaultRoles =
     [
-        ("Sale", "Nhân viên kinh doanh",
-        [PermissionNames.CreateOrder, PermissionNames.ViewOrder, PermissionNames.ViewCustomer, PermissionNames.ViewAllCustomers]),
+        ("SalePos", "Nhân viên bán hàng quầy (POS)",
+        [PermissionNames.CreateOrder, PermissionNames.ViewOrder, PermissionNames.ViewCustomer]),
+        ("SaleCod", "Nhân viên bán / thu COD",
+        [PermissionNames.CreateOrder, PermissionNames.ViewOrder, PermissionNames.ViewCustomer, PermissionNames.VerifyCod]),
+        // Legacy: giữ để tương thích dữ liệu cũ; quyền gần SalePos (không VERIFY_COD).
+        ("Sale", "Nhân viên kinh doanh (legacy → dùng SalePos/SaleCod)",
+        [PermissionNames.CreateOrder, PermissionNames.ViewOrder, PermissionNames.ViewCustomer]),
         ("Warehouse", "Thủ kho Kho tổng",
         [PermissionNames.ViewOrder, PermissionNames.ManageCatalog]),
         ("Accountant", "Kế toán",
         [PermissionNames.ViewOrder, PermissionNames.ViewAllCustomers]),
         ("Manager", "Quản lý",
-        [PermissionNames.CreateOrder, PermissionNames.ViewOrder, PermissionNames.ViewAllCustomers, PermissionNames.ManageEmployee,
-         PermissionNames.CreateCustomer, PermissionNames.ViewCustomer])
+        [
+            PermissionNames.CreateOrder,
+            PermissionNames.ViewOrder,
+            PermissionNames.ViewAllCustomers,
+            PermissionNames.ManageEmployee,
+            PermissionNames.CreateCustomer,
+            PermissionNames.ViewCustomer,
+            PermissionNames.VerifyCod
+        ])
     ];
 
     private static readonly (string Username, string FullName, string Department, string RoleName)[] DemoUsers =
     [
-        ("sale01", "Nguyen Van Sale", "Sales", "Sale"),
+        ("sale01", "Nguyen Van Sale Quay", "Sales", "SalePos"),
+        ("sale_cod01", "Tran Thi Sale COD", "Sales", "SaleCod"),
         ("manager01", "Tran Thi Manager", "Operations", "Manager"),
         ("accountant01", "Le Thi Ke Toan", "Accounting", "Accountant")
     ];
@@ -43,6 +56,8 @@ public static class DataSeeder
 
         foreach (var (username, fullName, department, roleName) in DemoUsers)
             await SeedDemoUserAsync(context, username, fullName, department, roleName);
+
+        await SyncDemoUserPrimaryRoleAsync(context);
     }
 
     private static async Task SeedPermissionsAsync(UserDbContext context)
@@ -134,6 +149,40 @@ public static class DataSeeder
         if (role is null) return;
 
         await SeedUserAsync(context, username, fullName, department, role, 10_000_000);
+    }
+
+    /// <summary>
+    /// User đã tồn tại (seed cũ) được gán lại role chuẩn: sale01→SalePos, sale_cod01→SaleCod.
+    /// </summary>
+    private static async Task SyncDemoUserPrimaryRoleAsync(UserDbContext context)
+    {
+        var desired = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["sale01"] = "SalePos",
+            ["sale_cod01"] = "SaleCod",
+            ["manager01"] = "Manager",
+            ["accountant01"] = "Accountant",
+        };
+
+        foreach (var (username, roleName) in desired)
+        {
+            var user = await context.Users
+                .Include(u => u.UserRoles)
+                .FirstOrDefaultAsync(u => u.Username == username && !u.IsDeleted);
+            if (user is null) continue;
+
+            var role = await context.Roles.FirstOrDefaultAsync(r => r.RoleName == roleName && !r.IsDeleted);
+            if (role is null) continue;
+
+            var hasRole = user.UserRoles.Any(ur => ur.RoleId == role.Id);
+            if (hasRole && user.UserRoles.Count == 1) continue;
+
+            user.UserRoles.Clear();
+            user.UserRoles.Add(new UserRole { UserId = user.Id, RoleId = role.Id });
+        }
+
+        if (context.ChangeTracker.HasChanges())
+            await context.SaveChangesAsync();
     }
 
     private static async Task SeedUserAsync(

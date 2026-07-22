@@ -352,7 +352,7 @@ public class PosTransferPaymentLogic(
 
     private static void EnsureCanAccess(Order order, OrderAccessContext access)
     {
-        if (!access.CanAccessOrder(order.EmployeeId))
+        if (!access.CanAccessOrder(order))
             throw new OrderForbiddenException();
     }
 

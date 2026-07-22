@@ -11,6 +11,7 @@ public static class PermissionNames
     public const string ManageUser = "MANAGE_USER";
     public const string ManageRole = "MANAGE_ROLE";
     public const string ManageCatalog = "MANAGE_CATALOG";
+    public const string VerifyCod = "VERIFY_COD";
 
     public static readonly string[] All =
     [
@@ -22,6 +23,7 @@ public static class PermissionNames
         ManageEmployee,
         ManageUser,
         ManageRole,
-        ManageCatalog
+        ManageCatalog,
+        VerifyCod
     ];
 }

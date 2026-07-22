@@ -4,6 +4,9 @@ import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
 import { showError } from '../../../app/toast.js'
+import { canAccessModule } from '../../../app/navigation.js'
+import { loadAuthSession } from '../../auth/services/authSession.js'
+import { canViewOnlyCodOrders } from '../../auth/utils/permissions.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import OrderCustomerCell from '../components/OrderCustomerCell.jsx'
 import { fetchOrders, fetchReturns } from '../services/ordersApi.js'
@@ -24,14 +27,17 @@ const VIEW_TABS = [
 ]
 
 function ExchangeOrdersPage() {
+  const session = loadAuthSession()
+  const codOnly = canViewOnlyCodOrders(session)
+  const canOpenGeneralOrders = canAccessModule(session, 'orders')
   const [searchParams, setSearchParams] = useSearchParams()
   const viewTab = searchParams.get('tab') === 'exchange' ? 'exchange' : 'returns'
 
   const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('')
-  const [channel, setChannel] = useState(() => searchParams.get('channel') || '')
-  const [returnChannel, setReturnChannel] = useState(() => searchParams.get('channel') || '')
+  const [channel, setChannel] = useState(() => (codOnly ? 'COD' : (searchParams.get('channel') || '')))
+  const [returnChannel, setReturnChannel] = useState(() => (codOnly ? 'COD' : (searchParams.get('channel') || '')))
   const [orders, setOrders] = useState([])
   const [returns, setReturns] = useState([])
   const [totalCount, setTotalCount] = useState(0)
@@ -44,21 +50,21 @@ function ExchangeOrdersPage() {
       search: search.trim() || undefined,
       status: status || undefined,
       orderKind: 'Exchange',
-      channel: channel || undefined,
+      channel: codOnly ? 'COD' : (channel || undefined),
       page,
       pageSize,
     }),
-    [search, status, channel, page, pageSize],
+    [search, status, channel, page, pageSize, codOnly],
   )
 
   const returnQueryParams = useMemo(
     () => ({
       search: search.trim() || undefined,
-      channel: returnChannel || undefined,
+      channel: codOnly ? 'COD' : (returnChannel || undefined),
       page,
       pageSize,
     }),
-    [search, returnChannel, page, pageSize],
+    [search, returnChannel, page, pageSize, codOnly],
   )
 
   const hasActiveFilters =
@@ -130,19 +136,32 @@ function ExchangeOrdersPage() {
         title="Trả / đổi hàng"
         description={
           viewTab === 'returns'
-            ? 'Danh sách phiếu trả hàng — áp dụng chung cho mọi kênh bán.'
-            : 'Đơn đổi phát sinh khi khách trả hàng và mua/đổi sản phẩm khác.'
+            ? codOnly
+              ? 'Phiếu trả hàng của đơn COD.'
+              : 'Danh sách phiếu trả hàng — áp dụng chung cho mọi kênh bán.'
+            : codOnly
+              ? 'Đơn đổi phát sinh từ đơn COD.'
+              : 'Đơn đổi phát sinh khi khách trả hàng và mua/đổi sản phẩm khác.'
         }
         searchPlaceholder={viewTab === 'returns' ? 'Tìm TH-..., HVT-..., tên khách...' : 'Tìm mã đơn, tên khách...'}
         searchValue={searchInput}
         onSearchChange={setSearchInput}
         rightContent={
-          <Link
-            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50"
-            to="/orders"
-          >
-            ← Đơn bán hàng
-          </Link>
+          canOpenGeneralOrders ? (
+            <Link
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50"
+              to="/orders"
+            >
+              ← Đơn bán hàng
+            </Link>
+          ) : (
+            <Link
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50"
+              to="/orders/cod"
+            >
+              ← Quản lý đơn COD
+            </Link>
+          )
         }
       />
 
@@ -169,6 +188,7 @@ function ExchangeOrdersPage() {
 
         {viewTab === 'exchange' ? (
         <div className="flex flex-wrap items-end gap-4">
+          {!codOnly ? (
           <div>
             <span className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-400">Kênh đổi hàng</span>
             <div className="inline-flex rounded-xl border border-slate-200 bg-[#fbf9f1] p-1">
@@ -194,6 +214,11 @@ function ExchangeOrdersPage() {
               })}
             </div>
           </div>
+          ) : (
+            <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">
+              Chỉ hiển thị trả/đổi từ đơn <strong>COD</strong>.
+            </p>
+          )}
 
           <label className="min-w-[180px] max-w-xs flex-1">
             <span className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-400">Trạng thái</span>
@@ -213,7 +238,7 @@ function ExchangeOrdersPage() {
             </select>
           </label>
 
-          {hasActiveFilters ? (
+          {hasActiveFilters && !codOnly ? (
             <button
               type="button"
               onClick={() => {
@@ -229,6 +254,7 @@ function ExchangeOrdersPage() {
         </div>
         ) : (
           <div className="flex flex-wrap items-end gap-4">
+            {!codOnly ? (
             <div>
               <span className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-400">
                 Hóa đơn gốc
@@ -256,7 +282,12 @@ function ExchangeOrdersPage() {
                 })}
               </div>
             </div>
-            {hasActiveFilters ? (
+            ) : (
+              <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">
+                Chỉ hiển thị phiếu trả từ đơn <strong>COD</strong>.
+              </p>
+            )}
+            {hasActiveFilters && !codOnly ? (
               <button
                 type="button"
                 onClick={() => {

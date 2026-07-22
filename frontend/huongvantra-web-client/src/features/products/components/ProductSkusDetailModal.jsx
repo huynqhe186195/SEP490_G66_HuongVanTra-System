@@ -9,7 +9,12 @@ import {
   formatWeightGrams,
   getProductStatusMeta,
 } from '../utils/productDisplay.js'
-import { fetchSkuStocks, buildWarehouseStockBySkuIdMap, buildStockBySkuIdMap } from '../../inventory/services/inventoryStockApi.js'
+import {
+  fetchSkuStocks,
+  fetchStoreSkuStocks,
+  buildWarehouseStockBySkuIdMap,
+  buildStockBySkuIdMap,
+} from '../../inventory/services/inventoryStockApi.js'
 import { INVENTORY_STOCK_CHANGED_EVENT } from '../../inventory/utils/inventoryStockEvents.js'
 
 function ProductSkusDetailModal({
@@ -29,7 +34,7 @@ function ProductSkusDetailModal({
   useEffect(() => {
     async function refreshStocks() {
       try {
-        const stocks = await fetchSkuStocks()
+        const stocks = warehouseStockView ? await fetchSkuStocks() : await fetchStoreSkuStocks()
         setRefreshedStockBySkuId(
           warehouseStockView ? buildWarehouseStockBySkuIdMap(stocks) : buildStockBySkuIdMap(stocks),
         )

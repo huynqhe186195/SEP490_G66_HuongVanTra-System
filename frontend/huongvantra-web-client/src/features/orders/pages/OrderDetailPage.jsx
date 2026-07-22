@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
-import { canCreateOrder } from '../../auth/utils/permissions.js'
+import { canCreateOrder, canVerifyCodPayment } from '../../auth/utils/permissions.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import CodVerifyModal from '../components/CodVerifyModal.jsx'
 import ConfirmDialog from '../../../components/shared/ConfirmDialog.jsx'
@@ -55,7 +55,9 @@ function OrderDetailPage() {
   const [searchParams] = useSearchParams()
   const fromCod = searchParams.get('from') === 'cod'
   const fromExchange = searchParams.get('from') === 'exchange'
-  const canManage = canCreateOrder(loadAuthSession())
+  const session = loadAuthSession()
+  const canManage = canCreateOrder(session)
+  const canCollectCod = canVerifyCodPayment(session)
 
   const [order, setOrder] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -397,7 +399,7 @@ function OrderDetailPage() {
                     Hoàn tất đơn
                   </button>
                 ) : null}
-                {canVerifyCod(order) ? (
+                {canCollectCod && canVerifyCod(order) ? (
                   <button
                     type="button"
                     disabled={isSaving}

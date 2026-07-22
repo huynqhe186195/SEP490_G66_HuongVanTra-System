@@ -114,22 +114,45 @@ public class InventoryLogic(
 
     public async Task HandleOrderPlacedAsync(OrderPlacedEvent message, CancellationToken ct = default)
     {
-        if (await _processedEvents.ExistsAsync(OrderPlacedEventType, message.OrderId, ct))
-            return;
+        var paymentStatus = (message.OrderStatus ?? string.Empty).Trim().ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(paymentStatus))
+            paymentStatus = "pendingpayment";
 
-        if (await _queueRepo.GetByOrderIdAsync(message.OrderId, ct) != null)
+        var existingQueue = await _queueRepo.GetByOrderIdAsync(message.OrderId, ct);
+        if (existingQueue != null)
         {
-            await _processedEvents.AddAsync(OrderPlacedEventType, message.OrderId, ct);
-            await _queueRepo.SaveChangesAsync(ct);
+            if (!string.Equals(existingQueue.OrderPaymentStatus, paymentStatus, StringComparison.Ordinal))
+            {
+                existingQueue.OrderPaymentStatus = paymentStatus;
+                await _queueRepo.SaveChangesAsync(ct);
+            }
+
+            if (!await _processedEvents.ExistsAsync(OrderPlacedEventType, message.OrderId, ct))
+            {
+                await _processedEvents.AddAsync(OrderPlacedEventType, message.OrderId, ct);
+                await _queueRepo.SaveChangesAsync(ct);
+            }
+
+            // Đơn đã thanh toán/hoàn tất → tự trừ tồn quầy (trước đây chỉ tạo queue, không confirm).
+            if (IsPaidOrderPaymentStatus(paymentStatus)
+                && existingQueue.QueueStatus == QueueStatus.Waiting
+                && !existingQueue.IsDeducted)
+            {
+                await TryAutoConfirmQueueAsync(existingQueue.Id, ct);
+            }
+
             return;
         }
+
+        if (await _processedEvents.ExistsAsync(OrderPlacedEventType, message.OrderId, ct))
+            return;
 
         var queue = new StockDeductQueue
         {
             Id = Guid.NewGuid(),
             OrderId = message.OrderId,
             OrderCode = message.OrderCode,
-            OrderPaymentStatus = message.OrderStatus.ToLowerInvariant(),
+            OrderPaymentStatus = paymentStatus,
             OrderStockStatus = "pending_deduct",
             QueueStatus = QueueStatus.Waiting,
             TotalAmount = message.TotalAmount,
@@ -152,6 +175,14 @@ public class InventoryLogic(
         await _processedEvents.AddAsync(OrderPlacedEventType, message.OrderId, ct);
         await _queueRepo.SaveChangesAsync(ct);
 
+        if (IsPaidOrderPaymentStatus(paymentStatus))
+            await TryAutoConfirmQueueAsync(queue.Id, ct);
+    }
+
+    private static bool IsPaidOrderPaymentStatus(string? status)
+    {
+        var key = (status ?? string.Empty).Trim().ToLowerInvariant();
+        return key is "completed" or "success" or "paid";
     }
 
     private async Task TryAutoConfirmQueueAsync(Guid queueId, CancellationToken ct)

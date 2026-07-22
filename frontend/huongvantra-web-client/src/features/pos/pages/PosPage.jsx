@@ -57,9 +57,11 @@ import {
 import ResizableSplitPane from '../../../components/shared/ResizableSplitPane.jsx'
 import LoadingIndicator from '../../../components/shared/LoadingIndicator.jsx'
 import { useNetworkStatus } from '../../../hooks/useNetworkStatus.js'
+import { loadAuthSession } from '../../auth/services/authSession.js'
+import { canUsePosCodMode, canUsePosCounterMode } from '../../auth/utils/permissions.js'
 import CustomBundlePanel from '../components/CustomBundlePanel.jsx'
 
-const SALES_MODES = [
+const ALL_SALES_MODES = [
     { id: "counter", label: "Bán trực tiếp", icon: "storefront" },
     { id: "takeaway", label: "Bán COD", icon: "local_shipping" },
 ];
@@ -89,13 +91,13 @@ function createWorkspace(mode = "counter") {
     const empty = () => createEmptySession(mode);
     if (mode === "takeaway") {
         return {
-            tabs: [{ id: 1, label: "Hóa đơn 1" }],
+            tabs: [{ id: 1, label: "Khách lẻ" }],
             activeTabId: 1,
             sessions: { 1: empty() },
         };
     }
     return {
-        tabs: [{ id: 1, label: "Hóa đơn 1" }],
+        tabs: [{ id: 1, label: "Khách lẻ" }],
         activeTabId: 1,
         sessions: { 1: empty() },
     };
@@ -218,11 +220,34 @@ function createEmptySession(mode = "counter") {
 
 function PosPage() {
   const navigate = useNavigate()
-  const [salesMode, setSalesMode] = useState('counter')
+  const authSession = loadAuthSession()
+  const allowedSalesModes = useMemo(() => {
+    const allowCounter = canUsePosCounterMode(authSession)
+    const allowCod = canUsePosCodMode(authSession)
+    return ALL_SALES_MODES.filter((mode) => {
+      if (mode.id === 'counter') return allowCounter
+      if (mode.id === 'takeaway') return allowCod
+      return false
+    })
+  }, [authSession])
+  const [salesMode, setSalesMode] = useState(() => {
+    const session = loadAuthSession()
+    if (canUsePosCounterMode(session)) return 'counter'
+    if (canUsePosCodMode(session)) return 'takeaway'
+    return 'counter'
+  })
   const [workspaceByMode, setWorkspaceByMode] = useState({
     counter: createWorkspace('counter'),
     takeaway: createWorkspace('takeaway'),
   })
+
+  useEffect(() => {
+    if (allowedSalesModes.length === 0) return
+    if (!allowedSalesModes.some((mode) => mode.id === salesMode)) {
+      setSalesMode(allowedSalesModes[0].id)
+    }
+  }, [allowedSalesModes, salesMode])
+
   const [customerSearchResults, setCustomerSearchResults] = useState([])
   const [isCustomerSearchLoading, setIsCustomerSearchLoading] = useState(false)
   const [openModal, setOpenModal] = useState(null)
@@ -407,7 +432,7 @@ function PosPage() {
     ? 0
     : Number(selectedCustomer?.tierDiscountPercent || 0)
   const canUseVipManualAdjustments = isVipCustomerType(selectedCustomer?.customerType)
-  const canUseOrderDiscount = true
+  const canUseOrderDiscount = canUseVipManualAdjustments
   const effectiveOrderDiscountPercent = canUseOrderDiscount ? orderDiscountPercent : 0
   const effectiveOrderDiscountAmountFixed = canUseOrderDiscount ? orderDiscountAmountFixed : 0
   const {
@@ -724,7 +749,7 @@ function PosPage() {
 
     const addTab = () => {
         const nextId = tabs.length ? Math.max(...tabs.map((tab) => tab.id)) + 1 : 1;
-        const nextTab = { id: nextId, label: `Hóa đơn ${nextId}` };
+        const nextTab = { id: nextId, label: `Khách lẻ` };
         patchWorkspace((ws) => ({
             ...ws,
             tabs: [...ws.tabs, nextTab],
@@ -1159,8 +1184,9 @@ function PosPage() {
     const hasCustomerSelected = Boolean(selectedCustomer?.customerId);
     const hasShippingAddress = Boolean(shippingAddress?.trim());
     const isZeroAmountSale = total === 0 && grossSubtotal > 0;
-    const canPayCash = hasCartItems && hasCustomerSelected;
-    const canPayTransfer = hasCartItems && hasCustomerSelected && total > 0;
+    // Quầy: cho phép khách vãng lai (không mã KH). COD/takeaway vẫn bắt buộc KH + địa chỉ.
+    const canPayCash = hasCartItems && (hasCustomerSelected || !isTakeaway);
+    const canPayTransfer = hasCartItems && (hasCustomerSelected || !isTakeaway) && total > 0;
     const canPayTakeaway = hasCartItems && hasCustomerSelected && hasShippingAddress && (isTransferPayment ? total > 0 : true);
     const canPay = isTakeaway ? canPayTakeaway && !isSubmitting : (isTransferPayment ? canPayTransfer : canPayCash) && !isSubmitting;
     const normalizedPromoSearch = promoCodeInput.trim().toUpperCase();
@@ -1232,13 +1258,17 @@ function PosPage() {
 
   const buildOrderPayload = (method, amount) => {
     const storeId = resolvePosStoreId()
-    const manualDiscount = Math.round(
-      itemDiscountTotal + orderDiscountAmount + membershipDiscountAmount,
-    )
+    // Chiết khấu đơn / dòng VIP chỉ gửi khi KH VIP. % hạng thành viên vẫn gửi riêng.
+    const vipManualDiscount = canUseVipManualAdjustments
+      ? itemDiscountTotal + orderDiscountAmount
+      : 0
+    const manualDiscount = Math.round(vipManualDiscount + membershipDiscountAmount)
     return {
       storeId,
-      customerId: selectedCustomer.customerId,
-      customerSnapshotName: formatCustomerOrderSnapshot(selectedCustomer),
+      customerId: selectedCustomer?.customerId || null,
+      customerSnapshotName: selectedCustomer
+        ? formatCustomerOrderSnapshot(selectedCustomer)
+        : 'Khách lẻ',
       promotionId: appliedPromotion?.id ?? null,
       promotionCode: appliedPromotion?.promoCode ?? null,
       manualDiscount,
@@ -1440,6 +1470,7 @@ function PosPage() {
         }
 
         resetCheckoutState();
+        setCatalogReloadKey((key) => key + 1);
         await printReceiptSequence(receipts);
     };
 
@@ -1587,8 +1618,13 @@ function PosPage() {
     };
 
     const handlePayment = async () => {
-        if (!hasCustomerSelected) {
-            showError("Vui lòng chọn hoặc thêm khách hàng trước khi thanh toán.");
+        if (isTakeaway && !hasCustomerSelected) {
+            showError("Vui lòng chọn hoặc thêm khách hàng trước khi tạo đơn COD/giao hàng.");
+            return;
+        }
+
+        if (!hasCustomerSelected && (orderDiscountAmount > 0 || cartItems.some((item) => item.isGift || Number(item.lineDiscountValue) > 0))) {
+            showError("Khách vãng lai không dùng chiết khấu/quà. Bỏ chiết khấu hoặc chọn khách VIP.");
             return;
         }
 
@@ -1730,6 +1766,7 @@ function PosPage() {
 
     const selectCustomer = (customer) => {
         const keepVipAdjustments = isVipCustomerType(customer?.customerType);
+        const label = String(customer?.fullName || '').trim()
         updateActiveSession((prev) => ({
             ...prev,
             selectedCustomer: customer,
@@ -1748,6 +1785,16 @@ function PosPage() {
                 ),
             }),
         }));
+        if (label) {
+            patchWorkspace((ws) => ({
+                ...ws,
+                tabs: ws.tabs.map((tab) =>
+                    tab.id === ws.activeTabId
+                        ? { ...tab, label: label.length > 20 ? `${label.slice(0, 18)}…` : label }
+                        : tab,
+                ),
+            }));
+        }
         setCustomerSearchResults([]);
         setSavedShippingAddresses([]);
         setUseCustomShippingAddress(false);
@@ -1917,8 +1964,8 @@ function PosPage() {
                                         return (
                                             <div
                                                 key={item.sku}
-                                                className="relative flex flex-nowrap items-center gap-2 rounded-xl border border-[#c1c9c0]/50 bg-[#fbf9f1] px-2.5 py-2.5 sm:gap-3 sm:px-3 sm:py-3">
-                                                <div className="min-w-0 flex-1 overflow-hidden">
+                                                className="relative grid grid-cols-[minmax(0,1fr)_7.75rem_auto] items-center gap-2 rounded-xl border border-[#c1c9c0]/50 bg-[#fbf9f1] px-2.5 py-2.5 sm:gap-3 sm:px-3 sm:py-3">
+                                                <div className="min-w-0 overflow-hidden">
                                                     <p className="truncate text-sm font-semibold leading-snug text-[#1b1c17] sm:text-base" title={item.name}>
                                                         {item.name}
                                                         {item.isGift ?
@@ -1939,7 +1986,7 @@ function PosPage() {
                                                     </p>
                                                 </div>
 
-                                                <div className="flex shrink-0 items-center overflow-hidden rounded-lg border border-[#c1c9c0] text-sm sm:text-base">
+                                                <div className="flex w-[7.75rem] shrink-0 items-center justify-self-center overflow-hidden rounded-lg border border-[#c1c9c0] text-sm sm:text-base">
                                                     <button
                                                         type="button"
                                                         onClick={() => updateQuantity(item.sku, "dec")}
@@ -1950,7 +1997,7 @@ function PosPage() {
                                                         type="text"
                                                         inputMode="decimal"
                                                         aria-label={`Số lượng ${item.name}`}
-                                                        className="w-[2.75rem] border-x border-[#c1c9c0] bg-white px-0.5 py-1 text-center text-sm font-semibold outline-none focus:bg-[#f6f4ec] focus:ring-1 focus:ring-[#356647]/30 sm:w-[3.25rem] sm:px-1 sm:text-base"
+                                                        className="w-[2.75rem] border-x border-[#c1c9c0] bg-white px-0.5 py-1 text-center text-sm font-semibold tabular-nums outline-none focus:bg-[#f6f4ec] focus:ring-1 focus:ring-[#356647]/30 sm:w-[3.25rem] sm:px-1 sm:text-base"
                                                         value={item.qty}
                                                         onChange={(event) => setLineQuantity(item.sku, event.target.value)}
                                                     />
@@ -1962,7 +2009,7 @@ function PosPage() {
                                                     </button>
                                                 </div>
 
-                                                <div className="relative shrink-0">
+                                                <div className="relative flex shrink-0 items-center justify-end">
                                                     {canUseVipManualAdjustments ?
                                                         <button
                                                             type="button"
@@ -2106,6 +2153,12 @@ function PosPage() {
                                                 orderDiscountPercent: 0,
                                                 orderDiscountAmountFixed: 0,
                                             });
+                                            patchWorkspace((ws) => ({
+                                                ...ws,
+                                                tabs: ws.tabs.map((tab) =>
+                                                    tab.id === ws.activeTabId ? { ...tab, label: "Khách lẻ" } : tab,
+                                                ),
+                                            }));
                                         }}
                                         className="shrink-0 rounded-lg border border-[#c1c9c0] px-2 py-1 text-xs font-semibold text-[#414942] hover:bg-[#f6f4ec]">
                                         Đổi
@@ -2214,6 +2267,46 @@ function PosPage() {
                             :   null}
                         </div>
                     </div>
+
+                    {(selectedCategoryIds.length > 0 || priceFilter) ? (
+                        <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-[#c1c9c0]/40 bg-[#f6f4ec] px-3 py-2">
+                            {selectedCategoryIds.map((id) => {
+                                const category = posCategories.find((item) => Number(item.id) === Number(id))
+                                const name = category?.name || `DM ${id}`
+                                return (
+                                    <button
+                                        key={`cat-${id}`}
+                                        type="button"
+                                        onClick={() => setSelectedCategoryIds((prev) => prev.filter((item) => Number(item) !== Number(id)))}
+                                        className="inline-flex items-center gap-1 rounded-full border border-[#356647]/30 bg-white px-2.5 py-1 text-xs font-semibold text-[#356647]"
+                                    >
+                                        {name}
+                                        <span className="material-symbols-outlined text-[14px]">close</span>
+                                    </button>
+                                )
+                            })}
+                            {priceFilter ? (
+                                <button
+                                    type="button"
+                                    onClick={() => setPriceFilter('')}
+                                    className="inline-flex items-center gap-1 rounded-full border border-[#356647]/30 bg-white px-2.5 py-1 text-xs font-semibold text-[#356647]"
+                                >
+                                    {selectedPriceFilterLabel || 'Giá'}
+                                    <span className="material-symbols-outlined text-[14px]">close</span>
+                                </button>
+                            ) : null}
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setSelectedCategoryIds([])
+                                    setPriceFilter('')
+                                }}
+                                className="ml-auto text-xs font-semibold text-[#717971] underline hover:text-[#356647]"
+                            >
+                                Xóa lọc
+                            </button>
+                        </div>
+                    ) : null}
 
                     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                         <div className="flex min-h-0 flex-1 flex-col bg-white">
@@ -2457,7 +2550,7 @@ function PosPage() {
             <footer className="shrink-0 border-t border-[#d8d6ce] bg-white px-4">
                 <div className="flex items-end justify-between gap-4">
                     <div className="flex items-end gap-8">
-                        {SALES_MODES.map((mode) => {
+                        {allowedSalesModes.map((mode) => {
                             const isActive = salesMode === mode.id;
                             return (
                                 <button
@@ -2495,6 +2588,7 @@ function PosPage() {
 
             <AddCustomerModal
                 isOpen={openModal === "customer"}
+                initialPhone={customerSearchValue}
                 onClose={() => setOpenModal(null)}
                 onSaved={(customer) => {
                     selectCustomer(customer);

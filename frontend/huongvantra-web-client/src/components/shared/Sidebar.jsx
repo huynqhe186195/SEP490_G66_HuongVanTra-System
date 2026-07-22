@@ -8,6 +8,7 @@ import {
 } from '../../features/auth/services/authSession.js'
 import {
   canAccessModule,
+  canAccessPath,
   isNavigationChildActive,
   isNavigationItemActive,
 } from '../../app/navigation.js'
@@ -176,10 +177,13 @@ function Sidebar({
         : 'text-white/80 hover:bg-white/10 hover:text-white',
     ].join(' ')
 
-  const handleNavClick = (event, module) => {
+  const handleNavClick = (event, path, module) => {
     try {
       const session = loadAuthSession()
-      if (!canAccessModule(session, module)) {
+      const allowed = path
+        ? canAccessPath(session, path)
+        : canAccessModule(session, module)
+      if (!allowed) {
         event.preventDefault()
         showError('Bạn không có quyền truy cập tab này.')
         return
@@ -349,7 +353,7 @@ function Sidebar({
                             key={child.path}
                             to={child.path}
                             onClick={(event) => {
-                              handleNavClick(event, item.module)
+                              handleNavClick(event, child.path, item.module)
                               setOpenFlyoutPath(null)
                             }}
                             className={childNavClass(childActive)}
@@ -410,7 +414,7 @@ function Sidebar({
                         <NavLink
                           key={child.path}
                           to={child.path}
-                          onClick={(event) => handleNavClick(event, item.module)}
+                          onClick={(event) => handleNavClick(event, child.path, item.module)}
                           className={childNavClass(childActive)}
                         >
                           <span
@@ -433,7 +437,7 @@ function Sidebar({
               key={item.path}
               to={item.path}
               title={isCompact ? item.label : undefined}
-              onClick={(event) => handleNavClick(event, item.module)}
+              onClick={(event) => handleNavClick(event, item.path, item.module)}
               className={navLinkClass(itemActive)}
             >
               {isCompact ? (

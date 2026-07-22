@@ -12,6 +12,9 @@ public static class PermissionNames
     public const string ManageRole = "MANAGE_ROLE";
     public const string ManageCatalog = "MANAGE_CATALOG";
 
+    /// <summary>Tạo/theo dõi/xác nhận thu COD — SaleCod, Manager, Admin.</summary>
+    public const string VerifyCod = "VERIFY_COD";
+
     /// <summary>Xem danh sách/chi tiết KH — Sale (VIEW_CUSTOMER) hoặc Manager/Kế toán (VIEW_ALL_CUSTOMERS).</summary>
     public const string ViewCustomerAccess = "VIEW_CUSTOMER_ACCESS";
 
@@ -34,6 +37,7 @@ public static class PermissionNames
         ManageEmployee,
         ManageUser,
         ManageRole,
-        ManageCatalog
+        ManageCatalog,
+        VerifyCod
     ];
 }
