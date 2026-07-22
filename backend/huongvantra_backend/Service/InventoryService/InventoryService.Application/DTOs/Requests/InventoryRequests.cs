@@ -162,3 +162,17 @@ public record CreateStocktakeRequest(
     List<StocktakeItemRequest> Items);
 
 public record ReviewStocktakeRequest(string? Reason);
+
+public record CreateSupplierRequest(
+    string Name,
+    string? Phone,
+    string? Email,
+    string? Address,
+    string? Note);
+
+public record UpdateSupplierRequest(
+    string Name,
+    string? Phone,
+    string? Email,
+    string? Address,
+    string? Note);

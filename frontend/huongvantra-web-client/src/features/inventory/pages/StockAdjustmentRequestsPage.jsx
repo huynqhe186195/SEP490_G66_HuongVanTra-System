@@ -224,13 +224,16 @@ function CreateStockRequestModal({ onClose, onSubmitted }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-      <div className="flex max-h-[min(90dvh,720px)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl">
+      <div
+        className="flex max-h-[min(90dvh,720px)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl"
+        style={{ fontFamily: "'Times New Roman', Times, serif" }}
+      >
         <div className="flex shrink-0 items-start justify-between border-b border-slate-100 px-6 py-4">
           <div>
-            <h2 className="text-lg font-bold text-slate-800">Tạo yêu cầu bổ sung tồn quầy</h2>
-            <p className="mt-1 text-sm text-slate-500">Kho tổng cấp hàng cho Tồn quầy POS mặc định. Không chọn chi nhánh/cửa hàng.</p>
+            <h2 className="text-lg font-bold text-slate-900">Tạo yêu cầu bổ sung tồn quầy</h2>
+            <p className="mt-1 text-sm text-slate-700">Kho tổng cấp hàng cho Tồn quầy POS mặc định. Không chọn chi nhánh/cửa hàng.</p>
           </div>
-          <button type="button" onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600">
+          <button type="button" onClick={onClose} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-700">
             <span className="material-symbols-outlined text-[22px]">close</span>
           </button>
         </div>
@@ -238,7 +241,7 @@ function CreateStockRequestModal({ onClose, onSubmitted }) {
         <form className="flex min-h-0 flex-1 flex-col" onSubmit={handleSubmit}>
           <div className="custom-scrollbar min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4">
             <label className="block space-y-2">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Tìm SKU / sản phẩm</span>
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-700">Tìm SKU / sản phẩm</span>
               <input
                 value={search}
                 onChange={(event) => {
@@ -247,10 +250,10 @@ function CreateStockRequestModal({ onClose, onSubmitted }) {
                   setSkuHasMore(false)
                   setSkuTotalCount(null)
                 }}
-                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-[#538463]"
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-[#538463]"
                 placeholder="VD: FG-TRA-NHAI-50G hoặc tên sản phẩm"
               />
-              <span className="block text-xs text-slate-500">
+              <span className="block text-xs text-slate-700">
                 Nhập mã SKU, tên sản phẩm hoặc tên biến thể để tìm trong toàn bộ danh sách. Có thể nhập không dấu, ví dụ: tra nhai.
               </span>
             </label>
@@ -258,40 +261,40 @@ function CreateStockRequestModal({ onClose, onSubmitted }) {
             <div className="grid gap-3 sm:grid-cols-[1fr_auto_1fr] sm:items-stretch">
               <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 p-4">
                 <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-700">Kho xuất</p>
-                <p className="mt-1 text-sm font-bold text-slate-800">Kho tổng</p>
-                <p className="mt-1 text-xs text-slate-500">WarehouseQuantityOnHand</p>
+                <p className="mt-1 text-sm font-bold text-slate-900">Kho tổng</p>
+                <p className="mt-1 text-xs text-slate-700">WarehouseQuantityOnHand</p>
               </div>
-              <div className="hidden items-center justify-center px-1 text-slate-400 sm:flex">
+              <div className="hidden items-center justify-center px-1 text-slate-500 sm:flex">
                 <span className="material-symbols-outlined text-[24px]">arrow_forward</span>
               </div>
               <div className="rounded-xl border border-sky-100 bg-sky-50/80 p-4">
                 <p className="text-[10px] font-bold uppercase tracking-wide text-sky-700">Kho nhận</p>
-                <p className="mt-1 text-sm font-bold text-slate-800">Tồn quầy POS mặc định</p>
-                <p className="mt-1 text-xs text-slate-500">QuantityOnHand</p>
+                <p className="mt-1 text-sm font-bold text-slate-900">Tồn quầy POS mặc định</p>
+                <p className="mt-1 text-xs text-slate-700">QuantityOnHand</p>
               </div>
             </div>
 
             <div className="rounded-xl border border-slate-100">
               <div className="flex flex-wrap items-start justify-between gap-2 border-b border-slate-100 bg-slate-50 px-4 py-3">
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                  <p className="text-xs font-bold uppercase tracking-wide text-slate-700">
                     {isSearchingSku ? 'Kết quả SKU' : 'SKU gợi ý'}
                   </p>
-                  <p className="mt-1 text-xs font-medium normal-case tracking-normal text-slate-500">
+                  <p className="mt-1 text-xs font-medium normal-case tracking-normal text-slate-600">
                     {isSearchingSku
                       ? 'Kết quả được tìm theo mã SKU, tên sản phẩm và tên biến thể.'
                       : 'Đang hiển thị các SKU gợi ý. Hãy tìm kiếm để xem thêm SKU khác.'}
                   </p>
                 </div>
-                <span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-slate-500">
+                <span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-slate-600">
                   {skuListCountText}
                 </span>
               </div>
               <div className="max-h-56 overflow-y-auto custom-scrollbar">
                 {isLoading ? (
-                  <p className="px-4 py-6 text-sm text-slate-500">Đang tải SKU...</p>
+                  <p className="px-4 py-6 text-sm text-slate-600">Đang tải SKU...</p>
                 ) : skuOptions.length === 0 ? (
-                  <p className="px-4 py-6 text-sm text-slate-500">
+                  <p className="px-4 py-6 text-sm text-slate-600">
                     {isSearchingSku
                       ? 'Không tìm thấy SKU phù hợp. Hãy thử nhập mã SKU hoặc tên sản phẩm khác.'
                       : 'Chưa có SKU gợi ý để hiển thị.'}
@@ -306,20 +309,20 @@ function CreateStockRequestModal({ onClose, onSubmitted }) {
                           type="button"
                           onClick={() => setSelectedOption(option)}
                           className={`flex w-full items-start justify-between gap-3 border-b border-slate-50 px-4 py-3 text-left text-sm hover:bg-[#fbf9f1] ${
-                            selected ? 'bg-[#e8f1eb] text-[#356647]' : 'text-slate-700'
+                            selected ? 'bg-[#e8f1eb] text-[#356647]' : 'text-slate-800'
                           }`}
                         >
                           <span className="min-w-0">
                             <span className="block font-mono text-xs font-bold">{option.sku.skuCode}</span>
                             <span className="mt-0.5 block truncate font-semibold">{option.skuSnapshotName}</span>
-                            <span className="mt-0.5 block text-xs text-slate-500">{option.productName}</span>
+                            <span className="mt-0.5 block text-xs text-slate-900">{option.productName}</span>
                             {selected ? (
                               <span className="mt-1 inline-flex rounded-full bg-[#356647] px-2 py-0.5 text-[10px] font-bold text-white">
                                 Đã chọn
                               </span>
                             ) : null}
                           </span>
-                          <span className="shrink-0 text-right text-xs text-slate-500">
+                          <span className="shrink-0 text-right text-xs text-slate-900">
                             Kho tổng: <strong>{formatStockQuantity(option.warehouseQuantityOnHand)}</strong>
                             <br />
                             Tồn quầy POS: <strong>{formatStockQuantity(option.quantityOnHand)}</strong>
@@ -350,10 +353,10 @@ function CreateStockRequestModal({ onClose, onSubmitted }) {
                 <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="font-mono text-sm font-bold text-[#356647]">{selectedOption.sku.skuCode}</p>
-                    <p className="mt-1 text-sm font-semibold text-slate-800">{selectedOption.skuSnapshotName}</p>
-                    <p className="mt-0.5 text-xs text-slate-500">{selectedOption.productName}</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-900">{selectedOption.skuSnapshotName}</p>
+                    <p className="mt-0.5 text-xs text-slate-700">{selectedOption.productName}</p>
                   </div>
-                  <div className="shrink-0 text-right text-xs text-slate-600">
+                  <div className="shrink-0 text-right text-xs text-slate-700">
                     <p>Kho tổng: <strong>{formatStockQuantity(selectedOption.warehouseQuantityOnHand)}</strong></p>
                     <p className="mt-1">Tồn quầy POS: <strong>{formatStockQuantity(selectedOption.quantityOnHand)}</strong></p>
                   </div>
@@ -363,7 +366,7 @@ function CreateStockRequestModal({ onClose, onSubmitted }) {
 
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="block space-y-2">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Số lượng bổ sung *</span>
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-700">Số lượng bổ sung *</span>
                 <input
                   type="number"
                   inputMode="numeric"
@@ -371,17 +374,17 @@ function CreateStockRequestModal({ onClose, onSubmitted }) {
                   step="1"
                   value={quantity}
                   onChange={(event) => setQuantity(event.target.value)}
-                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-[#538463]"
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-[#538463]"
                   placeholder="VD: 10"
                 />
               </label>
               <label className="block space-y-2">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Ghi chú</span>
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-700">Ghi chú</span>
                 <textarea
                   rows={3}
                   value={reason}
                   onChange={(event) => setReason(event.target.value)}
-                  className="w-full resize-none rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-[#538463]"
+                  className="w-full resize-none rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-[#538463]"
                 />
               </label>
             </div>

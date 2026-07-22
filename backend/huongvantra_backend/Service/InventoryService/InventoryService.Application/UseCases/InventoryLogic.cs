@@ -29,6 +29,7 @@ public class InventoryLogic(
     IInventoryUnitOfWork _unitOfWork,
     IProductionOrderRepository _productionOrderRepo,
     IProductCatalogClient _productCatalogClient,
+    ISupplierRepository _supplierRepo,
     IOptions<InventoryOptions> inventoryOptions)
 {
     private readonly InventoryOptions _inventoryOptions = inventoryOptions.Value;
@@ -6230,5 +6231,104 @@ public class InventoryLogic(
                 await _eventPublisher.PublishLowStockAsync(
                     stock.SkuId, stock.SkuCode, stock.WarehouseQuantityOnHand, stock.WarehouseLowStockThreshold, ct);
         }
+    }
+
+    // ---- Supplier management ----
+
+    public async Task<PagedResponse<SupplierResponse>> GetSuppliersAsync(
+        string? search, bool includeDeleted, int page, int pageSize, CancellationToken ct = default)
+    {
+        var (items, total) = await _supplierRepo.GetPagedAsync(search, includeDeleted, page, pageSize, ct);
+        var responses = await Task.WhenAll(items.Select(s => MapSupplierAsync(s, ct)));
+        return new PagedResponse<SupplierResponse>(
+            [.. responses],
+            page, pageSize, total,
+            (int)Math.Ceiling(total / (double)pageSize));
+    }
+
+    public async Task<SupplierResponse> GetSupplierAsync(Guid id, CancellationToken ct = default)
+    {
+        var supplier = await _supplierRepo.GetByIdAsync(id, ct)
+            ?? throw new InventoryNotFoundException("Không tìm thấy nhà cung cấp.");
+        return await MapSupplierAsync(supplier, ct);
+    }
+
+    public async Task<List<SupplierSimpleResponse>> GetActiveSuppliersAsync(CancellationToken ct = default)
+    {
+        var list = await _supplierRepo.GetActiveListAsync(ct);
+        return list.Select(s => new SupplierSimpleResponse(s.Id, s.Name, s.Phone, s.Email)).ToList();
+    }
+
+    public async Task<SupplierResponse> CreateSupplierAsync(CreateSupplierRequest request, CancellationToken ct = default)
+    {
+        var name = NormalizeSnapshotText(request.Name) ?? throw new InventoryValidationException("Tên nhà cung cấp không được để trống.");
+        var now = DateTime.UtcNow;
+        var supplier = new Supplier
+        {
+            Id = Guid.NewGuid(),
+            Name = name,
+            Phone = NormalizeSnapshotText(request.Phone),
+            Email = NormalizeSnapshotText(request.Email),
+            Address = NormalizeSnapshotText(request.Address),
+            Note = NormalizeSnapshotText(request.Note),
+            IsDeleted = false,
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+        await _supplierRepo.AddAsync(supplier, ct);
+        await _supplierRepo.SaveChangesAsync(ct);
+        return await MapSupplierAsync(supplier, ct);
+    }
+
+    public async Task<SupplierResponse> UpdateSupplierAsync(Guid id, UpdateSupplierRequest request, CancellationToken ct = default)
+    {
+        var name = NormalizeSnapshotText(request.Name) ?? throw new InventoryValidationException("Tên nhà cung cấp không được để trống.");
+        var supplier = await _supplierRepo.GetByIdAsync(id, ct)
+            ?? throw new InventoryNotFoundException("Không tìm thấy nhà cung cấp.");
+
+        supplier.Name = name;
+        supplier.Phone = NormalizeSnapshotText(request.Phone);
+        supplier.Email = NormalizeSnapshotText(request.Email);
+        supplier.Address = NormalizeSnapshotText(request.Address);
+        supplier.Note = NormalizeSnapshotText(request.Note);
+        supplier.UpdatedAt = DateTime.UtcNow;
+
+        await _supplierRepo.SaveChangesAsync(ct);
+        return await MapSupplierAsync(supplier, ct);
+    }
+
+    public async Task<SupplierResponse> SoftDeleteSupplierAsync(Guid id, CancellationToken ct = default)
+    {
+        var supplier = await _supplierRepo.GetByIdAsync(id, ct)
+            ?? throw new InventoryNotFoundException("Không tìm thấy nhà cung cấp.");
+        if (supplier.IsDeleted)
+            throw new InventoryValidationException("Nhà cung cấp đã bị ẩn.");
+
+        supplier.IsDeleted = true;
+        supplier.UpdatedAt = DateTime.UtcNow;
+        await _supplierRepo.SaveChangesAsync(ct);
+        return await MapSupplierAsync(supplier, ct);
+    }
+
+    public async Task<SupplierResponse> RestoreSupplierAsync(Guid id, CancellationToken ct = default)
+    {
+        var supplier = await _supplierRepo.GetByIdAsync(id, ct)
+            ?? throw new InventoryNotFoundException("Không tìm thấy nhà cung cấp.");
+        if (!supplier.IsDeleted)
+            throw new InventoryValidationException("Nhà cung cấp chưa bị ẩn.");
+
+        supplier.IsDeleted = false;
+        supplier.UpdatedAt = DateTime.UtcNow;
+        await _supplierRepo.SaveChangesAsync(ct);
+        return await MapSupplierAsync(supplier, ct);
+    }
+
+    private async Task<SupplierResponse> MapSupplierAsync(Supplier s, CancellationToken ct)
+    {
+        var receiptCount = await _supplierReceiptRepo.CountBySupplerIdAsync(s.Id, ct);
+        return new SupplierResponse(
+            s.Id, s.Name, s.Phone, s.Email, s.Address, s.Note, s.IsDeleted,
+            s.CreatedAt, s.UpdatedAt,
+            receiptCount, 0m);
     }
 }

@@ -37,6 +37,7 @@ import StockAdjustmentRequestsPage from '../features/inventory/pages/StockAdjust
 import SupplierReceiptsPage from '../features/inventory/pages/SupplierReceiptsPage.jsx'
 import ProductionOrdersPage from '../features/inventory/pages/ProductionOrdersPage.jsx'
 import CustomBundlesPage from '../features/inventory/pages/CustomBundlesPage.jsx'
+import SuppliersPage from '../features/inventory/pages/SuppliersPage.jsx'
 import OrderDetailPage from '../features/orders/pages/OrderDetailPage.jsx'
 import CustomerDisplayPage from '../features/pos/pages/CustomerDisplayPage.jsx'
 import PosPage from '../features/pos/pages/PosPage.jsx'
@@ -105,6 +106,7 @@ function App() {
         <Route path="/inventory/production" element={<Navigate to="/inventory/production-orders" replace />} />
         <Route path="/inventory/production-orders" element={<ProductionOrdersPage />} />
         <Route path="/inventory/custom-bundles" element={<CustomBundlesPage />} />
+        <Route path="/inventory/suppliers" element={<SuppliersPage />} />
         <Route path="/inventory/bom" element={<Navigate to="/inventory/boms" replace />} />
         <Route path="/inventory/boms" element={<InventoryBomPage />} />
         <Route path="/inventory/bom/create" element={<InventoryBomCreatePage />} />

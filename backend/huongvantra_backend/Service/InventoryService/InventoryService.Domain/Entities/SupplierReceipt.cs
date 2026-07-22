@@ -25,6 +25,7 @@ public class SupplierReceipt
     public string? ReviewedByRoleName { get; set; }
     public DateTime? ReviewedAt { get; set; }
     public string? ReviewNote { get; set; }
+    public Guid? SupplierId { get; set; }
     public Guid? StockImportSlipId { get; set; }
     public string? StockImportSlipCode { get; set; }
 

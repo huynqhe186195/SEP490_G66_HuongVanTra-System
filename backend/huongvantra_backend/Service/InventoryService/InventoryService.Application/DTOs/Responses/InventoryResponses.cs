@@ -521,3 +521,22 @@ public record ProductionOrderResponse(
     DateTime? CompletedAt,
     List<ProductionOrderLineResponse> Lines,
     List<ProductionOrderOutputLineResponse> OutputLines);
+
+public record SupplierResponse(
+    Guid Id,
+    string Name,
+    string? Phone,
+    string? Email,
+    string? Address,
+    string? Note,
+    bool IsDeleted,
+    DateTime CreatedAt,
+    DateTime UpdatedAt,
+    int TotalReceiptCount,
+    decimal TotalReceiptValue);
+
+public record SupplierSimpleResponse(
+    Guid Id,
+    string Name,
+    string? Phone,
+    string? Email);

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
 import { showError, showSuccess, showToast } from '../../../app/toast.js'
@@ -13,6 +14,7 @@ import {
   cancelProductCreationRequest,
   createProductCreationRequest,
   fetchProductCreationRequests,
+  fetchProducts,
   rejectProductCreationRequest,
   submitProductCreationRequest,
   updateProductCreationRequest,
@@ -1235,7 +1237,92 @@ function AttributeNameCombobox({
   )
 }
 
-function ProductRow({ row, categories, materials, attributeNameOptions, onChange, onImagesChange, onRemove, canRemove }) {
+function ProductNameCombobox({ value, existingProducts, onChange, onSelectExisting }) {
+  const [query, setQuery] = useState(value)
+  const [isOpen, setIsOpen] = useState(false)
+  const [highlighted, setHighlighted] = useState(0)
+  const rootRef = useRef(null)
+
+  useEffect(() => { setQuery(value) }, [value])
+
+  useEffect(() => {
+    const handler = (e) => { if (!rootRef.current?.contains(e.target)) setIsOpen(false) }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const filtered = useMemo(() => {
+    const kw = query.trim().toLowerCase()
+    if (!kw) return existingProducts.slice(0, 8)
+    return existingProducts.filter((p) => p.name?.toLowerCase().includes(kw)).slice(0, 8)
+  }, [query, existingProducts])
+
+  function commit(product) {
+    onSelectExisting(product)
+    setQuery(product.name)
+    setIsOpen(false)
+  }
+
+  return (
+    <div ref={rootRef} className="relative mt-1">
+      <input
+        className="w-full rounded-lg border border-slate-200 py-2 pl-3 pr-8 text-sm focus:border-[#356647] focus:outline-none focus:ring-2 focus:ring-[#356647]/15"
+        placeholder="Tên sản phẩm..."
+        value={query}
+        onFocus={() => setIsOpen(true)}
+        onChange={(e) => { setQuery(e.target.value); onChange(e.target.value); setIsOpen(true); setHighlighted(0) }}
+        onKeyDown={(e) => {
+          if (e.key === 'ArrowDown') { e.preventDefault(); setHighlighted((h) => Math.min(h + 1, filtered.length - 1)) }
+          if (e.key === 'ArrowUp') { e.preventDefault(); setHighlighted((h) => Math.max(h - 1, 0)) }
+          if (e.key === 'Enter' && filtered[highlighted]) { e.preventDefault(); commit(filtered[highlighted]) }
+          if (e.key === 'Escape') setIsOpen(false)
+        }}
+      />
+      {query ? (
+        <button
+          type="button"
+          tabIndex={-1}
+          className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500"
+          onClick={() => { setQuery(''); onChange(''); setIsOpen(true) }}
+        >
+          <span className="material-symbols-outlined text-[16px]">close</span>
+        </button>
+      ) : (
+        <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-300">
+          <span className="material-symbols-outlined text-[16px]">search</span>
+        </span>
+      )}
+      {isOpen && (
+        <div className="absolute left-0 right-0 top-full z-30 mt-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
+          {filtered.length === 0 ? (
+            <div className="px-4 py-3 text-sm text-slate-400">Sản phẩm mới</div>
+          ) : (
+            <>
+              <p className="border-b border-slate-100 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Có sẵn trong hệ thống</p>
+              {filtered.map((product, i) => (
+                <button
+                  key={product.id}
+                  type="button"
+                  className={`flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm ${i === highlighted ? 'bg-[#f0eee6]' : 'hover:bg-slate-50'}`}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => commit(product)}
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium text-slate-800">{product.name}</p>
+                    <p className="text-[11px] text-slate-400">{product.categoryName || '—'} · {getProductTypeLabel(product.productType)}</p>
+                  </div>
+                  <span className="shrink-0 text-[11px] font-semibold text-[#538463]">Điền nhanh</span>
+                </button>
+              ))}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ProductRow({ row, rowIndex, categories, materials, existingProducts, attributeNameOptions, onChange, onImagesChange, onRemove, canRemove }) {
   const isFinishedProduct = row.productType === PRODUCT_TYPE.THANH_PHAM
   const skuRows = syncSkuRows(row, getSkuRows(row))
   const componentSkuOptions = getComponentSkuOptions(materials)
@@ -1243,6 +1330,7 @@ function ProductRow({ row, categories, materials, attributeNameOptions, onChange
   const images = Array.isArray(row.images) ? row.images : []
   const uploadingImageCount = images.filter((image) => image.uploading).length
   const [pendingAttributeFocusKey, setPendingAttributeFocusKey] = useState(null)
+  const [isExpanded, setIsExpanded] = useState(!row.name)
 
   function applySkuRows(nextRow, nextSkuRows) {
     onChange(syncLegacySkuFields(nextRow, nextSkuRows))
@@ -1264,6 +1352,16 @@ function ProductRow({ row, categories, materials, attributeNameOptions, onChange
       }
     })
     applySkuRows(nextRow, nextSkuRows)
+  }
+
+  function handleSelectExistingProduct(product) {
+    updateProduct({
+      name: product.name || '',
+      productType: product.productType || PRODUCT_TYPE.THANH_PHAM,
+      categoryId: product.categoryId ? String(product.categoryId) : '',
+      inventoryUnit: product.inventoryUnit || 'Piece',
+      description: product.description || '',
+    })
   }
 
   function updateSku(index, changes) {
@@ -1497,12 +1595,51 @@ function ProductRow({ row, categories, materials, attributeNameOptions, onChange
   }
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="grid gap-3 md:grid-cols-4">
-        <label className="text-xs font-semibold text-slate-500">
+    <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="flex items-center justify-between border-b border-slate-100 px-4 py-2.5">
+        <button
+          type="button"
+          className="flex min-w-0 flex-1 items-center gap-2 text-left"
+          onClick={() => setIsExpanded((v) => !v)}
+        >
+          <span className={`material-symbols-outlined shrink-0 text-[18px] text-slate-400 transition-transform duration-150 ${isExpanded ? 'rotate-90' : ''}`}>chevron_right</span>
+          <span className="text-xs font-bold uppercase tracking-wide text-slate-800">Sản phẩm {rowIndex + 1}</span>
+          {row.name ? (
+            <span className="ml-0.5 truncate text-xs font-semibold text-slate-700">— {row.name}</span>
+          ) : (
+            <span className="ml-0.5 text-xs font-normal italic text-slate-400">chưa đặt tên</span>
+          )}
+          {!isExpanded && (
+            <span className="ml-auto flex shrink-0 items-center gap-2 pr-2">
+              {images.length > 0 && (
+                <span className="inline-flex items-center gap-1 text-[11px] text-slate-400">
+                  <span className="material-symbols-outlined text-[13px]">photo_library</span>{images.length}
+                </span>
+              )}
+              <span className="inline-flex items-center gap-1 text-[11px] text-slate-400">
+                <span className="material-symbols-outlined text-[13px]">inventory_2</span>{skuRows.length} SKU
+              </span>
+              {row.productType ? (
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500">{getProductTypeLabel(row.productType)}</span>
+              ) : null}
+            </span>
+          )}
+        </button>
+        <button type="button" disabled={!canRemove} onClick={onRemove} className="ml-2 inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-rose-500 hover:text-rose-700 disabled:opacity-30">
+          <span className="material-symbols-outlined text-[15px]">delete</span>Xóa
+        </button>
+      </div>
+      {isExpanded && <div className="p-4">
+      <div className="grid gap-3 md:grid-cols-[2fr_1fr_1fr_1fr]">
+        <div className="text-xs font-semibold text-slate-500">
           Tên sản phẩm
-          <input className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={row.name} onChange={(event) => updateProduct({ name: event.target.value })} />
-        </label>
+          <ProductNameCombobox
+            value={row.name}
+            existingProducts={existingProducts}
+            onChange={(name) => updateProduct({ name })}
+            onSelectExisting={handleSelectExistingProduct}
+          />
+        </div>
         <label className="text-xs font-semibold text-slate-500">
           Loại hàng
           <select
@@ -1536,14 +1673,18 @@ function ProductRow({ row, categories, materials, attributeNameOptions, onChange
         />
       </label>
 
-      <div className="mt-3 rounded-lg border border-slate-100 bg-slate-50 p-3">
+      <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Hình ảnh sản phẩm ({images.length}/{MAX_PRODUCT_IMAGES})</p>
-            <p className="mt-1 text-xs text-slate-500">Ảnh chỉ được tải lên Cloudinary khi bạn bấm "Gửi biên bản". Nhấn vào ảnh để đặt làm ảnh đại diện.</p>
+          <div className="flex items-center gap-2">
+            <span className="material-symbols-outlined text-[18px] text-slate-400">photo_library</span>
+            <div>
+              <p className="text-xs font-bold text-slate-700">Hình ảnh sản phẩm <span className="font-normal text-slate-400">({images.length}/{MAX_PRODUCT_IMAGES})</span></p>
+              <p className="text-[11px] text-slate-400">Click ảnh để đặt làm đại diện.</p>
+            </div>
           </div>
-          <label className={`inline-flex cursor-pointer items-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 ${uploadingImageCount > 0 || images.length >= MAX_PRODUCT_IMAGES ? 'pointer-events-none opacity-50' : 'hover:bg-slate-50'}`}>
-            {uploadingImageCount > 0 ? `Đang upload (${uploadingImageCount})...` : '+ Thêm ảnh'}
+          <label className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 ${uploadingImageCount > 0 || images.length >= MAX_PRODUCT_IMAGES ? 'pointer-events-none opacity-50' : 'hover:bg-slate-50'}`}>
+            <span className="material-symbols-outlined text-[16px]">add_photo_alternate</span>
+            {uploadingImageCount > 0 ? `Đang upload (${uploadingImageCount})...` : 'Thêm ảnh'}
             <input type="file" accept="image/*" multiple className="hidden" disabled={uploadingImageCount > 0 || images.length >= MAX_PRODUCT_IMAGES} onChange={handleImageUpload} />
           </label>
         </div>
@@ -1591,13 +1732,18 @@ function ProductRow({ row, categories, materials, attributeNameOptions, onChange
         )}
       </div>
 
-      <div className="mt-4 rounded-lg border border-slate-100 bg-slate-50 p-3">
+      <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Quản lý đơn vị và SKU</p>
-            <p className="text-xs text-slate-500">Mỗi đơn vị đóng gói là một SKU tồn kho riêng, không tự quy đổi tồn.</p>
+          <div className="flex items-center gap-2">
+            <span className="material-symbols-outlined text-[18px] text-[#538463]">inventory_2</span>
+            <div>
+              <p className="text-xs font-bold text-slate-700">Đơn vị & SKU</p>
+              <p className="text-[11px] text-slate-400">Mỗi đơn vị đóng gói là một SKU tồn kho riêng, không tự quy đổi tồn.</p>
+            </div>
           </div>
-          <button type="button" className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold" onClick={addSku}>+ Thêm đơn vị</button>
+          <button type="button" className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold hover:bg-slate-50" onClick={addSku}>
+            <span className="material-symbols-outlined text-[16px]">add</span>Thêm đơn vị
+          </button>
         </div>
 
         <div className="mt-3 space-y-3">
@@ -1755,10 +1901,15 @@ function ProductRow({ row, categories, materials, attributeNameOptions, onChange
         </div>
       </div>
 
-      <div className="mt-4 rounded-lg border border-slate-100 bg-white p-3">
+      <div className="mt-4 rounded-lg border border-slate-200 bg-white p-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Thuộc tính bổ sung</p>
-          <button type="button" className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold" onClick={addAttribute}>+ Thêm thuộc tính</button>
+          <div className="flex items-center gap-2">
+            <span className="material-symbols-outlined text-[18px] text-violet-400">label</span>
+            <p className="text-xs font-bold text-slate-700">Thuộc tính bổ sung</p>
+          </div>
+          <button type="button" className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold hover:bg-slate-50" onClick={addAttribute}>
+            <span className="material-symbols-outlined text-[16px]">add</span>Thêm thuộc tính
+          </button>
         </div>
         {attributes.length === 0 ? <p className="mt-3 text-xs text-slate-400">Chưa có thuộc tính bổ sung.</p> : null}
         <div className="mt-3 space-y-2">
@@ -1783,10 +1934,7 @@ function ProductRow({ row, categories, materials, attributeNameOptions, onChange
           ))}
         </div>
       </div>
-
-      <div className="mt-3 flex justify-end">
-        <button type="button" disabled={!canRemove} onClick={onRemove} className="font-semibold text-rose-600 disabled:opacity-40">Xóa sản phẩm</button>
-      </div>
+      </div>}
     </div>
   )
 }
@@ -1838,7 +1986,7 @@ function ProductCreationRequestDetailModal({ request, onClose, onApprove, onReje
         <div className="custom-scrollbar flex-1 space-y-4 overflow-y-auto p-6">
           <section className="grid gap-3 rounded-xl border border-slate-100 bg-slate-50 p-4 text-sm md:grid-cols-3">
             <div><p className="text-xs font-bold uppercase text-slate-400">Mã yêu cầu</p><p className="font-mono font-semibold text-[#356647]">{request.requestCode}</p></div>
-            <div><p className="text-xs font-bold uppercase text-slate-400">Trạng thái</p><p className="font-semibold text-slate-800">{statusLabel(request.status)}</p></div>
+            <div><p className="text-xs font-bold uppercase text-slate-400">Trạng thái</p><StatusChip status={request.status} /></div>
             <div><p className="text-xs font-bold uppercase text-slate-400">Người gửi</p><p className="font-semibold text-slate-800">{request.createdByName || '—'}</p></div>
             <div><p className="text-xs font-bold uppercase text-slate-400">Ngày tạo</p><p>{formatDateTimeVN(request.createdAt)}</p></div>
             <div><p className="text-xs font-bold uppercase text-slate-400">Ngày gửi</p><p>{formatDateTimeVN(request.submittedAt || request.createdAt)}</p></div>
@@ -2001,13 +2149,13 @@ function AdminProductCreationRequestsTable({
               <tr key={request.id} className="align-middle hover:bg-slate-50/70">
                 <td className="px-4 py-3 font-mono text-xs font-semibold text-[#356647]">{request.requestCode}</td>
                 <td className="max-w-[320px] px-4 py-3">
-                  <p className="truncate font-semibold text-slate-800">{request.title}</p>
-                  {request.warehouseNote ? <p className="mt-1 truncate text-xs text-slate-500">{request.warehouseNote}</p> : null}
+                  <p className="font-semibold text-slate-800">{request.title}</p>
+                  {request.warehouseNote ? <p className="mt-1 text-xs text-slate-500 line-clamp-2">{request.warehouseNote}</p> : null}
                 </td>
                 <td className="px-4 py-3 text-slate-700">{request.createdByName || '—'}</td>
                 <td className="px-4 py-3 text-xs text-slate-500">{formatDateTimeVN(request.submittedAt || request.createdAt)}</td>
                 <td className="px-4 py-3 text-right font-semibold">{request.items.length}</td>
-                <td className="px-4 py-3">{statusLabel(request.status)}</td>
+                <td className="px-4 py-3"><StatusChip status={request.status} /></td>
                 <td className="px-4 py-3 text-right">
                   <div className="flex flex-wrap justify-end gap-2">
                     <button type="button" className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50" onClick={() => onDetail(request)}>Chi tiết</button>
@@ -2036,14 +2184,201 @@ function AdminProductCreationRequestsTable({
   )
 }
 
+const STATUS_CHIP_CLASS = {
+  Draft: 'bg-slate-100 text-slate-600',
+  PendingApproval: 'bg-amber-100 text-amber-700',
+  Rejected: 'bg-rose-100 text-rose-700',
+  Completed: 'bg-emerald-100 text-emerald-700',
+  Cancelled: 'bg-slate-200 text-slate-500',
+}
+
+function StatusChip({ status }) {
+  return (
+    <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${STATUS_CHIP_CLASS[status] ?? 'bg-slate-100 text-slate-600'}`}>
+      {statusLabel(status)}
+    </span>
+  )
+}
+
+function DecisionReasonModal({ isOpen, action, request, onClose, onConfirm, isSaving }) {
+  const [reason, setReason] = useState('')
+
+  useEffect(() => {
+    if (isOpen) setReason('')
+  }, [isOpen])
+
+  if (!isOpen || !request) return null
+
+  const isReject = action === 'reject'
+  const title = isReject ? 'Từ chối yêu cầu' : 'Hủy yêu cầu'
+  const confirmLabel = isReject ? 'Xác nhận từ chối' : 'Xác nhận hủy'
+  const confirmClass = isReject
+    ? 'bg-amber-600 hover:bg-amber-700 text-white'
+    : 'bg-rose-600 hover:bg-rose-700 text-white'
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/45 p-4"
+      onClick={onClose}
+      role="presentation"
+    >
+      <div
+        className="w-full max-w-md rounded-2xl bg-white shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+      >
+        <div className="flex items-start justify-between border-b border-slate-100 px-6 py-4">
+          <div>
+            <h3 className="font-bold text-slate-900">{title}</h3>
+            <p className="mt-0.5 font-mono text-xs text-slate-400">{request.requestCode} · {request.title}</p>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100">
+            <span className="material-symbols-outlined text-[20px]">close</span>
+          </button>
+        </div>
+        <div className="px-6 py-4">
+          <label className="block text-sm font-semibold text-slate-700">
+            Lý do {isReject ? 'từ chối' : 'hủy'} <span className="text-rose-500">*</span>
+            <textarea
+              className="mt-2 w-full resize-none rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-[#356647] focus:outline-none focus:ring-2 focus:ring-[#356647]/15"
+              rows={3}
+              placeholder={`Nhập lý do ${isReject ? 'từ chối' : 'hủy'}...`}
+              value={reason}
+              autoFocus
+              onChange={(e) => setReason(e.target.value)}
+            />
+          </label>
+        </div>
+        <div className="flex items-center justify-end gap-2 border-t border-slate-100 px-6 py-4">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            Hủy bỏ
+          </button>
+          <button
+            type="button"
+            disabled={!reason.trim() || isSaving}
+            className={`rounded-xl px-4 py-2 text-sm font-semibold disabled:opacity-50 ${confirmClass}`}
+            onClick={() => onConfirm(request, action, reason.trim())}
+          >
+            {isSaving ? 'Đang xử lý...' : confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ExpandableNoteField({ value, onChange, placeholder }) {
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [modalValue, setModalValue] = useState('')
+  const textareaRef = useRef(null)
+  const isOverflowing = value && value.length > 120
+
+  function openModal() {
+    setModalValue(value)
+    setIsModalOpen(true)
+  }
+
+  function confirmModal() {
+    onChange(modalValue)
+    setIsModalOpen(false)
+  }
+
+  return (
+    <>
+      <div className="relative mt-1">
+        <textarea
+          ref={textareaRef}
+          rows={2}
+          className="w-full resize-none overflow-hidden rounded-lg border border-slate-200 px-3 py-2 pr-20 text-sm focus:border-[#356647] focus:outline-none focus:ring-2 focus:ring-[#356647]/15"
+          placeholder={placeholder}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+        />
+        {isOverflowing && (
+          <button
+            type="button"
+            onClick={openModal}
+            className="absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-md bg-white/90 px-2 py-1 text-[11px] font-semibold text-[#356647] shadow-sm ring-1 ring-slate-200 hover:bg-[#f0eee6]"
+          >
+            <span className="material-symbols-outlined text-[13px]">open_in_full</span>
+            Chi tiết
+          </button>
+        )}
+        {!isOverflowing && value && (
+          <button
+            type="button"
+            onClick={openModal}
+            className="absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-md bg-white/80 px-2 py-1 text-[11px] text-slate-400 hover:text-[#356647]"
+          >
+            <span className="material-symbols-outlined text-[13px]">open_in_full</span>
+          </button>
+        )}
+      </div>
+
+      {isModalOpen && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
+          <div className="flex w-full max-w-xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-[20px] text-slate-400">edit_note</span>
+                <h3 className="text-sm font-bold text-slate-800">Ghi chú Warehouse</h3>
+              </div>
+              <button type="button" onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+            <div className="p-5">
+              <textarea
+                autoFocus
+                rows={8}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-[#356647] focus:outline-none focus:ring-2 focus:ring-[#356647]/15"
+                placeholder={placeholder}
+                value={modalValue}
+                onChange={(e) => setModalValue(e.target.value)}
+              />
+              <p className="mt-1 text-right text-[11px] text-slate-400">{modalValue.length} ký tự</p>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-slate-100 px-5 py-3">
+              <button
+                type="button"
+                onClick={() => setIsModalOpen(false)}
+                className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={confirmModal}
+                className="rounded-lg bg-[#356647] px-4 py-2 text-sm font-semibold text-white hover:bg-[#2d5a3d]"
+              >
+                Xác nhận
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  )
+}
+
 export default function ProductApprovalsPage() {
   const session = useAuthSession()
+  const { pathname } = useLocation()
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const admin = isSystemAdmin(session)
   const warehouse = isWarehouseRole(session)
+  const showCreateForm = warehouse && pathname !== '/inventory/product-approvals'
   const fileInputRef = useRef(null)
   const initialRequestStatus = admin ? 'PendingApproval' : 'all'
   const [categories, setCategories] = useState([])
   const [materials, setMaterials] = useState([])
+  const [existingProducts, setExistingProducts] = useState([])
   const [attributeNames, setAttributeNames] = useState([])
   const [requests, setRequests] = useState([])
   const [isLoading, setIsLoading] = useState(true)
@@ -2053,8 +2388,10 @@ export default function ProductApprovalsPage() {
   const [warehouseNote, setWarehouseNote] = useState('')
   const [rows, setRows] = useState([createDraftProduct()])
   const [statusFilter, setStatusFilter] = useState(initialRequestStatus)
+  const [requestSearch, setRequestSearch] = useState('')
   const [adminPage, setAdminPage] = useState(1)
   const [detailRequest, setDetailRequest] = useState(null)
+  const [decisionModal, setDecisionModal] = useState(null)
   const [importPreview, setImportPreview] = useState(null)
   const [importMode, setImportMode] = useState('replace')
   const [isImporting, setIsImporting] = useState(false)
@@ -2074,10 +2411,19 @@ export default function ProductApprovalsPage() {
     ...(importPreview?.errors ?? []),
     ...importAppendErrors,
   ], [importAppendErrors, importPreview])
+  const filteredRequests = useMemo(() => {
+    const keyword = requestSearch.trim().toLowerCase()
+    if (!keyword) return requests
+    return requests.filter((r) => {
+      const titleMatch = r.title?.toLowerCase().includes(keyword)
+      const productMatch = (r.items ?? []).some((item) => item.productName?.toLowerCase().includes(keyword))
+      return titleMatch || productMatch
+    })
+  }, [requests, requestSearch])
   const adminPagedRequests = useMemo(() => {
     const start = (adminPage - 1) * ADMIN_REQUEST_PAGE_SIZE
-    return requests.slice(start, start + ADMIN_REQUEST_PAGE_SIZE)
-  }, [adminPage, requests])
+    return filteredRequests.slice(start, start + ADMIN_REQUEST_PAGE_SIZE)
+  }, [adminPage, filteredRequests])
 
   useEffect(() => {
     const maxPage = Math.max(1, Math.ceil(requests.length / ADMIN_REQUEST_PAGE_SIZE))
@@ -2109,13 +2455,15 @@ export default function ProductApprovalsPage() {
           return []
         }),
         fetchProductCreationRequests({ status: initialRequestStatus, page: 1, pageSize: PRODUCT_CREATION_REQUEST_FETCH_PAGE_SIZE }),
+        fetchProducts({ isActive: true, pageSize: 200 }).catch(() => ({ items: [] })),
       ])
-        .then(([categoryItems, materialItems, attributeNameItems, requestResult]) => {
+        .then(([categoryItems, materialItems, attributeNameItems, requestResult, productResult]) => {
           if (cancelled) return
           setCategories(categoryItems)
           setMaterials(materialItems)
           setAttributeNames(attributeNameItems)
           setRequests(requestResult.items)
+          setExistingProducts(productResult.items ?? [])
         })
         .catch((error) => showError(error.message))
         .finally(() => {
@@ -2128,6 +2476,21 @@ export default function ProductApprovalsPage() {
       window.clearTimeout(timer)
     }
   }, [initialRequestStatus])
+
+  useEffect(() => {
+    const requestId = searchParams.get('requestId')
+    if (!requestId || !showCreateForm || isLoading || !requests.length) return
+    const target = requests.find((r) => r.id === requestId)
+    if (!target) return
+    setActiveRequestId(target.id)
+    setTitle(target.title)
+    setWarehouseNote(target.warehouseNote || '')
+    setRows(target.items.length ? target.items.map((item) => fromProductSnapshot(item, materialsById)) : [createDraftProduct()])
+    setImportPreview(null)
+    setImportMode('replace')
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, showCreateForm, isLoading, requests])
 
   function updateRow(index, changes) {
     setRows((current) => current.map((row, rowIndex) => (rowIndex === index ? { ...row, ...changes } : row)))
@@ -2153,6 +2516,7 @@ export default function ProductApprovalsPage() {
   function handleStatusFilterChange(value) {
     setStatusFilter(value)
     setAdminPage(1)
+    setRequestSearch('')
     loadRequests(value)
   }
 
@@ -2270,9 +2634,13 @@ export default function ProductApprovalsPage() {
     }
   }
 
-  async function handleDecision(request, action) {
-    const reason = action === 'approve' ? '' : window.prompt(action === 'reject' ? 'Nhập lý do từ chối:' : 'Nhập lý do hủy:')
-    if (action !== 'approve' && !String(reason || '').trim()) return
+  async function handleDecision(request, action, reason) {
+    if (action !== 'approve') {
+      if (!reason) {
+        setDecisionModal({ request, action })
+        return
+      }
+    }
 
     setIsSaving(true)
     try {
@@ -2281,6 +2649,7 @@ export default function ProductApprovalsPage() {
       if (action === 'cancel') await cancelProductCreationRequest(request.id, reason, '')
       showSuccess('Đã cập nhật yêu cầu.')
       setDetailRequest(null)
+      setDecisionModal(null)
       await loadRequests(statusFilter)
     } catch (error) {
       showError(error.message)
@@ -2430,8 +2799,8 @@ export default function ProductApprovalsPage() {
 
   return (
     <PageShell
-      title="Yêu cầu tạo hàng hóa"
-      description="Warehouse tạo yêu cầu nhiều sản phẩm, Admin duyệt và hệ thống tạo Product/SKU/BOM atomically."
+      title={showCreateForm ? 'Tạo biên bản yêu cầu' : 'Lịch sử tạo hàng hóa'}
+      description={showCreateForm ? 'Tạo biên bản nhiều sản phẩm, gửi Admin duyệt.' : 'Lịch sử các yêu cầu tạo hàng hóa đã gửi.'}
       actions={!admin && warehouse ? (
         <select className="rounded-lg border border-slate-200 px-3 py-2 text-sm" value={statusFilter} onChange={(event) => handleStatusFilterChange(event.target.value)}>
           {PRODUCT_CREATION_STATUS_FILTERS.map((option) => (
@@ -2440,12 +2809,11 @@ export default function ProductApprovalsPage() {
         </select>
       ) : null}
     >
-      {warehouse ? (
+      {showCreateForm ? (
         <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-base font-bold text-slate-900">{activeRequestId ? 'Sửa yêu cầu' : 'Tạo biên bản yêu cầu thêm sản phẩm kho mới'}</h2>
-              <p className="text-sm text-slate-500">Không dùng approval code. Admin chỉ duyệt/từ chối nội dung Warehouse gửi.</p>
             </div>
             <div className="flex flex-wrap gap-2">
               <input ref={fileInputRef} type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="hidden" onChange={handleImportFile} />
@@ -2543,14 +2911,23 @@ export default function ProductApprovalsPage() {
             </div>
           ) : null}
 
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className="grid gap-3 md:grid-cols-[1fr_2fr]">
             <label className="text-xs font-semibold text-slate-500">
-              Tiêu đề
-              <input className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={title} onChange={(event) => setTitle(event.target.value)} />
+              Tiêu đề <span className="font-normal text-slate-400">(bắt buộc)</span>
+              <input
+                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-[#356647] focus:outline-none focus:ring-2 focus:ring-[#356647]/15"
+                placeholder="VD: Thêm dòng trà mới tháng 7..."
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
+              />
             </label>
             <label className="text-xs font-semibold text-slate-500">
               Ghi chú Warehouse
-              <input className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={warehouseNote} onChange={(event) => setWarehouseNote(event.target.value)} />
+              <ExpandableNoteField
+                value={warehouseNote}
+                onChange={setWarehouseNote}
+                placeholder="Mô tả lý do, nguồn gốc, hoặc hướng dẫn thêm cho Admin..."
+              />
             </label>
           </div>
           <div className="mt-4 space-y-4">
@@ -2558,8 +2935,10 @@ export default function ProductApprovalsPage() {
               <ProductRow
                 key={row.clientKey}
                 row={row}
+                rowIndex={index}
                 categories={categories}
                 materials={materials}
+                existingProducts={existingProducts}
                 attributeNameOptions={attributeNameOptions}
                 onChange={(changes) => updateRow(index, changes)}
                 onImagesChange={(updater) => updateRowImages(index, updater)}
@@ -2568,14 +2947,23 @@ export default function ProductApprovalsPage() {
               />
             ))}
           </div>
-          <div className="mt-4 flex flex-wrap justify-end gap-2">
-            <button type="button" className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold" onClick={() => setRows((current) => [...current, createDraftProduct()])}>Thêm sản phẩm</button>
-            <button type="button" disabled={isSaving} className="rounded-lg bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700" onClick={() => saveDraft()}>{isSaving ? 'Đang lưu...' : 'Lưu nháp'}</button>
-            <button type="button" disabled={isSaving} className="rounded-lg bg-[#356647] px-4 py-2 text-sm font-semibold text-white" onClick={handleSubmit}>{isSaving ? 'Đang gửi...' : 'Gửi Admin duyệt'}</button>
+          <div className="sticky bottom-0 z-10 -mx-5 mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 bg-white/95 px-5 py-3 backdrop-blur-sm">
+            <button
+              type="button"
+              className="rounded-lg border border-dashed border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+              onClick={() => setRows((current) => [...current, createDraftProduct()])}
+            >
+              + Thêm sản phẩm
+            </button>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" disabled={isSaving} className="rounded-lg bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-200 disabled:opacity-50" onClick={() => saveDraft()}>{isSaving ? 'Đang lưu...' : 'Lưu nháp'}</button>
+              <button type="button" disabled={isSaving} className="rounded-lg bg-[#356647] px-4 py-2 text-sm font-semibold text-white hover:bg-[#2d5a3d] disabled:opacity-50" onClick={handleSubmit}>{isSaving ? 'Đang gửi...' : 'Gửi Admin duyệt'}</button>
+            </div>
           </div>
         </section>
       ) : null}
 
+      {!showCreateForm ? (
       <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
           <div>
@@ -2586,16 +2974,27 @@ export default function ProductApprovalsPage() {
               </p>
             ) : null}
           </div>
-          {admin ? (
-            <label className="flex items-center gap-2 text-sm font-semibold text-slate-600">
-              Trạng thái
-              <select className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700" value={statusFilter} onChange={(event) => handleStatusFilterChange(event.target.value)}>
-                {PRODUCT_CREATION_STATUS_FILTERS.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </select>
-            </label>
-          ) : null}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative">
+              <span className="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-[18px] text-slate-400">search</span>
+              <input
+                className="w-52 rounded-lg border border-slate-200 bg-white py-2 pl-8 pr-3 text-sm focus:border-[#356647] focus:outline-none focus:ring-2 focus:ring-[#356647]/15"
+                placeholder="Tìm tên sản phẩm..."
+                value={requestSearch}
+                onChange={(e) => { setRequestSearch(e.target.value); setAdminPage(1) }}
+              />
+            </div>
+            {admin ? (
+              <label className="flex items-center gap-2 text-sm font-semibold text-slate-600">
+                Trạng thái
+                <select className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700" value={statusFilter} onChange={(event) => handleStatusFilterChange(event.target.value)}>
+                  {PRODUCT_CREATION_STATUS_FILTERS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+          </div>
         </div>
         {admin ? (
           <AdminProductCreationRequestsTable
@@ -2603,7 +3002,7 @@ export default function ProductApprovalsPage() {
             isLoading={isLoading}
             page={adminPage}
             pageSize={ADMIN_REQUEST_PAGE_SIZE}
-            totalCount={requests.length}
+            totalCount={filteredRequests.length}
             onPageChange={setAdminPage}
             onDetail={setDetailRequest}
             onDecision={handleDecision}
@@ -2626,10 +3025,10 @@ export default function ProductApprovalsPage() {
               {isLoading ? (
                 <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-400">Đang tải...</td></tr>
               ) : null}
-              {!isLoading && requests.length === 0 ? (
-                <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-400">Chưa có yêu cầu tạo hàng hóa.</td></tr>
+              {!isLoading && filteredRequests.length === 0 ? (
+                <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-400">{requestSearch ? 'Không tìm thấy yêu cầu phù hợp.' : 'Chưa có yêu cầu tạo hàng hóa.'}</td></tr>
               ) : null}
-              {requests.map((request) => (
+              {filteredRequests.map((request) => (
                 <tr key={request.id} className="align-top">
                   <td className="px-4 py-3 font-mono text-xs text-[#356647]">{request.requestCode}</td>
                   <td className="px-4 py-3 font-semibold text-slate-800">
@@ -2638,57 +3037,26 @@ export default function ProductApprovalsPage() {
                     {request.rejectReason ? <p className="mt-1 text-xs text-rose-600">Từ chối: {request.rejectReason}</p> : null}
                   </td>
                   <td className="px-4 py-3">
-                    <div className="space-y-1">
-                      {request.items.map((item) => {
-                        const priceSummary = requestItemPriceSummary(item)
-                        const snapshotVariants = item.productSnapshot?.variants ?? item.ProductSnapshot?.Variants ?? []
-                        const snapshotAttributes = item.productSnapshot?.attributes ?? item.ProductSnapshot?.Attributes ?? []
-                        return (
-                          <div key={item.clientKey} className="text-xs text-slate-600">
-                            <p>
-                              <span className="font-semibold text-slate-800">{item.productName}</span> · {getProductTypeLabel(item.productType)} · {item.variantCount} SKU · {item.bomLineCount} BOM
-                            </p>
-                            {priceSummary ? <p className="mt-0.5 text-[11px] text-slate-500">{priceSummary}</p> : null}
-                            {Array.isArray(snapshotAttributes) && snapshotAttributes.length > 0 ? (
-                              <div className="mt-1 flex flex-wrap gap-1">
-                                {snapshotAttributes.map((attribute, attributeIndex) => (
-                                  <span key={`${item.clientKey}-attr-${attributeIndex}`} className="inline-flex rounded-full bg-[#f0eee6] px-2 py-0.5 text-[11px] font-semibold text-slate-600">
-                                    {attribute.attributeName || attribute.AttributeName}: {attribute.value || attribute.Value}
-                                  </span>
-                                ))}
-                              </div>
-                            ) : null}
-                            {Array.isArray(snapshotVariants) && snapshotVariants.length > 0 ? (
-                              <div className="mt-1 space-y-1 text-[11px] text-slate-500">
-                                {snapshotVariants.map((variant) => {
-                                  const variantSkuCode = variant.skuCode ?? variant.SkuCode ?? ''
-                                  const bomLines = variant.bomLines ?? variant.BomLines ?? []
-                                  return (
-                                    <div key={variant.requestSkuKey || variant.RequestSkuKey || variantSkuCode}>
-                                      <span className="font-mono font-semibold text-[#356647]">{variantSkuCode}</span>
-                                      {bomLines.map((line, lineIndex) => (
-                                        <span key={`${variantSkuCode}-${lineIndex}`} className="ml-2 inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5">
-                                          {line.componentSkuCode || line.ComponentSkuCode || line.materialName || line.MaterialName || line.materialId || line.MaterialId} x{line.quantity ?? line.Quantity}
-                                          {line.isRequiredBaseComponent || line.IsRequiredBaseComponent ? <span className="font-semibold text-emerald-700">Tự động theo quy đổi</span> : null}
-                                        </span>
-                                      ))}
-                                    </div>
-                                  )
-                                })}
-                              </div>
-                            ) : null}
-                          </div>
-                        )
-                      })}
+                    <div className="space-y-1.5">
+                      {request.items.map((item) => (
+                        <div key={item.clientKey} className="flex flex-wrap items-center gap-1.5 text-xs">
+                          <span className="font-semibold text-slate-800">{item.productName}</span>
+                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-slate-500">{getProductTypeLabel(item.productType)}</span>
+                          <span className="text-slate-400">{item.variantCount} SKU · {item.bomLineCount} BOM</span>
+                        </div>
+                      ))}
                     </div>
                   </td>
-                  <td className="px-4 py-3">{statusLabel(request.status)}</td>
+                  <td className="px-4 py-3"><StatusChip status={request.status} /></td>
                   <td className="px-4 py-3">{request.revisionNumber}</td>
                   <td className="px-4 py-3 text-xs text-slate-500">{formatDateTimeVN(request.submittedAt || request.createdAt)}</td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex justify-end gap-2">
                       {warehouse && ['Draft', 'Rejected'].includes(request.status) ? (
-                        <button type="button" className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold" onClick={() => loadIntoForm(request)}>Sửa</button>
+                        <button type="button" className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold" onClick={() => navigate(`/inventory/products/create?requestId=${request.id}`)}>Sửa</button>
+                      ) : null}
+                      {warehouse && ['Completed', 'Cancelled', 'PendingApproval'].includes(request.status) ? (
+                        <button type="button" className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600" onClick={() => setDetailRequest(request)}>Xem</button>
                       ) : null}
                       {admin && request.status === 'PendingApproval' ? (
                         <>
@@ -2706,11 +3074,20 @@ export default function ProductApprovalsPage() {
         </div>
         )}
       </section>
+      ) : null}
       <ProductCreationRequestDetailModal
         request={detailRequest}
         onClose={() => setDetailRequest(null)}
         onApprove={(request) => handleDecision(request, 'approve')}
         onReject={(request) => handleDecision(request, 'reject')}
+        isSaving={isSaving}
+      />
+      <DecisionReasonModal
+        isOpen={Boolean(decisionModal)}
+        action={decisionModal?.action}
+        request={decisionModal?.request}
+        onClose={() => setDecisionModal(null)}
+        onConfirm={handleDecision}
         isSaving={isSaving}
       />
     </PageShell>

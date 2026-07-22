@@ -63,12 +63,13 @@ export const navigationItems = [
     })),
   },
   { label: 'Hợp đồng', path: '/contracts', module: 'contracts', icon: 'description', roles: ['admin', 'agencyManager'] },
-  { label: 'Hàng hóa', path: '/inventory/products', module: 'products', icon: 'inventory_2', roles: ['admin', 'agencyManager', 'inventoryManager'] },
+  { label: 'Sản phẩm & Số lượng', path: '/inventory/products', module: 'products', icon: 'inventory_2', roles: ['admin', 'agencyManager', 'inventoryManager'] },
   { label: 'Danh Mục Sản Phẩm', path: '/products/categories', module: 'products', icon: 'category', roles: ['admin', 'agencyManager', 'inventoryManager'] },
-  { label: 'Yêu cầu tạo hàng hóa', path: '/inventory/product-approvals', module: 'product_creation_requests', icon: 'verified', roles: ['admin', 'inventoryManager'] },
-  { label: 'Yêu cầu xóa hàng hóa', path: '/inventory/product-deletion-requests', module: 'product_deletion_requests', icon: 'inventory_2', roles: ['admin', 'inventoryManager'] },
+  { label: 'Lịch sử tạo hàng hóa', path: '/inventory/product-approvals', module: 'product_creation_requests', icon: 'verified', roles: ['admin', 'inventoryManager'] },
+  { label: 'Yêu cầu xóa hàng hóa', path: '/inventory/product-deletion-requests', module: 'product_deletion_requests', icon: 'delete_sweep', roles: ['admin', 'inventoryManager'] },
   { label: 'Kho tổng', path: '/inventory', module: 'inventory', icon: 'warehouse', roles: ['inventoryManager'] },
   { label: 'Phiếu nhập NCC', path: '/inventory/supplier-receipts', module: 'supplier_receipts', icon: 'assignment_turned_in', roles: ['admin', 'agencyManager', 'accountant'] },
+  { label: 'Nhà cung cấp', path: '/inventory/suppliers', module: 'supplier_receipts', icon: 'storefront', roles: ['admin', 'agencyManager', 'accountant', 'inventoryManager'] },
   { label: 'Lô hàng nhập', path: '/inventory/batches', module: 'warehouse_batches', icon: 'inventory', roles: ['admin', 'agencyManager', 'inventoryManager', 'accountant'] },
   { label: 'Trả hàng nhập', path: '/inventory/returns', module: 'inventory_returns', icon: 'assignment_return', roles: ['admin', 'agencyManager', 'inventoryManager'] },
   { label: 'Kiểm kê tồn kho', path: '/inventory/stocktake', module: 'inventory_stocktake', icon: 'fact_check', roles: ['admin', 'agencyManager', 'inventoryManager'] },
@@ -163,11 +164,11 @@ const INVENTORY_SIDEBAR_GROUPS = [
     label: 'Hàng hóa',
     icon: 'inventory_2',
     entries: [
-      { path: '/inventory/products' },
+      { path: '/inventory/products', label: 'Sản phẩm & Số lượng' },
       { path: '/products/categories', label: 'Danh mục sản phẩm' },
       { path: '/inventory/boms' },
-      { path: '/inventory/product-approvals' },
-      { path: '/inventory/product-deletion-requests' },
+      { path: '/inventory/product-approvals', label: 'Lịch sử tạo hàng hóa' },
+      { path: '/inventory/product-deletion-requests', label: 'Yêu cầu xóa hàng hóa' },
     ],
   },
   {
@@ -180,6 +181,7 @@ const INVENTORY_SIDEBAR_GROUPS = [
       { path: '/inventory/stocktake' },
       { path: '/inventory/ledger' },
       { path: '/inventory/stock-requests' },
+      { path: '/inventory/suppliers' },
     ],
   },
   {
@@ -295,7 +297,7 @@ function withRoleAwareProductLabel(items, roles = []) {
   })
 
   return items.map((item) =>
-    item.path === '/inventory/products' && isWarehouse ? { ...item, label: 'Sản phẩm & số lượng' } : item,
+    item.path === '/inventory/products' && isWarehouse ? { ...item, label: 'Hàng hóa' } : item,
   )
 }
 
@@ -382,6 +384,7 @@ const MODULE_PATH_PREFIXES = [
   { module: 'products', prefix: '/inventory/products' },
   { module: 'stock_adjustment_ops', prefix: '/inventory/stock-requests' },
   { module: 'supplier_receipts', prefix: '/inventory/supplier-receipts' },
+  { module: 'supplier_receipts', prefix: '/inventory/suppliers' },
   { module: 'warehouse_batches', prefix: '/inventory/batches' },
   { module: 'inventory_returns', prefix: '/inventory/returns' },
   { module: 'inventory_stocktake', prefix: '/inventory/stocktake' },

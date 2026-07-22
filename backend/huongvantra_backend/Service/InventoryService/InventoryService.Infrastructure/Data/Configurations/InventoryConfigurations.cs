@@ -336,6 +336,22 @@ public class InventoryLedgerEntryConfiguration : IEntityTypeConfiguration<Invent
     }
 }
 
+public class SupplierConfiguration : IEntityTypeConfiguration<Supplier>
+{
+    public void Configure(EntityTypeBuilder<Supplier> builder)
+    {
+        builder.ToTable("Suppliers");
+        builder.HasKey(e => e.Id);
+        builder.Property(e => e.Name).HasMaxLength(255).IsRequired();
+        builder.Property(e => e.Phone).HasMaxLength(20);
+        builder.Property(e => e.Email).HasMaxLength(255);
+        builder.Property(e => e.Address).HasMaxLength(500);
+        builder.Property(e => e.Note).HasMaxLength(1000);
+        builder.HasIndex(e => e.IsDeleted);
+        builder.HasIndex(e => e.Name);
+    }
+}
+
 public class SupplierReceiptConfiguration : IEntityTypeConfiguration<SupplierReceipt>
 {
     public void Configure(EntityTypeBuilder<SupplierReceipt> builder)
@@ -355,6 +371,7 @@ public class SupplierReceiptConfiguration : IEntityTypeConfiguration<SupplierRec
         builder.Property(e => e.ReviewNote).HasMaxLength(500);
         builder.Property(e => e.StockImportSlipCode).HasMaxLength(30);
         builder.HasIndex(e => e.ReceiptCode).IsUnique();
+        builder.HasIndex(e => e.SupplierId);
         builder.HasIndex(e => e.SupplierName);
         builder.HasIndex(e => e.Status);
         builder.HasIndex(e => e.CreatedBy);
