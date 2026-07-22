@@ -65,13 +65,21 @@ export function formatRoleName(roleName) {
   return ROLE_LABELS[roleName] || roleName
 }
 
-export function formatPermissionName(permissionName) {
-  if (!permissionName) return '—'
-  return PERMISSION_LABELS[permissionName]?.label || permissionName.replace(/_/g, ' ').toLowerCase()
+export function formatPermissionName(permissionName, permissionCode) {
+  if (!permissionName && !permissionCode) return '—'
+  // If we have a dictionary match for the code, use it.
+  if (permissionCode && PERMISSION_LABELS[permissionCode]?.label) {
+    return PERMISSION_LABELS[permissionCode].label
+  }
+  // Otherwise, if the name matches the dictionary (old behavior where name was the code), use it.
+  if (PERMISSION_LABELS[permissionName]?.label) {
+    return PERMISSION_LABELS[permissionName].label
+  }
+  return permissionName || permissionCode.replace(/_/g, ' ').toLowerCase()
 }
 
-export function getPermissionHint(permissionName) {
-  return PERMISSION_LABELS[permissionName]?.hint || 'Quyền thao tác trên hệ thống'
+export function getPermissionHint(codeOrName) {
+  return PERMISSION_LABELS[codeOrName]?.hint || 'Quyền thao tác trên hệ thống'
 }
 
 export const SOFT_DELETE_CONFIRM = {

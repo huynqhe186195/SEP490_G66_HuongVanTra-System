@@ -13,17 +13,21 @@ public class PermissionLogic(IPermissionRepository permissionRepo)
         if (await permissionRepo.GetByNameAsync(request.PermissionName) is not null)
             throw new DuplicatePermissionException(request.PermissionName);
 
-        var permission = new Permission { PermissionName = request.PermissionName };
+        var permission = new Permission 
+        { 
+            PermissionCode = request.PermissionCode, 
+            PermissionName = request.PermissionName 
+        };
         await permissionRepo.AddAsync(permission);
         await permissionRepo.SaveChangesAsync();
 
-        return new PermissionResponse(permission.Id, permission.PermissionName, permission.IsDeleted);
+        return new PermissionResponse(permission.Id, permission.PermissionCode, permission.PermissionName, permission.IsDeleted);
     }
 
     public async Task<IEnumerable<PermissionResponse>> GetAllAsync(bool onlyDeleted = false)
     {
         var permissions = await permissionRepo.GetAllAsync(onlyDeleted);
-        return permissions.Select(p => new PermissionResponse(p.Id, p.PermissionName, p.IsDeleted));
+        return permissions.Select(p => new PermissionResponse(p.Id, p.PermissionCode, p.PermissionName, p.IsDeleted));
     }
 
     public async Task SoftDeleteAsync(int id)

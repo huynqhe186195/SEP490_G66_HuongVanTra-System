@@ -28,6 +28,7 @@ public class GlobalExceptionMiddleware(RequestDelegate next)
             PermissionNotFoundException e => (StatusCodes.Status404NotFound, e.Message),
             EmployeeNotFoundException e => (StatusCodes.Status404NotFound, e.Message),
             InvalidCredentialsException e => (StatusCodes.Status401Unauthorized, e.Message),
+            InvalidOldPasswordException e => (StatusCodes.Status401Unauthorized, e.Message),
             InvalidRefreshTokenException e => (StatusCodes.Status401Unauthorized, e.Message),
             UserInactiveException e => (StatusCodes.Status403Forbidden, e.Message),
             ForbiddenException e => (StatusCodes.Status403Forbidden, e.Message),

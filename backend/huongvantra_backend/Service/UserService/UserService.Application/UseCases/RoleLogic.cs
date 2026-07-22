@@ -11,6 +11,9 @@ public class RoleLogic(IRoleRepository roleRepo, IPermissionRepository permissio
 {
     public async Task<RoleResponse> CreateAsync(CreateRoleRequest request)
     {
+        if (string.IsNullOrWhiteSpace(request.RoleName))
+            throw new UserValidationException("Tên role không được để trống");
+
         await ValidatePermissionIdsAsync(request.PermissionIds);
 
         var role = new Role
@@ -54,6 +57,9 @@ public class RoleLogic(IRoleRepository roleRepo, IPermissionRepository permissio
 
     public async Task UpdateAsync(int id, UpdateRoleRequest request)
     {
+        if (string.IsNullOrWhiteSpace(request.RoleName))
+            throw new UserValidationException("Tên role không được để trống");
+
         var role = await roleRepo.GetByIdAsync(id) ?? throw new RoleNotFoundException(id);
         await ValidatePermissionIdsAsync(request.PermissionIds);
 
@@ -113,7 +119,7 @@ public class RoleLogic(IRoleRepository roleRepo, IPermissionRepository permissio
         var role = await roleRepo.GetByIdAsync(roleId) ?? throw new RoleNotFoundException(roleId);
         return role.RolePermissions
             .Where(rp => rp.Permission is not null)
-            .Select(rp => new PermissionResponse(rp.Permission!.Id, rp.Permission.PermissionName, rp.Permission.IsDeleted));
+            .Select(rp => new PermissionResponse(rp.Permission!.Id, rp.Permission.PermissionCode, rp.Permission.PermissionName, rp.Permission.IsDeleted));
     }
 
     private async Task ValidatePermissionIdsAsync(IEnumerable<int> permissionIds)
@@ -131,7 +137,7 @@ public class RoleLogic(IRoleRepository roleRepo, IPermissionRepository permissio
         role.Description,
         role.RolePermissions
             .Where(rp => rp.Permission is not null && !rp.Permission.IsDeleted)
-            .Select(rp => rp.Permission!.PermissionName)
+            .Select(rp => rp.Permission!.PermissionCode)
             .ToList(),
         role.IsDeleted);
 }

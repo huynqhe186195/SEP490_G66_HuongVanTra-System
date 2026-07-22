@@ -24,8 +24,15 @@ public class AuthLogic(
 
     public async Task<LoginResponse> LoginAsync(LoginRequest request)
     {
-        var user = await userRepo.GetByUsernameAsync(request.Username)
-            ?? throw new InvalidCredentialsException();
+        if (string.IsNullOrWhiteSpace(request.Username))
+            throw new UserValidationException("Tên đăng nhập không được để trống");
+            
+        if (string.IsNullOrWhiteSpace(request.Password))
+            throw new UserValidationException("Mật khẩu không được để trống");
+
+        var user = await userRepo.GetByUsernameAsync(request.Username);
+        if (user is null)
+            throw new UserValidationException("Tài khoản không tồn tại");
 
         if (!user.IsActive) throw new UserInactiveException();
 
@@ -71,10 +78,19 @@ public class AuthLogic(
 
     public async Task ChangePasswordAsync(Guid userId, AuthChangePasswordRequest request)
     {
+        if (string.IsNullOrWhiteSpace(request.NewPassword))
+            throw new UserValidationException("Mật khẩu mới không được để trống");
+
+        if (request.NewPassword.Length < 6)
+            throw new UserValidationException("Mật khẩu mới phải có ít nhất 6 ký tự");
+
+        if (request.NewPassword == request.CurrentPassword)
+            throw new UserValidationException("Mật khẩu mới không được trùng với mật khẩu cũ");
+
         var user = await userRepo.GetByIdAsync(userId) ?? throw new UserNotFoundException(userId);
 
         if (!BCrypt.Net.BCrypt.Verify(request.CurrentPassword, user.PasswordHash))
-            throw new InvalidCredentialsException();
+            throw new InvalidOldPasswordException();
 
         user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
         user.UpdatedAt = DateTime.UtcNow;
@@ -108,7 +124,7 @@ public class AuthLogic(
         var roleNames = roles.Select(r => r.RoleName).ToList();
         var permissions = roles
             .SelectMany(r => r.RolePermissions)
-            .Select(rp => rp.Permission.PermissionName)
+            .Select(rp => rp.Permission.PermissionCode)
             .Distinct()
             .ToList();
 

@@ -76,6 +76,7 @@ function AccessControlPage() {
   const [isSavingRole, setIsSavingRole] = useState(false)
 
   const [permissionModalOpen, setPermissionModalOpen] = useState(false)
+  const [permissionFormCode, setPermissionFormCode] = useState('')
   const [permissionFormName, setPermissionFormName] = useState('')
   const [isSavingPermission, setIsSavingPermission] = useState(false)
   const [permissionSearch, setPermissionSearch] = useState('')
@@ -234,16 +235,22 @@ function AccessControlPage() {
   }
 
   const handleCreatePermission = async () => {
-    const code = permissionFormName.trim().toUpperCase().replace(/\s+/g, '_')
+    const code = permissionFormCode.trim().toUpperCase()
     if (!code) {
       showError('Vui lòng nhập mã quyền (ví dụ: TAO_DON).')
+      return
+    }
+    const name = permissionFormName.trim()
+    if (!name) {
+      showError('Vui lòng nhập tên quyền (ví dụ: Tạo đơn hàng).')
       return
     }
 
     setIsSavingPermission(true)
     try {
-      await createPermission(code)
+      await createPermission(code, name)
       showSuccess('Đã thêm quyền mới.')
+      setPermissionFormCode('')
       setPermissionFormName('')
       setPermissionModalOpen(false)
       await loadData()
@@ -455,9 +462,9 @@ function AccessControlPage() {
                   >
                     <div>
                       <h3 className="text-lg font-bold text-[#414942]">
-                        {formatPermissionName(permission.permissionName)}
+                        {formatPermissionName(permission.permissionName, permission.permissionCode)}
                       </h3>
-                      <p className="mt-1 text-sm text-[#717971]">Mã: {permission.permissionName}</p>
+                      <p className="mt-1 text-sm text-[#717971]">Mã: {permission.permissionCode}</p>
                     </div>
                     <BigButton variant="secondary" className="mt-4 w-full" onClick={() => handleRestorePermission(permission)}>
                       <span className="material-symbols-outlined text-[24px]">restore</span>
@@ -482,10 +489,10 @@ function AccessControlPage() {
                     <span className="material-symbols-outlined text-[36px] text-[#356647]">key</span>
                     <div>
                       <h3 className="text-lg font-bold text-[#1b1c17]">
-                        {formatPermissionName(permission.permissionName)}
+                        {formatPermissionName(permission.permissionName, permission.permissionCode)}
                       </h3>
-                      <p className="mt-1 text-sm text-[#717971]">Mã: {permission.permissionName}</p>
-                      <p className="mt-2 text-base text-[#414942]">{getPermissionHint(permission.permissionName)}</p>
+                      <p className="mt-1 text-sm text-[#717971]">Mã: {permission.permissionCode}</p>
+                      <p className="mt-2 text-base text-[#414942]">{getPermissionHint(permission.permissionCode)}</p>
                     </div>
                   </div>
                   <BigButton
@@ -554,10 +561,10 @@ function AccessControlPage() {
                         />
                         <span>
                           <span className="block text-base font-bold text-[#1b1c17]">
-                            {formatPermissionName(permission.permissionName)}
+                            {formatPermissionName(permission.permissionName, permission.permissionCode)}
                           </span>
                           <span className="mt-1 block text-sm text-[#414942]">
-                            {getPermissionHint(permission.permissionName)}
+                            {getPermissionHint(permission.permissionCode)}
                           </span>
                         </span>
                       </label>
@@ -589,6 +596,15 @@ function AccessControlPage() {
               <input
                 className="mt-2 w-full rounded-2xl border-2 border-[#c1c9c0] px-4 py-3 text-base uppercase"
                 placeholder="TAO_DON"
+                value={permissionFormCode}
+                onChange={(e) => setPermissionFormCode(e.target.value)}
+              />
+            </label>
+            <label className="mt-4 block">
+              <span className="text-base font-bold text-[#1b1c17]">Tên quyền</span>
+              <input
+                className="mt-2 w-full rounded-2xl border-2 border-[#c1c9c0] px-4 py-3 text-base"
+                placeholder="Tạo đơn hàng"
                 value={permissionFormName}
                 onChange={(e) => setPermissionFormName(e.target.value)}
               />

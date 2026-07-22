@@ -7,10 +7,13 @@ public class UserNotFoundByUsernameException(string username)
     : Exception($"User with username '{username}' was not found.");
 
 public class InvalidCredentialsException()
-    : Exception("Username or password is incorrect.");
+    : Exception("Mật khẩu không đúng");
+
+public class InvalidOldPasswordException()
+    : Exception("Mật khẩu cũ không khớp");
 
 public class UserInactiveException()
-    : Exception("This account has been deactivated.");
+    : Exception("Tài khoản đã bị khóa");
 
 public class DuplicateUsernameException(string username)
     : Exception($"Username '{username}' already exists.");
@@ -25,7 +28,7 @@ public class EmployeeNotFoundException(long id)
     : Exception($"Employee with id '{id}' was not found.");
 
 public class InvalidRefreshTokenException()
-    : Exception("Refresh token is invalid or expired.");
+    : Exception("Refresh token không đúng hoặc đã hết hạn");
 
 public class ForbiddenException(string message = "You do not have permission to perform this action.")
     : Exception(message);

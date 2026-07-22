@@ -5,10 +5,10 @@ export function fetchPermissions(params = {}) {
   return apiRequestAuth(`/api/permissions${query}`, { method: 'GET' })
 }
 
-export function createPermission(permissionName) {
+export function createPermission(permissionCode, permissionName) {
   return apiRequestAuth('/api/permissions', {
     method: 'POST',
-    body: JSON.stringify({ permissionName }),
+    body: JSON.stringify({ permissionCode, permissionName }),
   })
 }
 
