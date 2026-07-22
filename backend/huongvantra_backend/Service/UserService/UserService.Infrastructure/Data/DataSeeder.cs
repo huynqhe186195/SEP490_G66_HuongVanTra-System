@@ -17,7 +17,7 @@ public static class DataSeeder
     private static readonly (string RoleName, string Description, string[] Permissions)[] DefaultRoles =
     [
         ("Sale", "Nhân viên kinh doanh",
-        [PermissionNames.CreateOrder, PermissionNames.ViewOrder, PermissionNames.ViewCustomer]),
+        [PermissionNames.CreateOrder, PermissionNames.ViewOrder, PermissionNames.ViewCustomer, PermissionNames.ViewAllCustomers]),
         ("Warehouse", "Thủ kho Kho tổng",
         [PermissionNames.ViewOrder, PermissionNames.ManageCatalog]),
         ("Accountant", "Kế toán",
@@ -34,7 +34,8 @@ public static class DataSeeder
     [
         ("sale01", "Nguyen Van Sale", "Sales", "Sale"),
         ("manager01", "Tran Thi Manager", "Operations", "Manager"),
-        (CooperativeOwnerUsername, "Nguyen Van Chu HTX", "Board", CooperativeOwnerRoleName)
+        (CooperativeOwnerUsername, "Nguyen Van Chu HTX", "Board", CooperativeOwnerRoleName),
+        ("accountant01", "Le Thi Ke Toan", "Accounting", "Accountant")
     ];
 
     public static async Task SeedAsync(UserDbContext context)

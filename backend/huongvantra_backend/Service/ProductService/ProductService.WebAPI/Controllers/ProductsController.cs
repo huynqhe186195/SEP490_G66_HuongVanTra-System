@@ -11,7 +11,13 @@ namespace ProductService.WebAPI.Controllers;
 [Route("api/v1/products")]
 public class ProductsController(ProductLogic _productLogic) : ControllerBase
 {
+    private static readonly object MasterDataWriteDisabled = new
+    {
+        message = "Product master data phải đi qua workflow phê duyệt. Vui lòng dùng /api/v1/product-creation-requests hoặc /api/v1/product-deletion-requests."
+    };
+
     [HttpGet]
+    [Authorize(Roles = "Warehouse,Accountant,Admin")]
     public async Task<IActionResult> GetPaged(
         [FromQuery] string? search,
         [FromQuery] int? categoryId,
@@ -25,42 +31,37 @@ public class ProductsController(ProductLogic _productLogic) : ControllerBase
             User.GetCatalogViewScope()));
 
     [HttpGet("{id:guid}")]
+    [Authorize(Roles = "Warehouse,Accountant,Admin")]
     public async Task<IActionResult> GetById(Guid id) =>
         Ok(await _productLogic.GetByIdAsync(id, User.GetCatalogViewScope()));
 
     [HttpGet("variants/{variantId:guid}/bom")]
-    [Authorize(Roles = "Warehouse")]
+    [Authorize(Roles = "Warehouse,Accountant,Admin")]
     public async Task<IActionResult> GetVariantBom(Guid variantId) =>
         Ok(await _productLogic.GetVariantBomAsync(variantId));
 
     [HttpPut("variants/{variantId:guid}/bom")]
     [Authorize(Roles = "Warehouse")]
-    public async Task<IActionResult> UpdateVariantBom(Guid variantId, [FromBody] UpdateVariantBomRequest request) =>
-        Ok(await _productLogic.UpdateVariantBomAsync(variantId, request));
+    public IActionResult UpdateVariantBom(Guid variantId, [FromBody] UpdateVariantBomRequest request) =>
+        StatusCode(StatusCodes.Status410Gone, MasterDataWriteDisabled);
 
     [HttpPost]
     [Authorize(Roles = "Warehouse")]
-    public async Task<IActionResult> Create([FromBody] CreateProductRequest request)
-    {
-        var result = await _productLogic.CreateAsync(request);
-        return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
-    }
+    public IActionResult Create([FromBody] CreateProductRequest request) =>
+        StatusCode(StatusCodes.Status410Gone, MasterDataWriteDisabled);
 
     [HttpPut("{id:guid}")]
     [Authorize(Roles = "Warehouse")]
-    public async Task<IActionResult> Update(Guid id, [FromBody] UpdateProductRequest request) =>
-        Ok(await _productLogic.UpdateAsync(id, request));
+    public IActionResult Update(Guid id, [FromBody] UpdateProductRequest request) =>
+        StatusCode(StatusCodes.Status410Gone, MasterDataWriteDisabled);
 
     [HttpDelete("{id:guid}")]
     [Authorize(Roles = "Warehouse")]
-    public async Task<IActionResult> Delete(Guid id)
-    {
-        await _productLogic.DeleteAsync(id);
-        return NoContent();
-    }
+    public IActionResult Delete(Guid id) =>
+        StatusCode(StatusCodes.Status410Gone, MasterDataWriteDisabled);
 
     [HttpPost("{id:guid}/restore")]
-    [Authorize(Roles = "Warehouse")]
-    public async Task<IActionResult> Restore(Guid id) =>
-        Ok(await _productLogic.RestoreAsync(id));
+    [Authorize(Roles = "Admin")]
+    public IActionResult Restore(Guid id) =>
+        StatusCode(StatusCodes.Status410Gone, MasterDataWriteDisabled);
 }

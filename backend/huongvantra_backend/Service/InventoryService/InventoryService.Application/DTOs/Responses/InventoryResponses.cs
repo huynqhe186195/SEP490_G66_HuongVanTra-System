@@ -24,7 +24,17 @@ public record StockDeductQueueResponse(
     string? CancelledByRoleName = null,
     string? CancelReason = null,
     DateTime? LastAttemptAt = null,
-    string? LastShortageReason = null);
+    string? LastShortageReason = null,
+    List<StockDeductQueueLineResponse>? Lines = null);
+
+public record StockDeductQueueLineResponse(
+    Guid SkuId,
+    string? SkuCode,
+    string SkuName,
+    int OrderedQuantity,
+    int FinishedDeductedQuantity,
+    int PendingBomQuantity,
+    string StockHandlingMode);
 
 public record StockDeductPreviewItemResponse(
     Guid SkuId,
@@ -42,7 +52,9 @@ public record StockDeductPreviewResponse(
     string QueueStatus,
     string OrderStockStatus,
     bool CanDeduct,
-    List<StockDeductPreviewItemResponse> Items);
+    List<StockDeductPreviewItemResponse> Items,
+    List<StockDeductQueueLineResponse>? Lines = null,
+    bool IsBomReconciliation = false);
 
 public record StockDeductConfirmResponse(
     Guid QueueId,
@@ -56,6 +68,23 @@ public record StockDeductConfirmResponse(
     DateTime? CancelledAt = null,
     string? CancelReason = null);
 
+public record PosStockHandlingLineResponse(
+    Guid SkuId,
+    string? SkuCode,
+    string SkuName,
+    int OrderedQuantity,
+    int FinishedDeductedQuantity,
+    int PendingBomQuantity);
+
+public record PosStockHandlingResponse(
+    Guid OrderId,
+    string OrderCode,
+    string StockHandlingMode,
+    bool HasPendingStockReconciliation,
+    string Message,
+    List<Guid> QueueIds,
+    List<PosStockHandlingLineResponse> Lines);
+
 public record SkuStockResponse(
     Guid SkuId,
     string SkuCode,
@@ -63,6 +92,19 @@ public record SkuStockResponse(
     int QuantityOnHand,
     int WarehouseQuantityOnHand,
     int LowStockThreshold,
+    int WarehouseLowStockThreshold,
+    int ShelfLowStockThreshold,
+    DateTime UpdatedAt);
+
+/// <summary>Response chỉ trả tồn quầy — dùng cho Admin/Manager (không expose thông tin kho tổng).</summary>
+public record StoreSkuStockResponse(
+    Guid SkuId,
+    string SkuCode,
+    int WeightInGrams,
+    int QuantityOnHand,
+    int WarehouseQuantityOnHand,
+    int LowStockThreshold,
+    int ShelfLowStockThreshold,
     DateTime UpdatedAt);
 
 public record StockAdjustmentRequestItemResponse(
@@ -143,6 +185,9 @@ public record WarehouseBatchResponse(
     string? SourceType,
     Guid? SourceReferenceId,
     string? SourceReferenceCode,
+    string Location,
+    Guid? ParentBatchId,
+    Guid? SourceBatchId,
     string Status,
     int TotalQuantityOnHand,
     int SkuLineCount,
@@ -159,6 +204,9 @@ public record StockExportSlipResponse(
     string? StockAdjustmentRequestCode,
     Guid? ProductionOrderId,
     string? ProductionCode,
+    string? ReferenceType,
+    Guid? ReferenceId,
+    string? ReferenceCode,
     Guid SkuId,
     string SkuCode,
     string SkuSnapshotName,
@@ -186,6 +234,7 @@ public record StockImportSlipLineResponse(
     int WarehouseQtyAfter,
     int StoreQtyBefore,
     int StoreQtyAfter,
+    string? DestinationLocation,
     Guid? WarehouseBatchId,
     string? WarehouseBatchLotCode,
     Guid? ProductionOrderOutputLineId,
@@ -208,6 +257,11 @@ public record StockImportSlipResponse(
     string? WarehouseBatchLotCode,
     Guid? ProductionOrderId,
     string? ProductionCode,
+    Guid? SupplierReceiptId,
+    string? SupplierReceiptCode,
+    string? ReferenceType,
+    Guid? ReferenceId,
+    string? ReferenceCode,
     string? Note,
     Guid CreatedBy,
     Guid? CreatedById,
@@ -215,6 +269,218 @@ public record StockImportSlipResponse(
     string? CreatedByRoleName,
     DateTime CreatedAt,
     List<StockImportSlipLineResponse> Lines);
+
+public record InventoryLedgerEntryResponse(
+    Guid Id,
+    Guid TransactionGroupId,
+    DateTime OccurredAtUtc,
+    Guid SkuId,
+    string SkuCode,
+    string SkuNameSnapshot,
+    string? ProductTypeSnapshot,
+    string? InventoryUnitSnapshot,
+    string Location,
+    int QuantityBefore,
+    int QuantityDelta,
+    int QuantityAfter,
+    string TransactionType,
+    string? SourceLocation,
+    string? DestinationLocation,
+    string? ReferenceType,
+    Guid? ReferenceId,
+    string? ReferenceCode,
+    Guid? BatchId,
+    string? LotCode,
+    Guid? ActorId,
+    string? ActorName,
+    string? ActorRole,
+    string? Reason,
+    string? Note,
+    string? CorrelationId);
+
+public record SupplierReceiptItemResponse(
+    Guid Id,
+    Guid SkuId,
+    string SkuCode,
+    string SkuNameSnapshot,
+    string ProductTypeSnapshot,
+    string InventoryUnitSnapshot,
+    string? SubmittedUnit,
+    decimal SubmittedQuantity,
+    int Quantity,
+    decimal? UnitCost,
+    string LotCode,
+    DateTime? ManufacturedAt,
+    DateTime? ExpiresAt,
+    int ActualReceivedQuantity,
+    string? QualityNote,
+    Guid? WarehouseBatchId,
+    string? WarehouseBatchLotCode,
+    int? WarehouseQtyBefore,
+    int? WarehouseQtyAfter,
+    int? ShelfQtyBefore,
+    int? ShelfQtyAfter);
+
+public record SupplierReceiptResponse(
+    Guid Id,
+    string ReceiptCode,
+    string? SupplierName,
+    string? SupplierReference,
+    string? SupplierDocumentNumber,
+    DateTime? SupplierDocumentDate,
+    DateTime ReceivedDate,
+    string? Note,
+    string Status,
+    Guid CreatedBy,
+    string? CreatedByName,
+    string? CreatedByRoleName,
+    DateTime CreatedAt,
+    DateTime UpdatedAt,
+    Guid? SubmittedBy,
+    DateTime? SubmittedAt,
+    Guid? ReviewedBy,
+    string? ReviewedByName,
+    string? ReviewedByRoleName,
+    DateTime? ReviewedAt,
+    string? ReviewNote,
+    Guid? StockImportSlipId,
+    string? StockImportSlipCode,
+    int TotalQuantity,
+    List<SupplierReceiptItemResponse> Items);
+
+public record ShelfReturnRequestItemResponse(
+    Guid Id,
+    Guid SkuId,
+    string SkuCode,
+    string SkuSnapshotName,
+    int Quantity,
+    Guid? ShelfBatchId,
+    string? ShelfLotCode,
+    int? ShelfQtyBefore,
+    int? ShelfQtyAfter,
+    int? WarehouseQtyBefore,
+    int? WarehouseQtyAfter,
+    Guid? StockExportSlipId,
+    string? StockExportSlipCode,
+    Guid? StockImportSlipId,
+    string? StockImportSlipCode,
+    Guid? WarehouseBatchId,
+    string? WarehouseBatchLotCode,
+    string? Note);
+
+public record ShelfReturnRequestResponse(
+    Guid Id,
+    string ReturnCode,
+    string ReturnMode,
+    Guid? OriginalStockAdjustmentRequestId,
+    string? OriginalStockAdjustmentRequestCode,
+    string? Reason,
+    string? Note,
+    string Status,
+    Guid CreatedBy,
+    string? CreatedByName,
+    string? CreatedByRoleName,
+    DateTime CreatedAt,
+    DateTime UpdatedAt,
+    Guid? ReviewedBy,
+    string? ReviewedByName,
+    string? ReviewedByRoleName,
+    DateTime? ReviewedAt,
+    string? ReviewNote,
+    int TotalQuantity,
+    List<ShelfReturnRequestItemResponse> Items);
+
+public record SupplierReturnRequestItemResponse(
+    Guid Id,
+    Guid SkuId,
+    string SkuCode,
+    string SkuSnapshotName,
+    int Quantity,
+    Guid? WarehouseBatchId,
+    string? WarehouseBatchLotCode,
+    int? WarehouseQtyBefore,
+    int? WarehouseQtyAfter,
+    int? ShelfQtyBefore,
+    int? ShelfQtyAfter,
+    Guid? StockExportSlipId,
+    string? StockExportSlipCode,
+    string? Note);
+
+public record SupplierReturnRequestResponse(
+    Guid Id,
+    string ReturnCode,
+    string ReturnMode,
+    Guid? SupplierReceiptId,
+    string? SupplierReceiptCode,
+    string? SupplierName,
+    string? SupplierReference,
+    string? Reason,
+    string? Note,
+    string Status,
+    Guid CreatedBy,
+    string? CreatedByName,
+    string? CreatedByRoleName,
+    DateTime CreatedAt,
+    DateTime UpdatedAt,
+    Guid? ReviewedBy,
+    string? ReviewedByName,
+    string? ReviewedByRoleName,
+    DateTime? ReviewedAt,
+    string? ReviewNote,
+    int TotalQuantity,
+    List<SupplierReturnRequestItemResponse> Items);
+
+public record StocktakeReasonCodeResponse(
+    string Code,
+    string Label);
+
+public record StocktakeRequestItemResponse(
+    Guid Id,
+    Guid SkuId,
+    string SkuCode,
+    string SkuSnapshotName,
+    string? ProductTypeSnapshot,
+    string? InventoryUnitSnapshot,
+    int SystemQuantitySnapshot,
+    int ActualQuantity,
+    int Variance,
+    string ReasonCode,
+    string? Note,
+    int? WarehouseQtyBefore,
+    int? WarehouseQtyAfter,
+    int? ShelfQtyBefore,
+    int? ShelfQtyAfter,
+    Guid? StockExportSlipId,
+    string? StockExportSlipCode,
+    Guid? StockImportSlipId,
+    string? StockImportSlipCode,
+    Guid? WarehouseBatchId,
+    string? WarehouseBatchLotCode);
+
+public record StocktakeRequestResponse(
+    Guid Id,
+    string RequestCode,
+    string Location,
+    DateTime CountDate,
+    string? Reason,
+    string? Note,
+    string Status,
+    Guid CreatedBy,
+    string? CreatedByName,
+    string? CreatedByRoleName,
+    DateTime CreatedAt,
+    DateTime UpdatedAt,
+    Guid? SubmittedBy,
+    DateTime? SubmittedAt,
+    Guid? ReviewedBy,
+    string? ReviewedByName,
+    string? ReviewedByRoleName,
+    DateTime? ReviewedAt,
+    string? ReviewNote,
+    int TotalPositiveVariance,
+    int TotalNegativeVariance,
+    int TotalAbsoluteVariance,
+    List<StocktakeRequestItemResponse> Items);
 
 public record ProductionOrderLineResponse(
     Guid Id,
@@ -230,6 +496,7 @@ public record ProductionOrderOutputLineResponse(
     string FinishedSkuSnapshotName,
     int PlannedQuantity,
     DateTime? ExpiresAt,
+    string DestinationLocation,
     Guid? WarehouseBatchId,
     string? WarehouseBatchLotCode,
     DateTime CreatedAt);
@@ -240,7 +507,17 @@ public record ProductionOrderResponse(
     string? Note,
     string Status,
     Guid CreatedBy,
+    string? CreatedByName,
+    string? CreatedByRoleName,
     DateTime CreatedAt,
+    DateTime UpdatedAt,
+    Guid? SubmittedBy,
+    DateTime? SubmittedAt,
+    Guid? ReviewedBy,
+    string? ReviewedByName,
+    string? ReviewedByRoleName,
+    DateTime? ReviewedAt,
+    string? ReviewNote,
     DateTime? CompletedAt,
     List<ProductionOrderLineResponse> Lines,
     List<ProductionOrderOutputLineResponse> OutputLines);

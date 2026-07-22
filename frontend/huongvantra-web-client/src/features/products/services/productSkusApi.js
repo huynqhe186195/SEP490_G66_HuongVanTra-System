@@ -48,8 +48,42 @@ export async function fetchAllActiveSkus(pageSize = 100) {
   return items
 }
 
+/** SKU cho Admin/Manager — gọi endpoint riêng, luôn trả catalog cửa hàng. */
+export async function fetchStoreSkus(params = {}) {
+  const query = buildSkuQuery(params)
+  const data = await apiRequestAuth(`/api/v1/store/skus?${query}`, { method: 'GET' })
+  const paged = toPagedResult(data)
+  return {
+    ...paged,
+    items: paged.items.map(mapProductSku).filter(Boolean),
+  }
+}
+
+export async function fetchAllActiveStoreSkus(pageSize = 100) {
+  const items = []
+  let page = 1
+  let totalCount = 0
+
+  do {
+    const result = await fetchStoreSkus({ isActive: true, page, pageSize })
+    items.push(...result.items)
+    totalCount = result.totalCount ?? items.length
+    if (result.items.length < pageSize) break
+    page += 1
+  } while (items.length < totalCount)
+
+  return items
+}
+
 export async function fetchSkusByProductId(productId) {
   const data = await apiRequestAuth(`/api/v1/skus/by-product/${productId}`, { method: 'GET' })
+  const items = Array.isArray(data) ? data : data?.items ?? data?.Items ?? []
+  return items.map(mapProductSku).filter(Boolean)
+}
+
+/** SKU theo product — catalog cửa hàng (Admin/Manager/Sale). */
+export async function fetchStoreSkusByProductId(productId) {
+  const data = await apiRequestAuth(`/api/v1/store/skus/by-product/${productId}`, { method: 'GET' })
   const items = Array.isArray(data) ? data : data?.items ?? data?.Items ?? []
   return items.map(mapProductSku).filter(Boolean)
 }

@@ -1,5 +1,13 @@
 # SEP490 - Hệ thống Quản trị Hương Vân Trà
 
+## Inventory / Warehouse Scope
+
+Current Inventory scope separates `Warehouse` and `Shelf` stock, uses `WarehouseQuantityOnHand` for Kho tong and `QuantityOnHand` for Ke Hang/POS sellable stock, and keeps Product master changes behind approval workflows.
+
+Read the acceptance and UAT guide here:
+
+- `docs/inventory-acceptance-guide.md`
+
 # Hướng dẫn cách build docker 
 1. Build lại images (bắt buộc phải rebuild vì đã thay đổi Dockerfile)
 

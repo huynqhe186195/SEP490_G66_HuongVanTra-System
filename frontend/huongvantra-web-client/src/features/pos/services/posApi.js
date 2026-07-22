@@ -102,6 +102,7 @@ function buildOrderRequestFromPosPayload(
       unitPrice: line.isGift ? 0 : line.unitPrice,
       isGift: Boolean(line.isGift),
     })),
+    customBundles: payload.customBundles ?? [],
   })
 }
 
@@ -122,6 +123,7 @@ function mapOrderDetailToPosResult(order) {
     qrExpiresAtUtc: null,
     invoiceCode: null,
     createdAt: order.createdAt,
+    stockHandlingSummary: order.stockHandlingSummary ?? null,
     items: (order.items ?? []).map((row) => ({
       productId: row.skuId,
       productName: row.skuSnapshotName,
@@ -154,6 +156,7 @@ export function mapPosOrderResult(item) {
     qrExpiresAtUtc: item.qrExpiresAtUtc ?? item.QrExpiresAtUtc ?? null,
     invoiceCode: item.invoiceCode ?? item.InvoiceCode ?? null,
     createdAt: item.createdAt ?? item.CreatedAt,
+    stockHandlingSummary: item.stockHandlingSummary ?? item.StockHandlingSummary ?? null,
     items: (item.items ?? item.Items ?? []).map((row) => ({
       productId: row.productId ?? row.ProductId,
       productName: row.productName ?? row.ProductName ?? '',
@@ -471,6 +474,10 @@ export function mapPosProduct(item) {
     categoryId: item.categoryId ?? item.CategoryId ?? null,
     categoryName: item.categoryName ?? item.CategoryName ?? '',
     costPrice: Number(item.costPrice ?? item.CostPrice ?? 0),
+    productType: item.productType ?? item.ProductType ?? '',
+    inventoryUnit: item.inventoryUnit ?? item.InventoryUnit ?? '',
+    isSellable: item.isSellable ?? item.IsSellable ?? true,
+    priceUnit: item.priceUnit ?? item.PriceUnit ?? item.inventoryUnit ?? item.InventoryUnit ?? '',
   }
 }
 
@@ -754,11 +761,11 @@ async function fetchStoreProductsForPos() {
   const pageSize = 100
   let page = 1
   let allItems = []
-  let totalCount = 0
+  let totalCount
 
   do {
     const data = await apiRequestAuth(
-      `/api/v1/products?page=${page}&pageSize=${pageSize}`,
+      `/api/v1/store/products?page=${page}&pageSize=${pageSize}`,
       { method: 'GET' },
     )
     const paged = toPagedResult(data)
@@ -786,7 +793,10 @@ export async function fetchPosProducts({ storeId, search, limit = 30 }) {
       imageUrl: p.imageUrl ?? '',
       categoryId: p.categoryId ?? null,
       productType: p.productType ?? '',
-    }))
+      inventoryUnit: p.inventoryUnit ?? '',
+      isSellable: p.isSellable ?? true,
+      priceUnit: p.priceUnit ?? p.inventoryUnit ?? '',
+    })).filter((product) => product.isSellable !== false)
   }
 
   void storeId
@@ -799,7 +809,7 @@ export async function fetchPosProducts({ storeId, search, limit = 30 }) {
   query.set('isActive', 'true')
 
   const [data, productItems] = await Promise.all([
-    apiRequestAuth(`/api/v1/skus?${query.toString()}`, { method: 'GET' }),
+    apiRequestAuth(`/api/v1/store/skus?${query.toString()}`, { method: 'GET' }),
     fetchStoreProductsForPos().catch(() => []),
   ])
   const paged = toPagedResult(data)
@@ -813,7 +823,7 @@ export async function fetchPosProducts({ storeId, search, limit = 30 }) {
 
   let stockBySkuId = new Map()
   try {
-    const stocks = await apiRequestAuth('/api/v1/inventory/sku-stocks', { method: 'GET' })
+    const stocks = await apiRequestAuth('/api/v1/store/sku-stocks', { method: 'GET' })
     if (Array.isArray(stocks)) {
       stockBySkuId = new Map(
         stocks.map((row) => [row.skuId ?? row.SkuId, Number(row.quantityOnHand ?? row.QuantityOnHand ?? 0)]),
@@ -848,9 +858,14 @@ export async function fetchPosProducts({ storeId, search, limit = 30 }) {
         categoryId: sku.categoryId ?? sku.CategoryId ?? product?.categoryId ?? product?.CategoryId ?? null,
         categoryName: sku.categoryName ?? sku.CategoryName ?? product?.categoryName ?? product?.CategoryName ?? '',
         costPrice: sku.costPrice ?? sku.CostPrice ?? 0,
+        productType: sku.productType ?? sku.ProductType ?? product?.productType ?? product?.ProductType ?? '',
+        inventoryUnit: sku.inventoryUnit ?? sku.InventoryUnit ?? product?.inventoryUnit ?? product?.InventoryUnit ?? '',
+        isSellable: sku.isSellable ?? sku.IsSellable ?? product?.isSellable ?? product?.IsSellable ?? true,
+        priceUnit: sku.priceUnit ?? sku.PriceUnit ?? product?.priceUnit ?? product?.PriceUnit ?? sku.inventoryUnit ?? sku.InventoryUnit ?? '',
       })
     })
     .filter(Boolean)
+    .filter((product) => product.isSellable !== false)
 }
 
 export function resolvePosStoreId() {

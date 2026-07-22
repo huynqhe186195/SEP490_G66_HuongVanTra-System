@@ -9,8 +9,17 @@ public class ProductionOrder
     public string? Note { get; set; }
     public ProductionOrderStatus Status { get; set; } = ProductionOrderStatus.Draft;
     public Guid CreatedBy { get; set; }
+    public string? CreatedByName { get; set; }
+    public string? CreatedByRoleName { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
+    public Guid? SubmittedBy { get; set; }
+    public DateTime? SubmittedAt { get; set; }
+    public Guid? ReviewedBy { get; set; }
+    public string? ReviewedByName { get; set; }
+    public string? ReviewedByRoleName { get; set; }
+    public DateTime? ReviewedAt { get; set; }
+    public string? ReviewNote { get; set; }
     public DateTime? CompletedAt { get; set; }
     public ICollection<ProductionOrderLine> Lines { get; set; } = [];
     public ICollection<ProductionOrderOutputLine> OutputLines { get; set; } = [];

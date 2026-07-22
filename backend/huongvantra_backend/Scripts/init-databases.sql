@@ -38,4 +38,10 @@ CREATE DATABASE IF NOT EXISTS `hvt_document_db`
 
 GRANT ALL PRIVILEGES ON `hvt_document_db`.* TO 'hvtuser'@'%';
 
+CREATE DATABASE IF NOT EXISTS `hvt_audit_db`
+  CHARACTER SET utf8mb4
+  COLLATE utf8mb4_unicode_ci;
+
+GRANT ALL PRIVILEGES ON `hvt_audit_db`.* TO 'hvtuser'@'%';
+
 FLUSH PRIVILEGES;

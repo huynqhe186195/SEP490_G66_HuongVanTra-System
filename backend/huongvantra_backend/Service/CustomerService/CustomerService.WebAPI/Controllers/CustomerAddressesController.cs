@@ -28,7 +28,7 @@ public class CustomerAddressesController : ControllerBase
     }
 
     [HttpGet]
-    [Authorize(Policy = PermissionNames.ViewCustomer)]
+    [Authorize(Policy = PermissionNames.ViewCustomerAccess)]
     public async Task<IActionResult> GetAll(Guid customerId, CancellationToken ct = default)
     {
         var addresses = await _addressRepo.GetByCustomerIdAsync(customerId, ct);

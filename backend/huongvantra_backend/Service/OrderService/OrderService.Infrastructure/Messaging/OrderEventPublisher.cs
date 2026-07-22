@@ -62,7 +62,7 @@ public class OrderEventPublisher(IPublishEndpoint _publishEndpoint) : IOrderEven
         decimal returnAmount,
         decimal orderFinalAmount,
         decimal refundAmount,
-        IEnumerable<(Guid SkuId, int Quantity)> items,
+        IEnumerable<(Guid SkuId, string SkuName, string? SkuCode, int Quantity)> items,
         CancellationToken ct = default) =>
         _publishEndpoint.Publish(new OrderReturnedEvent
         {
@@ -74,6 +74,12 @@ public class OrderEventPublisher(IPublishEndpoint _publishEndpoint) : IOrderEven
             ReturnAmount = returnAmount,
             OrderFinalAmount = orderFinalAmount,
             RefundAmount = refundAmount,
-            Items = items.Select(i => new OrderItemEvent { SkuId = i.SkuId, Quantity = i.Quantity })
+            Items = items.Select(i => new OrderItemEvent
+            {
+                SkuId = i.SkuId,
+                SkuName = i.SkuName,
+                SkuCode = i.SkuCode,
+                Quantity = i.Quantity
+            })
         }, ct);
 }

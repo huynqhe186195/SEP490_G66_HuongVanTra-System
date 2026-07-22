@@ -1,6 +1,12 @@
 namespace ProductService.Application.DTOs.Requests;
 
-public record BomLineRequest(Guid MaterialId, decimal Quantity);
+public record BomLineRequest(
+    Guid MaterialId,
+    decimal Quantity,
+    Guid? ComponentVariantId = null,
+    string? ComponentSkuCode = null,
+    string? ComponentRequestSkuKey = null,
+    bool IsRequiredBaseComponent = false);
 
 public record UpdateVariantBomRequest(List<BomLineRequest>? Lines);
 
@@ -52,6 +58,11 @@ public record UpdateProductSkuRequest(
     string? ImageUrl,
     bool IsActive);
 
+public record ProductAttributeValueRequest(
+    int? AttributeNameId,
+    string AttributeName,
+    string Value);
+
 public record CreateProductRequest(
     int CategoryId,
     string Name,
@@ -60,6 +71,7 @@ public record CreateProductRequest(
     string? BrewingGuide,
     string? Description,
     string? BaseUnit,
+    string? InventoryUnit,
     decimal? WeightValue,
     string? WeightUnit,
     bool IsVariantParent,
@@ -67,7 +79,8 @@ public record CreateProductRequest(
     List<ProductImageRequest>? Images,
     List<ProductUnitRequest>? Units,
     List<ProductVariantRequest>? Variants,
-    GenerateProductVariantsRequest? VariantGenerator);
+    GenerateProductVariantsRequest? VariantGenerator,
+    List<ProductAttributeValueRequest>? Attributes = null);
 
 public record UpdateProductRequest(
     int CategoryId,
@@ -77,6 +90,7 @@ public record UpdateProductRequest(
     string? BrewingGuide,
     string? Description,
     string? BaseUnit,
+    string? InventoryUnit,
     decimal? WeightValue,
     string? WeightUnit,
     bool IsVariantParent,
@@ -85,5 +99,6 @@ public record UpdateProductRequest(
     List<ProductImageRequest>? Images,
     List<ProductUnitRequest>? Units,
     List<ProductVariantRequest>? Variants,
-    GenerateProductVariantsRequest? VariantGenerator);
+    GenerateProductVariantsRequest? VariantGenerator,
+    List<ProductAttributeValueRequest>? Attributes = null);
 

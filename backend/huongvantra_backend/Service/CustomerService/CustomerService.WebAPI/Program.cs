@@ -4,6 +4,7 @@ using CustomerService.Infrastructure.Data;
 using CustomerService.Infrastructure.Messaging;
 using CustomerService.Infrastructure.Repositories;
 using CustomerService.WebAPI.Middlewares;
+using HuongVanTra.Shared.Audit;
 using HuongVanTra.Shared.Auth;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
@@ -39,6 +40,7 @@ builder.Services.AddScoped<CustomerTierLogic>();
 
 builder.Services.AddHvtJwtAuthentication(builder.Configuration);
 builder.Services.AddHvtPermissionPolicies();
+builder.Services.AddHvtSystemActivityAudit("CustomerService");
 
 builder.Services.AddMassTransit(x =>
 {
@@ -111,6 +113,7 @@ app.UseMiddleware<GlobalExceptionMiddleware>();
 app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseHvtSystemActivityAudit();
 app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
 app.MapControllers();
 

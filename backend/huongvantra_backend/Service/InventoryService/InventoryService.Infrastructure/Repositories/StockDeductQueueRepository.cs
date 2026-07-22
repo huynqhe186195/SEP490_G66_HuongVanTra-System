@@ -25,6 +25,26 @@ public class StockDeductQueueRepository(InventoryDbContext _db) : IStockDeductQu
         return await query.OrderByDescending(q => q.CreatedAt).ToListAsync(ct);
     }
 
+    public async Task<List<StockDeductQueue>> GetUnresolvedBomReconciliationQueuesAsync(
+        Guid? excludeQueueId = null,
+        CancellationToken ct = default)
+    {
+        var query = _db.StockDeductQueues
+            .Include(q => q.Items)
+            .Where(q =>
+                !q.IsDeducted &&
+                (q.QueueStatus == QueueStatus.Waiting || q.QueueStatus == QueueStatus.Insufficient) &&
+                q.Items.Any(i =>
+                    i.PendingBomQuantity != null &&
+                    i.PendingBomQuantity > 0 &&
+                    i.MaterialRequirementSnapshotJson != null));
+
+        if (excludeQueueId.HasValue)
+            query = query.Where(q => q.Id != excludeQueueId.Value);
+
+        return await query.ToListAsync(ct);
+    }
+
     public async Task<int> CountWaitingAsync(CancellationToken ct = default)
     {
         return await _db.StockDeductQueues

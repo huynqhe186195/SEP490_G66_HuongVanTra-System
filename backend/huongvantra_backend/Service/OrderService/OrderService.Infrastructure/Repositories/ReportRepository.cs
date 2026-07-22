@@ -127,6 +127,7 @@ public class ReportRepository(OrderDbContext dbContext) : IReportRepository
             ValueReturnRate = valueReturnRate,
             CustomerCount = customerCount,
             CustomerGrowthRate = customerGrowthRate,
+            TotalCostOfGoods = totalCost,
             GrossProfit = grossProfit
         };
     }

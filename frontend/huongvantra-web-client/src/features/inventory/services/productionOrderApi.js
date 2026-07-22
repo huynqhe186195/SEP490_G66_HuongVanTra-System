@@ -21,6 +21,7 @@ export function mapProductionOrderOutputLine(row) {
     finishedSkuSnapshotName: row.finishedSkuSnapshotName ?? row.FinishedSkuSnapshotName ?? '',
     plannedQuantity,
     expiresAt: row.expiresAt ?? row.ExpiresAt ?? null,
+    destinationLocation: row.destinationLocation ?? row.DestinationLocation ?? 'Warehouse',
     warehouseBatchId: row.warehouseBatchId ?? row.WarehouseBatchId ?? null,
     warehouseBatchLotCode: row.warehouseBatchLotCode ?? row.WarehouseBatchLotCode ?? null,
   }
@@ -35,7 +36,17 @@ export function mapProductionOrder(row) {
     note: row.note ?? row.Note ?? null,
     status: row.status ?? row.Status ?? 'Draft',
     createdBy: row.createdBy ?? row.CreatedBy,
+    createdByName: row.createdByName ?? row.CreatedByName ?? null,
+    createdByRoleName: row.createdByRoleName ?? row.CreatedByRoleName ?? null,
     createdAt: row.createdAt ?? row.CreatedAt ?? null,
+    updatedAt: row.updatedAt ?? row.UpdatedAt ?? null,
+    submittedBy: row.submittedBy ?? row.SubmittedBy ?? null,
+    submittedAt: row.submittedAt ?? row.SubmittedAt ?? null,
+    reviewedBy: row.reviewedBy ?? row.ReviewedBy ?? null,
+    reviewedByName: row.reviewedByName ?? row.ReviewedByName ?? null,
+    reviewedByRoleName: row.reviewedByRoleName ?? row.ReviewedByRoleName ?? null,
+    reviewedAt: row.reviewedAt ?? row.ReviewedAt ?? null,
+    reviewNote: row.reviewNote ?? row.ReviewNote ?? null,
     completedAt: row.completedAt ?? row.CompletedAt ?? null,
     lines: (row.lines ?? row.Lines ?? []).map(mapProductionOrderLine).filter(Boolean),
     outputLines,
@@ -44,13 +55,19 @@ export function mapProductionOrder(row) {
 
 export const PRODUCTION_STATUS_LABEL = {
   Draft: 'Chờ xác nhận',
+  PendingApproval: 'Chờ duyệt',
+  Approved: 'Đã duyệt',
   Completed: 'Hoàn thành',
+  Rejected: 'Bị từ chối',
   Cancelled: 'Đã hủy',
 }
 
 export const PRODUCTION_STATUS_CLASS = {
   Draft: 'bg-amber-50 text-amber-700 border border-amber-200',
+  PendingApproval: 'bg-sky-50 text-sky-700 border border-sky-200',
+  Approved: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
   Completed: 'bg-green-50 text-green-700 border border-green-200',
+  Rejected: 'bg-red-50 text-red-700 border border-red-200',
   Cancelled: 'bg-slate-100 text-slate-500 border border-slate-200',
 }
 
@@ -82,6 +99,7 @@ export async function createProductionOrder(payload) {
         finishedSkuSnapshotName: output.finishedSkuSnapshotName,
         plannedQuantity: Number(output.plannedQuantity ?? output.quantity),
         expiresAt: output.expiresAt || null,
+        destinationLocation: output.destinationLocation || 'Warehouse',
       })),
       lines: (payload.lines ?? []).map((l) => ({
         materialSkuId: l.materialSkuId,
@@ -94,12 +112,36 @@ export async function createProductionOrder(payload) {
   return mapProductionOrder(data)
 }
 
+export async function submitProductionOrder(id) {
+  const data = await apiRequestAuth(`/api/v1/inventory/production-orders/${id}/submit`, { method: 'POST' })
+  return mapProductionOrder(data)
+}
+
+export async function approveProductionOrder(id, reason = '') {
+  const data = await apiRequestAuth(`/api/v1/inventory/production-orders/${id}/approve`, {
+    method: 'POST',
+    body: JSON.stringify({ reason: reason?.trim() || null }),
+  })
+  return mapProductionOrder(data)
+}
+
+export async function rejectProductionOrder(id, reason) {
+  const data = await apiRequestAuth(`/api/v1/inventory/production-orders/${id}/reject`, {
+    method: 'POST',
+    body: JSON.stringify({ reason: reason?.trim() || '' }),
+  })
+  return mapProductionOrder(data)
+}
+
 export async function completeProductionOrder(id) {
   const data = await apiRequestAuth(`/api/v1/inventory/production-orders/${id}/complete`, { method: 'POST' })
   return mapProductionOrder(data)
 }
 
-export async function cancelProductionOrder(id) {
-  const data = await apiRequestAuth(`/api/v1/inventory/production-orders/${id}/cancel`, { method: 'POST' })
+export async function cancelProductionOrder(id, reason) {
+  const data = await apiRequestAuth(`/api/v1/inventory/production-orders/${id}/cancel`, {
+    method: 'POST',
+    body: JSON.stringify({ reason: reason?.trim() || '' }),
+  })
   return mapProductionOrder(data)
 }

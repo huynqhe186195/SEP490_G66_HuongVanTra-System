@@ -11,6 +11,11 @@ namespace ProductService.WebAPI.Controllers;
 [Route("api/v1/product-approval-requests")]
 public class ProductApprovalRequestsController(ProductApprovalLogic _logic) : ControllerBase
 {
+    private static readonly object LegacyWriteDisabled = new
+    {
+        message = "Luồng mã phê duyệt sản phẩm cũ đã chuyển sang ProductCreationRequest. Vui lòng dùng /api/v1/product-creation-requests."
+    };
+
     [HttpGet]
     [Authorize(Policy = PermissionNames.ManageBusinessPolicy)]
     public async Task<IActionResult> GetPaged(
@@ -28,35 +33,32 @@ public class ProductApprovalRequestsController(ProductApprovalLogic _logic) : Co
 
     [HttpPost]
     [Authorize(Policy = PermissionNames.ManageBusinessPolicy)]
-    public async Task<IActionResult> Create([FromBody] CreateNewProductApprovalRequest request, CancellationToken ct = default)
-    {
-        var result = await _logic.CreateAsync(request, User.ToProductApprovalActorSnapshot(), ct);
-        return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
-    }
+    public IActionResult Create([FromBody] CreateNewProductApprovalRequest request, CancellationToken ct = default) =>
+        StatusCode(StatusCodes.Status410Gone, LegacyWriteDisabled);
 
     [HttpPost("{id:guid}/authorize")]
     [Authorize(Policy = PermissionNames.ManageBusinessPolicy)]
-    public async Task<IActionResult> Authorize(Guid id, [FromBody] AuthorizeProductApprovalRequest request, CancellationToken ct = default) =>
-        Ok(await _logic.AuthorizeAsync(id, request, User.ToProductApprovalActorSnapshot(), ct));
+    public IActionResult Authorize(Guid id, [FromBody] AuthorizeProductApprovalRequest request, CancellationToken ct = default) =>
+        StatusCode(StatusCodes.Status410Gone, LegacyWriteDisabled);
 
     [HttpPost("{id:guid}/cancel")]
     [Authorize(Policy = PermissionNames.ManageBusinessPolicy)]
-    public async Task<IActionResult> Cancel(Guid id, [FromBody] CancelProductApprovalRequest request, CancellationToken ct = default) =>
-        Ok(await _logic.CancelAsync(id, request, User.ToProductApprovalActorSnapshot(), ct));
+    public IActionResult Cancel(Guid id, [FromBody] CancelProductApprovalRequest request, CancellationToken ct = default) =>
+        StatusCode(StatusCodes.Status410Gone, LegacyWriteDisabled);
 
     [HttpPost("validate-code")]
-    [Authorize(Roles = "Warehouse")]
-    public async Task<IActionResult> ValidateCode([FromBody] ValidateProductApprovalCodeRequest request, CancellationToken ct = default) =>
-        Ok(await _logic.ValidateCodeAsync(request, ct));
+    [Authorize(Policy = PermissionNames.ManageBusinessPolicy)]
+    public IActionResult ValidateCode([FromBody] ValidateProductApprovalCodeRequest request, CancellationToken ct = default) =>
+        StatusCode(StatusCodes.Status410Gone, LegacyWriteDisabled);
 
     [HttpPost("create-automatic")]
-    [Authorize(Roles = "Warehouse")]
-    public async Task<IActionResult> CreateAutomatic([FromBody] CreateProductFromApprovalRequest request, CancellationToken ct = default) =>
-        Ok(await _logic.CreateAutomaticAsync(request, User.ToProductApprovalActorSnapshot(), ct));
+    [Authorize(Policy = PermissionNames.ManageBusinessPolicy)]
+    public IActionResult CreateAutomatic([FromBody] CreateProductFromApprovalRequest request, CancellationToken ct = default) =>
+        StatusCode(StatusCodes.Status410Gone, LegacyWriteDisabled);
 
     [HttpPost("create-manual")]
-    [Authorize(Roles = "Warehouse")]
-    public async Task<IActionResult> CreateManual([FromBody] CreateProductManualFromApprovalRequest request, CancellationToken ct = default) =>
-        Ok(await _logic.CreateManualAsync(request, User.ToProductApprovalActorSnapshot(), ct));
+    [Authorize(Policy = PermissionNames.ManageBusinessPolicy)]
+    public IActionResult CreateManual([FromBody] CreateProductManualFromApprovalRequest request, CancellationToken ct = default) =>
+        StatusCode(StatusCodes.Status410Gone, LegacyWriteDisabled);
 }
 

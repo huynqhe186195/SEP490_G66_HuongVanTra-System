@@ -6,7 +6,7 @@ namespace InventoryService.WebAPI.Controllers;
 
 [ApiController]
 [Route("api/v1/inventory/statistics")]
-[Authorize(Roles = "Warehouse,Admin")]
+[Authorize(Roles = "Warehouse,Admin,Manager,Accountant")]
 public class StatisticsController(StatisticsLogic _logic) : ControllerBase
 {
     [HttpGet]

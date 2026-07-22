@@ -7,13 +7,14 @@ import {
 import { loadAuthSession } from './authSession.js'
 
 const ROLE_MODULE_MAP = {
-  admin: ['users_admin', 'phan_quyen_admin'],
+  admin: ['users_admin', 'phan_quyen_admin', 'system_activity_log'],
   cooperativeOwner: [
     'orders',
     'customers',
     'contracts',
     'products',
-    'product_approvals_admin',
+    'product_creation_requests',
+    'product_deletion_requests',
     'staff',
     'membership_tiers_admin',
     'promotions_admin',
@@ -23,8 +24,19 @@ const ROLE_MODULE_MAP = {
   ],
   manager: ['pos', 'orders', 'cod_ops', 'stock_deduct_ops', 'stock_adjustment_ops', 'customers', 'contracts', 'products', 'staff', 'dashboard'],
   sale: ['pos', 'orders', 'customers', 'dashboard'],
-  warehouse: ['products', 'stock_adjustment_ops', 'inventory', 'dashboard'],
-  accountant: ['orders', 'customers', 'reports', 'dashboard', 'accountant_ops'],
+  warehouse: ['products', 'product_creation_requests', 'product_deletion_requests', 'stock_adjustment_ops', 'inventory', 'dashboard'],
+  accountant: [
+    'orders',
+    'customers',
+    'dashboard',
+    'inventory_ledger',
+    'inventory_reports',
+    'inventory_statistics',
+    'supplier_receipts',
+    'accounting_cost',
+    'reports',
+    'accountant_ops',
+  ],
 }
 
 const ROLE_ALIAS_TO_MAP_KEY = {

@@ -44,6 +44,131 @@ namespace InventoryService.Infrastructure.Migrations
                     b.ToTable("ProcessedIntegrationEvents");
                 });
 
+            modelBuilder.Entity("InventoryService.Domain.Entities.InventoryLedgerEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)");
+
+                    b.Property<Guid?>("ActorId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("ActorName")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("ActorRole")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<Guid?>("BatchId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("CorrelationId")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<string>("DestinationLocation")
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)");
+
+                    b.Property<string>("InventoryUnitSnapshot")
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)");
+
+                    b.Property<string>("Location")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)");
+
+                    b.Property<string>("LotCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<DateTime>("OccurredAtUtc")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("ProductTypeSnapshot")
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)");
+
+                    b.Property<int>("QuantityAfter")
+                        .HasColumnType("int");
+
+                    b.Property<int>("QuantityBefore")
+                        .HasColumnType("int");
+
+                    b.Property<int>("QuantityDelta")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<string>("ReferenceCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<Guid?>("ReferenceId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("ReferenceType")
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<string>("SkuCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<Guid>("SkuId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("SkuNameSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("SourceLocation")
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)");
+
+                    b.Property<Guid>("TransactionGroupId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("TransactionType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActorId");
+
+                    b.HasIndex("BatchId");
+
+                    b.HasIndex("CorrelationId");
+
+                    b.HasIndex("Location");
+
+                    b.HasIndex("OccurredAtUtc");
+
+                    b.HasIndex("ReferenceCode");
+
+                    b.HasIndex("SkuCode");
+
+                    b.HasIndex("SkuId");
+
+                    b.HasIndex("TransactionGroupId");
+
+                    b.HasIndex("TransactionType");
+
+                    b.ToTable("InventoryLedgerEntries");
+                });
+
             modelBuilder.Entity("InventoryService.Domain.Entities.SkuStock", b =>
                 {
                     b.Property<Guid>("SkuId")
@@ -53,13 +178,21 @@ namespace InventoryService.Infrastructure.Migrations
                         .HasColumnType("datetime(6)");
 
                     b.Property<int>("LowStockThreshold")
-                        .HasDefaultValue(5)
+                        .HasDefaultValue(0)
                         .HasColumnType("int");
 
                     b.Property<int>("QuantityOnHand")
                         .HasColumnType("int");
 
+                    b.Property<int>("ShelfLowStockThreshold")
+                        .HasDefaultValue(0)
+                        .HasColumnType("int");
+
                     b.Property<int>("WarehouseQuantityOnHand")
+                        .HasColumnType("int");
+
+                    b.Property<int>("WarehouseLowStockThreshold")
+                        .HasDefaultValue(0)
                         .HasColumnType("int");
 
                     b.Property<string>("SkuCode")
@@ -183,6 +316,18 @@ namespace InventoryService.Infrastructure.Migrations
                     b.Property<Guid>("QueueId")
                         .HasColumnType("char(36)");
 
+                    b.Property<int?>("FinishedDeductedQuantity")
+                        .HasColumnType("int");
+
+                    b.Property<string>("MaterialRequirementSnapshotJson")
+                        .HasColumnType("longtext");
+
+                    b.Property<int?>("OrderedQuantity")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("PendingBomQuantity")
+                        .HasColumnType("int");
+
                     b.Property<int>("Quantity")
                         .HasColumnType("int");
 
@@ -197,6 +342,10 @@ namespace InventoryService.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(255)
                         .HasColumnType("varchar(255)");
+
+                    b.Property<string>("StockHandlingMode")
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
 
                     b.HasKey("Id");
 
@@ -265,6 +414,17 @@ namespace InventoryService.Infrastructure.Migrations
                     b.Property<Guid?>("ProductionOrderId")
                         .HasColumnType("char(36)");
 
+                    b.Property<string>("ReferenceCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<Guid?>("ReferenceId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("ReferenceType")
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
                     b.Property<int>("Quantity")
                         .HasColumnType("int");
 
@@ -307,6 +467,10 @@ namespace InventoryService.Infrastructure.Migrations
 
                     b.HasIndex("ProductionOrderId");
 
+                    b.HasIndex("ReferenceCode");
+
+                    b.HasIndex("ReferenceId");
+
                     b.HasIndex("StockAdjustmentRequestId");
 
                     b.ToTable("StockExportSlips");
@@ -319,6 +483,10 @@ namespace InventoryService.Infrastructure.Migrations
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
+
+                    b.Property<string>("DestinationLocation")
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)");
 
                     b.Property<string>("Note")
                         .HasMaxLength(500)
@@ -415,6 +583,24 @@ namespace InventoryService.Infrastructure.Migrations
                     b.Property<int>("Quantity")
                         .HasColumnType("int");
 
+                    b.Property<string>("ReferenceCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<Guid?>("ReferenceId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("ReferenceType")
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<string>("SupplierReceiptCode")
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)");
+
+                    b.Property<Guid?>("SupplierReceiptId")
+                        .HasColumnType("char(36)");
+
                     b.Property<string>("SkuCode")
                         .IsRequired()
                         .HasMaxLength(50)
@@ -455,7 +641,15 @@ namespace InventoryService.Infrastructure.Migrations
 
                     b.HasIndex("ProductionOrderId");
 
+                    b.HasIndex("ReferenceCode");
+
+                    b.HasIndex("ReferenceId");
+
                     b.HasIndex("SkuId");
+
+                    b.HasIndex("SupplierReceiptCode");
+
+                    b.HasIndex("SupplierReceiptId");
 
                     b.HasIndex("WarehouseBatchId");
 
@@ -535,6 +729,740 @@ namespace InventoryService.Infrastructure.Migrations
                     b.ToTable("StockImportSlipLines");
                 });
 
+            modelBuilder.Entity("InventoryService.Domain.Entities.ShelfReturnRequest", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("CreatedByName")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("CreatedByRoleName")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<string>("OriginalStockAdjustmentRequestCode")
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)");
+
+                    b.Property<Guid?>("OriginalStockAdjustmentRequestId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid?>("ReviewedBy")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("ReviewedByName")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("ReviewedByRoleName")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<string>("ReviewNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<string>("ReturnCode")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)");
+
+                    b.Property<string>("ReturnMode")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("CreatedBy");
+
+                    b.HasIndex("OriginalStockAdjustmentRequestCode");
+
+                    b.HasIndex("OriginalStockAdjustmentRequestId");
+
+                    b.HasIndex("ReturnCode")
+                        .IsUnique();
+
+                    b.HasIndex("ReturnMode");
+
+                    b.HasIndex("Status");
+
+                    b.ToTable("ShelfReturnRequests");
+                });
+
+            modelBuilder.Entity("InventoryService.Domain.Entities.ShelfReturnRequestItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("int");
+
+                    b.Property<Guid?>("ShelfBatchId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("ShelfLotCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<int?>("ShelfQtyAfter")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("ShelfQtyBefore")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("ShelfReturnRequestId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("SkuCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<Guid>("SkuId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("SkuSnapshotName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<Guid?>("StockExportSlipId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("StockExportSlipCode")
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)");
+
+                    b.Property<Guid?>("StockImportSlipId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("StockImportSlipCode")
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)");
+
+                    b.Property<Guid?>("WarehouseBatchId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("WarehouseBatchLotCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<int?>("WarehouseQtyAfter")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("WarehouseQtyBefore")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ShelfBatchId");
+
+                    b.HasIndex("ShelfReturnRequestId");
+
+                    b.HasIndex("SkuId");
+
+                    b.HasIndex("StockExportSlipId");
+
+                    b.HasIndex("StockImportSlipId");
+
+                    b.HasIndex("WarehouseBatchId");
+
+                    b.ToTable("ShelfReturnRequestItems");
+                });
+
+            modelBuilder.Entity("InventoryService.Domain.Entities.SupplierReturnRequest", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("CreatedByName")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("CreatedByRoleName")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid?>("ReviewedBy")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("ReviewedByName")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("ReviewedByRoleName")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<string>("ReviewNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<string>("ReturnCode")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)");
+
+                    b.Property<string>("ReturnMode")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)");
+
+                    b.Property<string>("SupplierName")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("SupplierReceiptCode")
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)");
+
+                    b.Property<Guid?>("SupplierReceiptId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("SupplierReference")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("CreatedBy");
+
+                    b.HasIndex("ReturnCode")
+                        .IsUnique();
+
+                    b.HasIndex("ReturnMode");
+
+                    b.HasIndex("Status");
+
+                    b.HasIndex("SupplierReceiptCode");
+
+                    b.HasIndex("SupplierReceiptId");
+
+                    b.ToTable("SupplierReturnRequests");
+                });
+
+            modelBuilder.Entity("InventoryService.Domain.Entities.SupplierReturnRequestItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("int");
+
+                    b.Property<string>("SkuCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<Guid>("SkuId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("SkuSnapshotName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<Guid?>("StockExportSlipId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("StockExportSlipCode")
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)");
+
+                    b.Property<Guid>("SupplierReturnRequestId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<Guid?>("WarehouseBatchId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("WarehouseBatchLotCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<int?>("WarehouseQtyAfter")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("WarehouseQtyBefore")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("ShelfQtyAfter")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("ShelfQtyBefore")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SkuId");
+
+                    b.HasIndex("StockExportSlipId");
+
+                    b.HasIndex("SupplierReturnRequestId");
+
+                    b.HasIndex("WarehouseBatchId");
+
+                    b.ToTable("SupplierReturnRequestItems");
+                });
+
+            modelBuilder.Entity("InventoryService.Domain.Entities.StocktakeRequest", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)");
+
+                    b.Property<DateTime>("CountDate")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("CreatedByName")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("CreatedByRoleName")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<string>("Location")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid?>("ReviewedBy")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("ReviewedByName")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("ReviewedByRoleName")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<string>("ReviewNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<string>("RequestCode")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)");
+
+                    b.Property<DateTime?>("SubmittedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid?>("SubmittedBy")
+                        .HasColumnType("char(36)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CountDate");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("CreatedBy");
+
+                    b.HasIndex("Location");
+
+                    b.HasIndex("RequestCode")
+                        .IsUnique();
+
+                    b.HasIndex("ReviewedAt");
+
+                    b.HasIndex("Status");
+
+                    b.HasIndex("SubmittedAt");
+
+                    b.ToTable("StocktakeRequests");
+                });
+
+            modelBuilder.Entity("InventoryService.Domain.Entities.StocktakeRequestItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)");
+
+                    b.Property<int>("ActualQuantity")
+                        .HasColumnType("int");
+
+                    b.Property<string>("InventoryUnitSnapshot")
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<string>("ProductTypeSnapshot")
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)");
+
+                    b.Property<string>("ReasonCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<int?>("ShelfQtyAfter")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("ShelfQtyBefore")
+                        .HasColumnType("int");
+
+                    b.Property<string>("SkuCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<Guid>("SkuId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("SkuSnapshotName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<Guid?>("StockExportSlipId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("StockExportSlipCode")
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)");
+
+                    b.Property<Guid?>("StockImportSlipId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("StockImportSlipCode")
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)");
+
+                    b.Property<Guid>("StocktakeRequestId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<int>("SystemQuantitySnapshot")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Variance")
+                        .HasColumnType("int");
+
+                    b.Property<Guid?>("WarehouseBatchId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("WarehouseBatchLotCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<int?>("WarehouseQtyAfter")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("WarehouseQtyBefore")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SkuId");
+
+                    b.HasIndex("StockExportSlipId");
+
+                    b.HasIndex("StockImportSlipId");
+
+                    b.HasIndex("StocktakeRequestId");
+
+                    b.HasIndex("WarehouseBatchId");
+
+                    b.ToTable("StocktakeRequestItems");
+                });
+
+            modelBuilder.Entity("InventoryService.Domain.Entities.SupplierReceipt", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("CreatedByName")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("CreatedByRoleName")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<DateTime>("ReceivedDate")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("ReceiptCode")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)");
+
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid?>("ReviewedBy")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("ReviewedByName")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("ReviewedByRoleName")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<string>("ReviewNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)");
+
+                    b.Property<Guid?>("StockImportSlipId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("StockImportSlipCode")
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)");
+
+                    b.Property<DateTime?>("SubmittedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid?>("SubmittedBy")
+                        .HasColumnType("char(36)");
+
+                    b.Property<DateTime?>("SupplierDocumentDate")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("SupplierDocumentNumber")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<string>("SupplierName")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("SupplierReference")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("CreatedBy");
+
+                    b.HasIndex("ReceiptCode")
+                        .IsUnique();
+
+                    b.HasIndex("ReceivedDate");
+
+                    b.HasIndex("Status");
+
+                    b.HasIndex("StockImportSlipId");
+
+                    b.HasIndex("SupplierName");
+
+                    b.ToTable("SupplierReceipts");
+                });
+
+            modelBuilder.Entity("InventoryService.Domain.Entities.SupplierReceiptItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)");
+
+                    b.Property<int>("ActualReceivedQuantity")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<DateTime?>("ExpiresAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("InventoryUnitSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)");
+
+                    b.Property<string>("LotCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<DateTime?>("ManufacturedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("ProductTypeSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)");
+
+                    b.Property<string>("QualityNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("ShelfQtyAfter")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("ShelfQtyBefore")
+                        .HasColumnType("int");
+
+                    b.Property<string>("SkuCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<Guid>("SkuId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("SkuNameSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<decimal>("SubmittedQuantity")
+                        .HasColumnType("decimal(18,3)");
+
+                    b.Property<string>("SubmittedUnit")
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)");
+
+                    b.Property<Guid>("SupplierReceiptId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<decimal?>("UnitCost")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid?>("WarehouseBatchId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("WarehouseBatchLotCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<int?>("WarehouseQtyAfter")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("WarehouseQtyBefore")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LotCode");
+
+                    b.HasIndex("SkuId");
+
+                    b.HasIndex("SupplierReceiptId");
+
+                    b.HasIndex("WarehouseBatchId");
+
+                    b.ToTable("SupplierReceiptItems");
+                });
+
             modelBuilder.Entity("InventoryService.Domain.Entities.WarehouseBatch", b =>
                 {
                     b.Property<Guid>("Id")
@@ -554,9 +1482,21 @@ namespace InventoryService.Infrastructure.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("varchar(50)");
 
+                    b.Property<string>("Location")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)")
+                        .HasDefaultValue("Warehouse");
+
                     b.Property<string>("Note")
                         .HasMaxLength(500)
                         .HasColumnType("varchar(500)");
+
+                    b.Property<Guid?>("ParentBatchId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<Guid?>("SourceBatchId")
+                        .HasColumnType("char(36)");
 
                     b.Property<Guid?>("SourceReferenceId")
                         .HasColumnType("char(36)");
@@ -589,6 +1529,12 @@ namespace InventoryService.Infrastructure.Migrations
 
                     b.HasIndex("LotCode")
                         .IsUnique();
+
+                    b.HasIndex("Location");
+
+                    b.HasIndex("ParentBatchId");
+
+                    b.HasIndex("SourceBatchId");
 
                     b.HasIndex("SourceReferenceCode");
 
@@ -848,6 +1794,16 @@ namespace InventoryService.Infrastructure.Migrations
 
             modelBuilder.Entity("InventoryService.Domain.Entities.WarehouseBatch", b =>
                 {
+                    b.HasOne("InventoryService.Domain.Entities.WarehouseBatch", "ParentBatch")
+                        .WithMany()
+                        .HasForeignKey("ParentBatchId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("InventoryService.Domain.Entities.WarehouseBatch", "SourceBatch")
+                        .WithMany()
+                        .HasForeignKey("SourceBatchId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasMany("Items")
                         .WithOne("Batch")
                         .HasForeignKey("WarehouseBatchId")
@@ -855,6 +1811,10 @@ namespace InventoryService.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Items");
+
+                    b.Navigation("ParentBatch");
+
+                    b.Navigation("SourceBatch");
                 });
 
             modelBuilder.Entity("InventoryService.Domain.Entities.WarehouseBatchItem", b =>
@@ -894,6 +1854,11 @@ namespace InventoryService.Infrastructure.Migrations
                         .HasForeignKey("ProductionOrderId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("InventoryService.Domain.Entities.SupplierReceipt")
+                        .WithMany()
+                        .HasForeignKey("SupplierReceiptId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("InventoryService.Domain.Entities.WarehouseBatch")
                         .WithMany()
                         .HasForeignKey("WarehouseBatchId")
@@ -927,6 +1892,143 @@ namespace InventoryService.Infrastructure.Migrations
                     b.Navigation("WarehouseBatch");
                 });
 
+            modelBuilder.Entity("InventoryService.Domain.Entities.ShelfReturnRequest", b =>
+                {
+                    b.HasMany("Items")
+                        .WithOne("ShelfReturnRequest")
+                        .HasForeignKey("ShelfReturnRequestId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Items");
+                });
+
+            modelBuilder.Entity("InventoryService.Domain.Entities.ShelfReturnRequestItem", b =>
+                {
+                    b.HasOne("InventoryService.Domain.Entities.ShelfReturnRequest", "ShelfReturnRequest")
+                        .WithMany("Items")
+                        .HasForeignKey("ShelfReturnRequestId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("InventoryService.Domain.Entities.WarehouseBatch", "ShelfBatch")
+                        .WithMany()
+                        .HasForeignKey("ShelfBatchId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("InventoryService.Domain.Entities.WarehouseBatch", "WarehouseBatch")
+                        .WithMany()
+                        .HasForeignKey("WarehouseBatchId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("ShelfBatch");
+
+                    b.Navigation("ShelfReturnRequest");
+
+                    b.Navigation("WarehouseBatch");
+                });
+
+            modelBuilder.Entity("InventoryService.Domain.Entities.SupplierReturnRequest", b =>
+                {
+                    b.HasMany("Items")
+                        .WithOne("SupplierReturnRequest")
+                        .HasForeignKey("SupplierReturnRequestId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Items");
+                });
+
+            modelBuilder.Entity("InventoryService.Domain.Entities.SupplierReturnRequestItem", b =>
+                {
+                    b.HasOne("InventoryService.Domain.Entities.SupplierReturnRequest", "SupplierReturnRequest")
+                        .WithMany("Items")
+                        .HasForeignKey("SupplierReturnRequestId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("InventoryService.Domain.Entities.WarehouseBatch", "WarehouseBatch")
+                        .WithMany()
+                        .HasForeignKey("WarehouseBatchId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("SupplierReturnRequest");
+
+                    b.Navigation("WarehouseBatch");
+                });
+
+            modelBuilder.Entity("InventoryService.Domain.Entities.StocktakeRequest", b =>
+                {
+                    b.HasMany("Items")
+                        .WithOne("Request")
+                        .HasForeignKey("StocktakeRequestId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Items");
+                });
+
+            modelBuilder.Entity("InventoryService.Domain.Entities.StocktakeRequestItem", b =>
+                {
+                    b.HasOne("InventoryService.Domain.Entities.StocktakeRequest", "Request")
+                        .WithMany("Items")
+                        .HasForeignKey("StocktakeRequestId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("InventoryService.Domain.Entities.StockExportSlip", "StockExportSlip")
+                        .WithMany()
+                        .HasForeignKey("StockExportSlipId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("InventoryService.Domain.Entities.StockImportSlip", "StockImportSlip")
+                        .WithMany()
+                        .HasForeignKey("StockImportSlipId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("InventoryService.Domain.Entities.WarehouseBatch", "WarehouseBatch")
+                        .WithMany()
+                        .HasForeignKey("WarehouseBatchId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Request");
+
+                    b.Navigation("StockExportSlip");
+
+                    b.Navigation("StockImportSlip");
+
+                    b.Navigation("WarehouseBatch");
+                });
+
+            modelBuilder.Entity("InventoryService.Domain.Entities.SupplierReceipt", b =>
+                {
+                    b.HasMany("Items")
+                        .WithOne("SupplierReceipt")
+                        .HasForeignKey("SupplierReceiptId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Items");
+                });
+
+            modelBuilder.Entity("InventoryService.Domain.Entities.SupplierReceiptItem", b =>
+                {
+                    b.HasOne("InventoryService.Domain.Entities.SupplierReceipt", "SupplierReceipt")
+                        .WithMany("Items")
+                        .HasForeignKey("SupplierReceiptId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("InventoryService.Domain.Entities.WarehouseBatch", "WarehouseBatch")
+                        .WithMany()
+                        .HasForeignKey("WarehouseBatchId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("SupplierReceipt");
+
+                    b.Navigation("WarehouseBatch");
+                });
+
             modelBuilder.Entity("InventoryService.Domain.Entities.ProductionOrder", b =>
                 {
                     b.Property<Guid>("Id")
@@ -937,6 +2039,14 @@ namespace InventoryService.Infrastructure.Migrations
 
                     b.Property<Guid>("CreatedBy")
                         .HasColumnType("char(36)");
+
+                    b.Property<string>("CreatedByName")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("CreatedByRoleName")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
@@ -950,10 +2060,34 @@ namespace InventoryService.Infrastructure.Migrations
                         .HasMaxLength(30)
                         .HasColumnType("varchar(30)");
 
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid?>("ReviewedBy")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("ReviewedByName")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("ReviewedByRoleName")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<string>("ReviewNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("varchar(20)");
+
+                    b.Property<DateTime?>("SubmittedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid?>("SubmittedBy")
+                        .HasColumnType("char(36)");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("datetime(6)");
@@ -970,6 +2104,15 @@ namespace InventoryService.Infrastructure.Migrations
                     b.HasIndex("CreatedAt")
                         .HasDatabaseName("IX_ProductionOrders_CreatedAt");
 
+                    b.HasIndex("SubmittedAt")
+                        .HasDatabaseName("IX_ProductionOrders_SubmittedAt");
+
+                    b.HasIndex("ReviewedBy")
+                        .HasDatabaseName("IX_ProductionOrders_ReviewedBy");
+
+                    b.HasIndex("ReviewedAt")
+                        .HasDatabaseName("IX_ProductionOrders_ReviewedAt");
+
                     b.ToTable("ProductionOrders");
                 });
 
@@ -980,6 +2123,12 @@ namespace InventoryService.Infrastructure.Migrations
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
+
+                    b.Property<string>("DestinationLocation")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)")
+                        .HasDefaultValue("Warehouse");
 
                     b.Property<string>("FinishedSkuCode")
                         .IsRequired()
@@ -1021,6 +2170,9 @@ namespace InventoryService.Infrastructure.Migrations
                     b.HasIndex("ProductionOrderId", "FinishedSkuId")
                         .IsUnique()
                         .HasDatabaseName("IX_ProductionOrderOutputLines_ProductionOrderId_FinishedSkuId");
+
+                    b.HasIndex("DestinationLocation")
+                        .HasDatabaseName("IX_ProductionOrderOutputLines_DestinationLocation");
 
                     b.HasIndex("WarehouseBatchId")
                         .HasDatabaseName("IX_ProductionOrderOutputLines_WarehouseBatchId");

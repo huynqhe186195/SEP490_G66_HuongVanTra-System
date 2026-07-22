@@ -1,17 +1,29 @@
 import { apiRequestAuth } from './apiClient.js'
 import { cacheProducts, cacheCustomers, setMeta } from './offlineDb.js'
 import { toPagedResult } from './apiClient.js'
+import { loadAuthSession } from '../features/auth/services/authSession.js'
+import { isWarehouseRole } from '../features/auth/utils/permissions.js'
 
 // ── Sync products + SKUs + stock into IndexedDB ──────────────────────────────
 
+function catalogPaths() {
+  const warehouse = isWarehouseRole(loadAuthSession())
+  return {
+    skus: warehouse ? '/api/v1/skus' : '/api/v1/store/skus',
+    products: warehouse ? '/api/v1/products' : '/api/v1/store/products',
+    stocks: warehouse ? '/api/v1/inventory/sku-stocks' : '/api/v1/store/sku-stocks',
+  }
+}
+
 async function fetchAllSkus() {
+  const { skus: base } = catalogPaths()
   const pageSize = 100
   let page = 1
   let all = []
-  let total = 0
+  let total
   do {
     const data = await apiRequestAuth(
-      `/api/v1/skus?page=${page}&pageSize=${pageSize}&isActive=true`,
+      `${base}?page=${page}&pageSize=${pageSize}&isActive=true`,
       { method: 'GET' }
     )
     const paged = toPagedResult(data)
@@ -25,13 +37,14 @@ async function fetchAllSkus() {
 }
 
 async function fetchAllProducts() {
+  const { products: base } = catalogPaths()
   const pageSize = 100
   let page = 1
   let all = []
-  let total = 0
+  let total
   do {
     const data = await apiRequestAuth(
-      `/api/v1/products?page=${page}&pageSize=${pageSize}`,
+      `${base}?page=${page}&pageSize=${pageSize}`,
       { method: 'GET' }
     )
     const paged = toPagedResult(data)
@@ -46,7 +59,8 @@ async function fetchAllProducts() {
 
 async function fetchAllStocks() {
   try {
-    const data = await apiRequestAuth('/api/v1/inventory/sku-stocks', { method: 'GET' })
+    const { stocks } = catalogPaths()
+    const data = await apiRequestAuth(stocks, { method: 'GET' })
     return Array.isArray(data) ? data : []
   } catch {
     return []
@@ -57,7 +71,7 @@ async function fetchAllCustomers() {
   const pageSize = 100
   let page = 1
   let all = []
-  let total = 0
+  let total
   do {
     const data = await apiRequestAuth(
       `/api/customers?page=${page}&pageSize=${pageSize}`,
@@ -122,6 +136,9 @@ export async function syncOfflineCache({ permissions = [] } = {}) {
         price: sku.basePrice ?? sku.BasePrice ?? sku.retailPrice ?? sku.RetailPrice ?? 0,
         unit: sku.packagingType ?? sku.PackagingType ?? '',
         productType: sku.productType ?? sku.ProductType ?? product?.productType ?? product?.ProductType ?? '',
+        inventoryUnit: sku.inventoryUnit ?? sku.InventoryUnit ?? product?.inventoryUnit ?? product?.InventoryUnit ?? '',
+        isSellable: Boolean(sku.isSellable ?? sku.IsSellable ?? product?.isSellable ?? product?.IsSellable ?? true),
+        priceUnit: sku.priceUnit ?? sku.PriceUnit ?? product?.priceUnit ?? product?.PriceUnit ?? sku.inventoryUnit ?? sku.InventoryUnit ?? '',
         imageUrl: sku.imageUrl ?? sku.ImageUrl ?? product?.imageUrl ?? product?.ImageUrl ?? '',
         categoryId: sku.categoryId ?? sku.CategoryId ?? product?.categoryId ?? product?.CategoryId ?? null,
         qtyOnHand: stockBySkuId.get(skuId) ?? 0,

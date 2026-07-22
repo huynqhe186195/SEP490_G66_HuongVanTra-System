@@ -11,6 +11,9 @@ public class WarehouseBatch
     public string? SourceType { get; set; }
     public Guid? SourceReferenceId { get; set; }
     public string? SourceReferenceCode { get; set; }
+    public string Location { get; set; } = "Warehouse";
+    public Guid? ParentBatchId { get; set; }
+    public Guid? SourceBatchId { get; set; }
     /// <summary>active | depleted</summary>
     public string Status { get; set; } = "active";
     public Guid CreatedBy { get; set; }
@@ -18,4 +21,6 @@ public class WarehouseBatch
     public DateTime UpdatedAt { get; set; }
 
     public ICollection<WarehouseBatchItem> Items { get; set; } = new List<WarehouseBatchItem>();
+    public WarehouseBatch? ParentBatch { get; set; }
+    public WarehouseBatch? SourceBatch { get; set; }
 }

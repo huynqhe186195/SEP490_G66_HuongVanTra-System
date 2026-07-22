@@ -37,6 +37,30 @@ export function mapOrderItem(item) {
   }
 }
 
+function mapStockHandlingLine(item) {
+  if (!item || typeof item !== 'object') return null
+  return {
+    skuId: item.skuId ?? item.SkuId,
+    skuCode: item.skuCode ?? item.SkuCode ?? '',
+    skuName: item.skuName ?? item.SkuName ?? '',
+    orderedQuantity: Number(item.orderedQuantity ?? item.OrderedQuantity ?? 0),
+    finishedDeductedQuantity: Number(item.finishedDeductedQuantity ?? item.FinishedDeductedQuantity ?? 0),
+    pendingBomQuantity: Number(item.pendingBomQuantity ?? item.PendingBomQuantity ?? 0),
+  }
+}
+
+function mapStockHandlingSummary(item) {
+  if (!item || typeof item !== 'object') return null
+  return {
+    hasPendingStockReconciliation: Boolean(
+      item.hasPendingStockReconciliation ?? item.HasPendingStockReconciliation,
+    ),
+    stockHandlingMode: normalizeEnum(item.stockHandlingMode ?? item.StockHandlingMode),
+    message: item.message ?? item.Message ?? '',
+    lines: (item.lines ?? item.Lines ?? []).map(mapStockHandlingLine).filter(Boolean),
+  }
+}
+
 export function mapOrderSummary(item) {
   if (!item || typeof item !== 'object') return null
   return {
@@ -87,6 +111,7 @@ export function mapOrderDetail(item) {
     updatedAt: item.updatedAt ?? item.UpdatedAt,
     items: Array.isArray(rawItems) ? rawItems.map(mapOrderItem).filter(Boolean) : [],
     payments: Array.isArray(rawPayments) ? rawPayments.map(mapPayment).filter(Boolean) : [],
+    stockHandlingSummary: mapStockHandlingSummary(item.stockHandlingSummary ?? item.StockHandlingSummary),
   }
 }
 

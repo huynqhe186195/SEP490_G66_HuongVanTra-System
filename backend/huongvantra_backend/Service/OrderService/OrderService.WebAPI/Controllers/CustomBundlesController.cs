@@ -19,7 +19,7 @@ public class CustomBundlesController(OrderLogic orderLogic) : ControllerBase
         Ok(await orderLogic.GetPendingCustomBundlesAsync(page, pageSize, ct));
 
     [HttpPatch("{id:guid}/pack")]
-    [Authorize(Policy = PermissionNames.ViewOrder)]
+    [Authorize(Roles = "Warehouse")]
     public async Task<IActionResult> Pack(Guid id, CancellationToken ct) =>
         Ok(await orderLogic.PackCustomBundleAsync(id, ct));
 }

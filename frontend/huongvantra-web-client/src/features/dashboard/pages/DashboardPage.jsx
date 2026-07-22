@@ -160,6 +160,7 @@ function DashboardPage() {
                     <>
                         <MetricCard title="Doanh thu gộp" value={formatCurrency(stats?.grossRevenue)} icon="payments" colorClass="text-blue-600" bgClass="bg-blue-50" />
                         <MetricCard title="Doanh thu thuần" value={formatCurrency(stats?.netRevenue)} icon="account_balance_wallet" colorClass="text-[#356647]" bgClass="bg-[#eaf4eb]" />
+                        <MetricCard title="Tổng giá vốn" value={formatCurrency(stats?.totalCostOfGoods)} icon="sell" colorClass="text-slate-700" bgClass="bg-slate-100" />
                         <MetricCard title="Lợi nhuận gộp" value={formatCurrency(stats?.grossProfit)} icon="savings" colorClass="text-yellow-600" bgClass="bg-yellow-50" />
                     </>
                 )}

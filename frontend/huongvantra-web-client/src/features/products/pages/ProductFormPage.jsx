@@ -13,12 +13,19 @@ import { createAttributeName, fetchAttributeNames } from '../services/attributeN
 import {
   createProductFromApproval,
   createProductManualFromApproval,
+  fetchProductApprovals,
   fetchProductById,
   updateProduct,
   validateProductApprovalCode,
 } from '../services/productsApi.js'
 import { mapProductApiError, validateProductForm } from '../utils/productValidation.js'
 import { setProductListFocus } from '../utils/productListFocus.js'
+import { formatDateTimeVN } from '../../../utils/vietnamDateTime.js'
+import {
+  flattenCategoryTreeForSelect,
+  getCategoryPathLabel,
+  isCategoryUnavailable,
+} from '../utils/categoryTreeUtils.js'
 
 const PRODUCT_TYPES = { NGUYEN_LIEU: 'NGUYEN_LIEU', THANH_PHAM: 'THANH_PHAM' }
 
@@ -45,6 +52,36 @@ const EMPTY_ATTRIBUTE = {
 
 function createLocalId(prefix) {
   return `${prefix}_${Date.now()}_${Math.random().toString(16).slice(2)}`
+}
+
+const CLOUDINARY_CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME
+const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET
+
+function hasCloudinaryUploadConfig() {
+  return Boolean(CLOUDINARY_CLOUD_NAME && CLOUDINARY_UPLOAD_PRESET)
+}
+
+async function uploadImageToCloudinary(file) {
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET)
+
+  const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, {
+    method: 'POST',
+    body: formData,
+  })
+
+  if (!response.ok) {
+    throw new Error('Không upload được ảnh lên Cloudinary.')
+  }
+
+  const data = await response.json()
+  const imageUrl = data.secure_url || data.url
+  if (!imageUrl) {
+    throw new Error('Cloudinary không trả về đường dẫn ảnh.')
+  }
+
+  return imageUrl
 }
 
 function toNumber(value, fallback = 0) {
@@ -111,25 +148,6 @@ function FieldError({ message }) {
   return <p className="mt-1 text-xs text-[#b42318]">{message}</p>
 }
 
-// Build a flat list with depth info from a nested category tree
-function buildCategoryTree(categories) {
-  const byId = {}
-  for (const cat of categories) byId[String(cat.id)] = { ...cat, children: [] }
-  const roots = []
-  for (const cat of categories) {
-    const pid = cat.parentId ? String(cat.parentId) : null
-    if (pid && byId[pid]) byId[pid].children.push(byId[String(cat.id)])
-    else roots.push(byId[String(cat.id)])
-  }
-  const flat = []
-  function walk(node, depth) {
-    flat.push({ ...node, depth })
-    for (const child of node.children) walk(child, depth + 1)
-  }
-  for (const root of roots) walk(root, 0)
-  return flat
-}
-
 // Modal for creating a category
 function CreateCategoryModal({ isOpen, onClose, categories, onCreated }) {
   const [name, setName] = useState('')
@@ -162,7 +180,7 @@ function CreateCategoryModal({ isOpen, onClose, categories, onCreated }) {
 
   if (!isOpen) return null
 
-  const treeOptions = buildCategoryTree(
+  const treeOptions = flattenCategoryTreeForSelect(
     categories.filter((c) => !c.isDeleted && c.isActive !== false),
   )
 
@@ -206,7 +224,7 @@ function CreateCategoryModal({ isOpen, onClose, categories, onCreated }) {
               <option value="">Không có — tạo nhóm gốc</option>
               {treeOptions.map((cat) => (
                 <option key={cat.id} value={String(cat.id)}>
-                  {'  '.repeat(cat.depth)}{cat.depth > 0 ? '└ ' : ''}{cat.name}
+                  {cat.pathLabel}
                 </option>
               ))}
             </select>
@@ -360,24 +378,105 @@ function CreateAttributeNameModal({ isOpen, onClose, onCreated }) {
   )
 }
 
-function formatDateTime(value) {
-  if (!value) return '—'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return '—'
-  return date.toLocaleString('vi-VN', {
-    hour: '2-digit',
-    minute: '2-digit',
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  })
-}
-
 function getProductTypeLabel(value) {
   return value === PRODUCT_TYPES.NGUYEN_LIEU ? 'Nguyên liệu / Bao bì' : 'Thành phẩm kinh doanh'
 }
 
-function ApprovalProductPreview({ product }) {
+const APPROVAL_CATEGORY_UNAVAILABLE_MESSAGE = 'Danh mục trong biên bản không còn tồn tại hoặc đã bị vô hiệu hóa.'
+
+function parseOptionValuesJson(value) {
+  if (!value) return {}
+  try {
+    const parsed = JSON.parse(value)
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+
+function normalizeComparableText(value) {
+  return String(value ?? '').trim()
+}
+
+function normalizeComparableSku(value) {
+  return normalizeComparableText(value).toUpperCase()
+}
+
+function normalizeComparableNumber(value) {
+  if (value === null || value === undefined || value === '') return null
+  const number = Number(value)
+  return Number.isFinite(number) ? Number(number.toFixed(3)) : null
+}
+
+function canonicalApprovalProduct(product) {
+  const variants = Array.isArray(product?.variants) ? product.variants : []
+  const units = Array.isArray(product?.units) ? product.units : []
+  return {
+    name: normalizeComparableText(product?.name),
+    productType: normalizeComparableText(product?.productType),
+    categoryId: Number(product?.categoryId || 0),
+    baseUnit: normalizeComparableText(product?.baseUnit),
+    weightValue: normalizeComparableNumber(product?.weightValue),
+    weightUnit: normalizeComparableText(product?.weightUnit),
+    units: units
+      .map((unit) => ({
+        unitName: normalizeComparableText(unit.unitName).toLowerCase(),
+        conversionRate: normalizeComparableNumber(unit.conversionRate),
+        price: normalizeComparableNumber(unit.price),
+        isDirectSell: unit.isDirectSell !== false,
+        isBaseUnit: Boolean(unit.isBaseUnit),
+      }))
+      .sort((a, b) => a.unitName.localeCompare(b.unitName)),
+    variants: variants
+      .map((variant) => ({
+        skuCode: normalizeComparableSku(variant.skuCode),
+        variantName: normalizeComparableText(variant.variantName),
+        costPrice: normalizeComparableNumber(variant.costPrice),
+        retailPrice: normalizeComparableNumber(variant.retailPrice),
+        minStock: normalizeComparableNumber(variant.minStock),
+        maxStock: normalizeComparableNumber(variant.maxStock),
+        bomLines: (Array.isArray(variant.bomLines) ? variant.bomLines : [])
+          .map((line) => ({
+            materialId: normalizeComparableText(line.materialId ?? line.MaterialId),
+            quantity: normalizeComparableNumber(line.quantity ?? line.Quantity),
+          }))
+          .sort((a, b) => a.materialId.localeCompare(b.materialId)),
+      }))
+      .sort((a, b) => a.skuCode.localeCompare(b.skuCode)),
+  }
+}
+
+function compareApprovalProducts(approved, manual) {
+  const left = canonicalApprovalProduct(approved)
+  const right = canonicalApprovalProduct(manual)
+  const diffs = []
+  if (left.name !== right.name) diffs.push('Tên sản phẩm khác')
+  if (left.productType !== right.productType) diffs.push('Loại hàng khác')
+  if (left.categoryId !== right.categoryId) diffs.push('Danh mục khác')
+  if (left.baseUnit !== right.baseUnit) diffs.push('Đơn vị gốc khác')
+  if (left.weightValue !== right.weightValue || left.weightUnit !== right.weightUnit) diffs.push('Khối lượng/quy cách khác')
+  if (JSON.stringify(left.units) !== JSON.stringify(right.units)) diffs.push('Đơn vị bán khác')
+  if (left.variants.length !== right.variants.length) {
+    diffs.push('Số lượng SKU khác')
+  } else {
+    const rightBySku = new Map(right.variants.map((variant) => [variant.skuCode, variant]))
+    for (const approvedVariant of left.variants) {
+      const manualVariant = rightBySku.get(approvedVariant.skuCode)
+      if (!manualVariant) {
+        diffs.push(`SKU ${approvedVariant.skuCode || '(trống)'} khác`)
+        continue
+      }
+      if (approvedVariant.variantName !== manualVariant.variantName) diffs.push(`Tên biến thể ${approvedVariant.skuCode} khác`)
+      if (approvedVariant.costPrice !== manualVariant.costPrice) diffs.push(`Giá vốn ${approvedVariant.skuCode} khác`)
+      if (approvedVariant.retailPrice !== manualVariant.retailPrice) diffs.push(`Giá bán ${approvedVariant.skuCode} khác`)
+      if (approvedVariant.minStock !== manualVariant.minStock || approvedVariant.maxStock !== manualVariant.maxStock) diffs.push(`Tồn min/max ${approvedVariant.skuCode} khác`)
+      if (JSON.stringify(approvedVariant.bomLines) !== JSON.stringify(manualVariant.bomLines)) diffs.push(`BOM ${approvedVariant.skuCode} khác`)
+    }
+  }
+  return Array.from(new Set(diffs))
+}
+
+function ApprovalProductPreview({ product, categories = [] }) {
   const variants = Array.isArray(product?.variants) ? product.variants : []
   const units = Array.isArray(product?.units) ? product.units : []
 
@@ -394,7 +493,7 @@ function ApprovalProductPreview({ product }) {
         </div>
         <div>
           <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Nhóm hàng</p>
-          <p className="mt-1 font-semibold text-slate-800">#{product?.categoryId || '—'}</p>
+          <p className="mt-1 font-semibold text-slate-800">{getCategoryPathLabel(categories, product?.categoryId, product?.categoryName)}</p>
         </div>
         <div>
           <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Đơn vị gốc</p>
@@ -435,7 +534,7 @@ function ApprovalProductPreview({ product }) {
   )
 }
 
-function ApprovalCodeGate({ approvalCode, onCodeChange, onValidate, isLoading }) {
+function ApprovalCodeGate({ approvalCode, onCodeChange, onValidate, isLoading, pendingApprovals = [], categories = [] }) {
   return (
     <PageShell>
       <div className="mx-auto max-w-3xl space-y-6">
@@ -474,12 +573,36 @@ function ApprovalCodeGate({ approvalCode, onCodeChange, onValidate, isLoading })
             Quay lại danh sách
           </Link>
         </div>
+
+        {pendingApprovals.length ? (
+          <section className="rounded-[1rem] bg-white p-5 shadow-sm">
+            <h2 className="text-base font-bold text-slate-800">Biên bản chờ tạo hàng hóa</h2>
+            <div className="mt-4 space-y-3">
+              {pendingApprovals.map((approval) => (
+                <button
+                  key={approval.id}
+                  type="button"
+                  onClick={() => onCodeChange(approval.approvalCode)}
+                  className="w-full rounded-xl border border-slate-200 p-3 text-left hover:border-[#538463] hover:bg-[#f7fbf8]"
+                >
+                  <span className="font-mono text-xs font-bold text-[#356647]">{approval.approvalCode}</span>
+                  <span className="mt-1 block text-sm font-semibold text-slate-800">{approval.productName || approval.productSnapshot?.name || '—'}</span>
+                  <span className="mt-1 block text-xs text-slate-500">
+                    {getCategoryPathLabel(categories, approval.categoryId || approval.productSnapshot?.categoryId, approval.productSnapshot?.categoryName)}
+                    {' · '}
+                    Cấp mã lúc {formatDateTimeVN(approval.authorisedAt)}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </section>
+        ) : null}
       </div>
     </PageShell>
   )
 }
 
-function ApprovalModeSelection({ approval, onSelectMode, onReset }) {
+function ApprovalModeSelection({ approval, categories = [], onSelectMode, onReset }) {
   return (
     <PageShell>
       <div className="space-y-6">
@@ -496,7 +619,7 @@ function ApprovalModeSelection({ approval, onSelectMode, onReset }) {
         </div>
 
         <section className="rounded-[1rem] bg-white p-4 shadow-sm sm:p-6">
-          <ApprovalProductPreview product={approval.productSnapshot} />
+          <ApprovalProductPreview product={approval.productSnapshot} categories={categories} />
         </section>
 
         <section className="grid gap-4 md:grid-cols-2">
@@ -524,7 +647,7 @@ function ApprovalModeSelection({ approval, onSelectMode, onReset }) {
   )
 }
 
-function AutomaticApprovalCreatePage({ approval, onCreate, onBack, isSaving }) {
+function AutomaticApprovalCreatePage({ approval, categories = [], onCreate, onBack, isSaving }) {
   return (
     <PageShell>
       <div className="space-y-6">
@@ -546,14 +669,17 @@ function AutomaticApprovalCreatePage({ approval, onCreate, onBack, isSaving }) {
         </div>
 
         <section className="rounded-[1rem] bg-white p-4 shadow-sm sm:p-6">
-          <ApprovalProductPreview product={approval.productSnapshot} />
+          <div className="mb-4 rounded-xl border border-[#356647]/20 bg-[#f7fbf8] p-4 text-sm text-slate-600">
+            Hệ thống sẽ tạo hàng hóa đúng theo thông tin Product/SKU/BOM đã được Admin cấp mã. Thủ kho chỉ xác nhận tạo, không chỉnh sửa dữ liệu trong chế độ tự động.
+          </div>
+          <ApprovalProductPreview product={approval.productSnapshot} categories={categories} />
         </section>
       </div>
     </PageShell>
   )
 }
 
-function ManualCreationConfirmModal({ payload, approval, reason, onClose, onConfirm, isSaving }) {
+function ManualCreationConfirmModal({ payload, approval, reason, categories = [], onClose, onConfirm, isSaving }) {
   if (!payload) return null
   const variants = Array.isArray(payload.variants) ? payload.variants : []
   const totalBomLines = variants.reduce((sum, variant) => sum + (Array.isArray(variant.bomLines) ? variant.bomLines.length : 0), 0)
@@ -579,6 +705,10 @@ function ManualCreationConfirmModal({ payload, approval, reason, onClose, onConf
             <div>
               <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Loại hàng</p>
               <p className="mt-1 font-semibold text-slate-800">{getProductTypeLabel(payload.productType)}</p>
+            </div>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Nhóm hàng</p>
+              <p className="mt-1 font-semibold text-slate-800">{getCategoryPathLabel(categories, payload.categoryId, payload.categoryName)}</p>
             </div>
             <div>
               <p className="text-xs font-bold uppercase tracking-wide text-slate-500">SKU</p>
@@ -648,6 +778,7 @@ function ProductFormPage({ mode }) {
   const [dbAttributeNames, setDbAttributeNames] = useState([])
   const [isLoading, setIsLoading] = useState(isEditMode)
   const [isSaving, setIsSaving] = useState(false)
+  const [uploadingImages, setUploadingImages] = useState(0)
   const [fieldErrors, setFieldErrors] = useState({})
   const [variantDrafts, setVariantDrafts] = useState({})
   const [productType, setProductType] = useState(PRODUCT_TYPES.THANH_PHAM)
@@ -666,6 +797,7 @@ function ProductFormPage({ mode }) {
   const [isAutomaticCreating, setIsAutomaticCreating] = useState(false)
   const [manualModeReason, setManualModeReason] = useState('')
   const [pendingManualPayload, setPendingManualPayload] = useState(null)
+  const [pendingApprovals, setPendingApprovals] = useState([])
   const isFinishedProduct = productType === PRODUCT_TYPES.THANH_PHAM
 
   const [form, setForm] = useState(() => ({
@@ -702,7 +834,7 @@ function ProductFormPage({ mode }) {
     let mounted = true
     async function loadCategories() {
       try {
-        const items = await fetchCategories()
+        const items = await fetchCategories({ isDeleted: false })
         if (mounted) setCategories(items)
       } catch (error) {
         if (mounted) showError(error.message)
@@ -733,6 +865,19 @@ function ProductFormPage({ mode }) {
     fetchAttributeNames().then((list) => { if (mounted) setDbAttributeNames(list) }).catch(() => {})
     return () => { mounted = false }
   }, [])
+
+  useEffect(() => {
+    if (isEditMode || !canEdit) return undefined
+    let mounted = true
+    fetchProductApprovals({ status: 'AwaitingWarehouseConfirmation', page: 1, pageSize: 8 })
+      .then((result) => {
+        if (mounted) setPendingApprovals(result.items || [])
+      })
+      .catch(() => {
+        if (mounted) setPendingApprovals([])
+      })
+    return () => { mounted = false }
+  }, [canEdit, isEditMode])
 
   useEffect(() => {
     if (!isEditMode || !id) return undefined
@@ -796,7 +941,7 @@ function ProductFormPage({ mode }) {
     const visible = categories.filter(
       (c) => (!c.isDeleted && c.isActive !== false) || String(c.id) === String(form.categoryId),
     )
-    return buildCategoryTree(visible)
+    return flattenCategoryTreeForSelect(visible)
   }, [categories, form.categoryId])
 
   const allBrands = useMemo(() => dbBrands.map((b) => b.name), [dbBrands])
@@ -832,6 +977,7 @@ function ProductFormPage({ mode }) {
           unit,
           attributes,
           skuCode: draft.skuCode ?? '',
+          variantName: draft.variantName ?? '',
           skuSuggestion,
           barcode: draft.barcode ?? (unit.isBaseUnit ? form.barcode : unit.barcode) ?? '',
           costPrice,
@@ -852,6 +998,7 @@ function ProductFormPage({ mode }) {
       for (const row of generatedRows) {
         next[row.key] = {
           skuCode: previous[row.key]?.skuCode ?? row.skuCode ?? '',
+          variantName: previous[row.key]?.variantName ?? row.variantName ?? '',
           barcode: previous[row.key]?.barcode ?? row.barcode ?? '',
           salePrice: previous[row.key]?.salePrice ?? row.salePrice ?? 0,
         }
@@ -1058,23 +1205,65 @@ function ProductFormPage({ mode }) {
 
   function handleImagesChange(event) {
     const files = Array.from(event.target.files || [])
+    event.target.value = ''
     const accepted = files.filter((file) => file.size <= MAX_IMAGE_SIZE)
     if (accepted.length !== files.length) showError('Một số ảnh vượt quá 2MB nên đã bị bỏ qua.')
+    if (!accepted.length) return
 
+    if (!hasCloudinaryUploadConfig()) {
+      showError('Chưa cấu hình Cloudinary (VITE_CLOUDINARY_CLOUD_NAME / VITE_CLOUDINARY_UPLOAD_PRESET). Không thể upload ảnh.')
+      return
+    }
+
+    const queued = []
     setForm((prev) => {
       const available = MAX_IMAGES - prev.images.length
-      const nextImages = accepted.slice(0, available).map((file, index) => ({
-        id: createLocalId('image'),
-        file,
-        name: file.name,
-        previewUrl: URL.createObjectURL(file),
-        imageUrl: '',
-        sortOrder: prev.images.length + index,
-        isThumbnail: prev.images.length === 0 && index === 0,
-      }))
+      const nextImages = accepted.slice(0, available).map((file, index) => {
+        const entry = {
+          id: createLocalId('image'),
+          file,
+          name: file.name,
+          previewUrl: URL.createObjectURL(file),
+          imageUrl: '',
+          uploading: true,
+          sortOrder: prev.images.length + index,
+          isThumbnail: prev.images.length === 0 && index === 0,
+        }
+        queued.push(entry)
+        return entry
+      })
       return { ...prev, images: [...prev.images, ...nextImages] }
     })
-    event.target.value = ''
+
+    queued.forEach((entry) => {
+      setUploadingImages((count) => count + 1)
+      uploadImageToCloudinary(entry.file)
+        .then((imageUrl) => {
+          setForm((prev) => ({
+            ...prev,
+            images: prev.images.map((image) =>
+              image.id === entry.id ? { ...image, imageUrl, uploading: false } : image,
+            ),
+          }))
+        })
+        .catch(() => {
+          showError(`Không upload được ảnh "${entry.name}".`)
+          setForm((prev) => {
+            const images = prev.images.filter((image) => image.id !== entry.id)
+            return {
+              ...prev,
+              images: images.map((image, index) => ({
+                ...image,
+                sortOrder: index,
+                isThumbnail: images.some((item) => item.isThumbnail) ? image.isThumbnail : index === 0,
+              })),
+            }
+          })
+        })
+        .finally(() => {
+          setUploadingImages((count) => Math.max(0, count - 1))
+        })
+    })
   }
 
   function removeImage(imageId) {
@@ -1124,7 +1313,7 @@ function ProductFormPage({ mode }) {
       return {
         skuCode: normalizeText(row.skuCode).toUpperCase(),
         barcode: normalizeText(row.barcode) || null,
-        variantName: variantName || normalizeText(form.name) || row.unit.unitName,
+        variantName: normalizeText(row.variantName) || variantName || normalizeText(form.name) || row.unit.unitName,
         optionValuesJson: JSON.stringify(optionValues),
         costPrice: toNumber(row.costPrice),
         retailPrice: toNumber(row.salePrice),
@@ -1180,6 +1369,133 @@ function ProductFormPage({ mode }) {
     }
   }
 
+  function buildManualRowsForSnapshot(units, attributes) {
+    const validSnapshotAttributes = attributes
+      .filter((attribute) => normalizeText(attribute.name) && attribute.values.length)
+      .map((attribute) => ({ name: normalizeText(attribute.name), values: attribute.values }))
+    const combinations = cartesianProduct(validSnapshotAttributes)
+    return units.map((unit) => ({
+      ...unit,
+      conversionRate: toNumber(unit.conversionRate, 1) || 1,
+      unitName: normalizeText(unit.unitName) || '—',
+    })).flatMap((unit) =>
+      combinations.map((rowAttributes) => ({
+        key: buildVariantKey(unit, rowAttributes),
+        unit,
+        attributes: rowAttributes,
+      })),
+    )
+  }
+
+  function findSnapshotVariantForRow(variants, row, fallbackIndex) {
+    const matched = variants.find((variant) => {
+      const options = parseOptionValuesJson(variant.optionValuesJson)
+      const attributeMatched = row.attributes.every((attribute) =>
+        normalizeComparableText(options[attribute.name]).toLowerCase() === normalizeComparableText(attribute.value).toLowerCase(),
+      )
+      if (!attributeMatched) return false
+
+      const unitOptions = [options.Unit, options['Đơn vị'], options['Quy cách']].map(normalizeComparableText).filter(Boolean)
+      return !unitOptions.length || unitOptions.some((value) => value.toLowerCase() === normalizeComparableText(row.unit.unitName).toLowerCase())
+    })
+    return matched || variants[fallbackIndex] || null
+  }
+
+  function applyApprovalSnapshotToManualForm(snapshot) {
+    if (!snapshot) return
+    const variants = Array.isArray(snapshot.variants) ? snapshot.variants : []
+    const firstVariant = variants[0] || {}
+    const snapshotUnits = Array.isArray(snapshot.units) && snapshot.units.length
+      ? snapshot.units
+      : [{
+          unitName: snapshot.baseUnit || 'cái',
+          conversionRate: 1,
+          price: firstVariant.retailPrice ?? 0,
+          barcode: '',
+          isDirectSell: true,
+          isBaseUnit: true,
+        }]
+    const mappedUnits = snapshotUnits.map((unit, index) => ({
+      id: createLocalId('unit'),
+      unitName: unit.unitName || (index === 0 ? snapshot.baseUnit : ''),
+      conversionRate: String(unit.conversionRate || 1),
+      price: String(unit.price ?? firstVariant.retailPrice ?? 0),
+      barcode: unit.barcode || '',
+      isDirectSell: unit.isDirectSell !== false,
+      isBaseUnit: Boolean(unit.isBaseUnit || index === 0),
+    }))
+
+    const attributeValues = new Map()
+    for (const variant of variants) {
+      const options = parseOptionValuesJson(variant.optionValuesJson)
+      for (const [name, value] of Object.entries(options)) {
+        if (name === 'Unit' || !normalizeText(value)) continue
+        if (!attributeValues.has(name)) attributeValues.set(name, new Set())
+        attributeValues.get(name).add(String(value))
+      }
+    }
+    const mappedAttributes = Array.from(attributeValues.entries()).map(([name, values]) => ({
+      ...EMPTY_ATTRIBUTE,
+      id: createLocalId('attr'),
+      name,
+      values: Array.from(values),
+    }))
+    const attributes = mappedAttributes.length ? mappedAttributes : [{ ...EMPTY_ATTRIBUTE, id: createLocalId('attr') }]
+    const rows = buildManualRowsForSnapshot(mappedUnits, attributes)
+    const nextVariantDrafts = {}
+    const nextBomByVariant = {}
+    rows.forEach((row, index) => {
+      const variant = findSnapshotVariantForRow(variants, row, index)
+      nextVariantDrafts[row.key] = {
+        skuCode: variant?.skuCode || '',
+        variantName: variant?.variantName || '',
+        barcode: variant?.barcode || '',
+        salePrice: String(variant?.retailPrice ?? row.unit.price ?? 0),
+      }
+      nextBomByVariant[row.key] = (Array.isArray(variant?.bomLines) ? variant.bomLines : []).map((line) => ({
+        material_id: line.materialId ?? line.MaterialId,
+        materialId: line.materialId ?? line.MaterialId,
+        quantity: Number(line.quantity ?? line.Quantity ?? 0),
+      }))
+    })
+
+    setProductType(snapshot.productType || PRODUCT_TYPES.THANH_PHAM)
+    setForm((prev) => ({
+      ...prev,
+      productCode: '',
+      barcode: firstVariant.barcode || '',
+      name: snapshot.name || '',
+      categoryId: snapshot.categoryId ? String(snapshot.categoryId) : '',
+      brandId: '',
+      brandName: '',
+      origin: snapshot.origin || '',
+      flavorProfile: snapshot.flavorProfile || '',
+      brewingGuide: snapshot.brewingGuide || '',
+      description: snapshot.description || '',
+      costPrice: String(firstVariant.costPrice ?? 0),
+      salePrice: String(firstVariant.retailPrice ?? mappedUnits.find((unit) => unit.isBaseUnit)?.price ?? 0),
+      minStock: String(firstVariant.minStock ?? 0),
+      maxStock: String(firstVariant.maxStock ?? 999999999),
+      weightValue: snapshot.weightValue ?? '',
+      weightUnit: snapshot.weightUnit || 'g',
+      images: [],
+      units: mappedUnits,
+      attributes,
+      isActive: true,
+    }))
+    setVariantDrafts(nextVariantDrafts)
+    setBomByVariant(nextBomByVariant)
+    setFieldErrors({})
+    setDuplicateProductName('')
+  }
+
+  function handleSelectApprovalMode(mode) {
+    setApprovalMode(mode)
+    if (mode === 'manual') {
+      applyApprovalSnapshotToManualForm(approvalRecord?.productSnapshot)
+    }
+  }
+
   async function handleValidateApprovalCode(event) {
     event.preventDefault()
     const code = approvalCode.trim().toUpperCase()
@@ -1199,6 +1515,7 @@ function ProductFormPage({ mode }) {
       setApprovalCode(result.approval.approvalCode || code)
       setApprovalRecord(result.approval)
       setApprovalMode('')
+      setPendingManualPayload(null)
       showSuccess('Mã phê duyệt hợp lệ.')
     } catch (error) {
       showError(error.message)
@@ -1218,6 +1535,10 @@ function ProductFormPage({ mode }) {
   async function handleAutomaticCreation() {
     if (!approvalRecord?.approvalCode) {
       showError('Vui lòng kiểm tra mã phê duyệt trước khi tạo tự động.')
+      return
+    }
+    if (isCategoryUnavailable(categories, approvalRecord.productSnapshot?.categoryId)) {
+      showError(APPROVAL_CATEGORY_UNAVAILABLE_MESSAGE)
       return
     }
 
@@ -1275,6 +1596,11 @@ function ProductFormPage({ mode }) {
       return
     }
 
+    if (uploadingImages > 0) {
+      showError('Vui lòng đợi ảnh tải lên hoàn tất trước khi lưu.')
+      return
+    }
+
     const payload = buildSubmitPayload()
 
     const validation = validateProductForm(payload)
@@ -1298,8 +1624,27 @@ function ProductFormPage({ mode }) {
           showError('Vui lòng chọn chế độ tạo sản phẩm.')
           return
         }
-        if (!manualModeReason.trim()) {
+        if (isCategoryUnavailable(categories, approvalRecord.productSnapshot?.categoryId)) {
+          setFieldErrors((prev) => ({ ...prev, categoryId: APPROVAL_CATEGORY_UNAVAILABLE_MESSAGE }))
+          showError(APPROVAL_CATEGORY_UNAVAILABLE_MESSAGE)
+          return
+        }
+        const reason = manualModeReason.trim()
+        if (!reason) {
           showError('Vui lòng nhập lý do nhập thủ công.')
+          return
+        }
+        if (reason.length < 5) {
+          showError('Lý do nhập thủ công phải có ít nhất 5 ký tự.')
+          return
+        }
+        if (reason.length > 1000) {
+          showError('Lý do nhập thủ công tối đa 1000 ký tự.')
+          return
+        }
+        const differences = compareApprovalProducts(approvalRecord.productSnapshot, payload)
+        if (differences.length) {
+          showError(`Dữ liệu nhập thủ công khác với biên bản đã được Admin phê duyệt. ${differences.slice(0, 6).join('; ')}.`)
           return
         }
         setPendingManualPayload(payload)
@@ -1335,6 +1680,8 @@ function ProductFormPage({ mode }) {
         onCodeChange={setApprovalCode}
         onValidate={handleValidateApprovalCode}
         isLoading={isApprovalLoading}
+        pendingApprovals={pendingApprovals}
+        categories={categories}
       />
     )
   }
@@ -1343,7 +1690,8 @@ function ProductFormPage({ mode }) {
     return (
       <ApprovalModeSelection
         approval={approvalRecord}
-        onSelectMode={setApprovalMode}
+        categories={categories}
+        onSelectMode={handleSelectApprovalMode}
         onReset={resetApprovalCode}
       />
     )
@@ -1353,6 +1701,7 @@ function ProductFormPage({ mode }) {
     return (
       <AutomaticApprovalCreatePage
         approval={approvalRecord}
+        categories={categories}
         onCreate={handleAutomaticCreation}
         onBack={() => setApprovalMode('')}
         isSaving={isAutomaticCreating}
@@ -1366,7 +1715,7 @@ function ProductFormPage({ mode }) {
         <div className="space-y-6">
           <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-start">
             <div>
-              <h1 className="text-2xl font-extrabold text-slate-800">Gửi yêu cầu điều chỉnh tồn</h1>
+              <h1 className="text-2xl font-extrabold text-slate-800">Gửi yêu cầu bổ sung tồn quầy</h1>
               <p className="mt-1 text-sm text-slate-500">
                 {form.name ? (
                   <>
@@ -1374,7 +1723,7 @@ function ProductFormPage({ mode }) {
                     (có thể quay lại danh sách hàng hóa thêm SKU khác trước khi gửi).
                   </>
                 ) : (
-                  'Thêm SKU vào lô chung (giữ khi chuyển trang), rồi gửi một yêu cầu cho Thủ kho duyệt.'
+                  'Thêm SKU vào lô chung (giữ khi chuyển trang), rồi gửi yêu cầu để Thủ kho Kho tổng duyệt bổ sung tồn quầy POS mặc định.'
                 )}
               </p>
             </div>
@@ -1418,8 +1767,8 @@ function ProductFormPage({ mode }) {
             <Link className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50" to="/inventory/products">
               Quay lại
             </Link>
-            <button type="submit" disabled={isSaving} className="rounded-xl bg-[#538463] px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-[#457053] disabled:opacity-50">
-              {isSaving ? 'Đang lưu...' : isEditMode ? 'Cập nhật' : 'Tiếp tục xác nhận'}
+            <button type="submit" disabled={isSaving || uploadingImages > 0} className="rounded-xl bg-[#538463] px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-[#457053] disabled:opacity-50">
+              {isSaving ? 'Đang lưu...' : uploadingImages > 0 ? 'Đang tải ảnh...' : isEditMode ? 'Cập nhật' : 'Tiếp tục xác nhận'}
             </button>
           </div>
         </div>
@@ -1437,6 +1786,12 @@ function ProductFormPage({ mode }) {
               <button type="button" onClick={() => setApprovalMode('')} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
                 Chọn lại chế độ
               </button>
+            </div>
+            <div className="mt-4 rounded-xl border border-slate-200 bg-white p-4">
+              <h2 className="text-sm font-bold text-slate-800">Thông tin đã được Admin phê duyệt</h2>
+              <div className="mt-3">
+                <ApprovalProductPreview product={approvalRecord.productSnapshot} categories={categories} />
+              </div>
             </div>
             <label className="mt-4 block">
               <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Lý do nhập thủ công *</span>
@@ -1516,7 +1871,7 @@ function ProductFormPage({ mode }) {
                   <option value="">Chọn nhóm hàng</option>
                   {categoryTreeOptions.map((cat) => (
                     <option key={cat.id} value={String(cat.id)}>
-                      {'  '.repeat(cat.depth * 2)}{cat.depth > 0 ? '└ ' : ''}{cat.name}{cat.isActive === false || cat.isDeleted ? ' (đã ẩn)' : ''}
+                      {cat.pathLabel}{cat.isActive === false || cat.isDeleted ? ' (đã ẩn)' : ''}
                     </option>
                   ))}
                 </select>
@@ -1562,10 +1917,10 @@ function ProductFormPage({ mode }) {
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="text-sm font-bold text-slate-700">Upload ảnh</p>
-                <p className="text-xs text-slate-500">Tối đa {MAX_IMAGES} ảnh, mỗi ảnh nhỏ hơn 2MB. Nếu backend chưa có upload file, ảnh sẽ chỉ preview local.</p>
+                <p className="text-xs text-slate-500">Tối đa {MAX_IMAGES} ảnh, mỗi ảnh nhỏ hơn 2MB. Ảnh được lưu trên Cloudinary, hệ thống chỉ lưu đường dẫn ảnh.</p>
               </div>
               <label className="inline-flex cursor-pointer items-center justify-center rounded-xl bg-[#538463] px-4 py-2 text-sm font-bold text-white hover:bg-[#457053]">
-                Chọn ảnh
+                {uploadingImages > 0 ? 'Đang tải ảnh...' : 'Chọn ảnh'}
                 <input type="file" accept="image/*" multiple disabled={form.images.length >= MAX_IMAGES} onChange={handleImagesChange} className="hidden" />
               </label>
             </div>
@@ -1574,6 +1929,11 @@ function ProductFormPage({ mode }) {
                 {form.images.map((image) => (
                   <div key={image.id} className="relative overflow-hidden rounded-xl border border-slate-200 bg-white">
                     <img src={image.previewUrl || image.imageUrl} alt={image.name} className="h-28 w-full object-cover" />
+                    {image.uploading ? (
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/40 text-[11px] font-bold text-white">
+                        Đang tải...
+                      </div>
+                    ) : null}
                     <div className="absolute inset-x-0 bottom-0 flex items-center justify-between bg-white/90 px-2 py-1">
                       <label className="flex items-center gap-1 text-[11px] font-semibold text-slate-700">
                         <input type="radio" checked={image.isThumbnail} onChange={() => setThumbnail(image.id)} />
@@ -1873,6 +2233,7 @@ function ProductFormPage({ mode }) {
         payload={pendingManualPayload}
         approval={approvalRecord}
         reason={manualModeReason}
+        categories={categories}
         onClose={() => setPendingManualPayload(null)}
         onConfirm={handleManualConfirmSubmit}
         isSaving={isSaving}

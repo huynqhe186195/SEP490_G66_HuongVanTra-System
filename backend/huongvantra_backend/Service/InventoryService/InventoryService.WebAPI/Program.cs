@@ -1,10 +1,12 @@
 using HuongVanTra.Shared.Auth;
+using HuongVanTra.Shared.Audit;
 using InventoryService.Application.Interfaces;
 using InventoryService.Application.Options;
 using InventoryService.Application.UseCases;
 using InventoryService.Infrastructure.Data;
 using InventoryService.Infrastructure.Messaging;
 using InventoryService.Infrastructure.Repositories;
+using InventoryService.Infrastructure.Services;
 using InventoryService.WebAPI.Middlewares;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
@@ -22,6 +24,7 @@ builder.Services.AddSwaggerGen();
 
 builder.Services.AddHvtJwtAuthentication(builder.Configuration);
 builder.Services.AddHvtPermissionPolicies();
+builder.Services.AddHvtSystemActivityAudit("InventoryService");
 builder.Services.Configure<InventoryOptions>(builder.Configuration.GetSection(InventoryOptions.SectionName));
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
@@ -40,9 +43,19 @@ builder.Services.AddScoped<IStockExportSlipRepository, StockExportSlipRepository
 builder.Services.AddScoped<IStockImportSlipRepository, StockImportSlipRepository>();
 builder.Services.AddScoped<IWarehouseBatchRepository, WarehouseBatchRepository>();
 builder.Services.AddScoped<IStockExportBatchAllocationRepository, StockExportBatchAllocationRepository>();
+builder.Services.AddScoped<IInventoryLedgerRepository, InventoryLedgerRepository>();
+builder.Services.AddScoped<ISupplierReceiptRepository, SupplierReceiptRepository>();
+builder.Services.AddScoped<IShelfReturnRequestRepository, ShelfReturnRequestRepository>();
+builder.Services.AddScoped<ISupplierReturnRequestRepository, SupplierReturnRequestRepository>();
+builder.Services.AddScoped<IStocktakeRequestRepository, StocktakeRequestRepository>();
 builder.Services.AddScoped<IProcessedIntegrationEventRepository, ProcessedIntegrationEventRepository>();
 builder.Services.AddScoped<IProductionOrderRepository, ProductionOrderRepository>();
 builder.Services.AddScoped<IInventoryEventPublisher, InventoryEventPublisher>();
+builder.Services.AddHttpClient<IProductCatalogClient, ProductCatalogClient>(client =>
+{
+    var baseUrl = builder.Configuration["ProductService:BaseUrl"] ?? "http://product-service:8080";
+    client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
+});
 builder.Services.AddScoped<InventoryLogic>();
 builder.Services.AddScoped<StatisticsLogic>();
 builder.Services.AddMassTransit(x =>
@@ -106,6 +119,7 @@ if (app.Environment.IsDevelopment())
 app.UseMiddleware<GlobalExceptionMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseHvtSystemActivityAudit();
 app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
 app.MapControllers();
 

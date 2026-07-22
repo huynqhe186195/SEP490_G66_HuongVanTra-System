@@ -2,8 +2,7 @@ import { useState } from 'react'
 import { showError } from '../../../app/toast.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import { formatStockQuantity } from '../../products/utils/productDisplay.js'
-
-export const UNKNOWN_CREATOR_VALUE = 'Chưa xác định'
+import { formatCreatorRole, UNKNOWN_CREATOR_VALUE } from '../utils/inventoryCreatorDisplay.js'
 
 export function SlipPrintStyles() {
   return (
@@ -49,39 +48,18 @@ function getPdfFilename(filename) {
   return normalized.toLowerCase().endsWith('.pdf') ? normalized : `${normalized}.pdf`
 }
 
-function normalizeRoleKey(roleName) {
-  return String(roleName || '')
-    .trim()
-    .toLowerCase()
-    .replace(/[\s_-]+/g, '')
-}
-
-export function formatCreatorRole(roleName) {
-  const trimmed = String(roleName || '').trim()
-  if (!trimmed) return UNKNOWN_CREATOR_VALUE
-
-  const roleMap = {
-    warehouse: 'Thủ kho Kho tổng',
-    warehousestaff: 'Thủ kho Kho tổng',
-    inventorystaff: 'Thủ kho Kho tổng',
-    inventorymanager: 'Thủ kho Kho tổng',
-    manager: 'Quản lý',
-    agencymanager: 'Quản lý',
-    admin: 'Quản trị viên',
-    administrator: 'Quản trị viên',
-    sale: 'Nhân viên bán hàng',
-    salesstaff: 'Nhân viên bán hàng',
-  }
-
-  return roleMap[normalizeRoleKey(trimmed)] || trimmed
-}
-
 function getCreatorDisplay(slip) {
   const name = String(slip?.createdByName || '').trim()
   return {
     name: name || UNKNOWN_CREATOR_VALUE,
     role: formatCreatorRole(slip?.createdByRoleName),
   }
+}
+
+function formatDestinationLocation(value) {
+  if (value === 'Shelf') return 'Kệ Hàng'
+  if (value === 'Warehouse') return 'Kho'
+  return '—'
 }
 
 export function SlipActionButtons({ documentRef, filename = 'phieu-kho.pdf' }) {
@@ -289,7 +267,7 @@ export function ExportSlipDocument({ slip, getTypeLabel }) {
               <th className="border-b border-slate-200 px-3 py-2">Nguyên liệu</th>
               <th className="border-b border-slate-200 px-3 py-2 text-right">Số lượng</th>
               <th className="border-b border-slate-200 px-3 py-2">Kho trước {'->'} sau</th>
-              <th className="border-b border-slate-200 px-3 py-2">Cửa hàng trước {'->'} sau</th>
+              <th className="border-b border-slate-200 px-3 py-2">Tồn quầy POS trước {'->'} sau</th>
               <th className="border-b border-slate-200 px-3 py-2">Lô FIFO</th>
             </tr>
           </thead>
@@ -364,8 +342,9 @@ export function ImportSlipDocument({ slip, getTypeLabel }) {
               <th className="border-b border-slate-200 px-3 py-2">{productColumnLabel}</th>
               <th className="border-b border-slate-200 px-3 py-2 text-right">Số lượng</th>
               <th className="border-b border-slate-200 px-3 py-2">{lotColumnLabel}</th>
+              <th className="border-b border-slate-200 px-3 py-2">Nơi nhập</th>
               <th className="border-b border-slate-200 px-3 py-2">Kho trước {'->'} sau</th>
-              <th className="border-b border-slate-200 px-3 py-2">Cửa hàng trước {'->'} sau</th>
+              <th className="border-b border-slate-200 px-3 py-2">Tồn quầy POS trước {'->'} sau</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -377,6 +356,7 @@ export function ImportSlipDocument({ slip, getTypeLabel }) {
                 <td className="px-3 py-2 text-slate-700">
                   <span className="font-mono">{line.warehouseBatchLotCode || '-'}</span>
                 </td>
+                <td className="px-3 py-2 text-slate-700">{formatDestinationLocation(line.destinationLocation)}</td>
                 <td className="px-3 py-2 text-slate-700">
                   {formatQuantityTransition(line.warehouseQtyBefore, line.warehouseQtyAfter)}
                 </td>

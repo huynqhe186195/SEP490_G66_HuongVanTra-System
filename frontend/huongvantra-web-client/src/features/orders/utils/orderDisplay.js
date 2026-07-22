@@ -288,6 +288,7 @@ export function getOrderRemainingDebt(order) {
 
 export function getInventorySyncLabel(status) {
   const key = normalizeOrderKey(status)
+  if (key === 'PendingReconciliation') return 'Chờ đối soát nguyên liệu'
   const map = {
     Synced: 'Đã đồng bộ kho',
     PendingDeduction: 'Chờ trừ tồn quầy',
@@ -343,6 +344,7 @@ export function getPaymentStatusClass(status) {
 export function getInventorySyncClass(status) {
   const key = normalizeOrderKey(status)
   if (key === 'Synced') return 'bg-emerald-50 text-emerald-700'
+  if (key === 'PendingReconciliation') return 'bg-amber-50 text-amber-700'
   if (key === 'Cancelled') return 'bg-slate-100 text-slate-500'
   return 'bg-slate-100 text-slate-600'
 }
@@ -494,6 +496,8 @@ export const STOCK_STATUS_OPTIONS = [
 
 export function getStockStatusLabel(status) {
   const key = String(status || '').toLowerCase()
+  if (key === 'pendingreconciliation' || key === 'pending_bom_reconciliation') return 'Chờ đối soát nguyên liệu'
+  if (key === 'waiting_materials') return 'Chờ nguyên liệu'
   const map = {
     pending_deduct: 'Chờ trừ tồn quầy',
     pendingdeduction: 'Chờ trừ tồn quầy',
@@ -519,6 +523,7 @@ export function getQueueStatusLabel(status) {
 export function getStockStatusClass(status) {
   const key = String(status || '').toLowerCase()
   if (key === 'deducted' || key === 'synced') return 'bg-[#b9d4b0]/30 text-[#538463]'
+  if (key === 'pending_bom_reconciliation' || key === 'waiting_materials') return 'bg-amber-50 text-amber-700'
   if (key === 'waiting_stock' || key === 'insufficient') return 'bg-amber-50 text-amber-700'
   if (key === 'cancelled') return 'bg-red-50 text-red-600'
   return 'bg-slate-100 text-slate-600'

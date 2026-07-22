@@ -7,6 +7,8 @@ namespace InventoryService.Infrastructure.Repositories;
 
 public class WarehouseBatchRepository(InventoryDbContext _db) : IWarehouseBatchRepository
 {
+    private const string WarehouseLocation = "Warehouse";
+
     private IQueryable<WarehouseBatch> WithItems() =>
         _db.WarehouseBatches.Include(b => b.Items);
 
@@ -50,13 +52,17 @@ public class WarehouseBatchRepository(InventoryDbContext _db) : IWarehouseBatchR
     }
 
     public Task<List<WarehouseBatchItem>> GetAvailableItemsForSkuAsync(Guid skuId, CancellationToken ct = default) =>
+        GetAvailableItemsForSkuAsync(skuId, WarehouseLocation, ct);
+
+    public Task<List<WarehouseBatchItem>> GetAvailableItemsForSkuAsync(Guid skuId, string location, CancellationToken ct = default) =>
         _db.WarehouseBatchItems
             .Include(i => i.Batch)
             .Where(i =>
                 i.SkuId == skuId &&
                 i.QuantityOnHand > 0 &&
                 i.Batch != null &&
-                i.Batch.Status == "active")
+                i.Batch.Status == "active" &&
+                i.Batch.Location == location)
             .OrderBy(i => i.Batch!.ExpiresAt ?? DateTime.MaxValue)
             .ThenBy(i => i.Batch!.CreatedAt)
             .ThenBy(i => i.CreatedAt)
@@ -72,10 +78,13 @@ public class WarehouseBatchRepository(InventoryDbContext _db) : IWarehouseBatchR
     }
 
     public Task<int> SumQuantityOnHandAsync(Guid skuId, CancellationToken ct = default) =>
+        SumQuantityOnHandAsync(skuId, WarehouseLocation, ct);
+
+    public Task<int> SumQuantityOnHandAsync(Guid skuId, string location, CancellationToken ct = default) =>
         _db.WarehouseBatchItems
             .Where(i => i.SkuId == skuId)
             .Join(
-                _db.WarehouseBatches.Where(b => b.Status == "active"),
+                _db.WarehouseBatches.Where(b => b.Status == "active" && b.Location == location),
                 i => i.WarehouseBatchId,
                 b => b.Id,
                 (i, _) => i.QuantityOnHand)
@@ -84,8 +93,8 @@ public class WarehouseBatchRepository(InventoryDbContext _db) : IWarehouseBatchR
     public async Task<decimal> CalculateMovingAverageCostAsync(Guid skuId, CancellationToken ct = default)
     {
         var items = await _db.WarehouseBatchItems
-            .Where(i => i.SkuId == skuId && i.UnitCost.HasValue)
-            .Select(i => new { i.InitialQuantity, UnitCost = i.UnitCost.Value })
+            .Where(i => i.SkuId == skuId && i.UnitCost.HasValue && i.Batch != null && i.Batch.Location == WarehouseLocation)
+            .Select(i => new { i.InitialQuantity, UnitCost = i.UnitCost ?? 0m })
             .ToListAsync(ct);
 
         if (items.Count == 0) return 0m;
@@ -101,7 +110,7 @@ public class WarehouseBatchRepository(InventoryDbContext _db) : IWarehouseBatchR
     {
         var rows = await _db.WarehouseBatchItems
             .Join(
-                _db.WarehouseBatches.Where(b => b.Status == "active"),
+                _db.WarehouseBatches.Where(b => b.Status == "active" && b.Location == WarehouseLocation),
                 i => i.WarehouseBatchId,
                 b => b.Id,
                 (i, _) => new { i.SkuId, i.QuantityOnHand })
@@ -122,7 +131,7 @@ public class WarehouseBatchRepository(InventoryDbContext _db) : IWarehouseBatchR
     public async Task<decimal> CalculateTotalWarehouseValueAsync(CancellationToken ct = default)
     {
         return await _db.WarehouseBatchItems
-            .Where(b => b.QuantityOnHand > 0 && b.UnitCost.HasValue)
+            .Where(b => b.QuantityOnHand > 0 && b.UnitCost.HasValue && b.Batch != null && b.Batch.Location == WarehouseLocation)
             .SumAsync(b => b.QuantityOnHand * b.UnitCost!.Value, ct);
     }
 

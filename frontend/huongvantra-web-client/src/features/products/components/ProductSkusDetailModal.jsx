@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { showError } from '../../../app/toast.js'
 import ProductImage from './ProductImage.jsx'
 import { useStockAdjustmentBatch } from '../../inventory/hooks/useStockAdjustmentBatch.js'
@@ -16,7 +15,6 @@ import { INVENTORY_STOCK_CHANGED_EVENT } from '../../inventory/utils/inventorySt
 function ProductSkusDetailModal({
   product,
   stockBySkuId,
-  canManage = false,
   canAdjustStock = false,
   warehouseStockView = false,
   onClose,
@@ -24,18 +22,15 @@ function ProductSkusDetailModal({
   const stockLabel = warehouseStockView ? 'Tồn kho tổng' : 'Tồn cửa hàng'
   const [skus, setSkus] = useState(() => product?.skus ?? [])
   const [isLoading, setIsLoading] = useState(false)
-  const [localStockBySkuId, setLocalStockBySkuId] = useState(() => stockBySkuId ?? new Map())
+  const [refreshedStockBySkuId, setRefreshedStockBySkuId] = useState(null)
+  const localStockBySkuId = refreshedStockBySkuId ?? stockBySkuId ?? new Map()
   const { isInBatch, addAll, toggleLine, count } = useStockAdjustmentBatch()
-
-  useEffect(() => {
-    setLocalStockBySkuId(stockBySkuId ?? new Map())
-  }, [stockBySkuId])
 
   useEffect(() => {
     async function refreshStocks() {
       try {
         const stocks = await fetchSkuStocks()
-        setLocalStockBySkuId(
+        setRefreshedStockBySkuId(
           warehouseStockView ? buildWarehouseStockBySkuIdMap(stocks) : buildStockBySkuIdMap(stocks),
         )
       } catch {
@@ -217,15 +212,6 @@ function ProductSkusDetailModal({
           >
             Đóng
           </button>
-          {canManage ? (
-            <Link
-              to={`/products/${product.id}/edit`}
-              className="rounded-xl bg-[#538463] px-5 py-2.5 text-sm font-bold text-white hover:bg-[#457053]"
-              onClick={onClose}
-            >
-              Sửa sản phẩm / SKU
-            </Link>
-          ) : null}
         </div>
       </div>
     </div>

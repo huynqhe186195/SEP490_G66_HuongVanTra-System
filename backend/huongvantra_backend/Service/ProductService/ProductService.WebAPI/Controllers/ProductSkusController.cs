@@ -11,7 +11,13 @@ namespace ProductService.WebAPI.Controllers;
 [Route("api/v1/skus")]
 public class ProductSkusController(ProductSkuLogic _skuLogic) : ControllerBase
 {
+    private static readonly object MasterDataWriteDisabled = new
+    {
+        message = "SKU master data phải đi qua workflow phê duyệt Product. Vui lòng dùng /api/v1/product-creation-requests."
+    };
+
     [HttpGet]
+    [Authorize(Roles = "Warehouse,Accountant,Admin")]
     public async Task<IActionResult> GetPaged(
         [FromQuery] string? search,
         [FromQuery] Guid? productId,
@@ -22,36 +28,39 @@ public class ProductSkusController(ProductSkuLogic _skuLogic) : ControllerBase
             new GetProductSkusRequest(search, productId, isActive, page, pageSize),
             User.GetCatalogViewScope()));
 
+    [HttpGet("bom-catalog")]
+    public async Task<IActionResult> GetBomCatalog(
+        [FromQuery] List<Guid>? skuIds,
+        CancellationToken ct) =>
+        Ok(await _skuLogic.GetBomCatalogBySkuIdsAsync(skuIds, User.GetCatalogViewScope(), ct));
+
     [HttpGet("{id:guid}")]
+    [Authorize(Roles = "Warehouse,Accountant,Admin")]
     public async Task<IActionResult> GetById(Guid id) =>
         Ok(await _skuLogic.GetByIdAsync(id, User.GetCatalogViewScope()));
 
     [HttpGet("by-code/{skuCode}")]
+    [Authorize(Roles = "Warehouse,Accountant,Admin")]
     public async Task<IActionResult> GetBySkuCode(string skuCode) =>
         Ok(await _skuLogic.GetBySkuCodeAsync(skuCode, User.GetCatalogViewScope()));
 
     [HttpGet("by-product/{productId:guid}")]
+    [Authorize(Roles = "Warehouse,Accountant,Admin")]
     public async Task<IActionResult> GetByProductId(Guid productId) =>
         Ok(await _skuLogic.GetByProductIdAsync(productId, User.GetCatalogViewScope()));
 
     [HttpPost]
     [Authorize(Roles = "Warehouse")]
-    public async Task<IActionResult> Create([FromBody] CreateProductSkuRequest request)
-    {
-        var result = await _skuLogic.CreateAsync(request);
-        return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
-    }
+    public IActionResult Create([FromBody] CreateProductSkuRequest request) =>
+        StatusCode(StatusCodes.Status410Gone, MasterDataWriteDisabled);
 
     [HttpPut("{id:guid}")]
     [Authorize(Roles = "Warehouse")]
-    public async Task<IActionResult> Update(Guid id, [FromBody] UpdateProductSkuRequest request) =>
-        Ok(await _skuLogic.UpdateAsync(id, request));
+    public IActionResult Update(Guid id, [FromBody] UpdateProductSkuRequest request) =>
+        StatusCode(StatusCodes.Status410Gone, MasterDataWriteDisabled);
 
     [HttpDelete("{id:guid}")]
     [Authorize(Roles = "Warehouse")]
-    public async Task<IActionResult> Delete(Guid id)
-    {
-        await _skuLogic.DeleteAsync(id);
-        return NoContent();
-    }
+    public IActionResult Delete(Guid id) =>
+        StatusCode(StatusCodes.Status410Gone, MasterDataWriteDisabled);
 }

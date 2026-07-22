@@ -14,8 +14,6 @@ import { formatStockQuantity } from '../../products/utils/productDisplay.js'
 
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 
-import InventoryNavTabs from '../components/InventoryNavTabs.jsx'
-
 import { fetchWarehouseBatches } from '../services/warehouseBatchApi.js'
 
 
@@ -176,15 +174,13 @@ function InventoryBatchesPage() {
 
         title="Tồn theo lô"
 
-        description="Mỗi lô có thể chứa nhiều SKU — xuất sang cửa hàng trừ theo FIFO từng SKU"
+        description="Mỗi lô có thể chứa nhiều SKU — xuất bổ sung tồn quầy POS mặc định trừ theo FIFO từng SKU"
 
         searchPlaceholder="Tìm mã lô, SKU, NCC..."
 
         searchValue={searchInput}
 
         onSearchChange={setSearchInput}
-
-        rightContent={<InventoryNavTabs />}
 
       />
 

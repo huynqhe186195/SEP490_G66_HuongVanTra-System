@@ -1,1158 +1,2717 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import PageShell from '../../../components/shared/PageShell.jsx'
-import { showError, showSuccess } from '../../../app/toast.js'
-import {
-  authorizeProductApprovalRequest,
-  buildCreateProductBody,
-  cancelProductApprovalRequest,
-  createProductApprovalRequest,
-  fetchProductApprovals,
-} from '../services/productsApi.js'
+import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
+import { showError, showSuccess, showToast } from '../../../app/toast.js'
+import { useAuthSession } from '../../auth/hooks/useAuthSession.js'
+import { isSystemAdmin, isWarehouseRole } from '../../auth/utils/permissions.js'
+import VndCurrencyInput from '../components/VndCurrencyInput.jsx'
+import { fetchAttributeNames } from '../services/attributeNamesApi.js'
 import { fetchCategories } from '../services/categoriesApi.js'
-import { fetchAllActiveSkus } from '../services/productSkusApi.js'
 import { searchMaterials } from '../services/bomApi.js'
+import {
+  approveProductCreationRequest,
+  cancelProductCreationRequest,
+  createProductCreationRequest,
+  fetchProductCreationRequests,
+  rejectProductCreationRequest,
+  submitProductCreationRequest,
+  updateProductCreationRequest,
+} from '../services/productsApi.js'
+import { formatDateTimeVN } from '../../../utils/vietnamDateTime.js'
+import {
+  PRODUCT_CREATION_TEMPLATE_FILENAME,
+  buildGeneratedSkuCode,
+  downloadOfficialProductCreationTemplate,
+  exportProductCreationDraftToTemplate,
+  formatProductCreationDraftExportFilename,
+  hasMeaningfulProductCreationDraftData,
+  parseOfficialProductCreationFile,
+  validateAppendProductCreationImport,
+} from '../utils/productCreationExcelWorkflow.js'
+import {
+  INVENTORY_UNIT_OPTIONS,
+  PRODUCT_TYPE,
+  PRODUCT_TYPE_OPTIONS,
+  getDefaultSellableByType,
+  getInventoryUnitShortLabel,
+  getProductTypeLabel,
+} from '../utils/productTypes.js'
+import { formatWholeVnd, parseWholeVndInput } from '../utils/productDisplay.js'
 
-const PRODUCT_TYPES = [
-  { value: 'THANH_PHAM', label: 'Thành phẩm' },
-  { value: 'NGUYEN_LIEU', label: 'Nguyên liệu' },
+const STATUS_LABELS = {
+  Draft: 'Nháp',
+  PendingApproval: 'Chờ Admin duyệt',
+  Rejected: 'Bị từ chối',
+  Completed: 'Đã tạo hàng hóa',
+  Cancelled: 'Đã hủy',
+}
+
+const EMPTY_GUID = '00000000-0000-0000-0000-000000000000'
+const BOM_INTEGER_MESSAGE = 'Định mức phải là số nguyên dương.'
+const ADMIN_REQUEST_PAGE_SIZE = TABLE_PAGE_SIZE
+const PRODUCT_CREATION_REQUEST_FETCH_PAGE_SIZE = 100
+const MAX_IMAGE_UPLOAD_BYTES = 5 * 1024 * 1024
+const MAX_PRODUCT_IMAGES = 5
+const CLOUDINARY_CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME
+const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET
+const PRODUCT_CREATION_STATUS_FILTERS = [
+  { value: 'PendingApproval', label: 'Chờ xử lý' },
+  { value: 'all', label: 'Tất cả' },
+  { value: 'Draft', label: 'Nháp' },
+  { value: 'Completed', label: 'Đã tạo hàng hóa' },
+  { value: 'Rejected', label: 'Đã từ chối' },
+  { value: 'Cancelled', label: 'Đã hủy' },
+]
+const SALES_TAX_OPTIONS = [
+  { value: '8', label: '8%' },
+  { value: '10', label: '10%' },
+  { value: 'custom', label: 'Tùy chỉnh' },
+]
+const ATTRIBUTE_DUPLICATE_MESSAGE = 'Thuộc tính này đã được sử dụng cho sản phẩm.'
+const ATTRIBUTE_VALUE_REQUIRED_MESSAGE = 'Vui lòng nhập giá trị thuộc tính.'
+const ATTRIBUTE_NAME_SUGGESTIONS = [
+  'Hương vị',
+  'Màu sắc',
+  'Xuất xứ',
+  'Chất liệu bao bì',
+  'Trọng lượng',
+  'Cấp độ trà',
 ]
 
-const DEFAULT_MAX_STOCK = '999999999'
-const SKU_PATTERN = /^[A-Z0-9\-_]{3,50}$/
-
-function createKey(prefix) {
-  return `${prefix}_${Date.now()}_${Math.random().toString(16).slice(2)}`
-}
-
-function createUnit(overrides = {}) {
+function createAttributeRow(overrides = {}) {
   return {
-    key: createKey('unit'),
-    unitName: 'gói',
-    conversionRate: '1',
-    price: '0',
-    barcode: '',
-    isDirectSell: true,
-    isBaseUnit: true,
+    clientKey: `attr-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    attributeNameId: null,
+    attributeName: '',
+    value: '',
     ...overrides,
   }
 }
 
-function createOptionRow(overrides = {}) {
+function createDraftProduct() {
+  const key = `item-${Date.now()}-${Math.random().toString(16).slice(2)}`
+  const baseSkuKey = `${key}-base`
   return {
-    key: createKey('option'),
-    name: 'Unit',
-    value: 'gói',
-    ...overrides,
-  }
-}
-
-function createBomLine(overrides = {}) {
-  return {
-    key: createKey('bom'),
-    materialId: '',
-    materialName: '',
-    materialUnitName: '',
-    quantity: '1',
-    ...overrides,
-  }
-}
-
-function createVariant(overrides = {}) {
-  return {
-    key: createKey('variant'),
-    skuCode: '',
-    barcode: '',
-    variantName: '',
-    costPrice: '0',
-    retailPrice: '0',
-    minStock: '0',
-    maxStock: DEFAULT_MAX_STOCK,
-    isSellable: true,
-    allowRewardPoints: true,
-    isActive: true,
-    imageUrl: '',
-    optionRows: [createOptionRow()],
-    bomLines: [],
-    ...overrides,
-  }
-}
-
-function createInitialForm() {
-  return {
+    clientKey: key,
+    variantClientKey: baseSkuKey,
     name: '',
+    productType: PRODUCT_TYPE.THANH_PHAM,
     categoryId: '',
-    productType: 'THANH_PHAM',
     baseUnit: 'gói',
-    weightValue: '',
-    weightUnit: 'g',
-    origin: '',
-    flavorProfile: '',
-    brewingGuide: '',
+    inventoryUnit: 'Piece',
     description: '',
-    units: [createUnit()],
-    variants: [createVariant()],
-    adminNotes: '',
+    images: [],
+    skuCode: '',
+    variantName: '',
+    retailPrice: '',
+    salesTaxMode: 'custom',
+    salesTaxPercent: '0',
+    costPrice: '0',
+    minStock: '0',
+    maxStock: '',
+    isSellable: true,
+    bomLines: [],
+    skuRows: [{
+      requestSkuKey: baseSkuKey,
+      unitName: 'gói',
+      conversionRate: '1',
+      skuCode: '',
+      variantName: '',
+      retailPrice: '',
+      salesTaxMode: 'custom',
+      salesTaxPercent: '0',
+      costPrice: '0',
+      barcode: '',
+      minStock: '0',
+      maxStock: '',
+      isSellable: true,
+      isBaseUnitVariant: true,
+      isAutoGeneratedSku: true,
+      bomLines: [],
+    }],
+    attributes: [],
   }
-}
-
-function trimText(value) {
-  return String(value ?? '').trim()
 }
 
 function numberOrNull(value) {
   if (value === null || value === undefined || value === '') return null
-  const number = Number(value)
+  const number = Number(String(value).replace(',', '.'))
   return Number.isFinite(number) ? number : null
 }
 
-function formatCurrency(value) {
-  const number = Number(value ?? 0)
-  return Number.isFinite(number) ? number.toLocaleString('vi-VN') : '0'
+function positiveIntegerOrNull(value) {
+  const text = normalizeText(value)
+  if (!/^[1-9]\d*$/.test(text)) return null
+  const number = Number(text)
+  return Number.isSafeInteger(number) && number > 0 ? number : null
 }
 
-function formatDateTime(value) {
-  if (!value) return '-'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return '-'
-  return date.toLocaleString('vi-VN', {
-    hour: '2-digit',
-    minute: '2-digit',
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
+function preventNonIntegerKey(event) {
+  if (['e', 'E', '+', '-', '.', ','].includes(event.key)) event.preventDefault()
+}
+
+function moneyOrNull(value) {
+  return parseWholeVndInput(value)
+}
+
+function calculateDerivedRetailPrice(baseRetailPrice, conversionRate) {
+  const basePrice = moneyOrNull(baseRetailPrice)
+  const conversion = positiveIntegerOrNull(conversionRate)
+  if (basePrice === null || conversion === null) return ''
+
+  const amount = basePrice * conversion
+  return Number.isSafeInteger(amount) && amount >= 0 ? String(amount) : ''
+}
+
+function normalizeText(value) {
+  return String(value ?? '').trim()
+}
+
+function hasCloudinaryUploadConfig() {
+  return Boolean(CLOUDINARY_CLOUD_NAME && CLOUDINARY_UPLOAD_PRESET)
+}
+
+async function uploadImageToCloudinary(file) {
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET)
+
+  const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, {
+    method: 'POST',
+    body: formData,
   })
+
+  if (!response.ok) {
+    throw new Error('Không upload được ảnh lên Cloudinary.')
+  }
+
+  const data = await response.json()
+  const imageUrl = data.secure_url || data.url
+  if (!imageUrl) {
+    throw new Error('Cloudinary không trả về đường dẫn ảnh.')
+  }
+
+  return imageUrl
 }
 
-function normalizeSkuInput(value) {
-  return String(value ?? '').toUpperCase().replace(/\s+/g, '')
+function createLocalImageId() {
+  return `img-${Date.now()}-${Math.random().toString(16).slice(2)}`
 }
 
-function getProductTypeLabel(value) {
-  return PRODUCT_TYPES.find((item) => item.value === value)?.label || value || '-'
+function normalizeProductImages(product) {
+  const rawImages = product?.images ?? product?.Images ?? []
+  const list = Array.isArray(rawImages)
+    ? rawImages
+        .map((image, index) => {
+          const imageUrl = normalizeText(image?.imageUrl ?? image?.ImageUrl ?? '')
+          if (!imageUrl) return null
+          return {
+            id: createLocalImageId(),
+            imageUrl,
+            altText: image?.altText ?? image?.AltText ?? '',
+            sortOrder: Number(image?.sortOrder ?? image?.SortOrder ?? index) || index,
+            isThumbnail: Boolean(image?.isThumbnail ?? image?.IsThumbnail),
+            uploading: false,
+          }
+        })
+        .filter(Boolean)
+    : []
+
+  if (list.length === 0) {
+    const directUrl = normalizeText(product?.imageUrl ?? product?.ImageUrl ?? product?.thumbnailUrl ?? product?.ThumbnailUrl ?? '')
+    if (directUrl) {
+      list.push({ id: createLocalImageId(), imageUrl: directUrl, altText: '', sortOrder: 0, isThumbnail: true, uploading: false })
+    }
+  }
+
+  list.sort((a, b) => a.sortOrder - b.sortOrder)
+  return reindexProductImages(list)
 }
 
-function statusLabel(status) {
-  switch (status) {
-    case 'Draft':
-      return 'Chưa cấp mã'
-    case 'AwaitingWarehouseConfirmation':
-      return 'Đã cấp mã'
-    case 'Completed':
-      return 'Đã dùng'
-    case 'Cancelled':
-      return 'Đã hủy'
-    case 'Rejected':
-      return 'Từ chối'
-    case 'Expired':
-      return 'Hết hạn'
-    default:
-      return status || '-'
+function reindexProductImages(images) {
+  const list = images.map((image, index) => ({ ...image, sortOrder: index }))
+  if (list.length > 0 && !list.some((image) => image.isThumbnail && !image.uploading)) {
+    const firstReady = list.find((image) => !image.uploading)
+    if (firstReady) firstReady.isThumbnail = true
+  }
+  return list
+}
+
+function isHttpImageUrl(value) {
+  const text = normalizeText(value)
+  if (!text) return true
+  try {
+    const url = new URL(text)
+    return url.protocol === 'http:' || url.protocol === 'https:'
+  } catch {
+    return false
   }
 }
 
-function getCategoryName(categories, categoryId) {
-  return categories.find((item) => String(item.id) === String(categoryId))?.name || (categoryId ? `#${categoryId}` : '-')
+function normalizeTaxPercent(value) {
+  const number = numberOrNull(value)
+  if (number === null || number < 0) return null
+  return number
+}
+
+function getSkuTaxPercent(sku) {
+  return normalizeTaxPercent(sku?.salesTaxPercent ?? sku?.taxPercent ?? sku?.SalesTaxPercent ?? sku?.TaxPercent) ?? 0
+}
+
+function getPriceAfterTax(priceBeforeTax, taxPercent) {
+  const price = moneyOrNull(priceBeforeTax)
+  const tax = normalizeTaxPercent(taxPercent) ?? 0
+  if (price === null) return null
+  return Math.round(price * (1 + tax / 100))
+}
+
+function getVariantPriceBeforeTax(variant) {
+  return getVariantValue(variant, 'priceBeforeTax', getVariantValue(variant, 'retailPrice', 0))
+}
+
+function getVariantTaxPercent(variant) {
+  return normalizeTaxPercent(getVariantValue(variant, 'salesTaxPercent', getVariantValue(variant, 'taxPercent', 0))) ?? 0
+}
+
+function getVariantPriceAfterTax(variant) {
+  const explicitPrice = getVariantValue(variant, 'retailPrice', null)
+  const priceBeforeTax = getVariantPriceBeforeTax(variant)
+  const taxPercent = getVariantTaxPercent(variant)
+  return explicitPrice ?? getPriceAfterTax(priceBeforeTax, taxPercent) ?? 0
+}
+
+function getCostNumber(value) {
+  const number = moneyOrNull(value)
+  return number === null ? 0 : number
+}
+
+function getComponentUnitCostFromOption(option) {
+  return getCostNumber(
+    option?.costPrice ??
+    option?.purchasePrice ??
+    option?.averageCost ??
+    option?.importCost ??
+    option?.unitCost ??
+    0,
+  )
+}
+
+function getBomLineUnitCost(line, skuRows = []) {
+  const componentRequestKey = normalizeText(line?.componentRequestSkuKey ?? line?.ComponentRequestSkuKey)
+  const componentSkuCode = normalizeText(line?.componentSkuCode ?? line?.ComponentSkuCode).toUpperCase()
+  const localSku = skuRows.find((sku) =>
+    (componentRequestKey && normalizeText(sku.requestSkuKey) === componentRequestKey) ||
+    (componentSkuCode && normalizeText(sku.skuCode).toUpperCase() === componentSkuCode))
+
+  if (localSku) return getCostNumber(localSku.costPrice)
+
+  const explicitCost = line?.componentUnitCost ?? line?.ComponentUnitCost ?? line?.costPrice ?? line?.CostPrice
+  if (explicitCost !== null && explicitCost !== undefined && explicitCost !== '') return getCostNumber(explicitCost)
+
+  return 0
+}
+
+function calculateSkuBomCost(sku, skuRows = []) {
+  return (sku?.bomLines ?? []).reduce((total, line) => {
+    const quantity = positiveIntegerOrNull(line.quantity) ?? 0
+    return total + getBomLineUnitCost(line, skuRows) * quantity
+  }, 0)
+}
+
+function hasMissingBomCost(sku, skuRows = []) {
+  return (sku?.bomLines ?? []).some((line) => {
+    const quantity = positiveIntegerOrNull(line.quantity) ?? 0
+    return quantity > 0 && getBomLineUnitCost(line, skuRows) <= 0
+  })
+}
+
+function normalizeAttributeName(value) {
+  const text = normalizeText(value).replace(/\s+/g, ' ').normalize('NFC')
+  return text || ''
+}
+
+function getAttributeNameKey(value) {
+  return normalizeAttributeName(value).toLocaleLowerCase('vi-VN')
+}
+
+function normalizeAttributeValue(value) {
+  return normalizeText(value)
+}
+
+function normalizeAttributeRow(attribute) {
+  return {
+    ...attribute,
+    clientKey: attribute.clientKey || `attr-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    attributeNameId: attribute.attributeNameId || null,
+    attributeName: normalizeAttributeName(attribute.attributeName),
+    value: normalizeAttributeValue(attribute.value),
+  }
+}
+
+function getSubmittableAttributes(attributes = []) {
+  return attributes
+    .map(normalizeAttributeRow)
+    .filter((attribute) => attribute.attributeName || attribute.value)
+}
+
+function validateAttributeRows(attributes = [], prefix) {
+  const errors = []
+  const usedKeys = new Set()
+  getSubmittableAttributes(attributes).forEach((attribute, index) => {
+    const rowPrefix = `${prefix}, thuộc tính ${index + 1}`
+    if (!attribute.attributeName && attribute.value) {
+      errors.push(`${rowPrefix}: thiếu tên thuộc tính.`)
+      return
+    }
+    if (attribute.attributeName && !attribute.value) {
+      errors.push(`${rowPrefix}: ${ATTRIBUTE_VALUE_REQUIRED_MESSAGE}`)
+    }
+    if (attribute.attributeName.length > 100) {
+      errors.push(`${rowPrefix}: tên thuộc tính tối đa 100 ký tự.`)
+    }
+    if (attribute.value.length > 500) {
+      errors.push(`${rowPrefix}: giá trị thuộc tính tối đa 500 ký tự.`)
+    }
+
+    const key = getAttributeNameKey(attribute.attributeName)
+    if (key && usedKeys.has(key)) {
+      errors.push(`${rowPrefix}: ${ATTRIBUTE_DUPLICATE_MESSAGE}`)
+    }
+    if (key) usedKeys.add(key)
+  })
+  return errors
+}
+
+function createSkuRow(row, { isBase = false } = {}) {
+  const key = `${row.clientKey}-sku-${Date.now()}-${Math.random().toString(16).slice(2)}`
+  const baseSku = getSkuRows(row).find((sku) => sku.isBaseUnitVariant) ?? getSkuRows(row)[0]
+  const basePrice = moneyOrNull(baseSku?.retailPrice) ?? moneyOrNull(row.retailPrice) ?? 0
+  const conversionRate = isBase ? 1 : 10
+  const unitName = isBase ? (row.baseUnit || 'gói') : ''
+  return {
+    requestSkuKey: key,
+    unitName,
+    conversionRate: String(conversionRate),
+    skuCode: buildGeneratedSkuCode(row.name, unitName, conversionRate),
+    variantName: unitName ? `${row.name || 'Sản phẩm'} - ${unitName}` : row.name,
+    retailPrice: basePrice > 0 ? String(basePrice * conversionRate) : '',
+    salesTaxMode: baseSku?.salesTaxMode ?? row.salesTaxMode ?? 'custom',
+    salesTaxPercent: baseSku?.salesTaxPercent ?? row.salesTaxPercent ?? '0',
+    costPrice: String(moneyOrNull(row.costPrice) ?? 0),
+    barcode: '',
+    minStock: String(row.minStock ?? 0),
+    maxStock: row.maxStock ?? '',
+    isSellable: row.isSellable !== false,
+    isBaseUnitVariant: isBase,
+    isAutoGeneratedSku: true,
+    baseRequestSkuKey: isBase ? null : baseSku?.requestSkuKey,
+    baseSkuCode: isBase ? null : baseSku?.skuCode,
+    bomLines: isBase || !baseSku
+      ? []
+      : [{
+        materialId: EMPTY_GUID,
+        materialName: row.name,
+        materialUnitName: baseSku.unitName || row.baseUnit,
+        quantity: conversionRate,
+        componentRequestSkuKey: baseSku.requestSkuKey,
+        componentSkuCode: baseSku.skuCode,
+        componentVariantName: baseSku.variantName || baseSku.unitName,
+        isRequiredBaseComponent: true,
+      }],
+  }
+}
+
+function getSkuRows(row) {
+  if (Array.isArray(row.skuRows) && row.skuRows.length) return row.skuRows
+  return [{
+    requestSkuKey: row.variantClientKey || `${row.clientKey}-sku`,
+    unitName: row.baseUnit || 'gói',
+    conversionRate: '1',
+    skuCode: row.skuCode || '',
+    variantName: row.variantName || row.name || '',
+    retailPrice: row.retailPrice ?? '',
+    salesTaxMode: row.salesTaxMode ?? 'custom',
+    salesTaxPercent: row.salesTaxPercent ?? '0',
+    costPrice: row.costPrice ?? '0',
+    barcode: '',
+    minStock: row.minStock ?? '0',
+    maxStock: row.maxStock ?? '',
+    isSellable: row.isSellable !== false,
+    isBaseUnitVariant: true,
+    isAutoGeneratedSku: true,
+    bomLines: row.bomLines ?? [],
+  }]
+}
+
+function syncLegacySkuFields(row, skuRows) {
+  const normalizedSkuRows = syncSkuRows(row, skuRows)
+  const baseSku = normalizedSkuRows.find((sku) => sku.isBaseUnitVariant) ?? normalizedSkuRows[0] ?? {}
+  return {
+    ...row,
+    skuRows: normalizedSkuRows,
+    variantClientKey: baseSku.requestSkuKey || row.variantClientKey,
+    baseUnit: baseSku.unitName || row.baseUnit,
+    skuCode: baseSku.skuCode || '',
+    variantName: baseSku.variantName || '',
+    retailPrice: baseSku.retailPrice ?? '',
+    salesTaxMode: baseSku.salesTaxMode ?? row.salesTaxMode ?? 'custom',
+    salesTaxPercent: baseSku.salesTaxPercent ?? row.salesTaxPercent ?? '0',
+    costPrice: baseSku.costPrice ?? '0',
+    minStock: baseSku.minStock ?? '0',
+    maxStock: baseSku.maxStock ?? '',
+    isSellable: baseSku.isSellable !== false,
+    bomLines: baseSku.bomLines ?? [],
+  }
+}
+
+function statusLabel(status) {
+  return STATUS_LABELS[status] || status || '—'
+}
+
+function getPrimarySnapshotVariant(item) {
+  const product = item?.productSnapshot ?? item?.ProductSnapshot ?? {}
+  const variants = product.variants ?? product.Variants ?? []
+  return Array.isArray(variants) ? variants[0] : null
+}
+
+function requestItemPriceSummary(item) {
+  const variant = getPrimarySnapshotVariant(item)
+  if (!variant) return ''
+  const priceBeforeTax = variant.priceBeforeTax ?? variant.PriceBeforeTax ?? variant.retailPrice ?? variant.RetailPrice
+  const salesTaxPercent = variant.salesTaxPercent ?? variant.SalesTaxPercent ?? 0
+  const retailPrice = variant.retailPrice ?? variant.RetailPrice
+  const costPrice = variant.costPrice ?? variant.CostPrice
+  return `Giá trước thuế: ${formatWholeVnd(priceBeforeTax)} · Thuế: ${salesTaxPercent}% · Giá sau thuế: ${formatWholeVnd(retailPrice)} · Giá vốn: ${formatWholeVnd(costPrice)}`
 }
 
 function getMaterialUnit(material) {
+  const inventoryUnit = getInventoryUnitShortLabel(material?.inventoryUnit)
+  if (inventoryUnit) return inventoryUnit
+
   const baseUnit = material?.units?.find((unit) => unit.isBaseUnit) || material?.units?.[0]
   return material?.materialUnitName || material?.baseUnit || baseUnit?.unitName || ''
 }
 
-function buildOptionValuesJson(optionRows = []) {
-  const values = {}
-  for (const row of optionRows) {
-    const name = trimText(row.name)
-    const value = trimText(row.value)
-    if (name && value) values[name] = value
-  }
-  return JSON.stringify(values)
-}
-
-function buildProductSnapshot(form) {
-  const product = {
-    categoryId: Number(form.categoryId),
-    name: trimText(form.name),
-    origin: trimText(form.origin) || null,
-    flavorProfile: trimText(form.flavorProfile) || null,
-    brewingGuide: trimText(form.brewingGuide) || null,
-    description: trimText(form.description) || null,
-    baseUnit: trimText(form.baseUnit),
-    weightValue: numberOrNull(form.weightValue),
-    weightUnit: trimText(form.weightUnit) || null,
-    isVariantParent: form.variants.length > 1,
-    productType: form.productType,
-    images: [],
-    units: form.units.map((unit) => ({
-      variantId: null,
-      unitName: trimText(unit.unitName),
-      conversionRate: Number(unit.conversionRate),
-      price: numberOrNull(unit.price),
-      barcode: trimText(unit.barcode) || null,
-      isDirectSell: Boolean(unit.isDirectSell),
-      isBaseUnit: Boolean(unit.isBaseUnit),
-    })),
-    variants: form.variants.map((variant) => ({
-      skuCode: normalizeSkuInput(variant.skuCode),
-      barcode: trimText(variant.barcode) || null,
-      variantName: trimText(variant.variantName),
-      optionValuesJson: buildOptionValuesJson(variant.optionRows),
-      costPrice: Number(variant.costPrice || 0),
-      retailPrice: Number(variant.retailPrice || 0),
-      minStock: numberOrNull(variant.minStock),
-      maxStock: numberOrNull(variant.maxStock),
-      isSellable: Boolean(variant.isSellable),
-      allowRewardPoints: Boolean(variant.allowRewardPoints),
-      isActive: variant.isActive !== false,
-      imageUrl: trimText(variant.imageUrl) || null,
-      units: [],
-      bomLines: form.productType === 'THANH_PHAM'
-        ? variant.bomLines.map((line) => ({
-          materialId: line.materialId,
-          quantity: Number(line.quantity),
-        }))
-        : [],
-    })),
-    variantGenerator: null,
-  }
-
-  return buildCreateProductBody(product)
-}
-
-function validateApprovalForm(form, { existingSkuCodes }) {
-  const errors = {}
-  const addError = (key, message) => {
-    if (!errors[key]) errors[key] = message
-  }
-
-  const name = trimText(form.name)
-  if (!name) addError('name', 'Tên sản phẩm là bắt buộc.')
-  else if (name.length < 2 || name.length > 150) addError('name', 'Tên sản phẩm phải từ 2 đến 150 ký tự.')
-
-  if (!form.categoryId) addError('categoryId', 'Danh mục là bắt buộc.')
-  if (!form.productType) addError('productType', 'Loại hàng là bắt buộc.')
-  if (!trimText(form.baseUnit)) addError('baseUnit', 'Đơn vị gốc là bắt buộc.')
-
-  if (trimText(form.weightValue)) {
-    const weight = Number(form.weightValue)
-    if (!Number.isFinite(weight) || weight <= 0) addError('weightValue', 'Khối lượng phải lớn hơn 0.')
-    if (!trimText(form.weightUnit)) addError('weightUnit', 'Đơn vị khối lượng là bắt buộc khi nhập khối lượng.')
-  }
-
-  if (trimText(form.adminNotes).length > 1000) addError('adminNotes', 'Ghi chú Chủ HTX tối đa 1000 ký tự.')
-
-  if (!form.units.length) addError('units', 'Cần ít nhất một đơn vị bán.')
-  const baseUnits = form.units.filter((unit) => unit.isBaseUnit)
-  if (form.units.length && baseUnits.length !== 1) addError('units', 'Cần chọn đúng một đơn vị gốc.')
-
-  const unitNames = new Set()
-  const unitBarcodes = new Set()
-  form.units.forEach((unit) => {
-    const prefix = `unit.${unit.key}`
-    const unitName = trimText(unit.unitName).toLowerCase()
-    if (!unitName) addError(`${prefix}.unitName`, 'Tên đơn vị là bắt buộc.')
-    else if (unitNames.has(unitName)) addError(`${prefix}.unitName`, 'Tên đơn vị bị trùng.')
-    else unitNames.add(unitName)
-
-    const conversionRate = Number(unit.conversionRate)
-    if (!Number.isFinite(conversionRate) || conversionRate <= 0) addError(`${prefix}.conversionRate`, 'Tỷ lệ quy đổi phải lớn hơn 0.')
-    if (unit.isBaseUnit && conversionRate !== 1) addError(`${prefix}.conversionRate`, 'Đơn vị gốc phải có tỷ lệ quy đổi bằng 1.')
-
-    if (unit.isDirectSell && trimText(unit.price) === '') addError(`${prefix}.price`, 'Đơn vị bán trực tiếp cần có giá bán.')
-    const price = Number(unit.price || 0)
-    if (!Number.isFinite(price) || price < 0) addError(`${prefix}.price`, 'Giá bán phải lớn hơn hoặc bằng 0.')
-
-    const barcode = trimText(unit.barcode).toLowerCase()
-    if (barcode) {
-      if (unitBarcodes.has(barcode)) addError(`${prefix}.barcode`, 'Barcode đơn vị bị trùng.')
-      else unitBarcodes.add(barcode)
-    }
+function getComponentSkuOptions(materials) {
+  return materials.flatMap((material) => {
+    const variants = material.variants?.length ? material.variants : material.skus ?? []
+    return variants.map((variant) => ({
+      productId: material.id,
+      productName: material.name,
+      productType: material.productType,
+      materialUnitName: getMaterialUnit(material),
+      variantId: variant.id,
+      skuCode: variant.skuCode,
+      variantName: variant.variantName || variant.packagingType || variant.unitName || material.name,
+      unitName: variant.unitName || '',
+      costPrice: getComponentUnitCostFromOption(variant) || getComponentUnitCostFromOption(material),
+    }))
   })
+}
 
-  if (!form.variants.length) addError('variants', 'Cần ít nhất một SKU/Biến thể.')
-  const skuCodes = new Set()
-  const variantBarcodes = new Set()
+function createBomLineFromComponentSku(option, quantity = 1) {
+  return {
+    materialId: option.productId,
+    materialName: option.productName,
+    materialUnitName: option.materialUnitName,
+    quantity,
+    componentVariantId: option.variantId,
+    componentSkuCode: option.skuCode,
+    componentVariantName: option.variantName,
+    componentUnitCost: getComponentUnitCostFromOption(option),
+    isRequiredBaseComponent: false,
+  }
+}
 
-  form.variants.forEach((variant) => {
-    const prefix = `variant.${variant.key}`
-    const skuCode = normalizeSkuInput(variant.skuCode)
-    if (!skuCode) addError(`${prefix}.skuCode`, 'Mã SKU không được để trống.')
-    else if (!SKU_PATTERN.test(skuCode)) addError(`${prefix}.skuCode`, 'SKU chỉ gồm chữ in hoa, số, gạch ngang hoặc gạch dưới, 3-50 ký tự.')
-    else if (skuCodes.has(skuCode)) addError(`${prefix}.skuCode`, 'Mã SKU bị trùng trong biên bản.')
-    else if (existingSkuCodes.has(skuCode)) addError(`${prefix}.skuCode`, 'Mã SKU đã tồn tại.')
-    else skuCodes.add(skuCode)
+function lineMatchesSku(line, sku) {
+  if (!line || !sku) return false
+  const lineRequestKey = normalizeText(line.componentRequestSkuKey)
+  const lineSkuCode = normalizeText(line.componentSkuCode).toUpperCase()
+  const lineVariantId = normalizeText(line.componentVariantId)
+  const skuRequestKey = normalizeText(sku.requestSkuKey)
+  const skuCode = normalizeText(sku.skuCode).toUpperCase()
+  const skuVariantId = normalizeText(sku.variantId || sku.id)
+  return Boolean(
+    (lineRequestKey && skuRequestKey && lineRequestKey === skuRequestKey)
+    || (lineSkuCode && skuCode && lineSkuCode === skuCode)
+    || (lineVariantId && skuVariantId && lineVariantId === skuVariantId),
+  )
+}
 
-    if (!trimText(variant.variantName)) addError(`${prefix}.variantName`, 'Tên biến thể là bắt buộc.')
+function getBomComponentKey(line) {
+  if (line?.componentVariantId) return `variant:${line.componentVariantId}`
+  if (line?.componentSkuCode) return `sku:${normalizeText(line.componentSkuCode).toUpperCase()}`
+  if (line?.componentRequestSkuKey) return `request:${line.componentRequestSkuKey}`
+  return line?.materialId ? `material:${line.materialId}` : ''
+}
 
-    const costPrice = Number(variant.costPrice || 0)
-    if (!Number.isFinite(costPrice) || costPrice < 0) addError(`${prefix}.costPrice`, 'Giá vốn phải lớn hơn hoặc bằng 0.')
-    const retailPrice = Number(variant.retailPrice || 0)
-    if (!Number.isFinite(retailPrice) || retailPrice < 0) addError(`${prefix}.retailPrice`, 'Giá bán phải lớn hơn hoặc bằng 0.')
+function createRequiredBaseBomLine(row, sku, baseSku) {
+  return {
+    materialId: EMPTY_GUID,
+    materialName: row.name,
+    materialUnitName: baseSku.unitName || row.baseUnit,
+    quantity: normalizeText(sku.conversionRate) || '',
+    componentRequestSkuKey: baseSku.requestSkuKey,
+    componentSkuCode: baseSku.skuCode,
+    componentVariantName: baseSku.variantName || baseSku.unitName,
+    componentUnitCost: getCostNumber(baseSku.costPrice),
+    isRequiredBaseComponent: true,
+  }
+}
 
-    const minStock = Number(variant.minStock || 0)
-    const maxStock = Number(variant.maxStock || 0)
-    if (!Number.isFinite(minStock) || minStock < 0) addError(`${prefix}.minStock`, 'Tồn tối thiểu phải lớn hơn hoặc bằng 0.')
-    if (!Number.isFinite(maxStock) || maxStock < 0) addError(`${prefix}.maxStock`, 'Tồn tối đa phải lớn hơn hoặc bằng 0.')
-    if (Number.isFinite(minStock) && Number.isFinite(maxStock) && maxStock < minStock) addError(`${prefix}.maxStock`, 'Tồn tối đa phải lớn hơn hoặc bằng tồn tối thiểu.')
+function syncRequiredBaseBomLines(row, skuRows) {
+  const normalizedRows = Array.isArray(skuRows) ? skuRows : []
+  if (row.productType !== PRODUCT_TYPE.THANH_PHAM) {
+    return normalizedRows.map((sku) => ({ ...sku, bomLines: [] }))
+  }
 
-    const barcode = trimText(variant.barcode).toLowerCase()
-    if (barcode) {
-      if (variantBarcodes.has(barcode)) addError(`${prefix}.barcode`, 'Barcode SKU bị trùng.')
-      else variantBarcodes.add(barcode)
-    }
+  const baseIndex = normalizedRows.findIndex((sku) => sku.isBaseUnitVariant)
+  const baseSku = normalizedRows[baseIndex >= 0 ? baseIndex : 0]
+  if (!baseSku) return normalizedRows
 
-    variant.optionRows.forEach((option) => {
-      const optionPrefix = `${prefix}.option.${option.key}`
-      const optionName = trimText(option.name)
-      const optionValue = trimText(option.value)
-      if ((optionName && !optionValue) || (!optionName && optionValue)) {
-        addError(`${optionPrefix}.name`, 'Option cần đủ tên và giá trị.')
-      }
+  return normalizedRows.map((sku, index) => {
+    const isBase = index === (baseIndex >= 0 ? baseIndex : 0)
+    const manualLines = (sku.bomLines ?? []).filter((line) => {
+      if (line.isRequiredBaseComponent) return false
+      if (!isBase && lineMatchesSku(line, baseSku)) return false
+      return true
     })
 
-    if (form.productType === 'THANH_PHAM') {
-      const usedMaterials = new Set()
-      variant.bomLines.forEach((line) => {
-        const linePrefix = `${prefix}.bom.${line.key}`
-        if (!line.materialId) addError(`${linePrefix}.materialId`, 'BOM có dòng nguyên liệu chưa chọn.')
-        else if (usedMaterials.has(String(line.materialId))) addError(`${linePrefix}.materialId`, 'Không được chọn trùng nguyên liệu trong cùng BOM.')
-        else usedMaterials.add(String(line.materialId))
-
-        const quantity = Number(line.quantity)
-        if (!Number.isFinite(quantity) || quantity <= 0) addError(`${linePrefix}.quantity`, 'Số lượng BOM phải lớn hơn 0.')
-      })
+    if (isBase) {
+      return {
+        ...sku,
+        isBaseUnitVariant: true,
+        conversionRate: '1',
+        baseRequestSkuKey: null,
+        baseSkuCode: null,
+        bomLines: manualLines,
+      }
     }
+
+    return {
+      ...sku,
+      isBaseUnitVariant: false,
+      baseRequestSkuKey: baseSku.requestSkuKey,
+      baseSkuCode: baseSku.skuCode,
+      bomLines: [createRequiredBaseBomLine(row, sku, baseSku), ...manualLines],
+    }
+  })
+}
+
+function syncDerivedSkuRetailPrices(skuRows) {
+  const normalizedRows = Array.isArray(skuRows) ? skuRows : []
+  const baseIndex = normalizedRows.findIndex((sku) => sku.isBaseUnitVariant)
+  const baseSku = normalizedRows[baseIndex >= 0 ? baseIndex : 0]
+  if (!baseSku) return normalizedRows
+
+  return normalizedRows.map((sku, index) => {
+    const isBase = index === (baseIndex >= 0 ? baseIndex : 0)
+    if (isBase) {
+      return {
+        ...sku,
+        isBaseUnitVariant: true,
+        conversionRate: '1',
+      }
+    }
+
+    return {
+      ...sku,
+      isBaseUnitVariant: false,
+      retailPrice: calculateDerivedRetailPrice(baseSku.retailPrice, sku.conversionRate),
+      salesTaxMode: baseSku.salesTaxMode ?? 'custom',
+      salesTaxPercent: baseSku.salesTaxPercent ?? '0',
+    }
+  })
+}
+
+function syncSkuRows(row, skuRows) {
+  const withRetailPrices = syncDerivedSkuRetailPrices(skuRows)
+  const withBomLines = syncRequiredBaseBomLines(row, withRetailPrices)
+  if (row.productType !== PRODUCT_TYPE.THANH_PHAM) return withBomLines
+
+  const withDirectCosts = withBomLines.map((sku) => ({
+    ...sku,
+    costPrice: String(Math.round(calculateSkuBomCost(sku, withBomLines))),
+  }))
+
+  return withDirectCosts.map((sku) => ({
+    ...sku,
+    costPrice: String(Math.round(calculateSkuBomCost(sku, withDirectCosts))),
+  }))
+}
+
+function normalizeBomLine(line, materialsById) {
+  const materialId = line.materialId ?? line.material_id ?? line.MaterialId
+  const material = materialId ? materialsById.get(String(materialId)) : null
+  const componentSkuCode = line.componentSkuCode ?? line.ComponentSkuCode ?? ''
+  const componentVariantName = line.componentVariantName ?? line.ComponentVariantName ?? ''
+  return {
+    materialId,
+    materialName: line.materialName ?? line.MaterialName ?? componentVariantName ?? material?.name ?? '',
+    materialUnitName:
+      line.materialUnitName ??
+      line.MaterialUnitName ??
+      line.baseUnit ??
+      line.BaseUnit ??
+      getMaterialUnit(material),
+    quantity: numberOrNull(line.quantity ?? line.Quantity) ?? 1,
+    componentVariantId: line.componentVariantId ?? line.ComponentVariantId ?? null,
+    componentSkuCode,
+    componentRequestSkuKey: line.componentRequestSkuKey ?? line.ComponentRequestSkuKey ?? null,
+    componentVariantName,
+    componentUnitCost: line.componentUnitCost ?? line.ComponentUnitCost ?? line.costPrice ?? line.CostPrice ?? 0,
+    isRequiredBaseComponent: Boolean(line.isRequiredBaseComponent ?? line.IsRequiredBaseComponent ?? false),
+  }
+}
+
+function toProductPayload(row) {
+  const isFinishedProduct = row.productType === PRODUCT_TYPE.THANH_PHAM
+  const skuRows = syncSkuRows(row, getSkuRows(row))
+  const baseSku = skuRows.find((sku) => sku.isBaseUnitVariant) ?? skuRows[0]
+  const baseUnit = baseSku?.unitName || row.baseUnit || 'unit'
+
+  return {
+    categoryId: Number(row.categoryId),
+    name: row.name.trim(),
+    origin: '',
+    flavorProfile: '',
+    brewingGuide: '',
+    description: row.description?.trim() || '',
+    baseUnit,
+    inventoryUnit: row.inventoryUnit || 'Piece',
+    weightValue: null,
+    weightUnit: null,
+    isVariantParent: true,
+    productType: row.productType,
+    images: (Array.isArray(row.images) ? row.images : [])
+      .filter((image) => !image.uploading && normalizeText(image.imageUrl))
+      .map((image, index) => ({
+        imageUrl: normalizeText(image.imageUrl),
+        altText: normalizeText(image.altText) || row.name.trim(),
+        sortOrder: index,
+        isThumbnail: Boolean(image.isThumbnail),
+      })),
+    units: skuRows.map((sku) => {
+      const price = getPriceAfterTax(sku.retailPrice, getSkuTaxPercent(sku))
+      return {
+        unitName: sku.unitName || baseUnit,
+        conversionRate: Number(sku.conversionRate || 1),
+        price: price && price > 0 ? price : null,
+        barcode: normalizeText(sku.barcode),
+        isDirectSell: sku.isSellable !== false,
+        isBaseUnit: Boolean(sku.isBaseUnitVariant),
+      }
+    }),
+    variants: skuRows.map((sku) => {
+      const priceBeforeTax = moneyOrNull(sku.retailPrice) ?? 0
+      const salesTaxPercent = getSkuTaxPercent(sku)
+      const retailPrice = getPriceAfterTax(sku.retailPrice, salesTaxPercent) ?? 0
+      const costPrice = moneyOrNull(sku.costPrice) ?? 0
+      return {
+        requestSkuKey: sku.requestSkuKey,
+        skuCode: normalizeText(sku.skuCode).toUpperCase(),
+        barcode: normalizeText(sku.barcode),
+        variantName: normalizeText(sku.variantName) || `${row.name.trim()} - ${sku.unitName || baseUnit}`,
+        optionValuesJson: '{}',
+        costPrice,
+        retailPrice,
+        priceBeforeTax,
+        salesTaxPercent,
+        salesTaxMode: sku.salesTaxMode ?? 'custom',
+        minStock: numberOrNull(sku.minStock),
+        maxStock: numberOrNull(sku.maxStock),
+        isSellable: sku.isSellable !== false,
+        allowRewardPoints: true,
+        isActive: true,
+        imageUrl: '',
+        unitName: sku.unitName || baseUnit,
+        conversionRate: Number(sku.conversionRate || 1),
+        baseRequestSkuKey: sku.isBaseUnitVariant ? null : (sku.baseRequestSkuKey || baseSku?.requestSkuKey || null),
+        baseSkuCode: sku.isBaseUnitVariant ? null : (sku.baseSkuCode || baseSku?.skuCode || null),
+        isBaseUnitVariant: Boolean(sku.isBaseUnitVariant),
+        isAutoGeneratedSku: sku.isAutoGeneratedSku !== false,
+        units: [{
+          unitName: sku.unitName || baseUnit,
+          conversionRate: 1,
+          price: retailPrice > 0 ? retailPrice : null,
+          barcode: normalizeText(sku.barcode),
+          isDirectSell: sku.isSellable !== false,
+          isBaseUnit: true,
+        }],
+        bomLines: isFinishedProduct
+          ? (sku.bomLines ?? [])
+            .filter((line) => positiveIntegerOrNull(line.quantity) && (line.materialId || line.componentVariantId || line.componentSkuCode || line.componentRequestSkuKey))
+            .map((line) => ({
+              materialId: line.materialId || EMPTY_GUID,
+              quantity: positiveIntegerOrNull(line.quantity),
+              componentVariantId: line.componentVariantId || null,
+              componentSkuCode: normalizeText(line.componentSkuCode),
+              componentRequestSkuKey: normalizeText(line.componentRequestSkuKey),
+              componentUnitCost: getBomLineUnitCost(line, skuRows),
+              isRequiredBaseComponent: Boolean(line.isRequiredBaseComponent),
+            }))
+          : [],
+      }
+    }),
+    attributes: getSubmittableAttributes(row.attributes)
+      .map((attribute) => ({
+        attributeNameId: attribute.attributeNameId || null,
+        attributeName: attribute.attributeName,
+        value: attribute.value,
+      })),
+    variantGenerator: null,
+  }
+}
+
+function fromProductSnapshot(item, materialsById) {
+  const product = item.productSnapshot ?? {}
+  const variants = Array.isArray(product.variants) ? product.variants : []
+  const skuRows = variants.map((variant, index) => {
+    const salesTaxPercent = normalizeTaxPercent(variant.salesTaxPercent ?? variant.taxPercent) ?? 0
+    return {
+      variantId: variant.id ?? variant.variantId ?? null,
+      requestSkuKey: variant.requestSkuKey || variant.skuCode || `${item.clientKey || Date.now()}-sku-${index + 1}`,
+      unitName: variant.unitName || variant.units?.[0]?.unitName || product.baseUnit || 'gói',
+      conversionRate: String(variant.conversionRate ?? (index === 0 ? 1 : '')),
+      skuCode: variant.skuCode || '',
+      variantName: variant.variantName || '',
+      retailPrice: String(variant.priceBeforeTax ?? variant.retailPrice ?? ''),
+      salesTaxMode: variant.salesTaxMode ?? ([8, 10].includes(salesTaxPercent) ? String(salesTaxPercent) : 'custom'),
+      salesTaxPercent: String(salesTaxPercent),
+      costPrice: String(variant.costPrice ?? 0),
+      barcode: variant.barcode || '',
+      minStock: String(variant.minStock ?? 0),
+      maxStock: variant.maxStock == null ? '' : String(variant.maxStock),
+      isSellable: variant.isSellable !== false,
+      isBaseUnitVariant: Boolean(variant.isBaseUnitVariant ?? index === 0),
+      isAutoGeneratedSku: variant.isAutoGeneratedSku !== false,
+      baseRequestSkuKey: variant.baseRequestSkuKey ?? null,
+      baseSkuCode: variant.baseSkuCode ?? null,
+      bomLines: Array.isArray(variant.bomLines)
+        ? variant.bomLines.map((line) => normalizeBomLine(line, materialsById))
+        : [],
+    }
+  })
+  const baseSku = skuRows.find((sku) => sku.isBaseUnitVariant) ?? skuRows[0] ?? {}
+  const fallbackDraft = { ...createDraftProduct(), name: product.name || '' }
+  const fallbackSkuRows = getSkuRows(fallbackDraft)
+
+  return syncLegacySkuFields({
+    clientKey: item.clientKey || `item-${Date.now()}`,
+    variantClientKey: baseSku.requestSkuKey || `${item.clientKey || Date.now()}-sku`,
+    name: product.name || '',
+    description: product.description || '',
+    images: normalizeProductImages(product),
+    productType: product.productType || PRODUCT_TYPE.THANH_PHAM,
+    categoryId: product.categoryId ? String(product.categoryId) : '',
+    baseUnit: baseSku.unitName || product.baseUnit || 'gói',
+    inventoryUnit: product.inventoryUnit || 'Piece',
+    skuCode: baseSku.skuCode || '',
+    variantName: baseSku.variantName || '',
+    retailPrice: baseSku.retailPrice ?? '',
+    salesTaxMode: baseSku.salesTaxMode ?? 'custom',
+    salesTaxPercent: baseSku.salesTaxPercent ?? '0',
+    costPrice: baseSku.costPrice ?? '0',
+    minStock: baseSku.minStock ?? '0',
+    maxStock: baseSku.maxStock ?? '',
+    isSellable: baseSku.isSellable !== false,
+    bomLines: baseSku.bomLines ?? [],
+    skuRows: skuRows.length ? skuRows : fallbackSkuRows,
+    attributes: Array.isArray(product.attributes)
+      ? product.attributes.map((attribute) => normalizeAttributeRow({
+        attributeNameId: attribute.attributeNameId ?? null,
+        attributeName: attribute.attributeName ?? '',
+        value: attribute.value ?? '',
+      }))
+      : [],
+  }, skuRows.length ? skuRows : fallbackSkuRows)
+}
+
+function validateForm(title, rows, options = {}) {
+  const errors = []
+  const requireFinishedBom = options.requireFinishedBom === true
+  if (!title.trim()) errors.push('Tiêu đề yêu cầu là bắt buộc.')
+  if (!rows.length) errors.push('Cần ít nhất một sản phẩm.')
+
+  const skuCodes = new Set()
+  const names = new Set()
+  rows.forEach((row, index) => {
+    const prefix = `Sản phẩm ${index + 1}`
+    const isFinishedProduct = row.productType === PRODUCT_TYPE.THANH_PHAM
+    const skuRows = syncSkuRows(row, getSkuRows(row))
+    if (!row.name.trim()) errors.push(`${prefix}: thiếu tên sản phẩm.`)
+    if (!row.categoryId) errors.push(`${prefix}: thiếu danh mục.`)
+    const images = Array.isArray(row.images) ? row.images : []
+    if (images.some((image) => image.uploading)) errors.push(`${prefix}: vui lòng đợi ảnh upload xong.`)
+    if (images.some((image) => !isHttpImageUrl(image.imageUrl))) errors.push(`${prefix}: URL ảnh phải bắt đầu bằng http:// hoặc https://.`)
+    if (row.name.trim()) {
+      const nameKey = row.name.trim().toLowerCase()
+      if (names.has(nameKey)) errors.push(`${prefix}: tên sản phẩm bị trùng trong yêu cầu.`)
+      names.add(nameKey)
+    }
+    errors.push(...validateAttributeRows(row.attributes, prefix))
+
+    if (!skuRows.length) errors.push(`${prefix}: cần ít nhất một SKU.`)
+    const baseCount = skuRows.filter((sku) => sku.isBaseUnitVariant).length
+    if (skuRows.length && baseCount !== 1) errors.push(`${prefix}: cần đúng một SKU đơn vị cơ bản.`)
+    if (requireFinishedBom && isFinishedProduct && !skuRows.some((sku) => (sku.bomLines ?? []).length > 0)) {
+      errors.push('Sản phẩm kệ bắt buộc phải có BOM trước khi gửi duyệt.')
+    }
+
+    skuRows.forEach((sku, skuIndex) => {
+      const skuPrefix = `${prefix}, SKU ${skuIndex + 1}`
+      if (!normalizeText(sku.unitName)) errors.push(`${skuPrefix}: thiếu tên đơn vị.`)
+      if (!normalizeText(sku.skuCode)) errors.push(`${skuPrefix}: thiếu mã SKU.`)
+      const conversionRate = positiveIntegerOrNull(sku.conversionRate)
+      if (!conversionRate) errors.push(`${skuPrefix}: quy đổi phải là số nguyên dương.`)
+      if (sku.isBaseUnitVariant && conversionRate !== 1) errors.push(`${skuPrefix}: SKU đơn vị cơ bản phải có quy đổi bằng 1.`)
+      if (normalizeText(sku.skuCode)) {
+        const skuKey = normalizeText(sku.skuCode).toUpperCase()
+        if (skuCodes.has(skuKey)) errors.push(`${skuPrefix}: SKU bị trùng trong yêu cầu.`)
+        skuCodes.add(skuKey)
+      }
+
+      const retailPrice = moneyOrNull(sku.retailPrice)
+      const costPrice = moneyOrNull(sku.costPrice)
+      const salesTaxPercent = normalizeTaxPercent(sku.salesTaxPercent)
+      if (normalizeText(sku.retailPrice) && retailPrice === null) errors.push(`${skuPrefix}: giá trước thuế không hợp lệ.`)
+      if (salesTaxPercent === null) errors.push(`${skuPrefix}: thuế bán hàng không hợp lệ.`)
+      if (normalizeText(sku.costPrice) && costPrice === null) errors.push(`${skuPrefix}: giá vốn không hợp lệ.`)
+      if ((getPriceAfterTax(sku.retailPrice, getSkuTaxPercent(sku)) ?? 0) <= 0 && sku.isSellable) errors.push(`${skuPrefix}: SKU bán trực tiếp cần giá sau thuế > 0.`)
+      if (!isFinishedProduct && (sku.bomLines ?? []).length > 0) errors.push(`${skuPrefix}: BOM chỉ áp dụng cho Sản phẩm kệ.`)
+
+      const components = new Set()
+      ;(sku.bomLines ?? []).forEach((line, lineIndex) => {
+        const linePrefix = `${skuPrefix}, BOM ${lineIndex + 1}`
+        const componentKey = line.componentVariantId || line.componentSkuCode || line.componentRequestSkuKey || line.materialId
+        if (!componentKey) errors.push(`${linePrefix}: thiếu component SKU.`)
+        if (componentKey && components.has(String(componentKey))) errors.push(`${linePrefix}: component bị trùng.`)
+        if (componentKey) components.add(String(componentKey))
+        if (!positiveIntegerOrNull(line.quantity)) errors.push(`${linePrefix}: ${BOM_INTEGER_MESSAGE}`)
+      })
+    })
   })
 
   return errors
 }
 
-function FieldError({ message }) {
-  if (!message) return null
-  return <p className="mt-1 text-xs font-medium text-rose-600">{message}</p>
+function buildAttributeNameOptions(attributeNames = [], rows = []) {
+  const byKey = new Map()
+  const addOption = (name, source, id = null) => {
+    const label = normalizeAttributeName(name)
+    const key = getAttributeNameKey(label)
+    if (!key || byKey.has(key)) return
+    byKey.set(key, { key, id, name: label, source })
+  }
+
+  toReferenceArray(attributeNames)
+    .filter((item) => item && (item.isDeleted ?? item.IsDeleted) !== true && (item.isActive ?? item.IsActive) !== false)
+    .forEach((item) => addOption(
+      item.name ?? item.Name ?? item.attributeName ?? item.AttributeName ?? item.displayName ?? item.DisplayName,
+      'existing',
+      item.id ?? item.Id,
+    ))
+  ATTRIBUTE_NAME_SUGGESTIONS.forEach((name) => addOption(name, 'suggestion'))
+  rows.forEach((row) => {
+    ;(row.attributes ?? []).forEach((attribute) => addOption(attribute.attributeName, 'request', attribute.attributeNameId ?? null))
+  })
+
+  return Array.from(byKey.values()).sort((left, right) => left.name.localeCompare(right.name, 'vi'))
 }
 
-function SectionCard({ title, children, right }) {
-  return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-base font-bold text-slate-800">{title}</h2>
-        {right}
-      </div>
-      {children}
-    </section>
+function buildAttributeNameLookup(options = []) {
+  return new Map(options.map((option) => [option.key, option]))
+}
+
+function toReferenceArray(value) {
+  if (Array.isArray(value)) return value
+  if (!value || typeof value !== 'object') return []
+
+  const candidateKeys = ['items', 'Items', 'records', 'Records', 'list', 'List', 'result', 'Result', 'data', 'Data']
+  for (const key of candidateKeys) {
+    const candidate = value[key]
+    if (Array.isArray(candidate)) return candidate
+    const nested = toReferenceArray(candidate)
+    if (nested.length) return nested
+  }
+
+  return []
+}
+
+const EXCEL_REFERENCE_SOURCES = {
+  categories: {
+    label: 'Categories',
+    userMessage: 'Không tải được danh mục sản phẩm.',
+  },
+  componentSkus: {
+    label: 'Component SKUs',
+    userMessage: 'Không tải được danh sách Component SKU.',
+  },
+  attributeNames: {
+    label: 'Attribute Names',
+    userMessage: 'Không tải được danh sách tên thuộc tính.',
+  },
+}
+
+function getReferenceFailureMessage(error) {
+  return normalizeText(error?.message ?? error?.Message ?? error?.statusText ?? error) || 'Không rõ nguyên nhân'
+}
+
+function buildReferenceLoadEntry(sourceKey, result, fallbackItems = []) {
+  const source = EXCEL_REFERENCE_SOURCES[sourceKey]
+  if (result.status === 'fulfilled') {
+    const items = toReferenceArray(result.value)
+    return {
+      items,
+      failure: null,
+      status: {
+        source: source.label,
+        status: 'OK',
+        message: `OK: ${items.length} items`,
+      },
+    }
+  }
+
+  const items = toReferenceArray(fallbackItems)
+  const message = getReferenceFailureMessage(result.reason)
+  return {
+    items,
+    failure: {
+      source: sourceKey,
+      message: source.userMessage,
+      detail: message,
+    },
+    status: {
+      source: source.label,
+      status: 'Failed',
+      message: `Failed: ${message}`,
+    },
+  }
+}
+
+function showReferenceWarningToast(failures = []) {
+  if (!failures.length) return
+  const details = failures.map((failure) => failure.message).join(' ')
+  showToast(
+    `File mẫu đã được tải nhưng thiếu một số dữ liệu tham chiếu. Vui lòng kiểm tra sheet tham chiếu hoặc nhập tay nếu cần. ${details}`,
+    'warning',
   )
 }
 
-function SnapshotPreview({ product, categories, adminNotes, compact = false }) {
-  const variants = product?.variants ?? []
-  const units = product?.units ?? []
-  const totalBomLines = variants.reduce((sum, variant) => sum + (variant.bomLines?.length ?? 0), 0)
+function SkuComponentCombobox({ options, onSelect }) {
+  const [query, setQuery] = useState('')
+  const [isOpen, setIsOpen] = useState(false)
+  const [highlightedIndex, setHighlightedIndex] = useState(0)
+  const filteredOptions = useMemo(() => {
+    const keyword = normalizeText(query).toLowerCase()
+    const source = keyword
+      ? options.filter((option) => [
+        option.skuCode,
+        option.productName,
+        option.variantName,
+        option.unitName,
+        option.productTypeLabel,
+        option.sourceLabel,
+      ].some((value) => normalizeText(value).toLowerCase().includes(keyword)))
+      : options
+    return source.slice(0, 20)
+  }, [options, query])
+
+  function selectOption(option) {
+    if (!option) return
+    onSelect(option)
+    setQuery('')
+    setIsOpen(false)
+    setHighlightedIndex(0)
+  }
 
   return (
-    <div className="space-y-4">
-      <div className="grid gap-3 md:grid-cols-4">
-        <PreviewItem label="Sản phẩm" value={product?.name || '-'} />
-        <PreviewItem label="Danh mục" value={getCategoryName(categories, product?.categoryId)} />
-        <PreviewItem label="Loại hàng" value={getProductTypeLabel(product?.productType)} />
-        <PreviewItem label="Đơn vị gốc" value={product?.baseUnit || '-'} />
-      </div>
-
-      {!compact ? (
-        <div className="grid gap-3 md:grid-cols-3">
-          <PreviewItem label="Khối lượng" value={product?.weightValue ? `${product.weightValue} ${product.weightUnit || ''}` : '-'} />
-          <PreviewItem label="Xuất xứ" value={product?.origin || '-'} />
-          <PreviewItem label="BOM" value={totalBomLines ? `${totalBomLines} dòng nguyên liệu` : 'Chưa có BOM'} />
+    <div className="relative w-full max-w-md">
+      <input
+        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-[#356647] focus:outline-none focus:ring-2 focus:ring-[#356647]/15"
+        placeholder="Tìm component SKU..."
+        value={query}
+        onFocus={() => setIsOpen(true)}
+        onBlur={() => window.setTimeout(() => setIsOpen(false), 120)}
+        onChange={(event) => {
+          setQuery(event.target.value)
+          setIsOpen(true)
+          setHighlightedIndex(0)
+        }}
+        onKeyDown={(event) => {
+          if (event.key === 'Escape') {
+            setIsOpen(false)
+            return
+          }
+          if (event.key === 'ArrowDown') {
+            event.preventDefault()
+            setIsOpen(true)
+            setHighlightedIndex((current) => Math.min(current + 1, Math.max(filteredOptions.length - 1, 0)))
+            return
+          }
+          if (event.key === 'ArrowUp') {
+            event.preventDefault()
+            setHighlightedIndex((current) => Math.max(current - 1, 0))
+            return
+          }
+          if (event.key === 'Enter') {
+            event.preventDefault()
+            selectOption(filteredOptions[highlightedIndex])
+          }
+        }}
+      />
+      {isOpen ? (
+        <div className="absolute left-0 right-0 top-full z-20 mt-1 max-h-72 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg">
+          {filteredOptions.length === 0 ? (
+            <p className="px-4 py-3 text-sm text-slate-400">Không tìm thấy SKU phù hợp</p>
+          ) : null}
+          {filteredOptions.map((option, index) => (
+            <button
+              key={option.key}
+              type="button"
+              className={`block w-full px-4 py-2.5 text-left text-sm ${index === highlightedIndex ? 'bg-[#f0eee6]' : 'hover:bg-slate-50'}`}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => selectOption(option)}
+            >
+              <span className="block font-mono text-xs font-semibold text-[#356647]">{option.skuCode}</span>
+              <span className="block font-medium text-slate-800">
+                {option.productName}{option.unitName ? ` · ${option.unitName}` : ''}
+              </span>
+              <span className="text-xs text-slate-500">
+                {[option.variantName, option.productTypeLabel, option.sourceLabel].filter(Boolean).join(' · ')}
+              </span>
+            </button>
+          ))}
         </div>
       ) : null}
+    </div>
+  )
+}
 
-      <div className="overflow-x-auto rounded-xl border border-slate-200">
+function AttributeNameCombobox({
+  value,
+  options,
+  usedKeys,
+  onSelect,
+  autoFocus = false,
+  onFocused,
+}) {
+  const rootRef = useRef(null)
+  const inputRef = useRef(null)
+  const [isOpen, setIsOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  const [highlightedIndex, setHighlightedIndex] = useState(0)
+  const selectedName = normalizeAttributeName(value)
+  const queryName = normalizeAttributeName(query)
+  const queryKey = getAttributeNameKey(queryName)
+
+  const filteredOptions = useMemo(() => {
+    const searchKey = queryKey
+    return options
+      .filter((option) => !usedKeys.has(option.key))
+      .filter((option) => !searchKey || option.key.includes(searchKey) || option.name.toLocaleLowerCase('vi-VN').includes(searchKey))
+      .slice(0, 8)
+  }, [options, queryKey, usedKeys])
+
+  const hasExactMatch = options.some((option) => option.key === queryKey)
+  const isDuplicateName = Boolean(queryKey && usedKeys.has(queryKey))
+  const canCreate = Boolean(queryName && !hasExactMatch && !isDuplicateName)
+  const resultItems = [
+    ...filteredOptions.map((option) => ({ type: 'option', key: option.key, label: option.name, option })),
+    ...(canCreate ? [{ type: 'create', key: `create:${queryKey}`, label: `+ Tạo thuộc tính “${queryName}”`, option: { id: null, name: queryName, key: queryKey } }] : []),
+  ]
+
+  useEffect(() => {
+    if (!autoFocus) return
+    const timer = window.setTimeout(() => {
+      inputRef.current?.focus()
+      setIsOpen(true)
+      setQuery('')
+      onFocused?.()
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [autoFocus, onFocused])
+
+  useEffect(() => {
+    const handlePointerDown = (event) => {
+      if (!rootRef.current?.contains(event.target)) {
+        setIsOpen(false)
+        setQuery('')
+      }
+    }
+    document.addEventListener('mousedown', handlePointerDown)
+    return () => document.removeEventListener('mousedown', handlePointerDown)
+  }, [])
+
+  function commitOption(item) {
+    if (!item || item.disabled) return
+    onSelect({
+      attributeNameId: item.option.id ?? null,
+      attributeName: item.option.name,
+    })
+    setIsOpen(false)
+    setQuery('')
+  }
+
+  return (
+    <div ref={rootRef} className="relative">
+      <div className="flex items-center rounded-lg border border-slate-200 bg-white focus-within:border-[#538463]">
+        <input
+          ref={inputRef}
+          type="text"
+          role="combobox"
+          aria-expanded={isOpen}
+          autoComplete="off"
+          className="min-w-0 flex-1 rounded-lg px-3 py-2 text-sm outline-none"
+          placeholder="Tìm hoặc nhập tên thuộc tính..."
+          value={isOpen ? query : selectedName}
+          onFocus={() => {
+            setIsOpen(true)
+            setQuery('')
+            setHighlightedIndex(0)
+          }}
+          onChange={(event) => {
+            setQuery(event.target.value)
+            setHighlightedIndex(0)
+            if (!isOpen) setIsOpen(true)
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'ArrowDown') {
+              event.preventDefault()
+              setIsOpen(true)
+              setHighlightedIndex((current) => Math.min(current + 1, Math.max(resultItems.length - 1, 0)))
+            }
+            if (event.key === 'ArrowUp') {
+              event.preventDefault()
+              setHighlightedIndex((current) => Math.max(current - 1, 0))
+            }
+            if (event.key === 'Enter' && isOpen) {
+              event.preventDefault()
+              commitOption(resultItems[highlightedIndex])
+            }
+            if (event.key === 'Escape') {
+              setIsOpen(false)
+              setQuery('')
+            }
+          }}
+        />
+        {selectedName ? (
+          <button
+            type="button"
+            className="mr-2 rounded-md px-2 py-1 text-xs font-semibold text-slate-400 hover:bg-slate-100"
+            title="Xóa thuộc tính"
+            onClick={() => onSelect({ attributeNameId: null, attributeName: '' })}
+          >
+            x
+          </button>
+        ) : null}
+      </div>
+
+      {isOpen ? (
+        <div className="absolute left-0 right-0 top-full z-30 mt-1 max-h-64 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg">
+          {resultItems.length === 0 && !isDuplicateName ? (
+            <p className="px-4 py-3 text-sm text-slate-400">Không tìm thấy thuộc tính phù hợp.</p>
+          ) : null}
+          {isDuplicateName ? (
+            <p className="px-4 py-3 text-sm font-semibold text-amber-700">Đã được sử dụng</p>
+          ) : null}
+          {resultItems.map((item, index) => (
+            <button
+              key={item.key}
+              type="button"
+              className={`block w-full px-4 py-2.5 text-left text-sm ${index === highlightedIndex ? 'bg-[#f0eee6]' : 'hover:bg-slate-50'} ${item.type === 'create' ? 'font-semibold text-[#356647]' : 'text-slate-800'}`}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => commitOption(item)}
+            >
+              {item.label}
+              {item.type === 'option' && item.option.source === 'existing' ? (
+                <span className="ml-2 text-[11px] font-semibold text-slate-400">Đã có</span>
+              ) : null}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function ProductRow({ row, categories, materials, attributeNameOptions, onChange, onImagesChange, onRemove, canRemove }) {
+  const isFinishedProduct = row.productType === PRODUCT_TYPE.THANH_PHAM
+  const skuRows = syncSkuRows(row, getSkuRows(row))
+  const componentSkuOptions = getComponentSkuOptions(materials)
+  const attributes = row.attributes ?? []
+  const images = Array.isArray(row.images) ? row.images : []
+  const uploadingImageCount = images.filter((image) => image.uploading).length
+  const [pendingAttributeFocusKey, setPendingAttributeFocusKey] = useState(null)
+
+  function applySkuRows(nextRow, nextSkuRows) {
+    onChange(syncLegacySkuFields(nextRow, nextSkuRows))
+  }
+
+  function updateProduct(changes) {
+    const nextRow = { ...row, ...changes }
+    const nextSkuRows = skuRows.map((sku) => {
+      const unitName = changes.baseUnit && sku.isBaseUnitVariant ? changes.baseUnit : sku.unitName
+      const conversionRate = sku.isBaseUnitVariant ? 1 : sku.conversionRate
+      const autoSku = sku.isAutoGeneratedSku !== false
+      return {
+        ...sku,
+        unitName,
+        conversionRate: String(conversionRate),
+        skuCode: autoSku ? buildGeneratedSkuCode(nextRow.name, unitName, conversionRate) : sku.skuCode,
+        variantName: `${nextRow.name || 'Sản phẩm'} - ${unitName || 'đơn vị'}`,
+        bomLines: nextRow.productType === PRODUCT_TYPE.THANH_PHAM ? sku.bomLines : [],
+      }
+    })
+    applySkuRows(nextRow, nextSkuRows)
+  }
+
+  function updateSku(index, changes) {
+    const nextSkuRows = skuRows.map((sku, currentIndex) => {
+      if (currentIndex !== index) return sku
+      const unitName = changes.unitName ?? sku.unitName
+      const conversionRate = changes.isBaseUnitVariant || sku.isBaseUnitVariant
+        ? 1
+        : (changes.conversionRate ?? sku.conversionRate)
+      const autoSku = changes.isAutoGeneratedSku ?? sku.isAutoGeneratedSku ?? true
+      const salesTaxMode = changes.salesTaxMode ?? sku.salesTaxMode ?? 'custom'
+      const salesTaxPercent = salesTaxMode === 'custom'
+        ? (changes.salesTaxPercent ?? sku.salesTaxPercent ?? '0')
+        : salesTaxMode
+      return {
+        ...sku,
+        ...changes,
+        unitName,
+        conversionRate: String(conversionRate),
+        skuCode: autoSku ? buildGeneratedSkuCode(row.name, unitName, conversionRate) : (changes.skuCode ?? sku.skuCode),
+        variantName: changes.variantName ?? `${row.name || 'Sản phẩm'} - ${unitName || 'đơn vị'}`,
+        salesTaxMode,
+        salesTaxPercent,
+        isAutoGeneratedSku: autoSku,
+      }
+    })
+    applySkuRows(row, nextSkuRows)
+  }
+
+  function handleImageUpload(event) {
+    const files = Array.from(event.target.files ?? [])
+    event.target.value = ''
+    if (!files.length) return
+
+    const availableSlots = MAX_PRODUCT_IMAGES - images.length
+    if (availableSlots <= 0) {
+      showError(`Tối đa ${MAX_PRODUCT_IMAGES} ảnh cho mỗi sản phẩm.`)
+      return
+    }
+
+    const accepted = []
+    for (const file of files) {
+      if (accepted.length >= availableSlots) {
+        showError(`Chỉ thêm được tối đa ${MAX_PRODUCT_IMAGES} ảnh, một số ảnh đã bị bỏ qua.`)
+        break
+      }
+      if (!file.type.startsWith('image/')) {
+        showError(`"${file.name}": vui lòng chọn file hình ảnh.`)
+        continue
+      }
+      if (file.size > MAX_IMAGE_UPLOAD_BYTES) {
+        showError(`"${file.name}": ảnh tối đa 5MB.`)
+        continue
+      }
+      accepted.push(file)
+    }
+    if (!accepted.length) return
+
+    // Ảnh chỉ giữ local (preview) tại thời điểm thêm — CHƯA upload lên Cloudinary.
+    // Việc upload được hoãn tới khi bấm "Gửi biên bản" (xem uploadPendingImagesForSubmit).
+    const pendingEntries = accepted.map((file) => ({
+      id: createLocalImageId(),
+      file,
+      previewUrl: URL.createObjectURL(file),
+      imageUrl: '',
+      altText: '',
+      sortOrder: 0,
+      isThumbnail: false,
+      uploading: false,
+      pending: true,
+    }))
+
+    onImagesChange((current) => reindexProductImages([...current, ...pendingEntries]))
+  }
+
+  function removeImage(imageId) {
+    const target = images.find((image) => image.id === imageId)
+    if (target?.previewUrl) URL.revokeObjectURL(target.previewUrl)
+    onImagesChange((current) => reindexProductImages(current.filter((image) => image.id !== imageId)))
+  }
+
+  function setThumbnail(imageId) {
+    onImagesChange((current) => current.map((image) => ({ ...image, isThumbnail: image.id === imageId })))
+  }
+
+  function addSku() {
+    applySkuRows(row, [...skuRows, createSkuRow(row, { isBase: false })])
+  }
+
+  function removeSku(index) {
+    const target = skuRows[index]
+    if (target?.isBaseUnitVariant) return
+    applySkuRows(row, skuRows.filter((_, currentIndex) => currentIndex !== index))
+  }
+
+  function markBaseSku(index) {
+    const baseSku = skuRows[index]
+    const nextSkuRows = skuRows.map((sku, currentIndex) => ({
+      ...sku,
+      isBaseUnitVariant: currentIndex === index,
+      conversionRate: currentIndex === index ? '1' : sku.conversionRate,
+      baseRequestSkuKey: currentIndex === index ? null : baseSku.requestSkuKey,
+      baseSkuCode: currentIndex === index ? null : baseSku.skuCode,
+    }))
+    applySkuRows({ ...row, baseUnit: baseSku.unitName || row.baseUnit }, nextSkuRows)
+  }
+
+  function getAvailableComponentOptions(skuIndex) {
+    const sku = skuRows[skuIndex]
+    const selectedKeys = new Set((sku?.bomLines ?? []).map(getBomComponentKey).filter(Boolean))
+    const localOptions = skuRows
+      .filter((option) => option.requestSkuKey !== sku?.requestSkuKey && option.skuCode)
+      .map((option) => ({
+        key: `local:${option.requestSkuKey}`,
+        sourceType: 'local',
+        requestSkuKey: option.requestSkuKey,
+        skuCode: option.skuCode,
+        productName: row.name,
+        variantName: option.variantName || option.unitName,
+        unitName: option.unitName,
+        costPrice: getCostNumber(option.costPrice),
+        productType: row.productType,
+        productTypeLabel: getProductTypeLabel(row.productType),
+        sourceLabel: 'SKU cùng request',
+      }))
+      .filter((option) =>
+        !selectedKeys.has(`request:${option.requestSkuKey}`)
+        && !selectedKeys.has(`sku:${normalizeText(option.skuCode).toUpperCase()}`))
+
+    const externalOptions = componentSkuOptions
+      .map((option) => ({
+        key: `external:${option.variantId}`,
+        sourceType: 'external',
+        ...option,
+        productTypeLabel: getProductTypeLabel(option.productType),
+        sourceLabel: 'SKU hiện có',
+      }))
+      .filter((option) => {
+        const optionSku = normalizeText(option.skuCode).toUpperCase()
+        return optionSku !== normalizeText(sku?.skuCode).toUpperCase()
+          && String(option.variantId) !== String(sku?.variantId || sku?.id || '')
+          && !selectedKeys.has(`variant:${option.variantId}`)
+          && !selectedKeys.has(`sku:${optionSku}`)
+      })
+
+    return [...localOptions, ...externalOptions]
+  }
+
+  function addBomComponent(skuIndex, option) {
+    if (!option) return
+    let line = null
+    if (option.sourceType === 'local') {
+      const localSku = skuRows.find((sku) => sku.requestSkuKey === option.requestSkuKey)
+      if (!localSku) return
+      line = {
+        materialId: EMPTY_GUID,
+        materialName: row.name,
+        materialUnitName: localSku.unitName || row.baseUnit,
+        quantity: 1,
+        componentRequestSkuKey: localSku.requestSkuKey,
+        componentSkuCode: localSku.skuCode,
+        componentVariantName: localSku.variantName || localSku.unitName,
+        componentUnitCost: getCostNumber(localSku.costPrice),
+        isRequiredBaseComponent: false,
+      }
+    } else {
+      line = createBomLineFromComponentSku(option)
+    }
+
+    const nextSkuRows = skuRows.map((sku, currentIndex) => (
+      currentIndex === skuIndex
+        ? { ...sku, bomLines: [...(sku.bomLines ?? []), line] }
+        : sku
+    ))
+    applySkuRows(row, nextSkuRows)
+  }
+
+  function updateBomLine(skuIndex, lineIndex, changes) {
+    const nextSkuRows = skuRows.map((sku, currentIndex) => (
+      currentIndex === skuIndex
+        ? {
+          ...sku,
+          bomLines: (sku.bomLines ?? []).map((line, currentLineIndex) => (
+            currentLineIndex === lineIndex && !line.isRequiredBaseComponent ? { ...line, ...changes } : line
+          )),
+        }
+        : sku
+    ))
+    applySkuRows(row, nextSkuRows)
+  }
+
+  function removeBomLine(skuIndex, lineIndex) {
+    const nextSkuRows = skuRows.map((sku, currentIndex) => (
+      currentIndex === skuIndex
+        ? { ...sku, bomLines: (sku.bomLines ?? []).filter((line, currentLineIndex) => line.isRequiredBaseComponent || currentLineIndex !== lineIndex) }
+        : sku
+    ))
+    applySkuRows(row, nextSkuRows)
+  }
+
+  function updateAttribute(index, changes) {
+    onChange({
+      attributes: attributes.map((attribute, currentIndex) => (
+        currentIndex === index ? { ...attribute, ...changes } : attribute
+      )),
+    })
+  }
+
+  function addAttribute() {
+    const emptyAttribute = attributes.find((attribute) =>
+      !normalizeAttributeName(attribute.attributeName) && !normalizeAttributeValue(attribute.value))
+    if (emptyAttribute) {
+      setPendingAttributeFocusKey(emptyAttribute.clientKey)
+      return
+    }
+
+    const nextAttribute = createAttributeRow()
+    setPendingAttributeFocusKey(nextAttribute.clientKey)
+    onChange({ attributes: [...attributes, nextAttribute] })
+  }
+
+  function removeAttribute(index) {
+    onChange({ attributes: attributes.filter((_, currentIndex) => currentIndex !== index) })
+  }
+
+  function usedAttributeKeysExcept(index) {
+    return new Set(attributes
+      .filter((_, currentIndex) => currentIndex !== index)
+      .map((attribute) => getAttributeNameKey(attribute.attributeName))
+      .filter(Boolean))
+  }
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="grid gap-3 md:grid-cols-4">
+        <label className="text-xs font-semibold text-slate-500">
+          Tên sản phẩm
+          <input className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={row.name} onChange={(event) => updateProduct({ name: event.target.value })} />
+        </label>
+        <label className="text-xs font-semibold text-slate-500">
+          Loại hàng
+          <select
+            className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+            value={row.productType}
+            onChange={(event) => updateProduct({ productType: event.target.value, isSellable: getDefaultSellableByType(event.target.value) })}
+          >
+            {PRODUCT_TYPE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
+        </label>
+        <label className="text-xs font-semibold text-slate-500">
+          Danh mục
+          <select className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={row.categoryId} onChange={(event) => updateProduct({ categoryId: event.target.value })}>
+            <option value="">Chọn danh mục</option>
+            {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+          </select>
+        </label>
+        <label className="text-xs font-semibold text-slate-500">
+          Đơn vị tồn kho
+          <select className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={row.inventoryUnit} onChange={(event) => updateProduct({ inventoryUnit: event.target.value })}>
+            {INVENTORY_UNIT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
+        </label>
+      </div>
+      <label className="mt-3 block text-xs font-semibold text-slate-500">
+        Mô tả
+        <input
+          className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+          value={row.description || ''}
+          onChange={(event) => updateProduct({ description: event.target.value })}
+        />
+      </label>
+
+      <div className="mt-3 rounded-lg border border-slate-100 bg-slate-50 p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Hình ảnh sản phẩm ({images.length}/{MAX_PRODUCT_IMAGES})</p>
+            <p className="mt-1 text-xs text-slate-500">Ảnh chỉ được tải lên Cloudinary khi bạn bấm "Gửi biên bản". Nhấn vào ảnh để đặt làm ảnh đại diện.</p>
+          </div>
+          <label className={`inline-flex cursor-pointer items-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 ${uploadingImageCount > 0 || images.length >= MAX_PRODUCT_IMAGES ? 'pointer-events-none opacity-50' : 'hover:bg-slate-50'}`}>
+            {uploadingImageCount > 0 ? `Đang upload (${uploadingImageCount})...` : '+ Thêm ảnh'}
+            <input type="file" accept="image/*" multiple className="hidden" disabled={uploadingImageCount > 0 || images.length >= MAX_PRODUCT_IMAGES} onChange={handleImageUpload} />
+          </label>
+        </div>
+        {!hasCloudinaryUploadConfig() ? (
+          <p className="mt-2 text-xs font-semibold text-amber-700">Chưa cấu hình Cloudinary — sẽ không gửi được biên bản có ảnh cho tới khi cấu hình.</p>
+        ) : null}
+        {images.some((image) => image.pending) ? (
+          <p className="mt-2 text-xs font-semibold text-[#356647]">Có {images.filter((image) => image.pending).length} ảnh đang chờ — sẽ tải lên khi gửi biên bản.</p>
+        ) : null}
+
+        {images.length ? (
+          <div className="mt-3 flex flex-wrap gap-3">
+            {images.map((image) => (
+              <div key={image.id} className="w-32">
+                <button
+                  type="button"
+                  onClick={() => !image.uploading && setThumbnail(image.id)}
+                  className={`relative flex h-28 w-32 items-center justify-center overflow-hidden rounded-lg border bg-white ${image.isThumbnail ? 'border-[#356647] ring-2 ring-[#356647]/30' : 'border-slate-200'}`}
+                >
+                  {image.uploading ? (
+                    <span className="material-symbols-outlined animate-spin text-2xl text-slate-300">progress_activity</span>
+                  ) : (image.imageUrl || image.previewUrl) ? (
+                    <img src={image.imageUrl || image.previewUrl} alt={image.altText || row.name || 'Hình ảnh sản phẩm'} className="h-full w-full object-cover" />
+                  ) : (
+                    <span className="material-symbols-outlined text-3xl text-slate-300">image</span>
+                  )}
+                  {image.isThumbnail && !image.uploading ? (
+                    <span className="absolute left-1 top-1 rounded bg-[#356647] px-1.5 py-0.5 text-[10px] font-bold text-white">Đại diện</span>
+                  ) : null}
+                  {image.pending && !image.uploading ? (
+                    <span className="absolute right-1 top-1 rounded bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold text-white">Chờ tải lên</span>
+                  ) : null}
+                </button>
+                <div className="mt-1 flex items-center justify-between">
+                  <span className="text-[11px] text-slate-400">{image.uploading ? 'Đang tải...' : image.isThumbnail ? 'Ảnh chính' : 'Đặt làm chính'}</span>
+                  <button type="button" className="text-xs font-semibold text-rose-600" onClick={() => removeImage(image.id)}>Xóa</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="mt-3 flex h-24 items-center justify-center rounded-lg border border-dashed border-slate-200 bg-white text-xs text-slate-400">
+            Chưa có ảnh nào.
+          </div>
+        )}
+      </div>
+
+      <div className="mt-4 rounded-lg border border-slate-100 bg-slate-50 p-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Quản lý đơn vị và SKU</p>
+            <p className="text-xs text-slate-500">Mỗi đơn vị đóng gói là một SKU tồn kho riêng, không tự quy đổi tồn.</p>
+          </div>
+          <button type="button" className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold" onClick={addSku}>+ Thêm đơn vị</button>
+        </div>
+
+        <div className="mt-3 space-y-3">
+          {skuRows.map((sku, index) => (
+            <div key={sku.requestSkuKey || index} className="rounded-lg border border-slate-200 bg-white p-3">
+              <div className="grid gap-3 md:grid-cols-6">
+                <label className="text-xs font-semibold text-slate-500">
+                  {sku.isBaseUnitVariant ? 'Tên đơn vị cơ bản' : 'Tên đơn vị'}
+                  <input className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={sku.unitName} onChange={(event) => updateSku(index, { unitName: event.target.value })} />
+                </label>
+                <label className="text-xs font-semibold text-slate-500">
+                  Quy đổi
+                  <input type="text" inputMode="numeric" pattern="[0-9]*" disabled={sku.isBaseUnitVariant} onKeyDown={preventNonIntegerKey} className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-100" value={sku.conversionRate} onChange={(event) => updateSku(index, { conversionRate: event.target.value })} />
+                </label>
+                <label className="text-xs font-semibold text-slate-500 md:col-span-2">
+                  Mã SKU tự sinh
+                  <input className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 font-mono text-sm uppercase" value={sku.skuCode} onChange={(event) => updateSku(index, { skuCode: event.target.value.toUpperCase(), isAutoGeneratedSku: false })} />
+                </label>
+                <label className="text-xs font-semibold text-slate-500">
+                  Giá trước thuế
+                  <VndCurrencyInput className="mt-1" value={sku.retailPrice} readOnly={!sku.isBaseUnitVariant} onChange={(value) => updateSku(index, { retailPrice: value })} />
+                  {!sku.isBaseUnitVariant ? (
+                    <span className="mt-1 block text-[11px] font-medium text-slate-400">
+                      Tự động tính theo giá đơn vị cơ bản × quy đổi
+                    </span>
+                  ) : null}
+                </label>
+                <label className="text-xs font-semibold text-slate-500">
+                  Thuế bán hàng
+                  <select
+                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-100"
+                    value={sku.salesTaxMode ?? 'custom'}
+                    disabled={!sku.isBaseUnitVariant}
+                    onChange={(event) => updateSku(index, { salesTaxMode: event.target.value })}
+                  >
+                    {SALES_TAX_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                  </select>
+                  {(sku.salesTaxMode ?? 'custom') === 'custom' ? (
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-100"
+                      value={sku.salesTaxPercent ?? '0'}
+                      disabled={!sku.isBaseUnitVariant}
+                      onKeyDown={(event) => {
+                        if (['e', 'E', '+', '-'].includes(event.key)) event.preventDefault()
+                      }}
+                      onChange={(event) => updateSku(index, { salesTaxPercent: event.target.value })}
+                    />
+                  ) : null}
+                </label>
+                <label className="text-xs font-semibold text-slate-500">
+                  Giá sau thuế
+                  <input
+                    className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700"
+                    value={formatWholeVnd(getPriceAfterTax(sku.retailPrice, getSkuTaxPercent(sku)) ?? 0)}
+                    readOnly
+                  />
+                </label>
+                <label className="text-xs font-semibold text-slate-500">
+                  {isFinishedProduct ? 'Giá vốn tự động' : 'Giá vốn'}
+                  <VndCurrencyInput className="mt-1" value={sku.costPrice} readOnly={isFinishedProduct} onChange={(value) => updateSku(index, { costPrice: value })} />
+                  {isFinishedProduct ? (
+                    <span className="mt-1 block text-[11px] font-medium text-slate-400">
+                      Tự động tính theo tổng giá vốn của các thành phần BOM.
+                    </span>
+                  ) : null}
+                </label>
+              </div>
+              {isFinishedProduct && hasMissingBomCost(sku, skuRows) ? (
+                <p className="mt-2 text-xs font-semibold text-amber-700">Một số thành phần chưa có giá vốn nên giá vốn có thể chưa đầy đủ.</p>
+              ) : null}
+              <div className="mt-3 grid gap-3 md:grid-cols-6">
+                <label className="text-xs font-semibold text-slate-500 md:col-span-2">
+                  Barcode
+                  <input className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={sku.barcode || ''} onChange={(event) => updateSku(index, { barcode: event.target.value })} />
+                </label>
+                <label className="flex items-center gap-2 pt-6 text-sm font-semibold text-slate-700">
+                  <input type="checkbox" checked={sku.isSellable !== false} onChange={(event) => updateSku(index, { isSellable: event.target.checked })} />
+                  Bán trực tiếp
+                </label>
+                <label className="flex items-center gap-2 pt-6 text-sm font-semibold text-slate-700">
+                  <input type="radio" name={`${row.clientKey}-base-sku`} checked={Boolean(sku.isBaseUnitVariant)} onChange={() => markBaseSku(index)} />
+                  Đơn vị cơ bản
+                </label>
+                <label className="text-xs font-semibold text-slate-500">
+                  Tồn tối thiểu
+                  <input type="number" min="0" className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={sku.minStock} onChange={(event) => updateSku(index, { minStock: event.target.value })} />
+                </label>
+                <label className="text-xs font-semibold text-slate-500">
+                  Tồn tối đa
+                  <input type="number" min="0" className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={sku.maxStock} onChange={(event) => updateSku(index, { maxStock: event.target.value })} />
+                </label>
+                <div className="flex items-end justify-end">
+                  <button type="button" disabled={sku.isBaseUnitVariant} className="font-semibold text-rose-600 disabled:opacity-40" onClick={() => removeSku(index)}>Xóa</button>
+                </div>
+              </div>
+
+              {isFinishedProduct ? (
+                <div className="mt-3 rounded-lg border border-slate-100 bg-slate-50 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <p className="text-xs font-bold uppercase tracking-wide text-slate-500">BOM cho SKU {sku.skuCode || index + 1}</p>
+                    <SkuComponentCombobox options={getAvailableComponentOptions(index)} onSelect={(option) => addBomComponent(index, option)} />
+                  </div>
+                  {(sku.bomLines ?? []).length === 0 ? <p className="mt-3 text-xs text-slate-400">Chưa có component BOM.</p> : null}
+                  {(sku.bomLines ?? []).length > 0 ? (
+                    <div className="mt-3 overflow-x-auto">
+                      <table className="min-w-full text-left text-xs">
+                        <thead className="text-slate-500">
+                          <tr>
+                            <th className="py-2 pr-3">Component SKU</th>
+                            <th className="py-2 pr-3">Định mức</th>
+                            <th className="py-2 text-right">Thao tác</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-200">
+                          {(sku.bomLines ?? []).map((line, lineIndex) => (
+                            <tr key={`${line.componentVariantId || line.componentRequestSkuKey || line.materialId}-${lineIndex}`} className={line.isRequiredBaseComponent ? 'bg-emerald-50/45' : ''}>
+                              <td className="py-2 pr-3">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <p className="font-semibold text-slate-700">{line.componentSkuCode || line.materialName || line.materialId}</p>
+                                  {line.isRequiredBaseComponent ? (
+                                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-bold text-emerald-700">
+                                      <span className="material-symbols-outlined text-[14px]">lock</span>
+                                      Tự động theo quy đổi
+                                    </span>
+                                  ) : null}
+                                </div>
+                                <p className="text-[11px] text-slate-400">{line.componentVariantName || line.materialName}</p>
+                              </td>
+                              <td className="py-2 pr-3">
+                                <div className="flex items-center gap-2">
+                                  <input type="text" inputMode="numeric" pattern="[0-9]*" disabled={line.isRequiredBaseComponent} onKeyDown={preventNonIntegerKey} className="w-28 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm disabled:border-emerald-100 disabled:bg-emerald-50 disabled:font-semibold disabled:text-emerald-800" value={line.quantity} onChange={(event) => updateBomLine(index, lineIndex, { quantity: event.target.value })} />
+                                  <span className="text-slate-500">{line.materialUnitName || 'đơn vị'}</span>
+                                </div>
+                              </td>
+                              <td className="py-2 text-right">
+                                {line.isRequiredBaseComponent ? (
+                                  <span className="text-xs font-semibold text-slate-400">Bắt buộc</span>
+                                ) : (
+                                  <button type="button" className="font-semibold text-rose-600" onClick={() => removeBomLine(index, lineIndex)}>Xóa</button>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-4 rounded-lg border border-slate-100 bg-white p-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Thuộc tính bổ sung</p>
+          <button type="button" className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold" onClick={addAttribute}>+ Thêm thuộc tính</button>
+        </div>
+        {attributes.length === 0 ? <p className="mt-3 text-xs text-slate-400">Chưa có thuộc tính bổ sung.</p> : null}
+        <div className="mt-3 space-y-2">
+          {attributes.map((attribute, index) => (
+            <div key={attribute.clientKey || index} className="grid gap-2 md:grid-cols-[1fr_1fr_auto]">
+              <AttributeNameCombobox
+                value={attribute.attributeName}
+                options={attributeNameOptions}
+                usedKeys={usedAttributeKeysExcept(index)}
+                autoFocus={pendingAttributeFocusKey === attribute.clientKey}
+                onFocused={() => setPendingAttributeFocusKey(null)}
+                onSelect={(selection) => updateAttribute(index, selection)}
+              />
+              <input
+                className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                placeholder="Giá trị"
+                value={attribute.value}
+                onChange={(event) => updateAttribute(index, { value: event.target.value })}
+              />
+              <button type="button" className="font-semibold text-rose-600" onClick={() => removeAttribute(index)}>Xóa</button>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-3 flex justify-end">
+        <button type="button" disabled={!canRemove} onClick={onRemove} className="font-semibold text-rose-600 disabled:opacity-40">Xóa sản phẩm</button>
+      </div>
+    </div>
+  )
+}
+
+function getSnapshotProduct(item) {
+  return item?.productSnapshot ?? item?.ProductSnapshot ?? {}
+}
+
+function getSnapshotVariants(item) {
+  const product = getSnapshotProduct(item)
+  const variants = product.variants ?? product.Variants ?? []
+  return Array.isArray(variants) ? variants : []
+}
+
+function getSnapshotAttributes(item) {
+  const product = getSnapshotProduct(item)
+  const attributes = product.attributes ?? product.Attributes ?? []
+  return Array.isArray(attributes) ? attributes : []
+}
+
+function getSnapshotBomLines(variant) {
+  const lines = variant?.bomLines ?? variant?.BomLines ?? []
+  return Array.isArray(lines) ? lines : []
+}
+
+function getVariantValue(variant, key, fallback = '') {
+  const pascalKey = `${key[0].toUpperCase()}${key.slice(1)}`
+  return variant?.[key] ?? variant?.[pascalKey] ?? fallback
+}
+
+function ProductCreationRequestDetailModal({ request, onClose, onApprove, onReject, isSaving }) {
+  if (!request) return null
+  const canDecide = request.status === 'PendingApproval'
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 p-4">
+      <div className="flex max-h-[min(92dvh,880px)] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div className="flex shrink-0 items-start justify-between border-b border-slate-100 px-6 py-4">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wide text-[#538463]">Chi tiết yêu cầu tạo hàng hóa</p>
+            <h2 className="mt-1 text-xl font-bold text-slate-900">{request.requestCode}</h2>
+            <p className="mt-1 text-sm text-slate-500">{request.title}</p>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100">
+            <span className="material-symbols-outlined text-[22px]">close</span>
+          </button>
+        </div>
+
+        <div className="custom-scrollbar flex-1 space-y-4 overflow-y-auto p-6">
+          <section className="grid gap-3 rounded-xl border border-slate-100 bg-slate-50 p-4 text-sm md:grid-cols-3">
+            <div><p className="text-xs font-bold uppercase text-slate-400">Mã yêu cầu</p><p className="font-mono font-semibold text-[#356647]">{request.requestCode}</p></div>
+            <div><p className="text-xs font-bold uppercase text-slate-400">Trạng thái</p><p className="font-semibold text-slate-800">{statusLabel(request.status)}</p></div>
+            <div><p className="text-xs font-bold uppercase text-slate-400">Người gửi</p><p className="font-semibold text-slate-800">{request.createdByName || '—'}</p></div>
+            <div><p className="text-xs font-bold uppercase text-slate-400">Ngày tạo</p><p>{formatDateTimeVN(request.createdAt)}</p></div>
+            <div><p className="text-xs font-bold uppercase text-slate-400">Ngày gửi</p><p>{formatDateTimeVN(request.submittedAt || request.createdAt)}</p></div>
+            <div><p className="text-xs font-bold uppercase text-slate-400">Ghi chú Warehouse</p><p className="line-clamp-2">{request.warehouseNote || '—'}</p></div>
+          </section>
+
+          {request.items.map((item, itemIndex) => {
+            const product = getSnapshotProduct(item)
+            const variants = getSnapshotVariants(item)
+            const attributes = getSnapshotAttributes(item)
+            const productName = product.name ?? product.Name ?? item.productName
+            const productType = product.productType ?? product.ProductType ?? item.productType
+            const productImages = normalizeProductImages(product)
+
+            return (
+              <section key={item.clientKey || item.id || itemIndex} className="rounded-xl border border-slate-200 bg-white p-4">
+                {productImages.length ? (
+                  <div className="mb-4 rounded-lg border border-slate-100 bg-slate-50 p-3">
+                    <p className="text-xs font-bold uppercase text-slate-400">Hình ảnh sản phẩm ({productImages.length})</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {productImages.map((image) => (
+                        <div key={image.id} className="relative">
+                          <img src={image.imageUrl} alt={image.altText || productName || 'Hình ảnh sản phẩm'} className="h-20 w-20 rounded-lg object-cover" />
+                          {image.isThumbnail ? (
+                            <span className="absolute left-1 top-1 rounded bg-[#356647] px-1 py-0.5 text-[9px] font-bold text-white">Đại diện</span>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+                <div className="grid gap-3 text-sm md:grid-cols-3">
+                  <div><p className="text-xs font-bold uppercase text-slate-400">Tên sản phẩm</p><p className="font-semibold text-slate-900">{productName || '—'}</p></div>
+                  <div><p className="text-xs font-bold uppercase text-slate-400">Loại hàng</p><p>{getProductTypeLabel(productType)}</p></div>
+                  <div><p className="text-xs font-bold uppercase text-slate-400">Danh mục</p><p>{product.categoryName ?? product.CategoryName ?? item.categoryId ?? '—'}</p></div>
+                  <div><p className="text-xs font-bold uppercase text-slate-400">Đơn vị tồn kho</p><p>{product.inventoryUnit ?? product.InventoryUnit ?? item.inventoryUnit ?? '—'}</p></div>
+                  <div><p className="text-xs font-bold uppercase text-slate-400">Mô tả</p><p className="line-clamp-2">{product.description ?? product.Description ?? '—'}</p></div>
+                </div>
+
+                <div className="mt-4 overflow-x-auto rounded-lg border border-slate-100">
+                  <table className="min-w-full text-left text-xs">
+                    <thead className="bg-slate-50 text-slate-500">
+                      <tr>
+                        <th className="px-3 py-2">Tên đơn vị</th>
+                        <th className="px-3 py-2 text-right">Quy đổi</th>
+                        <th className="px-3 py-2">Đơn vị cơ bản</th>
+                        <th className="px-3 py-2">Mã SKU</th>
+                        <th className="px-3 py-2 text-right">Giá trước thuế</th>
+                        <th className="px-3 py-2 text-right">Thuế bán hàng</th>
+                        <th className="px-3 py-2 text-right">Giá sau thuế</th>
+                        <th className="px-3 py-2 text-right">Giá vốn tự động</th>
+                        <th className="px-3 py-2">Bán trực tiếp</th>
+                        <th className="px-3 py-2">Tồn min/max</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {variants.length === 0 ? (
+                        <tr><td colSpan={10} className="px-3 py-4 text-slate-400">Chưa có SKU.</td></tr>
+                      ) : variants.map((variant, variantIndex) => (
+                        <tr key={getVariantValue(variant, 'requestSkuKey', variantIndex)}>
+                          <td className="px-3 py-2">{getVariantValue(variant, 'unitName', getVariantValue(variant, 'variantName', '—'))}</td>
+                          <td className="px-3 py-2 text-right">{getVariantValue(variant, 'conversionRate', '—')}</td>
+                          <td className="px-3 py-2">{getVariantValue(variant, 'isBaseUnitVariant', false) ? 'Có' : 'Không'}</td>
+                          <td className="px-3 py-2 font-mono font-semibold text-[#356647]">{getVariantValue(variant, 'skuCode', '—')}</td>
+                          <td className="px-3 py-2 text-right">{formatWholeVnd(getVariantPriceBeforeTax(variant))}</td>
+                          <td className="px-3 py-2 text-right">{getVariantTaxPercent(variant)}%</td>
+                          <td className="px-3 py-2 text-right">{formatWholeVnd(getVariantPriceAfterTax(variant))}</td>
+                          <td className="px-3 py-2 text-right">{formatWholeVnd(getVariantValue(variant, 'costPrice', 0))}</td>
+                          <td className="px-3 py-2">{getVariantValue(variant, 'isSellable', true) !== false ? 'Có' : 'Không'}</td>
+                          <td className="px-3 py-2">{getVariantValue(variant, 'minStock', '—')} / {getVariantValue(variant, 'maxStock', '—')}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                  <div className="rounded-lg border border-slate-100 p-3">
+                    <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Thuộc tính</p>
+                    {attributes.length === 0 ? <p className="mt-2 text-xs text-slate-400">Không có thuộc tính.</p> : null}
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {attributes.map((attribute, attributeIndex) => (
+                        <span key={attributeIndex} className="rounded-full bg-[#f0eee6] px-2 py-1 text-xs font-semibold text-slate-700">
+                          {attribute.attributeName || attribute.AttributeName}: {attribute.value || attribute.Value}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg border border-slate-100 p-3">
+                    <p className="text-xs font-bold uppercase tracking-wide text-slate-500">BOM</p>
+                    <div className="mt-2 space-y-2 text-xs">
+                      {variants.some((variant) => getSnapshotBomLines(variant).length > 0) ? (
+                        variants.flatMap((variant) => getSnapshotBomLines(variant).map((line, lineIndex) => (
+                          <div key={`${getVariantValue(variant, 'skuCode', 'sku')}-${lineIndex}`} className="rounded-lg bg-slate-50 p-2">
+                            <p><span className="font-semibold">Output SKU:</span> <span className="font-mono text-[#356647]">{getVariantValue(variant, 'skuCode', '—')}</span></p>
+                            <p><span className="font-semibold">Component SKU:</span> {line.componentSkuCode || line.ComponentSkuCode || '—'}</p>
+                            <p><span className="font-semibold">Tên component:</span> {line.componentVariantName || line.ComponentVariantName || line.materialName || line.MaterialName || '—'}</p>
+                            <p><span className="font-semibold">Định mức:</span> {line.quantity ?? line.Quantity ?? '—'} {line.materialUnitName || line.MaterialUnitName || ''}</p>
+                            {line.note || line.Note ? <p><span className="font-semibold">Ghi chú:</span> {line.note || line.Note}</p> : null}
+                            {line.isRequiredBaseComponent || line.IsRequiredBaseComponent ? <p className="font-semibold text-emerald-700">Tự động theo quy đổi</p> : null}
+                          </div>
+                        )))
+                      ) : <p className="text-slate-400">Không có BOM.</p>}
+                    </div>
+                  </div>
+                </div>
+              </section>
+            )
+          })}
+        </div>
+
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-slate-100 px-6 py-4">
+          {canDecide ? (
+            <>
+              <button type="button" disabled={isSaving} className="rounded-lg bg-[#356647] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" onClick={() => onApprove(request)}>Duyệt</button>
+              <button type="button" disabled={isSaving} className="rounded-lg bg-amber-100 px-4 py-2 text-sm font-semibold text-amber-700 disabled:opacity-50" onClick={() => onReject(request)}>Từ chối</button>
+            </>
+          ) : null}
+          <button type="button" className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700" onClick={onClose}>Đóng</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function AdminProductCreationRequestsTable({
+  requests,
+  isLoading,
+  page,
+  pageSize,
+  totalCount,
+  onPageChange,
+  onDetail,
+  onDecision,
+}) {
+  return (
+    <>
+      <div className="overflow-x-auto">
         <table className="min-w-full text-left text-sm">
-          <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+          <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
             <tr>
-              <th className="px-4 py-3 font-semibold">SKU</th>
-              <th className="px-4 py-3 font-semibold">Tên biến thể</th>
-              <th className="px-4 py-3 text-right font-semibold">Giá bán</th>
-              <th className="px-4 py-3 text-center font-semibold">BOM</th>
+              <th className="px-4 py-3">Mã yêu cầu</th>
+              <th className="px-4 py-3">Tiêu đề</th>
+              <th className="px-4 py-3">Người gửi</th>
+              <th className="px-4 py-3">Thời gian gửi</th>
+              <th className="px-4 py-3 text-right">Số sản phẩm</th>
+              <th className="px-4 py-3">Trạng thái</th>
+              <th className="px-4 py-3 text-right">Thao tác</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {variants.length ? variants.map((variant, index) => (
-              <tr key={`${variant.skuCode || index}`}>
-                <td className="px-4 py-3 font-mono text-xs font-semibold text-[#356647]">{variant.skuCode || '-'}</td>
-                <td className="px-4 py-3 font-medium text-slate-800">{variant.variantName || '-'}</td>
-                <td className="px-4 py-3 text-right">{formatCurrency(variant.retailPrice)}</td>
-                <td className="px-4 py-3 text-center">{variant.bomLines?.length ? `${variant.bomLines.length} dòng` : '-'}</td>
+            {isLoading ? (
+              <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-400">Đang tải...</td></tr>
+            ) : null}
+            {!isLoading && requests.length === 0 ? (
+              <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-400">Chưa có yêu cầu tạo hàng hóa.</td></tr>
+            ) : null}
+            {requests.map((request) => (
+              <tr key={request.id} className="align-middle hover:bg-slate-50/70">
+                <td className="px-4 py-3 font-mono text-xs font-semibold text-[#356647]">{request.requestCode}</td>
+                <td className="max-w-[320px] px-4 py-3">
+                  <p className="truncate font-semibold text-slate-800">{request.title}</p>
+                  {request.warehouseNote ? <p className="mt-1 truncate text-xs text-slate-500">{request.warehouseNote}</p> : null}
+                </td>
+                <td className="px-4 py-3 text-slate-700">{request.createdByName || '—'}</td>
+                <td className="px-4 py-3 text-xs text-slate-500">{formatDateTimeVN(request.submittedAt || request.createdAt)}</td>
+                <td className="px-4 py-3 text-right font-semibold">{request.items.length}</td>
+                <td className="px-4 py-3">{statusLabel(request.status)}</td>
+                <td className="px-4 py-3 text-right">
+                  <div className="flex flex-wrap justify-end gap-2">
+                    <button type="button" className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50" onClick={() => onDetail(request)}>Chi tiết</button>
+                    {request.status === 'PendingApproval' ? (
+                      <>
+                        <button type="button" className="rounded-lg bg-[#356647] px-3 py-1.5 text-xs font-semibold text-white" onClick={() => onDecision(request, 'approve')}>Duyệt</button>
+                        <button type="button" className="rounded-lg bg-amber-100 px-3 py-1.5 text-xs font-semibold text-amber-700" onClick={() => onDecision(request, 'reject')}>Từ chối</button>
+                        <button type="button" className="rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-50" onClick={() => onDecision(request, 'cancel')}>Hủy</button>
+                      </>
+                    ) : null}
+                  </div>
+                </td>
               </tr>
-            )) : (
-              <tr>
-                <td colSpan={4} className="px-4 py-6 text-center text-slate-400">Chưa có SKU.</td>
-              </tr>
-            )}
+            ))}
           </tbody>
         </table>
       </div>
-
-      {!compact ? (
-        <>
-          <div className="overflow-x-auto rounded-xl border border-slate-200">
-            <table className="min-w-full text-left text-sm">
-              <thead className="bg-slate-50 text-xs uppercase text-slate-500">
-                <tr>
-                  <th className="px-4 py-3 font-semibold">Đơn vị bán</th>
-                  <th className="px-4 py-3 text-right font-semibold">Tỷ lệ</th>
-                  <th className="px-4 py-3 text-right font-semibold">Giá bán</th>
-                  <th className="px-4 py-3 text-center font-semibold">Loại</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {units.map((unit, index) => (
-                  <tr key={`${unit.unitName}-${index}`}>
-                    <td className="px-4 py-3 font-medium text-slate-800">{unit.unitName || '-'}</td>
-                    <td className="px-4 py-3 text-right">{unit.conversionRate}</td>
-                    <td className="px-4 py-3 text-right">{formatCurrency(unit.price)}</td>
-                    <td className="px-4 py-3 text-center">{unit.isBaseUnit ? 'Đơn vị gốc' : unit.isDirectSell ? 'Bán trực tiếp' : '-'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="grid gap-3 md:grid-cols-2">
-            <PreviewItem label="Hồ sơ hương vị" value={product?.flavorProfile || '-'} />
-            <PreviewItem label="Hướng dẫn pha" value={product?.brewingGuide || '-'} />
-            <PreviewItem label="Mô tả" value={product?.description || '-'} />
-            <PreviewItem label="Ghi chú Chủ HTX" value={adminNotes || '-'} />
-          </div>
-        </>
-      ) : null}
-    </div>
-  )
-}
-
-function PreviewItem({ label, value }) {
-  return (
-    <div className="rounded-xl bg-slate-50 p-3">
-      <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">{label}</p>
-      <p className="mt-1 whitespace-pre-wrap text-sm font-semibold text-slate-800">{value}</p>
-    </div>
-  )
-}
-
-function ConfirmModal({ product, categories, adminNotes, onClose, onConfirm, isSaving }) {
-  if (!product) return null
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm" role="presentation" onClick={onClose}>
-      <div className="max-h-[min(760px,calc(100dvh-2rem))] w-full max-w-4xl overflow-hidden rounded-2xl bg-white shadow-2xl" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
-        <header className="border-b border-slate-100 px-6 py-4">
-          <h2 className="text-lg font-bold text-slate-800">Xác nhận tạo biên bản phê duyệt</h2>
-          <p className="mt-1 text-sm text-slate-500">
-            Vui lòng kiểm tra thông tin sản phẩm, SKU và BOM trước khi tạo biên bản. Sau khi cấp mã, Thủ kho Kho tổng sẽ dùng mã này để tạo hàng hóa.
-          </p>
-        </header>
-        <div className="max-h-[540px] overflow-y-auto px-6 py-5">
-          <SnapshotPreview product={product} categories={categories} adminNotes={adminNotes} />
-        </div>
-        <footer className="flex justify-end gap-3 border-t border-slate-100 px-6 py-4">
-          <button type="button" onClick={onClose} className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">
-            Quay lại chỉnh sửa
-          </button>
-          <button type="button" onClick={onConfirm} disabled={isSaving} className="rounded-xl bg-[#538463] px-5 py-2.5 text-sm font-bold text-white hover:bg-[#457053] disabled:opacity-50">
-            {isSaving ? 'Đang tạo...' : 'Tạo biên bản'}
-          </button>
-        </footer>
-      </div>
-    </div>
-  )
-}
-
-function DetailModal({ item, categories, onClose, onAuthorize, onCancel, onCopy, isSaving }) {
-  if (!item) return null
-  const product = item.finalProductSnapshot || item.productSnapshot
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm" role="presentation" onClick={onClose}>
-      <div className="flex max-h-[min(780px,calc(100dvh-2rem))] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
-        <header className="flex items-start justify-between gap-4 border-b border-slate-100 px-6 py-4">
-          <div>
-            <h2 className="text-lg font-bold text-slate-800">Chi tiết biên bản</h2>
-            <p className="mt-1 text-sm text-slate-500">
-              <span className="font-mono font-semibold text-[#356647]">{item.approvalCode}</span> - {statusLabel(item.status)}
-            </p>
-          </div>
-          <button type="button" onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100">
-            <span className="material-symbols-outlined">close</span>
-          </button>
-        </header>
-        <div className="flex-1 space-y-5 overflow-y-auto px-6 py-5">
-          <div className="grid gap-3 md:grid-cols-4">
-            <PreviewItem label="Người tạo" value={item.requestedByName || '-'} />
-            <PreviewItem label="Thời gian tạo" value={formatDateTime(item.requestedAt || item.createdAt)} />
-            <PreviewItem label="Người cấp mã" value={item.authorisedByName || '-'} />
-            <PreviewItem label="Cấp mã lúc" value={formatDateTime(item.authorisedAt)} />
-          </div>
-          {product ? (
-            <SnapshotPreview product={product} categories={categories} adminNotes={item.adminNotes} />
-          ) : (
-            <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700">
-              Không đọc được snapshot sản phẩm. Vui lòng kiểm tra JSON nâng cao.
-            </p>
-          )}
-          <details className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-            <summary className="cursor-pointer text-sm font-bold text-slate-700">Advanced / JSON Preview</summary>
-            <textarea
-              readOnly
-              className="mt-3 min-h-64 w-full rounded-xl border border-slate-200 bg-slate-950 px-3 py-2.5 font-mono text-xs text-slate-100 outline-none"
-              value={JSON.stringify(product || {}, null, 2)}
-            />
-          </details>
-        </div>
-        <footer className="flex flex-wrap justify-end gap-2 border-t border-slate-100 px-6 py-4">
-          {item.status === 'Draft' ? (
-            <button type="button" disabled={isSaving} onClick={() => onAuthorize(item)} className="rounded-xl bg-[#538463] px-4 py-2 text-sm font-bold text-white hover:bg-[#457053] disabled:opacity-50">
-              Cấp mã
-            </button>
-          ) : null}
-          {item.status !== 'Draft' && item.approvalCode ? (
-            <button type="button" onClick={() => onCopy(item.approvalCode)} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
-              Sao chép mã
-            </button>
-          ) : null}
-          {item.status !== 'Completed' && item.status !== 'Cancelled' ? (
-            <button type="button" disabled={isSaving} onClick={() => onCancel(item)} className="rounded-xl border border-rose-200 px-4 py-2 text-sm font-bold text-rose-600 hover:bg-rose-50 disabled:opacity-50">
-              Hủy
-            </button>
-          ) : null}
-        </footer>
-      </div>
-    </div>
+      <TablePagination
+        page={page}
+        pageSize={pageSize}
+        totalCount={totalCount}
+        onPageChange={onPageChange}
+        itemLabel="yêu cầu"
+      />
+    </>
   )
 }
 
 export default function ProductApprovalsPage() {
-  const [items, setItems] = useState([])
+  const session = useAuthSession()
+  const admin = isSystemAdmin(session)
+  const warehouse = isWarehouseRole(session)
+  const fileInputRef = useRef(null)
+  const initialRequestStatus = admin ? 'PendingApproval' : 'all'
   const [categories, setCategories] = useState([])
-  const [existingSkus, setExistingSkus] = useState([])
-  const [materialOptions, setMaterialOptions] = useState([])
-  const [materialSearch, setMaterialSearch] = useState('')
-  const [isMaterialLoading, setIsMaterialLoading] = useState(false)
+  const [materials, setMaterials] = useState([])
+  const [attributeNames, setAttributeNames] = useState([])
+  const [requests, setRequests] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
-  const [form, setForm] = useState(createInitialForm)
-  const [errors, setErrors] = useState({})
-  const [pendingProduct, setPendingProduct] = useState(null)
-  const [detailItem, setDetailItem] = useState(null)
-  const [categorySearch, setCategorySearch] = useState('')
+  const [activeRequestId, setActiveRequestId] = useState(null)
+  const [title, setTitle] = useState('')
+  const [warehouseNote, setWarehouseNote] = useState('')
+  const [rows, setRows] = useState([createDraftProduct()])
+  const [statusFilter, setStatusFilter] = useState(initialRequestStatus)
+  const [adminPage, setAdminPage] = useState(1)
+  const [detailRequest, setDetailRequest] = useState(null)
+  const [importPreview, setImportPreview] = useState(null)
+  const [importMode, setImportMode] = useState('replace')
+  const [isImporting, setIsImporting] = useState(false)
+  const [isExporting, setIsExporting] = useState(false)
+  const [isTemplateGenerating, setIsTemplateGenerating] = useState(false)
 
-  const existingSkuCodes = useMemo(
-    () => new Set(existingSkus.map((sku) => normalizeSkuInput(sku.skuCode)).filter(Boolean)),
-    [existingSkus],
-  )
+  const materialsById = useMemo(() => new Map(materials.map((material) => [String(material.id), material])), [materials])
+  const attributeNameOptions = useMemo(() => buildAttributeNameOptions(attributeNames, rows), [attributeNames, rows])
+  const attributeNameByKey = useMemo(() => buildAttributeNameLookup(attributeNameOptions), [attributeNameOptions])
+  const hasCurrentDraftData = useMemo(() => hasMeaningfulProductCreationDraftData(rows), [rows])
+  const importAppendErrors = useMemo(() => (
+    importPreview && importMode === 'append'
+      ? validateAppendProductCreationImport(rows, importPreview.rows, { getSkuRows, syncSkuRows })
+      : []
+  ), [importMode, importPreview, rows])
+  const importBlockingErrors = useMemo(() => [
+    ...(importPreview?.errors ?? []),
+    ...importAppendErrors,
+  ], [importAppendErrors, importPreview])
+  const adminPagedRequests = useMemo(() => {
+    const start = (adminPage - 1) * ADMIN_REQUEST_PAGE_SIZE
+    return requests.slice(start, start + ADMIN_REQUEST_PAGE_SIZE)
+  }, [adminPage, requests])
 
-  const productSnapshot = useMemo(() => buildProductSnapshot(form), [form])
+  useEffect(() => {
+    const maxPage = Math.max(1, Math.ceil(requests.length / ADMIN_REQUEST_PAGE_SIZE))
+    if (adminPage <= maxPage) return undefined
+    const timer = window.setTimeout(() => setAdminPage(maxPage), 0)
+    return () => window.clearTimeout(timer)
+  }, [adminPage, requests.length])
 
-  const visibleCategories = useMemo(() => {
-    const search = categorySearch.trim().toLowerCase()
-    return categories
-      .filter((item) => !item.isDeleted && item.isActive !== false)
-      .filter((item) => !search || item.name.toLowerCase().includes(search))
-  }, [categories, categorySearch])
-
-  async function loadItems() {
+  const loadRequests = useCallback(async (nextStatus) => {
+    setIsLoading(true)
     try {
-      setIsLoading(true)
-      const result = await fetchProductApprovals({ page: 1, pageSize: 50, status: 'all' })
-      setItems(result.items)
+      const result = await fetchProductCreationRequests({ status: nextStatus, page: 1, pageSize: PRODUCT_CREATION_REQUEST_FETCH_PAGE_SIZE })
+      setRequests(result.items)
     } catch (error) {
       showError(error.message)
     } finally {
       setIsLoading(false)
     }
-  }
-
-  useEffect(() => {
-    loadItems()
-    fetchCategories({ isDeleted: false })
-      .then(setCategories)
-      .catch((error) => showError(error.message))
-    fetchAllActiveSkus(100)
-      .then(setExistingSkus)
-      .catch(() => setExistingSkus([]))
   }, [])
 
   useEffect(() => {
-    if (form.productType !== 'THANH_PHAM') {
-      setMaterialOptions([])
-      return
-    }
-    const timer = setTimeout(() => {
-      setIsMaterialLoading(true)
-      searchMaterials(materialSearch, 30)
-        .then(setMaterialOptions)
-        .catch(() => setMaterialOptions([]))
-        .finally(() => setIsMaterialLoading(false))
-    }, 250)
-    return () => clearTimeout(timer)
-  }, [materialSearch, form.productType])
-
-  function updateFormField(field, value) {
-    setForm((prev) => ({ ...prev, [field]: value }))
-  }
-
-  function updateUnit(key, field, value) {
-    setForm((prev) => ({
-      ...prev,
-      units: prev.units.map((unit) => {
-        if (unit.key !== key) return field === 'isBaseUnit' && value ? { ...unit, isBaseUnit: false } : unit
-        const next = { ...unit, [field]: value }
-        if (field === 'isBaseUnit' && value) next.conversionRate = '1'
-        return next
-      }),
-    }))
-  }
-
-  function addUnit() {
-    setForm((prev) => ({ ...prev, units: [...prev.units, createUnit({ isBaseUnit: false, isDirectSell: true })] }))
-  }
-
-  function removeUnit(key) {
-    setForm((prev) => {
-      const units = prev.units.filter((unit) => unit.key !== key)
-      return { ...prev, units: units.length ? units : prev.units }
-    })
-  }
-
-  function updateVariant(key, field, value) {
-    setForm((prev) => ({
-      ...prev,
-      variants: prev.variants.map((variant) => (variant.key === key ? { ...variant, [field]: value } : variant)),
-    }))
-  }
-
-  function addVariant() {
-    const unit = trimText(form.baseUnit) || 'gói'
-    setForm((prev) => ({
-      ...prev,
-      variants: [
-        ...prev.variants,
-        createVariant({
-          variantName: prev.name ? `${trimText(prev.name)} - ${unit}` : '',
-          retailPrice: prev.units.find((unitRow) => unitRow.isBaseUnit)?.price ?? '0',
-          optionRows: [createOptionRow({ name: 'Unit', value: unit })],
+    let cancelled = false
+    const timer = window.setTimeout(() => {
+      Promise.all([
+        fetchCategories({ isDeleted: false }),
+        searchMaterials('', 100),
+        fetchAttributeNames().catch((error) => {
+          showError(`Không tải được danh sách thuộc tính: ${error.message}`)
+          return []
         }),
-      ],
+        fetchProductCreationRequests({ status: initialRequestStatus, page: 1, pageSize: PRODUCT_CREATION_REQUEST_FETCH_PAGE_SIZE }),
+      ])
+        .then(([categoryItems, materialItems, attributeNameItems, requestResult]) => {
+          if (cancelled) return
+          setCategories(categoryItems)
+          setMaterials(materialItems)
+          setAttributeNames(attributeNameItems)
+          setRequests(requestResult.items)
+        })
+        .catch((error) => showError(error.message))
+        .finally(() => {
+          if (!cancelled) setIsLoading(false)
+        })
+    }, 0)
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [initialRequestStatus])
+
+  function updateRow(index, changes) {
+    setRows((current) => current.map((row, rowIndex) => (rowIndex === index ? { ...row, ...changes } : row)))
+  }
+
+  function updateRowImages(index, updater) {
+    setRows((current) => current.map((row, rowIndex) => {
+      if (rowIndex !== index) return row
+      const currentImages = Array.isArray(row.images) ? row.images : []
+      return { ...row, images: updater(currentImages) }
     }))
   }
 
-  function removeVariant(key) {
-    setForm((prev) => {
-      const variants = prev.variants.filter((variant) => variant.key !== key)
-      return { ...prev, variants: variants.length ? variants : prev.variants }
-    })
+  function resetForm() {
+    setActiveRequestId(null)
+    setTitle('')
+    setWarehouseNote('')
+    setRows([createDraftProduct()])
+    setImportPreview(null)
+    setImportMode('replace')
   }
 
-  function updateOption(variantKey, optionKey, field, value) {
-    setForm((prev) => ({
-      ...prev,
-      variants: prev.variants.map((variant) => {
-        if (variant.key !== variantKey) return variant
-        return {
-          ...variant,
-          optionRows: variant.optionRows.map((option) => (option.key === optionKey ? { ...option, [field]: value } : option)),
-        }
-      }),
+  function handleStatusFilterChange(value) {
+    setStatusFilter(value)
+    setAdminPage(1)
+    loadRequests(value)
+  }
+
+  function loadIntoForm(request) {
+    setActiveRequestId(request.id)
+    setTitle(request.title)
+    setWarehouseNote(request.warehouseNote || '')
+    setRows(request.items.length ? request.items.map((item) => fromProductSnapshot(item, materialsById)) : [createDraftProduct()])
+    setImportPreview(null)
+    setImportMode('replace')
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  async function saveDraft({ showToast = true, rowsOverride } = {}) {
+    const effectiveRows = rowsOverride ?? rows
+    const errors = validateForm(title, effectiveRows)
+    if (errors.length) {
+      showError(errors[0])
+      return null
+    }
+
+    setIsSaving(true)
+    try {
+      const payload = { title, warehouseNote, items: effectiveRows.map((row) => ({ clientKey: row.clientKey, product: toProductPayload(row) })) }
+      const saved = activeRequestId
+        ? await updateProductCreationRequest(activeRequestId, payload)
+        : await createProductCreationRequest(payload)
+      setActiveRequestId(saved.id)
+      if (showToast) showSuccess('Đã lưu yêu cầu tạo hàng hóa.')
+      await loadRequests(statusFilter)
+      return saved
+    } catch (error) {
+      showError(error.message)
+      return null
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  async function uploadPendingImages() {
+    const pendingCount = rows.reduce(
+      (total, row) => total + (Array.isArray(row.images) ? row.images.filter((image) => image.pending && image.file).length : 0),
+      0,
+    )
+    if (pendingCount === 0) return rows
+
+    if (!hasCloudinaryUploadConfig()) {
+      showError('Chưa cấu hình Cloudinary nên không thể tải ảnh lên. Vui lòng cấu hình trước khi gửi biên bản.')
+      return null
+    }
+
+    // Đánh dấu tất cả ảnh pending là đang upload để UI phản hồi.
+    setRows((current) => current.map((row) => ({
+      ...row,
+      images: (Array.isArray(row.images) ? row.images : []).map((image) =>
+        image.pending && image.file ? { ...image, uploading: true } : image),
+    })))
+
+    const uploadedRows = await Promise.all(rows.map(async (row) => {
+      const images = Array.isArray(row.images) ? row.images : []
+      const nextImages = await Promise.all(images.map(async (image) => {
+        if (!image.pending || !image.file) return image
+        const imageUrl = await uploadImageToCloudinary(image.file)
+        if (image.previewUrl) URL.revokeObjectURL(image.previewUrl)
+        return { ...image, imageUrl, uploading: false, pending: false, file: null, previewUrl: null }
+      }))
+      return { ...row, images: reindexProductImages(nextImages) }
     }))
+
+    setRows(uploadedRows)
+    return uploadedRows
   }
 
-  function addOption(variantKey) {
-    setForm((prev) => ({
-      ...prev,
-      variants: prev.variants.map((variant) => (
-        variant.key === variantKey
-          ? { ...variant, optionRows: [...variant.optionRows, createOptionRow({ name: '', value: '' })] }
-          : variant
-      )),
-    }))
-  }
-
-  function removeOption(variantKey, optionKey) {
-    setForm((prev) => ({
-      ...prev,
-      variants: prev.variants.map((variant) => (
-        variant.key === variantKey
-          ? { ...variant, optionRows: variant.optionRows.filter((option) => option.key !== optionKey) }
-          : variant
-      )),
-    }))
-  }
-
-  function addBomLine(variantKey) {
-    setForm((prev) => ({
-      ...prev,
-      variants: prev.variants.map((variant) => (
-        variant.key === variantKey ? { ...variant, bomLines: [...variant.bomLines, createBomLine()] } : variant
-      )),
-    }))
-  }
-
-  function updateBomLine(variantKey, lineKey, field, value) {
-    setForm((prev) => ({
-      ...prev,
-      variants: prev.variants.map((variant) => {
-        if (variant.key !== variantKey) return variant
-        return {
-          ...variant,
-          bomLines: variant.bomLines.map((line) => {
-            if (line.key !== lineKey) return line
-            if (field !== 'materialId') return { ...line, [field]: value }
-            const material = materialOptions.find((item) => String(item.id) === String(value))
-            return {
-              ...line,
-              materialId: value,
-              materialName: material?.name || line.materialName,
-              materialUnitName: getMaterialUnit(material) || line.materialUnitName,
-            }
-          }),
-        }
-      }),
-    }))
-  }
-
-  function removeBomLine(variantKey, lineKey) {
-    setForm((prev) => ({
-      ...prev,
-      variants: prev.variants.map((variant) => (
-        variant.key === variantKey
-          ? { ...variant, bomLines: variant.bomLines.filter((line) => line.key !== lineKey) }
-          : variant
-      )),
-    }))
-  }
-
-  function handleSubmit(event) {
-    event.preventDefault()
-    const nextErrors = validateApprovalForm(form, { existingSkuCodes })
-    setErrors(nextErrors)
-    if (Object.keys(nextErrors).length > 0) {
-      showError('Vui lòng kiểm tra các trường còn thiếu hoặc chưa hợp lệ.')
+  async function handleSubmit() {
+    const submitErrors = validateForm(title, rows, { requireFinishedBom: true })
+    if (submitErrors.length) {
+      showError(submitErrors[0])
       return
     }
-    setPendingProduct(buildProductSnapshot(form))
-  }
 
-  async function handleConfirmCreate() {
-    if (!pendingProduct) return
+    setIsSaving(true)
+    let uploadedRows
     try {
-      setIsSaving(true)
-      const created = await createProductApprovalRequest({ product: pendingProduct, adminNotes: form.adminNotes })
-      showSuccess(`Đã tạo biên bản ${created.approvalCode}.`)
-      setPendingProduct(null)
-      setForm(createInitialForm())
-      setErrors({})
-      await loadItems()
+      uploadedRows = await uploadPendingImages()
     } catch (error) {
-      showError(error.apiErrors?.length ? error.apiErrors.join(' ') : error.message)
+      // Rollback trạng thái uploading để người dùng thử lại.
+      setRows((current) => current.map((row) => ({
+        ...row,
+        images: (Array.isArray(row.images) ? row.images : []).map((image) =>
+          image.uploading && image.file ? { ...image, uploading: false } : image),
+      })))
+      showError(error.message || 'Không tải được ảnh lên Cloudinary. Vui lòng thử lại.')
+      setIsSaving(false)
+      return
+    }
+    if (!uploadedRows) {
+      setIsSaving(false)
+      return
+    }
+
+    setIsSaving(false)
+    const saved = await saveDraft({ showToast: false, rowsOverride: uploadedRows })
+    if (!saved?.id) return
+
+    setIsSaving(true)
+    try {
+      await submitProductCreationRequest(saved.id, warehouseNote)
+      showSuccess('Đã gửi yêu cầu cho Admin duyệt.')
+      resetForm()
+      await loadRequests(statusFilter)
+    } catch (error) {
+      showError(error.message)
     } finally {
       setIsSaving(false)
     }
   }
 
-  async function handleAuthorize(item) {
+  async function handleDecision(request, action) {
+    const reason = action === 'approve' ? '' : window.prompt(action === 'reject' ? 'Nhập lý do từ chối:' : 'Nhập lý do hủy:')
+    if (action !== 'approve' && !String(reason || '').trim()) return
+
+    setIsSaving(true)
     try {
-      setIsSaving(true)
-      const updated = await authorizeProductApprovalRequest(item.id)
-      showSuccess(`Đã cấp mã ${updated.approvalCode}.`)
-      setDetailItem((current) => (current?.id === updated.id ? updated : current))
-      await loadItems()
+      if (action === 'approve') await approveProductCreationRequest(request.id, '')
+      if (action === 'reject') await rejectProductCreationRequest(request.id, reason, '')
+      if (action === 'cancel') await cancelProductCreationRequest(request.id, reason, '')
+      showSuccess('Đã cập nhật yêu cầu.')
+      setDetailRequest(null)
+      await loadRequests(statusFilter)
     } catch (error) {
-      showError(error.apiErrors?.length ? error.apiErrors.join(' ') : error.message)
+      showError(error.message)
     } finally {
       setIsSaving(false)
     }
   }
 
-  async function handleCancel(item) {
-    const reason = window.prompt(`Lý do hủy biên bản ${item.approvalCode}?`)
-    if (!reason?.trim()) return
+  async function loadExcelReferenceData() {
+    const [categoryResult, materialResult, attributeNameResult] = await Promise.allSettled([
+      fetchCategories({ isDeleted: false }),
+      searchMaterials('', 500),
+      fetchAttributeNames(),
+    ])
 
-    try {
-      setIsSaving(true)
-      await cancelProductApprovalRequest(item.id, reason)
-      showSuccess('Đã hủy biên bản phê duyệt.')
-      if (detailItem?.id === item.id) setDetailItem(null)
-      await loadItems()
-    } catch (error) {
-      showError(error.apiErrors?.length ? error.apiErrors.join(' ') : error.message)
-    } finally {
-      setIsSaving(false)
+    const categoryReference = buildReferenceLoadEntry('categories', categoryResult, categories)
+    const materialReference = buildReferenceLoadEntry('componentSkus', materialResult, materials)
+    const attributeNameReference = buildReferenceLoadEntry('attributeNames', attributeNameResult, attributeNames)
+
+    const categoryItems = categoryReference.items
+    const materialItems = materialReference.items
+    const attributeNameItems = attributeNameReference.items
+    const failures = [
+      categoryReference.failure,
+      materialReference.failure,
+      attributeNameReference.failure,
+    ].filter(Boolean)
+    const referenceLoadStatuses = [
+      categoryReference.status,
+      materialReference.status,
+      attributeNameReference.status,
+    ]
+
+    setCategories(categoryItems)
+    setMaterials(materialItems)
+    setAttributeNames(attributeNameItems)
+
+    return {
+      categoryItems,
+      materialItems,
+      attributeNameItems,
+      failures,
+      referenceLoadStatuses,
     }
   }
 
-  async function handleCopy(code) {
+  async function downloadTemplate() {
+    setIsTemplateGenerating(true)
     try {
-      await navigator.clipboard.writeText(code)
-      showSuccess('Đã sao chép mã phê duyệt.')
+      const { categoryItems, materialItems, attributeNameItems, failures, referenceLoadStatuses } = await loadExcelReferenceData()
+      await downloadOfficialProductCreationTemplate({
+        categories: categoryItems,
+        materials: materialItems,
+        attributeNameOptions: buildAttributeNameOptions(attributeNameItems, []),
+        referenceLoadStatuses,
+      })
+      showReferenceWarningToast(failures)
     } catch {
-      showError('Không thể sao chép mã. Vui lòng copy thủ công.')
+      showError('Không tạo được file mẫu Excel. Vui lòng thử lại.')
+    } finally {
+      setIsTemplateGenerating(false)
     }
+  }
+
+  async function exportCurrentDraft() {
+    const errors = validateForm(title || 'Yêu cầu tạo hàng hóa', rows)
+    if (errors.length) {
+      showError(errors[0])
+      return
+    }
+
+    setIsExporting(true)
+    try {
+      const { categoryItems, materialItems, attributeNameItems, failures, referenceLoadStatuses } = await loadExcelReferenceData()
+      await exportProductCreationDraftToTemplate({
+        rows,
+        categories: categoryItems,
+        materials: materialItems,
+        attributeNameOptions: buildAttributeNameOptions(attributeNameItems, rows),
+        referenceLoadStatuses,
+        filename: formatProductCreationDraftExportFilename(),
+        helpers: {
+          getSkuRows,
+          syncSkuRows,
+          getSubmittableAttributes,
+          moneyOrNull,
+        },
+      })
+      if (failures.length) {
+        showReferenceWarningToast(failures)
+      } else {
+        showSuccess('Đã export bản nháp theo file mẫu chính thức.')
+      }
+    } catch (error) {
+      showError(error.message || 'Không thể export file Excel.')
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
+  async function handleImportFile(event) {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+
+    setIsImporting(true)
+    try {
+      const preview = await parseOfficialProductCreationFile(file, {
+        categories,
+        materials,
+        attributeNameByKey,
+        createDraftProduct,
+        createAttributeRow,
+        syncLegacySkuFields,
+      })
+      setImportPreview(preview)
+      setImportMode(hasCurrentDraftData ? 'replace' : 'replace')
+      if (preview.errors.length) {
+        showError(preview.errors[0])
+      } else {
+        showSuccess('Đã đọc file Excel. Kiểm tra preview trước khi áp dụng vào bản nháp.')
+      }
+    } catch (error) {
+      showError(error.message || 'Không thể đọc file Excel.')
+    } finally {
+      setIsImporting(false)
+    }
+  }
+
+  function applyImportPreview() {
+    if (!importPreview) return
+    if (importBlockingErrors.length) {
+      showError(importBlockingErrors[0])
+      return
+    }
+
+    const nextRows = importMode === 'append'
+      ? [...rows, ...importPreview.rows]
+      : importPreview.rows
+
+    setRows(nextRows.length ? nextRows : [createDraftProduct()])
+    if (!title.trim()) setTitle(importPreview.suggestedTitle || importPreview.sourceFilename?.replace(/\.xlsx$/i, '') || '')
+    setImportPreview(null)
+    setImportMode('replace')
+    showSuccess('Đã áp dụng dữ liệu import vào bản nháp.')
   }
 
   return (
-    <PageShell>
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-extrabold text-slate-800">Duyệt sản phẩm mới</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            Chủ hợp tác xã tạo biên bản, cấp mã, sau đó Thủ kho Kho tổng dùng mã tại trang tạo hàng hóa.
-          </p>
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <SectionCard title="1. Thông tin sản phẩm">
-            <div className="grid gap-4 md:grid-cols-3">
-              <label className="block md:col-span-2">
-                <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Tên sản phẩm *</span>
-                <input className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#538463]" value={form.name} onChange={(event) => updateFormField('name', event.target.value)} />
-                <FieldError message={errors.name} />
-              </label>
-              <label className="block">
-                <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Loại hàng *</span>
-                <select className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#538463]" value={form.productType} onChange={(event) => updateFormField('productType', event.target.value)}>
-                  {PRODUCT_TYPES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-                </select>
-                <FieldError message={errors.productType} />
-              </label>
-              <label className="block">
-                <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Tìm danh mục</span>
-                <input className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#538463]" value={categorySearch} onChange={(event) => setCategorySearch(event.target.value)} placeholder="Nhập tên danh mục" />
-              </label>
-              <label className="block md:col-span-2">
-                <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Nhóm hàng / Danh mục *</span>
-                <select className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#538463]" value={form.categoryId} onChange={(event) => updateFormField('categoryId', event.target.value)}>
-                  <option value="">Chọn danh mục</option>
-                  {visibleCategories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
-                </select>
-                <FieldError message={errors.categoryId} />
-              </label>
-              <label className="block">
-                <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Đơn vị gốc *</span>
-                <input className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#538463]" value={form.baseUnit} onChange={(event) => updateFormField('baseUnit', event.target.value)} />
-                <FieldError message={errors.baseUnit} />
-              </label>
-              <label className="block">
-                <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Khối lượng</span>
-                <input type="number" min="0" step="0.001" className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#538463]" value={form.weightValue} onChange={(event) => updateFormField('weightValue', event.target.value)} />
-                <FieldError message={errors.weightValue} />
-              </label>
-              <label className="block">
-                <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Đơn vị khối lượng</span>
-                <input className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#538463]" value={form.weightUnit} onChange={(event) => updateFormField('weightUnit', event.target.value)} />
-                <FieldError message={errors.weightUnit} />
-              </label>
-              <label className="block">
-                <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Xuất xứ</span>
-                <input className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#538463]" value={form.origin} onChange={(event) => updateFormField('origin', event.target.value)} />
-              </label>
-              <label className="block md:col-span-3">
-                <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Hồ sơ hương vị</span>
-                <input className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#538463]" value={form.flavorProfile} onChange={(event) => updateFormField('flavorProfile', event.target.value)} />
-              </label>
-              <label className="block md:col-span-3">
-                <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Hướng dẫn pha</span>
-                <textarea className="mt-1 min-h-20 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#538463]" value={form.brewingGuide} onChange={(event) => updateFormField('brewingGuide', event.target.value)} />
-              </label>
-              <label className="block md:col-span-3">
-                <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Mô tả</span>
-                <textarea className="mt-1 min-h-20 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#538463]" value={form.description} onChange={(event) => updateFormField('description', event.target.value)} />
-              </label>
+    <PageShell
+      title="Yêu cầu tạo hàng hóa"
+      description="Warehouse tạo yêu cầu nhiều sản phẩm, Admin duyệt và hệ thống tạo Product/SKU/BOM atomically."
+      actions={!admin && warehouse ? (
+        <select className="rounded-lg border border-slate-200 px-3 py-2 text-sm" value={statusFilter} onChange={(event) => handleStatusFilterChange(event.target.value)}>
+          {PRODUCT_CREATION_STATUS_FILTERS.map((option) => (
+            <option key={option.value} value={option.value}>{option.label}</option>
+          ))}
+        </select>
+      ) : null}
+    >
+      {warehouse ? (
+        <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-base font-bold text-slate-900">{activeRequestId ? 'Sửa yêu cầu' : 'Tạo biên bản yêu cầu thêm sản phẩm kho mới'}</h2>
+              <p className="text-sm text-slate-500">Không dùng approval code. Admin chỉ duyệt/từ chối nội dung Warehouse gửi.</p>
             </div>
-          </SectionCard>
-
-          <SectionCard title="2. Đơn vị bán" right={<button type="button" onClick={addUnit} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Thêm đơn vị</button>}>
-            <FieldError message={errors.units} />
-            <div className="space-y-3">
-              {form.units.map((unit) => {
-                const prefix = `unit.${unit.key}`
-                return (
-                  <div key={unit.key} className="grid gap-3 rounded-xl border border-slate-200 p-3 md:grid-cols-6">
-                    <label className="block md:col-span-2">
-                      <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Tên đơn vị *</span>
-                      <input className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#538463]" value={unit.unitName} onChange={(event) => updateUnit(unit.key, 'unitName', event.target.value)} />
-                      <FieldError message={errors[`${prefix}.unitName`]} />
-                    </label>
-                    <label className="block">
-                      <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Tỷ lệ *</span>
-                      <input type="number" min="0" step="0.001" className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#538463]" value={unit.conversionRate} onChange={(event) => updateUnit(unit.key, 'conversionRate', event.target.value)} disabled={unit.isBaseUnit} />
-                      <FieldError message={errors[`${prefix}.conversionRate`]} />
-                    </label>
-                    <label className="block">
-                      <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Giá bán</span>
-                      <input type="number" min="0" step="1000" className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#538463]" value={unit.price} onChange={(event) => updateUnit(unit.key, 'price', event.target.value)} />
-                      <FieldError message={errors[`${prefix}.price`]} />
-                    </label>
-                    <label className="block">
-                      <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Mã vạch</span>
-                      <input className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#538463]" value={unit.barcode} onChange={(event) => updateUnit(unit.key, 'barcode', event.target.value)} />
-                      <FieldError message={errors[`${prefix}.barcode`]} />
-                    </label>
-                    <div className="flex items-end justify-between gap-2">
-                      <div className="space-y-2 pb-1 text-xs font-semibold text-slate-600">
-                        <label className="flex items-center gap-2"><input type="checkbox" checked={unit.isDirectSell} onChange={(event) => updateUnit(unit.key, 'isDirectSell', event.target.checked)} /> Bán trực tiếp</label>
-                        <label className="flex items-center gap-2"><input type="checkbox" checked={unit.isBaseUnit} onChange={(event) => updateUnit(unit.key, 'isBaseUnit', event.target.checked)} /> Đơn vị gốc</label>
-                      </div>
-                      {form.units.length > 1 ? (
-                        <button type="button" onClick={() => removeUnit(unit.key)} className="rounded-lg px-2 py-1 text-xs font-bold text-rose-600 hover:bg-rose-50">Xóa</button>
-                      ) : null}
-                    </div>
-                  </div>
-                )
-              })}
+            <div className="flex flex-wrap gap-2">
+              <input ref={fileInputRef} type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="hidden" onChange={handleImportFile} />
+              <button type="button" disabled={isTemplateGenerating} className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold disabled:opacity-50" onClick={downloadTemplate}>{isTemplateGenerating ? 'Đang tạo file mẫu...' : 'Tải file mẫu'}</button>
+              <button type="button" disabled={isImporting} className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold disabled:opacity-50" onClick={() => fileInputRef.current?.click()}>{isImporting ? 'Đang đọc...' : 'Import Excel'}</button>
+              <button type="button" disabled={isExporting} className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold disabled:opacity-50" onClick={exportCurrentDraft}>{isExporting ? 'Đang export...' : 'Export Excel'}</button>
+              {activeRequestId ? <button type="button" className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold" onClick={resetForm}>Tạo yêu cầu khác</button> : null}
             </div>
-          </SectionCard>
-
-          <SectionCard title="3. SKU / Biến thể" right={<button type="button" onClick={addVariant} className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Thêm SKU</button>}>
-            <FieldError message={errors.variants} />
-            <div className="space-y-4">
-              {form.variants.map((variant, index) => {
-                const prefix = `variant.${variant.key}`
-                return (
-                  <div key={variant.key} className="rounded-2xl border border-slate-200 p-4">
-                    <div className="mb-3 flex items-center justify-between gap-3">
-                      <h3 className="text-sm font-bold text-slate-800">SKU #{index + 1}</h3>
-                      {form.variants.length > 1 ? (
-                        <button type="button" onClick={() => removeVariant(variant.key)} className="rounded-lg px-3 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-50">Xóa SKU</button>
-                      ) : null}
-                    </div>
-                    <div className="grid gap-3 md:grid-cols-4">
-                      <label className="block">
-                        <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Mã SKU *</span>
-                        <input className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 font-mono text-sm outline-none focus:border-[#538463]" value={variant.skuCode} onChange={(event) => updateVariant(variant.key, 'skuCode', normalizeSkuInput(event.target.value))} placeholder="FG-TRA-SEN-50G" />
-                        <FieldError message={errors[`${prefix}.skuCode`]} />
-                      </label>
-                      <label className="block md:col-span-2">
-                        <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Tên biến thể *</span>
-                        <input className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#538463]" value={variant.variantName} onChange={(event) => updateVariant(variant.key, 'variantName', event.target.value)} placeholder="Trà Sen - gói 50g" />
-                        <FieldError message={errors[`${prefix}.variantName`]} />
-                      </label>
-                      <label className="block">
-                        <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Barcode</span>
-                        <input className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#538463]" value={variant.barcode} onChange={(event) => updateVariant(variant.key, 'barcode', event.target.value)} />
-                        <FieldError message={errors[`${prefix}.barcode`]} />
-                      </label>
-                      <label className="block">
-                        <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Giá vốn</span>
-                        <input type="number" min="0" step="1000" className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#538463]" value={variant.costPrice} onChange={(event) => updateVariant(variant.key, 'costPrice', event.target.value)} />
-                        <FieldError message={errors[`${prefix}.costPrice`]} />
-                      </label>
-                      <label className="block">
-                        <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Giá bán</span>
-                        <input type="number" min="0" step="1000" className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#538463]" value={variant.retailPrice} onChange={(event) => updateVariant(variant.key, 'retailPrice', event.target.value)} />
-                        <FieldError message={errors[`${prefix}.retailPrice`]} />
-                      </label>
-                      <label className="block">
-                        <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Tồn tối thiểu</span>
-                        <input type="number" min="0" className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#538463]" value={variant.minStock} onChange={(event) => updateVariant(variant.key, 'minStock', event.target.value)} />
-                        <FieldError message={errors[`${prefix}.minStock`]} />
-                      </label>
-                      <label className="block">
-                        <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Tồn tối đa</span>
-                        <input type="number" min="0" className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#538463]" value={variant.maxStock} onChange={(event) => updateVariant(variant.key, 'maxStock', event.target.value)} />
-                        <FieldError message={errors[`${prefix}.maxStock`]} />
-                      </label>
-                      <label className="block md:col-span-2">
-                        <span className="text-xs font-bold uppercase tracking-wide text-slate-500">Ảnh biến thể</span>
-                        <input className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#538463]" value={variant.imageUrl} onChange={(event) => updateVariant(variant.key, 'imageUrl', event.target.value)} placeholder="https://..." />
-                      </label>
-                      <div className="flex flex-wrap items-end gap-4 text-xs font-semibold text-slate-600 md:col-span-2">
-                        <label className="flex items-center gap-2"><input type="checkbox" checked={variant.isSellable} onChange={(event) => updateVariant(variant.key, 'isSellable', event.target.checked)} /> Có bán</label>
-                        <label className="flex items-center gap-2"><input type="checkbox" checked={variant.allowRewardPoints} onChange={(event) => updateVariant(variant.key, 'allowRewardPoints', event.target.checked)} /> Tích điểm</label>
-                        <label className="flex items-center gap-2"><input type="checkbox" checked={variant.isActive} onChange={(event) => updateVariant(variant.key, 'isActive', event.target.checked)} /> Hoạt động</label>
-                      </div>
-                    </div>
-
-                    <div className="mt-4 rounded-xl bg-slate-50 p-3">
-                      <div className="mb-3 flex items-center justify-between">
-                        <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Option values</p>
-                        <button type="button" onClick={() => addOption(variant.key)} className="text-xs font-bold text-[#356647]">Thêm option</button>
-                      </div>
-                      <div className="space-y-2">
-                        {variant.optionRows.map((option) => {
-                          const optionPrefix = `${prefix}.option.${option.key}`
-                          return (
-                            <div key={option.key} className="grid gap-2 md:grid-cols-[1fr_1fr_auto]">
-                              <input className="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#538463]" value={option.name} onChange={(event) => updateOption(variant.key, option.key, 'name', event.target.value)} placeholder="Unit" />
-                              <input className="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#538463]" value={option.value} onChange={(event) => updateOption(variant.key, option.key, 'value', event.target.value)} placeholder="gói" />
-                              <button type="button" onClick={() => removeOption(variant.key, option.key)} className="rounded-lg px-3 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50">Xóa</button>
-                              <FieldError message={errors[`${optionPrefix}.name`]} />
-                            </div>
-                          )
-                        })}
-                      </div>
-                    </div>
-
-                    {form.productType === 'THANH_PHAM' ? (
-                      <div className="mt-4 rounded-xl border border-slate-200 p-3">
-                        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                          <div>
-                            <p className="text-xs font-bold uppercase tracking-wide text-slate-500">BOM nguyên liệu</p>
-                            {!variant.bomLines.length ? <p className="mt-1 text-xs text-amber-600">Thành phẩm chưa có BOM. Vẫn có thể tạo biên bản nếu sản phẩm chưa cần định mức.</p> : null}
-                          </div>
-                          <div className="flex gap-2">
-                            <input className="w-52 rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#538463]" value={materialSearch} onChange={(event) => setMaterialSearch(event.target.value)} placeholder="Tìm nguyên liệu" />
-                            <button type="button" onClick={() => addBomLine(variant.key)} className="rounded-lg bg-[#538463] px-3 py-2 text-xs font-bold text-white hover:bg-[#457053]">Thêm BOM</button>
-                          </div>
-                        </div>
-                        {variant.bomLines.length ? (
-                          <div className="overflow-x-auto rounded-xl border border-slate-200">
-                            <table className="min-w-full text-left text-sm">
-                              <thead className="bg-slate-50 text-xs uppercase text-slate-500">
-                                <tr>
-                                  <th className="px-3 py-2 font-semibold">Nguyên liệu</th>
-                                  <th className="px-3 py-2 text-center font-semibold">Số lượng</th>
-                                  <th className="px-3 py-2 font-semibold">Đơn vị</th>
-                                  <th className="px-3 py-2 text-right font-semibold">Hành động</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-slate-100">
-                                {variant.bomLines.map((line) => {
-                                  const linePrefix = `${prefix}.bom.${line.key}`
-                                  const selectedMissing = line.materialId && !materialOptions.some((material) => String(material.id) === String(line.materialId))
-                                  return (
-                                    <tr key={line.key}>
-                                      <td className="px-3 py-2">
-                                        <select className="w-64 rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#538463]" value={line.materialId} onChange={(event) => updateBomLine(variant.key, line.key, 'materialId', event.target.value)}>
-                                          <option value="">Chọn nguyên liệu</option>
-                                          {selectedMissing ? <option value={line.materialId}>{line.materialName || line.materialId}</option> : null}
-                                          {materialOptions.map((material) => (
-                                            <option key={material.id} value={material.id}>{material.name}</option>
-                                          ))}
-                                        </select>
-                                        <FieldError message={errors[`${linePrefix}.materialId`]} />
-                                      </td>
-                                      <td className="px-3 py-2 text-center">
-                                        <input type="number" min="0" step="0.001" className="w-28 rounded-lg border border-slate-200 px-3 py-2 text-center text-sm outline-none focus:border-[#538463]" value={line.quantity} onChange={(event) => updateBomLine(variant.key, line.key, 'quantity', event.target.value)} />
-                                        <FieldError message={errors[`${linePrefix}.quantity`]} />
-                                      </td>
-                                      <td className="px-3 py-2 text-slate-600">{line.materialUnitName || '-'}</td>
-                                      <td className="px-3 py-2 text-right">
-                                        <button type="button" onClick={() => removeBomLine(variant.key, line.key)} className="rounded-lg px-2 py-1 text-xs font-bold text-rose-600 hover:bg-rose-50">Xóa</button>
-                                      </td>
-                                    </tr>
-                                  )
-                                })}
-                              </tbody>
-                            </table>
-                          </div>
-                        ) : null}
-                        {isMaterialLoading ? <p className="mt-2 text-xs text-slate-400">Đang tải nguyên liệu...</p> : null}
-                      </div>
-                    ) : (
-                      <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-500">
-                        BOM không áp dụng cho nguyên liệu.
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-          </SectionCard>
-
-          <SectionCard title="4. Ghi chú Chủ HTX">
-            <textarea className="min-h-24 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-[#538463]" value={form.adminNotes} onChange={(event) => updateFormField('adminNotes', event.target.value)} placeholder="Ghi chú nội bộ cho biên bản phê duyệt" />
-            <FieldError message={errors.adminNotes} />
-          </SectionCard>
-
-          <SectionCard title="5. Xem trước biên bản">
-            <SnapshotPreview product={productSnapshot} categories={categories} adminNotes={form.adminNotes} />
-            <details className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <summary className="cursor-pointer text-sm font-bold text-slate-700">Advanced / JSON Preview</summary>
-              <textarea readOnly className="mt-3 min-h-72 w-full rounded-xl border border-slate-200 bg-slate-950 px-3 py-2.5 font-mono text-xs text-slate-100 outline-none" value={JSON.stringify(productSnapshot, null, 2)} />
-            </details>
-            <div className="mt-4 flex justify-end">
-              <button type="submit" disabled={isSaving} className="rounded-xl bg-[#538463] px-6 py-2.5 text-sm font-bold text-white hover:bg-[#457053] disabled:opacity-50">
-                Tạo biên bản
-              </button>
-            </div>
-          </SectionCard>
-        </form>
-
-        <section className="rounded-2xl bg-white p-4 shadow-sm sm:p-6">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="text-lg font-bold text-slate-800">Danh sách biên bản</h2>
-            <button type="button" onClick={loadItems} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
-              Làm mới
-            </button>
           </div>
 
-          <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
-            <table className="min-w-full text-left text-sm">
-              <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-                <tr>
-                  <th className="px-4 py-3 font-semibold">Mã biên bản</th>
-                  <th className="px-4 py-3 font-semibold">Tên sản phẩm</th>
-                  <th className="px-4 py-3 font-semibold">Loại hàng</th>
-                  <th className="px-4 py-3 font-semibold">Trạng thái</th>
-                  <th className="px-4 py-3 font-semibold">Mã phê duyệt</th>
-                  <th className="px-4 py-3 font-semibold">Người tạo</th>
-                  <th className="px-4 py-3 font-semibold">Thời gian tạo</th>
-                  <th className="px-4 py-3 text-right font-semibold">Hành động</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {isLoading ? (
-                  <tr>
-                    <td colSpan={8} className="px-4 py-8 text-center text-slate-400">Đang tải...</td>
-                  </tr>
-                ) : items.length ? items.map((item) => (
-                  <tr key={item.id}>
-                    <td className="px-4 py-3 font-mono text-xs font-semibold text-[#356647]">{item.approvalCode}</td>
-                    <td className="px-4 py-3 font-medium text-slate-800">{item.productName || item.productSnapshot?.name || '-'}</td>
-                    <td className="px-4 py-3">{getProductTypeLabel(item.productType || item.productSnapshot?.productType)}</td>
-                    <td className="px-4 py-3">{statusLabel(item.status)}</td>
-                    <td className="px-4 py-3 font-mono text-xs font-semibold text-slate-700">{item.status === 'Draft' ? '-' : item.approvalCode}</td>
-                    <td className="px-4 py-3 text-slate-600">{item.requestedByName || '-'}</td>
-                    <td className="px-4 py-3 text-slate-600">{formatDateTime(item.requestedAt || item.createdAt)}</td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="flex flex-wrap justify-end gap-2">
-                        <button type="button" onClick={() => setDetailItem(item)} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Xem chi tiết</button>
-                        {item.status === 'Draft' ? (
-                          <button type="button" disabled={isSaving} onClick={() => handleAuthorize(item)} className="rounded-lg bg-[#538463] px-3 py-2 text-xs font-bold text-white hover:bg-[#457053] disabled:opacity-50">Cấp mã</button>
-                        ) : null}
-                        {item.status !== 'Draft' && item.approvalCode ? (
-                          <button type="button" onClick={() => handleCopy(item.approvalCode)} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Sao chép mã</button>
-                        ) : null}
-                        {item.status !== 'Completed' && item.status !== 'Cancelled' ? (
-                          <button type="button" disabled={isSaving} onClick={() => handleCancel(item)} className="rounded-lg border border-rose-200 px-3 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50 disabled:opacity-50">Hủy</button>
-                        ) : null}
-                      </div>
-                    </td>
-                  </tr>
-                )) : (
-                  <tr>
-                    <td colSpan={8} className="px-4 py-8 text-center text-slate-400">Chưa có biên bản phê duyệt.</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+          {importPreview ? (
+            <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="font-bold text-slate-900">Preview import Excel</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    File: <span className="font-semibold text-slate-700">{importPreview.sourceFilename || '—'}</span>
+                    <span className="mx-2">•</span>
+                    Sheet: <span className="font-semibold text-slate-700">{importPreview.sheetName || '—'}</span>
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">File mẫu chính thức: {PRODUCT_CREATION_TEMPLATE_FILENAME}</p>
+                </div>
+                <button type="button" className="font-semibold text-slate-500 hover:text-slate-700" onClick={() => setImportPreview(null)}>Đóng</button>
+              </div>
+
+              <div className="mt-3 grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
+                <div className="rounded-lg bg-white px-3 py-2">
+                  <p className="text-[11px] font-bold uppercase text-slate-400">Sản phẩm</p>
+                  <p className="text-lg font-bold text-slate-900">{importPreview.counts.products}</p>
+                </div>
+                <div className="rounded-lg bg-white px-3 py-2">
+                  <p className="text-[11px] font-bold uppercase text-slate-400">SKU</p>
+                  <p className="text-lg font-bold text-slate-900">{importPreview.counts.skus}</p>
+                </div>
+                <div className="rounded-lg bg-white px-3 py-2">
+                  <p className="text-[11px] font-bold uppercase text-slate-400">Thuộc tính</p>
+                  <p className="text-lg font-bold text-slate-900">{importPreview.counts.attributes}</p>
+                </div>
+                <div className="rounded-lg bg-white px-3 py-2">
+                  <p className="text-[11px] font-bold uppercase text-slate-400">BOM component</p>
+                  <p className="text-lg font-bold text-slate-900">{importPreview.counts.manualBomLines}</p>
+                </div>
+                <div className="rounded-lg bg-white px-3 py-2">
+                  <p className="text-[11px] font-bold uppercase text-slate-400">Cảnh báo</p>
+                  <p className="text-lg font-bold text-amber-700">{importPreview.warnings.length}</p>
+                </div>
+                <div className="rounded-lg bg-white px-3 py-2">
+                  <p className="text-[11px] font-bold uppercase text-slate-400">Lỗi</p>
+                  <p className="text-lg font-bold text-rose-700">{importBlockingErrors.length}</p>
+                </div>
+              </div>
+
+              {hasCurrentDraftData && importPreview.errors.length === 0 ? (
+                <div className="mt-3 flex flex-wrap gap-3 rounded-lg border border-slate-200 bg-white p-3">
+                  <label className="flex items-center gap-2 font-semibold text-slate-700">
+                    <input type="radio" name="product-import-mode" checked={importMode === 'replace'} onChange={() => setImportMode('replace')} />
+                    Thay thế dữ liệu hiện tại
+                  </label>
+                  <label className="flex items-center gap-2 font-semibold text-slate-700">
+                    <input type="radio" name="product-import-mode" checked={importMode === 'append'} onChange={() => setImportMode('append')} />
+                    Nối thêm vào bản nháp
+                  </label>
+                </div>
+              ) : null}
+
+              {importPreview.warnings.length ? (
+                <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-amber-800">
+                  <p className="font-semibold">Cảnh báo</p>
+                  <ul className="mt-2 list-disc space-y-1 pl-5">
+                    {importPreview.warnings.slice(0, 8).map((warning) => <li key={warning}>{warning}</li>)}
+                  </ul>
+                </div>
+              ) : null}
+
+              {importBlockingErrors.length ? (
+                <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-rose-700">
+                  <p className="font-semibold">Import Excel chưa hợp lệ</p>
+                  <ul className="mt-2 list-disc space-y-1 pl-5">
+                    {importBlockingErrors.slice(0, 12).map((error) => <li key={error}>{error}</li>)}
+                  </ul>
+                </div>
+              ) : null}
+
+              <div className="mt-3 flex flex-wrap justify-end gap-2">
+                <button type="button" className="rounded-lg border border-slate-200 bg-white px-4 py-2 font-semibold" onClick={() => setImportPreview(null)}>Hủy</button>
+                <button
+                  type="button"
+                  disabled={importBlockingErrors.length > 0}
+                  className="rounded-lg bg-[#356647] px-4 py-2 font-semibold text-white disabled:opacity-50"
+                  onClick={applyImportPreview}
+                >
+                  Áp dụng vào bản nháp
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          <div className="grid gap-3 md:grid-cols-2">
+            <label className="text-xs font-semibold text-slate-500">
+              Tiêu đề
+              <input className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={title} onChange={(event) => setTitle(event.target.value)} />
+            </label>
+            <label className="text-xs font-semibold text-slate-500">
+              Ghi chú Warehouse
+              <input className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={warehouseNote} onChange={(event) => setWarehouseNote(event.target.value)} />
+            </label>
+          </div>
+          <div className="mt-4 space-y-4">
+            {rows.map((row, index) => (
+              <ProductRow
+                key={row.clientKey}
+                row={row}
+                categories={categories}
+                materials={materials}
+                attributeNameOptions={attributeNameOptions}
+                onChange={(changes) => updateRow(index, changes)}
+                onImagesChange={(updater) => updateRowImages(index, updater)}
+                onRemove={() => setRows((current) => current.filter((_, rowIndex) => rowIndex !== index))}
+                canRemove={rows.length > 1}
+              />
+            ))}
+          </div>
+          <div className="mt-4 flex flex-wrap justify-end gap-2">
+            <button type="button" className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold" onClick={() => setRows((current) => [...current, createDraftProduct()])}>Thêm sản phẩm</button>
+            <button type="button" disabled={isSaving} className="rounded-lg bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700" onClick={() => saveDraft()}>{isSaving ? 'Đang lưu...' : 'Lưu nháp'}</button>
+            <button type="button" disabled={isSaving} className="rounded-lg bg-[#356647] px-4 py-2 text-sm font-semibold text-white" onClick={handleSubmit}>{isSaving ? 'Đang gửi...' : 'Gửi Admin duyệt'}</button>
           </div>
         </section>
-      </div>
+      ) : null}
 
-      <ConfirmModal
-        product={pendingProduct}
-        categories={categories}
-        adminNotes={form.adminNotes}
+      <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
+          <div>
+            <h2 className="text-base font-bold text-slate-900">{admin ? 'Yêu cầu chờ xử lý' : 'Yêu cầu tạo hàng hóa'}</h2>
+            {admin ? (
+              <p className="mt-1 text-sm text-slate-500">
+                Đang xem: {PRODUCT_CREATION_STATUS_FILTERS.find((option) => option.value === statusFilter)?.label ?? 'Tất cả'}
+              </p>
+            ) : null}
+          </div>
+          {admin ? (
+            <label className="flex items-center gap-2 text-sm font-semibold text-slate-600">
+              Trạng thái
+              <select className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700" value={statusFilter} onChange={(event) => handleStatusFilterChange(event.target.value)}>
+                {PRODUCT_CREATION_STATUS_FILTERS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+        </div>
+        {admin ? (
+          <AdminProductCreationRequestsTable
+            requests={adminPagedRequests}
+            isLoading={isLoading}
+            page={adminPage}
+            pageSize={ADMIN_REQUEST_PAGE_SIZE}
+            totalCount={requests.length}
+            onPageChange={setAdminPage}
+            onDetail={setDetailRequest}
+            onDecision={handleDecision}
+          />
+        ) : (
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-left text-sm">
+            <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+              <tr>
+                <th className="px-4 py-3">Mã yêu cầu</th>
+                <th className="px-4 py-3">Tiêu đề</th>
+                <th className="px-4 py-3">Sản phẩm</th>
+                <th className="px-4 py-3">Trạng thái</th>
+                <th className="px-4 py-3">Revision</th>
+                <th className="px-4 py-3">Thời gian</th>
+                <th className="px-4 py-3 text-right">Thao tác</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {isLoading ? (
+                <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-400">Đang tải...</td></tr>
+              ) : null}
+              {!isLoading && requests.length === 0 ? (
+                <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-400">Chưa có yêu cầu tạo hàng hóa.</td></tr>
+              ) : null}
+              {requests.map((request) => (
+                <tr key={request.id} className="align-top">
+                  <td className="px-4 py-3 font-mono text-xs text-[#356647]">{request.requestCode}</td>
+                  <td className="px-4 py-3 font-semibold text-slate-800">
+                    <p>{request.title}</p>
+                    {request.createdByName ? <p className="mt-1 text-xs font-normal text-slate-500">Người tạo: {request.createdByName}</p> : null}
+                    {request.rejectReason ? <p className="mt-1 text-xs text-rose-600">Từ chối: {request.rejectReason}</p> : null}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="space-y-1">
+                      {request.items.map((item) => {
+                        const priceSummary = requestItemPriceSummary(item)
+                        const snapshotVariants = item.productSnapshot?.variants ?? item.ProductSnapshot?.Variants ?? []
+                        const snapshotAttributes = item.productSnapshot?.attributes ?? item.ProductSnapshot?.Attributes ?? []
+                        return (
+                          <div key={item.clientKey} className="text-xs text-slate-600">
+                            <p>
+                              <span className="font-semibold text-slate-800">{item.productName}</span> · {getProductTypeLabel(item.productType)} · {item.variantCount} SKU · {item.bomLineCount} BOM
+                            </p>
+                            {priceSummary ? <p className="mt-0.5 text-[11px] text-slate-500">{priceSummary}</p> : null}
+                            {Array.isArray(snapshotAttributes) && snapshotAttributes.length > 0 ? (
+                              <div className="mt-1 flex flex-wrap gap-1">
+                                {snapshotAttributes.map((attribute, attributeIndex) => (
+                                  <span key={`${item.clientKey}-attr-${attributeIndex}`} className="inline-flex rounded-full bg-[#f0eee6] px-2 py-0.5 text-[11px] font-semibold text-slate-600">
+                                    {attribute.attributeName || attribute.AttributeName}: {attribute.value || attribute.Value}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : null}
+                            {Array.isArray(snapshotVariants) && snapshotVariants.length > 0 ? (
+                              <div className="mt-1 space-y-1 text-[11px] text-slate-500">
+                                {snapshotVariants.map((variant) => {
+                                  const variantSkuCode = variant.skuCode ?? variant.SkuCode ?? ''
+                                  const bomLines = variant.bomLines ?? variant.BomLines ?? []
+                                  return (
+                                    <div key={variant.requestSkuKey || variant.RequestSkuKey || variantSkuCode}>
+                                      <span className="font-mono font-semibold text-[#356647]">{variantSkuCode}</span>
+                                      {bomLines.map((line, lineIndex) => (
+                                        <span key={`${variantSkuCode}-${lineIndex}`} className="ml-2 inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5">
+                                          {line.componentSkuCode || line.ComponentSkuCode || line.materialName || line.MaterialName || line.materialId || line.MaterialId} x{line.quantity ?? line.Quantity}
+                                          {line.isRequiredBaseComponent || line.IsRequiredBaseComponent ? <span className="font-semibold text-emerald-700">Tự động theo quy đổi</span> : null}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            ) : null}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">{statusLabel(request.status)}</td>
+                  <td className="px-4 py-3">{request.revisionNumber}</td>
+                  <td className="px-4 py-3 text-xs text-slate-500">{formatDateTimeVN(request.submittedAt || request.createdAt)}</td>
+                  <td className="px-4 py-3 text-right">
+                    <div className="flex justify-end gap-2">
+                      {warehouse && ['Draft', 'Rejected'].includes(request.status) ? (
+                        <button type="button" className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold" onClick={() => loadIntoForm(request)}>Sửa</button>
+                      ) : null}
+                      {admin && request.status === 'PendingApproval' ? (
+                        <>
+                          <button type="button" className="rounded-lg bg-[#356647] px-3 py-1.5 text-xs font-semibold text-white" onClick={() => handleDecision(request, 'approve')}>Duyệt</button>
+                          <button type="button" className="rounded-lg bg-amber-100 px-3 py-1.5 text-xs font-semibold text-amber-700" onClick={() => handleDecision(request, 'reject')}>Từ chối</button>
+                          <button type="button" className="rounded-lg bg-rose-100 px-3 py-1.5 text-xs font-semibold text-rose-700" onClick={() => handleDecision(request, 'cancel')}>Hủy</button>
+                        </>
+                      ) : null}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        )}
+      </section>
+      <ProductCreationRequestDetailModal
+        request={detailRequest}
+        onClose={() => setDetailRequest(null)}
+        onApprove={(request) => handleDecision(request, 'approve')}
+        onReject={(request) => handleDecision(request, 'reject')}
         isSaving={isSaving}
-        onClose={() => setPendingProduct(null)}
-        onConfirm={handleConfirmCreate}
-      />
-      <DetailModal
-        item={detailItem}
-        categories={categories}
-        isSaving={isSaving}
-        onClose={() => setDetailItem(null)}
-        onAuthorize={handleAuthorize}
-        onCancel={handleCancel}
-        onCopy={handleCopy}
       />
     </PageShell>
   )

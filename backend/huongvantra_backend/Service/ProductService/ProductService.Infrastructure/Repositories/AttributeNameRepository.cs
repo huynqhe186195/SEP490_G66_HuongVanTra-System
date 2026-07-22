@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using ProductService.Application.Validation;
 using ProductService.Application.Interfaces;
 using ProductService.Domain.Entities;
 using ProductService.Infrastructure.Data;
@@ -30,16 +31,18 @@ public class AttributeNameRepository(ProductDbContext _db) : IAttributeNameRepos
 
     public async Task<bool> ExistsNameAsync(string name, int? excludeId = null, bool includeDeleted = true)
     {
-        var normalized = name.Trim().ToLower();
+        var normalized = ProductInputValidator.NormalizeAttributeNameKey(name);
+        if (normalized is null) return false;
+
         IQueryable<AttributeName> query = includeDeleted
             ? _db.AttributeNames.IgnoreQueryFilters()
             : _db.AttributeNames;
 
-        query = query.Where(a => a.Name.ToLower() == normalized);
         if (excludeId.HasValue)
             query = query.Where(a => a.Id != excludeId.Value);
 
-        return await query.AnyAsync();
+        var names = await query.Select(a => a.Name).ToListAsync();
+        return names.Any(existing => ProductInputValidator.NormalizeAttributeNameKey(existing) == normalized);
     }
 
     public async Task<AttributeName> CreateAsync(AttributeName attributeName)

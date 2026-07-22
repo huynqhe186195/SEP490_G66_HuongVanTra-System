@@ -13,7 +13,7 @@ namespace InventoryService.WebAPI.Controllers;
 public class StockAdjustmentRequestsController(InventoryLogic _logic) : ControllerBase
 {
     [HttpGet]
-    [Authorize(Policy = PermissionNames.ViewOrder)]
+    [Authorize(Roles = "Manager,Warehouse,Admin,Accountant")]
     public async Task<IActionResult> GetList(
         CancellationToken ct,
         [FromQuery] string? status,
@@ -31,7 +31,7 @@ public class StockAdjustmentRequestsController(InventoryLogic _logic) : Controll
     }
 
     [HttpGet("{id:guid}")]
-    [Authorize(Policy = PermissionNames.ViewOrder)]
+    [Authorize(Roles = "Manager,Warehouse,Admin,Accountant")]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
     {
         var item = await _logic.GetStockAdjustmentRequestAsync(id, ct);
@@ -40,7 +40,7 @@ public class StockAdjustmentRequestsController(InventoryLogic _logic) : Controll
     }
 
     [HttpPost]
-    [Authorize(Policy = PermissionNames.ViewOrder)]
+    [Authorize(Roles = "Manager,Warehouse,Admin")]
     public async Task<IActionResult> Create([FromBody] CreateStockAdjustmentRequest request, CancellationToken ct)
     {
         var userId = User.GetUserId();
@@ -51,7 +51,7 @@ public class StockAdjustmentRequestsController(InventoryLogic _logic) : Controll
     }
 
     [HttpPost("{id:guid}/approve")]
-    [Authorize(Policy = PermissionNames.ViewOrder)]
+    [Authorize(Roles = "Manager,Warehouse,Admin")]
     public async Task<IActionResult> Approve(Guid id, CancellationToken ct)
     {
         var result = await _logic.ApproveStockAdjustmentRequestAsync(id, User.GetUserId(), User.ToCreatorSnapshot(), ct);
@@ -59,7 +59,7 @@ public class StockAdjustmentRequestsController(InventoryLogic _logic) : Controll
     }
 
     [HttpPost("{id:guid}/reject")]
-    [Authorize(Policy = PermissionNames.ViewOrder)]
+    [Authorize(Roles = "Manager,Warehouse,Admin")]
     public async Task<IActionResult> Reject(Guid id, [FromBody] RejectStockAdjustmentRequest request, CancellationToken ct)
     {
         var result = await _logic.RejectStockAdjustmentRequestAsync(id, User.GetUserId(), request, ct);
@@ -67,13 +67,13 @@ public class StockAdjustmentRequestsController(InventoryLogic _logic) : Controll
     }
 
     [HttpPost("{id:guid}/cancel")]
-    [Authorize(Policy = PermissionNames.ViewOrder)]
-    public async Task<IActionResult> Cancel(Guid id, CancellationToken ct)
+    [Authorize(Roles = "Manager,Warehouse,Admin")]
+    public async Task<IActionResult> Cancel(Guid id, [FromBody] CancelStockAdjustmentRequest? request, CancellationToken ct)
     {
         var userId = User.GetUserId();
         if (userId == Guid.Empty) return Unauthorized(new { message = "Không xác định được người dùng." });
 
-        var result = await _logic.CancelStockAdjustmentRequestAsync(id, userId, ct);
+        var result = await _logic.CancelStockAdjustmentRequestAsync(id, userId, User.IsInRole("Admin"), request, ct);
         return Ok(result);
     }
 }

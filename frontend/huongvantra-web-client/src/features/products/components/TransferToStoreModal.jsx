@@ -4,7 +4,7 @@ import { createStockAdjustmentRequest } from '../../inventory/services/stockAdju
 import { formatStockQuantity } from '../utils/productDisplay.js'
 import { buildSkuSnapshotName } from './BatchStockAdjustmentModal.jsx'
 
-const DEFAULT_TRANSFER_REASON = 'Xuất kho tổng sang cửa hàng để bán POS'
+const DEFAULT_TRANSFER_REASON = 'Bổ sung tồn quầy POS mặc định từ Kho tổng'
 
 function TransferToStoreModal({
   sku,
@@ -33,22 +33,22 @@ function TransferToStoreModal({
     event.preventDefault()
 
     if (!sku?.id) {
-      showError('Vui lòng chọn SKU cần xuất sang cửa hàng.')
+      showError('Vui lòng chọn SKU cần bổ sung tồn quầy.')
       return
     }
 
     if (!Number.isFinite(parsedQuantity) || parsedQuantity <= 0) {
-      showError('Số lượng xuất sang cửa hàng phải lớn hơn 0.')
+      showError('Số lượng bổ sung tồn quầy phải lớn hơn 0.')
       return
     }
 
     if (!Number.isInteger(parsedQuantity)) {
-      showError('Số lượng xuất sang cửa hàng phải là số nguyên.')
+      showError('Số lượng bổ sung tồn quầy phải là số nguyên.')
       return
     }
 
     if (parsedQuantity > warehouseQty) {
-      showError('Số lượng xuất không được vượt tồn kho tổng hiện có.')
+      showError('Kho tổng không đủ tồn để bổ sung tồn quầy.')
       return
     }
 
@@ -67,7 +67,7 @@ function TransferToStoreModal({
       })
 
       showSuccess(
-        `Đã gửi yêu cầu ${created.requestCode} xuất ${formatStockQuantity(parsedQuantity)} ${sku.skuCode} sang cửa hàng. Chờ duyệt.`,
+        `Đã gửi yêu cầu ${created.requestCode} bổ sung ${formatStockQuantity(parsedQuantity)} ${sku.skuCode} vào tồn quầy POS mặc định. Chờ duyệt.`,
       )
       onSubmitted?.(created)
       onClose?.()
@@ -91,10 +91,10 @@ function TransferToStoreModal({
         <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-100 px-6 py-4">
           <div className="min-w-0">
             <h2 id="transfer-to-store-title" className="text-lg font-bold text-slate-800">
-              Xuất sang cửa hàng
+              Tạo yêu cầu bổ sung tồn quầy
             </h2>
             <p className="mt-1 text-sm text-slate-500">
-              Kho tổng → Cửa hàng/Quầy POS
+              Kho tổng → Tồn quầy POS mặc định
             </p>
           </div>
           <button
@@ -129,7 +129,7 @@ function TransferToStoreModal({
               </div>
               <div className="rounded-xl border border-sky-100 bg-sky-50/70 p-4">
                 <p className="text-[10px] font-bold uppercase tracking-wide text-sky-700">Đích</p>
-                <p className="mt-1 text-sm font-bold text-slate-800">Cửa hàng/Quầy POS</p>
+                <p className="mt-1 text-sm font-bold text-slate-800">Tồn quầy POS mặc định</p>
                 <p className="mt-2 text-2xl font-bold text-[#356647]">
                   {formatStockQuantity(storeQty)}
                 </p>
@@ -138,7 +138,7 @@ function TransferToStoreModal({
             </div>
 
             <label className="block space-y-2">
-              <span className="text-xs font-semibold text-[#717971]">Số lượng xuất *</span>
+              <span className="text-xs font-semibold text-[#717971]">Số lượng bổ sung *</span>
               <input
                 type="number"
                 inputMode="numeric"
@@ -152,8 +152,8 @@ function TransferToStoreModal({
               />
               {canPreviewAfter ? (
                 <p className="text-xs text-slate-500">
-                  Sau khi duyệt: Kho tổng còn {formatStockQuantity(warehouseQty - parsedQuantity)}, cửa hàng có{' '}
-                  {formatStockQuantity(storeQty + parsedQuantity)}.
+                  Sau khi duyệt: Kho tổng còn {formatStockQuantity(warehouseQty - parsedQuantity)}, tồn quầy có{' '}
+                  {formatStockQuantity(storeQty + parsedQuantity)} tại Tồn quầy POS mặc định.
                 </p>
               ) : null}
             </label>
@@ -170,7 +170,7 @@ function TransferToStoreModal({
 
             {warehouseQty <= 0 ? (
               <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                SKU này chưa có tồn kho tổng để xuất sang cửa hàng.
+                SKU này chưa có tồn Kho tổng để bổ sung tồn quầy.
               </p>
             ) : null}
           </div>
@@ -188,7 +188,7 @@ function TransferToStoreModal({
               disabled={isSaving || warehouseQty <= 0}
               className="rounded-xl bg-[#538463] px-5 py-2.5 text-sm font-bold text-white hover:bg-[#457053] disabled:opacity-50"
             >
-              {isSaving ? 'Đang gửi...' : 'Gửi yêu cầu xuất'}
+              {isSaving ? 'Đang gửi...' : 'Gửi yêu cầu'}
             </button>
           </div>
         </form>

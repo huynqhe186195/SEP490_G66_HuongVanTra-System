@@ -27,6 +27,59 @@ export function buildCategoryTree(categories = []) {
   return roots
 }
 
+export function getCategoryById(categories = [], categoryId) {
+  if (!categoryId) return null
+  return categories.find((item) => String(item.id) === String(categoryId)) || null
+}
+
+export function getCategoryPathParts(categories = [], categoryId) {
+  const parts = []
+  const guard = new Set()
+  let current = getCategoryById(categories, categoryId)
+
+  while (current && !guard.has(String(current.id))) {
+    guard.add(String(current.id))
+    parts.unshift(current.name)
+    current = current.parentId ? getCategoryById(categories, current.parentId) : null
+  }
+
+  return parts
+}
+
+export function getCategoryPathLabel(categories = [], categoryId, fallbackName, emptyLabel = '—') {
+  const parts = getCategoryPathParts(categories, categoryId)
+  if (parts.length) return parts.join(' > ')
+  if (fallbackName) return fallbackName
+  return categoryId ? `Danh mục #${categoryId}` : emptyLabel
+}
+
+export function flattenCategoryTreeForSelect(categories = []) {
+  const rows = []
+
+  function walk(nodes, depth = 0, parentParts = []) {
+    for (const node of nodes) {
+      const pathParts = [...parentParts, node.name]
+      rows.push({
+        ...node,
+        depth,
+        pathParts,
+        pathLabel: pathParts.join(' > '),
+        selectLabel: `${'  '.repeat(depth)}${depth > 0 ? '└ ' : ''}${node.name}`,
+      })
+      if (node.children?.length) walk(node.children, depth + 1, pathParts)
+    }
+  }
+
+  walk(buildCategoryTree(categories))
+  return rows
+}
+
+export function isCategoryUnavailable(categories = [], categoryId) {
+  if (!categoryId || categories.length === 0) return false
+  const category = getCategoryById(categories, categoryId)
+  return !category || category.isDeleted || category.isActive === false
+}
+
 export function collectDescendantIds(categoryId, categories = []) {
   const childrenByParent = new Map()
   for (const category of categories) {
@@ -125,17 +178,5 @@ export function buildCategoryParentOptions(categories = [], { excludeId = null }
 }
 
 export function getCategoryBreadcrumb(categoryId, categories = []) {
-  const names = []
-  let currentId = categoryId
-  const guard = new Set()
-
-  while (currentId && !guard.has(currentId)) {
-    guard.add(currentId)
-    const category = categories.find((item) => item.id === currentId)
-    if (!category) break
-    names.unshift(category.name)
-    currentId = category.parentId ?? null
-  }
-
-  return names.join(' › ')
+  return getCategoryPathParts(categories, categoryId).join(' › ')
 }

@@ -18,6 +18,15 @@ public class InventoryDbContext(DbContextOptions<InventoryDbContext> options) : 
     public DbSet<WarehouseBatch> WarehouseBatches => Set<WarehouseBatch>();
     public DbSet<WarehouseBatchItem> WarehouseBatchItems => Set<WarehouseBatchItem>();
     public DbSet<StockExportBatchAllocation> StockExportBatchAllocations => Set<StockExportBatchAllocation>();
+    public DbSet<InventoryLedgerEntry> InventoryLedgerEntries => Set<InventoryLedgerEntry>();
+    public DbSet<SupplierReceipt> SupplierReceipts => Set<SupplierReceipt>();
+    public DbSet<SupplierReceiptItem> SupplierReceiptItems => Set<SupplierReceiptItem>();
+    public DbSet<ShelfReturnRequest> ShelfReturnRequests => Set<ShelfReturnRequest>();
+    public DbSet<ShelfReturnRequestItem> ShelfReturnRequestItems => Set<ShelfReturnRequestItem>();
+    public DbSet<SupplierReturnRequest> SupplierReturnRequests => Set<SupplierReturnRequest>();
+    public DbSet<SupplierReturnRequestItem> SupplierReturnRequestItems => Set<SupplierReturnRequestItem>();
+    public DbSet<StocktakeRequest> StocktakeRequests => Set<StocktakeRequest>();
+    public DbSet<StocktakeRequestItem> StocktakeRequestItems => Set<StocktakeRequestItem>();
     public DbSet<ProductionOrder> ProductionOrders => Set<ProductionOrder>();
     public DbSet<ProductionOrderLine> ProductionOrderLines => Set<ProductionOrderLine>();
     public DbSet<ProductionOrderOutputLine> ProductionOrderOutputLines => Set<ProductionOrderOutputLine>();

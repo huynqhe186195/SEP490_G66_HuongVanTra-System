@@ -33,10 +33,6 @@ function BatchStockAdjustmentModal({ lines, onClose, onSubmitted }) {
     [draftLines],
   )
 
-  const needsReason = parsedLines.some(
-    (line) => Number.isFinite(line.quantityDelta) && line.quantityDelta < 0,
-  )
-
   function updateDelta(skuId, value) {
     setDraftLines((current) =>
       current.map((line) => (line.skuId === skuId ? { ...line, delta: value } : line)),
@@ -57,8 +53,8 @@ function BatchStockAdjustmentModal({ lines, onClose, onSubmitted }) {
 
     const items = []
     for (const line of parsedLines) {
-      if (!Number.isFinite(line.quantityDelta) || line.quantityDelta === 0) {
-        showError(`Nhập số lượng thay đổi cho SKU ${line.skuCode}.`)
+      if (!Number.isFinite(line.quantityDelta) || line.quantityDelta <= 0) {
+        showError(`Nhập số lượng bổ sung lớn hơn 0 cho SKU ${line.skuCode}.`)
         return
       }
       items.push({
@@ -69,11 +65,6 @@ function BatchStockAdjustmentModal({ lines, onClose, onSubmitted }) {
       })
     }
 
-    if (needsReason && !reason.trim()) {
-      showError('Lô có giảm tồn cần ghi rõ lý do chung.')
-      return
-    }
-
     setIsSaving(true)
     try {
       const created = await createStockAdjustmentRequest({
@@ -82,7 +73,7 @@ function BatchStockAdjustmentModal({ lines, onClose, onSubmitted }) {
       })
       const lineCount = created.items?.length ?? items.length
       showSuccess(
-        `Đã gửi lô ${created.requestCode} (${lineCount} SKU). Chờ Thủ kho duyệt.`,
+        `Đã gửi yêu cầu bổ sung tồn quầy ${created.requestCode} (${lineCount} SKU). Chờ Thủ kho duyệt.`,
       )
       onSubmitted?.(created)
       onClose?.()
@@ -104,10 +95,10 @@ function BatchStockAdjustmentModal({ lines, onClose, onSubmitted }) {
         <div className="flex shrink-0 items-start justify-between border-b border-slate-100 px-6 py-4">
           <div>
             <h2 id="batch-adjust-stock-title" className="text-lg font-bold text-slate-800">
-              Gửi yêu cầu điều chỉnh tồn (lô)
+              Gửi yêu cầu bổ sung tồn quầy
             </h2>
             <p className="mt-1 text-sm text-slate-500">
-              {draftLines.length} SKU trong lô — Thủ kho duyệt một lần cho cả lô
+              {draftLines.length} SKU trong yêu cầu — Kho tổng cấp sang Tồn quầy POS mặc định
             </p>
           </div>
           <button
@@ -139,7 +130,7 @@ function BatchStockAdjustmentModal({ lines, onClose, onSubmitted }) {
                         <p className="mt-0.5 text-xs text-slate-500">{line.skuSnapshotName}</p>
                       ) : null}
                       <p className="mt-1 text-xs text-slate-600">
-                        Tồn cửa hàng:{' '}
+                        Tồn quầy POS mặc định:{' '}
                         <span className="font-semibold">{formatStockQuantity(line.quantityOnHand)}</span>
                       </p>
                     </div>
@@ -154,11 +145,11 @@ function BatchStockAdjustmentModal({ lines, onClose, onSubmitted }) {
                     ) : null}
                   </div>
                   <label className="mt-3 block space-y-1">
-                    <span className="text-xs font-semibold text-[#717971]">Số lượng thay đổi *</span>
+                    <span className="text-xs font-semibold text-[#717971]">Số lượng bổ sung *</span>
                     <input
                       type="number"
                       inputMode="numeric"
-                      placeholder="VD: 50 hoặc -5"
+                      placeholder="VD: 50"
                       value={line.delta}
                       onChange={(event) => updateDelta(line.skuId, event.target.value)}
                       className="w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20"
@@ -170,14 +161,12 @@ function BatchStockAdjustmentModal({ lines, onClose, onSubmitted }) {
 
             <label className="block space-y-2">
               <span className="text-xs font-semibold text-[#717971]">
-                Lý do chung{needsReason ? ' *' : ''}
+                Ghi chú gửi duyệt
               </span>
               <textarea
                 rows={3}
                 placeholder={
-                  needsReason
-                    ? 'Bắt buộc khi lô có giảm tồn'
-                    : 'Tùy chọn — ghi chú cho Thủ kho'
+                  'Tùy chọn — ghi chú cho Thủ kho'
                 }
                 value={reason}
                 onChange={(event) => setReason(event.target.value)}
@@ -199,7 +188,7 @@ function BatchStockAdjustmentModal({ lines, onClose, onSubmitted }) {
               disabled={isSaving || draftLines.length === 0}
               className="rounded-xl bg-[#538463] px-5 py-2.5 text-sm font-bold text-white hover:bg-[#457053] disabled:opacity-50"
             >
-              {isSaving ? 'Đang gửi...' : `Gửi lô (${draftLines.length} SKU)`}
+              {isSaving ? 'Đang gửi...' : `Gửi yêu cầu (${draftLines.length} SKU)`}
             </button>
           </div>
         </form>

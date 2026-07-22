@@ -17,5 +17,8 @@ public class SalesStatisticsResponse
     public int CustomerCount { get; set; }
     public double CustomerGrowthRate { get; set; }
 
+    /// <summary>Tổng giá vốn hàng đã bán (theo CostPrice trên dòng đơn, trừ phần đã trả).</summary>
+    public decimal TotalCostOfGoods { get; set; }
+
     public decimal GrossProfit { get; set; }
 }

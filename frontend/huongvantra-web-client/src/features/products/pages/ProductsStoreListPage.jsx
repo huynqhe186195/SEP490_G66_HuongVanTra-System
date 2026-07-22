@@ -6,9 +6,9 @@ import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/Tab
 import { showError, showSuccess } from '../../../app/toast.js'
 import { canAdjustStoreStock, canSyncCatalog, canViewOrders } from '../../auth/utils/permissions.js'
 import { fetchCategories } from '../services/categoriesApi.js'
-import { buildStockBySkuIdMap, fetchSkuStocks } from '../../inventory/services/inventoryStockApi.js'
+import { buildStockBySkuIdMap, fetchStoreSkuStocks } from '../../inventory/services/inventoryStockApi.js'
 import { fetchPendingCatalogSync, syncCatalogToStore } from '../services/catalogSyncApi.js'
-import { fetchAllActiveSkus } from '../services/productSkusApi.js'
+import { fetchAllActiveStoreSkus } from '../services/productSkusApi.js'
 import ProductImage from '../components/ProductImage.jsx'
 import StoreProductExpandedLoader from '../components/StoreProductExpandedLoader.jsx'
 import { useStockAdjustmentBatch } from '../../inventory/hooks/useStockAdjustmentBatch.js'
@@ -117,7 +117,7 @@ export default function ProductsStoreListPage() {
       return
     }
     try {
-      const stocks = await fetchSkuStocks()
+      const stocks = await fetchStoreSkuStocks()
       setStockBySkuId(buildStockBySkuIdMap(stocks))
     } catch {
       setStockBySkuId(new Map())
@@ -127,7 +127,7 @@ export default function ProductsStoreListPage() {
   const loadCatalog = useCallback(async () => {
     try {
       setIsLoading(true)
-      const [items] = await Promise.all([fetchAllActiveSkus(100), loadStocks()])
+      const [items] = await Promise.all([fetchAllActiveStoreSkus(100), loadStocks()])
       setSkus(items)
     } catch (error) {
       setSkus([])

@@ -1,12 +1,16 @@
 import { apiRequestAuth, toPagedResult } from '../../../lib/apiClient.js'
 import { mapProduct } from './productsApi.js'
+import { PRODUCT_TYPE } from '../utils/productTypes.js'
 
 export async function searchMaterials(search = '', pageSize = 20) {
-  const params = new URLSearchParams({ pageSize: String(pageSize), isActive: 'true', productType: 'NGUYEN_LIEU' })
-  if (search.trim()) params.set('search', search.trim())
-  const data = await apiRequestAuth(`/api/v1/products?${params}`, { method: 'GET' })
-  const paged = toPagedResult(data)
-  return paged.items.map(mapProduct).filter(Boolean)
+  const productTypes = [PRODUCT_TYPE.NGUYEN_LIEU, PRODUCT_TYPE.BAO_BI, PRODUCT_TYPE.THANH_PHAM]
+  const results = await Promise.all(productTypes.map(async (productType) => {
+    const params = new URLSearchParams({ pageSize: String(pageSize), isActive: 'true', productType })
+    if (search.trim()) params.set('search', search.trim())
+    const data = await apiRequestAuth(`/api/v1/products?${params}`, { method: 'GET' })
+    return toPagedResult(data).items.map(mapProduct).filter(Boolean)
+  }))
+  return Array.from(new Map(results.flat().map((item) => [item.id, item])).values())
 }
 
 export function mapBomLine(row) {
@@ -20,6 +24,10 @@ export function mapBomLine(row) {
     materialUnitName,
     baseUnit: materialUnitName,
     quantity: Number(row.quantity ?? row.Quantity ?? 0),
+    componentVariantId: row.componentVariantId ?? row.ComponentVariantId ?? null,
+    componentSkuCode: row.componentSkuCode ?? row.ComponentSkuCode ?? '',
+    componentVariantName: row.componentVariantName ?? row.ComponentVariantName ?? '',
+    isRequiredBaseComponent: Boolean(row.isRequiredBaseComponent ?? row.IsRequiredBaseComponent ?? false),
   }
 }
 
@@ -34,8 +42,12 @@ export async function updateVariantBom(variantId, lines = []) {
     method: 'PUT',
     body: JSON.stringify({
       lines: lines.map((line) => ({
-        materialId: line.materialId ?? line.material_id,
+        materialId: line.materialId ?? line.material_id ?? '00000000-0000-0000-0000-000000000000',
         quantity: Number(line.quantity),
+        componentVariantId: line.componentVariantId ?? null,
+        componentSkuCode: line.componentSkuCode || null,
+        componentRequestSkuKey: line.componentRequestSkuKey || null,
+        isRequiredBaseComponent: Boolean(line.isRequiredBaseComponent),
       })),
     }),
   })

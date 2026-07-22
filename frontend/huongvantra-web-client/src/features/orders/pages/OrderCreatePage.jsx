@@ -8,7 +8,7 @@ import PageShell from '../../../components/shared/PageShell.jsx'
 
 import { showError, showSuccess } from '../../../app/toast.js'
 
-import { fetchSkus } from '../../products/services/productSkusApi.js'
+import { fetchStoreSkus } from '../../products/services/productSkusApi.js'
 
 import OrderCustomerSection from '../components/OrderCustomerSection.jsx'
 
@@ -78,7 +78,7 @@ function OrderCreatePage() {
 
       try {
 
-        const result = await fetchSkus({ isActive: true, pageSize: 100 })
+        const result = await fetchStoreSkus({ isActive: true, pageSize: 100 })
 
         if (mounted) setSkuOptions(result.items)
 

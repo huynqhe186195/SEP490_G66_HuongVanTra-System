@@ -6,6 +6,7 @@ import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/Tab
 import { showError, showSuccess } from '../../../app/toast.js'
 import {
   canCreateCatalog,
+  canCreateStockReplenishmentRequest,
   canHideCatalog,
   canSyncCatalog,
   isWarehouseRole,
@@ -18,7 +19,7 @@ import {
   fetchSkuStocks,
 } from '../../inventory/services/inventoryStockApi.js'
 import { fetchPendingCatalogSync, syncCatalogToStore } from '../services/catalogSyncApi.js'
-import { deleteProduct, fetchProducts, restoreProduct } from '../services/productsApi.js'
+import { createProductDeletionRequest, fetchProducts, submitProductDeletionRequest } from '../services/productsApi.js'
 import ProductImage from '../components/ProductImage.jsx'
 import ProductSkusDetailModal from '../components/ProductSkusDetailModal.jsx'
 import ProductExpandedPanel from '../components/ProductExpandedPanel.jsx'
@@ -33,6 +34,7 @@ import {
   summarizeProductVariants,
   summarizeProductSkus,
 } from '../utils/productDisplay.js'
+import { getProductTypeLabel, PRODUCT_TYPE, PRODUCT_TYPE_OPTIONS } from '../utils/productTypes.js'
 import { buildCategoryTree } from '../utils/categoryTreeUtils.js'
 import { consumeProductListFocus, readHighlightProductIdFromUrl } from '../utils/productListFocus.js'
 
@@ -46,8 +48,7 @@ const STATUS_FILTERS = [
 
 const PRODUCT_TYPE_FILTERS = [
   { value: '', label: 'Tất cả' },
-  { value: 'THANH_PHAM', label: 'Thành phẩm' },
-  { value: 'NGUYEN_LIEU', label: 'Nguyên liệu' },
+  ...PRODUCT_TYPE_OPTIONS,
 ]
 
 function ChipGroup({ options, value, onChange }) {
@@ -173,13 +174,13 @@ function getVariantLabel(variant, productName) {
   return name.startsWith(prefix) ? name.slice(prefix.length) : name || variant.skuCode || '—'
 }
 
-const MISSING_BOM_TITLE = 'Thành phẩm này chưa có định mức BOM, chưa nên dùng để tạo lệnh sản xuất.'
+const MISSING_BOM_TITLE = 'Sản phẩm kệ này chưa có định mức BOM, chưa nên dùng để tạo lệnh sản xuất.'
 const PRODUCT_FETCH_PAGE_SIZE = 100
 
 async function fetchAllProductsForWarehouseList(params = {}) {
   const items = []
   let requestPage = 1
-  let totalPages = 1
+  let totalPages
 
   do {
     const result = await fetchProducts({
@@ -259,6 +260,7 @@ export default function ProductsWarehouseListPage() {
   const canCreate = canCreateCatalog(session)
   const canHide = canHideCatalog(session)
   const canSync = canSyncCatalog(session)
+  const canRequestCounterReplenishment = canCreateStockReplenishmentRequest(session)
   const isWarehouse = isWarehouseRole(session)
 
   useEffect(() => {
@@ -288,7 +290,7 @@ export default function ProductsWarehouseListPage() {
   const [transferTarget, setTransferTarget] = useState(null)
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
   const [focusProductId, setFocusProductId] = useState(() => initialState.focusId)
-  const [expandedRowKey, setExpandedRowKey] = useState(null)
+  const [expandedRowKeys, setExpandedRowKeys] = useState(() => new Set())
   const [createdBanner, setCreatedBanner] = useState(() => ({
     open: initialState.showCreatedBanner,
     productId: initialState.focusId,
@@ -316,15 +318,21 @@ export default function ProductsWarehouseListPage() {
   useEffect(() => {
     const focus = consumeProductListFocus()
     if (!focus?.id) return undefined
-    setFocusProductId(focus.id)
-    if (focus.showBanner) setCreatedBanner({ open: true, productId: focus.id, name: focus.name || '' })
-    if (focus.statusFilter) setStatusFilter(focus.statusFilter)
+    const applyTimer = window.setTimeout(() => {
+      setFocusProductId(focus.id)
+      if (focus.showBanner) setCreatedBanner({ open: true, productId: focus.id, name: focus.name || '' })
+      if (focus.statusFilter) setStatusFilter(focus.statusFilter)
+    }, 0)
     const scrollTimer = window.setTimeout(
       () => document.getElementById(`product-row-${focus.id}`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }),
       120,
     )
     const clearTimer = window.setTimeout(() => setFocusProductId(null), 4500)
-    return () => { window.clearTimeout(scrollTimer); window.clearTimeout(clearTimer) }
+    return () => {
+      window.clearTimeout(applyTimer)
+      window.clearTimeout(scrollTimer)
+      window.clearTimeout(clearTimer)
+    }
   }, [location.key])
 
   // ── Data loading ───────────────────────────────────────────────────────────
@@ -380,12 +388,18 @@ export default function ProductsWarehouseListPage() {
   }, [canSync])
 
   useEffect(() => {
-    loadCategories()
-    loadPendingSync()
-    fetchInventorySettings().then((s) => setSimulateWarehouse(s.simulateWarehouse)).catch(() => {})
+    const timer = window.setTimeout(() => {
+      loadCategories()
+      loadPendingSync()
+      fetchInventorySettings().then((s) => setSimulateWarehouse(s.simulateWarehouse)).catch(() => {})
+    }, 0)
+    return () => window.clearTimeout(timer)
   }, [loadCategories, loadPendingSync])
 
-  useEffect(() => { loadProducts() }, [loadProducts])
+  useEffect(() => {
+    const timer = window.setTimeout(() => loadProducts(), 0)
+    return () => window.clearTimeout(timer)
+  }, [loadProducts])
 
   useEffect(() => {
     const refresh = () => loadStocks()
@@ -396,8 +410,11 @@ export default function ProductsWarehouseListPage() {
   useEffect(() => {
     if (!createdBanner.open || !createdBanner.productId) return
     const found = products.find((p) => String(p.id) === String(createdBanner.productId))
-    if (found?.name && found.name !== createdBanner.name)
+    if (!found?.name || found.name === createdBanner.name) return
+    const timer = window.setTimeout(() => {
       setCreatedBanner((prev) => ({ ...prev, name: found.name }))
+    }, 0)
+    return () => window.clearTimeout(timer)
   }, [products, createdBanner.open, createdBanner.productId, createdBanner.name])
 
   const skuRows = useMemo(() => buildSkuRows(products), [products])
@@ -413,7 +430,9 @@ export default function ProductsWarehouseListPage() {
 
   useEffect(() => {
     const maxPage = Math.max(1, Math.ceil(totalCount / pageSize))
-    if (page > maxPage) setPage(maxPage)
+    if (page <= maxPage) return undefined
+    const timer = window.setTimeout(() => setPage(maxPage), 0)
+    return () => window.clearTimeout(timer)
   }, [page, pageSize, totalCount])
 
   // ── Actions ────────────────────────────────────────────────────────────────
@@ -437,11 +456,17 @@ export default function ProductsWarehouseListPage() {
 
   async function handleHide(product) {
     if (!canHide || product.isDeleted) return
-    if (!window.confirm(`Ẩn sản phẩm "${product.name}"?`)) return
+    const reason = window.prompt(`Nhập lý do yêu cầu xóa sản phẩm "${product.name}":`)
+    if (!String(reason || '').trim()) return
     try {
       setTogglingId(product.id)
-      await deleteProduct(product.id)
-      showSuccess('Đã ẩn sản phẩm.')
+      const request = await createProductDeletionRequest({
+        title: `Yêu cầu xóa ${product.name}`,
+        reason,
+        items: [{ productId: product.id, reason }],
+      })
+      await submitProductDeletionRequest(request.id, reason)
+      showSuccess('Đã gửi yêu cầu xóa hàng hóa cho Admin duyệt.')
       await loadProducts()
     } catch (error) {
       showError(error.message)
@@ -452,22 +477,17 @@ export default function ProductsWarehouseListPage() {
 
   async function handleRestore(product) {
     if (!canHide || !product.isDeleted) return
-    if (!window.confirm(`Kích hoạt lại sản phẩm "${product.name}"?`)) return
-    try {
-      setTogglingId(product.id)
-      await restoreProduct(product.id)
-      showSuccess('Đã kích hoạt lại sản phẩm.')
-      await loadProducts()
-    } catch (error) {
-      showError(error.message)
-    } finally {
-      setTogglingId(null)
-    }
+    showError('Khôi phục Product đã bị khóa khỏi UI thường. Cần quy trình Admin khẩn cấp riêng.')
   }
 
   // ── Row expansion ─────────────────────────────────────────────────────────
   function toggleExpand(rowKey) {
-    setExpandedRowKey((cur) => (cur === rowKey ? null : rowKey))
+    setExpandedRowKeys((current) => {
+      const next = new Set(current)
+      if (next.has(rowKey)) next.delete(rowKey)
+      else next.add(rowKey)
+      return next
+    })
   }
 
   function openTransferToStore(product, sku) {
@@ -616,11 +636,11 @@ export default function ProductsWarehouseListPage() {
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <Link
-                  to={`/products/${createdBanner.productId}/edit`}
+                  to={`/inventory/products?highlight=${encodeURIComponent(createdBanner.productId)}`}
                   className="inline-flex items-center gap-1.5 rounded-xl bg-[#538463] px-4 py-2 text-sm font-bold text-white hover:bg-[#457053]"
                 >
-                  <span className="material-symbols-outlined text-[18px]">edit</span>
-                  Xem / Sửa
+                  <span className="material-symbols-outlined text-[18px]">visibility</span>
+                  Xem
                 </Link>
                 <button
                   type="button"
@@ -649,8 +669,8 @@ export default function ProductsWarehouseListPage() {
                   <tr>
                     <th className="w-10 px-2 py-3" />
                     <th className="w-14 px-2 py-3" />
-                    <th className="px-3 py-3">Mã SKU</th>
                     <th className="min-w-[180px] px-3 py-3">Tên hàng</th>
+                    <th className="px-3 py-3">Mã SKU</th>
                     <th className="hidden px-3 py-3 md:table-cell">Nhóm hàng</th>
                     <th className="hidden px-3 py-3 text-right lg:table-cell">Giá vốn</th>
                     <th className="px-3 py-3 text-right">Giá bán</th>
@@ -685,10 +705,11 @@ export default function ProductsWarehouseListPage() {
                       const stockQty = selectedVariant ? Number(stockBySkuId.get(selectedVariant.id) ?? 0) : 0
                       const isOut = stockQty <= 0
                       const isLow = stockQty > 0 && stockQty <= 5
-                      const isExpanded = expandedRowKey === row.rowKey
+                      const isExpanded = expandedRowKeys.has(row.rowKey)
                       const isFocused = focusProductId && String(product.id) === focusProductId
-                      const isNguyenLieu = product.productType === 'NGUYEN_LIEU'
-                      const isFinishedProduct = product.productType === 'THANH_PHAM'
+                      const isNguyenLieu = product.productType === PRODUCT_TYPE.NGUYEN_LIEU
+                      const isBaoBi = product.productType === PRODUCT_TYPE.BAO_BI
+                      const isFinishedProduct = product.productType === PRODUCT_TYPE.THANH_PHAM
                       const selectedVariantBomLineCount = Number(selectedVariant?.bomLineCount ?? 0)
                       const selectedVariantHasBom = selectedVariant
                         ? Boolean(selectedVariant.hasBom || selectedVariantBomLineCount > 0)
@@ -734,17 +755,6 @@ export default function ProductsWarehouseListPage() {
                               />
                             </td>
 
-                            {/* SKU code */}
-                            <td className="px-3 py-3 font-mono text-xs font-bold text-[#356647]" onClick={() => toggleExpand(row.rowKey)}>
-                              {selectedVariant?.skuCode || (
-                                canCreate ? (
-                                  <Link to={`/products/${product.id}/edit`} className="text-[11px] font-semibold text-[#356647] hover:underline" onClick={(e) => e.stopPropagation()}>
-                                    Chưa có
-                                  </Link>
-                                ) : '—'
-                              )}
-                            </td>
-
                             {/* Tên hàng + variant */}
                             <td className="px-3 py-3" onClick={() => toggleExpand(row.rowKey)}>
                               <span className="block font-semibold text-slate-900">{product.name}</span>
@@ -753,6 +763,11 @@ export default function ProductsWarehouseListPage() {
                                   {getVariantLabel(selectedVariant, product.name)}
                                 </span>
                               ) : null}
+                            </td>
+
+                            {/* SKU code */}
+                            <td className="px-3 py-3 font-mono text-xs font-bold text-[#356647]" onClick={() => toggleExpand(row.rowKey)}>
+                              {selectedVariant?.skuCode || '—'}
                             </td>
 
                             {/* Danh mục */}
@@ -795,26 +810,28 @@ export default function ProductsWarehouseListPage() {
                             <td className="hidden px-3 py-3 sm:table-cell" onClick={() => toggleExpand(row.rowKey)}>
                               {isNguyenLieu ? (
                                 <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-violet-800">
-                                  Nguyên liệu
+                                  {getProductTypeLabel(product.productType)}
+                                </span>
+                              ) : isBaoBi ? (
+                                <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-sky-800">
+                                  {getProductTypeLabel(product.productType)}
                                 </span>
                               ) : isFinishedProduct ? (
                                 <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700">
-                                  Thành phẩm
+                                  {getProductTypeLabel(product.productType)}
                                 </span>
                               ) : (
                                 <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-700">
-                                  {product.productType || 'Khác'}
+                                  {getProductTypeLabel(product.productType)}
                                 </span>
                               )}
                               {isFinishedProduct && selectedVariant && !selectedVariantHasBom ? (
-                                <Link
-                                  to={`/inventory/boms?variantId=${encodeURIComponent(selectedVariant.id)}&openBom=true`}
+                                <span
                                   title={MISSING_BOM_TITLE}
-                                  onClick={(event) => event.stopPropagation()}
-                                  className="mt-1 inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-800 hover:bg-amber-200 hover:text-amber-900"
+                                  className="mt-1 inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-800"
                                 >
-                                  Thiếu BOM · Tạo ngay
-                                </Link>
+                                  Thiếu BOM
+                                </span>
                               ) : null}
                             </td>
 
@@ -838,26 +855,27 @@ export default function ProductsWarehouseListPage() {
                                     <span className="material-symbols-outlined text-[18px]">inventory_2</span>
                                   </button>
                                 ) : null}
-                                {isWarehouse && selectedVariant && !product.isDeleted ? (
+                                {canRequestCounterReplenishment && selectedVariant && !product.isDeleted ? (
                                   <button
                                     type="button"
-                                    title={stockQty > 0 ? 'Xuất sang cửa hàng' : 'Kho tổng hết hàng'}
+                                    title={stockQty > 0 ? 'Bổ sung Kệ Hàng' : 'Kho hết hàng'}
                                     disabled={stockQty <= 0}
                                     className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-semibold text-[#356647] hover:bg-[#356647]/8 disabled:cursor-not-allowed disabled:opacity-40"
                                     onClick={() => openTransferToStore(product, selectedVariant)}
                                   >
                                     <span className="material-symbols-outlined text-[18px]">output</span>
-                                    <span>Xuất sang CH</span>
+                                    <span>Bổ sung quầy</span>
                                   </button>
                                 ) : null}
                                 {!product.isDeleted && canCreate ? (
-                                  <Link
-                                    to={`/products/${product.id}/edit`}
-                                    title="Sửa sản phẩm"
-                                    className="rounded-full p-1.5 text-[#717971] hover:bg-[#e4e3db] hover:text-[#356647]"
+                                  <button
+                                    type="button"
+                                    title="Master data chỉ sửa qua workflow phê duyệt"
+                                    className="rounded-full p-1.5 text-slate-400"
+                                    onClick={() => showError('Sửa Product/SKU/BOM trực tiếp đã bị khóa. Vui lòng tạo yêu cầu Product Creation mới nếu cần thay đổi master data.')}
                                   >
-                                    <span className="material-symbols-outlined text-[18px]">edit</span>
-                                  </Link>
+                                    <span className="material-symbols-outlined text-[18px]">lock</span>
+                                  </button>
                                 ) : null}
                                 {canHide && product.isDeleted ? (
                                   <button

@@ -15,7 +15,10 @@ public static class PermissionNames
     public const string ApproveContract = "APPROVE_CONTRACT";
     public const string ManageBusinessPolicy = "MANAGE_BUSINESS_POLICY";
 
-    /// <summary>Sửa hồ sơ KH — Admin/Manager/Kế toán (VIEW_ALL_CUSTOMERS).</summary>
+    /// <summary>Xem danh sách/chi tiết KH — Sale (VIEW_CUSTOMER) hoặc Manager/Kế toán (VIEW_ALL_CUSTOMERS).</summary>
+    public const string ViewCustomerAccess = "VIEW_CUSTOMER_ACCESS";
+
+    /// <summary>Sửa hồ sơ KH — Admin (MANAGE_ROLE) hoặc Manager (CREATE_CUSTOMER). Kế toán chỉ xem.</summary>
     public const string EditCustomerProfile = "EDIT_CUSTOMER_PROFILE";
 
     /// <summary>Admin hoặc Thủ kho — tạo/sửa sản phẩm, danh mục, SKU.</summary>

@@ -97,7 +97,7 @@ services:
 
   # customer-service:
   #   build: null
-  #   image: mcr.microsoft.com/dotnet/sdk:8.0-alpine
+  #   image: hvt-dotnet-sdk:8.0-alpine-dev   # tag riêng, xem ghi chú ở product-service
   #   container_name: hvt-customer-service-dev
   #   working_dir: /src
   #   volumes:
@@ -130,7 +130,7 @@ services:
 
   # user-service:
   #   build: null
-  #   image: mcr.microsoft.com/dotnet/sdk:8.0-alpine
+  #   image: hvt-dotnet-sdk:8.0-alpine-dev   # tag riêng, xem ghi chú ở product-service
   #   container_name: hvt-user-service-dev
   #   working_dir: /src
   #   volumes:
@@ -159,7 +159,7 @@ services:
 
   # order-service:
   #   build: null
-  #   image: mcr.microsoft.com/dotnet/sdk:8.0-alpine
+  #   image: hvt-dotnet-sdk:8.0-alpine-dev   # tag riêng, xem ghi chú ở product-service
   #   container_name: hvt-order-service-dev
   #   working_dir: /src
   #   volumes:
@@ -192,7 +192,7 @@ services:
 
   # inventory-service:
   #   build: null
-  #   image: mcr.microsoft.com/dotnet/sdk:8.0-alpine
+  #   image: hvt-dotnet-sdk:8.0-alpine-dev   # tag riêng, xem ghi chú ở product-service
   #   container_name: hvt-inventory-service-dev
   #   working_dir: /src
   #   volumes:

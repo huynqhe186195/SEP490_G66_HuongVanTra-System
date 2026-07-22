@@ -12,7 +12,7 @@ namespace InventoryService.WebAPI.Controllers;
 public class SkuStockController(InventoryLogic _logic) : ControllerBase
 {
     [HttpGet]
-    [Authorize(Policy = PermissionNames.ViewOrder)]
+    [Authorize(Roles = "Warehouse,Accountant")]
     public async Task<IActionResult> GetAll(CancellationToken ct)
     {
         var items = await _logic.GetSkuStocksAsync(ct);
@@ -20,7 +20,7 @@ public class SkuStockController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpGet("low-stock")]
-    [Authorize(Policy = PermissionNames.ViewOrder)]
+    [Authorize(Roles = "Warehouse,Accountant")]
     public async Task<IActionResult> GetLowStock(CancellationToken ct)
     {
         var items = await _logic.GetLowStockSkusAsync(ct);
@@ -47,7 +47,7 @@ public class SkuStockController(InventoryLogic _logic) : ControllerBase
     [Authorize(Roles = "Warehouse")]
     public async Task<IActionResult> UpdateThreshold(Guid skuId, [FromBody] UpdateLowStockThresholdRequest request, CancellationToken ct)
     {
-        var result = await _logic.UpdateLowStockThresholdAsync(skuId, request.Threshold, ct);
+        var result = await _logic.UpdateLowStockThresholdAsync(skuId, request, ct);
         return Ok(result);
     }
 }

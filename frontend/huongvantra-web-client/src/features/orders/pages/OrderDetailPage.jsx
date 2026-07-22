@@ -45,8 +45,8 @@ import {
   getOrderRemainingDebt,
   getPrimaryPayment,
 } from '../utils/orderDisplay.js'
-import { fetchAllActiveSkus } from '../../products/services/productSkusApi.js'
-import { fetchProducts } from '../../products/services/productsApi.js'
+import { fetchAllActiveStoreSkus } from '../../products/services/productSkusApi.js'
+import { fetchStoreProducts } from '../../products/services/productsApi.js'
 import { fetchCustomerById } from '../../customers/services/customersApi.js'
 import { buildProductCatalogLookups, resolveOrderLineDisplay } from '../../products/utils/productDisplay.js'
 function OrderDetailPage() {
@@ -138,8 +138,8 @@ function OrderDetailPage() {
     async function loadCatalog() {
       try {
         const [productsResult, skus] = await Promise.all([
-          fetchProducts({ isActive: true, page: 1, pageSize: 100 }),
-          fetchAllActiveSkus(100),
+          fetchStoreProducts({ isActive: true, page: 1, pageSize: 100 }),
+          fetchAllActiveStoreSkus(100),
         ])
         if (mounted) {
           setCatalogLookups(buildProductCatalogLookups({ products: productsResult.items, skus }))

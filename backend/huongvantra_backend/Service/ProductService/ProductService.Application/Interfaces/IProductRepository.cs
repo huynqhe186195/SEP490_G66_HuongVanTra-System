@@ -18,6 +18,9 @@ public interface IProductRepository
     Task<List<Domain.Entities.ProductVariant>> SyncPendingVariantsToStoreAsync(DateTime syncedAt, CancellationToken ct = default);
     Task<Product?> GetByIdAsync(Guid id, bool includeDeleted = false);
     Task<ProductVariant?> GetVariantByIdAsync(Guid id, bool includeDeleted = false);
+    Task<List<ProductVariant>> GetVariantsByIdsAsync(IEnumerable<Guid> ids, bool includeDeleted = false);
+    Task<List<ProductVariant>> GetVariantsBySkuCodesAsync(IEnumerable<string> skuCodes, bool includeDeleted = false);
+    Task<List<ProductVariantBomEdge>> GetActiveBomEdgesAsync();
     Task<List<Product>> GetProductsByIdsAsync(IEnumerable<Guid> ids, bool includeDeleted = false);
     Task<bool> ExistsNameAsync(string name, Guid? excludeProductId = null, bool includeDeleted = true);
     Task<bool> ExistsVariantSkuCodeAsync(string skuCode, Guid? excludeVariantId = null, Guid? excludeProductId = null);
@@ -27,3 +30,5 @@ public interface IProductRepository
     Task DeleteAsync(Product product);
     Task RestoreAsync(Product product);
 }
+
+public sealed record ProductVariantBomEdge(Guid ProductVariantId, Guid ComponentVariantId);

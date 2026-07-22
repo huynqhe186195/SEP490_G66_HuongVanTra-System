@@ -28,6 +28,6 @@ public interface IOrderEventPublisher
         decimal returnAmount,
         decimal orderFinalAmount,
         decimal refundAmount,
-        IEnumerable<(Guid SkuId, int Quantity)> items,
+        IEnumerable<(Guid SkuId, string SkuName, string? SkuCode, int Quantity)> items,
         CancellationToken ct = default);
 }
