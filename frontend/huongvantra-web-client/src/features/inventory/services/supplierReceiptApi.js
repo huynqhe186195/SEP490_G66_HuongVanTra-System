@@ -60,6 +60,7 @@ export function mapSupplierReceipt(row) {
 
 function buildReceiptPayload(payload) {
   return {
+    supplierId: payload.supplierId || null,
     supplierName: payload.supplierName?.trim() || null,
     supplierReference: payload.supplierReference?.trim() || null,
     supplierDocumentNumber: payload.supplierDocumentNumber?.trim() || null,
@@ -110,6 +111,10 @@ export async function createSupplierReceipt(payload) {
 
 export async function submitSupplierReceipt(id) {
   return mapSupplierReceipt(await apiRequestAuth(`/api/v1/inventory/supplier-receipts/${id}/submit`, { method: 'POST' }))
+}
+
+export async function receiveSupplierReceipt(id) {
+  return mapSupplierReceipt(await apiRequestAuth(`/api/v1/inventory/supplier-receipts/${id}/receive`, { method: 'POST' }))
 }
 
 export async function approveSupplierReceipt(id) {

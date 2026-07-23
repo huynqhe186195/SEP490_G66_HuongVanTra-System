@@ -107,6 +107,7 @@ public record SupplierReceiptItemRequest(
     string? QualityNote);
 
 public record UpsertSupplierReceiptRequest(
+    Guid? SupplierId,
     string? SupplierName,
     string? SupplierReference,
     string? SupplierDocumentNumber,

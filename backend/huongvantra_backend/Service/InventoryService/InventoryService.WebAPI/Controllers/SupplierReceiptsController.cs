@@ -40,7 +40,7 @@ public class SupplierReceiptsController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "Manager,Admin")]
+    [Authorize(Roles = "Manager,Admin,Warehouse")]
     public async Task<IActionResult> Create([FromBody] UpsertSupplierReceiptRequest request, CancellationToken ct)
     {
         var userId = User.GetUserId();
@@ -51,13 +51,23 @@ public class SupplierReceiptsController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
-    [Authorize(Roles = "Manager,Admin")]
+    [Authorize(Roles = "Manager,Admin,Warehouse")]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpsertSupplierReceiptRequest request, CancellationToken ct)
     {
         var userId = User.GetUserId();
         if (userId == Guid.Empty) return Unauthorized(new { message = "Không xác định được người dùng." });
 
         return Ok(await _logic.UpdateSupplierReceiptAsync(id, request, userId, ct));
+    }
+
+    [HttpPost("{id:guid}/receive")]
+    [Authorize(Roles = "Manager,Admin,Warehouse")]
+    public async Task<IActionResult> Receive(Guid id, CancellationToken ct)
+    {
+        var userId = User.GetUserId();
+        if (userId == Guid.Empty) return Unauthorized(new { message = "Không xác định được người dùng." });
+
+        return Ok(await _logic.ReceiveSupplierReceiptAsync(id, userId, User.ToCreatorSnapshot(), ct));
     }
 
     [HttpPost("{id:guid}/submit")]

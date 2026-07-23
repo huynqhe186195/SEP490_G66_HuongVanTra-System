@@ -10,19 +10,13 @@ import { loadAuthSession } from '../../auth/services/authSession.js'
 import { canWriteInventory } from '../../auth/utils/permissions.js'
 import InventoryNavTabs from '../components/InventoryNavTabs.jsx'
 import {
-  approveSupplierReceipt,
   cancelSupplierReceipt,
   fetchSupplierReceipts,
-  rejectSupplierReceipt,
-  submitSupplierReceipt,
 } from '../services/supplierReceiptApi.js'
 
 const STATUS_OPTIONS = [
   { value: '', label: 'Tất cả' },
-  { value: 'draft', label: 'Nháp' },
-  { value: 'pendingapproval', label: 'Chờ duyệt' },
-  { value: 'completed', label: 'Hoàn tất' },
-  { value: 'rejected', label: 'Từ chối' },
+  { value: 'completed', label: 'Đã nhận' },
   { value: 'cancelled', label: 'Đã hủy' },
 ]
 
@@ -30,7 +24,7 @@ function getStatusLabel(status) {
   const normalized = String(status || '').toLowerCase()
   if (normalized === 'draft') return 'Nháp'
   if (normalized === 'pendingapproval') return 'Chờ duyệt'
-  if (normalized === 'completed') return 'Hoàn tất'
+  if (normalized === 'completed') return 'Đã nhận'
   if (normalized === 'rejected') return 'Từ chối'
   if (normalized === 'cancelled') return 'Đã hủy'
   return status || '—'
@@ -98,12 +92,6 @@ function SupplierReceiptsPage() {
     }
   }
 
-  async function handleReject(receipt) {
-    const reason = window.prompt('Nhập lý do từ chối phiếu nhập')
-    if (!reason?.trim()) return
-    await runAction(receipt, (id) => rejectSupplierReceipt(id, reason), (updated) => `Đã từ chối ${updated.receiptCode}.`)
-  }
-
   async function handleCancel(receipt) {
     const reason = window.prompt('Nhập lý do hủy phiếu nhập')
     if (!reason?.trim()) return
@@ -124,7 +112,7 @@ function SupplierReceiptsPage() {
     <PageShell>
       <PageHeader
         title="Phiếu nhập nhà cung cấp"
-        description="Quản lý yêu cầu nhập hàng vào Kho. Batch, phiếu nhập kho và ledger chỉ tạo khi duyệt."
+        description="Lịch sử phiếu nhập hàng từ NCC. Nhận hàng ghi thẳng vào kho, phiếu dùng để kế toán thống kê."
         searchPlaceholder="Tìm mã phiếu, nhà cung cấp, SKU, mã lô..."
         searchValue={searchInput}
         onSearchChange={handleSearchChange}
@@ -203,37 +191,7 @@ function SupplierReceiptsPage() {
                         >
                           Chi tiết
                         </button>
-                        {canWrite && (receipt.status === 'draft' || receipt.status === 'rejected') ? (
-                          <button
-                            type="button"
-                            disabled={Boolean(actionId)}
-                            onClick={() => runAction(receipt, submitSupplierReceipt, (updated) => `Đã gửi ${updated.receiptCode} chờ duyệt.`)}
-                            className="rounded-lg border border-amber-200 px-3 py-1.5 text-xs font-semibold text-amber-700 hover:bg-amber-50 disabled:opacity-50"
-                          >
-                            Gửi duyệt
-                          </button>
-                        ) : null}
-                        {canWrite && receipt.status === 'pendingapproval' ? (
-                          <>
-                            <button
-                              type="button"
-                              disabled={Boolean(actionId)}
-                              onClick={() => runAction(receipt, approveSupplierReceipt, (updated) => `Đã duyệt ${updated.receiptCode}.`)}
-                              className="rounded-lg bg-[#538463] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#457053] disabled:opacity-50"
-                            >
-                              Duyệt
-                            </button>
-                            <button
-                              type="button"
-                              disabled={Boolean(actionId)}
-                              onClick={() => handleReject(receipt)}
-                              className="rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50"
-                            >
-                              Từ chối
-                            </button>
-                          </>
-                        ) : null}
-                        {canWrite && receipt.status !== 'completed' && receipt.status !== 'cancelled' ? (
+                        {canWrite && (receipt.status === 'draft' || receipt.status === 'pendingapproval') ? (
                           <button
                             type="button"
                             disabled={Boolean(actionId)}
@@ -265,7 +223,7 @@ function SupplierReceiptsPage() {
 
       {selectedReceipt ? (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
+          className="inventory-modal fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
           onClick={() => setSelectedReceipt(null)}
         >
           <div
@@ -289,7 +247,7 @@ function SupplierReceiptsPage() {
             <div className="mb-5 grid grid-cols-1 gap-3 rounded-xl bg-slate-50 p-4 text-sm md:grid-cols-3">
               <div><span className="text-slate-500">Trạng thái:</span> <strong>{getStatusLabel(selectedReceipt.status)}</strong></div>
               <div><span className="text-slate-500">Người tạo:</span> <strong>{selectedReceipt.createdByName || '—'}</strong></div>
-              <div><span className="text-slate-500">Người duyệt:</span> <strong>{selectedReceipt.reviewedByName || '—'}</strong></div>
+              <div><span className="text-slate-500">Người nhận:</span> <strong>{selectedReceipt.reviewedByName || '—'}</strong></div>
               <div><span className="text-slate-500">Chứng từ NCC:</span> <strong>{selectedReceipt.supplierDocumentNumber || '—'}</strong></div>
               <div><span className="text-slate-500">Ngày nhận:</span> <strong>{selectedReceipt.receivedDate ? formatVietnamDateTime(selectedReceipt.receivedDate) : '—'}</strong></div>
               <div><span className="text-slate-500">Phiếu nhập kho:</span> <strong>{selectedReceipt.stockImportSlipCode || '—'}</strong></div>

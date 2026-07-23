@@ -59,6 +59,20 @@ public class SupplierReceiptRepository(InventoryDbContext _db) : ISupplierReceip
     public Task<int> CountBySupplerIdAsync(Guid supplierId, CancellationToken ct = default) =>
         _db.SupplierReceipts.CountAsync(r => r.SupplierId == supplierId, ct);
 
+    public Task<SupplierReceipt?> FindDuplicateDocumentAsync(Guid? supplierId, string? supplierDocumentNumber, Guid? excludeId, CancellationToken ct = default)
+    {
+        if (supplierId == null || string.IsNullOrWhiteSpace(supplierDocumentNumber))
+            return Task.FromResult<SupplierReceipt?>(null);
+        var normalized = supplierDocumentNumber.Trim();
+        return _db.SupplierReceipts
+            .Where(r => r.SupplierId == supplierId
+                && r.SupplierDocumentNumber == normalized
+                && r.Status == SupplierReceiptStatus.Completed
+                && (excludeId == null || r.Id != excludeId))
+            .OrderByDescending(r => r.CreatedAt)
+            .FirstOrDefaultAsync(ct);
+    }
+
     public async Task AddAsync(SupplierReceipt receipt, CancellationToken ct = default) =>
         await _db.SupplierReceipts.AddAsync(receipt, ct);
 

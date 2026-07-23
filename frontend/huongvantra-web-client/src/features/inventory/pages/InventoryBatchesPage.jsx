@@ -206,11 +206,20 @@ function InventoryBatchesPage() {
 
         </label>
 
-        <p className="text-sm text-slate-500">
+        <div className="flex items-center gap-3">
+          <p className="text-sm text-slate-500">
 
-          {filteredBatches.length} lô · tổng còn <strong>{formatStockQuantity(totalQty)}</strong> đơn vị
+            {filteredBatches.length} lô · tổng còn <strong>{formatStockQuantity(totalQty)}</strong> đơn vị
 
-        </p>
+          </p>
+          <Link
+            to="/inventory/import/create"
+            className="flex items-center gap-1.5 rounded-lg bg-[#356647] px-4 py-2 text-sm font-bold text-white hover:bg-[#2a5238]"
+          >
+            <span className="material-symbols-outlined text-base">add</span>
+            Tạo lô nhập
+          </Link>
+        </div>
 
       </div>
 

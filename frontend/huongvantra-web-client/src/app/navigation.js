@@ -69,7 +69,6 @@ export const navigationItems = [
   { label: 'Yêu cầu xóa hàng hóa', path: '/inventory/product-deletion-requests', module: 'product_deletion_requests', icon: 'delete_sweep', roles: ['admin', 'inventoryManager'] },
   { label: 'Kho tổng', path: '/inventory', module: 'inventory', icon: 'warehouse', roles: ['inventoryManager'] },
   { label: 'Phiếu nhập NCC', path: '/inventory/supplier-receipts', module: 'supplier_receipts', icon: 'assignment_turned_in', roles: ['admin', 'agencyManager', 'accountant'] },
-  { label: 'Nhà cung cấp', path: '/inventory/suppliers', module: 'supplier_receipts', icon: 'storefront', roles: ['admin', 'agencyManager', 'accountant', 'inventoryManager'] },
   { label: 'Lô hàng nhập', path: '/inventory/batches', module: 'warehouse_batches', icon: 'inventory', roles: ['admin', 'agencyManager', 'inventoryManager', 'accountant'] },
   { label: 'Trả hàng nhập', path: '/inventory/returns', module: 'inventory_returns', icon: 'assignment_return', roles: ['admin', 'agencyManager', 'inventoryManager'] },
   { label: 'Kiểm kê tồn kho', path: '/inventory/stocktake', module: 'inventory_stocktake', icon: 'fact_check', roles: ['admin', 'agencyManager', 'inventoryManager'] },
@@ -177,11 +176,11 @@ const INVENTORY_SIDEBAR_GROUPS = [
     icon: 'warehouse',
     entries: [
       { path: '/inventory', label: 'Tồn kho tổng' },
+      { path: '/inventory/batches', label: 'Lô hàng nhập' },
       { path: '/inventory/returns' },
       { path: '/inventory/stocktake' },
       { path: '/inventory/ledger' },
       { path: '/inventory/stock-requests' },
-      { path: '/inventory/suppliers' },
     ],
   },
   {
@@ -384,7 +383,6 @@ const MODULE_PATH_PREFIXES = [
   { module: 'products', prefix: '/inventory/products' },
   { module: 'stock_adjustment_ops', prefix: '/inventory/stock-requests' },
   { module: 'supplier_receipts', prefix: '/inventory/supplier-receipts' },
-  { module: 'supplier_receipts', prefix: '/inventory/suppliers' },
   { module: 'warehouse_batches', prefix: '/inventory/batches' },
   { module: 'inventory_returns', prefix: '/inventory/returns' },
   { module: 'inventory_stocktake', prefix: '/inventory/stocktake' },
