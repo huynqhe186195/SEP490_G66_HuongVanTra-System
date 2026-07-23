@@ -44,6 +44,7 @@ builder.Services.AddScoped<IPromotionRepository, PromotionRepository>();
 builder.Services.AddScoped<IOrderCodeGenerator, OrderCodeGenerator>();
 builder.Services.AddScoped<IReturnOrderRepository, ReturnOrderRepository>();
 builder.Services.AddScoped<ICustomBundleRepository, CustomBundleRepository>();
+builder.Services.AddScoped<IOrderOutboxWriter, OrderOutboxWriter>();
 builder.Services.AddScoped<IOrderEventPublisher, OrderEventPublisher>();
 builder.Services.AddScoped<IReportRepository, ReportRepository>();
 builder.Services.AddHttpContextAccessor();
