@@ -13,7 +13,7 @@ namespace ProductService.WebAPI.Controllers;
 public class CatalogSyncController(CatalogSyncLogic _syncLogic) : ControllerBase
 {
     [HttpGet("sync/pending")]
-    [Authorize(Policy = PermissionNames.ViewOrder)]
+    [Authorize(Policy = PermissionNames.CreatePosOrder)]
     public async Task<IActionResult> GetPending(CancellationToken ct)
     {
         if (User.GetCatalogViewScope() == CatalogViewScope.Warehouse)
@@ -30,7 +30,7 @@ public class CatalogSyncController(CatalogSyncLogic _syncLogic) : ControllerBase
     }
 
     [HttpPost("sync")]
-    [Authorize(Roles = "Manager,Admin,Sale")]
+    [Authorize(Policy = PermissionNames.CreatePosOrder)]
     public async Task<IActionResult> Sync(CancellationToken ct)
     {
         CatalogSyncLogic.EnsureNotWarehouseSource(User.GetCatalogViewScope() == CatalogViewScope.Warehouse);

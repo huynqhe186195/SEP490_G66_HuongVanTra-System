@@ -263,8 +263,19 @@ public class OrderLogic(
             req.OrderChannel, req.ShippingAddress,
             hasCustomBundles: (req.CustomBundles ?? []).Any(b => (b.Ingredients ?? []).Count > 0));
 
-        if (detailInputs.Any(i => i.IsGift))
+        if (req.OrderKind != OrderKind.Exchange)
+        {
+            OrderBusinessRules.EnsureSaleLinesHavePositivePrice(
+                detailInputs.Select(item => (item.UnitPrice, item.IsGift)));
+        }
+
+        var hasGiftItems = detailInputs.Any(i => i.IsGift);
+        if (hasGiftItems)
             await EnsureVipCustomerAsync(req.CustomerId, ct);
+        var isAuthorizedVipGiftOrder =
+            hasGiftItems
+            && detailInputs.All(item => item.IsGift)
+            && !(req.CustomBundles ?? []).Any(bundle => (bundle.Ingredients ?? []).Count > 0);
 
         // Exchange: DiscountAmount includes return credit (+ tier/manual already validated in ReturnAsync).
         // Do not treat that credit as a VIP/manual POS discount.
@@ -275,6 +286,10 @@ public class OrderLogic(
         var bundleTotal = (req.CustomBundles ?? []).Sum(b => b.Ingredients.Sum(i => i.UnitPrice * i.Quantity));
         totalAmount += bundleTotal;
         var manualDiscount = req.DiscountAmount;
+        if (req.OrderKind != OrderKind.Exchange)
+        {
+            OrderBusinessRules.EnsureManualDiscountDoesNotZeroOrder(totalAmount, manualDiscount);
+        }
         if (manualDiscount > totalAmount)
             throw new OrderValidationException("Giảm giá thủ công không được lớn hơn tổng tiền đơn hàng.");
 
@@ -294,6 +309,16 @@ public class OrderLogic(
                 ct);
         var totalDiscount = manualDiscount + promotionDiscount.DiscountAmount + membershipDiscount;
         var finalAmount = Math.Max(0, totalAmount - totalDiscount);
+        if (req.OrderKind != OrderKind.Exchange)
+        {
+            OrderBusinessRules.EnsureZeroTotalOrderAllowed(
+                finalAmount,
+                totalAmount,
+                manualDiscount,
+                promotionDiscount.PromotionId,
+                promotionDiscount.DiscountAmount,
+                isAuthorizedVipGiftOrder);
+        }
         OrderBusinessRules.EnsureGuestFullyPaid(
             req.CustomerId,
             req.PaidAmount,

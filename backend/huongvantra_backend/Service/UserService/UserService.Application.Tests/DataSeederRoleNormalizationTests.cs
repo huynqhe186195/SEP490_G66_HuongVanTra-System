@@ -123,6 +123,7 @@ public class DataSeederRoleNormalizationTests
         Assert.Contains(PermissionNames.CreatePosOrder, salePosPermissions);
         Assert.DoesNotContain(PermissionNames.CreateCodOrder, salePosPermissions);
         Assert.DoesNotContain(PermissionNames.VerifyCod, salePosPermissions);
+        Assert.DoesNotContain(PermissionNames.ManageCatalog, salePosPermissions);
         Assert.Contains(PermissionNames.CreateCodOrder, saleCodPermissions);
         Assert.Contains(PermissionNames.VerifyCod, saleCodPermissions);
         Assert.DoesNotContain(PermissionNames.CreatePosOrder, saleCodPermissions);
@@ -130,6 +131,7 @@ public class DataSeederRoleNormalizationTests
         Assert.Equal(
             salePosPermissions.OrderBy(value => value),
             legacyPermissions.OrderBy(value => value));
+        Assert.DoesNotContain(PermissionNames.ManageCatalog, legacyPermissions);
     }
 
     private static Task<Role> Role(UserDbContext db, string roleName) =>

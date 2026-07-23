@@ -44,6 +44,7 @@ import { loadPosSeller } from '../utils/posSeller.js'
 import {
   normalizeOrderDiscountInput,
   validatePosDiscountsBeforePayment,
+  validateZeroTotalCheckout,
 } from '../utils/posDiscountValidation.js'
 import { formatCustomerOrderSnapshot, isVipCustomerType } from '../../customers/utils/customerDisplay.js'
 import { fetchPendingCatalogSync, syncCatalogToStore } from '../../products/services/catalogSyncApi.js'
@@ -238,6 +239,7 @@ function createEmptySession(mode = "counter") {
 function PosPage() {
   const navigate = useNavigate()
   const authSession = loadAuthSession()
+  const canSyncCatalog = canUsePosCounterMode(authSession)
   const allowedSalesModes = useMemo(() => {
     const allowCounter = canUsePosCounterMode(authSession)
     const allowCod = canUsePosCodMode(authSession)
@@ -387,6 +389,7 @@ function PosPage() {
     }, [catalogReloadKey]);
 
     useEffect(() => {
+        if (!canSyncCatalog) return undefined;
         let mounted = true;
         fetchPendingCatalogSync()
             .then((pending) => {
@@ -398,7 +401,7 @@ function PosPage() {
         return () => {
             mounted = false;
         };
-    }, [catalogReloadKey]);
+    }, [canSyncCatalog, catalogReloadKey]);
 
     const formatMoney = (value) =>
         new Intl.NumberFormat("vi-VN", {
@@ -592,6 +595,7 @@ function PosPage() {
     }, [searchValue, activeTabId, catalogReloadKey]);
 
     async function handleRefreshCatalog() {
+        if (!canSyncCatalog) return;
         setIsCatalogSyncing(true);
         try {
             const pending = await fetchPendingCatalogSync();
@@ -1187,6 +1191,18 @@ function PosPage() {
                 updateActiveSession(paymentCheck.clampOrderDiscount);
             }
             showError(paymentCheck.error);
+            return false;
+        }
+
+        const zeroTotalCheck = validateZeroTotalCheckout({
+            items: normalizedItems,
+            customBundles,
+            finalAmount: total,
+            hasAppliedPromotion: Boolean(appliedPromotion?.id),
+            isVipCustomer: canUseVipManualAdjustments,
+        });
+        if (!zeroTotalCheck.ok) {
+            showError(zeroTotalCheck.error);
             return false;
         }
 
@@ -2495,6 +2511,7 @@ function PosPage() {
                                                 </button>
                                             </div>
                                         :   null}
+                                        {canSyncCatalog ?
                                         <button
                                             type="button"
                                             onClick={handleRefreshCatalog}
@@ -2507,6 +2524,7 @@ function PosPage() {
                                                 <span className="rounded-full bg-amber-100 px-1.5 text-[10px] font-bold text-amber-800">{pendingCatalogSync}</span>
                                             :   null}
                                         </button>
+                                        : null}
                                         <span className="text-xs text-[#717971]">{filteredSearchProducts.length} SP</span>
                                     </div>
                                 :   null}

@@ -19,6 +19,7 @@ import {
 
 import { createOrder } from '../services/ordersApi.js'
 import { createCheckoutAttemptManager } from '../utils/checkoutAttempt.js'
+import { validateZeroTotalCheckout } from '../../pos/utils/posDiscountValidation.js'
 
 import {
 
@@ -342,6 +343,15 @@ function OrderCreatePage() {
 
       return
 
+    }
+
+    const zeroTotalCheck = validateZeroTotalCheckout({
+      items,
+      finalAmount,
+    })
+    if (!zeroTotalCheck.ok) {
+      showError(zeroTotalCheck.error)
+      return
     }
 
     const enteredPaidAmount = form.paymentMethod === 'COD'
