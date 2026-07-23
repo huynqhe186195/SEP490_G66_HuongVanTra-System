@@ -41,7 +41,9 @@ public class PaymentLogic(
             throw new OrderValidationException(
                 $"Số tiền thu ({FormatVnd(collected)}) không đủ thành tiền đơn ({FormatVnd(order.FinalAmount)}).");
 
-        payment.Amount = collected;
+        // Chỉ lưu phần tiền thực tế áp dụng vào đơn; tiền thừa được xử lý riêng
+        // qua debt settlement/tiền trả lại và không làm phình aggregate đã thanh toán.
+        payment.Amount = Math.Min(collected, order.FinalAmount);
         payment.IsCodVerified = true;
         payment.PaymentStatus = PaymentStatus.Success;
         payment.TransactionRef = req.TransactionRef?.Trim();

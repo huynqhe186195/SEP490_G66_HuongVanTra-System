@@ -429,7 +429,14 @@ export async function previewCustomerDebtPayment(customerId, amount) {
 
 export async function applyCustomerDebtPayment(
   customerId,
-  { amount, note, sourceOrderId = null, allocations = null },
+  {
+    amount,
+    note,
+    sourceOrderId = null,
+    allocations = null,
+    paymentMethod = 'Cash',
+    idempotencyKey = null,
+  },
 ) {
   const normalizedAllocations = Array.isArray(allocations)
     ? allocations
@@ -447,6 +454,8 @@ export async function applyCustomerDebtPayment(
       note: note?.trim() || null,
       sourceOrderId: sourceOrderId || null,
       allocations: normalizedAllocations?.length ? normalizedAllocations : null,
+      paymentMethod,
+      idempotencyKey,
     }),
   })
   const { mapDebtPaymentResult } = await import('../utils/debtPaymentUtils.js')

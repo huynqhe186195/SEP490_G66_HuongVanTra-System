@@ -160,6 +160,20 @@ export function getCollectedPaymentAmount(payment, order = null) {
   return 0
 }
 
+export function getCollectedOrderPaymentAmount(order) {
+  return (order?.payments || []).reduce(
+    (sum, payment) => sum + getCollectedPaymentAmount(payment, order),
+    0,
+  )
+}
+
+export function getOrderPaymentMethodLabel(order) {
+  const labels = (order?.payments || [])
+    .map((payment) => getPaymentMethodLabel(payment?.paymentMethod))
+    .filter(Boolean)
+  return [...new Set(labels)].join(' + ') || '—'
+}
+
 /** Hiển thị trạng thái thanh toán nhất quán với trạng thái đơn (tránh "Hoàn tất" nhưng "Chờ xử lý"). */
 export function resolveOrderPaymentDisplay(order) {
   const payment = getPrimaryPayment(order)
@@ -173,7 +187,7 @@ export function resolveOrderPaymentDisplay(order) {
   const orderChannel = normalizeOrderKey(order?.orderChannel)
   const finalAmount = Number(order?.finalAmount || 0)
   const expectedAmount = Number(payment.amount || 0)
-  const collectedAmount = getCollectedPaymentAmount(payment, order)
+  const collectedAmount = getCollectedOrderPaymentAmount(order)
   const remainingDebt = Math.max(0, finalAmount - collectedAmount)
   const isFullyPaid = collectedAmount > 0 && remainingDebt <= 0
   const isCod = paymentMethod === 'COD'
@@ -252,7 +266,11 @@ export function resolveOrderPaymentDisplay(order) {
     return {
       label: 'Chờ thanh toán',
       className: 'bg-amber-50 text-amber-800',
-      detail: expectedAmount > 0 ? `Chờ chuyển khoản ${formatVnd(expectedAmount)}` : null,
+      detail: expectedAmount > 0
+        ? collectedAmount > 0
+          ? `Đã thu ${formatVnd(collectedAmount)} · Chờ chuyển khoản ${formatVnd(expectedAmount)}`
+          : `Chờ chuyển khoản ${formatVnd(expectedAmount)}`
+        : null,
       amountCaption: 'Số tiền cần thu',
       displayAmount: expectedAmount,
     }
@@ -278,11 +296,10 @@ export function resolveOrderPaymentDisplay(order) {
 }
 
 export function getOrderRemainingDebt(order) {
-  const payment = getPrimaryPayment(order)
-  if (!payment) return 0
+  if (!(order?.payments || []).length) return 0
   if (normalizeOrderKey(order?.orderStatus) !== 'Completed') return 0
   const finalAmount = Number(order?.finalAmount || 0)
-  const collectedAmount = getCollectedPaymentAmount(payment, order)
+  const collectedAmount = getCollectedOrderPaymentAmount(order)
   return Math.max(0, finalAmount - collectedAmount)
 }
 
@@ -350,8 +367,9 @@ export function getInventorySyncClass(status) {
 }
 
 export function isCodOrder(order) {
-  const payment = order?.payments?.[0]
-  return normalizeOrderKey(payment?.paymentMethod) === 'COD'
+  return Boolean(order?.payments?.some(
+    (payment) => normalizeOrderKey(payment?.paymentMethod) === 'COD',
+  ))
 }
 
 export function isOrderTerminal(order) {
@@ -392,7 +410,9 @@ export function isPendingPaymentOrder(order) {
 }
 
 export function isPendingTransferPayment(order) {
-  const payment = getPrimaryPayment(order)
+  const payment = order?.payments?.find(
+    (row) => isTransferPaymentMethod(row?.paymentMethod),
+  )
   const orderStatus = normalizeOrderKey(order?.orderStatus)
   const paymentStatus = normalizeOrderKey(payment?.paymentStatus)
   return (
@@ -437,7 +457,13 @@ export function canVerifyCod(order) {
 }
 
 export function getPrimaryPayment(order) {
-  return order?.payments?.[0] || null
+  const payments = order?.payments || []
+  return payments.find((payment) =>
+    isTransferPaymentMethod(payment?.paymentMethod)
+    && normalizeOrderKey(payment?.paymentStatus) !== 'Success')
+    || payments.find((payment) => normalizeOrderKey(payment?.paymentMethod) === 'COD')
+    || payments.at(0)
+    || null
 }
 
 export function getCodDaysPending(order) {

@@ -368,6 +368,10 @@ function OrderCreatePage() {
 
       setIsSaving(true)
 
+      const paidAmount = form.paymentMethod === 'COD'
+        ? 0
+        : Math.min(Number(form.paidAmount || 0), finalAmount)
+
       const request = {
 
         customerId: form.customerId || null,
@@ -383,14 +387,13 @@ function OrderCreatePage() {
 
         discountAmount: manualDiscountAmount,
 
-        paidAmount: (() => {
-          if (form.paymentMethod === 'COD') return 0
-          const paid = Number(form.paidAmount || 0)
-          if (isPosChannel(form.orderChannel) && paid < finalAmount) return finalAmount
-          return paid
-        })(),
+        paidAmount,
 
         paymentMethod: form.paymentMethod,
+
+        payments: paidAmount > 0
+          ? [{ paymentMethod: form.paymentMethod, amount: paidAmount }]
+          : [],
 
         items,
 

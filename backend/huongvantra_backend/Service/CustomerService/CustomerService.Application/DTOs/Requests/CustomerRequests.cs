@@ -62,7 +62,9 @@ public record ApplyDebtPaymentRequest(
     decimal Amount,
     string? Note,
     Guid? SourceOrderId = null,
-    IReadOnlyList<DebtAllocationItemRequest>? Allocations = null
+    IReadOnlyList<DebtAllocationItemRequest>? Allocations = null,
+    string? PaymentMethod = null,
+    string? IdempotencyKey = null
 );
 
 /// <summary>
@@ -73,7 +75,8 @@ public record CodDebtSettlement(
     bool PayDebtsEnabled,
     decimal AllocatedAmount,
     IReadOnlyList<CodDebtAllocationItem> Allocations,
-    decimal CreditToCustomer = 0
+    decimal CreditToCustomer = 0,
+    string? PaymentMethod = null
 );
 
 public record CodDebtAllocationItem(

@@ -17,6 +17,7 @@ export function serializeCodDebtSettlement(settlement) {
     allocatedAmount,
     allocations,
     creditToCustomer: Math.max(0, Math.round(Number(settlement.creditToCustomer || 0))),
+    paymentMethod: settlement.paymentMethod || null,
   })
 }
 
@@ -40,6 +41,7 @@ export function parseCodDebtSettlement(value) {
       allocatedAmount,
       allocations,
       creditToCustomer: Math.max(0, Math.round(Number(data.creditToCustomer || 0))),
+      paymentMethod: data.paymentMethod ?? data.PaymentMethod ?? null,
     }
   } catch {
     return null

@@ -199,6 +199,15 @@ export function buildCreateOrderBody(payload) {
     transferQrAmount: Number(payload.transferQrAmount ?? 0),
     paymentMethod: payload.paymentMethod,
     codDebtSettlementJson: payload.codDebtSettlementJson?.trim() || null,
+    payments: Array.isArray(payload.payments)
+      ? payload.payments
+          .map((payment) => ({
+            paymentMethod: payment.paymentMethod,
+            amount: Number(payment.amount),
+            debtSettlementJson: payment.debtSettlementJson?.trim() || null,
+          }))
+          .filter((payment) => payment.paymentMethod && payment.amount > 0)
+      : null,
     items: (payload.items || []).map((line) => ({
       skuId: line.skuId,
       skuSnapshotName: line.skuSnapshotName,

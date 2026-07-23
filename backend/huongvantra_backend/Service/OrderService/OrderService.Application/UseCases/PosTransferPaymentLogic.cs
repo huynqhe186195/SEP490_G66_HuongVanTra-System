@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -148,10 +149,45 @@ public class PosTransferPaymentLogic(
     }
 
     private static decimal GetTransferQrAmount(Order order, Payment payment) =>
-        ResolveTransferQrAmount(payment.Amount, order.FinalAmount);
+        ResolveTransferQrAmount(payment.Amount, order.FinalAmount)
+        + GetDebtSettlementAmount(payment.CodDebtSettlementJson);
 
     private static decimal ResolveTransferQrAmount(decimal paymentAmount, decimal orderFinalAmount) =>
         paymentAmount > 0 ? paymentAmount : orderFinalAmount;
+
+    private static decimal GetDebtSettlementAmount(string? settlementJson)
+    {
+        if (string.IsNullOrWhiteSpace(settlementJson))
+            return 0;
+
+        try
+        {
+            using var document = JsonDocument.Parse(settlementJson);
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+                return 0;
+
+            foreach (var property in document.RootElement.EnumerateObject())
+            {
+                if (!string.Equals(
+                        property.Name,
+                        "allocatedAmount",
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                return property.Value.TryGetDecimal(out var amount)
+                    ? Math.Max(0, amount)
+                    : 0;
+            }
+        }
+        catch (JsonException)
+        {
+            return 0;
+        }
+
+        return 0;
+    }
 
     private static bool IsTransferPaymentMethod(string? paymentMethod) =>
         string.Equals(paymentMethod, PaymentMethod.VietQR.ToString(), StringComparison.OrdinalIgnoreCase)
@@ -220,27 +256,39 @@ public class PosTransferPaymentLogic(
         Guid orderId, OrderAccessContext access, CancellationToken ct = default)
     {
         var order = await orderLogic.GetByIdAsync(orderId, access, ct);
-        var payment = order.Payments.FirstOrDefault();
-        var isPaid = string.Equals(payment?.PaymentStatus, PaymentStatus.Success.ToString(),
-            StringComparison.OrdinalIgnoreCase)
-            || string.Equals(order.OrderStatus, OrderStatus.Completed.ToString(),
-                StringComparison.OrdinalIgnoreCase);
-
         var transferPayment = order.Payments?.FirstOrDefault(p =>
             IsTransferPaymentMethod(p.PaymentMethod));
+        var paymentStatus = transferPayment?.PaymentStatus
+            ?? (order.Payments.All(payment =>
+                    string.Equals(
+                        payment.PaymentStatus,
+                        PaymentStatus.Success.ToString(),
+                        StringComparison.OrdinalIgnoreCase))
+                ? PaymentStatus.Success.ToString()
+                : PaymentStatus.Pending.ToString());
+        var isPaid = string.Equals(
+            order.OrderStatus,
+            OrderStatus.Completed.ToString(),
+            StringComparison.OrdinalIgnoreCase);
 
         return new PosOrderPaymentStatusResponse(
             order.Id,
             order.OrderCode,
-            payment?.PaymentStatus ?? "",
+            paymentStatus,
             order.OrderStatus,
             isPaid,
             null,
             order.OrderCode,
             transferPayment is not null
-                ? ResolveTransferQrAmount(transferPayment.Amount, order.FinalAmount)
+                ? GetTransferQrAmountForResponse(order, transferPayment)
                 : order.FinalAmount);
     }
+
+    private static decimal GetTransferQrAmountForResponse(
+        OrderResponse order,
+        PaymentResponse payment) =>
+        ResolveTransferQrAmount(payment.Amount, order.FinalAmount)
+        + GetDebtSettlementAmount(payment.CodDebtSettlementJson);
 
     public async Task HandleSepayWebhookAsync(SepayWebhookPayload payload, CancellationToken ct = default)
     {
@@ -300,8 +348,13 @@ public class PosTransferPaymentLogic(
             orderCode = order.OrderCode;
         }
 
-        if (order.OrderStatus == OrderStatus.Completed || order.OrderStatus == OrderStatus.Cancelled)
+        if (order.OrderStatus == OrderStatus.Cancelled)
             return;
+        if (order.OrderStatus == OrderStatus.Completed)
+        {
+            await orderLogic.RepublishCompletedCustomerStateAsync(order.Id, ct);
+            return;
+        }
 
         var payment = order.Payments?.FirstOrDefault(p =>
             p.PaymentMethod is PaymentMethod.VietQR or PaymentMethod.BankTransfer);
@@ -312,7 +365,14 @@ public class PosTransferPaymentLogic(
         }
 
         if (payment.PaymentStatus == PaymentStatus.Success)
+        {
+            await orderLogic.CompleteAsync(
+                order.Id,
+                new OrderAccessContext(Guid.Empty, CanViewAllOrders: true),
+                actorName: "SePay Webhook Retry",
+                ct: ct);
             return;
+        }
 
         var expectedAmount = (long)Math.Round(GetTransferQrAmount(order, payment), MidpointRounding.AwayFromZero);
         var tolerance = Math.Max(0, _sepay.AmountToleranceVnd);
@@ -331,12 +391,12 @@ public class PosTransferPaymentLogic(
         // Cho phép chuyển thiếu — phần còn lại sẽ tính vào công nợ khách hàng
         if (receivedAmount < expectedAmount - tolerance)
         {
-            logger.LogInformation(
-                "SePay webhook partial payment for {OrderCode}. Expected {Expected}, received {Received}. Debt: {Debt}.",
+            logger.LogWarning(
+                "SePay webhook ignored: transfer component is incomplete for {OrderCode}. Expected {Expected}, received {Received}.",
                 orderCode,
                 expectedAmount,
-                receivedAmount,
-                expectedAmount - receivedAmount);
+                receivedAmount);
+            return;
         }
 
         payment.TransactionRef = payload.ReferenceCode ?? payload.Id.ToString(CultureInfo.InvariantCulture);

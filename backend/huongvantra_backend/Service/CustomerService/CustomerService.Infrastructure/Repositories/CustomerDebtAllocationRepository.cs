@@ -19,4 +19,13 @@ public class CustomerDebtAllocationRepository : ICustomerDebtAllocationRepositor
             .AsNoTracking()
             .Where(a => a.CustomerId == customerId)
             .ToListAsync(ct);
+
+    public async Task<IReadOnlyList<CustomerDebtAllocation>> GetByTransactionIdAsync(
+        Guid transactionId,
+        CancellationToken ct = default) =>
+        await _db.CustomerDebtAllocations
+            .AsNoTracking()
+            .Where(allocation => allocation.DebtTransactionId == transactionId)
+            .OrderBy(allocation => allocation.CreatedAt)
+            .ToListAsync(ct);
 }

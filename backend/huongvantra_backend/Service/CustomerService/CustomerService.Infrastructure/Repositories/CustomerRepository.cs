@@ -1,8 +1,10 @@
 using CustomerService.Application.Interfaces;
 using CustomerService.Domain.Entities;
 using CustomerService.Domain.Enums;
+using CustomerService.Domain.Exceptions;
 using CustomerService.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
+using MySqlConnector;
 
 namespace CustomerService.Infrastructure.Repositories;
 
@@ -224,8 +226,26 @@ public class CustomerRepository : ICustomerRepository
     public async Task<int> CountDeletedAsync(Guid? assignedSaleId = null, CancellationToken ct = default) =>
         await _db.Customers.CountAsync(c => c.IsDeleted && (!assignedSaleId.HasValue || c.AssignedSaleId == assignedSaleId.Value), ct);
 
-    public async Task<int> SaveChangesAsync(CancellationToken ct = default) =>
-        await _db.SaveChangesAsync(ct);
+    public async Task<int> SaveChangesAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            return await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException exception) when (
+            exception.InnerException is MySqlException { Number: 1062 } mysqlException
+            && mysqlException.Message.Contains("PRIMARY", StringComparison.OrdinalIgnoreCase)
+            && _db.ChangeTracker.Entries<CustomerDebtTransaction>().Any(entry =>
+                entry.State == EntityState.Added
+                && entry.Entity.ReferenceType != null
+                && entry.Entity.ReferenceType.StartsWith(
+                    "DebtPayment:",
+                    StringComparison.Ordinal)
+                && Guid.TryParse(entry.Entity.RelatedOrderCode, out _)))
+        {
+            throw new DuplicateCustomerDebtPaymentException(exception);
+        }
+    }
 
     public void ClearChangeTracker() => _db.ChangeTracker.Clear();
 }

@@ -55,9 +55,46 @@ function buildPromotionPreviewBody({
 function mapPaymentMethod(method) {
   const value = String(method || '').toUpperCase()
   if (value === 'CASH') return 'Cash'
-  if (value === 'TRANSFER') return 'VietQR'
+  if (value === 'TRANSFER' || value === 'VIETQR') return 'VietQR'
+  if (value === 'BANKTRANSFER') return 'BankTransfer'
   if (value === 'COD') return 'COD'
   return 'Cash'
+}
+
+function getPaymentAllocations(payload) {
+  return Array.isArray(payload?.payments) ? payload.payments : []
+}
+
+function findPaymentAllocation(payload, predicate) {
+  return getPaymentAllocations(payload).find((payment) =>
+    predicate(String(payment?.paymentMethod || '').toUpperCase()))
+}
+
+function sumPaymentAllocations(payload, predicate) {
+  return getPaymentAllocations(payload)
+    .filter((payment) => predicate(String(payment?.paymentMethod || '').toUpperCase()))
+    .reduce((sum, payment) => sum + Math.max(0, Number(payment?.amount ?? 0)), 0)
+}
+
+function findTransferPayment(payments) {
+  return (Array.isArray(payments) ? payments : []).find((payment) => {
+    const method = String(payment?.paymentMethod || '').toUpperCase()
+    return method === 'VIETQR' || method === 'BANKTRANSFER' || method === 'TRANSFER'
+  })
+}
+
+function resolveOrderPaymentStatus(payments) {
+  const rows = Array.isArray(payments) ? payments : []
+  const transferPayment = findTransferPayment(rows)
+  if (transferPayment) return transferPayment.paymentStatus ?? ''
+  if (rows.length === 0) return ''
+  if (rows.every((payment) => String(payment?.paymentStatus || '').toLowerCase() === 'success')) {
+    return 'Success'
+  }
+  if (rows.some((payment) => String(payment?.paymentStatus || '').toLowerCase() === 'failed')) {
+    return 'Failed'
+  }
+  return 'Pending'
 }
 
 function mapPosLineItem(item) {
@@ -82,7 +119,13 @@ function buildOrderRequestFromPosPayload(
   { orderChannel, shippingAddress, paymentMethod, paidAmount, transferQrAmount, codDebtSettlementJson },
 ) {
   const lines = (payload.items ?? []).map(mapPosLineItem)
-  const payment = payload.payments?.[0]
+  const transferPayment = findPaymentAllocation(
+    payload,
+    (method) => method === 'TRANSFER' || method === 'VIETQR' || method === 'BANKTRANSFER',
+  )
+  const cashPayment = findPaymentAllocation(payload, (method) => method === 'CASH')
+  const codPayment = findPaymentAllocation(payload, (method) => method === 'COD')
+  const legacyPayment = transferPayment ?? cashPayment ?? codPayment
 
   return buildCreateOrderBody({
     customerId: payload.customerId,
@@ -93,9 +136,14 @@ function buildOrderRequestFromPosPayload(
     discountAmount: Number(payload.manualDiscount ?? 0),
     promotionId: payload.promotionId,
     promotionCode: payload.promotionCode,
-    paidAmount: paidAmount ?? Number(payment?.amount ?? 0),
+    paidAmount: paidAmount ?? 0,
     transferQrAmount: transferQrAmount ?? 0,
-    paymentMethod: paymentMethod ?? mapPaymentMethod(payment?.paymentMethod),
+    paymentMethod: paymentMethod ?? mapPaymentMethod(legacyPayment?.paymentMethod),
+    payments: (payload.payments ?? []).map((allocation) => ({
+      paymentMethod: mapPaymentMethod(allocation.paymentMethod),
+      amount: Number(allocation.amount ?? 0),
+      debtSettlementJson: allocation.debtSettlementJson ?? null,
+    })),
     codDebtSettlementJson: codDebtSettlementJson ?? null,
     items: lines.map((line) => ({
       skuId: line.productId,
@@ -115,12 +163,11 @@ function buildOrderRequestFromPosPayload(
 }
 
 function mapOrderDetailToPosResult(order) {
-  const primaryPayment = order.payments?.[0]
   return {
     orderId: order.id,
     orderCode: order.orderCode,
     totalAmount: order.finalAmount,
-    paymentStatus: primaryPayment?.paymentStatus ?? '',
+    paymentStatus: resolveOrderPaymentStatus(order.payments),
     stockStatus: String(order.inventorySyncStatus || 'PendingDeduction').toLowerCase(),
     orderStatus: order.orderStatus,
     qrPayload: null,
@@ -297,10 +344,13 @@ async function submitPosOrder(payload, options, { idempotencyKey } = {}) {
 }
 
 export async function createPosOrderOnline(payload, { qrAmount = 0, idempotencyKey } = {}) {
-  const payment = payload.payments?.[0]
+  const transferPayment = findPaymentAllocation(
+    payload,
+    (method) => method === 'TRANSFER' || method === 'VIETQR' || method === 'BANKTRANSFER',
+  )
   const result = await submitPosOrder(payload, {
     orderChannel: 'POS',
-    paymentMethod: mapPaymentMethod(payment?.paymentMethod ?? 'TRANSFER'),
+    paymentMethod: mapPaymentMethod(transferPayment?.paymentMethod ?? 'TRANSFER'),
     paidAmount: 0,
     transferQrAmount: qrAmount > 0 ? qrAmount : 0,
   }, { idempotencyKey })
@@ -348,11 +398,19 @@ export function buildTakeawayOrderPayload({
 export function createTakeawayCodOrder(
   payload,
   expectedAmount = 0,
-  { codDebtSettlementJson = null, idempotencyKey } = {},
+  { paymentAmount = expectedAmount, codDebtSettlementJson = null, idempotencyKey } = {},
 ) {
   const amount = Math.max(0, Number(expectedAmount) || 0)
+  const appliedAmount = Math.max(0, Number(paymentAmount) || 0)
   return submitPosOrder(
-    { ...payload, payments: [{ paymentMethod: 'COD', amount }] },
+    {
+      ...payload,
+      payments: [{
+        paymentMethod: 'COD',
+        amount: appliedAmount,
+        debtSettlementJson: codDebtSettlementJson,
+      }],
+    },
     {
       orderChannel: 'COD',
       shippingAddress: payload.shippingAddress,
@@ -364,9 +422,24 @@ export function createTakeawayCodOrder(
   )
 }
 
-export async function createTakeawayVietQrOrder(payload, { qrAmount = 0, idempotencyKey } = {}) {
+export async function createTakeawayVietQrOrder(
+  payload,
+  {
+    qrAmount = 0,
+    paymentAmount = qrAmount,
+    debtSettlementJson = null,
+    idempotencyKey,
+  } = {},
+) {
   const result = await submitPosOrder(
-    { ...payload, payments: [{ paymentMethod: 'TRANSFER', amount: 0 }] },
+    {
+      ...payload,
+      payments: [{
+        paymentMethod: 'TRANSFER',
+        amount: Math.max(0, Number(paymentAmount) || 0),
+        debtSettlementJson,
+      }],
+    },
     {
       orderChannel: 'Phone',
       shippingAddress: payload.shippingAddress,
@@ -382,13 +455,13 @@ export async function createTakeawayVietQrOrder(payload, { qrAmount = 0, idempot
 export async function createPosOrderOffline(payload, { idempotencyKey } = {}) {
   // Khi offline: lưu vào sync_queue và trả về fake result để UI tiếp tục
   if (!navigator.onLine) {
-    const payment = payload.payments?.[0]
+    const cashAmount = sumPaymentAllocations(payload, (method) => method === 'CASH')
     const tempId = `OFFLINE-${Date.now()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`
     const idempotencyKey = crypto.randomUUID()
     const orderPayload = buildOrderRequestFromPosPayload(payload, {
       orderChannel: 'POS',
-      paymentMethod: mapPaymentMethod(payment?.paymentMethod ?? 'CASH'),
-      paidAmount: Number(payment?.amount ?? 0),
+      paymentMethod: 'Cash',
+      paidAmount: cashAmount,
     })
 
     await saveDraftOrder({
@@ -405,25 +478,32 @@ export async function createPosOrderOffline(payload, { idempotencyKey } = {}) {
       status: 'PENDING_SYNC',
       isOffline: true,
       totalAmount: orderPayload.totalAmount ?? 0,
-      paidAmount: Number(payment?.amount ?? 0),
+      paidAmount: cashAmount,
     }
   }
 
-  const payment = payload.payments?.[0]
+  const cashAmount = sumPaymentAllocations(payload, (method) => method === 'CASH')
   return submitPosOrder(payload, {
     orderChannel: 'POS',
-    paymentMethod: mapPaymentMethod(payment?.paymentMethod ?? 'CASH'),
-    paidAmount: Number(payment?.amount ?? 0),
+    paymentMethod: 'Cash',
+    paidAmount: cashAmount,
   }, { idempotencyKey })
 }
 
 /** CK tại quầy đã ghi nhận số tiền khách chuyển (không qua QR). */
 export function createPosOrderTransferRecorded(payload) {
-  const payment = payload.payments?.[0]
+  const transferPayment = findPaymentAllocation(
+    payload,
+    (method) => method === 'TRANSFER' || method === 'VIETQR' || method === 'BANKTRANSFER',
+  )
+  const transferAmount = sumPaymentAllocations(
+    payload,
+    (method) => method === 'TRANSFER' || method === 'VIETQR' || method === 'BANKTRANSFER',
+  )
   return submitPosOrder(payload, {
     orderChannel: 'POS',
-    paymentMethod: mapPaymentMethod(payment?.paymentMethod ?? 'TRANSFER'),
-    paidAmount: Number(payment?.amount ?? 0),
+    paymentMethod: mapPaymentMethod(transferPayment?.paymentMethod ?? 'TRANSFER'),
+    paidAmount: transferAmount,
   })
 }
 
@@ -451,19 +531,18 @@ export async function fetchPosOrderPaymentStatus(orderId) {
     return mapPosPaymentStatus(data)
   } catch {
     const order = await fetchOrder(orderId)
-    const payment = order.payments?.[0]
-    const isPaid =
-      String(payment?.paymentStatus || '').toLowerCase() === 'success'
-      || String(order.orderStatus || '').toLowerCase() === 'completed'
+    const transferPayment = findTransferPayment(order.payments)
+    const paymentStatus = resolveOrderPaymentStatus(order.payments)
+    const isPaid = String(order.orderStatus || '').toLowerCase() === 'completed'
 
     return mapPosPaymentStatus({
       orderId: order.id,
       orderCode: order.orderCode,
-      paymentStatus: payment?.paymentStatus ?? '',
+      paymentStatus,
       orderStatus: order.orderStatus,
       isPaid,
       expectedTransferContent: order.orderCode,
-      expectedAmount: order.finalAmount,
+      expectedAmount: Number(transferPayment?.amount ?? order.finalAmount),
     })
   }
 }

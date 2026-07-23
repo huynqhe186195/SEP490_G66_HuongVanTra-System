@@ -319,20 +319,24 @@ public class OrderLogic(
                 promotionDiscount.DiscountAmount,
                 isAuthorizedVipGiftOrder);
         }
+        var paymentAllocations = NormalizePaymentAllocations(req, finalAmount);
+        var allocatedPaymentTotal = paymentAllocations.Sum(item => item.Amount);
         OrderBusinessRules.EnsureGuestFullyPaid(
             req.CustomerId,
-            req.PaidAmount,
+            allocatedPaymentTotal,
             finalAmount);
         var orderCode = await _codeGen.GenerateAsync(req.OrderKind, ct);
 
-        var isPosCashCompleted = req.OrderChannel == OrderChannel.POS
-            && req.PaymentMethod == PaymentMethod.Cash;
-
-        var isPosRecordedTransferCompleted = req.OrderChannel == OrderChannel.POS
-            && req.PaymentMethod is PaymentMethod.VietQR or PaymentMethod.BankTransfer
-            && req.PaidAmount > 0;
-
-        var isPosCompletedOnCreate = isPosCashCompleted || isPosRecordedTransferCompleted;
+        var hasPendingTransfer = paymentAllocations.Any(item =>
+            item.PaymentMethod is PaymentMethod.VietQR or PaymentMethod.BankTransfer
+            && item.PaymentStatus != PaymentStatus.Success);
+        var hasCodPayment = paymentAllocations.Any(item => item.PaymentMethod == PaymentMethod.COD);
+        var hasRecordedPayment = paymentAllocations.Any(item => item.PaymentStatus == PaymentStatus.Success);
+        var isPosCompletedOnCreate =
+            req.OrderChannel == OrderChannel.POS
+            && !hasPendingTransfer
+            && !hasCodPayment
+            && (finalAmount <= 0 || hasRecordedPayment || req.PaymentMethod == PaymentMethod.Cash);
 
         var ownerId = access.CanViewAllOrders ? (req.EmployeeId ?? actorId) : actorId;
         if (!access.CanViewAllOrders
@@ -409,58 +413,48 @@ public class OrderLogic(
             UpdatedAt = now
         }).ToList();
 
-        var debtAmount = req.PaymentMethod == PaymentMethod.COD
+        var successfulPaymentTotal = paymentAllocations
+            .Where(item => item.PaymentStatus == PaymentStatus.Success)
+            .Sum(item => item.Amount);
+        var debtAmount = hasCodPayment
             ? finalAmount
-            : Math.Max(0, finalAmount - req.PaidAmount);
+            : Math.Max(0, finalAmount - successfulPaymentTotal);
 
-        var paymentAmount = req.PaidAmount;
-        if (paymentAmount <= 0
-            && req.PaymentMethod is PaymentMethod.VietQR or PaymentMethod.BankTransfer
-            && req.TransferQrAmount > 0)
+        var paymentCreatedAt = DateTime.UtcNow;
+        var payments = paymentAllocations.Select(item =>
         {
-            paymentAmount = req.TransferQrAmount;
-        }
+            var payment = new Payment
+            {
+                Id = Guid.NewGuid(),
+                OrderId = order.Id,
+                PaymentMethod = item.PaymentMethod,
+                Amount = item.Amount,
+                PaymentStatus = item.PaymentStatus,
+                IsCodVerified = false,
+                CodWarningDate = item.PaymentMethod == PaymentMethod.COD
+                    ? paymentCreatedAt.AddDays(7)
+                    : null,
+                CodDebtSettlementJson = item.DebtSettlementJson,
+                PaidAt = item.PaymentStatus == PaymentStatus.Success
+                    ? paymentCreatedAt
+                    : null,
+                CreatedAt = paymentCreatedAt,
+                UpdatedAt = paymentCreatedAt
+            };
 
-        var isPosRecordedPayment = isPosCompletedOnCreate
-            && req.PaymentMethod != PaymentMethod.COD
-            && (req.PaidAmount > 0 || finalAmount <= 0);
+            if (item.PaymentMethod is PaymentMethod.VietQR or PaymentMethod.BankTransfer
+                && item.PaymentStatus == PaymentStatus.Pending)
+            {
+                var expiryMinutes = _sepay.PosVaDurationSeconds > 0
+                    ? Math.Max(1, _sepay.PosVaDurationSeconds / 60)
+                    : 15;
+                payment.TransferQrExpiresAtUtc = paymentCreatedAt.AddMinutes(expiryMinutes);
+            }
 
-        var payment = new Payment
-        {
-            Id = Guid.NewGuid(),
-            OrderId = order.Id,
-            PaymentMethod = req.PaymentMethod,
-            Amount = paymentAmount,
-            PaymentStatus = req.PaymentMethod == PaymentMethod.COD
-                ? PaymentStatus.Pending
-                : isPosRecordedPayment || req.PaidAmount >= finalAmount
-                    ? PaymentStatus.Success
-                    : PaymentStatus.Pending,
-            IsCodVerified = false,
-            CodWarningDate = req.PaymentMethod == PaymentMethod.COD
-                ? DateTime.UtcNow.AddDays(7)
-                : null,
-            CodDebtSettlementJson = req.PaymentMethod == PaymentMethod.COD
-                ? string.IsNullOrWhiteSpace(req.CodDebtSettlementJson) ? null : req.CodDebtSettlementJson.Trim()
-                : null,
-            PaidAt = null,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
-        };
+            return payment;
+        }).ToList();
 
-        if (payment.PaymentStatus == PaymentStatus.Success && req.PaymentMethod != PaymentMethod.COD)
-            payment.PaidAt = DateTime.UtcNow;
-
-        if (payment.PaymentMethod is PaymentMethod.VietQR or PaymentMethod.BankTransfer
-            && payment.PaymentStatus == PaymentStatus.Pending)
-        {
-            var expiryMinutes = _sepay.PosVaDurationSeconds > 0
-                ? Math.Max(1, _sepay.PosVaDurationSeconds / 60)
-                : 15;
-            payment.TransferQrExpiresAtUtc = DateTime.UtcNow.AddMinutes(expiryMinutes);
-        }
-
-        order.Payments = [payment];
+        order.Payments = payments;
 
         await _orderRepo.AddAsync(order, ct);
 
@@ -500,25 +494,36 @@ public class OrderLogic(
             actorName,
             ct);
 
-        if (payment.PaymentStatus == PaymentStatus.Success)
+        foreach (var payment in payments)
         {
-            var paymentNote = debtAmount > 0
-                ? $"Đã thu {FormatVnd(payment.Amount)} qua {GetPaymentMethodLabel(payment.PaymentMethod)}. Còn nợ {FormatVnd(debtAmount)}."
-                : $"Đã thanh toán {FormatVnd(payment.Amount)} qua {GetPaymentMethodLabel(payment.PaymentMethod)}.";
-            await RecordActivityAsync(
-                order.Id,
-                OrderActivityType.PaymentReceived,
-                paymentNote,
-                actorId,
-                actorName,
-                ct);
+            if (payment.PaymentStatus == PaymentStatus.Success)
+            {
+                await RecordActivityAsync(
+                    order.Id,
+                    OrderActivityType.PaymentReceived,
+                    $"Đã ghi nhận {FormatVnd(payment.Amount)} qua {GetPaymentMethodLabel(payment.PaymentMethod)}.",
+                    actorId,
+                    actorName,
+                    ct);
+            }
+            else
+            {
+                await RecordActivityAsync(
+                    order.Id,
+                    OrderActivityType.PaymentPending,
+                    $"Chờ {FormatVnd(payment.Amount)} qua {GetPaymentMethodLabel(payment.PaymentMethod)}.",
+                    actorId,
+                    actorName,
+                    ct);
+            }
         }
-        else
+
+        if (payments.Count == 0 && finalAmount > 0)
         {
             await RecordActivityAsync(
                 order.Id,
                 OrderActivityType.PaymentPending,
-                $"Chờ thanh toán qua {GetPaymentMethodLabel(payment.PaymentMethod)}.",
+                $"Chưa thu tiền. Còn nợ {FormatVnd(debtAmount)}.",
                 actorId,
                 actorName,
                 ct);
@@ -561,6 +566,131 @@ public class OrderLogic(
 
         return MapToResponse(order, MapStockHandlingSummary(stockHandling));
     }
+
+    private static List<NormalizedPaymentAllocation> NormalizePaymentAllocations(
+        CreateOrderRequest request,
+        decimal finalAmount)
+    {
+        if (request.Payments is { Count: > 0 })
+        {
+            if (finalAmount <= 0)
+                throw new OrderValidationException("Đơn 0 đồng hợp lệ không được tạo bản ghi thanh toán 0 đồng.");
+
+            if (request.Payments.Any(item => item.Amount <= 0))
+                throw new OrderValidationException("Mỗi khoản thanh toán phải lớn hơn 0.");
+
+            if (request.Payments.Any(item => !Enum.IsDefined(item.PaymentMethod)))
+                throw new OrderValidationException("Phương thức thanh toán không hợp lệ.");
+
+            if (request.Payments
+                .GroupBy(item => item.PaymentMethod)
+                .Any(group => group.Count() > 1))
+            {
+                throw new OrderValidationException(
+                    "Mỗi phương thức thanh toán chỉ được xuất hiện một lần trong cùng đơn hàng.");
+            }
+
+            var transferCount = request.Payments.Count(item =>
+                item.PaymentMethod is PaymentMethod.VietQR or PaymentMethod.BankTransfer);
+            var hasCod = request.Payments.Any(item => item.PaymentMethod == PaymentMethod.COD);
+            if (request.Payments.Count > 2
+                || transferCount > 1
+                || (request.Payments.Count == 2
+                    && (!request.Payments.Any(item => item.PaymentMethod == PaymentMethod.Cash)
+                        || transferCount != 1))
+                || (hasCod && request.Payments.Count != 1))
+            {
+                throw new OrderValidationException(
+                    "Chỉ hỗ trợ tiền mặt, chuyển khoản/VietQR, COD riêng lẻ hoặc kết hợp tiền mặt với một khoản chuyển khoản.");
+            }
+
+            if (request.Payments.Count(item => !string.IsNullOrWhiteSpace(item.DebtSettlementJson)) > 1)
+                throw new OrderValidationException("Chỉ được khai báo một yêu cầu thu công nợ trong mỗi lần thanh toán.");
+
+            if (!request.CustomerId.HasValue
+                && request.Payments.Any(item => !string.IsNullOrWhiteSpace(item.DebtSettlementJson)))
+            {
+                throw new OrderValidationException("Chỉ khách hàng đã đăng ký mới được thanh toán công nợ.");
+            }
+
+            var total = request.Payments.Sum(item => item.Amount);
+            if (total > finalAmount)
+                throw new OrderValidationException("Tổng các khoản thanh toán không được vượt quá thành tiền.");
+            if (hasCod && total != finalAmount)
+                throw new OrderValidationException("Khoản COD phải bằng đúng thành tiền của đơn.");
+
+            return request.Payments.Select(item => new NormalizedPaymentAllocation(
+                item.PaymentMethod,
+                item.Amount,
+                item.PaymentMethod == PaymentMethod.Cash
+                    ? PaymentStatus.Success
+                    : PaymentStatus.Pending,
+                string.IsNullOrWhiteSpace(item.DebtSettlementJson)
+                    ? null
+                    : item.DebtSettlementJson.Trim())).ToList();
+        }
+
+        if (finalAmount <= 0)
+        {
+            if (request.PaidAmount > 0 || request.TransferQrAmount > 0)
+                throw new OrderValidationException("Đơn 0 đồng hợp lệ không cần khoản thanh toán.");
+            return [];
+        }
+
+        if (request.PaymentMethod == PaymentMethod.COD)
+        {
+            return
+            [
+                new NormalizedPaymentAllocation(
+                    PaymentMethod.COD,
+                    finalAmount,
+                    PaymentStatus.Pending,
+                    string.IsNullOrWhiteSpace(request.CodDebtSettlementJson)
+                        ? null
+                        : request.CodDebtSettlementJson.Trim())
+            ];
+        }
+
+        if (!Enum.IsDefined(request.PaymentMethod))
+            throw new OrderValidationException("Phương thức thanh toán không hợp lệ.");
+
+        var requestedAmount = request.PaymentMethod is PaymentMethod.VietQR or PaymentMethod.BankTransfer
+            && request.PaidAmount <= 0
+                ? request.TransferQrAmount
+                : request.PaidAmount;
+        if (requestedAmount <= 0)
+            return [];
+        // Legacy callers may send cash tendered (including change) via PaidAmount.
+        // Persist only the amount applied to the order, matching Payments[] semantics.
+        var amount = Math.Min(requestedAmount, finalAmount);
+
+        var isRecordedTransfer =
+            request.PaymentMethod is PaymentMethod.VietQR or PaymentMethod.BankTransfer
+            && request.PaidAmount > 0
+            && (request.OrderChannel == OrderChannel.POS || request.PaidAmount >= finalAmount);
+        var status = request.PaymentMethod == PaymentMethod.Cash
+            ? request.OrderChannel == OrderChannel.POS || request.PaidAmount >= finalAmount
+                ? PaymentStatus.Success
+                : PaymentStatus.Pending
+            : isRecordedTransfer
+                ? PaymentStatus.Success
+                : PaymentStatus.Pending;
+
+        return
+        [
+            new NormalizedPaymentAllocation(
+                request.PaymentMethod,
+                amount,
+                status,
+                null)
+        ];
+    }
+
+    private sealed record NormalizedPaymentAllocation(
+        PaymentMethod PaymentMethod,
+        decimal Amount,
+        PaymentStatus PaymentStatus,
+        string? DebtSettlementJson);
 
     private async Task EnsureVipCustomerAsync(Guid? customerId, CancellationToken ct)
     {
@@ -762,10 +892,30 @@ public class OrderLogic(
         order.UpdatedAt = DateTime.UtcNow;
 
         var payments = order.Payments ?? await GetPaymentsInternal(order.Id, ct);
-        foreach (var payment in payments.Where(p => p.PaymentStatus != PaymentStatus.Success))
+        var successfulAmount = payments
+            .Where(payment => payment.PaymentStatus == PaymentStatus.Success)
+            .Sum(payment => payment.Amount);
+        var remainingAmount = Math.Max(0, order.FinalAmount - successfulAmount);
+        var pendingPayments = payments
+            .Where(payment => payment.PaymentStatus == PaymentStatus.Pending)
+            .ToList();
+        if (pendingPayments.Count > 0 && remainingAmount > 0)
         {
-            payment.Amount = order.FinalAmount;
-            payment.UpdatedAt = DateTime.UtcNow;
+            pendingPayments[0].Amount = remainingAmount;
+            pendingPayments[0].UpdatedAt = DateTime.UtcNow;
+            foreach (var extraPayment in pendingPayments.Skip(1))
+            {
+                extraPayment.PaymentStatus = PaymentStatus.Failed;
+                extraPayment.UpdatedAt = DateTime.UtcNow;
+            }
+        }
+        else if (remainingAmount <= 0)
+        {
+            foreach (var pendingPayment in pendingPayments)
+            {
+                pendingPayment.PaymentStatus = PaymentStatus.Failed;
+                pendingPayment.UpdatedAt = DateTime.UtcNow;
+            }
         }
 
         await RecordActivityAsync(
@@ -868,20 +1018,36 @@ public class OrderLogic(
         if (order.OrderStatus == OrderStatus.Cancelled || order.OrderStatus == OrderStatus.Completed)
             throw new OrderCannotBeModifiedException(id, order.OrderStatus.ToString());
 
+        var payments = order.Payments ?? await GetPaymentsInternal(order.Id, ct);
+        var hasPendingTransfer = payments.Any(payment =>
+            payment.PaymentMethod is PaymentMethod.VietQR or PaymentMethod.BankTransfer
+            && payment.PaymentStatus != PaymentStatus.Success);
+        if (hasPendingTransfer && !actualReceivedAmount.HasValue)
+        {
+            throw new OrderValidationException(
+                "Đơn chuyển khoản chỉ được hoàn tất sau khi backend xác nhận giao dịch.");
+        }
+
         order.OrderStatus = OrderStatus.Completed;
         order.UpdatedAt = DateTime.UtcNow;
 
-        var payments = order.Payments ?? await GetPaymentsInternal(order.Id, ct);
         foreach (var payment in payments)
         {
             if (payment.PaymentStatus == PaymentStatus.Success) continue;
 
             if (payment.PaymentMethod is PaymentMethod.VietQR or PaymentMethod.BankTransfer or PaymentMethod.Cash)
             {
+                var alreadyPaid = payments
+                    .Where(item => item.PaymentStatus == PaymentStatus.Success)
+                    .Sum(item => item.Amount);
+                var remainingOrderAmount = Math.Max(0, order.FinalAmount - alreadyPaid);
+                var configuredAmount = payment.Amount > 0
+                    ? Math.Min(payment.Amount, remainingOrderAmount)
+                    : remainingOrderAmount;
                 var paidNow = (payment.PaymentMethod is PaymentMethod.VietQR or PaymentMethod.BankTransfer)
                     && actualReceivedAmount.HasValue
-                    ? Math.Min(actualReceivedAmount.Value, order.FinalAmount)
-                    : order.FinalAmount;
+                    ? Math.Min(actualReceivedAmount.Value, configuredAmount)
+                    : configuredAmount;
 
                 payment.PaymentStatus = PaymentStatus.Success;
                 payment.Amount = paidNow;
@@ -943,6 +1109,24 @@ public class OrderLogic(
             var debtAmount = Math.Max(0, order.FinalAmount - paidAmount);
             await PublishOrderCompletedAsync(order, debtAmount, ct);
         }
+    }
+
+    public async Task RepublishCompletedCustomerStateAsync(
+        Guid orderId,
+        CancellationToken ct = default)
+    {
+        var order = await _orderRepo.GetByIdAsync(orderId, ct)
+            ?? throw new OrderNotFoundException(orderId);
+        if (order.OrderStatus != OrderStatus.Completed || !order.CustomerId.HasValue)
+            return;
+
+        var paidAmount = (order.Payments ?? [])
+            .Where(payment => payment.PaymentStatus == PaymentStatus.Success)
+            .Sum(payment => payment.Amount);
+        await PublishOrderCompletedEventAsync(
+            order,
+            Math.Max(0, order.FinalAmount - paidAmount),
+            ct);
     }
 
     public async Task<ReturnOrderResponse> ReturnAsync(
@@ -1241,11 +1425,23 @@ public class OrderLogic(
             // Log if needed, but don't prevent the event from being published
         }
 
-        await _eventPublisher.PublishOrderCompletedAsync(
+        await PublishOrderCompletedEventAsync(order, debtAmount, ct);
+    }
+
+    private Task PublishOrderCompletedEventAsync(
+        Order order,
+        decimal debtAmount,
+        CancellationToken ct)
+    {
+        var debtSettlementJson = (order.Payments ?? [])
+            .Select(payment => payment.CodDebtSettlementJson)
+            .FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
+
+        return _eventPublisher.PublishOrderCompletedAsync(
             order.Id, order.OrderCode, order.CustomerId.Value,
             order.FinalAmount, debtAmount,
             (order.OrderDetails ?? []).Select(d => (d.SkuId, d.Quantity)),
-            null,
+            debtSettlementJson,
             ct);
     }
 

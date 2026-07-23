@@ -11,8 +11,6 @@ import {
 } from '../services/posApi.js'
 import { isQrExpired, useQrExpiryCountdown } from '../utils/qrExpiry.js'
 import { vietnamNowLabel } from '../../../utils/vietnamDateTime.js'
-import { applyCustomerDebtPaymentWithRetry } from '../../customers/services/customersApi.js'
-import { buildDebtReceiptFromPayment } from '../../customers/utils/debtPaymentUtils.js'
 import { printReceiptSequence } from '../utils/printReceipt.js'
 
 const POLL_INTERVAL_MS = 3000
@@ -88,34 +86,12 @@ function PosTransferQrPage() {
       const receipts = receipt ? [receipt] : []
       const debtSettlement = payment?.debtSettlement
 
-      if (debtSettlement?.customerId && debtSettlement.amount > 0) {
-        try {
-          const debtPayment = await applyCustomerDebtPaymentWithRetry(debtSettlement.customerId, {
-            amount: debtSettlement.amount,
-            note: `Trừ từ tiền thừa đơn ${orderCode}`,
-            sourceOrderId: debtSettlement.orderId || payment?.orderId,
-            allocations: debtSettlement.allocations ?? null,
-          })
-          const debtReceipt = buildDebtReceiptFromPayment({
-            payment: debtPayment,
-            customerName: debtSettlement.customerName || '',
-            customerCode: debtSettlement.customerCode || '',
-            paymentMethodLabel: 'Chuyển khoản',
-            balanceBefore: debtSettlement.balanceBefore,
-            relatedOrderCode: orderCode || undefined,
-          })
-          if (debtReceipt) receipts.push(debtReceipt)
-        } catch (error) {
-          showError(error.message || 'Đơn đã thanh toán nhưng không ghi được trừ nợ.')
-        }
-      }
-
       const successMsg = status?.invoiceCode
         ? debtSettlement?.amount > 0
-          ? `Đã thanh toán · Số HĐ: ${status.invoiceCode} · Trừ nợ ${formatMoney(debtSettlement.amount)} đ`
+          ? `Đã thanh toán · Số HĐ: ${status.invoiceCode} · Backend đang đối soát trừ nợ ${formatMoney(debtSettlement.amount)} đ`
           : `Đã thanh toán · Số HĐ: ${status.invoiceCode}`
         : debtSettlement?.amount > 0
-          ? `Đã thanh toán đơn ${orderCode} · Trừ nợ ${formatMoney(debtSettlement.amount)} đ`
+          ? `Đã thanh toán đơn ${orderCode} · Backend đang đối soát trừ nợ ${formatMoney(debtSettlement.amount)} đ`
           : `Đã thanh toán · Đơn ${orderCode}`
 
       setPaymentDone(true)

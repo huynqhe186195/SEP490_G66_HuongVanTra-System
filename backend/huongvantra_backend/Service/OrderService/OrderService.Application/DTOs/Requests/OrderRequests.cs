@@ -18,7 +18,14 @@ public record CreateOrderRequest(
     string? PromotionCode = null,
     string? CodDebtSettlementJson = null,
     OrderKind OrderKind = OrderKind.Sale,
-    List<CreateCustomBundleRequest>? CustomBundles = null
+    List<CreateCustomBundleRequest>? CustomBundles = null,
+    List<CreatePaymentAllocationRequest>? Payments = null
+);
+
+public record CreatePaymentAllocationRequest(
+    PaymentMethod PaymentMethod,
+    decimal Amount,
+    string? DebtSettlementJson = null
 );
 
 public record CreateOrderDetailRequest(
