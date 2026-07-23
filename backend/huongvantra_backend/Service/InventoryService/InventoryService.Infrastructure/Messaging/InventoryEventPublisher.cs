@@ -10,6 +10,8 @@ public class InventoryEventPublisher(IPublishEndpoint _publishEndpoint) : IInven
         Guid orderId, string orderCode, bool success, CancellationToken ct = default) =>
         _publishEndpoint.Publish(new StockDeductedEvent
         {
+            EventId = Guid.NewGuid(),
+            OccurredAtUtc = DateTime.UtcNow,
             OrderId = orderId,
             OrderCode = orderCode,
             Success = success,
@@ -20,6 +22,8 @@ public class InventoryEventPublisher(IPublishEndpoint _publishEndpoint) : IInven
         Guid orderId, string orderCode, string reason, CancellationToken ct = default) =>
         _publishEndpoint.Publish(new StockDeductedEvent
         {
+            EventId = Guid.NewGuid(),
+            OccurredAtUtc = DateTime.UtcNow,
             OrderId = orderId,
             OrderCode = orderCode,
             Success = false,
