@@ -16,6 +16,7 @@ public class OrderDbContext(DbContextOptions<OrderDbContext> options) : DbContex
     public DbSet<ReturnOrderDetail> ReturnOrderDetails => Set<ReturnOrderDetail>();
     public DbSet<CustomBundle> CustomBundles => Set<CustomBundle>();
     public DbSet<CustomBundleIngredient> CustomBundleIngredients => Set<CustomBundleIngredient>();
+    public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
