@@ -15,6 +15,8 @@ namespace CustomerService.Application.UseCases;
 public class CustomerLogic
 {
     private const int MaxPageSize = 100;
+    private const int MaxCheckoutSearchPageSize = 50;
+    private const int MaxCheckoutSearchLength = 100;
     public const string CustomerImportTemplateFileName = "Mau_Import_Khach_Hang_Huong_Van_Tra.xlsx";
     public const string CustomerImportContentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
     private const int ImportHeaderScanRowCount = 20;
@@ -878,6 +880,51 @@ public class CustomerLogic
         var customers = await _customerRepo.GetAllAsync(page, pageSize, filter, ct);
         var items = customers.Select(MapToResponse).ToList();
         return new PagedResult<CustomerResponse>(items, page, pageSize, totalCount);
+    }
+
+    public async Task<PagedResult<CheckoutCustomerSearchResponse>> SearchForCheckoutAsync(
+        CheckoutCustomerSearchRequest request,
+        CustomerAccessContext access,
+        CancellationToken ct = default)
+    {
+        request ??= new CheckoutCustomerSearchRequest();
+        ValidatePagination(request.Page, request.PageSize, MaxCheckoutSearchPageSize);
+
+        var search = NormalizeCheckoutSearch(request.Search);
+        var normalizedPhone = NormalizePhoneSearch(search);
+        var customerGroup = ParseCheckoutCustomerType(request.CustomerType);
+
+        if (request.ExactPhone
+            && !VietnamPhoneValidator.TryValidate(normalizedPhone, out var phoneError))
+        {
+            throw new CustomerValidationException([phoneError ?? "Số điện thoại tìm kiếm không hợp lệ."]);
+        }
+
+        if (string.IsNullOrEmpty(search) && !customerGroup.HasValue)
+        {
+            return new PagedResult<CheckoutCustomerSearchResponse>(
+                Array.Empty<CheckoutCustomerSearchResponse>(),
+                request.Page,
+                request.PageSize,
+                0);
+        }
+
+        var (customers, totalCount) = await _customerRepo.SearchForCheckoutAsync(
+            search,
+            normalizedPhone,
+            request.ExactPhone,
+            customerGroup,
+            access.AssignedSaleFilter,
+            request.Page,
+            request.PageSize,
+            ct);
+
+        var items = customers.Select(MapToCheckoutSearchResponse).ToList();
+        return new PagedResult<CheckoutCustomerSearchResponse>(
+            items,
+            request.Page,
+            request.PageSize,
+            totalCount);
     }
 
     public async Task<PagedResult<CustomerResponse>> GetInactiveAsync(
@@ -2382,13 +2429,48 @@ public class CustomerLogic
             request.Department);
     }
 
-    private static void ValidatePagination(int page, int pageSize)
+    private static void ValidatePagination(int page, int pageSize, int maxPageSize = MaxPageSize)
     {
         var errors = new List<string>();
         if (page < 1) errors.Add("Page must be greater than or equal to 1.");
         if (pageSize < 1) errors.Add("PageSize must be greater than or equal to 1.");
-        else if (pageSize > MaxPageSize) errors.Add($"PageSize must be less than or equal to {MaxPageSize}.");
+        else if (pageSize > maxPageSize) errors.Add($"PageSize must be less than or equal to {maxPageSize}.");
         if (errors.Count > 0) throw new CustomerValidationException(errors);
+    }
+
+    private static string? NormalizeCheckoutSearch(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        var normalized = Regex.Replace(value.Trim(), @"\s+", " ");
+        if (normalized.Length > MaxCheckoutSearchLength)
+            throw new CustomerValidationException([$"Từ khóa tìm kiếm không được vượt quá {MaxCheckoutSearchLength} ký tự."]);
+
+        return normalized;
+    }
+
+    private static string? NormalizePhoneSearch(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return null;
+
+        var digits = new string(value.Where(char.IsDigit).ToArray());
+        return digits.Length > 0 ? digits : null;
+    }
+
+    private static CustomerGroup? ParseCheckoutCustomerType(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        return value.Trim().ToUpperInvariant() switch
+        {
+            "GENERAL" or "RETAIL" or "PHOTHONG" => CustomerGroup.PhoThong,
+            "VIP" or "DOINGOAI" => CustomerGroup.DoiNgoai,
+            "CORPORATE" or "DOANHNGHIEP" => CustomerGroup.DoanhNghiep,
+            _ => throw new CustomerValidationException(["Loại khách hàng tìm kiếm không hợp lệ."])
+        };
     }
 
     private static CustomerDebtTransactionResponse MapDebt(CustomerDebtTransaction t) =>
@@ -2440,6 +2522,10 @@ public class CustomerLogic
         new(c.Id, c.CustomerCode, c.FullName, c.PhoneNumber, c.Email, c.CustomerGroup, c.TaxCode,
             c.TierId, c.Tier?.TierName, c.TotalSpending, c.CurrentDebt,
             c.AssignedSaleId, c.Source, c.Department, c.CreatedAt, c.UpdatedAt);
+
+    private static CheckoutCustomerSearchResponse MapToCheckoutSearchResponse(Customer c) =>
+        new(c.Id, c.CustomerCode, c.FullName, c.PhoneNumber, c.CustomerGroup,
+            c.TierId, c.Tier?.TierName, c.Tier?.DiscountPercent ?? 0, c.CurrentDebt);
 
     private static CustomerDetailResponse MapToDetailResponse(Customer c) =>
         new(c.Id, c.CustomerCode, c.FullName, c.PhoneNumber, c.Email, c.CustomerGroup, c.TaxCode,

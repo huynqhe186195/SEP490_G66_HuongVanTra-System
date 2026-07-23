@@ -15,12 +15,28 @@ public static class DataSeeder
     private static readonly (string RoleName, string Description, string[] Permissions)[] DefaultRoles =
     [
         ("SalePos", "Nhân viên bán hàng quầy (POS)",
-        [PermissionNames.CreateOrder, PermissionNames.ViewOrder, PermissionNames.ViewCustomer]),
+        [
+            PermissionNames.CreateOrder,
+            PermissionNames.CreatePosOrder,
+            PermissionNames.ViewOrder,
+            PermissionNames.ViewCustomer
+        ]),
         ("SaleCod", "Nhân viên bán / thu COD",
-        [PermissionNames.CreateOrder, PermissionNames.ViewOrder, PermissionNames.ViewCustomer, PermissionNames.VerifyCod]),
+        [
+            PermissionNames.CreateOrder,
+            PermissionNames.CreateCodOrder,
+            PermissionNames.ViewOrder,
+            PermissionNames.ViewCustomer,
+            PermissionNames.VerifyCod
+        ]),
         // Legacy: giữ để tương thích dữ liệu cũ; quyền gần SalePos (không VERIFY_COD).
         ("Sale", "Nhân viên kinh doanh (legacy → dùng SalePos/SaleCod)",
-        [PermissionNames.CreateOrder, PermissionNames.ViewOrder, PermissionNames.ViewCustomer]),
+        [
+            PermissionNames.CreateOrder,
+            PermissionNames.CreatePosOrder,
+            PermissionNames.ViewOrder,
+            PermissionNames.ViewCustomer
+        ]),
         ("Warehouse", "Thủ kho Kho tổng",
         [PermissionNames.ViewOrder, PermissionNames.ManageCatalog]),
         ("Accountant", "Kế toán",
@@ -28,6 +44,8 @@ public static class DataSeeder
         ("Manager", "Quản lý",
         [
             PermissionNames.CreateOrder,
+            PermissionNames.CreatePosOrder,
+            PermissionNames.CreateCodOrder,
             PermissionNames.ViewOrder,
             PermissionNames.ViewAllCustomers,
             PermissionNames.ManageEmployee,
@@ -152,7 +170,8 @@ public static class DataSeeder
     }
 
     /// <summary>
-    /// User đã tồn tại (seed cũ) được gán lại role chuẩn: sale01→SalePos, sale_cod01→SaleCod.
+    /// Đồng bộ các demo account có mapping xác định. Chỉ bỏ role Sale legacy,
+    /// không xóa các role phụ hợp lệ đã được quản trị viên gán.
     /// </summary>
     private static async Task SyncDemoUserPrimaryRoleAsync(UserDbContext context)
     {
@@ -164,6 +183,9 @@ public static class DataSeeder
             ["accountant01"] = "Accountant",
         };
 
+        var legacySaleRole = await context.Roles
+            .FirstOrDefaultAsync(r => r.RoleName == "Sale" && !r.IsDeleted);
+
         foreach (var (username, roleName) in desired)
         {
             var user = await context.Users
@@ -174,11 +196,17 @@ public static class DataSeeder
             var role = await context.Roles.FirstOrDefaultAsync(r => r.RoleName == roleName && !r.IsDeleted);
             if (role is null) continue;
 
-            var hasRole = user.UserRoles.Any(ur => ur.RoleId == role.Id);
-            if (hasRole && user.UserRoles.Count == 1) continue;
+            if (!user.UserRoles.Any(ur => ur.RoleId == role.Id))
+                user.UserRoles.Add(new UserRole { UserId = user.Id, RoleId = role.Id });
 
-            user.UserRoles.Clear();
-            user.UserRoles.Add(new UserRole { UserId = user.Id, RoleId = role.Id });
+            if (legacySaleRole is not null)
+            {
+                var legacyAssignments = user.UserRoles
+                    .Where(ur => ur.RoleId == legacySaleRole.Id)
+                    .ToList();
+                foreach (var legacyAssignment in legacyAssignments)
+                    user.UserRoles.Remove(legacyAssignment);
+            }
         }
 
         if (context.ChangeTracker.HasChanges())

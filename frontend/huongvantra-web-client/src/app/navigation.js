@@ -422,7 +422,26 @@ export function canAccessModule(session, module) {
   }
 
   if (String(module).toLowerCase() === 'pos' && session?.permissions?.length) {
-    return session.permissions.includes('CREATE_ORDER')
+    return (
+      session.permissions.includes('CREATE_POS_ORDER')
+      || session.permissions.includes('CREATE_COD_ORDER')
+    )
+  }
+
+  if (String(module).toLowerCase() === 'cod_ops' && session?.permissions?.length) {
+    return (
+      session.permissions.includes('CREATE_COD_ORDER')
+      || session.permissions.includes('VERIFY_COD')
+    )
+  }
+
+  if (String(module).toLowerCase() === 'orders' && session?.permissions?.length) {
+    const canViewAll =
+      session.permissions.includes('VIEW_ALL_CUSTOMERS')
+      || session.permissions.includes('MANAGE_EMPLOYEE')
+      || session.permissions.includes('MANAGE_ROLE')
+    return session.permissions.includes('VIEW_ORDER')
+      && (canViewAll || session.permissions.includes('CREATE_POS_ORDER'))
   }
 
   if (String(module).toLowerCase() === 'inventory') {
@@ -478,9 +497,16 @@ export function canAccessPath(session, pathname, search = '') {
 }
 
 function isSaleCodOnlySession(session) {
-  if (!session?.roles?.length) return false
-  if (hasAnyRoleGroup(session.roles, ['admin', 'agencyManager'])) return false
-  return hasAnyRoleGroup(session.roles, ['saleCod'])
+  const permissions = session?.permissions ?? []
+  const canViewAll =
+    permissions.includes('VIEW_ALL_CUSTOMERS')
+    || permissions.includes('MANAGE_EMPLOYEE')
+    || permissions.includes('MANAGE_ROLE')
+  return (
+    !canViewAll
+    && permissions.includes('CREATE_COD_ORDER')
+    && !permissions.includes('CREATE_POS_ORDER')
+  )
 }
 
 /** Xem danh sách / preview hàng chờ trừ tồn quầy (Manager/Admin). */
@@ -500,7 +526,7 @@ export function canConfirmStockDeduct(session) {
 export function getAccessDeniedMessage(pathname) {
   const module = getModuleForPath(pathname)
   if (module === 'pos') {
-    return 'Tài khoản không có quyền tạo đơn (CREATE_ORDER). Vui lòng đăng nhập bằng SalePos / SaleCod hoặc Quản lý, hoặc đăng xuất và đăng nhập lại sau khi quyền được cập nhật.'
+    return 'Tài khoản không có quyền tạo đơn POS/COD. Vui lòng đăng xuất và đăng nhập lại nếu quyền vừa được cập nhật.'
   }
   if (module === 'cod_ops') {
     return 'Chỉ Sale COD hoặc Quản lý chi nhánh mới được truy cập Quản lý COD.'

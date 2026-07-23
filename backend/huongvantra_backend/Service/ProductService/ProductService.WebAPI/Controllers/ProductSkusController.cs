@@ -40,6 +40,16 @@ public class ProductSkusController(ProductSkuLogic _skuLogic) : ControllerBase
         CancellationToken ct) =>
         Ok(await _skuLogic.GetBomCatalogBySkuIdsAsync(skuIds, CatalogViewScope.Warehouse, ct));
 
+    /// <summary>
+    /// Minimal service-to-service catalog used by OrderService to validate base-unit quantities.
+    /// </summary>
+    [HttpGet("order-catalog")]
+    [AllowAnonymous]
+    public async Task<IActionResult> GetOrderCatalog(
+        [FromQuery] List<Guid>? skuIds,
+        CancellationToken ct) =>
+        Ok(await _skuLogic.GetOrderCatalogBySkuIdsAsync(skuIds, ct));
+
     [HttpGet("{id:guid}")]
     [Authorize(Roles = "Warehouse,Accountant,Admin")]
     public async Task<IActionResult> GetById(Guid id) =>

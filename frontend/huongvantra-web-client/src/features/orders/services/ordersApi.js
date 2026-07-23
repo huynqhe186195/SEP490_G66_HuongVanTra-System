@@ -223,9 +223,12 @@ export function buildCreateOrderBody(payload) {
   }
 }
 
-export async function createOrder(payload) {
+export async function createOrder(payload, { idempotencyKey } = {}) {
   const data = await apiRequestAuth('/api/v1/orders', {
     method: 'POST',
+    headers: idempotencyKey
+      ? { 'X-Idempotency-Key': idempotencyKey }
+      : undefined,
     body: JSON.stringify(buildCreateOrderBody(payload)),
   })
   return mapOrderDetail(data)

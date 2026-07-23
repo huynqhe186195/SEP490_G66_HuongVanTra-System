@@ -3,21 +3,16 @@ namespace CustomerService.Application.Interfaces;
 public record CustomerAccessContext(
     Guid UserId,
     bool CanViewAllCustomers,
-    bool CanManageCorporateCustomers = false,
-    bool CanCreateOrder = false,
-    bool BypassAssignmentFilter = false)
+    bool CanManageCorporateCustomers = false)
 {
-    /// <summary>CRM list: Sale chỉ thấy KH được gán. Checkout POS/COD: bỏ filter.</summary>
+    /// <summary>Sale chỉ thấy khách hàng được gán; quyền xem toàn bộ không áp dụng filter.</summary>
     public Guid? AssignedSaleFilter =>
-        CanViewAllCustomers || BypassAssignmentFilter ? null : UserId;
+        CanViewAllCustomers ? null : UserId;
 
     /// <summary>
-    /// Đọc KH để gắn đơn: Sale có CREATE_ORDER được lookup mọi KH (kể cả đang gán Sale khác).
+    /// Sale chỉ được đọc và thao tác trên khách hàng được gán cho chính mình.
     /// </summary>
     public bool CanAccessCustomer(Guid? assignedSaleId) =>
         CanViewAllCustomers
-        || CanCreateOrder
-        || BypassAssignmentFilter
-        || !assignedSaleId.HasValue
-        || assignedSaleId.Value == UserId;
+        || (assignedSaleId.HasValue && assignedSaleId.Value == UserId);
 }

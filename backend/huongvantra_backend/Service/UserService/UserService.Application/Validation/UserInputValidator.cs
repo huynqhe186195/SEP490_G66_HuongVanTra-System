@@ -4,13 +4,23 @@ namespace UserService.Application.Validation;
 
 public static class UserInputValidator
 {
-    public static void ValidateSingleRole(IReadOnlyCollection<int>? roleIds)
+    public static IReadOnlyList<int> ResolveRoleIds(
+        IReadOnlyCollection<int>? roleIds,
+        int? legacyRoleId = null)
     {
-        if (roleIds is null || roleIds.Count == 0)
-            throw new UserValidationException("Vui lòng chọn một vai trò.");
+        var resolved = roleIds is { Count: > 0 }
+            ? roleIds.ToList()
+            : legacyRoleId.HasValue
+                ? [legacyRoleId.Value]
+                : [];
 
-        if (roleIds.Count > 1)
-            throw new UserValidationException("Mỗi tài khoản chỉ được gán một vai trò.");
+        if (resolved.Count == 0)
+            throw new UserValidationException("Vui lòng chọn ít nhất một vai trò.");
+
+        if (resolved.Count != resolved.Distinct().Count())
+            throw new UserValidationException("Danh sách vai trò không được chứa giá trị trùng lặp.");
+
+        return resolved;
     }
 
     public static void ValidatePhoneIfProvided(string? phone)

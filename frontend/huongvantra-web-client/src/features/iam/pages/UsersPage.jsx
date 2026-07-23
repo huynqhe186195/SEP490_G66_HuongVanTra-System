@@ -8,6 +8,7 @@ import ViewTabs from '../components/ViewTabs.jsx'
 import { fetchRoles, mapRole } from '../services/rolesApi.js'
 import {
   createUser,
+  fetchLegacySaleReview,
   fetchUsers,
   lockUser,
   mapUser,
@@ -24,7 +25,7 @@ const EMPTY_CREATE = {
   password: '',
   fullName: '',
   phone: '',
-  roleId: null,
+  roleIds: [],
 }
 
 function InfoBox({ children }) {
@@ -63,6 +64,7 @@ function UsersPage() {
   const [users, setUsers] = useState([])
   const [deletedUsers, setDeletedUsers] = useState([])
   const [roles, setRoles] = useState([])
+  const [legacySaleReview, setLegacySaleReview] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
@@ -72,7 +74,7 @@ function UsersPage() {
   const [createOpen, setCreateOpen] = useState(false)
   const [editUser, setEditUser] = useState(null)
   const [createForm, setCreateForm] = useState(EMPTY_CREATE)
-  const [editRoleId, setEditRoleId] = useState(null)
+  const [editRoleIds, setEditRoleIds] = useState([])
   const [editActive, setEditActive] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [createFieldErrors, setCreateFieldErrors] = useState({})
@@ -80,14 +82,16 @@ function UsersPage() {
   const loadData = useCallback(async () => {
     setIsLoading(true)
     try {
-      const [rolesData, usersData, deletedData] = await Promise.all([
+      const [rolesData, usersData, deletedData, legacyReviewData] = await Promise.all([
         fetchRoles(),
         fetchUsers({ page, pageSize, search: search.trim() || undefined }),
         fetchUsers({ page: 1, pageSize: 100, onlyDeleted: true }),
+        fetchLegacySaleReview(),
       ])
       setRoles((Array.isArray(rolesData) ? rolesData : []).map(mapRole).filter(Boolean))
       setUsers((usersData.items || []).map(mapUser).filter(Boolean))
       setDeletedUsers((deletedData.items || []).map(mapUser).filter(Boolean))
+      setLegacySaleReview(Array.isArray(legacyReviewData) ? legacyReviewData : [])
       setTotalCount(usersData.totalCount || 0)
     } catch (error) {
       setUsers([])
@@ -98,6 +102,8 @@ function UsersPage() {
   }, [page, pageSize, search])
 
   useEffect(() => {
+    // loadData owns the asynchronous state transition for this dependency change.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadData()
   }, [loadData])
 
@@ -126,20 +132,24 @@ function UsersPage() {
   }
 
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize))
+  const assignableRoles = useMemo(
+    () => roles.filter((role) => role.roleName !== 'Sale'),
+    [roles],
+  )
 
   const openCreate = () => {
-    setCreateForm({
-      ...EMPTY_CREATE,
-      roleId: roles[0]?.id ?? null,
-    })
+    setCreateForm(EMPTY_CREATE)
     setCreateFieldErrors({})
     setCreateOpen(true)
   }
 
   const openEdit = (user) => {
-    const matchedRole = roles.find((role) => user.roles.includes(role.roleName))
     setEditUser(user)
-    setEditRoleId(matchedRole?.id ?? null)
+    setEditRoleIds(
+      assignableRoles
+        .filter((role) => user.roles.includes(role.roleName))
+        .map((role) => role.id),
+    )
     setEditActive(user.isActive)
   }
 
@@ -149,13 +159,22 @@ function UsersPage() {
     setCreateFieldErrors((current) => ({ ...current, [field]: undefined }))
   }
 
-  const selectCreateRoleId = (roleId) => {
-    setCreateForm((current) => ({ ...current, roleId }))
-    setCreateFieldErrors((current) => ({ ...current, roleId: undefined }))
+  const toggleCreateRoleId = (roleId) => {
+    setCreateForm((current) => ({
+      ...current,
+      roleIds: current.roleIds.includes(roleId)
+        ? current.roleIds.filter((id) => id !== roleId)
+        : [...current.roleIds, roleId],
+    }))
+    setCreateFieldErrors((current) => ({ ...current, roleIds: undefined }))
   }
 
-  const selectEditRoleId = (roleId) => {
-    setEditRoleId(roleId)
+  const toggleEditRoleId = (roleId) => {
+    setEditRoleIds((current) => (
+      current.includes(roleId)
+        ? current.filter((id) => id !== roleId)
+        : [...current, roleId]
+    ))
   }
 
   const handleCreate = async () => {
@@ -171,7 +190,7 @@ function UsersPage() {
       await createUser({
         username: createForm.username.trim(),
         password: createForm.password,
-        roleIds: [createForm.roleId],
+        roleIds: createForm.roleIds,
         fullName: createForm.fullName.trim(),
         department: null,
         actualSalary: 0,
@@ -189,14 +208,14 @@ function UsersPage() {
 
   const handleUpdate = async () => {
     if (!editUser) return
-    if (!editRoleId) {
-      showError('Vui lòng chọn một vai trò.')
+    if (editRoleIds.length === 0) {
+      showError('Vui lòng chọn ít nhất một vai trò.')
       return
     }
 
     setIsSaving(true)
     try {
-      await updateUser(editUser.id, { isActive: editActive, roleIds: [editRoleId] })
+      await updateUser(editUser.id, { isActive: editActive, roleIds: editRoleIds })
       showSuccess('Đã lưu thay đổi tài khoản.')
       setEditUser(null)
       await loadData()
@@ -269,6 +288,13 @@ function UsersPage() {
         <p><strong>Tab Đang sử dụng:</strong> quản lý tài khoản đang hoạt động.</p>
         <p><strong>Tab Khôi phục:</strong> xem tài khoản đã ngừng sử dụng và bấm <strong>Khôi phục</strong> để dùng lại.</p>
         <p className="mt-1"><strong>Khóa:</strong> tạm chặn đăng nhập. <strong>Ngừng sử dụng:</strong> chuyển sang tab Khôi phục.</p>
+        {legacySaleReview.length > 0 ? (
+          <p className="mt-3 rounded-xl border border-[#b45309]/40 bg-[#fffbeb] p-3 text-[#7c2d12]">
+            <strong>Cần phân loại Sale legacy ({legacySaleReview.length}):</strong>{' '}
+            {legacySaleReview.map((item) => item.username ?? item.Username).join(', ')}.
+            Hãy sửa tài khoản và chọn SalePos, SaleCod hoặc cả hai; quyền POS an toàn hiện vẫn được giữ trong thời gian chờ.
+          </p>
+        ) : null}
       </InfoBox>
 
       <div className="mb-6">
@@ -442,28 +468,27 @@ function UsersPage() {
                 </label>
               ))}
               <fieldset>
-                <legend className="text-base font-bold text-[#1b1c17]">Chọn vai trò (một vai trò)</legend>
+                <legend className="text-base font-bold text-[#1b1c17]">Chọn một hoặc nhiều vai trò</legend>
                 <div className="mt-3 space-y-2">
-                  {roles.map((role) => (
+                  {assignableRoles.map((role) => (
                     <label
                       key={role.id}
                       className={`flex cursor-pointer items-center gap-3 rounded-2xl border-2 p-4 ${
-                        createForm.roleId === role.id ? 'border-[#356647] bg-[#356647]/5' : 'border-[#c1c9c0]/60'
+                        createForm.roleIds.includes(role.id) ? 'border-[#356647] bg-[#356647]/5' : 'border-[#c1c9c0]/60'
                       }`}
                     >
                       <input
-                        type="radio"
-                        name="create-role"
+                        type="checkbox"
                         className="h-5 w-5 accent-[#356647]"
-                        checked={createForm.roleId === role.id}
-                        onChange={() => selectCreateRoleId(role.id)}
+                        checked={createForm.roleIds.includes(role.id)}
+                        onChange={() => toggleCreateRoleId(role.id)}
                       />
                       <span className="text-base font-semibold">{formatRoleName(role.roleName)}</span>
                     </label>
                   ))}
                 </div>
-                {createFieldErrors.roleId ? (
-                  <p className="mt-2 text-sm text-[#ba1a1a]">{createFieldErrors.roleId}</p>
+                {createFieldErrors.roleIds ? (
+                  <p className="mt-2 text-sm text-[#ba1a1a]">{createFieldErrors.roleIds}</p>
                 ) : null}
               </fieldset>
             </div>
@@ -493,21 +518,20 @@ function UsersPage() {
                 />
               </label>
               <fieldset>
-                <legend className="text-base font-bold text-[#1b1c17]">Vai trò (một vai trò)</legend>
+                <legend className="text-base font-bold text-[#1b1c17]">Vai trò (có thể chọn nhiều)</legend>
                 <div className="mt-3 space-y-2">
-                  {roles.map((role) => (
+                  {assignableRoles.map((role) => (
                     <label
                       key={role.id}
                       className={`flex cursor-pointer items-center gap-3 rounded-2xl border-2 p-4 ${
-                        editRoleId === role.id ? 'border-[#356647] bg-[#356647]/5' : 'border-[#c1c9c0]/60'
+                        editRoleIds.includes(role.id) ? 'border-[#356647] bg-[#356647]/5' : 'border-[#c1c9c0]/60'
                       }`}
                     >
                       <input
-                        type="radio"
-                        name="edit-role"
+                        type="checkbox"
                         className="h-5 w-5 accent-[#356647]"
-                        checked={editRoleId === role.id}
-                        onChange={() => selectEditRoleId(role.id)}
+                        checked={editRoleIds.includes(role.id)}
+                        onChange={() => toggleEditRoleId(role.id)}
                       />
                       <span className="text-base font-semibold">{formatRoleName(role.roleName)}</span>
                     </label>

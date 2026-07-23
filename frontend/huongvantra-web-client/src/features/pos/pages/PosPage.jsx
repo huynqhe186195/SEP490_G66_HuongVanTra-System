@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { showError, showSuccess } from "../../../app/toast.js";
+import { showError, showInfo, showSuccess } from "../../../app/toast.js";
 import AddCustomerModal from "../components/AddCustomerModal.jsx";
 import CustomerDetailModal from "../components/CustomerDetailModal.jsx";
 import OrderOfferModal from "../components/OrderOfferModal.jsx";
@@ -60,6 +60,15 @@ import { useNetworkStatus } from '../../../hooks/useNetworkStatus.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import { canUsePosCodMode, canUsePosCounterMode } from '../../auth/utils/permissions.js'
 import CustomBundlePanel from '../components/CustomBundlePanel.jsx'
+import {
+  getPosBaseUnitLabel,
+  normalizePosBaseQuantity,
+} from '../utils/posQuantity.js'
+import {
+  getCustomerSearchDisplayState,
+  isCustomerSearchAbort,
+} from '../utils/posCustomerSearch.js'
+import { createCheckoutAttemptManager } from '../../orders/utils/checkoutAttempt.js'
 
 const ALL_SALES_MODES = [
     { id: "counter", label: "Bán trực tiếp", icon: "storefront" },
@@ -74,6 +83,13 @@ const COUNTER_PAYMENT_METHODS = [
 const TAKEAWAY_PAYMENT_METHODS = [
     { id: "COD", label: "COD — thu khi giao", icon: "local_shipping" },
     { id: "TRANSFER", label: "Chuyển khoản / VietQR", icon: "account_balance" },
+];
+
+const CUSTOMER_SEARCH_TYPES = [
+    { id: "", label: "Tất cả loại KH" },
+    { id: "GENERAL", label: "Phổ thông" },
+    { id: "VIP", label: "Đối ngoại (VIP)" },
+    { id: "CORPORATE", label: "Doanh nghiệp" },
 ];
 
 const PRICE_FILTER_OPTIONS = [
@@ -209,6 +225,7 @@ function createEmptySession(mode = "counter") {
         appliedPromotion: null,
         selectedCustomer: null,
         customerSearchValue: "",
+        customerSearchType: "",
         paymentMethod: mode === "takeaway" ? "COD" : "CASH",
         amountPaidInput: "",
         overpaymentAction: "return_change",
@@ -250,6 +267,7 @@ function PosPage() {
 
   const [customerSearchResults, setCustomerSearchResults] = useState([])
   const [isCustomerSearchLoading, setIsCustomerSearchLoading] = useState(false)
+  const [customerSearchError, setCustomerSearchError] = useState('')
   const [openModal, setOpenModal] = useState(null)
   const [openDiscountSku, setOpenDiscountSku] = useState(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -285,6 +303,7 @@ function PosPage() {
   const [posTab, setPosTab] = useState('products')
   const promotionCartSignatureRef = useRef('')
   const previousCustomerIdRef = useRef(null)
+  const checkoutAttemptRef = useRef(createCheckoutAttemptManager())
 
   const isTakeaway = salesMode === 'takeaway'
   const workspace = workspaceByMode[salesMode]
@@ -301,6 +320,7 @@ function PosPage() {
     appliedPromotion = null,
     selectedCustomer = null,
     customerSearchValue = '',
+    customerSearchType = '',
     paymentMethod: sessionPaymentMethod,
     amountPaidInput = '',
     overpaymentAction = 'return_change',
@@ -416,11 +436,7 @@ function PosPage() {
         if (!normalized) {
             return null;
         }
-        const parsed = Number(normalized);
-        if (!Number.isFinite(parsed)) {
-            return null;
-        }
-        return Number(parsed.toFixed(2));
+        return normalized;
     };
 
   const parseMoneyInput = (value) => {
@@ -630,28 +646,44 @@ function PosPage() {
 
     useEffect(() => {
         if (selectedCustomer) {
-            setCustomerSearchResults([]);
-            return undefined;
+            const resetId = setTimeout(() => {
+                setCustomerSearchResults([]);
+                setCustomerSearchError("");
+                setIsCustomerSearchLoading(false);
+            }, 0);
+            return () => clearTimeout(resetId);
         }
 
         const query = customerSearchValue.trim();
-        if (!query) {
-            setCustomerSearchResults([]);
-            return undefined;
+        const customerType = customerSearchType.trim();
+        if (!query && !customerType) {
+            const resetId = setTimeout(() => {
+                setCustomerSearchResults([]);
+                setCustomerSearchError("");
+                setIsCustomerSearchLoading(false);
+            }, 0);
+            return () => clearTimeout(resetId);
         }
 
         let cancelled = false;
+        const controller = new AbortController();
         const timerId = setTimeout(async () => {
             setIsCustomerSearchLoading(true);
+            setCustomerSearchError("");
             try {
-                const items = await fetchPosCustomers({ search: query, limit: 20 });
+                const items = await fetchPosCustomers({
+                    search: query,
+                    customerType,
+                    limit: 20,
+                    signal: controller.signal,
+                });
                 if (!cancelled) {
                     setCustomerSearchResults(items);
                 }
             } catch (error) {
-                if (!cancelled) {
+                if (!cancelled && !isCustomerSearchAbort(error)) {
                     setCustomerSearchResults([]);
-                    showError(error.message);
+                    setCustomerSearchError(error.message || "Không thể tìm khách hàng lúc này.");
                 }
             } finally {
                 if (!cancelled) {
@@ -663,8 +695,9 @@ function PosPage() {
         return () => {
             cancelled = true;
             clearTimeout(timerId);
+            controller.abort();
         };
-    }, [customerSearchValue, selectedCustomer, activeTabId]);
+    }, [customerSearchValue, customerSearchType, selectedCustomer, activeTabId]);
 
     useEffect(() => {
         const customerId = selectedCustomer?.customerId;
@@ -806,7 +839,7 @@ function PosPage() {
             const currentItems = prev.cartItems;
             const existingLine = currentItems.find((item) => item.sku === product.sku);
             if (existingLine) {
-                const nextQty = Number((existingLine.qty + existingLine.step).toFixed(2));
+                const nextQty = existingLine.qty + existingLine.step;
                 return {
                     ...prev,
                     cartItems: clampCartLineDiscounts(
@@ -837,7 +870,9 @@ function PosPage() {
                         packagingType: product.packagingType,
                         name: product.name,
                         qty: 1,
-                        unit: "x",
+                        inventoryUnit: product.inventoryUnit,
+                        priceUnit: product.priceUnit,
+                        unit: getPosBaseUnitLabel(product.inventoryUnit),
                         price: product.price,
                         categoryId: product.categoryId ?? product.CategoryId ?? null,
                         categoryName: product.categoryName ?? product.CategoryName ?? null,
@@ -859,7 +894,7 @@ function PosPage() {
             return;
         }
 
-        const nextQty = direction === "inc" ? Number((target.qty + target.step).toFixed(2)) : Number((target.qty - target.step).toFixed(2));
+        const nextQty = direction === "inc" ? target.qty + target.step : target.qty - target.step;
 
         updateActiveSession((prev) => ({
             ...prev,
@@ -882,8 +917,15 @@ function PosPage() {
             return;
         }
 
-        const parsed = parseQtyInput(rawValue);
-        if (parsed == null) {
+        let parsed;
+        try {
+            const parsedInput = parseQtyInput(rawValue);
+            if (parsedInput == null) {
+                return;
+            }
+            parsed = normalizePosBaseQuantity(parsedInput, item.inventoryUnit);
+        } catch (error) {
+            showError(error?.message || "Số lượng không hợp lệ.");
             return;
         }
 
@@ -987,6 +1029,8 @@ function PosPage() {
                 categoryId: item.categoryId ?? null,
                 lineDiscountType: item.lineDiscountType,
                 lineDiscountValue: item.lineDiscountValue || 0,
+                inventoryUnit: item.inventoryUnit,
+                priceUnit: item.priceUnit,
             })),
             orderDiscountPercent: effectiveOrderDiscountPercent,
             orderDiscountAmountFixed: effectiveOrderDiscountAmountFixed,
@@ -1002,6 +1046,8 @@ function PosPage() {
             unitPrice: item.price,
             subTotal: getLineGross(item),
             categoryId: item.categoryId ?? null,
+            inventoryUnit: item.inventoryUnit,
+            priceUnit: item.priceUnit,
         }));
 
     useEffect(() => {
@@ -1258,11 +1304,11 @@ function PosPage() {
 
   const buildOrderPayload = (method, amount) => {
     const storeId = resolvePosStoreId()
-    // Chiết khấu đơn / dòng VIP chỉ gửi khi KH VIP. % hạng thành viên vẫn gửi riêng.
+    // DiscountAmount chỉ mang giảm giá thủ công VIP; hạng thành viên do backend tự tính.
     const vipManualDiscount = canUseVipManualAdjustments
       ? itemDiscountTotal + orderDiscountAmount
       : 0
-    const manualDiscount = Math.round(vipManualDiscount + membershipDiscountAmount)
+    const manualDiscount = Math.round(vipManualDiscount)
     return {
       storeId,
       customerId: selectedCustomer?.customerId || null,
@@ -1281,6 +1327,8 @@ function PosPage() {
         unitPrice: item.isGift ? 0 : item.price,
         costPrice: item.costPrice ?? 0,
         categoryName: item.categoryName ?? null,
+        inventoryUnit: item.inventoryUnit,
+        priceUnit: item.priceUnit,
         isGift: item.isGift ? 1 : 0,
       })),
       payments: [
@@ -1395,11 +1443,16 @@ function PosPage() {
         });
     };
 
-  const finalizeRecordedPayment = async ({ method, createOrder, debtSettlement = null }) => {
+  const finalizeRecordedPayment = async ({
+    method,
+    createOrder,
+    debtSettlement = null,
+    idempotencyKey,
+  }) => {
     const debtApplyAmount = resolveDebtApplyAmount(debtSettlement)
     const changeAfterDebt = resolveChangeAfterDebt(debtSettlement, debtApplyAmount)
     const payload = buildOrderPayload(method, recordedPaymentAmount)
-    const result = await createOrder(payload)
+    const result = await createOrder(payload, { idempotencyKey })
 
     let debtPayment = null
     if (debtApplyAmount > 0 && selectedCustomer?.customerId) {
@@ -1489,7 +1542,7 @@ function PosPage() {
         setIsPaymentSidebarOpen(true);
     };
 
-    const handleTakeawayPayment = async (debtSettlement = null) => {
+    const handleTakeawayPayment = async (debtSettlement = null, idempotencyKey) => {
         const address = shippingAddress?.trim();
         if (!address) {
             showError("Vui lòng nhập địa chỉ giao hàng cho đơn mang đi.");
@@ -1515,7 +1568,10 @@ function PosPage() {
         });
 
         if (isTransferPayment) {
-            const result = await createTakeawayVietQrOrder(payload, { qrAmount: transferQrAmount });
+            const result = await createTakeawayVietQrOrder(payload, {
+                qrAmount: transferQrAmount,
+                idempotencyKey,
+            });
             const transferDebtSettlement = buildTransferDebtSettlement(debtSettlement, result.orderId);
 
             showSuccess(
@@ -1556,7 +1612,10 @@ function PosPage() {
 
         const activeSettlement = debtSettlement ?? null;
         const codDebtSettlementJson = serializeCodDebtSettlement(activeSettlement);
-        const result = await createTakeawayCodOrder(payload, codExpectedAmount, { codDebtSettlementJson });
+        const result = await createTakeawayCodOrder(payload, codExpectedAmount, {
+            codDebtSettlementJson,
+            idempotencyKey,
+        });
         const debtNote =
             activeSettlement?.payDebtsEnabled && Number(activeSettlement.allocatedAmount || 0) > 0 ?
                 ` · Dự kiến trừ nợ ${formatMoney(activeSettlement.allocatedAmount)} đ khi thu COD`
@@ -1571,15 +1630,18 @@ function PosPage() {
         printReceiptFromData(receipt);
     };
 
-    const executePayment = async (debtSettlement = null) => {
+    const executePayment = async (debtSettlement = null, idempotencyKey) => {
         if (isTakeaway) {
-            await handleTakeawayPayment(debtSettlement);
+            await handleTakeawayPayment(debtSettlement, idempotencyKey);
             return;
         }
 
         if (isTransferPayment) {
             const payload = buildOrderPayload("TRANSFER", 0);
-            const result = await createPosOrderOnline(payload, { qrAmount: transferQrAmount });
+            const result = await createPosOrderOnline(payload, {
+                qrAmount: transferQrAmount,
+                idempotencyKey,
+            });
             const transferDebtSettlement = buildTransferDebtSettlement(debtSettlement, result.orderId);
 
             showSuccess(
@@ -1614,8 +1676,30 @@ function PosPage() {
             method: "CASH",
             createOrder: createPosOrderOffline,
             debtSettlement,
+            idempotencyKey,
         });
     };
+
+    const submitCheckoutAttempt = (activeDebtSettlement = null) =>
+        checkoutAttemptRef.current.submit(
+            {
+                salesMode,
+                activeTabId,
+                cartItems,
+                customBundles,
+                selectedCustomerId: selectedCustomer?.customerId ?? null,
+                orderDiscountPercent,
+                orderDiscountAmountFixed,
+                promotionId: appliedPromotion?.id ?? null,
+                promotionCode: appliedPromotion?.promoCode ?? null,
+                paymentMethod: sessionPaymentMethod,
+                amountPaidInput,
+                shippingAddress,
+                orderNote,
+                debtSettlement: activeDebtSettlement,
+            },
+            (idempotencyKey) => executePayment(activeDebtSettlement, idempotencyKey),
+        );
 
     const handlePayment = async () => {
         if (isTakeaway && !hasCustomerSelected) {
@@ -1625,6 +1709,11 @@ function PosPage() {
 
         if (!hasCustomerSelected && (orderDiscountAmount > 0 || cartItems.some((item) => item.isGift || Number(item.lineDiscountValue) > 0))) {
             showError("Khách vãng lai không dùng chiết khấu/quà. Bỏ chiết khấu hoặc chọn khách VIP.");
+            return;
+        }
+
+        if (!hasCustomerSelected && recordedPaymentAmount < total) {
+            showError("Khách lẻ phải thanh toán đủ. Vui lòng đăng ký hoặc chọn khách hàng trước khi bán nợ/thanh toán một phần.");
             return;
         }
 
@@ -1663,9 +1752,10 @@ function PosPage() {
     };
 
     const handleConfirmPayment = async () => {
+        if (isSubmitting || checkoutAttemptRef.current.isProcessing()) return;
         setIsSubmitting(true);
         try {
-            await executePayment(debtSettlement);
+            await submitCheckoutAttempt(debtSettlement);
             setIsPaymentConfirmOpen(false);
         } catch (error) {
             showError(error.message);
@@ -1681,9 +1771,10 @@ function PosPage() {
             return;
         }
 
+        if (isSubmitting || checkoutAttemptRef.current.isProcessing()) return;
         setIsSubmitting(true);
         try {
-            await executePayment(result);
+            await submitCheckoutAttempt(result);
         } catch (error) {
             showError(error.message);
         } finally {
@@ -1698,9 +1789,10 @@ function PosPage() {
             return;
         }
 
+        if (isSubmitting || checkoutAttemptRef.current.isProcessing()) return;
         setIsSubmitting(true);
         try {
-            await executePayment({
+            await submitCheckoutAttempt({
                 payDebtsEnabled: false,
                 allocations: [],
                 allocatedAmount: 0,
@@ -1760,17 +1852,29 @@ function PosPage() {
 
     const selectedPriceFilterLabel = useMemo(() => PRICE_FILTER_OPTIONS.find((option) => option.id === priceFilter)?.label ?? null, [priceFilter]);
 
-    const hasCustomerSearchQuery = customerSearchValue.trim().length > 0;
-    const showCustomerDropdown = !selectedCustomer && hasCustomerSearchQuery && customerSearchResults.length > 0;
-    const showCustomerSearchEmpty = !selectedCustomer && hasCustomerSearchQuery && !isCustomerSearchLoading && customerSearchResults.length === 0;
+    const hasCustomerSearchQuery = customerSearchValue.trim().length > 0 || customerSearchType.length > 0;
+    const customerSearchDisplayState = getCustomerSearchDisplayState({
+        hasCriteria: !selectedCustomer && hasCustomerSearchQuery,
+        isLoading: isCustomerSearchLoading,
+        error: customerSearchError,
+        resultCount: customerSearchResults.length,
+    });
+    const showCustomerDropdown = customerSearchDisplayState === "results";
+    const showCustomerSearchEmpty = customerSearchDisplayState === "empty";
 
     const selectCustomer = (customer) => {
         const keepVipAdjustments = isVipCustomerType(customer?.customerType);
+        const removedVipAdjustments = !keepVipAdjustments && (
+            orderDiscountPercent > 0
+            || orderDiscountAmountFixed > 0
+            || cartItems.some((item) => item.isGift || Number(item.lineDiscountValue || 0) > 0)
+        );
         const label = String(customer?.fullName || '').trim()
         updateActiveSession((prev) => ({
             ...prev,
             selectedCustomer: customer,
             customerSearchValue: "",
+            customerSearchType: "",
             shippingAddress: "",
             ...(keepVipAdjustments ? {} : {
                 orderDiscountPercent: 0,
@@ -1796,8 +1900,43 @@ function PosPage() {
             }));
         }
         setCustomerSearchResults([]);
+        setCustomerSearchError("");
         setSavedShippingAddresses([]);
         setUseCustomShippingAddress(false);
+        if (removedVipAdjustments) {
+            showInfo("Đã xóa quà tặng/chiết khấu thủ công vì khách mới không phải khách đối ngoại (VIP).");
+        }
+    };
+
+    const clearCustomerSelection = () => {
+        const removedVipAdjustments = orderDiscountPercent > 0
+            || orderDiscountAmountFixed > 0
+            || cartItems.some((item) => item.isGift || Number(item.lineDiscountValue || 0) > 0);
+        updateActiveSession((prev) => ({
+            ...prev,
+            selectedCustomer: null,
+            customerSearchValue: "",
+            customerSearchType: "",
+            orderDiscountPercent: 0,
+            orderDiscountAmountFixed: 0,
+            cartItems: clampCartLineDiscounts(
+                prev.cartItems.map((item) => ({
+                    ...item,
+                    isGift: false,
+                    lineDiscountType: "percent",
+                    lineDiscountValue: 0,
+                })),
+            ),
+        }));
+        patchWorkspace((ws) => ({
+            ...ws,
+            tabs: ws.tabs.map((tab) =>
+                tab.id === ws.activeTabId ? { ...tab, label: "Khách lẻ" } : tab,
+            ),
+        }));
+        if (removedVipAdjustments) {
+            showInfo("Đã xóa quà tặng/chiết khấu thủ công vì khách lẻ không được áp dụng ưu đãi VIP.");
+        }
     };
 
     const handleSavedShippingAddressChange = (value) => {
@@ -1975,7 +2114,7 @@ function PosPage() {
                                                     <p className="mt-0.5 truncate text-xs text-[#717971] sm:text-sm">
                                                         {item.isGift ?
                                                             <span className="line-through opacity-60">{formatMoney(item.price)} đ</span>
-                                                        :   <span>{formatMoney(item.price)} đ</span>}
+                                                        :   <span>{formatMoney(item.price)} đ/{item.unit}</span>}
                                                         <span
                                                             className={`ml-1 text-[11px] sm:text-xs ${Number(item.stockQuantity) <= 0 ? "font-semibold text-[#7e5700]" : ""}`}>
                                                             · {formatStockHint(item.stockQuantity)}
@@ -1995,7 +2134,7 @@ function PosPage() {
                                                     </button>
                                                     <input
                                                         type="text"
-                                                        inputMode="decimal"
+                                                        inputMode="numeric"
                                                         aria-label={`Số lượng ${item.name}`}
                                                         className="w-[2.75rem] border-x border-[#c1c9c0] bg-white px-0.5 py-1 text-center text-sm font-semibold tabular-nums outline-none focus:bg-[#f6f4ec] focus:ring-1 focus:ring-[#356647]/30 sm:w-[3.25rem] sm:px-1 sm:text-base"
                                                         value={item.qty}
@@ -2147,18 +2286,7 @@ function PosPage() {
                                         type="button"
                                         onClick={(event) => {
                                             event.stopPropagation();
-                                            updateActiveSession({
-                                                selectedCustomer: null,
-                                                customerSearchValue: "",
-                                                orderDiscountPercent: 0,
-                                                orderDiscountAmountFixed: 0,
-                                            });
-                                            patchWorkspace((ws) => ({
-                                                ...ws,
-                                                tabs: ws.tabs.map((tab) =>
-                                                    tab.id === ws.activeTabId ? { ...tab, label: "Khách lẻ" } : tab,
-                                                ),
-                                            }));
+                                            clearCustomerSelection();
                                         }}
                                         className="shrink-0 rounded-lg border border-[#c1c9c0] px-2 py-1 text-xs font-semibold text-[#414942] hover:bg-[#f6f4ec]">
                                         Đổi
@@ -2182,8 +2310,20 @@ function PosPage() {
                                             <Icon className="text-[18px]">add</Icon>
                                         </button>
                                     </div>
-                                    {!selectedCustomer && isCustomerSearchLoading ?
+                                    <select
+                                        className="mt-1.5 w-full rounded-lg border border-[#c1c9c0] bg-white px-3 py-1.5 text-xs font-semibold text-[#414942] outline-none focus:border-[#356647] focus:ring-2 focus:ring-[#356647]/20"
+                                        value={customerSearchType}
+                                        onChange={(event) => updateActiveSession({ customerSearchType: event.target.value })}
+                                        aria-label="Loại khách hàng">
+                                        {CUSTOMER_SEARCH_TYPES.map((option) => (
+                                            <option key={option.id || "all"} value={option.id}>{option.label}</option>
+                                        ))}
+                                    </select>
+                                    {customerSearchDisplayState === "loading" ?
                                         <p className="mt-1.5 text-xs text-[#717971]">Đang tìm khách hàng...</p>
+                                    :   null}
+                                    {customerSearchDisplayState === "error" ?
+                                        <p className="mt-1.5 text-xs font-medium text-[#a63d2f]" role="alert">{customerSearchError}</p>
                                     :   null}
                                     {showCustomerDropdown ?
                                         <div className="custom-scrollbar absolute left-0 right-0 top-full z-40 mt-1 max-h-52 overflow-y-auto rounded-xl border border-[#c1c9c0] bg-white shadow-2xl">
@@ -2488,14 +2628,7 @@ function PosPage() {
         isSubmitting={isSubmitting}
         canPay={canPay}
         onOpenCustomerDetail={() => setOpenModal('customer-detail')}
-        onClearCustomer={() =>
-          updateActiveSession({
-            selectedCustomer: null,
-            customerSearchValue: '',
-            orderDiscountPercent: 0,
-            orderDiscountAmountFixed: 0,
-          })
-        }
+        onClearCustomer={clearCustomerSelection}
         shippingAddress={shippingAddress}
         onShippingAddressChange={(value) => updateActiveSession({ shippingAddress: value })}
         savedShippingAddresses={savedShippingAddresses}

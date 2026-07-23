@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { showError } from '../../../app/toast.js'
-import { customerHasTier, isVipCustomerType } from '../../customers/utils/customerDisplay.js'
+import { isVipCustomerType } from '../../customers/utils/customerDisplay.js'
 import { resolveOrderLineDisplay } from '../../products/utils/productDisplay.js'
 import { normalizeOrderDiscountInput } from '../../pos/utils/posDiscountValidation.js'
 import {
@@ -73,7 +73,10 @@ function OrderUpdateMetaModal({ isOpen, order, customer, catalogLookups, isSavin
   const [giftByLineId, setGiftByLineId] = useState({})
 
   const canUseVipManualAdjustments = isVipCustomerType(customer?.customerType)
-  const canUseManualDiscount = canUseVipManualAdjustments || customerHasTier(customer)
+  const canUseManualDiscount = canUseVipManualAdjustments
+  const tierDiscountPercent = canUseVipManualAdjustments
+    ? 0
+    : Number(customer?.tier?.discountPercent ?? customer?.tierDiscountPercent ?? 0)
 
   const promotionsLoadingRef = useRef(false)
   const promotionsLoadedRef = useRef(false)
@@ -217,9 +220,24 @@ function OrderUpdateMetaModal({ isOpen, order, customer, catalogLookups, isSavin
       .slice(0, 20)
   }, [availablePromotions, promoSearch])
 
+  const previewMembershipDiscount = useMemo(
+    () => Math.round(
+      Math.max(0, orderSubtotal - manualDiscountAmount - previewPromotionDiscount)
+        * tierDiscountPercent
+        / 100,
+    ),
+    [manualDiscountAmount, orderSubtotal, previewPromotionDiscount, tierDiscountPercent],
+  )
+
   const previewFinalAmount = useMemo(() => {
-    return Math.max(0, orderSubtotal - manualDiscountAmount - previewPromotionDiscount)
-  }, [manualDiscountAmount, orderSubtotal, previewPromotionDiscount])
+    return Math.max(
+      0,
+      orderSubtotal
+        - manualDiscountAmount
+        - previewPromotionDiscount
+        - previewMembershipDiscount,
+    )
+  }, [manualDiscountAmount, orderSubtotal, previewMembershipDiscount, previewPromotionDiscount])
 
   const displayPromotion = useMemo(() => {
     if (!selectedPromotion?.id) return selectedPromotion
@@ -364,7 +382,7 @@ function OrderUpdateMetaModal({ isOpen, order, customer, catalogLookups, isSavin
 
               {!canUseManualDiscount ? (
                 <p className="text-xs text-slate-500">
-                  Chiết khấu thủ công chỉ dành cho khách VIP hoặc khách có hạng thành viên.
+                  Chiết khấu thủ công chỉ dành cho khách đối ngoại (VIP). Ưu đãi hạng thành viên được hệ thống tự tính.
                 </p>
               ) : (
                 <>
@@ -564,6 +582,12 @@ function OrderUpdateMetaModal({ isOpen, order, customer, catalogLookups, isSavin
                 <span>Khuyến mãi</span>
                 <span>-{formatVnd(previewPromotionDiscount)}</span>
               </div>
+              {previewMembershipDiscount > 0 ? (
+                <div className="flex justify-between py-1 text-slate-600">
+                  <span>Ưu đãi hạng thành viên ({tierDiscountPercent}%)</span>
+                  <span>-{formatVnd(previewMembershipDiscount)}</span>
+                </div>
+              ) : null}
               <div className="flex justify-between py-2 font-semibold text-[#356647]">
                 <span>Thành tiền (ước tính)</span>
                 <span>{formatVnd(previewFinalAmount)}</span>

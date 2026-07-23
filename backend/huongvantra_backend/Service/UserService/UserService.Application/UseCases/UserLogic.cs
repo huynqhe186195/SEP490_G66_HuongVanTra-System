@@ -14,7 +14,7 @@ public class UserLogic(IUserRepository userRepo, IRoleRepository roleRepo, IEmpl
 {
     public async Task<UserResponse> CreateAsync(CreateUserRequest request)
     {
-        UserInputValidator.ValidateSingleRole(request.RoleIds);
+        var roleIds = UserInputValidator.ResolveRoleIds(request.RoleIds, request.RoleId);
         UserInputValidator.ValidatePhoneIfProvided(request.BankAccountInfo);
 
         if (await userRepo.ExistsAsync(request.Username))
@@ -28,11 +28,13 @@ public class UserLogic(IUserRepository userRepo, IRoleRepository roleRepo, IEmpl
             IsActive = true
         };
 
-        foreach (var roleId in request.RoleIds)
+        var assignedRoles = new List<Role>();
+        foreach (var roleId in roleIds)
         {
-            _ = await roleRepo.GetByIdAsync(roleId) ?? throw new RoleNotFoundException(roleId);
-            user.UserRoles.Add(new UserRole { UserId = user.Id, RoleId = roleId });
+            var role = await roleRepo.GetByIdAsync(roleId) ?? throw new RoleNotFoundException(roleId);
+            assignedRoles.Add(role);
         }
+        RoleAssignmentRules.Replace(user, assignedRoles);
 
         await userRepo.AddAsync(user);
 
@@ -111,13 +113,13 @@ public class UserLogic(IUserRepository userRepo, IRoleRepository roleRepo, IEmpl
 
     public async Task UpdateAsync(Guid id, UpdateUserRequest request, IReadOnlyList<string>? actorPermissions = null)
     {
-        UserInputValidator.ValidateSingleRole(request.RoleIds);
+        var roleIds = UserInputValidator.ResolveRoleIds(request.RoleIds, request.RoleId);
 
         var user = await userRepo.GetByIdAsync(id) ?? throw new UserNotFoundException(id);
         var currentRoles = user.UserRoles.Select(ur => ur.Role.RoleName).ToList();
 
         var assignedRoles = new List<Role>();
-        foreach (var roleId in request.RoleIds)
+        foreach (var roleId in roleIds)
         {
             var role = await roleRepo.GetByIdAsync(roleId) ?? throw new RoleNotFoundException(roleId);
             assignedRoles.Add(role);
@@ -130,10 +132,7 @@ public class UserLogic(IUserRepository userRepo, IRoleRepository roleRepo, IEmpl
 
         user.IsActive = request.IsActive;
         user.UpdatedAt = DateTime.UtcNow;
-        user.UserRoles.Clear();
-
-        foreach (var role in assignedRoles)
-            user.UserRoles.Add(new UserRole { UserId = user.Id, RoleId = role.Id });
+        RoleAssignmentRules.Replace(user, assignedRoles);
 
         userRepo.Update(user);
         await userRepo.SaveChangesAsync();
@@ -190,10 +189,11 @@ public class UserLogic(IUserRepository userRepo, IRoleRepository roleRepo, IEmpl
 
     public async Task AssignRolesAsync(Guid id, AssignRolesRequest request, IReadOnlyList<string>? actorPermissions = null)
     {
+        var roleIds = UserInputValidator.ResolveRoleIds(request.RoleIds, request.RoleId);
         var user = await userRepo.GetByIdAsync(id) ?? throw new UserNotFoundException(id);
 
         var assignedRoles = new List<Role>();
-        foreach (var roleId in request.RoleIds)
+        foreach (var roleId in roleIds)
         {
             var role = await roleRepo.GetByIdAsync(roleId) ?? throw new RoleNotFoundException(roleId);
             assignedRoles.Add(role);
@@ -204,11 +204,11 @@ public class UserLogic(IUserRepository userRepo, IRoleRepository roleRepo, IEmpl
             user.UserRoles.Select(ur => ur.Role.RoleName),
             assignedRoles.Select(r => r.RoleName));
 
-        foreach (var role in assignedRoles)
-        {
-            if (user.UserRoles.Any(ur => ur.RoleId == role.Id)) continue;
-            user.UserRoles.Add(new UserRole { UserId = user.Id, RoleId = role.Id });
-        }
+        var existingRoles = user.UserRoles
+            .Select(userRole => userRole.Role)
+            .Where(role => role is not null)
+            .Concat(assignedRoles);
+        RoleAssignmentRules.Replace(user, existingRoles);
 
         user.UpdatedAt = DateTime.UtcNow;
         userRepo.Update(user);
@@ -238,6 +238,23 @@ public class UserLogic(IUserRepository userRepo, IRoleRepository roleRepo, IEmpl
         var user = await userRepo.GetByIdAsync(id) ?? throw new UserNotFoundException(id);
         EnforceStaffScopeIfNeeded(actorPermissions, user.UserRoles.Select(ur => ur.Role.RoleName));
         return MapUserRoles(user);
+    }
+
+    public async Task<IReadOnlyList<LegacySaleReviewResponse>> GetLegacySaleReviewAsync()
+    {
+        var users = await userRepo.GetLegacySaleUsersAsync();
+        return users
+            .Select(user => new LegacySaleReviewResponse(
+                user.Id,
+                user.Username,
+                user.Employee?.Id,
+                user.UserRoles
+                    .Select(userRole => userRole.Role.RoleName)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(roleName => roleName, StringComparer.OrdinalIgnoreCase)
+                    .ToList(),
+                "Không đủ dữ liệu để xác định tài khoản này phải là SalePos hay SaleCod; giữ quyền Sale legacy an toàn tương đương SalePos và cần quản trị viên xác nhận."))
+            .ToList();
     }
 
     private static void EnforceStaffScopeIfNeeded(

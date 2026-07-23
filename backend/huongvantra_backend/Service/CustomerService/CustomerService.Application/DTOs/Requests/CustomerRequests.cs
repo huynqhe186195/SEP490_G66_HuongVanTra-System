@@ -28,6 +28,14 @@ public record UpdateCustomerRequest(
     string? Department = null
 );
 
+public record CheckoutCustomerSearchRequest(
+    string? Search = null,
+    string? CustomerType = null,
+    bool ExactPhone = false,
+    int Page = 1,
+    int PageSize = 20
+);
+
 public class CustomerExportRequest
 {
     public string? Keyword { get; set; }

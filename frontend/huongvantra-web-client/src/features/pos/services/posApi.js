@@ -13,6 +13,8 @@ import {
   fetchOrders,
 } from '../../orders/services/ordersApi.js'
 import { mapPromotion } from '../utils/posPromotionUtils.js'
+import { normalizePosBaseQuantity } from '../utils/posQuantity.js'
+import { buildPosCustomerSearchQuery } from '../utils/posCustomerSearch.js'
 import {
   getProductsFromCache,
   getCustomerByPhone as getOfflineCustomerByPhone,
@@ -33,16 +35,20 @@ function buildPromotionPreviewBody({
     promotionCode: promotionCode?.trim() || null,
     customerId: customerId || null,
     manualDiscount: Math.max(0, Math.round(Number(manualDiscount) || 0)),
-    items: items.map((item) => ({
-      skuId: item.skuId ?? item.productId,
-      quantity: Math.max(1, Math.round(Number(item.quantity ?? item.qty ?? 1))),
-      unitPrice: Number(item.unitPrice ?? item.price ?? 0),
-      subTotal:
-        item.subTotal ??
-        item.lineTotal ??
-        Number(item.unitPrice ?? item.price ?? 0) * Number(item.quantity ?? item.qty ?? 1),
-      categoryId: item.categoryId ?? item.CategoryId ?? null,
-    })),
+    items: items.map((item) => {
+      const quantity = normalizePosBaseQuantity(
+        item.quantity ?? item.qty ?? 1,
+        item.inventoryUnit || 'Piece',
+      )
+      const unitPrice = Number(item.unitPrice ?? item.price ?? 0)
+      return {
+        skuId: item.skuId ?? item.productId,
+        quantity,
+        unitPrice,
+        subTotal: item.subTotal ?? item.lineTotal ?? unitPrice * quantity,
+        categoryId: item.categoryId ?? item.CategoryId ?? null,
+      }
+    }),
   }
 }
 
@@ -62,6 +68,8 @@ function mapPosLineItem(item) {
     packagingType: item.packagingType ?? '',
     name: item.name ?? item.skuSnapshotName ?? '',
     quantity: Number(item.quantity ?? item.qty ?? 1),
+    inventoryUnit: item.inventoryUnit ?? '',
+    priceUnit: item.priceUnit ?? '',
     unitPrice: Number(item.unitPrice ?? item.price ?? 0),
     isGift: Boolean(item.isGift),
     categoryName: item.categoryName ?? item.CategoryName ?? '',
@@ -97,7 +105,7 @@ function buildOrderRequestFromPosPayload(
           : line.name || line.sku || 'Sản phẩm',
       skuSnapshotCode: line.sku || null,
       categorySnapshotName: line.categoryName || null,
-      quantity: Math.max(1, Math.round(line.quantity)),
+      quantity: normalizePosBaseQuantity(line.quantity, line.inventoryUnit),
       costPrice: Number(line.costPrice ?? 0),
       unitPrice: line.isGift ? 0 : line.unitPrice,
       isGift: Boolean(line.isGift),
@@ -282,20 +290,20 @@ export function resolveTransferQrImageUrl({ qrImageUrl, qrPayload } = {}) {
   return `https://quickchart.io/qr?size=280&margin=1&text=${encodeURIComponent(qrPayload)}`
 }
 
-async function submitPosOrder(payload, options) {
+async function submitPosOrder(payload, options, { idempotencyKey } = {}) {
   const body = buildOrderRequestFromPosPayload(payload, options)
-  const order = await createOrder(body)
+  const order = await createOrder(body, { idempotencyKey })
   return mapOrderDetailToPosResult(order)
 }
 
-export async function createPosOrderOnline(payload, { qrAmount = 0 } = {}) {
+export async function createPosOrderOnline(payload, { qrAmount = 0, idempotencyKey } = {}) {
   const payment = payload.payments?.[0]
   const result = await submitPosOrder(payload, {
     orderChannel: 'POS',
     paymentMethod: mapPaymentMethod(payment?.paymentMethod ?? 'TRANSFER'),
     paidAmount: 0,
     transferQrAmount: qrAmount > 0 ? qrAmount : 0,
-  })
+  }, { idempotencyKey })
   return attachTransferQr(result, qrAmount)
 }
 
@@ -328,6 +336,8 @@ export function buildTakeawayOrderPayload({
       unitPrice: item.isGift ? 0 : item.price,
       costPrice: item.costPrice ?? 0,
       categoryName: item.categoryName ?? null,
+      inventoryUnit: item.inventoryUnit,
+      priceUnit: item.priceUnit,
       isGift: item.isGift ? 1 : 0,
     })),
     customBundles: customBundles ?? [],
@@ -335,7 +345,11 @@ export function buildTakeawayOrderPayload({
   }
 }
 
-export function createTakeawayCodOrder(payload, expectedAmount = 0, { codDebtSettlementJson = null } = {}) {
+export function createTakeawayCodOrder(
+  payload,
+  expectedAmount = 0,
+  { codDebtSettlementJson = null, idempotencyKey } = {},
+) {
   const amount = Math.max(0, Number(expectedAmount) || 0)
   return submitPosOrder(
     { ...payload, payments: [{ paymentMethod: 'COD', amount }] },
@@ -346,10 +360,11 @@ export function createTakeawayCodOrder(payload, expectedAmount = 0, { codDebtSet
       paidAmount: amount,
       codDebtSettlementJson,
     },
+    { idempotencyKey },
   )
 }
 
-export async function createTakeawayVietQrOrder(payload, { qrAmount = 0 } = {}) {
+export async function createTakeawayVietQrOrder(payload, { qrAmount = 0, idempotencyKey } = {}) {
   const result = await submitPosOrder(
     { ...payload, payments: [{ paymentMethod: 'TRANSFER', amount: 0 }] },
     {
@@ -359,11 +374,12 @@ export async function createTakeawayVietQrOrder(payload, { qrAmount = 0 } = {}) 
       paidAmount: 0,
       transferQrAmount: qrAmount > 0 ? qrAmount : 0,
     },
+    { idempotencyKey },
   )
   return attachTransferQr(result, qrAmount)
 }
 
-export async function createPosOrderOffline(payload) {
+export async function createPosOrderOffline(payload, { idempotencyKey } = {}) {
   // Khi offline: lưu vào sync_queue và trả về fake result để UI tiếp tục
   if (!navigator.onLine) {
     const payment = payload.payments?.[0]
@@ -398,7 +414,7 @@ export async function createPosOrderOffline(payload) {
     orderChannel: 'POS',
     paymentMethod: mapPaymentMethod(payment?.paymentMethod ?? 'CASH'),
     paidAmount: Number(payment?.amount ?? 0),
-  })
+  }, { idempotencyKey })
 }
 
 /** CK tại quầy đã ghi nhận số tiền khách chuyển (không qua QR). */
@@ -475,9 +491,14 @@ export function mapPosProduct(item) {
     categoryName: item.categoryName ?? item.CategoryName ?? '',
     costPrice: Number(item.costPrice ?? item.CostPrice ?? 0),
     productType: item.productType ?? item.ProductType ?? '',
-    inventoryUnit: item.inventoryUnit ?? item.InventoryUnit ?? '',
+    inventoryUnit: item.inventoryUnit || item.InventoryUnit || '',
     isSellable: item.isSellable ?? item.IsSellable ?? true,
-    priceUnit: item.priceUnit ?? item.PriceUnit ?? item.inventoryUnit ?? item.InventoryUnit ?? '',
+    priceUnit:
+      item.priceUnit
+      || item.PriceUnit
+      || item.inventoryUnit
+      || item.InventoryUnit
+      || '',
   }
 }
 
@@ -506,7 +527,13 @@ export function mapPosCustomer(item) {
     customerType: mapped.customerType,
     tierCode: mapped.tierCode ?? '',
     tierId: mapped.tierId,
-    tierDiscountPercent: Number(mapped.tier?.discountPercent ?? mapped.tierDiscountPercent ?? 0),
+    tierDiscountPercent: Number(
+      item.tierDiscountPercent
+      ?? item.TierDiscountPercent
+      ?? mapped.tier?.discountPercent
+      ?? mapped.tierDiscountPercent
+      ?? 0,
+    ),
     totalSpend: mapped.totalSpend,
     currentDebt: mapped.currentDebt,
   }
@@ -515,6 +542,7 @@ export function mapPosCustomer(item) {
 function mapOfflineCustomer(c) {
   return {
     customerId: c.customerId,
+    customerCode: c.customerCode ?? '',
     fullName: c.name,
     phone: c.phone,
     currentDebt: c.debtBalance ?? 0,
@@ -630,7 +658,7 @@ export async function fetchPosCustomerContext(customerId) {
   })
 }
 
-export async function fetchPosCustomers({ search, limit = 20 }) {
+export async function fetchPosCustomers({ search, customerType, limit = 20, signal } = {}) {
   const term = search?.trim()
 
   // Offline fallback: đọc từ IndexedDB
@@ -638,47 +666,30 @@ export async function fetchPosCustomers({ search, limit = 20 }) {
     const phoneTerm = term?.replace(/\D/g, '') ?? ''
     if (phoneTerm.length === 10 && phoneTerm.startsWith('0')) {
       const byPhone = await getOfflineCustomerByPhone(phoneTerm)
-      if (byPhone) return [mapOfflineCustomer(byPhone)]
+      if (byPhone) {
+        const mapped = mapOfflineCustomer(byPhone)
+        return !customerType || mapped.customerType === customerType ? [mapped] : []
+      }
     }
     const results = await searchCustomersFromCache(term ?? '', limit)
-    return results.map(mapOfflineCustomer)
+    return results
+      .map(mapOfflineCustomer)
+      .filter((customer) => !customerType || customer.customerType === customerType)
+      .slice(0, limit)
   }
 
-  const phoneTerm = term?.replace(/\D/g, '') ?? ''
-
-  if (phoneTerm.length === 10 && phoneTerm.startsWith('0')) {
-    try {
-      const byPhone = await fetchCustomerByPhone(phoneTerm, { silentAuthErrors: true })
-      if (byPhone) {
-        return [mapPosCustomer(byPhone)]
-      }
-    } catch (error) {
-      if (error.statusCode !== 403 && error.statusCode !== 404) {
-        throw error
-      }
-    }
-  }
-
-  // forCheckout=true: Sale COD/POS được tìm mọi KH (không chỉ KH được gán cho mình)
-  const data = await apiRequestAuth(`/api/customers?page=1&pageSize=100&forCheckout=true`, { method: 'GET' })
+  const query = buildPosCustomerSearchQuery({
+    search: term,
+    customerType,
+    page: 1,
+    pageSize: limit,
+  })
+  const data = await apiRequestAuth(`/api/customers/checkout-search?${query.toString()}`, {
+    method: 'GET',
+    signal,
+  })
   const paged = toPagedResult(data)
-  let items = paged.items.map(mapCustomer).filter(Boolean)
-
-  if (term) {
-    const lowerTerm = term.toLowerCase()
-    items = items.filter((item) => {
-      const name = (item.fullName || '').toLowerCase()
-      const phone = (item.phone || '').replace(/\s+/g, '')
-      const code = (item.customerCode || '').toLowerCase()
-      return (
-        name.includes(lowerTerm) ||
-        code.includes(lowerTerm) ||
-        (phoneTerm.length > 0 && phone.includes(phoneTerm))
-      )
-    })
-  }
-
-  return items.slice(0, limit).map(mapPosCustomer)
+  return paged.items.map(mapPosCustomer).filter(Boolean)
 }
 
 export async function createPosCustomer(payload) {
@@ -877,7 +888,16 @@ export async function fetchPosProducts({ storeId, search, limit = 30 }) {
         productType: sku.productType ?? sku.ProductType ?? product?.productType ?? product?.ProductType ?? '',
         inventoryUnit: sku.inventoryUnit ?? sku.InventoryUnit ?? product?.inventoryUnit ?? product?.InventoryUnit ?? '',
         isSellable: sku.isSellable ?? sku.IsSellable ?? product?.isSellable ?? product?.IsSellable ?? true,
-        priceUnit: sku.priceUnit ?? sku.PriceUnit ?? product?.priceUnit ?? product?.PriceUnit ?? sku.inventoryUnit ?? sku.InventoryUnit ?? '',
+        priceUnit:
+          sku.priceUnit
+          || sku.PriceUnit
+          || product?.priceUnit
+          || product?.PriceUnit
+          || sku.inventoryUnit
+          || sku.InventoryUnit
+          || product?.inventoryUnit
+          || product?.InventoryUnit
+          || '',
       })
     })
     .filter(Boolean)

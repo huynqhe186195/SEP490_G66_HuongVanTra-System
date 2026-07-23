@@ -1,5 +1,6 @@
 using CustomerService.Application.Interfaces;
 using CustomerService.Domain.Entities;
+using CustomerService.Domain.Enums;
 using CustomerService.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -49,6 +50,52 @@ public class CustomerRepository : ICustomerRepository
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync(ct);
+
+    public async Task<(IReadOnlyList<Customer> Items, int TotalCount)> SearchForCheckoutAsync(
+        string? search,
+        string? normalizedPhone,
+        bool exactPhone,
+        CustomerGroup? customerGroup,
+        Guid? assignedSaleId,
+        int page,
+        int pageSize,
+        CancellationToken ct = default)
+    {
+        var query = _db.Customers
+            .AsNoTracking()
+            .Include(c => c.Tier)
+            .Where(c => !c.IsDeleted);
+
+        if (assignedSaleId.HasValue)
+            query = query.Where(c => c.AssignedSaleId == assignedSaleId.Value);
+
+        if (customerGroup.HasValue)
+            query = query.Where(c => c.CustomerGroup == customerGroup.Value);
+
+        if (exactPhone)
+        {
+            query = query.Where(c => c.PhoneNumber == normalizedPhone);
+        }
+        else if (!string.IsNullOrEmpty(search))
+        {
+            var normalizedSearch = search.ToLower();
+            query = query.Where(c =>
+                c.FullName.ToLower().Contains(normalizedSearch)
+                || c.CustomerCode.ToLower().Contains(normalizedSearch)
+                || (!string.IsNullOrEmpty(normalizedPhone) && c.PhoneNumber.Contains(normalizedPhone)));
+        }
+
+        var totalCount = await query.CountAsync(ct);
+        var items = await query
+            .OrderBy(c => c.FullName)
+            .ThenBy(c => c.CustomerCode)
+            .ThenBy(c => c.Id)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(ct);
+
+        return (items, totalCount);
+    }
 
     public async Task<IEnumerable<Customer>> GetAllForExportAsync(Guid? assignedSaleId = null, bool includeDeleted = false, CancellationToken ct = default)
     {

@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using OrderService.Application.Authorization;
 using OrderService.Application.DTOs.Responses;
 using OrderService.Application.UseCases;
+using OrderService.WebAPI.Authorization;
 
 namespace OrderService.WebAPI.Controllers;
 
@@ -11,24 +12,20 @@ namespace OrderService.WebAPI.Controllers;
 [Route("api/pos")]
 public class PosPaymentController(PosTransferPaymentLogic posPaymentLogic) : ControllerBase
 {
-    private OrderAccessContext AccessContext() => new(
-        User.GetUserId(),
-        User.HasPermission(PermissionNames.ManageEmployee)
-            || User.HasPermission(PermissionNames.ManageRole)
-            || User.HasPermission(PermissionNames.ViewAllCustomers));
+    private OrderAccessContext AccessContext() => User.CreateOrderAccessContext();
 
     [HttpGet("transfer-payment-info")]
-    [Authorize(Policy = PermissionNames.CreateOrder)]
+    [Authorize(Policy = PermissionNames.CreatePosOrder)]
     public IActionResult GetTransferPaymentInfo() =>
         Ok(posPaymentLogic.GetTransferPaymentInfo());
 
     [HttpGet("sepay-setup")]
-    [Authorize(Policy = PermissionNames.CreateOrder)]
+    [Authorize(Policy = PermissionNames.CreatePosOrder)]
     public IActionResult GetSepaySetup() =>
         Ok(posPaymentLogic.GetSepaySetup());
 
     [HttpPost("transfer-qr")]
-    [Authorize(Policy = PermissionNames.CreateOrder)]
+    [Authorize(Policy = PermissionNames.CreatePosOrder)]
     public async Task<IActionResult> BuildTransferQr(
         [FromBody] BuildTransferQrRequest request, CancellationToken ct) =>
         Ok(await posPaymentLogic.BuildTransferQrAsync(request, AccessContext(), ct));
@@ -39,7 +36,7 @@ public class PosPaymentController(PosTransferPaymentLogic posPaymentLogic) : Con
         Ok(await posPaymentLogic.GetTransferQrForOrderAsync(orderId, AccessContext(), ct));
 
     [HttpPost("orders/{orderId:guid}/transfer-qr/refresh")]
-    [Authorize(Policy = PermissionNames.CreateOrder)]
+    [Authorize(Policy = PermissionNames.CreatePosOrder)]
     public async Task<IActionResult> RefreshTransferQr(Guid orderId, CancellationToken ct) =>
         Ok(await posPaymentLogic.RefreshTransferQrForOrderAsync(orderId, AccessContext(), ct));
 

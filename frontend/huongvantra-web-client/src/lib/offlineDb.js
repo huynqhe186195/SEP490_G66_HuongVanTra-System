@@ -43,8 +43,13 @@ export async function getProductsFromCache(search = '', limit = 80) {
 
 export async function cacheCustomers(customers) {
   const now = Date.now()
-  await db.customers.bulkPut(customers.map(c => ({ ...c, cachedAt: now })))
-  await setMeta('lastCustomerSync', now)
+  await db.transaction('rw', db.customers, db.app_meta, async () => {
+    await db.customers.clear()
+    if (customers.length > 0) {
+      await db.customers.bulkPut(customers.map(c => ({ ...c, cachedAt: now })))
+    }
+    await db.app_meta.put({ key: 'lastCustomerSync', value: now })
+  })
 }
 
 export async function getCustomerByPhone(phone) {
@@ -53,11 +58,13 @@ export async function getCustomerByPhone(phone) {
 
 export async function searchCustomersFromCache(query, limit = 20) {
   const q = query.toLowerCase()
+  const phoneQuery = query.replace(/\D/g, '')
   const all = await db.customers.toArray()
   return all
     .filter(c =>
-      c.phone?.includes(q) ||
-      c.name?.toLowerCase().includes(q)
+      c.name?.toLowerCase().includes(q) ||
+      c.customerCode?.toLowerCase().includes(q) ||
+      (phoneQuery.length > 0 && c.phone?.includes(phoneQuery))
     )
     .slice(0, limit)
 }

@@ -18,7 +18,7 @@ async function fetchUsersWithClientSearch(params, keyword) {
   const requestedPageSize = params.pageSize ?? 10
   const fetchPageSize = 100
   let page = 1
-  let totalCount = 0
+  let totalCount
   let items = []
 
   do {
@@ -57,6 +57,10 @@ async function fetchUsersWithClientSearch(params, keyword) {
 
 export function fetchUserById(id) {
   return apiRequestAuth(`/api/users/${id}`, { method: 'GET' })
+}
+
+export function fetchLegacySaleReview() {
+  return apiRequestAuth('/api/users/legacy-sale-review', { method: 'GET' })
 }
 
 export function createUser(payload) {

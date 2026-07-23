@@ -3,18 +3,14 @@ import { useNavigate, useParams } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
-import { fetchStaffAccount, updateStaffAccount } from '../services/staffApi.js'
-
-const loginHistory = [
-  { id: '1', channel: 'He thong POS 02', time: '14:20', date: 'Lan cuoi: Hom nay', icon: 'devices', active: true },
-  { id: '2', channel: 'Mobile App', time: '08:15', date: 'Lan cuoi: Hom qua', icon: 'smartphone', active: false },
-]
+import { fetchRoleOptions, fetchStaffAccount, updateStaffAccount } from '../services/staffApi.js'
 
 function StaffDetailPage() {
   const navigate = useNavigate()
   const { id: employeeId } = useParams()
-  const [isLoading, setIsLoading] = useState(true)
+  const [isLoading, setIsLoading] = useState(Boolean(employeeId))
   const [isSaving, setIsSaving] = useState(false)
+  const [roleOptions, setRoleOptions] = useState([])
   const [currentRoles, setCurrentRoles] = useState([])
   const [form, setForm] = useState({
     fullName: '',
@@ -29,16 +25,19 @@ function StaffDetailPage() {
   useEffect(() => {
     if (!employeeId) {
       showError('ID nhân viên không hợp lệ.')
-      setIsLoading(false)
       return
     }
 
     let mounted = true
     const loadData = async () => {
       try {
-        const account = await fetchStaffAccount(employeeId)
+        const [account, roles] = await Promise.all([
+          fetchStaffAccount(employeeId),
+          fetchRoleOptions(),
+        ])
         if (!mounted) return
 
+        setRoleOptions(roles || [])
         setCurrentRoles(account.roles || [])
         setForm({
           fullName: account.fullName || '',
@@ -62,11 +61,19 @@ function StaffDetailPage() {
 
   const canSave = useMemo(() => {
     if (!form.active) return true
-    return Boolean(form.fullName.trim() && form.phone.trim() && form.username.trim())
-  }, [form.active, form.fullName, form.phone, form.username])
+    return Boolean(form.fullName.trim() && form.phone.trim() && form.username.trim() && currentRoles.length)
+  }, [form.active, form.fullName, form.phone, form.username, currentRoles.length])
 
   const handleChange = (field) => (event) => {
     setForm((current) => ({ ...current, [field]: event.target.value }))
+  }
+
+  const toggleRole = (roleName) => {
+    setCurrentRoles((current) => (
+      current.includes(roleName)
+        ? current.filter((role) => role !== roleName)
+        : [...current, roleName]
+    ))
   }
 
   const handleSave = async () => {
@@ -90,6 +97,7 @@ function StaffDetailPage() {
         username: form.username,
         isActive: form.active,
         newPassword: isDeactivating ? null : form.newPassword || null,
+        roles: currentRoles,
       })
 
       showSuccess(isDeactivating ? 'Đã ngừng hoạt động nhân viên.' : 'Cập nhật nhân viên thành công.')
@@ -178,14 +186,22 @@ function StaffDetailPage() {
                   />
                 </label>
 
-                <label className="flex flex-col gap-2">
-                  <span className="text-xs font-semibold text-[#414942]">Vai trò</span>
-                  <input
-                    className="rounded-lg border-none bg-[#f0eee6] p-3 text-sm text-[#414942] shadow-inner"
-                    value={currentRoles.join(', ') || '—'}
-                    readOnly
-                  />
-                </label>
+                <fieldset className="flex flex-col gap-2 md:col-span-2">
+                  <legend className="text-xs font-semibold text-[#414942]">Vai trò (có thể chọn nhiều)</legend>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {roleOptions.map((role) => (
+                      <label key={role.id} className="flex items-center gap-3 rounded-lg bg-[#f6f4ec] p-3 text-sm shadow-inner">
+                        <input
+                          type="checkbox"
+                          className="h-5 w-5 accent-[#356647]"
+                          checked={currentRoles.includes(role.name)}
+                          onChange={() => toggleRole(role.name)}
+                        />
+                        <span>{role.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
 
                 <label className="flex flex-col gap-2">
                   <span className="text-xs font-semibold text-[#414942]">Mat khau moi</span>

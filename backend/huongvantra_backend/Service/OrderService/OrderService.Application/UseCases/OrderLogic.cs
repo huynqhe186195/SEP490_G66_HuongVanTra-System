@@ -9,6 +9,7 @@ using OrderService.Application.Validation;
 using OrderService.Domain.Entities;
 using OrderService.Domain.Enums;
 using OrderService.Domain.Exceptions;
+using OrderService.Domain.Rules;
 
 namespace OrderService.Application.UseCases;
 
@@ -48,7 +49,7 @@ public class OrderLogic(
             req.Search, customerId, req.Status, channel,
             excludeChannel, req.CodTab, req.ReturnableOnly,
             req.OrderKind, req.ExcludeOrderKind,
-            fromDate, toDate, employeeFilter,
+            fromDate, toDate, employeeFilter, access.IncludeAllCodOrders,
             page, pageSize, ct);
 
         var dtos = items.Select(MapToSummary).ToList();
@@ -164,7 +165,7 @@ public class OrderLogic(
         OrderInputValidator.ValidatePagination(page, pageSize);
         var channel = access.CodOrdersOnly ? "COD" : sourceChannel;
         var (items, total) = await _returnOrderRepo.GetPagedAsync(
-            search, channel, access.EmployeeFilter, page, pageSize, ct);
+            search, channel, access.EmployeeFilter, access.IncludeAllCodOrders, page, pageSize, ct);
         var dtos = new List<ReturnOrderSummaryResponse>(items.Count);
 
         foreach (var (item, sourceOrderChannel) in items)
@@ -229,16 +230,20 @@ public class OrderLogic(
         string? idempotencyKey = null,
         CancellationToken ct = default)
     {
-        // Idempotency: nếu key đã tồn tại, trả về đơn cũ thay vì tạo mới
-        if (!string.IsNullOrWhiteSpace(idempotencyKey))
+        var effectiveIdempotencyKey = OrderIdempotency.BuildActorScopedKey(idempotencyKey, actorId);
+        if (effectiveIdempotencyKey is not null)
         {
-            var existing = await _orderRepo.GetByIdempotencyKeyAsync(idempotencyKey, ct);
+            var existing = await _orderRepo.GetByIdempotencyKeyAsync(effectiveIdempotencyKey, ct);
             if (existing != null)
                 return MapToResponse(existing);
         }
 
+        var skuProfiles = await GetRequiredSkuProfilesAsync(
+            req.Items.Select(i => i.SkuId),
+            ct);
         var detailInputs = req.Items.Select(i =>
         {
+            var profile = skuProfiles[i.SkuId];
             var isGift = i.IsGift;
             var unitPrice = isGift ? 0m : i.UnitPrice;
             return new CreateOrderDetailInput(
@@ -246,11 +251,11 @@ public class OrderLogic(
                 i.SkuSnapshotName.Trim(),
                 i.SkuSnapshotCode?.Trim(),
                 i.CategorySnapshotName?.Trim(),
-                i.Quantity,
+                OrderBusinessRules.NormalizeBaseQuantity(i.Quantity, profile.InventoryUnit),
                 i.CostPrice,
                 unitPrice,
                 isGift,
-                i.CategoryId);
+                profile.CategoryId ?? i.CategoryId);
         }).ToList();
 
         OrderInputValidator.ValidateCreateOrder(
@@ -266,18 +271,12 @@ public class OrderLogic(
         if (req.DiscountAmount > 0 && req.OrderKind != OrderKind.Exchange)
             await EnsureManualDiscountAllowedAsync(req.CustomerId, ct);
 
-        var orderCode = await _codeGen.GenerateAsync(req.OrderKind, ct);
         var totalAmount = detailInputs.Sum(i => i.UnitPrice * i.Quantity);
         var bundleTotal = (req.CustomBundles ?? []).Sum(b => b.Ingredients.Sum(i => i.UnitPrice * i.Quantity));
         totalAmount += bundleTotal;
         var manualDiscount = req.DiscountAmount;
         if (manualDiscount > totalAmount)
             throw new OrderValidationException("Giảm giá thủ công không được lớn hơn tổng tiền đơn hàng.");
-
-        var hasPromotion = (req.PromotionId.HasValue && req.PromotionId.Value != Guid.Empty) ||
-            !string.IsNullOrWhiteSpace(req.PromotionCode);
-        if (hasPromotion)
-            detailInputs = await EnrichCategoryIdsAsync(detailInputs, ct);
 
         var promotionItems = detailInputs.Select(i => new PromotionCalculationItem(
             i.SkuId,
@@ -287,8 +286,19 @@ public class OrderLogic(
             i.CategoryId)).ToList();
         var promotionDiscount = await _promotionLogic.ValidateAndCalculateDiscountAsync(
             req.PromotionId, req.PromotionCode, promotionItems, manualDiscount, req.CustomerId, ct);
-        var totalDiscount = manualDiscount + promotionDiscount.DiscountAmount;
+        var membershipDiscount = req.OrderKind == OrderKind.Exchange
+            ? 0m
+            : await GetMembershipTierDiscountAsync(
+                req.CustomerId,
+                Math.Max(0, totalAmount - manualDiscount - promotionDiscount.DiscountAmount),
+                ct);
+        var totalDiscount = manualDiscount + promotionDiscount.DiscountAmount + membershipDiscount;
         var finalAmount = Math.Max(0, totalAmount - totalDiscount);
+        OrderBusinessRules.EnsureGuestFullyPaid(
+            req.CustomerId,
+            req.PaidAmount,
+            finalAmount);
+        var orderCode = await _codeGen.GenerateAsync(req.OrderKind, ct);
 
         var isPosCashCompleted = req.OrderChannel == OrderChannel.POS
             && req.PaymentMethod == PaymentMethod.Cash;
@@ -327,7 +337,7 @@ public class OrderLogic(
             FinalAmount = finalAmount,
             ShippingAddress = req.ShippingAddress?.Trim(),
             Note = req.Note?.Trim(),
-            IdempotencyKey = string.IsNullOrWhiteSpace(idempotencyKey) ? null : idempotencyKey,
+            IdempotencyKey = effectiveIdempotencyKey,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
@@ -427,6 +437,25 @@ public class OrderLogic(
 
         order.Payments = [payment];
 
+        await _orderRepo.AddAsync(order, ct);
+
+        if (effectiveIdempotencyKey is not null)
+        {
+            try
+            {
+                // Persist the unique claim before any stock or event side effect.
+                await _orderRepo.SaveChangesAsync(ct);
+            }
+            catch (DuplicateOrderIdempotencyKeyException)
+            {
+                var existing = await _orderRepo.GetByIdempotencyKeyAsync(effectiveIdempotencyKey, ct);
+                if (existing is not null)
+                    return MapToResponse(existing);
+
+                throw;
+            }
+        }
+
         InventoryStockHandlingResponse? stockHandling = null;
         if (ShouldHandlePosStockSynchronously(order))
         {
@@ -435,8 +464,6 @@ public class OrderLogic(
                 ? InventorySyncStatus.PendingReconciliation
                 : InventorySyncStatus.Synced;
         }
-
-        await _orderRepo.AddAsync(order, ct);
 
         await RecordActivityAsync(
             order.Id,
@@ -525,19 +552,16 @@ public class OrderLogic(
     private async Task EnsureManualDiscountAllowedAsync(Guid? customerId, CancellationToken ct)
     {
         if (!customerId.HasValue || customerId == Guid.Empty)
-            throw new OrderValidationException(
-                "Chiết khấu đơn chỉ áp dụng cho khách VIP. Giảm giá hạng thành viên cần chọn khách có hạng.");
+        {
+            OrderBusinessRules.EnsureManualDiscountAllowed(1m, null);
+            return;
+        }
 
         var customer = await _customerCatalogClient.GetCustomerAsync(customerId.Value, ct);
-        if (customer is null)
-            throw new OrderValidationException("Không xác minh được loại khách hàng.");
-
-        // VIP: chiết khấu đơn / quà tay. Hạng thành viên: % hạng (FE gửi kèm DiscountAmount).
-        if (customer.IsVipCustomer || customer.TierId.HasValue)
-            return;
-
-        throw new OrderValidationException(
-            "Chiết khấu đơn chỉ dành cho khách VIP. Khách phổ thông không có hạng thành viên không được giảm giá thủ công.");
+        OrderBusinessRules.EnsureManualDiscountAllowed(
+            1m,
+            customer?.CustomerGroup,
+            customer?.TierId);
     }
 
     private async Task ApplyOrderDetailUpdatesAsync(
@@ -547,10 +571,17 @@ public class OrderLogic(
 
         order.OrderDetails ??= new List<OrderDetail>();
         var existingById = order.OrderDetails.ToDictionary(d => d.Id);
+        var skuProfiles = await GetRequiredSkuProfilesAsync(
+            items.Select(i => i.SkuId),
+            ct);
         var now = DateTime.UtcNow;
 
         foreach (var reqItem in items)
         {
+            var profile = skuProfiles[reqItem.SkuId];
+            var quantity = OrderBusinessRules.NormalizeBaseQuantity(
+                reqItem.Quantity,
+                profile.InventoryUnit);
             if (reqItem.Quantity < 1)
                 throw new OrderValidationException("Số lượng sản phẩm phải >= 1.");
 
@@ -559,7 +590,7 @@ public class OrderLogic(
                 if (!existingById.TryGetValue(reqItem.Id.Value, out var detail))
                     throw new OrderValidationException("Dòng đơn hàng không tồn tại.");
 
-                if (reqItem.Quantity < detail.ReturnedQuantity)
+                if (quantity < detail.ReturnedQuantity)
                     throw new OrderValidationException(
                         $"Số lượng không thể nhỏ hơn số đã trả ({detail.ReturnedQuantity}).");
 
@@ -570,10 +601,10 @@ public class OrderLogic(
                 detail.SkuSnapshotName = reqItem.SkuSnapshotName.Trim();
                 detail.SkuSnapshotCode = reqItem.SkuSnapshotCode?.Trim();
                 detail.CategorySnapshotName = reqItem.CategorySnapshotName?.Trim();
-                detail.Quantity = reqItem.Quantity;
+                detail.Quantity = quantity;
                 detail.CostPrice = reqItem.CostPrice;
                 detail.UnitPrice = unitPrice;
-                detail.SubTotal = unitPrice * reqItem.Quantity;
+                detail.SubTotal = unitPrice * quantity;
                 detail.IsGift = reqItem.IsGift;
                 detail.UpdatedAt = now;
                 continue;
@@ -590,7 +621,7 @@ public class OrderLogic(
                 SkuSnapshotName = reqItem.SkuSnapshotName.Trim(),
                 SkuSnapshotCode = reqItem.SkuSnapshotCode?.Trim(),
                 CategorySnapshotName = reqItem.CategorySnapshotName?.Trim(),
-                Quantity = reqItem.Quantity,
+                Quantity = quantity,
                 CostPrice = reqItem.CostPrice,
                 UnitPrice = 0m,
                 SubTotal = 0m,
@@ -605,21 +636,25 @@ public class OrderLogic(
         order.UpdatedAt = now;
     }
 
-    private async Task<List<CreateOrderDetailInput>> EnrichCategoryIdsAsync(
-        List<CreateOrderDetailInput> items,
+    private async Task<Dictionary<Guid, ProductSkuCatalogProfile>> GetRequiredSkuProfilesAsync(
+        IEnumerable<Guid> skuIds,
         CancellationToken ct)
     {
-        var categoryBySkuId = new Dictionary<Guid, int?>();
-        foreach (var skuId in items.Select(i => i.SkuId).Distinct())
-            categoryBySkuId[skuId] = await _productCatalogClient.GetSkuCategoryIdAsync(skuId, ct);
-
-        return items
-            .Select(item =>
-                categoryBySkuId.TryGetValue(item.SkuId, out var resolvedCategoryId) &&
-                resolvedCategoryId.HasValue
-                    ? item with { CategoryId = resolvedCategoryId.Value }
-                    : item)
+        var submittedIds = skuIds
+            .Distinct()
             .ToList();
+        if (submittedIds.Any(id => id == Guid.Empty))
+            throw new OrderValidationException("SkuId sản phẩm không hợp lệ.");
+
+        var targetIds = submittedIds;
+        var profiles = (await _productCatalogClient.GetSkuProfilesAsync(targetIds, ct))
+            .ToDictionary(profile => profile.SkuId);
+        var missingIds = targetIds.Where(id => !profiles.ContainsKey(id)).ToList();
+        if (missingIds.Count > 0)
+            throw new OrderValidationException(
+                "Không xác minh được đơn vị tồn kho của một hoặc nhiều sản phẩm. Vui lòng tải lại danh mục và thử lại.");
+
+        return profiles;
     }
 
     public async Task<OrderResponse> UpdateAsync(
@@ -684,7 +719,11 @@ public class OrderLogic(
             order.CustomerId,
             ct);
 
-        var totalDiscount = manualDiscount + promotionDiscount.DiscountAmount;
+        var membershipDiscount = await GetMembershipTierDiscountAsync(
+            order.CustomerId,
+            Math.Max(0, order.TotalAmount - manualDiscount - promotionDiscount.DiscountAmount),
+            ct);
+        var totalDiscount = manualDiscount + promotionDiscount.DiscountAmount + membershipDiscount;
         if (totalDiscount > order.TotalAmount)
             throw new OrderValidationException("Tổng giảm giá (thủ công + khuyến mãi) không được lớn hơn tạm tính.");
 

@@ -1,4 +1,5 @@
 using CustomerService.Domain.Entities;
+using CustomerService.Domain.Enums;
 
 namespace CustomerService.Application.Interfaces;
 
@@ -9,6 +10,15 @@ public interface ICustomerRepository
     Task<bool> PhoneExistsAsync(string phone, Guid? excludeCustomerId = null, CancellationToken ct = default);
     Task<bool> EmailExistsAsync(string email, Guid? excludeCustomerId = null, CancellationToken ct = default);
     Task<IEnumerable<Customer>> GetAllAsync(int page, int pageSize, Guid? assignedSaleId = null, CancellationToken ct = default);
+    Task<(IReadOnlyList<Customer> Items, int TotalCount)> SearchForCheckoutAsync(
+        string? search,
+        string? normalizedPhone,
+        bool exactPhone,
+        CustomerGroup? customerGroup,
+        Guid? assignedSaleId,
+        int page,
+        int pageSize,
+        CancellationToken ct = default);
     Task<IEnumerable<Customer>> GetAllForExportAsync(Guid? assignedSaleId = null, bool includeDeleted = false, CancellationToken ct = default);
     Task<int> CountAsync(Guid? assignedSaleId = null, CancellationToken ct = default);
     Task<string> GenerateNextCustomerCodeAsync(CancellationToken ct = default);

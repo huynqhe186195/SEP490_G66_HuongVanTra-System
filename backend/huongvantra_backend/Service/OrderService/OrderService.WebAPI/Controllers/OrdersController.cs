@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using OrderService.Application.Authorization;
 using OrderService.Application.DTOs.Requests;
 using OrderService.Application.UseCases;
+using OrderService.WebAPI.Authorization;
 
 namespace OrderService.WebAPI.Controllers;
 
@@ -12,15 +13,7 @@ namespace OrderService.WebAPI.Controllers;
 [Authorize]
 public class OrdersController(OrderLogic orderLogic) : ControllerBase
 {
-    private OrderAccessContext AccessContext()
-    {
-        var canViewAll = User.HasPermission(PermissionNames.ManageEmployee)
-            || User.HasPermission(PermissionNames.ManageRole)
-            || User.HasPermission(PermissionNames.ViewAllCustomers);
-        // SaleCod: VERIFY_COD nhưng không phải Manager/Admin → chỉ đơn COD.
-        var codOnly = !canViewAll && User.HasPermission(PermissionNames.VerifyCod);
-        return new OrderAccessContext(User.GetUserId(), canViewAll, codOnly);
-    }
+    private OrderAccessContext AccessContext() => User.CreateOrderAccessContext();
 
     private (Guid? ActorId, string? ActorName) Actor() =>
     (
@@ -69,7 +62,7 @@ public class OrdersController(OrderLogic orderLogic) : ControllerBase
         Ok(await orderLogic.GetReturnsByOrderIdAsync(orderId, AccessContext(), ct));
 
     [HttpPost]
-    [Authorize(Policy = PermissionNames.CreateOrder)]
+    [Authorize]
     public async Task<IActionResult> Create([FromBody] CreateOrderRequest request, CancellationToken ct)
     {
         if (IsCodCheckout(request) && !CanOperateCod())
@@ -93,17 +86,10 @@ public class OrdersController(OrderLogic orderLogic) : ControllerBase
     }
 
     private bool CanOperateCod() =>
-        User.HasPermission(PermissionNames.VerifyCod)
-        || User.HasPermission(PermissionNames.ManageEmployee)
-        || User.HasPermission(PermissionNames.ManageRole);
+        User.HasPermission(PermissionNames.CreateCodOrder);
 
-    /// <summary>Sale COD (có VERIFY_COD, không phải Manager) không bán quầy; SalePos / Manager thì được.</summary>
     private bool CanOperatePosCounter() =>
-        User.HasPermission(PermissionNames.CreateOrder)
-        && (
-            User.HasPermission(PermissionNames.ManageEmployee)
-            || User.HasPermission(PermissionNames.ManageRole)
-            || !User.HasPermission(PermissionNames.VerifyCod));
+        User.HasPermission(PermissionNames.CreatePosOrder);
 
     private static bool IsCodCheckout(CreateOrderRequest request) =>
         request.OrderChannel == OrderService.Domain.Enums.OrderChannel.COD
