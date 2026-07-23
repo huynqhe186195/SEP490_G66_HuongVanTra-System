@@ -11,6 +11,7 @@ import {
   createOrder,
   fetchOrder,
   fetchOrders,
+  mapOrderDetail,
 } from '../../orders/services/ordersApi.js'
 import { mapPromotion } from '../utils/posPromotionUtils.js'
 import { normalizePosBaseQuantity } from '../utils/posQuantity.js'
@@ -769,6 +770,14 @@ export async function fetchPosCustomers({ search, customerType, limit = 20, sign
   })
   const paged = toPagedResult(data)
   return paged.items.map(mapPosCustomer).filter(Boolean)
+}
+
+export async function cancelPendingPosTransfer(orderId) {
+  const order = await apiRequestAuth(
+    `/api/pos/orders/${orderId}/transfer-payment/cancel`,
+    { method: 'POST' },
+  )
+  return mapOrderDetail(order)
 }
 
 export async function createPosCustomer(payload) {

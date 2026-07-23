@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { showError, showSuccess } from '../../../app/toast.js'
 import {
+  cancelPendingPosTransfer,
   fetchOrderTransferQrByOrderId,
   fetchPosOrderPaymentStatus,
   fetchPosSepaySetup,
@@ -9,6 +10,13 @@ import {
   refreshOrderTransferQr,
   resolveTransferQrImageUrl,
 } from '../services/posApi.js'
+import ConfirmDialog from '../components/ConfirmDialog.jsx'
+import { useAuthSession } from '../../auth/hooks/useAuthSession.js'
+import {
+  completePersistedPosCart,
+  findPersistedPendingPosCart,
+  restoreCancelledOrderCart,
+} from '../utils/posWorkspaceStorage.js'
 import { isQrExpired, useQrExpiryCountdown } from '../utils/qrExpiry.js'
 import { vietnamNowLabel } from '../../../utils/vietnamDateTime.js'
 import { printReceiptSequence } from '../utils/printReceipt.js'
@@ -36,10 +44,29 @@ function paymentStatusLabel(status, isPaid) {
 function PosTransferQrPage() {
   const navigate = useNavigate()
   const location = useLocation()
-  const payment = location.state
+  const routerPayment = location.state && typeof location.state === 'object'
+    ? location.state
+    : {}
+  const queryOrderId = useMemo(
+    () => new URLSearchParams(location.search).get('orderId')?.trim() || '',
+    [location.search],
+  )
+  const resolvedOrderId = queryOrderId || routerPayment.orderId || ''
+  const authSession = useAuthSession()
+  const authUserId = authSession?.userId ? String(authSession.userId) : null
+  const [persistedPaymentContext, setPersistedPaymentContext] = useState(null)
+  const payment = useMemo(() => ({
+    ...(persistedPaymentContext || {}),
+    ...routerPayment,
+    orderId: resolvedOrderId,
+    paymentMethod: resolvedOrderId
+      ? 'TRANSFER'
+      : routerPayment.paymentMethod,
+  }), [persistedPaymentContext, resolvedOrderId, routerPayment])
   const [bankInfo, setBankInfo] = useState(null)
   const [isLoadingBank, setIsLoadingBank] = useState(true)
   const [paymentStatus, setPaymentStatus] = useState('')
+  const [orderStatus, setOrderStatus] = useState('')
   const [isPaid, setIsPaid] = useState(false)
   const [invoiceCode, setInvoiceCode] = useState('')
   const [pollError, setPollError] = useState('')
@@ -49,10 +76,41 @@ function PosTransferQrPage() {
   const [qrData, setQrData] = useState(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [paymentDone, setPaymentDone] = useState(false)
+  const [isCancelConfirmOpen, setIsCancelConfirmOpen] = useState(false)
+  const [isCancelling, setIsCancelling] = useState(false)
   const completedRef = useRef(false)
+  const missingOrderNotifiedRef = useRef(false)
+  const normalizedOrderStatus = String(orderStatus || '').toLowerCase()
+  const normalizedPaymentStatus = String(paymentStatus || '').toLowerCase()
+  const isTerminalUnavailable =
+    normalizedOrderStatus === 'cancelled'
+    || normalizedOrderStatus === 'failed'
+    || normalizedPaymentStatus === 'failed'
   const qrExpiresAtUtc = qrData?.qrExpiresAtUtc ?? payment?.qrExpiresAtUtc
   const qrExpired = isQrExpired(qrExpiresAtUtc, qrData?.isExpired)
   const qrExpiryLabel = useQrExpiryCountdown(qrExpiresAtUtc, qrExpired, QR_EXPIRED_MESSAGE)
+
+  useEffect(() => {
+    if (resolvedOrderId || missingOrderNotifiedRef.current) return
+    missingOrderNotifiedRef.current = true
+    showError('Không tìm thấy OrderId của giao dịch QR. Vui lòng mở lại từ giỏ POS đang chờ.')
+  }, [resolvedOrderId])
+
+  useEffect(() => {
+    if (!authUserId || !resolvedOrderId || routerPayment.workspaceTabId != null)
+      return undefined
+
+    let mounted = true
+    findPersistedPendingPosCart(authUserId, resolvedOrderId)
+      .then((context) => {
+        if (mounted && context) setPersistedPaymentContext(context)
+      })
+      .catch(() => {})
+
+    return () => {
+      mounted = false
+    }
+  }, [authUserId, resolvedOrderId, routerPayment.workspaceTabId])
 
   useEffect(() => {
     if (!payment?.orderId) return undefined
@@ -97,13 +155,29 @@ function PosTransferQrPage() {
       setPaymentDone(true)
       showSuccess(successMsg)
 
+      await completePersistedPosCart(
+        authUserId,
+        payment?.workspaceMode,
+        payment?.workspaceTabId,
+      ).catch(() => {})
+
       if (receipts.length > 0) {
         await printReceiptSequence(receipts)
       }
 
       navigate('/pos', { replace: true })
     },
-    [navigate, payment?.orderCode, payment?.orderId, payment?.receipt, payment?.debtSettlement, invoiceCode],
+    [
+      authUserId,
+      navigate,
+      payment?.debtSettlement,
+      payment?.orderCode,
+      payment?.orderId,
+      payment?.receipt,
+      payment?.workspaceMode,
+      payment?.workspaceTabId,
+      invoiceCode,
+    ],
   )
 
   useEffect(() => {
@@ -154,6 +228,7 @@ function PosTransferQrPage() {
       setPollError('')
 
       setPaymentStatus(status.paymentStatus || '')
+      setOrderStatus(status.orderStatus || '')
       setIsPaid(status.isPaid)
       if (status.invoiceCode) {
         setInvoiceCode(status.invoiceCode)
@@ -198,7 +273,7 @@ function PosTransferQrPage() {
 
   const displayAmount = expectedAmount > 0 ? expectedAmount : payment?.total || 0
 
-  const qrImageUrl = !qrExpired
+  const qrImageUrl = !qrExpired && !isTerminalUnavailable
     ? resolveTransferQrImageUrl({
         qrImageUrl: qrData?.qrImageUrl ?? payment?.qrImageUrl,
         qrPayload: qrData?.qrPayload ?? payment?.qrPayload,
@@ -216,6 +291,30 @@ function PosTransferQrPage() {
       showError(error.message)
     } finally {
       setIsRefreshing(false)
+    }
+  }
+
+  async function handleCancelPayment() {
+    if (!payment?.orderId || isCancelling) return
+    try {
+      setIsCancelling(true)
+      completedRef.current = true
+      const cancelledOrder = await cancelPendingPosTransfer(payment.orderId)
+      await restoreCancelledOrderCart(authUserId, {
+        order: cancelledOrder,
+        mode: payment.workspaceMode,
+        tabId: payment.workspaceTabId,
+        sessionSnapshot: payment.sessionSnapshot,
+      })
+      showSuccess(`Đã hủy thanh toán ${cancelledOrder.orderCode} và khôi phục giỏ hàng.`)
+      navigate('/pos', { replace: true })
+    } catch (error) {
+      completedRef.current = false
+      showError(error.message || 'Không thể hủy thanh toán chuyển khoản.')
+      pollPaymentStatus()
+    } finally {
+      setIsCancelling(false)
+      setIsCancelConfirmOpen(false)
     }
   }
 
@@ -330,7 +429,14 @@ function PosTransferQrPage() {
             )}
           </div>
 
-          {qrExpired ? (
+          {isTerminalUnavailable ? (
+            <div className="w-full rounded-xl border border-[#ba1a1a]/40 bg-[#ba1a1a]/10 p-3 text-sm text-[#ba1a1a]">
+              Giao dịch không còn ở trạng thái chờ. Trạng thái đơn: <strong>{orderStatus || 'Không xác định'}</strong>;
+              trạng thái thanh toán: <strong>{paymentStatus || 'Không xác định'}</strong>.
+            </div>
+          ) : null}
+
+          {qrExpired && !isTerminalUnavailable ? (
             <button
               type="button"
               disabled={isRefreshing}
@@ -392,6 +498,17 @@ function PosTransferQrPage() {
             </p>
           ) : null}
 
+          {!isPaid && !isTerminalUnavailable ? (
+            <button
+              type="button"
+              disabled={isCancelling}
+              onClick={() => setIsCancelConfirmOpen(true)}
+              className="w-full rounded-xl border border-[#ba1a1a]/40 bg-white px-5 py-3 text-sm font-bold text-[#ba1a1a] hover:bg-[#ba1a1a]/5 disabled:opacity-50"
+            >
+              {isCancelling ? 'Đang hủy...' : 'Hủy thanh toán và quay lại giỏ hàng'}
+            </button>
+          ) : null}
+
           {isLoadingBank ? (
             <p className="text-sm text-[#717971]">Đang tải thông tin tài khoản...</p>
           ) : (
@@ -441,6 +558,16 @@ function PosTransferQrPage() {
         </div>
 
       </div>
+      <ConfirmDialog
+        isOpen={isCancelConfirmOpen}
+        title="Hủy thanh toán chuyển khoản?"
+        message="Đơn đang chờ sẽ bị hủy toàn bộ. Giỏ hàng được khôi phục để chỉnh sửa và thanh toán lại."
+        confirmLabel={isCancelling ? 'Đang hủy...' : 'Hủy và khôi phục giỏ'}
+        onConfirm={handleCancelPayment}
+        onCancel={() => {
+          if (!isCancelling) setIsCancelConfirmOpen(false)
+        }}
+      />
     </div>
   )
 }

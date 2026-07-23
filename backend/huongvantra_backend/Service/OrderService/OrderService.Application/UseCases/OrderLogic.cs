@@ -976,6 +976,81 @@ public class OrderLogic(
             ct);
     }
 
+    public async Task<OrderResponse> CancelPendingTransferAsync(
+        Guid id,
+        OrderAccessContext access,
+        Guid? actorId = null,
+        string? actorName = null,
+        CancellationToken ct = default)
+    {
+        var order = await _orderRepo.GetByIdAsync(id, ct)
+            ?? throw new OrderNotFoundException(id);
+        if (!access.CanAccessOrder(order) && order.EmployeeId != access.UserId)
+            throw new OrderForbiddenException();
+
+        if (order.OrderStatus == OrderStatus.Cancelled)
+        {
+            // Re-publishing is safe because InventoryService de-duplicates cancellation by OrderId.
+            // It also lets an idempotent retry repair a previously failed broker publish.
+            await _eventPublisher.PublishOrderCancelledAsync(
+                order.Id,
+                order.OrderCode,
+                (order.OrderDetails ?? []).Select(detail => (detail.SkuId, detail.Quantity)),
+                ct);
+            return MapToResponse(order);
+        }
+        if (order.OrderStatus == OrderStatus.Completed)
+            throw new OrderValidationException("Giao dịch đã được xác nhận thành công nên không thể hủy thanh toán.");
+        if (order.OrderStatus != OrderStatus.PendingPayment)
+            throw new OrderValidationException("Chỉ được hủy đơn đang chờ thanh toán chuyển khoản.");
+
+        var payments = order.Payments ?? await GetPaymentsInternal(order.Id, ct);
+        var transferPayment = payments.FirstOrDefault(payment =>
+            payment.PaymentMethod is PaymentMethod.VietQR or PaymentMethod.BankTransfer);
+        if (transferPayment is null)
+            throw new OrderValidationException("Đơn không có khoản thanh toán chuyển khoản.");
+        if (transferPayment.PaymentStatus == PaymentStatus.Success)
+            throw new OrderValidationException("Giao dịch đã được xác nhận thành công nên không thể hủy thanh toán.");
+
+        var claimed = await _orderRepo.TryTransitionStatusAsync(
+            order.Id,
+            OrderStatus.PendingPayment,
+            OrderStatus.Cancelled,
+            ct);
+        if (!claimed)
+        {
+            throw new OrderValidationException(
+                "Trạng thái thanh toán vừa thay đổi. Giao dịch có thể đã được xác nhận; vui lòng tải lại.");
+        }
+
+        order.OrderStatus = OrderStatus.Cancelled;
+        order.InventorySyncStatus = InventorySyncStatus.Cancelled;
+        order.UpdatedAt = DateTime.UtcNow;
+        foreach (var payment in payments)
+        {
+            payment.PaymentStatus = PaymentStatus.Failed;
+            payment.PaidAt = null;
+            payment.UpdatedAt = DateTime.UtcNow;
+        }
+
+        await RecordActivityAsync(
+            order.Id,
+            OrderActivityType.Cancelled,
+            "Hủy thanh toán chuyển khoản và hoàn tác checkout POS đang chờ.",
+            actorId,
+            actorName,
+            ct);
+        await _orderRepo.SaveChangesAsync(ct);
+
+        await _eventPublisher.PublishOrderCancelledAsync(
+            order.Id,
+            order.OrderCode,
+            (order.OrderDetails ?? []).Select(detail => (detail.SkuId, detail.Quantity)),
+            ct);
+
+        return MapToResponse(order);
+    }
+
     public async Task MarkShippingAsync(
         Guid id, OrderAccessContext access, Guid? actorId = null, string? actorName = null, CancellationToken ct = default)
     {
@@ -1028,6 +1103,24 @@ public class OrderLogic(
                 "Đơn chuyển khoản chỉ được hoàn tất sau khi backend xác nhận giao dịch.");
         }
 
+        var claimed = await _orderRepo.TryTransitionStatusAsync(
+            order.Id,
+            order.OrderStatus,
+            OrderStatus.Completed,
+            ct);
+        if (!claimed)
+        {
+            var current = await _orderRepo.GetByIdAsync(order.Id, ct)
+                ?? throw new OrderNotFoundException(order.Id);
+            if (current.OrderStatus == OrderStatus.Completed)
+                return;
+            if (current.OrderStatus == OrderStatus.Cancelled)
+                throw new OrderValidationException(
+                    "Thanh toán đã bị hủy trước khi giao dịch được xác nhận.");
+            throw new OrderValidationException(
+                "Trạng thái đơn vừa thay đổi; không thể hoàn tất giao dịch này.");
+        }
+
         order.OrderStatus = OrderStatus.Completed;
         order.UpdatedAt = DateTime.UtcNow;
 
@@ -1075,6 +1168,10 @@ public class OrderLogic(
             actorId,
             actorName,
             ct);
+
+        // Persist the winning terminal state and all payment allocations before invoking
+        // synchronous stock handling. A cancellation racing after this point must lose.
+        await _orderRepo.SaveChangesAsync(ct);
 
         InventoryStockHandlingResponse? stockHandling = null;
         if (ShouldHandlePosStockSynchronously(order))

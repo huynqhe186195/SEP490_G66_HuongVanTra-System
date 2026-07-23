@@ -55,6 +55,7 @@ import ResizableSplitPane from '../../../components/shared/ResizableSplitPane.js
 import LoadingIndicator from '../../../components/shared/LoadingIndicator.jsx'
 import { useNetworkStatus } from '../../../hooks/useNetworkStatus.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
+import { useAuthSession } from '../../auth/hooks/useAuthSession.js'
 import { canUsePosCodMode, canUsePosCounterMode } from '../../auth/utils/permissions.js'
 import CustomBundlePanel from '../components/CustomBundlePanel.jsx'
 import {
@@ -66,6 +67,10 @@ import {
   isCustomerSearchAbort,
 } from '../utils/posCustomerSearch.js'
 import { createCheckoutAttemptManager } from '../../orders/utils/checkoutAttempt.js'
+import {
+  loadPersistedPosWorkspace,
+  persistPosWorkspace,
+} from '../utils/posWorkspaceStorage.js'
 
 const ALL_SALES_MODES = [
     { id: "counter", label: "Bán trực tiếp", icon: "storefront" },
@@ -236,7 +241,8 @@ function createEmptySession(mode = "counter") {
 
 function PosPage() {
   const navigate = useNavigate()
-  const authSession = loadAuthSession()
+  const authSession = useAuthSession()
+  const authUserId = authSession?.userId ? String(authSession.userId) : null
   const canSyncCatalog = canUsePosCounterMode(authSession)
   const allowedSalesModes = useMemo(() => {
     const allowCounter = canUsePosCounterMode(authSession)
@@ -257,6 +263,9 @@ function PosPage() {
     counter: createWorkspace('counter'),
     takeaway: createWorkspace('takeaway'),
   })
+  const [isWorkspaceReady, setIsWorkspaceReady] = useState(false)
+  const [isRestoredCatalogValidating, setIsRestoredCatalogValidating] = useState(false)
+  const [restoredOrderIds, setRestoredOrderIds] = useState([])
 
   useEffect(() => {
     if (allowedSalesModes.length === 0) return
@@ -304,6 +313,155 @@ function PosPage() {
   const promotionCartSignatureRef = useRef('')
   const previousCustomerIdRef = useRef(null)
   const checkoutAttemptRef = useRef(createCheckoutAttemptManager())
+  const validatedWorkspaceUserRef = useRef(null)
+
+  useEffect(() => {
+    let cancelled = false
+    setIsWorkspaceReady(false)
+    setWorkspaceByMode({
+      counter: createWorkspace('counter'),
+      takeaway: createWorkspace('takeaway'),
+    })
+    setIsRestoredCatalogValidating(false)
+    setRestoredOrderIds([])
+    validatedWorkspaceUserRef.current = null
+    if (!authUserId) return () => { cancelled = true }
+
+    loadPersistedPosWorkspace(authUserId)
+      .then((stored) => {
+        if (cancelled) return
+        setWorkspaceByMode(stored.workspaceByMode)
+        setSalesMode(stored.salesMode)
+        setRestoredOrderIds(stored.restoredOrderIds)
+      })
+      .catch(() => {
+        if (!cancelled) showInfo('Không đọc được giỏ POS đã lưu; đã mở giỏ mới.')
+      })
+      .finally(() => {
+        if (!cancelled) setIsWorkspaceReady(true)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [authUserId])
+
+  useEffect(() => {
+    if (!authUserId || !isWorkspaceReady) return undefined
+    const timerId = setTimeout(() => {
+      persistPosWorkspace(authUserId, {
+        workspaceByMode,
+        salesMode,
+        restoredOrderIds,
+      }).catch(() => {})
+    }, 300)
+    return () => clearTimeout(timerId)
+  }, [authUserId, isWorkspaceReady, restoredOrderIds, salesMode, workspaceByMode])
+
+  useEffect(() => {
+    if (!authUserId || !isWorkspaceReady || validatedWorkspaceUserRef.current === authUserId)
+      return undefined
+
+    const restoredItems = Object.values(workspaceByMode)
+      .flatMap((modeWorkspace) => Object.values(modeWorkspace.sessions || {}))
+      .flatMap((storedSession) => storedSession?.cartItems || [])
+    const uniqueItems = [...new Map(
+      restoredItems.map((item) => [String(item.productId || item.sku), item]),
+    ).values()]
+    if (!uniqueItems.length) {
+      validatedWorkspaceUserRef.current = authUserId
+      return undefined
+    }
+
+    let cancelled = false
+    setIsRestoredCatalogValidating(true)
+    Promise.all(uniqueItems.map(async (item) => {
+      try {
+        const matches = await fetchPosProducts({
+          storeId: resolvePosStoreId(),
+          search: item.sku || item.productId,
+          limit: 10,
+        })
+        const product = matches.find((candidate) =>
+          String(candidate.productId) === String(item.productId)
+          || String(candidate.sku).toUpperCase() === String(item.sku).toUpperCase())
+        return [String(item.productId || item.sku), {
+          product: product || null,
+          lookupFailed: false,
+        }]
+      } catch {
+        return [String(item.productId || item.sku), {
+          product: null,
+          lookupFailed: true,
+        }]
+      }
+    })).then((entries) => {
+      if (cancelled) return
+      validatedWorkspaceUserRef.current = authUserId
+      const catalogByKey = new Map(entries)
+      let unavailableCount = 0
+      let unverifiedCount = 0
+      setWorkspaceByMode((current) => Object.fromEntries(
+        Object.entries(current).map(([mode, modeWorkspace]) => [
+          mode,
+          {
+            ...modeWorkspace,
+            sessions: Object.fromEntries(Object.entries(modeWorkspace.sessions).map(([tabId, storedSession]) => [
+              tabId,
+              {
+                ...storedSession,
+                cartItems: (storedSession.cartItems || []).map((item) => {
+                  const lookup = catalogByKey.get(String(item.productId || item.sku))
+                  const product = lookup?.product
+                  if (!product) {
+                    if (lookup?.lookupFailed) unverifiedCount += 1
+                    else unavailableCount += 1
+                    return {
+                      ...item,
+                      isUnavailable: true,
+                      availabilityIssue: lookup?.lookupFailed ? 'catalog_error' : 'unavailable',
+                    }
+                  }
+                  return {
+                    ...item,
+                    productId: product.productId,
+                    sku: product.sku,
+                    productName: product.productName,
+                    packagingType: product.packagingType,
+                    name: product.name,
+                    price: product.price,
+                    costPrice: product.costPrice,
+                    stockQuantity: product.stockQuantity,
+                    inventoryUnit: product.inventoryUnit,
+                    priceUnit: product.priceUnit,
+                    unit: getPosBaseUnitLabel(product.inventoryUnit),
+                    categoryId: product.categoryId,
+                    categoryName: product.categoryName,
+                    imageUrl: product.imageUrl,
+                    step: product.inventoryUnit === 'Gram' ? 1 : 1,
+                    isUnavailable: false,
+                    availabilityIssue: null,
+                  }
+                }),
+              },
+            ])),
+          },
+        ]),
+      ))
+      if (unavailableCount > 0) {
+        showInfo(`${unavailableCount} sản phẩm trong giỏ đã lưu hiện không còn bán. Vui lòng xóa trước khi thanh toán.`)
+      }
+      if (unverifiedCount > 0) {
+        showInfo(`${unverifiedCount} sản phẩm chưa thể xác thực với catalog. Vui lòng tải lại trước khi thanh toán.`)
+      }
+    }).finally(() => {
+      if (!cancelled) setIsRestoredCatalogValidating(false)
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [authUserId, isWorkspaceReady, workspaceByMode])
 
   const isTakeaway = salesMode === 'takeaway'
   const workspace = workspaceByMode[salesMode]
@@ -838,6 +996,10 @@ function PosPage() {
         if (tabs.length <= 1) return;
 
         const tabSession = sessions[tabId];
+        if (tabSession?.pendingQrOrderId) {
+            showError("Không thể đóng giỏ đang chờ thanh toán QR. Hãy mở lại QR để hoàn tất hoặc hủy giao dịch.");
+            return;
+        }
         const tabItemCount = tabSession?.cartItems?.length ?? 0;
         if (tabItemCount === 0) {
             closeTab(tabId);
@@ -1268,20 +1430,31 @@ function PosPage() {
     };
 
     const hasCartItems = cartItems.length > 0 || customBundles.length > 0;
+    const hasUnavailableItems = cartItems.some((item) => item.isUnavailable);
+    const hasPendingQrOrder = Boolean(session?.pendingQrOrderId);
     const hasCustomerSelected = Boolean(selectedCustomer?.customerId);
     const hasShippingAddress = Boolean(shippingAddress?.trim());
     const isZeroAmountSale = total === 0 && grossSubtotal > 0;
     // Quầy: cho phép khách vãng lai (không mã KH). COD/takeaway vẫn bắt buộc KH + địa chỉ.
-    const canPayCash = hasCartItems && (hasCustomerSelected || !isTakeaway);
-    const canPayTransfer = hasCartItems && (hasCustomerSelected || !isTakeaway) && total > 0;
+    const canPayCash = hasCartItems && !isRestoredCatalogValidating && !hasUnavailableItems && !hasPendingQrOrder && (hasCustomerSelected || !isTakeaway);
+    const canPayTransfer = hasCartItems && !isRestoredCatalogValidating && !hasUnavailableItems && !hasPendingQrOrder && (hasCustomerSelected || !isTakeaway) && total > 0;
     const canPaySplit =
         hasCartItems
+        && !isRestoredCatalogValidating
+        && !hasUnavailableItems
+        && !hasPendingQrOrder
         && !isTakeaway
         && total > 0
         && splitCashAmount > 0
         && splitTransferAmount > 0
         && paymentAllocatedTotal === total;
-    const canPayTakeaway = hasCartItems && hasCustomerSelected && hasShippingAddress && (isTransferPayment ? total > 0 : true);
+    const canPayTakeaway = hasCartItems
+        && !hasUnavailableItems
+        && !isRestoredCatalogValidating
+        && !hasPendingQrOrder
+        && hasCustomerSelected
+        && hasShippingAddress
+        && (isTransferPayment ? total > 0 : true);
     const canPay = isTakeaway
         ? canPayTakeaway && !isSubmitting
         : (isSplitPayment ? canPaySplit : isTransferPayment ? canPayTransfer : canPayCash) && !isSubmitting;
@@ -1558,10 +1731,56 @@ function PosPage() {
     };
 
     const resetCheckoutState = () => {
-        updateActiveSession(createEmptySession(salesMode));
+        setWorkspaceByMode((current) => {
+            const modeWorkspace = current[salesMode];
+            const remainingTabs = modeWorkspace.tabs.filter((tab) => tab.id !== activeTabId);
+            const remainingSessions = { ...modeWorkspace.sessions };
+            delete remainingSessions[activeTabId];
+            const nextId = modeWorkspace.tabs.length
+                ? Math.max(...modeWorkspace.tabs.map((tab) => tab.id)) + 1
+                : 1;
+            const cleanTab = { id: nextId, label: "Khách lẻ" };
+            return {
+                ...current,
+                [salesMode]: {
+                    tabs: [...remainingTabs, cleanTab],
+                    sessions: {
+                        ...remainingSessions,
+                        [nextId]: createEmptySession(salesMode),
+                    },
+                    activeTabId: nextId,
+                },
+            };
+        });
         setOpenDiscountSku(null);
         setIsPaymentSidebarOpen(false);
         setIsPaymentConfirmOpen(false);
+    };
+
+    const persistPendingQrCheckout = async (orderId) => {
+        const sessionSnapshot = {
+            ...session,
+            pendingQrOrderId: orderId,
+        };
+        const nextWorkspaceByMode = {
+            ...workspaceByMode,
+            [salesMode]: {
+                ...workspaceByMode[salesMode],
+                sessions: {
+                    ...workspaceByMode[salesMode].sessions,
+                    [activeTabId]: sessionSnapshot,
+                },
+            },
+        };
+        setWorkspaceByMode(nextWorkspaceByMode);
+        if (authUserId) {
+            await persistPosWorkspace(authUserId, {
+                workspaceByMode: nextWorkspaceByMode,
+                salesMode,
+                restoredOrderIds,
+            });
+        }
+        return sessionSnapshot;
     };
 
     const openPaymentSidebar = () => {
@@ -1621,8 +1840,8 @@ function PosPage() {
                 orderCode: result.orderCode,
                 method: "TRANSFER",
             });
-            resetCheckoutState();
-            navigate("/pos/payment/qr", {
+            const sessionSnapshot = await persistPendingQrCheckout(result.orderId);
+            navigate(`/pos/payment/qr?orderId=${encodeURIComponent(result.orderId)}`, {
                 state: {
                     orderId: result.orderId,
                     orderCode: result.orderCode,
@@ -1638,6 +1857,9 @@ function PosPage() {
                     paymentMethod: "TRANSFER",
                     receipt,
                     debtSettlement: transferDebtSettlement,
+                    workspaceMode: salesMode,
+                    workspaceTabId: activeTabId,
+                    sessionSnapshot,
                 },
             });
             return;
@@ -1706,8 +1928,8 @@ function PosPage() {
                 orderCode: result.orderCode,
                 method: isSplitPayment ? "SPLIT" : "TRANSFER",
             });
-            resetCheckoutState();
-            navigate("/pos/payment/qr", {
+            const sessionSnapshot = await persistPendingQrCheckout(result.orderId);
+            navigate(`/pos/payment/qr?orderId=${encodeURIComponent(result.orderId)}`, {
                 state: {
                     orderId: result.orderId,
                     orderCode: result.orderCode,
@@ -1723,6 +1945,9 @@ function PosPage() {
                     paymentMethod: "TRANSFER",
                     receipt,
                     debtSettlement: transferDebtSettlement,
+                    workspaceMode: salesMode,
+                    workspaceTabId: activeTabId,
+                    sessionSnapshot,
                 },
             });
             return;
@@ -1759,6 +1984,18 @@ function PosPage() {
         );
 
     const handlePayment = async () => {
+        if (isRestoredCatalogValidating) {
+            showError("Đang xác thực lại sản phẩm trong giỏ đã lưu. Vui lòng chờ trong giây lát.");
+            return;
+        }
+        if (hasPendingQrOrder) {
+            showError("Giỏ này đang có đơn chuyển khoản chờ xử lý. Hãy hoàn tất hoặc hủy QR trước khi thanh toán lại.");
+            return;
+        }
+        if (hasUnavailableItems) {
+            showError("Giỏ có sản phẩm không còn bán. Vui lòng xóa sản phẩm được đánh dấu trước khi thanh toán.");
+            return;
+        }
         if (isTakeaway && !hasCustomerSelected) {
             showError("Vui lòng chọn hoặc thêm khách hàng trước khi tạo đơn COD/giao hàng.");
             return;
@@ -1818,6 +2055,27 @@ function PosPage() {
         }
 
         setIsPaymentConfirmOpen(true);
+    };
+
+    const resumePendingQrPayment = () => {
+        const pendingOrderId = session?.pendingQrOrderId;
+        if (!pendingOrderId) {
+            showError("Không tìm thấy mã đơn chuyển khoản đang chờ. Vui lòng tải lại POS.");
+            return;
+        }
+        navigate(`/pos/payment/qr?orderId=${encodeURIComponent(pendingOrderId)}`, {
+            state: {
+                orderId: pendingOrderId,
+                orderCode: "",
+                orderLabel: activeTab.label,
+                customer: selectedCustomer?.fullName || "Khách lẻ",
+                total: transferQrAmount > 0 ? transferQrAmount : total,
+                paymentMethod: "TRANSFER",
+                workspaceMode: salesMode,
+                workspaceTabId: activeTabId,
+                sessionSnapshot: session,
+            },
+        });
     };
 
     const handleConfirmPayment = async () => {
@@ -2018,6 +2276,10 @@ function PosPage() {
         updateActiveSession({ shippingAddress: value });
     };
 
+    if (authUserId && !isWorkspaceReady) {
+        return <LoadingIndicator label="Đang khôi phục giỏ POS..." className="min-h-[60vh]" />;
+    }
+
     return (
         <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-[#c1c9c0]/40 bg-[#fbf9f1] shadow-[0_10px_30px_rgba(27,28,23,0.04)] lg:rounded-[28px]">
             <header className="border-b border-[#c1c9c0]/60 bg-[#f6f4ec] px-4 py-2.5">
@@ -2113,6 +2375,20 @@ function PosPage() {
                             </span>
                         </div>
 
+                        {hasPendingQrOrder ?
+                            <div className="mx-3 mb-2 flex items-center justify-between gap-3 rounded-xl border border-[#7e5700]/35 bg-[#fec25b]/15 px-3 py-2.5">
+                                <p className="text-xs font-medium text-[#604100]">
+                                    Giỏ này đang có đơn chuyển khoản chờ xử lý.
+                                </p>
+                                <button
+                                    type="button"
+                                    onClick={resumePendingQrPayment}
+                                    className="shrink-0 rounded-lg bg-[#7e5700] px-3 py-2 text-xs font-bold text-white hover:bg-[#604100]">
+                                    Mở lại QR
+                                </button>
+                            </div>
+                        :   null}
+
                         <CustomScrollArea className="min-h-[120px] flex-1" contentClassName="px-3 pb-3">
                             {!hasCartItems ?
                                 <div className="flex min-h-[140px] flex-col items-center justify-center rounded-xl border border-dashed border-[#c1c9c0]/80 bg-[#f6f4ec]/40 p-5 text-center">
@@ -2172,12 +2448,19 @@ function PosPage() {
                                         return (
                                             <div
                                                 key={item.sku}
-                                                className="relative grid grid-cols-[minmax(0,1fr)_7.75rem_auto] items-center gap-2 rounded-xl border border-[#c1c9c0]/50 bg-[#fbf9f1] px-2.5 py-2.5 sm:gap-3 sm:px-3 sm:py-3">
+                                                className={`relative grid grid-cols-[minmax(0,1fr)_7.75rem_auto] items-center gap-2 rounded-xl border bg-[#fbf9f1] px-2.5 py-2.5 sm:gap-3 sm:px-3 sm:py-3 ${
+                                                    item.isUnavailable ? "border-[#ba1a1a]/60" : "border-[#c1c9c0]/50"
+                                                }`}>
                                                 <div className="min-w-0 overflow-hidden">
                                                     <p className="truncate text-sm font-semibold leading-snug text-[#1b1c17] sm:text-base" title={item.name}>
                                                         {item.name}
                                                         {item.isGift ?
                                                             <span className="ml-1.5 rounded-full bg-[#fff8e8] px-1.5 py-0.5 text-[10px] font-bold uppercase text-[#7e5700]">Quà</span>
+                                                        :   null}
+                                                        {item.isUnavailable ?
+                                                            <span className="ml-1.5 rounded-full bg-[#ba1a1a]/10 px-1.5 py-0.5 text-[10px] font-bold text-[#ba1a1a]">
+                                                                {item.availabilityIssue === "catalog_error" ? "Chưa xác thực" : "Ngừng bán"}
+                                                            </span>
                                                         :   null}
                                                     </p>
                                                     <p className="mt-0.5 truncate text-xs text-[#717971] sm:text-sm">

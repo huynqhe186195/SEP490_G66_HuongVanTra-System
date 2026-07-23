@@ -374,6 +374,16 @@ public class PosTransferPaymentLogic(
             return;
         }
 
+        if (payment.TransferQrExpiresAtUtc.HasValue
+            && payment.TransferQrExpiresAtUtc.Value <= DateTime.UtcNow)
+        {
+            logger.LogWarning(
+                "SePay webhook ignored: transfer QR for order {OrderCode} expired at {ExpiresAtUtc}.",
+                orderCode,
+                payment.TransferQrExpiresAtUtc.Value);
+            return;
+        }
+
         var expectedAmount = (long)Math.Round(GetTransferQrAmount(order, payment), MidpointRounding.AwayFromZero);
         var tolerance = Math.Max(0, _sepay.AmountToleranceVnd);
 

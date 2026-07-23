@@ -337,5 +337,18 @@ public class OrderIdempotencyTests
             int toleranceVnd,
             CancellationToken ct = default) =>
             throw new NotSupportedException();
+
+        public Task<bool> TryTransitionStatusAsync(
+            Guid orderId,
+            OrderStatus expectedStatus,
+            OrderStatus nextStatus,
+            CancellationToken ct = default)
+        {
+            var order = store.Orders.FirstOrDefault(item =>
+                item.Id == orderId && item.OrderStatus == expectedStatus);
+            if (order is null) return Task.FromResult(false);
+            order.OrderStatus = nextStatus;
+            return Task.FromResult(true);
+        }
     }
 }

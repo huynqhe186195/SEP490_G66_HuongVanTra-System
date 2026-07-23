@@ -200,6 +200,19 @@ public class OrderRepository(OrderDbContext _db) : IOrderRepository
             .Include(o => o.Payments)
             .FirstOrDefaultAsync(o => o.IdempotencyKey == key, ct);
 
+    public async Task<bool> TryTransitionStatusAsync(
+        Guid orderId,
+        OrderStatus expectedStatus,
+        OrderStatus nextStatus,
+        CancellationToken ct = default) =>
+        await _db.Orders
+            .Where(order => order.Id == orderId && order.OrderStatus == expectedStatus)
+            .ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(order => order.OrderStatus, nextStatus)
+                    .SetProperty(order => order.UpdatedAt, DateTime.UtcNow),
+                ct) == 1;
+
     public async Task AddAsync(Order order, CancellationToken ct = default) =>
         await _db.Orders.AddAsync(order, ct);
 

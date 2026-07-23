@@ -10,6 +10,15 @@ db.version(1).stores({
   app_meta:     'key',
 })
 
+db.version(2).stores({
+  products:       'skuId, skuCode, isActive, productType, cachedAt',
+  customers:      'customerId, phone, cachedAt',
+  sync_queue:     '++id, type, status, createdAt',
+  draft_orders:   'tempId, status, createdAt',
+  app_meta:       'key',
+  pos_workspaces: 'userId, updatedAt',
+})
+
 // ── app_meta helpers ────────────────────────────────────────────────────────
 
 export async function getMeta(key) {
@@ -112,4 +121,20 @@ export async function getDraftOrder(tempId) {
 
 export async function updateDraftOrder(tempId, changes) {
   await db.draft_orders.update(tempId, changes)
+}
+
+// ── POS workspace (isolated by authenticated UserId) ───────────────────────
+
+export async function getPosWorkspace(userId) {
+  if (!userId) return null
+  return db.pos_workspaces.get(String(userId))
+}
+
+export async function savePosWorkspace(userId, workspace) {
+  if (!userId) return
+  await db.pos_workspaces.put({
+    ...workspace,
+    userId: String(userId),
+    updatedAt: Date.now(),
+  })
 }

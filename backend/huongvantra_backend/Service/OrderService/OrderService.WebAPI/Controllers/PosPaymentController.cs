@@ -10,9 +10,17 @@ namespace OrderService.WebAPI.Controllers;
 
 [ApiController]
 [Route("api/pos")]
-public class PosPaymentController(PosTransferPaymentLogic posPaymentLogic) : ControllerBase
+public class PosPaymentController(
+    PosTransferPaymentLogic posPaymentLogic,
+    OrderLogic orderLogic) : ControllerBase
 {
     private OrderAccessContext AccessContext() => User.CreateOrderAccessContext();
+
+    private (Guid? ActorId, string? ActorName) Actor() =>
+    (
+        User.GetUserId() is var id && id != Guid.Empty ? id : null,
+        string.IsNullOrWhiteSpace(User.GetUsername()) ? null : User.GetUsername()
+    );
 
     [HttpGet("transfer-payment-info")]
     [Authorize(Policy = PermissionNames.CreatePosOrder)]
@@ -44,6 +52,25 @@ public class PosPaymentController(PosTransferPaymentLogic posPaymentLogic) : Con
     [Authorize(Policy = PermissionNames.ViewOrder)]
     public async Task<IActionResult> GetOrderPaymentStatus(Guid orderId, CancellationToken ct) =>
         Ok(await posPaymentLogic.GetOrderPaymentStatusAsync(orderId, AccessContext(), ct));
+
+    [HttpPost("orders/{orderId:guid}/transfer-payment/cancel")]
+    [Authorize]
+    public async Task<IActionResult> CancelPendingTransfer(Guid orderId, CancellationToken ct)
+    {
+        if (!User.HasPermission(PermissionNames.CreatePosOrder)
+            && !User.HasPermission(PermissionNames.CreateCodOrder))
+        {
+            return Forbid();
+        }
+
+        var (actorId, actorName) = Actor();
+        return Ok(await orderLogic.CancelPendingTransferAsync(
+            orderId,
+            AccessContext(),
+            actorId,
+            actorName,
+            ct));
+    }
 
     [HttpPost("sepay/webhook")]
     [AllowAnonymous]
