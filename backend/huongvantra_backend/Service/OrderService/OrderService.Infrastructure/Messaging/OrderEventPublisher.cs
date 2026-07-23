@@ -48,6 +48,8 @@ public class OrderEventPublisher(IPublishEndpoint _publishEndpoint) : IOrderEven
         CancellationToken ct = default) =>
         _publishEndpoint.Publish(new OrderCompletedEvent
         {
+            EventId = Guid.NewGuid(),
+            OccurredAtUtc = DateTime.UtcNow,
             OrderId = orderId,
             OrderCode = orderCode,
             CustomerId = customerId,

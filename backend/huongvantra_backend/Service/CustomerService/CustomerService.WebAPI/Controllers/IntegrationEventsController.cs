@@ -41,6 +41,8 @@ public class IntegrationEventsController : ControllerBase
 
         var message = new OrderCompletedEvent
         {
+            EventId = Guid.NewGuid(),
+            OccurredAtUtc = DateTime.UtcNow,
             OrderId = orderId,
             OrderCode = orderCode,
             CustomerId = request.CustomerId,
