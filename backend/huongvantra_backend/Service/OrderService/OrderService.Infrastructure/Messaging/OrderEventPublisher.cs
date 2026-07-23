@@ -33,6 +33,8 @@ public class OrderEventPublisher(IPublishEndpoint _publishEndpoint) : IOrderEven
         CancellationToken ct = default) =>
         _publishEndpoint.Publish(new OrderCancelledEvent
         {
+            EventId = Guid.NewGuid(),
+            OccurredAtUtc = DateTime.UtcNow,
             OrderId = orderId,
             OrderCode = orderCode,
             Items = items.Select(i => new OrderItemEvent { SkuId = i.SkuId, Quantity = i.Quantity })
@@ -68,6 +70,8 @@ public class OrderEventPublisher(IPublishEndpoint _publishEndpoint) : IOrderEven
         CancellationToken ct = default) =>
         _publishEndpoint.Publish(new OrderReturnedEvent
         {
+            EventId = Guid.NewGuid(),
+            OccurredAtUtc = DateTime.UtcNow,
             ReturnId = returnId,
             ReturnCode = returnCode,
             OrderId = orderId,
