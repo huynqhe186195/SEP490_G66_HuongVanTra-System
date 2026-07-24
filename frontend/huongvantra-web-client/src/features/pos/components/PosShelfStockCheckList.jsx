@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { fetchStoreSkuStocks } from '../../inventory/services/inventoryStockApi.js'
 import { fetchAllActiveStoreSkus } from '../../products/services/productSkusApi.js'
 
@@ -8,9 +8,49 @@ function parseQty(raw) {
   return Number(cleaned)
 }
 
+function buildCountsPayload(nextActual, nextRows) {
+  const items = []
+  const variances = []
+  for (const row of nextRows) {
+    const actual = parseQty(nextActual[row.skuId])
+    if (actual === null) continue
+    const system = Number(row.quantityOnHand) || 0
+    const entry = {
+      skuId: row.skuId,
+      skuCode: row.skuCode,
+      productName: row.productName,
+      system,
+      actual,
+      diff: actual - system,
+    }
+    items.push(entry)
+    if (actual !== system) variances.push(entry)
+  }
+  const filledCount = items.length
+  const summaryText =
+    variances.length === 0
+      ? filledCount > 0
+        ? `Đã điền ${filledCount}/${nextRows.length} SKU, khớp hệ thống.`
+        : ''
+      : `Lệch ${variances.length} SKU: ${variances
+          .slice(0, 8)
+          .map(
+            (v) =>
+              `${v.skuCode || v.productName} hệ thống=${v.system}/thực tế=${v.actual}(${v.diff > 0 ? '+' : ''}${v.diff})`,
+          )
+          .join('; ')}${variances.length > 8 ? '…' : ''}`
+  return {
+    variances,
+    filledCount,
+    totalCount: nextRows.length,
+    summaryText,
+    items,
+  }
+}
+
 /**
  * Danh sách tồn kệ — cột Hệ thống + ô nhập Thực tế để Sale đối chiếu đầu ca.
- * onCountsChange({ variances, filledCount, totalCount, summaryText })
+ * onCountsChange({ variances, filledCount, totalCount, summaryText, items })
  */
 export default function PosShelfStockCheckList({ compact = false, onCountsChange }) {
   const [rows, setRows] = useState([])
@@ -19,40 +59,13 @@ export default function PosShelfStockCheckList({ compact = false, onCountsChange
   const [search, setSearch] = useState('')
   /** skuId → chuỗi nhập (để giữ ô trống) */
   const [actualBySkuId, setActualBySkuId] = useState({})
+  const onCountsChangeRef = useRef(onCountsChange)
+  onCountsChangeRef.current = onCountsChange
 
-  const notifyCounts = (nextActual, nextRows) => {
-    if (typeof onCountsChange !== 'function') return
-    const variances = []
-    for (const row of nextRows) {
-      const actual = parseQty(nextActual[row.skuId])
-      if (actual === null) continue
-      const system = Number(row.quantityOnHand) || 0
-      if (actual !== system) {
-        variances.push({
-          skuId: row.skuId,
-          skuCode: row.skuCode,
-          productName: row.productName,
-          system,
-          actual,
-          diff: actual - system,
-        })
-      }
-    }
-    const filledCount = nextRows.filter((r) => parseQty(nextActual[r.skuId]) !== null).length
-    const summaryText =
-      variances.length === 0
-        ? filledCount > 0
-          ? `Đã điền ${filledCount}/${nextRows.length} SKU, khớp hệ thống.`
-          : ''
-        : `Lệch ${variances.length} SKU: ${variances
-            .slice(0, 8)
-            .map(
-              (v) =>
-                `${v.skuCode || v.productName} hệ thống=${v.system}/thực tế=${v.actual}(${v.diff > 0 ? '+' : ''}${v.diff})`,
-            )
-            .join('; ')}${variances.length > 8 ? '…' : ''}`
-    onCountsChange({ variances, filledCount, totalCount: nextRows.length, summaryText })
-  }
+  // Báo parent sau render — tránh setState parent trong lúc render / trong updater.
+  useEffect(() => {
+    onCountsChangeRef.current?.(buildCountsPayload(actualBySkuId, rows))
+  }, [actualBySkuId, rows])
 
   const load = () => {
     setLoading(true)
@@ -91,14 +104,12 @@ export default function PosShelfStockCheckList({ compact = false, onCountsChange
           for (const row of list) {
             if (prev[row.skuId] !== undefined) next[row.skuId] = prev[row.skuId]
           }
-          notifyCounts(next, list)
           return next
         })
       })
       .catch((err) => {
         setRows([])
         setActualBySkuId({})
-        notifyCounts({}, [])
         setError(err?.message || 'Không tải được tồn kệ trên hệ thống.')
       })
       .finally(() => setLoading(false))
@@ -111,11 +122,7 @@ export default function PosShelfStockCheckList({ compact = false, onCountsChange
 
   const setActual = (skuId, value) => {
     const cleaned = String(value ?? '').replace(/[^\d]/g, '')
-    setActualBySkuId((prev) => {
-      const next = { ...prev, [skuId]: cleaned }
-      notifyCounts(next, rows)
-      return next
-    })
+    setActualBySkuId((prev) => ({ ...prev, [skuId]: cleaned }))
   }
 
   const fillSystemAsActual = () => {
@@ -124,7 +131,6 @@ export default function PosShelfStockCheckList({ compact = false, onCountsChange
       next[row.skuId] = String(row.quantityOnHand)
     }
     setActualBySkuId(next)
-    notifyCounts(next, rows)
   }
 
   const filtered = useMemo(() => {

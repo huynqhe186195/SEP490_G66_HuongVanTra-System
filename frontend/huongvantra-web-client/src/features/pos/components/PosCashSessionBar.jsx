@@ -13,6 +13,7 @@ import {
   subscribeCashSession,
 } from '../utils/posCashSessionStore.js'
 import PosShelfStockCheckList from './PosShelfStockCheckList.jsx'
+import { submitShiftOpenShelfStocktake } from '../utils/submitShiftOpenShelfStocktake.js'
 
 function parseMoney(raw) {
   const cleaned = String(raw || '').replace(/[^\d]/g, '')
@@ -75,7 +76,12 @@ export default function PosCashSessionBar() {
   const [openNote, setOpenNote] = useState('')
   const [shelfChecked, setShelfChecked] = useState(false)
   const [shelfNote, setShelfNote] = useState('')
-  const [shelfCountSummary, setShelfCountSummary] = useState('')
+  const [shelfCounts, setShelfCounts] = useState({
+    items: [],
+    filledCount: 0,
+    totalCount: 0,
+    summaryText: '',
+  })
   const [countedInput, setCountedInput] = useState('')
   const [varianceNote, setVarianceNote] = useState('')
   const [busy, setBusy] = useState(false)
@@ -106,7 +112,7 @@ export default function PosCashSessionBar() {
       setOpenNote('')
       setShelfChecked(false)
       setShelfNote('')
-      setShelfCountSummary('')
+      setShelfCounts({ items: [], filledCount: 0, totalCount: 0, summaryText: '' })
     }
     if (type === 'close') {
       setCountedInput(formatMoneyInput(expectedCash(loadOpenCashSession())))
@@ -123,9 +129,16 @@ export default function PosCashSessionBar() {
     setBusy(true)
     try {
       const name = shiftDisplayName(onDuty)
+      const stocktake = await submitShiftOpenShelfStocktake({
+        items: shelfCounts.items,
+        filledCount: shelfCounts.filledCount,
+        totalCount: shelfCounts.totalCount,
+        shelfNote,
+        shiftLabel: name,
+      })
       const shelfPart = [
-        'Kiểm kệ đầu ca: đã xác nhận.',
-        shelfCountSummary.trim(),
+        `Phiếu kiểm kê ${stocktake.requestCode} (đã gửi duyệt).`,
+        shelfCounts.summaryText.trim(),
         shelfNote.trim(),
       ]
         .filter(Boolean)
@@ -140,7 +153,9 @@ export default function PosCashSessionBar() {
         shiftLabel: name || null,
       })
       setModal(null)
-      showSuccess(name ? `Đã mở ca · ${name}` : 'Đã mở ca POS.')
+      showSuccess(
+        `Đã mở ca và gửi phiếu kiểm kê ${stocktake.requestCode}. Manager duyệt tại Kiểm kê tồn kho.`,
+      )
     } catch (error) {
       showError(error.message)
     } finally {
@@ -268,8 +283,19 @@ export default function PosCashSessionBar() {
 
             <SectionCard step="2" title="Hàng hóa trên kệ đầu ca">
               <PosShelfStockCheckList
-                onCountsChange={({ summaryText }) => setShelfCountSummary(summaryText || '')}
+                onCountsChange={(payload) =>
+                  setShelfCounts({
+                    items: payload.items || [],
+                    filledCount: payload.filledCount || 0,
+                    totalCount: payload.totalCount || 0,
+                    summaryText: payload.summaryText || '',
+                  })
+                }
               />
+              <p className="mt-2 text-[11px] text-slate-500">
+                Khi mở ca, hệ thống tạo phiếu kiểm kê kệ (ghi người làm) và gửi Manager duyệt tại «Kiểm kê tồn
+                kho».
+              </p>
               <label className="mt-3 flex cursor-pointer items-start gap-2 text-sm text-slate-800">
                 <input
                   type="checkbox"

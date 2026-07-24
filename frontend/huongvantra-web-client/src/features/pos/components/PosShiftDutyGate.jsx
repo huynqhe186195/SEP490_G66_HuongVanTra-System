@@ -7,6 +7,7 @@ import { fetchOnDutyShift } from '../../shifts/services/shiftsApi.js'
 import { shiftDisplayName } from '../utils/shiftDisplayName.js'
 import { openCashSession } from '../utils/posCashSessionStore.js'
 import PosShelfStockCheckList from './PosShelfStockCheckList.jsx'
+import { submitShiftOpenShelfStocktake } from '../utils/submitShiftOpenShelfStocktake.js'
 
 const BYPASSED_DUTY = { bypassed: true }
 
@@ -73,7 +74,12 @@ export default function PosShiftDutyGate({
   const [openNote, setOpenNote] = useState('')
   const [shelfChecked, setShelfChecked] = useState(false)
   const [shelfNote, setShelfNote] = useState('')
-  const [shelfCountSummary, setShelfCountSummary] = useState('')
+  const [shelfCounts, setShelfCounts] = useState({
+    items: [],
+    filledCount: 0,
+    totalCount: 0,
+    summaryText: '',
+  })
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const dutyName = shiftDisplayName(onDuty)
@@ -117,9 +123,16 @@ export default function PosShiftDutyGate({
     }
     setIsSubmitting(true)
     try {
+      const stocktake = await submitShiftOpenShelfStocktake({
+        items: shelfCounts.items,
+        filledCount: shelfCounts.filledCount,
+        totalCount: shelfCounts.totalCount,
+        shelfNote,
+        shiftLabel: dutyName,
+      })
       const shelfPart = [
-        'Kiểm kệ đầu ca: đã xác nhận.',
-        shelfCountSummary.trim(),
+        `Phiếu kiểm kê ${stocktake.requestCode} (đã gửi duyệt).`,
+        shelfCounts.summaryText.trim(),
         shelfNote.trim(),
       ]
         .filter(Boolean)
@@ -133,7 +146,9 @@ export default function PosShiftDutyGate({
         shiftSlotId: onDuty?.slotId || null,
         shiftLabel: dutyName || null,
       })
-      showSuccess(dutyName ? `Đã mở ca · ${dutyName}` : 'Đã mở ca — có thể bán tại quầy.')
+      showSuccess(
+        `Đã mở ca và gửi phiếu kiểm kê ${stocktake.requestCode}. Manager duyệt tại Kiểm kê tồn kho.`,
+      )
       onCashOpened?.()
     } catch (err) {
       showError(err.message)
@@ -221,8 +236,18 @@ export default function PosShiftDutyGate({
               </p>
               <div className="mt-2">
                 <PosShelfStockCheckList
-                  onCountsChange={({ summaryText }) => setShelfCountSummary(summaryText || '')}
+                  onCountsChange={(payload) =>
+                    setShelfCounts({
+                      items: payload.items || [],
+                      filledCount: payload.filledCount || 0,
+                      totalCount: payload.totalCount || 0,
+                      summaryText: payload.summaryText || '',
+                    })
+                  }
                 />
+                <p className="mt-2 text-[11px] text-slate-500">
+                  Khi mở ca sẽ tạo phiếu kiểm kê kệ (có người làm) và gửi Manager duyệt.
+                </p>
               </div>
               <label className="mt-3 flex cursor-pointer items-start gap-2 text-sm text-slate-800">
                 <input
