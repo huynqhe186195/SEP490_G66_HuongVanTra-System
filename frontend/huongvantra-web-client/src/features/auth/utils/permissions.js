@@ -43,8 +43,8 @@ export function canEditCustomer(session) {
   return hasPermission(session, 'CREATE_CUSTOMER') || hasPermission(session, 'MANAGE_ROLE')
 }
 
-/** Sale (hoặc NV chỉ có VIEW_CUSTOMER): xem tệp KH được gán, không thêm/sửa hồ sơ. */
-export function isAssignedCustomerViewer(session) {
+/** Sale (hoặc NV chỉ có VIEW_CUSTOMER): xem toàn bộ khách trong cửa hàng, không thêm/sửa hồ sơ. */
+export function isReadOnlyCustomerViewer(session) {
   return canViewCustomer(session) && !canViewAllCustomers(session)
 }
 
@@ -53,7 +53,7 @@ export function canDeleteCustomer(session) {
   return hasPermission(session, 'MANAGE_ROLE')
 }
 
-/** Manager/Admin/Kế toán xem mọi đơn; Sale chỉ đơn do mình tạo (EmployeeId). */
+/** Manager/Admin/Kế toán có thêm bộ lọc theo nhân viên; Sale xem mọi đơn nhưng không lọc theo nhân viên. */
 export function canViewAllOrders(session) {
   return (
     hasPermission(session, 'VIEW_ALL_CUSTOMERS')

@@ -19,7 +19,7 @@ public sealed class CheckoutCustomerSearchTests
     private readonly Guid _saleTwoId = Guid.NewGuid();
 
     [Fact]
-    public async Task Sale_search_returns_only_assigned_customers()
+    public async Task Sale_search_returns_every_customer_in_store_scope()
     {
         await using var db = CreateDb();
         var own = Customer("KH000001", "Nguyễn An", "0901111111", CustomerGroup.PhoThong, _saleOneId);
@@ -31,12 +31,14 @@ public sealed class CheckoutCustomerSearchTests
             new CheckoutCustomerSearchRequest(Search: "Nguyễn"),
             SaleAccess());
 
-        Assert.Equal([own.Id], result.Items.Select(x => x.Id));
-        Assert.Equal(1, result.TotalCount);
+        Assert.Equal(
+            new[] { own.Id, other.Id, unassigned.Id }.OrderBy(id => id),
+            result.Items.Select(x => x.Id).OrderBy(id => id));
+        Assert.Equal(3, result.TotalCount);
     }
 
     [Fact]
-    public async Task Exact_phone_returns_only_the_permitted_customer()
+    public async Task Exact_phone_finds_a_customer_created_by_another_sale()
     {
         await using var db = CreateDb();
         var own = Customer("KH000001", "Khách của Sale 1", "0901234567", CustomerGroup.PhoThong, _saleOneId);
@@ -52,35 +54,35 @@ public sealed class CheckoutCustomerSearchTests
             SaleAccess());
 
         Assert.Equal([own.Id], ownResult.Items.Select(x => x.Id));
-        Assert.Empty(otherResult.Items);
+        Assert.Equal([other.Id], otherResult.Items.Select(x => x.Id));
     }
 
     [Fact]
-    public async Task Existing_exact_phone_lookup_cannot_bypass_assignment_scope()
+    public async Task Exact_phone_lookup_opens_another_sales_customer()
     {
         await using var db = CreateDb();
         var other = Customer("KH000002", "Khách của Sale 2", "0911234567", CustomerGroup.PhoThong, _saleTwoId);
         await SeedAsync(db, other);
 
-        await Assert.ThrowsAsync<CustomerForbiddenException>(() =>
-            CreateLogic(db).GetByPhoneAsync(other.PhoneNumber, SaleAccess()));
+        var found = await CreateLogic(db).GetByPhoneAsync(other.PhoneNumber, SaleAccess());
+
+        Assert.Equal(other.Id, Assert.IsType<CustomerResponse>(found).Id);
     }
 
     [Theory]
     [InlineData("Khách Sale Khác")]
     [InlineData("KH999999")]
-    public async Task Sale_cannot_find_another_sales_customer_by_name_or_code(string search)
+    public async Task Sale_finds_another_sales_customer_by_name_or_code(string search)
     {
         await using var db = CreateDb();
-        await SeedAsync(
-            db,
-            Customer("KH999999", "Khách Sale Khác", "0911234567", CustomerGroup.PhoThong, _saleTwoId));
+        var other = Customer("KH999999", "Khách Sale Khác", "0911234567", CustomerGroup.PhoThong, _saleTwoId);
+        await SeedAsync(db, other);
 
         var result = await CreateLogic(db).SearchForCheckoutAsync(
             new CheckoutCustomerSearchRequest(Search: search),
             SaleAccess());
 
-        Assert.Empty(result.Items);
+        Assert.Equal([other.Id], result.Items.Select(x => x.Id));
     }
 
     [Theory]

@@ -102,7 +102,7 @@ public class PosTransferPaymentLogic(
     {
         var order = await orderRepo.GetByIdAsync(orderId, ct)
             ?? throw new OrderNotFoundException(orderId);
-        EnsureCanAccess(order, access);
+        EnsureCanModify(order, access);
         var payment = GetTransferPayment(order)
             ?? throw new OrderValidationException("Đơn không có thanh toán chuyển khoản.");
 
@@ -127,7 +127,7 @@ public class PosTransferPaymentLogic(
     {
         var order = await orderRepo.GetByIdAsync(orderId, ct)
             ?? throw new OrderNotFoundException(orderId);
-        EnsureCanAccess(order, access);
+        EnsureCanModify(order, access);
         var payment = GetTransferPayment(order)
             ?? throw new OrderValidationException("Đơn không có thanh toán chuyển khoản.");
 
@@ -420,9 +420,9 @@ public class PosTransferPaymentLogic(
         logger.LogInformation("SePay webhook completed order {OrderCode}.", orderCode);
     }
 
-    private static void EnsureCanAccess(Order order, OrderAccessContext access)
+    private static void EnsureCanModify(Order order, OrderAccessContext access)
     {
-        if (!access.CanAccessOrder(order))
+        if (!access.CanModifyOrder(order))
             throw new OrderForbiddenException();
     }
 

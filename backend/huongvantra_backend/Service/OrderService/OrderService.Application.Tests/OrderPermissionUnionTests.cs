@@ -11,7 +11,7 @@ namespace OrderService.Application.Tests;
 public class OrderPermissionUnionTests
 {
     [Fact]
-    public void SalePos_scope_allows_only_own_non_COD_order()
+    public void SalePos_scope_views_every_order_regardless_of_creator()
     {
         var userId = Guid.NewGuid();
         var access = new OrderAccessContext(
@@ -20,14 +20,30 @@ public class OrderPermissionUnionTests
             CanViewAllCodOrders: false,
             CanViewOwnOrders: true);
 
-        Assert.True(access.CanAccessOrder(Order(userId, OrderChannel.POS)));
-        Assert.False(access.CanAccessOrder(Order(Guid.NewGuid(), OrderChannel.POS)));
-        Assert.False(access.CanAccessOrder(Order(userId, OrderChannel.COD)));
+        Assert.True(access.CanViewOrder(Order(userId, OrderChannel.POS)));
+        Assert.True(access.CanViewOrder(Order(Guid.NewGuid(), OrderChannel.POS)));
+        Assert.True(access.CanViewOrder(Order(Guid.NewGuid(), OrderChannel.COD)));
+        Assert.Null(access.EmployeeFilter);
         Assert.False(access.CodOrdersOnly);
     }
 
     [Fact]
-    public void SaleCod_scope_allows_all_COD_and_no_counter_order()
+    public void SalePos_scope_modifies_only_its_own_non_COD_order()
+    {
+        var userId = Guid.NewGuid();
+        var access = new OrderAccessContext(
+            userId,
+            CanViewAllOrders: false,
+            CanViewAllCodOrders: false,
+            CanViewOwnOrders: true);
+
+        Assert.True(access.CanModifyOrder(Order(userId, OrderChannel.POS)));
+        Assert.False(access.CanModifyOrder(Order(Guid.NewGuid(), OrderChannel.POS)));
+        Assert.False(access.CanModifyOrder(Order(userId, OrderChannel.COD)));
+    }
+
+    [Fact]
+    public void SaleCod_scope_stays_limited_to_COD_channel()
     {
         var userId = Guid.NewGuid();
         var access = new OrderAccessContext(
@@ -36,13 +52,15 @@ public class OrderPermissionUnionTests
             CanViewAllCodOrders: true,
             CanViewOwnOrders: false);
 
-        Assert.True(access.CanAccessOrder(Order(Guid.NewGuid(), OrderChannel.COD)));
-        Assert.False(access.CanAccessOrder(Order(userId, OrderChannel.POS)));
+        Assert.True(access.CanViewOrder(Order(Guid.NewGuid(), OrderChannel.COD)));
+        Assert.False(access.CanViewOrder(Order(userId, OrderChannel.POS)));
+        Assert.True(access.CanModifyOrder(Order(Guid.NewGuid(), OrderChannel.COD)));
+        Assert.False(access.CanModifyOrder(Order(userId, OrderChannel.POS)));
         Assert.True(access.CodOrdersOnly);
     }
 
     [Fact]
-    public void Dual_sale_scope_is_union_of_own_counter_and_all_COD()
+    public void Dual_sale_scope_views_all_and_modifies_own_counter_plus_all_COD()
     {
         var userId = Guid.NewGuid();
         var access = new OrderAccessContext(
@@ -51,12 +69,12 @@ public class OrderPermissionUnionTests
             CanViewAllCodOrders: true,
             CanViewOwnOrders: true);
 
-        Assert.True(access.CanAccessOrder(Order(userId, OrderChannel.POS)));
-        Assert.False(access.CanAccessOrder(Order(Guid.NewGuid(), OrderChannel.POS)));
-        Assert.True(access.CanAccessOrder(Order(userId, OrderChannel.COD)));
-        Assert.True(access.CanAccessOrder(Order(Guid.NewGuid(), OrderChannel.COD)));
+        Assert.True(access.CanViewOrder(Order(Guid.NewGuid(), OrderChannel.POS)));
+        Assert.True(access.CanViewOrder(Order(Guid.NewGuid(), OrderChannel.COD)));
+        Assert.True(access.CanModifyOrder(Order(userId, OrderChannel.POS)));
+        Assert.False(access.CanModifyOrder(Order(Guid.NewGuid(), OrderChannel.POS)));
+        Assert.True(access.CanModifyOrder(Order(Guid.NewGuid(), OrderChannel.COD)));
         Assert.False(access.CodOrdersOnly);
-        Assert.True(access.IncludeAllCodOrders);
     }
 
     [Fact]
@@ -68,47 +86,28 @@ public class OrderPermissionUnionTests
             CanViewAllCodOrders: true,
             CanViewOwnOrders: true);
 
-        Assert.True(access.CanAccessOrder(Order(Guid.NewGuid(), OrderChannel.POS)));
-        Assert.True(access.CanAccessOrder(Order(Guid.NewGuid(), OrderChannel.COD)));
+        Assert.True(access.CanViewOrder(Order(Guid.NewGuid(), OrderChannel.POS)));
+        Assert.True(access.CanModifyOrder(Order(Guid.NewGuid(), OrderChannel.COD)));
         Assert.Null(access.EmployeeFilter);
     }
 
     [Fact]
-    public async Task Repository_filters_SalePos_to_own_non_COD_orders()
+    public async Task Repository_returns_orders_of_every_creator_when_employee_filter_is_absent()
     {
         await using var db = CreateDb();
         var userId = Guid.NewGuid();
         var ownCounter = Order(userId, OrderChannel.POS);
         var otherCounter = Order(Guid.NewGuid(), OrderChannel.POS);
-        var ownCod = Order(userId, OrderChannel.COD);
-        db.Orders.AddRange(ownCounter, otherCounter, ownCod);
-        await db.SaveChangesAsync();
-        var repository = new OrderRepository(db);
-
-        var result = await GetPaged(repository, userId, includeAllCodOrders: false);
-
-        Assert.Equal([ownCounter.Id], result.Items.Select(item => item.Id));
-    }
-
-    [Fact]
-    public async Task Repository_filters_dual_sale_to_own_non_COD_plus_all_COD()
-    {
-        await using var db = CreateDb();
-        var userId = Guid.NewGuid();
-        var ownCounter = Order(userId, OrderChannel.POS);
-        var otherCounter = Order(Guid.NewGuid(), OrderChannel.POS);
-        var ownCod = Order(userId, OrderChannel.COD);
         var otherCod = Order(Guid.NewGuid(), OrderChannel.COD);
-        db.Orders.AddRange(ownCounter, otherCounter, ownCod, otherCod);
+        db.Orders.AddRange(ownCounter, otherCounter, otherCod);
         await db.SaveChangesAsync();
         var repository = new OrderRepository(db);
 
-        var result = await GetPaged(repository, userId, includeAllCodOrders: true);
+        var result = await GetPaged(repository, employeeId: null, includeAllCodOrders: false);
 
         Assert.Equal(
-            new[] { ownCounter.Id, ownCod.Id, otherCod.Id }.OrderBy(id => id),
+            new[] { ownCounter.Id, otherCounter.Id, otherCod.Id }.OrderBy(id => id),
             result.Items.Select(item => item.Id).OrderBy(id => id));
-        Assert.DoesNotContain(result.Items, item => item.Id == otherCounter.Id);
     }
 
     [Fact]
@@ -151,7 +150,7 @@ public class OrderPermissionUnionTests
 
     private static Task<(List<Order> Items, int TotalCount)> GetPaged(
         OrderRepository repository,
-        Guid employeeId,
+        Guid? employeeId,
         bool includeAllCodOrders) =>
         repository.GetPagedAsync(
             search: null,

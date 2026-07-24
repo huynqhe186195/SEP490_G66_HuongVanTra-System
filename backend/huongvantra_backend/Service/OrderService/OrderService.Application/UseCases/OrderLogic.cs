@@ -126,7 +126,7 @@ public class OrderLogic(
     {
         var order = await _orderRepo.GetByIdAsync(id, ct)
             ?? throw new OrderNotFoundException(id);
-        EnsureCanAccess(order, access);
+        EnsureCanView(order, access);
         if (await RepairInconsistentPaymentsAsync(order, ct))
             await _orderRepo.SaveChangesAsync(ct);
         if (await RepairMissingPosTierDiscountAsync(order, ct))
@@ -140,7 +140,7 @@ public class OrderLogic(
             throw new OrderValidationException("Mã đơn hàng không được để trống.");
         var order = await _orderRepo.GetByCodeAsync(code.Trim().ToUpperInvariant(), ct)
             ?? throw new OrderNotFoundByCodeException(code);
-        EnsureCanAccess(order, access);
+        EnsureCanView(order, access);
         if (await RepairInconsistentPaymentsAsync(order, ct))
             await _orderRepo.SaveChangesAsync(ct);
         if (await RepairMissingPosTierDiscountAsync(order, ct))
@@ -153,7 +153,7 @@ public class OrderLogic(
     {
         var order = await _orderRepo.GetByIdAsync(orderId, ct)
             ?? throw new OrderNotFoundException(orderId);
-        EnsureCanAccess(order, access);
+        EnsureCanView(order, access);
 
         var items = await _activityRepo.GetByOrderIdAsync(orderId, MaxActivities, ct);
         return items.Select(MapActivity).ToList();
@@ -190,7 +190,7 @@ public class OrderLogic(
 
         var sourceOrder = await _orderRepo.GetByIdAsync(item.SourceOrderId, ct)
             ?? throw new OrderNotFoundException(item.SourceOrderId);
-        EnsureCanAccess(sourceOrder, access);
+        EnsureCanView(sourceOrder, access);
         var sourceChannel = sourceOrder?.OrderChannel ?? OrderChannel.POS;
 
         string? exchangeCode = null;
@@ -205,7 +205,7 @@ public class OrderLogic(
     {
         var sourceOrder = await _orderRepo.GetByIdAsync(orderId, ct)
             ?? throw new OrderNotFoundException(orderId);
-        EnsureCanAccess(sourceOrder, access);
+        EnsureCanView(sourceOrder, access);
 
         var items = await _returnOrderRepo.GetBySourceOrderIdAsync(orderId, ct);
         var dtos = new List<ReturnOrderSummaryResponse>(items.Count);
@@ -588,30 +588,15 @@ public class OrderLogic(
             if (request.Payments.Any(item => !Enum.IsDefined(item.PaymentMethod)))
                 throw new OrderValidationException("Phương thức thanh toán không hợp lệ.");
 
-            if (request.Payments
-                .GroupBy(item => item.PaymentMethod)
-                .Any(group => group.Count() > 1))
+            // Mỗi đơn chỉ dùng đúng một phương thức thanh toán; mảng Payments được giữ lại
+            // vì COD/VietQR vẫn gửi một phần tử kèm DebtSettlementJson.
+            if (request.Payments.Count > 1)
             {
                 throw new OrderValidationException(
-                    "Mỗi phương thức thanh toán chỉ được xuất hiện một lần trong cùng đơn hàng.");
+                    "Mỗi đơn hàng chỉ được sử dụng một phương thức thanh toán.");
             }
 
-            var transferCount = request.Payments.Count(item =>
-                item.PaymentMethod is PaymentMethod.VietQR or PaymentMethod.BankTransfer);
             var hasCod = request.Payments.Any(item => item.PaymentMethod == PaymentMethod.COD);
-            if (request.Payments.Count > 2
-                || transferCount > 1
-                || (request.Payments.Count == 2
-                    && (!request.Payments.Any(item => item.PaymentMethod == PaymentMethod.Cash)
-                        || transferCount != 1))
-                || (hasCod && request.Payments.Count != 1))
-            {
-                throw new OrderValidationException(
-                    "Chỉ hỗ trợ tiền mặt, chuyển khoản/VietQR, COD riêng lẻ hoặc kết hợp tiền mặt với một khoản chuyển khoản.");
-            }
-
-            if (request.Payments.Count(item => !string.IsNullOrWhiteSpace(item.DebtSettlementJson)) > 1)
-                throw new OrderValidationException("Chỉ được khai báo một yêu cầu thu công nợ trong mỗi lần thanh toán.");
 
             if (!request.CustomerId.HasValue
                 && request.Payments.Any(item => !string.IsNullOrWhiteSpace(item.DebtSettlementJson)))
@@ -824,7 +809,7 @@ public class OrderLogic(
     {
         var order = await _orderRepo.GetByIdAsync(id, ct)
             ?? throw new OrderNotFoundException(id);
-        EnsureCanAccess(order, access);
+        EnsureCanModify(order, access);
 
         if (order.OrderStatus == OrderStatus.Completed || order.OrderStatus == OrderStatus.Cancelled)
             throw new OrderCannotBeModifiedException(id, order.OrderStatus.ToString());
@@ -998,7 +983,7 @@ public class OrderLogic(
     {
         var order = await _orderRepo.GetByIdAsync(id, ct)
             ?? throw new OrderNotFoundException(id);
-        EnsureCanAccess(order, access);
+        EnsureCanModify(order, access);
 
         if (order.OrderStatus == OrderStatus.Completed || order.OrderStatus == OrderStatus.Cancelled)
             throw new OrderCannotBeCancelledException(id, order.OrderStatus.ToString());
@@ -1051,7 +1036,7 @@ public class OrderLogic(
     {
         var order = await _orderRepo.GetByIdAsync(id, ct)
             ?? throw new OrderNotFoundException(id);
-        if (!access.CanAccessOrder(order) && order.EmployeeId != access.UserId)
+        if (!access.CanModifyOrder(order) && order.EmployeeId != access.UserId)
             throw new OrderForbiddenException();
 
         if (order.OrderStatus == OrderStatus.Cancelled)
@@ -1128,7 +1113,7 @@ public class OrderLogic(
     {
         var order = await _orderRepo.GetByIdAsync(id, ct)
             ?? throw new OrderNotFoundException(id);
-        EnsureCanAccess(order, access);
+        EnsureCanModify(order, access);
 
         if (order.OrderStatus != OrderStatus.Processing && order.OrderStatus != OrderStatus.PendingPayment)
             throw new OrderCannotBeModifiedException(id, order.OrderStatus.ToString());
@@ -1169,7 +1154,7 @@ public class OrderLogic(
     {
         var order = await _orderRepo.GetByIdAsync(id, ct)
             ?? throw new OrderNotFoundException(id);
-        EnsureCanAccess(order, access);
+        EnsureCanModify(order, access);
 
         if (order.OrderStatus == OrderStatus.Cancelled || order.OrderStatus == OrderStatus.Completed)
             throw new OrderCannotBeModifiedException(id, order.OrderStatus.ToString());
@@ -1327,7 +1312,7 @@ public class OrderLogic(
     {
         var order = await _orderRepo.GetByIdAsync(orderId, ct)
             ?? throw new OrderNotFoundException(orderId);
-        EnsureCanAccess(order, access);
+        EnsureCanModify(order, access);
 
         if (order.OrderStatus != OrderStatus.Completed)
             throw new OrderValidationException("Chỉ trả hàng trên hóa đơn đã hoàn tất.");
@@ -2040,9 +2025,15 @@ public class OrderLogic(
         _ => method.ToString()
     };
 
-    private static void EnsureCanAccess(Order order, OrderAccessContext access)
+    private static void EnsureCanView(Order order, OrderAccessContext access)
     {
-        if (!access.CanAccessOrder(order))
+        if (!access.CanViewOrder(order))
+            throw new OrderForbiddenException();
+    }
+
+    private static void EnsureCanModify(Order order, OrderAccessContext access)
+    {
+        if (!access.CanModifyOrder(order))
             throw new OrderForbiddenException();
     }
 }

@@ -71,10 +71,9 @@ function findPaymentAllocation(payload, predicate) {
     predicate(String(payment?.paymentMethod || '').toUpperCase()))
 }
 
-function sumPaymentAllocations(payload, predicate) {
-  return getPaymentAllocations(payload)
-    .filter((payment) => predicate(String(payment?.paymentMethod || '').toUpperCase()))
-    .reduce((sum, payment) => sum + Math.max(0, Number(payment?.amount ?? 0)), 0)
+function getPaymentAllocationAmount(payload, predicate) {
+  const allocation = findPaymentAllocation(payload, predicate)
+  return Math.max(0, Number(allocation?.amount ?? 0))
 }
 
 function findTransferPayment(payments) {
@@ -456,7 +455,7 @@ export async function createTakeawayVietQrOrder(
 export async function createPosOrderOffline(payload, { idempotencyKey } = {}) {
   // Khi offline: lưu vào sync_queue và trả về fake result để UI tiếp tục
   if (!navigator.onLine) {
-    const cashAmount = sumPaymentAllocations(payload, (method) => method === 'CASH')
+    const cashAmount = getPaymentAllocationAmount(payload, (method) => method === 'CASH')
     const tempId = `OFFLINE-${Date.now()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`
     const idempotencyKey = crypto.randomUUID()
     const orderPayload = buildOrderRequestFromPosPayload(payload, {
@@ -483,7 +482,7 @@ export async function createPosOrderOffline(payload, { idempotencyKey } = {}) {
     }
   }
 
-  const cashAmount = sumPaymentAllocations(payload, (method) => method === 'CASH')
+  const cashAmount = getPaymentAllocationAmount(payload, (method) => method === 'CASH')
   return submitPosOrder(payload, {
     orderChannel: 'POS',
     paymentMethod: 'Cash',
@@ -497,7 +496,7 @@ export function createPosOrderTransferRecorded(payload) {
     payload,
     (method) => method === 'TRANSFER' || method === 'VIETQR' || method === 'BANKTRANSFER',
   )
-  const transferAmount = sumPaymentAllocations(
+  const transferAmount = getPaymentAllocationAmount(
     payload,
     (method) => method === 'TRANSFER' || method === 'VIETQR' || method === 'BANKTRANSFER',
   )

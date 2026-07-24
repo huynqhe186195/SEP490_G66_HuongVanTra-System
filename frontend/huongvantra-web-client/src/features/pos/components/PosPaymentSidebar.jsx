@@ -40,17 +40,11 @@ export default function PosPaymentSidebar({
   paymentMethods,
   onPaymentMethodChange,
   isTransferPayment,
-  isSplitPayment,
   isCodTakeaway,
   isTransferTakeaway,
   customerCurrentDebt,
   amountPaidInput,
   onAmountPaidChange,
-  transferAmountInput,
-  onTransferAmountChange,
-  splitCashAmount,
-  splitTransferAmount,
-  paymentAllocatedTotal,
   amountPaid,
   debtAmount,
   change,
@@ -532,11 +526,9 @@ export default function PosPaymentSidebar({
                 <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[#717971]" htmlFor="sidebar-amount-paid">
                   {isCodTakeaway
                     ? 'Số tiền khách trả'
-                    : isSplitPayment
-                      ? 'Tiền mặt'
-                      : isTransferPayment
-                        ? 'Số tiền chuyển khoản'
-                        : 'Khách trả'}
+                    : isTransferPayment
+                      ? 'Số tiền chuyển khoản'
+                      : 'Khách trả'}
                 </label>
                 <input
                   id="sidebar-amount-paid"
@@ -546,35 +538,11 @@ export default function PosPaymentSidebar({
                   value={amountPaidInput}
                   onChange={(event) => onAmountPaidChange(event.target.value)}
                 />
-                {isSplitPayment ? (
-                  <div className="mt-3">
-                    <label
-                      className="mb-2 block text-xs font-bold uppercase tracking-wider text-[#717971]"
-                      htmlFor="sidebar-transfer-amount"
-                    >
-                      Chuyển khoản
-                    </label>
-                    <input
-                      id="sidebar-transfer-amount"
-                      type="text"
-                      inputMode="numeric"
-                      className="w-full rounded-xl border border-[#c1c9c0] bg-[#fbf9f1] px-3 py-2.5 text-2xl font-bold tabular-nums outline-none focus:border-[#356647] focus:ring-2 focus:ring-[#356647]/20"
-                      value={transferAmountInput}
-                      onChange={(event) => onTransferAmountChange(event.target.value)}
-                      placeholder={formatMoney(Math.max(total - splitCashAmount, 0))}
-                    />
-                    <p className="mt-1.5 text-xs text-[#717971]">
-                      Để trống: tự tính phần còn lại {formatMoney(Math.max(total - splitCashAmount, 0))} đ.
-                    </p>
-                  </div>
-                ) : null}
                 <p className="mt-1.5 text-xs text-[#717971]">
                   {isCodTakeaway
                     ? amountPaid > 0
                       ? `Dự kiến thu ${formatMoney(amountPaid)} đ khi giao hàng.`
                       : `Để trống: thu đúng ${formatMoney(total)} đ khi giao hàng.`
-                    : isSplitPayment
-                      ? `Tiền mặt ${formatMoney(splitCashAmount)} đ · chuyển khoản ${formatMoney(splitTransferAmount)} đ.`
                     : isTransferPayment
                       ? amountPaid > 0
                         ? `Mã QR hiển thị ${formatMoney(transferQrAmount)} đ (chưa ghi nhận đã thu).`
@@ -582,25 +550,11 @@ export default function PosPaymentSidebar({
                       : `Để trống: ghi nợ ${formatMoney(total)} đ.`}
                 </p>
                 <div className="mt-2 flex items-center justify-between rounded-lg bg-[#f6f4ec] px-3 py-2 text-sm">
-                  <span className="text-[#717971]">{isSplitPayment ? 'Tổng phân bổ' : 'Đã nhập'}</span>
+                  <span className="text-[#717971]">Đã nhập</span>
                   <span className="font-bold text-[#1b1c17]">
-                    {formatMoney(isSplitPayment ? paymentAllocatedTotal : amountPaid)} đ
+                    {formatMoney(amountPaid)} đ
                   </span>
                 </div>
-                {isSplitPayment && paymentAllocatedTotal !== total ? (
-                  <div className={`mt-2 flex items-center justify-between rounded-lg px-3 py-2 text-sm ${
-                    paymentAllocatedTotal < total
-                      ? 'bg-[#fec25b]/20 text-[#7e5700]'
-                      : 'bg-red-50 text-red-700'
-                  }`}>
-                    <span className="font-semibold">
-                      {paymentAllocatedTotal < total ? 'Còn thiếu' : 'Đang vượt'}
-                    </span>
-                    <span className="font-bold">
-                      {formatMoney(Math.abs(total - paymentAllocatedTotal))} đ
-                    </span>
-                  </div>
-                ) : null}
                 {!isCodTakeaway && debtAmount > 0 ? (
                   <div className="mt-2 flex items-center justify-between rounded-lg bg-[#fec25b]/20 px-3 py-2 text-sm">
                     <span className="font-semibold text-[#7e5700]">Dư nợ (đơn này)</span>
