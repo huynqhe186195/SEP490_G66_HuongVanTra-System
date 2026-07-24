@@ -61,6 +61,7 @@ public class InventoryLogic(
     private const string TransactionProductionFinishedReceipt = "PRODUCTION_FINISHED_RECEIPT";
     private const string TransactionStocktakeAdjustment = "STOCKTAKE_ADJUSTMENT";
     private const string TransactionPosSale = "POS_SALE";
+    private const string TransactionSalesDeductLater = "SALES_DEDUCT_LATER";
     private const string TransactionSalesBomReconciliation = "SALES_BOM_RECONCILIATION";
     private const string TransactionCustomBundleMaterialExport = "CUSTOM_BUNDLE_MATERIAL_EXPORT";
     private const string TransactionCustomerReturnReceipt = "CUSTOMER_RETURN_RECEIPT";
@@ -620,15 +621,37 @@ public class InventoryLogic(
             var exportCountToday = await _exportSlipRepo.CountCreatedSinceAsync(now.Date, innerCt);
             var slipId = Guid.NewGuid();
             var slipLines = new List<StockExportSlipLine>();
+            var allAllocations = new List<StockExportBatchAllocation>();
+            var ledgerEntries = new List<InventoryLedgerEntry>();
+            var transactionGroupId = Guid.NewGuid();
 
             foreach (var item in orderedItems)
             {
                 var stock = stockBySkuId[item.SkuId];
                 var warehouseBefore = stock.WarehouseQuantityOnHand;
                 var storeBefore = stock.QuantityOnHand;
-                var storeAfter = storeBefore - item.Quantity;
 
-                slipLines.Add(new StockExportSlipLine
+                // POS-04: trừ tồn Kệ Hàng theo FEFO ở chế độ lô (SimulateWarehouse=false) để
+                // aggregate luôn khớp tổng lô; chế độ mô phỏng thì trừ trực tiếp aggregate.
+                List<StockExportBatchAllocation> allocations = [];
+                int storeAfter;
+                if (_inventoryOptions.SimulateWarehouse)
+                {
+                    storeAfter = storeBefore - item.Quantity;
+                    stock.QuantityOnHand = storeAfter;
+                }
+                else
+                {
+                    allocations = await AllocateAndDeductBatchesFifoAsync(
+                        item.SkuId,
+                        item.Quantity,
+                        innerCt,
+                        LocationShelf);
+                    storeAfter = await _batchRepo.SumQuantityOnHandAsync(item.SkuId, LocationShelf, innerCt);
+                    stock.QuantityOnHand = storeAfter;
+                }
+
+                var slipLine = new StockExportSlipLine
                 {
                     Id = Guid.NewGuid(),
                     StockExportSlipId = slipId,
@@ -642,9 +665,38 @@ public class InventoryLogic(
                     StoreQtyAfter = storeAfter,
                     Note = $"Trừ tồn quầy cho đơn hàng {queue.OrderCode}",
                     CreatedAt = now,
-                });
+                };
 
-                stock.QuantityOnHand = storeAfter;
+                foreach (var allocation in allocations)
+                {
+                    allocation.StockExportSlipId = slipId;
+                    allocation.StockExportSlipLineId = slipLine.Id;
+                }
+
+                slipLines.Add(slipLine);
+                allAllocations.AddRange(allocations);
+                ledgerEntries.Add(CreateLedgerEntry(
+                    transactionGroupId,
+                    item.SkuId,
+                    item.SkuSnapshotCode ?? item.SkuId.ToString()[..8],
+                    item.SkuSnapshotName,
+                    LocationShelf,
+                    storeBefore,
+                    -item.Quantity,
+                    storeAfter,
+                    TransactionSalesDeductLater,
+                    LocationShelf,
+                    null,
+                    ReferenceOrder,
+                    queue.OrderId,
+                    queue.OrderCode,
+                    allocations.Count == 1 ? allocations[0].WarehouseBatchId : null,
+                    allocations.Count == 1 ? allocations[0].LotCode : null,
+                    confirmedBy,
+                    confirmer,
+                    $"Trừ tồn quầy cho đơn hàng {queue.OrderCode}",
+                    slipLine.Note));
+
                 // POS-04: tồn vật lý đã rời quầy → nhả phần giữ chỗ tương ứng của queue này.
                 if (queue.IsReserved)
                     stock.ReservedQuantity = Math.Max(0, stock.ReservedQuantity - item.Quantity);
@@ -664,6 +716,9 @@ public class InventoryLogic(
                 StockAdjustmentRequestId = null,
                 ProductionOrderId = null,
                 ProductionCode = null,
+                ReferenceType = ReferenceOrder,
+                ReferenceId = queue.OrderId,
+                ReferenceCode = queue.OrderCode,
                 SkuId = slipLines.Count == 1 ? firstLine.SkuId : Guid.Empty,
                 SkuCode = slipLines.Count == 1 ? firstLine.SkuCode : "MULTI",
                 SkuSnapshotName = slipLines.Count == 1 ? firstLine.ProductSnapshotName : $"{slipLines.Count} dòng hàng bán",
@@ -691,6 +746,10 @@ public class InventoryLogic(
             queue.LastShortageReason = null;
 
             await _exportSlipRepo.AddAsync(exportSlip, innerCt);
+            if (allAllocations.Count > 0)
+                await _exportAllocationRepo.AddRangeAsync(allAllocations, innerCt);
+            if (ledgerEntries.Count > 0)
+                await _ledgerRepo.AddRangeAsync(ledgerEntries, innerCt);
             await _queueRepo.SaveChangesAsync(innerCt);
             return new StockDeductOperationResult(queue, true, []);
         }, ct);

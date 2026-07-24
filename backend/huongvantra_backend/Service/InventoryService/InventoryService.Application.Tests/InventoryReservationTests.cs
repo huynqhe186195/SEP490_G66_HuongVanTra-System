@@ -5,6 +5,7 @@ using InventoryService.Application.Options;
 using InventoryService.Application.UseCases;
 using InventoryService.Domain.Entities;
 using InventoryService.Domain.Enums;
+using InventoryService.Domain.Exceptions;
 using InventoryService.Infrastructure.Data;
 using InventoryService.Infrastructure.Repositories;
 using Microsoft.EntityFrameworkCore;
@@ -50,7 +51,8 @@ public sealed class InventoryReservationTests
 
     private static InventoryLogic BuildLogic(
         InventoryDbContext db,
-        IInventoryEventPublisher? publisher = null)
+        IInventoryEventPublisher? publisher = null,
+        bool simulateWarehouse = true)
     {
         var stockRepo = new InMemorySkuStockRepository(db);
         var queueRepo = new StockDeductQueueRepository(db);
@@ -60,11 +62,11 @@ public sealed class InventoryReservationTests
             stockRepo,
             queueRepo,
             Mock.Of<IStockAdjustmentRequestRepository>(),
-            Mock.Of<IStockExportSlipRepository>(),
+            new StockExportSlipRepository(db),
             Mock.Of<IStockImportSlipRepository>(),
-            Mock.Of<IWarehouseBatchRepository>(),
-            Mock.Of<IStockExportBatchAllocationRepository>(),
-            Mock.Of<IInventoryLedgerRepository>(),
+            new WarehouseBatchRepository(db),
+            new StockExportBatchAllocationRepository(db),
+            new InventoryLedgerRepository(db),
             Mock.Of<ISupplierReceiptRepository>(),
             Mock.Of<IShelfReturnRequestRepository>(),
             Mock.Of<ISupplierReturnRequestRepository>(),
@@ -76,7 +78,8 @@ public sealed class InventoryReservationTests
             Mock.Of<IProductCatalogClient>(),
             Mock.Of<ISupplierRepository>(),
             Mock.Of<IReturnInspectionRepository>(),
-            Microsoft.Extensions.Options.Options.Create(new InventoryOptions()));
+            Microsoft.Extensions.Options.Options.Create(
+                new InventoryOptions { SimulateWarehouse = simulateWarehouse }));
     }
 
     /// <summary>
@@ -208,7 +211,7 @@ public sealed class InventoryReservationTests
         await using var db = NewContext();
         var skuId = Guid.NewGuid();
         await SeedStockAsync(db, skuId, onHand: 10);
-        var logic = BuildLogic(db);
+        var logic = BuildLogic(db, simulateWarehouse: true);
         var orderId = Guid.NewGuid();
 
         await logic.HandleOrderPlacedAsync(CodPlaced(orderId, skuId, 6));
@@ -228,7 +231,7 @@ public sealed class InventoryReservationTests
         await using var db = NewContext();
         var skuId = Guid.NewGuid();
         await SeedStockAsync(db, skuId, onHand: 10);
-        var logic = BuildLogic(db);
+        var logic = BuildLogic(db, simulateWarehouse: true);
 
         // Đơn COD A giữ 8 → khả bán còn 2.
         await logic.HandleOrderPlacedAsync(CodPlaced(Guid.NewGuid(), skuId, 8, "HVT-A"));
@@ -355,5 +358,170 @@ public sealed class InventoryReservationTests
 
         var stock = await db.SkuStocks.AsNoTracking().FirstAsync(s => s.SkuId == skuId);
         Assert.Equal(8, stock.ReservedQuantity); // không nhân đôi delta
+    }
+
+    // ── POS-04 Shipping (deduct-later) trong chế độ lô (SimulateWarehouse=false) ──
+    // Xác nhận queue trừ đồng thời aggregate QuantityOnHand và WarehouseBatchItem tại
+    // Kệ Hàng theo FEFO; tạo slip + allocation + ledger; idempotent khi gọi lại.
+
+    private static async Task SeedShelfBatchAsync(
+        InventoryDbContext db, Guid skuId, int qty, string lotCode,
+        DateTime? expiresAt = null, string code = "SKU-1")
+    {
+        var batchId = Guid.NewGuid();
+        db.WarehouseBatches.Add(new WarehouseBatch
+        {
+            Id = batchId,
+            LotCode = lotCode,
+            Location = "Shelf",
+            Status = "active",
+            ExpiresAt = expiresAt,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+            Items =
+            {
+                new WarehouseBatchItem
+                {
+                    Id = Guid.NewGuid(),
+                    WarehouseBatchId = batchId,
+                    SkuId = skuId,
+                    SkuCode = code,
+                    QuantityOnHand = qty,
+                    InitialQuantity = qty,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow,
+                }
+            }
+        });
+        await db.SaveChangesAsync();
+    }
+
+    private static async Task SyncShelfAggregateAsync(InventoryDbContext db, Guid skuId)
+    {
+        var stock = await db.SkuStocks.FirstAsync(s => s.SkuId == skuId);
+        stock.QuantityOnHand = await db.WarehouseBatchItems
+            .Where(i => i.SkuId == skuId)
+            .Join(db.WarehouseBatches.Where(b => b.Status == "active" && b.Location == "Shelf"),
+                i => i.WarehouseBatchId, b => b.Id, (i, _) => i.QuantityOnHand)
+            .SumAsync();
+        await db.SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task Shipping_BatchMode_DeductsAggregateAndBatch_BySameQuantity()
+    {
+        await using var db = NewContext();
+        var skuId = Guid.NewGuid();
+        await SeedStockAsync(db, skuId, onHand: 0);
+        await SeedShelfBatchAsync(db, skuId, qty: 10, lotCode: "SHELF-L1");
+        await SyncShelfAggregateAsync(db, skuId); // aggregate == tổng lô = 10
+        var logic = BuildLogic(db, simulateWarehouse: false);
+        var orderId = Guid.NewGuid();
+
+        await logic.HandleOrderPlacedAsync(CodPlaced(orderId, skuId, 6));
+        var queue = await db.StockDeductQueues.Include(q => q.Items).FirstAsync(q => q.OrderId == orderId);
+
+        await logic.ConfirmQueueAsync(queue.Id, Guid.NewGuid(), null);
+
+        var stock = await db.SkuStocks.AsNoTracking().FirstAsync(s => s.SkuId == skuId);
+        var batchSum = await db.WarehouseBatchItems.AsNoTracking()
+            .Where(i => i.SkuId == skuId).SumAsync(i => i.QuantityOnHand);
+        Assert.Equal(4, stock.QuantityOnHand);   // aggregate giảm đúng 6
+        Assert.Equal(4, batchSum);               // lô giảm đúng 6
+        Assert.Equal(stock.QuantityOnHand, batchSum); // aggregate luôn khớp tổng lô
+        Assert.Equal(0, stock.ReservedQuantity);
+    }
+
+    [Fact]
+    public async Task Shipping_BatchMode_CreatesSlip_Allocation_AndLedger()
+    {
+        await using var db = NewContext();
+        var skuId = Guid.NewGuid();
+        await SeedStockAsync(db, skuId, onHand: 0);
+        await SeedShelfBatchAsync(db, skuId, qty: 10, lotCode: "SHELF-L1");
+        await SyncShelfAggregateAsync(db, skuId);
+        var logic = BuildLogic(db, simulateWarehouse: false);
+        var orderId = Guid.NewGuid();
+
+        await logic.HandleOrderPlacedAsync(CodPlaced(orderId, skuId, 6));
+        var queue = await db.StockDeductQueues.Include(q => q.Items).FirstAsync(q => q.OrderId == orderId);
+
+        await logic.ConfirmQueueAsync(queue.Id, Guid.NewGuid(), null);
+
+        var slip = await db.StockExportSlips.AsNoTracking().SingleAsync();
+        Assert.Equal("sales_deduct_later", slip.ExportType);
+        Assert.Equal(orderId, slip.ReferenceId);
+        Assert.Equal(6, slip.Quantity);
+
+        var allocations = await db.StockExportBatchAllocations.AsNoTracking().ToListAsync();
+        Assert.Single(allocations);
+        Assert.Equal(6, allocations[0].Quantity);
+        Assert.Equal(slip.Id, allocations[0].StockExportSlipId);
+
+        var ledger = await db.InventoryLedgerEntries.AsNoTracking().ToListAsync();
+        var entry = Assert.Single(ledger);
+        Assert.Equal("SALES_DEDUCT_LATER", entry.TransactionType);
+        Assert.Equal("Shelf", entry.Location);
+        Assert.Equal(-6, entry.QuantityDelta);
+        Assert.Equal(10, entry.QuantityBefore);
+        Assert.Equal(4, entry.QuantityAfter);
+    }
+
+    [Fact]
+    public async Task Shipping_BatchMode_Duplicate_ProducesNoSecondEffect()
+    {
+        await using var db = NewContext();
+        var skuId = Guid.NewGuid();
+        await SeedStockAsync(db, skuId, onHand: 0);
+        await SeedShelfBatchAsync(db, skuId, qty: 10, lotCode: "SHELF-L1");
+        await SyncShelfAggregateAsync(db, skuId);
+        var logic = BuildLogic(db, simulateWarehouse: false);
+        var orderId = Guid.NewGuid();
+
+        await logic.HandleOrderPlacedAsync(CodPlaced(orderId, skuId, 6));
+        var queue = await db.StockDeductQueues.Include(q => q.Items).FirstAsync(q => q.OrderId == orderId);
+
+        await logic.ConfirmQueueAsync(queue.Id, Guid.NewGuid(), null);
+        // Xác nhận lần hai: queue đã Confirmed → chặn, không trừ lần nữa.
+        await Assert.ThrowsAsync<InventoryValidationException>(() =>
+            logic.ConfirmQueueAsync(queue.Id, Guid.NewGuid(), null));
+
+        var stock = await db.SkuStocks.AsNoTracking().FirstAsync(s => s.SkuId == skuId);
+        var batchSum = await db.WarehouseBatchItems.AsNoTracking()
+            .Where(i => i.SkuId == skuId).SumAsync(i => i.QuantityOnHand);
+        Assert.Equal(4, stock.QuantityOnHand);   // vẫn chỉ trừ 1 lần
+        Assert.Equal(4, batchSum);
+        Assert.Single(await db.StockExportSlips.AsNoTracking().ToListAsync());
+        Assert.Single(await db.StockExportBatchAllocations.AsNoTracking().ToListAsync());
+        Assert.Single(await db.InventoryLedgerEntries.AsNoTracking().ToListAsync());
+    }
+
+    [Fact]
+    public async Task Shipping_ThenRestock_IncreasesOnlyByReturnedQuantity_NoResyncJump()
+    {
+        await using var db = NewContext();
+        var skuId = Guid.NewGuid();
+        await SeedStockAsync(db, skuId, onHand: 0);
+        await SeedShelfBatchAsync(db, skuId, qty: 10, lotCode: "SHELF-L1");
+        await SyncShelfAggregateAsync(db, skuId);
+        var logic = BuildLogic(db, simulateWarehouse: false);
+        var orderId = Guid.NewGuid();
+
+        await logic.HandleOrderPlacedAsync(CodPlaced(orderId, skuId, 6));
+        var queue = await db.StockDeductQueues.Include(q => q.Items).FirstAsync(q => q.OrderId == orderId);
+        await logic.ConfirmQueueAsync(queue.Id, Guid.NewGuid(), null);
+
+        var afterShip = await db.SkuStocks.AsNoTracking().FirstAsync(s => s.SkuId == skuId);
+        Assert.Equal(4, afterShip.QuantityOnHand); // aggregate đã khớp lô = 4
+
+        // Nhập lại 1 vào Kệ Hàng như một lô restock → aggregate phải = 5, không nhảy về 11.
+        await SeedShelfBatchAsync(db, skuId, qty: 1, lotCode: "SHELF-RESTOCK-1");
+        await SyncShelfAggregateAsync(db, skuId);
+
+        var afterRestock = await db.SkuStocks.AsNoTracking().FirstAsync(s => s.SkuId == skuId);
+        var batchSum = await db.WarehouseBatchItems.AsNoTracking()
+            .Where(i => i.SkuId == skuId).SumAsync(i => i.QuantityOnHand);
+        Assert.Equal(5, afterRestock.QuantityOnHand); // tăng đúng 1, không nhảy do re-sync
+        Assert.Equal(5, batchSum);
     }
 }
