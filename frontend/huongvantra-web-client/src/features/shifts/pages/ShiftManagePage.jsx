@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
+import { loadAuthSession } from '../../auth/services/authSession.js'
+import { hasPermission } from '../../auth/utils/permissions.js'
 import {
   assignmentStatusLabel,
   findSlot,
@@ -14,8 +15,15 @@ import {
 } from '../data/mockShiftData.js'
 import {
   approveShiftRegistration,
+  assignShiftSlot,
+  closeShiftRegistrationWindow,
+  fetchAssignableShiftStaff,
+  fetchShiftRegistrationWindow,
   fetchShiftWeek,
   rejectShiftRegistration,
+  reopenShiftRegistrationWindow,
+  unassignShiftRegistration,
+  upsertShiftRegistrationWindow,
 } from '../services/shiftsApi.js'
 
 function statusTone(status) {
@@ -25,13 +33,56 @@ function statusTone(status) {
   return 'bg-slate-100 text-slate-600'
 }
 
+function toDatetimeLocalValue(isoOrEmpty) {
+  if (!isoOrEmpty) return ''
+  const d = new Date(isoOrEmpty)
+  if (Number.isNaN(d.getTime())) return ''
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+function fromDatetimeLocalValue(localValue) {
+  if (!localValue) return ''
+  const d = new Date(localValue)
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toISOString()
+}
+
+function defaultWindowLocals() {
+  const open = new Date()
+  const close = new Date(open.getTime() + 24 * 60 * 60 * 1000)
+  return {
+    opensAtLocal: toDatetimeLocalValue(open.toISOString()),
+    closesAtLocal: toDatetimeLocalValue(close.toISOString()),
+  }
+}
+
+function windowStatusLabel(status) {
+  if (status === 'Open') return 'Đang mở'
+  if (status === 'Scheduled') return 'Đã lên lịch'
+  if (status === 'Expired') return 'Hết hạn'
+  if (status === 'Closed') return 'Đã đóng'
+  return status || '—'
+}
+
 function ShiftManagePage() {
+  const auth = loadAuthSession()
+  const canManage = hasPermission(auth, 'MANAGE_EMPLOYEE') || hasPermission(auth, 'MANAGE_ROLE')
+  const canReview = canManage
   const [weekOffset, setWeekOffset] = useState(0)
-  const [areaFilter, setAreaFilter] = useState('')
+  const [areaFilter] = useState('Shelf')
   const [selectedSlotId, setSelectedSlotId] = useState(null)
   const [templates, setTemplates] = useState([])
   const [slots, setSlots] = useState([])
   const [loading, setLoading] = useState(true)
+  const [staffOptions, setStaffOptions] = useState([])
+  const [selectedStaffId, setSelectedStaffId] = useState('')
+  const [assigning, setAssigning] = useState(false)
+  const [unassigningId, setUnassigningId] = useState('')
+  const [regWindow, setRegWindow] = useState(null)
+  const [opensAtLocal, setOpensAtLocal] = useState(() => defaultWindowLocals().opensAtLocal)
+  const [closesAtLocal, setClosesAtLocal] = useState(() => defaultWindowLocals().closesAtLocal)
+  const [savingWindow, setSavingWindow] = useState(false)
 
   const weekDays = useMemo(() => getWeekDays(weekOffset), [weekOffset])
   const weekStart = weekDays[0]?.iso
@@ -54,10 +105,41 @@ function ShiftManagePage() {
     }
   }
 
+  const loadRegWindow = async (start = weekStart) => {
+    if (!canManage || !start) return
+    try {
+      const data = await fetchShiftRegistrationWindow(start)
+      setRegWindow(data)
+      if (data) {
+        setOpensAtLocal(toDatetimeLocalValue(data.opensAt))
+        setClosesAtLocal(toDatetimeLocalValue(data.closesAt))
+      } else {
+        const defaults = defaultWindowLocals()
+        setOpensAtLocal(defaults.opensAtLocal)
+        setClosesAtLocal(defaults.closesAtLocal)
+      }
+    } catch {
+      setRegWindow(null)
+    }
+  }
+
   useEffect(() => {
     loadWeek(weekOffset, areaFilter)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [weekOffset, areaFilter])
+
+  useEffect(() => {
+    loadRegWindow(weekStart)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [weekStart, canManage])
+
+  useEffect(() => {
+    if (!canManage) return
+    fetchAssignableShiftStaff()
+      .then(setStaffOptions)
+      .catch(() => setStaffOptions([]))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const reloadWeek = (nextOffset) => {
     setWeekOffset(nextOffset)
@@ -73,6 +155,27 @@ function ShiftManagePage() {
     [slots, selectedSlotId],
   )
   const selectedTpl = selected ? getTemplate(templates, selected.templateId) : null
+
+  useEffect(() => {
+    setSelectedStaffId('')
+  }, [selectedSlotId])
+
+  const assignableStaffOptions = useMemo(() => {
+    if (!selected) return []
+    const onSlotIds = new Set(
+      selected.assignments
+        .filter((a) => a.status === 'Approved' || a.status === 'Pending')
+        .map((a) => a.staffId),
+    )
+    return staffOptions.filter((s) => !onSlotIds.has(s.userId))
+  }, [selected, staffOptions])
+
+  const canAssignSelected = useMemo(() => {
+    if (!selected || !selectedTpl || !canManage) return false
+    if (selected.status === 'Closed') return false
+    const approvedCount = selected.assignments.filter((a) => a.status === 'Approved').length
+    return approvedCount < selectedTpl.capacity
+  }, [selected, selectedTpl, canManage])
 
   const stats = useMemo(() => {
     const relevant = slots.filter((s) => {
@@ -108,11 +211,89 @@ function ShiftManagePage() {
     }
   }
 
+  const assignSlot = async () => {
+    if (!selected || !selectedStaffId) return
+    setAssigning(true)
+    try {
+      await assignShiftSlot(selected.id, selectedStaffId)
+      showSuccess('Đã chỉ định nhân viên vào ca.')
+      setSelectedStaffId('')
+      await loadWeek(weekOffset, areaFilter)
+    } catch (error) {
+      showError(error.message || 'Không chỉ định được ca.')
+    } finally {
+      setAssigning(false)
+    }
+  }
+
+  const unassignStaff = async (registrationId, staffName) => {
+    if (!registrationId) return
+    if (!window.confirm(`Gỡ «${staffName || 'nhân viên'}» khỏi ca này?`)) return
+    setUnassigningId(registrationId)
+    try {
+      await unassignShiftRegistration(registrationId)
+      showSuccess('Đã gỡ nhân viên khỏi ca.')
+      await loadWeek(weekOffset, areaFilter)
+    } catch (error) {
+      showError(error.message || 'Không gỡ được nhân viên khỏi ca.')
+    } finally {
+      setUnassigningId('')
+    }
+  }
+
+  const saveRegistrationWindow = async () => {
+    if (!weekStart) return
+    const opensAt = fromDatetimeLocalValue(opensAtLocal)
+    const closesAt = fromDatetimeLocalValue(closesAtLocal)
+    if (!opensAt || !closesAt) {
+      showError('Vui lòng chọn đủ thời điểm mở và hạn đóng đăng ký.')
+      return
+    }
+    setSavingWindow(true)
+    try {
+      const data = await upsertShiftRegistrationWindow({ weekStart, opensAt, closesAt })
+      setRegWindow(data)
+      showSuccess(data?.isOpenNow ? 'Đã mở cửa sổ đăng ký ca.' : 'Đã lưu lịch mở đăng ký ca.')
+    } catch (error) {
+      showError(error.message || 'Không lưu được cửa sổ đăng ký.')
+    } finally {
+      setSavingWindow(false)
+    }
+  }
+
+  const closeWindow = async () => {
+    if (!regWindow?.id) return
+    setSavingWindow(true)
+    try {
+      const data = await closeShiftRegistrationWindow(regWindow.id)
+      setRegWindow(data)
+      showSuccess('Đã đóng đăng ký ca cho tuần này.')
+    } catch (error) {
+      showError(error.message || 'Không đóng được cửa sổ đăng ký.')
+    } finally {
+      setSavingWindow(false)
+    }
+  }
+
+  const reopenWindow = async () => {
+    if (!regWindow?.id) return
+    setSavingWindow(true)
+    try {
+      const data = await reopenShiftRegistrationWindow(regWindow.id)
+      setRegWindow(data)
+      showSuccess('Đã mở lại đăng ký ca.')
+    } catch (error) {
+      showError(error.message || 'Không mở lại được cửa sổ đăng ký.')
+    } finally {
+      setSavingWindow(false)
+    }
+  }
+
   return (
     <PageShell className="[font-family:'Manrope',sans-serif]">
       <PageHeader
         title="Phân ca làm"
-        description="Lịch tuần dạng thời khóa biểu (ngày × khung ca)."
+        description="Manager mở/đóng thời hạn đăng ký ca theo tuần, chỉ định / gỡ Sale. Sale chỉ tự đăng ký khi cửa sổ đang mở."
       />
 
       <section className="rounded-[24px] border border-[#c1c9c0]/30 bg-white p-6 shadow-sm">
@@ -126,16 +307,79 @@ function ShiftManagePage() {
           <div>
             <h1 className="text-2xl font-bold text-[#356647] sm:text-3xl">Lịch ca theo tuần</h1>
             <p className="mt-2 max-w-2xl text-sm text-[#414942]">
-              Cột = ngày, hàng = khung ca. Click ô để duyệt đăng ký.
+              Mở cửa sổ đăng ký cho tuần đang xem, rồi chỉ định / duyệt Sale trên lưới bên dưới.
             </p>
           </div>
-          <Link
-            to="/my-shifts"
-            className="rounded-xl border border-[#c1c9c0] px-4 py-2.5 text-sm font-semibold text-[#356647] hover:bg-[#f6f4ec]"
-          >
-            Góc nhân viên
-          </Link>
         </div>
+
+        {canManage ? (
+          <div className="mt-5 rounded-2xl border border-[#356647]/25 bg-[#356647]/5 px-4 py-4 sm:px-5">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide text-[#356647]">
+                  Cửa sổ đăng ký · tuần {formatWeekRange(weekDays)}
+                </p>
+                <p className="mt-1 text-sm text-slate-700">
+                  Trạng thái:{' '}
+                  <strong>
+                    {regWindow ? windowStatusLabel(regWindow.status) : 'Chưa mở'}
+                  </strong>
+                  {regWindow?.isOpenNow ? ' — Sale đang đăng ký được' : null}
+                </p>
+              </div>
+            </div>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <label className="block text-sm text-slate-700">
+                <span className="mb-1 block text-xs font-semibold uppercase text-slate-500">Mở lúc</span>
+                <input
+                  type="datetime-local"
+                  value={opensAtLocal}
+                  onChange={(e) => setOpensAtLocal(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                />
+              </label>
+              <label className="block text-sm text-slate-700">
+                <span className="mb-1 block text-xs font-semibold uppercase text-slate-500">Hạn đóng</span>
+                <input
+                  type="datetime-local"
+                  value={closesAtLocal}
+                  onChange={(e) => setClosesAtLocal(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                />
+              </label>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={savingWindow}
+                onClick={saveRegistrationWindow}
+                className="rounded-xl bg-[#356647] px-4 py-2 text-sm font-semibold text-white hover:bg-[#2d553b] disabled:opacity-60"
+              >
+                {savingWindow ? 'Đang lưu…' : regWindow ? 'Cập nhật thời hạn' : 'Mở đăng ký ca'}
+              </button>
+              {regWindow?.id && regWindow.status === 'Open' ? (
+                <button
+                  type="button"
+                  disabled={savingWindow}
+                  onClick={closeWindow}
+                  className="rounded-xl border border-rose-200 px-4 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-60"
+                >
+                  Đóng ngay
+                </button>
+              ) : null}
+              {regWindow?.id && regWindow.isManuallyClosed ? (
+                <button
+                  type="button"
+                  disabled={savingWindow}
+                  onClick={reopenWindow}
+                  className="rounded-xl border border-[#356647]/40 px-4 py-2 text-sm font-semibold text-[#356647] hover:bg-white disabled:opacity-60"
+                >
+                  Mở lại
+                </button>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
 
         <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
           <div className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-[#fbf9f1] p-1">
@@ -167,30 +411,6 @@ function ShiftManagePage() {
                 Tuần này
               </button>
             ) : null}
-          </div>
-
-          <div className="inline-flex rounded-xl border border-slate-200 bg-[#fbf9f1] p-1">
-            {[
-              { value: '', label: 'Tất cả' },
-              { value: 'Shelf', label: 'Quầy' },
-              { value: 'Warehouse', label: 'Kho' },
-            ].map((opt) => (
-              <button
-                key={opt.value || 'all'}
-                type="button"
-                onClick={() => {
-                  setAreaFilter(opt.value)
-                  setSelectedSlotId(null)
-                }}
-                className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${
-                  areaFilter === opt.value
-                    ? 'bg-white text-[#356647] shadow-sm'
-                    : 'text-slate-500 hover:text-slate-800'
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
           </div>
         </div>
 
@@ -354,7 +574,7 @@ function ShiftManagePage() {
                                   {assignmentStatusLabel(a.status)}
                                 </span>
                               </div>
-                              {a.status === 'Pending' && selected.status !== 'Closed' ? (
+                              {canReview && a.status === 'Pending' && selected.status !== 'Closed' ? (
                                 <div className="mt-3 flex gap-2">
                                   <button
                                     type="button"
@@ -372,10 +592,53 @@ function ShiftManagePage() {
                                   </button>
                                 </div>
                               ) : null}
+                              {canManage
+                              && selected.status !== 'Closed'
+                              && (a.status === 'Approved' || a.status === 'Pending') ? (
+                                <button
+                                  type="button"
+                                  disabled={unassigningId === a.id}
+                                  onClick={() => unassignStaff(a.id, a.name)}
+                                  className="mt-3 w-full rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-60"
+                                >
+                                  {unassigningId === a.id ? 'Đang gỡ…' : 'Gỡ khỏi ca'}
+                                </button>
+                              ) : null}
                             </li>
                           ))
                         )}
                       </ul>
+
+                      {canManage && canAssignSelected ? (
+                        <div className="mt-4 rounded-xl border border-[#356647]/30 bg-white px-3 py-3">
+                          <p className="text-xs font-semibold uppercase text-slate-500">Chỉ định nhân viên</p>
+                          <select
+                            value={selectedStaffId}
+                            onChange={(e) => setSelectedStaffId(e.target.value)}
+                            className="mt-2 w-full rounded-lg border border-slate-200 px-2 py-2 text-sm text-slate-800"
+                          >
+                            <option value="">Chọn nhân viên Sale…</option>
+                            {assignableStaffOptions.map((s) => (
+                              <option key={s.userId} value={s.userId}>
+                                {s.fullName} · {s.roleName}
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            disabled={!selectedStaffId || assigning}
+                            onClick={assignSlot}
+                            className="mt-2 w-full rounded-lg bg-[#356647] px-3 py-2 text-sm font-semibold text-white hover:bg-[#2d553b] disabled:opacity-60"
+                          >
+                            {assigning ? 'Đang chỉ định…' : 'Chỉ định vào ca'}
+                          </button>
+                          {assignableStaffOptions.length === 0 ? (
+                            <p className="mt-2 text-xs text-slate-500">
+                              Không còn nhân viên Sale nào khả dụng cho ô ca này.
+                            </p>
+                          ) : null}
+                        </div>
+                      ) : null}
                     </>
                   )}
                 </div>

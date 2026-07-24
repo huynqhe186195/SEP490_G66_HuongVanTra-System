@@ -296,7 +296,7 @@ function OrderDetailPage() {
           <p>
             Ngoài giờ ca — chỉ xem, không sửa / hủy / giao / hoàn tất / trả đổi / thu COD.{' '}
             <Link to="/my-shifts" className="font-semibold underline">
-              Vào «Ca của tôi»
+              Vào «Lịch làm việc»
             </Link>{' '}
             để đăng ký hoặc chờ đến giờ ca.
           </p>

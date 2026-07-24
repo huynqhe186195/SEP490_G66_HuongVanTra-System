@@ -1,0 +1,13 @@
+namespace UserService.Application.DTOs.Requests;
+
+/// <summary>Manager/Admin chỉ định một nhân viên Sale vào ca làm việc.</summary>
+public record AssignShiftRequest(Guid UserId);
+
+/// <summary>
+/// Manager mở / cập nhật cửa sổ đăng ký ca cho một tuần.
+/// OpensAt / ClosesAt: ISO-8601 (ưu tiên có offset; nếu không có thì hiểu theo giờ VN +07:00).
+/// </summary>
+public record UpsertShiftRegistrationWindowRequest(
+    string WeekStart,
+    string OpensAt,
+    string ClosesAt);

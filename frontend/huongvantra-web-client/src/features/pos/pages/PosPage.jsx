@@ -61,7 +61,6 @@ import { loadAuthSession } from '../../auth/services/authSession.js'
 import { canUsePosCodMode, canUsePosCounterMode } from '../../auth/utils/permissions.js'
 import CustomBundlePanel from '../components/CustomBundlePanel.jsx'
 import PosCashSessionBar, { assertCashSessionOpenForPayment } from '../components/PosCashSessionBar.jsx'
-import PosCashSessionGate from '../components/PosCashSessionGate.jsx'
 import PosShiftDutyGate from '../components/PosShiftDutyGate.jsx'
 import {
   loadOpenCashSession,
@@ -1669,7 +1668,7 @@ function PosPage() {
             }
 
             if (!shelfOnDuty) {
-                showError('Chưa được duyệt ca quầy hoặc đang ngoài giờ ca — không thể bán tại quầy. Vào «Ca của tôi» để đăng ký.');
+                showError('Chưa được duyệt ca quầy hoặc đang ngoài giờ ca — không thể bán tại quầy. Vào «Lịch làm việc» để đăng ký.');
                 return;
             }
 
@@ -1846,9 +1845,21 @@ function PosPage() {
         updateActiveSession({ shippingAddress: value });
     };
 
+    const needsCashSession = !isTakeaway
+
     return (
+        <PosShiftDutyGate
+            onDutyChange={setShelfOnDuty}
+            requireCashSession={needsCashSession}
+            cashSessionOpen={cashSessionOpen}
+            onCashOpened={() => setCashSessionOpen(true)}
+            onSwitchToCod={
+                allowedSalesModes.some((m) => m.id === 'takeaway')
+                    ? () => setSalesMode('takeaway')
+                    : undefined
+            }
+        >
         <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-[#c1c9c0]/40 bg-[#fbf9f1] shadow-[0_10px_30px_rgba(27,28,23,0.04)] lg:rounded-[28px]">
-            <PosShiftDutyGate onDutyChange={setShelfOnDuty} />
             <header className="relative z-20 shrink-0 border-b border-[#c1c9c0]/60 bg-[#f6f4ec] px-4 py-2.5">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto no-scrollbar">
@@ -1925,25 +1936,7 @@ function PosPage() {
 
                     <PosCashSessionBar />
                 </div>
-                {shelfOnDuty && !isTakeaway && !cashSessionOpen ? (
-                    <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
-                        <span>
-                            <strong>Chưa mở ca quỹ</strong> — POS quầy đang khóa. Mở ca trên lớp phủ để tiếp tục.
-                        </span>
-                    </div>
-                ) : null}
             </header>
-
-            {shelfOnDuty && !isTakeaway && !cashSessionOpen ? (
-                <PosCashSessionGate
-                    onOpened={() => setCashSessionOpen(true)}
-                    onSwitchToCod={
-                        allowedSalesModes.some((m) => m.id === 'takeaway')
-                            ? () => setSalesMode('takeaway')
-                            : undefined
-                    }
-                />
-            ) : null}
 
             <ResizableSplitPane
                 storageKey="hvt-pos-panel-ratio"
@@ -2733,6 +2726,7 @@ function PosPage() {
                 }}
             />
         </div>
+        </PosShiftDutyGate>
     );
 }
 

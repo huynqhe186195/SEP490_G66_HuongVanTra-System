@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
-import { canUsePosCodMode } from '../../auth/utils/permissions.js'
+import { canUsePosCodMode, canViewAllOrders } from '../../auth/utils/permissions.js'
 import { fetchOnDutyShift } from '../../shifts/services/shiftsApi.js'
 import { openCashSession } from '../utils/posCashSessionStore.js'
 
@@ -13,7 +13,8 @@ function parseMoney(raw) {
 
 /**
  * Chặn toàn bộ POS quầy đến khi mở ca quỹ.
- * Mọi người phải đang trong ca quầy (Shelf) đã duyệt.
+ * Nhân viên bán hàng phải đang trong ca quầy (Shelf) đã duyệt.
+ * Manager/Admin (canViewAllOrders) được bỏ qua yêu cầu ca.
  */
 export default function PosCashSessionGate({ onOpened, onSwitchToCod }) {
   const [openingCashInput, setOpeningCashInput] = useState('500.000')
@@ -26,9 +27,14 @@ export default function PosCashSessionGate({ onOpened, onSwitchToCod }) {
   const sellerName = auth?.username || 'Nhân viên POS'
   const sellerRole = (auth?.roles || []).join(', ')
   const canCod = canUsePosCodMode(auth)
-  const canOpen = Boolean(onDuty)
+  const bypassShift = canViewAllOrders(auth)
+  const canOpen = bypassShift || Boolean(onDuty)
 
   useEffect(() => {
+    if (bypassShift) {
+      setCheckingShift(false)
+      return undefined
+    }
     let cancelled = false
     setCheckingShift(true)
     fetchOnDutyShift('Shelf')
@@ -44,12 +50,12 @@ export default function PosCashSessionGate({ onOpened, onSwitchToCod }) {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [bypassShift])
 
   const handleOpen = async () => {
     if (!canOpen) {
       showError(
-        'Chỉ mở ca quỹ khi đã được duyệt ca quầy và đang trong giờ làm. Vào «Ca của tôi» để đăng ký/kiểm tra.',
+        'Chỉ mở ca quỹ khi đã được duyệt ca quầy và đang trong giờ làm. Vào «Lịch làm việc» để đăng ký/kiểm tra.',
       )
       return
     }
@@ -73,7 +79,7 @@ export default function PosCashSessionGate({ onOpened, onSwitchToCod }) {
   }
 
   return (
-    <div className="absolute inset-0 z-[70] flex items-center justify-center bg-[#1b1c17]/55 p-4 backdrop-blur-[2px]">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col items-center justify-center overflow-hidden rounded-xl border border-[#c1c9c0]/40 bg-[#fbf9f1] p-4 shadow-[0_10px_30px_rgba(27,28,23,0.04)] lg:rounded-[28px]">
       <div className="w-full max-w-md rounded-2xl border border-[#c1c9c0]/40 bg-white shadow-2xl">
         <div className="border-b border-[#e7e8e0] px-6 py-5">
           <p className="text-xs font-bold uppercase tracking-wide text-[#538463]">Bắt buộc mở ca</p>
@@ -83,7 +89,9 @@ export default function PosCashSessionGate({ onOpened, onSwitchToCod }) {
               ? 'Đang kiểm tra ca làm việc của bạn…'
               : onDuty
                 ? `Bạn đang trong ${onDuty.label}. Nhập tiền đầu két để tiếp tục.`
-                : 'Bạn phải đang trong ca quầy (Shelf) đã duyệt. Vào «Ca của tôi» để đăng ký và chờ Manager duyệt.'}
+                : bypassShift
+                  ? 'Nhập tiền đầu két để tiếp tục.'
+                  : 'Bạn phải đang trong ca quầy (Shelf) đã duyệt. Vào «Lịch làm việc» để đăng ký và chờ Manager duyệt.'}
           </p>
         </div>
 
@@ -122,7 +130,7 @@ export default function PosCashSessionGate({ onOpened, onSwitchToCod }) {
               to="/my-shifts"
               className="mt-1 flex w-full items-center justify-center rounded-xl bg-[#356647] py-3 text-sm font-bold text-white hover:bg-[#2d553b]"
             >
-              Tới «Ca của tôi»
+              Tới «Lịch làm việc»
             </Link>
           )}
 

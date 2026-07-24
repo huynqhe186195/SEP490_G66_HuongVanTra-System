@@ -30,19 +30,20 @@ public class PosCashSessionLogic(
         OpenPosCashSessionRequest request,
         Guid userId,
         string? actorName,
+        bool canBypassShiftRequirement,
         CancellationToken ct = default)
     {
         var existing = await _repo.GetOpenAsync(ct);
         if (existing is not null)
             throw new OrderValidationException("Đã có ca quỹ đang mở. Vui lòng đóng ca hiện tại trước khi mở ca mới.");
 
-        // Bắt buộc: user phải đang trong ca quầy đã duyệt (không bypass Manager/Admin).
+        // Nhân viên bán hàng phải đang trong ca quầy đã duyệt; Manager/Admin được bỏ qua.
         var onDuty = await _shifts.GetMyOnDutyAsync("Shelf", ct);
-        if (onDuty is null)
+        if (onDuty is null && !canBypassShiftRequirement)
             throw new OrderValidationException(
-                "Chỉ mở ca quỹ khi bạn đã được duyệt ca quầy và đang trong giờ làm. Hãy đăng ký / chờ duyệt ca trên «Ca của tôi».");
+                "Chỉ mở ca quỹ khi bạn đã được duyệt ca quầy và đang trong giờ làm. Hãy đăng ký / chờ duyệt ca trên «Lịch làm việc».");
 
-        if (request.ShiftSlotId.HasValue && request.ShiftSlotId.Value != onDuty.SlotId)
+        if (onDuty is not null && request.ShiftSlotId.HasValue && request.ShiftSlotId.Value != onDuty.SlotId)
             throw new OrderValidationException("Ca quỹ phải gắn đúng ca quầy bạn đang được xếp.");
 
         var openingCash = Math.Max(0, request.OpeningCash);
@@ -61,8 +62,12 @@ public class PosCashSessionLogic(
             OpenedByUserId = userId,
             OpenedByName = openedByName,
             OpenedByRole = NormalizeOptional(request.OpenedByRole),
-            ShiftSlotId = onDuty.SlotId,
-            ShiftLabel = onDuty.Label,
+            ShiftSlotId = onDuty?.SlotId,
+            // Chỉ lưu tên ca (không kèm giờ) — FE/POS hiển thị «Ca đang mở · {tên}».
+            ShiftLabel = FirstNonEmpty(
+                request.ShiftLabel,
+                onDuty?.TemplateName,
+                StripShiftHours(onDuty?.Label)),
             OpenedAt = now,
             CreatedAt = now,
             UpdatedAt = now
@@ -167,6 +172,18 @@ public class PosCashSessionLogic(
 
     private static string? NormalizeOptional(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    /// <summary>Bỏ phần giờ trong nhãn ca ("Ca sáng · 08:00–12:00" → "Ca sáng").</summary>
+    private static string? StripShiftHours(string? label)
+    {
+        var text = NormalizeOptional(label);
+        if (text is null) return null;
+        var idx = text.LastIndexOf('·');
+        if (idx < 0) idx = text.LastIndexOf('•');
+        if (idx <= 0) return text;
+        var left = text[..idx].Trim();
+        return string.IsNullOrEmpty(left) ? text : left;
+    }
 
     private static string? FirstNonEmpty(params string?[] values) =>
         values.Select(NormalizeOptional).FirstOrDefault(v => v is not null);

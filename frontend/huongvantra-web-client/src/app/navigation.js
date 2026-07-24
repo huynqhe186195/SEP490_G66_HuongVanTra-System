@@ -111,14 +111,16 @@ export const navigationItems = [
     path: '/shifts',
     module: 'shift_manage',
     icon: 'calendar_month',
-    roles: ['admin', 'agencyManager'],
+    // Chỉ Manager — chỉ định / gỡ Sale khỏi ca (mọi ngày trong tuần hiện tại).
+    roles: ['agencyManager'],
   },
   {
-    label: 'Ca của tôi',
+    label: 'Lịch làm việc',
     path: '/my-shifts',
     module: 'my_shifts',
     icon: 'schedule',
-    roles: ['admin', 'agencyManager', 'salesStaff', 'inventoryManager'],
+    // Sale xem lịch ca (của mình + đồng nghiệp) / đăng ký khi Manager mở cửa sổ.
+    roles: ['salesStaff'],
   },
   {
     label: 'Hạng thẻ',

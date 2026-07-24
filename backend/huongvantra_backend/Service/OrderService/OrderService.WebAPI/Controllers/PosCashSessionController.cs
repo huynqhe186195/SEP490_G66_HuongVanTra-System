@@ -33,7 +33,8 @@ public class PosCashSessionController(PosCashSessionLogic posCashSessionLogic) :
     public async Task<IActionResult> Open([FromBody] OpenPosCashSessionRequest request, CancellationToken ct)
     {
         var (actorId, actorName) = Actor();
-        var result = await posCashSessionLogic.OpenAsync(request, actorId, actorName, ct);
+        var result = await posCashSessionLogic.OpenAsync(
+            request, actorId, actorName, CanBypassShiftRequirement(), ct);
         return Ok(result);
     }
 

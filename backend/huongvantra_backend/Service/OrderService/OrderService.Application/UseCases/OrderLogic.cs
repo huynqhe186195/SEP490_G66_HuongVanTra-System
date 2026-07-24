@@ -1455,8 +1455,6 @@ public class OrderLogic(
 
     public async Task<CustomBundleResponse> PackCustomBundleAsync(Guid bundleId, CancellationToken ct = default)
     {
-        await _shiftGuard.EnsureWarehouseOnDutyAsync(ct);
-
         var bundle = await _customBundleRepo.GetByIdAsync(bundleId, ct)
             ?? throw new OrderNotFoundException(bundleId);
 

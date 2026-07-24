@@ -17,6 +17,7 @@ public class UserDbContext : DbContext
     public DbSet<ShiftTemplate> ShiftTemplates => Set<ShiftTemplate>();
     public DbSet<ShiftSlot> ShiftSlots => Set<ShiftSlot>();
     public DbSet<ShiftRegistration> ShiftRegistrations => Set<ShiftRegistration>();
+    public DbSet<ShiftRegistrationWindow> ShiftRegistrationWindows => Set<ShiftRegistrationWindow>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

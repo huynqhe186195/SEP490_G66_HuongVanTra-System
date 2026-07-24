@@ -104,6 +104,27 @@ public class ShiftRepository(UserDbContext context) : IShiftRepository
                 && r.Slot.Status == ShiftSlotStatus.Open)
             .ToListAsync();
 
+    public async Task<int> CountApprovedForUserInWeekAsync(
+        Guid userId,
+        DateOnly weekStart,
+        DateOnly weekEnd,
+        DateOnly? fromDateInclusive = null)
+    {
+        var from = fromDateInclusive is null || fromDateInclusive < weekStart
+            ? weekStart
+            : fromDateInclusive.Value;
+
+        return await context.ShiftRegistrations
+            .Include(r => r.Slot)
+            .Where(r =>
+                r.UserId == userId
+                && r.Status == ShiftRegistrationStatus.Approved
+                && !r.IsDeleted
+                && r.Slot.WorkDate >= from
+                && r.Slot.WorkDate <= weekEnd)
+            .CountAsync();
+    }
+
     public async Task AddRegistrationAsync(ShiftRegistration registration) =>
         await context.ShiftRegistrations.AddAsync(registration);
 
@@ -111,6 +132,33 @@ public class ShiftRepository(UserDbContext context) : IShiftRepository
     {
         registration.UpdatedAt = DateTime.UtcNow;
         context.ShiftRegistrations.Update(registration);
+    }
+
+    public async Task<ShiftRegistrationWindow?> GetRegistrationWindowByWeekAsync(DateOnly weekStart) =>
+        await context.ShiftRegistrationWindows
+            .FirstOrDefaultAsync(w => w.WeekStart == weekStart && !w.IsDeleted);
+
+    public async Task<ShiftRegistrationWindow?> GetRegistrationWindowByIdAsync(Guid id) =>
+        await context.ShiftRegistrationWindows
+            .FirstOrDefaultAsync(w => w.Id == id && !w.IsDeleted);
+
+    public async Task<IReadOnlyList<ShiftRegistrationWindow>> GetOpenRegistrationWindowsAsync(DateTime utcNow) =>
+        await context.ShiftRegistrationWindows
+            .Where(w =>
+                !w.IsDeleted
+                && !w.IsManuallyClosed
+                && w.OpensAt <= utcNow
+                && w.ClosesAt >= utcNow)
+            .OrderBy(w => w.WeekStart)
+            .ToListAsync();
+
+    public async Task AddRegistrationWindowAsync(ShiftRegistrationWindow window) =>
+        await context.ShiftRegistrationWindows.AddAsync(window);
+
+    public void UpdateRegistrationWindow(ShiftRegistrationWindow window)
+    {
+        window.UpdatedAt = DateTime.UtcNow;
+        context.ShiftRegistrationWindows.Update(window);
     }
 
     public async Task SaveChangesAsync() => await context.SaveChangesAsync();

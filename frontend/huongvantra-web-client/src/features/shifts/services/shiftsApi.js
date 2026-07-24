@@ -25,6 +25,15 @@ function normalizeAssignment(raw) {
   }
 }
 
+function normalizeStaffOption(raw) {
+  if (!raw || typeof raw !== 'object') return null
+  return {
+    userId: String(raw.userId ?? raw.UserId ?? ''),
+    fullName: raw.fullName ?? raw.FullName ?? '',
+    roleName: raw.roleName ?? raw.RoleName ?? '',
+  }
+}
+
 function normalizeSlot(raw) {
   if (!raw || typeof raw !== 'object') return null
   const assignments = (raw.assignments ?? raw.Assignments ?? [])
@@ -36,6 +45,20 @@ function normalizeSlot(raw) {
     workDate: raw.workDate ?? raw.WorkDate ?? '',
     status: raw.status ?? raw.Status ?? 'Open',
     assignments,
+  }
+}
+
+function normalizeWindow(raw) {
+  if (!raw || typeof raw !== 'object') return null
+  return {
+    id: String(raw.id ?? raw.Id ?? ''),
+    weekStart: raw.weekStart ?? raw.WeekStart ?? '',
+    weekEnd: raw.weekEnd ?? raw.WeekEnd ?? '',
+    opensAt: raw.opensAt ?? raw.OpensAt ?? '',
+    closesAt: raw.closesAt ?? raw.ClosesAt ?? '',
+    isManuallyClosed: Boolean(raw.isManuallyClosed ?? raw.IsManuallyClosed),
+    isOpenNow: Boolean(raw.isOpenNow ?? raw.IsOpenNow),
+    status: raw.status ?? raw.Status ?? 'Closed',
   }
 }
 
@@ -64,6 +87,76 @@ export async function approveShiftRegistration(registrationId) {
 
 export async function rejectShiftRegistration(registrationId) {
   await apiRequestAuth(`/api/shifts/registrations/${registrationId}/reject`, { method: 'POST' })
+}
+
+/** Danh sách nhân viên Sale khả dụng để Manager chỉ định vào ca. */
+export async function fetchAssignableShiftStaff() {
+  const data = await apiRequestAuth('/api/shifts/assignable-staff')
+  const list = Array.isArray(data) ? data : []
+  return list.map(normalizeStaffOption).filter(Boolean)
+}
+
+/** Manager chỉ định trực tiếp một Sale vào ca — được duyệt ngay. */
+export async function assignShiftSlot(slotId, userId) {
+  const data = await apiRequestAuth(`/api/shifts/slots/${slotId}/assign`, {
+    method: 'POST',
+    body: JSON.stringify({ userId }),
+  })
+  return normalizeAssignment(data)
+}
+
+/** Manager gỡ nhân viên khỏi ca (Pending / Approved). */
+export async function unassignShiftRegistration(registrationId) {
+  await apiRequestAuth(`/api/shifts/registrations/${registrationId}/unassign`, { method: 'POST' })
+}
+
+export async function fetchShiftRegistrationWindow(weekStart) {
+  const params = new URLSearchParams({ weekStart })
+  const data = await apiRequestAuth(`/api/shifts/registration-windows?${params}`)
+  if (!data) return null
+  return normalizeWindow(data)
+}
+
+export async function upsertShiftRegistrationWindow({ weekStart, opensAt, closesAt }) {
+  const data = await apiRequestAuth('/api/shifts/registration-windows', {
+    method: 'PUT',
+    body: JSON.stringify({ weekStart, opensAt, closesAt }),
+  })
+  return normalizeWindow(data)
+}
+
+export async function closeShiftRegistrationWindow(windowId) {
+  const data = await apiRequestAuth(`/api/shifts/registration-windows/${windowId}/close`, {
+    method: 'POST',
+  })
+  return normalizeWindow(data)
+}
+
+export async function reopenShiftRegistrationWindow(windowId) {
+  const data = await apiRequestAuth(`/api/shifts/registration-windows/${windowId}/reopen`, {
+    method: 'POST',
+  })
+  return normalizeWindow(data)
+}
+
+/** Trạng thái đăng ký ca tuần hiện tại — dùng để chặn app nếu Sale chưa có ca đã duyệt tuần này. */
+export async function fetchMyShiftWeekStatus() {
+  const data = await apiRequestAuth('/api/shifts/me/week-status')
+  return {
+    weekStart: data.weekStart ?? data.WeekStart ?? '',
+    weekEnd: data.weekEnd ?? data.WeekEnd ?? '',
+    canRegisterNow: Boolean(data.canRegisterNow ?? data.CanRegisterNow),
+    // backward-compat for older FE snippets
+    canRegisterToday: Boolean(
+      data.canRegisterNow ?? data.CanRegisterNow ?? data.canRegisterToday ?? data.CanRegisterToday,
+    ),
+    hasApprovedShiftThisWeek: Boolean(data.hasApprovedShiftThisWeek ?? data.HasApprovedShiftThisWeek),
+    allowMyShiftsOnly: Boolean(data.allowMyShiftsOnly ?? data.AllowMyShiftsOnly),
+    hardBlocked: Boolean(data.hardBlocked ?? data.HardBlocked),
+    activeWindow: normalizeWindow(data.activeWindow ?? data.ActiveWindow),
+    currentWeekWindow: normalizeWindow(data.currentWeekWindow ?? data.CurrentWeekWindow),
+    message: data.message ?? data.Message ?? '',
+  }
 }
 
 /** Ca quầy đã duyệt đang trong giờ (±30 phút). Null nếu chưa đủ điều kiện mở ca quỹ. */

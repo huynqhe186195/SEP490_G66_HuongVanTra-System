@@ -145,7 +145,7 @@ function buildStocktakeCsvRows(request) {
   ]
 }
 
-function StocktakeDetailModal({ request, onClose, onAction }) {
+function StocktakeDetailModal({ request, onClose, onAction, canWrite = true }) {
   if (!request) return null
 
   return (
@@ -234,22 +234,22 @@ function StocktakeDetailModal({ request, onClose, onAction }) {
           </button>
           <div className="flex flex-wrap justify-end gap-2">
             {request.status === 'Draft' || request.status === 'Rejected' ? (
-              <button type="button" onClick={() => onAction('submit', request)} className="rounded-xl bg-amber-600 px-4 py-2 text-sm font-bold text-white hover:bg-amber-700">
+              <button type="button" disabled={!canWrite} onClick={() => onAction('submit', request)} className="rounded-xl bg-amber-600 px-4 py-2 text-sm font-bold text-white hover:bg-amber-700 disabled:opacity-50">
                 Gửi duyệt
               </button>
             ) : null}
             {request.status === 'PendingApproval' ? (
               <>
-                <button type="button" onClick={() => onAction('reject', request)} className="rounded-xl border border-rose-200 px-4 py-2 text-sm font-bold text-rose-700 hover:bg-rose-50">
+                <button type="button" disabled={!canWrite} onClick={() => onAction('reject', request)} className="rounded-xl border border-rose-200 px-4 py-2 text-sm font-bold text-rose-700 hover:bg-rose-50 disabled:opacity-50">
                   Từ chối
                 </button>
-                <button type="button" onClick={() => onAction('approve', request)} className="rounded-xl bg-[#538463] px-4 py-2 text-sm font-bold text-white hover:bg-[#426d50]">
+                <button type="button" disabled={!canWrite} onClick={() => onAction('approve', request)} className="rounded-xl bg-[#538463] px-4 py-2 text-sm font-bold text-white hover:bg-[#426d50] disabled:opacity-50">
                   Duyệt và áp tồn
                 </button>
               </>
             ) : null}
             {request.status !== 'Completed' && request.status !== 'Cancelled' ? (
-              <button type="button" onClick={() => onAction('cancel', request)} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">
+              <button type="button" disabled={!canWrite} onClick={() => onAction('cancel', request)} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
                 Hủy
               </button>
             ) : null}
@@ -901,6 +901,7 @@ function InventoryStocktakePage() {
           request={detail}
           onClose={() => setDetail(null)}
           onAction={handleAction}
+          canWrite={canWrite}
         />
       ) : null}
     </PageShell>

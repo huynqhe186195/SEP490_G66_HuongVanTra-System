@@ -414,7 +414,7 @@ function OrderCreatePage() {
 
             <Link to="/my-shifts" className="font-semibold underline">
 
-              Vào «Ca của tôi»
+              Vào «Lịch làm việc»
 
             </Link>{' '}
 

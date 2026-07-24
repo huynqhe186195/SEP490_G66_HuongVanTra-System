@@ -241,6 +241,56 @@ namespace UserService.Infrastructure.Migrations
                     b.ToTable("ShiftRegistrations", (string)null);
                 });
 
+            modelBuilder.Entity("UserService.Domain.Entities.ShiftRegistrationWindow", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)")
+                        .HasCollation("ascii_general_ci");
+
+                    b.Property<DateTime?>("ClosedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid?>("ClosedByUserId")
+                        .HasColumnType("char(36)")
+                        .HasCollation("ascii_general_ci");
+
+                    b.Property<DateTime>("ClosesAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("tinyint(1)")
+                        .HasDefaultValue(false);
+
+                    b.Property<bool>("IsManuallyClosed")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("tinyint(1)")
+                        .HasDefaultValue(false);
+
+                    b.Property<DateTime>("OpensAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid>("OpenedByUserId")
+                        .HasColumnType("char(36)")
+                        .HasCollation("ascii_general_ci");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<DateOnly>("WeekStart")
+                        .HasColumnType("date");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("WeekStart")
+                        .IsUnique();
+
+                    b.ToTable("ShiftRegistrationWindows", (string)null);
+                });
+
             modelBuilder.Entity("UserService.Domain.Entities.ShiftSlot", b =>
                 {
                     b.Property<Guid>("Id")

@@ -71,12 +71,24 @@ public static class DataSeeder
         await SeedShiftTemplatesAsync(context);
     }
 
+    // Chỉ Sale (SalePos/SaleCod) cần đăng ký ca — ca kho (Warehouse) bị vô hiệu hoá.
+    private static readonly HashSet<Guid> InactiveShiftTemplateIds =
+    [
+        Guid.Parse("aaaaaaaa-0001-4000-8000-000000000003"), // Ca kho
+    ];
+
     private static async Task SeedShiftTemplatesAsync(UserDbContext context)
     {
         foreach (var (id, name, area, start, end, capacity, color, sortOrder) in DefaultShiftTemplates)
         {
+            var isActive = !InactiveShiftTemplateIds.Contains(id);
             var existing = await context.ShiftTemplates.FirstOrDefaultAsync(t => t.Id == id);
-            if (existing is not null) continue;
+            if (existing is not null)
+            {
+                if (existing.IsActive != isActive)
+                    existing.IsActive = isActive;
+                continue;
+            }
 
             context.ShiftTemplates.Add(new ShiftTemplate
             {
@@ -88,7 +100,7 @@ public static class DataSeeder
                 Capacity = capacity,
                 Color = color,
                 SortOrder = sortOrder,
-                IsActive = true
+                IsActive = isActive
             });
         }
 
