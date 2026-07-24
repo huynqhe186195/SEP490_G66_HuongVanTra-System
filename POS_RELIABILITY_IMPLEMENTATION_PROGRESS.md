@@ -112,13 +112,31 @@ Status legend: DONE · PARTIAL · BLOCKED · NOT STARTED
 - New tests authored (not executed): `InventoryReservationTests.cs`, `InventoryLogicIdempotencyTests.cs`, `ProcessedIntegrationEventInboxTests.cs`. Existing test fixups: `OutboxMessagePublisherTests` (OrderShipped InlineData + registry count 4→5), `OrderIdempotencyTests`, `OutboxOrderEventPublisherTests`.
 - Migration `20260724140000_AddReservedQuantityToSkuStock` created **but NOT applied** to any database (no `dotnet ef database update` per brief).
 - Untested / verify at gate: real-MySQL row-lock ordering under concurrent reserve/replace; the H4 cross-service compensation path (Order save fails after Inventory replaced) — only reachable with a live OrderService DB; `ExecuteInTransactionAsync` rollback semantics on real MySQL; end-to-end COD lifecycle create→reserve→edit→replace→ship→deduct.
-## PHASE I — POS-06 Sell-first Reconciliation — NOT STARTED
-## PHASE J — Return Inspection Safety — NOT STARTED
-## PHASE K — Regression & Documentation — NOT STARTED
+## PHASE I — POS-06 Sell-first Reconciliation — DONE (commits 6cb76c3, 4ad8cb5)
+- I1–I3 — Sell-first checkout: immediate Shelf deduction where available, reconciliation queue created only for the missing Shelf portion, total-source-insufficiency block at checkout. Commit `6cb76c3` (`feat(pos): implement sell-first checkout reconciliation`).
+- I4–I7 — Reconciliation workflow: manual queue confirmation post-sale (Warehouse/Manager/Admin), FEFO Warehouse deduction of raw materials + packaging, all-or-nothing confirmation (no partial/negative stock), reject/cancel never cancels the completed customer order. Commit `4ad8cb5` (`feat(inventory): complete sell-first reconciliation workflow`).
+
+## PHASE J — Return Inspection Safety — DONE (commits 4008142, f69f18f)
+- J1–J3 — Backend inspected-return disposition workflow (commit `4008142`, `feat(returns): add inspected return disposition workflow`):
+  - Creating a return does NOT auto-increase sellable stock; `HandleOrderReturnedAsync` idempotent by EventId AND (OrderReturnedEventType, ReturnId); `ReturnInspection` created idempotently per (ReturnId, SkuId) with Disposition=Pending.
+  - `InspectReturnAsync` first-wins idempotent, permission-controlled: **RestockApproved** → new Shelf batch (`sourceType return_restock`, increases sellable); **Quarantined** → batch at Location="Quarantine" (`return_quarantine`), excluded from sellable/warehouse; **Disposed** → no stock change. Refund state and inventory disposition separately auditable.
+  - `ReturnInspectionController` (`api/v1/inventory/return-inspections`): GET list + GET by-return (Warehouse/Manager/Admin/Staff), POST inspect (Warehouse/Manager/Admin). Migration `20260724160000_AddReturnInspections` created **and applied** to `hvt_inventory_db` (table + 7 indexes + PK + FK to WarehouseBatches SetNull verified). ModelSnapshot in sync.
+  - Tests: `ReturnInspectionTests.cs` (12 [Fact]). **Full InventoryService suite 52/52 pass in isolated .NET 8 Docker container** (Windows Application Control blocked host `dotnet test` — Docker fallback per mandate; source copied into container, container removed after, no volume/DB destructive commands).
+- J4–J5 — Permissions + inspection queue UI (commit `f69f18f`, `feat(returns): complete return inspection management`):
+  - `canInspectReturn` permission helper (Warehouse/Manager/Admin) matching the backend controller gate.
+  - `returnInspectionApi.js` service (list, by-return, inspect; 17-field mapper; disposition labels/classes).
+  - `ReturnInspectionsPage.jsx` queue page: tabs (pending/restock/quarantined/disposed/all), inspect modal (radio RestockApproved/Quarantined/Disposed + note), pending badge.
+  - Route in `App.jsx`; nav tab `returnInspectionNavTab`; access-control mapping `{ module: 'inventory_returns', prefix: '/inventory/return-inspections' }` placed before generic `/inventory` fallback (roles admin/agencyManager/inventoryManager).
+  - **Frontend `npm run build` succeeded** (800 modules; only pre-existing chunk-size/dynamic-import warnings). `git diff --check` clean.
+
+## PHASE K — Regression & Documentation — IN PROGRESS
+- K1–K4: build affected services, run focused + regression tests (Docker fallback for InventoryService), Docker runtime/UAT, cleanup, technical + acceptance docs. Final commit: `test(pos): complete reliability regression and documentation`.
 
 ---
 
 ## Resume point
-Phase G: G4–G7 DONE at code level (build/tests from earlier sessions recorded above; this session did not re-run them). G8 — PENDING MANUAL/RUNTIME VERIFICATION at the Docker gate (real-MySQL atomic-claim/unique-index race + end-to-end exactly-once).
-Phase H: H1–H6 DONE at **code level only** — no build/test run this session per the implementation-only brief. Migration `20260724140000_AddReservedQuantityToSkuStock` created, NOT applied. Verify at the Phase K gate: build InventoryService + OrderService, run the new + fixed tests, apply the reservation migration, then run the COD lifecycle end-to-end (create→reserve→edit→replace→ship→deduct, cancel-before/after-ship, insufficient-reserve block).
-Next: **Phase I — POS-06 Sell-first Reconciliation** (NOT STARTED). Do not begin I/J/K without a new instruction.
+Phase G: G4–G7 DONE at code level. G8 — verified at Docker gate (real-MySQL atomic-claim + end-to-end exactly-once). Rolled into commit `61686a8` (`feat(pos): complete outbox and cod reservation reliability`).
+Phase H: H1–H6 DONE. Reservation migration applied; COD lifecycle verified. Rolled into commit `61686a8`.
+Phase I: DONE — commits `6cb76c3`, `4ad8cb5`.
+Phase J: DONE — commits `4008142` (backend, 52/52 Docker tests), `f69f18f` (frontend, build passed).
+Next: **Phase K — Regression & Documentation** (IN PROGRESS). Then a single push to `origin/HuyTD` (fetch, verify ahead/behind, stop on divergence, never force push).
