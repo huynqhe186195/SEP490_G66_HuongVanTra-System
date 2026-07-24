@@ -1667,19 +1667,46 @@ public class InventoryLogic(
                 stock.UpdatedAt = now;
             }
 
-            // Thay items của queue theo danh sách mới (quan hệ bắt buộc → dòng cũ bị xóa cascade).
-            queue.Items.Clear();
+            // Reconcile items tại chỗ theo VỊ TRÍ (không theo SkuId): tái dùng từng dòng đã tracked,
+            // ghi đè toàn bộ field (kể cả SkuId). Chỉ thêm dòng khi cần nhiều hơn, chỉ xóa dòng dư.
+            // KHÔNG dùng Items.Clear() + re-add: dòng mới với Id (Guid) đã set khiến EF coi là
+            // UPDATE một hàng không tồn tại (affected 0) → DbUpdateConcurrencyException dưới MySQL;
+            // tối thiểu hóa DELETE/INSERT cũng tránh vấn đề orphan-cascade giữa các provider.
+            var reusablePool = new Queue<StockDeductQueueItem>(queue.Items);
+            var keptItems = new HashSet<StockDeductQueueItem>();
+
             foreach (var (skuId, required) in requiredBySku.OrderBy(kv => kv.Key))
             {
-                queue.Items.Add(new StockDeductQueueItem
+                StockDeductQueueItem target;
+                if (reusablePool.Count > 0)
                 {
-                    Id = Guid.NewGuid(),
-                    QueueId = queue.Id,
-                    SkuId = skuId,
-                    SkuSnapshotName = required.Name,
-                    SkuSnapshotCode = required.Code,
-                    Quantity = required.Quantity
-                });
+                    target = reusablePool.Dequeue(); // tái dùng dòng đã tracked → EF phát UPDATE hợp lệ
+                    target.SkuId = skuId;
+                    target.SkuSnapshotName = required.Name;
+                    target.SkuSnapshotCode = required.Code;
+                    target.Quantity = required.Quantity;
+                }
+                else
+                {
+                    target = new StockDeductQueueItem
+                    {
+                        Id = Guid.NewGuid(),
+                        QueueId = queue.Id,
+                        SkuId = skuId,
+                        SkuSnapshotName = required.Name,
+                        SkuSnapshotCode = required.Code,
+                        Quantity = required.Quantity
+                    };
+                    queue.Items.Add(target);
+                }
+                keptItems.Add(target);
+            }
+
+            // Xóa các dòng dư không được tái dùng → EF cascade DELETE.
+            foreach (var item in queue.Items.ToList())
+            {
+                if (!keptItems.Contains(item))
+                    queue.Items.Remove(item);
             }
 
             queue.TotalAmount = request.TotalAmount;

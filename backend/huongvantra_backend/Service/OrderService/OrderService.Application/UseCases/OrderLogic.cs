@@ -728,7 +728,8 @@ public class OrderLogic(
     private async Task ApplyOrderDetailUpdatesAsync(
         Order order, List<UpdateOrderDetailRequest> items, CancellationToken ct)
     {
-        await EnsureVipCustomerAsync(order.CustomerId, ct);
+        if (items.Any(i => i.IsGift))
+            await EnsureVipCustomerAsync(order.CustomerId, ct);
 
         order.OrderDetails ??= new List<OrderDetail>();
         var existingById = order.OrderDetails.ToDictionary(d => d.Id);

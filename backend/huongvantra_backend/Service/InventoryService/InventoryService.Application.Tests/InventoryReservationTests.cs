@@ -1,4 +1,5 @@
 using HuongVanTra.Shared.Messages;
+using InventoryService.Application.DTOs.Requests;
 using InventoryService.Application.Interfaces;
 using InventoryService.Application.Options;
 using InventoryService.Application.UseCases;
@@ -242,5 +243,117 @@ public sealed class InventoryReservationTests
         var stock = await db.SkuStocks.AsNoTracking().FirstAsync(s => s.SkuId == skuId);
         Assert.Equal(2, stock.QuantityOnHand);
         Assert.Equal(0, stock.ReservedQuantity);
+    }
+
+    private static ReplaceCodReservationRequest ReplaceReq(
+        Guid orderId, params (Guid SkuId, int Qty)[] lines) =>
+        new(
+            orderId,
+            OperationId: Guid.NewGuid(),
+            TotalAmount: lines.Sum(l => l.Qty) * 10_000m,
+            Items: lines.Select(l => new ReplaceCodReservationItemRequest(
+                l.SkuId, "SKU", "SKU", l.Qty)).ToList());
+
+    /// <summary>
+    /// H4 regression — sửa số lượng đơn COD chờ xác nhận: reconcile item tại chỗ (không Clear+re-add),
+    /// giữ chỗ điều chỉnh theo delta. Bảo vệ chống lỗi DbUpdateConcurrency{}
+    /// (EF UPDATE hàng không tồn tại) từng làm HTTP 500 khi thay giữ chỗ.
+    /// </summary>
+    [Fact]
+    public async Task ReplaceReservation_QuantityIncrease_ReconcilesItemInPlace_AndAdjustsReserved()
+    {
+        await using var db = NewContext();
+        var skuId = Guid.NewGuid();
+        await SeedStockAsync(db, skuId, onHand: 20);
+        var logic = BuildLogic(db);
+        var orderId = Guid.NewGuid();
+
+        await logic.HandleOrderPlacedAsync(CodPlaced(orderId, skuId, 5));
+        var before = await db.StockDeductQueues.Include(q => q.Items).AsNoTracking()
+            .FirstAsync(q => q.OrderId == orderId);
+        var originalItemId = before.Items.Single().Id;
+
+        var result = await logic.ReplaceCodReservationAsync(ReplaceReq(orderId, (skuId, 8)));
+
+        Assert.True(result.Replaced);
+        var queue = await db.StockDeductQueues.Include(q => q.Items).AsNoTracking()
+            .FirstAsync(q => q.OrderId == orderId);
+        var item = Assert.Single(queue.Items);
+        Assert.Equal(originalItemId, item.Id);   // dòng cũ được tái dùng, không tạo mới
+        Assert.Equal(8, item.Quantity);
+        Assert.True(queue.IsReserved);
+
+        var stock = await db.SkuStocks.AsNoTracking().FirstAsync(s => s.SkuId == skuId);
+        Assert.Equal(8, stock.ReservedQuantity);  // 5 → 8 theo delta +3
+        Assert.Equal(20, stock.QuantityOnHand);
+    }
+
+    [Fact]
+    public async Task ReplaceReservation_QuantityDecrease_ReleasesDelta()
+    {
+        await using var db = NewContext();
+        var skuId = Guid.NewGuid();
+        await SeedStockAsync(db, skuId, onHand: 20);
+        var logic = BuildLogic(db);
+        var orderId = Guid.NewGuid();
+
+        await logic.HandleOrderPlacedAsync(CodPlaced(orderId, skuId, 9));
+        await logic.ReplaceCodReservationAsync(ReplaceReq(orderId, (skuId, 4)));
+
+        var stock = await db.SkuStocks.AsNoTracking().FirstAsync(s => s.SkuId == skuId);
+        Assert.Equal(4, stock.ReservedQuantity);  // 9 → 4, nhả 5
+    }
+
+    [Fact]
+    public async Task ReplaceReservation_AddAndRemoveSku_ReconcilesItemsAndReservations()
+    {
+        await using var db = NewContext();
+        var skuA = Guid.NewGuid();
+        var skuB = Guid.NewGuid();
+        await SeedStockAsync(db, skuA, onHand: 20, code: "SKU-A");
+        await SeedStockAsync(db, skuB, onHand: 20, code: "SKU-B");
+        var logic = BuildLogic(db);
+        var orderId = Guid.NewGuid();
+
+        // Đơn ban đầu chỉ có SKU-A x3.
+        await logic.HandleOrderPlacedAsync(CodPlaced(orderId, skuA, 3));
+
+        // Sửa thành SKU-B x6 (bỏ A, thêm B).
+        var result = await logic.ReplaceCodReservationAsync(ReplaceReq(orderId, (skuB, 6)));
+        Assert.True(result.Replaced);
+
+        var queue = await db.StockDeductQueues.Include(q => q.Items).AsNoTracking()
+            .FirstAsync(q => q.OrderId == orderId);
+        var item = Assert.Single(queue.Items);
+        Assert.Equal(skuB, item.SkuId);
+        Assert.Equal(6, item.Quantity);
+
+        var stockA = await db.SkuStocks.AsNoTracking().FirstAsync(s => s.SkuId == skuA);
+        var stockB = await db.SkuStocks.AsNoTracking().FirstAsync(s => s.SkuId == skuB);
+        Assert.Equal(0, stockA.ReservedQuantity);  // A đã nhả hết
+        Assert.Equal(6, stockB.ReservedQuantity);  // B giữ mới
+    }
+
+    [Fact]
+    public async Task ReplaceReservation_SameOperationId_IsIdempotent()
+    {
+        await using var db = NewContext();
+        var skuId = Guid.NewGuid();
+        await SeedStockAsync(db, skuId, onHand: 20);
+        var logic = BuildLogic(db);
+        var orderId = Guid.NewGuid();
+
+        await logic.HandleOrderPlacedAsync(CodPlaced(orderId, skuId, 5));
+        var req = ReplaceReq(orderId, (skuId, 8));
+
+        var first = await logic.ReplaceCodReservationAsync(req);
+        var second = await logic.ReplaceCodReservationAsync(req); // cùng OperationId → no-op
+
+        Assert.True(first.Replaced);
+        Assert.False(second.Replaced);
+        Assert.True(second.AlreadyProcessed);
+
+        var stock = await db.SkuStocks.AsNoTracking().FirstAsync(s => s.SkuId == skuId);
+        Assert.Equal(8, stock.ReservedQuantity); // không nhân đôi delta
     }
 }
