@@ -384,6 +384,10 @@ export function canReturnOrder(order) {
   return lines.some((line) => Number(line.returnedQuantity || 0) < Number(line.quantity || 0))
 }
 
+export function canReprintReceipt(order) {
+  return normalizeOrderKey(order?.orderStatus) === 'Completed'
+}
+
 export function getManualDiscountAmount(order) {
   const total = Number(order?.discountAmount ?? 0)
   const promotion = Number(order?.promotionDiscountAmount ?? 0)

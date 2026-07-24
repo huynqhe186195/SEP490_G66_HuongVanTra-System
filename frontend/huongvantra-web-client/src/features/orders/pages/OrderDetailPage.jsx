@@ -15,18 +15,22 @@ import OrderTimeline from '../components/OrderTimeline.jsx'
 import OrderTransferQrPanel from '../components/OrderTransferQrPanel.jsx'
 import OrderUpdateMetaModal from '../components/OrderUpdateMetaModal.jsx'
 import {
+import ReceiptReprintModal from '../components/ReceiptReprintModal.jsx'
   cancelOrder,
   completeOrder,
   fetchOrder,
   fetchReturnsByOrderId,
   shipOrder,
+  reprintReceipt,
   updateOrder,
 } from '../services/ordersApi.js'
 import {
+import { printReceiptFromData } from '../../pos/utils/printReceipt.js'
   canCancelOrder,
   canCompleteOrder,
   canEditOrderMeta,
   canReturnOrder,
+  canReprintReceipt,
   canShipOrder,
   canVerifyCod,
   getOrderEditBlockedMessage,
@@ -66,6 +70,8 @@ function OrderDetailPage() {
   const [isCodVerifyOpen, setIsCodVerifyOpen] = useState(false)
   const [confirmCancelOpen, setConfirmCancelOpen] = useState(false)
   const [timelineRefreshKey, setTimelineRefreshKey] = useState(0)
+  const [isReprintOpen, setIsReprintOpen] = useState(false)
+  const [isReprinting, setIsReprinting] = useState(false)
   const [catalogLookups, setCatalogLookups] = useState(() => buildProductCatalogLookups())
   const [orderReturns, setOrderReturns] = useState([])
   const [orderCustomer, setOrderCustomer] = useState(null)
@@ -199,6 +205,30 @@ function OrderDetailPage() {
   }
 
   async function runAction(action) {
+  async function handleConfirmReprint(reason) {
+    if (!order || isReprinting) return
+    try {
+      setIsReprinting(true)
+      const result = await reprintReceipt(order.id, reason, {
+        idempotencyKey: crypto.randomUUID(),
+      })
+      const receipt = result?.receipt
+      if (!receipt) throw new Error('Không nhận được dữ liệu hóa đơn để in lại.')
+
+      setIsReprintOpen(false)
+      showSuccess(`Đã ghi nhận lần in lại thứ ${receipt.reprintNumber}.`)
+      await printReceiptFromData({
+        ...receipt,
+        createdAtLabel: formatVietnamDateTime(receipt.createdAt),
+        reprintedAtLabel: formatVietnamDateTime(receipt.reprintedAt),
+      })
+    } catch (error) {
+      showError(error.message || 'Không thể in lại hóa đơn.')
+    } finally {
+      setIsReprinting(false)
+    }
+  }
+
     if (!canManage || !order) return
     try {
       setIsSaving(true)
@@ -426,6 +456,16 @@ function OrderDetailPage() {
                   </button>
                 ) : null}
                 {canCancelOrder(order) ? (
+                {canReprintReceipt(order) ? (
+                  <button
+                    type="button"
+                    disabled={isReprinting}
+                    onClick={() => setIsReprintOpen(true)}
+                    className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    In lại hóa đơn
+                  </button>
+                ) : null}
                   <button
                     type="button"
                     disabled={isSaving}
@@ -492,6 +532,14 @@ function OrderDetailPage() {
         title="Hủy đơn hàng"
         message={`Bạn có chắc muốn hủy đơn ${order.orderCode}? Thao tác này không thể hoàn tác.`}
         confirmLabel="Hủy đơn"
+      <ReceiptReprintModal
+        isOpen={isReprintOpen}
+        order={order}
+        isSaving={isReprinting}
+        onClose={() => setIsReprintOpen(false)}
+        onConfirm={handleConfirmReprint}
+      />
+
         cancelLabel="Giữ đơn"
         onConfirm={handleConfirmCancel}
         onCancel={() => setConfirmCancelOpen(false)}

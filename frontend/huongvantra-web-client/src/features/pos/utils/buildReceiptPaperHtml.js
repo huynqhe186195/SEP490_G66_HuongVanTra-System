@@ -64,6 +64,13 @@ export function buildReceiptPaperHtml(receipt) {
       <div class="receipt-brand">HƯƠNG VÂN TRÀ</div>
       <div class="receipt-title">HÓA ĐƠN BÁN HÀNG</div>
       ${
+        receipt.isReprint
+          ? `<div class="receipt-reprint-banner">BẢN IN LẠI</div>
+      <div class="receipt-meta">Lần in lại: ${escapeHtml(receipt.reprintNumber ?? 1)}</div>
+      <div class="receipt-meta">Thời điểm in lại: ${escapeHtml(receipt.reprintedAtLabel || '—')}</div>`
+          : ''
+      }
+      ${
         receipt.invoiceCode
           ? `<div class="receipt-meta receipt-highlight">Số HĐ: ${escapeHtml(receipt.invoiceCode)}</div>`
           : ''

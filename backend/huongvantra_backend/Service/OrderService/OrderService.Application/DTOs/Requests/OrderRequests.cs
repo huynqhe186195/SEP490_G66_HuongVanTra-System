@@ -103,6 +103,8 @@ public record CreateCustomBundleIngredientRequest(
     int Quantity,
     decimal UnitPrice);
 
+public record ReprintReceiptRequest(string Reason);
+
 public record GetOrdersRequest(
     string? Search,
     string? CustomerId,

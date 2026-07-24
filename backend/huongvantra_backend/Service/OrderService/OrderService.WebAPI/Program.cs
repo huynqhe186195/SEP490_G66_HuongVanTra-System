@@ -40,6 +40,7 @@ builder.Services.AddScoped<IOrderRepository, OrderRepository>();
 builder.Services.AddScoped<IOrderDetailRepository, OrderDetailRepository>();
 builder.Services.AddScoped<IPaymentRepository, PaymentRepository>();
 builder.Services.AddScoped<IOrderActivityRepository, OrderActivityRepository>();
+builder.Services.AddScoped<IOrderReceiptPrintLogRepository, OrderReceiptPrintLogRepository>();
 builder.Services.AddScoped<IPromotionRepository, PromotionRepository>();
 builder.Services.AddScoped<IOrderCodeGenerator, OrderCodeGenerator>();
 builder.Services.AddScoped<IReturnOrderRepository, ReturnOrderRepository>();
@@ -92,6 +93,7 @@ builder.Services.Configure<EmailOptions>(options =>
 builder.Services.AddScoped<IEmailService, EmailService>();
 
 builder.Services.AddScoped<OrderLogic>();
+builder.Services.AddScoped<ReceiptReprintLogic>();
 builder.Services.AddScoped<PaymentLogic>();
 builder.Services.AddScoped<PosTransferPaymentLogic>();
 builder.Services.AddScoped<PromotionLogic>();
