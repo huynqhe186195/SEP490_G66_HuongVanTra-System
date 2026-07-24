@@ -34,6 +34,7 @@ import ExchangeOrdersPage from '../features/orders/pages/ExchangeOrdersPage.jsx'
 import ReturnOrderDetailPage from '../features/orders/pages/ReturnOrderDetailPage.jsx'
 import CodOrdersPage from '../features/orders/pages/CodOrdersPage.jsx'
 import StockDeductQueuePage from '../features/inventory/pages/StockDeductQueuePage.jsx'
+import ReturnInspectionsPage from '../features/inventory/pages/ReturnInspectionsPage.jsx'
 import StockAdjustmentRequestsPage from '../features/inventory/pages/StockAdjustmentRequestsPage.jsx'
 import SupplierReceiptsPage from '../features/inventory/pages/SupplierReceiptsPage.jsx'
 import ProductionOrdersPage from '../features/inventory/pages/ProductionOrdersPage.jsx'
@@ -100,6 +101,7 @@ function App() {
         <Route path="/inventory/import" element={<InventoryImportPage />} />
         <Route path="/inventory/import/create" element={<InventoryImportCreatePage />} />
         <Route path="/inventory/returns" element={<InventoryReturnsPage />} />
+        <Route path="/inventory/return-inspections" element={<ReturnInspectionsPage />} />
         <Route path="/inventory/stocktake" element={<InventoryStocktakePage />} />
         <Route path="/inventory/reports" element={<InventoryReportsPage />} />
         <Route path="/inventory/ledger" element={<InventoryLedgerPage />} />

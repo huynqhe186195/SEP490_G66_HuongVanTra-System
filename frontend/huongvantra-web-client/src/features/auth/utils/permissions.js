@@ -164,6 +164,11 @@ export function canReviewStockReplenishmentRequest(session) {
   return isBranchManager(session) || isManagerRole(session) || isWarehouseRole(session) || isSystemAdmin(session)
 }
 
+/** Kiểm tra & quyết định xử lý hàng trả (Restock/Quarantine/Dispose): Thủ kho, Quản lý, Admin. */
+export function canInspectReturn(session) {
+  return isWarehouseRole(session) || isBranchManager(session) || isManagerRole(session) || isSystemAdmin(session)
+}
+
 export function canCancelStockReplenishmentRequest(session) {
   return isBranchManager(session) || isManagerRole(session) || isWarehouseRole(session) || isSystemAdmin(session)
 }

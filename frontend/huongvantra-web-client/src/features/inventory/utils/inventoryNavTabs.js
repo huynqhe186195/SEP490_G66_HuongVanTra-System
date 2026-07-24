@@ -32,6 +32,11 @@ export const inventoryReturnNavTab = {
   to: '/inventory/returns',
 }
 
+export const returnInspectionNavTab = {
+  label: 'Kiểm tra hàng trả',
+  to: '/inventory/return-inspections',
+}
+
 export const stocktakeNavTab = {
   label: 'Kiểm kê',
   to: '/inventory/stocktake',
@@ -47,6 +52,7 @@ export const inventoryNavTabs = [
   ...warehouseNavTabs,
   supplierReceiptNavTab,
   inventoryReturnNavTab,
+  returnInspectionNavTab,
   inventoryLedgerNavTab,
   stockRequestNavTab,
 ]
@@ -71,6 +77,7 @@ export function getInventoryNavTabs(session) {
   }
   if (isSystemAdmin(session) || isManagerLike(session) || isWarehouseRole(session)) {
     tabs.push(inventoryReturnNavTab)
+    tabs.push(returnInspectionNavTab)
   }
   if (!isWarehouseRole(session) && (isSystemAdmin(session) || isManagerLike(session))) {
     tabs.push(stocktakeNavTab)

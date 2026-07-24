@@ -396,6 +396,7 @@ const MODULE_PATH_PREFIXES = [
   { module: 'supplier_receipts', prefix: '/inventory/supplier-receipts' },
   { module: 'supplier_receipts', prefix: '/inventory/suppliers' },
   { module: 'warehouse_batches', prefix: '/inventory/batches' },
+  { module: 'inventory_returns', prefix: '/inventory/return-inspections' },
   { module: 'inventory_returns', prefix: '/inventory/returns' },
   { module: 'inventory_stocktake', prefix: '/inventory/stocktake' },
   { module: 'inventory_reports', prefix: '/inventory/reports' },
