@@ -6,12 +6,23 @@ namespace UserService.Application.Authorization;
 public static class StaffManagementScope
 {
     public const string SaleRoleName = "Sale";
+    public const string SalePosRoleName = "SalePos";
+    public const string SaleCodRoleName = "SaleCod";
 
     private static readonly HashSet<string> AdminAssignableRoles = new(StringComparer.OrdinalIgnoreCase)
     {
         "Warehouse",
         "Accountant",
         "Manager",
+        SalePosRoleName,
+        SaleCodRoleName,
+    };
+
+    private static readonly HashSet<string> SaleFamilyRoles = new(StringComparer.OrdinalIgnoreCase)
+    {
+        SaleRoleName,
+        SalePosRoleName,
+        SaleCodRoleName,
     };
 
     public static bool IsSystemAdmin(IEnumerable<string> permissions) =>
@@ -31,13 +42,13 @@ public static class StaffManagementScope
             return AdminAssignableRoles.ToList();
 
         if (IsBranchManager(permissions))
-            return [SaleRoleName];
+            return [SalePosRoleName, SaleCodRoleName];
 
         return [];
     }
 
     public static bool IsSaleRole(string? roleName) =>
-        string.Equals(roleName, SaleRoleName, StringComparison.OrdinalIgnoreCase);
+        !string.IsNullOrWhiteSpace(roleName) && SaleFamilyRoles.Contains(roleName);
 
     public static bool CanViewEmployee(IEnumerable<string> permissions, IEnumerable<string> employeeRoles)
     {

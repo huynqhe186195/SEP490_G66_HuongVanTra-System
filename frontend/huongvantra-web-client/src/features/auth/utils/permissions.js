@@ -108,6 +108,58 @@ export function canCreateOrder(session) {
   return hasPermission(session, 'CREATE_ORDER')
 }
 
+/** Xác nhận / vận hành COD — SaleCod (VERIFY_COD) hoặc Manager/Admin. */
+export function canVerifyCodPayment(session) {
+  return (
+    hasPermission(session, 'VERIFY_COD')
+    || hasPermission(session, 'MANAGE_EMPLOYEE')
+    || hasPermission(session, 'MANAGE_ROLE')
+  )
+}
+
+function normalizeRoleToken(role) {
+  return String(role || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[._-]+/g, '')
+    .replace(/\s+/g, '')
+}
+
+export function isSalePosRole(session) {
+  return (session?.roles ?? []).some((role) => {
+    const key = normalizeRoleToken(role)
+    return key === 'salepos' || key === 'sale'
+  })
+}
+
+export function isSaleCodRole(session) {
+  return (session?.roles ?? []).some((role) => normalizeRoleToken(role) === 'salecod')
+}
+
+/** SaleCod thuần (không Manager/Admin): chỉ xem/xử lý đơn COD. */
+export function isSaleCodOnlyRole(session) {
+  if (!isSaleCodRole(session)) return false
+  if (hasPermission(session, 'MANAGE_EMPLOYEE') || hasPermission(session, 'MANAGE_ROLE')) return false
+  return true
+}
+
+export function canViewOnlyCodOrders(session) {
+  return isSaleCodOnlyRole(session)
+}
+
+/** Quầy POS: SalePos / Manager / Admin. SaleCod thuần không bán quầy. */
+export function canUsePosCounterMode(session) {
+  if (!canCreateOrder(session)) return false
+  if (hasPermission(session, 'MANAGE_EMPLOYEE') || hasPermission(session, 'MANAGE_ROLE')) return true
+  if (isSaleCodOnlyRole(session)) return false
+  return true
+}
+
+/** Chế độ Bán COD trên POS: SaleCod / Manager / Admin. */
+export function canUsePosCodMode(session) {
+  return canVerifyCodPayment(session) && canCreateOrder(session)
+}
+
 export function canAdjustStoreStock(session) {
   return canCreateStockReplenishmentRequest(session)
 }
@@ -166,7 +218,7 @@ export function canManageSuppliers(session) {
 }
 
 export function getStaffManagementScopeLabel(session) {
-  if (isSystemAdmin(session)) return 'Quản lý nhân sự: Warehouse, Accountant, Manager'
-  if (isBranchManager(session)) return 'Quản lý nhân sự: Sale'
+  if (isSystemAdmin(session)) return 'Quản lý nhân sự: Warehouse, Accountant, Manager, SalePos, SaleCod'
+  if (isBranchManager(session)) return 'Quản lý nhân sự: SalePos, SaleCod'
   return 'Quản lý nhân sự'
 }

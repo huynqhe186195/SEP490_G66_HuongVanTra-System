@@ -17,6 +17,7 @@ public class PosTransferPaymentLogic(
     IOptions<SepayOptions> sepayOptions,
     IOrderRepository orderRepo,
     OrderLogic orderLogic,
+    StaffShiftGuard shiftGuard,
     ILogger<PosTransferPaymentLogic> logger)
 {
     private readonly PosTransferPaymentOptions _pos = posOptions.Value;
@@ -82,6 +83,8 @@ public class PosTransferPaymentLogic(
     public async Task<TransferQrResponse> BuildTransferQrAsync(
         BuildTransferQrRequest request, OrderAccessContext access, CancellationToken ct = default)
     {
+        await shiftGuard.EnsureShelfOnDutyAsync(access, ct);
+
         if (request.OrderId.HasValue)
             return await ResolveTransferQrForOrderAsync(request.OrderId.Value, access, issueOnCreate: true, ct);
 
@@ -99,6 +102,8 @@ public class PosTransferPaymentLogic(
     public async Task<TransferQrResponse> RefreshTransferQrForOrderAsync(
         Guid orderId, OrderAccessContext access, CancellationToken ct = default)
     {
+        await shiftGuard.EnsureShelfOnDutyAsync(access, ct);
+
         var order = await orderRepo.GetByIdAsync(orderId, ct)
             ?? throw new OrderNotFoundException(orderId);
         EnsureCanAccess(order, access);
@@ -352,7 +357,7 @@ public class PosTransferPaymentLogic(
 
     private static void EnsureCanAccess(Order order, OrderAccessContext access)
     {
-        if (!access.CanAccessOrder(order.EmployeeId))
+        if (!access.CanAccessOrder(order))
             throw new OrderForbiddenException();
     }
 

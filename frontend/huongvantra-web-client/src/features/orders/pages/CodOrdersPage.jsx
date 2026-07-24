@@ -4,6 +4,8 @@ import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
 import { showError } from '../../../app/toast.js'
+import { canAccessModule } from '../../../app/navigation.js'
+import { loadAuthSession } from '../../auth/services/authSession.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import OrderCustomerCell from '../components/OrderCustomerCell.jsx'
 import { fetchOrders } from '../services/ordersApi.js'
@@ -22,6 +24,9 @@ const TABS = [
 ]
 
 function CodOrdersPage() {
+  const session = loadAuthSession()
+  const canOpenGeneralOrders = canAccessModule(session, 'orders')
+  const canOpenReturns = canAccessModule(session, 'pos') || canAccessModule(session, 'orders')
   const [activeTab, setActiveTab] = useState('pending')
   const [searchValue, setSearchValue] = useState('')
   const [orders, setOrders] = useState([])
@@ -120,12 +125,16 @@ function CodOrdersPage() {
             ) : null}
           </button>
         ))}
-        <Link
-          className="ml-auto rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-          to="/orders"
-        >
-          Đơn hàng khác
-        </Link>
+        {canOpenGeneralOrders ? (
+          <Link
+            className="ml-auto rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            to="/orders"
+          >
+            Đơn hàng khác
+          </Link>
+        ) : (
+          <div className="ml-auto" />
+        )}
       </div>
 
       <section className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -214,7 +223,7 @@ function CodOrdersPage() {
                           >
                             Chi tiết
                           </Link>
-                          {activeTab === 'done' ? (
+                          {activeTab === 'done' && canOpenReturns ? (
                             <Link
                               to={`/pos/returns/${order.id}`}
                               className="inline-flex rounded-lg border border-[#538463]/30 bg-[#f6f4ec] px-3 py-1.5 text-xs font-semibold text-[#356647] hover:bg-[#ebe8dc]"

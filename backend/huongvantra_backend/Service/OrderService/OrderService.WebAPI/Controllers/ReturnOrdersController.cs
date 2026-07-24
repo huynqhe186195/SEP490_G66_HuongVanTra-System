@@ -11,11 +11,14 @@ namespace OrderService.WebAPI.Controllers;
 [Authorize]
 public class ReturnOrdersController(OrderLogic orderLogic) : ControllerBase
 {
-    private OrderAccessContext AccessContext() => new(
-        User.GetUserId(),
-        User.HasPermission(PermissionNames.ManageEmployee)
+    private OrderAccessContext AccessContext()
+    {
+        var canViewAll = User.HasPermission(PermissionNames.ManageEmployee)
             || User.HasPermission(PermissionNames.ManageRole)
-            || User.HasPermission(PermissionNames.ViewAllCustomers));
+            || User.HasPermission(PermissionNames.ViewAllCustomers);
+        var codOnly = !canViewAll && User.HasPermission(PermissionNames.VerifyCod);
+        return new OrderAccessContext(User.GetUserId(), canViewAll, codOnly);
+    }
 
     [HttpGet]
     [Authorize(Policy = PermissionNames.ViewOrder)]

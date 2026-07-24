@@ -1,13 +1,39 @@
+using OrderService.Domain.Entities;
+using OrderService.Domain.Enums;
+
 namespace OrderService.Application.Authorization;
 
 /// <summary>
-/// Sale (chỉ VIEW_ORDER + CREATE_ORDER) chỉ thấy/sửa đơn có EmployeeId = UserId.
-/// Manager/Admin/Kế toán xem toàn bộ đơn.
+/// SalePos (VIEW/CREATE_ORDER): chỉ đơn của mình.
+/// SaleCod (VERIFY_COD, không Manager): mọi đơn COD, không xem đơn quầy/khác.
+/// Manager/Admin/Kế toán: toàn bộ đơn.
 /// </summary>
-public record OrderAccessContext(Guid UserId, bool CanViewAllOrders)
+public record OrderAccessContext(
+    Guid UserId,
+    bool CanViewAllOrders,
+    bool CodOrdersOnly = false)
 {
-    public Guid? EmployeeFilter => CanViewAllOrders ? null : UserId;
+    public Guid? EmployeeFilter => CanViewAllOrders || CodOrdersOnly ? null : UserId;
 
+    public bool CanAccessOrder(Order order)
+    {
+        if (CodOrdersOnly && !IsCodOrder(order))
+            return false;
+
+        if (CanViewAllOrders || CodOrdersOnly)
+            return true;
+
+        return order.EmployeeId.HasValue && order.EmployeeId.Value == UserId;
+    }
+
+    /// <summary>
+    /// Overload chỉ theo EmployeeId — không dùng cho SaleCod (cần OrderChannel).
+    /// Prefer <see cref="CanAccessOrder(Order)"/>.
+    /// </summary>
     public bool CanAccessOrder(Guid? employeeId) =>
-        CanViewAllOrders || (employeeId.HasValue && employeeId.Value == UserId);
+        !CodOrdersOnly
+        && (CanViewAllOrders || (employeeId.HasValue && employeeId.Value == UserId));
+
+    public static bool IsCodOrder(Order order) =>
+        order.OrderChannel == OrderChannel.COD;
 }

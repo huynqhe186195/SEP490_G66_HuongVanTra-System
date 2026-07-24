@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { showError, showSuccess } from '../../../app/toast.js'
 import {
   mapCustomerApiError,
@@ -19,24 +19,25 @@ function inputClass(hasError) {
   }`
 }
 
-function AddCustomerModal({ isOpen, onClose, onSaved }) {
+function AddCustomerModal({ isOpen, onClose, onSaved, initialPhone = '' }) {
   const [fullName, setFullName] = useState('')
   const [phone, setPhone] = useState('')
   const [address, setAddress] = useState('')
   const [fieldErrors, setFieldErrors] = useState({})
   const [isSaving, setIsSaving] = useState(false)
 
-  if (!isOpen) return null
-
-  const resetForm = () => {
+  useEffect(() => {
+    if (!isOpen) return
     setFullName('')
-    setPhone('')
+    setPhone(normalizePhoneInput(initialPhone) || '')
     setAddress('')
     setFieldErrors({})
-  }
+    setIsSaving(false)
+  }, [isOpen, initialPhone])
+
+  if (!isOpen) return null
 
   const handleClose = () => {
-    resetForm()
     onClose()
   }
 
@@ -69,7 +70,6 @@ function AddCustomerModal({ isOpen, onClose, onSaved }) {
           : `Đã thêm khách hàng ${customer.fullName || name}.`,
       )
       onSaved?.(customer)
-      resetForm()
       onClose()
     } catch (error) {
       const mapped = mapCustomerApiError(error.message)
@@ -83,84 +83,80 @@ function AddCustomerModal({ isOpen, onClose, onSaved }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm" onClick={handleClose}>
-      <div
-        className="flex w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <header className="flex items-center justify-between bg-[#538463] px-5 py-4 text-white">
-          <h1 className="text-lg font-bold">Thêm khách hàng mới</h1>
-          <button type="button" aria-label="Close" onClick={handleClose} className="rounded-full p-1 transition hover:bg-white/10">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-bold text-[#1b1c17]">Thêm khách hàng nhanh</h2>
+            <p className="mt-1 text-sm text-[#717971]">Dùng cho khách vãng lai tại quầy POS.</p>
+          </div>
+          <button type="button" onClick={handleClose} className="rounded-lg p-1 text-[#717971] hover:bg-[#f6f4ec]">
             <span className="material-symbols-outlined">close</span>
           </button>
-        </header>
+        </div>
 
-        <main className="space-y-4 bg-[#fbf9f1] p-5">
-          <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-semibold text-gray-700">
-              Số điện thoại <span className="text-red-500">*</span>
-            </span>
+        <div className="space-y-3">
+          <label className="block space-y-1">
+            <span className="text-xs font-semibold text-[#717971]">Họ tên</span>
             <input
-              className={inputClass(fieldErrors.phone)}
-              inputMode="numeric"
-              placeholder="Nhập số điện thoại (di động 10 số, máy bàn 02 + 9 số)..."
-              value={phone}
-              onChange={(event) => {
-                setPhone(normalizePhoneInput(event.target.value))
-                setFieldErrors((prev) => ({ ...prev, phone: undefined }))
-              }}
-            />
-            <FieldError message={fieldErrors.phone} />
-          </label>
-
-          <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-semibold text-gray-700">
-              Tên khách hàng <span className="text-red-500">*</span>
-            </span>
-            <input
-              className={inputClass(fieldErrors.fullName)}
-              placeholder="Nhập họ và tên..."
+              className={inputClass(Boolean(fieldErrors.fullName))}
               value={fullName}
               onChange={(event) => {
                 setFullName(normalizeNameInput(event.target.value))
                 setFieldErrors((prev) => ({ ...prev, fullName: undefined }))
               }}
+              placeholder="Nguyễn Văn A"
             />
             <FieldError message={fieldErrors.fullName} />
           </label>
 
-          <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-semibold text-gray-700">Địa chỉ</span>
+          <label className="block space-y-1">
+            <span className="text-xs font-semibold text-[#717971]">Số điện thoại</span>
             <input
-              className={inputClass(fieldErrors.address)}
-              placeholder="Nhập địa chỉ (tùy chọn)..."
+              className={inputClass(Boolean(fieldErrors.phone))}
+              value={phone}
+              onChange={(event) => {
+                setPhone(normalizePhoneInput(event.target.value))
+                setFieldErrors((prev) => ({ ...prev, phone: undefined }))
+              }}
+              placeholder="09xxxxxxxx"
+              inputMode="tel"
+            />
+            <FieldError message={fieldErrors.phone} />
+          </label>
+
+          <label className="block space-y-1">
+            <span className="text-xs font-semibold text-[#717971]">Địa chỉ (tuỳ chọn)</span>
+            <input
+              className={inputClass(Boolean(fieldErrors.address))}
               value={address}
               onChange={(event) => {
                 setAddress(event.target.value)
                 setFieldErrors((prev) => ({ ...prev, address: undefined }))
               }}
+              placeholder="Địa chỉ giao hàng"
             />
             <FieldError message={fieldErrors.address} />
           </label>
-        </main>
+        </div>
 
-        <footer className="flex justify-end gap-3 border-t border-[#e5e7eb] bg-white px-5 py-4">
+        <div className="mt-6 flex justify-end gap-2">
           <button
             type="button"
             onClick={handleClose}
-            className="rounded-lg border border-[#e5e7eb] px-6 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            className="rounded-xl border border-[#c1c9c0] px-4 py-2.5 text-sm font-semibold text-[#414942] hover:bg-[#f6f4ec]"
           >
-            Hủy bỏ
+            Huỷ
           </button>
           <button
             type="button"
-            onClick={handleSave}
             disabled={isSaving}
-            className="rounded-lg bg-[#538463] px-6 py-2.5 text-sm font-medium text-white hover:bg-[#436b50] disabled:opacity-50"
+            onClick={handleSave}
+            className="rounded-xl bg-[#356647] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#2d553b] disabled:opacity-60"
           >
-            {isSaving ? 'Đang lưu...' : 'Lưu khách hàng'}
+            {isSaving ? 'Đang lưu...' : 'Lưu khách'}
           </button>
-        </footer>
+        </div>
       </div>
     </div>
   )

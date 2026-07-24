@@ -659,7 +659,8 @@ export async function fetchPosCustomers({ search, limit = 20 }) {
     }
   }
 
-  const data = await apiRequestAuth(`/api/customers?page=1&pageSize=100`, { method: 'GET' })
+  // forCheckout=true: Sale COD/POS được tìm mọi KH (không chỉ KH được gán cho mình)
+  const data = await apiRequestAuth(`/api/customers?page=1&pageSize=100&forCheckout=true`, { method: 'GET' })
   const paged = toPagedResult(data)
   let items = paged.items.map(mapCustomer).filter(Boolean)
 
@@ -847,6 +848,11 @@ export async function fetchPosProducts({ storeId, search, limit = 30 }) {
         ?? ''
       if (!skuId || (!productName && !skuCode)) return null
 
+      const productImages = product?.images ?? product?.Images ?? []
+      const firstProductImage = Array.isArray(productImages)
+        ? (productImages[0]?.imageUrl ?? productImages[0]?.ImageUrl ?? productImages[0]?.url ?? productImages[0]?.Url ?? '')
+        : ''
+
       return mapPosProduct({
         productId: skuId,
         sku: skuCode,
@@ -854,7 +860,17 @@ export async function fetchPosProducts({ storeId, search, limit = 30 }) {
         packagingType: sku.packagingType ?? sku.PackagingType ?? '',
         price: sku.basePrice ?? sku.BasePrice ?? sku.retailPrice ?? sku.RetailPrice,
         stockQuantity: stockBySkuId.get(skuId) ?? 0,
-        imageUrl: sku.imageUrl ?? sku.ImageUrl ?? product?.imageUrl ?? product?.ImageUrl ?? '',
+        imageUrl:
+          sku.imageUrl
+          ?? sku.ImageUrl
+          ?? firstProductImage
+          ?? product?.imageUrl
+          ?? product?.ImageUrl
+          ?? product?.thumbnailUrl
+          ?? product?.ThumbnailUrl
+          ?? product?.primaryImageUrl
+          ?? product?.PrimaryImageUrl
+          ?? '',
         categoryId: sku.categoryId ?? sku.CategoryId ?? product?.categoryId ?? product?.CategoryId ?? null,
         categoryName: sku.categoryName ?? sku.CategoryName ?? product?.categoryName ?? product?.CategoryName ?? '',
         costPrice: sku.costPrice ?? sku.CostPrice ?? 0,

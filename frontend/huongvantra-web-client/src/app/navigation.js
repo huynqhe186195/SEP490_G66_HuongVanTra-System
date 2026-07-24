@@ -4,7 +4,9 @@ import { buildCustomerPath, CUSTOMER_SIDEBAR_SECTIONS, getCustomerSectionFromSea
 const ROLE_GROUPS = {
   admin: ['admin'],
   agencyManager: ['agency manager', 'agencymanager', 'am', 'owner', 'chu co so', 'chủ cơ sở', 'branch manager', 'manager'],
-  salesStaff: ['sales staff', 'salesstaff', 'sale', 'sales', 'staff sale'],
+  salesStaff: ['sales staff', 'salesstaff', 'sale', 'sales', 'staff sale', 'salepos', 'sale pos', 'salecod', 'sale cod'],
+  salePos: ['salepos', 'sale pos', 'sale'],
+  saleCod: ['salecod', 'sale cod'],
   inventoryManager: ['inventory manager', 'inventorymanager', 'warehouse manager', 'thu kho', 'thukho', 'warehouse'],
   accountant: ['accountant', 'ke toan', 'kế toán'],
   customer: ['customer', 'khach hang', 'khách hàng'],
@@ -39,9 +41,9 @@ const HOME_MODULE_PRIORITY = [
 
 export const navigationItems = [
   { label: 'POS bán hàng', path: '/pos', module: 'pos', icon: 'point_of_sale', roles: ['agencyManager', 'salesStaff', 'customer'] },
-  { label: 'Đơn hàng', path: '/orders', module: 'orders', icon: 'receipt_long', roles: ['admin', 'agencyManager', 'salesStaff', 'accountant'] },
-  { label: 'Trả / đổi hàng', path: '/orders/exchange', module: 'orders', icon: 'swap_horiz', roles: ['admin', 'agencyManager', 'salesStaff', 'accountant'] },
-  { label: 'Quản lý đơn COD', path: '/orders/cod', module: 'cod_ops', icon: 'local_shipping', roles: ['agencyManager'] },
+  { label: 'Đơn hàng', path: '/orders', module: 'orders', icon: 'receipt_long', roles: ['admin', 'agencyManager', 'salePos', 'accountant'] },
+  { label: 'Trả / đổi hàng', path: '/orders/exchange', module: 'orders', icon: 'swap_horiz', roles: ['admin', 'agencyManager', 'salePos', 'saleCod', 'accountant'] },
+  { label: 'Quản lý đơn COD', path: '/orders/cod', module: 'cod_ops', icon: 'local_shipping', roles: ['agencyManager', 'saleCod'] },
   {
     label: 'Chờ trừ tồn quầy',
     path: '/orders/stock-deduct',
@@ -103,6 +105,22 @@ export const navigationItems = [
     roles: ['accountant', 'admin', 'agencyManager'],
   },
   { label: 'Nhân sự', path: '/staff', module: 'staff', icon: 'badge', roles: ['admin', 'agencyManager'] },
+  {
+    label: 'Phân ca làm',
+    path: '/shifts',
+    module: 'shift_manage',
+    icon: 'calendar_month',
+    // Chỉ Manager — chỉ định / gỡ Sale khỏi ca (mọi ngày trong tuần hiện tại).
+    roles: ['agencyManager'],
+  },
+  {
+    label: 'Lịch làm việc',
+    path: '/my-shifts',
+    module: 'my_shifts',
+    icon: 'schedule',
+    // Sale xem lịch ca (của mình + đồng nghiệp) / đăng ký khi Manager mở cửa sổ.
+    roles: ['salesStaff'],
+  },
   {
     label: 'Hạng thẻ',
     path: '/admin/membership-tiers',
@@ -370,6 +388,8 @@ const MODULE_PATH_PREFIXES = [
   { module: 'integrations', prefix: '/integrations' },
   { module: 'reports', prefix: '/reports' },
   { module: 'contracts', prefix: '/contracts' },
+  { module: 'shift_manage', prefix: '/shifts' },
+  { module: 'my_shifts', prefix: '/my-shifts' },
   { module: 'staff', prefix: '/staff' },
   { module: 'membership_tiers_admin', prefix: '/admin/membership-tiers' },
   { module: 'promotions_admin', prefix: '/admin/promotions' },
@@ -448,9 +468,35 @@ export function canAccessModule(session, module) {
   return false
 }
 
-export function canAccessPath(session, pathname) {
+export function canAccessPath(session, pathname, search = '') {
+  const path = (pathname || '').toLowerCase()
+  const orderDetailContext = getOrderDetailContext(pathname, search)
+
+  if (orderDetailContext === 'cod' && canAccessModule(session, 'cod_ops')) {
+    return true
+  }
+
+  // SaleCod: được vào Trả/đổi + chi tiết liên quan (BE chỉ trả dữ liệu COD).
+  if (isSaleCodOnlySession(session)) {
+    if (
+      path === '/orders/exchange'
+      || path.startsWith('/orders/exchange/')
+      || path === '/orders/returns'
+      || path.startsWith('/orders/returns/')
+      || orderDetailContext === 'exchange'
+    ) {
+      return true
+    }
+  }
+
   const module = getModuleForPath(pathname)
   return canAccessModule(session, module)
+}
+
+function isSaleCodOnlySession(session) {
+  if (!session?.roles?.length) return false
+  if (hasAnyRoleGroup(session.roles, ['admin', 'agencyManager'])) return false
+  return hasAnyRoleGroup(session.roles, ['saleCod'])
 }
 
 /** Xem danh sách / preview hàng chờ trừ tồn quầy (Manager/Admin). */
@@ -470,10 +516,10 @@ export function canConfirmStockDeduct(session) {
 export function getAccessDeniedMessage(pathname) {
   const module = getModuleForPath(pathname)
   if (module === 'pos') {
-    return 'Tài khoản không có quyền tạo đơn (CREATE_ORDER). Vui lòng đăng nhập bằng Sale hoặc Quản lý, hoặc đăng xuất và đăng nhập lại sau khi quyền được cập nhật.'
+    return 'Tài khoản không có quyền tạo đơn (CREATE_ORDER). Vui lòng đăng nhập bằng SalePos / SaleCod hoặc Quản lý, hoặc đăng xuất và đăng nhập lại sau khi quyền được cập nhật.'
   }
   if (module === 'cod_ops') {
-    return 'Chỉ Quản lý chi nhánh mới được truy cập Quản lý COD.'
+    return 'Chỉ Sale COD hoặc Quản lý chi nhánh mới được truy cập Quản lý COD.'
   }
   if (module === 'stock_deduct_ops') {
     return 'Chỉ Quản lý chi nhánh hoặc Admin mới được xử lý hàng chờ trừ tồn quầy.'

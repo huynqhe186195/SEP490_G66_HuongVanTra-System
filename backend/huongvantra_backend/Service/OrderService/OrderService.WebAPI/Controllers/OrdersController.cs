@@ -12,11 +12,15 @@ namespace OrderService.WebAPI.Controllers;
 [Authorize]
 public class OrdersController(OrderLogic orderLogic) : ControllerBase
 {
-    private OrderAccessContext AccessContext() => new(
-        User.GetUserId(),
-        User.HasPermission(PermissionNames.ManageEmployee)
+    private OrderAccessContext AccessContext()
+    {
+        var canViewAll = User.HasPermission(PermissionNames.ManageEmployee)
             || User.HasPermission(PermissionNames.ManageRole)
-            || User.HasPermission(PermissionNames.ViewAllCustomers));
+            || User.HasPermission(PermissionNames.ViewAllCustomers);
+        // SaleCod: VERIFY_COD nhưng không phải Manager/Admin → chỉ đơn COD.
+        var codOnly = !canViewAll && User.HasPermission(PermissionNames.VerifyCod);
+        return new OrderAccessContext(User.GetUserId(), canViewAll, codOnly);
+    }
 
     private (Guid? ActorId, string? ActorName) Actor() =>
     (
@@ -68,6 +72,18 @@ public class OrdersController(OrderLogic orderLogic) : ControllerBase
     [Authorize(Policy = PermissionNames.CreateOrder)]
     public async Task<IActionResult> Create([FromBody] CreateOrderRequest request, CancellationToken ct)
     {
+        if (IsCodCheckout(request) && !CanOperateCod())
+            return StatusCode(StatusCodes.Status403Forbidden, new
+            {
+                message = "Chỉ Sale COD / Quản lý mới được tạo đơn COD."
+            });
+
+        if (!IsCodCheckout(request) && !CanOperatePosCounter())
+            return StatusCode(StatusCodes.Status403Forbidden, new
+            {
+                message = "Chỉ Sale quầy (POS) / Quản lý mới được tạo đơn bán tại quầy."
+            });
+
         var (actorId, actorName) = Actor();
         var idempotencyKey = Request.Headers.TryGetValue("X-Idempotency-Key", out var keyValues)
             ? keyValues.FirstOrDefault()
@@ -75,6 +91,23 @@ public class OrdersController(OrderLogic orderLogic) : ControllerBase
         var result = await orderLogic.CreateAsync(request, AccessContext(), actorId, actorName, idempotencyKey, ct);
         return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
     }
+
+    private bool CanOperateCod() =>
+        User.HasPermission(PermissionNames.VerifyCod)
+        || User.HasPermission(PermissionNames.ManageEmployee)
+        || User.HasPermission(PermissionNames.ManageRole);
+
+    /// <summary>Sale COD (có VERIFY_COD, không phải Manager) không bán quầy; SalePos / Manager thì được.</summary>
+    private bool CanOperatePosCounter() =>
+        User.HasPermission(PermissionNames.CreateOrder)
+        && (
+            User.HasPermission(PermissionNames.ManageEmployee)
+            || User.HasPermission(PermissionNames.ManageRole)
+            || !User.HasPermission(PermissionNames.VerifyCod));
+
+    private static bool IsCodCheckout(CreateOrderRequest request) =>
+        request.OrderChannel == OrderService.Domain.Enums.OrderChannel.COD
+        || request.PaymentMethod == OrderService.Domain.Enums.PaymentMethod.COD;
 
     [HttpPut("{id:guid}")]
     [Authorize(Policy = PermissionNames.CreateOrder)]

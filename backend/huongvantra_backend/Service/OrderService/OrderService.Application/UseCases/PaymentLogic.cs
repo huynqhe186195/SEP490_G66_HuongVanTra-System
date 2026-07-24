@@ -13,7 +13,8 @@ public class PaymentLogic(
     IPaymentRepository _paymentRepo,
     IOrderRepository _orderRepo,
     IOrderEventPublisher _eventPublisher,
-    IOrderActivityRepository _activityRepo)
+    IOrderActivityRepository _activityRepo,
+    StaffShiftGuard _shiftGuard)
 {
     public async Task<PaymentResponse> VerifyCodAsync(
         Guid paymentId,
@@ -23,6 +24,8 @@ public class PaymentLogic(
         string? actorName = null,
         CancellationToken ct = default)
     {
+        await _shiftGuard.EnsureShelfOnDutyAsync(access, ct);
+
         var payment = await _paymentRepo.GetByIdAsync(paymentId, ct)
             ?? throw new PaymentNotFoundException(paymentId);
 
@@ -77,6 +80,19 @@ public class PaymentLogic(
 
         await _paymentRepo.SaveChangesAsync(ct);
 
+        // Cập nhật StockDeductQueue.OrderPaymentStatus + kích hoạt trừ tồn (Inventory OrderPlaced handler).
+        await _eventPublisher.PublishOrderPlacedAsync(
+            order.Id,
+            order.OrderCode,
+            OrderStatus.Completed.ToString(),
+            order.FinalAmount,
+            (order.OrderDetails ?? []).Select(d => (
+                d.SkuId,
+                d.SkuSnapshotName,
+                d.SkuSnapshotCode,
+                d.Quantity)),
+            ct);
+
         if (order.CustomerId.HasValue)
         {
             var paidForOrder = Math.Min(collected, order.FinalAmount);
@@ -117,7 +133,7 @@ public class PaymentLogic(
     {
         var payments = await _paymentRepo.GetPendingCodAsync(ct);
         return payments
-            .Where(p => p.Order is not null && access.CanAccessOrder(p.Order.EmployeeId))
+            .Where(p => p.Order is not null && access.CanAccessOrder(p.Order))
             .Select(MapToResponse)
             .ToList();
     }
@@ -127,14 +143,14 @@ public class PaymentLogic(
     {
         var payments = await _paymentRepo.GetUnverifiedCodAsync(ct);
         return payments
-            .Where(p => p.Order is not null && access.CanAccessOrder(p.Order.EmployeeId))
+            .Where(p => p.Order is not null && access.CanAccessOrder(p.Order))
             .Select(MapToResponse)
             .ToList();
     }
 
     private static void EnsureCanAccess(Order order, OrderAccessContext access)
     {
-        if (!access.CanAccessOrder(order.EmployeeId))
+        if (!access.CanAccessOrder(order))
             throw new OrderForbiddenException();
     }
 

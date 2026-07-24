@@ -17,10 +17,12 @@ public class CustomersController : ControllerBase
 
     public CustomersController(CustomerLogic logic) => _logic = logic;
 
-    private CustomerAccessContext AccessContext() => new(
+    private CustomerAccessContext AccessContext(bool forCheckout = false) => new(
         User.GetUserId(),
         User.HasPermission(PermissionNames.ViewAllCustomers),
-        User.HasPermission(PermissionNames.ManageRole));
+        User.HasPermission(PermissionNames.ManageRole),
+        User.HasPermission(PermissionNames.CreateOrder),
+        forCheckout && User.HasPermission(PermissionNames.CreateOrder));
 
     [HttpGet("statistics")]
     [Authorize(Policy = PermissionNames.ViewCustomerAccess)]
@@ -32,9 +34,14 @@ public class CustomersController : ControllerBase
 
     [HttpGet]
     [Authorize(Policy = PermissionNames.ViewCustomerAccess)]
-    public async Task<IActionResult> GetAll([FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken ct = default)
+    public async Task<IActionResult> GetAll(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        // forCheckout: POS/COD — bỏ lọc AssignedSale để Sale tìm được mọi KH khi bán.
+        [FromQuery] bool forCheckout = false,
+        CancellationToken ct = default)
     {
-        var result = await _logic.GetAllAsync(page, pageSize, AccessContext(), ct);
+        var result = await _logic.GetAllAsync(page, pageSize, AccessContext(forCheckout), ct);
         return Ok(result);
     }
 
