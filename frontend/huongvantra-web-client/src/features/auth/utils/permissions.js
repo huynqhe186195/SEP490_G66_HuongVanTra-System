@@ -167,3 +167,15 @@ export function getStaffManagementScopeLabel(session) {
 export function canChangeStaffRole(session) {
   return isCooperativeOwner(session)
 }
+
+export function canCreateStockReplenishmentRequest(session) {
+  return isBranchManager(session) || isWarehouseRole(session)
+}
+
+export function canReviewStockReplenishmentRequest(session) {
+  return isWarehouseRole(session) || isCooperativeOwner(session)
+}
+
+export function canCancelStockReplenishmentRequest(session) {
+  return isBranchManager(session) || isWarehouseRole(session) || isSystemAdmin(session)
+}
