@@ -30,6 +30,7 @@ public class InventoryLogic(
     IProductionOrderRepository _productionOrderRepo,
     IProductCatalogClient _productCatalogClient,
     ISupplierRepository _supplierRepo,
+    IReturnInspectionRepository _returnInspectionRepo,
     IOptions<InventoryOptions> inventoryOptions)
 {
     private readonly InventoryOptions _inventoryOptions = inventoryOptions.Value;
@@ -1218,6 +1219,7 @@ public class InventoryLogic(
         return batch == null ? null : MapWarehouseBatch(batch);
     }
 
+    // Phase J1: hàng trả về KHÔNG tự tăng tồn bán — tạo ReturnInspection (Pending) để chờ kiểm tra.
     private async Task ReceiveCustomerReturnToShelfAsync(OrderReturnedEvent message, CancellationToken ct)
     {
         var items = message.Items
@@ -1239,125 +1241,151 @@ public class InventoryLogic(
 
         await _unitOfWork.ExecuteInTransactionAsync(async innerCt =>
         {
-            if (items.Count == 0)
-            {
-                await _processedEvents.AddAsync(OrderReturnedEventType, message.ReturnId, NullableEventId(message.EventId), innerCt);
-                await _skuStockRepo.SaveChangesAsync(innerCt);
-                return true;
-            }
-
             var now = DateTime.UtcNow;
-            var importSlipId = Guid.NewGuid();
-            var importCountToday = await _importSlipRepo.CountCreatedSinceAsync(now.Date, innerCt);
-            var lines = new List<StockImportSlipLine>();
-            var ledgerEntries = new List<InventoryLedgerEntry>();
-            var transactionGroupId = Guid.NewGuid();
-
             foreach (var item in items)
             {
-                var stockBefore = await _skuStockRepo.GetBySkuIdAsync(item.SkuId, innerCt);
-                var skuCode = item.SkuCode ?? stockBefore?.SkuCode ?? item.SkuId.ToString()[..8];
+                // Idempotent per SKU: không tạo lại nếu đã có record cho (ReturnId, SkuId).
+                if (await _returnInspectionRepo.ExistsByReturnAndSkuAsync(message.ReturnId, item.SkuId, innerCt))
+                    continue;
+
+                var stock = await _skuStockRepo.GetBySkuIdAsync(item.SkuId, innerCt);
+                var skuCode = item.SkuCode ?? stock?.SkuCode ?? item.SkuId.ToString()[..8];
                 var skuName = item.SkuName ?? skuCode;
-                var warehouseBefore = stockBefore?.WarehouseQuantityOnHand ?? 0;
-                var storeBefore = stockBefore?.QuantityOnHand ?? 0;
 
-                var batch = await CreateWarehouseBatchInternalAsync(
-                    BuildCustomerReturnLotCode(now, message.ReturnCode, item.SkuId),
-                    supplier: null,
-                    expiresAt: null,
-                    note: $"Khach tra hang {message.ReturnCode} tu don {message.OrderCode}",
-                    items: [new CreateWarehouseBatchItemRequest(
-                        item.SkuId,
-                        skuCode,
-                        skuName,
-                        item.Quantity,
-                        null)],
-                    createdBy: Guid.Empty,
-                    ct: innerCt,
-                    sourceType: "customer_return",
-                    sourceReferenceId: message.ReturnId,
-                    sourceReferenceCode: message.ReturnCode,
-                    location: LocationShelf);
-
-                var stockAfter = await _skuStockRepo.GetBySkuIdAsync(item.SkuId, innerCt);
-                var warehouseAfter = stockAfter?.WarehouseQuantityOnHand ?? warehouseBefore;
-                var storeAfter = stockAfter?.QuantityOnHand ?? storeBefore + item.Quantity;
-
-                lines.Add(new StockImportSlipLine
+                await _returnInspectionRepo.AddAsync(new ReturnInspection
                 {
                     Id = Guid.NewGuid(),
-                    StockImportSlipId = importSlipId,
+                    ReturnId = message.ReturnId,
+                    ReturnCode = message.ReturnCode,
+                    OrderId = message.OrderId,
+                    OrderCode = message.OrderCode,
                     SkuId = item.SkuId,
                     SkuCode = skuCode,
-                    ProductSnapshotName = skuName,
+                    SkuSnapshotName = skuName,
                     Quantity = item.Quantity,
-                    WarehouseQtyBefore = warehouseBefore,
-                    WarehouseQtyAfter = warehouseAfter,
-                    StoreQtyBefore = storeBefore,
-                    StoreQtyAfter = storeAfter,
-                    DestinationLocation = LocationShelf,
-                    WarehouseBatchId = batch.Id,
-                    WarehouseBatchLotCode = batch.LotCode,
-                    Note = $"Khach tra hang {message.ReturnCode}",
+                    Disposition = ReturnInspectionDisposition.Pending,
                     CreatedAt = now,
-                });
-
-                ledgerEntries.Add(CreateLedgerEntry(
-                    transactionGroupId,
-                    item.SkuId,
-                    skuCode,
-                    skuName,
-                    LocationShelf,
-                    storeBefore,
-                    item.Quantity,
-                    storeAfter,
-                    TransactionCustomerReturnReceipt,
-                    null,
-                    LocationShelf,
-                    ReferenceCustomerReturn,
-                    message.ReturnId,
-                    message.ReturnCode,
-                    batch.Id,
-                    batch.LotCode,
-                    Guid.Empty,
-                    null,
-                    $"Khach tra hang {message.ReturnCode}",
-                    message.OrderCode));
+                    UpdatedAt = now,
+                }, innerCt);
             }
 
-            var firstLine = lines[0];
-            var importSlip = new StockImportSlip
-            {
-                Id = importSlipId,
-                ImportCode = $"PN-{now:yyyyMMdd}-{(importCountToday + 1):D4}",
-                ImportType = "customer_return_receipt",
-                ReferenceType = ReferenceCustomerReturn,
-                ReferenceId = message.ReturnId,
-                ReferenceCode = message.ReturnCode,
-                SkuId = lines.Count == 1 ? firstLine.SkuId : Guid.Empty,
-                SkuCode = lines.Count == 1 ? firstLine.SkuCode : "MULTI",
-                ProductSnapshotName = lines.Count == 1 ? firstLine.ProductSnapshotName : $"{lines.Count} dong hang khach tra",
-                Quantity = lines.Sum(l => l.Quantity),
-                WarehouseQtyBefore = lines.Sum(l => l.WarehouseQtyBefore),
-                WarehouseQtyAfter = lines.Sum(l => l.WarehouseQtyAfter),
-                StoreQtyBefore = lines.Sum(l => l.StoreQtyBefore),
-                StoreQtyAfter = lines.Sum(l => l.StoreQtyAfter),
-                WarehouseBatchId = lines.Count == 1 ? firstLine.WarehouseBatchId : null,
-                WarehouseBatchLotCode = lines.Count == 1 ? firstLine.WarehouseBatchLotCode : null,
-                Note = $"Khach tra hang {message.ReturnCode} tu don {message.OrderCode}",
-                CreatedBy = Guid.Empty,
-                CreatedAt = now,
-                Lines = lines,
-            };
-
-            await _importSlipRepo.AddAsync(importSlip, innerCt);
-            if (ledgerEntries.Count > 0)
-                await _ledgerRepo.AddRangeAsync(ledgerEntries, innerCt);
             await _processedEvents.AddAsync(OrderReturnedEventType, message.ReturnId, NullableEventId(message.EventId), innerCt);
-            await _skuStockRepo.SaveChangesAsync(innerCt);
+            await _returnInspectionRepo.SaveChangesAsync(innerCt);
             return true;
         }, ct);
     }
+
+    public async Task<ReturnInspectionResponse> InspectReturnAsync(
+        Guid inspectionId,
+        InspectReturnRequest request,
+        Guid inspectorId,
+        CancellationToken ct = default)
+    {
+        if (!Enum.TryParse<ReturnInspectionDisposition>(request.Disposition, ignoreCase: true, out var disposition)
+            || disposition == ReturnInspectionDisposition.Pending)
+            throw new InventoryValidationException($"Disposition không hợp lệ: '{request.Disposition}'. Dùng RestockApproved, Quarantined, hoặc Disposed.");
+
+        return await _unitOfWork.ExecuteInTransactionAsync(async innerCt =>
+        {
+            var inspection = await _returnInspectionRepo.GetByIdAsync(inspectionId, innerCt)
+                ?? throw new InventoryNotFoundException($"Không tìm thấy ReturnInspection '{inspectionId}'.");
+
+            if (inspection.Disposition != ReturnInspectionDisposition.Pending)
+                return MapReturnInspection(inspection); // Idempotent: đã kiểm tra rồi.
+
+            var now = DateTime.UtcNow;
+            var stock = await _skuStockRepo.GetBySkuIdAsync(inspection.SkuId, innerCt);
+            var skuCode = stock?.SkuCode ?? inspection.SkuCode;
+            var skuName = inspection.SkuSnapshotName;
+
+            if (disposition == ReturnInspectionDisposition.RestockApproved)
+            {
+                // Tăng tồn Kệ Hàng — hàng đã qua kiểm tra, đủ điều kiện bán lại.
+                var batchResp = await CreateWarehouseBatchInternalAsync(
+                    BuildCustomerReturnLotCode(now, inspection.ReturnCode, inspection.SkuId),
+                    supplier: null,
+                    expiresAt: null,
+                    note: $"Kiem tra hang tra {inspection.ReturnCode} - phuc hoi ban",
+                    items: [new CreateWarehouseBatchItemRequest(inspection.SkuId, skuCode, skuName, inspection.Quantity, null)],
+                    createdBy: inspectorId,
+                    ct: innerCt,
+                    sourceType: "return_restock",
+                    sourceReferenceId: inspection.ReturnId,
+                    sourceReferenceCode: inspection.ReturnCode,
+                    location: LocationShelf);
+                inspection.RestockBatchId = batchResp.Id;
+            }
+            else if (disposition == ReturnInspectionDisposition.Quarantined)
+            {
+                // Tạo lô kiểm dịch (Location="Quarantine") — không tính vào tồn bán.
+                var qLot = $"QUA-{now:yyyyMMddHHmmss}-{inspection.SkuId.ToString("N")[..8].ToUpperInvariant()}";
+                var quarantineBatch = new WarehouseBatch
+                {
+                    Id = Guid.NewGuid(),
+                    LotCode = qLot,
+                    Location = "Quarantine",
+                    Status = "active",
+                    SourceType = "return_quarantine",
+                    SourceReferenceId = inspection.ReturnId,
+                    SourceReferenceCode = inspection.ReturnCode,
+                    Note = $"Kiem tra hang tra {inspection.ReturnCode} - kiem dich",
+                    CreatedBy = inspectorId,
+                    CreatedAt = now,
+                    UpdatedAt = now,
+                    Items =
+                    [
+                        new WarehouseBatchItem
+                        {
+                            Id = Guid.NewGuid(),
+                            SkuId = inspection.SkuId,
+                            SkuCode = skuCode,
+                            ProductSnapshotName = skuName,
+                            QuantityOnHand = inspection.Quantity,
+                            InitialQuantity = inspection.Quantity,
+                            CreatedAt = now,
+                            UpdatedAt = now,
+                        }
+                    ],
+                };
+                await _batchRepo.AddAsync(quarantineBatch, innerCt);
+                await _batchRepo.SaveChangesAsync(innerCt);
+                inspection.QuarantineBatchId = quarantineBatch.Id;
+                // Tồn SkuStock không thay đổi — "Quarantine" không phải Warehouse/Shelf.
+            }
+            // Disposed: không tạo batch, không thay đổi tồn.
+
+            inspection.Disposition = disposition;
+            inspection.InspectedBy = inspectorId;
+            inspection.InspectedAt = now;
+            inspection.InspectionNote = NormalizeSnapshotText(request.Note);
+            inspection.UpdatedAt = now;
+
+            await _returnInspectionRepo.SaveChangesAsync(innerCt);
+            return MapReturnInspection(inspection);
+        }, ct);
+    }
+
+    public async Task<PagedResponse<ReturnInspectionResponse>> GetReturnInspectionsPagedAsync(
+        string? disposition, string? search, int page, int pageSize, CancellationToken ct = default)
+    {
+        var (safePage, safeSize) = NormalizePagination(page, pageSize);
+        var (items, total) = await _returnInspectionRepo.GetPagedAsync(disposition, search, safePage, safeSize, ct);
+        var totalPages = Math.Max(1, (int)Math.Ceiling(total / (double)safeSize));
+        return new PagedResponse<ReturnInspectionResponse>(items.Select(MapReturnInspection).ToList(), safePage, safeSize, total, totalPages);
+    }
+
+    public async Task<List<ReturnInspectionResponse>> GetReturnInspectionsByReturnIdAsync(
+        Guid returnId, CancellationToken ct = default)
+    {
+        var items = await _returnInspectionRepo.GetByReturnIdAsync(returnId, ct);
+        return items.Select(MapReturnInspection).ToList();
+    }
+
+    private static ReturnInspectionResponse MapReturnInspection(ReturnInspection i) => new(
+        i.Id, i.ReturnId, i.ReturnCode, i.OrderId, i.OrderCode,
+        i.SkuId, i.SkuCode, i.SkuSnapshotName, i.Quantity,
+        i.Disposition.ToString(), i.QuarantineBatchId, i.RestockBatchId,
+        i.InspectedBy, i.InspectedAt, i.InspectionNote, i.CreatedAt, i.UpdatedAt);
 
     private async Task CheckAndNotifyLowStockAsync(
         ICollection<StockDeductQueueItem> items, CancellationToken ct)

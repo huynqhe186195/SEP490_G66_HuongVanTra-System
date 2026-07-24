@@ -450,6 +450,25 @@ public record SupplierReturnRequestResponse(
     int TotalQuantity,
     List<SupplierReturnRequestItemResponse> Items);
 
+public record ReturnInspectionResponse(
+    Guid Id,
+    Guid ReturnId,
+    string ReturnCode,
+    Guid OrderId,
+    string OrderCode,
+    Guid SkuId,
+    string SkuCode,
+    string SkuSnapshotName,
+    int Quantity,
+    string Disposition,
+    Guid? QuarantineBatchId,
+    Guid? RestockBatchId,
+    Guid? InspectedBy,
+    DateTime? InspectedAt,
+    string? InspectionNote,
+    DateTime CreatedAt,
+    DateTime UpdatedAt);
+
 public record StocktakeReasonCodeResponse(
     string Code,
     string Label);

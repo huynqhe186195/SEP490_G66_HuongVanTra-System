@@ -164,6 +164,8 @@ public record CreateSupplierReturnRequest(
 
 public record ReviewInventoryReturnRequest(string? Reason);
 
+public record InspectReturnRequest(string Disposition, string? Note);
+
 public record StocktakeItemRequest(
     Guid SkuId,
     string? SkuCode,

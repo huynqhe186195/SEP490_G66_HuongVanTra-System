@@ -74,6 +74,7 @@ public sealed class InventoryReservationTests
             Mock.Of<IProductionOrderRepository>(),
             Mock.Of<IProductCatalogClient>(),
             Mock.Of<ISupplierRepository>(),
+            Mock.Of<IReturnInspectionRepository>(),
             Microsoft.Extensions.Options.Options.Create(new InventoryOptions()));
     }
 

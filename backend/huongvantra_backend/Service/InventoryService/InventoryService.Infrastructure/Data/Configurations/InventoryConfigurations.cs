@@ -530,6 +530,32 @@ public class SupplierReturnRequestItemConfiguration : IEntityTypeConfiguration<S
     }
 }
 
+public class ReturnInspectionConfiguration : IEntityTypeConfiguration<ReturnInspection>
+{
+    public void Configure(EntityTypeBuilder<ReturnInspection> builder)
+    {
+        builder.ToTable("ReturnInspections");
+        builder.HasKey(e => e.Id);
+        builder.Property(e => e.ReturnCode).HasMaxLength(30).IsRequired();
+        builder.Property(e => e.OrderCode).HasMaxLength(30).IsRequired();
+        builder.Property(e => e.SkuCode).HasMaxLength(50).IsRequired();
+        builder.Property(e => e.SkuSnapshotName).HasMaxLength(255).IsRequired();
+        builder.Property(e => e.Disposition).HasConversion<string>().HasMaxLength(30).IsRequired();
+        builder.Property(e => e.InspectionNote).HasMaxLength(500);
+        builder.HasIndex(e => e.ReturnId);
+        builder.HasIndex(e => e.OrderId);
+        builder.HasIndex(e => e.SkuId);
+        builder.HasIndex(e => e.Disposition);
+        builder.HasIndex(e => e.CreatedAt);
+        builder.HasIndex(new[] { "ReturnId", "SkuId" })
+            .HasDatabaseName("IX_ReturnInspections_ReturnId_SkuId");
+        builder.HasOne(e => e.QuarantineBatch)
+            .WithMany()
+            .HasForeignKey(e => e.QuarantineBatchId)
+            .OnDelete(DeleteBehavior.SetNull);
+    }
+}
+
 public class StocktakeRequestConfiguration : IEntityTypeConfiguration<StocktakeRequest>
 {
     public void Configure(EntityTypeBuilder<StocktakeRequest> builder)

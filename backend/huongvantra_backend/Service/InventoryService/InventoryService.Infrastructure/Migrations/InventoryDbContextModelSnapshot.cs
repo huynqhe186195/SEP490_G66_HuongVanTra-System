@@ -2269,6 +2269,44 @@ namespace InventoryService.Infrastructure.Migrations
                     b.Navigation("OutputLines");
                 });
 
+            modelBuilder.Entity("InventoryService.Domain.Entities.ReturnInspection", b =>
+                {
+                    b.Property<Guid>("Id").ValueGeneratedOnAdd();
+                    b.Property<Guid>("ReturnId");
+                    b.Property<string>("ReturnCode").IsRequired().HasMaxLength(30);
+                    b.Property<Guid>("OrderId");
+                    b.Property<string>("OrderCode").IsRequired().HasMaxLength(30);
+                    b.Property<Guid>("SkuId");
+                    b.Property<string>("SkuCode").IsRequired().HasMaxLength(50);
+                    b.Property<string>("SkuSnapshotName").IsRequired().HasMaxLength(255);
+                    b.Property<int>("Quantity");
+                    b.Property<string>("Disposition").IsRequired().HasMaxLength(30);
+                    b.Property<Guid?>("QuarantineBatchId");
+                    b.Property<Guid?>("RestockBatchId");
+                    b.Property<Guid?>("InspectedBy");
+                    b.Property<DateTime?>("InspectedAt");
+                    b.Property<string>("InspectionNote").HasMaxLength(500);
+                    b.Property<DateTime>("CreatedAt");
+                    b.Property<DateTime>("UpdatedAt");
+                    b.HasKey("Id");
+                    b.HasIndex("ReturnId");
+                    b.HasIndex("OrderId");
+                    b.HasIndex("SkuId");
+                    b.HasIndex("Disposition");
+                    b.HasIndex("CreatedAt");
+                    b.HasIndex("QuarantineBatchId");
+                    b.HasIndex(new[] { "ReturnId", "SkuId" }).HasDatabaseName("IX_ReturnInspections_ReturnId_SkuId");
+                    b.ToTable("ReturnInspections");
+                });
+
+            modelBuilder.Entity("InventoryService.Domain.Entities.ReturnInspection", b =>
+                {
+                    b.HasOne("InventoryService.Domain.Entities.WarehouseBatch", "QuarantineBatch")
+                        .WithMany()
+                        .HasForeignKey("QuarantineBatchId")
+                        .OnDelete(DeleteBehavior.SetNull);
+                });
+
 #pragma warning restore 612, 618
         }
     }
