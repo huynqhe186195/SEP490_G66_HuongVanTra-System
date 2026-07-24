@@ -25,7 +25,9 @@ public record StockDeductQueueResponse(
     string? CancelReason = null,
     DateTime? LastAttemptAt = null,
     string? LastShortageReason = null,
-    List<StockDeductQueueLineResponse>? Lines = null);
+    List<StockDeductQueueLineResponse>? Lines = null,
+    // POS-04 (H6): trạng thái giữ chỗ tồn Kệ Hàng của đơn COD chờ xác nhận.
+    bool IsReserved = false);
 
 public record StockDeductQueueLineResponse(
     Guid SkuId,
@@ -85,6 +87,18 @@ public record PosStockHandlingResponse(
     List<Guid> QueueIds,
     List<PosStockHandlingLineResponse> Lines);
 
+/// <summary>
+/// POS-04 (H4): kết quả thay giữ chỗ tồn Kệ Hàng khi sửa đơn COD.
+/// Replaced=false + AlreadyProcessed=true nghĩa là OperationId đã xử lý trước đó (no-op).
+/// </summary>
+public record ReplaceCodReservationResponse(
+    Guid QueueId,
+    Guid OrderId,
+    string OrderCode,
+    bool Replaced,
+    bool AlreadyProcessed,
+    string Message);
+
 public record SkuStockResponse(
     Guid SkuId,
     string SkuCode,
@@ -94,7 +108,10 @@ public record SkuStockResponse(
     int LowStockThreshold,
     int WarehouseLowStockThreshold,
     int ShelfLowStockThreshold,
-    DateTime UpdatedAt);
+    DateTime UpdatedAt,
+    // POS-04: tồn Kệ Hàng đang giữ chỗ cho đơn COD chờ xác nhận và tồn khả bán = OnHand - Reserved.
+    int ReservedQuantity = 0,
+    int AvailableQuantity = 0);
 
 /// <summary>Response chỉ trả tồn quầy — dùng cho Admin/Manager (không expose thông tin kho tổng).</summary>
 public record StoreSkuStockResponse(
@@ -105,7 +122,10 @@ public record StoreSkuStockResponse(
     int WarehouseQuantityOnHand,
     int LowStockThreshold,
     int ShelfLowStockThreshold,
-    DateTime UpdatedAt);
+    DateTime UpdatedAt,
+    // POS-04: tồn Kệ Hàng đang giữ chỗ và tồn khả bán = OnHand - Reserved.
+    int ReservedQuantity = 0,
+    int AvailableQuantity = 0);
 
 public record StockAdjustmentRequestItemResponse(
     Guid Id,

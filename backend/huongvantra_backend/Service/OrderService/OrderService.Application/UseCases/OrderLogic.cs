@@ -551,18 +551,24 @@ public class OrderLogic(
                 ct);
         }
 
-        await _orderRepo.SaveChangesAsync(ct);
-
+        // G4: enqueue integration events vào Outbox TRƯỚC SaveChanges để OutboxMessage
+        // commit atomically cùng Order/OrderDetail/Payment/Activity trong một transaction.
         if (!ShouldSuppressLegacyOrderPlacedEvent(order))
         {
             await _eventPublisher.PublishOrderPlacedAsync(
-                order.Id, order.OrderCode, order.OrderStatus.ToString(), finalAmount,
+                order.Id, order.OrderCode, order.OrderStatus.ToString(), order.OrderChannel.ToString(), finalAmount,
                 order.OrderDetails.Select(d => (d.SkuId, d.SkuSnapshotName, d.SkuSnapshotCode, d.Quantity)),
                 ct);
         }
 
         if (order.OrderStatus == OrderStatus.Completed && order.CustomerId.HasValue)
-            await PublishOrderCompletedAsync(order, debtAmount, ct);
+            await EnqueueOrderCompletedAsync(order, debtAmount, ct);
+
+        await _orderRepo.SaveChangesAsync(ct);
+
+        // Email hóa đơn là side-effect thông báo, chạy sau khi transaction đã commit.
+        if (order.OrderStatus == OrderStatus.Completed && order.CustomerId.HasValue)
+            TrySendInvoiceEmail(order);
 
         return MapToResponse(order, MapStockHandlingSummary(stockHandling));
     }
@@ -822,6 +828,21 @@ public class OrderLogic(
         if (order.OrderStatus == OrderStatus.Completed || order.OrderStatus == OrderStatus.Cancelled)
             throw new OrderCannotBeModifiedException(id, order.OrderStatus.ToString());
 
+        // POS-04 (H4): sửa sản phẩm của đơn COD đang giữ chỗ tồn Kệ (trước Shipping) phải
+        // thay giữ chỗ đồng bộ ở Inventory TRƯỚC khi lưu đơn. Chụp lại danh sách items cũ
+        // để bồi hoàn nếu lưu đơn thất bại sau khi Inventory đã thay giữ chỗ.
+        var mustReplaceCodReservation = order.OrderChannel == OrderChannel.COD
+            && req.Items is { Count: > 0 }
+            && order.OrderStatus != OrderStatus.Draft
+            && order.OrderStatus != OrderStatus.Shipping;
+        var originalReservationItems = mustReplaceCodReservation
+            ? (order.OrderDetails ?? [])
+                .Select(d => new InventoryReservationReplaceItemRequest(
+                    d.SkuId, d.SkuSnapshotName, d.SkuSnapshotCode, d.Quantity))
+                .ToList()
+            : null;
+        var originalFinalAmount = order.FinalAmount;
+
         if (req.Items is { Count: > 0 })
             await ApplyOrderDetailUpdatesAsync(order, req.Items, ct);
 
@@ -928,7 +949,46 @@ public class OrderLogic(
             actorName,
             ct);
 
-        await _orderRepo.SaveChangesAsync(ct);
+        // POS-04 (H4): gọi Inventory thay giữ chỗ đồng bộ, all-or-nothing, idempotent theo
+        // OperationId — Inventory từ chối (thiếu tồn khả bán) thì đơn không được lưu,
+        // items cũ + giữ chỗ cũ giữ nguyên. Nếu lưu đơn thất bại SAU khi Inventory đã thay
+        // giữ chỗ, bồi hoàn bằng cách thay lại theo items cũ (best-effort, không đảm bảo
+        // atomicity phân tán tuyệt đối — thất bại bồi hoàn sẽ được ném ra để lộ rõ sự cố).
+        var replacedReservation = false;
+        if (mustReplaceCodReservation)
+        {
+            await ReplaceCodReservationAsync(order, ct);
+            replacedReservation = true;
+        }
+
+        try
+        {
+            await _orderRepo.SaveChangesAsync(ct);
+        }
+        catch (Exception saveEx) when (replacedReservation && originalReservationItems is not null)
+        {
+            // Bồi hoàn: thay lại giữ chỗ theo items cũ với OperationId mới. Nếu chính bước
+            // bồi hoàn cũng thất bại thì gộp cả hai lỗi để không che giấu sự cố lệch giữ chỗ.
+            try
+            {
+                await _inventoryCatalogClient.ReplaceCodReservationAsync(
+                    new InventoryReservationReplaceRequest(
+                        order.Id,
+                        Guid.NewGuid(),
+                        originalFinalAmount,
+                        originalReservationItems),
+                    ct);
+            }
+            catch (Exception compensationEx)
+            {
+                throw new AggregateException(
+                    "Lưu đơn COD thất bại sau khi đã thay giữ chỗ tồn, và bồi hoàn giữ chỗ cũng thất bại. Cần kiểm tra thủ công giữ chỗ tồn của đơn.",
+                    saveEx,
+                    compensationEx);
+            }
+            throw;
+        }
+
         return MapToResponse(order);
     }
 
@@ -941,6 +1001,10 @@ public class OrderLogic(
 
         if (order.OrderStatus == OrderStatus.Completed || order.OrderStatus == OrderStatus.Cancelled)
             throw new OrderCannotBeCancelledException(id, order.OrderStatus.ToString());
+
+        // POS-04 (quyết định #10): giữ lại trạng thái trước khi hủy để Inventory biết
+        // đơn đã Shipping hay chưa — hủy sau Shipping không được cộng lại tồn Kệ.
+        var statusBeforeCancel = order.OrderStatus;
 
         order.OrderStatus = OrderStatus.Cancelled;
         order.InventorySyncStatus = InventorySyncStatus.Cancelled;
@@ -968,12 +1032,13 @@ public class OrderLogic(
             actorName,
             ct);
 
-        await _orderRepo.SaveChangesAsync(ct);
-
+        // G4: enqueue cancellation event trước SaveChanges (atomic với đổi trạng thái đơn).
         await _eventPublisher.PublishOrderCancelledAsync(
-            order.Id, order.OrderCode,
+            order.Id, order.OrderCode, statusBeforeCancel.ToString(),
             (order.OrderDetails ?? []).Select(d => (d.SkuId, d.Quantity)),
             ct);
+
+        await _orderRepo.SaveChangesAsync(ct);
     }
 
     public async Task<OrderResponse> CancelPendingTransferAsync(
@@ -995,8 +1060,11 @@ public class OrderLogic(
             await _eventPublisher.PublishOrderCancelledAsync(
                 order.Id,
                 order.OrderCode,
+                OrderStatus.PendingPayment.ToString(),
                 (order.OrderDetails ?? []).Select(detail => (detail.SkuId, detail.Quantity)),
                 ct);
+            // G4: persist outbox row (enqueue chỉ track entity).
+            await _orderRepo.SaveChangesAsync(ct);
             return MapToResponse(order);
         }
         if (order.OrderStatus == OrderStatus.Completed)
@@ -1040,13 +1108,16 @@ public class OrderLogic(
             actorId,
             actorName,
             ct);
-        await _orderRepo.SaveChangesAsync(ct);
 
+        // G4: enqueue trước SaveChanges để atomic với hoàn tác checkout.
         await _eventPublisher.PublishOrderCancelledAsync(
             order.Id,
             order.OrderCode,
+            OrderStatus.PendingPayment.ToString(),
             (order.OrderDetails ?? []).Select(detail => (detail.SkuId, detail.Quantity)),
             ct);
+
+        await _orderRepo.SaveChangesAsync(ct);
 
         return MapToResponse(order);
     }
@@ -1077,6 +1148,15 @@ public class OrderLogic(
             "Chuyển sang trạng thái đang giao hàng.",
             actorId,
             actorName,
+            ct);
+
+        // POS-04 (H5, quyết định #7): bàn giao giao hàng là trigger duy nhất trừ tồn vật lý
+        // Kệ Hàng cho đơn COD đã giữ chỗ. Enqueue Outbox TRƯỚC SaveChanges để event commit
+        // atomic cùng chuyển trạng thái; Inventory Inbox dedupe theo EventId + business key
+        // nên duplicate Shipping không trừ lần hai.
+        await _eventPublisher.PublishOrderShippedAsync(
+            order.Id, order.OrderCode, order.OrderChannel.ToString(),
+            (order.OrderDetails ?? []).Select(d => (d.SkuId, d.SkuSnapshotName, d.SkuSnapshotCode, d.Quantity)),
             ct);
 
         await _orderRepo.SaveChangesAsync(ct);
@@ -1190,22 +1270,29 @@ public class OrderLogic(
                 ct);
         }
 
-        await _orderRepo.SaveChangesAsync(ct);
-
+        // G4: enqueue trước SaveChanges để atomic với transaction hoàn tất đơn.
         if (!ShouldSuppressLegacyOrderPlacedEvent(order))
         {
             await _eventPublisher.PublishOrderPlacedAsync(
-                order.Id, order.OrderCode, OrderStatus.Completed.ToString(), order.FinalAmount,
+                order.Id, order.OrderCode, OrderStatus.Completed.ToString(), order.OrderChannel.ToString(), order.FinalAmount,
                 (order.OrderDetails ?? []).Select(d => (d.SkuId, d.SkuSnapshotName, d.SkuSnapshotCode, d.Quantity)),
                 ct);
         }
 
+        decimal completedDebt = 0;
+        var shouldSendInvoice = false;
         if (order.CustomerId.HasValue)
         {
             var paidAmount = payments.Where(p => p.PaymentStatus == PaymentStatus.Success).Sum(p => p.Amount);
-            var debtAmount = Math.Max(0, order.FinalAmount - paidAmount);
-            await PublishOrderCompletedAsync(order, debtAmount, ct);
+            completedDebt = Math.Max(0, order.FinalAmount - paidAmount);
+            await EnqueueOrderCompletedAsync(order, completedDebt, ct);
+            shouldSendInvoice = true;
         }
+
+        await _orderRepo.SaveChangesAsync(ct);
+
+        if (shouldSendInvoice)
+            TrySendInvoiceEmail(order);
     }
 
     public async Task RepublishCompletedCustomerStateAsync(
@@ -1224,6 +1311,9 @@ public class OrderLogic(
             order,
             Math.Max(0, order.FinalAmount - paidAmount),
             ct);
+
+        // G4: enqueue chỉ track OutboxMessage; cần SaveChanges để persist row cho dispatcher.
+        await _orderRepo.SaveChangesAsync(ct);
     }
 
     public async Task<ReturnOrderResponse> ReturnAsync(
@@ -1361,8 +1451,9 @@ public class OrderLogic(
             actorName,
             ct);
 
-        await _returnOrderRepo.SaveChangesAsync(ct);
-
+        // G4: enqueue returned event trước SaveChanges để atomic với phiếu trả hàng.
+        // Lưu ý: sự kiện KHÔNG tự động cộng lại tồn bán được; việc phục hồi tồn do
+        // luồng kiểm định trả hàng (Phase J) quyết định.
         await _eventPublisher.PublishOrderReturnedAsync(
             returnId,
             returnCode,
@@ -1378,6 +1469,8 @@ public class OrderLogic(
                 x.Detail.SkuSnapshotCode,
                 x.Quantity)),
             ct);
+
+        await _returnOrderRepo.SaveChangesAsync(ct);
 
         string? exchangeOrderCode = null;
         Guid? exchangeOrderId = null;
@@ -1505,24 +1598,32 @@ public class OrderLogic(
         await _orderRepo.SaveChangesAsync(ct);
     }
 
-    private async Task PublishOrderCompletedAsync(Order order, decimal debtAmount, CancellationToken ct)
+    private Task EnqueueOrderCompletedAsync(Order order, decimal debtAmount, CancellationToken ct)
+    {
+        if (!order.CustomerId.HasValue) return Task.CompletedTask;
+        return PublishOrderCompletedEventAsync(order, debtAmount, ct);
+    }
+
+    private void TrySendInvoiceEmail(Order order)
     {
         if (!order.CustomerId.HasValue) return;
 
-        try
+        _ = Task.Run(async () =>
         {
-            var customer = await _customerCatalogClient.GetCustomerAsync(order.CustomerId.Value, ct);
-            if (customer is not null && !string.IsNullOrWhiteSpace(customer.Email))
+            try
             {
-                _ = Task.Run(() => _emailService.SendInvoiceEmailAsync(customer.Email, customer.FullName ?? "Quý khách", customer.TierName, order, CancellationToken.None));
+                var customer = await _customerCatalogClient.GetCustomerAsync(order.CustomerId.Value, CancellationToken.None);
+                if (customer is not null && !string.IsNullOrWhiteSpace(customer.Email))
+                {
+                    await _emailService.SendInvoiceEmailAsync(
+                        customer.Email, customer.FullName ?? "Quý khách", customer.TierName, order, CancellationToken.None);
+                }
             }
-        }
-        catch
-        {
-            // Log if needed, but don't prevent the event from being published
-        }
-
-        await PublishOrderCompletedEventAsync(order, debtAmount, ct);
+            catch
+            {
+                // Email là side-effect thông báo, không được ảnh hưởng tới kết quả nghiệp vụ.
+            }
+        });
     }
 
     private Task PublishOrderCompletedEventAsync(
@@ -1563,6 +1664,33 @@ public class OrderLogic(
                     order.OrderStatus.ToString(),
                     order.FinalAmount,
                     (order.OrderDetails ?? []).Select(d => new InventoryStockHandlingItemRequest(
+                        d.SkuId,
+                        d.SkuSnapshotName,
+                        d.SkuSnapshotCode,
+                        d.Quantity)).ToList()),
+                ct);
+        }
+        catch (InventoryStockHandlingException ex)
+        {
+            throw new OrderValidationException(ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// POS-04 (H4): thay giữ chỗ tồn Kệ Hàng cho đơn COD đang sửa — gọi đồng bộ Inventory,
+    /// all-or-nothing, idempotent theo OperationId. Inventory từ chối → OrderValidationException,
+    /// đơn không được lưu.
+    /// </summary>
+    private async Task ReplaceCodReservationAsync(Order order, CancellationToken ct)
+    {
+        try
+        {
+            await _inventoryCatalogClient.ReplaceCodReservationAsync(
+                new InventoryReservationReplaceRequest(
+                    order.Id,
+                    Guid.NewGuid(),
+                    order.FinalAmount,
+                    (order.OrderDetails ?? []).Select(d => new InventoryReservationReplaceItemRequest(
                         d.SkuId,
                         d.SkuSnapshotName,
                         d.SkuSnapshotCode,

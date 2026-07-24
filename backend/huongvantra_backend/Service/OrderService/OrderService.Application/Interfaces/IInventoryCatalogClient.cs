@@ -12,6 +12,13 @@ public interface IInventoryCatalogClient
     Task<InventoryStockHandlingResponse> PreparePosStockDeductionAsync(
         InventoryStockHandlingRequest request,
         CancellationToken ct = default);
+    /// <summary>
+    /// POS-04 (H4): thay giữ chỗ tồn Kệ Hàng cho đơn COD đang sửa — gọi đồng bộ, all-or-nothing,
+    /// idempotent theo OperationId. Ném <see cref="InventoryStockHandlingException"/> khi Inventory từ chối.
+    /// </summary>
+    Task<InventoryReservationReplaceResponse> ReplaceCodReservationAsync(
+        InventoryReservationReplaceRequest request,
+        CancellationToken ct = default);
 }
 
 public record InventoryStockHandlingItemRequest(
@@ -45,3 +52,23 @@ public record InventoryStockHandlingResponse(
     List<InventoryStockHandlingLineResponse> Lines);
 
 public class InventoryStockHandlingException(string message) : Exception(message);
+
+public record InventoryReservationReplaceItemRequest(
+    Guid SkuId,
+    string? SkuSnapshotName,
+    string? SkuSnapshotCode,
+    int Quantity);
+
+public record InventoryReservationReplaceRequest(
+    Guid OrderId,
+    Guid OperationId,
+    decimal TotalAmount,
+    List<InventoryReservationReplaceItemRequest> Items);
+
+public record InventoryReservationReplaceResponse(
+    Guid QueueId,
+    Guid OrderId,
+    string OrderCode,
+    bool Replaced,
+    bool AlreadyProcessed,
+    string Message);

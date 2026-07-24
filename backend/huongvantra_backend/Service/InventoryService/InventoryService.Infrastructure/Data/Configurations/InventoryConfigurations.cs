@@ -15,6 +15,8 @@ public class SkuStockConfiguration : IEntityTypeConfiguration<SkuStock>
         builder.Property(e => e.LowStockThreshold).HasDefaultValue(0);
         builder.Property(e => e.WarehouseLowStockThreshold).HasDefaultValue(0);
         builder.Property(e => e.ShelfLowStockThreshold).HasDefaultValue(0);
+        // POS-04: giữ chỗ tồn Kệ Hàng cho đơn COD chờ xác nhận.
+        builder.Property(e => e.ReservedQuantity).HasDefaultValue(0);
         builder.HasIndex(e => e.SkuCode);
     }
 }
@@ -669,6 +671,12 @@ public class ProcessedIntegrationEventConfiguration : IEntityTypeConfiguration<P
         builder.ToTable("ProcessedIntegrationEvents");
         builder.HasKey(e => e.Id);
         builder.Property(e => e.EventType).HasMaxLength(100).IsRequired();
+        builder.Property(e => e.EventId);
         builder.HasIndex(e => new { e.EventType, e.CorrelationId }).IsUnique();
+        // G6: EventId là khoá chống trùng có thẩm quyền. Unique để race hai lần giao
+        // cùng EventId không thể ghi hai inbox row (INSERT thứ hai vi phạm unique).
+        builder.HasIndex(e => e.EventId)
+            .IsUnique()
+            .HasDatabaseName("IX_ProcessedIntegrationEvents_EventId");
     }
 }

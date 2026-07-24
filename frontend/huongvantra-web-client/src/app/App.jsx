@@ -14,6 +14,7 @@ import CustomersPage from '../features/customers/pages/CustomersPage.jsx'
 import DashboardPage from '../features/dashboard/pages/DashboardPage.jsx'
 import CostProfitReportPage from '../features/accounting/pages/CostProfitReportPage.jsx'
 import IntegrationsPage from '../features/integrations/pages/IntegrationsPage.jsx'
+import InventorySyncMonitorPage from '../features/integrations/pages/InventorySyncMonitorPage.jsx'
 import InventoryExportPage from '../features/inventory/pages/InventoryExportPage.jsx'
 import InventoryBomPage from '../features/inventory/pages/InventoryBomPage.jsx'
 import InventoryBomCreatePage from '../features/inventory/pages/InventoryBomCreatePage.jsx'
@@ -125,6 +126,7 @@ function App() {
         <Route path="/admin/membership-tiers" element={<MembershipTiersPage />} />
         <Route path="/admin/promotions" element={<PromotionsPage />} />
         <Route path="/admin/system-activities" element={<SystemActivityLogPage />} />
+        <Route path="/admin/inventory-sync" element={<InventorySyncMonitorPage />} />
         <Route path="/admin/users" element={<UsersPage />} />
         <Route path="/admin/phan-quyen" element={<AccessControlPage />} />
         <Route path="/admin/roles" element={<Navigate to="/admin/phan-quyen?tab=vai-tro" replace />} />

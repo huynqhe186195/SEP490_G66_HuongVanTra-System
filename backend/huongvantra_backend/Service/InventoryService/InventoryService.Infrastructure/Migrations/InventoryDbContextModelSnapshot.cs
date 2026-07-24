@@ -27,6 +27,9 @@ namespace InventoryService.Infrastructure.Migrations
                     b.Property<Guid>("CorrelationId")
                         .HasColumnType("char(36)");
 
+                    b.Property<Guid?>("EventId")
+                        .HasColumnType("char(36)");
+
                     b.Property<string>("EventType")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -36,6 +39,10 @@ namespace InventoryService.Infrastructure.Migrations
                         .HasColumnType("datetime(6)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("EventId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ProcessedIntegrationEvents_EventId");
 
                     b.HasIndex("EventType", "CorrelationId")
                         .IsUnique()
@@ -184,6 +191,11 @@ namespace InventoryService.Infrastructure.Migrations
                     b.Property<int>("QuantityOnHand")
                         .HasColumnType("int");
 
+                    b.Property<int>("ReservedQuantity")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
+
                     b.Property<int>("ShelfLowStockThreshold")
                         .HasDefaultValue(0)
                         .HasColumnType("int");
@@ -255,6 +267,9 @@ namespace InventoryService.Infrastructure.Migrations
                         .HasColumnType("datetime(6)");
 
                     b.Property<bool>("IsDeducted")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<bool>("IsReserved")
                         .HasColumnType("tinyint(1)");
 
                     b.Property<DateTime?>("LastAttemptAt")

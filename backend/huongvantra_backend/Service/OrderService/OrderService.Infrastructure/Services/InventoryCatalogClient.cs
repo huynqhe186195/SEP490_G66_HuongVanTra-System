@@ -59,6 +59,28 @@ public class InventoryCatalogClient(HttpClient httpClient, ILogger<InventoryCata
         return result;
     }
 
+    public async Task<InventoryReservationReplaceResponse> ReplaceCodReservationAsync(
+        InventoryReservationReplaceRequest request,
+        CancellationToken ct = default)
+    {
+        var response = await httpClient.PostAsJsonAsync("api/v1/inventory/cod-reservation-replace", request, ct);
+        var raw = await response.Content.ReadAsStringAsync(ct);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var message = ExtractErrorMessage(raw)
+                ?? "Không thay được giữ chỗ tồn Kệ Hàng cho đơn COD. Vui lòng kiểm tra tồn khả bán.";
+            logger.LogWarning("Inventory COD reservation replace failed {Status}: {Error}", response.StatusCode, raw);
+            throw new InventoryStockHandlingException(message);
+        }
+
+        var result = JsonSerializer.Deserialize<InventoryReservationReplaceResponse>(raw, JsonOptions);
+        if (result == null)
+            throw new InventoryStockHandlingException("InventoryService không trả về kết quả thay giữ chỗ COD hợp lệ.");
+
+        return result;
+    }
+
     private static string? ExtractErrorMessage(string raw)
     {
         if (string.IsNullOrWhiteSpace(raw))

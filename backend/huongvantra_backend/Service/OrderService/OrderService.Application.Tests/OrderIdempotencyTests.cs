@@ -238,6 +238,7 @@ public class OrderIdempotencyTests
                 It.IsAny<Guid>(),
                 It.IsAny<string>(),
                 It.IsAny<string>(),
+                It.IsAny<string>(),
                 It.IsAny<decimal>(),
                 It.IsAny<IEnumerable<(Guid SkuId, string SkuName, string? SkuCode, int Quantity)>>(),
                 It.IsAny<CancellationToken>()),
