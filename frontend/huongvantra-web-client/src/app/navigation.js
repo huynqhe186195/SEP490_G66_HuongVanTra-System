@@ -108,6 +108,22 @@ export const navigationItems = [
   },
   { label: 'Nhân sự', path: '/staff', module: 'staff', icon: 'badge', roles: ['admin', 'agencyManager'] },
   {
+    label: 'Phân ca làm',
+    path: '/shifts',
+    module: 'shift_manage',
+    icon: 'calendar_month',
+    // Chỉ Manager — chỉ định / gỡ Sale khỏi ca (mọi ngày trong tuần hiện tại).
+    roles: ['agencyManager'],
+  },
+  {
+    label: 'Lịch làm việc',
+    path: '/my-shifts',
+    module: 'my_shifts',
+    icon: 'schedule',
+    // Sale xem lịch ca (của mình + đồng nghiệp) / đăng ký khi Manager mở cửa sổ.
+    roles: ['salesStaff'],
+  },
+  {
     label: 'Hạng thẻ',
     path: '/admin/membership-tiers',
     module: 'membership_tiers_admin',
@@ -381,6 +397,8 @@ const MODULE_PATH_PREFIXES = [
   { module: 'integrations', prefix: '/integrations' },
   { module: 'reports', prefix: '/reports' },
   { module: 'contracts', prefix: '/contracts' },
+  { module: 'shift_manage', prefix: '/shifts' },
+  { module: 'my_shifts', prefix: '/my-shifts' },
   { module: 'staff', prefix: '/staff' },
   { module: 'membership_tiers_admin', prefix: '/admin/membership-tiers' },
   { module: 'promotions_admin', prefix: '/admin/promotions' },

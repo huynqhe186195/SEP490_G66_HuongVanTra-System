@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+﻿import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { Link, useNavigate } from 'react-router-dom'
 
@@ -20,6 +20,12 @@ import {
 import { createOrder } from '../services/ordersApi.js'
 import { createCheckoutAttemptManager } from '../utils/checkoutAttempt.js'
 import { validateZeroTotalCheckout } from '../../pos/utils/posDiscountValidation.js'
+
+import { loadAuthSession } from '../../auth/services/authSession.js'
+
+import { canViewAllOrders } from '../../auth/utils/permissions.js'
+
+import { fetchOnDutyShift } from '../../shifts/services/shiftsApi.js'
 
 import {
 
@@ -79,10 +85,18 @@ function OrderCreatePage() {
 
   const navigate = useNavigate()
 
+  const session = loadAuthSession()
+
+  const isManager = canViewAllOrders(session)
+
   const [isSaving, setIsSaving] = useState(false)
   const checkoutAttemptRef = useRef(createCheckoutAttemptManager())
 
   const [skuOptions, setSkuOptions] = useState([])
+
+  const [shelfOnDuty, setShelfOnDuty] = useState(null)
+
+  const [checkingShift, setCheckingShift] = useState(!isManager)
 
   const [form, setForm] = useState({
 
@@ -158,6 +172,36 @@ function OrderCreatePage() {
   const canUseManualDiscount = isVipCustomerType(form.selectedCustomer?.customerType)
 
   useEffect(() => {
+    if (isManager) {
+      setShelfOnDuty(null)
+      setCheckingShift(false)
+      return undefined
+    }
+
+    let mounted = true
+    setCheckingShift(true)
+    fetchOnDutyShift('Shelf')
+      .then((duty) => {
+        if (mounted) setShelfOnDuty(duty)
+      })
+      .catch(() => {
+        if (mounted) setShelfOnDuty(null)
+      })
+      .finally(() => {
+        if (mounted) setCheckingShift(false)
+      })
+
+    return () => {
+      mounted = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isManager])
+
+  const canMutate = isManager || Boolean(shelfOnDuty)
+
+
+
+  useEffect(() => {
     if (!isPosChannel(form.orderChannel)) return
     setForm((prev) => ({
       ...prev,
@@ -220,7 +264,7 @@ function OrderCreatePage() {
       ...(mustClearManualDiscount ? { discountAmount: 0 } : {}),
     }))
     if (mustClearManualDiscount) {
-      showInfo('Đã xóa chiết khấu thủ công vì khách mới không phải khách đối ngoại (VIP).')
+      showInfo('ÄÃ£ xÃ³a chiáº¿t kháº¥u thá»§ cÃ´ng vÃ¬ khÃ¡ch má»›i khÃ´ng pháº£i khÃ¡ch Ä‘á»‘i ngoáº¡i (VIP).')
     }
 
   }
@@ -265,7 +309,7 @@ function OrderCreatePage() {
       skuId: sku.id,
 
       skuSnapshotName: sku.productName
-        ? `${sku.productName}${sku.packagingType ? ` — ${sku.packagingType}` : ''}`
+        ? `${sku.productName}${sku.packagingType ? ` â€” ${sku.packagingType}` : ''}`
         : sku.packagingType || sku.skuCode,
 
       skuSnapshotCode: sku.skuCode,
@@ -309,7 +353,33 @@ function OrderCreatePage() {
 
 
 
-    let items
+    if (!canMutate) {
+
+      showError('Báº¡n chÆ°a Ä‘áº¿n ca / chÆ°a Ä‘Æ°á»£c duyá»‡t ca quáº§y â€” khÃ´ng thá»ƒ táº¡o Ä‘Æ¡n.')
+
+      return
+
+    }
+
+
+
+    const items = form.items
+
+      .filter((line) => line.skuId)
+
+      .map((line) => ({
+
+        skuId: line.skuId,
+
+        skuSnapshotName: line.skuSnapshotName,
+
+        skuSnapshotCode: line.skuSnapshotCode,
+
+        quantity: Number(line.quantity),
+
+        unitPrice: Number(line.unitPrice),
+
+      }))`r`n    let items
     try {
       items = form.items
         .filter((line) => line.skuId)
@@ -321,7 +391,7 @@ function OrderCreatePage() {
           unitPrice: Number(line.unitPrice),
         }))
     } catch (error) {
-      showError(error?.message || 'Số lượng không hợp lệ.')
+      showError(error?.message || 'Sá»‘ lÆ°á»£ng khÃ´ng há»£p lá»‡.')
       return
     }
 
@@ -329,7 +399,7 @@ function OrderCreatePage() {
 
     if (!items.length) {
 
-      showError('Vui lòng thêm ít nhất một SKU.')
+      showError('Vui lÃ²ng thÃªm Ã­t nháº¥t má»™t SKU.')
 
       return
 
@@ -339,7 +409,7 @@ function OrderCreatePage() {
 
     if (needsShippingAddress && !form.shippingAddress.trim()) {
 
-      showError('Kênh online cần địa chỉ giao hàng.')
+      showError('KÃªnh online cáº§n Ä‘á»‹a chá»‰ giao hÃ ng.')
 
       return
 
@@ -358,7 +428,7 @@ function OrderCreatePage() {
       ? 0
       : Number(form.paidAmount || 0)
     if (!form.customerId && enteredPaidAmount < finalAmount) {
-      showError('Khách lẻ phải thanh toán đủ. Vui lòng đăng ký hoặc chọn khách hàng trước khi bán nợ/thanh toán một phần.')
+      showError('KhÃ¡ch láº» pháº£i thanh toÃ¡n Ä‘á»§. Vui lÃ²ng Ä‘Äƒng kÃ½ hoáº·c chá»n khÃ¡ch hÃ ng trÆ°á»›c khi bÃ¡n ná»£/thanh toÃ¡n má»™t pháº§n.')
       return
     }
 
@@ -403,7 +473,7 @@ function OrderCreatePage() {
         (idempotencyKey) => createOrder(request, { idempotencyKey }),
       )
 
-      showSuccess(`Đã tạo đơn ${created.orderCode}.`)
+      showSuccess(`ÄÃ£ táº¡o Ä‘Æ¡n ${created.orderCode}.`)
 
       navigate(`/orders/${created.id}`)
 
@@ -427,15 +497,15 @@ function OrderCreatePage() {
 
       <PageHeader
 
-        title="Tạo đơn hàng"
+        title="Táº¡o Ä‘Æ¡n hÃ ng"
 
-        description="Tạo đơn bán trực tiếp tại quầy, Zalo, điện thoại hoặc website."
+        description="Táº¡o Ä‘Æ¡n bÃ¡n trá»±c tiáº¿p táº¡i quáº§y, Zalo, Ä‘iá»‡n thoáº¡i hoáº·c website."
 
         rightContent={
 
           <Link className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50" to="/orders">
 
-            Quay lại
+            Quay láº¡i
 
           </Link>
 
@@ -445,17 +515,43 @@ function OrderCreatePage() {
 
 
 
+      {!checkingShift && !canMutate ? (
+
+        <div className="mb-4 flex items-start gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+
+          <span className="material-symbols-outlined text-[18px]">schedule</span>
+
+          <p>
+
+            NgoÃ i giá» ca â€” chá»‰ xem, khÃ´ng táº¡o Ä‘Æ¡n má»›i.{' '}
+
+            <Link to="/my-shifts" className="font-semibold underline">
+
+              VÃ o Â«Lá»‹ch lÃ m viá»‡cÂ»
+
+            </Link>{' '}
+
+            Ä‘á»ƒ Ä‘Äƒng kÃ½ hoáº·c chá» Ä‘áº¿n giá» ca.
+
+          </p>
+
+        </div>
+
+      ) : null}
+
+
+
       <form className="space-y-6" onSubmit={handleSubmit}>
 
         <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
 
-          <h2 className="mb-4 text-lg font-bold text-slate-800">Thông tin đơn</h2>
+          <h2 className="mb-4 text-lg font-bold text-slate-800">ThÃ´ng tin Ä‘Æ¡n</h2>
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
 
             <label className="space-y-1">
 
-              <span className="text-xs font-semibold text-slate-500">Kênh bán *</span>
+              <span className="text-xs font-semibold text-slate-500">KÃªnh bÃ¡n *</span>
 
               <select
 
@@ -480,14 +576,14 @@ function OrderCreatePage() {
               </select>
               {isPos ? (
                 <p className="text-xs text-slate-500">
-                  Bán tại quầy — không bắt buộc địa chỉ giao. Đơn thanh toán đủ sẽ được hoàn tất ngay.
+                  BÃ¡n táº¡i quáº§y â€” khÃ´ng báº¯t buá»™c Ä‘á»‹a chá»‰ giao. ÄÆ¡n thanh toÃ¡n Ä‘á»§ sáº½ Ä‘Æ°á»£c hoÃ n táº¥t ngay.
                 </p>
               ) : null}
             </label>
 
             <label className="space-y-1 md:col-span-2">
 
-              <span className="text-xs font-semibold text-slate-500">Ghi chú</span>
+              <span className="text-xs font-semibold text-slate-500">Ghi chÃº</span>
 
               <textarea
 
@@ -527,11 +623,11 @@ function OrderCreatePage() {
 
           <div className="mb-4 flex items-center justify-between gap-3">
 
-            <h2 className="text-lg font-bold text-slate-800">Sản phẩm (SKU)</h2>
+            <h2 className="text-lg font-bold text-slate-800">Sáº£n pháº©m (SKU)</h2>
 
             <button type="button" className="text-sm font-semibold text-[#538463]" onClick={addLine}>
 
-              + Thêm dòng
+              + ThÃªm dÃ²ng
 
             </button>
 
@@ -559,13 +655,13 @@ function OrderCreatePage() {
 
                   >
 
-                    <option value="">Chọn SKU...</option>
+                    <option value="">Chá»n SKU...</option>
 
                     {skuOptions.map((sku) => (
 
                       <option key={sku.id} value={sku.id}>
 
-                        {[sku.productName, sku.packagingType || sku.skuCode].filter(Boolean).join(' — ')} · {formatVnd(sku.basePrice)}
+                        {[sku.productName, sku.packagingType || sku.skuCode].filter(Boolean).join(' â€” ')} Â· {formatVnd(sku.basePrice)}
 
                       </option>
 
@@ -599,7 +695,7 @@ function OrderCreatePage() {
 
                 <label className="space-y-1 md:col-span-3">
 
-                  <span className="text-xs font-semibold text-slate-500">Đơn giá</span>
+                  <span className="text-xs font-semibold text-slate-500">ÄÆ¡n giÃ¡</span>
 
                   <input
 
@@ -625,7 +721,7 @@ function OrderCreatePage() {
 
                   <button type="button" className="text-xs font-semibold text-red-600" onClick={() => removeLine(index)}>
 
-                    Xóa
+                    XÃ³a
 
                   </button>
 
@@ -643,13 +739,13 @@ function OrderCreatePage() {
 
         <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
 
-          <h2 className="mb-4 text-lg font-bold text-slate-800">Thanh toán</h2>
+          <h2 className="mb-4 text-lg font-bold text-slate-800">Thanh toÃ¡n</h2>
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
 
             <label className="space-y-1">
 
-              <span className="text-xs font-semibold text-slate-500">Phương thức *</span>
+              <span className="text-xs font-semibold text-slate-500">PhÆ°Æ¡ng thá»©c *</span>
 
               <select
 
@@ -677,7 +773,7 @@ function OrderCreatePage() {
 
             {canUseManualDiscount ? (
               <label className="space-y-1">
-                <span className="text-xs font-semibold text-slate-500">Chiết khấu thủ công VIP</span>
+                <span className="text-xs font-semibold text-slate-500">Chiáº¿t kháº¥u thá»§ cÃ´ng VIP</span>
                 <input
                   className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
                   inputMode="decimal"
@@ -687,7 +783,7 @@ function OrderCreatePage() {
               </label>
             ) : (
               <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs text-slate-500">
-                Chiết khấu thủ công chỉ dành cho khách đối ngoại (VIP). Ưu đãi hạng thành viên được tự động áp dụng.
+                Chiáº¿t kháº¥u thá»§ cÃ´ng chá»‰ dÃ nh cho khÃ¡ch Ä‘á»‘i ngoáº¡i (VIP). Æ¯u Ä‘Ã£i háº¡ng thÃ nh viÃªn Ä‘Æ°á»£c tá»± Ä‘á»™ng Ã¡p dá»¥ng.
               </div>
             )}
 
@@ -695,7 +791,7 @@ function OrderCreatePage() {
 
               <label className="space-y-1">
 
-                <span className="text-xs font-semibold text-slate-500">Đã thu</span>
+                <span className="text-xs font-semibold text-slate-500">ÄÃ£ thu</span>
 
                 <input
 
@@ -721,7 +817,7 @@ function OrderCreatePage() {
 
             <div className="flex justify-between py-1">
 
-              <span>Tạm tính</span>
+              <span>Táº¡m tÃ­nh</span>
 
               <span>{formatVnd(subtotal)}</span>
 
@@ -729,21 +825,21 @@ function OrderCreatePage() {
 
             {manualDiscountAmount > 0 ? (
               <div className="flex justify-between py-1 text-slate-600">
-                <span>Chiết khấu thủ công VIP</span>
+                <span>Chiáº¿t kháº¥u thá»§ cÃ´ng VIP</span>
                 <span>-{formatVnd(manualDiscountAmount)}</span>
               </div>
             ) : null}
 
             {membershipDiscountAmount > 0 ? (
               <div className="flex justify-between py-1 text-slate-600">
-                <span>Ưu đãi hạng thành viên</span>
+                <span>Æ¯u Ä‘Ã£i háº¡ng thÃ nh viÃªn</span>
                 <span>-{formatVnd(membershipDiscountAmount)}</span>
               </div>
             ) : null}
 
             <div className="flex justify-between py-1 font-bold text-[#356647]">
 
-              <span>Thành tiền</span>
+              <span>ThÃ nh tiá»n</span>
 
               <span>{formatVnd(finalAmount)}</span>
 
@@ -761,19 +857,19 @@ function OrderCreatePage() {
 
             type="submit"
 
-            disabled={isSaving}
+            disabled={isSaving || !canMutate}
 
             className="rounded-xl bg-[#538463] px-6 py-3 text-sm font-bold text-white hover:bg-[#457053] disabled:opacity-50"
 
           >
 
-            {isSaving ? 'Đang tạo...' : 'Tạo đơn hàng'}
+            {isSaving ? 'Äang táº¡o...' : 'Táº¡o Ä‘Æ¡n hÃ ng'}
 
           </button>
 
           <Link className="rounded-xl border border-slate-200 px-6 py-3 text-sm font-semibold text-slate-700" to="/orders">
 
-            Hủy
+            Há»§y
 
           </Link>
 
@@ -790,5 +886,6 @@ function OrderCreatePage() {
 
 
 export default OrderCreatePage
+
 
 

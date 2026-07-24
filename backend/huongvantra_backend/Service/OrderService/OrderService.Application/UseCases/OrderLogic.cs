@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using Microsoft.Extensions.Options;
 using OrderService.Application.Authorization;
 using OrderService.Application.DTOs.Requests;
@@ -26,6 +26,8 @@ public class OrderLogic(
     IInventoryCatalogClient _inventoryCatalogClient,
     ICustomBundleRepository _customBundleRepo,
     IEmailService _emailService,
+    PosCashSessionLogic _posCashSessionLogic,
+    StaffShiftGuard _shiftGuard,
     IOptions<SepayOptions> sepayOptions)
 {
     private readonly SepayOptions _sepay = sepayOptions.Value;
@@ -85,7 +87,7 @@ public class OrderLogic(
     {
         var text = value.Trim();
         return text.Equals("OTHER", StringComparison.OrdinalIgnoreCase)
-            || text.Contains("khác", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("khÃ¡c", StringComparison.OrdinalIgnoreCase)
             || text.Contains("khac", StringComparison.OrdinalIgnoreCase);
     }
 
@@ -99,25 +101,25 @@ public class OrderLogic(
             .ToList();
 
         if (reasons.Count == 0)
-            throw new OrderValidationException("Vui lòng chọn ít nhất một lý do trả/đổi hàng.");
+            throw new OrderValidationException("Vui lÃ²ng chá»n Ã­t nháº¥t má»™t lÃ½ do tráº£/Ä‘á»•i hÃ ng.");
 
         var hasOtherReason = reasons.Any(IsOtherReturnReason);
         var otherReason = req.OtherReason?.Trim();
         if (hasOtherReason && (otherReason?.Length ?? 0) < 10)
-            throw new OrderValidationException("Vui lòng nhập lý do khác ít nhất 10 ký tự.");
+            throw new OrderValidationException("Vui lÃ²ng nháº­p lÃ½ do khÃ¡c Ã­t nháº¥t 10 kÃ½ tá»±.");
 
         var displayReasons = reasons
-            .Select(reason => IsOtherReturnReason(reason) ? "Lý do khác" : reason)
+            .Select(reason => IsOtherReturnReason(reason) ? "LÃ½ do khÃ¡c" : reason)
             .ToList();
 
-        var parts = new List<string> { $"Lý do: {string.Join("; ", displayReasons)}" };
+        var parts = new List<string> { $"LÃ½ do: {string.Join("; ", displayReasons)}" };
 
         if (hasOtherReason && !string.IsNullOrWhiteSpace(otherReason))
-            parts.Add($"Chi tiết khác: {otherReason}");
+            parts.Add($"Chi tiáº¿t khÃ¡c: {otherReason}");
 
         var note = req.Note?.Trim();
         if (!string.IsNullOrWhiteSpace(note))
-            parts.Add($"Ghi chú: {note}");
+            parts.Add($"Ghi chÃº: {note}");
 
         return string.Join(" | ", parts);
     }
@@ -137,7 +139,7 @@ public class OrderLogic(
     public async Task<OrderResponse> GetByCodeAsync(string code, OrderAccessContext access, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(code))
-            throw new OrderValidationException("Mã đơn hàng không được để trống.");
+            throw new OrderValidationException("MÃ£ Ä‘Æ¡n hÃ ng khÃ´ng Ä‘Æ°á»£c Ä‘á»ƒ trá»‘ng.");
         var order = await _orderRepo.GetByCodeAsync(code.Trim().ToUpperInvariant(), ct)
             ?? throw new OrderNotFoundByCodeException(code);
         EnsureCanAccess(order, access);
@@ -263,6 +265,8 @@ public class OrderLogic(
             req.OrderChannel, req.ShippingAddress,
             hasCustomBundles: (req.CustomBundles ?? []).Any(b => (b.Ingredients ?? []).Count > 0));
 
+        await _shiftGuard.EnsureShelfOnDutyAsync(access, ct);
+
         if (req.OrderKind != OrderKind.Exchange)
         {
             OrderBusinessRules.EnsureSaleLinesHavePositivePrice(
@@ -291,7 +295,7 @@ public class OrderLogic(
             OrderBusinessRules.EnsureManualDiscountDoesNotZeroOrder(totalAmount, manualDiscount);
         }
         if (manualDiscount > totalAmount)
-            throw new OrderValidationException("Giảm giá thủ công không được lớn hơn tổng tiền đơn hàng.");
+            throw new OrderValidationException("Giáº£m giÃ¡ thá»§ cÃ´ng khÃ´ng Ä‘Æ°á»£c lá»›n hÆ¡n tá»•ng tiá»n Ä‘Æ¡n hÃ ng.");
 
         var promotionItems = detailInputs.Select(i => new PromotionCalculationItem(
             i.SkuId,
@@ -488,8 +492,8 @@ public class OrderLogic(
             order.Id,
             OrderActivityType.Created,
             order.OrderKind == OrderKind.Exchange
-                ? $"Tạo đơn đổi hàng {order.OrderCode}. Thành tiền {FormatVnd(finalAmount)}."
-                : $"Tạo đơn {order.OrderCode} qua kênh {GetChannelLabel(order.OrderChannel)}. Thành tiền {FormatVnd(finalAmount)}.",
+                ? $"Táº¡o Ä‘Æ¡n Ä‘á»•i hÃ ng {order.OrderCode}. ThÃ nh tiá»n {FormatVnd(finalAmount)}."
+                : $"Táº¡o Ä‘Æ¡n {order.OrderCode} qua kÃªnh {GetChannelLabel(order.OrderChannel)}. ThÃ nh tiá»n {FormatVnd(finalAmount)}.",
             actorId,
             actorName,
             ct);
@@ -501,7 +505,7 @@ public class OrderLogic(
                 await RecordActivityAsync(
                     order.Id,
                     OrderActivityType.PaymentReceived,
-                    $"Đã ghi nhận {FormatVnd(payment.Amount)} qua {GetPaymentMethodLabel(payment.PaymentMethod)}.",
+                    $"ÄÃ£ ghi nháº­n {FormatVnd(payment.Amount)} qua {GetPaymentMethodLabel(payment.PaymentMethod)}.",
                     actorId,
                     actorName,
                     ct);
@@ -511,7 +515,7 @@ public class OrderLogic(
                 await RecordActivityAsync(
                     order.Id,
                     OrderActivityType.PaymentPending,
-                    $"Chờ {FormatVnd(payment.Amount)} qua {GetPaymentMethodLabel(payment.PaymentMethod)}.",
+                    $"Chá» {FormatVnd(payment.Amount)} qua {GetPaymentMethodLabel(payment.PaymentMethod)}.",
                     actorId,
                     actorName,
                     ct);
@@ -523,7 +527,7 @@ public class OrderLogic(
             await RecordActivityAsync(
                 order.Id,
                 OrderActivityType.PaymentPending,
-                $"Chưa thu tiền. Còn nợ {FormatVnd(debtAmount)}.",
+                $"ChÆ°a thu tiá»n. CÃ²n ná»£ {FormatVnd(debtAmount)}.",
                 actorId,
                 actorName,
                 ct);
@@ -534,7 +538,7 @@ public class OrderLogic(
             await RecordActivityAsync(
                 order.Id,
                 OrderActivityType.Completed,
-                "Hoàn tất đơn hàng.",
+                "HoÃ n táº¥t Ä‘Æ¡n hÃ ng.",
                 actorId,
                 actorName,
                 ct);
@@ -551,8 +555,18 @@ public class OrderLogic(
                 ct);
         }
 
-        // G4: enqueue integration events vào Outbox TRƯỚC SaveChanges để OutboxMessage
-        // commit atomically cùng Order/OrderDetail/Payment/Activity trong một transaction.
+        // G4: enqueue integration events vÃ o Outbox TRÆ¯á»šC SaveChanges Ä‘á»ƒ OutboxMessage
+        // commit atomically cÃ¹ng Order/OrderDetail/Payment/Activity trong má»™t transaction.
+        foreach (var payment in payments)
+        {
+            if (req.OrderChannel == OrderChannel.POS && payment.PaymentMethod == PaymentMethod.Cash && payment.PaymentStatus == PaymentStatus.Success)
+            {
+                await _posCashSessionLogic.RecordCashSaleAsync(payment.Amount, ct);
+            }
+        }
+
+        await _orderRepo.SaveChangesAsync(ct);
+
         if (!ShouldSuppressLegacyOrderPlacedEvent(order))
         {
             await _eventPublisher.PublishOrderPlacedAsync(
@@ -566,7 +580,7 @@ public class OrderLogic(
 
         await _orderRepo.SaveChangesAsync(ct);
 
-        // Email hóa đơn là side-effect thông báo, chạy sau khi transaction đã commit.
+        // Email hÃ³a Ä‘Æ¡n lÃ  side-effect thÃ´ng bÃ¡o, cháº¡y sau khi transaction Ä‘Ã£ commit.
         if (order.OrderStatus == OrderStatus.Completed && order.CustomerId.HasValue)
             TrySendInvoiceEmail(order);
 
@@ -580,20 +594,20 @@ public class OrderLogic(
         if (request.Payments is { Count: > 0 })
         {
             if (finalAmount <= 0)
-                throw new OrderValidationException("Đơn 0 đồng hợp lệ không được tạo bản ghi thanh toán 0 đồng.");
+                throw new OrderValidationException("ÄÆ¡n 0 Ä‘á»“ng há»£p lá»‡ khÃ´ng Ä‘Æ°á»£c táº¡o báº£n ghi thanh toÃ¡n 0 Ä‘á»“ng.");
 
             if (request.Payments.Any(item => item.Amount <= 0))
-                throw new OrderValidationException("Mỗi khoản thanh toán phải lớn hơn 0.");
+                throw new OrderValidationException("Má»—i khoáº£n thanh toÃ¡n pháº£i lá»›n hÆ¡n 0.");
 
             if (request.Payments.Any(item => !Enum.IsDefined(item.PaymentMethod)))
-                throw new OrderValidationException("Phương thức thanh toán không hợp lệ.");
+                throw new OrderValidationException("PhÆ°Æ¡ng thá»©c thanh toÃ¡n khÃ´ng há»£p lá»‡.");
 
             if (request.Payments
                 .GroupBy(item => item.PaymentMethod)
                 .Any(group => group.Count() > 1))
             {
                 throw new OrderValidationException(
-                    "Mỗi phương thức thanh toán chỉ được xuất hiện một lần trong cùng đơn hàng.");
+                    "Má»—i phÆ°Æ¡ng thá»©c thanh toÃ¡n chá»‰ Ä‘Æ°á»£c xuáº¥t hiá»‡n má»™t láº§n trong cÃ¹ng Ä‘Æ¡n hÃ ng.");
             }
 
             var transferCount = request.Payments.Count(item =>
@@ -607,23 +621,23 @@ public class OrderLogic(
                 || (hasCod && request.Payments.Count != 1))
             {
                 throw new OrderValidationException(
-                    "Chỉ hỗ trợ tiền mặt, chuyển khoản/VietQR, COD riêng lẻ hoặc kết hợp tiền mặt với một khoản chuyển khoản.");
+                    "Chá»‰ há»— trá»£ tiá»n máº·t, chuyá»ƒn khoáº£n/VietQR, COD riÃªng láº» hoáº·c káº¿t há»£p tiá»n máº·t vá»›i má»™t khoáº£n chuyá»ƒn khoáº£n.");
             }
 
             if (request.Payments.Count(item => !string.IsNullOrWhiteSpace(item.DebtSettlementJson)) > 1)
-                throw new OrderValidationException("Chỉ được khai báo một yêu cầu thu công nợ trong mỗi lần thanh toán.");
+                throw new OrderValidationException("Chá»‰ Ä‘Æ°á»£c khai bÃ¡o má»™t yÃªu cáº§u thu cÃ´ng ná»£ trong má»—i láº§n thanh toÃ¡n.");
 
             if (!request.CustomerId.HasValue
                 && request.Payments.Any(item => !string.IsNullOrWhiteSpace(item.DebtSettlementJson)))
             {
-                throw new OrderValidationException("Chỉ khách hàng đã đăng ký mới được thanh toán công nợ.");
+                throw new OrderValidationException("Chá»‰ khÃ¡ch hÃ ng Ä‘Ã£ Ä‘Äƒng kÃ½ má»›i Ä‘Æ°á»£c thanh toÃ¡n cÃ´ng ná»£.");
             }
 
             var total = request.Payments.Sum(item => item.Amount);
             if (total > finalAmount)
-                throw new OrderValidationException("Tổng các khoản thanh toán không được vượt quá thành tiền.");
+                throw new OrderValidationException("Tá»•ng cÃ¡c khoáº£n thanh toÃ¡n khÃ´ng Ä‘Æ°á»£c vÆ°á»£t quÃ¡ thÃ nh tiá»n.");
             if (hasCod && total != finalAmount)
-                throw new OrderValidationException("Khoản COD phải bằng đúng thành tiền của đơn.");
+                throw new OrderValidationException("Khoáº£n COD pháº£i báº±ng Ä‘Ãºng thÃ nh tiá»n cá»§a Ä‘Æ¡n.");
 
             return request.Payments.Select(item => new NormalizedPaymentAllocation(
                 item.PaymentMethod,
@@ -639,7 +653,7 @@ public class OrderLogic(
         if (finalAmount <= 0)
         {
             if (request.PaidAmount > 0 || request.TransferQrAmount > 0)
-                throw new OrderValidationException("Đơn 0 đồng hợp lệ không cần khoản thanh toán.");
+                throw new OrderValidationException("ÄÆ¡n 0 Ä‘á»“ng há»£p lá»‡ khÃ´ng cáº§n khoáº£n thanh toÃ¡n.");
             return [];
         }
 
@@ -658,7 +672,7 @@ public class OrderLogic(
         }
 
         if (!Enum.IsDefined(request.PaymentMethod))
-            throw new OrderValidationException("Phương thức thanh toán không hợp lệ.");
+            throw new OrderValidationException("PhÆ°Æ¡ng thá»©c thanh toÃ¡n khÃ´ng há»£p lá»‡.");
 
         var requestedAmount = request.PaymentMethod is PaymentMethod.VietQR or PaymentMethod.BankTransfer
             && request.PaidAmount <= 0
@@ -702,12 +716,12 @@ public class OrderLogic(
     {
         if (!customerId.HasValue || customerId == Guid.Empty)
             throw new OrderValidationException(
-                "Quà tặng và chiết khấu thủ công chỉ áp dụng cho khách đối ngoại (VIP). Vui lòng chọn khách VIP.");
+                "QuÃ  táº·ng vÃ  chiáº¿t kháº¥u thá»§ cÃ´ng chá»‰ Ã¡p dá»¥ng cho khÃ¡ch Ä‘á»‘i ngoáº¡i (VIP). Vui lÃ²ng chá»n khÃ¡ch VIP.");
 
         var customer = await _customerCatalogClient.GetCustomerAsync(customerId.Value, ct);
         if (customer is null || !customer.IsVipCustomer)
             throw new OrderValidationException(
-                "Quà tặng và chiết khấu thủ công chỉ dành cho khách đối ngoại (VIP).");
+                "QuÃ  táº·ng vÃ  chiáº¿t kháº¥u thá»§ cÃ´ng chá»‰ dÃ nh cho khÃ¡ch Ä‘á»‘i ngoáº¡i (VIP).");
     }
 
     private async Task EnsureManualDiscountAllowedAsync(Guid? customerId, CancellationToken ct)
@@ -744,20 +758,20 @@ public class OrderLogic(
                 reqItem.Quantity,
                 profile.InventoryUnit);
             if (reqItem.Quantity < 1)
-                throw new OrderValidationException("Số lượng sản phẩm phải >= 1.");
+                throw new OrderValidationException("Sá»‘ lÆ°á»£ng sáº£n pháº©m pháº£i >= 1.");
 
             if (reqItem.Id.HasValue && reqItem.Id != Guid.Empty)
             {
                 if (!existingById.TryGetValue(reqItem.Id.Value, out var detail))
-                    throw new OrderValidationException("Dòng đơn hàng không tồn tại.");
+                    throw new OrderValidationException("DÃ²ng Ä‘Æ¡n hÃ ng khÃ´ng tá»“n táº¡i.");
 
                 if (quantity < detail.ReturnedQuantity)
                     throw new OrderValidationException(
-                        $"Số lượng không thể nhỏ hơn số đã trả ({detail.ReturnedQuantity}).");
+                        $"Sá»‘ lÆ°á»£ng khÃ´ng thá»ƒ nhá» hÆ¡n sá»‘ Ä‘Ã£ tráº£ ({detail.ReturnedQuantity}).");
 
                 var unitPrice = reqItem.IsGift ? 0m : reqItem.UnitPrice;
                 if (!reqItem.IsGift && unitPrice < 0)
-                    throw new OrderValidationException("Đơn giá không được âm.");
+                    throw new OrderValidationException("ÄÆ¡n giÃ¡ khÃ´ng Ä‘Æ°á»£c Ã¢m.");
 
                 detail.SkuSnapshotName = reqItem.SkuSnapshotName.Trim();
                 detail.SkuSnapshotCode = reqItem.SkuSnapshotCode?.Trim();
@@ -772,7 +786,7 @@ public class OrderLogic(
             }
 
             if (!reqItem.IsGift)
-                throw new OrderValidationException("Chỉ được thêm dòng quà tặng khi cập nhật đơn VIP.");
+                throw new OrderValidationException("Chá»‰ Ä‘Æ°á»£c thÃªm dÃ²ng quÃ  táº·ng khi cáº­p nháº­t Ä‘Æ¡n VIP.");
 
             var giftLine = new OrderDetail
             {
@@ -805,7 +819,7 @@ public class OrderLogic(
             .Distinct()
             .ToList();
         if (submittedIds.Any(id => id == Guid.Empty))
-            throw new OrderValidationException("SkuId sản phẩm không hợp lệ.");
+            throw new OrderValidationException("SkuId sáº£n pháº©m khÃ´ng há»£p lá»‡.");
 
         var targetIds = submittedIds;
         var profiles = (await _productCatalogClient.GetSkuProfilesAsync(targetIds, ct))
@@ -813,7 +827,7 @@ public class OrderLogic(
         var missingIds = targetIds.Where(id => !profiles.ContainsKey(id)).ToList();
         if (missingIds.Count > 0)
             throw new OrderValidationException(
-                "Không xác minh được đơn vị tồn kho của một hoặc nhiều sản phẩm. Vui lòng tải lại danh mục và thử lại.");
+                "KhÃ´ng xÃ¡c minh Ä‘Æ°á»£c Ä‘Æ¡n vá»‹ tá»“n kho cá»§a má»™t hoáº·c nhiá»u sáº£n pháº©m. Vui lÃ²ng táº£i láº¡i danh má»¥c vÃ  thá»­ láº¡i.");
 
         return profiles;
     }
@@ -824,13 +838,14 @@ public class OrderLogic(
         var order = await _orderRepo.GetByIdAsync(id, ct)
             ?? throw new OrderNotFoundException(id);
         EnsureCanAccess(order, access);
+        await _shiftGuard.EnsureShelfOnDutyAsync(access, ct);
 
         if (order.OrderStatus == OrderStatus.Completed || order.OrderStatus == OrderStatus.Cancelled)
             throw new OrderCannotBeModifiedException(id, order.OrderStatus.ToString());
 
-        // POS-04 (H4): sửa sản phẩm của đơn COD đang giữ chỗ tồn Kệ (trước Shipping) phải
-        // thay giữ chỗ đồng bộ ở Inventory TRƯỚC khi lưu đơn. Chụp lại danh sách items cũ
-        // để bồi hoàn nếu lưu đơn thất bại sau khi Inventory đã thay giữ chỗ.
+        // POS-04 (H4): sá»­a sáº£n pháº©m cá»§a Ä‘Æ¡n COD Ä‘ang giá»¯ chá»— tá»“n Ká»‡ (trÆ°á»›c Shipping) pháº£i
+        // thay giá»¯ chá»— Ä‘á»“ng bá»™ á»Ÿ Inventory TRÆ¯á»šC khi lÆ°u Ä‘Æ¡n. Chá»¥p láº¡i danh sÃ¡ch items cÅ©
+        // Ä‘á»ƒ bá»“i hoÃ n náº¿u lÆ°u Ä‘Æ¡n tháº¥t báº¡i sau khi Inventory Ä‘Ã£ thay giá»¯ chá»—.
         var mustReplaceCodReservation = order.OrderChannel == OrderChannel.COD
             && req.Items is { Count: > 0 }
             && order.OrderStatus != OrderStatus.Draft
@@ -851,7 +866,7 @@ public class OrderLogic(
             await EnsureManualDiscountAllowedAsync(order.CustomerId, ct);
 
         if (manualDiscount > order.TotalAmount)
-            throw new OrderValidationException("Giảm giá thủ công không được lớn hơn tạm tính.");
+            throw new OrderValidationException("Giáº£m giÃ¡ thá»§ cÃ´ng khÃ´ng Ä‘Æ°á»£c lá»›n hÆ¡n táº¡m tÃ­nh.");
 
         var promotionItems = (order.OrderDetails ?? [])
             .Select(d => new PromotionCalculationItem(d.SkuId, d.Quantity, d.UnitPrice, d.SubTotal))
@@ -901,7 +916,7 @@ public class OrderLogic(
             ct);
         var totalDiscount = manualDiscount + promotionDiscount.DiscountAmount + membershipDiscount;
         if (totalDiscount > order.TotalAmount)
-            throw new OrderValidationException("Tổng giảm giá (thủ công + khuyến mãi) không được lớn hơn tạm tính.");
+            throw new OrderValidationException("Tá»•ng giáº£m giÃ¡ (thá»§ cÃ´ng + khuyáº¿n mÃ£i) khÃ´ng Ä‘Æ°á»£c lá»›n hÆ¡n táº¡m tÃ­nh.");
 
         order.ShippingAddress = req.ShippingAddress?.Trim();
         order.Note = req.Note?.Trim();
@@ -943,17 +958,17 @@ public class OrderLogic(
             order.Id,
             OrderActivityType.Updated,
             req.Items is { Count: > 0 }
-                ? $"Cập nhật đơn: sản phẩm/địa chỉ/ghi chú/giảm giá. Thành tiền mới {FormatVnd(order.FinalAmount)}."
-                : $"Cập nhật đơn: địa chỉ/ghi chú/giảm giá. Thành tiền mới {FormatVnd(order.FinalAmount)}.",
+                ? $"Cáº­p nháº­t Ä‘Æ¡n: sáº£n pháº©m/Ä‘á»‹a chá»‰/ghi chÃº/giáº£m giÃ¡. ThÃ nh tiá»n má»›i {FormatVnd(order.FinalAmount)}."
+                : $"Cáº­p nháº­t Ä‘Æ¡n: Ä‘á»‹a chá»‰/ghi chÃº/giáº£m giÃ¡. ThÃ nh tiá»n má»›i {FormatVnd(order.FinalAmount)}.",
             actorId,
             actorName,
             ct);
 
-        // POS-04 (H4): gọi Inventory thay giữ chỗ đồng bộ, all-or-nothing, idempotent theo
-        // OperationId — Inventory từ chối (thiếu tồn khả bán) thì đơn không được lưu,
-        // items cũ + giữ chỗ cũ giữ nguyên. Nếu lưu đơn thất bại SAU khi Inventory đã thay
-        // giữ chỗ, bồi hoàn bằng cách thay lại theo items cũ (best-effort, không đảm bảo
-        // atomicity phân tán tuyệt đối — thất bại bồi hoàn sẽ được ném ra để lộ rõ sự cố).
+        // POS-04 (H4): gá»i Inventory thay giá»¯ chá»— Ä‘á»“ng bá»™, all-or-nothing, idempotent theo
+        // OperationId â€” Inventory tá»« chá»‘i (thiáº¿u tá»“n kháº£ bÃ¡n) thÃ¬ Ä‘Æ¡n khÃ´ng Ä‘Æ°á»£c lÆ°u,
+        // items cÅ© + giá»¯ chá»— cÅ© giá»¯ nguyÃªn. Náº¿u lÆ°u Ä‘Æ¡n tháº¥t báº¡i SAU khi Inventory Ä‘Ã£ thay
+        // giá»¯ chá»—, bá»“i hoÃ n báº±ng cÃ¡ch thay láº¡i theo items cÅ© (best-effort, khÃ´ng Ä‘áº£m báº£o
+        // atomicity phÃ¢n tÃ¡n tuyá»‡t Ä‘á»‘i â€” tháº¥t báº¡i bá»“i hoÃ n sáº½ Ä‘Æ°á»£c nÃ©m ra Ä‘á»ƒ lá»™ rÃµ sá»± cá»‘).
         var replacedReservation = false;
         if (mustReplaceCodReservation)
         {
@@ -967,8 +982,8 @@ public class OrderLogic(
         }
         catch (Exception saveEx) when (replacedReservation && originalReservationItems is not null)
         {
-            // Bồi hoàn: thay lại giữ chỗ theo items cũ với OperationId mới. Nếu chính bước
-            // bồi hoàn cũng thất bại thì gộp cả hai lỗi để không che giấu sự cố lệch giữ chỗ.
+            // Bá»“i hoÃ n: thay láº¡i giá»¯ chá»— theo items cÅ© vá»›i OperationId má»›i. Náº¿u chÃ­nh bÆ°á»›c
+            // bá»“i hoÃ n cÅ©ng tháº¥t báº¡i thÃ¬ gá»™p cáº£ hai lá»—i Ä‘á»ƒ khÃ´ng che giáº¥u sá»± cá»‘ lá»‡ch giá»¯ chá»—.
             try
             {
                 await _inventoryCatalogClient.ReplaceCodReservationAsync(
@@ -982,7 +997,7 @@ public class OrderLogic(
             catch (Exception compensationEx)
             {
                 throw new AggregateException(
-                    "Lưu đơn COD thất bại sau khi đã thay giữ chỗ tồn, và bồi hoàn giữ chỗ cũng thất bại. Cần kiểm tra thủ công giữ chỗ tồn của đơn.",
+                    "LÆ°u Ä‘Æ¡n COD tháº¥t báº¡i sau khi Ä‘Ã£ thay giá»¯ chá»— tá»“n, vÃ  bá»“i hoÃ n giá»¯ chá»— cÅ©ng tháº¥t báº¡i. Cáº§n kiá»ƒm tra thá»§ cÃ´ng giá»¯ chá»— tá»“n cá»§a Ä‘Æ¡n.",
                     saveEx,
                     compensationEx);
             }
@@ -998,12 +1013,13 @@ public class OrderLogic(
         var order = await _orderRepo.GetByIdAsync(id, ct)
             ?? throw new OrderNotFoundException(id);
         EnsureCanAccess(order, access);
+        await _shiftGuard.EnsureShelfOnDutyAsync(access, ct);
 
         if (order.OrderStatus == OrderStatus.Completed || order.OrderStatus == OrderStatus.Cancelled)
             throw new OrderCannotBeCancelledException(id, order.OrderStatus.ToString());
 
-        // POS-04 (quyết định #10): giữ lại trạng thái trước khi hủy để Inventory biết
-        // đơn đã Shipping hay chưa — hủy sau Shipping không được cộng lại tồn Kệ.
+        // POS-04 (quyáº¿t Ä‘á»‹nh #10): giá»¯ láº¡i tráº¡ng thÃ¡i trÆ°á»›c khi há»§y Ä‘á»ƒ Inventory biáº¿t
+        // Ä‘Æ¡n Ä‘Ã£ Shipping hay chÆ°a â€” há»§y sau Shipping khÃ´ng Ä‘Æ°á»£c cá»™ng láº¡i tá»“n Ká»‡.
         var statusBeforeCancel = order.OrderStatus;
 
         order.OrderStatus = OrderStatus.Cancelled;
@@ -1021,8 +1037,8 @@ public class OrderLogic(
         }
 
         var description = string.IsNullOrWhiteSpace(reason)
-            ? "Hủy đơn hàng."
-            : $"Hủy đơn hàng. Lý do: {reason.Trim()}";
+            ? "Há»§y Ä‘Æ¡n hÃ ng."
+            : $"Há»§y Ä‘Æ¡n hÃ ng. LÃ½ do: {reason.Trim()}";
 
         await RecordActivityAsync(
             order.Id,
@@ -1032,7 +1048,7 @@ public class OrderLogic(
             actorName,
             ct);
 
-        // G4: enqueue cancellation event trước SaveChanges (atomic với đổi trạng thái đơn).
+        // G4: enqueue cancellation event trÆ°á»›c SaveChanges (atomic vá»›i Ä‘á»•i tráº¡ng thÃ¡i Ä‘Æ¡n).
         await _eventPublisher.PublishOrderCancelledAsync(
             order.Id, order.OrderCode, statusBeforeCancel.ToString(),
             (order.OrderDetails ?? []).Select(d => (d.SkuId, d.Quantity)),
@@ -1063,22 +1079,22 @@ public class OrderLogic(
                 OrderStatus.PendingPayment.ToString(),
                 (order.OrderDetails ?? []).Select(detail => (detail.SkuId, detail.Quantity)),
                 ct);
-            // G4: persist outbox row (enqueue chỉ track entity).
+            // G4: persist outbox row (enqueue chá»‰ track entity).
             await _orderRepo.SaveChangesAsync(ct);
             return MapToResponse(order);
         }
         if (order.OrderStatus == OrderStatus.Completed)
-            throw new OrderValidationException("Giao dịch đã được xác nhận thành công nên không thể hủy thanh toán.");
+            throw new OrderValidationException("Giao dá»‹ch Ä‘Ã£ Ä‘Æ°á»£c xÃ¡c nháº­n thÃ nh cÃ´ng nÃªn khÃ´ng thá»ƒ há»§y thanh toÃ¡n.");
         if (order.OrderStatus != OrderStatus.PendingPayment)
-            throw new OrderValidationException("Chỉ được hủy đơn đang chờ thanh toán chuyển khoản.");
+            throw new OrderValidationException("Chá»‰ Ä‘Æ°á»£c há»§y Ä‘Æ¡n Ä‘ang chá» thanh toÃ¡n chuyá»ƒn khoáº£n.");
 
         var payments = order.Payments ?? await GetPaymentsInternal(order.Id, ct);
         var transferPayment = payments.FirstOrDefault(payment =>
             payment.PaymentMethod is PaymentMethod.VietQR or PaymentMethod.BankTransfer);
         if (transferPayment is null)
-            throw new OrderValidationException("Đơn không có khoản thanh toán chuyển khoản.");
+            throw new OrderValidationException("ÄÆ¡n khÃ´ng cÃ³ khoáº£n thanh toÃ¡n chuyá»ƒn khoáº£n.");
         if (transferPayment.PaymentStatus == PaymentStatus.Success)
-            throw new OrderValidationException("Giao dịch đã được xác nhận thành công nên không thể hủy thanh toán.");
+            throw new OrderValidationException("Giao dá»‹ch Ä‘Ã£ Ä‘Æ°á»£c xÃ¡c nháº­n thÃ nh cÃ´ng nÃªn khÃ´ng thá»ƒ há»§y thanh toÃ¡n.");
 
         var claimed = await _orderRepo.TryTransitionStatusAsync(
             order.Id,
@@ -1088,7 +1104,7 @@ public class OrderLogic(
         if (!claimed)
         {
             throw new OrderValidationException(
-                "Trạng thái thanh toán vừa thay đổi. Giao dịch có thể đã được xác nhận; vui lòng tải lại.");
+                "Tráº¡ng thÃ¡i thanh toÃ¡n vá»«a thay Ä‘á»•i. Giao dá»‹ch cÃ³ thá»ƒ Ä‘Ã£ Ä‘Æ°á»£c xÃ¡c nháº­n; vui lÃ²ng táº£i láº¡i.");
         }
 
         order.OrderStatus = OrderStatus.Cancelled;
@@ -1104,12 +1120,12 @@ public class OrderLogic(
         await RecordActivityAsync(
             order.Id,
             OrderActivityType.Cancelled,
-            "Hủy thanh toán chuyển khoản và hoàn tác checkout POS đang chờ.",
+            "Há»§y thanh toÃ¡n chuyá»ƒn khoáº£n vÃ  hoÃ n tÃ¡c checkout POS Ä‘ang chá».",
             actorId,
             actorName,
             ct);
 
-        // G4: enqueue trước SaveChanges để atomic với hoàn tác checkout.
+        // G4: enqueue trÆ°á»›c SaveChanges Ä‘á»ƒ atomic vá»›i hoÃ n tÃ¡c checkout.
         await _eventPublisher.PublishOrderCancelledAsync(
             order.Id,
             order.OrderCode,
@@ -1128,6 +1144,7 @@ public class OrderLogic(
         var order = await _orderRepo.GetByIdAsync(id, ct)
             ?? throw new OrderNotFoundException(id);
         EnsureCanAccess(order, access);
+        await _shiftGuard.EnsureShelfOnDutyAsync(access, ct);
 
         if (order.OrderStatus != OrderStatus.Processing && order.OrderStatus != OrderStatus.PendingPayment)
             throw new OrderCannotBeModifiedException(id, order.OrderStatus.ToString());
@@ -1137,7 +1154,7 @@ public class OrderLogic(
             p.PaymentMethod is PaymentMethod.VietQR or PaymentMethod.BankTransfer
             && p.PaymentStatus != PaymentStatus.Success);
         if (pendingTransfer is not null)
-            throw new OrderValidationException("Đơn chuyển khoản phải thanh toán trước khi chuyển sang đang giao.");
+            throw new OrderValidationException("ÄÆ¡n chuyá»ƒn khoáº£n pháº£i thanh toÃ¡n trÆ°á»›c khi chuyá»ƒn sang Ä‘ang giao.");
 
         order.OrderStatus = OrderStatus.Shipping;
         order.UpdatedAt = DateTime.UtcNow;
@@ -1145,15 +1162,15 @@ public class OrderLogic(
         await RecordActivityAsync(
             order.Id,
             OrderActivityType.Shipped,
-            "Chuyển sang trạng thái đang giao hàng.",
+            "Chuyá»ƒn sang tráº¡ng thÃ¡i Ä‘ang giao hÃ ng.",
             actorId,
             actorName,
             ct);
 
-        // POS-04 (H5, quyết định #7): bàn giao giao hàng là trigger duy nhất trừ tồn vật lý
-        // Kệ Hàng cho đơn COD đã giữ chỗ. Enqueue Outbox TRƯỚC SaveChanges để event commit
-        // atomic cùng chuyển trạng thái; Inventory Inbox dedupe theo EventId + business key
-        // nên duplicate Shipping không trừ lần hai.
+        // POS-04 (H5, quyáº¿t Ä‘á»‹nh #7): bÃ n giao giao hÃ ng lÃ  trigger duy nháº¥t trá»« tá»“n váº­t lÃ½
+        // Ká»‡ HÃ ng cho Ä‘Æ¡n COD Ä‘Ã£ giá»¯ chá»—. Enqueue Outbox TRÆ¯á»šC SaveChanges Ä‘á»ƒ event commit
+        // atomic cÃ¹ng chuyá»ƒn tráº¡ng thÃ¡i; Inventory Inbox dedupe theo EventId + business key
+        // nÃªn duplicate Shipping khÃ´ng trá»« láº§n hai.
         await _eventPublisher.PublishOrderShippedAsync(
             order.Id, order.OrderCode, order.OrderChannel.ToString(),
             (order.OrderDetails ?? []).Select(d => (d.SkuId, d.SkuSnapshotName, d.SkuSnapshotCode, d.Quantity)),
@@ -1169,6 +1186,7 @@ public class OrderLogic(
         var order = await _orderRepo.GetByIdAsync(id, ct)
             ?? throw new OrderNotFoundException(id);
         EnsureCanAccess(order, access);
+        await _shiftGuard.EnsureShelfOnDutyAsync(access, ct);
 
         if (order.OrderStatus == OrderStatus.Cancelled || order.OrderStatus == OrderStatus.Completed)
             throw new OrderCannotBeModifiedException(id, order.OrderStatus.ToString());
@@ -1180,7 +1198,7 @@ public class OrderLogic(
         if (hasPendingTransfer && !actualReceivedAmount.HasValue)
         {
             throw new OrderValidationException(
-                "Đơn chuyển khoản chỉ được hoàn tất sau khi backend xác nhận giao dịch.");
+                "ÄÆ¡n chuyá»ƒn khoáº£n chá»‰ Ä‘Æ°á»£c hoÃ n táº¥t sau khi backend xÃ¡c nháº­n giao dá»‹ch.");
         }
 
         var claimed = await _orderRepo.TryTransitionStatusAsync(
@@ -1196,14 +1214,15 @@ public class OrderLogic(
                 return;
             if (current.OrderStatus == OrderStatus.Cancelled)
                 throw new OrderValidationException(
-                    "Thanh toán đã bị hủy trước khi giao dịch được xác nhận.");
+                    "Thanh toÃ¡n Ä‘Ã£ bá»‹ há»§y trÆ°á»›c khi giao dá»‹ch Ä‘Æ°á»£c xÃ¡c nháº­n.");
             throw new OrderValidationException(
-                "Trạng thái đơn vừa thay đổi; không thể hoàn tất giao dịch này.");
+                "Tráº¡ng thÃ¡i Ä‘Æ¡n vá»«a thay Ä‘á»•i; khÃ´ng thá»ƒ hoÃ n táº¥t giao dá»‹ch nÃ y.");
         }
 
         order.OrderStatus = OrderStatus.Completed;
         order.UpdatedAt = DateTime.UtcNow;
 
+        var newlySucceededCashAmount = 0m;
         foreach (var payment in payments)
         {
             if (payment.PaymentStatus == PaymentStatus.Success) continue;
@@ -1227,9 +1246,12 @@ public class OrderLogic(
                 payment.PaidAt = DateTime.UtcNow;
                 payment.UpdatedAt = DateTime.UtcNow;
 
+                if (payment.PaymentMethod == PaymentMethod.Cash && order.OrderChannel == OrderChannel.POS)
+                    newlySucceededCashAmount += paidNow;
+
                 var paymentDescription = string.IsNullOrWhiteSpace(payment.TransactionRef)
-                    ? $"Đã thanh toán {FormatVnd(paidNow)} qua {GetPaymentMethodLabel(payment.PaymentMethod)}."
-                    : $"Đã thanh toán {FormatVnd(paidNow)} qua {GetPaymentMethodLabel(payment.PaymentMethod)}. Mã GD: {payment.TransactionRef}.";
+                    ? $"ÄÃ£ thanh toÃ¡n {FormatVnd(paidNow)} qua {GetPaymentMethodLabel(payment.PaymentMethod)}."
+                    : $"ÄÃ£ thanh toÃ¡n {FormatVnd(paidNow)} qua {GetPaymentMethodLabel(payment.PaymentMethod)}. MÃ£ GD: {payment.TransactionRef}.";
 
                 await RecordActivityAsync(
                     order.Id,
@@ -1244,7 +1266,7 @@ public class OrderLogic(
         await RecordActivityAsync(
             order.Id,
             OrderActivityType.Completed,
-            "Hoàn tất đơn hàng.",
+            "HoÃ n táº¥t Ä‘Æ¡n hÃ ng.",
             actorId,
             actorName,
             ct);
@@ -1270,7 +1292,12 @@ public class OrderLogic(
                 ct);
         }
 
-        // G4: enqueue trước SaveChanges để atomic với transaction hoàn tất đơn.
+        // G4: enqueue trÆ°á»›c SaveChanges Ä‘á»ƒ atomic vá»›i transaction hoÃ n táº¥t Ä‘Æ¡n.
+        if (newlySucceededCashAmount > 0)
+            await _posCashSessionLogic.RecordCashSaleAsync(newlySucceededCashAmount, ct);
+
+        await _orderRepo.SaveChangesAsync(ct);
+
         if (!ShouldSuppressLegacyOrderPlacedEvent(order))
         {
             await _eventPublisher.PublishOrderPlacedAsync(
@@ -1312,7 +1339,7 @@ public class OrderLogic(
             Math.Max(0, order.FinalAmount - paidAmount),
             ct);
 
-        // G4: enqueue chỉ track OutboxMessage; cần SaveChanges để persist row cho dispatcher.
+        // G4: enqueue chá»‰ track OutboxMessage; cáº§n SaveChanges Ä‘á»ƒ persist row cho dispatcher.
         await _orderRepo.SaveChangesAsync(ct);
     }
 
@@ -1327,15 +1354,16 @@ public class OrderLogic(
         var order = await _orderRepo.GetByIdAsync(orderId, ct)
             ?? throw new OrderNotFoundException(orderId);
         EnsureCanAccess(order, access);
+        await _shiftGuard.EnsureShelfOnDutyAsync(access, ct);
 
         if (order.OrderStatus != OrderStatus.Completed)
-            throw new OrderValidationException("Chỉ trả hàng trên hóa đơn đã hoàn tất.");
+            throw new OrderValidationException("Chá»‰ tráº£ hÃ ng trÃªn hÃ³a Ä‘Æ¡n Ä‘Ã£ hoÃ n táº¥t.");
 
         await RepairMissingPosTierDiscountAsync(order, ct);
 
         var returnInputs = (req.Items ?? []).Where(i => i.ReturnQuantity > 0).ToList();
         if (returnInputs.Count == 0)
-            throw new OrderValidationException("Chọn ít nhất một dòng hàng để trả.");
+            throw new OrderValidationException("Chá»n Ã­t nháº¥t má»™t dÃ²ng hÃ ng Ä‘á»ƒ tráº£.");
 
         var returnNote = BuildReturnNote(req);
 
@@ -1345,12 +1373,12 @@ public class OrderLogic(
         foreach (var input in returnInputs)
         {
             if (!detailById.TryGetValue(input.OrderDetailId, out var detail))
-                throw new OrderValidationException($"Dòng hàng không thuộc đơn {order.OrderCode}.");
+                throw new OrderValidationException($"DÃ²ng hÃ ng khÃ´ng thuá»™c Ä‘Æ¡n {order.OrderCode}.");
 
             var remaining = detail.Quantity - detail.ReturnedQuantity;
             if (input.ReturnQuantity > remaining)
                 throw new OrderValidationException(
-                    $"Số lượng trả vượt quá còn lại ({remaining}) cho {detail.SkuSnapshotName}.");
+                    $"Sá»‘ lÆ°á»£ng tráº£ vÆ°á»£t quÃ¡ cÃ²n láº¡i ({remaining}) cho {detail.SkuSnapshotName}.");
 
             returnLines.Add((detail, input.ReturnQuantity));
         }
@@ -1364,7 +1392,7 @@ public class OrderLogic(
         if (manualExchangeDiscount > 0)
         {
             if (exchangeItems.Count == 0)
-                throw new OrderValidationException("Chiết khấu thủ công chỉ áp dụng khi có hàng đổi.");
+                throw new OrderValidationException("Chiáº¿t kháº¥u thá»§ cÃ´ng chá»‰ Ã¡p dá»¥ng khi cÃ³ hÃ ng Ä‘á»•i.");
             await EnsureVipCustomerAsync(order.CustomerId, ct);
         }
 
@@ -1374,7 +1402,7 @@ public class OrderLogic(
         var maxManualExchangeDiscount = Math.Max(0, exchangeAmount - membershipDiscount);
         if (manualExchangeDiscount > maxManualExchangeDiscount + 0.01m)
             throw new OrderValidationException(
-                $"Chiết khấu thủ công không được vượt {FormatVnd(maxManualExchangeDiscount)}.");
+                $"Chiáº¿t kháº¥u thá»§ cÃ´ng khÃ´ng Ä‘Æ°á»£c vÆ°á»£t {FormatVnd(maxManualExchangeDiscount)}.");
 
         var exchangePayable = Math.Max(0, exchangeAmount - membershipDiscount - manualExchangeDiscount);
         var netCustomerPays = exchangePayable - returnAmount;
@@ -1385,7 +1413,7 @@ public class OrderLogic(
             && refundMethod is PaymentMethod.VietQR or PaymentMethod.BankTransfer;
 
         if (netCustomerPays > 0 && !payExtraDeferred && customerPaid + 0.01m < netCustomerPays)
-            throw new OrderValidationException($"Khách cần trả thêm {FormatVnd(netCustomerPays)}.");
+            throw new OrderValidationException($"KhÃ¡ch cáº§n tráº£ thÃªm {FormatVnd(netCustomerPays)}.");
 
         var returnId = Guid.NewGuid();
         var returnCode = await _returnOrderRepo.GenerateReturnCodeAsync(ct);
@@ -1438,10 +1466,10 @@ public class OrderLogic(
         await _returnOrderRepo.AddAsync(returnOrder, ct);
 
         var returnDescription = refundAmount > 0
-            ? $"Trả hàng {returnCode}: hoàn {FormatVnd(refundAmount)} qua {GetPaymentMethodLabel(refundMethod)}."
+            ? $"Tráº£ hÃ ng {returnCode}: hoÃ n {FormatVnd(refundAmount)} qua {GetPaymentMethodLabel(refundMethod)}."
             : exchangeAmount > 0
-                ? $"Trả hàng {returnCode}: đổi/mua thêm, khách trả thêm {FormatVnd(netCustomerPays)}."
-                : $"Trả hàng {returnCode}: hoàn {FormatVnd(returnAmount)}.";
+                ? $"Tráº£ hÃ ng {returnCode}: Ä‘á»•i/mua thÃªm, khÃ¡ch tráº£ thÃªm {FormatVnd(netCustomerPays)}."
+                : $"Tráº£ hÃ ng {returnCode}: hoÃ n {FormatVnd(returnAmount)}.";
 
         await RecordActivityAsync(
             order.Id,
@@ -1451,9 +1479,14 @@ public class OrderLogic(
             actorName,
             ct);
 
-        // G4: enqueue returned event trước SaveChanges để atomic với phiếu trả hàng.
+// G4: enqueue returned event trước SaveChanges để atomic với phiếu trả hàng.
         // Lưu ý: sự kiện KHÔNG tự động cộng lại tồn bán được; việc phục hồi tồn do
         // luồng kiểm định trả hàng (Phase J) quyết định.
+
+        if (refundAmount > 0 && refundMethod == PaymentMethod.Cash && order.OrderChannel == OrderChannel.POS)
+            await _posCashSessionLogic.RecordCashRefundAsync(refundAmount, ct);
+
+        await _returnOrderRepo.SaveChangesAsync(ct);
         await _eventPublisher.PublishOrderReturnedAsync(
             returnId,
             returnCode,
@@ -1495,7 +1528,7 @@ public class OrderLogic(
                     actorId,
                     exchangeChannel,
                     order.ShippingAddress,
-                    $"Đổi hàng từ {order.OrderCode} ({returnCode})",
+                    $"Äá»•i hÃ ng tá»« {order.OrderCode} ({returnCode})",
                     exchangeDiscount,
                     exchangeItems.Select(i => new CreateOrderDetailRequest(
                         i.SkuId,
@@ -1561,9 +1594,9 @@ public class OrderLogic(
         await RecordActivityAsync(
             order.Id,
             OrderActivityType.InventorySynced,
-            "Đã trừ tồn kho thành công.",
+            "ÄÃ£ trá»« tá»“n kho thÃ nh cÃ´ng.",
             actorId: null,
-            actorName: "Hệ thống",
+            actorName: "Há»‡ thá»‘ng",
             ct);
 
         await _orderRepo.SaveChangesAsync(ct);
@@ -1584,15 +1617,15 @@ public class OrderLogic(
         order.UpdatedAt = DateTime.UtcNow;
 
         var description = string.IsNullOrWhiteSpace(reason)
-            ? "Đã hủy trừ tồn kho cho đơn hàng."
-            : $"Đã hủy trừ tồn kho cho đơn hàng. Lý do: {reason.Trim()}";
+            ? "ÄÃ£ há»§y trá»« tá»“n kho cho Ä‘Æ¡n hÃ ng."
+            : $"ÄÃ£ há»§y trá»« tá»“n kho cho Ä‘Æ¡n hÃ ng. LÃ½ do: {reason.Trim()}";
 
         await RecordActivityAsync(
             order.Id,
             OrderActivityType.InventorySynced,
             description,
             actorId: null,
-            actorName: "Hệ thống",
+            actorName: "Há»‡ thá»‘ng",
             ct);
 
         await _orderRepo.SaveChangesAsync(ct);
@@ -1616,12 +1649,12 @@ public class OrderLogic(
                 if (customer is not null && !string.IsNullOrWhiteSpace(customer.Email))
                 {
                     await _emailService.SendInvoiceEmailAsync(
-                        customer.Email, customer.FullName ?? "Quý khách", customer.TierName, order, CancellationToken.None);
+                        customer.Email, customer.FullName ?? "QuÃ½ khÃ¡ch", customer.TierName, order, CancellationToken.None);
                 }
             }
             catch
             {
-                // Email là side-effect thông báo, không được ảnh hưởng tới kết quả nghiệp vụ.
+                // Email lÃ  side-effect thÃ´ng bÃ¡o, khÃ´ng Ä‘Æ°á»£c áº£nh hÆ°á»Ÿng tá»›i káº¿t quáº£ nghiá»‡p vá»¥.
             }
         });
     }
@@ -1677,9 +1710,9 @@ public class OrderLogic(
     }
 
     /// <summary>
-    /// POS-04 (H4): thay giữ chỗ tồn Kệ Hàng cho đơn COD đang sửa — gọi đồng bộ Inventory,
-    /// all-or-nothing, idempotent theo OperationId. Inventory từ chối → OrderValidationException,
-    /// đơn không được lưu.
+    /// POS-04 (H4): thay giá»¯ chá»— tá»“n Ká»‡ HÃ ng cho Ä‘Æ¡n COD Ä‘ang sá»­a â€” gá»i Ä‘á»“ng bá»™ Inventory,
+    /// all-or-nothing, idempotent theo OperationId. Inventory tá»« chá»‘i â†’ OrderValidationException,
+    /// Ä‘Æ¡n khÃ´ng Ä‘Æ°á»£c lÆ°u.
     /// </summary>
     private async Task ReplaceCodReservationAsync(Order order, CancellationToken ct)
     {
@@ -1875,7 +1908,7 @@ public class OrderLogic(
     }
 
     /// <summary>
-    /// Đơn POS cũ: POS đã áp CK hạng nhưng backend chưa lưu vào DiscountAmount → FinalAmount lớn hơn số đã thu.
+    /// ÄÆ¡n POS cÅ©: POS Ä‘Ã£ Ã¡p CK háº¡ng nhÆ°ng backend chÆ°a lÆ°u vÃ o DiscountAmount â†’ FinalAmount lá»›n hÆ¡n sá»‘ Ä‘Ã£ thu.
     /// </summary>
     private static Task<bool> RepairMissingPosTierDiscountAsync(Order order, CancellationToken ct)
     {
@@ -1922,7 +1955,7 @@ public class OrderLogic(
             ?? throw new OrderNotFoundException(bundleId);
 
         if (bundle.PackingStatus == PackingStatus.Packed)
-            throw new OrderValidationException("Gói này đã được đóng gói.");
+            throw new OrderValidationException("GÃ³i nÃ y Ä‘Ã£ Ä‘Æ°á»£c Ä‘Ã³ng gÃ³i.");
 
         List<(Guid SkuId, string? SkuCode, string? SkuName, int Quantity)> ingredients = bundle.Ingredients
             .Select(i => (
@@ -2006,15 +2039,15 @@ public class OrderLogic(
         }
 
         var formatted = value < 0 ? "-" + new string(chars.ToArray()) : new string(chars.ToArray());
-        return formatted + " ₫";
+        return formatted + " â‚«";
     }
 
     private static string GetChannelLabel(OrderChannel channel) => channel switch
     {
-        OrderChannel.POS => "bán tại quầy",
+        OrderChannel.POS => "bÃ¡n táº¡i quáº§y",
         OrderChannel.Website => "website",
         OrderChannel.Zalo => "Zalo",
-        OrderChannel.Phone => "điện thoại",
+        OrderChannel.Phone => "Ä‘iá»‡n thoáº¡i",
         OrderChannel.COD => "COD",
         _ => channel.ToString()
     };
@@ -2032,9 +2065,9 @@ public class OrderLogic(
 
     private static string GetPaymentMethodLabel(PaymentMethod method) => method switch
     {
-        PaymentMethod.Cash => "tiền mặt",
+        PaymentMethod.Cash => "tiá»n máº·t",
         PaymentMethod.VietQR => "VietQR",
-        PaymentMethod.BankTransfer => "chuyển khoản",
+        PaymentMethod.BankTransfer => "chuyá»ƒn khoáº£n",
         PaymentMethod.COD => "COD",
         _ => method.ToString()
     };
@@ -2045,3 +2078,4 @@ public class OrderLogic(
             throw new OrderForbiddenException();
     }
 }
+

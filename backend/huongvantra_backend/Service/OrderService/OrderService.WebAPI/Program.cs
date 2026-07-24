@@ -59,6 +59,7 @@ builder.Services.AddHostedService<OutboxDispatcherHostedService>();
 builder.Services.AddScoped<IOutboxMonitoringRepository, OutboxMonitoringRepository>();
 builder.Services.AddScoped<IOutboxMonitoringLogic, OutboxMonitoringLogic>();
 builder.Services.AddScoped<IReportRepository, ReportRepository>();
+builder.Services.AddScoped<IPosCashSessionRepository, PosCashSessionRepository>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddTransient<ForwardAuthorizationHeaderHandler>();
 builder.Services.AddHttpClient<IProductCatalogClient, ProductCatalogClient>(client =>
@@ -76,6 +77,11 @@ builder.Services.AddHttpClient<IInventoryCatalogClient, InventoryCatalogClient>(
     var baseUrl = builder.Configuration["InventoryService:BaseUrl"] ?? "http://inventory-service:8080";
     client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
 }).AddHttpMessageHandler<ForwardAuthorizationHeaderHandler>();
+builder.Services.AddHttpClient<IShiftCatalogClient, ShiftCatalogClient>(client =>
+{
+    var baseUrl = builder.Configuration["UserService:BaseUrl"] ?? "http://user-service:8080";
+    client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
+}).AddHttpMessageHandler<ForwardAuthorizationHeaderHandler>();
 builder.Services.Configure<PosTransferPaymentOptions>(
     builder.Configuration.GetSection(PosTransferPaymentOptions.SectionName));
 builder.Services.Configure<SepayOptions>(
@@ -91,6 +97,8 @@ builder.Services.Configure<EmailOptions>(options =>
 });
 builder.Services.AddScoped<IEmailService, EmailService>();
 
+builder.Services.AddScoped<OrderService.Application.Authorization.StaffShiftGuard>();
+builder.Services.AddScoped<PosCashSessionLogic>();
 builder.Services.AddScoped<OrderLogic>();
 builder.Services.AddScoped<PaymentLogic>();
 builder.Services.AddScoped<PosTransferPaymentLogic>();

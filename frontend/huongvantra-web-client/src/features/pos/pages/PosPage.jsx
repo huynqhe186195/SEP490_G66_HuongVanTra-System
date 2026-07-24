@@ -71,6 +71,14 @@ import {
   loadPersistedPosWorkspace,
   persistPosWorkspace,
 } from '../utils/posWorkspaceStorage.js'
+import PosCashSessionBar, { assertCashSessionOpenForPayment } from '../components/PosCashSessionBar.jsx'
+import PosShiftDutyGate from '../components/PosShiftDutyGate.jsx'
+import {
+  loadOpenCashSession,
+  recordCashSale,
+  refreshCashSession,
+  subscribeCashSession,
+} from '../utils/posCashSessionStore.js'
 
 const ALL_SALES_MODES = [
     { id: "counter", label: "Bán trực tiếp", icon: "storefront" },
@@ -280,6 +288,13 @@ function PosPage() {
   const [openModal, setOpenModal] = useState(null)
   const [openDiscountSku, setOpenDiscountSku] = useState(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [cashSessionOpen, setCashSessionOpen] = useState(() => Boolean(loadOpenCashSession()))
+  const [shelfOnDuty, setShelfOnDuty] = useState(null)
+
+  useEffect(() => {
+    refreshCashSession().then((s) => setCashSessionOpen(Boolean(s)))
+    return subscribeCashSession(() => setCashSessionOpen(Boolean(loadOpenCashSession())))
+  }, [])
   const [isApplyingPromo, setIsApplyingPromo] = useState(false)
   const [availablePromotions, setAvailablePromotions] = useState([])
   const [isPromotionListLoading, setIsPromotionListLoading] = useState(false)
@@ -1458,6 +1473,9 @@ function PosPage() {
     const canPay = isTakeaway
         ? canPayTakeaway && !isSubmitting
         : (isSplitPayment ? canPaySplit : isTransferPayment ? canPayTransfer : canPayCash) && !isSubmitting;
+    const canPay = isTakeaway
+        ? canPayTakeaway && !isSubmitting
+        : cashSessionOpen && shelfOnDuty && (isSplitPayment ? canPaySplit : isTransferPayment ? canPayTransfer : canPayCash) && !isSubmitting;
     const normalizedPromoSearch = promoCodeInput.trim().toUpperCase();
     const visibleAvailablePromotions = availablePromotions
         .filter((promotion) => !normalizedPromoSearch || promotion.promoCode.toUpperCase().includes(normalizedPromoSearch))
@@ -2033,7 +2051,20 @@ function PosPage() {
                 return;
             }
 
+            if (!shelfOnDuty) {
+                showError('Chưa được duyệt ca quầy hoặc đang ngoài giờ ca — không thể bán tại quầy. Vào «Lịch làm việc» để đăng ký.');
+                return;
+            }
+
+            if (!assertCashSessionOpenForPayment(shelfOnDuty)) {
+                return;
+            }
+
             if (!canPay) {
+                if (!cashSessionOpen) {
+                    showError('Chưa mở ca quỹ — không thể bán tại quầy.');
+                    return;
+                }
                 if ((isTransferPayment || isSplitPayment) && isZeroAmountSale) {
                     showError("Đơn 0 đ vui lòng chọn thanh toán tiền mặt.");
                 } else if (isSplitPayment) {
@@ -2279,12 +2310,26 @@ function PosPage() {
     if (authUserId && !isWorkspaceReady) {
         return <LoadingIndicator label="Đang khôi phục giỏ POS..." className="min-h-[60vh]" />;
     }
+    const needsCashSession = !isTakeaway
+
 
     return (
+        <PosShiftDutyGate
+            onDutyChange={setShelfOnDuty}
+            requireCashSession={needsCashSession}
+            cashSessionOpen={cashSessionOpen}
+            onCashOpened={() => setCashSessionOpen(true)}
+            onSwitchToCod={
+                allowedSalesModes.some((m) => m.id === 'takeaway')
+                    ? () => setSalesMode('takeaway')
+                    : undefined
+            }
+        >
         <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-[#c1c9c0]/40 bg-[#fbf9f1] shadow-[0_10px_30px_rgba(27,28,23,0.04)] lg:rounded-[28px]">
-            <header className="border-b border-[#c1c9c0]/60 bg-[#f6f4ec] px-4 py-2.5">
-                <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
-                    <div className="relative w-[min(720px,82%)] shrink-0">
+            <header className="relative z-20 shrink-0 border-b border-[#c1c9c0]/60 bg-[#f6f4ec] px-4 py-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto no-scrollbar">
+                    <div className="relative w-[min(520px,70%)] shrink-0">
                         <Icon className="absolute left-3 top-1/2 -translate-y-1/2 text-[18px] text-[#717971]">search</Icon>
                         <input
                             className="w-full rounded-full border border-[#c1c9c0] bg-white py-2 pl-9 pr-9 text-sm outline-none focus:border-[#356647] focus:ring-2 focus:ring-[#356647]/20"
@@ -2353,6 +2398,9 @@ function PosPage() {
                             <Icon>add</Icon>
                         </button>
                     </div>
+                    </div>
+
+                    <PosCashSessionBar />
                 </div>
             </header>
 
@@ -3170,6 +3218,7 @@ function PosPage() {
                 }}
             />
         </div>
+        </PosShiftDutyGate>
     );
 }
 

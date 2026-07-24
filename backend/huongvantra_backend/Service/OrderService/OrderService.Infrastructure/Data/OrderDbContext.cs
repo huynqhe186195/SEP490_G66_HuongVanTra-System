@@ -17,6 +17,7 @@ public class OrderDbContext(DbContextOptions<OrderDbContext> options) : DbContex
     public DbSet<CustomBundle> CustomBundles => Set<CustomBundle>();
     public DbSet<CustomBundleIngredient> CustomBundleIngredients => Set<CustomBundleIngredient>();
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
+    public DbSet<PosCashSession> PosCashSessions => Set<PosCashSession>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -32,5 +33,6 @@ public class OrderDbContext(DbContextOptions<OrderDbContext> options) : DbContex
         modelBuilder.Entity<ReturnOrderDetail>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<CustomBundle>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<CustomBundleIngredient>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<PosCashSession>().HasQueryFilter(e => !e.IsDeleted);
     }
 }

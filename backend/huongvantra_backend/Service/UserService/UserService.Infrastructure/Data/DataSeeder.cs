@@ -72,6 +72,16 @@ public static class DataSeeder
         ("accountant01", "Le Thi Ke Toan", "Accounting", "Accountant")
     ];
 
+    private static readonly (Guid Id, string Name, ShiftArea Area, TimeSpan Start, TimeSpan End, int Capacity, string Color, int SortOrder)[] DefaultShiftTemplates =
+    [
+        (Guid.Parse("aaaaaaaa-0001-4000-8000-000000000001"), "Ca sáng quầy", ShiftArea.Shelf,
+            new TimeSpan(8, 0, 0), new TimeSpan(12, 0, 0), 2, "#356647", 1),
+        (Guid.Parse("aaaaaaaa-0001-4000-8000-000000000002"), "Ca chiều quầy", ShiftArea.Shelf,
+            new TimeSpan(13, 0, 0), new TimeSpan(21, 0, 0), 2, "#4e7f5e", 2),
+        (Guid.Parse("aaaaaaaa-0001-4000-8000-000000000003"), "Ca kho", ShiftArea.Warehouse,
+            new TimeSpan(8, 0, 0), new TimeSpan(17, 0, 0), 1, "#6b5b4a", 3),
+    ];
+
     public static async Task SeedAsync(UserDbContext context)
     {
         await SeedPermissionsAsync(context);
@@ -85,6 +95,44 @@ public static class DataSeeder
             await SeedDemoUserAsync(context, username, fullName, department, roleName);
 
         await SyncDemoUserPrimaryRoleAsync(context);
+        await SeedShiftTemplatesAsync(context);
+    }
+
+    // Chỉ Sale (SalePos/SaleCod) cần đăng ký ca — ca kho (Warehouse) bị vô hiệu hoá.
+    private static readonly HashSet<Guid> InactiveShiftTemplateIds =
+    [
+        Guid.Parse("aaaaaaaa-0001-4000-8000-000000000003"), // Ca kho
+    ];
+
+    private static async Task SeedShiftTemplatesAsync(UserDbContext context)
+    {
+        foreach (var (id, name, area, start, end, capacity, color, sortOrder) in DefaultShiftTemplates)
+        {
+            var isActive = !InactiveShiftTemplateIds.Contains(id);
+            var existing = await context.ShiftTemplates.FirstOrDefaultAsync(t => t.Id == id);
+            if (existing is not null)
+            {
+                if (existing.IsActive != isActive)
+                    existing.IsActive = isActive;
+                continue;
+            }
+
+            context.ShiftTemplates.Add(new ShiftTemplate
+            {
+                Id = id,
+                Name = name,
+                Area = area,
+                StartTime = start,
+                EndTime = end,
+                Capacity = capacity,
+                Color = color,
+                SortOrder = sortOrder,
+                IsActive = isActive
+            });
+        }
+
+        if (context.ChangeTracker.HasChanges())
+            await context.SaveChangesAsync();
     }
 
     private static async Task SeedPermissionsAsync(UserDbContext context)

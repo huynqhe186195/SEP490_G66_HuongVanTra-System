@@ -40,3 +40,12 @@ public class DuplicatePermissionException(string name)
     : Exception($"Permission '{name}' already exists.");
 
 public class UserValidationException(string message) : Exception(message);
+
+public class ShiftTemplateNotFoundException(Guid id)
+    : Exception($"Shift template with id '{id}' was not found.");
+
+public class ShiftSlotNotFoundException(Guid id)
+    : Exception($"Shift slot with id '{id}' was not found.");
+
+public class ShiftRegistrationNotFoundException(Guid id)
+    : Exception($"Shift registration with id '{id}' was not found.");
