@@ -93,6 +93,7 @@ public class PaymentLogic(
                 d.SkuSnapshotName,
                 d.SkuSnapshotCode,
                 d.Quantity)),
+            order.CustomerSnapshotName,
             ct);
 
         if (order.CustomerId.HasValue)

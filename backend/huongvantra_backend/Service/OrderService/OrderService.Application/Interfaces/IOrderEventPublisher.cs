@@ -5,6 +5,7 @@ public interface IOrderEventPublisher
     Task PublishOrderPlacedAsync(
         Guid orderId, string orderCode, string orderStatus, string orderChannel, decimal totalAmount,
         IEnumerable<(Guid SkuId, string SkuName, string? SkuCode, int Quantity)> items,
+        string? customerSnapshotName = null,
         CancellationToken ct = default);
 
     Task PublishOrderCancelledAsync(

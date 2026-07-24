@@ -82,6 +82,9 @@ export function mapOrderSummary(item) {
     isCodVerified: item.isCodVerified ?? item.IsCodVerified ?? null,
     codWarningDate: item.codWarningDate ?? item.CodWarningDate ?? null,
     codExpectedAmount: Number(item.codExpectedAmount ?? item.CodExpectedAmount ?? 0) || null,
+    hasActiveStockReservation: Boolean(
+      item.hasActiveStockReservation ?? item.HasActiveStockReservation ?? false,
+    ),
   }
 }
 
@@ -137,6 +140,7 @@ function buildOrdersQuery(params = {}) {
   if (params.employeeId && isValidGuid(params.employeeId)) {
     search.set('employeeId', String(params.employeeId).trim())
   }
+  if (params.hasActiveReservation) search.set('hasActiveReservation', 'true')
   const page = Math.max(1, Number(params.page) || 1)
   const pageSize = Math.min(1000, Math.max(1, Number(params.pageSize) || 20))
   search.set('page', String(page))
@@ -174,10 +178,6 @@ export async function fetchOrderActivities(orderId) {
   return Array.isArray(data) ? data.map(mapOrderActivity).filter(Boolean) : []
 }
 
-export async function fetchOrder(idOrCode) {
-  const value = String(idOrCode || '').trim()
-  const isGuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
-  const path = isGuid
 export function mapReceiptReprintLog(item) {
   if (!item) return null
   return {
@@ -240,6 +240,10 @@ export async function reprintReceipt(orderId, reason, { idempotencyKey } = {}) {
   }
 }
 
+export async function fetchOrder(idOrCode) {
+  const value = String(idOrCode || '').trim()
+  const isGuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
+  const path = isGuid
     ? `/api/v1/orders/${encodeURIComponent(value)}`
     : `/api/v1/orders/by-code/${encodeURIComponent(value)}`
   const data = await apiRequestAuth(path, { method: 'GET' })

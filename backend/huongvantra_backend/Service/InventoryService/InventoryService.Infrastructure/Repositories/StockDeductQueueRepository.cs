@@ -99,4 +99,60 @@ public class StockDeductQueueRepository(InventoryDbContext _db) : IStockDeductQu
 
     public Task<int> SaveChangesAsync(CancellationToken ct = default) =>
         _db.SaveChangesAsync(ct);
+
+    public Task<List<StockDeductQueue>> GetQueuesWithActiveReservationBySkuAsync(
+        Guid skuId,
+        CancellationToken ct = default) =>
+        _db.StockDeductQueues
+            .Include(q => q.Items)
+            .Where(q => q.Items.Any(i =>
+                i.SkuId == skuId && i.ReservationStatus == StockReservationStatus.Active))
+            .OrderByDescending(q => q.CreatedAt)
+            .AsNoTracking()
+            .ToListAsync(ct);
+
+    public async Task<(List<StockDeductQueue> Items, int TotalCount)> GetQueuesWithActiveReservationPagedAsync(
+        string? search,
+        int page,
+        int pageSize,
+        CancellationToken ct = default)
+    {
+        var query = _db.StockDeductQueues
+            .Include(q => q.Items)
+            .Where(q => q.Items.Any(i => i.ReservationStatus == StockReservationStatus.Active));
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var s = search.Trim().ToLower();
+            query = query.Where(q =>
+                q.OrderCode.ToLower().Contains(s) ||
+                (q.CustomerSnapshotName != null && q.CustomerSnapshotName.ToLower().Contains(s)));
+        }
+
+        var totalCount = await query.CountAsync(ct);
+        var items = await query
+            .OrderByDescending(q => q.CreatedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .AsNoTracking()
+            .ToListAsync(ct);
+
+        return (items, totalCount);
+    }
+
+    public Task<List<Guid>> GetOrderIdsWithActiveReservationAsync(
+        IReadOnlyCollection<Guid>? orderIds = null,
+        CancellationToken ct = default)
+    {
+        var query = _db.StockDeductQueues
+            .Where(q => q.Items.Any(i => i.ReservationStatus == StockReservationStatus.Active));
+
+        if (orderIds != null && orderIds.Count > 0)
+        {
+            var ids = orderIds.ToList();
+            query = query.Where(q => ids.Contains(q.OrderId));
+        }
+
+        return query.Select(q => q.OrderId).Distinct().ToListAsync(ct);
+    }
 }

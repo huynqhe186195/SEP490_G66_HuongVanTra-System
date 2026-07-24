@@ -9,6 +9,12 @@ public class StockDeductQueue
     public string OrderCode { get; set; } = string.Empty;
     public string OrderPaymentStatus { get; set; } = string.Empty;
     public string OrderStockStatus { get; set; } = "pending_deduct";
+
+    /// <summary>
+    /// POS-04: snapshot tên khách hàng lấy từ OrderPlacedEvent — dùng để hiển thị đơn đang giữ chỗ
+    /// từ màn hình SKU mà không truy vấn chéo database của OrderService/CustomerService.
+    /// </summary>
+    public string? CustomerSnapshotName { get; set; }
     public QueueStatus QueueStatus { get; set; } = QueueStatus.Waiting;
     public decimal TotalAmount { get; set; }
     public bool IsDeducted { get; set; }

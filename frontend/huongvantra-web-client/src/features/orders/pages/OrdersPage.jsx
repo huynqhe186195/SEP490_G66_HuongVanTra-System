@@ -28,6 +28,8 @@ const initialFilters = {
   channel: '',
   fromDate: '',
   toDate: '',
+  // POS-04 (truy vết giữ chỗ): chỉ hiển thị đơn đang giữ chỗ tồn Kệ Hàng.
+  hasActiveReservation: false,
 }
 
 function toDateInputValue(date) {
@@ -102,6 +104,7 @@ function OrdersPage() {
       excludeOrderKind: 'Exchange',
       fromDate: toLocalDayStartIso(filters.fromDate),
       toDate: toLocalDayEndIso(filters.toDate),
+      hasActiveReservation: filters.hasActiveReservation || undefined,
       page,
       pageSize,
     }),
@@ -144,7 +147,13 @@ function OrdersPage() {
     }
   }, [queryParams])
 
-  const hasActiveFilters = filters.status || filters.channel || filters.search || filters.fromDate || filters.toDate
+  const hasActiveFilters =
+    filters.status ||
+    filters.channel ||
+    filters.search ||
+    filters.fromDate ||
+    filters.toDate ||
+    filters.hasActiveReservation
 
   return (
     <PageShell className="pb-8">
@@ -252,6 +261,23 @@ function OrdersPage() {
             ))}
           </div>
 
+          <button
+            type="button"
+            onClick={() => {
+              setFilters((prev) => ({ ...prev, hasActiveReservation: !prev.hasActiveReservation }))
+              setPage(1)
+            }}
+            aria-pressed={filters.hasActiveReservation}
+            className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold ${
+              filters.hasActiveReservation
+                ? 'border-amber-300 bg-amber-100 text-amber-800'
+                : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+            }`}
+          >
+            <span className="material-symbols-outlined text-base">inventory_2</span>
+            Có hàng đang giữ
+          </button>
+
           {hasActiveFilters ? (
             <button
               type="button"
@@ -331,6 +357,12 @@ function OrdersPage() {
                         <Link className="hover:text-[#538463] hover:underline" to={`/orders/${order.id}`}>
                           {order.orderCode}
                         </Link>
+                        {order.hasActiveStockReservation ? (
+                          <span className="mt-1 flex w-fit items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
+                            <span className="material-symbols-outlined text-[13px]">inventory_2</span>
+                            Đang giữ hàng
+                          </span>
+                        ) : null}
                       </td>
                       <td className="px-4 py-4">
                         <OrderCustomerCell

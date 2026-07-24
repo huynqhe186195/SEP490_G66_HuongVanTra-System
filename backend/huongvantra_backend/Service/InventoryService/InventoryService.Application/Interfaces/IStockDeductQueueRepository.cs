@@ -20,4 +20,28 @@ public interface IStockDeductQueueRepository
         CancellationToken ct = default);
     Task AddAsync(StockDeductQueue queue, CancellationToken ct = default);
     Task<int> SaveChangesAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// POS-04 (truy vết giữ chỗ): các queue có ít nhất một dòng đang giữ chỗ SKU này.
+    /// </summary>
+    Task<List<StockDeductQueue>> GetQueuesWithActiveReservationBySkuAsync(
+        Guid skuId,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// POS-04 (truy vết giữ chỗ): các queue có ít nhất một dòng đang giữ chỗ, mới nhất trước.
+    /// </summary>
+    Task<(List<StockDeductQueue> Items, int TotalCount)> GetQueuesWithActiveReservationPagedAsync(
+        string? search,
+        int page,
+        int pageSize,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// POS-04 (truy vết giữ chỗ): OrderId của các đơn đang giữ chỗ, giới hạn theo tập OrderId truyền vào
+    /// (rỗng = không giới hạn). Dùng cho badge/filter trên danh sách đơn.
+    /// </summary>
+    Task<List<Guid>> GetOrderIdsWithActiveReservationAsync(
+        IReadOnlyCollection<Guid>? orderIds = null,
+        CancellationToken ct = default);
 }

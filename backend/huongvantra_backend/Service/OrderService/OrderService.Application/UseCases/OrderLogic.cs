@@ -45,14 +45,41 @@ public class OrderLogic(
         var channel = access.CodOrdersOnly ? "COD" : req.Channel;
         var excludeChannel = access.CodOrdersOnly ? null : req.ExcludeChannel;
 
+        // POS-04 (truy vết giữ chỗ): filter "Có hàng đang giữ" lấy tập OrderId từ InventoryService
+        // qua service client — không truy vấn chéo database.
+        IReadOnlyCollection<Guid>? restrictToOrderIds = null;
+        if (req.HasActiveReservation)
+        {
+            restrictToOrderIds = await _inventoryCatalogClient
+                .GetOrderIdsWithActiveReservationAsync([], ct);
+        }
+
         var (items, total) = await _orderRepo.GetPagedAsync(
             req.Search, customerId, req.Status, channel,
             excludeChannel, req.CodTab, req.ReturnableOnly,
             req.OrderKind, req.ExcludeOrderKind,
             fromDate, toDate, employeeFilter, access.IncludeAllCodOrders,
-            page, pageSize, ct);
+            page, pageSize, ct, restrictToOrderIds);
 
         var dtos = items.Select(MapToSummary).ToList();
+
+        if (dtos.Count > 0)
+        {
+            var pageOrderIds = dtos.Select(d => d.Id).ToList();
+            HashSet<Guid> reservedIds = restrictToOrderIds != null
+                ? [.. pageOrderIds]
+                : await _inventoryCatalogClient.GetOrderIdsWithActiveReservationAsync(pageOrderIds, ct);
+
+            if (reservedIds.Count > 0)
+            {
+                dtos = dtos
+                    .Select(d => reservedIds.Contains(d.Id)
+                        ? d with { HasActiveStockReservation = true }
+                        : d)
+                    .ToList();
+            }
+        }
+
         return new PagedResponse<OrderSummaryResponse>(
             dtos, page, pageSize, total,
             (int)Math.Ceiling((double)total / pageSize));
@@ -558,6 +585,7 @@ public class OrderLogic(
             await _eventPublisher.PublishOrderPlacedAsync(
                 order.Id, order.OrderCode, order.OrderStatus.ToString(), order.OrderChannel.ToString(), finalAmount,
                 order.OrderDetails.Select(d => (d.SkuId, d.SkuSnapshotName, d.SkuSnapshotCode, d.Quantity)),
+                order.CustomerSnapshotName,
                 ct);
         }
 
@@ -1262,6 +1290,7 @@ public class OrderLogic(
             await _eventPublisher.PublishOrderPlacedAsync(
                 order.Id, order.OrderCode, OrderStatus.Completed.ToString(), order.OrderChannel.ToString(), order.FinalAmount,
                 (order.OrderDetails ?? []).Select(d => (d.SkuId, d.SkuSnapshotName, d.SkuSnapshotCode, d.Quantity)),
+                order.CustomerSnapshotName,
                 ct);
         }
 

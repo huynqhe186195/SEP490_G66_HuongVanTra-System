@@ -19,6 +19,14 @@ public interface IInventoryCatalogClient
     Task<InventoryReservationReplaceResponse> ReplaceCodReservationAsync(
         InventoryReservationReplaceRequest request,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// POS-04 (truy vết giữ chỗ): lọc tập OrderId xuống còn các đơn đang giữ chỗ tồn Kệ Hàng.
+    /// Chỉ đọc, fail-soft: lỗi gọi Inventory trả về tập rỗng để không chặn danh sách đơn.
+    /// </summary>
+    Task<HashSet<Guid>> GetOrderIdsWithActiveReservationAsync(
+        IReadOnlyCollection<Guid> orderIds,
+        CancellationToken ct = default);
 }
 
 public record InventoryStockHandlingItemRequest(

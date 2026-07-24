@@ -266,6 +266,10 @@ namespace InventoryService.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
 
+                    b.Property<string>("CustomerSnapshotName")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
                     b.Property<bool>("IsDeducted")
                         .HasColumnType("tinyint(1)");
 
@@ -331,6 +335,9 @@ namespace InventoryService.Infrastructure.Migrations
                     b.Property<Guid>("QueueId")
                         .HasColumnType("char(36)");
 
+                    b.Property<DateTime?>("DeductedAt")
+                        .HasColumnType("datetime(6)");
+
                     b.Property<int?>("FinishedDeductedQuantity")
                         .HasColumnType("int");
 
@@ -345,6 +352,24 @@ namespace InventoryService.Infrastructure.Migrations
 
                     b.Property<int>("Quantity")
                         .HasColumnType("int");
+
+                    b.Property<DateTime?>("ReleasedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("ReservationStatus")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)")
+                        .HasDefaultValue("None");
+
+                    b.Property<DateTime?>("ReservedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("ReservedQuantity")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
 
                     b.Property<Guid>("SkuId")
                         .HasColumnType("char(36)");
@@ -366,6 +391,10 @@ namespace InventoryService.Infrastructure.Migrations
 
                     b.HasIndex("QueueId")
                         .HasDatabaseName("IX_StockDeductQueueItems_QueueId");
+
+                    b.HasIndex("SkuId");
+
+                    b.HasIndex("SkuId", "ReservationStatus");
 
                     b.ToTable("StockDeductQueueItems");
                 });

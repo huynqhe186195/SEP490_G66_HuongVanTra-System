@@ -241,6 +241,7 @@ public class OrderIdempotencyTests
                 It.IsAny<string>(),
                 It.IsAny<decimal>(),
                 It.IsAny<IEnumerable<(Guid SkuId, string SkuName, string? SkuCode, int Quantity)>>(),
+                It.IsAny<string?>(),
                 It.IsAny<CancellationToken>()),
             times);
 
@@ -327,7 +328,8 @@ public class OrderIdempotencyTests
             string? orderKind, string? excludeOrderKind,
             DateTime? fromDate, DateTime? toDate, Guid? employeeId,
             bool includeAllCodOrders, int page, int pageSize,
-            CancellationToken ct = default) =>
+            CancellationToken ct = default,
+            IReadOnlyCollection<Guid>? restrictToOrderIds = null) =>
             throw new NotSupportedException();
 
         public Task<List<Order>> GetPendingCodAsync(CancellationToken ct = default) =>

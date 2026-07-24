@@ -131,11 +131,25 @@ public class InventoryLogic(
         var existingQueue = await _queueRepo.GetByOrderIdAsync(message.OrderId, ct);
         if (existingQueue != null)
         {
+            var customerName = NormalizeCustomerSnapshotName(message.CustomerSnapshotName);
+            var queueChanged = false;
+
             if (!string.Equals(existingQueue.OrderPaymentStatus, paymentStatus, StringComparison.Ordinal))
             {
                 existingQueue.OrderPaymentStatus = paymentStatus;
-                await _queueRepo.SaveChangesAsync(ct);
+                queueChanged = true;
             }
+
+            // POS-04 (truy vết giữ chỗ): chỉ điền snapshot khi còn trống để event giao lại
+            // không ghi đè tên khách đã lưu bằng contract cũ (chuỗi rỗng).
+            if (customerName != null && string.IsNullOrWhiteSpace(existingQueue.CustomerSnapshotName))
+            {
+                existingQueue.CustomerSnapshotName = customerName;
+                queueChanged = true;
+            }
+
+            if (queueChanged)
+                await _queueRepo.SaveChangesAsync(ct);
 
             if (!await _processedEvents.ExistsAsync(OrderPlacedEventType, message.OrderId, ct))
             {
@@ -172,6 +186,7 @@ public class InventoryLogic(
             OrderCode = message.OrderCode,
             OrderPaymentStatus = paymentStatus,
             OrderStockStatus = "pending_deduct",
+            CustomerSnapshotName = NormalizeCustomerSnapshotName(message.CustomerSnapshotName),
             QueueStatus = QueueStatus.Waiting,
             TotalAmount = message.TotalAmount,
             IsDeducted = false,
@@ -205,6 +220,15 @@ public class InventoryLogic(
     {
         var key = (status ?? string.Empty).Trim().ToLowerInvariant();
         return key is "completed" or "success" or "paid";
+    }
+
+    /// <summary>
+    /// POS-04 (truy vết giữ chỗ): rỗng = contract cũ hoặc khách lẻ → giữ null thay vì chuỗi rỗng.
+    /// </summary>
+    private static string? NormalizeCustomerSnapshotName(string? name)
+    {
+        var trimmed = (name ?? string.Empty).Trim();
+        return string.IsNullOrEmpty(trimmed) ? null : trimmed;
     }
 
     /// <summary>
@@ -705,6 +729,10 @@ public class InventoryLogic(
 
             // POS-04: đã tiêu thụ toàn bộ giữ chỗ của queue trong vòng lặp trên.
             queue.IsReserved = false;
+
+            // POS-04 (truy vết giữ chỗ): giữ chỗ chuyển thành xuất kho, rời khỏi tổng đang giữ
+            // nhưng vẫn truy vết được từ màn hình đơn và màn hình SKU.
+            StampItemsDeducted(queue, now);
 
             var firstLine = slipLines[0];
             var effectiveConfirmedBy = confirmedBy == Guid.Empty ? Guid.Empty : confirmedBy;
@@ -1571,6 +1599,11 @@ public class InventoryLogic(
 
             queue.IsReserved = true;
             queue.LastShortageReason = null;
+
+            // POS-04 (truy vết giữ chỗ): đóng dấu trạng thái ở cấp dòng SKU. Tổng ReservedQuantity
+            // của các dòng Active theo SKU khớp đúng phần vừa cộng vào SkuStock.ReservedQuantity.
+            StampItemsReserved(queue, now);
+
             await _queueRepo.SaveChangesAsync(innerCt);
             return true;
         }, ct);
@@ -1604,6 +1637,53 @@ public class InventoryLogic(
 
         // Clear IsReserved trong cùng đơn vị lưu của caller → gọi lặp lại an toàn (no-op).
         queue.IsReserved = false;
+
+        // POS-04 (truy vết giữ chỗ): dòng rời khỏi tổng đang giữ nhưng vẫn còn để truy vết lịch sử.
+        StampItemsReleased(queue, now);
+    }
+
+    /// <summary>
+    /// POS-04 (truy vết giữ chỗ): đánh dấu các dòng SKU của queue là đang giữ chỗ.
+    /// </summary>
+    private static void StampItemsReserved(StockDeductQueue queue, DateTime now)
+    {
+        foreach (var item in queue.Items)
+        {
+            if (item.SkuId == Guid.Empty || item.Quantity <= 0) continue;
+            item.ReservationStatus = StockReservationStatus.Active;
+            item.ReservedQuantity = item.Quantity;
+            item.ReservedAt = now;
+            item.ReleasedAt = null;
+            item.DeductedAt = null;
+        }
+    }
+
+    /// <summary>
+    /// POS-04 (truy vết giữ chỗ): chuyển các dòng đang giữ sang Released (hủy trước khi giao).
+    /// Chỉ dòng Active bị đổi → gọi lặp lại là no-op, không ghi đè mốc thời gian cũ.
+    /// </summary>
+    private static void StampItemsReleased(StockDeductQueue queue, DateTime now)
+    {
+        foreach (var item in queue.Items)
+        {
+            if (item.ReservationStatus != StockReservationStatus.Active) continue;
+            item.ReservationStatus = StockReservationStatus.Released;
+            item.ReleasedAt = now;
+        }
+    }
+
+    /// <summary>
+    /// POS-04 (truy vết giữ chỗ): chuyển các dòng đang giữ sang Deducted (đã chuyển thành xuất kho).
+    /// Chỉ dòng Active bị đổi → redelivery không tạo mốc thời gian mới.
+    /// </summary>
+    private static void StampItemsDeducted(StockDeductQueue queue, DateTime now)
+    {
+        foreach (var item in queue.Items)
+        {
+            if (item.ReservationStatus != StockReservationStatus.Active) continue;
+            item.ReservationStatus = StockReservationStatus.Deducted;
+            item.DeductedAt = now;
+        }
     }
 
     /// <summary>
@@ -1774,6 +1854,10 @@ public class InventoryLogic(
             queue.QueueStatus = QueueStatus.Waiting;
             queue.LastShortageReason = null;
             queue.LastAttemptAt = now;
+
+            // POS-04 (truy vết giữ chỗ): dòng tái dùng đã bị ghi đè SkuId/Quantity → đóng dấu lại
+            // toàn bộ theo danh sách mới để tổng Active theo SKU khớp ReservedQuantity vừa reconcile.
+            StampItemsReserved(queue, now);
 
             // Inbox + mutation nguyên tử: ghi OperationId trong cùng transaction với thay đổi tồn.
             await _processedEvents.AddAsync(
@@ -2209,6 +2293,148 @@ public class InventoryLogic(
         q.LastShortageReason,
         BuildQueueLineResponses(q),
         q.IsReserved);
+
+    /// <summary>
+    /// POS-04 (truy vết giữ chỗ, chiều đơn → SKU): toàn bộ dòng giữ chỗ của một đơn, kể cả dòng
+    /// đã Released/Deducted để giữ được lịch sử. Đơn chưa có queue → trả danh sách rỗng.
+    /// </summary>
+    public async Task<OrderCodReservationResponse> GetOrderCodReservationsAsync(
+        Guid orderId,
+        CancellationToken ct = default)
+    {
+        if (orderId == Guid.Empty)
+            throw new InventoryValidationException("OrderId là bắt buộc.");
+
+        var queue = await _queueRepo.GetByOrderIdAsync(orderId, ct);
+        if (queue == null)
+        {
+            return new OrderCodReservationResponse(
+                orderId, null, string.Empty, string.Empty, string.Empty,
+                HasActiveReservation: false, TotalActiveReservedQuantity: 0,
+                Lines: []);
+        }
+
+        var lines = queue.Items
+            .Where(i => i.ReservationStatus != StockReservationStatus.None)
+            .OrderBy(i => i.SkuSnapshotCode ?? i.SkuSnapshotName)
+            .Select(i => new CodStockReservationLineResponse(
+                i.SkuId,
+                i.SkuSnapshotCode,
+                i.SkuSnapshotName,
+                i.Quantity,
+                i.ReservedQuantity,
+                i.ReservationStatus.ToString(),
+                i.ReservedAt,
+                i.ReleasedAt,
+                i.DeductedAt))
+            .ToList();
+
+        var activeQuantity = lines
+            .Where(l => l.ReservationStatus == nameof(StockReservationStatus.Active))
+            .Sum(l => l.ReservedQuantity);
+
+        return new OrderCodReservationResponse(
+            queue.OrderId,
+            queue.Id,
+            queue.OrderCode,
+            queue.QueueStatus.ToString().ToLowerInvariant(),
+            queue.OrderStockStatus,
+            activeQuantity > 0,
+            activeQuantity,
+            lines);
+    }
+
+    /// <summary>
+    /// POS-04 (truy vết giữ chỗ, chiều SKU → đơn): các đơn đang giữ chỗ SKU này. Tổng số lượng
+    /// giữ chỗ Active phải khớp <c>SkuStock.ReservedQuantity</c> — trả kèm cả hai để đối chiếu.
+    /// </summary>
+    public async Task<SkuCodReservationSummaryResponse> GetSkuCodReservationsAsync(
+        Guid skuId,
+        CancellationToken ct = default)
+    {
+        if (skuId == Guid.Empty)
+            throw new InventoryValidationException("SkuId là bắt buộc.");
+
+        var queues = await _queueRepo.GetQueuesWithActiveReservationBySkuAsync(skuId, ct);
+
+        var orders = new List<SkuCodReservationOrderResponse>();
+        var totalActive = 0;
+        foreach (var queue in queues)
+        {
+            var activeLines = queue.Items
+                .Where(i => i.SkuId == skuId && i.ReservationStatus == StockReservationStatus.Active)
+                .ToList();
+            if (activeLines.Count == 0) continue;
+
+            var quantity = activeLines.Sum(i => i.ReservedQuantity);
+            totalActive += quantity;
+
+            orders.Add(new SkuCodReservationOrderResponse(
+                queue.OrderId,
+                queue.OrderCode,
+                queue.CustomerSnapshotName,
+                quantity,
+                activeLines.Min(i => i.ReservedAt),
+                queue.OrderPaymentStatus,
+                queue.QueueStatus.ToString().ToLowerInvariant(),
+                nameof(StockReservationStatus.Active)));
+        }
+
+        var stock = await _skuStockRepo.GetBySkuIdAsync(skuId, ct);
+
+        return new SkuCodReservationSummaryResponse(
+            skuId,
+            totalActive,
+            stock?.ReservedQuantity ?? 0,
+            orders);
+    }
+
+    /// <summary>
+    /// POS-04 (truy vết giữ chỗ): danh sách đơn đang giữ chỗ tồn Kệ Hàng — nguồn cho badge
+    /// "Đang giữ hàng" và filter "Có hàng đang giữ" trên danh sách đơn.
+    /// </summary>
+    public async Task<PagedResponse<ActiveCodReservationOrderResponse>> GetOrdersWithActiveReservationAsync(
+        string? search,
+        int page = 1,
+        int pageSize = 20,
+        CancellationToken ct = default)
+    {
+        var safePage = page < 1 ? 1 : page;
+        var safePageSize = pageSize is < 1 or > 200 ? 20 : pageSize;
+
+        var (queues, totalCount) = await _queueRepo.GetQueuesWithActiveReservationPagedAsync(
+            search, safePage, safePageSize, ct);
+
+        var items = queues.Select(queue =>
+        {
+            var activeLines = queue.Items
+                .Where(i => i.ReservationStatus == StockReservationStatus.Active)
+                .ToList();
+
+            return new ActiveCodReservationOrderResponse(
+                queue.OrderId,
+                queue.OrderCode,
+                queue.CustomerSnapshotName,
+                queue.QueueStatus.ToString().ToLowerInvariant(),
+                queue.OrderPaymentStatus,
+                activeLines.Sum(i => i.ReservedQuantity),
+                activeLines.Count,
+                activeLines.Count == 0 ? null : activeLines.Min(i => i.ReservedAt));
+        }).ToList();
+
+        var totalPages = safePageSize == 0 ? 0 : (int)Math.Ceiling(totalCount / (double)safePageSize);
+        return new PagedResponse<ActiveCodReservationOrderResponse>(
+            items, safePage, safePageSize, totalCount, totalPages);
+    }
+
+    /// <summary>
+    /// POS-04 (truy vết giữ chỗ): OrderId của các đơn đang giữ chỗ, giới hạn theo tập truyền vào.
+    /// Dùng để OrderService gắn badge cho một trang danh sách đơn mà không truy vấn chéo database.
+    /// </summary>
+    public async Task<List<Guid>> GetOrderIdsWithActiveReservationAsync(
+        IReadOnlyCollection<Guid>? orderIds,
+        CancellationToken ct = default) =>
+        await _queueRepo.GetOrderIdsWithActiveReservationAsync(orderIds, ct);
 
     public async Task<StockAdjustmentRequestResponse> CreateStockAdjustmentRequestAsync(
         CreateStockAdjustmentRequest request,

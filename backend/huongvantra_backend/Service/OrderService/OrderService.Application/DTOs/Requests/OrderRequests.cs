@@ -119,5 +119,7 @@ public record GetOrdersRequest(
     string? ToDate = null,
     string? EmployeeId = null,
     string? Page = null,
-    string? PageSize = null
+    string? PageSize = null,
+    // POS-04 (truy vết giữ chỗ): true = chỉ lấy đơn đang giữ chỗ tồn Kệ Hàng.
+    bool HasActiveReservation = false
 );

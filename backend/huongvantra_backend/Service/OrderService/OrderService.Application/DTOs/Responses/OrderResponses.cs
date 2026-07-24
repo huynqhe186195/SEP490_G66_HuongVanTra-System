@@ -155,7 +155,9 @@ public record OrderSummaryResponse(
     bool? IsCodVerified = null,
     DateTime? CodWarningDate = null,
     decimal? CodExpectedAmount = null,
-    int TotalQuantity = 0
+    int TotalQuantity = 0,
+    // POS-04 (truy vết giữ chỗ): đơn đang giữ chỗ tồn Kệ Hàng — badge "Đang giữ hàng".
+    bool HasActiveStockReservation = false
 );
 
 public record CustomBundleIngredientResponse(

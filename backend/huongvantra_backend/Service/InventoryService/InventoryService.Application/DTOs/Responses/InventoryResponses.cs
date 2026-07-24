@@ -38,6 +38,71 @@ public record StockDeductQueueLineResponse(
     int PendingBomQuantity,
     string StockHandlingMode);
 
+/// <summary>
+/// POS-04 (truy vết giữ chỗ hai chiều): một dòng giữ chỗ tồn Kệ Hàng của đơn COD.
+/// Chỉ <c>ReservationStatus = "Active"</c> tính vào tổng đang giữ theo SKU.
+/// </summary>
+public record CodStockReservationLineResponse(
+    Guid SkuId,
+    string? SkuCode,
+    string SkuName,
+    int OrderedQuantity,
+    int ReservedQuantity,
+    string ReservationStatus,
+    DateTime? ReservedAt,
+    DateTime? ReleasedAt,
+    DateTime? DeductedAt);
+
+/// <summary>
+/// POS-04: toàn bộ giữ chỗ của một đơn — dùng cho màn hình chi tiết đơn COD.
+/// </summary>
+public record OrderCodReservationResponse(
+    Guid OrderId,
+    Guid? QueueId,
+    string OrderCode,
+    string QueueStatus,
+    string OrderStockStatus,
+    bool HasActiveReservation,
+    int TotalActiveReservedQuantity,
+    List<CodStockReservationLineResponse> Lines);
+
+/// <summary>
+/// POS-04: một đơn đang giữ chỗ SKU này — dùng cho màn hình chi tiết SKU/tồn kho.
+/// Tên khách hàng là snapshot nhận từ OrderPlacedEvent, không truy vấn chéo database.
+/// </summary>
+public record SkuCodReservationOrderResponse(
+    Guid OrderId,
+    string OrderCode,
+    string? CustomerSnapshotName,
+    int ReservedQuantity,
+    DateTime? ReservedAt,
+    string OrderPaymentStatus,
+    string QueueStatus,
+    string ReservationStatus);
+
+/// <summary>
+/// POS-04: tổng hợp giữ chỗ đang hoạt động của một SKU.
+/// <c>TotalActiveReservedQuantity</c> phải khớp <c>SkuStock.ReservedQuantity</c>.
+/// </summary>
+public record SkuCodReservationSummaryResponse(
+    Guid SkuId,
+    int TotalActiveReservedQuantity,
+    int SkuStockReservedQuantity,
+    List<SkuCodReservationOrderResponse> Orders);
+
+/// <summary>
+/// POS-04: một đơn trong danh sách đơn đang giữ chỗ (dùng cho filter "Có hàng đang giữ").
+/// </summary>
+public record ActiveCodReservationOrderResponse(
+    Guid OrderId,
+    string OrderCode,
+    string? CustomerSnapshotName,
+    string QueueStatus,
+    string OrderPaymentStatus,
+    int TotalActiveReservedQuantity,
+    int ActiveReservedLineCount,
+    DateTime? ReservedAt);
+
 public record StockDeductPreviewItemResponse(
     Guid SkuId,
     Guid MaterialId,

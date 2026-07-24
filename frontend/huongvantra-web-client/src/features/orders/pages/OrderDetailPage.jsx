@@ -11,26 +11,27 @@ import { parseCodDebtSettlement } from '../../customers/utils/codDebtSettlementU
 import OrderCustomerCell from '../components/OrderCustomerCell.jsx'
 import OrderProductsSection from '../components/OrderProductsSection.jsx'
 import OrderReturnsSection from '../components/OrderReturnsSection.jsx'
+import OrderStockReservationSection from '../components/OrderStockReservationSection.jsx'
 import OrderTimeline from '../components/OrderTimeline.jsx'
 import OrderTransferQrPanel from '../components/OrderTransferQrPanel.jsx'
 import OrderUpdateMetaModal from '../components/OrderUpdateMetaModal.jsx'
-import {
 import ReceiptReprintModal from '../components/ReceiptReprintModal.jsx'
+import {
   cancelOrder,
   completeOrder,
   fetchOrder,
   fetchReturnsByOrderId,
-  shipOrder,
   reprintReceipt,
+  shipOrder,
   updateOrder,
 } from '../services/ordersApi.js'
-import {
 import { printReceiptFromData } from '../../pos/utils/printReceipt.js'
+import {
   canCancelOrder,
   canCompleteOrder,
   canEditOrderMeta,
-  canReturnOrder,
   canReprintReceipt,
+  canReturnOrder,
   canShipOrder,
   canVerifyCod,
   getOrderEditBlockedMessage,
@@ -69,9 +70,9 @@ function OrderDetailPage() {
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false)
   const [isCodVerifyOpen, setIsCodVerifyOpen] = useState(false)
   const [confirmCancelOpen, setConfirmCancelOpen] = useState(false)
-  const [timelineRefreshKey, setTimelineRefreshKey] = useState(0)
   const [isReprintOpen, setIsReprintOpen] = useState(false)
   const [isReprinting, setIsReprinting] = useState(false)
+  const [timelineRefreshKey, setTimelineRefreshKey] = useState(0)
   const [catalogLookups, setCatalogLookups] = useState(() => buildProductCatalogLookups())
   const [orderReturns, setOrderReturns] = useState([])
   const [orderCustomer, setOrderCustomer] = useState(null)
@@ -204,7 +205,6 @@ function OrderDetailPage() {
     }
   }
 
-  async function runAction(action) {
   async function handleConfirmReprint(reason) {
     if (!order || isReprinting) return
     try {
@@ -229,6 +229,7 @@ function OrderDetailPage() {
     }
   }
 
+  async function runAction(action) {
     if (!canManage || !order) return
     try {
       setIsSaving(true)
@@ -455,7 +456,6 @@ function OrderDetailPage() {
                     Trả hàng / Đổi
                   </button>
                 ) : null}
-                {canCancelOrder(order) ? (
                 {canReprintReceipt(order) ? (
                   <button
                     type="button"
@@ -466,6 +466,7 @@ function OrderDetailPage() {
                     In lại hóa đơn
                   </button>
                 ) : null}
+                {canCancelOrder(order) ? (
                   <button
                     type="button"
                     disabled={isSaving}
@@ -480,6 +481,10 @@ function OrderDetailPage() {
           ) : null}
         </aside>
       </div>
+
+      {String(order.orderChannel).toUpperCase() === 'COD' ? (
+        <OrderStockReservationSection orderId={order.id} refreshKey={timelineRefreshKey} />
+      ) : null}
 
       {!compactProducts ? (
         <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
@@ -527,11 +532,6 @@ function OrderDetailPage() {
         onSave={handleSaveMeta}
       />
 
-      <ConfirmDialog
-        isOpen={confirmCancelOpen}
-        title="Hủy đơn hàng"
-        message={`Bạn có chắc muốn hủy đơn ${order.orderCode}? Thao tác này không thể hoàn tác.`}
-        confirmLabel="Hủy đơn"
       <ReceiptReprintModal
         isOpen={isReprintOpen}
         order={order}
@@ -540,6 +540,11 @@ function OrderDetailPage() {
         onConfirm={handleConfirmReprint}
       />
 
+      <ConfirmDialog
+        isOpen={confirmCancelOpen}
+        title="Hủy đơn hàng"
+        message={`Bạn có chắc muốn hủy đơn ${order.orderCode}? Thao tác này không thể hoàn tác.`}
+        confirmLabel="Hủy đơn"
         cancelLabel="Giữ đơn"
         onConfirm={handleConfirmCancel}
         onCancel={() => setConfirmCancelOpen(false)}
