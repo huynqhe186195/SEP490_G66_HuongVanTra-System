@@ -18,7 +18,14 @@ public record CreateOrderRequest(
     string? PromotionCode = null,
     string? CodDebtSettlementJson = null,
     OrderKind OrderKind = OrderKind.Sale,
-    List<CreateCustomBundleRequest>? CustomBundles = null
+    List<CreateCustomBundleRequest>? CustomBundles = null,
+    List<CreatePaymentAllocationRequest>? Payments = null
+);
+
+public record CreatePaymentAllocationRequest(
+    PaymentMethod PaymentMethod,
+    decimal Amount,
+    string? DebtSettlementJson = null
 );
 
 public record CreateOrderDetailRequest(
@@ -26,7 +33,7 @@ public record CreateOrderDetailRequest(
     string SkuSnapshotName,
     string? SkuSnapshotCode,
     string? CategorySnapshotName,
-    int Quantity,
+    decimal Quantity,
     decimal CostPrice,
     decimal UnitPrice = 0,
     bool IsGift = false,
@@ -39,7 +46,7 @@ public record UpdateOrderDetailRequest(
     string SkuSnapshotName,
     string? SkuSnapshotCode,
     string? CategorySnapshotName,
-    int Quantity,
+    decimal Quantity,
     decimal CostPrice,
     decimal UnitPrice,
     bool IsGift = false,

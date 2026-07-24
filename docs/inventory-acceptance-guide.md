@@ -42,7 +42,9 @@ Tai lieu nay tom tat pham vi hien tai cua module Inventory/Product catalog trong
 | Stocktake | `POST /api/v1/inventory/stocktake-requests` then submit/approve | Adjust selected location only | stocktake import/export slip and ledger |
 | POS immediate sale | `POST /api/v1/orders` + Inventory POS handling | Decrease `Shelf` only | POS export slip, batch allocations, ledger |
 | Sell-first reconciliation | `POST /api/stock-deduct-queue/{id}/confirm` | Deduct `NGUYEN_LIEU`/`BAO_BI` from `Warehouse` only | material export slip, allocations, ledger |
-| Customer return | Order return flow event | Sellable receipt currently returns to `Shelf` | customer return import slip, batch, ledger |
+| Customer return | Order return flow event | No auto stock change; creates a `ReturnInspection` (Pending) | return inspection record, ledger on disposition |
+| Return inspection | `GET /api/v1/inventory/return-inspections`, `POST /api/v1/inventory/return-inspections/{id}/inspect` | RestockApproved increases `Shelf`; Quarantined creates `Quarantine` lot (not sellable); Disposed no change | disposition-driven batch + ledger |
+| COD reservation | `POST /api/v1/inventory/cod-reservation-replace`; ship via `OrderShippedEvent` | Reserve holds `Shelf` (Available = OnHand - Reserved); dispatch deducts `Shelf` | reservation state on `StockDeductQueue`, export slip + ledger on ship |
 | Custom bundle packing | `POST /api/v1/orders/custom-bundles/...` and `POST /api/v1/inventory/deduct-materials` | Deduct materials from `Warehouse` | material export slip, allocations, ledger |
 
 ## Data Dictionary Notes
@@ -57,6 +59,12 @@ Tai lieu nay tom tat pham vi hien tai cua module Inventory/Product catalog trong
 | `StockExportSlip.ReferenceType/ReferenceId/ReferenceCode` | Business source reference for outbound movement. |
 | `StockExportBatchAllocation` | Trace from export slip/line to consumed batch/item quantity. |
 | `InventoryLedgerEntry` | Immutable stock movement record with location, before/after, actor snapshot and business reference. |
+| `SkuStock.ReservedQuantity` | Soft COD reservation hold on Shelf. Available sellable = `QuantityOnHand - ReservedQuantity`. |
+| `StockDeductQueue.IsReserved` | Whether this queue currently holds a Shelf reservation. |
+| `ReturnInspection.Disposition` | Return inspection decision: `Pending`, `RestockApproved`, `Quarantined`, `Disposed`. Refund state is tracked separately and stays independently auditable. |
+| `WarehouseBatch.Location = Quarantine` | Quarantined return lot. Excluded from both sellable Shelf and Warehouse aggregates. |
+| `OutboxMessage` | OrderService transactional outbox row; `Id == EventId`. Dispatched exactly-once by the outbox dispatcher. |
+| `ProcessedIntegrationEvent` | InventoryService inbox dedup record. Guards by `EventId` and business key (`OperationType + OrderId/ReturnId`). |
 | `InventoryOptions.SimulateWarehouse` | Legacy development simulation flag. Current scope expects `false`. |
 
 ## Migration Notes
@@ -74,15 +82,18 @@ Do not rewrite applied migrations. Current Inventory/Product scope relies on the
 | InventoryService | `20260717150000_AddInventoryReturnFlowsAndBatchLocations` |
 | InventoryService | `20260717160000_AddProductionApprovalAndOutputDestination` |
 | InventoryService | `20260717170000_AddStocktakeRequests` |
+| InventoryService | `20260724140000_AddReservedQuantityToSkuStock` (POS-04 COD reservation) |
+| InventoryService | `20260724160000_AddReturnInspections` (POS return inspection) |
+| OrderService | Transactional Outbox schema (POS-05) |
 
 ## Role And Permission Matrix
 
 | Role | Current Inventory responsibility |
 | --- | --- |
-| Warehouse | Create supplier receipts, production orders, stocktake drafts, and operational stock requests. Cannot approve own approval-gated request. |
-| Manager / Agency Manager | Review replenishment/return/stocktake flows where configured by current UI and permission policy. |
-| Admin | Product creation/deletion approval, audit review, and high-level inventory reports. |
-| Sales/Cashier | POS sale and customer return flow. Must not freely adjust inventory. |
+| Warehouse | Create supplier receipts, production orders, stocktake drafts, and operational stock requests. Cannot approve own approval-gated request. Confirms sell-first reconciliation and inspects returns. |
+| Manager / Agency Manager | Review replenishment/return/stocktake flows where configured by current UI and permission policy. Confirms sell-first reconciliation and inspects returns. |
+| Admin | Product creation/deletion approval, audit review, high-level inventory reports. Confirms sell-first reconciliation and inspects returns. |
+| Sales/Cashier | POS sale and customer return creation. Must not freely adjust inventory, confirm reconciliation, or inspect returns. |
 
 Application-level approval flows must continue to enforce:
 
@@ -105,7 +116,12 @@ Application-level approval flows must continue to enforce:
 | Stocktake decrease | Decrease selected location only | Decrease selected location only | Deduct selected location batches | Export + ledger |
 | POS normal sale | No change | Decrease | Deduct Shelf batches FEFO | Export + allocations + ledger |
 | Sell-first confirm | Decrease materials only | No finished deduction | Deduct Warehouse material batches | Export + allocations + ledger |
-| Customer sellable return | No change | Increase | Create Shelf return batch | Import + ledger |
+| Customer return created | No change | No change | No batch; create `ReturnInspection` (Pending) | No stock ledger until disposition |
+| Return inspect RestockApproved | No change | Increase | Create Shelf return batch (`return_restock`) | Import + ledger |
+| Return inspect Quarantined | No change | No change | Create `Quarantine` lot (`return_quarantine`), not sellable | Batch only, no sellable/warehouse aggregate change |
+| Return inspect Disposed | No change | No change | No batch | No stock change |
+| COD reserve / edit-replace | No change | No change (holds Reserved) | No batch; increment/adjust `ReservedQuantity` | Reservation state only |
+| COD dispatch (ship) | No change | Decrease | Release reservation, deduct Shelf FEFO | Export + allocations + ledger |
 | Custom bundle pack | Decrease materials only | No change | Deduct Warehouse material batches | Export + allocations + ledger |
 
 ## UAT Script
@@ -128,9 +144,12 @@ Run through Gateway where possible, using authenticated users with the proper ro
 14. POS sells SKU with sufficient Shelf stock; verify Shelf decreases and Warehouse unchanged.
 15. POS sells finished SKU with partial Shelf stock and BOM availability; verify queue contains missing quantity only.
 16. Confirm stock deduct queue; verify materials/packages are deducted from Warehouse only.
-17. POS/customer return for a sellable item; verify Shelf receipt batch/slip/ledger.
-18. Custom bundle packing; verify material export slip, allocations and ledger.
-19. Offline POS cache displays Shelf stock, not Warehouse stock; sync uses server-side validation.
+17. Create a customer return; verify NO sellable stock change and a `ReturnInspection` row appears with `Pending` in `/inventory/return-inspections`.
+18. As Warehouse/Manager/Admin, inspect the return: RestockApproved increases Shelf (return batch + ledger); Quarantined creates a `Quarantine` lot with no sellable/warehouse change; Disposed changes no stock. Re-submit the same inspection and verify it is idempotent (first-wins, no double effect).
+19. COD reservation: create a confirmed COD order; verify `ReservedQuantity` rises and sellable Available = OnHand - Reserved. Edit COD items; verify reservation atomically re-reserves. Cancel before dispatch; verify reservation released. Dispatch (ship); verify Shelf physically deducts and reservation clears.
+20. Outbox/Inbox exactly-once: place an order, then redeliver the same integration event (same `EventId`); verify Inventory processes once (inbox dedup) with no duplicate stock movement, slip, allocation, or ledger entry.
+21. Custom bundle packing; verify material export slip, allocations and ledger.
+22. Offline POS cache displays Shelf stock, not Warehouse stock; sync uses server-side validation.
 
 ## Final Acceptance Commands
 

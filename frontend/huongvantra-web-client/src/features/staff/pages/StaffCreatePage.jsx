@@ -15,7 +15,7 @@ function StaffCreatePage() {
     username: '',
     password: '',
     note: '',
-    role: '',
+    roles: [],
     scope: 'co-ban',
     active: true,
   })
@@ -27,10 +27,6 @@ function StaffCreatePage() {
         const roles = await fetchRoleOptions()
         if (!mounted) return
         setRoleOptions(roles || [])
-        setForm((current) => ({
-          ...current,
-          role: current.role || roles?.[0]?.name || '',
-        }))
       } catch (error) {
         showError(error.message)
       }
@@ -43,9 +39,18 @@ function StaffCreatePage() {
     setForm((current) => ({ ...current, [field]: event.target.value }))
   }
 
+  const toggleRole = (roleName) => {
+    setForm((current) => ({
+      ...current,
+      roles: current.roles.includes(roleName)
+        ? current.roles.filter((role) => role !== roleName)
+        : [...current.roles, roleName],
+    }))
+  }
+
   const canSubmit = useMemo(
-    () => Boolean(form.fullName.trim() && form.phone.trim() && form.username.trim() && form.password.trim().length >= 6 && form.role),
-    [form.fullName, form.phone, form.username, form.password, form.role],
+    () => Boolean(form.fullName.trim() && form.phone.trim() && form.username.trim() && form.password.trim().length >= 6 && form.roles.length),
+    [form.fullName, form.phone, form.username, form.password, form.roles.length],
   )
 
   const handleSave = async () => {
@@ -63,7 +68,7 @@ function StaffCreatePage() {
         phone: form.phone.trim(),
         note: form.note.trim() || null,
         isActive: form.active,
-        roles: [form.role],
+        roles: form.roles,
       })
       showSuccess('Tạo tài khoản nhân viên thành công.')
       navigate('/staff')
@@ -156,18 +161,22 @@ function StaffCreatePage() {
               </div>
 
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                <label className="flex flex-col gap-2">
-                  <span className="text-xs font-semibold text-[#414942]">Vai tro nhan vien</span>
-                  <div className="relative">
-                    <select className="w-full appearance-none rounded-lg border-none bg-[#f6f4ec] p-3 text-sm shadow-inner outline-none focus:ring-2 focus:ring-[#356647]/30" value={form.role} onChange={handleChange('role')}>
-                      <option value="">Chọn vai trò</option>
-                      {roleOptions.map((role) => (
-                        <option key={role.id} value={role.name}>{role.name}</option>
-                      ))}
-                    </select>
-                    <span className="material-symbols-outlined pointer-events-none absolute right-3 top-3 text-[#414942]">expand_more</span>
+                <fieldset className="flex flex-col gap-2 md:col-span-2">
+                  <legend className="text-xs font-semibold text-[#414942]">Vai trò nhân viên (có thể chọn nhiều)</legend>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {roleOptions.map((role) => (
+                      <label key={role.id} className="flex items-center gap-3 rounded-lg bg-[#f6f4ec] p-3 text-sm shadow-inner">
+                        <input
+                          type="checkbox"
+                          className="h-5 w-5 accent-[#356647]"
+                          checked={form.roles.includes(role.name)}
+                          onChange={() => toggleRole(role.name)}
+                        />
+                        <span>{role.label}</span>
+                      </label>
+                    ))}
                   </div>
-                </label>
+                </fieldset>
 
               
               </div>

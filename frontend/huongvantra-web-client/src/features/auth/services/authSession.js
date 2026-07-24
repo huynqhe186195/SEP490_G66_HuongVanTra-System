@@ -37,4 +37,5 @@ export function loadAuthSession() {
 
 export function clearAuthSession() {
   localStorage.removeItem(AUTH_SESSION_KEY)
+  window.dispatchEvent(new CustomEvent(AUTH_SESSION_CHANGED_EVENT))
 }

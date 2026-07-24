@@ -1,7 +1,10 @@
 using CustomerService.Application.Interfaces;
 using CustomerService.Domain.Entities;
+using CustomerService.Domain.Enums;
+using CustomerService.Domain.Exceptions;
 using CustomerService.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
+using MySqlConnector;
 
 namespace CustomerService.Infrastructure.Repositories;
 
@@ -49,6 +52,52 @@ public class CustomerRepository : ICustomerRepository
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync(ct);
+
+    public async Task<(IReadOnlyList<Customer> Items, int TotalCount)> SearchForCheckoutAsync(
+        string? search,
+        string? normalizedPhone,
+        bool exactPhone,
+        CustomerGroup? customerGroup,
+        Guid? assignedSaleId,
+        int page,
+        int pageSize,
+        CancellationToken ct = default)
+    {
+        var query = _db.Customers
+            .AsNoTracking()
+            .Include(c => c.Tier)
+            .Where(c => !c.IsDeleted);
+
+        if (assignedSaleId.HasValue)
+            query = query.Where(c => c.AssignedSaleId == assignedSaleId.Value);
+
+        if (customerGroup.HasValue)
+            query = query.Where(c => c.CustomerGroup == customerGroup.Value);
+
+        if (exactPhone)
+        {
+            query = query.Where(c => c.PhoneNumber == normalizedPhone);
+        }
+        else if (!string.IsNullOrEmpty(search))
+        {
+            var normalizedSearch = search.ToLower();
+            query = query.Where(c =>
+                c.FullName.ToLower().Contains(normalizedSearch)
+                || c.CustomerCode.ToLower().Contains(normalizedSearch)
+                || (!string.IsNullOrEmpty(normalizedPhone) && c.PhoneNumber.Contains(normalizedPhone)));
+        }
+
+        var totalCount = await query.CountAsync(ct);
+        var items = await query
+            .OrderBy(c => c.FullName)
+            .ThenBy(c => c.CustomerCode)
+            .ThenBy(c => c.Id)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(ct);
+
+        return (items, totalCount);
+    }
 
     public async Task<IEnumerable<Customer>> GetAllForExportAsync(Guid? assignedSaleId = null, bool includeDeleted = false, CancellationToken ct = default)
     {
@@ -177,8 +226,26 @@ public class CustomerRepository : ICustomerRepository
     public async Task<int> CountDeletedAsync(Guid? assignedSaleId = null, CancellationToken ct = default) =>
         await _db.Customers.CountAsync(c => c.IsDeleted && (!assignedSaleId.HasValue || c.AssignedSaleId == assignedSaleId.Value), ct);
 
-    public async Task<int> SaveChangesAsync(CancellationToken ct = default) =>
-        await _db.SaveChangesAsync(ct);
+    public async Task<int> SaveChangesAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            return await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException exception) when (
+            exception.InnerException is MySqlException { Number: 1062 } mysqlException
+            && mysqlException.Message.Contains("PRIMARY", StringComparison.OrdinalIgnoreCase)
+            && _db.ChangeTracker.Entries<CustomerDebtTransaction>().Any(entry =>
+                entry.State == EntityState.Added
+                && entry.Entity.ReferenceType != null
+                && entry.Entity.ReferenceType.StartsWith(
+                    "DebtPayment:",
+                    StringComparison.Ordinal)
+                && Guid.TryParse(entry.Entity.RelatedOrderCode, out _)))
+        {
+            throw new DuplicateCustomerDebtPaymentException(exception);
+        }
+    }
 
     public void ClearChangeTracker() => _db.ChangeTracker.Clear();
 }

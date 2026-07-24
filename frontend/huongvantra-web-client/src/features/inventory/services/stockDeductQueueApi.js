@@ -70,6 +70,8 @@ function mapQueueItem(item) {
     cancelReason: item.cancelReason ?? item.CancelReason ?? '',
     lastAttemptAt: item.lastAttemptAt ?? item.LastAttemptAt ?? null,
     lastShortageReason: item.lastShortageReason ?? item.LastShortageReason ?? '',
+    // POS-04 (H6): đơn COD đang giữ chỗ tồn Kệ Hàng chờ xác nhận.
+    isReserved: Boolean(item.isReserved ?? item.IsReserved ?? false),
     lines: (item.lines ?? item.Lines ?? []).map(mapQueueLine),
   }
 }

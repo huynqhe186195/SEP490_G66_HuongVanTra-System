@@ -57,7 +57,7 @@ function filterStaffRows(rows, params = {}) {
 }
 
 export async function fetchRoleOptions() {
-  let roles = []
+  let roles
   try {
     roles = await fetchAssignableRoles()
   } catch {
@@ -82,7 +82,7 @@ export async function fetchStaffAccounts(params = {}) {
     const rows = []
     const fetchPageSize = 100
     let fetchPage = 1
-    let totalCount = 0
+    let totalCount
 
     do {
       const data = await fetchEmployees({ page: fetchPage, pageSize: fetchPageSize })
@@ -145,15 +145,15 @@ export async function fetchStaffAccount(employeeId) {
 
 export async function createStaffAccount(payload) {
   const roles = await fetchRoleOptions()
-  const role = roles.find((item) => item.name === payload.roles?.[0])
-  if (!role) {
+  const roleIds = resolveRoleIds(roles, payload.roles)
+  if (!roleIds.length || roleIds.length !== (payload.roles || []).length) {
     throw new Error('Vai trò không hợp lệ.')
   }
 
   return createEmployee({
     username: payload.username,
     password: payload.password,
-    roleIds: [role.id],
+    roleIds,
     fullName: payload.fullName,
     department: payload.note || null,
     actualSalary: 0,
@@ -184,11 +184,12 @@ export async function updateStaffAccount(employeeId, payload) {
       await unlockUser(current.userGuid)
     }
 
-    if (payload.role !== undefined) {
+    if (payload.roles !== undefined || payload.role !== undefined) {
       const options = await fetchRoleOptions()
-      const roleIds = resolveRoleIds(options, [payload.role])
+      const requestedRoles = payload.roles ?? [payload.role]
+      const roleIds = resolveRoleIds(options, requestedRoles)
       if (!roleIds.length) {
-        throw new Error('Vui lòng chọn vai trò nhân viên.')
+        throw new Error('Vui lòng chọn ít nhất một vai trò nhân viên.')
       }
 
       await updateUser(current.userGuid, {

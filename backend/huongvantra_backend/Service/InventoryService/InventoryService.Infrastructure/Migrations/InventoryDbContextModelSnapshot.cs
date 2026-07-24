@@ -27,6 +27,9 @@ namespace InventoryService.Infrastructure.Migrations
                     b.Property<Guid>("CorrelationId")
                         .HasColumnType("char(36)");
 
+                    b.Property<Guid?>("EventId")
+                        .HasColumnType("char(36)");
+
                     b.Property<string>("EventType")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -36,6 +39,10 @@ namespace InventoryService.Infrastructure.Migrations
                         .HasColumnType("datetime(6)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("EventId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ProcessedIntegrationEvents_EventId");
 
                     b.HasIndex("EventType", "CorrelationId")
                         .IsUnique()
@@ -184,6 +191,11 @@ namespace InventoryService.Infrastructure.Migrations
                     b.Property<int>("QuantityOnHand")
                         .HasColumnType("int");
 
+                    b.Property<int>("ReservedQuantity")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
+
                     b.Property<int>("ShelfLowStockThreshold")
                         .HasDefaultValue(0)
                         .HasColumnType("int");
@@ -255,6 +267,9 @@ namespace InventoryService.Infrastructure.Migrations
                         .HasColumnType("datetime(6)");
 
                     b.Property<bool>("IsDeducted")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<bool>("IsReserved")
                         .HasColumnType("tinyint(1)");
 
                     b.Property<DateTime?>("LastAttemptAt")
@@ -2252,6 +2267,44 @@ namespace InventoryService.Infrastructure.Migrations
                     b.Navigation("Lines");
 
                     b.Navigation("OutputLines");
+                });
+
+            modelBuilder.Entity("InventoryService.Domain.Entities.ReturnInspection", b =>
+                {
+                    b.Property<Guid>("Id").ValueGeneratedOnAdd();
+                    b.Property<Guid>("ReturnId");
+                    b.Property<string>("ReturnCode").IsRequired().HasMaxLength(30);
+                    b.Property<Guid>("OrderId");
+                    b.Property<string>("OrderCode").IsRequired().HasMaxLength(30);
+                    b.Property<Guid>("SkuId");
+                    b.Property<string>("SkuCode").IsRequired().HasMaxLength(50);
+                    b.Property<string>("SkuSnapshotName").IsRequired().HasMaxLength(255);
+                    b.Property<int>("Quantity");
+                    b.Property<string>("Disposition").IsRequired().HasMaxLength(30);
+                    b.Property<Guid?>("QuarantineBatchId");
+                    b.Property<Guid?>("RestockBatchId");
+                    b.Property<Guid?>("InspectedBy");
+                    b.Property<DateTime?>("InspectedAt");
+                    b.Property<string>("InspectionNote").HasMaxLength(500);
+                    b.Property<DateTime>("CreatedAt");
+                    b.Property<DateTime>("UpdatedAt");
+                    b.HasKey("Id");
+                    b.HasIndex("ReturnId");
+                    b.HasIndex("OrderId");
+                    b.HasIndex("SkuId");
+                    b.HasIndex("Disposition");
+                    b.HasIndex("CreatedAt");
+                    b.HasIndex("QuarantineBatchId");
+                    b.HasIndex(new[] { "ReturnId", "SkuId" }).HasDatabaseName("IX_ReturnInspections_ReturnId_SkuId");
+                    b.ToTable("ReturnInspections");
+                });
+
+            modelBuilder.Entity("InventoryService.Domain.Entities.ReturnInspection", b =>
+                {
+                    b.HasOne("InventoryService.Domain.Entities.WarehouseBatch", "QuarantineBatch")
+                        .WithMany()
+                        .HasForeignKey("QuarantineBatchId")
+                        .OnDelete(DeleteBehavior.SetNull);
                 });
 
 #pragma warning restore 612, 618

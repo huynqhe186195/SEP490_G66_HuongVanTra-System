@@ -39,4 +39,18 @@ public class MaterialsController(InventoryLogic _logic) : ControllerBase
             ct);
         return Ok(result);
     }
+
+    /// <summary>
+    /// POS-04 (H4): OrderService gọi đồng bộ khi sửa đơn COD chờ xác nhận — thay giữ chỗ
+    /// tồn Kệ Hàng nguyên tử (release + re-reserve all-or-nothing, idempotent theo OperationId).
+    /// </summary>
+    [HttpPost("cod-reservation-replace")]
+    [Authorize(Policy = PermissionNames.CreateOrder)]
+    public async Task<IActionResult> ReplaceCodReservation(
+        [FromBody] ReplaceCodReservationRequest request,
+        CancellationToken ct)
+    {
+        var result = await _logic.ReplaceCodReservationAsync(request, ct);
+        return Ok(result);
+    }
 }

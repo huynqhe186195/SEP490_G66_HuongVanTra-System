@@ -71,6 +71,12 @@ public class DuplicateOrderCodeException : Exception
         : base($"Order code '{code}' already exists.") { }
 }
 
+public class DuplicateOrderIdempotencyKeyException : Exception
+{
+    public DuplicateOrderIdempotencyKeyException(Exception innerException)
+        : base("Order idempotency key already exists.", innerException) { }
+}
+
 public class OrderForbiddenException : Exception
 {
     public OrderForbiddenException(string message = "Bạn không có quyền truy cập đơn hàng này.")

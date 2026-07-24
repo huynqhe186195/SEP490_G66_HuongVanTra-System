@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { showError, showSuccess } from '../../../app/toast.js'
 import MembershipTierProgress from '../../customers/components/MembershipTierProgress.jsx'
 import { isVipCustomerType, supportsMembershipTierForCustomerType, isCorporateCustomerType } from '../../customers/utils/customerDisplay.js'
@@ -86,9 +86,11 @@ function CustomerDetailModal({ isOpen, customer, onClose, onCustomerUpdated }) {
   const [debtPayPreview, setDebtPayPreview] = useState(null)
   const [debtPayAmount, setDebtPayAmount] = useState('')
   const [debtPayNote, setDebtPayNote] = useState('')
+  const [debtPayMethod, setDebtPayMethod] = useState('Cash')
   const [isPayingDebt, setIsPayingDebt] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [seller, setSeller] = useState({ name: 'NV POS', role: '' })
+  const debtPaymentAttemptRef = useRef(null)
 
   useEffect(() => {
     if (!isOpen) return undefined
@@ -165,6 +167,7 @@ function CustomerDetailModal({ isOpen, customer, onClose, onCustomerUpdated }) {
 
   async function handleDebtPayment(event) {
     event.preventDefault()
+    if (isPayingDebt) return
     const amount = Number(String(debtPayAmount).replace(/\D/g, ''))
     const currentDebt = Number(context?.currentDebt ?? 0)
 
@@ -179,9 +182,23 @@ function CustomerDetailModal({ isOpen, customer, onClose, onCustomerUpdated }) {
 
     try {
       setIsPayingDebt(true)
+      const attemptSignature = JSON.stringify({
+        customerId: customer.customerId,
+        amount,
+        paymentMethod: debtPayMethod,
+        note: debtPayNote.trim(),
+      })
+      if (debtPaymentAttemptRef.current?.signature !== attemptSignature) {
+        debtPaymentAttemptRef.current = {
+          signature: attemptSignature,
+          idempotencyKey: crypto.randomUUID(),
+        }
+      }
       const payment = await applyCustomerDebtPayment(customer.customerId, {
         amount,
         note: debtPayNote.trim() || 'Thu công nợ tại POS',
+        paymentMethod: debtPayMethod,
+        idempotencyKey: debtPaymentAttemptRef.current.idempotencyKey,
       })
       const refreshed = await fetchPosCustomerContext(customer.customerId)
       const [debts, openDebtItems] = await Promise.all([
@@ -193,14 +210,16 @@ function CustomerDetailModal({ isOpen, customer, onClose, onCustomerUpdated }) {
       setOpenDebts(Array.isArray(openDebtItems) ? openDebtItems : [])
       setDebtPayAmount('')
       setDebtPayNote('')
+      setDebtPayMethod('Cash')
       setDebtPayPreview(null)
+      debtPaymentAttemptRef.current = null
       showSuccess(`Đã thu ${formatMoney(payment?.allocatedAmount ?? amount)} đ công nợ. Đang in phiếu thu nợ...`)
       await printDebtReceiptFromData(
         buildDebtReceiptFromPayment({
           payment,
           customerName: refreshed?.fullName || customer.fullName,
           customerCode: refreshed?.customerCode || customer.customerCode,
-          paymentMethodLabel: debtPayNote.trim() || 'Thu tại quầy',
+          paymentMethodLabel: debtPayMethod === 'Cash' ? 'Tiền mặt' : 'Chuyển khoản',
           balanceBefore: currentDebt,
           sellerName: seller.name,
           sellerRole: seller.role,
@@ -365,7 +384,7 @@ function CustomerDetailModal({ isOpen, customer, onClose, onCustomerUpdated }) {
               {Number(context?.currentDebt ?? 0) > 0 && canCollectCorporateDebt ? (
                 <form className="rounded-xl border border-[#356647]/25 bg-white p-4" onSubmit={handleDebtPayment}>
                   <p className="text-sm font-semibold text-[#356647]">Thu trả công nợ</p>
-                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <div className="mt-3 grid gap-3 sm:grid-cols-3">
                     <div>
                       <label className="mb-1 block text-xs font-semibold text-[#717971]" htmlFor="debt-pay-amount">
                         Số tiền thu
@@ -379,6 +398,20 @@ function CustomerDetailModal({ isOpen, customer, onClose, onCustomerUpdated }) {
                         className="w-full rounded-lg border border-[#c1c9c0] px-3 py-2 text-sm outline-none focus:border-[#356647]"
                         placeholder="VD: 500000"
                       />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-semibold text-[#717971]" htmlFor="debt-pay-method">
+                        Phương thức
+                      </label>
+                      <select
+                        id="debt-pay-method"
+                        value={debtPayMethod}
+                        onChange={(event) => setDebtPayMethod(event.target.value)}
+                        className="w-full rounded-lg border border-[#c1c9c0] px-3 py-2 text-sm outline-none focus:border-[#356647]"
+                      >
+                        <option value="Cash">Tiền mặt</option>
+                        <option value="BankTransfer">Chuyển khoản đã xác nhận</option>
+                      </select>
                     </div>
                     <div>
                       <label className="mb-1 block text-xs font-semibold text-[#717971]" htmlFor="debt-pay-note">

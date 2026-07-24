@@ -18,14 +18,14 @@ public class EmployeeLogic(
         CreateEmployeeRequest request,
         IReadOnlyList<string>? actorPermissions = null)
     {
-        UserInputValidator.ValidateSingleRole(request.RoleIds);
+        var roleIds = UserInputValidator.ResolveRoleIds(request.RoleIds, request.RoleId);
         UserInputValidator.ValidatePhoneIfProvided(request.BankAccountInfo);
 
         if (await userRepo.ExistsAsync(request.Username))
             throw new DuplicateUsernameException(request.Username);
 
         var assignedRoles = new List<Role>();
-        foreach (var roleId in request.RoleIds)
+        foreach (var roleId in roleIds)
         {
             var role = await roleRepo.GetByIdAsync(roleId) ?? throw new RoleNotFoundException(roleId);
             assignedRoles.Add(role);
@@ -42,8 +42,7 @@ public class EmployeeLogic(
             IsActive = true
         };
 
-        foreach (var role in assignedRoles)
-            user.UserRoles.Add(new UserRole { UserId = user.Id, RoleId = role.Id });
+        RoleAssignmentRules.Replace(user, assignedRoles);
 
         await userRepo.AddAsync(user);
 

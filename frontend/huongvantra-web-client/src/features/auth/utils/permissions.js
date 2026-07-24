@@ -105,16 +105,12 @@ export function canViewOrders(session) {
 }
 
 export function canCreateOrder(session) {
-  return hasPermission(session, 'CREATE_ORDER')
+  return canUsePosCounterMode(session) || canUsePosCodMode(session)
 }
 
-/** Xác nhận / vận hành COD — SaleCod (VERIFY_COD) hoặc Manager/Admin. */
+/** Xác nhận thanh toán COD — chỉ dựa trên action permission. */
 export function canVerifyCodPayment(session) {
-  return (
-    hasPermission(session, 'VERIFY_COD')
-    || hasPermission(session, 'MANAGE_EMPLOYEE')
-    || hasPermission(session, 'MANAGE_ROLE')
-  )
+  return hasPermission(session, 'VERIFY_COD')
 }
 
 function normalizeRoleToken(role) {
@@ -136,28 +132,24 @@ export function isSaleCodRole(session) {
   return (session?.roles ?? []).some((role) => normalizeRoleToken(role) === 'salecod')
 }
 
-/** SaleCod thuần (không Manager/Admin): chỉ xem/xử lý đơn COD. */
+/** Tương thích tên helper cũ; quyết định COD-only dựa trên permission union. */
 export function isSaleCodOnlyRole(session) {
-  if (!isSaleCodRole(session)) return false
-  if (hasPermission(session, 'MANAGE_EMPLOYEE') || hasPermission(session, 'MANAGE_ROLE')) return false
-  return true
+  return canViewOnlyCodOrders(session)
 }
 
 export function canViewOnlyCodOrders(session) {
-  return isSaleCodOnlyRole(session)
+  if (canViewAllOrders(session)) return false
+  return canUsePosCodMode(session) && !canUsePosCounterMode(session)
 }
 
-/** Quầy POS: SalePos / Manager / Admin. SaleCod thuần không bán quầy. */
+/** Quầy POS: action permission độc lập, hỗ trợ union nhiều role. */
 export function canUsePosCounterMode(session) {
-  if (!canCreateOrder(session)) return false
-  if (hasPermission(session, 'MANAGE_EMPLOYEE') || hasPermission(session, 'MANAGE_ROLE')) return true
-  if (isSaleCodOnlyRole(session)) return false
-  return true
+  return hasPermission(session, 'CREATE_POS_ORDER')
 }
 
-/** Chế độ Bán COD trên POS: SaleCod / Manager / Admin. */
+/** Bán COD: action permission độc lập với VERIFY_COD. */
 export function canUsePosCodMode(session) {
-  return canVerifyCodPayment(session) && canCreateOrder(session)
+  return hasPermission(session, 'CREATE_COD_ORDER')
 }
 
 export function canAdjustStoreStock(session) {
@@ -170,6 +162,11 @@ export function canCreateStockReplenishmentRequest(session) {
 
 export function canReviewStockReplenishmentRequest(session) {
   return isBranchManager(session) || isManagerRole(session) || isWarehouseRole(session) || isSystemAdmin(session)
+}
+
+/** Kiểm tra & quyết định xử lý hàng trả (Restock/Quarantine/Dispose): Thủ kho, Quản lý, Admin. */
+export function canInspectReturn(session) {
+  return isWarehouseRole(session) || isBranchManager(session) || isManagerRole(session) || isSystemAdmin(session)
 }
 
 export function canCancelStockReplenishmentRequest(session) {

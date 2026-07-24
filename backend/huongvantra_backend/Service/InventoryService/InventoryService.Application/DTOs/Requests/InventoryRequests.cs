@@ -19,6 +19,24 @@ public record PreparePosStockDeductionRequest(
     decimal TotalAmount,
     List<PreparePosStockDeductionItemRequest> Items);
 
+public record ReplaceCodReservationItemRequest(
+    Guid SkuId,
+    string? SkuSnapshotName,
+    string? SkuSnapshotCode,
+    int Quantity);
+
+/// <summary>
+/// POS-04 (H4): thay giữ chỗ tồn Kệ Hàng cho đơn COD đang sửa — reconcile tuyệt đối
+/// queue items + ReservedQuantity theo danh sách mới, all-or-nothing.
+/// <paramref name="OperationId"/> là idempotency key của một lần sửa đơn: cùng OperationId
+/// gọi lại → no-op (đã xử lý).
+/// </summary>
+public record ReplaceCodReservationRequest(
+    Guid OrderId,
+    Guid OperationId,
+    decimal TotalAmount,
+    List<ReplaceCodReservationItemRequest> Items);
+
 public record UpdateLowStockThresholdRequest(
     int Threshold,
     string? Location = null,
@@ -146,6 +164,8 @@ public record CreateSupplierReturnRequest(
     List<InventoryReturnItemRequest> Items);
 
 public record ReviewInventoryReturnRequest(string? Reason);
+
+public record InspectReturnRequest(string Disposition, string? Note);
 
 public record StocktakeItemRequest(
     Guid SkuId,

@@ -10,6 +10,13 @@ export function mapSkuStock(row) {
     lowStockThreshold: Number(row.lowStockThreshold ?? row.LowStockThreshold ?? 0),
     warehouseLowStockThreshold: Number(row.warehouseLowStockThreshold ?? row.WarehouseLowStockThreshold ?? 0),
     shelfLowStockThreshold: Number(row.shelfLowStockThreshold ?? row.ShelfLowStockThreshold ?? row.lowStockThreshold ?? row.LowStockThreshold ?? 0),
+    // POS-04 (H6): tồn Kệ đang giữ chỗ cho đơn COD chờ xác nhận và tồn khả bán.
+    reservedQuantity: Number(row.reservedQuantity ?? row.ReservedQuantity ?? 0),
+    availableQuantity: Number(
+      row.availableQuantity ??
+        row.AvailableQuantity ??
+        Math.max(0, Number(row.quantityOnHand ?? row.QuantityOnHand ?? 0) - Number(row.reservedQuantity ?? row.ReservedQuantity ?? 0)),
+    ),
     updatedAt: row.updatedAt ?? row.UpdatedAt ?? null,
   }
 }

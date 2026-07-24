@@ -3,7 +3,9 @@
 export const ROLE_LABELS = {
   Admin: 'Quản trị viên',
   Manager: 'Quản lý chi nhánh',
-  Sale: 'Nhân viên bán hàng',
+  Sale: 'Sale legacy (cần phân loại)',
+  SalePos: 'Nhân viên bán hàng quầy',
+  SaleCod: 'Nhân viên bán/thu COD',
   Warehouse: 'Thủ kho Kho tổng',
   Accountant: 'Kế toán',
 }
@@ -12,6 +14,18 @@ export const PERMISSION_LABELS = {
   CREATE_ORDER: {
     label: 'Tạo đơn hàng',
     hint: 'Được phép lập đơn bán hàng mới',
+  },
+  CREATE_POS_ORDER: {
+    label: 'Tạo đơn tại quầy',
+    hint: 'Được phép lập đơn bán trực tiếp tại quầy POS',
+  },
+  CREATE_COD_ORDER: {
+    label: 'Tạo đơn COD',
+    hint: 'Được phép lập đơn giao hàng thu tiền COD',
+  },
+  VERIFY_COD: {
+    label: 'Xác nhận thanh toán COD',
+    hint: 'Được phép xác nhận và thu tiền cho thanh toán COD',
   },
   VIEW_ORDER: {
     label: 'Xem đơn hàng',

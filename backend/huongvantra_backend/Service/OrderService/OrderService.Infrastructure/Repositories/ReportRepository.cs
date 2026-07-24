@@ -42,7 +42,8 @@ public class ReportRepository(OrderDbContext dbContext) : IReportRepository
             o.Payments.Any(p => p.PaymentStatus == PaymentStatus.Success)).ToList();
 
         var grossRevenue = validOrders.Sum(o => o.TotalAmount);
-        var totalDiscountAmount = validOrders.Sum(o => o.DiscountAmount + o.PromotionDiscountAmount);
+        // DiscountAmount is the persisted aggregate (manual + promotion + membership).
+        var totalDiscountAmount = validOrders.Sum(o => o.DiscountAmount);
         
         var partiallyReturned = 0;
         var fullyReturned = 0;

@@ -2,6 +2,8 @@ namespace HuongVanTra.Shared.Messages;
 
 public record OrderCompletedEvent
 {
+    public Guid EventId { get; init; }
+    public DateTime OccurredAtUtc { get; init; }
     public Guid OrderId { get; init; }
     public string OrderCode { get; init; } = string.Empty;
     public Guid CustomerId { get; init; }

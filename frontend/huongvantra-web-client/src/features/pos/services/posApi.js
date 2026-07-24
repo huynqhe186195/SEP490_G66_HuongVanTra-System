@@ -11,8 +11,11 @@ import {
   createOrder,
   fetchOrder,
   fetchOrders,
+  mapOrderDetail,
 } from '../../orders/services/ordersApi.js'
 import { mapPromotion } from '../utils/posPromotionUtils.js'
+import { normalizePosBaseQuantity } from '../utils/posQuantity.js'
+import { buildPosCustomerSearchQuery } from '../utils/posCustomerSearch.js'
 import {
   getProductsFromCache,
   getCustomerByPhone as getOfflineCustomerByPhone,
@@ -33,25 +36,66 @@ function buildPromotionPreviewBody({
     promotionCode: promotionCode?.trim() || null,
     customerId: customerId || null,
     manualDiscount: Math.max(0, Math.round(Number(manualDiscount) || 0)),
-    items: items.map((item) => ({
-      skuId: item.skuId ?? item.productId,
-      quantity: Math.max(1, Math.round(Number(item.quantity ?? item.qty ?? 1))),
-      unitPrice: Number(item.unitPrice ?? item.price ?? 0),
-      subTotal:
-        item.subTotal ??
-        item.lineTotal ??
-        Number(item.unitPrice ?? item.price ?? 0) * Number(item.quantity ?? item.qty ?? 1),
-      categoryId: item.categoryId ?? item.CategoryId ?? null,
-    })),
+    items: items.map((item) => {
+      const quantity = normalizePosBaseQuantity(
+        item.quantity ?? item.qty ?? 1,
+        item.inventoryUnit || 'Piece',
+      )
+      const unitPrice = Number(item.unitPrice ?? item.price ?? 0)
+      return {
+        skuId: item.skuId ?? item.productId,
+        quantity,
+        unitPrice,
+        subTotal: item.subTotal ?? item.lineTotal ?? unitPrice * quantity,
+        categoryId: item.categoryId ?? item.CategoryId ?? null,
+      }
+    }),
   }
 }
 
 function mapPaymentMethod(method) {
   const value = String(method || '').toUpperCase()
   if (value === 'CASH') return 'Cash'
-  if (value === 'TRANSFER') return 'VietQR'
+  if (value === 'TRANSFER' || value === 'VIETQR') return 'VietQR'
+  if (value === 'BANKTRANSFER') return 'BankTransfer'
   if (value === 'COD') return 'COD'
   return 'Cash'
+}
+
+function getPaymentAllocations(payload) {
+  return Array.isArray(payload?.payments) ? payload.payments : []
+}
+
+function findPaymentAllocation(payload, predicate) {
+  return getPaymentAllocations(payload).find((payment) =>
+    predicate(String(payment?.paymentMethod || '').toUpperCase()))
+}
+
+function sumPaymentAllocations(payload, predicate) {
+  return getPaymentAllocations(payload)
+    .filter((payment) => predicate(String(payment?.paymentMethod || '').toUpperCase()))
+    .reduce((sum, payment) => sum + Math.max(0, Number(payment?.amount ?? 0)), 0)
+}
+
+function findTransferPayment(payments) {
+  return (Array.isArray(payments) ? payments : []).find((payment) => {
+    const method = String(payment?.paymentMethod || '').toUpperCase()
+    return method === 'VIETQR' || method === 'BANKTRANSFER' || method === 'TRANSFER'
+  })
+}
+
+function resolveOrderPaymentStatus(payments) {
+  const rows = Array.isArray(payments) ? payments : []
+  const transferPayment = findTransferPayment(rows)
+  if (transferPayment) return transferPayment.paymentStatus ?? ''
+  if (rows.length === 0) return ''
+  if (rows.every((payment) => String(payment?.paymentStatus || '').toLowerCase() === 'success')) {
+    return 'Success'
+  }
+  if (rows.some((payment) => String(payment?.paymentStatus || '').toLowerCase() === 'failed')) {
+    return 'Failed'
+  }
+  return 'Pending'
 }
 
 function mapPosLineItem(item) {
@@ -62,6 +106,8 @@ function mapPosLineItem(item) {
     packagingType: item.packagingType ?? '',
     name: item.name ?? item.skuSnapshotName ?? '',
     quantity: Number(item.quantity ?? item.qty ?? 1),
+    inventoryUnit: item.inventoryUnit ?? '',
+    priceUnit: item.priceUnit ?? '',
     unitPrice: Number(item.unitPrice ?? item.price ?? 0),
     isGift: Boolean(item.isGift),
     categoryName: item.categoryName ?? item.CategoryName ?? '',
@@ -74,7 +120,13 @@ function buildOrderRequestFromPosPayload(
   { orderChannel, shippingAddress, paymentMethod, paidAmount, transferQrAmount, codDebtSettlementJson },
 ) {
   const lines = (payload.items ?? []).map(mapPosLineItem)
-  const payment = payload.payments?.[0]
+  const transferPayment = findPaymentAllocation(
+    payload,
+    (method) => method === 'TRANSFER' || method === 'VIETQR' || method === 'BANKTRANSFER',
+  )
+  const cashPayment = findPaymentAllocation(payload, (method) => method === 'CASH')
+  const codPayment = findPaymentAllocation(payload, (method) => method === 'COD')
+  const legacyPayment = transferPayment ?? cashPayment ?? codPayment
 
   return buildCreateOrderBody({
     customerId: payload.customerId,
@@ -85,9 +137,14 @@ function buildOrderRequestFromPosPayload(
     discountAmount: Number(payload.manualDiscount ?? 0),
     promotionId: payload.promotionId,
     promotionCode: payload.promotionCode,
-    paidAmount: paidAmount ?? Number(payment?.amount ?? 0),
+    paidAmount: paidAmount ?? 0,
     transferQrAmount: transferQrAmount ?? 0,
-    paymentMethod: paymentMethod ?? mapPaymentMethod(payment?.paymentMethod),
+    paymentMethod: paymentMethod ?? mapPaymentMethod(legacyPayment?.paymentMethod),
+    payments: (payload.payments ?? []).map((allocation) => ({
+      paymentMethod: mapPaymentMethod(allocation.paymentMethod),
+      amount: Number(allocation.amount ?? 0),
+      debtSettlementJson: allocation.debtSettlementJson ?? null,
+    })),
     codDebtSettlementJson: codDebtSettlementJson ?? null,
     items: lines.map((line) => ({
       skuId: line.productId,
@@ -97,7 +154,7 @@ function buildOrderRequestFromPosPayload(
           : line.name || line.sku || 'Sản phẩm',
       skuSnapshotCode: line.sku || null,
       categorySnapshotName: line.categoryName || null,
-      quantity: Math.max(1, Math.round(line.quantity)),
+      quantity: normalizePosBaseQuantity(line.quantity, line.inventoryUnit),
       costPrice: Number(line.costPrice ?? 0),
       unitPrice: line.isGift ? 0 : line.unitPrice,
       isGift: Boolean(line.isGift),
@@ -107,12 +164,11 @@ function buildOrderRequestFromPosPayload(
 }
 
 function mapOrderDetailToPosResult(order) {
-  const primaryPayment = order.payments?.[0]
   return {
     orderId: order.id,
     orderCode: order.orderCode,
     totalAmount: order.finalAmount,
-    paymentStatus: primaryPayment?.paymentStatus ?? '',
+    paymentStatus: resolveOrderPaymentStatus(order.payments),
     stockStatus: String(order.inventorySyncStatus || 'PendingDeduction').toLowerCase(),
     orderStatus: order.orderStatus,
     qrPayload: null,
@@ -282,20 +338,23 @@ export function resolveTransferQrImageUrl({ qrImageUrl, qrPayload } = {}) {
   return `https://quickchart.io/qr?size=280&margin=1&text=${encodeURIComponent(qrPayload)}`
 }
 
-async function submitPosOrder(payload, options) {
+async function submitPosOrder(payload, options, { idempotencyKey } = {}) {
   const body = buildOrderRequestFromPosPayload(payload, options)
-  const order = await createOrder(body)
+  const order = await createOrder(body, { idempotencyKey })
   return mapOrderDetailToPosResult(order)
 }
 
-export async function createPosOrderOnline(payload, { qrAmount = 0 } = {}) {
-  const payment = payload.payments?.[0]
+export async function createPosOrderOnline(payload, { qrAmount = 0, idempotencyKey } = {}) {
+  const transferPayment = findPaymentAllocation(
+    payload,
+    (method) => method === 'TRANSFER' || method === 'VIETQR' || method === 'BANKTRANSFER',
+  )
   const result = await submitPosOrder(payload, {
     orderChannel: 'POS',
-    paymentMethod: mapPaymentMethod(payment?.paymentMethod ?? 'TRANSFER'),
+    paymentMethod: mapPaymentMethod(transferPayment?.paymentMethod ?? 'TRANSFER'),
     paidAmount: 0,
     transferQrAmount: qrAmount > 0 ? qrAmount : 0,
-  })
+  }, { idempotencyKey })
   return attachTransferQr(result, qrAmount)
 }
 
@@ -328,6 +387,8 @@ export function buildTakeawayOrderPayload({
       unitPrice: item.isGift ? 0 : item.price,
       costPrice: item.costPrice ?? 0,
       categoryName: item.categoryName ?? null,
+      inventoryUnit: item.inventoryUnit,
+      priceUnit: item.priceUnit,
       isGift: item.isGift ? 1 : 0,
     })),
     customBundles: customBundles ?? [],
@@ -335,10 +396,22 @@ export function buildTakeawayOrderPayload({
   }
 }
 
-export function createTakeawayCodOrder(payload, expectedAmount = 0, { codDebtSettlementJson = null } = {}) {
+export function createTakeawayCodOrder(
+  payload,
+  expectedAmount = 0,
+  { paymentAmount = expectedAmount, codDebtSettlementJson = null, idempotencyKey } = {},
+) {
   const amount = Math.max(0, Number(expectedAmount) || 0)
+  const appliedAmount = Math.max(0, Number(paymentAmount) || 0)
   return submitPosOrder(
-    { ...payload, payments: [{ paymentMethod: 'COD', amount }] },
+    {
+      ...payload,
+      payments: [{
+        paymentMethod: 'COD',
+        amount: appliedAmount,
+        debtSettlementJson: codDebtSettlementJson,
+      }],
+    },
     {
       orderChannel: 'COD',
       shippingAddress: payload.shippingAddress,
@@ -346,12 +419,28 @@ export function createTakeawayCodOrder(payload, expectedAmount = 0, { codDebtSet
       paidAmount: amount,
       codDebtSettlementJson,
     },
+    { idempotencyKey },
   )
 }
 
-export async function createTakeawayVietQrOrder(payload, { qrAmount = 0 } = {}) {
+export async function createTakeawayVietQrOrder(
+  payload,
+  {
+    qrAmount = 0,
+    paymentAmount = qrAmount,
+    debtSettlementJson = null,
+    idempotencyKey,
+  } = {},
+) {
   const result = await submitPosOrder(
-    { ...payload, payments: [{ paymentMethod: 'TRANSFER', amount: 0 }] },
+    {
+      ...payload,
+      payments: [{
+        paymentMethod: 'TRANSFER',
+        amount: Math.max(0, Number(paymentAmount) || 0),
+        debtSettlementJson,
+      }],
+    },
     {
       orderChannel: 'Phone',
       shippingAddress: payload.shippingAddress,
@@ -359,20 +448,21 @@ export async function createTakeawayVietQrOrder(payload, { qrAmount = 0 } = {}) 
       paidAmount: 0,
       transferQrAmount: qrAmount > 0 ? qrAmount : 0,
     },
+    { idempotencyKey },
   )
   return attachTransferQr(result, qrAmount)
 }
 
-export async function createPosOrderOffline(payload) {
+export async function createPosOrderOffline(payload, { idempotencyKey } = {}) {
   // Khi offline: lưu vào sync_queue và trả về fake result để UI tiếp tục
   if (!navigator.onLine) {
-    const payment = payload.payments?.[0]
+    const cashAmount = sumPaymentAllocations(payload, (method) => method === 'CASH')
     const tempId = `OFFLINE-${Date.now()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`
     const idempotencyKey = crypto.randomUUID()
     const orderPayload = buildOrderRequestFromPosPayload(payload, {
       orderChannel: 'POS',
-      paymentMethod: mapPaymentMethod(payment?.paymentMethod ?? 'CASH'),
-      paidAmount: Number(payment?.amount ?? 0),
+      paymentMethod: 'Cash',
+      paidAmount: cashAmount,
     })
 
     await saveDraftOrder({
@@ -389,25 +479,32 @@ export async function createPosOrderOffline(payload) {
       status: 'PENDING_SYNC',
       isOffline: true,
       totalAmount: orderPayload.totalAmount ?? 0,
-      paidAmount: Number(payment?.amount ?? 0),
+      paidAmount: cashAmount,
     }
   }
 
-  const payment = payload.payments?.[0]
+  const cashAmount = sumPaymentAllocations(payload, (method) => method === 'CASH')
   return submitPosOrder(payload, {
     orderChannel: 'POS',
-    paymentMethod: mapPaymentMethod(payment?.paymentMethod ?? 'CASH'),
-    paidAmount: Number(payment?.amount ?? 0),
-  })
+    paymentMethod: 'Cash',
+    paidAmount: cashAmount,
+  }, { idempotencyKey })
 }
 
 /** CK tại quầy đã ghi nhận số tiền khách chuyển (không qua QR). */
 export function createPosOrderTransferRecorded(payload) {
-  const payment = payload.payments?.[0]
+  const transferPayment = findPaymentAllocation(
+    payload,
+    (method) => method === 'TRANSFER' || method === 'VIETQR' || method === 'BANKTRANSFER',
+  )
+  const transferAmount = sumPaymentAllocations(
+    payload,
+    (method) => method === 'TRANSFER' || method === 'VIETQR' || method === 'BANKTRANSFER',
+  )
   return submitPosOrder(payload, {
     orderChannel: 'POS',
-    paymentMethod: mapPaymentMethod(payment?.paymentMethod ?? 'TRANSFER'),
-    paidAmount: Number(payment?.amount ?? 0),
+    paymentMethod: mapPaymentMethod(transferPayment?.paymentMethod ?? 'TRANSFER'),
+    paidAmount: transferAmount,
   })
 }
 
@@ -435,19 +532,18 @@ export async function fetchPosOrderPaymentStatus(orderId) {
     return mapPosPaymentStatus(data)
   } catch {
     const order = await fetchOrder(orderId)
-    const payment = order.payments?.[0]
-    const isPaid =
-      String(payment?.paymentStatus || '').toLowerCase() === 'success'
-      || String(order.orderStatus || '').toLowerCase() === 'completed'
+    const transferPayment = findTransferPayment(order.payments)
+    const paymentStatus = resolveOrderPaymentStatus(order.payments)
+    const isPaid = String(order.orderStatus || '').toLowerCase() === 'completed'
 
     return mapPosPaymentStatus({
       orderId: order.id,
       orderCode: order.orderCode,
-      paymentStatus: payment?.paymentStatus ?? '',
+      paymentStatus,
       orderStatus: order.orderStatus,
       isPaid,
       expectedTransferContent: order.orderCode,
-      expectedAmount: order.finalAmount,
+      expectedAmount: Number(transferPayment?.amount ?? order.finalAmount),
     })
   }
 }
@@ -475,9 +571,14 @@ export function mapPosProduct(item) {
     categoryName: item.categoryName ?? item.CategoryName ?? '',
     costPrice: Number(item.costPrice ?? item.CostPrice ?? 0),
     productType: item.productType ?? item.ProductType ?? '',
-    inventoryUnit: item.inventoryUnit ?? item.InventoryUnit ?? '',
+    inventoryUnit: item.inventoryUnit || item.InventoryUnit || '',
     isSellable: item.isSellable ?? item.IsSellable ?? true,
-    priceUnit: item.priceUnit ?? item.PriceUnit ?? item.inventoryUnit ?? item.InventoryUnit ?? '',
+    priceUnit:
+      item.priceUnit
+      || item.PriceUnit
+      || item.inventoryUnit
+      || item.InventoryUnit
+      || '',
   }
 }
 
@@ -506,7 +607,13 @@ export function mapPosCustomer(item) {
     customerType: mapped.customerType,
     tierCode: mapped.tierCode ?? '',
     tierId: mapped.tierId,
-    tierDiscountPercent: Number(mapped.tier?.discountPercent ?? mapped.tierDiscountPercent ?? 0),
+    tierDiscountPercent: Number(
+      item.tierDiscountPercent
+      ?? item.TierDiscountPercent
+      ?? mapped.tier?.discountPercent
+      ?? mapped.tierDiscountPercent
+      ?? 0,
+    ),
     totalSpend: mapped.totalSpend,
     currentDebt: mapped.currentDebt,
   }
@@ -515,6 +622,7 @@ export function mapPosCustomer(item) {
 function mapOfflineCustomer(c) {
   return {
     customerId: c.customerId,
+    customerCode: c.customerCode ?? '',
     fullName: c.name,
     phone: c.phone,
     currentDebt: c.debtBalance ?? 0,
@@ -630,7 +738,7 @@ export async function fetchPosCustomerContext(customerId) {
   })
 }
 
-export async function fetchPosCustomers({ search, limit = 20 }) {
+export async function fetchPosCustomers({ search, customerType, limit = 20, signal } = {}) {
   const term = search?.trim()
 
   // Offline fallback: đọc từ IndexedDB
@@ -638,47 +746,38 @@ export async function fetchPosCustomers({ search, limit = 20 }) {
     const phoneTerm = term?.replace(/\D/g, '') ?? ''
     if (phoneTerm.length === 10 && phoneTerm.startsWith('0')) {
       const byPhone = await getOfflineCustomerByPhone(phoneTerm)
-      if (byPhone) return [mapOfflineCustomer(byPhone)]
+      if (byPhone) {
+        const mapped = mapOfflineCustomer(byPhone)
+        return !customerType || mapped.customerType === customerType ? [mapped] : []
+      }
     }
     const results = await searchCustomersFromCache(term ?? '', limit)
-    return results.map(mapOfflineCustomer)
+    return results
+      .map(mapOfflineCustomer)
+      .filter((customer) => !customerType || customer.customerType === customerType)
+      .slice(0, limit)
   }
 
-  const phoneTerm = term?.replace(/\D/g, '') ?? ''
-
-  if (phoneTerm.length === 10 && phoneTerm.startsWith('0')) {
-    try {
-      const byPhone = await fetchCustomerByPhone(phoneTerm, { silentAuthErrors: true })
-      if (byPhone) {
-        return [mapPosCustomer(byPhone)]
-      }
-    } catch (error) {
-      if (error.statusCode !== 403 && error.statusCode !== 404) {
-        throw error
-      }
-    }
-  }
-
-  // forCheckout=true: Sale COD/POS được tìm mọi KH (không chỉ KH được gán cho mình)
-  const data = await apiRequestAuth(`/api/customers?page=1&pageSize=100&forCheckout=true`, { method: 'GET' })
+  const query = buildPosCustomerSearchQuery({
+    search: term,
+    customerType,
+    page: 1,
+    pageSize: limit,
+  })
+  const data = await apiRequestAuth(`/api/customers/checkout-search?${query.toString()}`, {
+    method: 'GET',
+    signal,
+  })
   const paged = toPagedResult(data)
-  let items = paged.items.map(mapCustomer).filter(Boolean)
+  return paged.items.map(mapPosCustomer).filter(Boolean)
+}
 
-  if (term) {
-    const lowerTerm = term.toLowerCase()
-    items = items.filter((item) => {
-      const name = (item.fullName || '').toLowerCase()
-      const phone = (item.phone || '').replace(/\s+/g, '')
-      const code = (item.customerCode || '').toLowerCase()
-      return (
-        name.includes(lowerTerm) ||
-        code.includes(lowerTerm) ||
-        (phoneTerm.length > 0 && phone.includes(phoneTerm))
-      )
-    })
-  }
-
-  return items.slice(0, limit).map(mapPosCustomer)
+export async function cancelPendingPosTransfer(orderId) {
+  const order = await apiRequestAuth(
+    `/api/pos/orders/${orderId}/transfer-payment/cancel`,
+    { method: 'POST' },
+  )
+  return mapOrderDetail(order)
 }
 
 export async function createPosCustomer(payload) {
@@ -877,7 +976,16 @@ export async function fetchPosProducts({ storeId, search, limit = 30 }) {
         productType: sku.productType ?? sku.ProductType ?? product?.productType ?? product?.ProductType ?? '',
         inventoryUnit: sku.inventoryUnit ?? sku.InventoryUnit ?? product?.inventoryUnit ?? product?.InventoryUnit ?? '',
         isSellable: sku.isSellable ?? sku.IsSellable ?? product?.isSellable ?? product?.IsSellable ?? true,
-        priceUnit: sku.priceUnit ?? sku.PriceUnit ?? product?.priceUnit ?? product?.PriceUnit ?? sku.inventoryUnit ?? sku.InventoryUnit ?? '',
+        priceUnit:
+          sku.priceUnit
+          || sku.PriceUnit
+          || product?.priceUnit
+          || product?.PriceUnit
+          || sku.inventoryUnit
+          || sku.InventoryUnit
+          || product?.inventoryUnit
+          || product?.InventoryUnit
+          || '',
       })
     })
     .filter(Boolean)

@@ -28,6 +28,14 @@ public record UpdateCustomerRequest(
     string? Department = null
 );
 
+public record CheckoutCustomerSearchRequest(
+    string? Search = null,
+    string? CustomerType = null,
+    bool ExactPhone = false,
+    int Page = 1,
+    int PageSize = 20
+);
+
 public class CustomerExportRequest
 {
     public string? Keyword { get; set; }
@@ -54,7 +62,9 @@ public record ApplyDebtPaymentRequest(
     decimal Amount,
     string? Note,
     Guid? SourceOrderId = null,
-    IReadOnlyList<DebtAllocationItemRequest>? Allocations = null
+    IReadOnlyList<DebtAllocationItemRequest>? Allocations = null,
+    string? PaymentMethod = null,
+    string? IdempotencyKey = null
 );
 
 /// <summary>
@@ -65,7 +75,8 @@ public record CodDebtSettlement(
     bool PayDebtsEnabled,
     decimal AllocatedAmount,
     IReadOnlyList<CodDebtAllocationItem> Allocations,
-    decimal CreditToCustomer = 0
+    decimal CreditToCustomer = 0,
+    string? PaymentMethod = null
 );
 
 public record CodDebtAllocationItem(

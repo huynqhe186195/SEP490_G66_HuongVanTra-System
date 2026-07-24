@@ -3,13 +3,18 @@ namespace OrderService.Application.Interfaces;
 public interface IOrderEventPublisher
 {
     Task PublishOrderPlacedAsync(
-        Guid orderId, string orderCode, string orderStatus, decimal totalAmount,
+        Guid orderId, string orderCode, string orderStatus, string orderChannel, decimal totalAmount,
         IEnumerable<(Guid SkuId, string SkuName, string? SkuCode, int Quantity)> items,
         CancellationToken ct = default);
 
     Task PublishOrderCancelledAsync(
-        Guid orderId, string orderCode,
+        Guid orderId, string orderCode, string previousOrderStatus,
         IEnumerable<(Guid SkuId, int Quantity)> items,
+        CancellationToken ct = default);
+
+    Task PublishOrderShippedAsync(
+        Guid orderId, string orderCode, string orderChannel,
+        IEnumerable<(Guid SkuId, string SkuName, string? SkuCode, int Quantity)> items,
         CancellationToken ct = default);
 
     Task PublishOrderCompletedAsync(

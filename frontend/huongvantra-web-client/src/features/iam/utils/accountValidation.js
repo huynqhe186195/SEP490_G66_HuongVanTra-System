@@ -6,13 +6,14 @@ export function validateAccountPhone(phone, { required = false } = {}) {
 
 export { normalizePhoneInput }
 
-export function validateCreateAccountForm({ username, password, fullName, phone, roleId }) {
+export function validateCreateAccountForm({ username, password, fullName, phone, roleIds, roleId }) {
   const errors = {}
 
   if (!String(username || '').trim()) errors.username = 'Tên đăng nhập là bắt buộc.'
   if (String(password || '').trim().length < 6) errors.password = 'Mật khẩu phải có ít nhất 6 ký tự.'
   if (!String(fullName || '').trim()) errors.fullName = 'Họ và tên là bắt buộc.'
-  if (!roleId) errors.roleId = 'Vui lòng chọn một vai trò.'
+  const selectedRoleIds = Array.isArray(roleIds) ? roleIds : [roleId].filter(Boolean)
+  if (selectedRoleIds.length === 0) errors.roleIds = 'Vui lòng chọn ít nhất một vai trò.'
 
   const phoneError = validateAccountPhone(phone, { required: false })
   if (phoneError) errors.phone = phoneError

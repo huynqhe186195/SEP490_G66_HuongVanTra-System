@@ -15,6 +15,8 @@ public class SkuStockConfiguration : IEntityTypeConfiguration<SkuStock>
         builder.Property(e => e.LowStockThreshold).HasDefaultValue(0);
         builder.Property(e => e.WarehouseLowStockThreshold).HasDefaultValue(0);
         builder.Property(e => e.ShelfLowStockThreshold).HasDefaultValue(0);
+        // POS-04: giữ chỗ tồn Kệ Hàng cho đơn COD chờ xác nhận.
+        builder.Property(e => e.ReservedQuantity).HasDefaultValue(0);
         builder.HasIndex(e => e.SkuCode);
     }
 }
@@ -528,6 +530,32 @@ public class SupplierReturnRequestItemConfiguration : IEntityTypeConfiguration<S
     }
 }
 
+public class ReturnInspectionConfiguration : IEntityTypeConfiguration<ReturnInspection>
+{
+    public void Configure(EntityTypeBuilder<ReturnInspection> builder)
+    {
+        builder.ToTable("ReturnInspections");
+        builder.HasKey(e => e.Id);
+        builder.Property(e => e.ReturnCode).HasMaxLength(30).IsRequired();
+        builder.Property(e => e.OrderCode).HasMaxLength(30).IsRequired();
+        builder.Property(e => e.SkuCode).HasMaxLength(50).IsRequired();
+        builder.Property(e => e.SkuSnapshotName).HasMaxLength(255).IsRequired();
+        builder.Property(e => e.Disposition).HasConversion<string>().HasMaxLength(30).IsRequired();
+        builder.Property(e => e.InspectionNote).HasMaxLength(500);
+        builder.HasIndex(e => e.ReturnId);
+        builder.HasIndex(e => e.OrderId);
+        builder.HasIndex(e => e.SkuId);
+        builder.HasIndex(e => e.Disposition);
+        builder.HasIndex(e => e.CreatedAt);
+        builder.HasIndex(new[] { "ReturnId", "SkuId" })
+            .HasDatabaseName("IX_ReturnInspections_ReturnId_SkuId");
+        builder.HasOne(e => e.QuarantineBatch)
+            .WithMany()
+            .HasForeignKey(e => e.QuarantineBatchId)
+            .OnDelete(DeleteBehavior.SetNull);
+    }
+}
+
 public class StocktakeRequestConfiguration : IEntityTypeConfiguration<StocktakeRequest>
 {
     public void Configure(EntityTypeBuilder<StocktakeRequest> builder)
@@ -669,6 +697,12 @@ public class ProcessedIntegrationEventConfiguration : IEntityTypeConfiguration<P
         builder.ToTable("ProcessedIntegrationEvents");
         builder.HasKey(e => e.Id);
         builder.Property(e => e.EventType).HasMaxLength(100).IsRequired();
+        builder.Property(e => e.EventId);
         builder.HasIndex(e => new { e.EventType, e.CorrelationId }).IsUnique();
+        // G6: EventId là khoá chống trùng có thẩm quyền. Unique để race hai lần giao
+        // cùng EventId không thể ghi hai inbox row (INSERT thứ hai vi phạm unique).
+        builder.HasIndex(e => e.EventId)
+            .IsUnique()
+            .HasDatabaseName("IX_ProcessedIntegrationEvents_EventId");
     }
 }

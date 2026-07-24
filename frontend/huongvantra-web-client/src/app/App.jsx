@@ -14,6 +14,7 @@ import CustomersPage from '../features/customers/pages/CustomersPage.jsx'
 import DashboardPage from '../features/dashboard/pages/DashboardPage.jsx'
 import CostProfitReportPage from '../features/accounting/pages/CostProfitReportPage.jsx'
 import IntegrationsPage from '../features/integrations/pages/IntegrationsPage.jsx'
+import InventorySyncMonitorPage from '../features/integrations/pages/InventorySyncMonitorPage.jsx'
 import InventoryExportPage from '../features/inventory/pages/InventoryExportPage.jsx'
 import InventoryBomPage from '../features/inventory/pages/InventoryBomPage.jsx'
 import InventoryBomCreatePage from '../features/inventory/pages/InventoryBomCreatePage.jsx'
@@ -33,6 +34,7 @@ import ExchangeOrdersPage from '../features/orders/pages/ExchangeOrdersPage.jsx'
 import ReturnOrderDetailPage from '../features/orders/pages/ReturnOrderDetailPage.jsx'
 import CodOrdersPage from '../features/orders/pages/CodOrdersPage.jsx'
 import StockDeductQueuePage from '../features/inventory/pages/StockDeductQueuePage.jsx'
+import ReturnInspectionsPage from '../features/inventory/pages/ReturnInspectionsPage.jsx'
 import StockAdjustmentRequestsPage from '../features/inventory/pages/StockAdjustmentRequestsPage.jsx'
 import SupplierReceiptsPage from '../features/inventory/pages/SupplierReceiptsPage.jsx'
 import ProductionOrdersPage from '../features/inventory/pages/ProductionOrdersPage.jsx'
@@ -101,6 +103,7 @@ function App() {
         <Route path="/inventory/import" element={<InventoryImportPage />} />
         <Route path="/inventory/import/create" element={<InventoryImportCreatePage />} />
         <Route path="/inventory/returns" element={<InventoryReturnsPage />} />
+        <Route path="/inventory/return-inspections" element={<ReturnInspectionsPage />} />
         <Route path="/inventory/stocktake" element={<InventoryStocktakePage />} />
         <Route path="/inventory/reports" element={<InventoryReportsPage />} />
         <Route path="/inventory/ledger" element={<InventoryLedgerPage />} />
@@ -129,6 +132,7 @@ function App() {
         <Route path="/admin/membership-tiers" element={<MembershipTiersPage />} />
         <Route path="/admin/promotions" element={<PromotionsPage />} />
         <Route path="/admin/system-activities" element={<SystemActivityLogPage />} />
+        <Route path="/admin/inventory-sync" element={<InventorySyncMonitorPage />} />
         <Route path="/admin/users" element={<UsersPage />} />
         <Route path="/admin/phan-quyen" element={<AccessControlPage />} />
         <Route path="/admin/roles" element={<Navigate to="/admin/phan-quyen?tab=vai-tro" replace />} />
