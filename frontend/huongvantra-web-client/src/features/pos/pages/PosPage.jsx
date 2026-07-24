@@ -62,10 +62,11 @@ import { canUsePosCodMode, canUsePosCounterMode } from '../../auth/utils/permiss
 import CustomBundlePanel from '../components/CustomBundlePanel.jsx'
 import PosCashSessionBar, { assertCashSessionOpenForPayment } from '../components/PosCashSessionBar.jsx'
 import PosCashSessionGate from '../components/PosCashSessionGate.jsx'
+import PosShiftDutyGate from '../components/PosShiftDutyGate.jsx'
 import {
   loadOpenCashSession,
-  notifyCashSessionChanged,
   recordCashSale,
+  refreshCashSession,
   subscribeCashSession,
 } from '../utils/posCashSessionStore.js'
 
@@ -262,9 +263,10 @@ function PosPage() {
   const [openDiscountSku, setOpenDiscountSku] = useState(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [cashSessionOpen, setCashSessionOpen] = useState(() => Boolean(loadOpenCashSession()))
+  const [shelfOnDuty, setShelfOnDuty] = useState(null)
 
   useEffect(() => {
-    setCashSessionOpen(Boolean(loadOpenCashSession()))
+    refreshCashSession().then((s) => setCashSessionOpen(Boolean(s)))
     return subscribeCashSession(() => setCashSessionOpen(Boolean(loadOpenCashSession())))
   }, [])
   const [isApplyingPromo, setIsApplyingPromo] = useState(false)
@@ -1205,7 +1207,7 @@ function PosPage() {
     // Quầy: bắt buộc mở ca quỹ trước khi bán (TM + CK). COD/takeaway không khóa két.
     const canPay = isTakeaway
       ? canPayTakeaway && !isSubmitting
-      : cashSessionOpen && (isTransferPayment ? canPayTransfer : canPayCash) && !isSubmitting;
+      : cashSessionOpen && shelfOnDuty && (isTransferPayment ? canPayTransfer : canPayCash) && !isSubmitting;
     const normalizedPromoSearch = promoCodeInput.trim().toUpperCase();
     const visibleAvailablePromotions = availablePromotions
         .filter((promotion) => !normalizedPromoSearch || promotion.promoCode.toUpperCase().includes(normalizedPromoSearch))
@@ -1419,8 +1421,7 @@ function PosPage() {
     const result = await createOrder(payload)
 
     if (method === 'CASH' && recordedPaymentAmount > 0) {
-      recordCashSale(recordedPaymentAmount)
-      notifyCashSessionChanged()
+      await recordCashSale()
     }
 
     let debtPayment = null
@@ -1667,7 +1668,12 @@ function PosPage() {
                 return;
             }
 
-            if (!assertCashSessionOpenForPayment()) {
+            if (!shelfOnDuty) {
+                showError('Chưa được duyệt ca quầy hoặc đang ngoài giờ ca — không thể bán tại quầy. Vào «Ca của tôi» để đăng ký.');
+                return;
+            }
+
+            if (!assertCashSessionOpenForPayment(shelfOnDuty)) {
                 return;
             }
 
@@ -1842,6 +1848,7 @@ function PosPage() {
 
     return (
         <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-[#c1c9c0]/40 bg-[#fbf9f1] shadow-[0_10px_30px_rgba(27,28,23,0.04)] lg:rounded-[28px]">
+            <PosShiftDutyGate onDutyChange={setShelfOnDuty} />
             <header className="relative z-20 shrink-0 border-b border-[#c1c9c0]/60 bg-[#f6f4ec] px-4 py-2.5">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto no-scrollbar">
@@ -1918,7 +1925,7 @@ function PosPage() {
 
                     <PosCashSessionBar />
                 </div>
-                {!isTakeaway && !cashSessionOpen ? (
+                {shelfOnDuty && !isTakeaway && !cashSessionOpen ? (
                     <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
                         <span>
                             <strong>Chưa mở ca quỹ</strong> — POS quầy đang khóa. Mở ca trên lớp phủ để tiếp tục.
@@ -1927,7 +1934,7 @@ function PosPage() {
                 ) : null}
             </header>
 
-            {!isTakeaway && !cashSessionOpen ? (
+            {shelfOnDuty && !isTakeaway && !cashSessionOpen ? (
                 <PosCashSessionGate
                     onOpened={() => setCashSessionOpen(true)}
                     onSwitchToCod={

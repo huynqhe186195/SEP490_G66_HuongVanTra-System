@@ -47,3 +47,9 @@ public enum PaymentStatus
     Success,
     Failed
 }
+
+public enum PosCashSessionStatus
+{
+    Open,
+    Closed
+}

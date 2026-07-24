@@ -32,11 +32,13 @@ builder.Services.AddScoped<IRoleRepository, RoleRepository>();
 builder.Services.AddScoped<IEmployeeRepository, EmployeeRepository>();
 builder.Services.AddScoped<IPermissionRepository, PermissionRepository>();
 builder.Services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
+builder.Services.AddScoped<IShiftRepository, ShiftRepository>();
 builder.Services.AddScoped<AuthLogic>();
 builder.Services.AddScoped<UserLogic>();
 builder.Services.AddScoped<RoleLogic>();
 builder.Services.AddScoped<PermissionLogic>();
 builder.Services.AddScoped<EmployeeLogic>();
+builder.Services.AddScoped<ShiftLogic>();
 builder.Services.AddHvtSystemActivityAudit("UserService");
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)

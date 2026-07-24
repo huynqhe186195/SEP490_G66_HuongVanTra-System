@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
+import { fetchOnDutyShift } from '../../shifts/services/shiftsApi.js'
 import {
   closeCashSession,
   expectedCash,
   formatVnd,
   loadOpenCashSession,
-  notifyCashSessionChanged,
   openCashSession,
+  refreshCashSession,
   subscribeCashSession,
 } from '../utils/posCashSessionStore.js'
 
@@ -31,7 +32,7 @@ function ModalShell({ title, subtitle, onClose, children, footer }) {
       >
         <div className="flex items-start justify-between border-b border-[#e7e8e0] px-5 py-4">
           <div>
-            <p className="text-xs font-bold uppercase tracking-wide text-amber-700">Prototype ca quỹ</p>
+            <p className="text-xs font-bold uppercase tracking-wide text-[#538463]">Ca quỹ POS</p>
             <h3 className="mt-1 text-lg font-bold text-slate-900">{title}</h3>
             {subtitle ? <p className="mt-1 text-sm text-slate-500">{subtitle}</p> : null}
           </div>
@@ -52,27 +53,36 @@ function ModalShell({ title, subtitle, onClose, children, footer }) {
 
 export default function PosCashSessionBar() {
   const [session, setSession] = useState(() => loadOpenCashSession())
-  const [modal, setModal] = useState(null) // open | close
+  const [onDuty, setOnDuty] = useState(null)
+  const [modal, setModal] = useState(null)
   const [openingCashInput, setOpeningCashInput] = useState('500.000')
   const [openNote, setOpenNote] = useState('')
   const [countedInput, setCountedInput] = useState('')
   const [varianceNote, setVarianceNote] = useState('')
+  const [busy, setBusy] = useState(false)
 
   const auth = loadAuthSession()
   const sellerName = auth?.username || 'Nhân viên POS'
   const sellerRole = (auth?.roles || []).join(', ')
 
-  useEffect(() => subscribeCashSession(() => setSession(loadOpenCashSession())), [])
+  useEffect(() => {
+    refreshCashSession().then((s) => setSession(s))
+    fetchOnDutyShift('Shelf')
+      .then(setOnDuty)
+      .catch(() => setOnDuty(null))
+    return subscribeCashSession(() => setSession(loadOpenCashSession()))
+  }, [])
 
   const expected = useMemo(() => expectedCash(session), [session])
 
-  const refresh = () => {
-    setSession(loadOpenCashSession())
-    notifyCashSessionChanged()
-  }
-
   const openModal = (type) => {
     if (type === 'open') {
+      if (!onDuty) {
+        showError(
+          'Chỉ mở ca quỹ khi đã được duyệt ca quầy và đang trong giờ làm. Vào «Ca của tôi» để đăng ký/kiểm tra.',
+        )
+        return
+      }
       setOpeningCashInput('500.000')
       setOpenNote('')
     }
@@ -83,25 +93,28 @@ export default function PosCashSessionBar() {
     setModal(type)
   }
 
-  const handleOpen = () => {
+  const handleOpen = async () => {
+    setBusy(true)
     try {
-      openCashSession({
+      await openCashSession({
         openingCash: parseMoney(openingCashInput),
         note: openNote,
         openedByName: sellerName,
         openedByRole: sellerRole,
-        shiftLabel: 'Ca chiều quầy · 13:00–21:00 (demo)',
-        shiftSlotId: 'demo-shelf-afternoon',
+        shiftSlotId: onDuty?.slotId || null,
+        shiftLabel: onDuty?.label || null,
       })
-      refresh()
       setModal(null)
-      showSuccess('Đã mở ca quỹ POS (prototype).')
+      showSuccess(onDuty?.label ? `Đã mở ca quỹ · ${onDuty.label}` : 'Đã mở ca quỹ POS.')
     } catch (error) {
       showError(error.message)
+    } finally {
+      setBusy(false)
     }
   }
 
-  const handleClose = () => {
+  const handleClose = async () => {
+    setBusy(true)
     try {
       const counted = parseMoney(countedInput)
       const exp = expectedCash(loadOpenCashSession())
@@ -110,20 +123,20 @@ export default function PosCashSessionBar() {
         showError('Có chênh lệch quỹ — vui lòng nhập lý do.')
         return
       }
-      const closed = closeCashSession({
+      const closed = await closeCashSession({
         countedCash: counted,
         varianceNote,
-        closedByName: sellerName,
       })
-      refresh()
       setModal(null)
       showSuccess(
-        closed.variance === 0
+        Number(closed?.variance || 0) === 0
           ? 'Đã đóng ca. Quỹ khớp.'
           : `Đã đóng ca. Chênh lệch ${formatVnd(closed.variance)}.`,
       )
     } catch (error) {
       showError(error.message)
+    } finally {
+      setBusy(false)
     }
   }
 
@@ -143,7 +156,7 @@ export default function PosCashSessionBar() {
             {session ? 'point_of_sale' : 'lock_clock'}
           </span>
           {session ? (
-            <span>Ca đang mở</span>
+            <span>{session.shiftLabel ? `Ca đang mở · ${session.shiftLabel}` : 'Ca đang mở'}</span>
           ) : (
             <span>Chưa mở ca quỹ</span>
           )}
@@ -171,7 +184,7 @@ export default function PosCashSessionBar() {
       {modal === 'open' ? (
         <ModalShell
           title="Mở ca quỹ"
-          subtitle="Nhập tiền mặt đầu két."
+          subtitle={onDuty?.label ? `Gắn với ${onDuty.label}` : 'Nhập tiền mặt đầu két.'}
           onClose={() => setModal(null)}
           footer={
             <>
@@ -184,10 +197,11 @@ export default function PosCashSessionBar() {
               </button>
               <button
                 type="button"
+                disabled={busy}
                 onClick={handleOpen}
-                className="rounded-xl bg-[#356647] px-4 py-2 text-sm font-semibold text-white"
+                className="rounded-xl bg-[#356647] px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
               >
-                Mở ca
+                {busy ? 'Đang mở…' : 'Mở ca'}
               </button>
             </>
           }
@@ -213,7 +227,7 @@ export default function PosCashSessionBar() {
       {modal === 'close' ? (
         <ModalShell
           title="Kiểm tiền & đóng ca"
-          subtitle={`Kỳ vọng quỹ: ${formatVnd(expected)}`}
+          subtitle={`Tiền trong két (ước tính): ${formatVnd(expected)}`}
           onClose={() => setModal(null)}
           footer={
             <>
@@ -226,10 +240,11 @@ export default function PosCashSessionBar() {
               </button>
               <button
                 type="button"
+                disabled={busy}
                 onClick={handleClose}
-                className="rounded-xl bg-[#356647] px-4 py-2 text-sm font-semibold text-white"
+                className="rounded-xl bg-[#356647] px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
               >
-                Đóng ca
+                {busy ? 'Đang đóng…' : 'Đóng ca'}
               </button>
             </>
           }
@@ -267,17 +282,17 @@ export default function PosCashSessionBar() {
             onChange={(e) => setVarianceNote(e.target.value)}
             placeholder="Bắt buộc khi lệch ≥ 1.000 đ"
           />
-          <p className="mt-3 text-xs text-slate-500">
-            Người ca sau mở ca mới và nhập tiền đầu két = số vừa đếm (nếu tiếp tục bán).
-          </p>
         </ModalShell>
       ) : null}
     </>
   )
 }
 
-/** Gọi trước khi bán tại quầy — trả false nếu chưa mở ca quỹ. */
-export function assertCashSessionOpenForPayment() {
+export function assertCashSessionOpenForPayment(shelfOnDuty) {
+  if (!shelfOnDuty) {
+    showError('Chưa được duyệt ca quầy hoặc đang ngoài giờ ca — không thể bán tại quầy. Vào «Ca của tôi» để đăng ký.')
+    return false
+  }
   const session = loadOpenCashSession()
   if (!session) {
     showError('Chưa mở ca quỹ — không thể bán tại quầy. Hãy mở ca trên thanh POS trước.')
