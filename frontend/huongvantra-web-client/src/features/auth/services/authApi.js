@@ -23,6 +23,9 @@ const ROLE_MODULE_MAP = {
     'price_approval',
   ],
   manager: ['pos', 'orders', 'cod_ops', 'stock_deduct_ops', 'stock_adjustment_ops', 'customers', 'contracts', 'products', 'staff', 'dashboard'],
+  salepos: ['pos', 'orders', 'customers', 'dashboard'],
+  salecod: ['pos', 'cod_ops', 'customers', 'dashboard'],
+  // Legacy single Sale
   sale: ['pos', 'orders', 'customers', 'dashboard'],
   warehouse: ['products', 'product_creation_requests', 'product_deletion_requests', 'stock_adjustment_ops', 'inventory', 'dashboard'],
   accountant: [
@@ -49,6 +52,8 @@ const ROLE_ALIAS_TO_MAP_KEY = {
   owner: 'cooperativeOwner',
   salesstaff: 'sale',
   sale: 'sale',
+  salepos: 'salepos',
+  salecod: 'salecod',
   inventorymanager: 'warehouse',
   warehousemanager: 'warehouse',
   thukho: 'warehouse',
@@ -181,7 +186,7 @@ export function enrichSessionWithAccess(session) {
   const permissions = mergePermissions(session, session?.accessToken)
   const modules = deriveModulesFromRoles(session.roles ?? []).filter((module) => {
     if (module !== 'pos') return true
-    return permissions.includes('CREATE_ORDER')
+    return permissions.includes('CREATE_POS_ORDER') || permissions.includes('CREATE_COD_ORDER')
   })
   return {
     ...session,
@@ -203,7 +208,8 @@ export async function syncSessionFromServer(session) {
       ) ||
       (
         roleModules.includes('pos') &&
-        !enriched.permissions.includes('CREATE_ORDER')
+        !enriched.permissions.includes('CREATE_POS_ORDER') &&
+        !enriched.permissions.includes('CREATE_COD_ORDER')
       )
     )
 

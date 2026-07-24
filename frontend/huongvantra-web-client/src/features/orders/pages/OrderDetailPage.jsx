@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
-import { canCreateOrder } from '../../auth/utils/permissions.js'
+import { canCreateOrder, canVerifyCodPayment } from '../../auth/utils/permissions.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import CodVerifyModal from '../components/CodVerifyModal.jsx'
 import ConfirmDialog from '../../../components/shared/ConfirmDialog.jsx'
@@ -40,7 +40,7 @@ import {
   isExchangeOrder,
   getOrderStatusClass,
   getOrderStatusLabel,
-  getPaymentMethodLabel,
+  getOrderPaymentMethodLabel,
   resolveOrderPaymentDisplay,
   getOrderRemainingDebt,
   getPrimaryPayment,
@@ -55,7 +55,9 @@ function OrderDetailPage() {
   const [searchParams] = useSearchParams()
   const fromCod = searchParams.get('from') === 'cod'
   const fromExchange = searchParams.get('from') === 'exchange'
-  const canManage = canCreateOrder(loadAuthSession())
+  const session = loadAuthSession()
+  const canManage = canCreateOrder(session)
+  const canCollectCod = canVerifyCodPayment(session)
 
   const [order, setOrder] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -247,6 +249,13 @@ function OrderDetailPage() {
   }
 
   const payment = getPrimaryPayment(order)
+  const transferPayment = order.payments?.find((row) => {
+    const method = String(row?.paymentMethod || '').toUpperCase()
+    return method === 'VIETQR' || method === 'BANKTRANSFER'
+  })
+  const transferDebtSettlement = parseCodDebtSettlement(transferPayment?.codDebtSettlementJson)
+  const transferQrAmount = Number(transferPayment?.amount || order.finalAmount || 0)
+    + Number(transferDebtSettlement?.allocatedAmount || 0)
   const paymentDisplay = resolveOrderPaymentDisplay(order)
   const orderRemainingDebt = getOrderRemainingDebt(order)
   const showTransferQr = isPendingTransferPayment(order)
@@ -336,7 +345,7 @@ function OrderDetailPage() {
             <OrderTransferQrPanel
               orderId={order.id}
               orderCode={order.orderCode}
-              total={order.finalAmount}
+              total={transferQrAmount}
               customerName={order.customerSnapshotName}
               onPaid={() => {
                 loadOrder()
@@ -345,10 +354,10 @@ function OrderDetailPage() {
             />
           ) : null}
 
-          {payment && !showTransferQr ? (
+          {payment ? (
             <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
               <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-400">Thanh toán</h2>
-              <p className="text-sm text-slate-700">{getPaymentMethodLabel(payment.paymentMethod)}</p>
+              <p className="text-sm text-slate-700">{getOrderPaymentMethodLabel(order)}</p>
               <p className="mt-1 text-sm">
                 <span className="text-slate-500">{paymentDisplay.amountCaption}: </span>
                 <span className="font-semibold text-slate-800">{formatVnd(paymentDisplay.displayAmount)}</span>
@@ -397,7 +406,7 @@ function OrderDetailPage() {
                     Hoàn tất đơn
                   </button>
                 ) : null}
-                {canVerifyCod(order) ? (
+                {canCollectCod && canVerifyCod(order) ? (
                   <button
                     type="button"
                     disabled={isSaving}

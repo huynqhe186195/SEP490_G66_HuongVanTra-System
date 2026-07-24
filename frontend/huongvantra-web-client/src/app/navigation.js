@@ -1,12 +1,13 @@
 import { buildDashboardPath, DASHBOARD_SECTIONS, getDashboardSectionFromSearch } from './dashboardSections.js'
 import { buildCustomerPath, CUSTOMER_SIDEBAR_SECTIONS, getCustomerSectionFromSearch } from './customerSections.js'
-import { isCooperativeOwnerRole } from '../features/auth/services/authApi.js'
 
 const ROLE_GROUPS = {
   admin: ['admin'],
   cooperativeOwner: ['cooperative owner', 'cooperativeowner', 'chu hop tac xa', 'chủ hợp tác xã', 'owner'],
-  agencyManager: ['agency manager', 'agencymanager', 'am', 'branch manager', 'manager'],
-  salesStaff: ['sales staff', 'salesstaff', 'sale', 'sales', 'staff sale'],
+  agencyManager: ['agency manager', 'agencymanager', 'am', 'owner', 'chu co so', 'chủ cơ sở', 'branch manager', 'manager'],
+  salesStaff: ['sales staff', 'salesstaff', 'sale', 'sales', 'staff sale', 'salepos', 'sale pos', 'salecod', 'sale cod'],
+  salePos: ['salepos', 'sale pos', 'sale'],
+  saleCod: ['salecod', 'sale cod'],
   inventoryManager: ['inventory manager', 'inventorymanager', 'warehouse manager', 'thu kho', 'thukho', 'warehouse'],
   accountant: ['accountant', 'ke toan', 'kế toán'],
   customer: ['customer', 'khach hang', 'khách hàng'],
@@ -22,11 +23,13 @@ const HOME_MODULE_PRIORITY = [
   'pos',
   'cod_ops',
   'stock_deduct_ops',
-  'accountant_ops',
   'orders',
   'customers',
   'products',
   'stock_adjustment_ops',
+  'supplier_receipts',
+  'inventory_returns',
+  'inventory_ledger',
   'inventory',
   'staff',
 ]
@@ -39,22 +42,22 @@ const HOME_MODULE_PRIORITY = [
 
 export const navigationItems = [
   { label: 'POS bán hàng', path: '/pos', module: 'pos', icon: 'point_of_sale', roles: ['agencyManager', 'salesStaff', 'customer'] },
-  { label: 'Đơn hàng', path: '/orders', module: 'orders', icon: 'receipt_long', roles: ['cooperativeOwner', 'agencyManager', 'salesStaff', 'accountant'] },
-  { label: 'Trả / đổi hàng', path: '/orders/exchange', module: 'orders', icon: 'swap_horiz', roles: ['cooperativeOwner', 'agencyManager', 'salesStaff'] },
-  { label: 'Quản lý đơn COD', path: '/orders/cod', module: 'cod_ops', icon: 'local_shipping', roles: ['agencyManager'] },
+  { label: 'Đơn hàng', path: '/orders', module: 'orders', icon: 'receipt_long', roles: ['admin', 'agencyManager', 'salePos', 'accountant'] },
+  { label: 'Trả / đổi hàng', path: '/orders/exchange', module: 'orders', icon: 'swap_horiz', roles: ['admin', 'agencyManager', 'salePos', 'saleCod', 'accountant'] },
+  { label: 'Quản lý đơn COD', path: '/orders/cod', module: 'cod_ops', icon: 'local_shipping', roles: ['agencyManager', 'saleCod'] },
   {
     label: 'Chờ trừ tồn quầy',
     path: '/orders/stock-deduct',
     module: 'stock_deduct_ops',
     icon: 'inventory_2',
-    roles: ['cooperativeOwner', 'agencyManager'],
+    roles: ['admin', 'agencyManager'],
   },
   {
     label: 'Khách hàng',
     path: '/customers',
     module: 'customers',
     icon: 'groups',
-    roles: ['cooperativeOwner', 'agencyManager', 'salesStaff', 'accountant'],
+    roles: ['admin', 'agencyManager', 'salesStaff', 'accountant'],
     children: CUSTOMER_SIDEBAR_SECTIONS.map((section) => ({
       label: section.label,
       path: buildCustomerPath(section.key),
@@ -62,52 +65,82 @@ export const navigationItems = [
       sectionScope: 'customers',
     })),
   },
-  { label: 'Hợp đồng', path: '/contracts', module: 'contracts', icon: 'description', roles: ['cooperativeOwner', 'agencyManager'] },
-  { label: 'Hàng hóa', path: '/inventory/products', module: 'products', icon: 'inventory_2', roles: ['cooperativeOwner', 'agencyManager', 'inventoryManager'] },
-  { label: 'Duyệt sản phẩm mới', path: '/inventory/product-approvals', module: 'product_approvals_admin', icon: 'verified', roles: ['cooperativeOwner'] },
+  { label: 'Hợp đồng', path: '/contracts', module: 'contracts', icon: 'description', roles: ['admin', 'agencyManager'] },
+  { label: 'Sản phẩm & Số lượng', path: '/inventory/products', module: 'products', icon: 'inventory_2', roles: ['admin', 'agencyManager', 'inventoryManager'] },
+  { label: 'Danh Mục Sản Phẩm', path: '/products/categories', module: 'products', icon: 'category', roles: ['admin', 'agencyManager', 'inventoryManager'] },
+  { label: 'Lịch sử tạo hàng hóa', path: '/inventory/product-approvals', module: 'product_creation_requests', icon: 'verified', roles: ['admin', 'inventoryManager'] },
+  { label: 'Yêu cầu xóa hàng hóa', path: '/inventory/product-deletion-requests', module: 'product_deletion_requests', icon: 'delete_sweep', roles: ['admin', 'inventoryManager'] },
   { label: 'Kho tổng', path: '/inventory', module: 'inventory', icon: 'warehouse', roles: ['inventoryManager'] },
+  { label: 'Phiếu nhập NCC', path: '/inventory/supplier-receipts', module: 'supplier_receipts', icon: 'assignment_turned_in', roles: ['admin', 'agencyManager', 'accountant'] },
+  { label: 'Nhà cung cấp', path: '/inventory/suppliers', module: 'supplier_receipts', icon: 'storefront', roles: ['admin', 'agencyManager', 'accountant', 'inventoryManager'] },
+  { label: 'Lô hàng nhập', path: '/inventory/batches', module: 'warehouse_batches', icon: 'inventory', roles: ['admin', 'agencyManager', 'inventoryManager', 'accountant'] },
+  { label: 'Trả hàng nhập', path: '/inventory/returns', module: 'inventory_returns', icon: 'assignment_return', roles: ['admin', 'agencyManager', 'inventoryManager'] },
+  { label: 'Kiểm kê tồn kho', path: '/inventory/stocktake', module: 'inventory_stocktake', icon: 'fact_check', roles: ['admin', 'agencyManager', 'inventoryManager'] },
+  { label: 'Báo cáo kho', path: '/inventory/reports', module: 'inventory_reports', icon: 'analytics', roles: ['admin', 'agencyManager', 'accountant'] },
   { label: 'Lô sản xuất', path: '/inventory/production-orders', module: 'inventory', icon: 'precision_manufacturing', roles: ['inventoryManager'] },
+  { label: 'Sổ kho', path: '/inventory/ledger', module: 'inventory_ledger', icon: 'fact_check', roles: ['admin', 'agencyManager', 'inventoryManager', 'accountant'] },
   { label: 'Định mức BOM', path: '/inventory/boms', module: 'inventory', icon: 'schema', roles: ['inventoryManager'] },
-  { label: 'Gói custom', path: '/inventory/custom-bundles', module: 'inventory', icon: 'package_2', roles: ['inventoryManager'] },
+  { label: 'Đóng gói theo yêu cầu', path: '/inventory/custom-bundles', module: 'inventory', icon: 'package_2', roles: ['inventoryManager'] },
   {
     label: 'Thống kê kho',
     path: '/inventory/statistics',
     module: 'inventory_statistics',
     icon: 'analytics',
-    roles: ['inventoryManager'],
+    roles: ['inventoryManager', 'accountant'],
     children: [
       { label: 'Tổng quan', path: '/inventory/statistics?section=overview', section: 'overview', sectionScope: 'inventory_statistics' },
       { label: 'Trạng thái hàng hoá', path: '/inventory/statistics?section=alerts', section: 'alerts', sectionScope: 'inventory_statistics' },
     ],
   },
   {
-    label: 'Yêu cầu điều chỉnh tồn',
+    label: 'Bổ sung tồn quầy',
     path: '/inventory/stock-requests',
     module: 'stock_adjustment_ops',
     icon: 'edit_note',
-    roles: ['agencyManager', 'inventoryManager'],
+    roles: ['admin', 'agencyManager', 'inventoryManager'],
   },
-  { label: 'Nhân sự', path: '/staff', module: 'staff', icon: 'badge', roles: ['cooperativeOwner', 'agencyManager'] },
+  {
+    label: 'Bảng giá vốn & giá bán',
+    path: '/accounting/cost-profit',
+    module: 'accounting_cost',
+    icon: 'sell',
+    roles: ['accountant', 'admin', 'agencyManager'],
+  },
+  { label: 'Nhân sự', path: '/staff', module: 'staff', icon: 'badge', roles: ['admin', 'agencyManager'] },
   {
     label: 'Hạng thẻ',
     path: '/admin/membership-tiers',
     module: 'membership_tiers_admin',
     icon: 'military_tech',
-    roles: ['cooperativeOwner'],
+    roles: ['admin'],
   },
   {
     label: 'Mã giảm giá',
     path: '/admin/promotions',
     module: 'promotions_admin',
     icon: 'sell',
-    roles: ['cooperativeOwner'],
+    roles: ['admin'],
+  },
+  {
+    label: 'Nhật ký hệ thống',
+    path: '/admin/system-activities',
+    module: 'system_activity_log',
+    icon: 'manage_search',
+    roles: ['admin'],
+  },
+  {
+    label: 'Đồng bộ tồn kho',
+    path: '/admin/inventory-sync',
+    module: 'inventory_sync_monitor',
+    icon: 'sync_problem',
+    roles: ['admin', 'agencyManager'],
   },
   {
     label: 'Thống kê bán hàng',
     path: '/dashboard',
     module: 'dashboard',
     icon: 'dashboard',
-    roles: ['cooperativeOwner', 'agencyManager', 'accountant', 'salesStaff', 'inventoryManager'],
+    roles: ['admin', 'agencyManager', 'accountant', 'salesStaff'],
     children: DASHBOARD_SECTIONS.map((section) => ({
       label: section.label,
       path: buildDashboardPath(section.key),
@@ -115,10 +148,6 @@ export const navigationItems = [
       sectionScope: 'dashboard',
     })),
   },
-  { label: 'Xác nhận giá nhập', path: '/accounting/import-costs', module: 'accountant_ops', icon: 'inventory', roles: ['cooperativeOwner', 'agencyManager', 'accountant'] },
-  { label: 'Bảng giá bán hàng', path: '/accounting/pricing', module: 'accountant_ops', icon: 'request_quote', roles: ['cooperativeOwner', 'agencyManager', 'accountant'] },
-  { label: 'Đề xuất giá', path: '/accounting/price-proposals', module: 'accountant_ops', icon: 'playlist_add_check', roles: ['agencyManager', 'accountant'] },
-  { label: 'Duyệt giá bán', path: '/admin/price-proposals', module: 'price_approval', icon: 'rule', roles: ['cooperativeOwner'] },
   {
     label: 'Tài khoản',
     path: '/admin/users',
@@ -134,6 +163,89 @@ export const navigationItems = [
     roles: ['admin'],
   },
 ]
+
+/**
+ * Gom nhóm sidebar cho role Thủ kho: 3 nhóm cha có thể mở/gập.
+ * Mỗi entry con trỏ tới path đã có trong navigationItems; `label` (nếu có) ghi đè nhãn hiển thị.
+ */
+const INVENTORY_SIDEBAR_GROUPS = [
+  {
+    key: '__grp_inventory_products',
+    label: 'Hàng hóa',
+    icon: 'inventory_2',
+    entries: [
+      { path: '/inventory/products', label: 'Sản phẩm & Số lượng' },
+      { path: '/products/categories', label: 'Danh mục sản phẩm' },
+      { path: '/inventory/boms' },
+      { path: '/inventory/product-approvals', label: 'Lịch sử tạo hàng hóa' },
+      { path: '/inventory/product-deletion-requests', label: 'Yêu cầu xóa hàng hóa' },
+    ],
+  },
+  {
+    key: '__grp_inventory_warehouse',
+    label: 'Kho tổng',
+    icon: 'warehouse',
+    entries: [
+      { path: '/inventory', label: 'Tồn kho tổng' },
+      { path: '/inventory/returns' },
+      { path: '/inventory/stocktake' },
+      { path: '/inventory/ledger' },
+      { path: '/inventory/stock-requests' },
+      { path: '/inventory/suppliers' },
+    ],
+  },
+  {
+    key: '__grp_inventory_production',
+    label: 'Sản xuất & đóng gói',
+    icon: 'precision_manufacturing',
+    entries: [
+      { path: '/inventory/production-orders' },
+      { path: '/inventory/custom-bundles' },
+    ],
+  },
+]
+
+function isInventoryOnlySession(roles = []) {
+  if (!roles.length) return false
+  return (
+    hasAnyRoleGroup(roles, ['inventoryManager']) && !hasAnyRoleGroup(roles, ['admin', 'agencyManager'])
+  )
+}
+
+/** Fold các mục kho phẳng thành 3 nhóm cha; giữ nguyên các mục còn lại theo thứ tự gốc. */
+function groupInventorySidebar(items) {
+  const byPath = new Map(items.map((item) => [item.path, item]))
+  const consumed = new Set()
+
+  const groups = INVENTORY_SIDEBAR_GROUPS.map((spec) => {
+    const children = spec.entries
+      .map(({ path, label }) => {
+        const found = byPath.get(path)
+        if (!found) return null
+        consumed.add(path)
+        return {
+          label: label || found.label,
+          path: found.path,
+          module: found.module,
+        }
+      })
+      .filter(Boolean)
+
+    if (!children.length) return null
+
+    return {
+      label: spec.label,
+      icon: spec.icon,
+      path: spec.key,
+      module: 'inventory',
+      isGroup: true,
+      children,
+    }
+  }).filter(Boolean)
+
+  const rest = items.filter((item) => !consumed.has(item.path))
+  return [...groups, ...rest]
+}
 
 function isSidebarModuleEnabled(module) {
   return !SIDEBAR_DISABLED_MODULES.has(String(module || '').toLowerCase())
@@ -195,16 +307,17 @@ function withRoleAwareProductLabel(items, roles = []) {
   })
 
   return items.map((item) =>
-    item.path === '/inventory/products' && isWarehouse ? { ...item, label: 'Sản phẩm & số lượng' } : item,
+    item.path === '/inventory/products' && isWarehouse ? { ...item, label: 'Hàng hóa' } : item,
   )
 }
 
 export function getNavigationItemsForSession(session) {
-  if (session?.modules?.length) {
-    return withRoleAwareProductLabel(getNavigationItemsForModules(session.modules, session.roles ?? []), session?.roles ?? [])
-  }
+  const roles = session?.roles ?? []
+  const items = session?.modules?.length
+    ? withRoleAwareProductLabel(getNavigationItemsForModules(session.modules, roles), roles)
+    : withRoleAwareProductLabel(getNavigationItemsForRoles(roles), roles)
 
-  return withRoleAwareProductLabel(getNavigationItemsForRoles(session?.roles ?? []), session?.roles ?? [])
+  return isInventoryOnlySession(roles) ? groupInventorySidebar(items) : items
 }
 
 export function getHomeRouteForModules(modules = []) {
@@ -249,43 +362,52 @@ export function resolveHomeRoute(authSession) {
     return '/login'
   }
 
-  if (isCooperativeOwnerRole(authSession.roles ?? [])) {
-    return '/dashboard'
-  }
-
   const homeRoute = authSession.modules?.length
     ? getHomeRouteForModules(authSession.modules)
     : getHomeRouteForRoles(authSession.roles ?? [])
 
   if (homeRoute === '/login') {
     const items = getNavigationItemsForSession(authSession)
-    return items[0]?.path ?? '/profile'
+    const first = items[0]
+    if (!first) return '/profile'
+    return first.isGroup ? first.children?.[0]?.path ?? '/profile' : first.path ?? '/profile'
   }
 
   return homeRoute
 }
 
 const MODULE_PATH_PREFIXES = [
+  { module: 'accounting_cost', prefix: '/accounting' },
   { module: 'integrations', prefix: '/integrations' },
   { module: 'reports', prefix: '/reports' },
   { module: 'contracts', prefix: '/contracts' },
   { module: 'staff', prefix: '/staff' },
   { module: 'membership_tiers_admin', prefix: '/admin/membership-tiers' },
   { module: 'promotions_admin', prefix: '/admin/promotions' },
+  { module: 'system_activity_log', prefix: '/admin/system-activities' },
+  { module: 'inventory_sync_monitor', prefix: '/admin/inventory-sync' },
   { module: 'users_admin', prefix: '/admin/users' },
   { module: 'phan_quyen_admin', prefix: '/admin/phan-quyen' },
   { module: 'customers', prefix: '/customers' },
-  { module: 'product_approvals_admin', prefix: '/inventory/product-approvals' },
+  { module: 'product_creation_requests', prefix: '/inventory/product-approvals' },
+  { module: 'product_deletion_requests', prefix: '/inventory/product-deletion-requests' },
+  { module: 'products', prefix: '/products/categories' },
   { module: 'products', prefix: '/inventory/products' },
   { module: 'stock_adjustment_ops', prefix: '/inventory/stock-requests' },
+  { module: 'supplier_receipts', prefix: '/inventory/supplier-receipts' },
+  { module: 'supplier_receipts', prefix: '/inventory/suppliers' },
+  { module: 'warehouse_batches', prefix: '/inventory/batches' },
+  { module: 'inventory_returns', prefix: '/inventory/return-inspections' },
+  { module: 'inventory_returns', prefix: '/inventory/returns' },
+  { module: 'inventory_stocktake', prefix: '/inventory/stocktake' },
+  { module: 'inventory_reports', prefix: '/inventory/reports' },
+  { module: 'inventory_ledger', prefix: '/inventory/ledger' },
   { module: 'inventory', prefix: '/inventory' },
   { module: 'cod_ops', prefix: '/orders/cod' },
   { module: 'stock_deduct_ops', prefix: '/orders/stock-deduct' },
   { module: 'orders', prefix: '/orders' },
   { module: 'pos', prefix: '/pos' },
   { module: 'dashboard', prefix: '/dashboard' },
-  { module: 'accountant_ops', prefix: '/accounting' },
-  { module: 'price_approval', prefix: '/admin/price-proposals' },
 ]
 
 export function getModuleForPath(pathname) {
@@ -300,11 +422,6 @@ export function getModuleForPath(pathname) {
   return null
 }
 
-function canReadInventoryStocks(session) {
-  const permissions = session?.permissions ?? []
-  return permissions.includes('VIEW_ORDER') || permissions.includes('MANAGE_CATALOG')
-}
-
 export function canAccessModule(session, module) {
   if (!module) {
     return true
@@ -315,20 +432,31 @@ export function canAccessModule(session, module) {
   }
 
   if (String(module).toLowerCase() === 'pos' && session?.permissions?.length) {
-    return session.permissions.includes('CREATE_ORDER')
+    return (
+      session.permissions.includes('CREATE_POS_ORDER')
+      || session.permissions.includes('CREATE_COD_ORDER')
+    )
+  }
+
+  if (String(module).toLowerCase() === 'cod_ops' && session?.permissions?.length) {
+    return (
+      session.permissions.includes('CREATE_COD_ORDER')
+      || session.permissions.includes('VERIFY_COD')
+    )
+  }
+
+  if (String(module).toLowerCase() === 'orders' && session?.permissions?.length) {
+    const canViewAll =
+      session.permissions.includes('VIEW_ALL_CUSTOMERS')
+      || session.permissions.includes('MANAGE_EMPLOYEE')
+      || session.permissions.includes('MANAGE_ROLE')
+    return session.permissions.includes('VIEW_ORDER')
+      && (canViewAll || session.permissions.includes('CREATE_POS_ORDER'))
   }
 
   if (String(module).toLowerCase() === 'inventory') {
     if (!session?.roles?.length) return false
-    return hasAnyRoleGroup(session.roles, ['inventoryManager'])
-  }
-
-  if (String(module).toLowerCase() === 'products' && !canReadInventoryStocks(session)) {
-    return false
-  }
-
-  if (String(module).toLowerCase() === 'product_approvals_admin') {
-    return (session?.permissions ?? []).includes('MANAGE_BUSINESS_POLICY')
+    return hasAnyRoleGroup(session.roles, ['inventoryManager', 'accountant'])
   }
 
   if (session?.modules?.length) {
@@ -353,9 +481,42 @@ export function canAccessModule(session, module) {
   return false
 }
 
-export function canAccessPath(session, pathname) {
+export function canAccessPath(session, pathname, search = '') {
+  const path = (pathname || '').toLowerCase()
+  const orderDetailContext = getOrderDetailContext(pathname, search)
+
+  if (orderDetailContext === 'cod' && canAccessModule(session, 'cod_ops')) {
+    return true
+  }
+
+  // SaleCod: được vào Trả/đổi + chi tiết liên quan (BE chỉ trả dữ liệu COD).
+  if (isSaleCodOnlySession(session)) {
+    if (
+      path === '/orders/exchange'
+      || path.startsWith('/orders/exchange/')
+      || path === '/orders/returns'
+      || path.startsWith('/orders/returns/')
+      || orderDetailContext === 'exchange'
+    ) {
+      return true
+    }
+  }
+
   const module = getModuleForPath(pathname)
   return canAccessModule(session, module)
+}
+
+function isSaleCodOnlySession(session) {
+  const permissions = session?.permissions ?? []
+  const canViewAll =
+    permissions.includes('VIEW_ALL_CUSTOMERS')
+    || permissions.includes('MANAGE_EMPLOYEE')
+    || permissions.includes('MANAGE_ROLE')
+  return (
+    !canViewAll
+    && permissions.includes('CREATE_COD_ORDER')
+    && !permissions.includes('CREATE_POS_ORDER')
+  )
 }
 
 /** Xem danh sách / preview hàng chờ trừ tồn quầy (Manager/Admin). */
@@ -375,10 +536,10 @@ export function canConfirmStockDeduct(session) {
 export function getAccessDeniedMessage(pathname) {
   const module = getModuleForPath(pathname)
   if (module === 'pos') {
-    return 'Tài khoản không có quyền tạo đơn (CREATE_ORDER). Vui lòng đăng nhập bằng Sale hoặc Quản lý, hoặc đăng xuất và đăng nhập lại sau khi quyền được cập nhật.'
+    return 'Tài khoản không có quyền tạo đơn POS/COD. Vui lòng đăng xuất và đăng nhập lại nếu quyền vừa được cập nhật.'
   }
   if (module === 'cod_ops') {
-    return 'Chỉ Quản lý chi nhánh mới được truy cập Quản lý COD.'
+    return 'Chỉ Sale COD hoặc Quản lý chi nhánh mới được truy cập Quản lý COD.'
   }
   if (module === 'stock_deduct_ops') {
     return 'Chỉ Quản lý chi nhánh hoặc Admin mới được xử lý hàng chờ trừ tồn quầy.'
@@ -386,23 +547,11 @@ export function getAccessDeniedMessage(pathname) {
   if (module === 'inventory') {
     return 'Chỉ Thủ kho Kho tổng mới được truy cập module kho tổng.'
   }
-  if (module === 'products') {
-    return 'Tài khoản không có quyền xem tồn kho (VIEW_ORDER). Vui lòng đăng nhập bằng Quản lý, Chủ HTX hoặc Thủ kho.'
-  }
-  if (module === 'contracts') {
-    return 'Chỉ Chủ hợp tác xã hoặc Quản lý chi nhánh mới được truy cập Hợp đồng.'
-  }
-  if (module === 'product_approvals_admin') {
-    return 'Chỉ Chủ hợp tác xã mới được duyệt sản phẩm mới.'
-  }
-  if (module === 'promotions_admin' || module === 'membership_tiers_admin') {
-    return 'Chỉ Chủ hợp tác xã mới được quản lý hạng thẻ và mã giảm giá.'
-  }
-  if (module === 'price_approval') {
-    return 'Chỉ Chủ hợp tác xã mới được duyệt giá bán.'
+  if (module === 'promotions_admin' || module === 'membership_tiers_admin' || module === 'system_activity_log') {
+    return 'Chỉ Admin mới được quản lý hạng thẻ và mã giảm giá.'
   }
   if (module === 'users_admin' || module === 'phan_quyen_admin') {
-    return 'Chỉ Quản trị kỹ thuật mới được quản lý tài khoản và phân quyền.'
+    return 'Chỉ Quản trị viên mới được quản lý tài khoản và phân quyền.'
   }
   return 'Bạn không có quyền truy cập trang này.'
 }
@@ -428,6 +577,14 @@ function getOrderDetailContext(pathname, search = '') {
 /** Sidebar highlight: /orders/cod must not activate the /orders item. */
 export function isNavigationItemActive(pathname, item, search = '') {
   const path = (pathname || '').toLowerCase()
+
+  // Nhóm cha của role kho: active khi bất kỳ mục con nào đang active (theo path).
+  if (item?.isGroup) {
+    return (item.children || []).some((child) =>
+      isNavigationItemActive(pathname, { path: child.path, module: child.module }, search),
+    )
+  }
+
   const target = (item?.path || '').toLowerCase()
   const orderDetailContext = getOrderDetailContext(pathname, search)
 
@@ -511,6 +668,11 @@ export function isNavigationItemActive(pathname, item, search = '') {
 }
 
 export function isNavigationChildActive(pathname, search, child) {
+  // Nhóm cha của role kho: mục con điều hướng theo path riêng (không có section).
+  if (child && !child.section && child.path) {
+    return isNavigationItemActive(pathname, { path: child.path, module: child.module }, search)
+  }
+
   if (!child?.section) {
     return false
   }

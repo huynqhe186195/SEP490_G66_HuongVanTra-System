@@ -121,7 +121,10 @@ public class AuthLogic(
     private async Task<LoginResponse> IssueTokensAsync(User user)
     {
         var roles = await roleRepo.GetByUserIdAsync(user.Id);
-        var roleNames = roles.Select(r => r.RoleName).ToList();
+        var roleNames = roles
+            .Select(r => r.RoleName)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
         var permissions = roles
             .SelectMany(r => r.RolePermissions)
             .Select(rp => rp.Permission.PermissionCode)

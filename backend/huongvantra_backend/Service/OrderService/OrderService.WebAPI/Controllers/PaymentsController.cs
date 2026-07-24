@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using OrderService.Application.Authorization;
 using OrderService.Application.DTOs.Requests;
 using OrderService.Application.UseCases;
+using OrderService.WebAPI.Authorization;
 
 namespace OrderService.WebAPI.Controllers;
 
@@ -12,11 +13,7 @@ namespace OrderService.WebAPI.Controllers;
 [Authorize]
 public class PaymentsController(PaymentLogic paymentLogic) : ControllerBase
 {
-    private OrderAccessContext AccessContext() => new(
-        User.GetUserId(),
-        User.HasPermission(PermissionNames.ManageEmployee)
-            || User.HasPermission(PermissionNames.ManageRole)
-            || User.HasPermission(PermissionNames.ViewAllCustomers));
+    private OrderAccessContext AccessContext() => User.CreateOrderAccessContext();
 
     [HttpGet("orders/{orderId:guid}")]
     [Authorize(Policy = PermissionNames.ViewOrder)]
@@ -34,10 +31,11 @@ public class PaymentsController(PaymentLogic paymentLogic) : ControllerBase
         Ok(await paymentLogic.GetUnverifiedCodAsync(AccessContext(), ct));
 
     [HttpPost("{id:guid}/verify-cod")]
-    [Authorize(Policy = PermissionNames.CreateOrder)]
+    [Authorize(Policy = PermissionNames.VerifyCod)]
     public async Task<IActionResult> VerifyCod(
         Guid id, [FromBody] VerifyCodPaymentRequest request, CancellationToken ct = default)
     {
+        // Policy VERIFY_COD: SaleCod / Manager (seed) / Admin (all perms).
         var actorId = User.GetUserId();
         var actorName = User.GetUsername();
         return Ok(await paymentLogic.VerifyCodAsync(

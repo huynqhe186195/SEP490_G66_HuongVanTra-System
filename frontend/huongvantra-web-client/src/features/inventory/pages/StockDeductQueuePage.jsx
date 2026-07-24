@@ -204,6 +204,14 @@ function StockDeductQueuePage() {
                         <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
                           {getQueueStatusLabel(row.queueStatus)}
                         </span>
+                        {row.isReserved ? (
+                          <span
+                            className="mt-1 block w-fit rounded-full bg-sky-100 px-3 py-1 text-xs font-semibold text-sky-700"
+                            title="Đơn COD đang giữ chỗ tồn Kệ Hàng — tồn khả bán đã trừ phần giữ chỗ này"
+                          >
+                            Đang giữ chỗ tồn
+                          </span>
+                        ) : null}
                       </td>
                       <td className="px-4 py-5">
                         <span

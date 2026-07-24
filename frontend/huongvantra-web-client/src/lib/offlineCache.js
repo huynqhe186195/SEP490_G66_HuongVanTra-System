@@ -68,22 +68,34 @@ async function fetchAllStocks() {
 }
 
 async function fetchAllCustomers() {
-  const pageSize = 100
-  let page = 1
-  let all = []
-  let total
-  do {
-    const data = await apiRequestAuth(
-      `/api/customers?page=${page}&pageSize=${pageSize}`,
-      { method: 'GET' }
-    )
-    const paged = toPagedResult(data)
-    const items = paged.items ?? []
-    all = all.concat(items)
-    total = paged.totalCount ?? 0
-    if (items.length === 0) break
-    page++
-  } while (all.length < total && page <= 100)
+  const pageSize = 50
+  const customerTypes = ['GENERAL', 'VIP', 'CORPORATE']
+  const all = []
+
+  for (const customerType of customerTypes) {
+    let page = 1
+    let typeCount = 0
+    let total
+    do {
+      const query = new URLSearchParams({
+        customerType,
+        page: String(page),
+        pageSize: String(pageSize),
+      })
+      const data = await apiRequestAuth(
+        `/api/customers/checkout-search?${query.toString()}`,
+        { method: 'GET' },
+      )
+      const paged = toPagedResult(data)
+      const items = paged.items ?? []
+      all.push(...items)
+      typeCount += items.length
+      total = paged.totalCount ?? 0
+      if (items.length === 0) break
+      page++
+    } while (typeCount < total && page <= 100)
+  }
+
   return all
 }
 
@@ -99,6 +111,18 @@ function canSyncPosOfflineData(permissions) {
   return permissions.includes('CREATE_ORDER')
 }
 
+function mapCustomerGroupToPosType(value) {
+  const group = String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+
+  if (group === 'doingoai') return 'VIP'
+  if (group === 'doanhnghiep') return 'CORPORATE'
+  return 'GENERAL'
+}
+}
+
 // ── Main sync function — called on "Chuẩn bị offline" or background timer ───
 
 export async function syncOfflineCache({ permissions = [] } = {}) {
@@ -108,7 +132,7 @@ export async function syncOfflineCache({ permissions = [] } = {}) {
 
   const safe = fn => fn().catch(e => { console.warn('[offline-sync]', e.message); return [] })
 
-  const shouldSyncCustomers = canViewCustomers(permissions)
+  const shouldSyncCustomers = canViewCustomers(permissions) && permissions.includes('CREATE_ORDER')
 
   const [skus, products, stocks, customers] = await Promise.all([
     safe(fetchAllSkus),
@@ -149,13 +173,16 @@ export async function syncOfflineCache({ permissions = [] } = {}) {
 
   const mappedCustomers = customers.map(c => ({
     customerId: c.id ?? c.customerId ?? c.CustomerId,
+    customerCode: c.customerCode ?? c.CustomerCode ?? '',
     name: c.fullName ?? c.name ?? c.Name ?? '',
     phone: c.phoneNumber ?? c.phone ?? c.Phone ?? '',
     debtBalance: Number(c.currentDebt ?? c.debtBalance ?? 0),
     tierId: c.tierId ?? null,
     tierName: c.tierName ?? c.membershipTierName ?? '',
     tierDiscountPercent: Number(c.tierDiscountPercent ?? 0),
-    customerType: c.customerType ?? c.CustomerType ?? 'RETAIL',
+    customerType: mapCustomerGroupToPosType(
+      c.customerGroup ?? c.CustomerGroup ?? c.customerType ?? c.CustomerType,
+    ),
   }))
 
   await Promise.all([

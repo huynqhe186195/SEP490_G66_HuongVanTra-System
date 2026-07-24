@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OrderService.Application.Authorization;
 using OrderService.Application.UseCases;
+using OrderService.WebAPI.Authorization;
 
 namespace OrderService.WebAPI.Controllers;
 
@@ -11,11 +12,7 @@ namespace OrderService.WebAPI.Controllers;
 [Authorize]
 public class ReturnOrdersController(OrderLogic orderLogic) : ControllerBase
 {
-    private OrderAccessContext AccessContext() => new(
-        User.GetUserId(),
-        User.HasPermission(PermissionNames.ManageEmployee)
-            || User.HasPermission(PermissionNames.ManageRole)
-            || User.HasPermission(PermissionNames.ViewAllCustomers));
+    private OrderAccessContext AccessContext() => User.CreateOrderAccessContext();
 
     [HttpGet]
     [Authorize(Policy = PermissionNames.ViewOrder)]

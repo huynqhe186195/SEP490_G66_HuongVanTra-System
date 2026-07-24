@@ -12,6 +12,11 @@ public class StockDeductQueue
     public QueueStatus QueueStatus { get; set; } = QueueStatus.Waiting;
     public decimal TotalAmount { get; set; }
     public bool IsDeducted { get; set; }
+    /// <summary>
+    /// POS-04: đơn COD chờ xác nhận đã giữ chỗ tồn Kệ Hàng (ReservedQuantity đã cộng).
+    /// Dùng để reserve/release idempotent — chỉ reserve khi false, chỉ release khi true.
+    /// </summary>
+    public bool IsReserved { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? ConfirmedAt { get; set; }
     public Guid? ConfirmedBy { get; set; }

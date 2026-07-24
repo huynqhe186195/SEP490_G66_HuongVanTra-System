@@ -56,6 +56,9 @@ public class SupplierReceiptRepository(InventoryDbContext _db) : ISupplierReceip
     public Task<int> CountCreatedSinceAsync(DateTime sinceUtc, CancellationToken ct = default) =>
         _db.SupplierReceipts.CountAsync(r => r.CreatedAt >= sinceUtc, ct);
 
+    public Task<int> CountBySupplerIdAsync(Guid supplierId, CancellationToken ct = default) =>
+        _db.SupplierReceipts.CountAsync(r => r.SupplierId == supplierId, ct);
+
     public async Task AddAsync(SupplierReceipt receipt, CancellationToken ct = default) =>
         await _db.SupplierReceipts.AddAsync(receipt, ct);
 

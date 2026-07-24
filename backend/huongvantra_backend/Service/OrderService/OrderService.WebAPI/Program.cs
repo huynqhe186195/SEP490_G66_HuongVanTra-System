@@ -44,7 +44,20 @@ builder.Services.AddScoped<IPromotionRepository, PromotionRepository>();
 builder.Services.AddScoped<IOrderCodeGenerator, OrderCodeGenerator>();
 builder.Services.AddScoped<IReturnOrderRepository, ReturnOrderRepository>();
 builder.Services.AddScoped<ICustomBundleRepository, CustomBundleRepository>();
-builder.Services.AddScoped<IOrderEventPublisher, OrderEventPublisher>();
+builder.Services.AddScoped<IOrderOutboxWriter, OrderOutboxWriter>();
+// G4: request path ghi integration event vào Outbox (atomic với business transaction),
+// thay cho publish trực tiếp RabbitMQ. Dispatcher nền (G5) sẽ publish sau khi commit.
+builder.Services.AddScoped<IOrderEventPublisher, OutboxOrderEventPublisher>();
+// G5: Outbox Dispatcher — background publisher đọc Outbox và publish lên RabbitMQ.
+builder.Services.Configure<OutboxDispatcherOptions>(
+    builder.Configuration.GetSection(OutboxDispatcherOptions.SectionName));
+builder.Services.AddScoped<IOutboxStore, OutboxStore>();
+builder.Services.AddScoped<IOutboxMessagePublisher, MassTransitOutboxMessagePublisher>();
+builder.Services.AddScoped<OutboxDispatchProcessor>();
+builder.Services.AddHostedService<OutboxDispatcherHostedService>();
+// G7: giám sát Outbox (liệt kê/chi tiết/thống kê/retry thủ công) cho trang quản trị đồng bộ tồn kho.
+builder.Services.AddScoped<IOutboxMonitoringRepository, OutboxMonitoringRepository>();
+builder.Services.AddScoped<IOutboxMonitoringLogic, OutboxMonitoringLogic>();
 builder.Services.AddScoped<IReportRepository, ReportRepository>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddTransient<ForwardAuthorizationHeaderHandler>();

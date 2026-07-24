@@ -94,6 +94,7 @@ function OrderCustomerSection({
         setSelectedAddressKey(String(preferred.id))
         onChange({
           customerId: selectedCustomer.customerId,
+          selectedCustomer,
           customerSnapshotName:
             formatCustomerOrderSnapshot(selectedCustomer) || selectedCustomer.fullName,
           shippingAddress: formatted,
@@ -122,11 +123,11 @@ function OrderCustomerSection({
     setNewCustomerErrors({})
 
     if (nextMode === 'guest') {
-      onChange({ customerId: null, customerSnapshotName: '', shippingAddress: '' })
+      onChange({ customerId: null, selectedCustomer: null, customerSnapshotName: '', shippingAddress: '' })
     } else if (nextMode === 'new') {
-      onChange({ customerId: null, customerSnapshotName: '', shippingAddress: '' })
+      onChange({ customerId: null, selectedCustomer: null, customerSnapshotName: '', shippingAddress: '' })
     } else {
-      onChange({ customerId: null, customerSnapshotName: '', shippingAddress: '' })
+      onChange({ customerId: null, selectedCustomer: null, customerSnapshotName: '', shippingAddress: '' })
     }
   }
 
@@ -136,6 +137,7 @@ function OrderCustomerSection({
     setSearchResults([])
     onChange({
       customerId: customer.customerId,
+      selectedCustomer: customer,
       customerSnapshotName: formatCustomerOrderSnapshot(customer) || customer.fullName,
       shippingAddress: '',
     })
@@ -146,7 +148,7 @@ function OrderCustomerSection({
     setAddresses([])
     setSelectedAddressKey('')
     setUseCustomAddress(false)
-    onChange({ customerId: null, customerSnapshotName: '', shippingAddress: '' })
+    onChange({ customerId: null, selectedCustomer: null, customerSnapshotName: '', shippingAddress: '' })
   }
 
   function handleAddressPick(addressKey) {

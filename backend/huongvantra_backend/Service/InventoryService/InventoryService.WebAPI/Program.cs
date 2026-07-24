@@ -50,6 +50,8 @@ builder.Services.AddScoped<ISupplierReturnRequestRepository, SupplierReturnReque
 builder.Services.AddScoped<IStocktakeRequestRepository, StocktakeRequestRepository>();
 builder.Services.AddScoped<IProcessedIntegrationEventRepository, ProcessedIntegrationEventRepository>();
 builder.Services.AddScoped<IProductionOrderRepository, ProductionOrderRepository>();
+builder.Services.AddScoped<ISupplierRepository, SupplierRepository>();
+builder.Services.AddScoped<IReturnInspectionRepository, ReturnInspectionRepository>();
 builder.Services.AddScoped<IInventoryEventPublisher, InventoryEventPublisher>();
 builder.Services.AddHttpClient<IProductCatalogClient, ProductCatalogClient>(client =>
 {
@@ -64,6 +66,7 @@ builder.Services.AddMassTransit(x =>
     x.AddConsumer<OrderPlacedConsumer>();
     x.AddConsumer<OrderCancelledConsumer>();
     x.AddConsumer<OrderReturnedConsumer>();
+    x.AddConsumer<OrderShippedConsumer>();
     x.AddConsumer<LowStockConsumer>();
 
     x.UsingRabbitMq((ctx, cfg) =>
@@ -85,6 +88,9 @@ builder.Services.AddMassTransit(x =>
 
         cfg.ReceiveEndpoint("inventory-service.order-returned", e =>
             e.ConfigureConsumer<OrderReturnedConsumer>(ctx));
+
+        cfg.ReceiveEndpoint("inventory-service.order-shipped", e =>
+            e.ConfigureConsumer<OrderShippedConsumer>(ctx));
 
         cfg.ReceiveEndpoint("inventory-service.low-stock", e =>
             e.ConfigureConsumer<LowStockConsumer>(ctx));

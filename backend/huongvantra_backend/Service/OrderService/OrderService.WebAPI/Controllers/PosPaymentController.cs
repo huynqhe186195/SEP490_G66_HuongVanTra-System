@@ -4,31 +4,36 @@ using Microsoft.AspNetCore.Mvc;
 using OrderService.Application.Authorization;
 using OrderService.Application.DTOs.Responses;
 using OrderService.Application.UseCases;
+using OrderService.WebAPI.Authorization;
 
 namespace OrderService.WebAPI.Controllers;
 
 [ApiController]
 [Route("api/pos")]
-public class PosPaymentController(PosTransferPaymentLogic posPaymentLogic) : ControllerBase
+public class PosPaymentController(
+    PosTransferPaymentLogic posPaymentLogic,
+    OrderLogic orderLogic) : ControllerBase
 {
-    private OrderAccessContext AccessContext() => new(
-        User.GetUserId(),
-        User.HasPermission(PermissionNames.ManageEmployee)
-            || User.HasPermission(PermissionNames.ManageRole)
-            || User.HasPermission(PermissionNames.ViewAllCustomers));
+    private OrderAccessContext AccessContext() => User.CreateOrderAccessContext();
+
+    private (Guid? ActorId, string? ActorName) Actor() =>
+    (
+        User.GetUserId() is var id && id != Guid.Empty ? id : null,
+        string.IsNullOrWhiteSpace(User.GetUsername()) ? null : User.GetUsername()
+    );
 
     [HttpGet("transfer-payment-info")]
-    [Authorize(Policy = PermissionNames.CreateOrder)]
+    [Authorize(Policy = PermissionNames.CreatePosOrder)]
     public IActionResult GetTransferPaymentInfo() =>
         Ok(posPaymentLogic.GetTransferPaymentInfo());
 
     [HttpGet("sepay-setup")]
-    [Authorize(Policy = PermissionNames.CreateOrder)]
+    [Authorize(Policy = PermissionNames.CreatePosOrder)]
     public IActionResult GetSepaySetup() =>
         Ok(posPaymentLogic.GetSepaySetup());
 
     [HttpPost("transfer-qr")]
-    [Authorize(Policy = PermissionNames.CreateOrder)]
+    [Authorize(Policy = PermissionNames.CreatePosOrder)]
     public async Task<IActionResult> BuildTransferQr(
         [FromBody] BuildTransferQrRequest request, CancellationToken ct) =>
         Ok(await posPaymentLogic.BuildTransferQrAsync(request, AccessContext(), ct));
@@ -39,7 +44,7 @@ public class PosPaymentController(PosTransferPaymentLogic posPaymentLogic) : Con
         Ok(await posPaymentLogic.GetTransferQrForOrderAsync(orderId, AccessContext(), ct));
 
     [HttpPost("orders/{orderId:guid}/transfer-qr/refresh")]
-    [Authorize(Policy = PermissionNames.CreateOrder)]
+    [Authorize(Policy = PermissionNames.CreatePosOrder)]
     public async Task<IActionResult> RefreshTransferQr(Guid orderId, CancellationToken ct) =>
         Ok(await posPaymentLogic.RefreshTransferQrForOrderAsync(orderId, AccessContext(), ct));
 
@@ -47,6 +52,25 @@ public class PosPaymentController(PosTransferPaymentLogic posPaymentLogic) : Con
     [Authorize(Policy = PermissionNames.ViewOrder)]
     public async Task<IActionResult> GetOrderPaymentStatus(Guid orderId, CancellationToken ct) =>
         Ok(await posPaymentLogic.GetOrderPaymentStatusAsync(orderId, AccessContext(), ct));
+
+    [HttpPost("orders/{orderId:guid}/transfer-payment/cancel")]
+    [Authorize]
+    public async Task<IActionResult> CancelPendingTransfer(Guid orderId, CancellationToken ct)
+    {
+        if (!User.HasPermission(PermissionNames.CreatePosOrder)
+            && !User.HasPermission(PermissionNames.CreateCodOrder))
+        {
+            return Forbid();
+        }
+
+        var (actorId, actorName) = Actor();
+        return Ok(await orderLogic.CancelPendingTransferAsync(
+            orderId,
+            AccessContext(),
+            actorId,
+            actorName,
+            ct));
+    }
 
     [HttpPost("sepay/webhook")]
     [AllowAnonymous]

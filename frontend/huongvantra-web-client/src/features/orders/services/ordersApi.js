@@ -199,6 +199,15 @@ export function buildCreateOrderBody(payload) {
     transferQrAmount: Number(payload.transferQrAmount ?? 0),
     paymentMethod: payload.paymentMethod,
     codDebtSettlementJson: payload.codDebtSettlementJson?.trim() || null,
+    payments: Array.isArray(payload.payments)
+      ? payload.payments
+          .map((payment) => ({
+            paymentMethod: payment.paymentMethod,
+            amount: Number(payment.amount),
+            debtSettlementJson: payment.debtSettlementJson?.trim() || null,
+          }))
+          .filter((payment) => payment.paymentMethod && payment.amount > 0)
+      : null,
     items: (payload.items || []).map((line) => ({
       skuId: line.skuId,
       skuSnapshotName: line.skuSnapshotName,
@@ -223,9 +232,12 @@ export function buildCreateOrderBody(payload) {
   }
 }
 
-export async function createOrder(payload) {
+export async function createOrder(payload, { idempotencyKey } = {}) {
   const data = await apiRequestAuth('/api/v1/orders', {
     method: 'POST',
+    headers: idempotencyKey
+      ? { 'X-Idempotency-Key': idempotencyKey }
+      : undefined,
     body: JSON.stringify(buildCreateOrderBody(payload)),
   })
   return mapOrderDetail(data)

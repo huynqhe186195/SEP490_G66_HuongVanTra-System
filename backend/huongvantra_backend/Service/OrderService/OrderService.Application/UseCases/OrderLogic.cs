@@ -9,6 +9,7 @@ using OrderService.Application.Validation;
 using OrderService.Domain.Entities;
 using OrderService.Domain.Enums;
 using OrderService.Domain.Exceptions;
+using OrderService.Domain.Rules;
 
 namespace OrderService.Application.UseCases;
 
@@ -41,12 +42,14 @@ public class OrderLogic(
         var employeeFilter = access.EmployeeFilter ?? ParseOptionalGuid(req.EmployeeId);
         var fromDate = ParseOptionalDate(req.FromDate);
         var toDate = ParseOptionalDate(req.ToDate);
+        var channel = access.CodOrdersOnly ? "COD" : req.Channel;
+        var excludeChannel = access.CodOrdersOnly ? null : req.ExcludeChannel;
 
         var (items, total) = await _orderRepo.GetPagedAsync(
-            req.Search, customerId, req.Status, req.Channel,
-            req.ExcludeChannel, req.CodTab, req.ReturnableOnly,
+            req.Search, customerId, req.Status, channel,
+            excludeChannel, req.CodTab, req.ReturnableOnly,
             req.OrderKind, req.ExcludeOrderKind,
-            fromDate, toDate, employeeFilter,
+            fromDate, toDate, employeeFilter, access.IncludeAllCodOrders,
             page, pageSize, ct);
 
         var dtos = items.Select(MapToSummary).ToList();
@@ -160,8 +163,9 @@ public class OrderLogic(
         string? search, string? sourceChannel, OrderAccessContext access, int page, int pageSize, CancellationToken ct = default)
     {
         OrderInputValidator.ValidatePagination(page, pageSize);
+        var channel = access.CodOrdersOnly ? "COD" : sourceChannel;
         var (items, total) = await _returnOrderRepo.GetPagedAsync(
-            search, sourceChannel, access.EmployeeFilter, page, pageSize, ct);
+            search, channel, access.EmployeeFilter, access.IncludeAllCodOrders, page, pageSize, ct);
         var dtos = new List<ReturnOrderSummaryResponse>(items.Count);
 
         foreach (var (item, sourceOrderChannel) in items)
@@ -226,16 +230,20 @@ public class OrderLogic(
         string? idempotencyKey = null,
         CancellationToken ct = default)
     {
-        // Idempotency: nếu key đã tồn tại, trả về đơn cũ thay vì tạo mới
-        if (!string.IsNullOrWhiteSpace(idempotencyKey))
+        var effectiveIdempotencyKey = OrderIdempotency.BuildActorScopedKey(idempotencyKey, actorId);
+        if (effectiveIdempotencyKey is not null)
         {
-            var existing = await _orderRepo.GetByIdempotencyKeyAsync(idempotencyKey, ct);
+            var existing = await _orderRepo.GetByIdempotencyKeyAsync(effectiveIdempotencyKey, ct);
             if (existing != null)
                 return MapToResponse(existing);
         }
 
+        var skuProfiles = await GetRequiredSkuProfilesAsync(
+            req.Items.Select(i => i.SkuId),
+            ct);
         var detailInputs = req.Items.Select(i =>
         {
+            var profile = skuProfiles[i.SkuId];
             var isGift = i.IsGift;
             var unitPrice = isGift ? 0m : i.UnitPrice;
             return new CreateOrderDetailInput(
@@ -243,11 +251,11 @@ public class OrderLogic(
                 i.SkuSnapshotName.Trim(),
                 i.SkuSnapshotCode?.Trim(),
                 i.CategorySnapshotName?.Trim(),
-                i.Quantity,
+                OrderBusinessRules.NormalizeBaseQuantity(i.Quantity, profile.InventoryUnit),
                 i.CostPrice,
                 unitPrice,
                 isGift,
-                i.CategoryId);
+                profile.CategoryId ?? i.CategoryId);
         }).ToList();
 
         OrderInputValidator.ValidateCreateOrder(
@@ -255,24 +263,35 @@ public class OrderLogic(
             req.OrderChannel, req.ShippingAddress,
             hasCustomBundles: (req.CustomBundles ?? []).Any(b => (b.Ingredients ?? []).Count > 0));
 
-        if (detailInputs.Any(i => i.IsGift))
-            await EnsureVipCustomerAsync(req.CustomerId, ct);
+        if (req.OrderKind != OrderKind.Exchange)
+        {
+            OrderBusinessRules.EnsureSaleLinesHavePositivePrice(
+                detailInputs.Select(item => (item.UnitPrice, item.IsGift)));
+        }
 
-        if (req.DiscountAmount > 0)
+        var hasGiftItems = detailInputs.Any(i => i.IsGift);
+        if (hasGiftItems)
+            await EnsureVipCustomerAsync(req.CustomerId, ct);
+        var isAuthorizedVipGiftOrder =
+            hasGiftItems
+            && detailInputs.All(item => item.IsGift)
+            && !(req.CustomBundles ?? []).Any(bundle => (bundle.Ingredients ?? []).Count > 0);
+
+        // Exchange: DiscountAmount includes return credit (+ tier/manual already validated in ReturnAsync).
+        // Do not treat that credit as a VIP/manual POS discount.
+        if (req.DiscountAmount > 0 && req.OrderKind != OrderKind.Exchange)
             await EnsureManualDiscountAllowedAsync(req.CustomerId, ct);
 
-        var orderCode = await _codeGen.GenerateAsync(req.OrderKind, ct);
         var totalAmount = detailInputs.Sum(i => i.UnitPrice * i.Quantity);
         var bundleTotal = (req.CustomBundles ?? []).Sum(b => b.Ingredients.Sum(i => i.UnitPrice * i.Quantity));
         totalAmount += bundleTotal;
         var manualDiscount = req.DiscountAmount;
+        if (req.OrderKind != OrderKind.Exchange)
+        {
+            OrderBusinessRules.EnsureManualDiscountDoesNotZeroOrder(totalAmount, manualDiscount);
+        }
         if (manualDiscount > totalAmount)
             throw new OrderValidationException("Giảm giá thủ công không được lớn hơn tổng tiền đơn hàng.");
-
-        var hasPromotion = (req.PromotionId.HasValue && req.PromotionId.Value != Guid.Empty) ||
-            !string.IsNullOrWhiteSpace(req.PromotionCode);
-        if (hasPromotion)
-            detailInputs = await EnrichCategoryIdsAsync(detailInputs, ct);
 
         var promotionItems = detailInputs.Select(i => new PromotionCalculationItem(
             i.SkuId,
@@ -282,17 +301,42 @@ public class OrderLogic(
             i.CategoryId)).ToList();
         var promotionDiscount = await _promotionLogic.ValidateAndCalculateDiscountAsync(
             req.PromotionId, req.PromotionCode, promotionItems, manualDiscount, req.CustomerId, ct);
-        var totalDiscount = manualDiscount + promotionDiscount.DiscountAmount;
+        var membershipDiscount = req.OrderKind == OrderKind.Exchange
+            ? 0m
+            : await GetMembershipTierDiscountAsync(
+                req.CustomerId,
+                Math.Max(0, totalAmount - manualDiscount - promotionDiscount.DiscountAmount),
+                ct);
+        var totalDiscount = manualDiscount + promotionDiscount.DiscountAmount + membershipDiscount;
         var finalAmount = Math.Max(0, totalAmount - totalDiscount);
+        if (req.OrderKind != OrderKind.Exchange)
+        {
+            OrderBusinessRules.EnsureZeroTotalOrderAllowed(
+                finalAmount,
+                totalAmount,
+                manualDiscount,
+                promotionDiscount.PromotionId,
+                promotionDiscount.DiscountAmount,
+                isAuthorizedVipGiftOrder);
+        }
+        var paymentAllocations = NormalizePaymentAllocations(req, finalAmount);
+        var allocatedPaymentTotal = paymentAllocations.Sum(item => item.Amount);
+        OrderBusinessRules.EnsureGuestFullyPaid(
+            req.CustomerId,
+            allocatedPaymentTotal,
+            finalAmount);
+        var orderCode = await _codeGen.GenerateAsync(req.OrderKind, ct);
 
-        var isPosCashCompleted = req.OrderChannel == OrderChannel.POS
-            && req.PaymentMethod == PaymentMethod.Cash;
-
-        var isPosRecordedTransferCompleted = req.OrderChannel == OrderChannel.POS
-            && req.PaymentMethod is PaymentMethod.VietQR or PaymentMethod.BankTransfer
-            && req.PaidAmount > 0;
-
-        var isPosCompletedOnCreate = isPosCashCompleted || isPosRecordedTransferCompleted;
+        var hasPendingTransfer = paymentAllocations.Any(item =>
+            item.PaymentMethod is PaymentMethod.VietQR or PaymentMethod.BankTransfer
+            && item.PaymentStatus != PaymentStatus.Success);
+        var hasCodPayment = paymentAllocations.Any(item => item.PaymentMethod == PaymentMethod.COD);
+        var hasRecordedPayment = paymentAllocations.Any(item => item.PaymentStatus == PaymentStatus.Success);
+        var isPosCompletedOnCreate =
+            req.OrderChannel == OrderChannel.POS
+            && !hasPendingTransfer
+            && !hasCodPayment
+            && (finalAmount <= 0 || hasRecordedPayment || req.PaymentMethod == PaymentMethod.Cash);
 
         var ownerId = access.CanViewAllOrders ? (req.EmployeeId ?? actorId) : actorId;
         if (!access.CanViewAllOrders
@@ -322,7 +366,7 @@ public class OrderLogic(
             FinalAmount = finalAmount,
             ShippingAddress = req.ShippingAddress?.Trim(),
             Note = req.Note?.Trim(),
-            IdempotencyKey = string.IsNullOrWhiteSpace(idempotencyKey) ? null : idempotencyKey,
+            IdempotencyKey = effectiveIdempotencyKey,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
@@ -369,58 +413,67 @@ public class OrderLogic(
             UpdatedAt = now
         }).ToList();
 
-        var debtAmount = req.PaymentMethod == PaymentMethod.COD
+        var successfulPaymentTotal = paymentAllocations
+            .Where(item => item.PaymentStatus == PaymentStatus.Success)
+            .Sum(item => item.Amount);
+        var debtAmount = hasCodPayment
             ? finalAmount
-            : Math.Max(0, finalAmount - req.PaidAmount);
+            : Math.Max(0, finalAmount - successfulPaymentTotal);
 
-        var paymentAmount = req.PaidAmount;
-        if (paymentAmount <= 0
-            && req.PaymentMethod is PaymentMethod.VietQR or PaymentMethod.BankTransfer
-            && req.TransferQrAmount > 0)
+        var paymentCreatedAt = DateTime.UtcNow;
+        var payments = paymentAllocations.Select(item =>
         {
-            paymentAmount = req.TransferQrAmount;
+            var payment = new Payment
+            {
+                Id = Guid.NewGuid(),
+                OrderId = order.Id,
+                PaymentMethod = item.PaymentMethod,
+                Amount = item.Amount,
+                PaymentStatus = item.PaymentStatus,
+                IsCodVerified = false,
+                CodWarningDate = item.PaymentMethod == PaymentMethod.COD
+                    ? paymentCreatedAt.AddDays(7)
+                    : null,
+                CodDebtSettlementJson = item.DebtSettlementJson,
+                PaidAt = item.PaymentStatus == PaymentStatus.Success
+                    ? paymentCreatedAt
+                    : null,
+                CreatedAt = paymentCreatedAt,
+                UpdatedAt = paymentCreatedAt
+            };
+
+            if (item.PaymentMethod is PaymentMethod.VietQR or PaymentMethod.BankTransfer
+                && item.PaymentStatus == PaymentStatus.Pending)
+            {
+                var expiryMinutes = _sepay.PosVaDurationSeconds > 0
+                    ? Math.Max(1, _sepay.PosVaDurationSeconds / 60)
+                    : 15;
+                payment.TransferQrExpiresAtUtc = paymentCreatedAt.AddMinutes(expiryMinutes);
+            }
+
+            return payment;
+        }).ToList();
+
+        order.Payments = payments;
+
+        await _orderRepo.AddAsync(order, ct);
+
+        if (effectiveIdempotencyKey is not null)
+        {
+            try
+            {
+                // Persist the unique claim before any stock or event side effect.
+                await _orderRepo.SaveChangesAsync(ct);
+            }
+            catch (DuplicateOrderIdempotencyKeyException)
+            {
+                var existing = await _orderRepo.GetByIdempotencyKeyAsync(effectiveIdempotencyKey, ct);
+                if (existing is not null)
+                    return MapToResponse(existing);
+
+                throw;
+            }
         }
-
-        var isPosRecordedPayment = isPosCompletedOnCreate
-            && req.PaymentMethod != PaymentMethod.COD
-            && (req.PaidAmount > 0 || finalAmount <= 0);
-
-        var payment = new Payment
-        {
-            Id = Guid.NewGuid(),
-            OrderId = order.Id,
-            PaymentMethod = req.PaymentMethod,
-            Amount = paymentAmount,
-            PaymentStatus = req.PaymentMethod == PaymentMethod.COD
-                ? PaymentStatus.Pending
-                : isPosRecordedPayment || req.PaidAmount >= finalAmount
-                    ? PaymentStatus.Success
-                    : PaymentStatus.Pending,
-            IsCodVerified = false,
-            CodWarningDate = req.PaymentMethod == PaymentMethod.COD
-                ? DateTime.UtcNow.AddDays(7)
-                : null,
-            CodDebtSettlementJson = req.PaymentMethod == PaymentMethod.COD
-                ? string.IsNullOrWhiteSpace(req.CodDebtSettlementJson) ? null : req.CodDebtSettlementJson.Trim()
-                : null,
-            PaidAt = null,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
-        };
-
-        if (payment.PaymentStatus == PaymentStatus.Success && req.PaymentMethod != PaymentMethod.COD)
-            payment.PaidAt = DateTime.UtcNow;
-
-        if (payment.PaymentMethod is PaymentMethod.VietQR or PaymentMethod.BankTransfer
-            && payment.PaymentStatus == PaymentStatus.Pending)
-        {
-            var expiryMinutes = _sepay.PosVaDurationSeconds > 0
-                ? Math.Max(1, _sepay.PosVaDurationSeconds / 60)
-                : 15;
-            payment.TransferQrExpiresAtUtc = DateTime.UtcNow.AddMinutes(expiryMinutes);
-        }
-
-        order.Payments = [payment];
 
         InventoryStockHandlingResponse? stockHandling = null;
         if (ShouldHandlePosStockSynchronously(order))
@@ -430,8 +483,6 @@ public class OrderLogic(
                 ? InventorySyncStatus.PendingReconciliation
                 : InventorySyncStatus.Synced;
         }
-
-        await _orderRepo.AddAsync(order, ct);
 
         await RecordActivityAsync(
             order.Id,
@@ -443,25 +494,36 @@ public class OrderLogic(
             actorName,
             ct);
 
-        if (payment.PaymentStatus == PaymentStatus.Success)
+        foreach (var payment in payments)
         {
-            var paymentNote = debtAmount > 0
-                ? $"Đã thu {FormatVnd(payment.Amount)} qua {GetPaymentMethodLabel(payment.PaymentMethod)}. Còn nợ {FormatVnd(debtAmount)}."
-                : $"Đã thanh toán {FormatVnd(payment.Amount)} qua {GetPaymentMethodLabel(payment.PaymentMethod)}.";
-            await RecordActivityAsync(
-                order.Id,
-                OrderActivityType.PaymentReceived,
-                paymentNote,
-                actorId,
-                actorName,
-                ct);
+            if (payment.PaymentStatus == PaymentStatus.Success)
+            {
+                await RecordActivityAsync(
+                    order.Id,
+                    OrderActivityType.PaymentReceived,
+                    $"Đã ghi nhận {FormatVnd(payment.Amount)} qua {GetPaymentMethodLabel(payment.PaymentMethod)}.",
+                    actorId,
+                    actorName,
+                    ct);
+            }
+            else
+            {
+                await RecordActivityAsync(
+                    order.Id,
+                    OrderActivityType.PaymentPending,
+                    $"Chờ {FormatVnd(payment.Amount)} qua {GetPaymentMethodLabel(payment.PaymentMethod)}.",
+                    actorId,
+                    actorName,
+                    ct);
+            }
         }
-        else
+
+        if (payments.Count == 0 && finalAmount > 0)
         {
             await RecordActivityAsync(
                 order.Id,
                 OrderActivityType.PaymentPending,
-                $"Chờ thanh toán qua {GetPaymentMethodLabel(payment.PaymentMethod)}.",
+                $"Chưa thu tiền. Còn nợ {FormatVnd(debtAmount)}.",
                 actorId,
                 actorName,
                 ct);
@@ -489,21 +551,152 @@ public class OrderLogic(
                 ct);
         }
 
-        await _orderRepo.SaveChangesAsync(ct);
-
+        // G4: enqueue integration events vào Outbox TRƯỚC SaveChanges để OutboxMessage
+        // commit atomically cùng Order/OrderDetail/Payment/Activity trong một transaction.
         if (!ShouldSuppressLegacyOrderPlacedEvent(order))
         {
             await _eventPublisher.PublishOrderPlacedAsync(
-                order.Id, order.OrderCode, order.OrderStatus.ToString(), finalAmount,
+                order.Id, order.OrderCode, order.OrderStatus.ToString(), order.OrderChannel.ToString(), finalAmount,
                 order.OrderDetails.Select(d => (d.SkuId, d.SkuSnapshotName, d.SkuSnapshotCode, d.Quantity)),
                 ct);
         }
 
         if (order.OrderStatus == OrderStatus.Completed && order.CustomerId.HasValue)
-            await PublishOrderCompletedAsync(order, debtAmount, ct);
+            await EnqueueOrderCompletedAsync(order, debtAmount, ct);
+
+        await _orderRepo.SaveChangesAsync(ct);
+
+        // Email hóa đơn là side-effect thông báo, chạy sau khi transaction đã commit.
+        if (order.OrderStatus == OrderStatus.Completed && order.CustomerId.HasValue)
+            TrySendInvoiceEmail(order);
 
         return MapToResponse(order, MapStockHandlingSummary(stockHandling));
     }
+
+    private static List<NormalizedPaymentAllocation> NormalizePaymentAllocations(
+        CreateOrderRequest request,
+        decimal finalAmount)
+    {
+        if (request.Payments is { Count: > 0 })
+        {
+            if (finalAmount <= 0)
+                throw new OrderValidationException("Đơn 0 đồng hợp lệ không được tạo bản ghi thanh toán 0 đồng.");
+
+            if (request.Payments.Any(item => item.Amount <= 0))
+                throw new OrderValidationException("Mỗi khoản thanh toán phải lớn hơn 0.");
+
+            if (request.Payments.Any(item => !Enum.IsDefined(item.PaymentMethod)))
+                throw new OrderValidationException("Phương thức thanh toán không hợp lệ.");
+
+            if (request.Payments
+                .GroupBy(item => item.PaymentMethod)
+                .Any(group => group.Count() > 1))
+            {
+                throw new OrderValidationException(
+                    "Mỗi phương thức thanh toán chỉ được xuất hiện một lần trong cùng đơn hàng.");
+            }
+
+            var transferCount = request.Payments.Count(item =>
+                item.PaymentMethod is PaymentMethod.VietQR or PaymentMethod.BankTransfer);
+            var hasCod = request.Payments.Any(item => item.PaymentMethod == PaymentMethod.COD);
+            if (request.Payments.Count > 2
+                || transferCount > 1
+                || (request.Payments.Count == 2
+                    && (!request.Payments.Any(item => item.PaymentMethod == PaymentMethod.Cash)
+                        || transferCount != 1))
+                || (hasCod && request.Payments.Count != 1))
+            {
+                throw new OrderValidationException(
+                    "Chỉ hỗ trợ tiền mặt, chuyển khoản/VietQR, COD riêng lẻ hoặc kết hợp tiền mặt với một khoản chuyển khoản.");
+            }
+
+            if (request.Payments.Count(item => !string.IsNullOrWhiteSpace(item.DebtSettlementJson)) > 1)
+                throw new OrderValidationException("Chỉ được khai báo một yêu cầu thu công nợ trong mỗi lần thanh toán.");
+
+            if (!request.CustomerId.HasValue
+                && request.Payments.Any(item => !string.IsNullOrWhiteSpace(item.DebtSettlementJson)))
+            {
+                throw new OrderValidationException("Chỉ khách hàng đã đăng ký mới được thanh toán công nợ.");
+            }
+
+            var total = request.Payments.Sum(item => item.Amount);
+            if (total > finalAmount)
+                throw new OrderValidationException("Tổng các khoản thanh toán không được vượt quá thành tiền.");
+            if (hasCod && total != finalAmount)
+                throw new OrderValidationException("Khoản COD phải bằng đúng thành tiền của đơn.");
+
+            return request.Payments.Select(item => new NormalizedPaymentAllocation(
+                item.PaymentMethod,
+                item.Amount,
+                item.PaymentMethod == PaymentMethod.Cash
+                    ? PaymentStatus.Success
+                    : PaymentStatus.Pending,
+                string.IsNullOrWhiteSpace(item.DebtSettlementJson)
+                    ? null
+                    : item.DebtSettlementJson.Trim())).ToList();
+        }
+
+        if (finalAmount <= 0)
+        {
+            if (request.PaidAmount > 0 || request.TransferQrAmount > 0)
+                throw new OrderValidationException("Đơn 0 đồng hợp lệ không cần khoản thanh toán.");
+            return [];
+        }
+
+        if (request.PaymentMethod == PaymentMethod.COD)
+        {
+            return
+            [
+                new NormalizedPaymentAllocation(
+                    PaymentMethod.COD,
+                    finalAmount,
+                    PaymentStatus.Pending,
+                    string.IsNullOrWhiteSpace(request.CodDebtSettlementJson)
+                        ? null
+                        : request.CodDebtSettlementJson.Trim())
+            ];
+        }
+
+        if (!Enum.IsDefined(request.PaymentMethod))
+            throw new OrderValidationException("Phương thức thanh toán không hợp lệ.");
+
+        var requestedAmount = request.PaymentMethod is PaymentMethod.VietQR or PaymentMethod.BankTransfer
+            && request.PaidAmount <= 0
+                ? request.TransferQrAmount
+                : request.PaidAmount;
+        if (requestedAmount <= 0)
+            return [];
+        // Legacy callers may send cash tendered (including change) via PaidAmount.
+        // Persist only the amount applied to the order, matching Payments[] semantics.
+        var amount = Math.Min(requestedAmount, finalAmount);
+
+        var isRecordedTransfer =
+            request.PaymentMethod is PaymentMethod.VietQR or PaymentMethod.BankTransfer
+            && request.PaidAmount > 0
+            && (request.OrderChannel == OrderChannel.POS || request.PaidAmount >= finalAmount);
+        var status = request.PaymentMethod == PaymentMethod.Cash
+            ? request.OrderChannel == OrderChannel.POS || request.PaidAmount >= finalAmount
+                ? PaymentStatus.Success
+                : PaymentStatus.Pending
+            : isRecordedTransfer
+                ? PaymentStatus.Success
+                : PaymentStatus.Pending;
+
+        return
+        [
+            new NormalizedPaymentAllocation(
+                request.PaymentMethod,
+                amount,
+                status,
+                null)
+        ];
+    }
+
+    private sealed record NormalizedPaymentAllocation(
+        PaymentMethod PaymentMethod,
+        decimal Amount,
+        PaymentStatus PaymentStatus,
+        string? DebtSettlementJson);
 
     private async Task EnsureVipCustomerAsync(Guid? customerId, CancellationToken ct)
     {
@@ -520,18 +713,16 @@ public class OrderLogic(
     private async Task EnsureManualDiscountAllowedAsync(Guid? customerId, CancellationToken ct)
     {
         if (!customerId.HasValue || customerId == Guid.Empty)
-            throw new OrderValidationException(
-                "Chiết khấu thủ công yêu cầu khách hàng có hồ sơ (VIP hoặc hạng thành viên).");
+        {
+            OrderBusinessRules.EnsureManualDiscountAllowed(1m, null);
+            return;
+        }
 
         var customer = await _customerCatalogClient.GetCustomerAsync(customerId.Value, ct);
-        if (customer is null)
-            throw new OrderValidationException("Không xác minh được loại khách hàng.");
-
-        if (customer.IsVipCustomer || customer.TierId.HasValue)
-            return;
-
-        throw new OrderValidationException(
-            "Chiết khấu thủ công chỉ dành cho khách VIP hoặc khách có hạng thành viên.");
+        OrderBusinessRules.EnsureManualDiscountAllowed(
+            1m,
+            customer?.CustomerGroup,
+            customer?.TierId);
     }
 
     private async Task ApplyOrderDetailUpdatesAsync(
@@ -541,10 +732,17 @@ public class OrderLogic(
 
         order.OrderDetails ??= new List<OrderDetail>();
         var existingById = order.OrderDetails.ToDictionary(d => d.Id);
+        var skuProfiles = await GetRequiredSkuProfilesAsync(
+            items.Select(i => i.SkuId),
+            ct);
         var now = DateTime.UtcNow;
 
         foreach (var reqItem in items)
         {
+            var profile = skuProfiles[reqItem.SkuId];
+            var quantity = OrderBusinessRules.NormalizeBaseQuantity(
+                reqItem.Quantity,
+                profile.InventoryUnit);
             if (reqItem.Quantity < 1)
                 throw new OrderValidationException("Số lượng sản phẩm phải >= 1.");
 
@@ -553,7 +751,7 @@ public class OrderLogic(
                 if (!existingById.TryGetValue(reqItem.Id.Value, out var detail))
                     throw new OrderValidationException("Dòng đơn hàng không tồn tại.");
 
-                if (reqItem.Quantity < detail.ReturnedQuantity)
+                if (quantity < detail.ReturnedQuantity)
                     throw new OrderValidationException(
                         $"Số lượng không thể nhỏ hơn số đã trả ({detail.ReturnedQuantity}).");
 
@@ -564,10 +762,10 @@ public class OrderLogic(
                 detail.SkuSnapshotName = reqItem.SkuSnapshotName.Trim();
                 detail.SkuSnapshotCode = reqItem.SkuSnapshotCode?.Trim();
                 detail.CategorySnapshotName = reqItem.CategorySnapshotName?.Trim();
-                detail.Quantity = reqItem.Quantity;
+                detail.Quantity = quantity;
                 detail.CostPrice = reqItem.CostPrice;
                 detail.UnitPrice = unitPrice;
-                detail.SubTotal = unitPrice * reqItem.Quantity;
+                detail.SubTotal = unitPrice * quantity;
                 detail.IsGift = reqItem.IsGift;
                 detail.UpdatedAt = now;
                 continue;
@@ -584,7 +782,7 @@ public class OrderLogic(
                 SkuSnapshotName = reqItem.SkuSnapshotName.Trim(),
                 SkuSnapshotCode = reqItem.SkuSnapshotCode?.Trim(),
                 CategorySnapshotName = reqItem.CategorySnapshotName?.Trim(),
-                Quantity = reqItem.Quantity,
+                Quantity = quantity,
                 CostPrice = reqItem.CostPrice,
                 UnitPrice = 0m,
                 SubTotal = 0m,
@@ -599,21 +797,25 @@ public class OrderLogic(
         order.UpdatedAt = now;
     }
 
-    private async Task<List<CreateOrderDetailInput>> EnrichCategoryIdsAsync(
-        List<CreateOrderDetailInput> items,
+    private async Task<Dictionary<Guid, ProductSkuCatalogProfile>> GetRequiredSkuProfilesAsync(
+        IEnumerable<Guid> skuIds,
         CancellationToken ct)
     {
-        var categoryBySkuId = new Dictionary<Guid, int?>();
-        foreach (var skuId in items.Select(i => i.SkuId).Distinct())
-            categoryBySkuId[skuId] = await _productCatalogClient.GetSkuCategoryIdAsync(skuId, ct);
-
-        return items
-            .Select(item =>
-                categoryBySkuId.TryGetValue(item.SkuId, out var resolvedCategoryId) &&
-                resolvedCategoryId.HasValue
-                    ? item with { CategoryId = resolvedCategoryId.Value }
-                    : item)
+        var submittedIds = skuIds
+            .Distinct()
             .ToList();
+        if (submittedIds.Any(id => id == Guid.Empty))
+            throw new OrderValidationException("SkuId sản phẩm không hợp lệ.");
+
+        var targetIds = submittedIds;
+        var profiles = (await _productCatalogClient.GetSkuProfilesAsync(targetIds, ct))
+            .ToDictionary(profile => profile.SkuId);
+        var missingIds = targetIds.Where(id => !profiles.ContainsKey(id)).ToList();
+        if (missingIds.Count > 0)
+            throw new OrderValidationException(
+                "Không xác minh được đơn vị tồn kho của một hoặc nhiều sản phẩm. Vui lòng tải lại danh mục và thử lại.");
+
+        return profiles;
     }
 
     public async Task<OrderResponse> UpdateAsync(
@@ -625,6 +827,21 @@ public class OrderLogic(
 
         if (order.OrderStatus == OrderStatus.Completed || order.OrderStatus == OrderStatus.Cancelled)
             throw new OrderCannotBeModifiedException(id, order.OrderStatus.ToString());
+
+        // POS-04 (H4): sửa sản phẩm của đơn COD đang giữ chỗ tồn Kệ (trước Shipping) phải
+        // thay giữ chỗ đồng bộ ở Inventory TRƯỚC khi lưu đơn. Chụp lại danh sách items cũ
+        // để bồi hoàn nếu lưu đơn thất bại sau khi Inventory đã thay giữ chỗ.
+        var mustReplaceCodReservation = order.OrderChannel == OrderChannel.COD
+            && req.Items is { Count: > 0 }
+            && order.OrderStatus != OrderStatus.Draft
+            && order.OrderStatus != OrderStatus.Shipping;
+        var originalReservationItems = mustReplaceCodReservation
+            ? (order.OrderDetails ?? [])
+                .Select(d => new InventoryReservationReplaceItemRequest(
+                    d.SkuId, d.SkuSnapshotName, d.SkuSnapshotCode, d.Quantity))
+                .ToList()
+            : null;
+        var originalFinalAmount = order.FinalAmount;
 
         if (req.Items is { Count: > 0 })
             await ApplyOrderDetailUpdatesAsync(order, req.Items, ct);
@@ -678,7 +895,11 @@ public class OrderLogic(
             order.CustomerId,
             ct);
 
-        var totalDiscount = manualDiscount + promotionDiscount.DiscountAmount;
+        var membershipDiscount = await GetMembershipTierDiscountAsync(
+            order.CustomerId,
+            Math.Max(0, order.TotalAmount - manualDiscount - promotionDiscount.DiscountAmount),
+            ct);
+        var totalDiscount = manualDiscount + promotionDiscount.DiscountAmount + membershipDiscount;
         if (totalDiscount > order.TotalAmount)
             throw new OrderValidationException("Tổng giảm giá (thủ công + khuyến mãi) không được lớn hơn tạm tính.");
 
@@ -692,10 +913,30 @@ public class OrderLogic(
         order.UpdatedAt = DateTime.UtcNow;
 
         var payments = order.Payments ?? await GetPaymentsInternal(order.Id, ct);
-        foreach (var payment in payments.Where(p => p.PaymentStatus != PaymentStatus.Success))
+        var successfulAmount = payments
+            .Where(payment => payment.PaymentStatus == PaymentStatus.Success)
+            .Sum(payment => payment.Amount);
+        var remainingAmount = Math.Max(0, order.FinalAmount - successfulAmount);
+        var pendingPayments = payments
+            .Where(payment => payment.PaymentStatus == PaymentStatus.Pending)
+            .ToList();
+        if (pendingPayments.Count > 0 && remainingAmount > 0)
         {
-            payment.Amount = order.FinalAmount;
-            payment.UpdatedAt = DateTime.UtcNow;
+            pendingPayments[0].Amount = remainingAmount;
+            pendingPayments[0].UpdatedAt = DateTime.UtcNow;
+            foreach (var extraPayment in pendingPayments.Skip(1))
+            {
+                extraPayment.PaymentStatus = PaymentStatus.Failed;
+                extraPayment.UpdatedAt = DateTime.UtcNow;
+            }
+        }
+        else if (remainingAmount <= 0)
+        {
+            foreach (var pendingPayment in pendingPayments)
+            {
+                pendingPayment.PaymentStatus = PaymentStatus.Failed;
+                pendingPayment.UpdatedAt = DateTime.UtcNow;
+            }
         }
 
         await RecordActivityAsync(
@@ -708,7 +949,46 @@ public class OrderLogic(
             actorName,
             ct);
 
-        await _orderRepo.SaveChangesAsync(ct);
+        // POS-04 (H4): gọi Inventory thay giữ chỗ đồng bộ, all-or-nothing, idempotent theo
+        // OperationId — Inventory từ chối (thiếu tồn khả bán) thì đơn không được lưu,
+        // items cũ + giữ chỗ cũ giữ nguyên. Nếu lưu đơn thất bại SAU khi Inventory đã thay
+        // giữ chỗ, bồi hoàn bằng cách thay lại theo items cũ (best-effort, không đảm bảo
+        // atomicity phân tán tuyệt đối — thất bại bồi hoàn sẽ được ném ra để lộ rõ sự cố).
+        var replacedReservation = false;
+        if (mustReplaceCodReservation)
+        {
+            await ReplaceCodReservationAsync(order, ct);
+            replacedReservation = true;
+        }
+
+        try
+        {
+            await _orderRepo.SaveChangesAsync(ct);
+        }
+        catch (Exception saveEx) when (replacedReservation && originalReservationItems is not null)
+        {
+            // Bồi hoàn: thay lại giữ chỗ theo items cũ với OperationId mới. Nếu chính bước
+            // bồi hoàn cũng thất bại thì gộp cả hai lỗi để không che giấu sự cố lệch giữ chỗ.
+            try
+            {
+                await _inventoryCatalogClient.ReplaceCodReservationAsync(
+                    new InventoryReservationReplaceRequest(
+                        order.Id,
+                        Guid.NewGuid(),
+                        originalFinalAmount,
+                        originalReservationItems),
+                    ct);
+            }
+            catch (Exception compensationEx)
+            {
+                throw new AggregateException(
+                    "Lưu đơn COD thất bại sau khi đã thay giữ chỗ tồn, và bồi hoàn giữ chỗ cũng thất bại. Cần kiểm tra thủ công giữ chỗ tồn của đơn.",
+                    saveEx,
+                    compensationEx);
+            }
+            throw;
+        }
+
         return MapToResponse(order);
     }
 
@@ -721,6 +1001,10 @@ public class OrderLogic(
 
         if (order.OrderStatus == OrderStatus.Completed || order.OrderStatus == OrderStatus.Cancelled)
             throw new OrderCannotBeCancelledException(id, order.OrderStatus.ToString());
+
+        // POS-04 (quyết định #10): giữ lại trạng thái trước khi hủy để Inventory biết
+        // đơn đã Shipping hay chưa — hủy sau Shipping không được cộng lại tồn Kệ.
+        var statusBeforeCancel = order.OrderStatus;
 
         order.OrderStatus = OrderStatus.Cancelled;
         order.InventorySyncStatus = InventorySyncStatus.Cancelled;
@@ -748,12 +1032,94 @@ public class OrderLogic(
             actorName,
             ct);
 
-        await _orderRepo.SaveChangesAsync(ct);
-
+        // G4: enqueue cancellation event trước SaveChanges (atomic với đổi trạng thái đơn).
         await _eventPublisher.PublishOrderCancelledAsync(
-            order.Id, order.OrderCode,
+            order.Id, order.OrderCode, statusBeforeCancel.ToString(),
             (order.OrderDetails ?? []).Select(d => (d.SkuId, d.Quantity)),
             ct);
+
+        await _orderRepo.SaveChangesAsync(ct);
+    }
+
+    public async Task<OrderResponse> CancelPendingTransferAsync(
+        Guid id,
+        OrderAccessContext access,
+        Guid? actorId = null,
+        string? actorName = null,
+        CancellationToken ct = default)
+    {
+        var order = await _orderRepo.GetByIdAsync(id, ct)
+            ?? throw new OrderNotFoundException(id);
+        if (!access.CanAccessOrder(order) && order.EmployeeId != access.UserId)
+            throw new OrderForbiddenException();
+
+        if (order.OrderStatus == OrderStatus.Cancelled)
+        {
+            // Re-publishing is safe because InventoryService de-duplicates cancellation by OrderId.
+            // It also lets an idempotent retry repair a previously failed broker publish.
+            await _eventPublisher.PublishOrderCancelledAsync(
+                order.Id,
+                order.OrderCode,
+                OrderStatus.PendingPayment.ToString(),
+                (order.OrderDetails ?? []).Select(detail => (detail.SkuId, detail.Quantity)),
+                ct);
+            // G4: persist outbox row (enqueue chỉ track entity).
+            await _orderRepo.SaveChangesAsync(ct);
+            return MapToResponse(order);
+        }
+        if (order.OrderStatus == OrderStatus.Completed)
+            throw new OrderValidationException("Giao dịch đã được xác nhận thành công nên không thể hủy thanh toán.");
+        if (order.OrderStatus != OrderStatus.PendingPayment)
+            throw new OrderValidationException("Chỉ được hủy đơn đang chờ thanh toán chuyển khoản.");
+
+        var payments = order.Payments ?? await GetPaymentsInternal(order.Id, ct);
+        var transferPayment = payments.FirstOrDefault(payment =>
+            payment.PaymentMethod is PaymentMethod.VietQR or PaymentMethod.BankTransfer);
+        if (transferPayment is null)
+            throw new OrderValidationException("Đơn không có khoản thanh toán chuyển khoản.");
+        if (transferPayment.PaymentStatus == PaymentStatus.Success)
+            throw new OrderValidationException("Giao dịch đã được xác nhận thành công nên không thể hủy thanh toán.");
+
+        var claimed = await _orderRepo.TryTransitionStatusAsync(
+            order.Id,
+            OrderStatus.PendingPayment,
+            OrderStatus.Cancelled,
+            ct);
+        if (!claimed)
+        {
+            throw new OrderValidationException(
+                "Trạng thái thanh toán vừa thay đổi. Giao dịch có thể đã được xác nhận; vui lòng tải lại.");
+        }
+
+        order.OrderStatus = OrderStatus.Cancelled;
+        order.InventorySyncStatus = InventorySyncStatus.Cancelled;
+        order.UpdatedAt = DateTime.UtcNow;
+        foreach (var payment in payments)
+        {
+            payment.PaymentStatus = PaymentStatus.Failed;
+            payment.PaidAt = null;
+            payment.UpdatedAt = DateTime.UtcNow;
+        }
+
+        await RecordActivityAsync(
+            order.Id,
+            OrderActivityType.Cancelled,
+            "Hủy thanh toán chuyển khoản và hoàn tác checkout POS đang chờ.",
+            actorId,
+            actorName,
+            ct);
+
+        // G4: enqueue trước SaveChanges để atomic với hoàn tác checkout.
+        await _eventPublisher.PublishOrderCancelledAsync(
+            order.Id,
+            order.OrderCode,
+            OrderStatus.PendingPayment.ToString(),
+            (order.OrderDetails ?? []).Select(detail => (detail.SkuId, detail.Quantity)),
+            ct);
+
+        await _orderRepo.SaveChangesAsync(ct);
+
+        return MapToResponse(order);
     }
 
     public async Task MarkShippingAsync(
@@ -784,6 +1150,15 @@ public class OrderLogic(
             actorName,
             ct);
 
+        // POS-04 (H5, quyết định #7): bàn giao giao hàng là trigger duy nhất trừ tồn vật lý
+        // Kệ Hàng cho đơn COD đã giữ chỗ. Enqueue Outbox TRƯỚC SaveChanges để event commit
+        // atomic cùng chuyển trạng thái; Inventory Inbox dedupe theo EventId + business key
+        // nên duplicate Shipping không trừ lần hai.
+        await _eventPublisher.PublishOrderShippedAsync(
+            order.Id, order.OrderCode, order.OrderChannel.ToString(),
+            (order.OrderDetails ?? []).Select(d => (d.SkuId, d.SkuSnapshotName, d.SkuSnapshotCode, d.Quantity)),
+            ct);
+
         await _orderRepo.SaveChangesAsync(ct);
     }
 
@@ -798,20 +1173,54 @@ public class OrderLogic(
         if (order.OrderStatus == OrderStatus.Cancelled || order.OrderStatus == OrderStatus.Completed)
             throw new OrderCannotBeModifiedException(id, order.OrderStatus.ToString());
 
+        var payments = order.Payments ?? await GetPaymentsInternal(order.Id, ct);
+        var hasPendingTransfer = payments.Any(payment =>
+            payment.PaymentMethod is PaymentMethod.VietQR or PaymentMethod.BankTransfer
+            && payment.PaymentStatus != PaymentStatus.Success);
+        if (hasPendingTransfer && !actualReceivedAmount.HasValue)
+        {
+            throw new OrderValidationException(
+                "Đơn chuyển khoản chỉ được hoàn tất sau khi backend xác nhận giao dịch.");
+        }
+
+        var claimed = await _orderRepo.TryTransitionStatusAsync(
+            order.Id,
+            order.OrderStatus,
+            OrderStatus.Completed,
+            ct);
+        if (!claimed)
+        {
+            var current = await _orderRepo.GetByIdAsync(order.Id, ct)
+                ?? throw new OrderNotFoundException(order.Id);
+            if (current.OrderStatus == OrderStatus.Completed)
+                return;
+            if (current.OrderStatus == OrderStatus.Cancelled)
+                throw new OrderValidationException(
+                    "Thanh toán đã bị hủy trước khi giao dịch được xác nhận.");
+            throw new OrderValidationException(
+                "Trạng thái đơn vừa thay đổi; không thể hoàn tất giao dịch này.");
+        }
+
         order.OrderStatus = OrderStatus.Completed;
         order.UpdatedAt = DateTime.UtcNow;
 
-        var payments = order.Payments ?? await GetPaymentsInternal(order.Id, ct);
         foreach (var payment in payments)
         {
             if (payment.PaymentStatus == PaymentStatus.Success) continue;
 
             if (payment.PaymentMethod is PaymentMethod.VietQR or PaymentMethod.BankTransfer or PaymentMethod.Cash)
             {
+                var alreadyPaid = payments
+                    .Where(item => item.PaymentStatus == PaymentStatus.Success)
+                    .Sum(item => item.Amount);
+                var remainingOrderAmount = Math.Max(0, order.FinalAmount - alreadyPaid);
+                var configuredAmount = payment.Amount > 0
+                    ? Math.Min(payment.Amount, remainingOrderAmount)
+                    : remainingOrderAmount;
                 var paidNow = (payment.PaymentMethod is PaymentMethod.VietQR or PaymentMethod.BankTransfer)
                     && actualReceivedAmount.HasValue
-                    ? Math.Min(actualReceivedAmount.Value, order.FinalAmount)
-                    : order.FinalAmount;
+                    ? Math.Min(actualReceivedAmount.Value, configuredAmount)
+                    : configuredAmount;
 
                 payment.PaymentStatus = PaymentStatus.Success;
                 payment.Amount = paidNow;
@@ -840,6 +1249,10 @@ public class OrderLogic(
             actorName,
             ct);
 
+        // Persist the winning terminal state and all payment allocations before invoking
+        // synchronous stock handling. A cancellation racing after this point must lose.
+        await _orderRepo.SaveChangesAsync(ct);
+
         InventoryStockHandlingResponse? stockHandling = null;
         if (ShouldHandlePosStockSynchronously(order))
         {
@@ -857,22 +1270,50 @@ public class OrderLogic(
                 ct);
         }
 
-        await _orderRepo.SaveChangesAsync(ct);
-
+        // G4: enqueue trước SaveChanges để atomic với transaction hoàn tất đơn.
         if (!ShouldSuppressLegacyOrderPlacedEvent(order))
         {
             await _eventPublisher.PublishOrderPlacedAsync(
-                order.Id, order.OrderCode, OrderStatus.Completed.ToString(), order.FinalAmount,
+                order.Id, order.OrderCode, OrderStatus.Completed.ToString(), order.OrderChannel.ToString(), order.FinalAmount,
                 (order.OrderDetails ?? []).Select(d => (d.SkuId, d.SkuSnapshotName, d.SkuSnapshotCode, d.Quantity)),
                 ct);
         }
 
+        decimal completedDebt = 0;
+        var shouldSendInvoice = false;
         if (order.CustomerId.HasValue)
         {
             var paidAmount = payments.Where(p => p.PaymentStatus == PaymentStatus.Success).Sum(p => p.Amount);
-            var debtAmount = Math.Max(0, order.FinalAmount - paidAmount);
-            await PublishOrderCompletedAsync(order, debtAmount, ct);
+            completedDebt = Math.Max(0, order.FinalAmount - paidAmount);
+            await EnqueueOrderCompletedAsync(order, completedDebt, ct);
+            shouldSendInvoice = true;
         }
+
+        await _orderRepo.SaveChangesAsync(ct);
+
+        if (shouldSendInvoice)
+            TrySendInvoiceEmail(order);
+    }
+
+    public async Task RepublishCompletedCustomerStateAsync(
+        Guid orderId,
+        CancellationToken ct = default)
+    {
+        var order = await _orderRepo.GetByIdAsync(orderId, ct)
+            ?? throw new OrderNotFoundException(orderId);
+        if (order.OrderStatus != OrderStatus.Completed || !order.CustomerId.HasValue)
+            return;
+
+        var paidAmount = (order.Payments ?? [])
+            .Where(payment => payment.PaymentStatus == PaymentStatus.Success)
+            .Sum(payment => payment.Amount);
+        await PublishOrderCompletedEventAsync(
+            order,
+            Math.Max(0, order.FinalAmount - paidAmount),
+            ct);
+
+        // G4: enqueue chỉ track OutboxMessage; cần SaveChanges để persist row cho dispatcher.
+        await _orderRepo.SaveChangesAsync(ct);
     }
 
     public async Task<ReturnOrderResponse> ReturnAsync(
@@ -1010,8 +1451,9 @@ public class OrderLogic(
             actorName,
             ct);
 
-        await _returnOrderRepo.SaveChangesAsync(ct);
-
+        // G4: enqueue returned event trước SaveChanges để atomic với phiếu trả hàng.
+        // Lưu ý: sự kiện KHÔNG tự động cộng lại tồn bán được; việc phục hồi tồn do
+        // luồng kiểm định trả hàng (Phase J) quyết định.
         await _eventPublisher.PublishOrderReturnedAsync(
             returnId,
             returnCode,
@@ -1028,6 +1470,8 @@ public class OrderLogic(
                 x.Quantity)),
             ct);
 
+        await _returnOrderRepo.SaveChangesAsync(ct);
+
         string? exchangeOrderCode = null;
         Guid? exchangeOrderId = null;
 
@@ -1037,7 +1481,7 @@ public class OrderLogic(
             var exchangeDiscount = Math.Min(
                 exchangeAmount,
                 returnCredit + membershipDiscount + manualExchangeDiscount);
-            var exchangeChannel = OrderChannel.POS;
+            var exchangeChannel = order.OrderChannel;
             var exchangePaymentMethod = refundMethod;
             var isExchangeTransferQr = netCustomerPays > 0
                 && exchangePaymentMethod is PaymentMethod.VietQR or PaymentMethod.BankTransfer;
@@ -1050,7 +1494,7 @@ public class OrderLogic(
                     order.CustomerSnapshotName,
                     actorId,
                     exchangeChannel,
-                    null,
+                    order.ShippingAddress,
                     $"Đổi hàng từ {order.OrderCode} ({returnCode})",
                     exchangeDiscount,
                     exchangeItems.Select(i => new CreateOrderDetailRequest(
@@ -1154,28 +1598,48 @@ public class OrderLogic(
         await _orderRepo.SaveChangesAsync(ct);
     }
 
-    private async Task PublishOrderCompletedAsync(Order order, decimal debtAmount, CancellationToken ct)
+    private Task EnqueueOrderCompletedAsync(Order order, decimal debtAmount, CancellationToken ct)
+    {
+        if (!order.CustomerId.HasValue) return Task.CompletedTask;
+        return PublishOrderCompletedEventAsync(order, debtAmount, ct);
+    }
+
+    private void TrySendInvoiceEmail(Order order)
     {
         if (!order.CustomerId.HasValue) return;
 
-        try
+        _ = Task.Run(async () =>
         {
-            var customer = await _customerCatalogClient.GetCustomerAsync(order.CustomerId.Value, ct);
-            if (customer is not null && !string.IsNullOrWhiteSpace(customer.Email))
+            try
             {
-                _ = Task.Run(() => _emailService.SendInvoiceEmailAsync(customer.Email, customer.FullName ?? "Quý khách", customer.TierName, order, CancellationToken.None));
+                var customer = await _customerCatalogClient.GetCustomerAsync(order.CustomerId.Value, CancellationToken.None);
+                if (customer is not null && !string.IsNullOrWhiteSpace(customer.Email))
+                {
+                    await _emailService.SendInvoiceEmailAsync(
+                        customer.Email, customer.FullName ?? "Quý khách", customer.TierName, order, CancellationToken.None);
+                }
             }
-        }
-        catch
-        {
-            // Log if needed, but don't prevent the event from being published
-        }
+            catch
+            {
+                // Email là side-effect thông báo, không được ảnh hưởng tới kết quả nghiệp vụ.
+            }
+        });
+    }
 
-        await _eventPublisher.PublishOrderCompletedAsync(
+    private Task PublishOrderCompletedEventAsync(
+        Order order,
+        decimal debtAmount,
+        CancellationToken ct)
+    {
+        var debtSettlementJson = (order.Payments ?? [])
+            .Select(payment => payment.CodDebtSettlementJson)
+            .FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
+
+        return _eventPublisher.PublishOrderCompletedAsync(
             order.Id, order.OrderCode, order.CustomerId.Value,
             order.FinalAmount, debtAmount,
             (order.OrderDetails ?? []).Select(d => (d.SkuId, d.Quantity)),
-            null,
+            debtSettlementJson,
             ct);
     }
 
@@ -1200,6 +1664,33 @@ public class OrderLogic(
                     order.OrderStatus.ToString(),
                     order.FinalAmount,
                     (order.OrderDetails ?? []).Select(d => new InventoryStockHandlingItemRequest(
+                        d.SkuId,
+                        d.SkuSnapshotName,
+                        d.SkuSnapshotCode,
+                        d.Quantity)).ToList()),
+                ct);
+        }
+        catch (InventoryStockHandlingException ex)
+        {
+            throw new OrderValidationException(ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// POS-04 (H4): thay giữ chỗ tồn Kệ Hàng cho đơn COD đang sửa — gọi đồng bộ Inventory,
+    /// all-or-nothing, idempotent theo OperationId. Inventory từ chối → OrderValidationException,
+    /// đơn không được lưu.
+    /// </summary>
+    private async Task ReplaceCodReservationAsync(Order order, CancellationToken ct)
+    {
+        try
+        {
+            await _inventoryCatalogClient.ReplaceCodReservationAsync(
+                new InventoryReservationReplaceRequest(
+                    order.Id,
+                    Guid.NewGuid(),
+                    order.FinalAmount,
+                    (order.OrderDetails ?? []).Select(d => new InventoryReservationReplaceItemRequest(
                         d.SkuId,
                         d.SkuSnapshotName,
                         d.SkuSnapshotCode,
@@ -1550,7 +2041,7 @@ public class OrderLogic(
 
     private static void EnsureCanAccess(Order order, OrderAccessContext access)
     {
-        if (!access.CanAccessOrder(order.EmployeeId))
+        if (!access.CanAccessOrder(order))
             throw new OrderForbiddenException();
     }
 }

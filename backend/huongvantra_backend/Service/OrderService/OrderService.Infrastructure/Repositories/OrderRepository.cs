@@ -1,7 +1,9 @@
 using Microsoft.EntityFrameworkCore;
+using MySqlConnector;
 using OrderService.Application.Interfaces;
 using OrderService.Domain.Entities;
 using OrderService.Domain.Enums;
+using OrderService.Domain.Exceptions;
 using OrderService.Infrastructure.Data;
 
 namespace OrderService.Infrastructure.Repositories;
@@ -26,7 +28,7 @@ public class OrderRepository(OrderDbContext _db) : IOrderRepository
         string? search, Guid? customerId, string? status, string? channel,
         string? excludeChannel, string? codTab, bool returnableOnly,
         string? orderKind, string? excludeOrderKind,
-        DateTime? fromDate, DateTime? toDate, Guid? employeeId,
+        DateTime? fromDate, DateTime? toDate, Guid? employeeId, bool includeAllCodOrders,
         int page, int pageSize, CancellationToken ct = default)
     {
         var query = _db.Orders.AsQueryable();
@@ -125,12 +127,18 @@ public class OrderRepository(OrderDbContext _db) : IOrderRepository
 
         if (employeeId.HasValue)
         {
-            query = query.Where(o => 
-                o.EmployeeId == employeeId 
-                || _db.OrderActivities.Any(a => 
-                    a.OrderId == o.Id 
-                    && a.ActivityType == OrderActivityType.Created 
-                    && a.ActorId == employeeId));
+            query = query.Where(o =>
+                (includeAllCodOrders && o.OrderChannel == OrderChannel.COD)
+                || (
+                    o.OrderChannel != OrderChannel.COD
+                    && (
+                        o.EmployeeId == employeeId
+                        || _db.OrderActivities.Any(a =>
+                            a.OrderId == o.Id
+                            && a.ActivityType == OrderActivityType.Created
+                            && a.ActorId == employeeId)
+                    )
+                ));
         }
 
         if (fromDate.HasValue)
@@ -192,9 +200,35 @@ public class OrderRepository(OrderDbContext _db) : IOrderRepository
             .Include(o => o.Payments)
             .FirstOrDefaultAsync(o => o.IdempotencyKey == key, ct);
 
+    public async Task<bool> TryTransitionStatusAsync(
+        Guid orderId,
+        OrderStatus expectedStatus,
+        OrderStatus nextStatus,
+        CancellationToken ct = default) =>
+        await _db.Orders
+            .Where(order => order.Id == orderId && order.OrderStatus == expectedStatus)
+            .ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(order => order.OrderStatus, nextStatus)
+                    .SetProperty(order => order.UpdatedAt, DateTime.UtcNow),
+                ct) == 1;
+
     public async Task AddAsync(Order order, CancellationToken ct = default) =>
         await _db.Orders.AddAsync(order, ct);
 
-    public async Task<int> SaveChangesAsync(CancellationToken ct = default) =>
-        await _db.SaveChangesAsync(ct);
+    public async Task<int> SaveChangesAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            return await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException exception) when (IsIdempotencyKeyConflict(exception))
+        {
+            throw new DuplicateOrderIdempotencyKeyException(exception);
+        }
+    }
+
+    private static bool IsIdempotencyKeyConflict(DbUpdateException exception) =>
+        exception.InnerException is MySqlException { Number: 1062 } mysqlException
+        && mysqlException.Message.Contains("IdempotencyKey", StringComparison.OrdinalIgnoreCase);
 }

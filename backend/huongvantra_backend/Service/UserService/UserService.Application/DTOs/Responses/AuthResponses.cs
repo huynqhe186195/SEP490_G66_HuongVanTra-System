@@ -32,3 +32,10 @@ public record PagedResult<T>(
     int TotalCount);
 
 public record RoleSummaryResponse(int Id, string RoleName, string? Description);
+
+public record LegacySaleReviewResponse(
+    Guid UserId,
+    string Username,
+    long? EmployeeId,
+    List<string> Roles,
+    string Reason);

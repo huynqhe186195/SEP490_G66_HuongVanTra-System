@@ -31,6 +31,18 @@ public record CustomerResponse(
     DateTime UpdatedAt
 );
 
+public record CheckoutCustomerSearchResponse(
+    Guid Id,
+    string CustomerCode,
+    string FullName,
+    string PhoneNumber,
+    CustomerGroup CustomerGroup,
+    int? TierId,
+    string? TierName,
+    decimal TierDiscountPercent,
+    decimal CurrentDebt
+);
+
 public record CustomerDetailResponse(
     Guid Id,
     string CustomerCode,

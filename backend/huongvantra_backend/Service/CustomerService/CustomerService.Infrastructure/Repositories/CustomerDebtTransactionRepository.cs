@@ -65,6 +65,35 @@ public class CustomerDebtTransactionRepository : ICustomerDebtTransactionReposit
                 && t.ReferenceId == orderId,
             ct);
 
+    public async Task<CustomerDebtTransaction?> GetDebtPaymentByIdempotencyKeyAsync(
+        Guid customerId,
+        string idempotencyKey,
+        CancellationToken ct = default) =>
+        await _db.CustomerDebtTransactions
+            .AsNoTracking()
+            .FirstOrDefaultAsync(
+                transaction =>
+                    transaction.CustomerId == customerId
+                    && transaction.Type == DebtTransactionType.DecreaseDebt
+                    && transaction.ReferenceType != null
+                    && transaction.ReferenceType.StartsWith("DebtPayment:")
+                    && transaction.RelatedOrderCode == idempotencyKey,
+                ct);
+
+    public async Task<CustomerDebtTransaction?> GetDebtPaymentBySourceOrderAsync(
+        Guid customerId,
+        Guid sourceOrderId,
+        CancellationToken ct = default) =>
+        await _db.CustomerDebtTransactions
+            .AsNoTracking()
+            .FirstOrDefaultAsync(
+                transaction =>
+                    transaction.CustomerId == customerId
+                    && transaction.Type == DebtTransactionType.DecreaseDebt
+                    && transaction.ReferenceType == "OrderPayment"
+                    && transaction.ReferenceId == sourceOrderId,
+                ct);
+
     public Task<int> SaveChangesAsync(CancellationToken ct = default) =>
         _db.SaveChangesAsync(ct);
 }

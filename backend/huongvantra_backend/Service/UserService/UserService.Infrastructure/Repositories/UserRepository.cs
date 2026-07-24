@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using UserService.Application.Authorization;
 using UserService.Application.Interfaces;
 using UserService.Domain.Entities;
 using UserService.Domain.Enums;
@@ -25,6 +26,20 @@ public class UserRepository(UserDbContext context) : IUserRepository
                     .ThenInclude(r => r.RolePermissions)
                         .ThenInclude(rp => rp.Permission)
             .FirstOrDefaultAsync(u => u.Username == username && !u.IsDeleted);
+
+    public async Task<IReadOnlyList<User>> GetLegacySaleUsersAsync() =>
+        await context.Users
+            .AsNoTracking()
+            .Include(u => u.Employee)
+            .Include(u => u.UserRoles)
+                .ThenInclude(ur => ur.Role)
+            .Where(u =>
+                !u.IsDeleted
+                && u.UserRoles.Any(ur =>
+                    !ur.Role.IsDeleted
+                    && ur.Role.RoleName == StaffManagementScope.SaleRoleName))
+            .OrderBy(u => u.Username)
+            .ToListAsync();
 
     public async Task<bool> ExistsAsync(string username) =>
         await context.Users.AnyAsync(u => u.Username == username && !u.IsDeleted);

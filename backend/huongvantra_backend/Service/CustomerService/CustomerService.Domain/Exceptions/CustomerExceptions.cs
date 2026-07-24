@@ -37,3 +37,9 @@ public class CustomerForbiddenException : Exception
     public CustomerForbiddenException(string message)
         : base(message) { }
 }
+
+public class DuplicateCustomerDebtPaymentException : Exception
+{
+    public DuplicateCustomerDebtPaymentException(Exception innerException)
+        : base("A debt payment with the same idempotency key already exists.", innerException) { }
+}

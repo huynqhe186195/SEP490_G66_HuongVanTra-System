@@ -91,6 +91,8 @@ export default function ProductsStoreListPage() {
   const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE)
   const [isLoading, setIsLoading] = useState(true)
   const [stockBySkuId, setStockBySkuId] = useState(() => new Map())
+  // POS-04 (H6): tồn Kệ đang giữ chỗ theo skuId để hiển thị "khả bán / giữ chỗ".
+  const [reservedBySkuId, setReservedBySkuId] = useState(() => new Map())
   const [simulateWarehouse, setSimulateWarehouse] = useState(true)
   const [pendingSyncTotal, setPendingSyncTotal] = useState(0)
 
@@ -119,8 +121,10 @@ export default function ProductsStoreListPage() {
     try {
       const stocks = await fetchStoreSkuStocks()
       setStockBySkuId(buildStockBySkuIdMap(stocks))
+      setReservedBySkuId(new Map(stocks.map((row) => [row.skuId, Number(row.reservedQuantity ?? 0)])))
     } catch {
       setStockBySkuId(new Map())
+      setReservedBySkuId(new Map())
     }
   }, [canLoadInventory])
 
@@ -151,6 +155,7 @@ export default function ProductsStoreListPage() {
   }, [canSync])
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadCategories()
     loadPendingSync()
     if (canLoadInventory) {
@@ -159,6 +164,7 @@ export default function ProductsStoreListPage() {
   }, [loadCategories, loadPendingSync, canLoadInventory])
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadCatalog()
   }, [loadCatalog])
 
@@ -504,6 +510,7 @@ export default function ProductsStoreListPage() {
                     pagedGroups.map((group) => {
                       const selectedSku = getSelectedSku(group)
                       const stockQty = Number(stockBySkuId.get(selectedSku.id) ?? 0)
+                      const reservedQty = Number(reservedBySkuId.get(selectedSku.id) ?? 0)
                       const isExpanded = expandedProductId === group.productId
                       const isFavorite = favoriteIds.has(String(group.productId))
                       const isSelected = selectedIds.has(String(selectedSku.id))
@@ -625,6 +632,15 @@ export default function ProductsStoreListPage() {
                               onClick={() => toggleExpand(group.productId)}
                             >
                               {formatStockQuantity(stockQty)}
+                              {reservedQty > 0 ? (
+                                <span
+                                  className="mt-0.5 block text-[11px] font-medium text-sky-700"
+                                  title="Đang giữ chỗ cho đơn COD chờ xác nhận — tồn khả bán = tồn quầy − giữ chỗ"
+                                >
+                                  giữ chỗ {formatStockQuantity(reservedQty)} · khả bán{' '}
+                                  {formatStockQuantity(Math.max(0, stockQty - reservedQty))}
+                                </span>
+                              ) : null}
                             </td>
                             <td
                               className="hidden px-3 py-3 text-center sm:table-cell"

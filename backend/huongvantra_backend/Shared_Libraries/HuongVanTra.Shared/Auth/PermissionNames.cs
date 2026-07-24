@@ -3,6 +3,8 @@ namespace HuongVanTra.Shared.Auth;
 public static class PermissionNames
 {
     public const string CreateOrder = "CREATE_ORDER";
+    public const string CreatePosOrder = "CREATE_POS_ORDER";
+    public const string CreateCodOrder = "CREATE_COD_ORDER";
     public const string ViewOrder = "VIEW_ORDER";
     public const string CreateCustomer = "CREATE_CUSTOMER";
     public const string ViewCustomer = "VIEW_CUSTOMER";
@@ -14,6 +16,9 @@ public static class PermissionNames
     public const string ApprovePrice = "APPROVE_PRICE";
     public const string ApproveContract = "APPROVE_CONTRACT";
     public const string ManageBusinessPolicy = "MANAGE_BUSINESS_POLICY";
+
+    /// <summary>Tạo/theo dõi/xác nhận thu COD — SaleCod, Manager, Admin.</summary>
+    public const string VerifyCod = "VERIFY_COD";
 
     /// <summary>Xem danh sách/chi tiết KH — Sale (VIEW_CUSTOMER) hoặc Manager/Kế toán (VIEW_ALL_CUSTOMERS).</summary>
     public const string ViewCustomerAccess = "VIEW_CUSTOMER_ACCESS";
@@ -30,6 +35,8 @@ public static class PermissionNames
     public static readonly string[] All =
     [
         CreateOrder,
+        CreatePosOrder,
+        CreateCodOrder,
         ViewOrder,
         CreateCustomer,
         ViewCustomer,
@@ -40,6 +47,7 @@ public static class PermissionNames
         ManageCatalog,
         ApprovePrice,
         ApproveContract,
-        ManageBusinessPolicy
+        ManageBusinessPolicy,
+        VerifyCod
     ];
 }

@@ -45,7 +45,8 @@ public class ReturnOrderRepository(OrderDbContext _db) : IReturnOrderRepository
             .ToListAsync(ct);
 
     public async Task<(List<(ReturnOrder Item, OrderChannel SourceChannel)> Items, int Total)> GetPagedAsync(
-        string? search, string? sourceChannel, Guid? employeeId, int page, int pageSize, CancellationToken ct = default)
+        string? search, string? sourceChannel, Guid? employeeId, bool includeAllCodOrders,
+        int page, int pageSize, CancellationToken ct = default)
     {
         var query =
             from r in _db.ReturnOrders.AsNoTracking()
@@ -53,7 +54,11 @@ public class ReturnOrderRepository(OrderDbContext _db) : IReturnOrderRepository
             select new { Return = r, SourceChannel = o.OrderChannel, SourceEmployeeId = o.EmployeeId };
 
         if (employeeId.HasValue)
-            query = query.Where(x => x.SourceEmployeeId == employeeId.Value);
+        {
+            query = query.Where(x =>
+                (includeAllCodOrders && x.SourceChannel == OrderChannel.COD)
+                || (x.SourceChannel != OrderChannel.COD && x.SourceEmployeeId == employeeId.Value));
+        }
 
         if (!string.IsNullOrWhiteSpace(search))
         {

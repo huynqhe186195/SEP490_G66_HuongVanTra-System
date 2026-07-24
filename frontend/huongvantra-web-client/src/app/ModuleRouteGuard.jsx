@@ -12,7 +12,7 @@ function ModuleRouteGuard({ session, isLoadingAccess, children }) {
       return
     }
 
-    if (canAccessPath(session, location.pathname)) {
+    if (canAccessPath(session, location.pathname, location.search)) {
       lastDeniedPathRef.current = null
       return
     }
@@ -30,7 +30,7 @@ function ModuleRouteGuard({ session, isLoadingAccess, children }) {
     } catch {
       // ignore if alert blocked
     }
-  }, [isLoadingAccess, session, location.pathname])
+  }, [isLoadingAccess, session, location.pathname, location.search])
 
   if (isLoadingAccess) {
     return (
@@ -40,7 +40,7 @@ function ModuleRouteGuard({ session, isLoadingAccess, children }) {
     )
   }
 
-  if (!canAccessPath(session, location.pathname)) {
+  if (!canAccessPath(session, location.pathname, location.search)) {
     return <Navigate to={resolveHomeRoute(session)} replace />
   }
 

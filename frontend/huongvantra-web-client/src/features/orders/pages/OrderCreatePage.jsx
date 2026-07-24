@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { Link, useNavigate } from 'react-router-dom'
 
@@ -6,17 +6,22 @@ import PageHeader from '../../../components/shared/PageHeader.jsx'
 
 import PageShell from '../../../components/shared/PageShell.jsx'
 
-import { showError, showSuccess } from '../../../app/toast.js'
+import { showError, showInfo, showSuccess } from '../../../app/toast.js'
 
 import { fetchStoreSkus } from '../../products/services/productSkusApi.js'
 
 import OrderCustomerSection from '../components/OrderCustomerSection.jsx'
+import { isVipCustomerType } from '../../customers/utils/customerDisplay.js'
+import {
+  getPosBaseUnitLabel,
+  normalizePosBaseQuantity,
+} from '../../pos/utils/posQuantity.js'
 
 import { createOrder } from '../services/ordersApi.js'
+import { createCheckoutAttemptManager } from '../utils/checkoutAttempt.js'
+import { validateZeroTotalCheckout } from '../../pos/utils/posDiscountValidation.js'
 
 import {
-
-  calcOrderFinalAmount,
 
   calcOrderLineSubtotal,
 
@@ -34,7 +39,39 @@ import {
 
 
 
-const EMPTY_LINE = { skuId: '', skuSnapshotName: '', skuSnapshotCode: '', quantity: 1, unitPrice: 0 }
+const EMPTY_LINE = {
+  skuId: '',
+  skuSnapshotName: '',
+  skuSnapshotCode: '',
+  quantity: 1,
+  unitPrice: 0,
+  inventoryUnit: '',
+  priceUnit: '',
+}
+
+function calculateCreatePricing(items, discountAmount, customer) {
+  const subtotal = calcOrderLineSubtotal(items)
+  const isVip = isVipCustomerType(customer?.customerType)
+  const manualDiscountAmount = isVip
+    ? Math.max(0, Number(discountAmount) || 0)
+    : 0
+  const tierDiscountPercent = isVip
+    ? 0
+    : Number(customer?.tier?.discountPercent ?? customer?.tierDiscountPercent ?? 0)
+  const membershipDiscountAmount = Math.round(
+    Math.max(0, subtotal - manualDiscountAmount) * tierDiscountPercent / 100,
+  )
+
+  return {
+    subtotal,
+    manualDiscountAmount,
+    membershipDiscountAmount,
+    finalAmount: Math.max(
+      0,
+      subtotal - manualDiscountAmount - membershipDiscountAmount,
+    ),
+  }
+}
 
 
 
@@ -43,6 +80,7 @@ function OrderCreatePage() {
   const navigate = useNavigate()
 
   const [isSaving, setIsSaving] = useState(false)
+  const checkoutAttemptRef = useRef(createCheckoutAttemptManager())
 
   const [skuOptions, setSkuOptions] = useState([])
 
@@ -51,6 +89,7 @@ function OrderCreatePage() {
     orderChannel: 'POS',
 
     customerId: null,
+    selectedCustomer: null,
 
     customerSnapshotName: '',
 
@@ -102,25 +141,33 @@ function OrderCreatePage() {
 
 
 
+  const {
+    subtotal,
+    manualDiscountAmount,
+    membershipDiscountAmount,
+    finalAmount,
+  } = useMemo(
+    () => calculateCreatePricing(
+      form.items,
+      form.discountAmount,
+      form.selectedCustomer,
+    ),
+    [form.discountAmount, form.items, form.selectedCustomer],
+  )
+
+  const canUseManualDiscount = isVipCustomerType(form.selectedCustomer?.customerType)
+
   useEffect(() => {
     if (!isPosChannel(form.orderChannel)) return
     setForm((prev) => ({
       ...prev,
-      paidAmount: calcOrderFinalAmount(prev.items, prev.discountAmount),
+      paidAmount: calculateCreatePricing(
+        prev.items,
+        prev.discountAmount,
+        prev.selectedCustomer,
+      ).finalAmount,
     }))
-  }, [form.orderChannel, form.items, form.discountAmount])
-
-
-
-  const subtotal = useMemo(() => calcOrderLineSubtotal(form.items), [form.items])
-
-  const finalAmount = useMemo(
-
-    () => calcOrderFinalAmount(form.items, form.discountAmount),
-
-    [form.items, form.discountAmount],
-
-  )
+  }, [finalAmount, form.orderChannel])
 
 
 
@@ -143,7 +190,13 @@ function OrderCreatePage() {
         ...prev,
         orderChannel: channel,
         paymentMethod: nextPayment,
-        paidAmount: nextIsPos ? calcOrderFinalAmount(prev.items, prev.discountAmount) : prev.paidAmount,
+        paidAmount: nextIsPos
+          ? calculateCreatePricing(
+              prev.items,
+              prev.discountAmount,
+              prev.selectedCustomer,
+            ).finalAmount
+          : prev.paidAmount,
       }
     })
   }
@@ -155,8 +208,20 @@ function OrderCreatePage() {
 
 
   function updateCustomer(patch) {
+    const changesCustomer = Object.prototype.hasOwnProperty.call(patch, 'selectedCustomer')
+    const nextCustomer = changesCustomer ? patch.selectedCustomer : form.selectedCustomer
+    const mustClearManualDiscount = changesCustomer
+      && !isVipCustomerType(nextCustomer?.customerType)
+      && Number(form.discountAmount || 0) > 0
 
-    setForm((prev) => ({ ...prev, ...patch }))
+    setForm((prev) => ({
+      ...prev,
+      ...patch,
+      ...(mustClearManualDiscount ? { discountAmount: 0 } : {}),
+    }))
+    if (mustClearManualDiscount) {
+      showInfo('Đã xóa chiết khấu thủ công vì khách mới không phải khách đối ngoại (VIP).')
+    }
 
   }
 
@@ -182,7 +247,14 @@ function OrderCreatePage() {
 
     if (!sku) {
 
-      updateLine(index, { skuId: '', skuSnapshotName: '', skuSnapshotCode: '', unitPrice: 0 })
+      updateLine(index, {
+        skuId: '',
+        skuSnapshotName: '',
+        skuSnapshotCode: '',
+        unitPrice: 0,
+        inventoryUnit: '',
+        priceUnit: '',
+      })
 
       return
 
@@ -199,6 +271,8 @@ function OrderCreatePage() {
       skuSnapshotCode: sku.skuCode,
 
       unitPrice: sku.basePrice,
+      inventoryUnit: sku.inventoryUnit,
+      priceUnit: sku.priceUnit,
 
     })
 
@@ -231,26 +305,25 @@ function OrderCreatePage() {
   async function handleSubmit(event) {
 
     event.preventDefault()
+    if (isSaving || checkoutAttemptRef.current.isProcessing()) return
 
 
 
-    const items = form.items
-
-      .filter((line) => line.skuId)
-
-      .map((line) => ({
-
-        skuId: line.skuId,
-
-        skuSnapshotName: line.skuSnapshotName,
-
-        skuSnapshotCode: line.skuSnapshotCode,
-
-        quantity: Number(line.quantity),
-
-        unitPrice: Number(line.unitPrice),
-
-      }))
+    let items
+    try {
+      items = form.items
+        .filter((line) => line.skuId)
+        .map((line) => ({
+          skuId: line.skuId,
+          skuSnapshotName: line.skuSnapshotName,
+          skuSnapshotCode: line.skuSnapshotCode,
+          quantity: normalizePosBaseQuantity(line.quantity, line.inventoryUnit),
+          unitPrice: Number(line.unitPrice),
+        }))
+    } catch (error) {
+      showError(error?.message || 'Số lượng không hợp lệ.')
+      return
+    }
 
 
 
@@ -272,13 +345,34 @@ function OrderCreatePage() {
 
     }
 
+    const zeroTotalCheck = validateZeroTotalCheckout({
+      items,
+      finalAmount,
+    })
+    if (!zeroTotalCheck.ok) {
+      showError(zeroTotalCheck.error)
+      return
+    }
+
+    const enteredPaidAmount = form.paymentMethod === 'COD'
+      ? 0
+      : Number(form.paidAmount || 0)
+    if (!form.customerId && enteredPaidAmount < finalAmount) {
+      showError('Khách lẻ phải thanh toán đủ. Vui lòng đăng ký hoặc chọn khách hàng trước khi bán nợ/thanh toán một phần.')
+      return
+    }
+
 
 
     try {
 
       setIsSaving(true)
 
-      const created = await createOrder({
+      const paidAmount = form.paymentMethod === 'COD'
+        ? 0
+        : Math.min(Number(form.paidAmount || 0), finalAmount)
+
+      const request = {
 
         customerId: form.customerId || null,
 
@@ -291,20 +385,23 @@ function OrderCreatePage() {
 
         note: form.note,
 
-        discountAmount: Number(form.discountAmount || 0),
+        discountAmount: manualDiscountAmount,
 
-        paidAmount: (() => {
-          if (form.paymentMethod === 'COD') return 0
-          const paid = Number(form.paidAmount || 0)
-          if (isPosChannel(form.orderChannel) && paid < finalAmount) return finalAmount
-          return paid
-        })(),
+        paidAmount,
 
         paymentMethod: form.paymentMethod,
 
+        payments: paidAmount > 0
+          ? [{ paymentMethod: form.paymentMethod, amount: paidAmount }]
+          : [],
+
         items,
 
-      })
+      }
+      const created = await checkoutAttemptRef.current.submit(
+        request,
+        (idempotencyKey) => createOrder(request, { idempotencyKey }),
+      )
 
       showSuccess(`Đã tạo đơn ${created.orderCode}.`)
 
@@ -480,7 +577,9 @@ function OrderCreatePage() {
 
                 <label className="space-y-1 md:col-span-2">
 
-                  <span className="text-xs font-semibold text-slate-500">SL</span>
+                  <span className="text-xs font-semibold text-slate-500">
+                    SL {line.inventoryUnit ? `(${getPosBaseUnitLabel(line.inventoryUnit)})` : ''}
+                  </span>
 
                   <input
 
@@ -576,23 +675,21 @@ function OrderCreatePage() {
 
             </label>
 
-            <label className="space-y-1">
-
-              <span className="text-xs font-semibold text-slate-500">Giảm giá</span>
-
-              <input
-
-                className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
-
-                inputMode="decimal"
-
-                value={form.discountAmount}
-
-                onChange={(e) => updateField('discountAmount', e.target.value)}
-
-              />
-
-            </label>
+            {canUseManualDiscount ? (
+              <label className="space-y-1">
+                <span className="text-xs font-semibold text-slate-500">Chiết khấu thủ công VIP</span>
+                <input
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
+                  inputMode="decimal"
+                  value={form.discountAmount}
+                  onChange={(e) => updateField('discountAmount', e.target.value)}
+                />
+              </label>
+            ) : (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs text-slate-500">
+                Chiết khấu thủ công chỉ dành cho khách đối ngoại (VIP). Ưu đãi hạng thành viên được tự động áp dụng.
+              </div>
+            )}
 
             {form.paymentMethod !== 'COD' ? (
 
@@ -629,6 +726,20 @@ function OrderCreatePage() {
               <span>{formatVnd(subtotal)}</span>
 
             </div>
+
+            {manualDiscountAmount > 0 ? (
+              <div className="flex justify-between py-1 text-slate-600">
+                <span>Chiết khấu thủ công VIP</span>
+                <span>-{formatVnd(manualDiscountAmount)}</span>
+              </div>
+            ) : null}
+
+            {membershipDiscountAmount > 0 ? (
+              <div className="flex justify-between py-1 text-slate-600">
+                <span>Ưu đãi hạng thành viên</span>
+                <span>-{formatVnd(membershipDiscountAmount)}</span>
+              </div>
+            ) : null}
 
             <div className="flex justify-between py-1 font-bold text-[#356647]">
 

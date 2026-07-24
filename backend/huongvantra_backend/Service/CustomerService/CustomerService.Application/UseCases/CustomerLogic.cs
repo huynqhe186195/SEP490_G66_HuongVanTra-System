@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using ClosedXML.Excel;
@@ -15,6 +16,8 @@ namespace CustomerService.Application.UseCases;
 public class CustomerLogic
 {
     private const int MaxPageSize = 100;
+    private const int MaxCheckoutSearchPageSize = 50;
+    private const int MaxCheckoutSearchLength = 100;
     public const string CustomerImportTemplateFileName = "Mau_Import_Khach_Hang_Huong_Van_Tra.xlsx";
     public const string CustomerImportContentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
     private const int ImportHeaderScanRowCount = 20;
@@ -406,11 +409,22 @@ public class CustomerLogic
         if (settlement is null || !settlement.PayDebtsEnabled || settlement.AllocatedAmount <= 0)
             return;
 
-        // Clamp: không được trừ quá tổng nợ hiện tại (có thể đã thay đổi từ lúc tạo đơn)
+        // Debt can change between checkout and finalization. Reject a stale
+        // over-allocation instead of silently reducing it to a different amount.
         var maxPayable = customer.CurrentDebt;
         if (maxPayable <= 0) return;
 
-        var allocatedAmount = Math.Min(settlement.AllocatedAmount, maxPayable);
+        if (settlement.AllocatedAmount > maxPayable)
+        {
+            await RecordActivityAsync(
+                customer.Id,
+                CustomerActivityType.DebtUpdated,
+                $"Debt settlement for order {orderCode} was rejected: requested {settlement.AllocatedAmount:N0}, current debt {maxPayable:N0}.",
+                ct);
+            return;
+        }
+
+        var allocatedAmount = settlement.AllocatedAmount;
         if (allocatedAmount <= 0) return;
 
         // Xây allocation plans từ danh sách explicit hoặc FIFO
@@ -419,14 +433,44 @@ public class CustomerLogic
 
         if (settlement.Allocations is { Count: > 0 })
         {
-            // Scale down proportionally nếu tổng preset > maxPayable
             var presetTotal = settlement.Allocations.Sum(a => a.Amount);
-            var scale = presetTotal > maxPayable ? maxPayable / presetTotal : 1m;
-            var scaledAllocations = settlement.Allocations
-                .Select(a => new DebtAllocationItemRequest(a.OrderId, Math.Floor(a.Amount * scale)))
+            if (presetTotal != settlement.AllocatedAmount)
+            {
+                await RecordActivityAsync(
+                    customer.Id,
+                    CustomerActivityType.DebtUpdated,
+                    $"Debt settlement allocations for order {orderCode} were rejected: allocated total does not match the requested amount.",
+                    ct);
+                return;
+            }
+
+            if (presetTotal > maxPayable)
+            {
+                await RecordActivityAsync(
+                    customer.Id,
+                    CustomerActivityType.DebtUpdated,
+                    $"Debt settlement allocations for order {orderCode} were rejected: allocated {presetTotal:N0}, current debt {maxPayable:N0}.",
+                    ct);
+                return;
+            }
+
+            var explicitAllocations = settlement.Allocations
+                .Select(a => new DebtAllocationItemRequest(a.OrderId, a.Amount))
                 .Where(a => a.Amount > 0)
                 .ToList();
-            allocationPlans = BuildExplicitAllocations(scaledAllocations, openDebts);
+            try
+            {
+                allocationPlans = BuildExplicitAllocations(explicitAllocations, openDebts);
+            }
+            catch (CustomerValidationException)
+            {
+                await RecordActivityAsync(
+                    customer.Id,
+                    CustomerActivityType.DebtUpdated,
+                    $"Debt settlement allocations for order {orderCode} were rejected because the allocation data is no longer valid.",
+                    ct);
+                return;
+            }
         }
         else
         {
@@ -436,17 +480,27 @@ public class CustomerLogic
         allocatedAmount = allocationPlans.Sum(a => a.Amount);
         if (allocatedAmount <= 0) return;
 
-        // Trim nếu vẫn vượt (phòng thủ)
         if (allocatedAmount > customer.CurrentDebt)
         {
-            allocationPlans = TrimAllocationPlans(allocationPlans, customer.CurrentDebt);
-            allocatedAmount = allocationPlans.Sum(a => a.Amount);
+            await RecordActivityAsync(
+                customer.Id,
+                CustomerActivityType.DebtUpdated,
+                $"Debt settlement for order {orderCode} was rejected: allocated {allocatedAmount:N0}, current debt {customer.CurrentDebt:N0}.",
+                ct);
+            return;
         }
         if (allocatedAmount <= 0) return;
 
         customer.CurrentDebt -= allocatedAmount;
 
-        var note = $"Trừ từ tiền thừa đơn COD {orderCode}";
+        var settlementMethod = (settlement.PaymentMethod ?? "COD").Trim().ToUpperInvariant() switch
+        {
+            "CASH" => "Cash",
+            "BANKTRANSFER" or "TRANSFER" => "BankTransfer",
+            "VIETQR" => "VietQR",
+            _ => "COD"
+        };
+        var note = $"Trừ công nợ từ thanh toán {settlementMethod} của đơn {orderCode}";
         var transaction = await RecordDebtAsync(
             customer,
             DebtTransactionType.DecreaseDebt,
@@ -473,7 +527,7 @@ public class CustomerLogic
 
         var orderSummary = string.Join(", ", allocationPlans.Select(a => $"{a.OrderCode} {a.Amount:N0}"));
         await RecordActivityAsync(customer.Id, CustomerActivityType.DebtUpdated,
-            $"Trừ nợ COD -{allocatedAmount:N0} ({orderSummary})", ct);
+            $"Trừ nợ {settlementMethod} -{allocatedAmount:N0} ({orderSummary})", ct);
     }
 
     public async Task<OrderReturnedHandlingResult> HandleOrderReturnedAsync(
@@ -691,6 +745,9 @@ public class CustomerLogic
         if (request.Amount <= 0)
             throw new CustomerValidationException(["Amount must be greater than zero."]);
 
+        var paymentMethod = NormalizeDebtPaymentMethod(request.PaymentMethod);
+        var idempotencyKey = NormalizeDebtPaymentIdempotencyKey(request.IdempotencyKey);
+
         var customer = await _customerRepo.GetByIdAsync(customerId, ct)
             ?? throw new CustomerNotFoundException(customerId);
 
@@ -698,6 +755,32 @@ public class CustomerLogic
         EnsureCanManageCorporateCustomer(customer.CustomerGroup, access);
 
         await ReconcileCurrentDebtFromLedgerAsync(customer, ct);
+
+        CustomerDebtTransaction? existingPayment = null;
+        if (idempotencyKey is not null)
+        {
+            existingPayment = await _debtRepo.GetDebtPaymentByIdempotencyKeyAsync(
+                customerId,
+                idempotencyKey,
+                ct);
+        }
+        else if (request.SourceOrderId.HasValue)
+        {
+            existingPayment = await _debtRepo.GetDebtPaymentBySourceOrderAsync(
+                customerId,
+                request.SourceOrderId.Value,
+                ct);
+        }
+
+        if (existingPayment is not null)
+            return await BuildExistingDebtPaymentResponseAsync(
+                customerId,
+                request.Amount,
+                existingPayment,
+                ct);
+
+        if (request.Amount > customer.CurrentDebt)
+            throw new CustomerValidationException(["Số tiền thu không được vượt quá công nợ hiện tại."]);
 
         var openDebts = await BuildOpenDebtItemsAsync(customerId, ct);
         var allocationPlans = request.Allocations is { Count: > 0 }
@@ -713,7 +796,7 @@ public class CustomerLogic
             if (customer.CurrentDebt <= 0)
                 throw new CustomerValidationException(["Khách không có đơn nợ để trừ."]);
 
-            var fallbackAmount = Math.Min(request.Amount, customer.CurrentDebt);
+            var fallbackAmount = request.Amount;
             var orphanId = CreateOrphanDebtOrderId(customerId);
             var orphanDebt = openDebts.FirstOrDefault(d => d.OrderId == orphanId);
             var orderCode = orphanDebt?.OrderCode ?? "CN-TONG-HOP";
@@ -731,10 +814,7 @@ public class CustomerLogic
         }
 
         if (allocatedAmount > customer.CurrentDebt)
-        {
-            allocationPlans = TrimAllocationPlans(allocationPlans, customer.CurrentDebt);
-            allocatedAmount = allocationPlans.Sum(a => a.Amount);
-        }
+            throw new CustomerValidationException(["Debt allocation must not exceed the current debt."]);
 
         if (allocatedAmount <= 0)
             throw new CustomerValidationException(["Khách không có công nợ để trừ."]);
@@ -743,8 +823,10 @@ public class CustomerLogic
         customer.UpdatedAt = DateTime.UtcNow;
         _customerRepo.Update(customer);
 
-        var note = BuildDebtPaymentNote(request.Note, request.SourceOrderId, allocationPlans);
-        var referenceType = request.SourceOrderId.HasValue ? "OrderPayment" : "DebtPayment";
+        var note = $"{BuildDebtPaymentNote(request.Note, request.SourceOrderId, allocationPlans)} · {paymentMethod}";
+        var referenceType = request.SourceOrderId.HasValue
+            ? "OrderPayment"
+            : $"DebtPayment:{paymentMethod}";
         var transaction = await RecordDebtAsync(
             customer,
             DebtTransactionType.DecreaseDebt,
@@ -752,8 +834,11 @@ public class CustomerLogic
             referenceType,
             request.SourceOrderId,
             note,
-            null,
-            ct);
+            idempotencyKey,
+            ct,
+            idempotencyKey is null
+                ? null
+                : BuildDebtPaymentTransactionId(customerId, idempotencyKey));
 
         var now = DateTime.UtcNow;
         var entities = allocationPlans.Select(plan => new CustomerDebtAllocation
@@ -773,13 +858,97 @@ public class CustomerLogic
         await RecordActivityAsync(customerId, CustomerActivityType.DebtUpdated,
             $"Thanh toán -{allocatedAmount:N0} ({orderSummary})", ct);
 
-        await _customerRepo.SaveChangesAsync(ct);
+        try
+        {
+            await _customerRepo.SaveChangesAsync(ct);
+        }
+        catch (DuplicateCustomerDebtPaymentException) when (idempotencyKey is not null)
+        {
+            _customerRepo.ClearChangeTracker();
+            var concurrentPayment = await _debtRepo.GetDebtPaymentByIdempotencyKeyAsync(
+                customerId,
+                idempotencyKey,
+                ct);
+            if (concurrentPayment is null)
+                throw;
+
+            return await BuildExistingDebtPaymentResponseAsync(
+                customerId,
+                request.Amount,
+                concurrentPayment,
+                ct);
+        }
 
         return new CustomerDebtPaymentResponse(
             MapDebt(transaction),
             allocationPlans,
             allocatedAmount,
             Math.Max(0, request.Amount - allocatedAmount));
+    }
+
+    private static string NormalizeDebtPaymentMethod(string? paymentMethod)
+    {
+        var normalized = (paymentMethod ?? "Cash").Trim().ToUpperInvariant();
+        return normalized switch
+        {
+            "CASH" => "Cash",
+            "BANKTRANSFER" or "TRANSFER" => "BankTransfer",
+            "VIETQR" => "VietQR",
+            _ => throw new CustomerValidationException(
+                ["Phương thức thu nợ chỉ hỗ trợ Cash, BankTransfer hoặc VietQR."])
+        };
+    }
+
+    private static string? NormalizeDebtPaymentIdempotencyKey(string? idempotencyKey)
+    {
+        if (string.IsNullOrWhiteSpace(idempotencyKey))
+            return null;
+
+        var normalized = idempotencyKey.Trim();
+        if (normalized.Length > 50 || !Guid.TryParse(normalized, out var parsed))
+        {
+            throw new CustomerValidationException(
+                ["IdempotencyKey thu công nợ phải là UUID hợp lệ."]);
+        }
+
+        return parsed.ToString("D");
+    }
+
+    private async Task<CustomerDebtPaymentResponse> BuildExistingDebtPaymentResponseAsync(
+        Guid customerId,
+        decimal requestedAmount,
+        CustomerDebtTransaction existingPayment,
+        CancellationToken ct)
+    {
+        var existingAllocations = await _allocationRepo.GetByTransactionIdAsync(
+            existingPayment.Id,
+            ct);
+        var currentOpenDebts = await BuildOpenDebtItemsAsync(customerId, ct);
+        var remainingByOrder = currentOpenDebts.ToDictionary(
+            item => item.OrderId,
+            item => item.RemainingDebt);
+        var allocationResponses = existingAllocations.Select(allocation =>
+            new CustomerDebtAllocationResponse(
+                allocation.OrderId,
+                allocation.OrderCode,
+                allocation.Amount,
+                remainingByOrder.GetValueOrDefault(allocation.OrderId, 0))).ToList();
+
+        return new CustomerDebtPaymentResponse(
+            MapDebt(existingPayment),
+            allocationResponses,
+            existingPayment.Amount,
+            Math.Max(0, requestedAmount - existingPayment.Amount));
+    }
+
+    private static Guid BuildDebtPaymentTransactionId(Guid customerId, string idempotencyKey)
+    {
+        Span<byte> input = stackalloc byte[32];
+        customerId.TryWriteBytes(input[..16]);
+        Guid.Parse(idempotencyKey).TryWriteBytes(input[16..]);
+        Span<byte> hash = stackalloc byte[32];
+        SHA256.HashData(input, hash);
+        return new Guid(hash[..16]);
     }
 
     public async Task<IEnumerable<CustomerDebtTransactionResponse>> GetDebtsAsync(
@@ -878,6 +1047,51 @@ public class CustomerLogic
         var customers = await _customerRepo.GetAllAsync(page, pageSize, filter, ct);
         var items = customers.Select(MapToResponse).ToList();
         return new PagedResult<CustomerResponse>(items, page, pageSize, totalCount);
+    }
+
+    public async Task<PagedResult<CheckoutCustomerSearchResponse>> SearchForCheckoutAsync(
+        CheckoutCustomerSearchRequest request,
+        CustomerAccessContext access,
+        CancellationToken ct = default)
+    {
+        request ??= new CheckoutCustomerSearchRequest();
+        ValidatePagination(request.Page, request.PageSize, MaxCheckoutSearchPageSize);
+
+        var search = NormalizeCheckoutSearch(request.Search);
+        var normalizedPhone = NormalizePhoneSearch(search);
+        var customerGroup = ParseCheckoutCustomerType(request.CustomerType);
+
+        if (request.ExactPhone
+            && !VietnamPhoneValidator.TryValidate(normalizedPhone, out var phoneError))
+        {
+            throw new CustomerValidationException([phoneError ?? "Số điện thoại tìm kiếm không hợp lệ."]);
+        }
+
+        if (string.IsNullOrEmpty(search) && !customerGroup.HasValue)
+        {
+            return new PagedResult<CheckoutCustomerSearchResponse>(
+                Array.Empty<CheckoutCustomerSearchResponse>(),
+                request.Page,
+                request.PageSize,
+                0);
+        }
+
+        var (customers, totalCount) = await _customerRepo.SearchForCheckoutAsync(
+            search,
+            normalizedPhone,
+            request.ExactPhone,
+            customerGroup,
+            access.AssignedSaleFilter,
+            request.Page,
+            request.PageSize,
+            ct);
+
+        var items = customers.Select(MapToCheckoutSearchResponse).ToList();
+        return new PagedResult<CheckoutCustomerSearchResponse>(
+            items,
+            request.Page,
+            request.PageSize,
+            totalCount);
     }
 
     public async Task<PagedResult<CustomerResponse>> GetInactiveAsync(
@@ -1831,11 +2045,12 @@ public class CustomerLogic
         Guid? referenceId,
         string note,
         string? relatedOrderCode,
-        CancellationToken ct)
+        CancellationToken ct,
+        Guid? transactionId = null)
     {
         var transaction = new CustomerDebtTransaction
         {
-            Id = Guid.NewGuid(),
+            Id = transactionId ?? Guid.NewGuid(),
             CustomerId = customer.Id,
             Type = type,
             Amount = amount,
@@ -2382,13 +2597,48 @@ public class CustomerLogic
             request.Department);
     }
 
-    private static void ValidatePagination(int page, int pageSize)
+    private static void ValidatePagination(int page, int pageSize, int maxPageSize = MaxPageSize)
     {
         var errors = new List<string>();
         if (page < 1) errors.Add("Page must be greater than or equal to 1.");
         if (pageSize < 1) errors.Add("PageSize must be greater than or equal to 1.");
-        else if (pageSize > MaxPageSize) errors.Add($"PageSize must be less than or equal to {MaxPageSize}.");
+        else if (pageSize > maxPageSize) errors.Add($"PageSize must be less than or equal to {maxPageSize}.");
         if (errors.Count > 0) throw new CustomerValidationException(errors);
+    }
+
+    private static string? NormalizeCheckoutSearch(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        var normalized = Regex.Replace(value.Trim(), @"\s+", " ");
+        if (normalized.Length > MaxCheckoutSearchLength)
+            throw new CustomerValidationException([$"Từ khóa tìm kiếm không được vượt quá {MaxCheckoutSearchLength} ký tự."]);
+
+        return normalized;
+    }
+
+    private static string? NormalizePhoneSearch(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return null;
+
+        var digits = new string(value.Where(char.IsDigit).ToArray());
+        return digits.Length > 0 ? digits : null;
+    }
+
+    private static CustomerGroup? ParseCheckoutCustomerType(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        return value.Trim().ToUpperInvariant() switch
+        {
+            "GENERAL" or "RETAIL" or "PHOTHONG" => CustomerGroup.PhoThong,
+            "VIP" or "DOINGOAI" => CustomerGroup.DoiNgoai,
+            "CORPORATE" or "DOANHNGHIEP" => CustomerGroup.DoanhNghiep,
+            _ => throw new CustomerValidationException(["Loại khách hàng tìm kiếm không hợp lệ."])
+        };
     }
 
     private static CustomerDebtTransactionResponse MapDebt(CustomerDebtTransaction t) =>
@@ -2440,6 +2690,10 @@ public class CustomerLogic
         new(c.Id, c.CustomerCode, c.FullName, c.PhoneNumber, c.Email, c.CustomerGroup, c.TaxCode,
             c.TierId, c.Tier?.TierName, c.TotalSpending, c.CurrentDebt,
             c.AssignedSaleId, c.Source, c.Department, c.CreatedAt, c.UpdatedAt);
+
+    private static CheckoutCustomerSearchResponse MapToCheckoutSearchResponse(Customer c) =>
+        new(c.Id, c.CustomerCode, c.FullName, c.PhoneNumber, c.CustomerGroup,
+            c.TierId, c.Tier?.TierName, c.Tier?.DiscountPercent ?? 0, c.CurrentDebt);
 
     private static CustomerDetailResponse MapToDetailResponse(Customer c) =>
         new(c.Id, c.CustomerCode, c.FullName, c.PhoneNumber, c.Email, c.CustomerGroup, c.TaxCode,

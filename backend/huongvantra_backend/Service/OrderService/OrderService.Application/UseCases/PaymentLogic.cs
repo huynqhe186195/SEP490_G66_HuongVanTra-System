@@ -41,7 +41,9 @@ public class PaymentLogic(
             throw new OrderValidationException(
                 $"Số tiền thu ({FormatVnd(collected)}) không đủ thành tiền đơn ({FormatVnd(order.FinalAmount)}).");
 
-        payment.Amount = collected;
+        // Chỉ lưu phần tiền thực tế áp dụng vào đơn; tiền thừa được xử lý riêng
+        // qua debt settlement/tiền trả lại và không làm phình aggregate đã thanh toán.
+        payment.Amount = Math.Min(collected, order.FinalAmount);
         payment.IsCodVerified = true;
         payment.PaymentStatus = PaymentStatus.Success;
         payment.TransactionRef = req.TransactionRef?.Trim();
@@ -75,7 +77,23 @@ public class PaymentLogic(
             actorName,
             ct);
 
-        await _paymentRepo.SaveChangesAsync(ct);
+        // G4: enqueue integration events vào Outbox TRƯỚC khi SaveChanges để
+        // OutboxMessage được commit cùng transaction với payment/order/activity.
+        // Cập nhật StockDeductQueue.OrderPaymentStatus + kích hoạt trừ tồn (Inventory OrderPlaced handler).
+        // POS-04 (quyết định #8): nếu đơn đã Shipping và tồn đã trừ qua OrderShippedEvent,
+        // Inventory bỏ qua nhờ guard IsDeducted/QueueStatus — không trừ lần hai.
+        await _eventPublisher.PublishOrderPlacedAsync(
+            order.Id,
+            order.OrderCode,
+            OrderStatus.Completed.ToString(),
+            order.OrderChannel.ToString(),
+            order.FinalAmount,
+            (order.OrderDetails ?? []).Select(d => (
+                d.SkuId,
+                d.SkuSnapshotName,
+                d.SkuSnapshotCode,
+                d.Quantity)),
+            ct);
 
         if (order.CustomerId.HasValue)
         {
@@ -98,6 +116,9 @@ public class PaymentLogic(
                 ct);
         }
 
+        // Business state + outbox rows commit atomically here.
+        await _paymentRepo.SaveChangesAsync(ct);
+
         return MapToResponse(payment);
     }
 
@@ -117,7 +138,7 @@ public class PaymentLogic(
     {
         var payments = await _paymentRepo.GetPendingCodAsync(ct);
         return payments
-            .Where(p => p.Order is not null && access.CanAccessOrder(p.Order.EmployeeId))
+            .Where(p => p.Order is not null && access.CanAccessOrder(p.Order))
             .Select(MapToResponse)
             .ToList();
     }
@@ -127,14 +148,14 @@ public class PaymentLogic(
     {
         var payments = await _paymentRepo.GetUnverifiedCodAsync(ct);
         return payments
-            .Where(p => p.Order is not null && access.CanAccessOrder(p.Order.EmployeeId))
+            .Where(p => p.Order is not null && access.CanAccessOrder(p.Order))
             .Select(MapToResponse)
             .ToList();
     }
 
     private static void EnsureCanAccess(Order order, OrderAccessContext access)
     {
-        if (!access.CanAccessOrder(order.EmployeeId))
+        if (!access.CanAccessOrder(order))
             throw new OrderForbiddenException();
     }
 

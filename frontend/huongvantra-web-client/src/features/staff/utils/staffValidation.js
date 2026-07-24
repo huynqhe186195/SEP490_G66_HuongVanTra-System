@@ -1,4 +1,4 @@
-import { getPhoneMaxLength, normalizePhoneInput, validatePhoneNumber } from '../../customers/utils/customerValidation.js'
+﻿import { getPhoneMaxLength, normalizePhoneInput, validatePhoneNumber } from '../../customers/utils/customerValidation.js'
 
 export { normalizePhoneInput, getPhoneMaxLength }
 
@@ -6,13 +6,13 @@ export function validateStaffPhone(phone, { required = false } = {}) {
   return validatePhoneNumber(phone, { required })
 }
 
-export function validateStaffCreateForm({ fullName, phone, username, password, role }) {
+export function validateStaffCreateForm({ fullName, phone, username, password, roles }) {
   const errors = {}
 
   if (!String(fullName || '').trim()) errors.fullName = 'Họ và tên là bắt buộc.'
   if (!String(username || '').trim()) errors.username = 'Tên đăng nhập là bắt buộc.'
   if (String(password || '').trim().length < 6) errors.password = 'Mật khẩu phải có ít nhất 6 ký tự.'
-  if (!role) errors.role = 'Vui lòng chọn vai trò.'
+  if (!roles || roles.length === 0) errors.roles = 'Vui lòng chọn ít nhất một vai trò.'
 
   const phoneError = validateStaffPhone(phone, { required: true })
   if (phoneError) errors.phone = phoneError
@@ -25,7 +25,7 @@ export function validateStaffCreateForm({ fullName, phone, username, password, r
   }
 }
 
-export function validateStaffEditForm({ fullName, phone, role, allowRoleChange, active }) {
+export function validateStaffEditForm({ fullName, phone, roles, allowRoleChange, active }) {
   const errors = {}
 
   if (active && !String(fullName || '').trim()) {
@@ -35,8 +35,8 @@ export function validateStaffEditForm({ fullName, phone, role, allowRoleChange, 
   const phoneError = validateStaffPhone(phone, { required: false })
   if (phoneError) errors.phone = phoneError
 
-  if (allowRoleChange && active && !role) {
-    errors.role = 'Vui lòng chọn vai trò.'
+  if (allowRoleChange && active && (!roles || roles.length === 0)) {
+    errors.roles = 'Vui lòng chọn ít nhất một vai trò.'
   }
 
   const messages = Object.values(errors)

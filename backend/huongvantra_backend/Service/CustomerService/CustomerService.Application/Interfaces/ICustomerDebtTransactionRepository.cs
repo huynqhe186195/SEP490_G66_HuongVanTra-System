@@ -10,6 +10,14 @@ public interface ICustomerDebtTransactionRepository
     Task<(decimal TotalIncrease, decimal TotalDecrease, int Count)> GetSummaryAsync(Guid customerId, CancellationToken ct = default);
     Task<decimal> GetLedgerBalanceAsync(Guid customerId, CancellationToken ct = default);
     Task<bool> HasOrderDebtAsync(Guid orderId, CancellationToken ct = default);
+    Task<CustomerDebtTransaction?> GetDebtPaymentByIdempotencyKeyAsync(
+        Guid customerId,
+        string idempotencyKey,
+        CancellationToken ct = default);
+    Task<CustomerDebtTransaction?> GetDebtPaymentBySourceOrderAsync(
+        Guid customerId,
+        Guid sourceOrderId,
+        CancellationToken ct = default);
     Task<int> SaveChangesAsync(CancellationToken ct = default);
 }
 

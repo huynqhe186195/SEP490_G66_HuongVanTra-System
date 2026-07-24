@@ -32,9 +32,22 @@ public class CustomersController : ControllerBase
 
     [HttpGet]
     [Authorize(Policy = PermissionNames.ViewCustomerAccess)]
-    public async Task<IActionResult> GetAll([FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken ct = default)
+    public async Task<IActionResult> GetAll(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken ct = default)
     {
         var result = await _logic.GetAllAsync(page, pageSize, AccessContext(), ct);
+        return Ok(result);
+    }
+
+    [HttpGet("checkout-search")]
+    [Authorize(Policy = PermissionNames.CreateOrder)]
+    public async Task<IActionResult> SearchForCheckout(
+        [FromQuery] CheckoutCustomerSearchRequest request,
+        CancellationToken ct = default)
+    {
+        var result = await _logic.SearchForCheckoutAsync(request, AccessContext(), ct);
         return Ok(result);
     }
 

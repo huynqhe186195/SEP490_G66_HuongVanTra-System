@@ -116,3 +116,33 @@ export function validatePosDiscountsBeforePayment({
 
   return { ok: true }
 }
+
+export function validateZeroTotalCheckout({
+  items = [],
+  customBundles = [],
+  finalAmount = 0,
+  hasAppliedPromotion = false,
+  isVipCustomer = false,
+}) {
+  if (items.some((item) => !item.isGift && Number(item.price ?? item.unitPrice) <= 0)) {
+    return {
+      ok: false,
+      error: 'Sản phẩm bán thông thường phải có đơn giá lớn hơn 0. Dòng 0 đồng phải được đánh dấu là quà tặng VIP.',
+    }
+  }
+
+  if (Number(finalAmount) > 0) return { ok: true }
+
+  const isVipGiftOrder =
+    isVipCustomer
+    && items.length > 0
+    && items.every((item) => Boolean(item.isGift))
+    && customBundles.length === 0
+
+  if (hasAppliedPromotion || isVipGiftOrder) return { ok: true }
+
+  return {
+    ok: false,
+    error: 'Đơn hàng 0 đồng chỉ được phép khi có khuyến mãi hợp lệ giảm toàn bộ giá trị thanh toán hoặc toàn bộ đơn là quà tặng cho khách đối ngoại (VIP).',
+  }
+}

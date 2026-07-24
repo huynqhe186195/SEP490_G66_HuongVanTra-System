@@ -7,6 +7,8 @@ public static class StaffManagementScope
 {
     public const string SaleRoleName = "Sale";
     public const string CooperativeOwnerRoleName = "CooperativeOwner";
+    public const string SalePosRoleName = "SalePos";
+    public const string SaleCodRoleName = "SaleCod";
 
     private static readonly HashSet<string> CooperativeOwnerAssignableRoles = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -18,6 +20,16 @@ public static class StaffManagementScope
     private static readonly HashSet<string> SystemAdminAssignableRoles = new(StringComparer.OrdinalIgnoreCase)
     {
         CooperativeOwnerRoleName,
+        "Manager",
+        SalePosRoleName,
+        SaleCodRoleName,
+    };
+
+    private static readonly HashSet<string> SaleFamilyRoles = new(StringComparer.OrdinalIgnoreCase)
+    {
+        SaleRoleName,
+        SalePosRoleName,
+        SaleCodRoleName,
     };
 
     public static bool IsSystemAdmin(IEnumerable<string> permissions) =>
@@ -44,13 +56,13 @@ public static class StaffManagementScope
             return SystemAdminAssignableRoles.ToList();
 
         if (IsBranchManager(permissions))
-            return [SaleRoleName];
+            return [SalePosRoleName, SaleCodRoleName];
 
         return [];
     }
 
     public static bool IsSaleRole(string? roleName) =>
-        string.Equals(roleName, SaleRoleName, StringComparison.OrdinalIgnoreCase);
+        !string.IsNullOrWhiteSpace(roleName) && SaleFamilyRoles.Contains(roleName);
 
     public static bool CanViewEmployee(IEnumerable<string> permissions, IEnumerable<string> employeeRoles)
     {

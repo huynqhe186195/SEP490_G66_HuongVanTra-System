@@ -3,15 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { createStaffAccount, fetchRoleOptions } from '../services/staffApi.js'
-import { loadAuthSession } from '../../auth/services/authSession.js'
-import { getStaffManagementScopeLabel } from '../../auth/utils/permissions.js'
-import { formatRoleName } from '../../iam/utils/iamLabels.js'
-import { getPhoneMaxLength, normalizePhoneInput, validateStaffCreateForm } from '../utils/staffValidation.js'
 
 function StaffCreatePage() {
   const navigate = useNavigate()
-  const scopeLabel = getStaffManagementScopeLabel(loadAuthSession())
-  const [fieldErrors, setFieldErrors] = useState({})
   const [isSaving, setIsSaving] = useState(false)
   const [roleOptions, setRoleOptions] = useState([])
 
@@ -21,7 +15,7 @@ function StaffCreatePage() {
     username: '',
     password: '',
     note: '',
-    role: '',
+    roles: [],
     scope: 'co-ban',
     active: true,
   })
@@ -33,10 +27,6 @@ function StaffCreatePage() {
         const roles = await fetchRoleOptions()
         if (!mounted) return
         setRoleOptions(roles || [])
-        setForm((current) => ({
-          ...current,
-          role: current.role || roles?.[0]?.name || '',
-        }))
       } catch (error) {
         showError(error.message)
       }
@@ -46,25 +36,26 @@ function StaffCreatePage() {
   }, [])
 
   const handleChange = (field) => (event) => {
-    const value = field === 'phone' ? normalizePhoneInput(event.target.value) : event.target.value
-    setForm((current) => ({ ...current, [field]: value }))
-    if (fieldErrors[field]) {
-      setFieldErrors((current) => ({ ...current, [field]: undefined }))
-    }
+    setForm((current) => ({ ...current, [field]: event.target.value }))
   }
 
-  const validation = useMemo(
-    () => validateStaffCreateForm(form),
-    [form],
+  const toggleRole = (roleName) => {
+    setForm((current) => ({
+      ...current,
+      roles: current.roles.includes(roleName)
+        ? current.roles.filter((role) => role !== roleName)
+        : [...current.roles, roleName],
+    }))
+  }
+
+  const canSubmit = useMemo(
+    () => Boolean(form.fullName.trim() && form.phone.trim() && form.username.trim() && form.password.trim().length >= 6 && form.roles.length),
+    [form.fullName, form.phone, form.username, form.password, form.roles.length],
   )
 
-  const canSubmit = validation.valid
-
   const handleSave = async () => {
-    const result = validateStaffCreateForm(form)
-    setFieldErrors(result.errors)
-    if (!result.valid) {
-      showError(result.message)
+    if (!canSubmit) {
+      showError('Vui lòng nhập đủ họ tên, số điện thoại, tên đăng nhập, mật khẩu (≥6) và vai trò.')
       return
     }
 
@@ -77,7 +68,7 @@ function StaffCreatePage() {
         phone: form.phone.trim(),
         note: form.note.trim() || null,
         isActive: form.active,
-        roles: [form.role],
+        roles: form.roles,
       })
       showSuccess('Tạo tài khoản nhân viên thành công.')
       navigate('/staff')
@@ -92,7 +83,7 @@ function StaffCreatePage() {
     <div className="flex min-h-0 flex-1 flex-col gap-6 [font-family:'Manrope',sans-serif]">
       <PageHeader
         title="Tạo nhân viên"
-        description={scopeLabel}
+        description="Thêm tài khoản nhân sự mới, gán vai trò và phạm vi sử dụng"
       />
 
       <section className="rounded-[24px] border border-[#c1c9c0]/30 bg-white p-6 shadow-sm">
@@ -143,15 +134,7 @@ function StaffCreatePage() {
 
                 <label className="flex flex-col gap-2">
                   <span className="text-xs font-semibold text-[#414942]">So dien thoai</span>
-                  <input
-                    inputMode="numeric"
-                    maxLength={getPhoneMaxLength(form.phone)}
-                    className={`rounded-lg border-none bg-[#f6f4ec] p-3 text-sm shadow-inner outline-none focus:ring-2 focus:ring-[#356647]/30 ${fieldErrors.phone ? 'ring-2 ring-[#ba1a1a]/40' : ''}`}
-                    value={form.phone}
-                    onChange={handleChange('phone')}
-                    placeholder="VD: 0912345678"
-                  />
-                  {fieldErrors.phone ? <span className="text-xs text-[#93000a]">{fieldErrors.phone}</span> : null}
+                  <input required className="rounded-lg border-none bg-[#f6f4ec] p-3 text-sm shadow-inner outline-none focus:ring-2 focus:ring-[#356647]/30" value={form.phone} onChange={handleChange('phone')} />
                 </label>
 
                 <label className="flex flex-col gap-2">
@@ -178,18 +161,22 @@ function StaffCreatePage() {
               </div>
 
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                <label className="flex flex-col gap-2">
-                  <span className="text-xs font-semibold text-[#414942]">Vai tro nhan vien</span>
-                  <div className="relative">
-                    <select className="w-full appearance-none rounded-lg border-none bg-[#f6f4ec] p-3 text-sm shadow-inner outline-none focus:ring-2 focus:ring-[#356647]/30" value={form.role} onChange={handleChange('role')}>
-                      <option value="">Chọn vai trò</option>
-                      {roleOptions.map((role) => (
-                        <option key={role.id} value={role.name}>{formatRoleName(role.name)}</option>
-                      ))}
-                    </select>
-                    <span className="material-symbols-outlined pointer-events-none absolute right-3 top-3 text-[#414942]">expand_more</span>
+                <fieldset className="flex flex-col gap-2 md:col-span-2">
+                  <legend className="text-xs font-semibold text-[#414942]">Vai trò nhân viên (có thể chọn nhiều)</legend>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {roleOptions.map((role) => (
+                      <label key={role.id} className="flex items-center gap-3 rounded-lg bg-[#f6f4ec] p-3 text-sm shadow-inner">
+                        <input
+                          type="checkbox"
+                          className="h-5 w-5 accent-[#356647]"
+                          checked={form.roles.includes(role.name)}
+                          onChange={() => toggleRole(role.name)}
+                        />
+                        <span>{role.label}</span>
+                      </label>
+                    ))}
                   </div>
-                </label>
+                </fieldset>
 
               
               </div>

@@ -6,6 +6,7 @@ import {
   buildStockBySkuIdMap,
   buildWarehouseStockBySkuIdMap,
   fetchSkuStocks,
+  fetchStoreSkuStocks,
 } from '../../inventory/services/inventoryStockApi.js'
 import { INVENTORY_STOCK_CHANGED_EVENT } from '../../inventory/utils/inventoryStockEvents.js'
 import { createSku, deleteSku, fetchSkusByProductId, updateSku } from '../services/productSkusApi.js'
@@ -65,9 +66,10 @@ function ProductSkusPanel({
     if (!productId) return
     try {
       setIsLoading(true)
+      const fetchStocks = warehouseStockView ? fetchSkuStocks : fetchStoreSkuStocks
       const [items, stocks] = await Promise.all([
         fetchSkusByProductId(productId),
-        fetchSkuStocks().catch(() => []),
+        fetchStocks().catch(() => []),
       ])
       setSkus(items)
       setStockBySkuId(

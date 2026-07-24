@@ -5,8 +5,14 @@ public record CustomerAccessContext(
     bool CanViewAllCustomers,
     bool CanManageCorporateCustomers = false)
 {
-    public Guid? AssignedSaleFilter => CanViewAllCustomers ? null : UserId;
+    /// <summary>Sale chỉ thấy khách hàng được gán; quyền xem toàn bộ không áp dụng filter.</summary>
+    public Guid? AssignedSaleFilter =>
+        CanViewAllCustomers ? null : UserId;
 
+    /// <summary>
+    /// Sale chỉ được đọc và thao tác trên khách hàng được gán cho chính mình.
+    /// </summary>
     public bool CanAccessCustomer(Guid? assignedSaleId) =>
-        CanViewAllCustomers || !assignedSaleId.HasValue || assignedSaleId.Value == UserId;
+        CanViewAllCustomers
+        || (assignedSaleId.HasValue && assignedSaleId.Value == UserId);
 }

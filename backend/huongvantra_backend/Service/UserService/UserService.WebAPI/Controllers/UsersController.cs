@@ -30,6 +30,11 @@ public class UsersController(UserLogic userLogic) : ControllerBase
         return Forbid();
     }
 
+    [HttpGet("legacy-sale-review")]
+    [Authorize(Policy = PermissionNames.ManageUser)]
+    public async Task<IActionResult> GetLegacySaleReview() =>
+        Ok(await userLogic.GetLegacySaleReviewAsync());
+
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetById(Guid id)
     {
