@@ -34,8 +34,13 @@ export function canViewCustomer(session) {
   return hasPermission(session, 'VIEW_CUSTOMER')
 }
 
+/** Tạo hồ sơ KH: Manager/Admin và cả Sale (CREATE_ORDER) — một KH có thể mua qua nhiều Sale. */
 export function canCreateCustomer(session) {
-  return hasPermission(session, 'CREATE_CUSTOMER')
+  return (
+    hasPermission(session, 'CREATE_CUSTOMER')
+    || hasPermission(session, 'CREATE_ORDER')
+    || hasPermission(session, 'MANAGE_ROLE')
+  )
 }
 
 /** Sửa hồ sơ KH: Admin (MANAGE_ROLE) hoặc Manager (CREATE_CUSTOMER). Kế toán chỉ xem. */
@@ -43,7 +48,7 @@ export function canEditCustomer(session) {
   return hasPermission(session, 'CREATE_CUSTOMER') || hasPermission(session, 'MANAGE_ROLE')
 }
 
-/** Sale (hoặc NV chỉ có VIEW_CUSTOMER): xem toàn bộ khách trong cửa hàng, không thêm/sửa hồ sơ. */
+/** Sale (hoặc NV chỉ có VIEW_CUSTOMER): xem toàn bộ khách trong cửa hàng, thêm được nhưng không sửa hồ sơ. */
 export function isReadOnlyCustomerViewer(session) {
   return canViewCustomer(session) && !canViewAllCustomers(session)
 }

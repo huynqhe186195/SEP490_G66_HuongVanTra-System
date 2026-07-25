@@ -71,7 +71,7 @@ Existing `Payment` structures are retained because payment history, QR callback,
 | --- | --- | --- |
 | `OrderService.Application.Tests` | 98 / 98 pass | Host `dotnet test`, .NET 8. Includes 16 receipt-reprint facts. |
 | `InventoryService.Application.Tests` | 68 / 68 pass | Host `dotnet test`. Includes 7 `CodReservationTraceabilityTests` facts. |
-| `CustomerService.Application.Tests` | Not executed — blocked | All 16 facts fail with `0x800711C7` Application Control on `CustomerService.Infrastructure.dll`. Build succeeds 0/0; clean rebuild and out-of-repo run reproduce the block. See note below. |
+| `CustomerService.Application.Tests` | 23 / 23 pass | Host run blocked by `0x800711C7` Application Control on `CustomerService.Infrastructure.dll`; executed in the isolated Docker fallback container (source copied without `bin` / `obj`, no writable mount into the worktree). Includes 7 `CustomerCreatePermissionPolicyTests` facts. |
 | Frontend `npm run build` | Success | Only pre-existing chunk-size / dynamic-import warnings |
 
 Build:
@@ -88,9 +88,9 @@ Build:
 | --- | --- | --- |
 | `20260724140000_AddReservedQuantityToSkuStock` | `hvt_inventory_db` | Applied |
 | `20260724160000_AddReturnInspections` | `hvt_inventory_db` | Applied; table + 7 indexes + PK + FK (WarehouseBatches SetNull) verified |
-| `20260725100000_AddCodReservationTraceability` | `hvt_inventory_db` | Created; adds `ReservationStatus` / `ReservedQuantity` / `ReservedAt` / `ReleasedAt` / `DeductedAt` on `StockDeductQueueItems` and `CustomerSnapshotName` on `StockDeductQueues` |
+| `20260725100000_AddCodReservationTraceability` | `hvt_inventory_db` | Applied; adds `ReservationStatus` / `ReservedQuantity` / `ReservedAt` / `ReleasedAt` / `DeductedAt` on `StockDeductQueueItems` and `CustomerSnapshotName` on `StockDeductQueues`; verified in `__EFMigrationsHistory` plus columns and indexes |
 | `20260723192707_AddOrderOutboxMessages` | `hvt_order_db` | Applied |
-| `20260724195511_AddOrderReceiptPrintLogs` | `hvt_order_db` | Created; `OrderReceiptPrintLogs` audit table for controlled reprint |
+| `20260724195511_AddOrderReceiptPrintLogs` | `hvt_order_db` | Applied; `OrderReceiptPrintLogs` audit table for controlled reprint; verified in `__EFMigrationsHistory` plus table, indexes and FK |
 
 ModelSnapshot in sync with migrations for InventoryService and OrderService.
 
@@ -98,19 +98,51 @@ ModelSnapshot in sync with migrations for InventoryService and OrderService.
 
 Host `dotnet test` is intermittently blocked by Windows Application Control (`0x800711C7`). Previously hit `HuongVanTra.Shared.dll` for InventoryService (Phase J); this run it blocks `CustomerService.Infrastructure.dll`, failing all 16 CustomerService facts before any test body runs. The block is environmental, not a code defect: `dotnet build` succeeds with 0 warnings / 0 errors, `bin` + `obj` clean rebuild does not clear it, and running the built assembly from a temporary directory outside the repository reproduces it identically. Mandated fallback: run the suite in an isolated .NET 8 Docker container (source copied in, container removed after, no Docker volume or database destructive commands). OrderService and InventoryService ran unblocked on the host this session.
 
-## Manual / Runtime Verification Still Required
+## Runtime UAT Executed (Docker stack, Gateway `localhost:5000`)
 
-The following need a live Docker stack with real MySQL + RabbitMQ and are not covered by the InMemory unit layer:
+Executed against the live 11-container stack with real MySQL + RabbitMQ.
+
+| Area | Check | Result | Evidence |
+| --- | --- | --- | --- |
+| Sale permissions | `sale01` creates a Customer via `POST /api/customers` | PASS | `201`, `KH000008`, phone `0925143930` |
+| Sale permissions | `sale02` finds `sale01`'s Customer by exact phone and opens the detail | PASS | `checkout-search` + `GET /api/customers/{id}` both `200` |
+| Sale permissions | Duplicate phone is rejected store-wide | PASS | `409`, single clean message |
+| Sale permissions | `sale02` opens `sale01`'s Order detail; both Sales see the same list totals | PASS | Customer `totalCount` 9, Order `totalCount` 45 for both |
+| Sale permissions | Sale cannot edit / add debt / delete a Customer | PASS | `PUT`, `POST {id}/debts`, `DELETE` all `403` |
+| Single payment | Cash checkout | PASS | `HVT-260725-001`, one `Cash` Payment row |
+| Single payment | Bank-transfer checkout | PASS | `HVT-260725-002`, one `BankTransfer` Payment row |
+| Single payment | Request carrying two `Payments` is rejected | PASS | `400` "Mỗi đơn hàng chỉ được sử dụng một phương thức thanh toán." |
+| Single payment | VietQR checkout unaffected | PASS | `HVT-260725-005`, one `VietQR` Payment, `Pending` |
+| Single payment | Partial payment still books debt | PASS | `HVT-260725-006`, paid 5,000 / 20,000, Customer `currentDebt` 15,000 |
+| Single payment | Return + refund unaffected | PASS | `TH-260725-001`, refund 10,000, `RefundMethod` `Cash` |
+| Single payment | Payment history one row per Order | PASS | `GET /api/v1/payments/orders/{id}` for Cash / Transfer / VietQR / COD |
+| Receipt reprint | Non-`Completed` Order rejected | PASS | `Shipping` Order → `400` "Chỉ đơn hàng đã hoàn tất mới được in lại hóa đơn." |
+| Receipt reprint | Empty Reason rejected on the backend | PASS | `400` "Lý do in lại hóa đơn là bắt buộc." |
+| Receipt reprint | Empty Reason blocked on the frontend | PASS | `ReceiptReprintModal` disables submit while `reason.trim()` is empty |
+| Receipt reprint | First reprint `ReprintNumber` 1, second 2 | PASS | Two `OrderReceiptPrintLogs` rows, numbers 1 and 2 |
+| Receipt reprint | Repeating `X-Idempotency-Key` creates no duplicate log | PASS | Same log `Id` returned, still two rows total |
+| Receipt reprint | Printed output carries `BẢN IN LẠI` + count + time | PASS | `isReprint: true`, `reprintNumber`, `reprintedAt` in the response; rendered by `ReceiptPaper` / `buildReceiptPaperHtml` |
+| Receipt reprint | Audit stores OrderId, printer, reason, time | PASS | `OrderReceiptPrintLogs` rows carry `OrderId`, `PrintedByName` `sale01`, both reasons, `PrintedAt` |
+| Receipt reprint | Order total / payment / debt / stock unchanged | PASS | `FinalAmount` 10,000, one Payment, stock unchanged after two reprints |
+| COD traceability | Confirmed COD reserves Shelf stock | PASS | `HVT-260725-003`, `ReservationStatus` `Active`, 4 reserved |
+| COD traceability | Order → SKU direction lists held SKUs | PASS | `reservations/by-order/{orderId}` `hasActiveReservation: true` |
+| COD traceability | Badge filter returns the holding Order | PASS | `reservations/active-order-ids` echoes the OrderId |
+| COD traceability | SKU → Order direction lists holding Orders | PASS | `reservations/by-sku/{skuId}` |
+| COD traceability | Two Orders on one SKU sum to `ReservedQuantity` | PASS | 4 + 3 = 7 = `SkuStocks.ReservedQuantity` |
+| COD traceability | Active-reservation list / filter | PASS | `reservations/active-orders` `totalItems` tracks the active set |
+| COD traceability | Cancel before dispatch releases the hold | PASS | `Released`, dropped from active, `ReservedQuantity` 7 → 3 |
+| COD traceability | Dispatch deducts physical stock exactly once | PASS | `Deducted`, `QuantityOnHand` 208 → 205, one ledger row, `ReservedQuantity` → 0 |
+| COD traceability | Repeat dispatch creates no duplicate rows | PASS | `409` guard; ledger rows 1, queue item rows 1, stock still 205 |
+| Return safety | Creating a return does not raise sellable stock | PASS | `ReturnInspections` row `Pending`, `QuantityOnHand` unchanged at 205 |
+
+UAT data created: Customer `KH000008`; Orders `HVT-260725-001` … `HVT-260725-006`; Return `TH-260725-001`.
+
+## Still Not Covered by Runtime UAT
+
+These need the outbox/sell-first phases that are not yet implemented, or a second concurrent worker:
 
 - Real-MySQL atomic outbox claim (`UPDATE ... ORDER BY ... LIMIT`), two-worker no-double-claim, lease-expiry recovery.
 - End-to-end exactly-once redelivery across the RabbitMQ + inbox path.
-- COD lifecycle end-to-end: create -> reserve -> edit -> replace -> ship -> deduct; cancel before/after ship; insufficient-reserve block.
-- Sell-first end-to-end: partial Shelf sale -> queue missing portion -> confirm FEFO Warehouse deduct.
-- Return inspection end-to-end through the Gateway with role-gated users.
-- Cash checkout and bank-transfer checkout each succeed with a single `PaymentMethod`; a multi-method checkout request is rejected.
-- Sale A creates a Customer, Sale B finds and opens it; Sale B opens Sale A's Order detail.
-- Reprint a `Completed` Order: audit row written, printed output shows `BẢN IN LẠI` with reprint count and reprint time.
-- COD reservation traceability both directions: reserve, view from the Order detail, view the same reservation from the SKU detail, cancel → released, ship → deducted and removed from the active list.
-- `CustomerService.Application.Tests` in the Docker fallback container (host run blocked by Application Control).
-
-Run these via the UAT script in `inventory-acceptance-guide.md`.
+- COD edit → atomic release and re-reserve; insufficient-reserve block.
+- Sell-first end-to-end: partial Shelf sale → queue missing portion → confirm FEFO Warehouse deduct.
+- Return inspection disposition transitions through the Gateway with role-gated Warehouse users.

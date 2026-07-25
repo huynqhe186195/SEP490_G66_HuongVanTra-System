@@ -575,7 +575,7 @@ function CustomersPage() {
 
           {isReadOnlyViewer ? (
             <p className="text-xs leading-relaxed text-[#717971]">
-              Bạn xem được toàn bộ khách hàng của cửa hàng (Phổ thông & VIP). Thêm hoặc sửa hồ sơ khách hàng do Quản lý/Admin thực hiện; tại POS bạn vẫn có thể thêm khách nhanh khi bán hàng.
+              Bạn xem được toàn bộ khách hàng của cửa hàng (Phổ thông &amp; VIP) và được thêm khách hàng mới. Sửa hồ sơ khách hàng do Quản lý/Admin thực hiện.
             </p>
           ) : null}
 

@@ -97,8 +97,7 @@ public class CustomerLogic
         EnsureCanManageCorporateCustomer(input.CustomerGroup, access);
 
         if (await _customerRepo.PhoneExistsAsync(input.PhoneNumber, ct: ct))
-            throw new DuplicatePhoneNumberException(
-                $"Số điện thoại '{input.PhoneNumber}' đã được đăng ký. Hãy tìm khách trong danh sách hoặc ô tìm kiếm tại POS.");
+            throw new DuplicatePhoneNumberException(input.PhoneNumber);
 
         if (!string.IsNullOrWhiteSpace(input.Email) && await _customerRepo.EmailExistsAsync(input.Email, ct: ct))
             throw new DuplicateEmailException(input.Email);

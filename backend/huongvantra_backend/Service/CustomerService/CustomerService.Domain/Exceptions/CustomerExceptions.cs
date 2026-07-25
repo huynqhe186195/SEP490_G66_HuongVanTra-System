@@ -9,7 +9,8 @@ public class CustomerNotFoundException : Exception
 public class DuplicatePhoneNumberException : Exception
 {
     public DuplicatePhoneNumberException(string phone)
-        : base($"Số điện thoại '{phone}' đã được đăng ký.") { }
+        : base($"Số điện thoại '{phone}' đã được đăng ký. "
+               + "Hãy tìm khách trong danh sách hoặc ô tìm kiếm tại POS.") { }
 }
 
 public class DuplicateEmailException : Exception

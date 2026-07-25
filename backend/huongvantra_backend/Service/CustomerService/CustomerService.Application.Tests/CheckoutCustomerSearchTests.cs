@@ -66,7 +66,7 @@ public sealed class CheckoutCustomerSearchTests
 
         var found = await CreateLogic(db).GetByPhoneAsync(other.PhoneNumber, SaleAccess());
 
-        Assert.Equal(other.Id, Assert.IsType<CustomerResponse>(found).Id);
+        Assert.Equal(other.Id, Assert.IsType<CustomerDetailResponse>(found).Id);
     }
 
     [Theory]
