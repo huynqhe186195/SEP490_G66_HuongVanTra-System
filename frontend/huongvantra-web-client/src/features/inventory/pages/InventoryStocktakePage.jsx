@@ -12,7 +12,6 @@ import { isWarehouseRole, canWriteInventory } from '../../auth/utils/permissions
 import { fetchSkuStocks, fetchStoreSkuStocks } from '../services/inventoryStockApi.js'
 import {
   approveStocktakeRequest,
-  cancelStocktakeRequest,
   createStocktakeRequest,
   fetchStocktakeRequestById,
   fetchStocktakeRequests,
@@ -145,7 +144,7 @@ function buildStocktakeCsvRows(request) {
   ]
 }
 
-function StocktakeDetailModal({ request, onClose, onAction }) {
+function StocktakeDetailModal({ request, onClose, onAction, canWrite = true }) {
   if (!request) return null
 
   return (
@@ -233,25 +232,21 @@ function StocktakeDetailModal({ request, onClose, onAction }) {
             Xuất CSV
           </button>
           <div className="flex flex-wrap justify-end gap-2">
-            {request.status === 'Draft' || request.status === 'Rejected' ? (
-              <button type="button" onClick={() => onAction('submit', request)} className="rounded-xl bg-amber-600 px-4 py-2 text-sm font-bold text-white hover:bg-amber-700">
+            {/* Chỉ nháp mới gửi duyệt. Đã từ chối / hoàn thành / hủy — không gửi lại từ đây. */}
+            {request.status === 'Draft' ? (
+              <button type="button" disabled={!canWrite} onClick={() => onAction('submit', request)} className="rounded-xl bg-amber-600 px-4 py-2 text-sm font-bold text-white hover:bg-amber-700 disabled:opacity-50">
                 Gửi duyệt
               </button>
             ) : null}
             {request.status === 'PendingApproval' ? (
               <>
-                <button type="button" onClick={() => onAction('reject', request)} className="rounded-xl border border-rose-200 px-4 py-2 text-sm font-bold text-rose-700 hover:bg-rose-50">
+                <button type="button" disabled={!canWrite} onClick={() => onAction('reject', request)} className="rounded-xl border border-rose-200 px-4 py-2 text-sm font-bold text-rose-700 hover:bg-rose-50 disabled:opacity-50">
                   Từ chối
                 </button>
-                <button type="button" onClick={() => onAction('approve', request)} className="rounded-xl bg-[#538463] px-4 py-2 text-sm font-bold text-white hover:bg-[#426d50]">
+                <button type="button" disabled={!canWrite} onClick={() => onAction('approve', request)} className="rounded-xl bg-[#538463] px-4 py-2 text-sm font-bold text-white hover:bg-[#426d50] disabled:opacity-50">
                   Duyệt và áp tồn
                 </button>
               </>
-            ) : null}
-            {request.status !== 'Completed' && request.status !== 'Cancelled' ? (
-              <button type="button" onClick={() => onAction('cancel', request)} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">
-                Hủy
-              </button>
             ) : null}
           </div>
         </div>
@@ -704,7 +699,6 @@ function InventoryStocktakePage() {
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [detail, setDetail] = useState(null)
   const session = loadAuthSession()
-  const currentUserId = session?.userId
   const canWrite = canWriteInventory(session)
 
   const loadRequests = useCallback(async () => {
@@ -755,7 +749,7 @@ function InventoryStocktakePage() {
         const defaultReason = action === 'approve' ? 'Duyệt kiểm kê' : ''
         const reason = window.prompt(action === 'approve' ? 'Ghi chú duyệt' : 'Nhập lý do', defaultReason)
         if (reason === null) return
-        if ((action === 'reject' || action === 'cancel') && !reason.trim()) {
+        if ((action === 'reject') && !reason.trim()) {
           showError('Vui lòng nhập lý do.')
           return
         }
@@ -767,10 +761,6 @@ function InventoryStocktakePage() {
         if (action === 'reject') {
           result = await rejectStocktakeRequest(request.id, reason)
           showSuccess(`Đã từ chối ${result.requestCode}.`)
-        }
-        if (action === 'cancel') {
-          result = await cancelStocktakeRequest(request.id, reason)
-          showSuccess(`Đã hủy ${result.requestCode}.`)
         }
       }
       await loadRequests()
@@ -864,11 +854,6 @@ function InventoryStocktakePage() {
                       <button type="button" onClick={() => openDetail(item.id)} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">
                         Chi tiết
                       </button>
-                      {canWrite && item.status === 'PendingApproval' && item.createdBy !== currentUserId ? (
-                        <button type="button" onClick={() => handleAction('approve', item)} className="rounded-lg bg-[#538463] px-3 py-1.5 text-xs font-bold text-white hover:bg-[#426d50]">
-                          Duyệt
-                        </button>
-                      ) : null}
                     </div>
                   </td>
                 </tr>
@@ -901,6 +886,7 @@ function InventoryStocktakePage() {
           request={detail}
           onClose={() => setDetail(null)}
           onAction={handleAction}
+          canWrite={canWrite}
         />
       ) : null}
     </PageShell>

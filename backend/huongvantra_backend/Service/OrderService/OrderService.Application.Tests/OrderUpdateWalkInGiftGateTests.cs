@@ -8,6 +8,7 @@ using OrderService.Application.UseCases;
 using OrderService.Domain.Entities;
 using OrderService.Domain.Enums;
 using OrderService.Domain.Exceptions;
+using OrderService.Application.Tests.TestSupport;
 using Xunit;
 
 namespace OrderService.Application.Tests;
@@ -89,6 +90,8 @@ public class OrderUpdateWalkInGiftGateTests
             var promotionLogic = new PromotionLogic(
                 _promotionRepository.Object,
                 _customerCatalog.Object);
+            var shiftGuard = PosShiftTestDoubles.ShiftGuard();
+            var posCashSessionLogic = PosShiftTestDoubles.CashSessionLogic(shiftGuard);
             _logic = new OrderLogic(
                 _orderRepository.Object,
                 _returnOrderRepository.Object,
@@ -102,6 +105,8 @@ public class OrderUpdateWalkInGiftGateTests
                 _inventoryCatalog.Object,
                 new Mock<ICustomBundleRepository>().Object,
                 new Mock<IEmailService>().Object,
+                posCashSessionLogic,
+                shiftGuard,
                 Microsoft.Extensions.Options.Options.Create(new SepayOptions()));
         }
 

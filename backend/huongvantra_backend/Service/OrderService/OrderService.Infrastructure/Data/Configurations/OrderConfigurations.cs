@@ -259,3 +259,32 @@ public class CustomBundleIngredientConfiguration : IEntityTypeConfiguration<Cust
         builder.HasIndex(e => e.CustomBundleId);
     }
 }
+
+public class PosCashSessionConfiguration : IEntityTypeConfiguration<PosCashSession>
+{
+    public void Configure(EntityTypeBuilder<PosCashSession> builder)
+    {
+        builder.ToTable("PosCashSessions");
+        builder.HasKey(e => e.Id);
+        builder.Property(e => e.Id).ValueGeneratedNever();
+        builder.Property(e => e.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+        builder.Property(e => e.OpeningCash).HasColumnType("decimal(18,2)").IsRequired();
+        builder.Property(e => e.CashSalesTotal).HasColumnType("decimal(18,2)").HasDefaultValue(0m).IsRequired();
+        builder.Property(e => e.CashRefundTotal).HasColumnType("decimal(18,2)").HasDefaultValue(0m).IsRequired();
+        builder.Property(e => e.OrderCount).HasDefaultValue(0).IsRequired();
+        builder.Property(e => e.Note).HasMaxLength(500);
+        builder.Property(e => e.OpenedByName).HasMaxLength(100).IsRequired();
+        builder.Property(e => e.OpenedByRole).HasMaxLength(100);
+        builder.Property(e => e.ShiftLabel).HasMaxLength(200);
+        builder.Property(e => e.OpenedAt).IsRequired();
+        builder.Property(e => e.CountedCash).HasColumnType("decimal(18,2)");
+        builder.Property(e => e.ExpectedCash).HasColumnType("decimal(18,2)");
+        builder.Property(e => e.Variance).HasColumnType("decimal(18,2)");
+        builder.Property(e => e.VarianceNote).HasMaxLength(500);
+        builder.Property(e => e.ClosedByName).HasMaxLength(100);
+        builder.Property(e => e.CreatedAt).IsRequired();
+        builder.Property(e => e.UpdatedAt).IsRequired();
+        builder.HasIndex(e => e.Status);
+        builder.HasIndex(e => e.OpenedByUserId);
+    }
+}

@@ -9,6 +9,7 @@ using OrderService.Domain.Entities;
 using OrderService.Domain.Enums;
 using OrderService.Domain.Exceptions;
 using OrderService.Domain.Rules;
+using OrderService.Application.Tests.TestSupport;
 using Xunit;
 
 namespace OrderService.Application.Tests;
@@ -184,6 +185,8 @@ public class OrderIdempotencyTests
             new Mock<IPromotionRepository>().Object,
             new Mock<ICustomerCatalogClient>().Object);
 
+        var shiftGuard = PosShiftTestDoubles.ShiftGuard();
+        var posCashSessionLogic = PosShiftTestDoubles.CashSessionLogic(shiftGuard);
         return new OrderLogic(
             repository,
             new Mock<IReturnOrderRepository>().Object,
@@ -197,6 +200,8 @@ public class OrderIdempotencyTests
             inventoryCatalog ?? new Mock<IInventoryCatalogClient>().Object,
             new Mock<ICustomBundleRepository>().Object,
             new Mock<IEmailService>().Object,
+            posCashSessionLogic,
+            shiftGuard,
             Microsoft.Extensions.Options.Options.Create(new SepayOptions()));
     }
 

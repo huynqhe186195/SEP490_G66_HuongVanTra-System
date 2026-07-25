@@ -13,7 +13,8 @@ public class PaymentLogic(
     IPaymentRepository _paymentRepo,
     IOrderRepository _orderRepo,
     IOrderEventPublisher _eventPublisher,
-    IOrderActivityRepository _activityRepo)
+    IOrderActivityRepository _activityRepo,
+    StaffShiftGuard _shiftGuard)
 {
     public async Task<PaymentResponse> VerifyCodAsync(
         Guid paymentId,
@@ -23,6 +24,8 @@ public class PaymentLogic(
         string? actorName = null,
         CancellationToken ct = default)
     {
+        await _shiftGuard.EnsureShelfOnDutyAsync(access, ct);
+
         var payment = await _paymentRepo.GetByIdAsync(paymentId, ct)
             ?? throw new PaymentNotFoundException(paymentId);
 

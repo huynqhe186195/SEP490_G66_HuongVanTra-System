@@ -21,6 +21,12 @@ import { createOrder } from '../services/ordersApi.js'
 import { createCheckoutAttemptManager } from '../utils/checkoutAttempt.js'
 import { validateZeroTotalCheckout } from '../../pos/utils/posDiscountValidation.js'
 
+import { loadAuthSession } from '../../auth/services/authSession.js'
+
+import { canViewAllOrders } from '../../auth/utils/permissions.js'
+
+import { fetchOnDutyShift } from '../../shifts/services/shiftsApi.js'
+
 import {
 
   calcOrderLineSubtotal,
@@ -79,10 +85,18 @@ function OrderCreatePage() {
 
   const navigate = useNavigate()
 
+  const session = loadAuthSession()
+
+  const isManager = canViewAllOrders(session)
+
   const [isSaving, setIsSaving] = useState(false)
   const checkoutAttemptRef = useRef(createCheckoutAttemptManager())
 
   const [skuOptions, setSkuOptions] = useState([])
+
+  const [shelfOnDuty, setShelfOnDuty] = useState(null)
+
+  const [checkingShift, setCheckingShift] = useState(!isManager)
 
   const [form, setForm] = useState({
 
@@ -156,6 +170,36 @@ function OrderCreatePage() {
   )
 
   const canUseManualDiscount = isVipCustomerType(form.selectedCustomer?.customerType)
+
+  useEffect(() => {
+    if (isManager) {
+      setShelfOnDuty(null)
+      setCheckingShift(false)
+      return undefined
+    }
+
+    let mounted = true
+    setCheckingShift(true)
+    fetchOnDutyShift('Shelf')
+      .then((duty) => {
+        if (mounted) setShelfOnDuty(duty)
+      })
+      .catch(() => {
+        if (mounted) setShelfOnDuty(null)
+      })
+      .finally(() => {
+        if (mounted) setCheckingShift(false)
+      })
+
+    return () => {
+      mounted = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isManager])
+
+  const canMutate = isManager || Boolean(shelfOnDuty)
+
+
 
   useEffect(() => {
     if (!isPosChannel(form.orderChannel)) return
@@ -309,6 +353,11 @@ function OrderCreatePage() {
 
 
 
+    if (!canMutate) {
+      showError('Bạn chưa đến ca / chưa được duyệt ca quầy — không thể tạo đơn.')
+      return
+    }
+
     let items
     try {
       items = form.items
@@ -442,6 +491,32 @@ function OrderCreatePage() {
         }
 
       />
+
+
+
+      {!checkingShift && !canMutate ? (
+
+        <div className="mb-4 flex items-start gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+
+          <span className="material-symbols-outlined text-[18px]">schedule</span>
+
+          <p>
+
+            Ngoài giờ ca — chỉ xem, không tạo đơn mới.{' '}
+
+            <Link to="/my-shifts" className="font-semibold underline">
+
+              Vào «Lịch làm việc»
+
+            </Link>{' '}
+
+            để đăng ký hoặc chờ đến giờ ca.
+
+          </p>
+
+        </div>
+
+      ) : null}
 
 
 
@@ -761,7 +836,7 @@ function OrderCreatePage() {
 
             type="submit"
 
-            disabled={isSaving}
+            disabled={isSaving || !canMutate}
 
             className="rounded-xl bg-[#538463] px-6 py-3 text-sm font-bold text-white hover:bg-[#457053] disabled:opacity-50"
 

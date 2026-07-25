@@ -8,6 +8,7 @@ using OrderService.Application.UseCases;
 using OrderService.Domain.Entities;
 using OrderService.Domain.Enums;
 using OrderService.Domain.Exceptions;
+using OrderService.Application.Tests.TestSupport;
 using Xunit;
 
 namespace OrderService.Application.Tests;
@@ -39,6 +40,8 @@ public class OrderUnavailableSkuTests
         var promotionLogic = new PromotionLogic(
             new Mock<IPromotionRepository>().Object,
             customerCatalog.Object);
+        var shiftGuard = PosShiftTestDoubles.ShiftGuard();
+        var posCashSessionLogic = PosShiftTestDoubles.CashSessionLogic(shiftGuard);
         var logic = new OrderLogic(
             orderRepo.Object,
             new Mock<IReturnOrderRepository>().Object,
@@ -52,6 +55,8 @@ public class OrderUnavailableSkuTests
             new Mock<IInventoryCatalogClient>().Object,
             new Mock<ICustomBundleRepository>().Object,
             new Mock<IEmailService>().Object,
+            posCashSessionLogic,
+            shiftGuard,
             Microsoft.Extensions.Options.Options.Create(new SepayOptions()));
 
         var request = new CreateOrderRequest(

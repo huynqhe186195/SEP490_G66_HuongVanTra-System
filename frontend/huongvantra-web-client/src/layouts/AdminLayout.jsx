@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import ModuleRouteGuard from '../app/ModuleRouteGuard.jsx'
+import SaleWeeklyShiftGate from '../features/shifts/components/SaleWeeklyShiftGate.jsx'
 import StockAdjustmentBatchBar from '../features/inventory/components/StockAdjustmentBatchBar.jsx'
 import LowStockBadge from '../features/inventory/components/LowStockBadge.jsx'
 import OfflineBanner from '../features/pos/components/OfflineBanner.jsx'
@@ -32,6 +33,7 @@ function AdminLayout() {
   const [isLoadingAccess, setIsLoadingAccess] = useState(() => !loadAuthSession()?.modules?.length)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(readSidebarCollapsed)
+  const [shiftLockMode, setShiftLockMode] = useState(null)
   const location = useLocation()
   const isOnline = useNetworkStatus()
   const isPosPage = location.pathname === '/pos'
@@ -132,9 +134,17 @@ function AdminLayout() {
     location.pathname === '/inventory/products' && !isWarehouseUserRole(authSession?.roles ?? [])
   const isViewportLocked = location.pathname === '/pos' || isStoreProductsPage
 
+  const visibleSidebarItems =
+    shiftLockMode === 'hard_block' || shiftLockMode === 'checking'
+      ? []
+      : shiftLockMode === 'register_only' || shiftLockMode === 'off_duty'
+        ? sidebarItems.filter((item) => item.path === '/my-shifts' || item.module === 'my_shifts')
+        : sidebarItems
+
   return (
     <div className="min-h-screen bg-[#F8FAF7] text-gray-800">
       <OfflineBanner isOnline={isOnline} />
+      <SaleWeeklyShiftGate session={authSession} onLockChange={setShiftLockMode}>
       <div className={`flex h-[100dvh] overflow-hidden${!isOnline ? ' pt-9' : ''}`}>
         {mobileNavOpen ? (
           <button
@@ -146,7 +156,7 @@ function AdminLayout() {
         ) : null}
 
         <Sidebar
-          items={sidebarItems}
+          items={visibleSidebarItems}
           isLoading={isLoadingAccess}
           mobileOpen={mobileNavOpen}
           collapsed={sidebarCollapsed}
@@ -201,6 +211,7 @@ function AdminLayout() {
           <StockAdjustmentBatchBar />
         </div>
       </div>
+      </SaleWeeklyShiftGate>
     </div>
   )
 }

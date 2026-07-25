@@ -4189,12 +4189,19 @@ public class InventoryLogic(
 
     private async Task<int> GetSystemQuantityForLocationAsync(Guid skuId, string location, CancellationToken ct)
     {
+        // Tồn kệ phải khớp /api/v1/store/sku-stocks và POS (SkuStock.QuantityOnHand).
+        // Không dùng tổng lô Shelf ở đây — nhiều luồng bán/trừ tồn chỉ cập nhật SkuStock,
+        // nên SumQuantityOnHand(Shelf) dễ = 0 hoặc lệch so với số Sale đang đối chiếu.
+        if (location == LocationShelf)
+        {
+            var shelfStock = await _skuStockRepo.GetBySkuIdAsync(skuId, ct);
+            return shelfStock?.QuantityOnHand ?? 0;
+        }
+
         if (_inventoryOptions.SimulateWarehouse)
         {
             var stock = await _skuStockRepo.GetBySkuIdAsync(skuId, ct);
-            return location == LocationWarehouse
-                ? stock?.WarehouseQuantityOnHand ?? 0
-                : stock?.QuantityOnHand ?? 0;
+            return stock?.WarehouseQuantityOnHand ?? 0;
         }
 
         return await _batchRepo.SumQuantityOnHandAsync(skuId, location, ct);

@@ -3,7 +3,8 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
-import { canCreateOrder, canVerifyCodPayment } from '../../auth/utils/permissions.js'
+import { canCreateOrder, canVerifyCodPayment, canViewAllOrders } from '../../auth/utils/permissions.js'
+import { fetchOnDutyShift } from '../../shifts/services/shiftsApi.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import CodVerifyModal from '../components/CodVerifyModal.jsx'
 import ConfirmDialog from '../../../components/shared/ConfirmDialog.jsx'
@@ -63,8 +64,11 @@ function OrderDetailPage() {
   const session = loadAuthSession()
   const canManage = canCreateOrder(session)
   const canCollectCod = canVerifyCodPayment(session)
+  const isManager = canViewAllOrders(session)
 
   const [order, setOrder] = useState(null)
+  const [shelfOnDuty, setShelfOnDuty] = useState(null)
+  const [checkingShift, setCheckingShift] = useState(!isManager)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false)
@@ -94,6 +98,34 @@ function OrderDetailPage() {
   useEffect(() => {
     loadOrder()
   }, [loadOrder])
+
+  useEffect(() => {
+    if (isManager) {
+      setShelfOnDuty(null)
+      setCheckingShift(false)
+      return undefined
+    }
+
+    let mounted = true
+    setCheckingShift(true)
+    fetchOnDutyShift('Shelf')
+      .then((duty) => {
+        if (mounted) setShelfOnDuty(duty)
+      })
+      .catch(() => {
+        if (mounted) setShelfOnDuty(null)
+      })
+      .finally(() => {
+        if (mounted) setCheckingShift(false)
+      })
+
+    return () => {
+      mounted = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isManager])
+
+  const canMutate = isManager || Boolean(shelfOnDuty)
 
   useEffect(() => {
     if (!order?.customerId) {
@@ -165,7 +197,7 @@ function OrderDetailPage() {
   }, [])
 
   async function handleSaveMeta(values) {
-    if (!canManage || !order) return
+    if (!canManage || !canMutate || !order) return
     try {
       setIsSaving(true)
       const updated = await updateOrder(order.id, values)
@@ -190,7 +222,7 @@ function OrderDetailPage() {
   }, [order?.items, catalogLookups])
 
   async function handleConfirmCancel() {
-    if (!canManage || !order) return
+    if (!canManage || !canMutate || !order) return
     setConfirmCancelOpen(false)
     try {
       setIsSaving(true)
@@ -230,7 +262,7 @@ function OrderDetailPage() {
   }
 
   async function runAction(action) {
-    if (!canManage || !order) return
+    if (!canManage || !canMutate || !order) return
     try {
       setIsSaving(true)
       if (action === 'ship') {
@@ -296,6 +328,18 @@ function OrderDetailPage() {
   return (
     <PageShell>
     <div className="mx-auto w-full max-w-5xl space-y-6 px-1 pb-8 sm:px-2">
+      {!checkingShift && !canMutate ? (
+        <div className="flex items-start gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <span className="material-symbols-outlined text-[18px]">schedule</span>
+          <p>
+            Ngoài giờ ca — chỉ xem, không sửa / hủy / giao / hoàn tất / trả đổi / thu COD.{' '}
+            <Link to="/my-shifts" className="font-semibold underline">
+              Vào «Lịch làm việc»
+            </Link>{' '}
+            để đăng ký hoặc chờ đến giờ ca.
+          </p>
+        </div>
+      ) : null}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <Link
@@ -322,7 +366,7 @@ function OrderDetailPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {canManage && canEditOrderMeta(order) ? (
+          {canManage && canMutate && canEditOrderMeta(order) ? (
             <button
               type="button"
               onClick={() => setIsUpdateModalOpen(true)}
@@ -420,7 +464,7 @@ function OrderDetailPage() {
                 {canShipOrder(order) ? (
                   <button
                     type="button"
-                    disabled={isSaving}
+                    disabled={isSaving || !canMutate}
                     onClick={() => runAction('ship')}
                     className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-50"
                   >
@@ -430,7 +474,7 @@ function OrderDetailPage() {
                 {canCompleteOrder(order) ? (
                   <button
                     type="button"
-                    disabled={isSaving}
+                    disabled={isSaving || !canMutate}
                     onClick={() => runAction('complete')}
                     className="rounded-xl bg-[#538463] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#457053] disabled:opacity-50"
                   >
@@ -440,7 +484,7 @@ function OrderDetailPage() {
                 {canCollectCod && canVerifyCod(order) ? (
                   <button
                     type="button"
-                    disabled={isSaving}
+                    disabled={isSaving || !canMutate}
                     onClick={() => setIsCodVerifyOpen(true)}
                     className="rounded-xl bg-amber-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-amber-700 disabled:opacity-50"
                   >
@@ -450,8 +494,9 @@ function OrderDetailPage() {
                 {canReturnOrder(order) ? (
                   <button
                     type="button"
-                    onClick={() => navigate(`/pos/returns/${order.id}`)}
-                    className="rounded-xl border border-[#538463]/40 bg-[#f6f4ec] px-4 py-2.5 text-sm font-bold text-[#356647] hover:bg-[#ebe8dc]"
+                    disabled={!canMutate}
+                    onClick={() => canMutate && navigate(`/pos/returns/${order.id}`)}
+                    className="rounded-xl border border-[#538463]/40 bg-[#f6f4ec] px-4 py-2.5 text-sm font-bold text-[#356647] hover:bg-[#ebe8dc] disabled:opacity-50"
                   >
                     Trả hàng / Đổi
                   </button>
@@ -469,7 +514,7 @@ function OrderDetailPage() {
                 {canCancelOrder(order) ? (
                   <button
                     type="button"
-                    disabled={isSaving}
+                    disabled={isSaving || !canMutate}
                     onClick={() => runAction('cancel')}
                     className="rounded-xl border border-red-200 px-4 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50"
                   >

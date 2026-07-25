@@ -26,6 +26,8 @@ public class OrderLogic(
     IInventoryCatalogClient _inventoryCatalogClient,
     ICustomBundleRepository _customBundleRepo,
     IEmailService _emailService,
+    PosCashSessionLogic _posCashSessionLogic,
+    StaffShiftGuard _shiftGuard,
     IOptions<SepayOptions> sepayOptions)
 {
     private readonly SepayOptions _sepay = sepayOptions.Value;
@@ -289,6 +291,8 @@ public class OrderLogic(
             detailInputs, req.DiscountAmount, req.PaidAmount,
             req.OrderChannel, req.ShippingAddress,
             hasCustomBundles: (req.CustomBundles ?? []).Any(b => (b.Ingredients ?? []).Count > 0));
+
+        await _shiftGuard.EnsureShelfOnDutyAsync(access, ct);
 
         if (req.OrderKind != OrderKind.Exchange)
         {
@@ -594,7 +598,16 @@ public class OrderLogic(
 
         await _orderRepo.SaveChangesAsync(ct);
 
-        // Email hóa đơn là side-effect thông báo, chạy sau khi transaction đã commit.
+        // Ca quỹ POS: chỉ ghi nhận phần tiền mặt đã thu thành công, sau khi đơn đã commit.
+        if (order.OrderChannel == OrderChannel.POS)
+        {
+            var cashCollected = payments
+                .Where(p => p.PaymentMethod == PaymentMethod.Cash && p.PaymentStatus == PaymentStatus.Success)
+                .Sum(p => p.Amount);
+            if (cashCollected > 0)
+                await _posCashSessionLogic.RecordCashSaleAsync(cashCollected, ct);
+        }
+
         if (order.OrderStatus == OrderStatus.Completed && order.CustomerId.HasValue)
             TrySendInvoiceEmail(order);
 
@@ -838,6 +851,7 @@ public class OrderLogic(
         var order = await _orderRepo.GetByIdAsync(id, ct)
             ?? throw new OrderNotFoundException(id);
         EnsureCanModify(order, access);
+        await _shiftGuard.EnsureShelfOnDutyAsync(access, ct);
 
         if (order.OrderStatus == OrderStatus.Completed || order.OrderStatus == OrderStatus.Cancelled)
             throw new OrderCannotBeModifiedException(id, order.OrderStatus.ToString());
@@ -1012,6 +1026,7 @@ public class OrderLogic(
         var order = await _orderRepo.GetByIdAsync(id, ct)
             ?? throw new OrderNotFoundException(id);
         EnsureCanModify(order, access);
+        await _shiftGuard.EnsureShelfOnDutyAsync(access, ct);
 
         if (order.OrderStatus == OrderStatus.Completed || order.OrderStatus == OrderStatus.Cancelled)
             throw new OrderCannotBeCancelledException(id, order.OrderStatus.ToString());
@@ -1142,6 +1157,7 @@ public class OrderLogic(
         var order = await _orderRepo.GetByIdAsync(id, ct)
             ?? throw new OrderNotFoundException(id);
         EnsureCanModify(order, access);
+        await _shiftGuard.EnsureShelfOnDutyAsync(access, ct);
 
         if (order.OrderStatus != OrderStatus.Processing && order.OrderStatus != OrderStatus.PendingPayment)
             throw new OrderCannotBeModifiedException(id, order.OrderStatus.ToString());
@@ -1183,6 +1199,7 @@ public class OrderLogic(
         var order = await _orderRepo.GetByIdAsync(id, ct)
             ?? throw new OrderNotFoundException(id);
         EnsureCanModify(order, access);
+        await _shiftGuard.EnsureShelfOnDutyAsync(access, ct);
 
         if (order.OrderStatus == OrderStatus.Cancelled || order.OrderStatus == OrderStatus.Completed)
             throw new OrderCannotBeModifiedException(id, order.OrderStatus.ToString());
@@ -1218,6 +1235,7 @@ public class OrderLogic(
         order.OrderStatus = OrderStatus.Completed;
         order.UpdatedAt = DateTime.UtcNow;
 
+        var newlySucceededCashAmount = 0m;
         foreach (var payment in payments)
         {
             if (payment.PaymentStatus == PaymentStatus.Success) continue;
@@ -1240,6 +1258,9 @@ public class OrderLogic(
                 payment.Amount = paidNow;
                 payment.PaidAt = DateTime.UtcNow;
                 payment.UpdatedAt = DateTime.UtcNow;
+
+                if (payment.PaymentMethod == PaymentMethod.Cash && order.OrderChannel == OrderChannel.POS)
+                    newlySucceededCashAmount += paidNow;
 
                 var paymentDescription = string.IsNullOrWhiteSpace(payment.TransactionRef)
                     ? $"Đã thanh toán {FormatVnd(paidNow)} qua {GetPaymentMethodLabel(payment.PaymentMethod)}."
@@ -1306,6 +1327,9 @@ public class OrderLogic(
 
         await _orderRepo.SaveChangesAsync(ct);
 
+        if (newlySucceededCashAmount > 0)
+            await _posCashSessionLogic.RecordCashSaleAsync(newlySucceededCashAmount, ct);
+
         if (shouldSendInvoice)
             TrySendInvoiceEmail(order);
     }
@@ -1342,6 +1366,7 @@ public class OrderLogic(
         var order = await _orderRepo.GetByIdAsync(orderId, ct)
             ?? throw new OrderNotFoundException(orderId);
         EnsureCanModify(order, access);
+        await _shiftGuard.EnsureShelfOnDutyAsync(access, ct);
 
         if (order.OrderStatus != OrderStatus.Completed)
             throw new OrderValidationException("Chỉ trả hàng trên hóa đơn đã hoàn tất.");
@@ -1486,6 +1511,9 @@ public class OrderLogic(
             ct);
 
         await _returnOrderRepo.SaveChangesAsync(ct);
+
+        if (refundAmount > 0 && refundMethod == PaymentMethod.Cash && order.OrderChannel == OrderChannel.POS)
+            await _posCashSessionLogic.RecordCashRefundAsync(refundAmount, ct);
 
         string? exchangeOrderCode = null;
         Guid? exchangeOrderId = null;
