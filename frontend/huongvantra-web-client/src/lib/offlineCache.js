@@ -121,7 +121,6 @@ function mapCustomerGroupToPosType(value) {
   if (group === 'doanhnghiep') return 'CORPORATE'
   return 'GENERAL'
 }
-}
 
 // ── Main sync function — called on "Chuẩn bị offline" or background timer ───
 

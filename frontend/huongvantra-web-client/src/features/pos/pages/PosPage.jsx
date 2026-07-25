@@ -1472,9 +1472,6 @@ function PosPage() {
         && (isTransferPayment ? total > 0 : true);
     const canPay = isTakeaway
         ? canPayTakeaway && !isSubmitting
-        : (isSplitPayment ? canPaySplit : isTransferPayment ? canPayTransfer : canPayCash) && !isSubmitting;
-    const canPay = isTakeaway
-        ? canPayTakeaway && !isSubmitting
         : cashSessionOpen && shelfOnDuty && (isSplitPayment ? canPaySplit : isTransferPayment ? canPayTransfer : canPayCash) && !isSubmitting;
     const normalizedPromoSearch = promoCodeInput.trim().toUpperCase();
     const visibleAvailablePromotions = availablePromotions
