@@ -400,7 +400,7 @@ function CustomerFormPage() {
     <PageShell className="[font-family:'Manrope',sans-serif]">
       <PageHeader
         title={isReadOnly ? 'Xem khách hàng' : isEditMode ? 'Chỉnh sửa khách hàng' : 'Thêm khách hàng'}
-        description={
+        titleInfo={
           isReadOnly
             ? isCorporateLocked
               ? 'Chỉ Admin được chỉnh sửa khách doanh nghiệp. Bạn đang xem ở chế độ chỉ đọc.'

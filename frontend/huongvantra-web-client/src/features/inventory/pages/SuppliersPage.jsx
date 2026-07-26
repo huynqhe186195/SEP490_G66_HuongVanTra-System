@@ -315,6 +315,7 @@ export default function SuppliersPage() {
     <PageShell>
       <PageHeader
         title="Nhà cung cấp"
+        titleInfo="Quản lý danh mục nhà cung cấp dùng cho phiếu nhập và trả hàng."
         rightContent={
           canManage ? (
             <button

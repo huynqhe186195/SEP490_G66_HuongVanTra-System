@@ -103,7 +103,7 @@ function CustomerAddressesPage() {
     <PageShell>
       <PageHeader
         title={pageTitle}
-        description="Thêm, sửa và đặt địa chỉ mặc định cho khách hàng"
+        titleInfo="Thêm, sửa và đặt địa chỉ mặc định cho khách hàng"
         rightContent={
           <div className="flex flex-wrap gap-2">
             <Link

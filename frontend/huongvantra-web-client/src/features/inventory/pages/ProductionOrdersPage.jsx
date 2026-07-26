@@ -264,7 +264,7 @@ function ProductionOrdersPage() {
     <PageShell>
       <PageHeader
         title="Quản lý lệnh sản xuất"
-        description="Một lệnh sản xuất có thể chứa nhiều SKU thành phẩm; hệ thống xuất nguyên liệu và nhập lô thành phẩm về kho tổng."
+        titleInfo="Một lệnh sản xuất có thể chứa nhiều SKU thành phẩm; hệ thống xuất nguyên liệu và nhập lô thành phẩm về kho tổng."
         rightContent={
           <div className="flex items-center gap-3">
             <button

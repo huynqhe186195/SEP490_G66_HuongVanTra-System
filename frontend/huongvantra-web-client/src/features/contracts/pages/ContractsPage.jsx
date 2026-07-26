@@ -112,7 +112,7 @@ function ContractsPage() {
     <PageShell>
       <PageHeader
         title="Hợp đồng"
-        description="Quản lý hợp đồng với khách doanh nghiệp"
+        titleInfo="Quản lý hợp đồng với khách doanh nghiệp"
         rightContent={
           canCreate && (
             <Link

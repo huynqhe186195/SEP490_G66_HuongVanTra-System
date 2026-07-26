@@ -161,7 +161,7 @@ function ReturnInspectionsPage() {
     <PageShell>
       <PageHeader
         title="Kiểm tra hàng trả"
-        description={
+        titleInfo={
           canInspect
             ? 'Hàng trả KHÔNG tự tăng tồn bán. Kiểm tra rồi quyết định: nhập lại / kiểm dịch / tiêu hủy.'
             : 'Theo dõi trạng thái kiểm tra hàng trả.'

@@ -61,7 +61,7 @@ function InventoryExportPage() {
       <SlipPrintStyles />
       <PageHeader
         title="Phiếu xuất kho"
-        description="Chứng từ xuất nguyên liệu, gồm phiếu xuất sản xuất và các phiếu xuất kho khác."
+        titleInfo="Chứng từ xuất nguyên liệu, gồm phiếu xuất sản xuất và các phiếu xuất kho khác."
         searchPlaceholder="Tìm mã phiếu, SKU, mã lệnh SX..."
         searchValue={searchInput}
         onSearchChange={setSearchInput}

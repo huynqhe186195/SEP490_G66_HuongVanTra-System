@@ -284,7 +284,7 @@ function AccessControlPage() {
     <PageShell className="[font-family:'Manrope',sans-serif]">
       <PageHeader
         title="Phân quyền hệ thống"
-        description="Thiết lập vai trò (nhóm người dùng) và quyền thao tác — giao diện đơn giản, chữ to, dễ thao tác"
+        titleInfo="Thiết lập vai trò (nhóm người dùng) và quyền thao tác — giao diện đơn giản, chữ to, dễ thao tác"
       />
 
       <InfoBox>

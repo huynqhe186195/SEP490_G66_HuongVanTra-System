@@ -578,7 +578,7 @@ export default function InventoryReturnsPage() {
     <PageShell>
       <PageHeader
         title="Trả hàng nhập"
-        description={canWrite
+        titleInfo={canWrite
           ? 'Tạo và duyệt yêu cầu trả hàng từ Kệ Hàng về Kho hoặc từ Kho về nhà cung cấp.'
           : 'Xem yêu cầu trả hàng từ Kệ Hàng về Kho hoặc từ Kho về nhà cung cấp (chỉ xem).'}
         searchPlaceholder="Tìm mã yêu cầu, phiếu gốc, SKU, lô..."

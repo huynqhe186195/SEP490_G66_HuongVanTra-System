@@ -69,7 +69,7 @@ function ReportsCustomersPage() {
     <div className="relative flex min-h-0 flex-1 flex-col gap-6 [font-family:'Manrope',sans-serif]">
       <PageHeader
         title="Báo cáo khách hàng"
-        description="Xuất và phân tích dữ liệu khách hàng, hạng thành viên và chi tiêu"
+        titleInfo="Xuất và phân tích dữ liệu khách hàng, hạng thành viên và chi tiêu"
         searchPlaceholder="Tìm kiếm báo cáo hoặc khách hàng..."
       />
 

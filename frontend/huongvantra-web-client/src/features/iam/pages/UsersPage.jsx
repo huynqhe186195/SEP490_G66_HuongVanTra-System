@@ -273,7 +273,7 @@ function UsersPage() {
     <PageShell className="[font-family:'Manrope',sans-serif]">
       <PageHeader
         title="Quản lý tài khoản đăng nhập"
-        description="Thêm, sửa, khóa hoặc ngừng sử dụng tài khoản — chữ to, thao tác rõ ràng"
+        titleInfo="Thêm, sửa, khóa hoặc ngừng sử dụng tài khoản — chữ to, thao tác rõ ràng"
         rightContent={
           view === 'active' ? (
             <BigButton onClick={openCreate}>

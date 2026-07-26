@@ -774,7 +774,7 @@ function InventoryStocktakePage() {
     <PageShell>
       <PageHeader
         title="Kiểm kê tồn kho"
-        description="Ghi nhận chênh lệch thực đếm theo Kho hoặc Kệ Hàng, chờ duyệt trước khi áp tồn."
+        titleInfo="Ghi nhận chênh lệch thực đếm theo Kho hoặc Kệ Hàng, chờ duyệt trước khi áp tồn."
         searchPlaceholder="Tìm mã phiếu, SKU, tên hàng, mã lô..."
         searchValue={searchInput}
         onSearchChange={(value) => resetPageAndSet(setSearchInput, value)}

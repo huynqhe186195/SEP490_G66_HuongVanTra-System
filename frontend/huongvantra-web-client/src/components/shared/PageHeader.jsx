@@ -1,7 +1,30 @@
+export function TitleInfoButton({ text }) {
+  if (!text) return null
+
+  return (
+    <span className="group relative inline-flex shrink-0">
+      <button
+        type="button"
+        aria-label="Thông tin"
+        className="inline-flex h-7 w-7 items-center justify-center rounded-full text-[#7b847c] transition hover:bg-[#538463]/10 hover:text-[#356647]"
+      >
+        <span className="material-symbols-outlined text-[20px]">info</span>
+      </button>
+      <span
+        role="tooltip"
+        className="pointer-events-none absolute left-1/2 top-full z-40 mt-2 hidden w-64 -translate-x-1/2 rounded-xl border border-[#c1c9c0]/70 bg-white px-3 py-2 text-left text-xs leading-5 text-[#4a524c] shadow-[0_12px_28px_rgba(27,28,23,0.12)] group-hover:block group-focus-within:block sm:w-72"
+      >
+        {text}
+      </span>
+    </span>
+  )
+}
+
 function PageHeader({
   title,
   description,
   descriptionClassName = '',
+  titleInfo,
   searchPlaceholder,
   searchValue,
   onSearchChange,
@@ -45,7 +68,10 @@ function PageHeader({
                 <span className="text-[11px] font-semibold uppercase tracking-[0.28em] text-[#7b847c]">Trang quản trị</span>
               </div>
               <div>
-                <h1 className="text-xl font-semibold leading-tight tracking-[-0.03em] text-[#1f241f] sm:text-[1.75rem] lg:text-[2rem]">{title}</h1>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-xl font-semibold leading-tight tracking-[-0.03em] text-[#1f241f] sm:text-[1.75rem] lg:text-[2rem]">{title}</h1>
+                  <TitleInfoButton text={titleInfo} />
+                </div>
                 {description ? <p className={`mt-2 max-w-3xl text-[0.95rem] leading-7 text-[#707a72] ${descriptionClassName}`.trim()}>{description}</p> : null}
               </div>
             </div>

@@ -93,7 +93,7 @@ function CodOrdersPage() {
     <PageShell>
       <PageHeader
         title="Quản lý đơn COD"
-        description="Theo dõi đơn kênh COD và xác nhận thu tiền tại trang chi tiết đơn hàng."
+        titleInfo="Theo dõi đơn kênh COD và xác nhận thu tiền tại trang chi tiết đơn hàng."
         searchPlaceholder="Tìm mã đơn, tên khách..."
         searchValue={searchValue}
         onSearchChange={(value) => {

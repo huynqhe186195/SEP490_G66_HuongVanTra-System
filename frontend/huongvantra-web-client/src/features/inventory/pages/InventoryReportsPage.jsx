@@ -290,7 +290,7 @@ function InventoryReportsPage() {
     <PageShell>
       <PageHeader
         title="Báo cáo kho"
-        description="Báo cáo tồn hiện tại, cảnh báo tồn thấp, lô sắp hết hạn, biến động tồn, kiểm kê và nhà cung cấp."
+        titleInfo="Báo cáo tồn hiện tại, cảnh báo tồn thấp, lô sắp hết hạn, biến động tồn, kiểm kê và nhà cung cấp."
         searchPlaceholder="Tìm SKU, tên hàng, mã lô, mã chứng từ, nhà cung cấp..."
         searchValue={search}
         onSearchChange={(value) => resetPageAndSet(setSearch, value)}

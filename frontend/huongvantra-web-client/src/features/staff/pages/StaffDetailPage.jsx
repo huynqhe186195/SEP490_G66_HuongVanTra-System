@@ -113,7 +113,7 @@ function StaffDetailPage() {
     <PageShell className="[font-family:'Manrope',sans-serif]">
       <PageHeader
         title="Chi tiết nhân viên"
-        description="Xem và chỉnh sửa thông tin tài khoản nhân viên"
+        titleInfo="Xem và chỉnh sửa thông tin tài khoản nhân viên"
         searchPlaceholder="Tìm kiếm hệ thống..."
       />
 

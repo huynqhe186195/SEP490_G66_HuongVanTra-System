@@ -83,7 +83,7 @@ function StaffPage() {
     <PageShell className="[font-family:'Manrope',sans-serif]">
       <PageHeader
         title="Nhân viên"
-        description={scopeLabel}
+        titleInfo={scopeLabel}
       />
 
       <section className="rounded-[24px] border border-[#c1c9c0]/30 bg-white p-6 shadow-sm">

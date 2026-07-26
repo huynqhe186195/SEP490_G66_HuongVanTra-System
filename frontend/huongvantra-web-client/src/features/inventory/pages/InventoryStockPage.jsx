@@ -139,7 +139,7 @@ function InventoryStockPage() {
     <PageShell>
       <PageHeader
         title="Kho"
-        description="Tồn Kho = tổng các lô còn hàng. Nhà cung cấp nhập vào Kho trước, xuất theo FIFO khi có yêu cầu hợp lệ."
+        titleInfo="Tồn Kho = tổng các lô còn hàng. Nhà cung cấp nhập vào Kho trước, xuất theo FIFO khi có yêu cầu hợp lệ."
         searchPlaceholder="Tìm SKU, sản phẩm..."
         searchValue={searchInput}
         onSearchChange={setSearchInput}

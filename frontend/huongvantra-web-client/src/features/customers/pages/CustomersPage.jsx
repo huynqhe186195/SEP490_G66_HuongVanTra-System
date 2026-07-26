@@ -505,8 +505,7 @@ function CustomersPage() {
     <PageShell className="min-w-0 [font-family:'Manrope',sans-serif]">
       <PageHeader
         title="Khách hàng"
-        description={`${sectionLabel} — quản lý hồ sơ, công nợ và hoạt động khách hàng.`}
-        descriptionClassName="hidden sm:block"
+        titleInfo={`${sectionLabel} — quản lý hồ sơ, công nợ và hoạt động khách hàng.`}
         searchPlaceholder="Tìm theo tên, SĐT"
         searchWide
         searchValue={searchValue}

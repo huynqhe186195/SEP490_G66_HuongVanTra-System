@@ -588,7 +588,7 @@ function InventoryImportCreatePage() {
     <PageShell>
       <PageHeader
         title="Phiếu nhập nhà cung cấp"
-        description="Thủ kho nhập chứng từ từ NCC. Lưu nháp hoặc gửi duyệt — tồn kho chỉ tăng sau khi phiếu được duyệt."
+        titleInfo="Thủ kho nhập chứng từ từ NCC. Lưu nháp hoặc gửi duyệt — tồn kho chỉ tăng sau khi phiếu được duyệt."
       />
 
       {!canManage ? (

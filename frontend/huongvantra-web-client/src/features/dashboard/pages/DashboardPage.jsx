@@ -500,7 +500,7 @@ function DashboardPage() {
         <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 sm:gap-6">
             <PageHeader
                 title="Thống kê bán hàng"
-                description={`${sectionLabel} — tổng quan hoạt động cửa hàng, doanh thu và chỉ số vận hành.`}
+                titleInfo={`${sectionLabel} — tổng quan hoạt động cửa hàng, doanh thu và chỉ số vận hành.`}
                 searchPlaceholder="Tìm kiếm..."
             />
 

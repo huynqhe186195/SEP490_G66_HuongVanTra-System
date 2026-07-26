@@ -263,7 +263,7 @@ function InventoryStatisticsPage() {
     <PageShell className="flex-1">
       <PageHeader
         title="Thống kê trong kho"
-        subtitle="Tổng quan số liệu hàng hóa hiện tại"
+        titleInfo="Tổng quan số liệu hàng hóa hiện tại"
       />
 
       <div className="flex flex-col gap-6 px-4 pb-8 sm:px-6">

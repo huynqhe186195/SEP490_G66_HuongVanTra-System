@@ -729,7 +729,7 @@ function StockAdjustmentRequestsPage() {
     <PageShell>
       <PageHeader
         title="Yêu cầu bổ sung tồn quầy"
-        description={
+        titleInfo={
           canReview
             ? 'Thủ kho Kho tổng hoặc Admin duyệt yêu cầu điều chuyển từ Kho tổng sang Tồn quầy POS mặc định.'
             : 'Manager gửi yêu cầu bổ sung tồn quầy POS mặc định từ Kho tổng.'

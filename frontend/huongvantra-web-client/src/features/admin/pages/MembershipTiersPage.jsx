@@ -113,7 +113,7 @@ function MembershipTiersPage() {
     <PageShell>
       <PageHeader
         title="Quản lý hạng thẻ"
-        description="Cấu hình ngưỡng chi tiêu và chiết khấu theo hạng khách hàng thân thiết"
+        titleInfo="Cấu hình ngưỡng chi tiêu và chiết khấu theo hạng khách hàng thân thiết"
         rightContent={
           <button
             type="button"

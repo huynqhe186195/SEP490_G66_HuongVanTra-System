@@ -139,7 +139,7 @@ function SupplierReceiptsPage() {
     <PageShell>
       <PageHeader
         title="Phiếu nhập nhà cung cấp"
-        description="Phiếu nhập từ NCC theo quy trình Nháp → Chờ duyệt → Đã nhận. Tồn Kho chỉ tăng khi phiếu được duyệt."
+        titleInfo="Phiếu nhập từ NCC theo quy trình Nháp → Chờ duyệt → Đã nhận. Tồn Kho chỉ tăng khi phiếu được duyệt."
         searchPlaceholder="Tìm mã phiếu, nhà cung cấp, SKU, mã lô..."
         searchValue={searchInput}
         onSearchChange={handleSearchChange}

@@ -478,7 +478,7 @@ function OrderCreatePage() {
 
         title="Tạo đơn hàng"
 
-        description="Tạo đơn bán trực tiếp tại quầy, Zalo, điện thoại hoặc website."
+        titleInfo="Tạo đơn bán trực tiếp tại quầy, Zalo, điện thoại hoặc website."
 
         rightContent={
 

@@ -174,7 +174,7 @@ function InventoryBatchesPage() {
 
         title="Tồn theo lô"
 
-        description="Mỗi lô có thể chứa nhiều SKU — xuất bổ sung tồn quầy POS mặc định trừ theo FIFO từng SKU"
+        titleInfo="Mỗi lô có thể chứa nhiều SKU — xuất bổ sung tồn quầy POS mặc định trừ theo FIFO từng SKU"
 
         searchPlaceholder="Tìm mã lô, SKU, NCC..."
 

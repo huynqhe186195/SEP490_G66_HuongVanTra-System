@@ -349,7 +349,7 @@ function ShiftManagePage() {
     <PageShell className="[font-family:'Manrope',sans-serif]">
       <PageHeader
         title="Phân ca làm"
-        description="Manager chỉnh giờ khung ca, mở/đóng đăng ký theo tuần, chỉ định / gỡ Sale. Sale chỉ tự đăng ký khi cửa sổ đang mở."
+        titleInfo="Manager chỉnh giờ khung ca, mở/đóng đăng ký theo tuần, chỉ định / gỡ Sale. Sale chỉ tự đăng ký khi cửa sổ đang mở."
       />
 
       <section className="rounded-[24px] border border-[#c1c9c0]/30 bg-white p-6 shadow-sm">

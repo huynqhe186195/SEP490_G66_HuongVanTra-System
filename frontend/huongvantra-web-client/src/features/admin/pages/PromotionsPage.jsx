@@ -726,7 +726,7 @@ function PromotionsPage() {
     <PageShell>
       <PageHeader
         title="Quản lý mã giảm giá"
-        description="Tạo và chỉnh sửa mã khuyến mãi dùng tại POS và trên đơn hàng"
+        titleInfo="Tạo và chỉnh sửa mã khuyến mãi dùng tại POS và trên đơn hàng"
         rightContent={
           <button
             type="button"
