@@ -23,6 +23,18 @@ public static class UserInputValidator
         return resolved;
     }
 
+    public static void ValidateBasicInformation(string? username, string? password, string? fullName)
+    {
+        if (string.IsNullOrWhiteSpace(username))
+            throw new UserValidationException("Tên đăng nhập không được để trống.");
+
+        if (string.IsNullOrWhiteSpace(password))
+            throw new UserValidationException("Mật khẩu không được để trống.");
+
+        if (string.IsNullOrWhiteSpace(fullName))
+            throw new UserValidationException("Họ và tên không được để trống.");
+    }
+
     public static void ValidatePhoneIfProvided(string? phone)
     {
         VietnamPhoneValidator.ValidateIfProvided(phone);

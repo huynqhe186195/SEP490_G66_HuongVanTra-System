@@ -14,6 +14,7 @@ public class UserLogic(IUserRepository userRepo, IRoleRepository roleRepo, IEmpl
 {
     public async Task<UserResponse> CreateAsync(CreateUserRequest request)
     {
+        UserInputValidator.ValidateBasicInformation(request.Username, request.Password, request.FullName);
         var roleIds = UserInputValidator.ResolveRoleIds(request.RoleIds, request.RoleId);
         UserInputValidator.ValidatePhoneIfProvided(request.BankAccountInfo);
 

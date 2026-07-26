@@ -18,6 +18,7 @@ public class EmployeeLogic(
         CreateEmployeeRequest request,
         IReadOnlyList<string>? actorPermissions = null)
     {
+        UserInputValidator.ValidateBasicInformation(request.Username, request.Password, request.FullName);
         var roleIds = UserInputValidator.ResolveRoleIds(request.RoleIds, request.RoleId);
         UserInputValidator.ValidatePhoneIfProvided(request.BankAccountInfo);
 
