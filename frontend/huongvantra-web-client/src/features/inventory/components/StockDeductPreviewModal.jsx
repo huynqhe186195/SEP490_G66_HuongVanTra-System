@@ -106,7 +106,7 @@ function StockDeductPreviewModal({ queueId, orderCode, readOnly = false, onClose
   const canCancel = canConfirm
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+    <div className="inventory-modal fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
       <div
         className="max-h-[90vh] w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-xl"
         role="dialog"

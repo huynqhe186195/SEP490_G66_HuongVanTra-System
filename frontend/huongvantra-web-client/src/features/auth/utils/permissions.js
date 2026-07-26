@@ -178,6 +178,11 @@ export function canCancelStockReplenishmentRequest(session) {
   return isBranchManager(session) || isManagerRole(session) || isWarehouseRole(session) || isSystemAdmin(session)
 }
 
+/** Duyệt / Từ chối phiếu nhập NCC: Manager hoặc Admin. Người tạo không được tự duyệt (backend chặn). */
+export function canReviewSupplierReceipt(session) {
+  return isBranchManager(session) || isManagerRole(session) || isSystemAdmin(session)
+}
+
 export function isSystemAdmin(session) {
   return hasPermission(session, 'MANAGE_ROLE')
 }

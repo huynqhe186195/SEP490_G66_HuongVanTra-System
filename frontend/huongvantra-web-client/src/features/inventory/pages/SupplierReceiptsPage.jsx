@@ -7,7 +7,7 @@ import { showError, showSuccess } from '../../../app/toast.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import { formatStockQuantity } from '../../products/utils/productDisplay.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
-import { canWriteInventory } from '../../auth/utils/permissions.js'
+import { canReviewSupplierReceipt, canWriteInventory } from '../../auth/utils/permissions.js'
 import InventoryNavTabs from '../components/InventoryNavTabs.jsx'
 import {
   approveSupplierReceipt,
@@ -21,7 +21,7 @@ const STATUS_OPTIONS = [
   { value: '', label: 'Tất cả' },
   { value: 'draft', label: 'Nháp' },
   { value: 'pendingapproval', label: 'Chờ duyệt' },
-  { value: 'completed', label: 'Hoàn tất' },
+  { value: 'completed', label: 'Đã nhận' },
   { value: 'rejected', label: 'Từ chối' },
   { value: 'cancelled', label: 'Đã hủy' },
 ]
@@ -30,7 +30,7 @@ function getStatusLabel(status) {
   const normalized = String(status || '').toLowerCase()
   if (normalized === 'draft') return 'Nháp'
   if (normalized === 'pendingapproval') return 'Chờ duyệt'
-  if (normalized === 'completed') return 'Hoàn tất'
+  if (normalized === 'completed') return 'Đã nhận'
   if (normalized === 'rejected') return 'Từ chối'
   if (normalized === 'cancelled') return 'Đã hủy'
   return status || '—'
@@ -59,7 +59,10 @@ function SupplierReceiptsPage() {
   const [selectedReceipt, setSelectedReceipt] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [actionId, setActionId] = useState(null)
-  const canWrite = canWriteInventory(loadAuthSession())
+  const session = loadAuthSession()
+  const canWrite = canWriteInventory(session)
+  const canReview = canReviewSupplierReceipt(session)
+  const currentUserId = session?.userId ?? null
 
   const loadReceipts = useCallback(async () => {
     setIsLoading(true)
@@ -98,16 +101,28 @@ function SupplierReceiptsPage() {
     }
   }
 
+  async function handleCancel(receipt) {
+    const reason = window.prompt('Nhập lý do hủy phiếu nhập')
+    if (!reason?.trim()) return
+    await runAction(receipt, (id) => cancelSupplierReceipt(id, reason), (updated) => `Đã hủy ${updated.receiptCode}.`)
+  }
+
+  async function handleSubmitForApproval(receipt) {
+    await runAction(receipt, submitSupplierReceipt, (updated) => `Đã gửi duyệt ${updated.receiptCode}. Tồn kho chưa thay đổi.`)
+  }
+
+  async function handleApprove(receipt) {
+    await runAction(receipt, approveSupplierReceipt, (updated) => `Đã duyệt ${updated.receiptCode}. Tồn Kho đã được cập nhật.`)
+  }
+
   async function handleReject(receipt) {
     const reason = window.prompt('Nhập lý do từ chối phiếu nhập')
     if (!reason?.trim()) return
     await runAction(receipt, (id) => rejectSupplierReceipt(id, reason), (updated) => `Đã từ chối ${updated.receiptCode}.`)
   }
 
-  async function handleCancel(receipt) {
-    const reason = window.prompt('Nhập lý do hủy phiếu nhập')
-    if (!reason?.trim()) return
-    await runAction(receipt, (id) => cancelSupplierReceipt(id, reason), (updated) => `Đã hủy ${updated.receiptCode}.`)
+  function isOwnReceipt(receipt) {
+    return currentUserId != null && String(receipt.createdBy) === String(currentUserId)
   }
 
   function handleSearchChange(value) {
@@ -124,7 +139,7 @@ function SupplierReceiptsPage() {
     <PageShell>
       <PageHeader
         title="Phiếu nhập nhà cung cấp"
-        description="Quản lý yêu cầu nhập hàng vào Kho. Batch, phiếu nhập kho và ledger chỉ tạo khi duyệt."
+        description="Phiếu nhập từ NCC theo quy trình Nháp → Chờ duyệt → Đã nhận. Tồn Kho chỉ tăng khi phiếu được duyệt."
         searchPlaceholder="Tìm mã phiếu, nhà cung cấp, SKU, mã lô..."
         searchValue={searchInput}
         onSearchChange={handleSearchChange}
@@ -203,22 +218,22 @@ function SupplierReceiptsPage() {
                         >
                           Chi tiết
                         </button>
-                        {canWrite && (receipt.status === 'draft' || receipt.status === 'rejected') ? (
+                        {canWrite && isOwnReceipt(receipt) && (receipt.status === 'draft' || receipt.status === 'rejected') ? (
                           <button
                             type="button"
                             disabled={Boolean(actionId)}
-                            onClick={() => runAction(receipt, submitSupplierReceipt, (updated) => `Đã gửi ${updated.receiptCode} chờ duyệt.`)}
-                            className="rounded-lg border border-amber-200 px-3 py-1.5 text-xs font-semibold text-amber-700 hover:bg-amber-50 disabled:opacity-50"
+                            onClick={() => handleSubmitForApproval(receipt)}
+                            className="rounded-lg border border-[#538463] px-3 py-1.5 text-xs font-semibold text-[#538463] hover:bg-[#f2f7f3] disabled:opacity-50"
                           >
                             Gửi duyệt
                           </button>
                         ) : null}
-                        {canWrite && receipt.status === 'pendingapproval' ? (
+                        {canReview && receipt.status === 'pendingapproval' && !isOwnReceipt(receipt) ? (
                           <>
                             <button
                               type="button"
                               disabled={Boolean(actionId)}
-                              onClick={() => runAction(receipt, approveSupplierReceipt, (updated) => `Đã duyệt ${updated.receiptCode}.`)}
+                              onClick={() => handleApprove(receipt)}
                               className="rounded-lg bg-[#538463] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#457053] disabled:opacity-50"
                             >
                               Duyệt
@@ -227,13 +242,13 @@ function SupplierReceiptsPage() {
                               type="button"
                               disabled={Boolean(actionId)}
                               onClick={() => handleReject(receipt)}
-                              className="rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50"
+                              className="rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-50"
                             >
                               Từ chối
                             </button>
                           </>
                         ) : null}
-                        {canWrite && receipt.status !== 'completed' && receipt.status !== 'cancelled' ? (
+                        {canWrite && (receipt.status === 'draft' || receipt.status === 'pendingapproval' || receipt.status === 'rejected') ? (
                           <button
                             type="button"
                             disabled={Boolean(actionId)}
@@ -265,7 +280,7 @@ function SupplierReceiptsPage() {
 
       {selectedReceipt ? (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
+          className="inventory-modal fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
           onClick={() => setSelectedReceipt(null)}
         >
           <div

@@ -202,6 +202,7 @@ const INVENTORY_SIDEBAR_GROUPS = [
     icon: 'warehouse',
     entries: [
       { path: '/inventory', label: 'Tồn kho tổng' },
+      { path: '/inventory/batches', label: 'Lô hàng nhập' },
       { path: '/inventory/returns' },
       { path: '/inventory/stocktake' },
       { path: '/inventory/ledger' },

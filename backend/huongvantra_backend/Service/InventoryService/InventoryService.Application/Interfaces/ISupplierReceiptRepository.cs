@@ -15,6 +15,7 @@ public interface ISupplierReceiptRepository
         CancellationToken ct = default);
     Task<int> CountCreatedSinceAsync(DateTime sinceUtc, CancellationToken ct = default);
     Task<int> CountBySupplerIdAsync(Guid supplierId, CancellationToken ct = default);
+    Task<SupplierReceipt?> FindDuplicateDocumentAsync(Guid? supplierId, string? supplierDocumentNumber, Guid? excludeId, CancellationToken ct = default);
     Task AddAsync(SupplierReceipt receipt, CancellationToken ct = default);
     Task<int> SaveChangesAsync(CancellationToken ct = default);
 }
