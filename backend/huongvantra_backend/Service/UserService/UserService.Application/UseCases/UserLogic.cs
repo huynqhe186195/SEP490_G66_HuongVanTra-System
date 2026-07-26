@@ -10,7 +10,11 @@ using UserService.Domain.Exceptions;
 
 namespace UserService.Application.UseCases;
 
-public class UserLogic(IUserRepository userRepo, IRoleRepository roleRepo, IEmployeeRepository employeeRepo)
+public class UserLogic(
+    IUserRepository userRepo, 
+    IRoleRepository roleRepo, 
+    IEmployeeRepository employeeRepo,
+    IRefreshTokenRepository refreshTokenRepo)
 {
     public async Task<UserResponse> CreateAsync(CreateUserRequest request)
     {
@@ -177,14 +181,24 @@ public class UserLogic(IUserRepository userRepo, IRoleRepository roleRepo, IEmpl
 
     public async Task ChangePasswordAsync(Guid id, ChangePasswordRequest request)
     {
+        if (string.IsNullOrWhiteSpace(request.NewPassword))
+            throw new UserValidationException("Mật khẩu mới không được để trống");
+
+        if (request.NewPassword.Length < 6)
+            throw new UserValidationException("Mật khẩu mới phải có ít nhất 6 ký tự");
+
+        if (request.NewPassword == request.CurrentPassword)
+            throw new UserValidationException("Mật khẩu mới không được trùng với mật khẩu cũ");
+
         var user = await userRepo.GetByIdAsync(id) ?? throw new UserNotFoundException(id);
 
         if (!BCrypt.Net.BCrypt.Verify(request.CurrentPassword, user.PasswordHash))
-            throw new InvalidCredentialsException();
+            throw new InvalidOldPasswordException();
 
         user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
         user.UpdatedAt = DateTime.UtcNow;
         userRepo.Update(user);
+        await refreshTokenRepo.RevokeAllForUserAsync(id);
         await userRepo.SaveChangesAsync();
     }
 
