@@ -68,6 +68,7 @@ import {
 } from '../utils/posCustomerSearch.js'
 import { createCheckoutAttemptManager } from '../../orders/utils/checkoutAttempt.js'
 import {
+  clampPosSalesMode,
   loadPersistedPosWorkspace,
   persistPosWorkspace,
 } from '../utils/posWorkspaceStorage.js'
@@ -259,8 +260,13 @@ function PosPage() {
       return false
     })
   }, [authSession])
+  const allowedSalesModeIds = useMemo(
+    () => allowedSalesModes.map((mode) => mode.id),
+    [allowedSalesModes],
+  )
   const [salesMode, setSalesMode] = useState(() => {
     const session = loadAuthSession()
+    if (canUsePosCodMode(session) && !canUsePosCounterMode(session)) return 'takeaway'
     if (canUsePosCounterMode(session)) return 'counter'
     if (canUsePosCodMode(session)) return 'takeaway'
     return 'counter'
@@ -274,11 +280,9 @@ function PosPage() {
   const [restoredOrderIds, setRestoredOrderIds] = useState([])
 
   useEffect(() => {
-    if (allowedSalesModes.length === 0) return
-    if (!allowedSalesModes.some((mode) => mode.id === salesMode)) {
-      setSalesMode(allowedSalesModes[0].id)
-    }
-  }, [allowedSalesModes, salesMode])
+    if (allowedSalesModeIds.length === 0) return
+    setSalesMode((prev) => clampPosSalesMode(prev, allowedSalesModeIds))
+  }, [allowedSalesModeIds])
 
   const [customerSearchResults, setCustomerSearchResults] = useState([])
   const [isCustomerSearchLoading, setIsCustomerSearchLoading] = useState(false)
@@ -344,7 +348,13 @@ function PosPage() {
       .then((stored) => {
         if (cancelled) return
         setWorkspaceByMode(stored.workspaceByMode)
-        setSalesMode(stored.salesMode)
+        const session = loadAuthSession()
+        const ids = ALL_SALES_MODES.filter((mode) => {
+          if (mode.id === 'counter') return canUsePosCounterMode(session)
+          if (mode.id === 'takeaway') return canUsePosCodMode(session)
+          return false
+        }).map((mode) => mode.id)
+        setSalesMode(clampPosSalesMode(stored.salesMode, ids))
         setRestoredOrderIds(stored.restoredOrderIds)
       })
       .catch(() => {
@@ -477,6 +487,7 @@ function PosPage() {
   }, [authUserId, isWorkspaceReady, workspaceByMode])
 
   const isTakeaway = salesMode === 'takeaway'
+  const showCashSessionUi = !isTakeaway && canUsePosCounterMode(authSession)
   const workspace = workspaceByMode[salesMode]
   const { tabs, activeTabId, sessions } = workspace
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0]
@@ -2252,7 +2263,7 @@ function PosPage() {
         return <LoadingIndicator label="Đang khôi phục giỏ POS..." className="min-h-[60vh]" />;
     }
 
-    const needsCashSession = !isTakeaway
+    const needsCashSession = showCashSessionUi
 
     return (
         <PosShiftDutyGate
@@ -2341,7 +2352,7 @@ function PosPage() {
                     </div>
                     </div>
 
-                    <PosCashSessionBar />
+                    {showCashSessionUi ? <PosCashSessionBar /> : null}
                 </div>
             </header>
 

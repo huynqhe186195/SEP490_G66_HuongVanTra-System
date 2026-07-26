@@ -143,6 +143,14 @@ export function normalizePosWorkspaceRecord(record) {
   }
 }
 
+/** Giữ salesMode trong các mode user được phép (COD-only không bị kéo về counter). */
+export function clampPosSalesMode(salesMode, allowedModeIds = []) {
+  const ids = Array.isArray(allowedModeIds) ? allowedModeIds.filter(Boolean) : []
+  if (ids.length === 0) return salesMode === 'takeaway' ? 'takeaway' : 'counter'
+  if (ids.includes(salesMode)) return salesMode
+  return ids[0]
+}
+
 export async function loadPersistedPosWorkspace(userId) {
   return normalizePosWorkspaceRecord(await getPosWorkspace(userId))
 }

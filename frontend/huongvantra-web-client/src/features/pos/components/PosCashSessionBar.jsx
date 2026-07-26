@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { showError, showSuccess } from '../../../app/toast.js'
+import { loadAuthSession } from '../../auth/services/authSession.js'
+import { canUsePosCounterMode } from '../../auth/utils/permissions.js'
 import {
   closeCashSession,
   expectedCash,
@@ -50,6 +52,7 @@ function ModalShell({ title, subtitle, onClose, children, footer }) {
 
 /** Thanh ca: Kiểm tiền / Chốt cuối ca. Mở ca + kiểm kệ chỉ qua màn full-screen PosShiftDutyGate. */
 export default function PosCashSessionBar() {
+  const auth = loadAuthSession()
   const [session, setSession] = useState(() => loadOpenCashSession())
   const [modal, setModal] = useState(null)
   const [countedInput, setCountedInput] = useState('')
@@ -61,7 +64,10 @@ export default function PosCashSessionBar() {
     return subscribeCashSession(() => setSession(loadOpenCashSession()))
   }, [])
 
-  const expected = useMemo(() => expectedCash(session), [session])
+  // COD / không có quyền quầy: không hiện kiểm tiền / chốt ca quỹ POS.
+  if (!canUsePosCounterMode(auth)) return null
+
+  const expected = expectedCash(session)
 
   const openModal = (type) => {
     if (type === 'close') {
