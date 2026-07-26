@@ -16,15 +16,19 @@ function parseMoney(raw) {
   return cleaned ? Number(cleaned) : 0
 }
 
-function GateShell({ children }) {
+function GateShell({ children, fill = false }) {
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col items-center justify-center overflow-hidden rounded-xl border border-[#c1c9c0]/40 bg-[#fbf9f1] p-4 shadow-[0_10px_30px_rgba(27,28,23,0.04)] lg:rounded-[28px]">
+    <div
+      className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-[#c1c9c0]/40 bg-[#fbf9f1] shadow-[0_10px_30px_rgba(27,28,23,0.04)] lg:rounded-[28px] ${
+        fill ? '' : 'items-center justify-center p-4'
+      }`}
+    >
       {children}
     </div>
   )
 }
 
-function GateCard({ eyebrow, eyebrowTone = 'amber', title, body, children, wide = false }) {
+function GateCard({ eyebrow, eyebrowTone = 'amber', title, body, children }) {
   const eyebrowClass =
     eyebrowTone === 'rose'
       ? 'text-rose-700'
@@ -32,11 +36,7 @@ function GateCard({ eyebrow, eyebrowTone = 'amber', title, body, children, wide 
         ? 'text-[#538463]'
         : 'text-amber-700'
   return (
-    <div
-      className={`w-full rounded-2xl border border-[#c1c9c0]/40 bg-white shadow-2xl ${
-        wide ? 'max-w-2xl' : 'max-w-md'
-      }`}
-    >
+    <div className="w-full max-w-md rounded-2xl border border-[#c1c9c0]/40 bg-white shadow-2xl">
       <div className="border-b border-[#e7e8e0] px-6 py-5">
         <p className={`text-xs font-bold uppercase tracking-wide ${eyebrowClass}`}>{eyebrow}</p>
         <h2 className="mt-1 text-xl font-bold text-slate-900">{title}</h2>
@@ -48,10 +48,9 @@ function GateCard({ eyebrow, eyebrowTone = 'amber', title, body, children, wide 
 }
 
 /**
- * Cổng vào POS dùng chung SalePos + SaleCod:
- * 1) Chưa trong ca quầy → màn khóa
- * 2) Quầy: đã trong ca nhưng chưa mở quỹ → kiểm tiền + kiểm kệ đầu ca rồi mở ca
- * Manager/Admin bỏ qua bước (1).
+ * Cổng vào POS:
+ * 1) Chưa trong ca quầy → khóa
+ * 2) Trong ca nhưng chưa mở quỹ → màn FULL kiểm kệ + kiểm tiền (bắt buộc trước POS)
  */
 export default function PosShiftDutyGate({
   onDutyChange,
@@ -201,41 +200,34 @@ export default function PosShiftDutyGate({
 
   if (needsCash) {
     return (
-      <GateShell>
-        <GateCard
-          wide
-          eyebrow="Mở ca làm việc"
-          eyebrowTone="green"
-          title="Kiểm tiền & hàng kệ đầu ca"
-          body="Đối chiếu tồn kệ trên hệ thống với hàng thực tế, rồi nhập tiền đầu két."
-        >
-          <div className="max-h-[70vh] space-y-3 overflow-y-auto pr-0.5">
-            <div className="rounded-xl border border-[#e7e8e0] bg-[#fbf9f1] p-3">
-              <p className="text-[10px] font-bold uppercase tracking-wide text-[#538463]">1. Kiểm tiền</p>
-              <label className="mt-2 block text-xs font-semibold text-slate-600">Tiền mặt đầu két</label>
-              <input
-                className="mt-1 w-full rounded-xl border border-[#c1c9c0] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#356647] focus:ring-2 focus:ring-[#356647]/20"
-                value={openingCashInput}
-                onChange={(e) => setOpeningCashInput(e.target.value)}
-                inputMode="numeric"
-                placeholder="500.000"
-                autoFocus
-              />
-              <label className="mt-2 block text-xs font-semibold text-slate-600">Ghi chú tiền (tuỳ chọn)</label>
-              <input
-                className="mt-1 w-full rounded-xl border border-[#c1c9c0] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#356647]"
-                value={openNote}
-                onChange={(e) => setOpenNote(e.target.value)}
-                placeholder="Tuỳ chọn"
-              />
-            </div>
+      <GateShell fill>
+        <div className="flex h-full min-h-0 flex-1 flex-col bg-[#f6f4ec]">
+          <header className="shrink-0 border-b border-[#c1c9c0]/60 bg-white px-5 py-4 sm:px-8">
+            <p className="text-xs font-bold uppercase tracking-wide text-[#538463]">Đầu ca bắt buộc</p>
+            <h1 className="mt-1 text-2xl font-bold text-slate-900 sm:text-3xl">
+              Kiểm kệ & kiểm tiền trước khi vào POS
+            </h1>
+            <p className="mt-1 max-w-3xl text-sm text-slate-600">
+              Hoàn tất đối chiếu hàng trên kệ và nhập tiền đầu két. Sau khi xác nhận mới vào màn bán hàng.
+            </p>
+          </header>
 
-            <div className="rounded-xl border border-[#e7e8e0] bg-[#fbf9f1] p-3">
-              <p className="text-[10px] font-bold uppercase tracking-wide text-[#538463]">
-                2. Hàng hóa trên kệ đầu ca
-              </p>
-              <div className="mt-2">
+          <div className="grid min-h-0 flex-1 grid-cols-1 gap-0 lg:grid-cols-[minmax(0,1fr)_340px]">
+            <section className="flex min-h-0 flex-col border-b border-[#c1c9c0]/50 bg-white p-4 sm:p-6 lg:border-b-0 lg:border-r">
+              <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+                <div>
+                  <h2 className="text-lg font-bold text-[#356647]">Hàng hóa trên kệ đầu ca</h2>
+                  <p className="text-xs text-slate-500">
+                    Cột Hệ thống = tồn trên phần mềm. Nhập Thực tế theo hàng đếm được.
+                  </p>
+                </div>
+                <p className="text-xs font-semibold text-slate-500">
+                  Đã điền {shelfCounts.filledCount}/{shelfCounts.totalCount || '—'} SKU
+                </p>
+              </div>
+              <div className="min-h-0 flex-1 overflow-hidden rounded-2xl border border-[#e7e8e0] bg-[#fbf9f1] p-3">
                 <PosShelfStockCheckList
+                  fullHeight
                   onCountsChange={(payload) =>
                     setShelfCounts({
                       items: payload.items || [],
@@ -245,49 +237,75 @@ export default function PosShiftDutyGate({
                     })
                   }
                 />
-                <p className="mt-2 text-[11px] text-slate-500">
-                  Khi mở ca sẽ tạo phiếu kiểm kê kệ (có người làm) và gửi Manager duyệt.
-                </p>
               </div>
-              <label className="mt-3 flex cursor-pointer items-start gap-2 text-sm text-slate-800">
+              <label className="mt-3 flex cursor-pointer items-start gap-2 rounded-xl border border-[#e7e8e0] bg-[#fbf9f1] px-3 py-3 text-sm text-slate-800">
                 <input
                   type="checkbox"
-                  className="mt-1 h-4 w-4 rounded border-slate-300 text-[#356647]"
+                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-[#356647]"
                   checked={shelfChecked}
                   onChange={(e) => setShelfChecked(e.target.checked)}
                 />
-                <span>Đã đối chiếu hàng trên kệ với số lượng hệ thống ở trên.</span>
-              </label>
-              <label className="mt-2 block text-xs font-semibold text-slate-600">
-                Ghi chú lệch / thiếu (tuỳ chọn)
+                <span>Đã đối chiếu hàng trên kệ với số lượng hệ thống.</span>
               </label>
               <input
-                className="mt-1 w-full rounded-xl border border-[#c1c9c0] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#356647]"
+                className="mt-2 w-full rounded-xl border border-[#c1c9c0] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#356647]"
                 value={shelfNote}
                 onChange={(e) => setShelfNote(e.target.value)}
-                placeholder="VD: thiếu hàng…"
+                placeholder="Ghi chú lệch / thiếu (tuỳ chọn)"
               />
-            </div>
-          </div>
+            </section>
 
-          <button
-            type="button"
-            disabled={isSubmitting || !shelfChecked}
-            onClick={handleOpenCash}
-            className="mt-1 w-full rounded-xl bg-[#356647] py-3 text-sm font-bold text-white hover:bg-[#2d553b] disabled:opacity-60"
-          >
-            {isSubmitting ? 'Đang mở…' : 'Mở ca & vào POS'}
-          </button>
-          {canCod && typeof onSwitchToCod === 'function' ? (
-            <button
-              type="button"
-              onClick={onSwitchToCod}
-              className="w-full rounded-xl border border-[#c1c9c0] py-2.5 text-sm font-semibold text-[#356647] hover:bg-[#f6f4ec]"
-            >
-              Không mở ca — chuyển sang bán COD
-            </button>
-          ) : null}
-        </GateCard>
+            <aside className="flex min-h-0 flex-col gap-4 bg-[#fbf9f1] p-4 sm:p-6">
+              <div className="rounded-2xl border border-[#e7e8e0] bg-white p-4 shadow-sm">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-[#538463]">Kiểm tiền</p>
+                <label className="mt-3 block text-xs font-semibold text-slate-600">Tiền mặt đầu két</label>
+                <input
+                  className="mt-1 w-full rounded-xl border border-[#c1c9c0] px-3 py-2.5 text-sm outline-none focus:border-[#356647] focus:ring-2 focus:ring-[#356647]/20"
+                  value={openingCashInput}
+                  onChange={(e) => setOpeningCashInput(e.target.value)}
+                  inputMode="numeric"
+                  placeholder="500.000"
+                  autoFocus
+                />
+                <label className="mt-3 block text-xs font-semibold text-slate-600">Ghi chú tiền (tuỳ chọn)</label>
+                <input
+                  className="mt-1 w-full rounded-xl border border-[#c1c9c0] px-3 py-2.5 text-sm outline-none focus:border-[#356647]"
+                  value={openNote}
+                  onChange={(e) => setOpenNote(e.target.value)}
+                  placeholder="VD: đổi tiền lẻ…"
+                />
+              </div>
+
+              <div className="rounded-2xl border border-[#e7e8e0] bg-white p-4 text-sm text-slate-600 shadow-sm">
+                <p className="font-semibold text-slate-800">Sau khi mở ca</p>
+                <ul className="mt-2 list-disc space-y-1 pl-4 text-xs">
+                  <li>Tạo phiếu kiểm kê kệ và gửi Manager duyệt</li>
+                  <li>Mở ca quỹ POS — mới được bán tại quầy</li>
+                </ul>
+              </div>
+
+              <div className="mt-auto flex flex-col gap-2">
+                <button
+                  type="button"
+                  disabled={isSubmitting || !shelfChecked}
+                  onClick={handleOpenCash}
+                  className="w-full rounded-xl bg-[#356647] py-3.5 text-sm font-bold text-white hover:bg-[#2d553b] disabled:opacity-60"
+                >
+                  {isSubmitting ? 'Đang mở…' : 'Xác nhận đầu ca & vào POS'}
+                </button>
+                {canCod && typeof onSwitchToCod === 'function' ? (
+                  <button
+                    type="button"
+                    onClick={onSwitchToCod}
+                    className="w-full rounded-xl border border-[#c1c9c0] bg-white py-2.5 text-sm font-semibold text-[#356647] hover:bg-[#f6f4ec]"
+                  >
+                    Không mở ca — chuyển sang bán COD
+                  </button>
+                ) : null}
+              </div>
+            </aside>
+          </div>
+        </div>
       </GateShell>
     )
   }

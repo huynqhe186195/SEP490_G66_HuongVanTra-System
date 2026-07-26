@@ -39,6 +39,37 @@ public class ShiftLogic(
         return templates.Select(MapTemplate).ToList();
     }
 
+    /// <summary>
+    /// Manager chỉnh giờ bắt đầu / kết thúc khung ca. Áp dụng ngay cho kiểm tra on-duty (±30 phút).
+    /// </summary>
+    public async Task<ShiftTemplateResponse> UpdateTemplateHoursAsync(
+        Guid templateId,
+        UpdateShiftTemplateHoursRequest request)
+    {
+        var template = await shiftRepo.GetTemplateByIdAsync(templateId)
+            ?? throw new ShiftTemplateNotFoundException(templateId);
+
+        if (!template.IsActive)
+            throw new UserValidationException("Khung ca đã ngừng dùng, không thể chỉnh giờ.");
+
+        var start = ParseTimeOfDay(request.Start, "start");
+        var end = ParseTimeOfDay(request.End, "end");
+
+        if (end <= start)
+            throw new UserValidationException("Giờ kết thúc phải sau giờ bắt đầu (cùng ngày).");
+
+        var duration = end - start;
+        if (duration < TimeSpan.FromMinutes(30))
+            throw new UserValidationException("Mỗi ca phải dài tối thiểu 30 phút.");
+
+        template.StartTime = start;
+        template.EndTime = end;
+        shiftRepo.UpdateTemplate(template);
+        await shiftRepo.SaveChangesAsync();
+
+        return MapTemplate(template);
+    }
+
     public async Task<ShiftWeekResponse> GetWeekAsync(
         string weekStart,
         string? area,
@@ -568,6 +599,24 @@ public class ShiftLogic(
     private static string FormatDate(DateOnly date) => date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
     private static string FormatTime(TimeSpan time) => time.ToString(@"hh\:mm", CultureInfo.InvariantCulture);
+
+    private static TimeSpan ParseTimeOfDay(string? raw, string fieldName)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+            throw new UserValidationException($"Thiếu {fieldName} (HH:mm).");
+
+        var value = raw.Trim();
+        if (TimeSpan.TryParseExact(value, @"hh\:mm", CultureInfo.InvariantCulture, out var parsed)
+            || TimeSpan.TryParseExact(value, @"h\:mm", CultureInfo.InvariantCulture, out parsed)
+            || TimeSpan.TryParseExact(value, @"hh\:mm\:ss", CultureInfo.InvariantCulture, out parsed))
+        {
+            if (parsed < TimeSpan.Zero || parsed >= TimeSpan.FromDays(1))
+                throw new UserValidationException($"{fieldName} phải trong khoảng 00:00–23:59.");
+            return parsed;
+        }
+
+        throw new UserValidationException($"{fieldName} không hợp lệ — dùng định dạng HH:mm (vd: 13:00).");
+    }
 
     private static string AreaLabel(ShiftArea area) => area switch
     {

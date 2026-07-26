@@ -76,6 +76,15 @@ export async function fetchShiftWeek({ weekStart, area } = {}) {
   }
 }
 
+/** Manager chỉnh giờ khung ca (HH:mm). */
+export async function updateShiftTemplateHours(templateId, { start, end }) {
+  const data = await apiRequestAuth(`/api/shifts/templates/${templateId}`, {
+    method: 'PUT',
+    body: JSON.stringify({ start, end }),
+  })
+  return normalizeTemplate(data)
+}
+
 export async function registerShiftSlot(slotId) {
   const data = await apiRequestAuth(`/api/shifts/slots/${slotId}/register`, { method: 'POST' })
   return normalizeAssignment(data)

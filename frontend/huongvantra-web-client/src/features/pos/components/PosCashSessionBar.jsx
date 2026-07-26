@@ -1,19 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { showError, showSuccess } from '../../../app/toast.js'
-import { loadAuthSession } from '../../auth/services/authSession.js'
-import { fetchOnDutyShift } from '../../shifts/services/shiftsApi.js'
-import { shiftDisplayName } from '../utils/shiftDisplayName.js'
 import {
   closeCashSession,
   expectedCash,
   formatVnd,
   loadOpenCashSession,
-  openCashSession,
   refreshCashSession,
   subscribeCashSession,
 } from '../utils/posCashSessionStore.js'
-import PosShelfStockCheckList from './PosShelfStockCheckList.jsx'
-import { submitShiftOpenShelfStocktake } from '../utils/submitShiftOpenShelfStocktake.js'
 
 function parseMoney(raw) {
   const cleaned = String(raw || '').replace(/[^\d]/g, '')
@@ -25,13 +19,11 @@ function formatMoneyInput(value) {
   return n ? n.toLocaleString('vi-VN') : ''
 }
 
-function ModalShell({ title, subtitle, onClose, children, footer, wide = false }) {
+function ModalShell({ title, subtitle, onClose, children, footer }) {
   return (
     <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/40 p-4">
       <div
-        className={`w-full rounded-2xl border border-[#c1c9c0]/50 bg-white shadow-xl ${
-          wide ? 'max-w-2xl' : 'max-w-md'
-        }`}
+        className="w-full max-w-md rounded-2xl border border-[#c1c9c0]/50 bg-white shadow-xl"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => e.stopPropagation()}
       >
@@ -56,111 +48,27 @@ function ModalShell({ title, subtitle, onClose, children, footer, wide = false }
   )
 }
 
-function SectionCard({ step, title, children }) {
-  return (
-    <div className="rounded-xl border border-[#e7e8e0] bg-[#fbf9f1] p-3">
-      <p className="text-[10px] font-bold uppercase tracking-wide text-[#538463]">
-        {step ? `${step}. ` : ''}
-        {title}
-      </p>
-      <div className="mt-2">{children}</div>
-    </div>
-  )
-}
-
+/** Thanh ca: Kiểm tiền / Chốt cuối ca. Mở ca + kiểm kệ chỉ qua màn full-screen PosShiftDutyGate. */
 export default function PosCashSessionBar() {
   const [session, setSession] = useState(() => loadOpenCashSession())
-  const [onDuty, setOnDuty] = useState(null)
   const [modal, setModal] = useState(null)
-  const [openingCashInput, setOpeningCashInput] = useState('500.000')
-  const [openNote, setOpenNote] = useState('')
-  const [shelfChecked, setShelfChecked] = useState(false)
-  const [shelfNote, setShelfNote] = useState('')
-  const [shelfCounts, setShelfCounts] = useState({
-    items: [],
-    filledCount: 0,
-    totalCount: 0,
-    summaryText: '',
-  })
   const [countedInput, setCountedInput] = useState('')
   const [varianceNote, setVarianceNote] = useState('')
   const [busy, setBusy] = useState(false)
 
-  const auth = loadAuthSession()
-  const sellerName = auth?.username || 'Nhân viên POS'
-  const sellerRole = (auth?.roles || []).join(', ')
-
   useEffect(() => {
     refreshCashSession().then((s) => setSession(s))
-    fetchOnDutyShift('Shelf')
-      .then(setOnDuty)
-      .catch(() => setOnDuty(null))
     return subscribeCashSession(() => setSession(loadOpenCashSession()))
   }, [])
 
   const expected = useMemo(() => expectedCash(session), [session])
 
   const openModal = (type) => {
-    if (type === 'open') {
-      if (!onDuty) {
-        showError(
-          'Chỉ mở ca khi đã được duyệt ca quầy và đang trong giờ làm. Vào «Lịch làm việc» để đăng ký/kiểm tra.',
-        )
-        return
-      }
-      setOpeningCashInput('500.000')
-      setOpenNote('')
-      setShelfChecked(false)
-      setShelfNote('')
-      setShelfCounts({ items: [], filledCount: 0, totalCount: 0, summaryText: '' })
-    }
     if (type === 'close') {
       setCountedInput(formatMoneyInput(expectedCash(loadOpenCashSession())))
       setVarianceNote('')
     }
     setModal(type)
-  }
-
-  const handleOpen = async () => {
-    if (!shelfChecked) {
-      showError('Vui lòng xác nhận đã kiểm hàng hóa trên kệ đầu ca.')
-      return
-    }
-    setBusy(true)
-    try {
-      const name = shiftDisplayName(onDuty)
-      const stocktake = await submitShiftOpenShelfStocktake({
-        items: shelfCounts.items,
-        filledCount: shelfCounts.filledCount,
-        totalCount: shelfCounts.totalCount,
-        shelfNote,
-        shiftLabel: name,
-      })
-      const shelfPart = [
-        `Phiếu kiểm kê ${stocktake.requestCode} (đã gửi duyệt).`,
-        shelfCounts.summaryText.trim(),
-        shelfNote.trim(),
-      ]
-        .filter(Boolean)
-        .join(' ')
-      const noteParts = [shelfPart, openNote.trim()].filter(Boolean)
-      await openCashSession({
-        openingCash: parseMoney(openingCashInput),
-        note: noteParts.join(' | '),
-        openedByName: sellerName,
-        openedByRole: sellerRole,
-        shiftSlotId: onDuty?.slotId || null,
-        shiftLabel: name || null,
-      })
-      setModal(null)
-      showSuccess(
-        `Đã mở ca và gửi phiếu kiểm kê ${stocktake.requestCode}. Manager duyệt tại Kiểm kê tồn kho.`,
-      )
-    } catch (error) {
-      showError(error.message)
-    } finally {
-      setBusy(false)
-    }
   }
 
   const handleClose = async () => {
@@ -208,15 +116,7 @@ export default function PosCashSessionBar() {
           {session ? <span>Ca đang mở</span> : <span>Chưa mở ca</span>}
         </div>
 
-        {!session ? (
-          <button
-            type="button"
-            onClick={() => openModal('open')}
-            className="rounded-full bg-[#356647] px-3 py-1.5 text-xs font-bold text-white hover:bg-[#2d553b]"
-          >
-            Mở ca
-          </button>
-        ) : (
+        {session ? (
           <>
             <button
               type="button"
@@ -233,91 +133,8 @@ export default function PosCashSessionBar() {
               Chốt tiền cuối ca
             </button>
           </>
-        )}
+        ) : null}
       </div>
-
-      {modal === 'open' ? (
-        <ModalShell
-          wide
-          title="Mở ca làm việc"
-          subtitle="Kiểm tiền và đối chiếu hàng kệ với số trên hệ thống trước khi vào bán."
-          onClose={() => setModal(null)}
-          footer={
-            <>
-              <button
-                type="button"
-                onClick={() => setModal(null)}
-                className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600"
-              >
-                Hủy
-              </button>
-              <button
-                type="button"
-                disabled={busy || !shelfChecked}
-                onClick={handleOpen}
-                className="rounded-xl bg-[#356647] px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
-              >
-                {busy ? 'Đang mở…' : 'Xác nhận mở ca'}
-              </button>
-            </>
-          }
-        >
-          <div className="max-h-[70vh] space-y-3 overflow-y-auto pr-0.5">
-            <SectionCard step="1" title="Kiểm tiền">
-              <label className="block text-xs font-semibold text-slate-600">Tiền mặt đầu két</label>
-              <input
-                className="mt-1 w-full rounded-xl border border-[#c1c9c0] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#356647]"
-                value={openingCashInput}
-                onChange={(e) => setOpeningCashInput(e.target.value)}
-                inputMode="numeric"
-                placeholder="500.000"
-              />
-              <label className="mt-3 block text-xs font-semibold text-slate-600">Ghi chú tiền (tuỳ chọn)</label>
-              <input
-                className="mt-1 w-full rounded-xl border border-[#c1c9c0] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#356647]"
-                value={openNote}
-                onChange={(e) => setOpenNote(e.target.value)}
-                placeholder="VD: đổi tiền lẻ…"
-              />
-            </SectionCard>
-
-            <SectionCard step="2" title="Hàng hóa trên kệ đầu ca">
-              <PosShelfStockCheckList
-                onCountsChange={(payload) =>
-                  setShelfCounts({
-                    items: payload.items || [],
-                    filledCount: payload.filledCount || 0,
-                    totalCount: payload.totalCount || 0,
-                    summaryText: payload.summaryText || '',
-                  })
-                }
-              />
-              <p className="mt-2 text-[11px] text-slate-500">
-                Khi mở ca, hệ thống tạo phiếu kiểm kê kệ (ghi người làm) và gửi Manager duyệt tại «Kiểm kê tồn
-                kho».
-              </p>
-              <label className="mt-3 flex cursor-pointer items-start gap-2 text-sm text-slate-800">
-                <input
-                  type="checkbox"
-                  className="mt-1 h-4 w-4 rounded border-slate-300 text-[#356647]"
-                  checked={shelfChecked}
-                  onChange={(e) => setShelfChecked(e.target.checked)}
-                />
-                <span>Đã đối chiếu hàng trên kệ với số lượng hệ thống ở trên.</span>
-              </label>
-              <label className="mt-3 block text-xs font-semibold text-slate-600">
-                Ghi chú lệch / thiếu (tuỳ chọn)
-              </label>
-              <input
-                className="mt-1 w-full rounded-xl border border-[#c1c9c0] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#356647]"
-                value={shelfNote}
-                onChange={(e) => setShelfNote(e.target.value)}
-                placeholder="VD: thiếu 2 hộp trà X…"
-              />
-            </SectionCard>
-          </div>
-        </ModalShell>
-      ) : null}
 
       {modal === 'check' ? (
         <ModalShell
@@ -431,7 +248,7 @@ export function assertCashSessionOpenForPayment(shelfOnDuty) {
   }
   const session = loadOpenCashSession()
   if (!session) {
-    showError('Chưa mở ca — không thể bán tại quầy. Hãy mở ca trên thanh POS trước.')
+    showError('Chưa mở ca — hoàn tất kiểm kệ & kiểm tiền đầu ca trước khi bán.')
     return false
   }
   return true

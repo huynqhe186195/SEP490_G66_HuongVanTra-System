@@ -52,7 +52,7 @@ function buildCountsPayload(nextActual, nextRows) {
  * Danh sách tồn kệ — cột Hệ thống + ô nhập Thực tế để Sale đối chiếu đầu ca.
  * onCountsChange({ variances, filledCount, totalCount, summaryText, items })
  */
-export default function PosShelfStockCheckList({ compact = false, onCountsChange }) {
+export default function PosShelfStockCheckList({ compact = false, fullHeight = false, onCountsChange }) {
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -143,11 +143,15 @@ export default function PosShelfStockCheckList({ compact = false, onCountsChange
     )
   }, [rows, search])
 
-  const listMaxH = compact ? 'max-h-44' : 'max-h-60'
+  const listMaxH = fullHeight
+    ? 'max-h-none flex-1 min-h-0'
+    : compact
+      ? 'max-h-44'
+      : 'max-h-60'
 
   return (
-    <div className="space-y-2">
-      <div className="flex flex-wrap items-center gap-2">
+    <div className={`space-y-2 ${fullHeight ? 'flex h-full min-h-0 flex-col' : ''}`}>
+      <div className="flex shrink-0 flex-wrap items-center gap-2">
         <input
           type="search"
           value={search}
@@ -174,9 +178,11 @@ export default function PosShelfStockCheckList({ compact = false, onCountsChange
         </button>
       </div>
 
-      <p className="text-[11px] text-slate-500">
-        Đối chiếu: cột «Hệ thống» là số trên phần mềm — nhập «Thực tế» theo hàng đếm được trên kệ.
-      </p>
+      {!fullHeight ? (
+        <p className="text-[11px] text-slate-500">
+          Đối chiếu: cột «Hệ thống» là số trên phần mềm — nhập «Thực tế» theo hàng đếm được trên kệ.
+        </p>
+      ) : null}
 
       {loading ? (
         <p className="py-4 text-center text-sm text-slate-500">Đang tải tồn kệ…</p>
@@ -187,7 +193,11 @@ export default function PosShelfStockCheckList({ compact = false, onCountsChange
       ) : filtered.length === 0 ? (
         <p className="py-4 text-center text-sm text-slate-500">Không có hàng trên kệ / không khớp tìm kiếm.</p>
       ) : (
-        <div className={`overflow-auto rounded-lg border border-[#e7e8e0] bg-white ${listMaxH}`}>
+        <div
+          className={`overflow-auto rounded-lg border border-[#e7e8e0] bg-white ${listMaxH} ${
+            fullHeight ? 'min-h-[280px]' : ''
+          }`}
+        >
           <table className="w-full text-left text-xs">
             <thead className="sticky top-0 z-[1] bg-[#f6f4ec] text-[10px] uppercase tracking-wide text-slate-500">
               <tr>
@@ -243,7 +253,7 @@ export default function PosShelfStockCheckList({ compact = false, onCountsChange
       )}
 
       {!loading && !error && rows.length > 0 ? (
-        <p className="text-[11px] text-slate-400">
+        <p className={`text-[11px] text-slate-400 ${fullHeight ? 'shrink-0' : ''}`}>
           {filtered.length}/{rows.length} SKU · hàng vàng = thực tế khác hệ thống
         </p>
       ) : null}

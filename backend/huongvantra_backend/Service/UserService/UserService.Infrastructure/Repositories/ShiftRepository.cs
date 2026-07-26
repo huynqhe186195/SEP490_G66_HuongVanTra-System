@@ -17,6 +17,15 @@ public class ShiftRepository(UserDbContext context) : IShiftRepository
         return await query.OrderBy(t => t.SortOrder).ToListAsync();
     }
 
+    public async Task<ShiftTemplate?> GetTemplateByIdAsync(Guid id) =>
+        await context.ShiftTemplates.FirstOrDefaultAsync(t => t.Id == id && !t.IsDeleted);
+
+    public void UpdateTemplate(ShiftTemplate template)
+    {
+        template.UpdatedAt = DateTime.UtcNow;
+        context.ShiftTemplates.Update(template);
+    }
+
     public async Task EnsureWeekSlotsAsync(IEnumerable<ShiftTemplate> templates, DateOnly weekStart, DateOnly weekEnd)
     {
         var templateIds = templates.Select(t => t.Id).ToList();
