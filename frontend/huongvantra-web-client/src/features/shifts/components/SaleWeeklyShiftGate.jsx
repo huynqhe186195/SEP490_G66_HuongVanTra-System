@@ -39,7 +39,7 @@ function isSchedulePath(pathname) {
 
 function LockShell({ children }) {
   return (
-    <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col items-center justify-center bg-[#fbf9f1] p-4">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#fbf9f1] p-4">
       {children}
     </div>
   )
@@ -47,13 +47,13 @@ function LockShell({ children }) {
 
 function LockCard({ eyebrow, title, message, children }) {
   return (
-    <div className="w-full max-w-md rounded-2xl border border-[#c1c9c0]/40 bg-white shadow-2xl">
-      <div className="border-b border-[#e7e8e0] px-6 py-5">
-        <p className="text-xs font-bold uppercase tracking-wide text-rose-700">{eyebrow}</p>
-        <h2 className="mt-1 text-xl font-bold text-slate-900">{title}</h2>
-        {message ? <p className="mt-2 text-sm text-slate-600">{message}</p> : null}
+    <div className="w-full max-w-sm rounded-xl border border-[#c1c9c0]/60 bg-white shadow-sm">
+      <div className="border-b border-[#e7e8e0] px-5 py-4">
+        <p className="text-xs font-semibold text-[#717971]">{eyebrow}</p>
+        <h2 className="mt-1 text-lg font-bold text-[#1b1c17]">{title}</h2>
+        {message ? <p className="mt-2 text-sm leading-relaxed text-[#717971]">{message}</p> : null}
       </div>
-      <div className="flex flex-col gap-2 px-6 py-5">{children}</div>
+      <div className="flex flex-col gap-2 px-5 py-4">{children}</div>
     </div>
   )
 }
@@ -164,8 +164,8 @@ export default function SaleWeeklyShiftGate({ session, children, onLockChange })
   if (checking) {
     return (
       <LockShell>
-        <div className="w-full max-w-md rounded-2xl border border-[#c1c9c0]/40 bg-white px-6 py-8 text-center shadow-2xl">
-          <p className="text-sm font-semibold text-slate-600">Đang kiểm tra ca làm việc…</p>
+        <div className="w-full max-w-sm rounded-xl border border-[#c1c9c0]/60 bg-white px-5 py-6 text-center shadow-sm">
+          <p className="text-sm text-[#717971]">Đang kiểm tra ca làm việc…</p>
         </div>
       </LockShell>
     )
@@ -183,7 +183,7 @@ export default function SaleWeeklyShiftGate({ session, children, onLockChange })
           <button
             type="button"
             onClick={load}
-            className="w-full rounded-xl border border-[#c1c9c0] py-2.5 text-sm font-semibold text-[#356647] hover:bg-[#f6f4ec]"
+            className="w-full rounded-lg border border-[#c1c9c0] py-2.5 text-sm font-semibold text-[#356647] hover:bg-[#f6f4ec]"
           >
             Kiểm tra lại
           </button>
@@ -191,7 +191,7 @@ export default function SaleWeeklyShiftGate({ session, children, onLockChange })
             type="button"
             disabled={loggingOut}
             onClick={handleLogout}
-            className="w-full rounded-xl border border-rose-200 bg-rose-50 py-2.5 text-sm font-semibold text-rose-800 hover:bg-rose-100 disabled:opacity-60"
+            className="w-full rounded-lg border border-[#c1c9c0] py-2.5 text-sm font-semibold text-[#717971] hover:bg-[#f6f4ec] disabled:opacity-60"
           >
             {loggingOut ? 'Đang đăng xuất…' : 'Đăng xuất'}
           </button>
@@ -209,33 +209,18 @@ export default function SaleWeeklyShiftGate({ session, children, onLockChange })
   if (offDutyOnly && !onSchedule) {
     return (
       <LockShell>
-        <LockCard
-          eyebrow="Hệ thống tạm khóa"
-          title="Chưa đến giờ ca làm việc"
-          message={
-            onDuty === null && !error
-              ? 'Bạn đã được xếp ca tuần này nhưng hiện không trong khung giờ ca (±30 phút). Vào «Lịch làm việc» để xem lịch, hoặc quay lại khi đến ca.'
-              : error || 'Hiện ngoài giờ ca được duyệt. Chỉ xem được «Lịch làm việc».'
-          }
-        >
+        <LockCard eyebrow="Hệ thống tạm khóa" title="Chưa đến giờ ca làm việc">
           <Link
             to={SHIFT_SCHEDULE_PATH}
-            className="flex w-full items-center justify-center rounded-xl bg-[#356647] py-3 text-sm font-bold text-white hover:bg-[#2d553b]"
+            className="flex w-full items-center justify-center rounded-lg bg-[#356647] py-2.5 text-sm font-semibold text-white hover:bg-[#2d553b]"
           >
             Tới «{SCHEDULE_LABEL}»
           </Link>
           <button
             type="button"
-            onClick={load}
-            className="w-full rounded-xl border border-[#c1c9c0] py-2.5 text-sm font-semibold text-[#356647] hover:bg-[#f6f4ec]"
-          >
-            Kiểm tra lại
-          </button>
-          <button
-            type="button"
             disabled={loggingOut}
             onClick={handleLogout}
-            className="w-full rounded-xl border border-rose-200 bg-rose-50 py-2.5 text-sm font-semibold text-rose-800 hover:bg-rose-100 disabled:opacity-60"
+            className="w-full rounded-lg border border-[#c1c9c0] py-2.5 text-sm font-semibold text-[#717971] hover:bg-[#f6f4ec] disabled:opacity-60"
           >
             {loggingOut ? 'Đang đăng xuất…' : 'Đăng xuất'}
           </button>
@@ -250,11 +235,6 @@ export default function SaleWeeklyShiftGate({ session, children, onLockChange })
       {registerOnly && onSchedule ? (
         <div className="pointer-events-none fixed inset-x-0 bottom-0 z-[80] border-t border-amber-200 bg-amber-50/95 px-4 py-2 text-center text-xs font-semibold text-amber-950 sm:text-sm">
           Đang trong thời hạn đăng ký — chỉ dùng được «{SCHEDULE_LABEL}» cho đến khi được duyệt / chỉ định.
-        </div>
-      ) : null}
-      {offDutyOnly && onSchedule ? (
-        <div className="pointer-events-none fixed inset-x-0 bottom-0 z-[80] border-t border-amber-200 bg-amber-50/95 px-4 py-2 text-center text-xs font-semibold text-amber-950 sm:text-sm">
-          Ngoài giờ ca — chỉ xem «{SCHEDULE_LABEL}». Vào lại các chức năng khác khi đến ca (±30 phút).
         </div>
       ) : null}
     </div>

@@ -56,7 +56,7 @@ import LoadingIndicator from '../../../components/shared/LoadingIndicator.jsx'
 import { useNetworkStatus } from '../../../hooks/useNetworkStatus.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import { useAuthSession } from '../../auth/hooks/useAuthSession.js'
-import { canUsePosCodMode, canUsePosCounterMode } from '../../auth/utils/permissions.js'
+import { canUsePosCodMode, canUsePosCounterMode, canViewAllOrders } from '../../auth/utils/permissions.js'
 import CustomBundlePanel from '../components/CustomBundlePanel.jsx'
 import {
   getPosBaseUnitLabel,
@@ -291,6 +291,8 @@ function PosPage() {
   const [openDiscountSku, setOpenDiscountSku] = useState(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [cashSessionOpen, setCashSessionOpen] = useState(() => Boolean(loadOpenCashSession()))
+  const [shelfDayStatus, setShelfDayStatus] = useState({ dayStartDone: false, dayEndDone: false })
+  const [dayEndRequested, setDayEndRequested] = useState(false)
   const [shelfOnDuty, setShelfOnDuty] = useState(null)
 
   useEffect(() => {
@@ -1444,10 +1446,14 @@ function PosPage() {
         && hasCustomerSelected
         && hasShippingAddress
         && (isTransferPayment ? total > 0 : true);
-    // Quầy: bắt buộc mở ca quỹ và đang trong ca quầy trước khi bán (TM + CK). COD/takeaway không khóa két.
+    // Quầy: bắt buộc mở ca quỹ và đang trong ca quầy trước khi bán (TM + CK). COD/takeaway: chỉ cần trong ca, không khóa két / kiểm kệ.
     const canPay = isTakeaway
-        ? canPayTakeaway && !isSubmitting
-        : cashSessionOpen && shelfOnDuty && (isTransferPayment ? canPayTransfer : canPayCash) && !isSubmitting;
+        ? canPayTakeaway && Boolean(shelfOnDuty) && !isSubmitting
+        : cashSessionOpen
+          && shelfOnDuty
+          && !shelfDayStatus.dayEndDone
+          && (isTransferPayment ? canPayTransfer : canPayCash)
+          && !isSubmitting;
     const normalizedPromoSearch = promoCodeInput.trim().toUpperCase();
     const visibleAvailablePromotions = availablePromotions
         .filter((promotion) => !normalizedPromoSearch || promotion.promoCode.toUpperCase().includes(normalizedPromoSearch))
@@ -1994,6 +2000,10 @@ function PosPage() {
         }
 
         if (isTakeaway) {
+            if (!shelfOnDuty) {
+                showError('Chưa được duyệt ca quầy hoặc đang ngoài giờ ca — không thể tạo đơn COD. Vào «Lịch làm việc» để đăng ký.');
+                return;
+            }
             if (!canPay) {
                 if (!hasShippingAddress) {
                     showError("Vui lòng nhập địa chỉ giao hàng.");
@@ -2012,6 +2022,11 @@ function PosPage() {
 
             if (!shelfOnDuty) {
                 showError('Chưa được duyệt ca quầy hoặc đang ngoài giờ ca — không thể bán tại quầy. Vào «Lịch làm việc» để đăng ký.');
+                return;
+            }
+
+            if (shelfDayStatus.dayEndDone) {
+                showError('Đã chốt kệ cuối ngày — không bán thêm hôm nay.')
                 return;
             }
 
@@ -2263,14 +2278,14 @@ function PosPage() {
         return <LoadingIndicator label="Đang khôi phục giỏ POS..." className="min-h-[60vh]" />;
     }
 
-    const needsCashSession = showCashSessionUi
-
     return (
         <PosShiftDutyGate
             onDutyChange={setShelfOnDuty}
-            requireCashSession={needsCashSession}
             cashSessionOpen={cashSessionOpen}
-            onCashOpened={() => setCashSessionOpen(true)}
+            onDayStatusChange={setShelfDayStatus}
+            dayEndRequested={dayEndRequested}
+            onDayEndRequestHandled={() => setDayEndRequested(false)}
+            requireShelfDay={canUsePosCounterMode(authSession) && salesMode === 'counter'}
             onSwitchToCod={
                 allowedSalesModes.some((m) => m.id === 'takeaway')
                     ? () => setSalesMode('takeaway')
@@ -2352,7 +2367,22 @@ function PosPage() {
                     </div>
                     </div>
 
-                    {showCashSessionUi ? <PosCashSessionBar /> : null}
+                    {showCashSessionUi ? (
+                      <PosCashSessionBar
+                        dayStartDone={Boolean(shelfDayStatus.dayStartDone)}
+                        dayEndDone={Boolean(shelfDayStatus.dayEndDone)}
+                        onCashOpened={() => setCashSessionOpen(true)}
+                        sellerName={authSession?.username || ''}
+                        sellerRole={(authSession?.roles || []).join(', ')}
+                        shiftSlotId={shelfOnDuty?.slotId || null}
+                        shiftLabel={shelfOnDuty?.bypassed ? null : undefined}
+                        onRequestDayEnd={
+                          canViewAllOrders(authSession)
+                            ? undefined
+                            : () => setDayEndRequested(true)
+                        }
+                      />
+                    ) : null}
                 </div>
             </header>
 

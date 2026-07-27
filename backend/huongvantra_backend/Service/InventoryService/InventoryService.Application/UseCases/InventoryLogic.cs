@@ -3853,6 +3853,37 @@ public class InventoryLogic(
         return request == null ? null : MapStocktakeRequest(request);
     }
 
+    public static readonly string ShelfDayStartReason = "Kiểm kệ đầu ngày";
+    public static readonly string ShelfDayEndReason = "Kiểm kệ cuối ngày";
+    public static readonly string ShelfDayStartReasonLegacy = "Kiểm kệ đầu ca POS";
+
+    public async Task<ShelfDayStocktakeStatusResponse> GetShelfDayStocktakeStatusAsync(
+        DateTime? date,
+        CancellationToken ct = default)
+    {
+        var day = (date ?? DateTime.UtcNow).Date;
+        var markers = await _stocktakeRepo.GetShelfDayMarkersAsync(day, ct);
+
+        static bool IsDayStart(string? reason) =>
+            string.Equals(reason?.Trim(), ShelfDayStartReason, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(reason?.Trim(), ShelfDayStartReasonLegacy, StringComparison.OrdinalIgnoreCase);
+
+        static bool IsDayEnd(string? reason) =>
+            string.Equals(reason?.Trim(), ShelfDayEndReason, StringComparison.OrdinalIgnoreCase);
+
+        var dayStart = markers.FirstOrDefault(r => IsDayStart(r.Reason));
+        var dayEnd = markers.FirstOrDefault(r => IsDayEnd(r.Reason));
+
+        return new ShelfDayStocktakeStatusResponse(
+            DateOnly.FromDateTime(day),
+            dayStart != null,
+            dayEnd != null,
+            dayStart?.Id,
+            dayStart?.RequestCode,
+            dayEnd?.Id,
+            dayEnd?.RequestCode);
+    }
+
     public async Task<StocktakeRequestResponse> CreateStocktakeRequestAsync(
         CreateStocktakeRequest request,
         Guid createdBy,

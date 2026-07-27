@@ -15,6 +15,7 @@ public interface IStocktakeRequestRepository
         int pageSize,
         CancellationToken ct = default);
     Task<int> CountCreatedSinceAsync(DateTime sinceUtc, CancellationToken ct = default);
+    Task<List<StocktakeRequest>> GetShelfDayMarkersAsync(DateTime countDate, CancellationToken ct = default);
     Task AddAsync(StocktakeRequest request, CancellationToken ct = default);
     Task<int> SaveChangesAsync(CancellationToken ct = default);
 }

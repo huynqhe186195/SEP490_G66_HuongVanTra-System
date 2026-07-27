@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
@@ -144,18 +143,13 @@ function SupplierReceiptsPage() {
         searchValue={searchInput}
         onSearchChange={handleSearchChange}
         rightContent={(
-          <div className="flex flex-wrap items-center gap-3">
-            <InventoryNavTabs />
-            {canWrite ? (
-              <Link
-                to="/inventory/import/create"
-                className="inline-flex items-center gap-1.5 rounded-xl bg-[#538463] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#457053]"
-              >
-                <span className="material-symbols-outlined text-[18px]">add</span>
-                Tạo phiếu nhập
-              </Link>
-            ) : null}
-          </div>
+          <InventoryNavTabs
+            actions={
+              canWrite
+                ? [{ label: 'Tạo phiếu nhập', icon: 'add', to: '/inventory/import/create' }]
+                : []
+            }
+          />
         )}
       />
 

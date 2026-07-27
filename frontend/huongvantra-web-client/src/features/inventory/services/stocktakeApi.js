@@ -78,6 +78,79 @@ export async function fetchStocktakeRequestById(id) {
   return mapStocktakeRequest(data)
 }
 
+/** Trạng thái kiểm kê kệ đầu/cuối ngày (toàn cửa hàng). */
+export async function fetchShelfDayStocktakeStatus(date) {
+  const query = new URLSearchParams()
+  if (date) query.set('date', date)
+  const qs = query.toString()
+  try {
+    const data = await apiRequestAuth(
+      `/api/v1/inventory/stocktake-requests/shelf-day-status${qs ? `?${qs}` : ''}`,
+      { method: 'GET' },
+    )
+    return {
+      date: data?.date ?? data?.Date ?? null,
+      dayStartDone: Boolean(data?.dayStartDone ?? data?.DayStartDone),
+      dayEndDone: Boolean(data?.dayEndDone ?? data?.DayEndDone),
+      dayStartId: data?.dayStartId ?? data?.DayStartId ?? null,
+      dayStartRequestCode: data?.dayStartRequestCode ?? data?.DayStartRequestCode ?? '',
+      dayEndId: data?.dayEndId ?? data?.DayEndId ?? null,
+      dayEndRequestCode: data?.dayEndRequestCode ?? data?.DayEndRequestCode ?? '',
+    }
+  } catch {
+    // Fallback khi BE chưa có endpoint: suy ra từ danh sách phiếu Shelf của mình.
+    return fetchShelfDayStocktakeStatusFallback()
+  }
+}
+
+async function fetchShelfDayStocktakeStatusFallback() {
+  const { vietnamTodayDateInput, SHELF_DAY_START_REASON, SHELF_DAY_END_REASON } = await import(
+    '../../pos/utils/submitDailyShelfStocktake.js'
+  )
+  const today = vietnamTodayDateInput()
+  const paged = await fetchStocktakeRequests({
+    location: 'Shelf',
+    mine: true,
+    page: 1,
+    pageSize: 50,
+  })
+  const items = paged.items || []
+  const active = items.filter((row) => {
+    const status = String(row.status || '')
+    return status === 'PendingApproval' || status === 'Completed' || status === '1' || status === '2'
+  })
+
+  const isStart = (reason) => {
+    const r = String(reason || '').toLowerCase()
+    return r.includes('đầu ngày') || r.includes('dau ngay') || r.includes('đầu ca') || r.includes('dau ca')
+      || String(reason || '').includes(SHELF_DAY_START_REASON)
+  }
+  const isEnd = (reason) => {
+    const r = String(reason || '').toLowerCase()
+    return r.includes('cuối ngày') || r.includes('cuoi ngay')
+      || String(reason || '').includes(SHELF_DAY_END_REASON)
+  }
+
+  const sameDay = (row) => {
+    const countDate = String(row.countDate || '').slice(0, 10)
+    if (!countDate) return true
+    // Cho phép lệch 1 ngày UTC vs VN.
+    return countDate === today || countDate >= today
+  }
+
+  const dayStart = active.find((row) => isStart(row.reason) && sameDay(row)) || active.find((row) => isStart(row.reason))
+  const dayEnd = active.find((row) => isEnd(row.reason) && sameDay(row)) || active.find((row) => isEnd(row.reason))
+  return {
+    date: today,
+    dayStartDone: Boolean(dayStart),
+    dayEndDone: Boolean(dayEnd),
+    dayStartId: dayStart?.id || null,
+    dayStartRequestCode: dayStart?.requestCode || '',
+    dayEndId: dayEnd?.id || null,
+    dayEndRequestCode: dayEnd?.requestCode || '',
+  }
+}
+
 export async function createStocktakeRequest(payload) {
   const data = await apiRequestAuth('/api/v1/inventory/stocktake-requests', {
     method: 'POST',

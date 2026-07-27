@@ -295,13 +295,11 @@ function InventoryReportsPage() {
         searchValue={search}
         onSearchChange={(value) => resetPageAndSet(setSearch, value)}
         rightContent={(
-          <div className="flex flex-wrap items-center gap-3">
-            <InventoryNavTabs />
-            <button type="button" onClick={exportCurrentReport} className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50">
-              <span className="material-symbols-outlined text-[18px]">download</span>
-              Xuất CSV
-            </button>
-          </div>
+          <InventoryNavTabs
+            actions={[
+              { label: 'Xuất CSV', icon: 'download', onClick: exportCurrentReport },
+            ]}
+          />
         )}
       />
 

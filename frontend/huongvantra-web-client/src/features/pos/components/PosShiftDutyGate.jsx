@@ -1,20 +1,17 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { showError, showSuccess } from '../../../app/toast.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
-import { canUsePosCodMode, canViewAllOrders } from '../../auth/utils/permissions.js'
+import {
+  canUsePosCodMode,
+  canUsePosCounterMode,
+  canViewAllOrders,
+} from '../../auth/utils/permissions.js'
+import { fetchShelfDayStocktakeStatus } from '../../inventory/services/stocktakeApi.js'
 import { fetchOnDutyShift } from '../../shifts/services/shiftsApi.js'
 import { shiftDisplayName } from '../utils/shiftDisplayName.js'
-import { openCashSession } from '../utils/posCashSessionStore.js'
-import PosShelfStockCheckList from './PosShelfStockCheckList.jsx'
-import { submitShiftOpenShelfStocktake } from '../utils/submitShiftOpenShelfStocktake.js'
+import PosDailyShelfCountScreen from './PosDailyShelfCountScreen.jsx'
 
 const BYPASSED_DUTY = { bypassed: true }
-
-function parseMoney(raw) {
-  const cleaned = String(raw || '').replace(/[^\d]/g, '')
-  return cleaned ? Number(cleaned) : 0
-}
 
 function GateShell({ children, fill = false }) {
   return (
@@ -36,54 +33,116 @@ function GateCard({ eyebrow, eyebrowTone = 'amber', title, body, children }) {
         ? 'text-[#538463]'
         : 'text-amber-700'
   return (
-    <div className="w-full max-w-md rounded-2xl border border-[#c1c9c0]/40 bg-white shadow-2xl">
-      <div className="border-b border-[#e7e8e0] px-6 py-5">
-        <p className={`text-xs font-bold uppercase tracking-wide ${eyebrowClass}`}>{eyebrow}</p>
-        <h2 className="mt-1 text-xl font-bold text-slate-900">{title}</h2>
-        {body ? <p className="mt-2 text-sm text-slate-600">{body}</p> : null}
+    <div className="w-full max-w-sm rounded-xl border border-[#c1c9c0]/60 bg-white shadow-sm">
+      <div className="border-b border-[#e7e8e0] px-5 py-4">
+        <p className={`text-xs font-semibold ${eyebrowClass}`}>{eyebrow}</p>
+        <h2 className="mt-1 text-lg font-bold text-[#1b1c17]">{title}</h2>
+        {body ? <p className="mt-2 text-sm leading-relaxed text-[#717971]">{body}</p> : null}
       </div>
-      <div className="flex flex-col gap-2 px-6 py-5">{children}</div>
+      <div className="flex flex-col gap-2 px-5 py-4">{children}</div>
     </div>
   )
 }
 
 /**
  * Cổng vào POS:
- * 1) Chưa trong ca quầy → khóa
- * 2) Trong ca nhưng chưa mở quỹ → màn FULL kiểm kệ + kiểm tiền (bắt buộc trước POS)
+ * 1) Chưa trong ca quầy → khóa (SalePos + Sale COD)
+ * 2) Chế độ quầy: chưa kiểm kệ đầu ngày → đếm kệ
+ * 3) Chế độ quầy: màn chốt kệ cuối ngày (khi bấm nút)
+ * 4) Chế độ quầy: đã chốt kệ + quỹ đóng → khóa quầy (COD vẫn vào được nếu đổi mode)
+ * Sale COD / chế độ Bán COD: chỉ cần trong ca — không kiểm kệ, không quỹ.
  */
 export default function PosShiftDutyGate({
   onDutyChange,
   children,
-  requireCashSession = false,
   cashSessionOpen = false,
-  onCashOpened,
   onSwitchToCod,
+  onDayStatusChange,
+  dayEndRequested = false,
+  onDayEndRequestHandled,
+  /** true = áp dụng kiểm kệ theo ngày (chỉ khi bán quầy). */
+  requireShelfDay = true,
 }) {
   const auth = loadAuthSession()
   const bypass = canViewAllOrders(auth)
   const canCod = canUsePosCodMode(auth)
-  const sellerName = auth?.username || 'Nhân viên POS'
-  const sellerRole = (auth?.roles || []).join(', ')
+  const canCounter = canUsePosCounterMode(auth)
+  const shelfDayApplies = Boolean(requireShelfDay) && canCounter && !bypass
 
   const [onDuty, setOnDuty] = useState(null)
   const [checking, setChecking] = useState(!bypass)
   const [error, setError] = useState('')
-  const [openingCashInput, setOpeningCashInput] = useState('500.000')
-  const [openNote, setOpenNote] = useState('')
-  const [shelfChecked, setShelfChecked] = useState(false)
-  const [shelfNote, setShelfNote] = useState('')
-  const [shelfCounts, setShelfCounts] = useState({
-    items: [],
-    filledCount: 0,
-    totalCount: 0,
-    summaryText: '',
+  const [dayStatus, setDayStatus] = useState({
+    dayStartDone: bypass,
+    dayEndDone: false,
   })
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [dayStatusLoading, setDayStatusLoading] = useState(false)
+  const [showDayEnd, setShowDayEnd] = useState(false)
 
   const dutyName = shiftDisplayName(onDuty)
 
-  const load = () => {
+  const refreshDayStatus = useCallback(async () => {
+    if (bypass) {
+      const status = { dayStartDone: true, dayEndDone: false }
+      setDayStatus(status)
+      onDayStatusChange?.(status)
+      setDayStatusLoading(false)
+      return status
+    }
+    if (!shelfDayApplies) {
+      setDayStatusLoading(false)
+      setShowDayEnd(false)
+      return null
+    }
+
+    setDayStatusLoading(true)
+    try {
+      const status = await fetchShelfDayStocktakeStatus()
+      setDayStatus((prev) => {
+        const next = {
+          ...status,
+          dayStartDone: Boolean(status.dayStartDone || prev.dayStartDone),
+          dayEndDone: Boolean(status.dayEndDone || prev.dayEndDone),
+        }
+        onDayStatusChange?.(next)
+        return next
+      })
+      return status
+    } catch (err) {
+      setError(err?.message || 'Không kiểm tra được trạng thái kiểm kê ngày.')
+      return null
+    } finally {
+      setDayStatusLoading(false)
+    }
+  }, [bypass, shelfDayApplies, onDayStatusChange])
+
+  const markDayStartDoneLocal = useCallback((stocktake) => {
+    setDayStatus((prev) => {
+      const next = {
+        ...prev,
+        dayStartDone: true,
+        dayStartId: stocktake?.id || prev.dayStartId,
+        dayStartRequestCode: stocktake?.requestCode || prev.dayStartRequestCode,
+      }
+      onDayStatusChange?.(next)
+      return next
+    })
+  }, [onDayStatusChange])
+
+  const markDayEndDoneLocal = useCallback((stocktake) => {
+    setDayStatus((prev) => {
+      const next = {
+        ...prev,
+        dayEndDone: true,
+        dayEndId: stocktake?.id || prev.dayEndId,
+        dayEndRequestCode: stocktake?.requestCode || prev.dayEndRequestCode,
+      }
+      onDayStatusChange?.(next)
+      return next
+    })
+  }, [onDayStatusChange])
+
+  const loadDuty = useCallback(() => {
     setChecking(true)
     setError('')
     fetchOnDutyShift('Shelf')
@@ -97,73 +156,93 @@ export default function PosShiftDutyGate({
         setError(err?.message || 'Không kiểm tra được ca làm việc.')
       })
       .finally(() => setChecking(false))
-  }
+  }, [onDutyChange])
 
   useEffect(() => {
     if (bypass) {
       onDutyChange?.(BYPASSED_DUTY)
       setChecking(false)
+      const status = { dayStartDone: true, dayEndDone: false }
+      setDayStatus(status)
+      onDayStatusChange?.(status)
+      setDayStatusLoading(false)
       return undefined
     }
-    load()
-    const id = window.setInterval(load, 60_000)
+    loadDuty()
+    const id = window.setInterval(loadDuty, 60_000)
     return () => window.clearInterval(id)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bypass])
+  }, [bypass, loadDuty, onDutyChange, onDayStatusChange])
 
-  const handleOpenCash = async () => {
-    if (!bypass && !onDuty) {
-      showError('Chỉ mở ca khi đã được duyệt ca quầy và đang trong giờ làm.')
-      return
+  useEffect(() => {
+    if (bypass) return undefined
+    if (!shelfDayApplies) {
+      setShowDayEnd(false)
+      setDayStatusLoading(false)
+      return undefined
     }
-    if (!shelfChecked) {
-      showError('Vui lòng xác nhận đã kiểm hàng hóa trên kệ đầu ca.')
-      return
-    }
-    setIsSubmitting(true)
-    try {
-      const stocktake = await submitShiftOpenShelfStocktake({
-        items: shelfCounts.items,
-        filledCount: shelfCounts.filledCount,
-        totalCount: shelfCounts.totalCount,
-        shelfNote,
-        shiftLabel: dutyName,
+    let cancelled = false
+    setDayStatusLoading(true)
+    fetchShelfDayStocktakeStatus()
+      .then((status) => {
+        if (cancelled) return
+        setDayStatus((prev) => {
+          const next = {
+            ...status,
+            dayStartDone: Boolean(status.dayStartDone || prev.dayStartDone),
+            dayEndDone: Boolean(status.dayEndDone || prev.dayEndDone),
+          }
+          onDayStatusChange?.(next)
+          return next
+        })
       })
-      const shelfPart = [
-        `Phiếu kiểm kê ${stocktake.requestCode} (đã gửi duyệt).`,
-        shelfCounts.summaryText.trim(),
-        shelfNote.trim(),
-      ]
-        .filter(Boolean)
-        .join(' ')
-      const noteParts = [shelfPart, openNote.trim()].filter(Boolean)
-      await openCashSession({
-        openingCash: parseMoney(openingCashInput),
-        note: noteParts.join(' | '),
-        openedByName: sellerName,
-        openedByRole: sellerRole,
-        shiftSlotId: onDuty?.slotId || null,
-        shiftLabel: dutyName || null,
+      .catch((err) => {
+        if (cancelled) return
+        setError(err?.message || 'Không kiểm tra được trạng thái kiểm kê ngày.')
       })
-      showSuccess(
-        `Đã mở ca và gửi phiếu kiểm kê ${stocktake.requestCode}. Manager duyệt tại Kiểm kê tồn kho.`,
-      )
-      onCashOpened?.()
-    } catch (err) {
-      showError(err.message)
-    } finally {
-      setIsSubmitting(false)
+      .finally(() => {
+        if (!cancelled) setDayStatusLoading(false)
+      })
+
+    const id = window.setInterval(() => {
+      fetchShelfDayStocktakeStatus()
+        .then((status) => {
+          setDayStatus((prev) => {
+            const next = {
+              ...status,
+              dayStartDone: Boolean(status.dayStartDone || prev.dayStartDone),
+              dayEndDone: Boolean(status.dayEndDone || prev.dayEndDone),
+            }
+            onDayStatusChange?.(next)
+            return next
+          })
+        })
+        .catch(() => {})
+    }, 60_000)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(id)
     }
-  }
+  }, [bypass, shelfDayApplies, onDayStatusChange])
+
+  useEffect(() => {
+    if (dayEndRequested && shelfDayApplies && !bypass) {
+      setShowDayEnd(true)
+      onDayEndRequestHandled?.()
+    } else if (dayEndRequested && !shelfDayApplies) {
+      onDayEndRequestHandled?.()
+    }
+  }, [dayEndRequested, shelfDayApplies, bypass, onDayEndRequestHandled])
 
   const dutyOk = bypass || Boolean(onDuty)
-  const needsCash = requireCashSession && !cashSessionOpen && dutyOk
+  const needsDayStart = shelfDayApplies && !dayStatus.dayStartDone
+  const dayEnded = shelfDayApplies && dayStatus.dayEndDone
 
   if (checking && !bypass && !onDuty) {
     return (
       <GateShell>
         <GateCard eyebrow="Vui lòng chờ" title="Đang kiểm tra ca làm việc…">
-          <p className="text-center text-sm text-slate-500">Một lát nữa sẽ cập nhật trạng thái ca của bạn.</p>
+          <p className="text-center text-sm text-[#717971]">Một lát nữa sẽ cập nhật trạng thái ca của bạn.</p>
         </GateCard>
       </GateShell>
     )
@@ -182,14 +261,14 @@ export default function PosShiftDutyGate({
         >
           <Link
             to="/my-shifts"
-            className="flex w-full items-center justify-center rounded-xl bg-[#356647] py-3 text-sm font-bold text-white hover:bg-[#2d553b]"
+            className="flex w-full items-center justify-center rounded-lg bg-[#356647] py-2.5 text-sm font-semibold text-white hover:bg-[#2d553b]"
           >
             Tới «Lịch làm việc»
           </Link>
           <button
             type="button"
-            onClick={load}
-            className="w-full rounded-xl border border-[#c1c9c0] py-2.5 text-sm font-semibold text-[#356647] hover:bg-[#f6f4ec]"
+            onClick={loadDuty}
+            className="w-full rounded-lg border border-[#c1c9c0] py-2.5 text-sm font-semibold text-[#356647] hover:bg-[#f6f4ec]"
           >
             Kiểm tra lại
           </button>
@@ -198,114 +277,74 @@ export default function PosShiftDutyGate({
     )
   }
 
-  if (needsCash) {
+  if (shelfDayApplies && dayStatusLoading) {
+    return (
+      <GateShell>
+        <GateCard eyebrow="Vui lòng chờ" title="Đang kiểm tra kiểm kê ngày…">
+          <p className="text-center text-sm text-[#717971]">Kiểm tra phiếu đầu ngày / cuối ngày.</p>
+        </GateCard>
+      </GateShell>
+    )
+  }
+
+  if (needsDayStart) {
     return (
       <GateShell fill>
-        <div className="flex h-full min-h-0 flex-1 flex-col bg-[#f6f4ec]">
-          <header className="shrink-0 border-b border-[#c1c9c0]/60 bg-white px-5 py-4 sm:px-8">
-            <p className="text-xs font-bold uppercase tracking-wide text-[#538463]">Đầu ca bắt buộc</p>
-            <h1 className="mt-1 text-2xl font-bold text-slate-900 sm:text-3xl">
-              Kiểm kệ & kiểm tiền trước khi vào POS
-            </h1>
-            <p className="mt-1 max-w-3xl text-sm text-slate-600">
-              Hoàn tất đối chiếu hàng trên kệ và nhập tiền đầu két. Sau khi xác nhận mới vào màn bán hàng.
-            </p>
-          </header>
+        <PosDailyShelfCountScreen
+          kind="dayStart"
+          shiftLabel={dutyName}
+          onDone={async (stocktake) => {
+            markDayStartDoneLocal(stocktake)
+            await refreshDayStatus()
+          }}
+          secondaryAction={
+            canCod && typeof onSwitchToCod === 'function' ? (
+              <button
+                type="button"
+                onClick={onSwitchToCod}
+                className="rounded-xl border border-[#c1c9c0] bg-white px-4 py-3 text-sm font-semibold text-[#356647] hover:bg-[#f6f4ec]"
+              >
+                Không kiểm kệ — chuyển COD
+              </button>
+            ) : null
+          }
+        />
+      </GateShell>
+    )
+  }
 
-          <div className="grid min-h-0 flex-1 grid-cols-1 gap-0 lg:grid-cols-[minmax(0,1fr)_340px]">
-            <section className="flex min-h-0 flex-col border-b border-[#c1c9c0]/50 bg-white p-4 sm:p-6 lg:border-b-0 lg:border-r">
-              <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
-                <div>
-                  <h2 className="text-lg font-bold text-[#356647]">Hàng hóa trên kệ đầu ca</h2>
-                  <p className="text-xs text-slate-500">
-                    Cột Hệ thống = tồn trên phần mềm. Nhập Thực tế theo hàng đếm được.
-                  </p>
-                </div>
-                <p className="text-xs font-semibold text-slate-500">
-                  Đã điền {shelfCounts.filledCount}/{shelfCounts.totalCount || '—'} SKU
-                </p>
-              </div>
-              <div className="min-h-0 flex-1 overflow-hidden rounded-2xl border border-[#e7e8e0] bg-[#fbf9f1] p-3">
-                <PosShelfStockCheckList
-                  fullHeight
-                  onCountsChange={(payload) =>
-                    setShelfCounts({
-                      items: payload.items || [],
-                      filledCount: payload.filledCount || 0,
-                      totalCount: payload.totalCount || 0,
-                      summaryText: payload.summaryText || '',
-                    })
-                  }
-                />
-              </div>
-              <label className="mt-3 flex cursor-pointer items-start gap-2 rounded-xl border border-[#e7e8e0] bg-[#fbf9f1] px-3 py-3 text-sm text-slate-800">
-                <input
-                  type="checkbox"
-                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-[#356647]"
-                  checked={shelfChecked}
-                  onChange={(e) => setShelfChecked(e.target.checked)}
-                />
-                <span>Đã đối chiếu hàng trên kệ với số lượng hệ thống.</span>
-              </label>
-              <input
-                className="mt-2 w-full rounded-xl border border-[#c1c9c0] bg-white px-3 py-2.5 text-sm outline-none focus:border-[#356647]"
-                value={shelfNote}
-                onChange={(e) => setShelfNote(e.target.value)}
-                placeholder="Ghi chú lệch / thiếu (tuỳ chọn)"
-              />
-            </section>
+  if (showDayEnd && shelfDayApplies) {
+    return (
+      <GateShell fill>
+        <PosDailyShelfCountScreen
+          kind="dayEnd"
+          shiftLabel={dutyName}
+          onCancel={() => setShowDayEnd(false)}
+          onDone={async (stocktake) => {
+            markDayEndDoneLocal(stocktake)
+            setShowDayEnd(false)
+            await refreshDayStatus()
+          }}
+        />
+      </GateShell>
+    )
+  }
 
-            <aside className="flex min-h-0 flex-col gap-4 bg-[#fbf9f1] p-4 sm:p-6">
-              <div className="rounded-2xl border border-[#e7e8e0] bg-white p-4 shadow-sm">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-[#538463]">Kiểm tiền</p>
-                <label className="mt-3 block text-xs font-semibold text-slate-600">Tiền mặt đầu két</label>
-                <input
-                  className="mt-1 w-full rounded-xl border border-[#c1c9c0] px-3 py-2.5 text-sm outline-none focus:border-[#356647] focus:ring-2 focus:ring-[#356647]/20"
-                  value={openingCashInput}
-                  onChange={(e) => setOpeningCashInput(e.target.value)}
-                  inputMode="numeric"
-                  placeholder="500.000"
-                  autoFocus
-                />
-                <label className="mt-3 block text-xs font-semibold text-slate-600">Ghi chú tiền (tuỳ chọn)</label>
-                <input
-                  className="mt-1 w-full rounded-xl border border-[#c1c9c0] px-3 py-2.5 text-sm outline-none focus:border-[#356647]"
-                  value={openNote}
-                  onChange={(e) => setOpenNote(e.target.value)}
-                  placeholder="VD: đổi tiền lẻ…"
-                />
-              </div>
-
-              <div className="rounded-2xl border border-[#e7e8e0] bg-white p-4 text-sm text-slate-600 shadow-sm">
-                <p className="font-semibold text-slate-800">Sau khi mở ca</p>
-                <ul className="mt-2 list-disc space-y-1 pl-4 text-xs">
-                  <li>Tạo phiếu kiểm kê kệ và gửi Manager duyệt</li>
-                  <li>Mở ca quỹ POS — mới được bán tại quầy</li>
-                </ul>
-              </div>
-
-              <div className="mt-auto flex flex-col gap-2">
-                <button
-                  type="button"
-                  disabled={isSubmitting || !shelfChecked}
-                  onClick={handleOpenCash}
-                  className="w-full rounded-xl bg-[#356647] py-3.5 text-sm font-bold text-white hover:bg-[#2d553b] disabled:opacity-60"
-                >
-                  {isSubmitting ? 'Đang mở…' : 'Xác nhận đầu ca & vào POS'}
-                </button>
-                {canCod && typeof onSwitchToCod === 'function' ? (
-                  <button
-                    type="button"
-                    onClick={onSwitchToCod}
-                    className="w-full rounded-xl border border-[#c1c9c0] bg-white py-2.5 text-sm font-semibold text-[#356647] hover:bg-[#f6f4ec]"
-                  >
-                    Không mở ca — chuyển sang bán COD
-                  </button>
-                ) : null}
-              </div>
-            </aside>
-          </div>
-        </div>
+  if (dayEnded && !cashSessionOpen) {
+    const showCod = canCod && typeof onSwitchToCod === 'function'
+    return (
+      <GateShell>
+        <GateCard eyebrow="Kiểm kê cuối ngày" title="Đã hoàn tất kiểm kê kệ cuối ngày">
+          {showCod ? (
+            <button
+              type="button"
+              onClick={onSwitchToCod}
+              className="w-full rounded-lg border border-[#c1c9c0] py-2.5 text-sm font-semibold text-[#356647] hover:bg-[#f6f4ec]"
+            >
+              Chuyển sang bán COD
+            </button>
+          ) : null}
+        </GateCard>
       </GateShell>
     )
   }

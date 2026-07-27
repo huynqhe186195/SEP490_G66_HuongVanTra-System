@@ -49,7 +49,7 @@ function buildCountsPayload(nextActual, nextRows) {
 }
 
 /**
- * Danh sách tồn kệ — cột Hệ thống + ô nhập Thực tế để Sale đối chiếu đầu ca.
+ * Danh sách tồn kệ — cột Hệ thống + ô nhập Thực tế để Sale đối chiếu đầu/cuối ngày.
  * onCountsChange({ variances, filledCount, totalCount, summaryText, items })
  */
 export default function PosShelfStockCheckList({ compact = false, fullHeight = false, onCountsChange }) {

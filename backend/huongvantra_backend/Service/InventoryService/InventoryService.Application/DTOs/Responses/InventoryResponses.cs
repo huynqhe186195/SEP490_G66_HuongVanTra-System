@@ -538,6 +538,15 @@ public record StocktakeReasonCodeResponse(
     string Code,
     string Label);
 
+public record ShelfDayStocktakeStatusResponse(
+    DateOnly Date,
+    bool DayStartDone,
+    bool DayEndDone,
+    Guid? DayStartId,
+    string? DayStartRequestCode,
+    Guid? DayEndId,
+    string? DayEndRequestCode);
+
 public record StocktakeRequestItemResponse(
     Guid Id,
     Guid SkuId,

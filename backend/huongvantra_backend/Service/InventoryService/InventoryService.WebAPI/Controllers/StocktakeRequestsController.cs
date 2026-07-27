@@ -67,6 +67,18 @@ public class StocktakeRequestsController(InventoryLogic _logic) : ControllerBase
         return Ok(InventoryLogic.GetStocktakeReasonCodes());
     }
 
+    /// <summary>
+    /// Trạng thái kiểm kê kệ đầu/cuối ngày (toàn cửa hàng — không giới hạn theo người tạo).
+    /// </summary>
+    [HttpGet("shelf-day-status")]
+    public async Task<IActionResult> GetShelfDayStatus([FromQuery] DateTime? date, CancellationToken ct)
+    {
+        if (!IsPrivilegedStocktakeRole && !IsSaleActor)
+            return Forbid();
+
+        return Ok(await _logic.GetShelfDayStocktakeStatusAsync(date, ct));
+    }
+
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
     {
