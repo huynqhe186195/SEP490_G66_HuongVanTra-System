@@ -80,8 +80,10 @@ export async function fetchStocktakeRequestById(id) {
 
 /** Trạng thái kiểm kê kệ đầu/cuối ngày (toàn cửa hàng). */
 export async function fetchShelfDayStocktakeStatus(date) {
+  const { vietnamTodayDateInput } = await import('../../pos/utils/submitDailyShelfStocktake.js')
+  const day = date || vietnamTodayDateInput()
   const query = new URLSearchParams()
-  if (date) query.set('date', date)
+  if (day) query.set('date', day)
   const qs = query.toString()
   try {
     const data = await apiRequestAuth(
@@ -89,7 +91,7 @@ export async function fetchShelfDayStocktakeStatus(date) {
       { method: 'GET' },
     )
     return {
-      date: data?.date ?? data?.Date ?? null,
+      date: String(data?.date ?? data?.Date ?? day).slice(0, 10),
       dayStartDone: Boolean(data?.dayStartDone ?? data?.DayStartDone),
       dayEndDone: Boolean(data?.dayEndDone ?? data?.DayEndDone),
       dayStartId: data?.dayStartId ?? data?.DayStartId ?? null,
@@ -99,15 +101,15 @@ export async function fetchShelfDayStocktakeStatus(date) {
     }
   } catch {
     // Fallback khi BE chưa có endpoint: suy ra từ danh sách phiếu Shelf của mình.
-    return fetchShelfDayStocktakeStatusFallback()
+    return fetchShelfDayStocktakeStatusFallback(day)
   }
 }
 
-async function fetchShelfDayStocktakeStatusFallback() {
+async function fetchShelfDayStocktakeStatusFallback(day) {
   const { vietnamTodayDateInput, SHELF_DAY_START_REASON, SHELF_DAY_END_REASON } = await import(
     '../../pos/utils/submitDailyShelfStocktake.js'
   )
-  const today = vietnamTodayDateInput()
+  const today = day || vietnamTodayDateInput()
   const paged = await fetchStocktakeRequests({
     location: 'Shelf',
     mine: true,
@@ -131,15 +133,10 @@ async function fetchShelfDayStocktakeStatusFallback() {
       || String(reason || '').includes(SHELF_DAY_END_REASON)
   }
 
-  const sameDay = (row) => {
-    const countDate = String(row.countDate || '').slice(0, 10)
-    if (!countDate) return true
-    // Cho phép lệch 1 ngày UTC vs VN.
-    return countDate === today || countDate >= today
-  }
+  const sameDay = (row) => String(row.countDate || '').slice(0, 10) === today
 
-  const dayStart = active.find((row) => isStart(row.reason) && sameDay(row)) || active.find((row) => isStart(row.reason))
-  const dayEnd = active.find((row) => isEnd(row.reason) && sameDay(row)) || active.find((row) => isEnd(row.reason))
+  const dayStart = active.find((row) => isStart(row.reason) && sameDay(row))
+  const dayEnd = active.find((row) => isEnd(row.reason) && sameDay(row))
   return {
     date: today,
     dayStartDone: Boolean(dayStart),
@@ -148,6 +145,24 @@ async function fetchShelfDayStocktakeStatusFallback() {
     dayStartRequestCode: dayStart?.requestCode || '',
     dayEndId: dayEnd?.id || null,
     dayEndRequestCode: dayEnd?.requestCode || '',
+  }
+}
+
+/** Gộp status API với optimistic local — chỉ giữ optimistic trong cùng ngày VN. */
+export function mergeShelfDayStatus(prev, status) {
+  const apiDate = status?.date ? String(status.date).slice(0, 10) : null
+  const prevDate = prev?.date ? String(prev.date).slice(0, 10) : null
+  const sameDay = Boolean(apiDate && prevDate && apiDate === prevDate)
+
+  return {
+    ...status,
+    date: apiDate || prevDate || null,
+    dayStartDone: Boolean(status?.dayStartDone || (sameDay && prev?.dayStartDone)),
+    dayEndDone: Boolean(status?.dayEndDone || (sameDay && prev?.dayEndDone)),
+    dayStartId: status?.dayStartId ?? (sameDay ? prev?.dayStartId : null) ?? null,
+    dayStartRequestCode: status?.dayStartRequestCode || (sameDay ? prev?.dayStartRequestCode : '') || '',
+    dayEndId: status?.dayEndId ?? (sameDay ? prev?.dayEndId : null) ?? null,
+    dayEndRequestCode: status?.dayEndRequestCode || (sameDay ? prev?.dayEndRequestCode : '') || '',
   }
 }
 

@@ -6,9 +6,10 @@ import {
   canUsePosCounterMode,
   canViewAllOrders,
 } from '../../auth/utils/permissions.js'
-import { fetchShelfDayStocktakeStatus } from '../../inventory/services/stocktakeApi.js'
+import { fetchShelfDayStocktakeStatus, mergeShelfDayStatus } from '../../inventory/services/stocktakeApi.js'
 import { fetchOnDutyShift } from '../../shifts/services/shiftsApi.js'
 import { shiftDisplayName } from '../utils/shiftDisplayName.js'
+import { vietnamTodayDateInput } from '../utils/submitDailyShelfStocktake.js'
 import PosDailyShelfCountScreen from './PosDailyShelfCountScreen.jsx'
 
 const BYPASSED_DUTY = { bypassed: true }
@@ -73,6 +74,7 @@ export default function PosShiftDutyGate({
   const [checking, setChecking] = useState(!bypass)
   const [error, setError] = useState('')
   const [dayStatus, setDayStatus] = useState({
+    date: null,
     dayStartDone: bypass,
     dayEndDone: false,
   })
@@ -81,9 +83,17 @@ export default function PosShiftDutyGate({
 
   const dutyName = shiftDisplayName(onDuty)
 
+  const applyDayStatus = useCallback((status) => {
+    setDayStatus((prev) => {
+      const next = mergeShelfDayStatus(prev, status)
+      onDayStatusChange?.(next)
+      return next
+    })
+  }, [onDayStatusChange])
+
   const refreshDayStatus = useCallback(async () => {
     if (bypass) {
-      const status = { dayStartDone: true, dayEndDone: false }
+      const status = { date: vietnamTodayDateInput(), dayStartDone: true, dayEndDone: false }
       setDayStatus(status)
       onDayStatusChange?.(status)
       setDayStatusLoading(false)
@@ -98,15 +108,7 @@ export default function PosShiftDutyGate({
     setDayStatusLoading(true)
     try {
       const status = await fetchShelfDayStocktakeStatus()
-      setDayStatus((prev) => {
-        const next = {
-          ...status,
-          dayStartDone: Boolean(status.dayStartDone || prev.dayStartDone),
-          dayEndDone: Boolean(status.dayEndDone || prev.dayEndDone),
-        }
-        onDayStatusChange?.(next)
-        return next
-      })
+      applyDayStatus(status)
       return status
     } catch (err) {
       setError(err?.message || 'Không kiểm tra được trạng thái kiểm kê ngày.')
@@ -114,12 +116,13 @@ export default function PosShiftDutyGate({
     } finally {
       setDayStatusLoading(false)
     }
-  }, [bypass, shelfDayApplies, onDayStatusChange])
+  }, [bypass, shelfDayApplies, onDayStatusChange, applyDayStatus])
 
   const markDayStartDoneLocal = useCallback((stocktake) => {
     setDayStatus((prev) => {
       const next = {
         ...prev,
+        date: prev.date || vietnamTodayDateInput(),
         dayStartDone: true,
         dayStartId: stocktake?.id || prev.dayStartId,
         dayStartRequestCode: stocktake?.requestCode || prev.dayStartRequestCode,
@@ -133,6 +136,7 @@ export default function PosShiftDutyGate({
     setDayStatus((prev) => {
       const next = {
         ...prev,
+        date: prev.date || vietnamTodayDateInput(),
         dayEndDone: true,
         dayEndId: stocktake?.id || prev.dayEndId,
         dayEndRequestCode: stocktake?.requestCode || prev.dayEndRequestCode,
@@ -162,7 +166,7 @@ export default function PosShiftDutyGate({
     if (bypass) {
       onDutyChange?.(BYPASSED_DUTY)
       setChecking(false)
-      const status = { dayStartDone: true, dayEndDone: false }
+      const status = { date: vietnamTodayDateInput(), dayStartDone: true, dayEndDone: false }
       setDayStatus(status)
       onDayStatusChange?.(status)
       setDayStatusLoading(false)
@@ -185,15 +189,7 @@ export default function PosShiftDutyGate({
     fetchShelfDayStocktakeStatus()
       .then((status) => {
         if (cancelled) return
-        setDayStatus((prev) => {
-          const next = {
-            ...status,
-            dayStartDone: Boolean(status.dayStartDone || prev.dayStartDone),
-            dayEndDone: Boolean(status.dayEndDone || prev.dayEndDone),
-          }
-          onDayStatusChange?.(next)
-          return next
-        })
+        applyDayStatus(status)
       })
       .catch((err) => {
         if (cancelled) return
@@ -205,17 +201,7 @@ export default function PosShiftDutyGate({
 
     const id = window.setInterval(() => {
       fetchShelfDayStocktakeStatus()
-        .then((status) => {
-          setDayStatus((prev) => {
-            const next = {
-              ...status,
-              dayStartDone: Boolean(status.dayStartDone || prev.dayStartDone),
-              dayEndDone: Boolean(status.dayEndDone || prev.dayEndDone),
-            }
-            onDayStatusChange?.(next)
-            return next
-          })
-        })
+        .then((status) => applyDayStatus(status))
         .catch(() => {})
     }, 60_000)
 
@@ -223,7 +209,7 @@ export default function PosShiftDutyGate({
       cancelled = true
       window.clearInterval(id)
     }
-  }, [bypass, shelfDayApplies, onDayStatusChange])
+  }, [bypass, shelfDayApplies, applyDayStatus])
 
   useEffect(() => {
     if (dayEndRequested && shelfDayApplies && !bypass) {
@@ -236,7 +222,6 @@ export default function PosShiftDutyGate({
 
   const dutyOk = bypass || Boolean(onDuty)
   const needsDayStart = shelfDayApplies && !dayStatus.dayStartDone
-  const dayEnded = shelfDayApplies && dayStatus.dayEndDone
 
   if (checking && !bypass && !onDuty) {
     return (
@@ -256,7 +241,7 @@ export default function PosShiftDutyGate({
           title="Cần đăng ký & được duyệt ca quầy"
           body={
             error
-            || 'Bạn chưa có ca quầy đã duyệt trong giờ hiện tại (±30 phút). POS bị khóa cho đến khi Manager duyệt ca của bạn.'
+            || 'Bạn chưa có ca quầy đã duyệt trong giờ ca hiện tại. POS bị khóa cho đến khi Manager duyệt ca của bạn.'
           }
         >
           <Link
@@ -330,24 +315,6 @@ export default function PosShiftDutyGate({
     )
   }
 
-  if (dayEnded && !cashSessionOpen) {
-    const showCod = canCod && typeof onSwitchToCod === 'function'
-    return (
-      <GateShell>
-        <GateCard eyebrow="Kiểm kê cuối ngày" title="Đã hoàn tất kiểm kê kệ cuối ngày">
-          {showCod ? (
-            <button
-              type="button"
-              onClick={onSwitchToCod}
-              className="w-full rounded-lg border border-[#c1c9c0] py-2.5 text-sm font-semibold text-[#356647] hover:bg-[#f6f4ec]"
-            >
-              Chuyển sang bán COD
-            </button>
-          ) : null}
-        </GateCard>
-      </GateShell>
-    )
-  }
-
+  // Khóa toàn app sau chốt cuối ngày do SaleWeeklyShiftGate xử lý.
   return children
 }

@@ -135,7 +135,7 @@ function AdminLayout() {
   const isViewportLocked = location.pathname === '/pos' || isStoreProductsPage
 
   const visibleSidebarItems =
-    shiftLockMode === 'hard_block' || shiftLockMode === 'checking'
+    shiftLockMode === 'hard_block' || shiftLockMode === 'checking' || shiftLockMode === 'day_end'
       ? []
       : shiftLockMode === 'register_only' || shiftLockMode === 'off_duty'
         ? sidebarItems.filter((item) => item.path === '/my-shifts' || item.module === 'my_shifts')

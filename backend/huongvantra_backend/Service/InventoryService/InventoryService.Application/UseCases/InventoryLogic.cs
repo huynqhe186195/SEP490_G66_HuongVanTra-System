@@ -3861,7 +3861,8 @@ public class InventoryLogic(
         DateTime? date,
         CancellationToken ct = default)
     {
-        var day = (date ?? DateTime.UtcNow).Date;
+        // Ngày nghiệp vụ theo giờ VN (UTC+7), tránh khóa nhầm sang ngày mới vì UtcNow.Date.
+        var day = date?.Date ?? DateTime.UtcNow.AddHours(7).Date;
         var markers = await _stocktakeRepo.GetShelfDayMarkersAsync(day, ct);
 
         static bool IsDayStart(string? reason) =>
@@ -3896,13 +3897,14 @@ public class InventoryLogic(
         var location = NormalizeInventoryLocationName(request.Location);
         var normalizedItems = await NormalizeStocktakeItemsAsync(request.Items, location, ct);
         var now = DateTime.UtcNow;
+        var businessDate = now.AddHours(7).Date;
         var countToday = await _stocktakeRepo.CountCreatedSinceAsync(now.Date, ct);
         var entity = new StocktakeRequest
         {
             Id = Guid.NewGuid(),
             RequestCode = $"KK-{now:yyyyMMdd}-{(countToday + 1):D4}",
             Location = location,
-            CountDate = request.CountDate?.Date ?? now.Date,
+            CountDate = request.CountDate?.Date ?? businessDate,
             Reason = NormalizeSnapshotText(request.Reason),
             Note = NormalizeSnapshotText(request.Note),
             Status = StocktakeStatus.Draft,

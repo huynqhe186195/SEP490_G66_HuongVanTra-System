@@ -168,7 +168,7 @@ export async function fetchMyShiftWeekStatus() {
   }
 }
 
-/** Ca quầy đã duyệt đang trong giờ (±30 phút). Null nếu chưa đủ điều kiện mở ca quỹ. */
+/** Ca quầy đã duyệt đang trong giờ ca (đúng khung giờ template). Null nếu chưa đủ điều kiện. */
 export async function fetchOnDutyShift(area = 'Shelf') {
   const params = new URLSearchParams()
   if (area) params.set('area', area)

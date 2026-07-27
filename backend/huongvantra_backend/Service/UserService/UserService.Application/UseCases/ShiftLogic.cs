@@ -40,7 +40,7 @@ public class ShiftLogic(
     }
 
     /// <summary>
-    /// Manager chỉnh giờ bắt đầu / kết thúc khung ca. Áp dụng ngay cho kiểm tra on-duty (±30 phút).
+    /// Manager chỉnh giờ bắt đầu / kết thúc khung ca. Áp dụng ngay cho kiểm tra on-duty (đúng giờ ca).
     /// </summary>
     public async Task<ShiftTemplateResponse> UpdateTemplateHoursAsync(
         Guid templateId,
@@ -443,12 +443,12 @@ public class ShiftLogic(
     }
 
     /// <summary>
-    /// Ca đã duyệt của user đang trong khung giờ (± graceMinutes). Dùng để mở ca quỹ POS / kiểm kê.
+    /// Ca đã duyệt của user đang trong khung giờ ca (graceMinutes mặc định 0 = đúng giờ bắt đầu–kết thúc).
     /// </summary>
     public async Task<OnDutyShiftResponse?> GetOnDutyAsync(
         Guid actorUserId,
         string? area = null,
-        int graceMinutes = 30)
+        int graceMinutes = 0)
     {
         var filterArea = ParseAreaOrNull(area);
         var today = VnToday();

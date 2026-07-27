@@ -36,7 +36,7 @@ public class ShiftsController(ShiftLogic shiftLogic) : ControllerBase
 
     /// <summary>Ca đã duyệt đang trong giờ của user hiện tại (null nếu chưa đến ca / chưa được duyệt).</summary>
     [HttpGet("me/on-duty")]
-    public async Task<IActionResult> GetOnDuty([FromQuery] string? area, [FromQuery] int graceMinutes = 30)
+    public async Task<IActionResult> GetOnDuty([FromQuery] string? area, [FromQuery] int graceMinutes = 0)
     {
         var result = await shiftLogic.GetOnDutyAsync(CurrentUserId, area, graceMinutes);
         return Ok(new { onDuty = result });
