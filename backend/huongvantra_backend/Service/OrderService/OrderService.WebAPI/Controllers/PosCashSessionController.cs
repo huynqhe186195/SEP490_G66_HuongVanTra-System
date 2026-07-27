@@ -29,6 +29,31 @@ public class PosCashSessionController(PosCashSessionLogic posCashSessionLogic) :
         return Ok(new CurrentPosCashSessionResponse(session));
     }
 
+    /// <summary>Lịch sử ca quỹ — Manager / Admin / Accountant.</summary>
+    [HttpGet]
+    [Authorize(Roles = "Manager,Admin,Accountant")]
+    public async Task<IActionResult> GetHistory(
+        [FromQuery] DateTime? from,
+        [FromQuery] DateTime? to,
+        [FromQuery] string? status,
+        [FromQuery] string? search,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken ct = default)
+    {
+        // `to` là ngày VN inclusive → chuyển thành mốc UTC exclusive (+1 ngày VN).
+        DateTime? fromUtc = from?.Date;
+        DateTime? toExclusive = to.HasValue ? to.Value.Date.AddDays(1) : null;
+        if (fromUtc.HasValue)
+            fromUtc = DateTime.SpecifyKind(fromUtc.Value.AddHours(-7), DateTimeKind.Utc);
+        if (toExclusive.HasValue)
+            toExclusive = DateTime.SpecifyKind(toExclusive.Value.AddHours(-7), DateTimeKind.Utc);
+
+        var result = await posCashSessionLogic.GetHistoryAsync(
+            fromUtc, toExclusive, status, search, page, pageSize, ct);
+        return Ok(result);
+    }
+
     [HttpPost("open")]
     public async Task<IActionResult> Open([FromBody] OpenPosCashSessionRequest request, CancellationToken ct)
     {

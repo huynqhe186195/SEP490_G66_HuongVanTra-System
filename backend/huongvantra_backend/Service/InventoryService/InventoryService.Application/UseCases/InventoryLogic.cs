@@ -4002,14 +4002,12 @@ public class InventoryLogic(
             foreach (var item in request.Items.OrderBy(i => i.SkuCode))
             {
                 EnsureValidStocktakeReason(item.ReasonCode);
+                // Áp chênh lệch đã đếm (Actual − Snapshot) lên tồn hiện tại — không bắt buộc
+                // tồn vẫn bằng snapshot lúc kiểm kê (cho phép bán hàng sau khi gửi duyệt).
                 var currentSystemQuantity = await GetSystemQuantityForLocationAsync(item.SkuId, location, innerCt);
-                if (currentSystemQuantity != item.SystemQuantitySnapshot)
-                {
-                    throw new InventoryValidationException(
-                        $"System quantity for SKU {item.SkuCode} changed after counting. Create a new stocktake request.");
-                }
+                var variance = item.Variance;
 
-                if (item.Variance == 0)
+                if (variance == 0)
                 {
                     ApplyStocktakeBeforeAfter(item, location, currentSystemQuantity, currentSystemQuantity);
                     continue;
@@ -4020,9 +4018,9 @@ public class InventoryLogic(
                 var warehouseBefore = location == LocationWarehouse ? currentSystemQuantity : stock.WarehouseQuantityOnHand;
                 var shelfBefore = location == LocationShelf ? currentSystemQuantity : stock.QuantityOnHand;
 
-                if (item.Variance < 0)
+                if (variance < 0)
                 {
-                    var quantity = Math.Abs(item.Variance);
+                    var quantity = Math.Abs(variance);
                     var allocations = _inventoryOptions.SimulateWarehouse
                         ? new List<StockExportBatchAllocation>()
                         : await AllocateAndDeductBatchesFifoAsync(item.SkuId, quantity, innerCt, location);
@@ -4050,7 +4048,7 @@ public class InventoryLogic(
                 }
                 else
                 {
-                    var quantity = item.Variance;
+                    var quantity = variance;
                     var lotCode = BuildStocktakeLotCode(request.RequestCode, item);
                     var batch = await CreateWarehouseBatchInternalAsync(
                         lotCode,
@@ -4148,7 +4146,7 @@ public class InventoryLogic(
     public async Task<StocktakeRequestResponse> CancelStocktakeRequestAsync(
         Guid id,
         Guid actorId,
-        bool isAdmin,
+        bool isPrivileged,
         CreatorSnapshot? actor,
         ReviewStocktakeRequest request,
         CancellationToken ct = default)
@@ -4157,8 +4155,8 @@ public class InventoryLogic(
             ?? throw new InventoryNotFoundException("Stocktake request was not found.");
         if (entity.Status == StocktakeStatus.Completed)
             throw new InventoryValidationException("Completed stocktake requests cannot be cancelled.");
-        if (!isAdmin && entity.CreatedBy != actorId)
-            throw new InventoryValidationException("Only the creator or Admin can cancel this stocktake request.");
+        if (!isPrivileged && entity.CreatedBy != actorId)
+            throw new InventoryValidationException("Only the creator, Manager, Warehouse or Admin can cancel this stocktake request.");
         var reason = NormalizeSnapshotText(request.Reason);
         if (string.IsNullOrWhiteSpace(reason))
             throw new InventoryValidationException("Cancel reason is required.");
@@ -4172,6 +4170,51 @@ public class InventoryLogic(
         entity.UpdatedAt = DateTime.UtcNow;
         await _stocktakeRepo.SaveChangesAsync(ct);
         return MapStocktakeRequest(entity);
+    }
+
+    /// <summary>
+    /// Manager/Admin mở lại ngày bán: hủy marker kiểm kệ cuối ngày (Pending/Completed).
+    /// Không đảo tồn đã áp — chỉ gỡ khóa ngày để Sale tiếp tục bán.
+    /// </summary>
+    public async Task<ShelfDayStocktakeStatusResponse> ReopenShelfDayAsync(
+        DateTime? date,
+        Guid actorId,
+        CreatorSnapshot? actor,
+        ReviewStocktakeRequest request,
+        CancellationToken ct = default)
+    {
+        if (actorId == Guid.Empty)
+            throw new InventoryValidationException("Cannot identify reopen actor.");
+
+        var reason = NormalizeSnapshotText(request.Reason);
+        if (string.IsNullOrWhiteSpace(reason))
+            throw new InventoryValidationException("Lý do mở lại ngày bán là bắt buộc.");
+
+        var day = date?.Date ?? DateTime.UtcNow.AddHours(7).Date;
+        var markers = await _stocktakeRepo.GetShelfDayMarkersAsync(day, ct);
+        var dayEnds = markers
+            .Where(r => string.Equals(r.Reason?.Trim(), ShelfDayEndReason, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (dayEnds.Count == 0)
+            throw new InventoryValidationException("Không có phiếu kiểm kệ cuối ngày để mở lại.");
+
+        foreach (var marker in dayEnds)
+        {
+            var entity = await _stocktakeRepo.GetByIdAsync(marker.Id, ct)
+                ?? throw new InventoryNotFoundException("Stocktake request was not found.");
+
+            entity.Status = StocktakeStatus.Cancelled;
+            entity.ReviewedBy = actorId;
+            entity.ReviewedByName = NormalizeSnapshotText(actor?.CreatedByName);
+            entity.ReviewedByRoleName = NormalizeSnapshotText(actor?.CreatedByRoleName);
+            entity.ReviewedAt = DateTime.UtcNow;
+            entity.ReviewNote = $"Mở lại ngày bán: {reason}";
+            entity.UpdatedAt = DateTime.UtcNow;
+            await _stocktakeRepo.SaveChangesAsync(ct);
+        }
+
+        return await GetShelfDayStocktakeStatusAsync(day, ct);
     }
 
     private sealed record NormalizedStocktakeItem(

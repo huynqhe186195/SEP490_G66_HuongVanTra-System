@@ -13,12 +13,16 @@ import { fetchSkuStocks, fetchStoreSkuStocks } from '../services/inventoryStockA
 import {
   approveStocktakeRequest,
   createStocktakeRequest,
+  fetchShelfDayStocktakeStatus,
   fetchStocktakeRequestById,
   fetchStocktakeRequests,
   rejectStocktakeRequest,
+  reopenShelfDay,
   submitStocktakeRequest,
 } from '../services/stocktakeApi.js'
 import { notifyInventoryStockChanged } from '../utils/inventoryStockEvents.js'
+import { isBranchManager, isSystemAdmin } from '../../auth/utils/permissions.js'
+import { vietnamTodayDateInput } from '../../pos/utils/submitDailyShelfStocktake.js'
 
 const LOCATION_OPTIONS = [
   { value: 'Warehouse', label: 'Kho' },
@@ -698,8 +702,21 @@ function InventoryStocktakePage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [detail, setDetail] = useState(null)
+  const [shelfDay, setShelfDay] = useState(null)
+  const [isReopening, setIsReopening] = useState(false)
   const session = loadAuthSession()
   const canWrite = canWriteInventory(session)
+  const canReopenDay = isBranchManager(session) || isSystemAdmin(session)
+
+  const loadShelfDay = useCallback(async () => {
+    if (!canReopenDay) return
+    try {
+      const status = await fetchShelfDayStocktakeStatus(vietnamTodayDateInput())
+      setShelfDay(status)
+    } catch {
+      setShelfDay(null)
+    }
+  }, [canReopenDay])
 
   const loadRequests = useCallback(async () => {
     setIsLoading(true)
@@ -725,6 +742,10 @@ function InventoryStocktakePage() {
     return () => window.clearTimeout(timer)
   }, [loadRequests])
 
+  useEffect(() => {
+    loadShelfDay()
+  }, [loadShelfDay])
+
   function resetPageAndSet(setter, value) {
     setter(value)
     setPage(1)
@@ -736,6 +757,30 @@ function InventoryStocktakePage() {
       setDetail(request)
     } catch (error) {
       showError(error.message)
+    }
+  }
+
+  async function handleReopenDay() {
+    if (!shelfDay?.dayEndDone) return
+    const reason = window.prompt(
+      'Mở lại ngày bán sẽ hủy phiếu kiểm kệ cuối ngày (không đảo tồn đã duyệt). Nhập lý do:',
+      'Mở lại ngày bán',
+    )
+    if (reason === null) return
+    if (!reason.trim()) {
+      showError('Vui lòng nhập lý do mở lại ngày bán.')
+      return
+    }
+    setIsReopening(true)
+    try {
+      const next = await reopenShelfDay(reason, shelfDay.date || vietnamTodayDateInput())
+      setShelfDay(next)
+      showSuccess('Đã mở lại ngày bán — Sale có thể tiếp tục bán quầy.')
+      await loadRequests()
+    } catch (error) {
+      showError(error.message)
+    } finally {
+      setIsReopening(false)
     }
   }
 
@@ -780,6 +825,17 @@ function InventoryStocktakePage() {
         onSearchChange={(value) => resetPageAndSet(setSearchInput, value)}
         rightContent={(
           <div className="flex flex-wrap items-center gap-3">
+            {canReopenDay && shelfDay?.dayEndDone ? (
+              <button
+                type="button"
+                disabled={isReopening}
+                onClick={handleReopenDay}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm font-bold text-amber-900 hover:bg-amber-100 disabled:opacity-60"
+              >
+                <span className="material-symbols-outlined text-[18px]">lock_open</span>
+                {isReopening ? 'Đang mở lại...' : 'Mở lại ngày bán'}
+              </button>
+            ) : null}
             {canWrite ? (
               <button type="button" onClick={() => setIsCreateOpen(true)} className="inline-flex items-center gap-1.5 rounded-xl bg-[#538463] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#426d50]">
                 <span className="material-symbols-outlined text-[18px]">add</span>

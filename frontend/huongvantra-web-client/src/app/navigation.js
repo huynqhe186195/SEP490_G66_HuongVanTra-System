@@ -41,6 +41,7 @@ const HOME_MODULE_PRIORITY = [
 
 export const navigationItems = [
   { label: 'POS bán hàng', path: '/pos', module: 'pos', icon: 'point_of_sale', roles: ['agencyManager', 'salesStaff', 'customer'] },
+  { label: 'Quỹ ca POS', path: '/pos/cash-sessions', module: 'orders', icon: 'account_balance_wallet', roles: ['admin', 'agencyManager', 'accountant'] },
   {
     label: 'Đơn hàng',
     path: '/orders',
@@ -487,6 +488,7 @@ const MODULE_PATH_PREFIXES = [
   { module: 'cod_ops', prefix: '/orders/cod' },
   { module: 'stock_deduct_ops', prefix: '/orders/stock-deduct' },
   { module: 'orders', prefix: '/orders' },
+  { module: 'orders', prefix: '/pos/cash-sessions' },
   { module: 'pos', prefix: '/pos' },
   { module: 'dashboard', prefix: '/dashboard' },
 ]
@@ -742,6 +744,14 @@ export function isNavigationItemActive(pathname, item, search = '') {
   }
 
   if (item.module === 'dashboard') {
+    return path === target || path.startsWith(`${target}/`)
+  }
+
+  // POS bán hàng: không highlight khi đang ở Quỹ ca POS (/pos/cash-sessions).
+  if (item.module === 'pos' || target === '/pos') {
+    if (path === '/pos/cash-sessions' || path.startsWith('/pos/cash-sessions/')) {
+      return false
+    }
     return path === target || path.startsWith(`${target}/`)
   }
 

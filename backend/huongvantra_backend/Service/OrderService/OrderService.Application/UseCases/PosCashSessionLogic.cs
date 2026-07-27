@@ -26,6 +26,35 @@ public class PosCashSessionLogic(
         return session is null ? null : MapToResponse(session);
     }
 
+    public async Task<PagedResponse<PosCashSessionResponse>> GetHistoryAsync(
+        DateTime? fromUtc,
+        DateTime? toUtcExclusive,
+        string? status,
+        string? search,
+        int page,
+        int pageSize,
+        CancellationToken ct = default)
+    {
+        PosCashSessionStatus? parsedStatus = null;
+        if (!string.IsNullOrWhiteSpace(status)
+            && Enum.TryParse<PosCashSessionStatus>(status.Trim(), ignoreCase: true, out var st))
+        {
+            parsedStatus = st;
+        }
+
+        var safePage = Math.Max(1, page);
+        var safePageSize = Math.Clamp(pageSize, 1, 100);
+        var (items, total) = await _repo.GetPagedAsync(
+            fromUtc, toUtcExclusive, parsedStatus, search, safePage, safePageSize, ct);
+
+        return new PagedResponse<PosCashSessionResponse>(
+            items.Select(MapToResponse).ToList(),
+            safePage,
+            safePageSize,
+            total,
+            (int)Math.Ceiling(total / (double)safePageSize));
+    }
+
     public async Task<PosCashSessionResponse> OpenAsync(
         OpenPosCashSessionRequest request,
         Guid userId,

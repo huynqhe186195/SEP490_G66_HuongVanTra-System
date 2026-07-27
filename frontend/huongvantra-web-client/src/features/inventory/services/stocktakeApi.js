@@ -202,3 +202,27 @@ export async function cancelStocktakeRequest(id, reason) {
   })
   return mapStocktakeRequest(data)
 }
+
+/** Manager/Admin mở lại ngày bán — hủy marker kiểm kệ cuối ngày. */
+export async function reopenShelfDay(reason, date) {
+  const { vietnamTodayDateInput } = await import('../../pos/utils/submitDailyShelfStocktake.js')
+  const day = date || vietnamTodayDateInput()
+  const query = new URLSearchParams()
+  if (day) query.set('date', day)
+  const data = await apiRequestAuth(
+    `/api/v1/inventory/stocktake-requests/reopen-shelf-day?${query.toString()}`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ reason: reason?.trim() || null }),
+    },
+  )
+  return {
+    date: String(data?.date ?? data?.Date ?? day).slice(0, 10),
+    dayStartDone: Boolean(data?.dayStartDone ?? data?.DayStartDone),
+    dayEndDone: Boolean(data?.dayEndDone ?? data?.DayEndDone),
+    dayStartId: data?.dayStartId ?? data?.DayStartId ?? null,
+    dayStartRequestCode: data?.dayStartRequestCode ?? data?.DayStartRequestCode ?? '',
+    dayEndId: data?.dayEndId ?? data?.DayEndId ?? null,
+    dayEndRequestCode: data?.dayEndRequestCode ?? data?.DayEndRequestCode ?? '',
+  }
+}
