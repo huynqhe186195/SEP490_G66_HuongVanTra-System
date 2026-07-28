@@ -1452,7 +1452,7 @@ function PosPage() {
         : cashSessionOpen
           && shelfOnDuty
           && !shelfDayStatus.dayEndDone
-          && (isSplitPayment ? canPaySplit : isTransferPayment ? canPayTransfer : canPayCash)
+          && (isTransferPayment ? canPayTransfer : canPayCash)
           && !isSubmitting;
     const normalizedPromoSearch = promoCodeInput.trim().toUpperCase();
     const visibleAvailablePromotions = availablePromotions
