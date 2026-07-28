@@ -65,11 +65,11 @@ export const navigationItems = [
   },
   { label: 'Trả / đổi hàng', path: '/orders/exchange', module: 'orders', icon: 'swap_horiz', roles: ['admin', 'agencyManager', 'salePos', 'saleCod', 'accountant'] },
   {
-    label: 'Chờ trừ tồn quầy',
+    label: 'Chờ đóng gói / trừ Kho',
     path: '/orders/stock-deduct',
     module: 'stock_deduct_ops',
     icon: 'inventory_2',
-    roles: ['admin', 'agencyManager'],
+    roles: ['admin', 'agencyManager', 'inventoryManager'],
   },
   {
     label: 'Khách hàng',
@@ -90,13 +90,13 @@ export const navigationItems = [
   { label: 'Lịch sử tạo hàng hóa', path: '/inventory/product-approvals', module: 'product_creation_requests', icon: 'verified', roles: ['admin', 'inventoryManager'] },
   { label: 'Yêu cầu xóa hàng hóa', path: '/inventory/product-deletion-requests', module: 'product_deletion_requests', icon: 'delete_sweep', roles: ['admin', 'inventoryManager'] },
   { label: 'Kho tổng', path: '/inventory', module: 'inventory', icon: 'warehouse', roles: ['inventoryManager'] },
-  { label: 'Phiếu nhập NCC', path: '/inventory/supplier-receipts', module: 'supplier_receipts', icon: 'assignment_turned_in', roles: ['admin', 'agencyManager', 'accountant'] },
+  { label: 'Phiếu nhập NCC', path: '/inventory/supplier-receipts', module: 'supplier_receipts', icon: 'assignment_turned_in', roles: ['admin', 'agencyManager', 'accountant', 'inventoryManager'] },
   { label: 'Nhà cung cấp', path: '/inventory/suppliers', module: 'supplier_receipts', icon: 'storefront', roles: ['admin', 'agencyManager', 'accountant', 'inventoryManager'] },
   { label: 'Lô hàng nhập', path: '/inventory/batches', module: 'warehouse_batches', icon: 'inventory', roles: ['admin', 'agencyManager', 'inventoryManager', 'accountant'] },
   { label: 'Trả hàng nhập', path: '/inventory/returns', module: 'inventory_returns', icon: 'assignment_return', roles: ['admin', 'agencyManager', 'inventoryManager'] },
-  { label: 'Kiểm kê tồn kho', path: '/inventory/stocktake', module: 'inventory_stocktake', icon: 'fact_check', roles: ['admin', 'agencyManager', 'inventoryManager'] },
+  { label: 'Kiểm kê tồn kho', path: '/inventory/stocktake', module: 'inventory_stocktake', icon: 'fact_check', roles: ['admin', 'agencyManager', 'inventoryManager', 'salesStaff'] },
   { label: 'Báo cáo kho', path: '/inventory/reports', module: 'inventory_reports', icon: 'analytics', roles: ['admin', 'agencyManager', 'accountant'] },
-  { label: 'Lô sản xuất', path: '/inventory/production-orders', module: 'inventory', icon: 'precision_manufacturing', roles: ['inventoryManager'] },
+  { label: 'Lô sản xuất', path: '/inventory/production-orders', module: 'production_orders', icon: 'precision_manufacturing', roles: ['admin', 'agencyManager', 'inventoryManager'] },
   { label: 'Sổ kho', path: '/inventory/ledger', module: 'inventory_ledger', icon: 'fact_check', roles: ['admin', 'agencyManager', 'inventoryManager', 'accountant'] },
   { label: 'Định mức BOM', path: '/inventory/boms', module: 'inventory', icon: 'schema', roles: ['inventoryManager'] },
   { label: 'Đóng gói theo yêu cầu', path: '/inventory/custom-bundles', module: 'inventory', icon: 'package_2', roles: ['inventoryManager'] },
@@ -476,12 +476,14 @@ const MODULE_PATH_PREFIXES = [
   { module: 'products', prefix: '/products/categories' },
   { module: 'products', prefix: '/inventory/products' },
   { module: 'stock_adjustment_ops', prefix: '/inventory/stock-requests' },
+  { module: 'supplier_receipt_create', prefix: '/inventory/import/create' },
   { module: 'supplier_receipts', prefix: '/inventory/supplier-receipts' },
   { module: 'supplier_receipts', prefix: '/inventory/suppliers' },
   { module: 'warehouse_batches', prefix: '/inventory/batches' },
   { module: 'inventory_returns', prefix: '/inventory/return-inspections' },
   { module: 'inventory_returns', prefix: '/inventory/returns' },
   { module: 'inventory_stocktake', prefix: '/inventory/stocktake' },
+  { module: 'production_orders', prefix: '/inventory/production-orders' },
   { module: 'inventory_reports', prefix: '/inventory/reports' },
   { module: 'inventory_ledger', prefix: '/inventory/ledger' },
   { module: 'inventory', prefix: '/inventory' },
@@ -535,6 +537,14 @@ export function canAccessModule(session, module) {
       || session.permissions.includes('MANAGE_ROLE')
     return session.permissions.includes('VIEW_ORDER')
       && (canViewAll || session.permissions.includes('CREATE_POS_ORDER'))
+  }
+
+  if (String(module).toLowerCase() === 'supplier_receipt_create') {
+    if (!session?.roles?.length) return false
+    return (
+      hasAnyRoleGroup(session.roles, ['inventoryManager'])
+      && !hasAnyRoleGroup(session.roles, ['admin'])
+    )
   }
 
   if (String(module).toLowerCase() === 'inventory') {
@@ -602,13 +612,25 @@ function isSaleCodOnlySession(session) {
   )
 }
 
-/** Xem danh sách / preview hàng chờ trừ tồn quầy (Manager/Admin). */
+/** Xem danh sách / preview Queue đóng gói - Warehouse, Manager, Admin. */
 export function canViewStockDeductOps(session) {
   return canAccessModule(session, 'stock_deduct_ops')
 }
 
-/** Xác nhận trừ tồn quầy - chỉ Admin và Manager. */
+/** Xác nhận Queue đóng gói / trừ Kho - chỉ Warehouse. */
 export function canConfirmStockDeduct(session) {
+  if (!session?.roles?.length) {
+    return false
+  }
+
+  return (
+    hasAnyRoleGroup(session.roles, ['inventoryManager'])
+    && !hasAnyRoleGroup(session.roles, ['admin'])
+  )
+}
+
+/** Hủy Queue là xử lý ngoại lệ/escalation của Manager hoặc Admin. */
+export function canCancelStockDeduct(session) {
   if (!session?.roles?.length) {
     return false
   }
@@ -625,7 +647,10 @@ export function getAccessDeniedMessage(pathname) {
     return 'Chỉ Sale COD hoặc Quản lý chi nhánh mới được truy cập Quản lý COD.'
   }
   if (module === 'stock_deduct_ops') {
-    return 'Chỉ Quản lý chi nhánh hoặc Admin mới được xử lý hàng chờ trừ tồn quầy.'
+    return 'Chỉ Thủ kho xác nhận đóng gói/trừ Kho; Quản lý hoặc Admin chỉ xử lý ngoại lệ.'
+  }
+  if (module === 'supplier_receipt_create') {
+    return 'Chỉ Thủ kho được tạo hoặc gửi Phiếu nhập nhà cung cấp.'
   }
   if (module === 'inventory') {
     return 'Chỉ Thủ kho Kho tổng mới được truy cập module kho tổng.'

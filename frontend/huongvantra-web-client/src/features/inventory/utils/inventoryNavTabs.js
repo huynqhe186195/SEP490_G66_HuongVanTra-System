@@ -72,7 +72,7 @@ export function getInventoryNavTabs(session) {
   if (isWarehouseRole(session)) {
     tabs.push(...warehouseNavTabs)
   }
-  if (isSystemAdmin(session) || isManagerLike(session) || accountant) {
+  if (isSystemAdmin(session) || isManagerLike(session) || isWarehouseRole(session) || accountant) {
     tabs.push(supplierReceiptNavTab)
   }
   if (isSystemAdmin(session) || isManagerLike(session) || isWarehouseRole(session)) {

@@ -4,7 +4,7 @@ import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { formatStockQuantity } from '../../products/utils/productDisplay.js'
-import { isSystemAdmin } from '../../auth/utils/permissions.js'
+import { canOperateSupplierReceipt } from '../../auth/utils/permissions.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import { fetchAllActiveSkus } from '../../products/services/productSkusApi.js'
 import { fetchProducts } from '../../products/services/productsApi.js'
@@ -64,15 +64,6 @@ function getInventoryUnitLabel(unit) {
 
 function defaultSubmittedUnit(unit) {
   return unit === 'Gram' ? 'kg' : 'piece'
-}
-
-function normalizeRole(role) {
-  return String(role || '').trim().toLowerCase().replace(/[._-]+/g, ' ').replace(/\s+/g, ' ')
-}
-
-function canManageSupplierReceipt(session) {
-  if (isSystemAdmin(session)) return true
-  return (session?.roles ?? []).some((role) => ['manager', 'agency manager', 'branch manager', 'owner', 'warehouse', 'thủ kho'].includes(normalizeRole(role)))
 }
 
 function getSkuSnapshotName(sku) {
@@ -306,7 +297,7 @@ function SkuSearchPicker({ disabled, duplicate, hasError, onSelect, sku, skus })
 
 function InventoryImportCreatePage() {
   const navigate = useNavigate()
-  const canManage = canManageSupplierReceipt(loadAuthSession())
+  const canManage = canOperateSupplierReceipt(loadAuthSession())
   const [skus, setSkus] = useState([])
   const [suppliers, setSuppliers] = useState([])
   const [header, setHeader] = useState(EMPTY_HEADER)
@@ -516,7 +507,7 @@ function InventoryImportCreatePage() {
 
   async function saveReceipt(submitForApproval) {
     if (!canManage) {
-      showError('Chỉ Thủ kho, Manager hoặc Admin được tạo phiếu nhập nhà cung cấp.')
+      showError('Chỉ Thủ kho được tạo hoặc gửi phiếu nhập nhà cung cấp.')
       return
     }
     const headerOk = validateHeader()
@@ -593,7 +584,7 @@ function InventoryImportCreatePage() {
 
       {!canManage ? (
         <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          Chỉ Thủ kho, Manager hoặc Admin được tạo phiếu nhập nhà cung cấp.
+          Chỉ Thủ kho được tạo hoặc gửi phiếu nhập nhà cung cấp.
         </p>
       ) : null}
 

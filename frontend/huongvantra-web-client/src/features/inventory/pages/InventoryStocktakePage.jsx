@@ -8,7 +8,13 @@ import { formatStockQuantity } from '../../products/utils/productDisplay.js'
 import { fetchAllActiveSkus, fetchAllActiveStoreSkus } from '../../products/services/productSkusApi.js'
 import { PRODUCT_TYPE, getProductTypeLabel } from '../../products/utils/productTypes.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
-import { isWarehouseRole, canWriteInventory } from '../../auth/utils/permissions.js'
+import {
+  canCreateShelfStocktake,
+  canCreateWarehouseStocktake,
+  canReviewStocktake,
+  isBranchManager,
+  isSystemAdmin,
+} from '../../auth/utils/permissions.js'
 import { fetchSkuStocks, fetchStoreSkuStocks } from '../services/inventoryStockApi.js'
 import {
   approveStocktakeRequest,
@@ -21,7 +27,6 @@ import {
   submitStocktakeRequest,
 } from '../services/stocktakeApi.js'
 import { notifyInventoryStockChanged } from '../utils/inventoryStockEvents.js'
-import { isBranchManager, isSystemAdmin } from '../../auth/utils/permissions.js'
 import { vietnamTodayDateInput } from '../../pos/utils/submitDailyShelfStocktake.js'
 
 const LOCATION_OPTIONS = [
@@ -148,7 +153,7 @@ function buildStocktakeCsvRows(request) {
   ]
 }
 
-function StocktakeDetailModal({ request, onClose, onAction, canWrite = true }) {
+function StocktakeDetailModal({ request, onClose, onAction, canSubmit = false, canReview = false }) {
   if (!request) return null
 
   return (
@@ -238,16 +243,16 @@ function StocktakeDetailModal({ request, onClose, onAction, canWrite = true }) {
           <div className="flex flex-wrap justify-end gap-2">
             {/* Chỉ nháp mới gửi duyệt. Đã từ chối / hoàn thành / hủy — không gửi lại từ đây. */}
             {request.status === 'Draft' ? (
-              <button type="button" disabled={!canWrite} onClick={() => onAction('submit', request)} className="rounded-xl bg-amber-600 px-4 py-2 text-sm font-bold text-white hover:bg-amber-700 disabled:opacity-50">
+              <button type="button" disabled={!canSubmit} onClick={() => onAction('submit', request)} className="rounded-xl bg-amber-600 px-4 py-2 text-sm font-bold text-white hover:bg-amber-700 disabled:opacity-50">
                 Gửi duyệt
               </button>
             ) : null}
             {request.status === 'PendingApproval' ? (
               <>
-                <button type="button" disabled={!canWrite} onClick={() => onAction('reject', request)} className="rounded-xl border border-rose-200 px-4 py-2 text-sm font-bold text-rose-700 hover:bg-rose-50 disabled:opacity-50">
+                <button type="button" disabled={!canReview} onClick={() => onAction('reject', request)} className="rounded-xl border border-rose-200 px-4 py-2 text-sm font-bold text-rose-700 hover:bg-rose-50 disabled:opacity-50">
                   Từ chối
                 </button>
-                <button type="button" disabled={!canWrite} onClick={() => onAction('approve', request)} className="rounded-xl bg-[#538463] px-4 py-2 text-sm font-bold text-white hover:bg-[#426d50] disabled:opacity-50">
+                <button type="button" disabled={!canReview} onClick={() => onAction('approve', request)} className="rounded-xl bg-[#538463] px-4 py-2 text-sm font-bold text-white hover:bg-[#426d50] disabled:opacity-50">
                   Duyệt và áp tồn
                 </button>
               </>
@@ -259,8 +264,8 @@ function StocktakeDetailModal({ request, onClose, onAction, canWrite = true }) {
   )
 }
 
-function CreateStocktakeModal({ onClose, onSaved }) {
-  const [location, setLocation] = useState('Warehouse')
+function CreateStocktakeModal({ onClose, onSaved, fixedLocation }) {
+  const location = fixedLocation
   const [countDate, setCountDate] = useState(new Date().toISOString().slice(0, 10))
   const [reason, setReason] = useState('')
   const [note, setNote] = useState('')
@@ -283,7 +288,7 @@ function CreateStocktakeModal({ onClose, onSaved }) {
     async function loadOptions() {
       setIsLoading(true)
       try {
-        const isWarehouse = isWarehouseRole(loadAuthSession())
+        const isWarehouse = location === 'Warehouse'
         const [skuItems, stockItems] = await Promise.all([
           isWarehouse ? fetchAllActiveSkus(200) : fetchAllActiveStoreSkus(200),
           isWarehouse ? fetchSkuStocks() : fetchStoreSkuStocks(),
@@ -299,7 +304,7 @@ function CreateStocktakeModal({ onClose, onSaved }) {
     }
     loadOptions()
     return () => { mounted = false }
-  }, [])
+  }, [location])
 
   const skuById = useMemo(() => new Map(skus.map((sku) => [sku.id, sku])), [skus])
   const eligibleSkus = useMemo(
@@ -383,13 +388,6 @@ function CreateStocktakeModal({ onClose, onSaved }) {
         note: '',
       },
     ])
-    setSelectedSkuId('')
-    setSkuSearch('')
-    setIsSkuComboboxOpen(false)
-  }
-
-  function handleLocationChange(value) {
-    setLocation(value)
     setSelectedSkuId('')
     setSkuSearch('')
     setIsSkuComboboxOpen(false)
@@ -529,12 +527,10 @@ function CreateStocktakeModal({ onClose, onSaved }) {
 
         <div className="custom-scrollbar flex-1 overflow-y-auto p-6">
           <div className="grid gap-4 md:grid-cols-4">
-            <label className="space-y-1">
+            <div className="space-y-1">
               <span className="text-xs font-semibold uppercase text-slate-500">Vị trí kiểm kê</span>
-              <select value={location} onChange={(event) => handleLocationChange(event.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm">
-                {LOCATION_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-              </select>
-            </label>
+              <div className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">{getLocationLabel(location)}</div>
+            </div>
             <label className="space-y-1">
               <span className="text-xs font-semibold uppercase text-slate-500">Ngày kiểm kê</span>
               <input type="date" value={countDate} onChange={(event) => setCountDate(event.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" />
@@ -705,7 +701,11 @@ function InventoryStocktakePage() {
   const [shelfDay, setShelfDay] = useState(null)
   const [isReopening, setIsReopening] = useState(false)
   const session = loadAuthSession()
-  const canWrite = canWriteInventory(session)
+  const canCreateWarehouse = canCreateWarehouseStocktake(session)
+  const canCreateShelf = canCreateShelfStocktake(session)
+  const canCreate = canCreateWarehouse || canCreateShelf
+  const canReview = canReviewStocktake(session)
+  const fixedLocation = canCreateWarehouse ? 'Warehouse' : canCreateShelf ? 'Shelf' : null
   const canReopenDay = isBranchManager(session) || isSystemAdmin(session)
 
   const loadShelfDay = useCallback(async () => {
@@ -724,7 +724,7 @@ function InventoryStocktakePage() {
       const result = await fetchStocktakeRequests({
         search: searchInput.trim() || undefined,
         status: status || undefined,
-        location: location || undefined,
+        location: fixedLocation || location || undefined,
         page,
         pageSize,
       })
@@ -735,7 +735,7 @@ function InventoryStocktakePage() {
     } finally {
       setIsLoading(false)
     }
-  }, [location, page, pageSize, searchInput, status])
+  }, [fixedLocation, location, page, pageSize, searchInput, status])
 
   useEffect(() => {
     const timer = window.setTimeout(loadRequests, 250)
@@ -836,7 +836,7 @@ function InventoryStocktakePage() {
                 {isReopening ? 'Đang mở lại...' : 'Mở lại ngày bán'}
               </button>
             ) : null}
-            {canWrite ? (
+            {canCreate ? (
               <button type="button" onClick={() => setIsCreateOpen(true)} className="inline-flex items-center gap-1.5 rounded-xl bg-[#538463] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#426d50]">
                 <span className="material-symbols-outlined text-[18px]">add</span>
                 Tạo phiếu kiểm kê
@@ -850,7 +850,7 @@ function InventoryStocktakePage() {
         <select className="rounded-xl border border-slate-200 px-3 py-2 text-sm" value={status} onChange={(event) => resetPageAndSet(setStatus, event.target.value)}>
           {STATUS_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
         </select>
-        <select className="rounded-xl border border-slate-200 px-3 py-2 text-sm" value={location} onChange={(event) => resetPageAndSet(setLocation, event.target.value)}>
+        <select className="rounded-xl border border-slate-200 px-3 py-2 text-sm" value={fixedLocation || location} disabled={Boolean(fixedLocation)} onChange={(event) => resetPageAndSet(setLocation, event.target.value)}>
           <option value="">Tất cả vị trí</option>
           {LOCATION_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
         </select>
@@ -931,6 +931,7 @@ function InventoryStocktakePage() {
       {isCreateOpen ? (
         <CreateStocktakeModal
           onClose={() => setIsCreateOpen(false)}
+          fixedLocation={fixedLocation}
           onSaved={() => {
             setPage(1)
             loadRequests()
@@ -942,7 +943,8 @@ function InventoryStocktakePage() {
           request={detail}
           onClose={() => setDetail(null)}
           onAction={handleAction}
-          canWrite={canWrite}
+          canSubmit={canCreate}
+          canReview={canReview}
         />
       ) : null}
     </PageShell>

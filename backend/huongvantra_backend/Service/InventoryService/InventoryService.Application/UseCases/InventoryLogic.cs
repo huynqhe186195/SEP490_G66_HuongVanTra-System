@@ -3318,8 +3318,8 @@ public class InventoryLogic(
         var receipt = await _supplierReceiptRepo.GetByIdAsync(id, ct)
             ?? throw new InventoryNotFoundException("Không tìm thấy phiếu nhập nhà cung cấp.");
 
-        if (receipt.Status is SupplierReceiptStatus.Completed or SupplierReceiptStatus.Cancelled)
-            throw new InventoryValidationException("Phiếu nhập đã hoàn tất hoặc đã hủy, không thể hủy lại.");
+        if (receipt.Status != SupplierReceiptStatus.Draft)
+            throw new InventoryValidationException("Chỉ được hủy phiếu nhập ở trạng thái Draft.");
 
         if (!isAdmin && receipt.CreatedBy != actorId)
             throw new InventoryValidationException("Chỉ người tạo hoặc Admin mới được hủy phiếu nhập.");

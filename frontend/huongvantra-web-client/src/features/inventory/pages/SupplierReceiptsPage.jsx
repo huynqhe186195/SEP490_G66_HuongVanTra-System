@@ -6,7 +6,7 @@ import { showError, showSuccess } from '../../../app/toast.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import { formatStockQuantity } from '../../products/utils/productDisplay.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
-import { canReviewSupplierReceipt, canWriteInventory } from '../../auth/utils/permissions.js'
+import { canOperateSupplierReceipt, canReviewSupplierReceipt } from '../../auth/utils/permissions.js'
 import InventoryNavTabs from '../components/InventoryNavTabs.jsx'
 import {
   approveSupplierReceipt,
@@ -59,7 +59,7 @@ function SupplierReceiptsPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [actionId, setActionId] = useState(null)
   const session = loadAuthSession()
-  const canWrite = canWriteInventory(session)
+  const canOperate = canOperateSupplierReceipt(session)
   const canReview = canReviewSupplierReceipt(session)
   const currentUserId = session?.userId ?? null
 
@@ -145,7 +145,7 @@ function SupplierReceiptsPage() {
         rightContent={(
           <InventoryNavTabs
             actions={
-              canWrite
+              canOperate
                 ? [{ label: 'Tạo phiếu nhập', icon: 'add', to: '/inventory/import/create' }]
                 : []
             }
@@ -212,7 +212,7 @@ function SupplierReceiptsPage() {
                         >
                           Chi tiết
                         </button>
-                        {canWrite && isOwnReceipt(receipt) && (receipt.status === 'draft' || receipt.status === 'rejected') ? (
+                        {canOperate && isOwnReceipt(receipt) && (receipt.status === 'draft' || receipt.status === 'rejected') ? (
                           <button
                             type="button"
                             disabled={Boolean(actionId)}
@@ -242,7 +242,7 @@ function SupplierReceiptsPage() {
                             </button>
                           </>
                         ) : null}
-                        {canWrite && (receipt.status === 'draft' || receipt.status === 'pendingapproval' || receipt.status === 'rejected') ? (
+                        {canOperate && isOwnReceipt(receipt) && receipt.status === 'draft' ? (
                           <button
                             type="button"
                             disabled={Boolean(actionId)}
