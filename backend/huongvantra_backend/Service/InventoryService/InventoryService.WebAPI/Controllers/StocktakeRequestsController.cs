@@ -67,6 +67,33 @@ public class StocktakeRequestsController(InventoryLogic _logic) : ControllerBase
         return Ok(InventoryLogic.GetStocktakeReasonCodes());
     }
 
+    /// <summary>
+    /// Trạng thái kiểm kê kệ đầu/cuối ngày (toàn cửa hàng — không giới hạn theo người tạo).
+    /// </summary>
+    [HttpGet("shelf-day-status")]
+    public async Task<IActionResult> GetShelfDayStatus([FromQuery] DateTime? date, CancellationToken ct)
+    {
+        if (!IsPrivilegedStocktakeRole && !IsSaleActor)
+            return Forbid();
+
+        return Ok(await _logic.GetShelfDayStocktakeStatusAsync(date, ct));
+    }
+
+    /// <summary>Manager/Admin mở lại ngày bán — hủy marker kiểm kệ cuối ngày.</summary>
+    [HttpPost("reopen-shelf-day")]
+    [Authorize(Roles = "Manager,Admin")]
+    public async Task<IActionResult> ReopenShelfDay(
+        [FromBody] ReviewStocktakeRequest request,
+        [FromQuery] DateTime? date,
+        CancellationToken ct)
+    {
+        var userId = User.GetUserId();
+        if (userId == Guid.Empty)
+            return Unauthorized(new { message = "Khong xac dinh duoc nguoi dung." });
+
+        return Ok(await _logic.ReopenShelfDayAsync(date, userId, User.ToCreatorSnapshot(), request, ct));
+    }
+
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
     {
@@ -161,7 +188,8 @@ public class StocktakeRequestsController(InventoryLogic _logic) : ControllerBase
                 return Forbid();
         }
 
-        var result = await _logic.CancelStocktakeRequestAsync(id, userId, User.IsInRole("Admin"), User.ToCreatorSnapshot(), request, ct);
+        var result = await _logic.CancelStocktakeRequestAsync(
+            id, userId, canPrivileged, User.ToCreatorSnapshot(), request, ct);
         return Ok(result);
     }
 }

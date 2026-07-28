@@ -185,3 +185,74 @@ export async function cancelStockDeductQueue(queueId, reason = '') {
   })
   return mapConfirmResult(data)
 }
+
+// POS-04 (truy vết giữ chỗ): nhãn tiếng Việt cho StockReservationStatus.
+export const RESERVATION_STATUS_LABELS = {
+  Active: 'Đang giữ chỗ',
+  Released: 'Đã giải phóng',
+  Deducted: 'Đã chuyển thành xuất kho',
+  None: 'Chưa giữ chỗ',
+}
+
+export function reservationStatusLabel(status) {
+  return RESERVATION_STATUS_LABELS[String(status || '')] || 'Không xác định'
+}
+
+function mapReservationLine(item) {
+  return {
+    skuId: item.skuId ?? item.SkuId,
+    skuCode: item.skuCode ?? item.SkuCode ?? '',
+    skuName: item.skuName ?? item.SkuName ?? '',
+    orderedQuantity: Number(item.orderedQuantity ?? item.OrderedQuantity ?? 0),
+    reservedQuantity: Number(item.reservedQuantity ?? item.ReservedQuantity ?? 0),
+    reservationStatus: String(item.reservationStatus ?? item.ReservationStatus ?? ''),
+    reservedAt: item.reservedAt ?? item.ReservedAt ?? null,
+    releasedAt: item.releasedAt ?? item.ReleasedAt ?? null,
+    deductedAt: item.deductedAt ?? item.DeductedAt ?? null,
+  }
+}
+
+export async function fetchOrderCodReservations(orderId) {
+  const data = await requestWithAuth(
+    `/api/stock-deduct-queue/reservations/by-order/${encodeURIComponent(orderId)}`,
+    { method: 'GET' },
+  )
+  return {
+    orderId: data?.orderId ?? data?.OrderId ?? orderId,
+    queueId: data?.queueId ?? data?.QueueId ?? null,
+    orderCode: data?.orderCode ?? data?.OrderCode ?? '',
+    queueStatus: String(data?.queueStatus ?? data?.QueueStatus ?? '').toLowerCase(),
+    orderStockStatus: String(data?.orderStockStatus ?? data?.OrderStockStatus ?? '').toLowerCase(),
+    hasActiveReservation: Boolean(data?.hasActiveReservation ?? data?.HasActiveReservation ?? false),
+    totalActiveReservedQuantity: Number(
+      data?.totalActiveReservedQuantity ?? data?.TotalActiveReservedQuantity ?? 0,
+    ),
+    lines: (data?.lines ?? data?.Lines ?? []).map(mapReservationLine),
+  }
+}
+
+export async function fetchSkuCodReservations(skuId) {
+  const data = await requestWithAuth(
+    `/api/stock-deduct-queue/reservations/by-sku/${encodeURIComponent(skuId)}`,
+    { method: 'GET' },
+  )
+  return {
+    skuId: data?.skuId ?? data?.SkuId ?? skuId,
+    totalActiveReservedQuantity: Number(
+      data?.totalActiveReservedQuantity ?? data?.TotalActiveReservedQuantity ?? 0,
+    ),
+    skuStockReservedQuantity: Number(
+      data?.skuStockReservedQuantity ?? data?.SkuStockReservedQuantity ?? 0,
+    ),
+    orders: (data?.orders ?? data?.Orders ?? []).map((item) => ({
+      orderId: item.orderId ?? item.OrderId,
+      orderCode: item.orderCode ?? item.OrderCode ?? '',
+      customerSnapshotName: item.customerSnapshotName ?? item.CustomerSnapshotName ?? '',
+      reservedQuantity: Number(item.reservedQuantity ?? item.ReservedQuantity ?? 0),
+      reservedAt: item.reservedAt ?? item.ReservedAt ?? null,
+      orderPaymentStatus: String(item.orderPaymentStatus ?? item.OrderPaymentStatus ?? '').toLowerCase(),
+      queueStatus: String(item.queueStatus ?? item.QueueStatus ?? '').toLowerCase(),
+      reservationStatus: String(item.reservationStatus ?? item.ReservationStatus ?? ''),
+    })),
+  }
+}

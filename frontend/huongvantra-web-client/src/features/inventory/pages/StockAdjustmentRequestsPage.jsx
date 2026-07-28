@@ -223,7 +223,7 @@ function CreateStockRequestModal({ onClose, onSubmitted }) {
       : `${skuOptions.length} SKU`
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+    <div className="inventory-modal fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
       <div
         className="flex max-h-[min(90dvh,720px)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl"
         style={{ fontFamily: "'Times New Roman', Times, serif" }}
@@ -435,7 +435,7 @@ function ApproveStockRequestModal({ request, onClose, onConfirm, isSaving }) {
   const requestCode = request.requestCode || '—'
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+    <div className="inventory-modal fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
       <div className="flex max-h-[min(90dvh,720px)] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl">
         <div className="flex shrink-0 items-start justify-between border-b border-slate-100 px-6 py-4">
           <div>
@@ -729,7 +729,7 @@ function StockAdjustmentRequestsPage() {
     <PageShell>
       <PageHeader
         title="Yêu cầu bổ sung tồn quầy"
-        description={
+        titleInfo={
           canReview
             ? 'Thủ kho Kho tổng hoặc Admin duyệt yêu cầu điều chuyển từ Kho tổng sang Tồn quầy POS mặc định.'
             : 'Manager gửi yêu cầu bổ sung tồn quầy POS mặc định từ Kho tổng.'
@@ -887,7 +887,7 @@ function StockAdjustmentRequestsPage() {
       </div>
 
       {rejectTarget ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+        <div className="inventory-modal fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
             <h3 className="text-lg font-bold text-slate-800">Từ chối yêu cầu {rejectTarget.requestCode}</h3>
             <p className="mt-2 text-sm text-slate-600">
@@ -935,7 +935,7 @@ function StockAdjustmentRequestsPage() {
       ) : null}
 
       {cancelTarget ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+        <div className="inventory-modal fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
             <h3 className="text-lg font-bold text-slate-800">Hủy yêu cầu {cancelTarget.requestCode}</h3>
             <p className="mt-2 text-sm text-slate-600">Hủy yêu cầu đang chờ duyệt, không thay đổi tồn kho.</p>

@@ -1,9 +1,8 @@
-import { apiRequestAuth } from '../../../lib/apiClient.js'
+import { apiRequestAuth, toPagedResult } from '../../../lib/apiClient.js'
 
-export function normalizeCashSession(raw) {
+export function mapCashSession(raw) {
   if (!raw || typeof raw !== 'object') return null
-  const status = raw.status ?? raw.Status
-  if (status && status !== 'Open') return null
+  const status = raw.status ?? raw.Status ?? ''
   return {
     id: String(raw.id ?? raw.Id ?? ''),
     status: status || 'Open',
@@ -27,10 +26,33 @@ export function normalizeCashSession(raw) {
   }
 }
 
+export function normalizeCashSession(raw) {
+  if (!raw || typeof raw !== 'object') return null
+  const status = raw.status ?? raw.Status
+  if (status && status !== 'Open') return null
+  return mapCashSession(raw)
+}
+
 export async function fetchCurrentCashSession() {
   const data = await apiRequestAuth('/api/pos/cash-sessions/current')
   const session = data?.session ?? data?.Session ?? null
   return normalizeCashSession(session)
+}
+
+export async function fetchCashSessionHistory(params = {}) {
+  const query = new URLSearchParams()
+  if (params.from) query.set('from', params.from)
+  if (params.to) query.set('to', params.to)
+  if (params.status) query.set('status', params.status)
+  if (params.search?.trim()) query.set('search', params.search.trim())
+  query.set('page', String(params.page ?? 1))
+  query.set('pageSize', String(params.pageSize ?? 20))
+  const data = await apiRequestAuth(`/api/pos/cash-sessions?${query.toString()}`, { method: 'GET' })
+  const paged = toPagedResult(data)
+  return {
+    ...paged,
+    items: paged.items.map(mapCashSession).filter(Boolean),
+  }
 }
 
 export async function openCashSessionApi(payload) {
@@ -56,16 +78,9 @@ export async function closeCashSessionApi({ countedCash, varianceNote }) {
       varianceNote: varianceNote || null,
     }),
   })
-  // Closed session — return raw normalized without Open filter
   if (!data) return null
   return {
-    ...normalizeCashSession({ ...data, status: 'Open' }),
+    ...mapCashSession({ ...data, status: 'Closed' }),
     status: 'Closed',
-    countedCash: data.countedCash ?? data.CountedCash,
-    expectedCash: data.expectedCash ?? data.ExpectedCash,
-    variance: data.variance ?? data.Variance,
-    varianceNote: data.varianceNote ?? data.VarianceNote ?? '',
-    closedByName: data.closedByName ?? data.ClosedByName,
-    closedAt: data.closedAt ?? data.ClosedAt,
   }
 }

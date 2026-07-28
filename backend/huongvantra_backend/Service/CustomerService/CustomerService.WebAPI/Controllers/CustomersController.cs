@@ -181,7 +181,7 @@ public class CustomersController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Policy = PermissionNames.CreateCustomer)]
+    [Authorize(Policy = PermissionNames.CreateCustomerProfile)]
     public async Task<IActionResult> Create([FromBody] CreateCustomerRequest request, CancellationToken ct = default)
     {
         var result = await _logic.CreateAsync(request, AccessContext(), ct);

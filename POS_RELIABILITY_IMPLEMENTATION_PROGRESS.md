@@ -132,6 +132,23 @@ Status legend: DONE · PARTIAL · BLOCKED · NOT STARTED
 ## PHASE K — Regression & Documentation — IN PROGRESS
 - K1–K4: build affected services, run focused + regression tests (Docker fallback for InventoryService), Docker runtime/UAT, cleanup, technical + acceptance docs. Final commit: `test(pos): complete reliability regression and documentation`.
 
+## PHASE L — Post-PM adjustments — DONE (code level)
+
+The PM meeting cancelled two shipped changes. They are no longer business rules and must not be reintroduced:
+- Simultaneous cash + bank-transfer payment (split payment). Current rule: **exactly one `PaymentMethod` per Order**.
+- Sale seeing only their own Customers/Orders. Current rule: **Sale reads every Customer and Order within store scope**.
+
+- L1 — Split payment reverted. Frontend split UI removed; backend rejects multi-method checkout requests. `Payment` structures kept intact because payment history, QR callback, COD, debt, refund and audit still depend on them. No destructive migration.
+- L2 — Sale read scope restored at the backend (not a frontend-only filter): Customer search by name / phone / customer code covers the whole store, detail of another Sale's Customer opens, Order list and detail are unrestricted, duplicate-customer phone check spans the store. Frontend no longer sends `AssignedSaleId` / `EmployeeId`. **Write permissions unchanged** — editing another Sale's order, cancelling, refunding, changing debt and changing customer status still follow the existing policies.
+- L3 — Controlled receipt reprint. `OrderReceiptPrintLog` entity + migration `20260724195511_AddOrderReceiptPrintLogs` (Id, OrderId, PrintedByUserId / PrintedByEmployeeId, PrintedByName snapshot, Reason, ReprintNumber, PrintedAt, CreatedAt). Only `Completed` Orders reprintable, Reason mandatory and trimmed, exactly one audit row per valid reprint, `ReprintNumber` increments per Order, no change to total / payment / debt / promotion / inventory, not restricted to the owning Sale, double-submit handled by the existing idempotency-request convention. APIs: record-a-reprint (returns receipt data) + get-history-by-OrderId. Frontend: "In lại hóa đơn" on completed Order detail, reason modal blocking empty reason, disabled while in flight, print window opened only after the audit write succeeds, output labelled `BẢN IN LẠI` with reprint count and time. 16 facts inside the 98-test OrderService suite.
+- L4 — Bidirectional COD reservation traceability. `StockReservationStatus` enum (`None`/`Active`/`Released`/`Deducted`) + per-item `ReservedQuantity` / `ReservedAt` / `ReleasedAt` / `DeductedAt` and `StockDeductQueue.CustomerSnapshotName`; migration `20260725100000_AddCodReservationTraceability`. Four read APIs (by OrderId, active by SkuId, list of Orders with an active reservation, Order filter). Order side: list badge + `Có hàng đang giữ` filter, COD detail reservation table. SKU side: `Đơn hàng đang giữ chỗ` section on the Shelf SKU detail with a clickable order code. Snapshots come from the event contract — **no cross-service database query**. 7 facts in `CodReservationTraceabilityTests` inside the 68-test InventoryService suite.
+
+### Evidence (2026-07-25)
+- Builds: `OrderService.WebAPI`, `InventoryService.WebAPI`, `CustomerService.WebAPI` — all succeeded, 0 warnings, 0 errors.
+- `OrderService.Application.Tests` 98 / 98 pass; `InventoryService.Application.Tests` 68 / 68 pass; frontend `npm run build` succeeded.
+- `CustomerService.Application.Tests` blocked by Windows Application Control (`0x800711C7` on `CustomerService.Infrastructure.dll`) — all 16 facts fail before any test body runs. Environmental, not a code defect: build is clean, `bin`/`obj` rebuild does not clear it, and running from a directory outside the repository reproduces it. Docker fallback still required.
+- Runtime smoke tests on the live stack still outstanding — see `docs/pos-reliability-regression-matrix.md`.
+
 ---
 
 ## Resume point
@@ -139,4 +156,6 @@ Phase G: G4–G7 DONE at code level. G8 — verified at Docker gate (real-MySQL 
 Phase H: H1–H6 DONE. Reservation migration applied; COD lifecycle verified. Rolled into commit `61686a8`.
 Phase I: DONE — commits `6cb76c3`, `4ad8cb5`.
 Phase J: DONE — commits `4008142` (backend, 52/52 Docker tests), `f69f18f` (frontend, build passed).
-Next: **Phase K — Regression & Documentation** (IN PROGRESS). Then a single push to `origin/HuyTD` (fetch, verify ahead/behind, stop on divergence, never force push).
+Phase K: DONE — commit `015854b` (`test(pos): complete reliability regression and documentation`).
+Phase L: DONE at code level — three scoped commits: `fix(pos): revert split payment and restore sale visibility`, `feat(pos): add controlled receipt reprint`, `feat(inventory): add COD reservation traceability`.
+Next: runtime smoke tests on the live Docker stack, then a single push to `origin/HuyTD` (fetch, verify ahead/behind, stop on divergence, never force push).

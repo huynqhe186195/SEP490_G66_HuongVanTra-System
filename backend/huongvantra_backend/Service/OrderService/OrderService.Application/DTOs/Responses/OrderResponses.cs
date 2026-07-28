@@ -155,7 +155,9 @@ public record OrderSummaryResponse(
     bool? IsCodVerified = null,
     DateTime? CodWarningDate = null,
     decimal? CodExpectedAmount = null,
-    int TotalQuantity = 0
+    int TotalQuantity = 0,
+    // POS-04 (truy vết giữ chỗ): đơn đang giữ chỗ tồn Kệ Hàng — badge "Đang giữ hàng".
+    bool HasActiveStockReservation = false
 );
 
 public record CustomBundleIngredientResponse(
@@ -176,3 +178,41 @@ public record CustomBundleResponse(
     string PackingStatus,
     DateTime? PackedAt,
     List<CustomBundleIngredientResponse> Ingredients);
+
+public record ReceiptReprintLogResponse(
+    Guid Id,
+    Guid OrderId,
+    Guid? PrintedByUserId,
+    string? PrintedByName,
+    string Reason,
+    int ReprintNumber,
+    DateTime PrintedAt);
+
+public record ReceiptReprintItemResponse(
+    string? Sku,
+    string Name,
+    int Qty,
+    decimal Price,
+    decimal Total);
+
+public record ReceiptReprintDataResponse(
+    Guid OrderId,
+    string OrderCode,
+    string? InvoiceCode,
+    string CustomerName,
+    string PaymentMethodLabel,
+    DateTime CreatedAt,
+    string? SellerName,
+    List<ReceiptReprintItemResponse> Items,
+    decimal GrossSubtotal,
+    decimal TotalDiscount,
+    decimal Total,
+    decimal AmountPaid,
+    decimal DebtAmount,
+    bool IsReprint,
+    int ReprintNumber,
+    DateTime ReprintedAt);
+
+public record ReceiptReprintResponse(
+    ReceiptReprintLogResponse Log,
+    ReceiptReprintDataResponse Receipt);

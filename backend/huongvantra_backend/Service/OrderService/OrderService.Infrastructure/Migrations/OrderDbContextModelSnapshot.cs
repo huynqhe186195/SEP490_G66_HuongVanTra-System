@@ -308,6 +308,53 @@ namespace OrderService.Infrastructure.Migrations
                     b.ToTable("OrderDetails", (string)null);
                 });
 
+            modelBuilder.Entity("OrderService.Domain.Entities.OrderReceiptPrintLog", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("IdempotencyKey")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<DateTime>("PrintedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("PrintedByName")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<Guid?>("PrintedByUserId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<int>("ReprintNumber")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IdempotencyKey")
+                        .IsUnique()
+                        .HasFilter("`IdempotencyKey` IS NOT NULL");
+
+                    b.HasIndex("OrderId");
+
+                    b.HasIndex("OrderId", "ReprintNumber")
+                        .IsUnique();
+
+                    b.ToTable("OrderReceiptPrintLogs", (string)null);
+                });
+
             modelBuilder.Entity("OrderService.Domain.Entities.OutboxMessage", b =>
                 {
                     b.Property<Guid>("Id")
@@ -834,6 +881,17 @@ namespace OrderService.Infrastructure.Migrations
                 {
                     b.HasOne("OrderService.Domain.Entities.Order", "Order")
                         .WithMany("OrderDetails")
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Order");
+                });
+
+            modelBuilder.Entity("OrderService.Domain.Entities.OrderReceiptPrintLog", b =>
+                {
+                    b.HasOne("OrderService.Domain.Entities.Order", "Order")
+                        .WithMany()
                         .HasForeignKey("OrderId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();

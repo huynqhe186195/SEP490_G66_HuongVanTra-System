@@ -4,7 +4,7 @@ import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
 import LoadingIndicator from '../../../components/shared/LoadingIndicator.jsx'
-import { canAccessModule, canViewStockDeductOps } from '../../../app/navigation.js'
+import { canViewStockDeductOps } from '../../../app/navigation.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import { canCreateOrder } from '../../auth/utils/permissions.js'
 import { showError } from '../../../app/toast.js'
@@ -28,6 +28,8 @@ const initialFilters = {
   channel: '',
   fromDate: '',
   toDate: '',
+  // POS-04 (truy vết giữ chỗ): chỉ hiển thị đơn đang giữ chỗ tồn Kệ Hàng.
+  hasActiveReservation: false,
 }
 
 function toDateInputValue(date) {
@@ -82,10 +84,10 @@ function getQuickDateRange(type) {
 function OrdersPage() {
   const session = loadAuthSession()
   const canManage = canCreateOrder(session)
-  const canManageCod = canAccessModule(session, 'cod_ops')
   const canManageStockDeduct = canViewStockDeductOps(session)
 
   const [filters, setFilters] = useState(initialFilters)
+  const [quickDateKey, setQuickDateKey] = useState('')
   const [searchInput, setSearchInput] = useState('')
   const [orders, setOrders] = useState([])
   const [totalCount, setTotalCount] = useState(0)
@@ -102,6 +104,7 @@ function OrdersPage() {
       excludeOrderKind: 'Exchange',
       fromDate: toLocalDayStartIso(filters.fromDate),
       toDate: toLocalDayEndIso(filters.toDate),
+      hasActiveReservation: filters.hasActiveReservation || undefined,
       page,
       pageSize,
     }),
@@ -144,13 +147,19 @@ function OrdersPage() {
     }
   }, [queryParams])
 
-  const hasActiveFilters = filters.status || filters.channel || filters.search || filters.fromDate || filters.toDate
+  const hasActiveFilters =
+    filters.status ||
+    filters.channel ||
+    filters.search ||
+    filters.fromDate ||
+    filters.toDate ||
+    filters.hasActiveReservation
 
   return (
     <PageShell className="pb-8">
       <PageHeader
         title="Đơn hàng"
-        description="Theo dõi đơn đã tạo từ POS bán hàng. Tạo đơn mới tại màn POS."
+        titleInfo="Theo dõi đơn đã tạo từ POS bán hàng. Tạo đơn mới tại màn POS."
         searchPlaceholder="Tìm mã đơn, tên khách..."
         searchValue={searchInput}
         onSearchChange={setSearchInput}
@@ -205,12 +214,33 @@ function OrdersPage() {
             </select>
           </label>
 
+          <label className="min-w-[160px]">
+            <span className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-400">Khoảng thời gian</span>
+            <select
+              value={quickDateKey}
+              onChange={(e) => {
+                const key = e.target.value
+                setQuickDateKey(key)
+                setFilters((prev) => ({ ...prev, ...getQuickDateRange(key) }))
+                setPage(1)
+              }}
+              className="min-h-[44px] w-full rounded-xl border border-slate-200 bg-[#fbf9f1] px-4 py-3 text-sm outline-none focus:border-[#538463]"
+            >
+              <option value="">Tùy chọn (Từ / Đến ngày)</option>
+              <option value="today">Hôm nay</option>
+              <option value="last7">7 ngày qua</option>
+              <option value="thisMonth">Tháng này</option>
+              <option value="lastMonth">Tháng trước</option>
+            </select>
+          </label>
+
           <label className="min-w-[150px]">
             <span className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-400">Từ ngày</span>
             <input
               type="date"
               value={filters.fromDate}
               onChange={(e) => {
+                setQuickDateKey('')
                 setFilters((prev) => ({ ...prev, fromDate: e.target.value }))
                 setPage(1)
               }}
@@ -224,6 +254,7 @@ function OrdersPage() {
               type="date"
               value={filters.toDate}
               onChange={(e) => {
+                setQuickDateKey('')
                 setFilters((prev) => ({ ...prev, toDate: e.target.value }))
                 setPage(1)
               }}
@@ -231,32 +262,29 @@ function OrdersPage() {
             />
           </label>
 
-          <div className="flex flex-wrap items-center gap-2">
-            {[
-              ['today', 'Hôm nay'],
-              ['last7', '7 ngày qua'],
-              ['thisMonth', 'Tháng này'],
-              ['lastMonth', 'Tháng trước'],
-            ].map(([key, label]) => (
-              <button
-                key={key}
-                type="button"
-                onClick={() => {
-                  setFilters((prev) => ({ ...prev, ...getQuickDateRange(key) }))
-                  setPage(1)
-                }}
-                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setFilters((prev) => ({ ...prev, hasActiveReservation: !prev.hasActiveReservation }))
+              setPage(1)
+            }}
+            aria-pressed={filters.hasActiveReservation}
+            className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold ${
+              filters.hasActiveReservation
+                ? 'border-amber-300 bg-amber-100 text-amber-800'
+                : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+            }`}
+          >
+            <span className="material-symbols-outlined text-base">inventory_2</span>
+            Có hàng đang giữ
+          </button>
 
           {hasActiveFilters ? (
             <button
               type="button"
               onClick={() => {
                 setSearchInput('')
+                setQuickDateKey('')
                 setFilters(initialFilters)
                 setPage(1)
               }}
@@ -272,14 +300,6 @@ function OrdersPage() {
           >
             Đơn đổi hàng
           </Link>
-          {canManageCod ? (
-            <Link
-              className="inline-flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm font-bold text-amber-800 hover:bg-amber-100"
-              to="/orders/cod"
-            >
-              Quản lý đơn COD
-            </Link>
-          ) : null}
           {canManageStockDeduct ? (
             <Link
               className="inline-flex items-center gap-2 rounded-xl border border-[#538463]/30 bg-[#538463]/5 px-4 py-2.5 text-sm font-bold text-[#538463] hover:bg-[#538463]/10"
@@ -331,6 +351,12 @@ function OrdersPage() {
                         <Link className="hover:text-[#538463] hover:underline" to={`/orders/${order.id}`}>
                           {order.orderCode}
                         </Link>
+                        {order.hasActiveStockReservation ? (
+                          <span className="mt-1 flex w-fit items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
+                            <span className="material-symbols-outlined text-[13px]">inventory_2</span>
+                            Đang giữ hàng
+                          </span>
+                        ) : null}
                       </td>
                       <td className="px-4 py-4">
                         <OrderCustomerCell

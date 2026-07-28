@@ -174,3 +174,50 @@ Read the acceptance and UAT guide here:
     # Muốn dev ProductService với hot-reload → mở docker-compose.dev.yml, uncomment phần product-service
     # Chỉ cần infra thì không cần uncomment gì
     docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+=========================================================================================================================
+
+## Seed data mẫu (catalog + tồn kho) — sau khi pull code mới
+
+Seed **không** chạy tự động khi `docker compose up` hay khi start service. Sau khi stack MySQL + ProductService + InventoryService đã chạy (migrate xong), người mới pull code chạy seed **một lần** (hoặc khi muốn nạp lại dữ liệu mẫu).
+
+### Nội dung seed
+- Danh mục / sản phẩm / SKU mã `HVT-*` (trà thành phẩm, thảo mộc, NL, bao bì…)
+- Tồn kệ + kho, lô `HVT-LOT-*` / `HVT-SHELF-*`
+- **Không** tạo tài khoản / khách / đơn — dùng user sẵn có từ UserService
+
+### Cách chạy (Windows PowerShell)
+
+```powershell
+# 1) Đảm bảo Docker đang chạy và container MySQL tên hvt-mysql đang up
+# 2) Backend services đã start ít nhất 1 lần (để migrate tạo bảng)
+
+cd backend\huongvantra_backend\Scripts
+.\run-seed-catalog-inventory.ps1
+```
+
+Nếu tên container / mật khẩu root khác mặc định:
+
+```powershell
+.\run-seed-catalog-inventory.ps1 -MySqlContainer "hvt-mysql" -MySqlRootPassword "hvtroot123"
+```
+
+Thành công sẽ in `Seed OK.`
+
+### Xem dữ liệu sau khi seed
+- Đăng nhập FE: `manager01` / `123456` hoặc `sale01` / `123456`
+- Sản phẩm / kho: tìm mã `HVT-*`
+- POS: hard refresh (Ctrl+F5); nếu dùng offline cache thì đồng bộ lại
+
+### Tạo lại file SQL (chỉ khi sửa generator)
+
+```powershell
+cd backend\huongvantra_backend\Scripts
+node .\generate-seed-catalog-inventory.mjs
+.\run-seed-catalog-inventory.ps1
+```
+
+### Lưu ý
+- Script idempotent — chạy lại được, không cần xóa DB
+- File SQL: `backend/huongvantra_backend/Scripts/seed-catalog-inventory-realistic.sql`
+- Tài khoản demo mặc định (UserService seed khi start): `admin` / `sale01` / `sale_cod01` / `manager01` — mật khẩu `123456`

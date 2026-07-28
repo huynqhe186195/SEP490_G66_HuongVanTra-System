@@ -62,6 +62,20 @@ public class StocktakeRequestRepository(InventoryDbContext _db) : IStocktakeRequ
     public Task<int> CountCreatedSinceAsync(DateTime sinceUtc, CancellationToken ct = default) =>
         _db.StocktakeRequests.CountAsync(r => r.CreatedAt >= sinceUtc, ct);
 
+    public Task<List<StocktakeRequest>> GetShelfDayMarkersAsync(DateTime countDate, CancellationToken ct = default)
+    {
+        var day = countDate.Date;
+        return _db.StocktakeRequests
+            .AsNoTracking()
+            .Where(r =>
+                r.Location == "Shelf"
+                && r.CountDate >= day
+                && r.CountDate < day.AddDays(1)
+                && (r.Status == StocktakeStatus.PendingApproval || r.Status == StocktakeStatus.Completed))
+            .OrderByDescending(r => r.CreatedAt)
+            .ToListAsync(ct);
+    }
+
     public async Task AddAsync(StocktakeRequest request, CancellationToken ct = default) =>
         await _db.StocktakeRequests.AddAsync(request, ct);
 

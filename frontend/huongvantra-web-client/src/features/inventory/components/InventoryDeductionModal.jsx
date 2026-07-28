@@ -2,7 +2,7 @@ function InventoryDeductionModal({ isOpen, onClose, order, date, product, materi
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm" onClick={onClose}>
+    <div className="inventory-modal fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm" onClick={onClose}>
       <div className="flex h-[min(1010px,calc(100dvh-2rem))] w-full max-w-md flex-col overflow-hidden bg-white shadow-2xl md:rounded-xl" onClick={(event) => event.stopPropagation()}>
         <header className="relative border-b border-gray-100 bg-white p-5">
           <div className="flex items-start justify-between gap-4">

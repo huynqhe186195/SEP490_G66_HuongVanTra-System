@@ -23,6 +23,7 @@ import {
   rejectShiftRegistration,
   reopenShiftRegistrationWindow,
   unassignShiftRegistration,
+  updateShiftTemplateHours,
   upsertShiftRegistrationWindow,
 } from '../services/shiftsApi.js'
 
@@ -65,6 +66,14 @@ function windowStatusLabel(status) {
   return status || '—'
 }
 
+/** Chuẩn hoá HH:mm cho input type=time / so sánh dirty. */
+function normalizeTimeHm(raw) {
+  const s = String(raw || '').trim()
+  const m = s.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/)
+  if (!m) return s
+  return `${String(Number(m[1])).padStart(2, '0')}:${m[2]}`
+}
+
 function ShiftManagePage() {
   const auth = loadAuthSession()
   const canManage = hasPermission(auth, 'MANAGE_EMPLOYEE') || hasPermission(auth, 'MANAGE_ROLE')
@@ -83,6 +92,9 @@ function ShiftManagePage() {
   const [opensAtLocal, setOpensAtLocal] = useState(() => defaultWindowLocals().opensAtLocal)
   const [closesAtLocal, setClosesAtLocal] = useState(() => defaultWindowLocals().closesAtLocal)
   const [savingWindow, setSavingWindow] = useState(false)
+  /** Draft giờ khung ca: { [templateId]: { start, end } } */
+  const [hoursDraft, setHoursDraft] = useState({})
+  const [savingTemplateId, setSavingTemplateId] = useState('')
 
   const weekDays = useMemo(() => getWeekDays(weekOffset), [weekOffset])
   const weekStart = weekDays[0]?.iso
@@ -96,6 +108,14 @@ function ShiftManagePage() {
       const data = await fetchShiftWeek({ weekStart: start, area: area || undefined })
       setTemplates(data.templates)
       setSlots(data.slots)
+      setHoursDraft(
+        Object.fromEntries(
+          (data.templates || []).map((t) => [
+            t.id,
+            { start: normalizeTimeHm(t.start), end: normalizeTimeHm(t.end) },
+          ]),
+        ),
+      )
     } catch (error) {
       showError(error.message || 'Không tải được lịch ca.')
       setTemplates([])
@@ -289,11 +309,47 @@ function ShiftManagePage() {
     }
   }
 
+  const setTemplateHourField = (templateId, field, value) => {
+    setHoursDraft((prev) => ({
+      ...prev,
+      [templateId]: {
+        start: prev[templateId]?.start ?? '',
+        end: prev[templateId]?.end ?? '',
+        [field]: value,
+      },
+    }))
+  }
+
+  const saveTemplateHours = async (template) => {
+    if (!template?.id) return
+    const draft = hoursDraft[template.id] || { start: template.start, end: template.end }
+    const start = String(draft.start || '').trim()
+    const end = String(draft.end || '').trim()
+    if (!start || !end) {
+      showError('Vui lòng nhập đủ giờ bắt đầu và kết thúc.')
+      return
+    }
+    setSavingTemplateId(template.id)
+    try {
+      const updated = await updateShiftTemplateHours(template.id, { start, end })
+      setTemplates((prev) => prev.map((t) => (t.id === updated.id ? { ...t, ...updated } : t)))
+      setHoursDraft((prev) => ({
+        ...prev,
+        [updated.id]: { start: updated.start, end: updated.end },
+      }))
+      showSuccess(`Đã cập nhật giờ «${updated.name}»: ${updated.start}–${updated.end}.`)
+    } catch (error) {
+      showError(error.message || 'Không lưu được giờ ca.')
+    } finally {
+      setSavingTemplateId('')
+    }
+  }
+
   return (
     <PageShell className="[font-family:'Manrope',sans-serif]">
       <PageHeader
         title="Phân ca làm"
-        description="Manager mở/đóng thời hạn đăng ký ca theo tuần, chỉ định / gỡ Sale. Sale chỉ tự đăng ký khi cửa sổ đang mở."
+        titleInfo="Manager chỉnh giờ khung ca, mở/đóng đăng ký theo tuần, chỉ định / gỡ Sale. Sale chỉ tự đăng ký khi cửa sổ đang mở."
       />
 
       <section className="rounded-[24px] border border-[#c1c9c0]/30 bg-white p-6 shadow-sm">
@@ -437,10 +493,10 @@ function ShiftManagePage() {
 
             <div className="mt-6 grid gap-6 xl:grid-cols-[1fr_320px]">
               <div className="overflow-x-auto rounded-2xl border border-[#e7e8e0]">
-                <table className="min-w-[720px] w-full border-collapse text-left text-sm">
+                <table className="min-w-[820px] w-full border-collapse text-left text-sm">
                   <thead>
                     <tr className="bg-[#f6f4ec]">
-                      <th className="sticky left-0 z-10 w-40 border-b border-r border-[#e7e8e0] bg-[#f6f4ec] px-3 py-3 text-xs font-bold uppercase tracking-wide text-slate-500">
+                      <th className="sticky left-0 z-10 w-64 min-w-[16rem] border-b border-r border-[#e7e8e0] bg-[#f6f4ec] px-3 py-3 text-xs font-bold uppercase tracking-wide text-slate-500">
                         Khung ca
                       </th>
                       {weekDays.map((day) => (
@@ -468,19 +524,70 @@ function ShiftManagePage() {
                         </td>
                       </tr>
                     ) : (
-                      visibleTemplates.map((tpl) => (
+                      visibleTemplates.map((tpl) => {
+                        const draft = hoursDraft[tpl.id] || {
+                          start: normalizeTimeHm(tpl.start),
+                          end: normalizeTimeHm(tpl.end),
+                        }
+                        const currentStart = normalizeTimeHm(tpl.start)
+                        const currentEnd = normalizeTimeHm(tpl.end)
+                        const dirty =
+                          normalizeTimeHm(draft.start) !== currentStart
+                          || normalizeTimeHm(draft.end) !== currentEnd
+                        const savingHours = savingTemplateId === tpl.id
+
+                        return (
                         <tr key={tpl.id} className="align-top">
-                          <th className="sticky left-0 z-10 border-b border-r border-[#e7e8e0] bg-white px-3 py-3 text-left">
+                          <th className="sticky left-0 z-10 w-64 min-w-[16rem] border-b border-r border-[#e7e8e0] bg-white px-3 py-3 text-left">
                             <div className="flex items-start gap-2">
                               <span
                                 className="mt-1.5 inline-block h-2.5 w-2.5 shrink-0 rounded-full"
                                 style={{ background: tpl.color }}
                               />
-                              <div>
+                              <div className="min-w-0 flex-1">
                                 <p className="font-bold text-slate-900">{tpl.name}</p>
-                                <p className="text-xs text-slate-500">
-                                  {tpl.start}–{tpl.end} · max {tpl.capacity}
-                                </p>
+                                <p className="text-[11px] text-slate-500">max {tpl.capacity} người</p>
+                                {canManage ? (
+                                  <div
+                                    className="mt-2 space-y-1.5"
+                                    onClick={(e) => e.stopPropagation()}
+                                    onKeyDown={(e) => e.stopPropagation()}
+                                  >
+                                    <div className="flex items-center gap-1.5">
+                                      <input
+                                        type="time"
+                                        step="60"
+                                        value={normalizeTimeHm(draft.start) || ''}
+                                        onChange={(e) => setTemplateHourField(tpl.id, 'start', e.target.value)}
+                                        className="min-w-0 flex-1 rounded-md border border-slate-200 bg-[#fbf9f1] px-1.5 py-1.5 text-xs font-semibold text-slate-800"
+                                        title="Giờ bắt đầu"
+                                        aria-label={`${tpl.name} bắt đầu`}
+                                      />
+                                      <span className="shrink-0 text-xs text-slate-400">–</span>
+                                      <input
+                                        type="time"
+                                        step="60"
+                                        value={normalizeTimeHm(draft.end) || ''}
+                                        onChange={(e) => setTemplateHourField(tpl.id, 'end', e.target.value)}
+                                        className="min-w-0 flex-1 rounded-md border border-slate-200 bg-[#fbf9f1] px-1.5 py-1.5 text-xs font-semibold text-slate-800"
+                                        title="Giờ kết thúc"
+                                        aria-label={`${tpl.name} kết thúc`}
+                                      />
+                                    </div>
+                                    <button
+                                      type="button"
+                                      disabled={savingHours || !dirty}
+                                      onClick={() => saveTemplateHours(tpl)}
+                                      className="w-full rounded-md bg-[#356647] px-2 py-1.5 text-xs font-bold text-white hover:bg-[#2d553b] disabled:opacity-40"
+                                    >
+                                      {savingHours ? 'Đang lưu…' : dirty ? 'Lưu giờ' : `${currentStart}–${currentEnd}`}
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <p className="mt-1 text-xs font-semibold text-slate-600">
+                                    {currentStart}–{currentEnd}
+                                  </p>
+                                )}
                               </div>
                             </div>
                           </th>
@@ -540,7 +647,8 @@ function ShiftManagePage() {
                             )
                           })}
                         </tr>
-                      ))
+                        )
+                      })
                     )}
                   </tbody>
                 </table>

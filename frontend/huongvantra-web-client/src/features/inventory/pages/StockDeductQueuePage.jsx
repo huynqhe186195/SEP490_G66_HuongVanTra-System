@@ -92,7 +92,7 @@ function StockDeductQueuePage() {
     <PageShell>
       <PageHeader
         title="Chờ trừ tồn quầy"
-        description={
+        titleInfo={
           canExecuteDeduct
             ? 'Manager/Admin xác nhận trừ QuantityOnHand của Tồn quầy POS mặc định cho đơn đã bán trước.'
             : 'Theo dõi đơn chờ trừ Tồn quầy POS mặc định.'

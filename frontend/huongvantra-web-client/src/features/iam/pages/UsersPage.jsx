@@ -160,20 +160,24 @@ function UsersPage() {
   }
 
   const toggleCreateRoleId = (roleId) => {
+    const id = Number(roleId)
+    if (!Number.isFinite(id)) return
     setCreateForm((current) => ({
       ...current,
-      roleIds: current.roleIds.includes(roleId)
-        ? current.roleIds.filter((id) => id !== roleId)
-        : [...current.roleIds, roleId],
+      roleIds: current.roleIds.includes(id)
+        ? current.roleIds.filter((value) => value !== id)
+        : [...current.roleIds, id],
     }))
     setCreateFieldErrors((current) => ({ ...current, roleIds: undefined }))
   }
 
   const toggleEditRoleId = (roleId) => {
+    const id = Number(roleId)
+    if (!Number.isFinite(id)) return
     setEditRoleIds((current) => (
-      current.includes(roleId)
-        ? current.filter((id) => id !== roleId)
-        : [...current, roleId]
+      current.includes(id)
+        ? current.filter((value) => value !== id)
+        : [...current, id]
     ))
   }
 
@@ -273,7 +277,7 @@ function UsersPage() {
     <PageShell className="[font-family:'Manrope',sans-serif]">
       <PageHeader
         title="Quản lý tài khoản đăng nhập"
-        description="Thêm, sửa, khóa hoặc ngừng sử dụng tài khoản — chữ to, thao tác rõ ràng"
+        titleInfo="Thêm, sửa, khóa hoặc ngừng sử dụng tài khoản — chữ to, thao tác rõ ràng"
         rightContent={
           view === 'active' ? (
             <BigButton onClick={openCreate}>

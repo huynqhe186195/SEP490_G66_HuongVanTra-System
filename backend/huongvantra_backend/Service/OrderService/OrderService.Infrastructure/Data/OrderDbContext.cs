@@ -17,6 +17,7 @@ public class OrderDbContext(DbContextOptions<OrderDbContext> options) : DbContex
     public DbSet<CustomBundle> CustomBundles => Set<CustomBundle>();
     public DbSet<CustomBundleIngredient> CustomBundleIngredients => Set<CustomBundleIngredient>();
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
+    public DbSet<OrderReceiptPrintLog> OrderReceiptPrintLogs => Set<OrderReceiptPrintLog>();
     public DbSet<PosCashSession> PosCashSessions => Set<PosCashSession>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

@@ -11,7 +11,7 @@ namespace OrderService.WebAPI.Controllers;
 [ApiController]
 [Route("api/v1/orders")]
 [Authorize]
-public class OrdersController(OrderLogic orderLogic) : ControllerBase
+public class OrdersController(OrderLogic orderLogic, ReceiptReprintLogic receiptReprintLogic) : ControllerBase
 {
     private OrderAccessContext AccessContext() => User.CreateOrderAccessContext();
 
@@ -60,6 +60,24 @@ public class OrdersController(OrderLogic orderLogic) : ControllerBase
     [Authorize(Policy = PermissionNames.ViewOrder)]
     public async Task<IActionResult> GetReturnsByOrderId(Guid orderId, CancellationToken ct) =>
         Ok(await orderLogic.GetReturnsByOrderIdAsync(orderId, AccessContext(), ct));
+
+    [HttpGet("{id:guid}/receipt-reprints")]
+    [Authorize(Policy = PermissionNames.ViewOrder)]
+    public async Task<IActionResult> GetReceiptReprints(Guid id, CancellationToken ct) =>
+        Ok(await receiptReprintLogic.GetHistoryAsync(id, AccessContext(), ct));
+
+    [HttpPost("{id:guid}/receipt-reprints")]
+    [Authorize(Policy = PermissionNames.ViewOrder)]
+    public async Task<IActionResult> ReprintReceipt(
+        Guid id, [FromBody] ReprintReceiptRequest request, CancellationToken ct)
+    {
+        var (actorId, actorName) = Actor();
+        var idempotencyKey = Request.Headers.TryGetValue("X-Idempotency-Key", out var keyValues)
+            ? keyValues.FirstOrDefault()
+            : null;
+        return Ok(await receiptReprintLogic.ReprintAsync(
+            id, request?.Reason, actorId, actorName, idempotencyKey, AccessContext(), ct));
+    }
 
     [HttpPost]
     [Authorize]

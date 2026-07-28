@@ -271,7 +271,7 @@ function ProductsCategoriesPage() {
     <PageShell>
       <PageHeader
         title="Danh mục sản phẩm"
-        description={
+        titleInfo={
           canCreate
             ? 'Thủ kho — tạo và quản lý danh mục sản phẩm theo cấu trúc cha — con'
             : 'Xem danh mục — bấm Đồng bộ để tải dữ liệu mới từ kho'

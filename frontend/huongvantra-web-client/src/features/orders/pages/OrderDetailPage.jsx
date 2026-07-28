@@ -12,25 +12,29 @@ import { parseCodDebtSettlement } from '../../customers/utils/codDebtSettlementU
 import OrderCustomerCell from '../components/OrderCustomerCell.jsx'
 import OrderProductsSection from '../components/OrderProductsSection.jsx'
 import OrderReturnsSection from '../components/OrderReturnsSection.jsx'
+import OrderStockReservationSection from '../components/OrderStockReservationSection.jsx'
 import OrderTimeline from '../components/OrderTimeline.jsx'
 import OrderTransferQrPanel from '../components/OrderTransferQrPanel.jsx'
 import OrderUpdateMetaModal from '../components/OrderUpdateMetaModal.jsx'
+import ReceiptReprintModal from '../components/ReceiptReprintModal.jsx'
 import {
   cancelOrder,
   completeOrder,
   fetchOrder,
   fetchReturnsByOrderId,
+  reprintReceipt,
   shipOrder,
   updateOrder,
 } from '../services/ordersApi.js'
+import { printReceiptFromData } from '../../pos/utils/printReceipt.js'
 import {
   canCancelOrder,
   canCompleteOrder,
   canEditOrderMeta,
+  canReprintReceipt,
   canReturnOrder,
   canShipOrder,
   canVerifyCod,
-  getOrderEditBlockedMessage,
   isCodChannelOrder,
   isPendingPaymentOrder,
   isPendingTransferPayment,
@@ -69,6 +73,8 @@ function OrderDetailPage() {
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false)
   const [isCodVerifyOpen, setIsCodVerifyOpen] = useState(false)
   const [confirmCancelOpen, setConfirmCancelOpen] = useState(false)
+  const [isReprintOpen, setIsReprintOpen] = useState(false)
+  const [isReprinting, setIsReprinting] = useState(false)
   const [timelineRefreshKey, setTimelineRefreshKey] = useState(0)
   const [catalogLookups, setCatalogLookups] = useState(() => buildProductCatalogLookups())
   const [orderReturns, setOrderReturns] = useState([])
@@ -230,6 +236,30 @@ function OrderDetailPage() {
     }
   }
 
+  async function handleConfirmReprint(reason) {
+    if (!order || isReprinting) return
+    try {
+      setIsReprinting(true)
+      const result = await reprintReceipt(order.id, reason, {
+        idempotencyKey: crypto.randomUUID(),
+      })
+      const receipt = result?.receipt
+      if (!receipt) throw new Error('Không nhận được dữ liệu hóa đơn để in lại.')
+
+      setIsReprintOpen(false)
+      showSuccess(`Đã ghi nhận lần in lại thứ ${receipt.reprintNumber}.`)
+      await printReceiptFromData({
+        ...receipt,
+        createdAtLabel: formatVietnamDateTime(receipt.createdAt),
+        reprintedAtLabel: formatVietnamDateTime(receipt.reprintedAt),
+      })
+    } catch (error) {
+      showError(error.message || 'Không thể in lại hóa đơn.')
+    } finally {
+      setIsReprinting(false)
+    }
+  }
+
   async function runAction(action) {
     if (!canManage || !canMutate || !order) return
     try {
@@ -297,18 +327,6 @@ function OrderDetailPage() {
   return (
     <PageShell>
     <div className="mx-auto w-full max-w-5xl space-y-6 px-1 pb-8 sm:px-2">
-      {!checkingShift && !canMutate ? (
-        <div className="flex items-start gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          <span className="material-symbols-outlined text-[18px]">schedule</span>
-          <p>
-            Ngoài giờ ca — chỉ xem, không sửa / hủy / giao / hoàn tất / trả đổi / thu COD.{' '}
-            <Link to="/my-shifts" className="font-semibold underline">
-              Vào «Lịch làm việc»
-            </Link>{' '}
-            để đăng ký hoặc chờ đến giờ ca.
-          </p>
-        </div>
-      ) : null}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <Link
@@ -344,10 +362,6 @@ function OrderDetailPage() {
               <span className="material-symbols-outlined text-[18px]">edit</span>
               Cập nhật thông tin
             </button>
-          ) : canManage ? (
-            <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-              {getOrderEditBlockedMessage(order)}
-            </p>
           ) : null}
           <span className={`rounded-full px-3 py-1 text-xs font-semibold ${getOrderStatusClass(order.orderStatus)}`}>
             {getOrderStatusLabel(order.orderStatus)}
@@ -470,6 +484,16 @@ function OrderDetailPage() {
                     Trả hàng / Đổi
                   </button>
                 ) : null}
+                {canReprintReceipt(order) ? (
+                  <button
+                    type="button"
+                    disabled={isReprinting}
+                    onClick={() => setIsReprintOpen(true)}
+                    className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    In lại hóa đơn
+                  </button>
+                ) : null}
                 {canCancelOrder(order) ? (
                   <button
                     type="button"
@@ -485,6 +509,10 @@ function OrderDetailPage() {
           ) : null}
         </aside>
       </div>
+
+      {String(order.orderChannel).toUpperCase() === 'COD' ? (
+        <OrderStockReservationSection orderId={order.id} refreshKey={timelineRefreshKey} />
+      ) : null}
 
       {!compactProducts ? (
         <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
@@ -530,6 +558,14 @@ function OrderDetailPage() {
         isSaving={isSaving}
         onClose={() => setIsUpdateModalOpen(false)}
         onSave={handleSaveMeta}
+      />
+
+      <ReceiptReprintModal
+        isOpen={isReprintOpen}
+        order={order}
+        isSaving={isReprinting}
+        onClose={() => setIsReprintOpen(false)}
+        onConfirm={handleConfirmReprint}
       />
 
       <ConfirmDialog

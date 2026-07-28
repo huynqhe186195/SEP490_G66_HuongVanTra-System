@@ -6,7 +6,7 @@ import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { getCustomerSectionFromSearch, getCustomerSectionLabel } from '../../../app/customerSections.js'
-import { canCreateCustomer, canDeleteCustomer, canEditCustomer, canManageCorporateCustomers, canViewAllCustomers, isAssignedCustomerViewer } from '../../auth/utils/permissions.js'
+import { canCreateCustomer, canDeleteCustomer, canEditCustomer, canManageCorporateCustomers, canViewAllCustomers, isReadOnlyCustomerViewer } from '../../auth/utils/permissions.js'
 import CustomerActivityFeed from '../components/CustomerActivityFeed.jsx'
 import CustomersTableShell from '../components/CustomersTableShell.jsx'
 import CustomersMobileCards from '../components/CustomersMobileCards.jsx'
@@ -223,7 +223,7 @@ function CustomersPage() {
   const canCreateCustomers = canCreateCustomer(session)
   const canRemoveCustomers = canDeleteCustomer(session)
   const canManageCorporate = canManageCorporateCustomers(session)
-  const isScopedSale = isAssignedCustomerViewer(session)
+  const isReadOnlyViewer = isReadOnlyCustomerViewer(session)
   const canEditCustomerRow = (row) =>
     isCorporateCustomerType(row?.customerType) ? canManageCorporate : canManageCustomers
   const [searchValue, setSearchValue] = useState('')
@@ -505,8 +505,7 @@ function CustomersPage() {
     <PageShell className="min-w-0 [font-family:'Manrope',sans-serif]">
       <PageHeader
         title="Khách hàng"
-        description={`${sectionLabel} — quản lý hồ sơ, công nợ và hoạt động khách hàng.`}
-        descriptionClassName="hidden sm:block"
+        titleInfo={`${sectionLabel} — quản lý hồ sơ, công nợ và hoạt động khách hàng.`}
         searchPlaceholder="Tìm theo tên, SĐT"
         searchWide
         searchValue={searchValue}
@@ -573,9 +572,9 @@ function CustomersPage() {
             <span className="font-semibold text-[#356647]">{sectionLabel}</span>
           </div>
 
-          {isScopedSale ? (
+          {isReadOnlyViewer ? (
             <p className="text-xs leading-relaxed text-[#717971]">
-              Chỉ xem khách hàng được gán cho bạn (Phổ thông & VIP). Thêm hoặc sửa hồ sơ khách hàng do Quản lý/Admin thực hiện; tại POS bạn vẫn có thể thêm khách nhanh khi bán hàng.
+              Bạn xem được toàn bộ khách hàng của cửa hàng (Phổ thông &amp; VIP) và được thêm khách hàng mới. Sửa hồ sơ khách hàng do Quản lý/Admin thực hiện.
             </p>
           ) : null}
 
@@ -954,7 +953,7 @@ function CustomersPage() {
                 <article className="rounded-xl border border-[#eae8e0] bg-white p-4 shadow-sm sm:p-5">
                   <div className="mb-4 flex items-center justify-between gap-2">
                     <h4 className="font-bold text-[#1b1c17]">Top chi tiêu cao</h4>
-                    <span className="text-xs text-[#717971]">{isScopedSale ? 'Tệp của bạn' : 'Toàn hệ thống'} · {statistics.totalCustomers} khách</span>
+                    <span className="text-xs text-[#717971]">Toàn hệ thống · {statistics.totalCustomers} khách</span>
                   </div>
                   {statistics.topSpenders?.length ? (
                     <ul className="space-y-2">

@@ -205,7 +205,7 @@ function MyShiftsPage() {
     <PageShell className="[font-family:'Manrope',sans-serif]">
       <PageHeader
         title="Lịch làm việc"
-        description="Xem lịch làm việc của bạn và đồng nghiệp Sale; đăng ký khi Manager mở cửa sổ."
+        titleInfo="Xem lịch làm việc của bạn và đồng nghiệp Sale; đăng ký khi Manager mở cửa sổ."
       />
 
       <section className="rounded-[24px] border border-[#c1c9c0]/30 bg-white p-6 shadow-sm">

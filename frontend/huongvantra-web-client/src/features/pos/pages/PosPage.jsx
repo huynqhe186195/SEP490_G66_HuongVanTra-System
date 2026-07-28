@@ -56,7 +56,7 @@ import LoadingIndicator from '../../../components/shared/LoadingIndicator.jsx'
 import { useNetworkStatus } from '../../../hooks/useNetworkStatus.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import { useAuthSession } from '../../auth/hooks/useAuthSession.js'
-import { canUsePosCodMode, canUsePosCounterMode } from '../../auth/utils/permissions.js'
+import { canUsePosCodMode, canUsePosCounterMode, canViewAllOrders } from '../../auth/utils/permissions.js'
 import CustomBundlePanel from '../components/CustomBundlePanel.jsx'
 import {
   getPosBaseUnitLabel,
@@ -68,6 +68,7 @@ import {
 } from '../utils/posCustomerSearch.js'
 import { createCheckoutAttemptManager } from '../../orders/utils/checkoutAttempt.js'
 import {
+  clampPosSalesMode,
   loadPersistedPosWorkspace,
   persistPosWorkspace,
 } from '../utils/posWorkspaceStorage.js'
@@ -88,7 +89,6 @@ const ALL_SALES_MODES = [
 const COUNTER_PAYMENT_METHODS = [
     { id: "CASH", label: "Tiền mặt", icon: "payments" },
     { id: "TRANSFER", label: "Chuyển khoản", icon: "account_balance" },
-    { id: "SPLIT", label: "Tiền mặt + chuyển khoản", icon: "call_split" },
 ];
 
 const TAKEAWAY_PAYMENT_METHODS = [
@@ -239,7 +239,6 @@ function createEmptySession(mode = "counter") {
         customerSearchType: "",
         paymentMethod: mode === "takeaway" ? "COD" : "CASH",
         amountPaidInput: "",
-        transferAmountInput: "",
         overpaymentAction: "return_change",
         debtSettlement: null,
         shippingAddress: "",
@@ -261,8 +260,13 @@ function PosPage() {
       return false
     })
   }, [authSession])
+  const allowedSalesModeIds = useMemo(
+    () => allowedSalesModes.map((mode) => mode.id),
+    [allowedSalesModes],
+  )
   const [salesMode, setSalesMode] = useState(() => {
     const session = loadAuthSession()
+    if (canUsePosCodMode(session) && !canUsePosCounterMode(session)) return 'takeaway'
     if (canUsePosCounterMode(session)) return 'counter'
     if (canUsePosCodMode(session)) return 'takeaway'
     return 'counter'
@@ -276,11 +280,9 @@ function PosPage() {
   const [restoredOrderIds, setRestoredOrderIds] = useState([])
 
   useEffect(() => {
-    if (allowedSalesModes.length === 0) return
-    if (!allowedSalesModes.some((mode) => mode.id === salesMode)) {
-      setSalesMode(allowedSalesModes[0].id)
-    }
-  }, [allowedSalesModes, salesMode])
+    if (allowedSalesModeIds.length === 0) return
+    setSalesMode((prev) => clampPosSalesMode(prev, allowedSalesModeIds))
+  }, [allowedSalesModeIds])
 
   const [customerSearchResults, setCustomerSearchResults] = useState([])
   const [isCustomerSearchLoading, setIsCustomerSearchLoading] = useState(false)
@@ -289,6 +291,8 @@ function PosPage() {
   const [openDiscountSku, setOpenDiscountSku] = useState(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [cashSessionOpen, setCashSessionOpen] = useState(() => Boolean(loadOpenCashSession()))
+  const [shelfDayStatus, setShelfDayStatus] = useState({ dayStartDone: false, dayEndDone: false })
+  const [dayEndRequested, setDayEndRequested] = useState(false)
   const [shelfOnDuty, setShelfOnDuty] = useState(null)
 
   useEffect(() => {
@@ -346,7 +350,13 @@ function PosPage() {
       .then((stored) => {
         if (cancelled) return
         setWorkspaceByMode(stored.workspaceByMode)
-        setSalesMode(stored.salesMode)
+        const session = loadAuthSession()
+        const ids = ALL_SALES_MODES.filter((mode) => {
+          if (mode.id === 'counter') return canUsePosCounterMode(session)
+          if (mode.id === 'takeaway') return canUsePosCodMode(session)
+          return false
+        }).map((mode) => mode.id)
+        setSalesMode(clampPosSalesMode(stored.salesMode, ids))
         setRestoredOrderIds(stored.restoredOrderIds)
       })
       .catch(() => {
@@ -479,6 +489,7 @@ function PosPage() {
   }, [authUserId, isWorkspaceReady, workspaceByMode])
 
   const isTakeaway = salesMode === 'takeaway'
+  const showCashSessionUi = !isTakeaway && canUsePosCounterMode(authSession)
   const workspace = workspaceByMode[salesMode]
   const { tabs, activeTabId, sessions } = workspace
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0]
@@ -496,7 +507,6 @@ function PosPage() {
     customerSearchType = '',
     paymentMethod: sessionPaymentMethod,
     amountPaidInput = '',
-    transferAmountInput = '',
     overpaymentAction = 'return_change',
     debtSettlement = null,
     shippingAddress = '',
@@ -506,7 +516,6 @@ function PosPage() {
   const isOnline = useNetworkStatus()
   const paymentMethod = sessionPaymentMethod ?? (isTakeaway ? 'COD' : 'CASH')
   const isTransferPayment = paymentMethod === 'TRANSFER'
-  const isSplitPayment = paymentMethod === 'SPLIT'
   const isCodTakeaway = isTakeaway && paymentMethod === 'COD'
   const isTransferTakeaway = isTakeaway && isTransferPayment
 
@@ -647,23 +656,11 @@ function PosPage() {
   const usesFixedOrderDiscount = canUseOrderDiscount && (orderDiscountAmountFixed || 0) > 0
   const cartItemQuantity = cartItems.reduce((sum, item) => sum + (Number(item.qty) || 0), 0)
   const amountPaid = parseMoneyInput(amountPaidInput)
-  const enteredTransferAmount = parseMoneyInput(transferAmountInput)
   const customerCurrentDebt = Number(selectedCustomer?.currentDebt || 0)
-  const splitCashAmount = isSplitPayment ? amountPaid : 0
-  const splitTransferAmount = isSplitPayment
-    ? transferAmountInput
-      ? enteredTransferAmount
-      : Math.max(total - splitCashAmount, 0)
-    : 0
   const transferQrAmount = isTransferPayment
     ? amountPaid > 0 ? amountPaid : total
-    : isSplitPayment
-      ? splitTransferAmount
-      : 0
-  const paymentAllocatedTotal = isSplitPayment
-    ? splitCashAmount + splitTransferAmount
-    : amountPaid
-  const change = Math.max(paymentAllocatedTotal - total, 0)
+    : 0
+  const change = Math.max(amountPaid - total, 0)
   const transferOverpayToDebt =
     overpaymentAction === 'apply_to_debt' && isTransferPayment && change > 0 && customerCurrentDebt > 0
       ? Math.min(change, customerCurrentDebt)
@@ -674,23 +671,19 @@ function PosPage() {
       ? Math.min(change, customerCurrentDebt)
       : 0
   // Tiền mặt: để trống = ghi nợ toàn bộ. CK: để trống = QR đủ tiền; nhập vượt đơn = QR đúng số nhập (trừ nợ).
-  const recordedPaymentAmount = isSplitPayment
-    ? splitCashAmount
-    : amountPaid >= total ? total : amountPaid
+  const recordedPaymentAmount = amountPaid >= total ? total : amountPaid
   const debtAmount = isTransferPayment
     ? transferQrAmount >= total
       ? 0
       : Math.max(total - transferQrAmount, 0)
-    : isSplitPayment
-      ? Math.max(total - paymentAllocatedTotal, 0)
     : Math.max(total - recordedPaymentAmount, 0)
   const confirmedDebtAllocation = debtSettlement?.payDebtsEnabled
     ? Math.max(0, Number(debtSettlement.allocatedAmount || 0))
     : 0
   const displayChange = Math.max(change - confirmedDebtAllocation, 0)
-  const isTransferQrFlow = (isTransferPayment || isSplitPayment) && !isTakeaway
+  const isTransferQrFlow = isTransferPayment && !isTakeaway
   const isDebtSale = paymentMethod === 'CASH' && amountPaid === 0 && total > 0
-  const isPartialPayment = paymentAllocatedTotal > 0 && paymentAllocatedTotal < total
+  const isPartialPayment = amountPaid > 0 && amountPaid < total
   const canApplyOverpayToDebt = change > 0 && customerCurrentDebt > 0
   useEffect(() => {
     if (!selectedCustomer?.customerId || customerCurrentDebt <= 0) {
@@ -1421,13 +1414,6 @@ function PosPage() {
         });
     };
 
-    const handleTransferAmountChange = (rawValue) => {
-        const digits = String(rawValue).replace(/\D/g, "");
-        updateActiveSession({
-            transferAmountInput: digits ? formatMoney(Number(digits)) : "",
-        });
-    };
-
     const handleQuickAmount = (value) => {
         updateActiveSession({
             amountPaidInput: value > 0 ? formatMoney(value) : "",
@@ -1453,16 +1439,6 @@ function PosPage() {
     // Quầy: cho phép khách vãng lai (không mã KH). COD/takeaway vẫn bắt buộc KH + địa chỉ.
     const canPayCash = hasCartItems && !isRestoredCatalogValidating && !hasUnavailableItems && !hasPendingQrOrder && (hasCustomerSelected || !isTakeaway);
     const canPayTransfer = hasCartItems && !isRestoredCatalogValidating && !hasUnavailableItems && !hasPendingQrOrder && (hasCustomerSelected || !isTakeaway) && total > 0;
-    const canPaySplit =
-        hasCartItems
-        && !isRestoredCatalogValidating
-        && !hasUnavailableItems
-        && !hasPendingQrOrder
-        && !isTakeaway
-        && total > 0
-        && splitCashAmount > 0
-        && splitTransferAmount > 0
-        && paymentAllocatedTotal === total;
     const canPayTakeaway = hasCartItems
         && !hasUnavailableItems
         && !isRestoredCatalogValidating
@@ -1470,9 +1446,14 @@ function PosPage() {
         && hasCustomerSelected
         && hasShippingAddress
         && (isTransferPayment ? total > 0 : true);
+    // Quầy: bắt buộc mở ca quỹ và đang trong ca quầy trước khi bán (TM + CK). COD/takeaway: chỉ cần trong ca, không khóa két / kiểm kệ.
     const canPay = isTakeaway
-        ? canPayTakeaway && !isSubmitting
-        : cashSessionOpen && shelfOnDuty && (isSplitPayment ? canPaySplit : isTransferPayment ? canPayTransfer : canPayCash) && !isSubmitting;
+        ? canPayTakeaway && Boolean(shelfOnDuty) && !isSubmitting
+        : cashSessionOpen
+          && shelfOnDuty
+          && !shelfDayStatus.dayEndDone
+          && (isSplitPayment ? canPaySplit : isTransferPayment ? canPayTransfer : canPayCash)
+          && !isSubmitting;
     const normalizedPromoSearch = promoCodeInput.trim().toUpperCase();
     const visibleAvailablePromotions = availablePromotions
         .filter((promotion) => !normalizedPromoSearch || promotion.promoCode.toUpperCase().includes(normalizedPromoSearch))
@@ -1538,9 +1519,8 @@ function PosPage() {
         discountLabel: formatLineDiscountLabel(item),
     }));
 
-    const selectedPaymentMethodLabel = isSplitPayment
-        ? `Tiền mặt ${formatMoney(splitCashAmount)} đ + Chuyển khoản ${formatMoney(splitTransferAmount)} đ`
-        : paymentMethods.find((method) => method.id === paymentMethod)?.label ?? paymentMethod;
+    const selectedPaymentMethodLabel =
+        paymentMethods.find((method) => method.id === paymentMethod)?.label ?? paymentMethod;
 
   const buildOrderPayload = (method, amount, debtSettlementJson = null) => {
     const storeId = resolvePosStoreId()
@@ -1549,18 +1529,13 @@ function PosPage() {
       ? itemDiscountTotal + orderDiscountAmount
       : 0
     const manualDiscount = Math.round(vipManualDiscount)
-    const paymentAllocations = method === 'SPLIT'
-      ? [
-          { paymentMethod: 'CASH', amount: splitCashAmount },
-          { paymentMethod: 'TRANSFER', amount: splitTransferAmount },
-        ]
-      : amount > 0
-        ? [{
-            paymentMethod: method,
-            amount,
-            debtSettlementJson,
-          }]
-        : []
+    const paymentAllocations = amount > 0
+      ? [{
+          paymentMethod: method,
+          amount,
+          debtSettlementJson,
+        }]
+      : []
     return {
       storeId,
       customerId: selectedCustomer?.customerId || null,
@@ -1596,7 +1571,7 @@ function PosPage() {
     changeAmount = displayChange,
   }) => {
     const receiptTotal = orderTotal ?? total
-    const isRecordedPayment = method === 'CASH' || method === 'TRANSFER' || method === 'SPLIT'
+    const isRecordedPayment = method === 'CASH' || method === 'TRANSFER'
     return {
       orderCode: orderCode || activeTab.label,
       invoiceCode: invoiceCode || undefined,
@@ -1606,9 +1581,7 @@ function PosPage() {
           ? 'COD — thu khi giao'
           : method === 'TRANSFER'
             ? 'Chuyển khoản'
-            : method === 'SPLIT'
-              ? `Tiền mặt ${formatMoney(splitCashAmount)} đ + CK ${formatMoney(splitTransferAmount)} đ`
-              : 'Tiền mặt',
+            : 'Tiền mặt',
       createdAtLabel: vietnamNowLabel(),
       sellerName: seller.name,
       sellerRole: seller.role,
@@ -1622,12 +1595,8 @@ function PosPage() {
       grossSubtotal,
       totalDiscount: itemDiscountTotal + orderDiscountAmount + couponDiscountAmount + membershipDiscountAmount,
       total: receiptTotal,
-      amountPaid: isRecordedPayment
-        ? method === 'SPLIT' ? paymentAllocatedTotal : recordedPaymentAmount
-        : receiptTotal,
-      customerPaid: isRecordedPayment
-        ? method === 'SPLIT' ? paymentAllocatedTotal : amountPaid
-        : receiptTotal,
+      amountPaid: isRecordedPayment ? recordedPaymentAmount : receiptTotal,
+      customerPaid: isRecordedPayment ? amountPaid : receiptTotal,
       change: isRecordedPayment ? changeAmount : 0,
       debtAmount: isRecordedPayment ? debtAmount : 0,
       isDebtSale: method === 'CASH' && isDebtSale,
@@ -1707,6 +1676,10 @@ function PosPage() {
       backendDebtSettlementJson,
     )
     const result = await createOrder(payload, { idempotencyKey })
+
+    if (method === 'CASH' && recordedPaymentAmount > 0) {
+      await recordCashSale()
+    }
 
         const stockNote = result.stockHandlingSummary?.message
             ? ` Â· ${result.stockHandlingSummary.message}`
@@ -1914,17 +1887,15 @@ function PosPage() {
             return;
         }
 
-        if (isTransferPayment || isSplitPayment) {
-            const debtApplyAmount = isSplitPayment ? 0 : resolveDebtApplyAmount(debtSettlement);
+        if (isTransferPayment) {
+            const debtApplyAmount = resolveDebtApplyAmount(debtSettlement);
             const backendDebtSettlementJson = debtApplyAmount > 0
                 ? serializeCodDebtSettlement({ ...debtSettlement, paymentMethod: "VietQR" })
                 : null;
-            const transferAppliedToOrder = isSplitPayment
-                ? splitTransferAmount
-                : Math.min(transferQrAmount, total);
+            const transferAppliedToOrder = Math.min(transferQrAmount, total);
             const actualQrAmount = transferAppliedToOrder + debtApplyAmount;
             const payload = buildOrderPayload(
-                isSplitPayment ? "SPLIT" : "TRANSFER",
+                "TRANSFER",
                 transferAppliedToOrder,
                 backendDebtSettlementJson,
             );
@@ -1941,7 +1912,7 @@ function PosPage() {
             );
             const receipt = buildReceiptData({
                 orderCode: result.orderCode,
-                method: isSplitPayment ? "SPLIT" : "TRANSFER",
+                method: "TRANSFER",
             });
             const sessionSnapshot = await persistPendingQrCheckout(result.orderId);
             navigate(`/pos/payment/qr?orderId=${encodeURIComponent(result.orderId)}`, {
@@ -1990,7 +1961,6 @@ function PosPage() {
                 promotionCode: appliedPromotion?.promoCode ?? null,
                 paymentMethod: sessionPaymentMethod,
                 amountPaidInput,
-                transferAmountInput,
                 shippingAddress,
                 orderNote,
                 debtSettlement: activeDebtSettlement,
@@ -2021,17 +1991,19 @@ function PosPage() {
             return;
         }
 
-        const allocatedForOrder = isSplitPayment
-            ? paymentAllocatedTotal
-            : isTransferPayment
-                ? Math.min(transferQrAmount, total)
-                : recordedPaymentAmount;
+        const allocatedForOrder = isTransferPayment
+            ? Math.min(transferQrAmount, total)
+            : recordedPaymentAmount;
         if (!hasCustomerSelected && allocatedForOrder < total) {
             showError("Khách lẻ phải thanh toán đủ. Vui lòng đăng ký hoặc chọn khách hàng trước khi bán nợ/thanh toán một phần.");
             return;
         }
 
         if (isTakeaway) {
+            if (!shelfOnDuty) {
+                showError('Chưa được duyệt ca quầy hoặc đang ngoài giờ ca — không thể tạo đơn COD. Vào «Lịch làm việc» để đăng ký.');
+                return;
+            }
             if (!canPay) {
                 if (!hasShippingAddress) {
                     showError("Vui lòng nhập địa chỉ giao hàng.");
@@ -2050,6 +2022,11 @@ function PosPage() {
 
             if (!shelfOnDuty) {
                 showError('Chưa được duyệt ca quầy hoặc đang ngoài giờ ca — không thể bán tại quầy. Vào «Lịch làm việc» để đăng ký.');
+                return;
+            }
+
+            if (shelfDayStatus.dayEndDone) {
+                showError('Đã chốt kệ cuối ngày — không bán thêm hôm nay.')
                 return;
             }
 
@@ -2313,9 +2290,11 @@ function PosPage() {
     return (
         <PosShiftDutyGate
             onDutyChange={setShelfOnDuty}
-            requireCashSession={needsCashSession}
             cashSessionOpen={cashSessionOpen}
-            onCashOpened={() => setCashSessionOpen(true)}
+            onDayStatusChange={setShelfDayStatus}
+            dayEndRequested={dayEndRequested}
+            onDayEndRequestHandled={() => setDayEndRequested(false)}
+            requireShelfDay={canUsePosCounterMode(authSession) && salesMode === 'counter'}
             onSwitchToCod={
                 allowedSalesModes.some((m) => m.id === 'takeaway')
                     ? () => setSalesMode('takeaway')
@@ -2397,7 +2376,22 @@ function PosPage() {
                     </div>
                     </div>
 
-                    <PosCashSessionBar />
+                    {showCashSessionUi ? (
+                      <PosCashSessionBar
+                        dayStartDone={Boolean(shelfDayStatus.dayStartDone)}
+                        dayEndDone={Boolean(shelfDayStatus.dayEndDone)}
+                        onCashOpened={() => setCashSessionOpen(true)}
+                        sellerName={authSession?.username || ''}
+                        sellerRole={(authSession?.roles || []).join(', ')}
+                        shiftSlotId={shelfOnDuty?.slotId || null}
+                        shiftLabel={shelfOnDuty?.bypassed ? null : undefined}
+                        onRequestDayEnd={
+                          canViewAllOrders(authSession)
+                            ? undefined
+                            : () => setDayEndRequested(true)
+                        }
+                      />
+                    ) : null}
                 </div>
             </header>
 
@@ -3001,23 +2995,16 @@ function PosPage() {
           updateActiveSession({
             paymentMethod: id,
             amountPaidInput: id === paymentMethod ? amountPaidInput : '',
-            transferAmountInput: id === paymentMethod ? transferAmountInput : '',
             debtSettlement: null,
             overpaymentAction: 'return_change',
           })
         }
         isTransferPayment={isTransferPayment}
-        isSplitPayment={isSplitPayment}
         isCodTakeaway={isCodTakeaway}
         isTransferTakeaway={isTransferTakeaway}
         customerCurrentDebt={customerCurrentDebt}
         amountPaidInput={amountPaidInput}
         onAmountPaidChange={handleAmountPaidChange}
-        transferAmountInput={transferAmountInput}
-        onTransferAmountChange={handleTransferAmountChange}
-        splitCashAmount={splitCashAmount}
-        splitTransferAmount={splitTransferAmount}
-        paymentAllocatedTotal={paymentAllocatedTotal}
         transferQrAmount={transferQrAmount}
         amountPaid={amountPaid}
         debtAmount={debtAmount}

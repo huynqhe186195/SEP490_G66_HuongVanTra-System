@@ -131,3 +131,69 @@ body {
 }
 
 /* In hóa đơn POS: xem paymentReceipt.css */
+
+/* Modal & form khu kho: font Times New Roman, chữ to & đậm hơn */
+.inventory-modal *:not(.material-symbols-outlined),
+.inventory-form *:not(.material-symbols-outlined) {
+  font-family: 'Times New Roman', Times, serif !important;
+}
+.inventory-modal,
+.inventory-form {
+  font-weight: 400;
+  color: #0f172a;
+}
+.inventory-modal .text-xs,
+.inventory-form .text-xs {
+  font-size: 0.92rem;
+}
+.inventory-modal .text-sm,
+.inventory-form .text-sm {
+  font-size: 1.08rem;
+}
+.inventory-modal .text-base,
+.inventory-form .text-base {
+  font-size: 1.22rem;
+}
+.inventory-modal .text-lg,
+.inventory-form .text-lg {
+  font-size: 1.4rem;
+}
+.inventory-modal .text-slate-500,
+.inventory-modal .text-slate-400,
+.inventory-form .text-slate-500,
+.inventory-form .text-slate-400 {
+  color: #334155 !important;
+}
+.inventory-modal .text-slate-600,
+.inventory-form .text-slate-600 {
+  color: #1e293b !important;
+}
+/* Nhãn field, input, select, textarea: rõ & đậm hơn */
+.inventory-form label > span,
+.inventory-modal label > span {
+  color: #334155 !important;
+  font-weight: 500;
+}
+.inventory-form input,
+.inventory-form select,
+.inventory-form textarea,
+.inventory-modal input,
+.inventory-modal select,
+.inventory-modal textarea {
+  font-weight: 400;
+  color: #0f172a !important;
+  min-width: 0;
+  max-width: 100%;
+}
+/* Ô nhập trong lưới nhiều cột phải co vừa cột, không tràn */
+.inventory-form label,
+.inventory-modal label {
+  min-width: 0;
+}
+.inventory-form input::placeholder,
+.inventory-form textarea::placeholder,
+.inventory-modal input::placeholder,
+.inventory-modal textarea::placeholder {
+  color: #64748b !important;
+  font-weight: 500;
+}

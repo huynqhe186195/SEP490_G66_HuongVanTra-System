@@ -4,10 +4,13 @@ using OrderService.Domain.Enums;
 namespace OrderService.Application.Authorization;
 
 /// <summary>
-/// SalePos (CREATE_POS_ORDER): đơn của mình theo chính sách hiện tại, không gồm COD.
-/// SaleCod (CREATE_COD_ORDER): mọi đơn COD, không xem đơn quầy/khác.
+/// SalePos (CREATE_POS_ORDER): xem được mọi đơn quầy trong phạm vi cửa hàng,
+/// không lọc theo Sale tạo đơn.
+/// SaleCod (CREATE_COD_ORDER): mọi đơn COD, không xem đơn quầy.
 /// Người có cả hai permission nhận hợp của hai phạm vi trên.
 /// Manager/Admin/Kế toán: toàn bộ đơn.
+/// Quyền thao tác (sửa, hủy, hoàn tiền, giao hàng, hoàn tất) vẫn giới hạn theo
+/// người tạo đơn qua <see cref="CanModifyOrder(Order)"/>.
 /// </summary>
 public record OrderAccessContext(
     Guid UserId,
@@ -21,14 +24,24 @@ public record OrderAccessContext(
     public bool IncludeAllCodOrders =>
         !CanViewAllOrders && CanViewAllCodOrders && CanViewOwnOrders;
 
-    public Guid? EmployeeFilter =>
-        CanViewAllOrders || CodOrdersOnly
-            ? null
-            : CanViewOwnOrders
-                ? UserId
-                : Guid.Empty;
+    /// <summary>
+    /// Không lọc danh sách theo nhân viên tạo đơn: Sale được tra cứu toàn bộ đơn
+    /// trong phạm vi cửa hàng. Phạm vi kênh (COD) vẫn giữ nguyên.
+    /// </summary>
+    public Guid? EmployeeFilter => null;
 
-    public bool CanAccessOrder(Order order)
+    /// <summary>
+    /// Phạm vi xem/tra cứu: chỉ giới hạn theo kênh đơn, không theo người tạo.
+    /// </summary>
+    public bool CanViewOrder(Order order) =>
+        CanViewAllOrders
+        || !CodOrdersOnly
+        || IsCodOrder(order);
+
+    /// <summary>
+    /// Phạm vi thao tác: giữ nguyên chính sách sở hữu hiện tại.
+    /// </summary>
+    public bool CanModifyOrder(Order order)
     {
         if (CanViewAllOrders)
             return true;
@@ -43,9 +56,9 @@ public record OrderAccessContext(
 
     /// <summary>
     /// Overload chỉ theo EmployeeId — không dùng cho SaleCod (cần OrderChannel).
-    /// Prefer <see cref="CanAccessOrder(Order)"/>.
+    /// Prefer <see cref="CanModifyOrder(Order)"/>.
     /// </summary>
-    public bool CanAccessOrder(Guid? employeeId) =>
+    public bool CanModifyOrder(Guid? employeeId) =>
         CanViewAllOrders
         || (CanViewOwnOrders
             && employeeId.HasValue

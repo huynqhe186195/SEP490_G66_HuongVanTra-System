@@ -81,6 +81,36 @@ public class InventoryCatalogClient(HttpClient httpClient, ILogger<InventoryCata
         return result;
     }
 
+    public async Task<HashSet<Guid>> GetOrderIdsWithActiveReservationAsync(
+        IReadOnlyCollection<Guid> orderIds,
+        CancellationToken ct = default)
+    {
+        try
+        {
+            var response = await httpClient.PostAsJsonAsync(
+                "api/stock-deduct-queue/reservations/active-order-ids",
+                orderIds.ToList(),
+                ct);
+
+            var raw = await response.Content.ReadAsStringAsync(ct);
+            if (!response.IsSuccessStatusCode)
+            {
+                logger.LogWarning(
+                    "Inventory active reservation lookup failed {Status}: {Error}", response.StatusCode, raw);
+                return [];
+            }
+
+            var result = JsonSerializer.Deserialize<List<Guid>>(raw, JsonOptions);
+            return result == null ? [] : [.. result];
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
+        {
+            // Badge giữ chỗ là thông tin phụ trợ — không chặn danh sách đơn khi Inventory không phản hồi.
+            logger.LogWarning(ex, "Không lấy được danh sách đơn đang giữ chỗ từ InventoryService.");
+            return [];
+        }
+    }
+
     private static string? ExtractErrorMessage(string raw)
     {
         if (string.IsNullOrWhiteSpace(raw))

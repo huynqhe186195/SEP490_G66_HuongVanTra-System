@@ -66,7 +66,7 @@ function ReturnOrdersPage() {
     <PageShell className="pb-8">
       <PageHeader
         title="Phiếu trả hàng"
-        description="Danh sách phiếu trả từ POS — tra cứu theo mã phiếu, mã hóa đơn gốc hoặc tên khách."
+        titleInfo="Danh sách phiếu trả từ POS — tra cứu theo mã phiếu, mã hóa đơn gốc hoặc tên khách."
         searchPlaceholder="Tìm TH-..., HVT-..., tên khách..."
         searchValue={searchInput}
         onSearchChange={setSearchInput}

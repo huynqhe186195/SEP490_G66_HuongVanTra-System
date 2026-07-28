@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import PageShell from '../../../components/shared/PageShell.jsx'
+import { TitleInfoButton } from '../../../components/shared/PageHeader.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { useAuthSession } from '../../auth/hooks/useAuthSession.js'
 import { canCreateProductDeletionRequest, isSystemAdmin, isWarehouseRole } from '../../auth/utils/permissions.js'
@@ -295,10 +296,10 @@ export default function ProductDeletionRequestsPage() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#538463]">Product master data</p>
-            <h1 className="mt-2 text-2xl font-extrabold text-slate-900">Yêu cầu xóa hàng hóa</h1>
-            <p className="mt-1 text-sm text-slate-500">
-              Product/SKU/BOM không được xóa trực tiếp. Warehouse gửi yêu cầu, Admin duyệt xóa mềm sau khi kiểm tra tồn kho và ràng buộc BOM.
-            </p>
+            <div className="mt-2 flex items-center gap-2">
+              <h1 className="text-2xl font-extrabold text-slate-900">Yêu cầu xóa hàng hóa</h1>
+              <TitleInfoButton text="Product/SKU/BOM không được xóa trực tiếp. Warehouse gửi yêu cầu, Admin duyệt xóa mềm sau khi kiểm tra tồn kho và ràng buộc BOM." />
+            </div>
           </div>
           <div className="flex flex-wrap gap-2">
             {canWarehouse ? (

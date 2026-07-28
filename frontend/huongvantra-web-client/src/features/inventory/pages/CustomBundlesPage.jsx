@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { TitleInfoButton } from '../../../components/shared/PageHeader.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { confirmPacking, fetchPendingCustomBundles } from '../../orders/services/customBundleApi.js'
 
@@ -100,8 +101,10 @@ export default function CustomBundlesPage() {
     <div className="mx-auto max-w-4xl space-y-4 px-4 py-6">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-[#1b1c17]">Gói trà theo yêu cầu</h1>
-          <p className="text-sm text-[#717971]">Danh sách gói custom chờ đóng gói</p>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-bold text-[#1b1c17]">Gói trà theo yêu cầu</h1>
+            <TitleInfoButton text="Danh sách gói custom chờ đóng gói" />
+          </div>
         </div>
         <button
           type="button"

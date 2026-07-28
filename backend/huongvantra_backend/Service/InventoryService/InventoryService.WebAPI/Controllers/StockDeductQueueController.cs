@@ -48,4 +48,52 @@ public class StockDeductQueueController(InventoryLogic _logic) : ControllerBase
         var result = await _logic.CancelQueueAsync(queueId, request, User.GetUserId(), User.ToCreatorSnapshot(), ct);
         return Ok(result);
     }
+
+    /// <summary>
+    /// POS-04 (truy vết giữ chỗ, chiều đơn → SKU): danh sách giữ chỗ của một đơn COD.
+    /// Chỉ đọc — mọi role đăng nhập xem được đơn đều tra được giữ chỗ của đơn đó.
+    /// </summary>
+    [HttpGet("reservations/by-order/{orderId:guid}")]
+    public async Task<IActionResult> GetReservationsByOrder(Guid orderId, CancellationToken ct)
+    {
+        var result = await _logic.GetOrderCodReservationsAsync(orderId, ct);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// POS-04 (truy vết giữ chỗ, chiều SKU → đơn): các đơn đang giữ chỗ một SKU.
+    /// </summary>
+    [HttpGet("reservations/by-sku/{skuId:guid}")]
+    public async Task<IActionResult> GetActiveReservationsBySku(Guid skuId, CancellationToken ct)
+    {
+        var result = await _logic.GetSkuCodReservationsAsync(skuId, ct);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// POS-04 (truy vết giữ chỗ): danh sách đơn đang giữ chỗ tồn Kệ Hàng.
+    /// </summary>
+    [HttpGet("reservations/active-orders")]
+    public async Task<IActionResult> GetOrdersWithActiveReservation(
+        [FromQuery] string? search,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken ct = default)
+    {
+        var result = await _logic.GetOrdersWithActiveReservationAsync(search, page, pageSize, ct);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// POS-04 (truy vết giữ chỗ): lọc tập OrderId truyền lên xuống còn các đơn đang giữ chỗ.
+    /// Dùng cho badge trên danh sách đơn — OrderService gọi qua service client, không đọc chéo database.
+    /// </summary>
+    [HttpPost("reservations/active-order-ids")]
+    public async Task<IActionResult> FilterOrderIdsWithActiveReservation(
+        [FromBody] List<Guid>? orderIds,
+        CancellationToken ct)
+    {
+        var result = await _logic.GetOrderIdsWithActiveReservationAsync(orderIds, ct);
+        return Ok(result);
+    }
 }

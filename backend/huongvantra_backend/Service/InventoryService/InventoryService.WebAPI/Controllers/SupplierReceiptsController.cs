@@ -40,7 +40,7 @@ public class SupplierReceiptsController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "Manager,Admin")]
+    [Authorize(Roles = "Manager,Admin,Warehouse")]
     public async Task<IActionResult> Create([FromBody] UpsertSupplierReceiptRequest request, CancellationToken ct)
     {
         var userId = User.GetUserId();
@@ -51,7 +51,7 @@ public class SupplierReceiptsController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
-    [Authorize(Roles = "Manager,Admin")]
+    [Authorize(Roles = "Manager,Admin,Warehouse")]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpsertSupplierReceiptRequest request, CancellationToken ct)
     {
         var userId = User.GetUserId();
@@ -61,7 +61,7 @@ public class SupplierReceiptsController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpPost("{id:guid}/submit")]
-    [Authorize(Roles = "Manager,Admin")]
+    [Authorize(Roles = "Manager,Admin,Warehouse")]
     public async Task<IActionResult> Submit(Guid id, CancellationToken ct)
     {
         var userId = User.GetUserId();
@@ -91,7 +91,7 @@ public class SupplierReceiptsController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpPost("{id:guid}/cancel")]
-    [Authorize(Roles = "Manager,Admin")]
+    [Authorize(Roles = "Manager,Admin,Warehouse")]
     public async Task<IActionResult> Cancel(Guid id, [FromBody] ReviewSupplierReceiptRequest request, CancellationToken ct)
     {
         var userId = User.GetUserId();

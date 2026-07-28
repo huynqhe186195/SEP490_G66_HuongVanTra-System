@@ -169,7 +169,7 @@ function SystemActivityLogPage() {
     <PageShell>
       <PageHeader
         title="Nhật ký hoạt động hệ thống"
-        description="Theo dõi các thao tác ghi dữ liệu từ Product, Inventory, Order, User, Customer và Document."
+        titleInfo="Theo dõi các thao tác ghi dữ liệu từ Product, Inventory, Order, User, Customer và Document."
         rightContent={
           <button
             type="button"

@@ -83,7 +83,7 @@ function StaffPage() {
     <PageShell className="[font-family:'Manrope',sans-serif]">
       <PageHeader
         title="Nhân viên"
-        description={scopeLabel}
+        titleInfo={scopeLabel}
         rightContent={(
           <Link
             to="/staff/create"

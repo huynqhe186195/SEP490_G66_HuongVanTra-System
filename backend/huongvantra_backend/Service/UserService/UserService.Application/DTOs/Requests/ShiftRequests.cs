@@ -11,3 +11,6 @@ public record UpsertShiftRegistrationWindowRequest(
     string WeekStart,
     string OpensAt,
     string ClosesAt);
+
+/// <summary>Manager chỉnh giờ khung ca (Start/End dạng HH:mm, cùng ngày).</summary>
+public record UpdateShiftTemplateHoursRequest(string Start, string End);

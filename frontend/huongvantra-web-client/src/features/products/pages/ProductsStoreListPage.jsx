@@ -2,6 +2,7 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { AUTH_SESSION_CHANGED_EVENT, loadAuthSession } from '../../auth/services/authSession.js'
 import { Link } from 'react-router-dom'
 import PageShell from '../../../components/shared/PageShell.jsx'
+import { TitleInfoButton } from '../../../components/shared/PageHeader.jsx'
 import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { canAdjustStoreStock, canSyncCatalog, canViewOrders } from '../../auth/utils/permissions.js'
@@ -361,10 +362,10 @@ export default function ProductsStoreListPage() {
         <div className="shrink-0 border-b border-slate-200 px-3 py-3 sm:px-5">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <h1 className="text-xl font-bold text-slate-900">Hàng hóa</h1>
-              <p className="mt-0.5 text-xs text-slate-500 sm:text-sm">
-                Catalog cửa hàng theo sản phẩm — cùng nguồn dữ liệu với POS ({totalCount} sản phẩm)
-              </p>
+              <div className="flex items-center gap-2">
+                <h1 className="text-xl font-bold text-slate-900">Hàng hóa</h1>
+                <TitleInfoButton text={`Catalog cửa hàng theo sản phẩm — cùng nguồn dữ liệu với POS (${totalCount} sản phẩm)`} />
+              </div>
             </div>
 
             <div className="flex flex-1 flex-col gap-2 sm:flex-row sm:items-center lg:max-w-3xl lg:justify-end">

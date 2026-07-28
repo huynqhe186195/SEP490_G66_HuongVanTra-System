@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { showError } from '../../../app/toast.js'
 import { formatVietnamDate } from '../../../utils/vietnamDateTime.js'
 import { fetchWarehouseBatches } from '../../inventory/services/warehouseBatchApi.js'
+import SkuCodReservationSection from '../../inventory/components/SkuCodReservationSection.jsx'
 import ProductImage from './ProductImage.jsx'
 import {
   formatProductCreatedAt,
@@ -323,6 +324,8 @@ export default function ProductExpandedPanel({
             </tbody>
           </table>
         </div>
+
+          <SkuCodReservationSection skuId={focusedSkuId} />
         </div>
       ) : null}
 

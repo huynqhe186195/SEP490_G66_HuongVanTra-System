@@ -618,12 +618,6 @@ export default function ProductsWarehouseListPage() {
             </div>
           </div>
 
-          {pendingSyncTotal > 0 ? (
-            <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-              <p className="font-semibold">Có {pendingSyncTotal} mục từ kho chưa đồng bộ sang cửa hàng.</p>
-            </div>
-          ) : null}
-
           {createdBanner.open && createdBanner.productId ? (
             <div className="mt-3 flex flex-col gap-3 rounded-xl border border-[#356647]/30 bg-[#356647]/8 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
               <div>

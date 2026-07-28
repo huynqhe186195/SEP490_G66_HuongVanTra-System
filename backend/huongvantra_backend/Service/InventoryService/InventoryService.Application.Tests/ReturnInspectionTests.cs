@@ -57,11 +57,11 @@ public sealed class ReturnInspectionTests
             new InMemorySkuStockRepo(db),
             new StockDeductQueueRepository(db),
             Mock.Of<IStockAdjustmentRequestRepository>(),
-            Mock.Of<IStockExportSlipRepository>(),
+            new StockExportSlipRepository(db),
             Mock.Of<IStockImportSlipRepository>(),
             new WarehouseBatchRepository(db),
-            Mock.Of<IStockExportBatchAllocationRepository>(),
-            Mock.Of<IInventoryLedgerRepository>(),
+            new StockExportBatchAllocationRepository(db),
+            new InventoryLedgerRepository(db),
             Mock.Of<ISupplierReceiptRepository>(),
             Mock.Of<IShelfReturnRequestRepository>(),
             Mock.Of<ISupplierReturnRequestRepository>(),
@@ -112,6 +112,100 @@ public sealed class ReturnInspectionTests
 
     private static async Task<ReturnInspection> SinglePendingAsync(InventoryDbContext db, Guid returnId) =>
         await db.ReturnInspections.AsNoTracking().SingleAsync(r => r.ReturnId == returnId);
+
+    private static async Task SeedShelfBatchAsync(
+        InventoryDbContext db, Guid skuId, int qty, string lotCode, string code = "SKU-RI")
+    {
+        var batchId = Guid.NewGuid();
+        db.WarehouseBatches.Add(new WarehouseBatch
+        {
+            Id = batchId,
+            LotCode = lotCode,
+            Location = "Shelf",
+            Status = "active",
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+            Items =
+            {
+                new WarehouseBatchItem
+                {
+                    Id = Guid.NewGuid(),
+                    WarehouseBatchId = batchId,
+                    SkuId = skuId,
+                    SkuCode = code,
+                    QuantityOnHand = qty,
+                    InitialQuantity = qty,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow,
+                }
+            }
+        });
+        await db.SaveChangesAsync();
+    }
+
+    private static async Task SyncShelfAggregateAsync(InventoryDbContext db, Guid skuId)
+    {
+        var stock = await db.SkuStocks.FirstAsync(s => s.SkuId == skuId);
+        stock.QuantityOnHand = await db.WarehouseBatchItems
+            .Where(i => i.SkuId == skuId)
+            .Join(db.WarehouseBatches.Where(b => b.Status == "active" && b.Location == "Shelf"),
+                i => i.WarehouseBatchId, b => b.Id, (i, _) => i.QuantityOnHand)
+            .SumAsync();
+        await db.SaveChangesAsync();
+    }
+
+    private static OrderPlacedEvent CodPlaced(Guid orderId, Guid skuId, int qty, string code = "SKU-RI") =>
+        new()
+        {
+            EventId = Guid.NewGuid(),
+            OccurredAtUtc = DateTime.UtcNow,
+            OrderId = orderId,
+            OrderCode = $"HVT-{orderId:N}"[..10],
+            OrderStatus = "PendingPayment",
+            OrderChannel = "COD",
+            TotalAmount = 10_000m,
+            Items = [new OrderItemEvent { SkuId = skuId, SkuCode = code, SkuName = "Sản phẩm", Quantity = qty }],
+        };
+
+    // ── POS-04 + J: Shipping (deduct-later) rồi Return RestockApproved ────────
+    // Sau khi ship trừ lô Kệ Hàng, aggregate == tổng lô. Return 1 + RestockApproved
+    // chỉ tăng đúng 1, không nhảy tồn do đồng bộ lại aggregate từ lô.
+
+    [Fact]
+    public async Task ShippingThenRestockApproved_IncreasesOnlyByReturnedQuantity()
+    {
+        await using var db = NewDb();
+        var sku = Guid.NewGuid();
+        await SeedStockAsync(db, sku, shelfOnHand: 0);
+        await SeedShelfBatchAsync(db, sku, qty: 10, lotCode: "SHELF-E2E");
+        await SyncShelfAggregateAsync(db, sku);
+        var logic = BuildLogic(db);
+        var actor = Guid.NewGuid();
+
+        // 1) COD ship: trừ 4 khỏi lô Kệ Hàng → aggregate = 6, khớp tổng lô.
+        var orderId = Guid.NewGuid();
+        await logic.HandleOrderPlacedAsync(CodPlaced(orderId, sku, 4));
+        var queue = await db.StockDeductQueues.Include(q => q.Items).FirstAsync(q => q.OrderId == orderId);
+        await logic.ConfirmQueueAsync(queue.Id, actor, null);
+
+        var afterShip = await db.SkuStocks.AsNoTracking().FirstAsync(s => s.SkuId == sku);
+        var batchAfterShip = await db.WarehouseBatchItems.AsNoTracking()
+            .Where(i => i.SkuId == sku).SumAsync(i => i.QuantityOnHand);
+        Assert.Equal(6, afterShip.QuantityOnHand);
+        Assert.Equal(6, batchAfterShip);
+
+        // 2) Return 1 + RestockApproved → tồn tăng đúng 1 (6 → 7), không nhảy.
+        var returnId = Guid.NewGuid();
+        await logic.HandleOrderReturnedAsync(ReturnEvent(returnId, sku, 1, skuCode: "SKU-RI"));
+        var insp = await SinglePendingAsync(db, returnId);
+        await logic.InspectReturnAsync(insp.Id, new InspectReturnRequest("RestockApproved", "OK bán lại"), actor);
+
+        var afterRestock = await db.SkuStocks.AsNoTracking().FirstAsync(s => s.SkuId == sku);
+        var batchAfterRestock = await db.WarehouseBatchItems.AsNoTracking()
+            .Where(i => i.SkuId == sku).SumAsync(i => i.QuantityOnHand);
+        Assert.Equal(7, afterRestock.QuantityOnHand); // tăng đúng 1
+        Assert.Equal(7, batchAfterRestock);
+    }
 
     // ── J2: creating a return must NOT auto-increase sellable stock ───────────
 

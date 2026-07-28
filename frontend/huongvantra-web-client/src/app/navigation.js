@@ -42,9 +42,29 @@ const HOME_MODULE_PRIORITY = [
 
 export const navigationItems = [
   { label: 'POS bán hàng', path: '/pos', module: 'pos', icon: 'point_of_sale', roles: ['agencyManager', 'salesStaff', 'customer'] },
-  { label: 'Đơn hàng', path: '/orders', module: 'orders', icon: 'receipt_long', roles: ['admin', 'agencyManager', 'salePos', 'accountant'] },
+  { label: 'Quỹ ca POS', path: '/pos/cash-sessions', module: 'orders', icon: 'account_balance_wallet', roles: ['admin', 'agencyManager', 'accountant'] },
+  {
+    label: 'Đơn hàng',
+    path: '/orders',
+    module: 'orders',
+    icon: 'receipt_long',
+    roles: ['admin', 'agencyManager', 'salePos', 'saleCod', 'accountant'],
+    children: [
+      {
+        label: 'Quản Lý Đơn POS',
+        path: '/orders',
+        module: 'orders',
+        roles: ['admin', 'agencyManager', 'salePos', 'accountant'],
+      },
+      {
+        label: 'Quản Lý Đơn COD',
+        path: '/orders/cod',
+        module: 'cod_ops',
+        roles: ['agencyManager', 'saleCod'],
+      },
+    ],
+  },
   { label: 'Trả / đổi hàng', path: '/orders/exchange', module: 'orders', icon: 'swap_horiz', roles: ['admin', 'agencyManager', 'salePos', 'saleCod', 'accountant'] },
-  { label: 'Quản lý đơn COD', path: '/orders/cod', module: 'cod_ops', icon: 'local_shipping', roles: ['agencyManager', 'saleCod'] },
   {
     label: 'Chờ trừ tồn quầy',
     path: '/orders/stock-deduct',
@@ -203,6 +223,7 @@ const INVENTORY_SIDEBAR_GROUPS = [
     icon: 'warehouse',
     entries: [
       { path: '/inventory', label: 'Tồn kho tổng' },
+      { path: '/inventory/batches', label: 'Lô hàng nhập' },
       { path: '/inventory/returns' },
       { path: '/inventory/stocktake' },
       { path: '/inventory/ledger' },
@@ -284,6 +305,25 @@ function hasAnyRoleGroup(userRoles, allowedGroups) {
   })
 }
 
+function filterModuleChildren(children = [], allowedModules, roles = []) {
+  return children.filter((child) => {
+    if (!child.module) return true
+    if (!isSidebarModuleEnabled(child.module)) return false
+    if (child.roles?.length && !hasAnyRoleGroup(roles, child.roles)) return false
+    if (allowedModules.has(child.module)) return true
+    if (roles.length && child.roles?.length && hasAnyRoleGroup(roles, child.roles)) return true
+    return false
+  })
+}
+
+function filterRoleChildren(children = [], roles = []) {
+  return children.filter((child) => {
+    if (!child.module && !child.roles?.length) return true
+    if (child.roles?.length) return hasAnyRoleGroup(roles, child.roles)
+    return true
+  })
+}
+
 export function getNavigationItemsForModules(modules = [], roles = []) {
   if (!modules.length && !roles.length) {
     return []
@@ -293,17 +333,25 @@ export function getNavigationItemsForModules(modules = [], roles = []) {
     modules.map((module) => module.toLowerCase()).filter(isSidebarModuleEnabled),
   )
 
-  return navigationItems.filter((item) => {
-    if (!isSidebarModuleEnabled(item.module)) return false
+  return navigationItems
+    .map((item) => {
+      if (!isSidebarModuleEnabled(item.module)) return null
 
-    const roleAllowed = !item.roles?.length || hasAnyRoleGroup(roles, item.roles)
-    if (!roleAllowed) return false
+      const roleAllowed = !item.roles?.length || hasAnyRoleGroup(roles, item.roles)
+      if (!roleAllowed) return null
 
-    if (allowedModules.has(item.module)) return true
-    if (roles.length && hasAnyRoleGroup(roles, item.roles)) return true
+      const hasModuleChildren = item.children?.some((child) => child.module)
+      if (hasModuleChildren) {
+        const children = filterModuleChildren(item.children, allowedModules, roles)
+        if (!children.length) return null
+        return { ...item, children, path: children[0].path || item.path }
+      }
 
-    return false
-  })
+      if (allowedModules.has(item.module)) return item
+      if (roles.length && hasAnyRoleGroup(roles, item.roles)) return item
+      return null
+    })
+    .filter(Boolean)
 }
 
 export function getNavigationItemsForRoles(roles = []) {
@@ -311,7 +359,20 @@ export function getNavigationItemsForRoles(roles = []) {
     return []
   }
 
-  return navigationItems.filter((item) => hasAnyRoleGroup(roles, item.roles))
+  return navigationItems
+    .map((item) => {
+      if (!hasAnyRoleGroup(roles, item.roles)) return null
+
+      const hasModuleChildren = item.children?.some((child) => child.module || child.roles?.length)
+      if (hasModuleChildren) {
+        const children = filterRoleChildren(item.children, roles)
+        if (!children.length) return null
+        return { ...item, children, path: children[0].path || item.path }
+      }
+
+      return item
+    })
+    .filter(Boolean)
 }
 
 function withRoleAwareProductLabel(items, roles = []) {
@@ -350,8 +411,12 @@ export function getHomeRouteForModules(modules = []) {
       continue
     }
 
-    const item = navigationItems.find((entry) => entry.module === module)
-    if (item) {
+    const item =
+      navigationItems.find((entry) => entry.module === module)
+      || navigationItems
+        .flatMap((entry) => entry.children || [])
+        .find((child) => child.module === module)
+    if (item?.path) {
       return item.path
     }
   }
@@ -424,6 +489,7 @@ const MODULE_PATH_PREFIXES = [
   { module: 'cod_ops', prefix: '/orders/cod' },
   { module: 'stock_deduct_ops', prefix: '/orders/stock-deduct' },
   { module: 'orders', prefix: '/orders' },
+  { module: 'orders', prefix: '/pos/cash-sessions' },
   { module: 'pos', prefix: '/pos' },
   { module: 'dashboard', prefix: '/dashboard' },
 ]
@@ -596,8 +662,8 @@ function getOrderDetailContext(pathname, search = '') {
 export function isNavigationItemActive(pathname, item, search = '') {
   const path = (pathname || '').toLowerCase()
 
-  // Nhóm cha của role kho: active khi bất kỳ mục con nào đang active (theo path).
-  if (item?.isGroup) {
+  // Nhóm cha của role kho / nhóm Đơn hàng: active khi bất kỳ mục con nào đang active.
+  if (item?.isGroup || item?.children?.some((child) => child.module)) {
     return (item.children || []).some((child) =>
       isNavigationItemActive(pathname, { path: child.path, module: child.module }, search),
     )
@@ -679,6 +745,14 @@ export function isNavigationItemActive(pathname, item, search = '') {
   }
 
   if (item.module === 'dashboard') {
+    return path === target || path.startsWith(`${target}/`)
+  }
+
+  // POS bán hàng: không highlight khi đang ở Quỹ ca POS (/pos/cash-sessions).
+  if (item.module === 'pos' || target === '/pos') {
+    if (path === '/pos/cash-sessions' || path.startsWith('/pos/cash-sessions/')) {
+      return false
+    }
     return path === target || path.startsWith(`${target}/`)
   }
 

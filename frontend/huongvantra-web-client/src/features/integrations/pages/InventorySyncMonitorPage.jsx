@@ -138,7 +138,7 @@ function InventorySyncMonitorPage() {
     <PageShell>
       <PageHeader
         title="Giám sát đồng bộ tồn kho"
-        description="Theo dõi hàng đợi Outbox phát sự kiện đơn hàng sang kho và gửi lại thủ công khi thất bại."
+        titleInfo="Theo dõi hàng đợi Outbox phát sự kiện đơn hàng sang kho và gửi lại thủ công khi thất bại."
         rightContent={
           <button
             type="button"

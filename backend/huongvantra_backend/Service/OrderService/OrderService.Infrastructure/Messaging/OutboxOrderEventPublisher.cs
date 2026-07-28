@@ -22,6 +22,7 @@ public sealed class OutboxOrderEventPublisher(IOrderOutboxWriter _outbox) : IOrd
     public async Task PublishOrderPlacedAsync(
         Guid orderId, string orderCode, string orderStatus, string orderChannel, decimal totalAmount,
         IEnumerable<(Guid SkuId, string SkuName, string? SkuCode, int Quantity)> items,
+        string? customerSnapshotName = null,
         CancellationToken ct = default)
     {
         var eventId = Guid.NewGuid();
@@ -33,6 +34,7 @@ public sealed class OutboxOrderEventPublisher(IOrderOutboxWriter _outbox) : IOrd
             OrderCode = orderCode,
             OrderStatus = orderStatus,
             OrderChannel = orderChannel,
+            CustomerSnapshotName = customerSnapshotName ?? string.Empty,
             TotalAmount = totalAmount,
             Items = items.Select(i => new OrderItemEvent
             {

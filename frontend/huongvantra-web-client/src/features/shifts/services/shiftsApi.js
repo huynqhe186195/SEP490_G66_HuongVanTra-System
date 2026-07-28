@@ -76,6 +76,15 @@ export async function fetchShiftWeek({ weekStart, area } = {}) {
   }
 }
 
+/** Manager chỉnh giờ khung ca (HH:mm). */
+export async function updateShiftTemplateHours(templateId, { start, end }) {
+  const data = await apiRequestAuth(`/api/shifts/templates/${templateId}`, {
+    method: 'PUT',
+    body: JSON.stringify({ start, end }),
+  })
+  return normalizeTemplate(data)
+}
+
 export async function registerShiftSlot(slotId) {
   const data = await apiRequestAuth(`/api/shifts/slots/${slotId}/register`, { method: 'POST' })
   return normalizeAssignment(data)
@@ -159,7 +168,7 @@ export async function fetchMyShiftWeekStatus() {
   }
 }
 
-/** Ca quầy đã duyệt đang trong giờ (±30 phút). Null nếu chưa đủ điều kiện mở ca quỹ. */
+/** Ca quầy đã duyệt đang trong giờ ca (đúng khung giờ template). Null nếu chưa đủ điều kiện. */
 export async function fetchOnDutyShift(area = 'Shelf') {
   const params = new URLSearchParams()
   if (area) params.set('area', area)

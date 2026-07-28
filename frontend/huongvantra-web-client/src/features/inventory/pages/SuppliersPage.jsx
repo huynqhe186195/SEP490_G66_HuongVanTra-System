@@ -126,7 +126,7 @@ function SupplierFormModal({ initial, onClose, onSaved }) {
     errors[field] ? <p className="mt-1 text-xs text-red-500">{errors[field]}</p> : null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+    <div className="inventory-modal fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
       <div
         className="w-full max-w-lg rounded-2xl border border-[#c1c9c0] bg-white p-6 shadow-xl"
         onClick={(e) => e.stopPropagation()}>
@@ -315,6 +315,7 @@ export default function SuppliersPage() {
     <PageShell>
       <PageHeader
         title="Nhà cung cấp"
+        titleInfo="Quản lý danh mục nhà cung cấp dùng cho phiếu nhập và trả hàng."
         rightContent={
           canManage ? (
             <button

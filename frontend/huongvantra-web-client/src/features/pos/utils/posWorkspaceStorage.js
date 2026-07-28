@@ -19,7 +19,6 @@ export function createEmptyPersistedPosSession(mode = 'counter') {
     customerSearchType: '',
     paymentMethod: EMPTY_BY_MODE[mode] || 'CASH',
     amountPaidInput: '',
-    transferAmountInput: '',
     overpaymentAction: 'return_change',
     debtSettlement: null,
     shippingAddress: '',
@@ -102,7 +101,6 @@ function sanitizeSession(session, mode) {
     customerSearchType: String(session?.customerSearchType || ''),
     paymentMethod: String(session?.paymentMethod || base.paymentMethod),
     amountPaidInput: String(session?.amountPaidInput || ''),
-    transferAmountInput: String(session?.transferAmountInput || ''),
     overpaymentAction: String(session?.overpaymentAction || 'return_change'),
     debtSettlement: session?.debtSettlement ?? null,
     shippingAddress: String(session?.shippingAddress || ''),
@@ -143,6 +141,14 @@ export function normalizePosWorkspaceRecord(record) {
       ? [...new Set(record.restoredOrderIds.filter(Boolean).map(String))]
       : [],
   }
+}
+
+/** Giữ salesMode trong các mode user được phép (COD-only không bị kéo về counter). */
+export function clampPosSalesMode(salesMode, allowedModeIds = []) {
+  const ids = Array.isArray(allowedModeIds) ? allowedModeIds.filter(Boolean) : []
+  if (ids.length === 0) return salesMode === 'takeaway' ? 'takeaway' : 'counter'
+  if (ids.includes(salesMode)) return salesMode
+  return ids[0]
 }
 
 export async function loadPersistedPosWorkspace(userId) {

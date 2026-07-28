@@ -312,6 +312,11 @@ function Sidebar({
               isNavigationChildActive(location.pathname, location.search, child),
             )
             const parentHighlighted = itemActive && !hasActiveChild
+            const canExpandGroup = () => {
+              const session = loadAuthSession()
+              if (canAccessModule(session, item.module)) return true
+              return item.children.some((child) => !child.module || canAccessModule(session, child.module))
+            }
 
             if (isCompact) {
               return (
@@ -320,7 +325,7 @@ function Sidebar({
                     type="button"
                     title={item.label}
                     onClick={() => {
-                      if (!canAccessModule(loadAuthSession(), item.module)) {
+                      if (!canExpandGroup()) {
                         showError('Bạn không có quyền truy cập tab này.')
                         return
                       }
@@ -353,7 +358,7 @@ function Sidebar({
                             key={child.path}
                             to={child.path}
                             onClick={(event) => {
-                              handleNavClick(event, child.path, item.module)
+                              handleNavClick(event, child.path, child.module || item.module)
                               setOpenFlyoutPath(null)
                             }}
                             className={childNavClass(childActive)}
@@ -378,7 +383,7 @@ function Sidebar({
                 <button
                   type="button"
                   onClick={() => {
-                    if (!canAccessModule(loadAuthSession(), item.module)) {
+                    if (!canExpandGroup()) {
                       showError('Bạn không có quyền truy cập tab này.')
                       return
                     }
@@ -414,7 +419,7 @@ function Sidebar({
                         <NavLink
                           key={child.path}
                           to={child.path}
-                          onClick={(event) => handleNavClick(event, child.path, item.module)}
+                          onClick={(event) => handleNavClick(event, child.path, child.module || item.module)}
                           className={childNavClass(childActive)}
                         >
                           <span

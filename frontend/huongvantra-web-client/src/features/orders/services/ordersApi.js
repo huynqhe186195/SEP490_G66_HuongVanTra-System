@@ -82,6 +82,9 @@ export function mapOrderSummary(item) {
     isCodVerified: item.isCodVerified ?? item.IsCodVerified ?? null,
     codWarningDate: item.codWarningDate ?? item.CodWarningDate ?? null,
     codExpectedAmount: Number(item.codExpectedAmount ?? item.CodExpectedAmount ?? 0) || null,
+    hasActiveStockReservation: Boolean(
+      item.hasActiveStockReservation ?? item.HasActiveStockReservation ?? false,
+    ),
   }
 }
 
@@ -137,6 +140,7 @@ function buildOrdersQuery(params = {}) {
   if (params.employeeId && isValidGuid(params.employeeId)) {
     search.set('employeeId', String(params.employeeId).trim())
   }
+  if (params.hasActiveReservation) search.set('hasActiveReservation', 'true')
   const page = Math.max(1, Number(params.page) || 1)
   const pageSize = Math.min(1000, Math.max(1, Number(params.pageSize) || 20))
   search.set('page', String(page))
@@ -172,6 +176,68 @@ export async function fetchOrderActivities(orderId) {
     method: 'GET',
   })
   return Array.isArray(data) ? data.map(mapOrderActivity).filter(Boolean) : []
+}
+
+export function mapReceiptReprintLog(item) {
+  if (!item) return null
+  return {
+    id: item.id ?? item.Id ?? '',
+    orderId: item.orderId ?? item.OrderId ?? '',
+    printedByUserId: item.printedByUserId ?? item.PrintedByUserId ?? null,
+    printedByName: item.printedByName ?? item.PrintedByName ?? '',
+    reason: item.reason ?? item.Reason ?? '',
+    reprintNumber: Number(item.reprintNumber ?? item.ReprintNumber ?? 0),
+    printedAt: item.printedAt ?? item.PrintedAt ?? null,
+  }
+}
+
+export async function fetchReceiptReprints(orderId) {
+  const data = await apiRequestAuth(
+    `/api/v1/orders/${encodeURIComponent(orderId)}/receipt-reprints`,
+    { method: 'GET' },
+  )
+  return Array.isArray(data) ? data.map(mapReceiptReprintLog).filter(Boolean) : []
+}
+
+export async function reprintReceipt(orderId, reason, { idempotencyKey } = {}) {
+  const data = await apiRequestAuth(
+    `/api/v1/orders/${encodeURIComponent(orderId)}/receipt-reprints`,
+    {
+      method: 'POST',
+      headers: idempotencyKey ? { 'X-Idempotency-Key': idempotencyKey } : undefined,
+      body: JSON.stringify({ reason: String(reason || '').trim() }),
+    },
+  )
+  const receipt = data?.receipt ?? data?.Receipt ?? null
+  return {
+    log: mapReceiptReprintLog(data?.log ?? data?.Log),
+    receipt: receipt
+      ? {
+          orderId: receipt.orderId ?? receipt.OrderId ?? '',
+          orderCode: receipt.orderCode ?? receipt.OrderCode ?? '',
+          invoiceCode: receipt.invoiceCode ?? receipt.InvoiceCode ?? null,
+          customerName: receipt.customerName ?? receipt.CustomerName ?? 'Khách lẻ',
+          paymentMethodLabel: receipt.paymentMethodLabel ?? receipt.PaymentMethodLabel ?? '—',
+          createdAt: receipt.createdAt ?? receipt.CreatedAt ?? null,
+          sellerName: receipt.sellerName ?? receipt.SellerName ?? null,
+          items: (receipt.items ?? receipt.Items ?? []).map((line) => ({
+            sku: line.sku ?? line.Sku ?? '',
+            name: line.name ?? line.Name ?? '',
+            qty: Number(line.qty ?? line.Qty ?? 0),
+            price: Number(line.price ?? line.Price ?? 0),
+            total: Number(line.total ?? line.Total ?? 0),
+          })),
+          grossSubtotal: Number(receipt.grossSubtotal ?? receipt.GrossSubtotal ?? 0),
+          totalDiscount: Number(receipt.totalDiscount ?? receipt.TotalDiscount ?? 0),
+          total: Number(receipt.total ?? receipt.Total ?? 0),
+          amountPaid: Number(receipt.amountPaid ?? receipt.AmountPaid ?? 0),
+          debtAmount: Number(receipt.debtAmount ?? receipt.DebtAmount ?? 0),
+          isReprint: true,
+          reprintNumber: Number(receipt.reprintNumber ?? receipt.ReprintNumber ?? 0),
+          reprintedAt: receipt.reprintedAt ?? receipt.ReprintedAt ?? null,
+        }
+      : null,
+  }
 }
 
 export async function fetchOrder(idOrCode) {

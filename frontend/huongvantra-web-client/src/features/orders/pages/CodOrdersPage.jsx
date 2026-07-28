@@ -93,7 +93,7 @@ function CodOrdersPage() {
     <PageShell>
       <PageHeader
         title="Quản lý đơn COD"
-        description="Theo dõi đơn kênh COD và xác nhận thu tiền tại trang chi tiết đơn hàng."
+        titleInfo="Theo dõi đơn kênh COD và xác nhận thu tiền tại trang chi tiết đơn hàng."
         searchPlaceholder="Tìm mã đơn, tên khách..."
         searchValue={searchValue}
         onSearchChange={(value) => {
@@ -189,6 +189,12 @@ function CodOrdersPage() {
                     <tr key={order.id} className="transition-colors hover:bg-[#fbf9f1]/30">
                       <td className="px-8 py-5 font-bold text-slate-700">
                         {order.orderCode}
+                        {order.hasActiveStockReservation ? (
+                          <span className="mt-1 flex w-fit items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
+                            <span className="material-symbols-outlined text-[13px]">inventory_2</span>
+                            Đang giữ hàng
+                          </span>
+                        ) : null}
                         {overdue ? (
                           <span className="mt-1 block text-xs font-normal text-amber-700">
                             Quá hạn · {getCodDaysPending(order)} ngày

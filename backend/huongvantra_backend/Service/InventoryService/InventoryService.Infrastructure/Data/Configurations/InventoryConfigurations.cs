@@ -30,6 +30,7 @@ public class StockDeductQueueConfiguration : IEntityTypeConfiguration<StockDeduc
         builder.Property(e => e.OrderCode).HasMaxLength(50).IsRequired();
         builder.Property(e => e.OrderPaymentStatus).HasMaxLength(30).IsRequired();
         builder.Property(e => e.OrderStockStatus).HasMaxLength(30).IsRequired();
+        builder.Property(e => e.CustomerSnapshotName).HasMaxLength(255);
         builder.Property(e => e.QueueStatus).HasConversion<string>().HasMaxLength(20).IsRequired();
         builder.Property(e => e.ConfirmedByName).HasMaxLength(255);
         builder.Property(e => e.ConfirmedByRoleName).HasMaxLength(100);
@@ -56,6 +57,15 @@ public class StockDeductQueueItemConfiguration : IEntityTypeConfiguration<StockD
         builder.Property(e => e.SkuSnapshotCode).HasMaxLength(50);
         builder.Property(e => e.MaterialRequirementSnapshotJson).HasColumnType("LONGTEXT");
         builder.Property(e => e.StockHandlingMode).HasMaxLength(50);
+        // POS-04 (truy vết giữ chỗ): trạng thái + mốc thời gian giữ chỗ ở cấp dòng SKU.
+        builder.Property(e => e.ReservationStatus)
+            .HasConversion<string>()
+            .HasMaxLength(20)
+            .HasDefaultValue(StockReservationStatus.None)
+            .IsRequired();
+        builder.Property(e => e.ReservedQuantity).HasDefaultValue(0);
+        builder.HasIndex(e => e.SkuId);
+        builder.HasIndex(e => new { e.SkuId, e.ReservationStatus });
     }
 }
 

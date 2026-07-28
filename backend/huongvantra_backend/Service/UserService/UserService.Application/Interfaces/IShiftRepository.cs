@@ -6,6 +6,8 @@ namespace UserService.Application.Interfaces;
 public interface IShiftRepository
 {
     Task<IReadOnlyList<ShiftTemplate>> GetActiveTemplatesAsync(ShiftArea? area = null);
+    Task<ShiftTemplate?> GetTemplateByIdAsync(Guid id);
+    void UpdateTemplate(ShiftTemplate template);
     Task EnsureWeekSlotsAsync(IEnumerable<ShiftTemplate> templates, DateOnly weekStart, DateOnly weekEnd);
     Task<IReadOnlyList<ShiftSlot>> GetSlotsForWeekAsync(IEnumerable<Guid> templateIds, DateOnly weekStart, DateOnly weekEnd);
     Task<ShiftSlot?> GetSlotByIdAsync(Guid id);

@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using Microsoft.Extensions.Options;
 using OrderService.Application.Authorization;
 using OrderService.Application.DTOs.Requests;
@@ -47,14 +47,41 @@ public class OrderLogic(
         var channel = access.CodOrdersOnly ? "COD" : req.Channel;
         var excludeChannel = access.CodOrdersOnly ? null : req.ExcludeChannel;
 
+        // POS-04 (truy vết giữ chỗ): filter "Có hàng đang giữ" lấy tập OrderId từ InventoryService
+        // qua service client — không truy vấn chéo database.
+        IReadOnlyCollection<Guid>? restrictToOrderIds = null;
+        if (req.HasActiveReservation)
+        {
+            restrictToOrderIds = await _inventoryCatalogClient
+                .GetOrderIdsWithActiveReservationAsync([], ct);
+        }
+
         var (items, total) = await _orderRepo.GetPagedAsync(
             req.Search, customerId, req.Status, channel,
             excludeChannel, req.CodTab, req.ReturnableOnly,
             req.OrderKind, req.ExcludeOrderKind,
             fromDate, toDate, employeeFilter, access.IncludeAllCodOrders,
-            page, pageSize, ct);
+            page, pageSize, ct, restrictToOrderIds);
 
         var dtos = items.Select(MapToSummary).ToList();
+
+        if (dtos.Count > 0)
+        {
+            var pageOrderIds = dtos.Select(d => d.Id).ToList();
+            HashSet<Guid> reservedIds = restrictToOrderIds != null
+                ? [.. pageOrderIds]
+                : await _inventoryCatalogClient.GetOrderIdsWithActiveReservationAsync(pageOrderIds, ct);
+
+            if (reservedIds.Count > 0)
+            {
+                dtos = dtos
+                    .Select(d => reservedIds.Contains(d.Id)
+                        ? d with { HasActiveStockReservation = true }
+                        : d)
+                    .ToList();
+            }
+        }
+
         return new PagedResponse<OrderSummaryResponse>(
             dtos, page, pageSize, total,
             (int)Math.Ceiling((double)total / pageSize));
@@ -128,7 +155,7 @@ public class OrderLogic(
     {
         var order = await _orderRepo.GetByIdAsync(id, ct)
             ?? throw new OrderNotFoundException(id);
-        EnsureCanAccess(order, access);
+        EnsureCanView(order, access);
         if (await RepairInconsistentPaymentsAsync(order, ct))
             await _orderRepo.SaveChangesAsync(ct);
         if (await RepairMissingPosTierDiscountAsync(order, ct))
@@ -142,7 +169,7 @@ public class OrderLogic(
             throw new OrderValidationException("MÃ£ Ä‘Æ¡n hÃ ng khÃ´ng Ä‘Æ°á»£c Ä‘á»ƒ trá»‘ng.");
         var order = await _orderRepo.GetByCodeAsync(code.Trim().ToUpperInvariant(), ct)
             ?? throw new OrderNotFoundByCodeException(code);
-        EnsureCanAccess(order, access);
+        EnsureCanView(order, access);
         if (await RepairInconsistentPaymentsAsync(order, ct))
             await _orderRepo.SaveChangesAsync(ct);
         if (await RepairMissingPosTierDiscountAsync(order, ct))
@@ -155,7 +182,7 @@ public class OrderLogic(
     {
         var order = await _orderRepo.GetByIdAsync(orderId, ct)
             ?? throw new OrderNotFoundException(orderId);
-        EnsureCanAccess(order, access);
+        EnsureCanView(order, access);
 
         var items = await _activityRepo.GetByOrderIdAsync(orderId, MaxActivities, ct);
         return items.Select(MapActivity).ToList();
@@ -192,7 +219,7 @@ public class OrderLogic(
 
         var sourceOrder = await _orderRepo.GetByIdAsync(item.SourceOrderId, ct)
             ?? throw new OrderNotFoundException(item.SourceOrderId);
-        EnsureCanAccess(sourceOrder, access);
+        EnsureCanView(sourceOrder, access);
         var sourceChannel = sourceOrder?.OrderChannel ?? OrderChannel.POS;
 
         string? exchangeCode = null;
@@ -207,7 +234,7 @@ public class OrderLogic(
     {
         var sourceOrder = await _orderRepo.GetByIdAsync(orderId, ct)
             ?? throw new OrderNotFoundException(orderId);
-        EnsureCanAccess(sourceOrder, access);
+        EnsureCanView(sourceOrder, access);
 
         var items = await _returnOrderRepo.GetBySourceOrderIdAsync(orderId, ct);
         var dtos = new List<ReturnOrderSummaryResponse>(items.Count);
@@ -555,8 +582,8 @@ public class OrderLogic(
                 ct);
         }
 
-        // G4: enqueue integration events vÃ o Outbox TRÆ¯á»šC SaveChanges Ä‘á»ƒ OutboxMessage
-        // commit atomically cÃ¹ng Order/OrderDetail/Payment/Activity trong má»™t transaction.
+        // G4: enqueue integration events vào Outbox TRƯỚC SaveChanges để OutboxMessage
+        // commit atomically cùng Order/OrderDetail/Payment/Activity trong một transaction.
         foreach (var payment in payments)
         {
             if (req.OrderChannel == OrderChannel.POS && payment.PaymentMethod == PaymentMethod.Cash && payment.PaymentStatus == PaymentStatus.Success)
@@ -566,12 +593,12 @@ public class OrderLogic(
         }
 
         await _orderRepo.SaveChangesAsync(ct);
-
         if (!ShouldSuppressLegacyOrderPlacedEvent(order))
         {
             await _eventPublisher.PublishOrderPlacedAsync(
                 order.Id, order.OrderCode, order.OrderStatus.ToString(), order.OrderChannel.ToString(), finalAmount,
                 order.OrderDetails.Select(d => (d.SkuId, d.SkuSnapshotName, d.SkuSnapshotCode, d.Quantity)),
+                order.CustomerSnapshotName,
                 ct);
         }
 
@@ -580,7 +607,7 @@ public class OrderLogic(
 
         await _orderRepo.SaveChangesAsync(ct);
 
-        // Email hÃ³a Ä‘Æ¡n lÃ  side-effect thÃ´ng bÃ¡o, cháº¡y sau khi transaction Ä‘Ã£ commit.
+        // Email hóa đơn là side-effect thông báo, chạy sau khi transaction đã commit.
         if (order.OrderStatus == OrderStatus.Completed && order.CustomerId.HasValue)
             TrySendInvoiceEmail(order);
 
@@ -600,14 +627,12 @@ public class OrderLogic(
                 throw new OrderValidationException("Má»—i khoáº£n thanh toÃ¡n pháº£i lá»›n hÆ¡n 0.");
 
             if (request.Payments.Any(item => !Enum.IsDefined(item.PaymentMethod)))
-                throw new OrderValidationException("PhÆ°Æ¡ng thá»©c thanh toÃ¡n khÃ´ng há»£p lá»‡.");
+                throw new OrderValidationException("Phương thức thanh toán không hợp lệ.");
 
-            if (request.Payments
-                .GroupBy(item => item.PaymentMethod)
-                .Any(group => group.Count() > 1))
+            if (request.Payments.GroupBy(item => item.PaymentMethod).Any(group => group.Count() > 1))
             {
                 throw new OrderValidationException(
-                    "Má»—i phÆ°Æ¡ng thá»©c thanh toÃ¡n chá»‰ Ä‘Æ°á»£c xuáº¥t hiá»‡n má»™t láº§n trong cÃ¹ng Ä‘Æ¡n hÃ ng.");
+                    "Mỗi phương thức thanh toán chỉ được xuất hiện một lần trong cùng đơn hàng.");
             }
 
             var transferCount = request.Payments.Count(item =>
@@ -621,11 +646,11 @@ public class OrderLogic(
                 || (hasCod && request.Payments.Count != 1))
             {
                 throw new OrderValidationException(
-                    "Chá»‰ há»— trá»£ tiá»n máº·t, chuyá»ƒn khoáº£n/VietQR, COD riÃªng láº» hoáº·c káº¿t há»£p tiá»n máº·t vá»›i má»™t khoáº£n chuyá»ƒn khoáº£n.");
+                    "Chỉ hỗ trợ tiền mặt, chuyển khoản/VietQR, COD riêng lẻ hoặc kết hợp tiền mặt với một khoản chuyển khoản.");
             }
 
             if (request.Payments.Count(item => !string.IsNullOrWhiteSpace(item.DebtSettlementJson)) > 1)
-                throw new OrderValidationException("Chá»‰ Ä‘Æ°á»£c khai bÃ¡o má»™t yÃªu cáº§u thu cÃ´ng ná»£ trong má»—i láº§n thanh toÃ¡n.");
+                throw new OrderValidationException("Chỉ được khai báo một yêu cầu thu công nợ trong mỗi lần thanh toán.");
 
             if (!request.CustomerId.HasValue
                 && request.Payments.Any(item => !string.IsNullOrWhiteSpace(item.DebtSettlementJson)))
@@ -742,7 +767,8 @@ public class OrderLogic(
     private async Task ApplyOrderDetailUpdatesAsync(
         Order order, List<UpdateOrderDetailRequest> items, CancellationToken ct)
     {
-        await EnsureVipCustomerAsync(order.CustomerId, ct);
+        if (items.Any(i => i.IsGift))
+            await EnsureVipCustomerAsync(order.CustomerId, ct);
 
         order.OrderDetails ??= new List<OrderDetail>();
         var existingById = order.OrderDetails.ToDictionary(d => d.Id);
@@ -837,7 +863,7 @@ public class OrderLogic(
     {
         var order = await _orderRepo.GetByIdAsync(id, ct)
             ?? throw new OrderNotFoundException(id);
-        EnsureCanAccess(order, access);
+        EnsureCanModify(order, access);
         await _shiftGuard.EnsureShelfOnDutyAsync(access, ct);
 
         if (order.OrderStatus == OrderStatus.Completed || order.OrderStatus == OrderStatus.Cancelled)
@@ -1012,7 +1038,7 @@ public class OrderLogic(
     {
         var order = await _orderRepo.GetByIdAsync(id, ct)
             ?? throw new OrderNotFoundException(id);
-        EnsureCanAccess(order, access);
+        EnsureCanModify(order, access);
         await _shiftGuard.EnsureShelfOnDutyAsync(access, ct);
 
         if (order.OrderStatus == OrderStatus.Completed || order.OrderStatus == OrderStatus.Cancelled)
@@ -1066,7 +1092,7 @@ public class OrderLogic(
     {
         var order = await _orderRepo.GetByIdAsync(id, ct)
             ?? throw new OrderNotFoundException(id);
-        if (!access.CanAccessOrder(order) && order.EmployeeId != access.UserId)
+        if (!access.CanModifyOrder(order) && order.EmployeeId != access.UserId)
             throw new OrderForbiddenException();
 
         if (order.OrderStatus == OrderStatus.Cancelled)
@@ -1143,7 +1169,7 @@ public class OrderLogic(
     {
         var order = await _orderRepo.GetByIdAsync(id, ct)
             ?? throw new OrderNotFoundException(id);
-        EnsureCanAccess(order, access);
+        EnsureCanModify(order, access);
         await _shiftGuard.EnsureShelfOnDutyAsync(access, ct);
 
         if (order.OrderStatus != OrderStatus.Processing && order.OrderStatus != OrderStatus.PendingPayment)
@@ -1185,7 +1211,7 @@ public class OrderLogic(
     {
         var order = await _orderRepo.GetByIdAsync(id, ct)
             ?? throw new OrderNotFoundException(id);
-        EnsureCanAccess(order, access);
+        EnsureCanModify(order, access);
         await _shiftGuard.EnsureShelfOnDutyAsync(access, ct);
 
         if (order.OrderStatus == OrderStatus.Cancelled || order.OrderStatus == OrderStatus.Completed)
@@ -1292,17 +1318,17 @@ public class OrderLogic(
                 ct);
         }
 
-        // G4: enqueue trÆ°á»›c SaveChanges Ä‘á»ƒ atomic vá»›i transaction hoÃ n táº¥t Ä‘Æ¡n.
+        // G4: enqueue trước SaveChanges để atomic với transaction hoàn tất đơn.
         if (newlySucceededCashAmount > 0)
             await _posCashSessionLogic.RecordCashSaleAsync(newlySucceededCashAmount, ct);
 
         await _orderRepo.SaveChangesAsync(ct);
-
         if (!ShouldSuppressLegacyOrderPlacedEvent(order))
         {
             await _eventPublisher.PublishOrderPlacedAsync(
                 order.Id, order.OrderCode, OrderStatus.Completed.ToString(), order.OrderChannel.ToString(), order.FinalAmount,
                 (order.OrderDetails ?? []).Select(d => (d.SkuId, d.SkuSnapshotName, d.SkuSnapshotCode, d.Quantity)),
+                order.CustomerSnapshotName,
                 ct);
         }
 
@@ -1316,7 +1342,6 @@ public class OrderLogic(
             shouldSendInvoice = true;
         }
 
-        await _orderRepo.SaveChangesAsync(ct);
 
         if (shouldSendInvoice)
             TrySendInvoiceEmail(order);
@@ -1353,7 +1378,7 @@ public class OrderLogic(
     {
         var order = await _orderRepo.GetByIdAsync(orderId, ct)
             ?? throw new OrderNotFoundException(orderId);
-        EnsureCanAccess(order, access);
+        EnsureCanModify(order, access);
         await _shiftGuard.EnsureShelfOnDutyAsync(access, ct);
 
         if (order.OrderStatus != OrderStatus.Completed)
@@ -1479,7 +1504,7 @@ public class OrderLogic(
             actorName,
             ct);
 
-// G4: enqueue returned event trước SaveChanges để atomic với phiếu trả hàng.
+        // G4: enqueue returned event trước SaveChanges để atomic với phiếu trả hàng.
         // Lưu ý: sự kiện KHÔNG tự động cộng lại tồn bán được; việc phục hồi tồn do
         // luồng kiểm định trả hàng (Phase J) quyết định.
 
@@ -1504,6 +1529,9 @@ public class OrderLogic(
             ct);
 
         await _returnOrderRepo.SaveChangesAsync(ct);
+
+        if (refundAmount > 0 && refundMethod == PaymentMethod.Cash && order.OrderChannel == OrderChannel.POS)
+            await _posCashSessionLogic.RecordCashRefundAsync(refundAmount, ct);
 
         string? exchangeOrderCode = null;
         Guid? exchangeOrderId = null;
@@ -2072,9 +2100,15 @@ public class OrderLogic(
         _ => method.ToString()
     };
 
-    private static void EnsureCanAccess(Order order, OrderAccessContext access)
+    private static void EnsureCanView(Order order, OrderAccessContext access)
     {
-        if (!access.CanAccessOrder(order))
+        if (!access.CanViewOrder(order))
+            throw new OrderForbiddenException();
+    }
+
+    private static void EnsureCanModify(Order order, OrderAccessContext access)
+    {
+        if (!access.CanModifyOrder(order))
             throw new OrderForbiddenException();
     }
 }

@@ -97,7 +97,7 @@ public class CustomerLogic
         EnsureCanManageCorporateCustomer(input.CustomerGroup, access);
 
         if (await _customerRepo.PhoneExistsAsync(input.PhoneNumber, ct: ct))
-            throw await BuildDuplicatePhoneExceptionAsync(input.PhoneNumber, access, ct);
+            throw new DuplicatePhoneNumberException(input.PhoneNumber);
 
         if (!string.IsNullOrWhiteSpace(input.Email) && await _customerRepo.EmailExistsAsync(input.Email, ct: ct))
             throw new DuplicateEmailException(input.Email);
@@ -143,7 +143,7 @@ public class CustomerLogic
         var customer = await _customerRepo.GetByIdAsync(id, ct)
             ?? throw new CustomerNotFoundException(id);
 
-        EnsureCanAccess(customer, access);
+        EnsureCanModify(customer, access);
 
         var input = ValidateCustomerRequest(request);
         EnsureCanManageCorporateCustomer(customer.CustomerGroup, access);
@@ -183,7 +183,7 @@ public class CustomerLogic
         if (customer == null)
             throw new CustomerNotFoundException(id);
 
-        EnsureCanAccess(customer, access);
+        EnsureCanModify(customer, access);
         EnsureCanManageCorporateCustomer(customer.CustomerGroup, access);
 
         await _customerRepo.SoftDeleteAsync(id, ct);
@@ -196,7 +196,7 @@ public class CustomerLogic
         var customer = await _customerRepo.GetByIdIncludingDeletedAsync(id, ct)
             ?? throw new CustomerNotFoundException(id);
 
-        EnsureCanAccess(customer, access);
+        EnsureCanModify(customer, access);
         EnsureCanManageCorporateCustomer(customer.CustomerGroup, access);
 
         if (!customer.IsDeleted)
@@ -665,7 +665,7 @@ public class CustomerLogic
         var customer = await _customerRepo.GetByIdAsync(customerId, ct)
             ?? throw new CustomerNotFoundException(customerId);
 
-        EnsureCanAccess(customer, access);
+        EnsureCanModify(customer, access);
         EnsureCanManageCorporateCustomer(customer.CustomerGroup, access);
 
         if (request.Type == DebtTransactionType.DecreaseDebt)
@@ -696,10 +696,8 @@ public class CustomerLogic
         CustomerAccessContext access,
         CancellationToken ct = default)
     {
-        var customer = await _customerRepo.GetByIdAsync(customerId, ct)
+        _ = await _customerRepo.GetByIdAsync(customerId, ct)
             ?? throw new CustomerNotFoundException(customerId);
-
-        EnsureCanAccess(customer, access);
 
         var items = await BuildOpenDebtItemsAsync(customerId, ct);
         return items
@@ -717,10 +715,8 @@ public class CustomerLogic
         if (amount <= 0)
             throw new CustomerValidationException(["Amount must be greater than zero."]);
 
-        var customer = await _customerRepo.GetByIdAsync(customerId, ct)
+        _ = await _customerRepo.GetByIdAsync(customerId, ct)
             ?? throw new CustomerNotFoundException(customerId);
-
-        EnsureCanAccess(customer, access);
 
         var openDebts = await BuildOpenDebtItemsAsync(customerId, ct);
         var allocations = BuildFifoAllocations(amount, openDebts);
@@ -751,7 +747,7 @@ public class CustomerLogic
         var customer = await _customerRepo.GetByIdAsync(customerId, ct)
             ?? throw new CustomerNotFoundException(customerId);
 
-        EnsureCanAccess(customer, access);
+        EnsureCanModify(customer, access);
         EnsureCanManageCorporateCustomer(customer.CustomerGroup, access);
 
         await ReconcileCurrentDebtFromLedgerAsync(customer, ct);
@@ -956,10 +952,8 @@ public class CustomerLogic
         CustomerAccessContext access,
         CancellationToken ct = default)
     {
-        var customer = await _customerRepo.GetByIdAsync(customerId, ct)
+        _ = await _customerRepo.GetByIdAsync(customerId, ct)
             ?? throw new CustomerNotFoundException(customerId);
-
-        EnsureCanAccess(customer, access);
 
         var items = await _debtRepo.GetByCustomerIdAsync(customerId, ct);
         return MapDebtsWithLedgerBalances(items);
@@ -973,8 +967,6 @@ public class CustomerLogic
         var customer = await _customerRepo.GetByIdAsync(customerId, ct)
             ?? throw new CustomerNotFoundException(customerId);
 
-        EnsureCanAccess(customer, access);
-
         if (await ReconcileCurrentDebtFromLedgerAsync(customer, ct))
             await _customerRepo.SaveChangesAsync(ct);
         var (increase, decrease, count) = await _debtRepo.GetSummaryAsync(customerId, ct);
@@ -986,10 +978,8 @@ public class CustomerLogic
         CustomerAccessContext access,
         CancellationToken ct = default)
     {
-        var customer = await _customerRepo.GetByIdAsync(customerId, ct)
+        _ = await _customerRepo.GetByIdAsync(customerId, ct)
             ?? throw new CustomerNotFoundException(customerId);
-
-        EnsureCanAccess(customer, access);
 
         var items = await _activityRepo.GetByCustomerIdAsync(customerId, 100, ct);
         return items.Select(a => new CustomerActivityResponse(a.Id, a.CustomerId, a.ActivityType, a.Description, a.CreatedAt));
@@ -1022,7 +1012,6 @@ public class CustomerLogic
         if (customer is null)
             return null;
 
-        EnsureCanAccess(customer, access);
         return MapToDetailResponse(customer);
     }
 
@@ -1031,7 +1020,6 @@ public class CustomerLogic
         var customer = await _customerRepo.GetByIdAsync(id, ct)
             ?? throw new CustomerNotFoundException(id);
 
-        EnsureCanAccess(customer, access);
         if (await ReconcileCurrentDebtFromLedgerAsync(customer, ct))
             await _customerRepo.SaveChangesAsync(ct);
         return MapToDetailResponse(customer);
@@ -2525,25 +2513,9 @@ public class CustomerLogic
         return customer.TierId;
     }
 
-    private async Task<DuplicatePhoneNumberException> BuildDuplicatePhoneExceptionAsync(
-        string phone,
-        CustomerAccessContext access,
-        CancellationToken ct)
+    private static void EnsureCanModify(Customer customer, CustomerAccessContext access)
     {
-        var existing = await _customerRepo.GetByPhoneAsync(phone, ct);
-        if (existing is not null && !access.CanAccessCustomer(existing.AssignedSaleId))
-        {
-            return new DuplicatePhoneNumberException(
-                $"Số điện thoại '{phone}' đã có trong hệ thống nhưng không thuộc khách bạn phụ trách. Vui lòng liên hệ quản lý để được gán khách.");
-        }
-
-        return new DuplicatePhoneNumberException(
-            $"Số điện thoại '{phone}' đã được đăng ký. Hãy tìm khách trong danh sách hoặc ô tìm kiếm tại POS.");
-    }
-
-    private static void EnsureCanAccess(Customer customer, CustomerAccessContext access)
-    {
-        if (!access.CanAccessCustomer(customer.AssignedSaleId))
+        if (!access.CanModifyCustomer(customer.AssignedSaleId))
             throw new CustomerForbiddenException();
     }
 

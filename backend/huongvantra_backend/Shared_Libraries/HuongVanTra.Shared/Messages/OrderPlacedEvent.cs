@@ -13,6 +13,14 @@ public record OrderPlacedEvent
     /// Rỗng = contract cũ → coi như không phải COD (không giữ chỗ).
     /// </summary>
     public string OrderChannel { get; init; } = string.Empty;
+
+    /// <summary>
+    /// POS-04 (truy vết giữ chỗ): snapshot tên khách hàng tại thời điểm đặt đơn. Cho phép
+    /// Inventory hiển thị đơn đang giữ chỗ theo SKU mà không truy vấn database service khác.
+    /// Rỗng = contract cũ hoặc khách lẻ.
+    /// </summary>
+    public string CustomerSnapshotName { get; init; } = string.Empty;
+
     public decimal TotalAmount { get; init; }
     public IEnumerable<OrderItemEvent> Items { get; init; } = Enumerable.Empty<OrderItemEvent>();
 }

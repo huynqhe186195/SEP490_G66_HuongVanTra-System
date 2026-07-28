@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import PageShell from '../../../components/shared/PageShell.jsx'
+import PageHeader from '../../../components/shared/PageHeader.jsx'
 import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
 import { showError, showSuccess, showToast } from '../../../app/toast.js'
 import { useAuthSession } from '../../auth/hooks/useAuthSession.js'
@@ -2798,17 +2799,18 @@ export default function ProductApprovalsPage() {
   }
 
   return (
-    <PageShell
-      title={showCreateForm ? 'Tạo biên bản yêu cầu' : 'Lịch sử tạo hàng hóa'}
-      description={showCreateForm ? 'Tạo biên bản nhiều sản phẩm, gửi Admin duyệt.' : 'Lịch sử các yêu cầu tạo hàng hóa đã gửi.'}
-      actions={!admin && warehouse ? (
-        <select className="rounded-lg border border-slate-200 px-3 py-2 text-sm" value={statusFilter} onChange={(event) => handleStatusFilterChange(event.target.value)}>
-          {PRODUCT_CREATION_STATUS_FILTERS.map((option) => (
-            <option key={option.value} value={option.value}>{option.label}</option>
-          ))}
-        </select>
-      ) : null}
-    >
+    <PageShell>
+      <PageHeader
+        title={showCreateForm ? 'Tạo biên bản yêu cầu' : 'Lịch sử tạo hàng hóa'}
+        titleInfo={showCreateForm ? 'Tạo biên bản nhiều sản phẩm, gửi Admin duyệt.' : 'Lịch sử các yêu cầu tạo hàng hóa đã gửi.'}
+        rightContent={!admin && warehouse ? (
+          <select className="rounded-lg border border-slate-200 px-3 py-2 text-sm" value={statusFilter} onChange={(event) => handleStatusFilterChange(event.target.value)}>
+            {PRODUCT_CREATION_STATUS_FILTERS.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </select>
+        ) : null}
+      />
       {showCreateForm ? (
         <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">

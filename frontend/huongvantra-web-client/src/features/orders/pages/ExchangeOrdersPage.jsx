@@ -134,7 +134,7 @@ function ExchangeOrdersPage() {
     <PageShell className="pb-8">
       <PageHeader
         title="Trả / đổi hàng"
-        description={
+        titleInfo={
           viewTab === 'returns'
             ? codOnly
               ? 'Phiếu trả hàng của đơn COD.'

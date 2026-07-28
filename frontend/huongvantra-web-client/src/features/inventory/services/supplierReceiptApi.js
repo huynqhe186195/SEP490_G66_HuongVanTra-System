@@ -60,6 +60,7 @@ export function mapSupplierReceipt(row) {
 
 function buildReceiptPayload(payload) {
   return {
+    supplierId: payload.supplierId || null,
     supplierName: payload.supplierName?.trim() || null,
     supplierReference: payload.supplierReference?.trim() || null,
     supplierDocumentNumber: payload.supplierDocumentNumber?.trim() || null,

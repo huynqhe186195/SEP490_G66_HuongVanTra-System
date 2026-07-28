@@ -275,7 +275,7 @@ function ProductsPricingPage() {
     <PageShell>
       <PageHeader
         title="Bảng giá sản phẩm"
-        description="Quản lý price_books và price_book_entries cho SKU, biến thể hoặc đơn vị quy đổi."
+        titleInfo="Quản lý price_books và price_book_entries cho SKU, biến thể hoặc đơn vị quy đổi."
         searchPlaceholder="Tìm bảng giá theo mã hoặc tên..."
         searchValue={searchInput}
         onSearchChange={setSearchInput}

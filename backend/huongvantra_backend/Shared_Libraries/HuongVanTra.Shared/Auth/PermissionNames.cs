@@ -26,6 +26,12 @@ public static class PermissionNames
     /// <summary>Sửa hồ sơ KH — Admin (MANAGE_ROLE) hoặc Manager (CREATE_CUSTOMER). Kế toán chỉ xem.</summary>
     public const string EditCustomerProfile = "EDIT_CUSTOMER_PROFILE";
 
+    /// <summary>
+    /// Tạo hồ sơ KH mới — Sale (CREATE_ORDER) vẫn được tạo khách trong phạm vi cửa hàng,
+    /// ngoài Manager (CREATE_CUSTOMER) và Admin (MANAGE_ROLE). Import/công nợ vẫn giữ ở CREATE_CUSTOMER.
+    /// </summary>
+    public const string CreateCustomerProfile = "CREATE_CUSTOMER_PROFILE";
+
     /// <summary>Admin hoặc Thủ kho — tạo/sửa sản phẩm, danh mục, SKU.</summary>
     public const string CatalogManagement = "CATALOG_MANAGEMENT";
 

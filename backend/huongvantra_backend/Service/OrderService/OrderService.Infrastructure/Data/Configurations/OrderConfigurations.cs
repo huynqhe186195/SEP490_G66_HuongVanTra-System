@@ -201,6 +201,26 @@ public class OrderActivityConfiguration : IEntityTypeConfiguration<OrderActivity
     }
 }
 
+public class OrderReceiptPrintLogConfiguration : IEntityTypeConfiguration<OrderReceiptPrintLog>
+{
+    public void Configure(EntityTypeBuilder<OrderReceiptPrintLog> builder)
+    {
+        builder.ToTable("OrderReceiptPrintLogs");
+        builder.HasKey(e => e.Id);
+        builder.Property(e => e.Id).ValueGeneratedNever();
+        builder.Property(e => e.PrintedByName).HasMaxLength(100);
+        builder.Property(e => e.Reason).HasMaxLength(500).IsRequired();
+        builder.Property(e => e.ReprintNumber).IsRequired();
+        builder.Property(e => e.IdempotencyKey).HasMaxLength(100);
+        builder.Property(e => e.PrintedAt).IsRequired();
+        builder.Property(e => e.CreatedAt).IsRequired();
+        builder.HasIndex(e => e.OrderId);
+        builder.HasIndex(e => new { e.OrderId, e.ReprintNumber }).IsUnique();
+        builder.HasIndex(e => e.IdempotencyKey).IsUnique().HasFilter("`IdempotencyKey` IS NOT NULL");
+        builder.HasOne(e => e.Order).WithMany().HasForeignKey(e => e.OrderId);
+    }
+}
+
 public class CustomBundleConfiguration : IEntityTypeConfiguration<CustomBundle>
 {
     public void Configure(EntityTypeBuilder<CustomBundle> builder)

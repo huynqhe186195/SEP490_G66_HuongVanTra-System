@@ -97,7 +97,7 @@ export default function CostProfitReportPage() {
     <PageShell>
       <PageHeader
         title="Bảng giá vốn & giá bán"
-        description="Danh sách giá vốn và giá bán hiện tại của từng mã hàng. Có thể tìm kiếm và xuất file CSV."
+        titleInfo="Danh sách giá vốn và giá bán hiện tại của từng mã hàng. Có thể tìm kiếm và xuất file CSV."
         rightContent={
           <button
             type="button"

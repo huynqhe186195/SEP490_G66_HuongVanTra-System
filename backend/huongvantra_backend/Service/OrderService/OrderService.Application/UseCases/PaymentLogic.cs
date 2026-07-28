@@ -37,7 +37,7 @@ public class PaymentLogic(
 
         var order = await _orderRepo.GetByIdAsync(payment.OrderId, ct)
             ?? throw new OrderNotFoundException(payment.OrderId);
-        EnsureCanAccess(order, access);
+        EnsureCanModify(order, access);
 
         var collected = req.CollectedAmount > 0 ? req.CollectedAmount : order.FinalAmount;
         if (collected < order.FinalAmount)
@@ -96,6 +96,7 @@ public class PaymentLogic(
                 d.SkuSnapshotName,
                 d.SkuSnapshotCode,
                 d.Quantity)),
+            order.CustomerSnapshotName,
             ct);
 
         if (order.CustomerId.HasValue)
@@ -130,7 +131,7 @@ public class PaymentLogic(
     {
         var order = await _orderRepo.GetByIdAsync(orderId, ct)
             ?? throw new OrderNotFoundException(orderId);
-        EnsureCanAccess(order, access);
+        EnsureCanView(order, access);
 
         var payments = await _paymentRepo.GetByOrderIdAsync(orderId, ct);
         return payments.Select(MapToResponse).ToList();
@@ -141,7 +142,7 @@ public class PaymentLogic(
     {
         var payments = await _paymentRepo.GetPendingCodAsync(ct);
         return payments
-            .Where(p => p.Order is not null && access.CanAccessOrder(p.Order))
+            .Where(p => p.Order is not null && access.CanViewOrder(p.Order))
             .Select(MapToResponse)
             .ToList();
     }
@@ -151,14 +152,20 @@ public class PaymentLogic(
     {
         var payments = await _paymentRepo.GetUnverifiedCodAsync(ct);
         return payments
-            .Where(p => p.Order is not null && access.CanAccessOrder(p.Order))
+            .Where(p => p.Order is not null && access.CanViewOrder(p.Order))
             .Select(MapToResponse)
             .ToList();
     }
 
-    private static void EnsureCanAccess(Order order, OrderAccessContext access)
+    private static void EnsureCanView(Order order, OrderAccessContext access)
     {
-        if (!access.CanAccessOrder(order))
+        if (!access.CanViewOrder(order))
+            throw new OrderForbiddenException();
+    }
+
+    private static void EnsureCanModify(Order order, OrderAccessContext access)
+    {
+        if (!access.CanModifyOrder(order))
             throw new OrderForbiddenException();
     }
 

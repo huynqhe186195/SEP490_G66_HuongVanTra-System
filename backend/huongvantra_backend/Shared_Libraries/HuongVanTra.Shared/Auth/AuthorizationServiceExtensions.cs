@@ -34,6 +34,12 @@ public static class AuthorizationServiceExtensions
                     PermissionNames.CreateCustomer,
                     PermissionNames.ManageRole)));
 
+            options.AddPolicy(PermissionNames.CreateCustomerProfile, policy =>
+                policy.Requirements.Add(new AnyPermissionRequirement(
+                    PermissionNames.CreateCustomer,
+                    PermissionNames.CreateOrder,
+                    PermissionNames.ManageRole)));
+
             options.AddPolicy(PermissionNames.ApplyDebtPayment, policy =>
                 policy.Requirements.Add(new AnyPermissionRequirement(
                     PermissionNames.CreateOrder,

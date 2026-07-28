@@ -43,6 +43,15 @@ export const RECEIPT_PRINT_CSS = `
     font-size: 18px;
     font-weight: 700;
   }
+  .receipt-reprint-banner {
+    margin-top: 8px;
+    padding: 4px 0;
+    text-align: center;
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    border: 2px solid #000;
+  }
   .receipt-meta {
     text-align: center;
     font-size: 13px;

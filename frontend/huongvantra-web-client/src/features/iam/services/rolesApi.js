@@ -55,8 +55,10 @@ export function fetchRolePermissions(roleId) {
 
 export function mapRole(item) {
   if (!item || typeof item !== 'object') return null
+  const id = Number(item.id ?? item.Id)
+  if (!Number.isFinite(id)) return null
   return {
-    id: item.id ?? item.Id,
+    id,
     roleName: item.roleName ?? item.RoleName ?? '',
     description: item.description ?? item.Description ?? '',
     permissions: item.permissions ?? item.Permissions ?? [],

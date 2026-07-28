@@ -260,7 +260,7 @@ function ContractFormPage() {
       </div>
       <PageHeader
         title={isEdit ? 'Chỉnh sửa hợp đồng' : 'Tạo hợp đồng mới'}
-        description="Hợp đồng dành cho khách doanh nghiệp (B2B)"
+        titleInfo="Hợp đồng dành cho khách doanh nghiệp (B2B)"
       />
 
       <div className="mx-auto max-w-2xl space-y-6">

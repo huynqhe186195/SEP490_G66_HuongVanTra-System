@@ -25,9 +25,18 @@ public class ShiftsController(ShiftLogic shiftLogic) : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>Manager chỉnh giờ bắt đầu / kết thúc khung ca (áp dụng toàn hệ thống).</summary>
+    [HttpPut("templates/{id:guid}")]
+    [Authorize(Policy = PermissionNames.ManageEmployee)]
+    public async Task<IActionResult> UpdateTemplateHours(Guid id, [FromBody] UpdateShiftTemplateHoursRequest request)
+    {
+        var result = await shiftLogic.UpdateTemplateHoursAsync(id, request);
+        return Ok(result);
+    }
+
     /// <summary>Ca đã duyệt đang trong giờ của user hiện tại (null nếu chưa đến ca / chưa được duyệt).</summary>
     [HttpGet("me/on-duty")]
-    public async Task<IActionResult> GetOnDuty([FromQuery] string? area, [FromQuery] int graceMinutes = 30)
+    public async Task<IActionResult> GetOnDuty([FromQuery] string? area, [FromQuery] int graceMinutes = 0)
     {
         var result = await shiftLogic.GetOnDutyAsync(CurrentUserId, area, graceMinutes);
         return Ok(new { onDuty = result });

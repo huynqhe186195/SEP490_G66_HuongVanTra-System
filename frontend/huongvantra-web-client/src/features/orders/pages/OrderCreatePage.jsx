@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { Link, useNavigate } from 'react-router-dom'
 
@@ -354,32 +354,12 @@ function OrderCreatePage() {
 
 
     if (!canMutate) {
-
-      showError('Báº¡n chÆ°a Ä‘áº¿n ca / chÆ°a Ä‘Æ°á»£c duyá»‡t ca quáº§y â€” khÃ´ng thá»ƒ táº¡o Ä‘Æ¡n.')
-
-      return
-
+      showError('Bạn chưa đến ca / chưa được duyệt ca quầy — không thể tạo đơn.')      return
     }
 
 
 
-    const items = form.items
-
-      .filter((line) => line.skuId)
-
-      .map((line) => ({
-
-        skuId: line.skuId,
-
-        skuSnapshotName: line.skuSnapshotName,
-
-        skuSnapshotCode: line.skuSnapshotCode,
-
-        quantity: Number(line.quantity),
-
-        unitPrice: Number(line.unitPrice),
-
-      }))`r`n    let items
+    let items
     try {
       items = form.items
         .filter((line) => line.skuId)
@@ -391,28 +371,22 @@ function OrderCreatePage() {
           unitPrice: Number(line.unitPrice),
         }))
     } catch (error) {
-      showError(error?.message || 'Sá»‘ lÆ°á»£ng khÃ´ng há»£p lá»‡.')
+      showError(error?.message || 'Số lượng không hợp lệ.')
       return
     }
 
 
 
     if (!items.length) {
-
-      showError('Vui lÃ²ng thÃªm Ã­t nháº¥t má»™t SKU.')
-
+      showError('Vui lòng thêm ít nhất một SKU.')
       return
-
     }
 
 
 
     if (needsShippingAddress && !form.shippingAddress.trim()) {
-
-      showError('KÃªnh online cáº§n Ä‘á»‹a chá»‰ giao hÃ ng.')
-
+      showError('Kênh online cần địa chỉ giao hàng.')
       return
-
     }
 
     const zeroTotalCheck = validateZeroTotalCheckout({
@@ -428,7 +402,7 @@ function OrderCreatePage() {
       ? 0
       : Number(form.paidAmount || 0)
     if (!form.customerId && enteredPaidAmount < finalAmount) {
-      showError('KhÃ¡ch láº» pháº£i thanh toÃ¡n Ä‘á»§. Vui lÃ²ng Ä‘Äƒng kÃ½ hoáº·c chá»n khÃ¡ch hÃ ng trÆ°á»›c khi bÃ¡n ná»£/thanh toÃ¡n má»™t pháº§n.')
+      showError('Khách lẻ phải thanh toán đủ. Vui lòng đăng ký hoặc chọn khách hàng trước khi bán nợ/thanh toán một phần.')
       return
     }
 
@@ -472,9 +446,7 @@ function OrderCreatePage() {
         request,
         (idempotencyKey) => createOrder(request, { idempotencyKey }),
       )
-
-      showSuccess(`ÄÃ£ táº¡o Ä‘Æ¡n ${created.orderCode}.`)
-
+      showSuccess(`Đã tạo đơn ${created.orderCode}.`)
       navigate(`/orders/${created.id}`)
 
     } catch (error) {
@@ -492,15 +464,10 @@ function OrderCreatePage() {
 
 
   return (
-
     <PageShell>
-
       <PageHeader
-
-        title="Táº¡o Ä‘Æ¡n hÃ ng"
-
-        description="Táº¡o Ä‘Æ¡n bÃ¡n trá»±c tiáº¿p táº¡i quáº§y, Zalo, Ä‘iá»‡n thoáº¡i hoáº·c website."
-
+        title="Tạo đơn hàng"
+        titleInfo="Tạo đơn bán trực tiếp tại quầy, Zalo, điện thoại hoặc website."
         rightContent={
 
           <Link className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50" to="/orders">

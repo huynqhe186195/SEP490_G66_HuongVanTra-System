@@ -43,6 +43,7 @@ import SuppliersPage from '../features/inventory/pages/SuppliersPage.jsx'
 import OrderDetailPage from '../features/orders/pages/OrderDetailPage.jsx'
 import CustomerDisplayPage from '../features/pos/pages/CustomerDisplayPage.jsx'
 import PosPage from '../features/pos/pages/PosPage.jsx'
+import PosCashSessionsPage from '../features/pos/pages/PosCashSessionsPage.jsx'
 import PosTransferQrPage from '../features/pos/pages/PosTransferQrPage.jsx'
 import ReturnOrderPage from '../features/pos/pages/ReturnOrderPage.jsx'
 import ProductApprovalsPage from '../features/products/pages/ProductApprovalsPage.jsx'
@@ -80,6 +81,7 @@ function App() {
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/accounting/cost-profit" element={<CostProfitReportPage />} />
         <Route path="/pos" element={<PosPage />} />
+        <Route path="/pos/cash-sessions" element={<PosCashSessionsPage />} />
         <Route path="/pos/receipt/print" element={<Navigate to="/pos" replace />} />
         <Route path="/pos/payment/qr" element={<PosTransferQrPage />} />
         <Route path="/pos/returns/:orderId" element={<ReturnOrderPage />} />

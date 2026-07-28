@@ -35,6 +35,7 @@ gemini.md
 # Logs
 .antigravity/logs/
 *.ai.log
+build-*.log
 [Ll]og/
 [Ll]ogs/
 

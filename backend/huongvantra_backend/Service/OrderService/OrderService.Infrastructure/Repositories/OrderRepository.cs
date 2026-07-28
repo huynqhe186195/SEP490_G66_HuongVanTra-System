@@ -29,9 +29,17 @@ public class OrderRepository(OrderDbContext _db) : IOrderRepository
         string? excludeChannel, string? codTab, bool returnableOnly,
         string? orderKind, string? excludeOrderKind,
         DateTime? fromDate, DateTime? toDate, Guid? employeeId, bool includeAllCodOrders,
-        int page, int pageSize, CancellationToken ct = default)
+        int page, int pageSize, CancellationToken ct = default,
+        IReadOnlyCollection<Guid>? restrictToOrderIds = null)
     {
         var query = _db.Orders.AsQueryable();
+
+        // POS-04 (truy vết giữ chỗ): tập OrderId đang giữ chỗ do InventoryService trả về qua service client.
+        if (restrictToOrderIds != null)
+        {
+            var reservedIds = restrictToOrderIds.ToList();
+            query = query.Where(o => reservedIds.Contains(o.Id));
+        }
 
         if (!string.IsNullOrWhiteSpace(search))
         {

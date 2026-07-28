@@ -78,6 +78,94 @@ export async function fetchStocktakeRequestById(id) {
   return mapStocktakeRequest(data)
 }
 
+/** Trạng thái kiểm kê kệ đầu/cuối ngày (toàn cửa hàng). */
+export async function fetchShelfDayStocktakeStatus(date) {
+  const { vietnamTodayDateInput } = await import('../../pos/utils/submitDailyShelfStocktake.js')
+  const day = date || vietnamTodayDateInput()
+  const query = new URLSearchParams()
+  if (day) query.set('date', day)
+  const qs = query.toString()
+  try {
+    const data = await apiRequestAuth(
+      `/api/v1/inventory/stocktake-requests/shelf-day-status${qs ? `?${qs}` : ''}`,
+      { method: 'GET' },
+    )
+    return {
+      date: String(data?.date ?? data?.Date ?? day).slice(0, 10),
+      dayStartDone: Boolean(data?.dayStartDone ?? data?.DayStartDone),
+      dayEndDone: Boolean(data?.dayEndDone ?? data?.DayEndDone),
+      dayStartId: data?.dayStartId ?? data?.DayStartId ?? null,
+      dayStartRequestCode: data?.dayStartRequestCode ?? data?.DayStartRequestCode ?? '',
+      dayEndId: data?.dayEndId ?? data?.DayEndId ?? null,
+      dayEndRequestCode: data?.dayEndRequestCode ?? data?.DayEndRequestCode ?? '',
+    }
+  } catch {
+    // Fallback khi BE chưa có endpoint: suy ra từ danh sách phiếu Shelf của mình.
+    return fetchShelfDayStocktakeStatusFallback(day)
+  }
+}
+
+async function fetchShelfDayStocktakeStatusFallback(day) {
+  const { vietnamTodayDateInput, SHELF_DAY_START_REASON, SHELF_DAY_END_REASON } = await import(
+    '../../pos/utils/submitDailyShelfStocktake.js'
+  )
+  const today = day || vietnamTodayDateInput()
+  const paged = await fetchStocktakeRequests({
+    location: 'Shelf',
+    mine: true,
+    page: 1,
+    pageSize: 50,
+  })
+  const items = paged.items || []
+  const active = items.filter((row) => {
+    const status = String(row.status || '')
+    return status === 'PendingApproval' || status === 'Completed' || status === '1' || status === '2'
+  })
+
+  const isStart = (reason) => {
+    const r = String(reason || '').toLowerCase()
+    return r.includes('đầu ngày') || r.includes('dau ngay') || r.includes('đầu ca') || r.includes('dau ca')
+      || String(reason || '').includes(SHELF_DAY_START_REASON)
+  }
+  const isEnd = (reason) => {
+    const r = String(reason || '').toLowerCase()
+    return r.includes('cuối ngày') || r.includes('cuoi ngay')
+      || String(reason || '').includes(SHELF_DAY_END_REASON)
+  }
+
+  const sameDay = (row) => String(row.countDate || '').slice(0, 10) === today
+
+  const dayStart = active.find((row) => isStart(row.reason) && sameDay(row))
+  const dayEnd = active.find((row) => isEnd(row.reason) && sameDay(row))
+  return {
+    date: today,
+    dayStartDone: Boolean(dayStart),
+    dayEndDone: Boolean(dayEnd),
+    dayStartId: dayStart?.id || null,
+    dayStartRequestCode: dayStart?.requestCode || '',
+    dayEndId: dayEnd?.id || null,
+    dayEndRequestCode: dayEnd?.requestCode || '',
+  }
+}
+
+/** Gộp status API với optimistic local — chỉ giữ optimistic trong cùng ngày VN. */
+export function mergeShelfDayStatus(prev, status) {
+  const apiDate = status?.date ? String(status.date).slice(0, 10) : null
+  const prevDate = prev?.date ? String(prev.date).slice(0, 10) : null
+  const sameDay = Boolean(apiDate && prevDate && apiDate === prevDate)
+
+  return {
+    ...status,
+    date: apiDate || prevDate || null,
+    dayStartDone: Boolean(status?.dayStartDone || (sameDay && prev?.dayStartDone)),
+    dayEndDone: Boolean(status?.dayEndDone || (sameDay && prev?.dayEndDone)),
+    dayStartId: status?.dayStartId ?? (sameDay ? prev?.dayStartId : null) ?? null,
+    dayStartRequestCode: status?.dayStartRequestCode || (sameDay ? prev?.dayStartRequestCode : '') || '',
+    dayEndId: status?.dayEndId ?? (sameDay ? prev?.dayEndId : null) ?? null,
+    dayEndRequestCode: status?.dayEndRequestCode || (sameDay ? prev?.dayEndRequestCode : '') || '',
+  }
+}
+
 export async function createStocktakeRequest(payload) {
   const data = await apiRequestAuth('/api/v1/inventory/stocktake-requests', {
     method: 'POST',
@@ -113,4 +201,28 @@ export async function cancelStocktakeRequest(id, reason) {
     body: JSON.stringify({ reason: reason?.trim() || null }),
   })
   return mapStocktakeRequest(data)
+}
+
+/** Manager/Admin mở lại ngày bán — hủy marker kiểm kệ cuối ngày. */
+export async function reopenShelfDay(reason, date) {
+  const { vietnamTodayDateInput } = await import('../../pos/utils/submitDailyShelfStocktake.js')
+  const day = date || vietnamTodayDateInput()
+  const query = new URLSearchParams()
+  if (day) query.set('date', day)
+  const data = await apiRequestAuth(
+    `/api/v1/inventory/stocktake-requests/reopen-shelf-day?${query.toString()}`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ reason: reason?.trim() || null }),
+    },
+  )
+  return {
+    date: String(data?.date ?? data?.Date ?? day).slice(0, 10),
+    dayStartDone: Boolean(data?.dayStartDone ?? data?.DayStartDone),
+    dayEndDone: Boolean(data?.dayEndDone ?? data?.DayEndDone),
+    dayStartId: data?.dayStartId ?? data?.DayStartId ?? null,
+    dayStartRequestCode: data?.dayStartRequestCode ?? data?.DayStartRequestCode ?? '',
+    dayEndId: data?.dayEndId ?? data?.DayEndId ?? null,
+    dayEndRequestCode: data?.dayEndRequestCode ?? data?.DayEndRequestCode ?? '',
+  }
 }

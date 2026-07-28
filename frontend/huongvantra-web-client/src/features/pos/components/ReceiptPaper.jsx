@@ -23,6 +23,13 @@ const ReceiptPaper = forwardRef(function ReceiptPaper({ receipt }, ref) {
     <div ref={ref} className="receipt-paper">
       <div className="receipt-brand">HƯƠNG VÂN TRÀ</div>
       <div className="receipt-title">HÓA ĐƠN BÁN HÀNG</div>
+      {receipt.isReprint ? (
+        <>
+          <div className="receipt-reprint-banner">BẢN IN LẠI</div>
+          <div className="receipt-meta">Lần in lại: {receipt.reprintNumber ?? 1}</div>
+          <div className="receipt-meta">Thời điểm in lại: {receipt.reprintedAtLabel || '—'}</div>
+        </>
+      ) : null}
       {receipt.invoiceCode ? (
         <div className="receipt-meta receipt-highlight">Số HĐ: {receipt.invoiceCode}</div>
       ) : null}
