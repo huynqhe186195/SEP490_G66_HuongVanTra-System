@@ -5457,11 +5457,6 @@ public class InventoryLogic(
                 await _skuStockRepo.SaveChangesAsync(ct);
             }
 
-            if (normalizedLocation == LocationWarehouse)
-            {
-                var newMac = await _batchRepo.CalculateMovingAverageCostAsync(skuId, ct);
-                await _eventPublisher.PublishCostPriceUpdatedAsync(skuId, newMac, ct);
-            }
         }
 
         return MapWarehouseBatch(batch);
