@@ -102,6 +102,7 @@ function App() {
         <Route path="/inventory/stock-requests" element={<StockAdjustmentRequestsPage />} />
         <Route path="/inventory/batches" element={<InventoryBatchesPage />} />
         <Route path="/inventory/supplier-receipts" element={<SupplierReceiptsPage />} />
+        <Route path="/inventory/supplier-receipts/:receiptId" element={<SupplierReceiptsPage />} />
         <Route path="/inventory/import" element={<InventoryImportPage />} />
         <Route path="/inventory/import/create" element={<InventoryImportCreatePage />} />
         <Route path="/inventory/returns" element={<InventoryReturnsPage />} />

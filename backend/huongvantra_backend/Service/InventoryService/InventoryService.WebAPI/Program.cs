@@ -8,6 +8,7 @@ using InventoryService.Infrastructure.Messaging;
 using InventoryService.Infrastructure.Repositories;
 using InventoryService.Infrastructure.Services;
 using InventoryService.WebAPI.Middlewares;
+using InventoryService.WebAPI.Services;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json.Serialization;
@@ -60,6 +61,7 @@ builder.Services.AddHttpClient<IProductCatalogClient, ProductCatalogClient>(clie
 });
 builder.Services.AddScoped<InventoryLogic>();
 builder.Services.AddScoped<StatisticsLogic>();
+builder.Services.AddHostedService<InventoryOutboxDispatcherHostedService>();
 builder.Services.AddMassTransit(x =>
 {
     x.AddConsumer<SkuCreatedConsumer>();

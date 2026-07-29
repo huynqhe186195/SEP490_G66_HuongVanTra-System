@@ -14,6 +14,28 @@ public class SupplierReceiptRepository(InventoryDbContext _db) : ISupplierReceip
     public Task<SupplierReceipt?> GetByIdAsync(Guid id, CancellationToken ct = default) =>
         WithItems().FirstOrDefaultAsync(r => r.Id == id, ct);
 
+    public async Task<SupplierReceiptApprovalContext?> GetApprovalContextAsync(
+        Guid id,
+        CancellationToken ct = default)
+    {
+        var header = await _db.SupplierReceipts
+            .AsNoTracking()
+            .Where(receipt => receipt.Id == id)
+            .Select(receipt => new { receipt.Status, receipt.CreatedBy })
+            .FirstOrDefaultAsync(ct);
+        if (header is null)
+            return null;
+
+        var skuIds = await _db.SupplierReceiptItems
+            .AsNoTracking()
+            .Where(item => item.SupplierReceiptId == id)
+            .OrderBy(item => item.SkuCode)
+            .Select(item => item.SkuId)
+            .ToListAsync(ct);
+
+        return new SupplierReceiptApprovalContext(header.Status, header.CreatedBy, skuIds);
+    }
+
     public async Task<(List<SupplierReceipt> Items, int TotalCount)> GetPagedAsync(
         SupplierReceiptStatus? status,
         Guid? createdBy,

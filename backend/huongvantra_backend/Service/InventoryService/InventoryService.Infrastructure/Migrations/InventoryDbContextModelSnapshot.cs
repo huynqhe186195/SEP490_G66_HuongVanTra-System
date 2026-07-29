@@ -51,6 +51,76 @@ namespace InventoryService.Infrastructure.Migrations
                     b.ToTable("ProcessedIntegrationEvents");
                 });
 
+            modelBuilder.Entity("InventoryService.Domain.Entities.InventoryOutboxMessage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)");
+
+                    b.Property<Guid>("AggregateId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)");
+
+                    b.Property<DateTime?>("LastAttemptAtUtc")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("LastError")
+                        .HasColumnType("text");
+
+                    b.Property<string>("LockedBy")
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)");
+
+                    b.Property<DateTime?>("LockedUntilUtc")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<DateTime>("NextAttemptAtUtc")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<DateTime>("OccurredAtUtc")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("Payload")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime?>("PublishedAtUtc")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("RetryCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
+
+                    b.Property<Guid>("SourceId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)")
+                        .HasDefaultValue("Pending");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AggregateId", "EventType");
+
+                    b.HasIndex("EventType", "SourceId")
+                        .IsUnique();
+
+                    b.HasIndex("LockedUntilUtc");
+
+                    b.HasIndex("OccurredAtUtc");
+
+                    b.HasIndex("Status", "NextAttemptAtUtc");
+
+                    b.ToTable("InventoryOutboxMessages");
+                });
+
             modelBuilder.Entity("InventoryService.Domain.Entities.InventoryLedgerEntry", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1321,7 +1391,15 @@ namespace InventoryService.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("varchar(100)");
 
+                    b.Property<string>("DeliveredByName")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
                     b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<string>("OriginalDocumentReference")
                         .HasMaxLength(500)
                         .HasColumnType("varchar(500)");
 
@@ -1384,6 +1462,9 @@ namespace InventoryService.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("varchar(100)");
 
+                    b.Property<decimal>("TotalAmount")
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("datetime(6)");
 
@@ -1418,6 +1499,9 @@ namespace InventoryService.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
 
+                    b.Property<decimal>("DocumentQuantity")
+                        .HasColumnType("decimal(18,3)");
+
                     b.Property<DateTime?>("ExpiresAt")
                         .HasColumnType("datetime(6)");
 
@@ -1425,6 +1509,9 @@ namespace InventoryService.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("varchar(20)");
+
+                    b.Property<decimal?>("LineAmount")
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<string>("LotCode")
                         .IsRequired()
@@ -1512,6 +1599,11 @@ namespace InventoryService.Infrastructure.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("char(36)");
 
+                    b.Property<string>("BatchCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
 
@@ -1571,8 +1663,10 @@ namespace InventoryService.Infrastructure.Migrations
 
                     b.HasIndex("ExpiresAt");
 
-                    b.HasIndex("LotCode")
+                    b.HasIndex("BatchCode")
                         .IsUnique();
+
+                    b.HasIndex("LotCode");
 
                     b.HasIndex("Location");
 

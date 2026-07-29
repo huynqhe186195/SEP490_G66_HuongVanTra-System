@@ -116,8 +116,8 @@ public class SupplierReceiptsController(InventoryLogic _logic) : ControllerBase
     [AllowAnonymous]
     public IActionResult Template()
     {
-        const string csv = "SkuCode,TenHang,ProductType,InventoryUnit,SubmittedUnit,SubmittedQuantity,UnitCost,LotCode,ManufacturedAt,ExpiresAt,QualityNote\r\n"
-            + "RM-TRA-NHAI-G,Tra nhai,NGUYEN_LIEU,Gram,kg,1.5,120000,NCC-TRA-001,2026-07-01,2027-07-01,Dat\r\n";
+        const string csv = "SkuCode,SupplierLotCode,DocumentQuantity,ActualQuantity,UnitCost,ManufactureDate,ExpiryDate,Note\r\n"
+            + "RM-TRA-NHAI-G,NCC-TRA-001,10,10,125000,2026-07-01,2027-07-01,Dat\r\n";
         return File(System.Text.Encoding.UTF8.GetBytes(csv), "text/csv; charset=utf-8", "supplier-receipt-template.csv");
     }
 }

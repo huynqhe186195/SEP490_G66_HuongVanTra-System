@@ -241,6 +241,7 @@ public class WarehouseBatchConfiguration : IEntityTypeConfiguration<WarehouseBat
     {
         builder.ToTable("WarehouseBatches");
         builder.HasKey(e => e.Id);
+        builder.Property(e => e.BatchCode).HasMaxLength(50).IsRequired();
         builder.Property(e => e.LotCode).HasMaxLength(50).IsRequired();
         builder.Property(e => e.Supplier).HasMaxLength(200);
         builder.Property(e => e.Note).HasMaxLength(500);
@@ -248,7 +249,8 @@ public class WarehouseBatchConfiguration : IEntityTypeConfiguration<WarehouseBat
         builder.Property(e => e.SourceReferenceCode).HasMaxLength(50);
         builder.Property(e => e.Location).HasMaxLength(20).HasDefaultValue("Warehouse").IsRequired();
         builder.Property(e => e.Status).HasMaxLength(20).IsRequired();
-        builder.HasIndex(e => e.LotCode).IsUnique();
+        builder.HasIndex(e => e.BatchCode).IsUnique();
+        builder.HasIndex(e => e.LotCode);
         builder.HasIndex(e => e.Location);
         builder.HasIndex(e => e.ParentBatchId);
         builder.HasIndex(e => e.SourceBatchId);
@@ -374,7 +376,10 @@ public class SupplierReceiptConfiguration : IEntityTypeConfiguration<SupplierRec
         builder.Property(e => e.SupplierName).HasMaxLength(255);
         builder.Property(e => e.SupplierReference).HasMaxLength(100);
         builder.Property(e => e.SupplierDocumentNumber).HasMaxLength(100);
+        builder.Property(e => e.DeliveredByName).HasMaxLength(255);
+        builder.Property(e => e.OriginalDocumentReference).HasMaxLength(500);
         builder.Property(e => e.Note).HasMaxLength(500);
+        builder.Property(e => e.TotalAmount).HasColumnType("decimal(18,2)");
         builder.Property(e => e.Status).HasConversion<string>().HasMaxLength(30).IsRequired();
         builder.Property(e => e.CreatedByName).HasMaxLength(255);
         builder.Property(e => e.CreatedByRoleName).HasMaxLength(100);
@@ -409,7 +414,9 @@ public class SupplierReceiptItemConfiguration : IEntityTypeConfiguration<Supplie
         builder.Property(e => e.InventoryUnitSnapshot).HasMaxLength(20).IsRequired();
         builder.Property(e => e.SubmittedUnit).HasMaxLength(20);
         builder.Property(e => e.SubmittedQuantity).HasColumnType("decimal(18,3)");
+        builder.Property(e => e.DocumentQuantity).HasColumnType("decimal(18,3)");
         builder.Property(e => e.UnitCost).HasColumnType("decimal(18,2)");
+        builder.Property(e => e.LineAmount).HasColumnType("decimal(18,2)");
         builder.Property(e => e.LotCode).HasMaxLength(50).IsRequired();
         builder.Property(e => e.WarehouseBatchLotCode).HasMaxLength(50);
         builder.Property(e => e.QualityNote).HasMaxLength(500);

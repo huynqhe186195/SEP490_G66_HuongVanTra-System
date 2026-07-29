@@ -6,6 +6,9 @@ public interface IProductCatalogClient
     Task<ProductCatalogSnapshot> GetCatalogForVariantIdsAsync(
         IEnumerable<Guid> variantIds,
         CancellationToken ct = default);
+    Task<ProductCatalogSnapshot> GetSupplierReceiptCatalogForVariantIdsAsync(
+        IEnumerable<Guid> variantIds,
+        CancellationToken ct = default);
 }
 
 public sealed record ProductCatalogSnapshot(List<CatalogProduct> Products)
@@ -38,7 +41,15 @@ public sealed record CatalogVariant(
     bool IsSellable,
     bool HasBom,
     int BomLineCount,
-    List<CatalogBomLine> BomLines);
+    List<CatalogBomLine> BomLines,
+    bool IsPurchasable = false,
+    bool CanBeBomComponent = false,
+    bool CanUseInCustom = false,
+    bool CanHaveBom = false,
+    bool IsBaseUnitVariant = false,
+    Guid? BaseVariantId = null,
+    decimal ConversionRate = 0,
+    string? UnitName = null);
 
 public sealed record CatalogBomLine(
     Guid MaterialId,

@@ -176,7 +176,7 @@ function InventoryBatchesPage() {
 
         titleInfo="Mỗi lô có thể chứa nhiều SKU — xuất bổ sung tồn quầy POS mặc định trừ theo FIFO từng SKU"
 
-        searchPlaceholder="Tìm mã lô, SKU, NCC..."
+        searchPlaceholder="Tìm mã lô nội bộ, mã lô NCC, SKU, NCC..."
 
         searchValue={searchInput}
 
@@ -235,7 +235,9 @@ function InventoryBatchesPage() {
 
               <tr>
 
-                <th className="px-6 py-3">Mã lô</th>
+                <th className="px-6 py-3">Mã lô nội bộ</th>
+
+                <th className="px-4 py-3">Mã lô NCC</th>
 
                 <th className="px-4 py-3">Dòng SKU</th>
 
@@ -259,7 +261,7 @@ function InventoryBatchesPage() {
 
                 <tr>
 
-                  <td colSpan={7} className="px-6 py-8 text-slate-500">
+                  <td colSpan={8} className="px-6 py-8 text-slate-500">
 
                     Đang tải...
 
@@ -271,7 +273,7 @@ function InventoryBatchesPage() {
 
                 <tr>
 
-                  <td colSpan={7} className="px-6 py-8 text-slate-500">
+                  <td colSpan={8} className="px-6 py-8 text-slate-500">
 
                     Chưa có lô —{' '}
 
@@ -307,7 +309,7 @@ function InventoryBatchesPage() {
 
                         <td className="px-6 py-4 font-mono font-semibold text-[#356647]">
 
-                          {batch.lotCode}
+                          {batch.batchCode}
 
                           <span className="ml-2 text-xs font-normal text-slate-400">
 
@@ -328,6 +330,8 @@ function InventoryBatchesPage() {
                           ) : null}
 
                         </td>
+
+                        <td className="px-4 py-4 font-mono text-slate-700">{batch.lotCode || '—'}</td>
 
                         <td className="px-4 py-4 text-slate-700">{batch.skuLineCount} SKU</td>
 
@@ -383,7 +387,7 @@ function InventoryBatchesPage() {
 
                         <tr key={`${batch.id}-detail`}>
 
-                          <td colSpan={7} className="bg-[#fbf9f1]/40 px-6 py-4">
+                          <td colSpan={8} className="bg-[#fbf9f1]/40 px-6 py-4">
 
                             <table className="w-full text-sm">
 
