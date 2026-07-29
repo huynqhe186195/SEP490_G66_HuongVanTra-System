@@ -2913,7 +2913,7 @@ function PosPage() {
                                                 "Không tìm thấy sản phẩm phù hợp."
                                             :   "Chưa có sản phẩm để hiển thị."}
                                         </p>
-                                    :   <div className={`grid min-h-0 flex-1 grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 ${visibleProductPageItems.length >= POS_PRODUCT_PAGE_SIZE ? "xl:grid-rows-6 2xl:grid-rows-5" : "xl:auto-rows-max"}`}>
+                                    :   <div className={`grid min-h-0 flex-1 grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 ${visibleProductPageItems.length >= POS_PRODUCT_PAGE_SIZE ? "xl:grid-rows-6" : "xl:auto-rows-max"}`}>
                                             {visibleProductPageItems.map((item) => {
                                                 const outOfStock = Number(item.stockQuantity) <= 0;
                                                 const lowStock = outOfStock || Number(item.stockQuantity) <= 5;
