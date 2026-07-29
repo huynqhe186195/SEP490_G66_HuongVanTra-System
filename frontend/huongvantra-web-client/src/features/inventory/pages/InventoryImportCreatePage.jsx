@@ -16,11 +16,14 @@ import { isSupplierReceiptEligibleSku } from '../../products/services/productsAp
 import {
   createSupplierReceipt,
   fetchSupplierReceiptById,
-  getSupplierReceiptTemplateUrl,
   submitSupplierReceipt,
   updateSupplierReceipt,
 } from '../services/supplierReceiptApi.js'
 import { fetchActiveSuppliers } from '../services/suppliersApi.js'
+import {
+  parseSupplierReceiptTt200Excel,
+  TT200_TEMPLATE_URL,
+} from '../utils/supplierReceiptTt200Excel.js'
 
 const EMPTY_HEADER = {
   supplierId: '',
@@ -475,8 +478,131 @@ function InventoryImportCreatePage() {
     setLines((prev) => (prev.length <= 1 ? prev : prev.filter((line) => line.key !== key)))
   }
 
+  function applyImportedLines(rawLines, sourceLabel) {
+    const previewErrors = []
+    const previewWarnings = []
+    const compositeKeys = new Set()
+    const nextLines = rawLines.map((raw, rowIndex) => {
+      const rowLabel = raw.rowNumber ?? rowIndex + 2
+      const skuCode = String(raw.skuCode || '').trim().toUpperCase()
+      const sku = skuByCode.get(skuCode)
+      const actualQuantity = String(raw.actualQuantity ?? '').trim()
+      const documentQuantity = String(raw.documentQuantity || actualQuantity).trim()
+      const unitCost = String(raw.unitCost ?? '').trim()
+      const supplierLotCode = String(raw.lotCode ?? '').trim()
+      const manufacturedAt = String(raw.manufacturedAt ?? '').trim()
+      const expiresAt = String(raw.expiresAt ?? '').trim()
+      // ĐVT trên Excel chỉ mang tính tham khảo — form luôn lấy đơn vị chuẩn của SKU.
+
+      if (!sku) {
+        previewErrors.push(
+          `Dòng ${rowLabel}: SKU ${skuCode || 'trống'} không hợp lệ hoặc không được phép nhập NCC.`,
+        )
+      }
+      if (!isPositiveIntegerText(documentQuantity) || !isPositiveIntegerText(actualQuantity)) {
+        previewErrors.push(`Dòng ${rowLabel}: Số lượng phải là số nguyên lớn hơn 0.`)
+      }
+      if (!unitCost) previewWarnings.push(`Dòng ${rowLabel}: thiếu Unit Cost; chỉ có thể lưu Draft.`)
+      if (!String(raw.documentQuantity ?? '').trim() && actualQuantity) {
+        previewWarnings.push(`Dòng ${rowLabel}: thiếu Document Quantity, đã preview theo Actual Quantity.`)
+      }
+
+      if (sku && supplierLotCode && manufacturedAt && expiresAt) {
+        const composite = [
+          sku.id,
+          supplierLotCode.trim().toUpperCase(),
+          manufacturedAt,
+          expiresAt,
+        ].join('|')
+        if (compositeKeys.has(composite)) {
+          previewErrors.push(
+            `Dòng ${rowLabel}: trùng SKU, Supplier Lot Code, Manufacture Date và Expiry Date.`,
+          )
+        }
+        compositeKeys.add(composite)
+      }
+
+      return {
+        key: crypto.randomUUID(),
+        skuId: sku?.id ?? '',
+        documentQuantity,
+        actualQuantity,
+        unitCost: sanitizeVndInput(unitCost),
+        submittedUnit: defaultSubmittedUnit(sku?.inventoryUnit),
+        lotCode: supplierLotCode,
+        manufacturedAt,
+        expiresAt,
+        qualityNote: String(raw.qualityNote ?? raw.note ?? '').trim(),
+      }
+    })
+
+    if (previewErrors.length > 0) {
+      throw new Error(`${sourceLabel} không hợp lệ. ${previewErrors.slice(0, 5).join(' ')}`)
+    }
+
+    setLines(nextLines.length ? nextLines : [emptyLine()])
+    setLineWarnings({})
+    setLineErrors({})
+    return { nextLines, previewWarnings }
+  }
+
+  async function importExcelPreview(file) {
+    if (!file) return
+    try {
+      const buffer = await file.arrayBuffer()
+      const { headerPatch = {}, rawLines, errors } = parseSupplierReceiptTt200Excel(buffer)
+      if (errors.length > 0) throw new Error(errors[0])
+
+      const importWarnings = []
+      const nextHeader = { ...headerPatch }
+      if (nextHeader.supplierName) {
+        const needle = normalizeSearch(nextHeader.supplierName)
+        const matched = suppliers.find((s) => normalizeSearch(s.name) === needle)
+          || suppliers.find((s) => {
+            const name = normalizeSearch(s.name)
+            return name.includes(needle) || needle.includes(name)
+          })
+        if (matched) {
+          nextHeader.supplierId = matched.id
+          nextHeader.supplierName = matched.name
+        } else {
+          delete nextHeader.supplierId
+          importWarnings.push(
+            `Không khớp nhà cung cấp "${nextHeader.supplierName}" trong danh sách — vui lòng chọn lại trên form.`,
+          )
+          delete nextHeader.supplierName
+        }
+      }
+
+      if (Object.keys(nextHeader).length > 0) {
+        setHeader((prev) => ({
+          ...prev,
+          ...Object.fromEntries(
+            Object.entries(nextHeader).filter(([, value]) => value != null && String(value).trim() !== ''),
+          ),
+        }))
+        setHeaderErrors({})
+      }
+
+      const { nextLines, previewWarnings } = applyImportedLines(rawLines, 'Excel')
+      const allWarnings = [...importWarnings, ...previewWarnings]
+      if (allWarnings.length > 0) {
+        showSuccess(`Đã nạp ${nextLines.length} dòng hàng hóa. ${allWarnings.slice(0, 3).join(' ')}`)
+      } else {
+        showSuccess(`Đã nạp ${nextLines.length} dòng hàng hóa từ Excel.`)
+      }
+    } catch (error) {
+      showError(error.message || 'Không đọc được file Excel.')
+    }
+  }
+
   async function importCsvPreview(file) {
     if (!file) return
+    const lowerName = String(file.name || '').toLowerCase()
+    if (lowerName.endsWith('.xlsx') || lowerName.endsWith('.xls')) {
+      await importExcelPreview(file)
+      return
+    }
     try {
       const text = await file.text()
       const rows = text.split(/\r?\n/).filter((row) => row.trim())
@@ -485,85 +611,53 @@ function InventoryImportCreatePage() {
       const headers = parseCsvLine(rows[0]).map(normalizeCsvHeader)
       const indexOf = (...names) => headers.findIndex((header) => names.includes(header))
       const indexes = {
-        skuCode: indexOf('skucode', 'sku'),
-        documentQuantity: indexOf('documentquantity', 'soluongtheochungtu'),
-        actualQuantity: indexOf('actualquantity', 'submittedquantity', 'quantity', 'soluong', 'soluongthucnhap'),
-        unitCost: indexOf('unitcost', 'dongia'),
-        submittedUnit: indexOf('submittedunit', 'unit', 'donvi'),
+        skuCode: indexOf('skucode', 'sku', 'maso', 'mahang', 'ma'),
+        documentQuantity: indexOf(
+          'documentquantity',
+          'soluongtheochungtu',
+          'theochungtu',
+          'sltheochungtu',
+        ),
+        actualQuantity: indexOf(
+          'actualquantity',
+          'submittedquantity',
+          'quantity',
+          'soluong',
+          'soluongthucnhap',
+          'thucnhap',
+          'slthucnhap',
+        ),
+        unitCost: indexOf('unitcost', 'dongia', 'gia'),
+        submittedUnit: indexOf('submittedunit', 'unit', 'donvi', 'dvt'),
         lotCode: indexOf('supplierlotcode', 'lotcode', 'malo', 'maloncc'),
         manufacturedAt: indexOf('manufacturedat', 'manufacturedate', 'ngaysanxuat'),
         expiresAt: indexOf('expiresat', 'expirydate', 'hansudung'),
         note: indexOf('note', 'qualitynote', 'ghichu'),
       }
       if (indexes.skuCode < 0 || indexes.actualQuantity < 0) {
-        throw new Error('CSV phải có SKU Code và Actual Quantity (hoặc cột Quantity cũ).')
+        throw new Error(
+          'CSV phải có cột SKU Code (hoặc Mã số) và Actual Quantity (hoặc Số lượng / Thực nhập). File Excel TT200 hãy dùng nút Nạp Excel.',
+        )
       }
 
-      const previewErrors = []
-      const previewWarnings = []
-      const compositeKeys = new Set()
-      const nextLines = rows.slice(1).map((rawRow, rowIndex) => {
+      const rawLines = rows.slice(1).map((rawRow, rowIndex) => {
         const cells = parseCsvLine(rawRow)
         const get = (index) => (index >= 0 ? String(cells[index] ?? '').trim() : '')
-        const skuCode = get(indexes.skuCode).toUpperCase()
-        const sku = skuByCode.get(skuCode)
-        const actualQuantity = get(indexes.actualQuantity)
-        const documentQuantity = get(indexes.documentQuantity) || actualQuantity
-        const unitCost = get(indexes.unitCost)
-        const supplierLotCode = get(indexes.lotCode)
-        const manufacturedAt = get(indexes.manufacturedAt)
-        const expiresAt = get(indexes.expiresAt)
-        const csvUnit = get(indexes.submittedUnit)
-
-        if (!sku) previewErrors.push(`Dòng ${rowIndex + 2}: SKU ${skuCode || 'trống'} không hợp lệ hoặc không được phép nhập NCC.`)
-        if (!isPositiveIntegerText(documentQuantity) || !isPositiveIntegerText(actualQuantity)) {
-          previewErrors.push(`Dòng ${rowIndex + 2}: Số lượng phải là số nguyên lớn hơn 0.`)
-        }
-        if (csvUnit && sku && normalizeSearch(csvUnit) !== normalizeSearch(getSkuUnitName(sku))) {
-          previewErrors.push(
-            `Dòng ${rowIndex + 2}: Đơn vị "${csvUnit}" không khớp UnitName "${getSkuUnitName(sku)}" của SKU.`,
-          )
-        }
-        if (!unitCost) previewWarnings.push(`Dòng ${rowIndex + 2}: thiếu Unit Cost; chỉ có thể lưu Draft.`)
-        if (indexes.documentQuantity < 0) {
-          previewWarnings.push(`Dòng ${rowIndex + 2}: thiếu Document Quantity, đã preview theo Actual Quantity.`)
-        }
-
-        if (sku && supplierLotCode && manufacturedAt && expiresAt) {
-          const composite = [
-            sku.id,
-            supplierLotCode.trim().toUpperCase(),
-            manufacturedAt,
-            expiresAt,
-          ].join('|')
-          if (compositeKeys.has(composite)) {
-            previewErrors.push(
-              `Dòng ${rowIndex + 2}: trùng SKU, Supplier Lot Code, Manufacture Date và Expiry Date.`,
-            )
-          }
-          compositeKeys.add(composite)
-        }
-
         return {
-          key: crypto.randomUUID(),
-          skuId: sku?.id ?? '',
-          documentQuantity,
-          actualQuantity,
-          unitCost: sanitizeVndInput(unitCost),
-          submittedUnit: defaultSubmittedUnit(sku?.inventoryUnit),
-          lotCode: supplierLotCode,
-          manufacturedAt,
-          expiresAt,
-          qualityNote: get(indexes.note),
+          rowNumber: rowIndex + 2,
+          skuCode: get(indexes.skuCode),
+          documentQuantity: get(indexes.documentQuantity),
+          actualQuantity: get(indexes.actualQuantity),
+          unitCost: get(indexes.unitCost),
+          submittedUnit: get(indexes.submittedUnit),
+          lotCode: get(indexes.lotCode),
+          manufacturedAt: get(indexes.manufacturedAt),
+          expiresAt: get(indexes.expiresAt),
+          note: get(indexes.note),
         }
       })
 
-      if (previewErrors.length > 0) {
-        throw new Error(`CSV không hợp lệ. ${previewErrors.slice(0, 5).join(' ')}`)
-      }
-      setLines(nextLines.length ? nextLines : [emptyLine()])
-      setLineWarnings({})
-      setLineErrors({})
+      const { nextLines, previewWarnings } = applyImportedLines(rawLines, 'CSV')
       if (previewWarnings.length > 0) {
         showSuccess(`Đã nạp ${nextLines.length} dòng. ${previewWarnings.slice(0, 3).join(' ')}`)
       } else {
@@ -965,10 +1059,16 @@ function InventoryImportCreatePage() {
           </div>
 
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-lg font-bold text-slate-800">Dòng hàng nhập</h2>
+            <div>
+              <h2 className="text-lg font-bold text-slate-800">Dòng hàng nhập</h2>
+              <p className="mt-1 text-xs text-slate-500">
+                Nạp Excel lấy NCC + ghi chú phiếu + dòng hàng (lô / NSX / HSD / ghi chú chất lượng nếu có). Tên NCC phải khớp danh sách hệ thống.
+              </p>
+            </div>
             <div className="flex flex-wrap items-center gap-2">
               <a
-                href={getSupplierReceiptTemplateUrl()}
+                href={TT200_TEMPLATE_URL}
+                download="phieu-nhap-kho-excel-tt200.xlsx"
                 className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
               >
                 <span className="material-symbols-outlined text-[18px]">download</span>
@@ -976,10 +1076,10 @@ function InventoryImportCreatePage() {
               </a>
               <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">
                 <span className="material-symbols-outlined text-[18px]">upload_file</span>
-                Nạp CSV để preview
+                Nạp CSV
                 <input
                   type="file"
-                  accept=".csv,text/csv"
+                  accept=".csv,.xlsx,.xls,text/csv"
                   className="hidden"
                   onChange={(event) => {
                     void importCsvPreview(event.target.files?.[0])
