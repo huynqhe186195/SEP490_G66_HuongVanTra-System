@@ -1180,6 +1180,21 @@ namespace ProductService.Infrastructure.Migrations
                     b.Property<Guid?>("BaseVariantId")
                         .HasColumnType("char(36)");
 
+                    b.Property<bool>("CanBeBomComponent")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("tinyint(1)")
+                        .HasDefaultValue(false);
+
+                    b.Property<bool>("CanHaveBom")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("tinyint(1)")
+                        .HasDefaultValue(false);
+
+                    b.Property<bool>("CanUseInCustom")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("tinyint(1)")
+                        .HasDefaultValue(false);
+
                     b.Property<decimal>("ConversionRate")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("decimal(18,4)")
@@ -1219,6 +1234,11 @@ namespace ProductService.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("tinyint(1)")
                         .HasDefaultValue(true);
+
+                    b.Property<bool>("IsPurchasable")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("tinyint(1)")
+                        .HasDefaultValue(false);
 
                     b.Property<int?>("MaxStock")
                         .HasColumnType("int");
