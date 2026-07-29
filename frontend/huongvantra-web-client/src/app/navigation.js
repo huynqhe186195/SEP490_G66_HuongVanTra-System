@@ -321,10 +321,19 @@ function groupAdminManagerSidebar(items, isAdmin) {
   const consumed = new Set()
   const result = []
 
-  // POS — chỉ Manager
+  // POS — Manager luôn được dùng (inject nếu bị lọc modules)
   if (!isAdmin) {
-    const pos = takeNavLeaf(byPath, consumed, '/pos')
-    if (pos) result.push({ ...byPath.get('/pos') })
+    const posItem = byPath.get('/pos') || navigationItems.find((item) => item.path === '/pos')
+    if (posItem) {
+      consumed.add('/pos')
+      result.push({
+        label: posItem.label,
+        path: posItem.path,
+        module: posItem.module,
+        icon: posItem.icon,
+        roles: posItem.roles,
+      })
+    }
   } else if (byPath.has('/pos')) {
     consumed.add('/pos')
   }
@@ -756,6 +765,8 @@ export function canAccessModule(session, module) {
     return (
       session.permissions.includes('CREATE_POS_ORDER')
       || session.permissions.includes('CREATE_COD_ORDER')
+      // Manager (MANAGE_EMPLOYEE) luôn được vào POS bán hàng
+      || session.permissions.includes('MANAGE_EMPLOYEE')
     )
   }
 

@@ -147,9 +147,11 @@ export function canViewOnlyCodOrders(session) {
   return canUsePosCodMode(session) && !canUsePosCounterMode(session)
 }
 
-/** Quầy POS: action permission độc lập, hỗ trợ union nhiều role. */
+/** Quầy POS: SalePos (CREATE_POS_ORDER) hoặc Manager. */
 export function canUsePosCounterMode(session) {
   return hasPermission(session, 'CREATE_POS_ORDER')
+    || isBranchManager(session)
+    || isManagerRole(session)
 }
 
 /** Bán COD: action permission độc lập với VERIFY_COD. */
