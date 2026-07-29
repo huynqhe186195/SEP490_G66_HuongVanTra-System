@@ -225,7 +225,7 @@ export function canManageSuppliers(session) {
 }
 
 export function getStaffManagementScopeLabel(session) {
-  if (isSystemAdmin(session)) return 'Quản lý nhân sự: Warehouse, Accountant, Manager, SalePos, SaleCod'
+  if (isSystemAdmin(session)) return 'Quản lý nhân sự: Manager'
   if (isBranchManager(session)) return 'Quản lý nhân sự: SalePos, SaleCod'
   return 'Quản lý nhân sự'
 }

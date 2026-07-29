@@ -163,7 +163,35 @@ export async function createStaffAccount(payload) {
 
 function resolveRoleIds(options, roleNames) {
   const names = (Array.isArray(roleNames) ? roleNames : [roleNames]).filter(Boolean)
-  return names.map((name) => options.find((item) => item.name === name)?.id).filter(Boolean)
+  const resolved = []
+  for (const name of names) {
+    const direct = options.find((item) => item.name === name)?.id
+    if (direct) {
+      resolved.push(direct)
+      continue
+    }
+    // Sale legacy → ưu tiên SalePos nếu có trong danh sách gán được
+    if (String(name).toLowerCase() === 'sale') {
+      const salePos = options.find((item) => item.name === 'SalePos')?.id
+      if (salePos) resolved.push(salePos)
+    }
+  }
+  return [...new Set(resolved)]
+}
+
+/** Chuẩn hóa role hiển thị/sửa: Sale legacy → SalePos khi option có SalePos. */
+export function normalizeStaffRolesForEdit(roles, roleOptions) {
+  const names = Array.isArray(roles) ? roles : []
+  const optionNames = new Set((roleOptions || []).map((r) => r.name))
+  const next = []
+  for (const role of names) {
+    if (String(role).toLowerCase() === 'sale' && optionNames.has('SalePos')) {
+      if (!next.includes('SalePos')) next.push('SalePos')
+      continue
+    }
+    if (!next.includes(role)) next.push(role)
+  }
+  return next
 }
 
 export async function updateStaffAccount(employeeId, payload) {
@@ -186,10 +214,13 @@ export async function updateStaffAccount(employeeId, payload) {
 
     if (payload.roles !== undefined || payload.role !== undefined) {
       const options = await fetchRoleOptions()
-      const requestedRoles = payload.roles ?? [payload.role]
+      const requestedRoles = normalizeStaffRolesForEdit(
+        payload.roles ?? [payload.role],
+        options,
+      )
       const roleIds = resolveRoleIds(options, requestedRoles)
       if (!roleIds.length) {
-        throw new Error('Vui lòng chọn ít nhất một vai trò nhân viên.')
+        throw new Error('Vui lòng chọn ít nhất một vai trò nhân viên (SalePos / SaleCod hoặc vai trò được phép gán).')
       }
 
       await updateUser(current.userGuid, {

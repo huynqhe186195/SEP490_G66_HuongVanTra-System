@@ -11,11 +11,7 @@ public static class StaffManagementScope
 
     private static readonly HashSet<string> AdminAssignableRoles = new(StringComparer.OrdinalIgnoreCase)
     {
-        "Warehouse",
-        "Accountant",
         "Manager",
-        SalePosRoleName,
-        SaleCodRoleName,
     };
 
     private static readonly HashSet<string> SaleFamilyRoles = new(StringComparer.OrdinalIgnoreCase)
@@ -55,9 +51,11 @@ public static class StaffManagementScope
         var roles = employeeRoles.Where(r => !string.IsNullOrWhiteSpace(r)).ToList();
         if (roles.Count == 0) return false;
 
+        // Admin (trang Nhân sự): chỉ quản lý Manager.
         if (IsSystemAdmin(permissions))
-            return roles.All(role => !IsSaleRole(role));
+            return roles.All(role => AdminAssignableRoles.Contains(role));
 
+        // Manager: chỉ Sale (SalePos/SaleCod/Sale legacy)
         if (IsBranchManager(permissions))
             return roles.Any(IsSaleRole);
 
