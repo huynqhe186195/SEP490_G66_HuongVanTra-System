@@ -1,5 +1,5 @@
 import { apiRequestAuth, toPagedResult } from '../../../lib/apiClient.js'
-import { mapProductSku } from './productsApi.js'
+import { mapProductSku, mapSupplierReceiptSku } from './productsApi.js'
 
 function trimOrNull(value) {
   const text = String(value ?? '').trim()
@@ -46,6 +46,91 @@ export async function fetchAllActiveSkus(pageSize = 100) {
   } while (items.length < totalCount)
 
   return items
+}
+
+function mapAccountingCostProfitSku(item) {
+  if (!item || typeof item !== 'object') return null
+  return {
+    skuId: item.skuId ?? item.SkuId,
+    skuCode: item.skuCode ?? item.SkuCode ?? '',
+    productName: item.productName ?? item.ProductName ?? '',
+    variantName: item.variantName ?? item.VariantName ?? '',
+    unitName: item.unitName ?? item.UnitName ?? '',
+    retailPrice: Number(item.retailPrice ?? item.RetailPrice ?? 0),
+    averageCostPrice: Number(item.averageCostPrice ?? item.AverageCostPrice ?? 0),
+    lastPurchaseUnitCost: numberOrNull(item.lastPurchaseUnitCost ?? item.LastPurchaseUnitCost),
+    sourceReceiptId: item.sourceReceiptId ?? item.SourceReceiptId ?? null,
+    sourceReceiptCode: item.sourceReceiptCode ?? item.SourceReceiptCode ?? '',
+    sourceApprovedAt: item.sourceApprovedAt ?? item.SourceApprovedAt ?? null,
+    costUpdatedAt: item.costUpdatedAt ?? item.CostUpdatedAt ?? null,
+  }
+}
+
+export async function fetchAccountingCostProfitSkus() {
+  const data = await apiRequestAuth('/api/v1/skus/accounting-cost-profit', { method: 'GET' })
+  const items = Array.isArray(data) ? data : (data?.items ?? data?.Items ?? [])
+  return items.map(mapAccountingCostProfitSku).filter(Boolean)
+}
+
+export async function updateAccountingRetailPrice(skuId, retailPrice) {
+  const data = await apiRequestAuth(`/api/v1/skus/${skuId}/retail-price`, {
+    method: 'PATCH',
+    body: JSON.stringify({ retailPrice: Number(retailPrice) }),
+  })
+  return mapAccountingCostProfitSku(data)
+}
+
+function mapPriceHistoryItem(item) {
+  if (!item || typeof item !== 'object') return null
+  return {
+    id: item.id ?? item.Id,
+    type: item.type ?? item.Type ?? '',
+    oldValue: Number(item.oldValue ?? item.OldValue ?? 0),
+    newValue: Number(item.newValue ?? item.NewValue ?? 0),
+    incomingUnitCost: numberOrNull(item.incomingUnitCost ?? item.IncomingUnitCost),
+    sourceType: item.sourceType ?? item.SourceType ?? '',
+    sourceReceiptId: item.sourceReceiptId ?? item.SourceReceiptId ?? null,
+    sourceReceiptCode: item.sourceReceiptCode ?? item.SourceReceiptCode ?? '',
+    changedBy: item.changedBy ?? item.ChangedBy ?? '',
+    changedAt: item.changedAt ?? item.ChangedAt ?? null,
+    wasApplied: item.wasApplied ?? item.WasApplied ?? null,
+    processingResult: item.processingResult ?? item.ProcessingResult ?? '',
+    sourceApprovedAt: item.sourceApprovedAt ?? item.SourceApprovedAt ?? null,
+    updatedAt: item.updatedAt ?? item.UpdatedAt ?? null,
+  }
+}
+
+export async function fetchSkuPriceHistory(skuId, { page = 1, pageSize = 50 } = {}) {
+  const params = new URLSearchParams({
+    page: String(page),
+    pageSize: String(pageSize),
+  })
+  const data = await apiRequestAuth(`/api/v1/skus/${skuId}/price-history?${params.toString()}`, { method: 'GET' })
+  return {
+    items: (data.items ?? data.Items ?? []).map(mapPriceHistoryItem).filter(Boolean),
+    page: Number(data.page ?? data.Page ?? page),
+    pageSize: Number(data.pageSize ?? data.PageSize ?? pageSize),
+    totalCount: Number(data.totalCount ?? data.TotalCount ?? 0),
+    totalPages: Number(data.totalPages ?? data.TotalPages ?? 1),
+  }
+}
+
+export async function fetchSupplierReceiptSkus() {
+  const data = await apiRequestAuth('/api/v1/skus/supplier-receipt-catalog', { method: 'GET' })
+  const items = getSupplierReceiptCatalogItems(data)
+  return items.map(mapSupplierReceiptSku).filter(Boolean)
+}
+
+function getSupplierReceiptCatalogItems(response) {
+  if (Array.isArray(response)) return response
+  if (Array.isArray(response?.items)) return response.items
+  if (Array.isArray(response?.Items)) return response.Items
+  if (Array.isArray(response?.data)) return response.data
+  if (Array.isArray(response?.Data)) return response.Data
+  if (Array.isArray(response?.data?.items)) return response.data.items
+  if (Array.isArray(response?.Data?.Items)) return response.Data.Items
+
+  throw new Error('Dữ liệu danh sách SKU được phép nhập từ nhà cung cấp không hợp lệ.')
 }
 
 /** SKU cho Admin/Manager — gọi endpoint riêng, luôn trả catalog cửa hàng. */

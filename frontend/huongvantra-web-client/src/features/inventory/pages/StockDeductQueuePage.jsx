@@ -4,7 +4,7 @@ import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
 import { showError } from '../../../app/toast.js'
-import { canConfirmStockDeduct } from '../../../app/navigation.js'
+import { canCancelStockDeduct, canConfirmStockDeduct } from '../../../app/navigation.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import StockDeductPreviewModal from '../components/StockDeductPreviewModal.jsx'
@@ -20,20 +20,21 @@ import {
 
 const TABS = [
   { key: 'all', label: 'Tất cả', status: undefined },
-  { key: 'waiting', label: 'Chờ xác nhận', status: 'waiting' },
+  { key: 'waiting', label: 'Chờ đóng gói', status: 'waiting' },
   { key: 'insufficient', label: 'Chờ hàng', status: 'insufficient' },
   { key: 'confirmed', label: 'Đã trừ', status: 'confirmed' },
   { key: 'cancelled', label: 'Đã hủy', status: 'cancelled' },
 ]
 
 function getStockDeductTabLabel(tab) {
-  if (tab?.key === 'waiting') return 'Chờ đối soát'
+  if (tab?.key === 'waiting') return 'Chờ đóng gói'
   if (tab?.key === 'insufficient') return 'Chờ nguyên liệu'
   return tab?.label ?? ''
 }
 
 function StockDeductQueuePage() {
   const canExecuteDeduct = canConfirmStockDeduct(loadAuthSession())
+  const canCancelQueue = canCancelStockDeduct(loadAuthSession())
   const [activeTab, setActiveTab] = useState('all')
   const [searchValue, setSearchValue] = useState('')
   const [queues, setQueues] = useState([])
@@ -77,11 +78,11 @@ function StockDeductQueuePage() {
     const confirmed = queues.filter((q) => q.queueStatus === 'confirmed').length
     const cancelled = queues.filter((q) => q.queueStatus === 'cancelled').length
     return [
-      { label: 'Chờ xác nhận', value: String(waiting), note: 'Manager/Admin xử lý' },
+      { label: 'Chờ đóng gói', value: String(waiting), note: 'Thủ kho xác nhận theo Queue' },
       {
         label: 'Chờ hàng',
         value: String(insufficient),
-        note: 'Thiếu Tồn quầy POS mặc định - có thể thử lại',
+        note: 'Thiếu nguyên liệu Kho - cần xử lý trước khi xác nhận',
         warning: insufficient > 0,
       },
       { label: 'Đã trừ / Đã hủy', value: `${confirmed} / ${cancelled}`, note: 'Theo bộ lọc hiện tại' },
@@ -91,11 +92,13 @@ function StockDeductQueuePage() {
   return (
     <PageShell>
       <PageHeader
-        title="Chờ trừ tồn quầy"
+        title="Chờ đóng gói / trừ Kho"
         titleInfo={
           canExecuteDeduct
-            ? 'Manager/Admin xác nhận trừ QuantityOnHand của Tồn quầy POS mặc định cho đơn đã bán trước.'
-            : 'Theo dõi đơn chờ trừ Tồn quầy POS mặc định.'
+            ? 'Thủ kho xác nhận đóng gói và trừ nguyên liệu Kho theo Queue.'
+            : canCancelQueue
+              ? 'Theo dõi Queue; Quản lý hoặc Admin chỉ hủy khi xử lý ngoại lệ.'
+              : 'Theo dõi Queue đóng gói theo quyền được cấp.'
         }
         searchPlaceholder="Tìm mã đơn..."
         searchValue={searchValue}
@@ -159,7 +162,7 @@ function StockDeductQueuePage() {
               <tr>
                 <th className="px-8 py-4">Mã đơn</th>
                 <th className="px-4 py-4">Queue</th>
-                <th className="px-4 py-4">Tồn quầy POS</th>
+                <th className="px-4 py-4">Tồn cần đối soát</th>
                 <th className="px-4 py-4">Thanh toán</th>
                 <th className="px-4 py-4">Ngày tạo queue</th>
                 <th className="px-8 py-4 text-right">Tổng tiền</th>
@@ -177,7 +180,7 @@ function StockDeductQueuePage() {
               {!isLoading && queues.length === 0 ? (
                 <tr>
                   <td className="px-8 py-10 text-slate-500" colSpan={7}>
-                    Không có đơn chờ trừ tồn quầy trong mục này.
+                    Không có Queue đóng gói trong mục này.
                   </td>
                 </tr>
               ) : null}
@@ -243,7 +246,7 @@ function StockDeductQueuePage() {
                               : 'bg-slate-500 hover:bg-slate-600'
                           }`}
                         >
-                          {canExecuteDeduct ? 'Xem & xử lý' : 'Xem'}
+                          {canExecuteDeduct ? 'Xem & xác nhận' : canCancelQueue ? 'Xem & xử lý ngoại lệ' : 'Xem'}
                         </button>
                       </td>
                     </tr>
@@ -256,7 +259,7 @@ function StockDeductQueuePage() {
           page={page}
           pageSize={pageSize}
           totalCount={totalCount}
-          itemLabel="đơn chờ trừ tồn quầy"
+          itemLabel="Queue đóng gói"
           onPageChange={setPage}
           onPageSizeChange={setPageSize}
         />
@@ -266,7 +269,8 @@ function StockDeductQueuePage() {
         <StockDeductPreviewModal
           queueId={previewQueue.queueId}
           orderCode={previewQueue.orderCode}
-          readOnly={!canExecuteDeduct}
+          canConfirm={canExecuteDeduct}
+          canCancel={canCancelQueue}
           onClose={() => setPreviewQueue(null)}
           onConfirmed={loadData}
         />

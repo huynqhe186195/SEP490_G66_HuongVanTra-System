@@ -126,6 +126,15 @@ function normalizeRoleToken(role) {
     .replace(/\s+/g, '')
 }
 
+function hasAdminRole(session) {
+  return (session?.roles ?? []).some((role) => normalizeRoleToken(role) === 'admin')
+}
+
+/** Trang Accounting: chỉ principal có role Admin được sửa Giá bán. */
+export function canEditAccountingSalePrice(session) {
+  return hasAdminRole(session)
+}
+
 export function isSalePosRole(session) {
   return (session?.roles ?? []).some((role) => {
     const key = normalizeRoleToken(role)
@@ -180,9 +189,52 @@ export function canCancelStockReplenishmentRequest(session) {
   return isBranchManager(session) || isManagerRole(session) || isWarehouseRole(session) || isSystemAdmin(session)
 }
 
-/** Duyệt / Từ chối phiếu nhập NCC: Manager hoặc Admin. Người tạo không được tự duyệt (backend chặn). */
+/** Duyệt / Từ chối phiếu nhập NCC: chỉ Manager không có role Admin. */
 export function canReviewSupplierReceipt(session) {
-  return isBranchManager(session) || isManagerRole(session) || isSystemAdmin(session)
+  return (isBranchManager(session) || isManagerRole(session)) && !hasAdminRole(session)
+}
+
+/** Warehouse là actor vận hành duy nhất của Supplier Receipt trong Batch 1A. */
+export function canOperateSupplierReceipt(session) {
+  return isWarehouseRole(session) && !hasAdminRole(session)
+}
+
+export function canCreateProductionOrder(session) {
+  return isWarehouseRole(session) && !hasAdminRole(session)
+}
+
+export function canSubmitProductionOrder(session) {
+  return isWarehouseRole(session) && !hasAdminRole(session)
+}
+
+export function canCompleteProductionOrder(session) {
+  return isWarehouseRole(session) && !hasAdminRole(session)
+}
+
+export function canCancelProductionOrder(session) {
+  return isWarehouseRole(session) && !hasAdminRole(session)
+}
+
+export function canReviewProductionOrder(session) {
+  return (isBranchManager(session) || isManagerRole(session)) && !hasAdminRole(session)
+}
+
+export function canCreateWarehouseStocktake(session) {
+  return isWarehouseRole(session) && !hasAdminRole(session)
+}
+
+export function canCreateShelfStocktake(session) {
+  return (
+    canCreateOrder(session)
+    && !isWarehouseRole(session)
+    && !isBranchManager(session)
+    && !isManagerRole(session)
+    && !hasAdminRole(session)
+  )
+}
+
+export function canReviewStocktake(session) {
+  return (isBranchManager(session) || isManagerRole(session)) && !hasAdminRole(session)
 }
 
 export function isSystemAdmin(session) {

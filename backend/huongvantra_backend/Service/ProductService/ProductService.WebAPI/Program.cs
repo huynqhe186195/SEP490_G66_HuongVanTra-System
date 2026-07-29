@@ -35,6 +35,7 @@ builder.Services.AddScoped<IAttributeNameRepository, AttributeNameRepository>();
 builder.Services.AddScoped<IProductRepository, ProductRepository>();
 builder.Services.AddScoped<IPriceBookRepository, PriceBookRepository>();
 builder.Services.AddScoped<IProductEventPublisher, ProductEventPublisher>();
+builder.Services.AddScoped<ISupplierReceiptCostStore, SupplierReceiptCostStore>();
 builder.Services.AddHttpClient<IInventoryProductDeletionValidationClient, InventoryProductDeletionValidationClient>(client =>
 {
     var baseUrl = builder.Configuration["InventoryService:BaseUrl"] ?? "http://inventory-service:8080";
@@ -55,6 +56,7 @@ builder.Services.AddScoped<CatalogSyncLogic>();
 builder.Services.AddMassTransit(x =>
 {
     x.AddConsumer<CostPriceUpdatedConsumer>();
+    x.AddConsumer<SupplierReceiptApprovedCostRecordedConsumer>();
 
     x.UsingRabbitMq((context, cfg) =>
     {
@@ -67,6 +69,11 @@ builder.Services.AddMassTransit(x =>
         cfg.ReceiveEndpoint("product-cost-price-updated", e =>
         {
             e.ConfigureConsumer<CostPriceUpdatedConsumer>(context);
+        });
+
+        cfg.ReceiveEndpoint("product-service.supplier-receipt-approved-cost-recorded", e =>
+        {
+            e.ConfigureConsumer<SupplierReceiptApprovedCostRecordedConsumer>(context);
         });
     });
 });

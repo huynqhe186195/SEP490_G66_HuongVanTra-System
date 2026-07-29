@@ -18,6 +18,7 @@ export function mapWarehouseBatch(row) {
   const items = (row.items ?? row.Items ?? []).map(mapWarehouseBatchItem).filter(Boolean)
   return {
     id: row.id ?? row.Id,
+    batchCode: row.batchCode ?? row.BatchCode ?? row.lotCode ?? row.LotCode ?? '',
     lotCode: row.lotCode ?? row.LotCode ?? '',
     supplier: row.supplier ?? row.Supplier ?? '',
     expiresAt: row.expiresAt ?? row.ExpiresAt ?? null,

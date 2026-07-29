@@ -210,8 +210,256 @@ public class ProductSkuLogic(
             .Select(v => new ProductSkuOrderCatalogResponse(
                 v.Id,
                 v.Product.CategoryId,
-                v.Product.InventoryUnit.ToString()))
+                v.Product.InventoryUnit.ToString(),
+                v.Product.ProductType.ToString(),
+                v.IsPurchasable,
+                v.CanBeBomComponent,
+                v.CanUseInCustom,
+                v.CanHaveBom))
             .ToListAsync(ct);
+    }
+
+    public async Task<List<ProductSkuSupplierReceiptCatalogResponse>> GetSupplierReceiptCatalogBySkuIdsAsync(
+        List<Guid>? skuIds,
+        CancellationToken ct = default)
+    {
+        var targetIds = (skuIds ?? [])
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToHashSet();
+        var query = _db.ProductVariants
+            .AsNoTracking()
+            .Include(v => v.Product)
+            .Where(v =>
+                !v.IsDeleted &&
+                !v.Product.IsDeleted &&
+                v.IsActive &&
+                v.Product.IsActive &&
+                v.IsPurchasable &&
+                (v.Product.ProductType == ProductService.Domain.Enums.ProductType.THANH_PHAM ||
+                 v.Product.ProductType == ProductService.Domain.Enums.ProductType.NGUYEN_LIEU ||
+                 v.Product.ProductType == ProductService.Domain.Enums.ProductType.BAO_BI));
+
+        if (targetIds.Count > 0)
+        {
+            query = query.Where(v => targetIds.Contains(v.Id));
+        }
+
+        return await query
+            .OrderBy(v => v.Product.ProductType)
+            .ThenBy(v => v.Product.Name)
+            .ThenBy(v => v.SkuCode)
+            .Select(v => new ProductSkuSupplierReceiptCatalogResponse(
+                v.Id,
+                v.ProductId,
+                v.Product.Name,
+                v.SkuCode,
+                v.VariantName,
+                v.UnitName,
+                v.Product.ProductType.ToString(),
+                v.Product.InventoryUnit.ToString(),
+                v.Product.IsActive && v.IsActive,
+                v.IsPurchasable))
+            .ToListAsync(ct);
+    }
+
+    public async Task<List<ProductSkuAccountingResponse>> GetAccountingCostProfitAsync(
+        CancellationToken ct = default)
+    {
+        var variants = await BuildVariantQuery(CatalogViewScope.Warehouse)
+            .AsNoTracking()
+            .Where(variant => variant.IsActive && variant.Product.IsActive)
+            .OrderBy(variant => variant.SkuCode)
+            .ToListAsync(ct);
+
+        var skuIds = variants.Select(variant => variant.Id).ToHashSet();
+        var histories = skuIds.Count == 0
+            ? new List<ProductCostPriceHistory>()
+            : await _db.ProductCostPriceHistories
+                .AsNoTracking()
+                .Where(history => skuIds.Contains(history.SkuId) && history.WasApplied)
+                .OrderByDescending(history => history.SourceApprovedAt)
+                .ThenByDescending(history => history.ReceiptLineOrder)
+                .ThenByDescending(history => history.UpdatedAt)
+                .ToListAsync(ct);
+        var latestBySku = histories
+            .GroupBy(history => history.SkuId)
+            .ToDictionary(group => group.Key, group => group.First());
+
+        return variants.Select(variant =>
+        {
+            latestBySku.TryGetValue(variant.Id, out var latest);
+            return new ProductSkuAccountingResponse(
+                variant.Id,
+                variant.SkuCode,
+                variant.Product.Name,
+                variant.VariantName,
+                variant.UnitName,
+                variant.RetailPrice,
+                variant.CostPrice,
+                latest?.IncomingUnitCost,
+                latest?.SourceReceiptId,
+                latest?.SourceReceiptCode,
+                latest?.SourceApprovedAt,
+                latest?.UpdatedAt);
+        }).ToList();
+    }
+
+    public async Task<ProductSkuAccountingResponse> UpdateRetailPriceAsync(
+        Guid skuId,
+        UpdateProductVariantRetailPriceRequest request,
+        ProductApprovalActorSnapshot actor,
+        CancellationToken ct = default)
+    {
+        if (skuId == Guid.Empty)
+            throw new ProductValidationException("SkuId không hợp lệ.");
+        if (request is null)
+            throw new ProductValidationException("Request body là bắt buộc.");
+        if (request.RetailPrice <= 0)
+            throw new ProductValidationException("Giá bán phải lớn hơn 0.");
+
+        var normalizedRetailPrice = Math.Round(
+            request.RetailPrice,
+            2,
+            MidpointRounding.AwayFromZero);
+        ProductVariant? variant = null;
+        ProductCostPriceHistory? latest = null;
+
+        var strategy = _db.Database.CreateExecutionStrategy();
+        await strategy.ExecuteAsync(async () =>
+        {
+            await using var transaction = await _db.Database.BeginTransactionAsync(ct);
+            try
+            {
+                variant = await _db.ProductVariants
+                    .Include(item => item.Product)
+                    .FirstOrDefaultAsync(item => item.Id == skuId, ct)
+                    ?? throw new ProductSkuNotFoundException(skuId);
+
+                var oldRetailPrice = variant.RetailPrice;
+                if (oldRetailPrice != normalizedRetailPrice)
+                {
+                    var changedAt = DateTime.UtcNow;
+                    // Accounting owns only RetailPrice. CostPrice is never copied
+                    // from the client and remains owned by the receipt consumer.
+                    variant.RetailPrice = normalizedRetailPrice;
+                    variant.UpdatedAt = changedAt;
+                    _db.ProductRetailPriceHistories.Add(new ProductRetailPriceHistory
+                    {
+                        Id = Guid.NewGuid(),
+                        SkuId = skuId,
+                        OldRetailPrice = oldRetailPrice,
+                        NewRetailPrice = normalizedRetailPrice,
+                        ChangedBy = actor.UserId is { } userId && userId != Guid.Empty ? userId : null,
+                        ChangedByName = string.IsNullOrWhiteSpace(actor.FullName)
+                            ? null
+                            : actor.FullName.Trim(),
+                        ChangedAt = changedAt,
+                        SourceType = "manual_admin_accounting"
+                    });
+                    await _db.SaveChangesAsync(ct);
+                }
+
+                latest = await _db.ProductCostPriceHistories
+                    .AsNoTracking()
+                    .Where(history => history.SkuId == skuId && history.WasApplied)
+                    .OrderByDescending(history => history.SourceApprovedAt)
+                    .ThenByDescending(history => history.ReceiptLineOrder)
+                    .ThenByDescending(history => history.UpdatedAt)
+                    .FirstOrDefaultAsync(ct);
+                await transaction.CommitAsync(ct);
+            }
+            catch
+            {
+                await transaction.RollbackAsync(ct);
+                throw;
+            }
+        });
+
+        return new ProductSkuAccountingResponse(
+            variant!.Id,
+            variant.SkuCode,
+            variant.Product.Name,
+            variant.VariantName,
+            variant.UnitName,
+            variant.RetailPrice,
+            variant.CostPrice,
+            latest?.IncomingUnitCost,
+            latest?.SourceReceiptId,
+            latest?.SourceReceiptCode,
+            latest?.SourceApprovedAt,
+            latest?.UpdatedAt);
+    }
+
+    public async Task<PagedResponse<ProductPriceHistoryResponse>> GetPriceHistoryAsync(
+        Guid skuId,
+        int page,
+        int pageSize,
+        CancellationToken ct = default)
+    {
+        if (skuId == Guid.Empty)
+            throw new ProductValidationException("SkuId không hợp lệ.");
+
+        if (!await _db.ProductVariants.AsNoTracking().AnyAsync(variant => variant.Id == skuId && !variant.IsDeleted, ct))
+            throw new ProductSkuNotFoundException(skuId);
+
+        var safePage = Math.Max(1, page);
+        var safePageSize = Math.Clamp(pageSize, 1, 100);
+        var costHistory = await _db.ProductCostPriceHistories
+            .AsNoTracking()
+            .Where(history => history.SkuId == skuId)
+            .Select(history => new ProductPriceHistoryResponse(
+                history.Id,
+                "AverageCost",
+                history.OldCostPrice,
+                history.NewCostPrice,
+                history.IncomingUnitCost,
+                history.SourceType,
+                history.SourceReceiptId,
+                history.SourceReceiptCode,
+                history.UpdatedBy,
+                history.SourceApprovedAt,
+                history.WasApplied,
+                history.ProcessingResult,
+                history.SourceApprovedAt,
+                history.UpdatedAt))
+            .ToListAsync(ct);
+        var retailHistory = await _db.ProductRetailPriceHistories
+            .AsNoTracking()
+            .Where(history => history.SkuId == skuId)
+            .Select(history => new ProductPriceHistoryResponse(
+                history.Id,
+                "RetailPrice",
+                history.OldRetailPrice,
+                history.NewRetailPrice,
+                null,
+                history.SourceType,
+                null,
+                null,
+                history.ChangedByName,
+                history.ChangedAt,
+                null,
+                null,
+                null,
+                history.ChangedAt))
+            .ToListAsync(ct);
+
+        var unified = costHistory
+            .Concat(retailHistory)
+            .OrderByDescending(history => history.ChangedAt)
+            .ThenByDescending(history => history.Id)
+            .ToList();
+        var items = unified
+            .Skip((safePage - 1) * safePageSize)
+            .Take(safePageSize)
+            .ToList();
+
+        return new PagedResponse<ProductPriceHistoryResponse>(
+            items,
+            safePage,
+            safePageSize,
+            unified.Count,
+            Math.Max(1, (int)Math.Ceiling(unified.Count / (double)safePageSize)));
     }
 
     public Task<ProductSkuResponse> CreateAsync(CreateProductSkuRequest request) =>

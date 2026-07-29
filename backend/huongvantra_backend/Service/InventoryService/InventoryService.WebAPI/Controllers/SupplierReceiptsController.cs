@@ -40,9 +40,11 @@ public class SupplierReceiptsController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "Manager,Admin,Warehouse")]
+    [Authorize(Roles = "Warehouse")]
     public async Task<IActionResult> Create([FromBody] UpsertSupplierReceiptRequest request, CancellationToken ct)
     {
+        if (User.IsInRole("Admin")) return Forbid();
+
         var userId = User.GetUserId();
         if (userId == Guid.Empty) return Unauthorized(new { message = "Không xác định được người dùng." });
 
@@ -51,9 +53,11 @@ public class SupplierReceiptsController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
-    [Authorize(Roles = "Manager,Admin,Warehouse")]
+    [Authorize(Roles = "Warehouse")]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpsertSupplierReceiptRequest request, CancellationToken ct)
     {
+        if (User.IsInRole("Admin")) return Forbid();
+
         var userId = User.GetUserId();
         if (userId == Guid.Empty) return Unauthorized(new { message = "Không xác định được người dùng." });
 
@@ -61,9 +65,11 @@ public class SupplierReceiptsController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpPost("{id:guid}/submit")]
-    [Authorize(Roles = "Manager,Admin,Warehouse")]
+    [Authorize(Roles = "Warehouse")]
     public async Task<IActionResult> Submit(Guid id, CancellationToken ct)
     {
+        if (User.IsInRole("Admin")) return Forbid();
+
         var userId = User.GetUserId();
         if (userId == Guid.Empty) return Unauthorized(new { message = "Không xác định được người dùng." });
 
@@ -71,9 +77,11 @@ public class SupplierReceiptsController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpPost("{id:guid}/approve")]
-    [Authorize(Roles = "Manager,Admin")]
+    [Authorize(Roles = "Manager")]
     public async Task<IActionResult> Approve(Guid id, CancellationToken ct)
     {
+        if (User.IsInRole("Admin")) return Forbid();
+
         var userId = User.GetUserId();
         if (userId == Guid.Empty) return Unauthorized(new { message = "Không xác định được người dùng." });
 
@@ -81,9 +89,11 @@ public class SupplierReceiptsController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpPost("{id:guid}/reject")]
-    [Authorize(Roles = "Manager,Admin")]
+    [Authorize(Roles = "Manager")]
     public async Task<IActionResult> Reject(Guid id, [FromBody] ReviewSupplierReceiptRequest request, CancellationToken ct)
     {
+        if (User.IsInRole("Admin")) return Forbid();
+
         var userId = User.GetUserId();
         if (userId == Guid.Empty) return Unauthorized(new { message = "Không xác định được người dùng." });
 
@@ -91,21 +101,23 @@ public class SupplierReceiptsController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpPost("{id:guid}/cancel")]
-    [Authorize(Roles = "Manager,Admin,Warehouse")]
+    [Authorize(Roles = "Warehouse")]
     public async Task<IActionResult> Cancel(Guid id, [FromBody] ReviewSupplierReceiptRequest request, CancellationToken ct)
     {
+        if (User.IsInRole("Admin")) return Forbid();
+
         var userId = User.GetUserId();
         if (userId == Guid.Empty) return Unauthorized(new { message = "Không xác định được người dùng." });
 
-        return Ok(await _logic.CancelSupplierReceiptAsync(id, userId, User.IsInRole("Admin"), User.ToCreatorSnapshot(), request, ct));
+        return Ok(await _logic.CancelSupplierReceiptAsync(id, userId, false, User.ToCreatorSnapshot(), request, ct));
     }
 
     [HttpGet("template")]
     [AllowAnonymous]
     public IActionResult Template()
     {
-        const string csv = "SkuCode,TenHang,ProductType,InventoryUnit,SubmittedUnit,SubmittedQuantity,UnitCost,LotCode,ManufacturedAt,ExpiresAt,QualityNote\r\n"
-            + "RM-TRA-NHAI-G,Tra nhai,NGUYEN_LIEU,Gram,kg,1.5,120000,NCC-TRA-001,2026-07-01,2027-07-01,Dat\r\n";
+        const string csv = "SkuCode,SupplierLotCode,DocumentQuantity,ActualQuantity,UnitCost,ManufactureDate,ExpiryDate,Note\r\n"
+            + "RM-TRA-NHAI-G,NCC-TRA-001,10,10,125000,2026-07-01,2027-07-01,Dat\r\n";
         return File(System.Text.Encoding.UTF8.GetBytes(csv), "text/csv; charset=utf-8", "supplier-receipt-template.csv");
     }
 }

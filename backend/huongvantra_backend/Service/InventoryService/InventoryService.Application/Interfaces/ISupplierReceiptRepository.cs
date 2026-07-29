@@ -3,9 +3,17 @@ using InventoryService.Domain.Enums;
 
 namespace InventoryService.Application.Interfaces;
 
+public sealed record SupplierReceiptApprovalContext(
+    SupplierReceiptStatus Status,
+    Guid CreatedBy,
+    IReadOnlyList<Guid> SkuIds);
+
 public interface ISupplierReceiptRepository
 {
     Task<SupplierReceipt?> GetByIdAsync(Guid id, CancellationToken ct = default);
+    Task<SupplierReceiptApprovalContext?> GetApprovalContextAsync(
+        Guid id,
+        CancellationToken ct = default);
     Task<(List<SupplierReceipt> Items, int TotalCount)> GetPagedAsync(
         SupplierReceiptStatus? status,
         Guid? createdBy,

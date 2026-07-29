@@ -11,8 +11,10 @@ public class SupplierReceiptItem
     public string InventoryUnitSnapshot { get; set; } = string.Empty;
     public string? SubmittedUnit { get; set; }
     public decimal SubmittedQuantity { get; set; }
+    public decimal DocumentQuantity { get; set; }
     public int Quantity { get; set; }
     public decimal? UnitCost { get; set; }
+    public decimal? LineAmount { get; set; }
     public string LotCode { get; set; } = string.Empty;
     public DateTime? ManufacturedAt { get; set; }
     public DateTime? ExpiresAt { get; set; }

@@ -4,6 +4,14 @@ import PageHeader from '../../../components/shared/PageHeader.jsx'
 import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { formatVietnamDate, formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
+import { loadAuthSession } from '../../auth/services/authSession.js'
+import {
+  canCancelProductionOrder,
+  canCompleteProductionOrder,
+  canCreateProductionOrder,
+  canReviewProductionOrder,
+  canSubmitProductionOrder,
+} from '../../auth/utils/permissions.js'
 import CreateProductionOrderModal from '../components/CreateProductionOrderModal.jsx'
 import {
   approveProductionOrder,
@@ -80,7 +88,7 @@ function getConfirmActionMessage(action) {
   const code = action?.order?.productionCode ?? ''
   switch (action?.type) {
     case 'submit':
-      return `Gửi duyệt lệnh sản xuất "${code}"? Lệnh sẽ chờ quản lý hoặc admin xác nhận.`
+      return `Gửi duyệt lệnh sản xuất "${code}"? Lệnh sẽ chờ Manager xác nhận.`
     case 'approve':
       return `Duyệt lệnh sản xuất "${code}"? Sau khi duyệt, thủ kho mới có thể hoàn thành và ghi nhận tồn kho.`
     case 'reject':
@@ -131,6 +139,12 @@ function getFinishedGoodsLots(outputLines) {
 }
 
 function ProductionOrdersPage() {
+  const session = loadAuthSession()
+  const canCreate = canCreateProductionOrder(session)
+  const canSubmit = canSubmitProductionOrder(session)
+  const canReview = canReviewProductionOrder(session)
+  const canComplete = canCompleteProductionOrder(session)
+  const canCancel = canCancelProductionOrder(session)
   const [activeTab, setActiveTab] = useState('')
   const [orders, setOrders] = useState([])
   const [isLoading, setIsLoading] = useState(true)
@@ -239,19 +253,22 @@ function ProductionOrdersPage() {
       ],
       Rejected: [
         ['submit', 'Gửi duyệt lại', 'primary'],
-        ['cancel', 'Hủy', 'secondary'],
       ],
       PendingApproval: [
         ['approve', 'Duyệt', 'primary'],
         ['reject', 'Từ chối', 'danger'],
-        ['cancel', 'Hủy', 'secondary'],
       ],
       Approved: [
         ['complete', 'Hoàn thành', 'primary'],
-        ['cancel', 'Hủy', 'secondary'],
       ],
     }
-    const actions = actionsByStatus[order.status] ?? []
+    const actions = (actionsByStatus[order.status] ?? []).filter(([type]) => {
+      if (type === 'submit') return canSubmit
+      if (type === 'approve' || type === 'reject') return canReview
+      if (type === 'complete') return canComplete
+      if (type === 'cancel') return canCancel
+      return false
+    })
     if (actions.length === 0) return null
     return (
       <div className="flex flex-wrap items-center gap-2">
@@ -267,13 +284,15 @@ function ProductionOrdersPage() {
         titleInfo="Một lệnh sản xuất có thể chứa nhiều SKU thành phẩm; hệ thống xuất nguyên liệu và nhập lô thành phẩm về kho tổng."
         rightContent={
           <div className="flex items-center gap-3">
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-[#538463] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#457053]"
-            >
-              <span className="material-symbols-outlined text-[18px]">add</span>
-              Tạo lệnh sản xuất
-            </button>
+            {canCreate ? (
+              <button
+                onClick={() => setShowCreateModal(true)}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-[#538463] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#457053]"
+              >
+                <span className="material-symbols-outlined text-[18px]">add</span>
+                Tạo lệnh sản xuất
+              </button>
+            ) : null}
           </div>
         }
       />
@@ -579,11 +598,13 @@ function ProductionOrdersPage() {
       )}
 
       {/* Create modal */}
-      <CreateProductionOrderModal
-        isOpen={showCreateModal}
-        onClose={() => setShowCreateModal(false)}
-        onCreated={handleCreated}
-      />
+      {canCreate ? (
+        <CreateProductionOrderModal
+          isOpen={showCreateModal}
+          onClose={() => setShowCreateModal(false)}
+          onCreated={handleCreated}
+        />
+      ) : null}
     </PageShell>
   )
 }

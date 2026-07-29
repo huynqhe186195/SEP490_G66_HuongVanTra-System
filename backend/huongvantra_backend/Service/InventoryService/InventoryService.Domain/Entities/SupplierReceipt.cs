@@ -10,8 +10,11 @@ public class SupplierReceipt
     public string? SupplierReference { get; set; }
     public string? SupplierDocumentNumber { get; set; }
     public DateTime? SupplierDocumentDate { get; set; }
+    public string? DeliveredByName { get; set; }
+    public string? OriginalDocumentReference { get; set; }
     public DateTime ReceivedDate { get; set; }
     public string? Note { get; set; }
+    public decimal TotalAmount { get; set; }
     public SupplierReceiptStatus Status { get; set; } = SupplierReceiptStatus.Draft;
     public Guid CreatedBy { get; set; }
     public string? CreatedByName { get; set; }

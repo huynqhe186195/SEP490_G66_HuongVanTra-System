@@ -8,7 +8,9 @@ using InventoryService.Domain.Entities;
 using InventoryService.Domain.Enums;
 using InventoryService.Domain.Exceptions;
 using InventoryService.Infrastructure.Data;
+using InventoryService.Infrastructure.Messaging;
 using InventoryService.Infrastructure.Repositories;
+using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Moq;
 using MSOptions = Microsoft.Extensions.Options.Options;
@@ -60,6 +62,9 @@ public class SupplierReceiptApprovalWorkflowTests
 
         public Task<ProductCatalogSnapshot> GetCatalogForVariantIdsAsync(
             IEnumerable<Guid> variantIds, CancellationToken ct = default) => Task.FromResult(snapshot);
+
+        public Task<ProductCatalogSnapshot> GetSupplierReceiptCatalogForVariantIdsAsync(
+            IEnumerable<Guid> variantIds, CancellationToken ct = default) => Task.FromResult(snapshot);
     }
 
     private static ProductCatalogSnapshot BuildCatalog() => new(
@@ -72,14 +77,20 @@ public class SupplierReceiptApprovalWorkflowTests
             "Piece",
             true,
             [
-                new CatalogVariant(SkuA, ProductId, "NL-A-001", "SKU A", true, false, false, 0, []),
-                new CatalogVariant(SkuB, ProductId, "NL-B-002", "SKU B", true, false, false, 0, []),
+                new CatalogVariant(
+                    SkuA, ProductId, "NL-A-001", "SKU A", true, false, false, 0, [],
+                    IsPurchasable: true,
+                    UnitName: "gói"),
+                new CatalogVariant(
+                    SkuB, ProductId, "NL-B-002", "SKU B", true, false, false, 0, [],
+                    IsPurchasable: true),
             ]),
     ]);
 
     private static InventoryLogic BuildLogic(InventoryDbContext db)
     {
         var opts = MSOptions.Create(new InventoryOptions { SimulateWarehouse = false });
+        var eventPublisher = new InventoryEventPublisher(Mock.Of<IPublishEndpoint>(), db);
         return new InventoryLogic(
             new InMemorySkuStockRepo(db),
             new StockDeductQueueRepository(db),
@@ -94,7 +105,7 @@ public class SupplierReceiptApprovalWorkflowTests
             Mock.Of<ISupplierReturnRequestRepository>(),
             Mock.Of<IStocktakeRequestRepository>(),
             new ProcessedIntegrationEventRepository(db),
-            Mock.Of<IInventoryEventPublisher>(),
+            eventPublisher,
             new PassThrough(),
             Mock.Of<IProductionOrderRepository>(),
             new FakeCatalogClient(BuildCatalog()),
@@ -118,7 +129,12 @@ public class SupplierReceiptApprovalWorkflowTests
         db.SaveChanges();
     }
 
-    private static SupplierReceiptItemRequest Line(Guid skuId, string skuCode, string lotCode, decimal quantity)
+    private static SupplierReceiptItemRequest Line(
+        Guid skuId,
+        string skuCode,
+        string lotCode,
+        decimal quantity,
+        decimal? unitCost = 10_000m)
     {
         var received = DateTime.UtcNow.Date;
         return new SupplierReceiptItemRequest(
@@ -129,7 +145,7 @@ public class SupplierReceiptApprovalWorkflowTests
             "Piece",
             null,
             quantity,
-            10_000m,
+            unitCost,
             lotCode,
             received.AddDays(-2),
             received.AddDays(30),
@@ -160,6 +176,7 @@ public class SupplierReceiptApprovalWorkflowTests
         Assert.Equal(0, await db.WarehouseBatches.CountAsync());
         Assert.Equal(0, await db.StockImportSlips.CountAsync());
         Assert.Equal(0, await db.InventoryLedgerEntries.CountAsync());
+        Assert.Equal(0, await db.InventoryOutboxMessages.CountAsync());
         Assert.All(await db.SkuStocks.ToListAsync(), s =>
         {
             Assert.Equal(0, s.WarehouseQuantityOnHand);
@@ -176,13 +193,166 @@ public class SupplierReceiptApprovalWorkflowTests
         var logic = BuildLogic(db);
 
         var created = await logic.CreateSupplierReceiptAsync(
-            BuildRequest("HD-0001", Line(SkuA, "NL-A-001", "LOT-A-0001", 20)),
+            BuildRequest("HD-0001", Line(SkuA, "CLIENT-SPOOF", " Lot-A-Mixed ", 20)),
             InventoryTestActors.Warehouse,
             Snapshot(InventoryTestActors.Warehouse, "Thủ kho", "Warehouse"));
 
         var stored = await db.SupplierReceipts.Include(r => r.Items).SingleAsync(r => r.Id == created.Id);
         Assert.Equal(SupplierReceiptStatus.Draft, stored.Status);
         Assert.Single(stored.Items);
+        Assert.Equal(10_000m, stored.Items.Single().UnitCost);
+        Assert.Equal(20m, stored.Items.Single().DocumentQuantity);
+        Assert.Equal(200_000m, stored.Items.Single().LineAmount);
+        Assert.Equal("NL-A-001", stored.Items.Single().SkuCode);
+        Assert.Equal("Lot-A-Mixed", stored.Items.Single().LotCode);
+        Assert.Equal("gói", stored.Items.Single().InventoryUnitSnapshot);
+        Assert.Equal(200_000m, stored.TotalAmount);
+        await AssertNoStockMovementAsync(db);
+    }
+
+    [Fact]
+    public async Task CreateSupplierReceipt_AllowsSameSkuWithDifferentSupplierLots()
+    {
+        using var db = NewDb();
+        SeedBaseline(db);
+        var logic = BuildLogic(db);
+
+        var created = await logic.CreateSupplierReceiptAsync(
+            BuildRequest(
+                "HD-MULTI-LOT",
+                Line(SkuA, "NL-A-001", "LOT-A", 10),
+                Line(SkuA, "NL-A-001", "LOT-B", 20)),
+            InventoryTestActors.Warehouse,
+            Snapshot(InventoryTestActors.Warehouse, "Thủ kho", "Warehouse"));
+
+        Assert.Equal(2, created.Items.Count);
+        await AssertNoStockMovementAsync(db);
+    }
+
+    [Fact]
+    public async Task CreateSupplierReceipt_RejectsExactDuplicateLotIdentity()
+    {
+        using var db = NewDb();
+        SeedBaseline(db);
+        var logic = BuildLogic(db);
+
+        await Assert.ThrowsAsync<InventoryValidationException>(() =>
+            logic.CreateSupplierReceiptAsync(
+                BuildRequest(
+                    "HD-EXACT-DUP",
+                    Line(SkuA, "NL-A-001", " lot-a ", 10),
+                    Line(SkuA, "NL-A-001", "LOT-A", 20)),
+                InventoryTestActors.Warehouse,
+                Snapshot(InventoryTestActors.Warehouse, "Thủ kho", "Warehouse")));
+
+        Assert.Empty(db.SupplierReceipts);
+    }
+
+    [Fact]
+    public async Task CreateSupplierReceipt_AllowsDifferentSkusWithSameSupplierLot()
+    {
+        using var db = NewDb();
+        SeedBaseline(db);
+        var logic = BuildLogic(db);
+
+        var created = await logic.CreateSupplierReceiptAsync(
+            BuildRequest(
+                "HD-SHARED-LOT",
+                Line(SkuA, "NL-A-001", "LOT-SHARED", 10),
+                Line(SkuB, "NL-B-002", "LOT-SHARED", 20)),
+            InventoryTestActors.Warehouse,
+            Snapshot(InventoryTestActors.Warehouse, "Thủ kho", "Warehouse"));
+
+        Assert.Equal(2, created.Items.Count);
+    }
+
+    [Fact]
+    public async Task Draft_AllowsMissingLotAndDates_ButSubmitRejects()
+    {
+        using var db = NewDb();
+        SeedBaseline(db);
+        var logic = BuildLogic(db);
+        var incomplete = Line(SkuA, "NL-A-001", string.Empty, 10) with
+        {
+            ManufacturedAt = null,
+            ExpiresAt = null
+        };
+
+        var created = await logic.CreateSupplierReceiptAsync(
+            BuildRequest("HD-INCOMPLETE-DRAFT", incomplete),
+            InventoryTestActors.Warehouse,
+            Snapshot(InventoryTestActors.Warehouse, "Thủ kho", "Warehouse"));
+
+        await Assert.ThrowsAsync<InventoryValidationException>(() =>
+            logic.SubmitSupplierReceiptAsync(created.Id, InventoryTestActors.Warehouse));
+        Assert.Equal(SupplierReceiptStatus.Draft, (await db.SupplierReceipts.SingleAsync()).Status);
+    }
+
+    [Theory]
+    [InlineData(1.5)]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public async Task CreateSupplierReceipt_RejectsNonNaturalQuantity(decimal quantity)
+    {
+        using var db = NewDb();
+        SeedBaseline(db);
+        var logic = BuildLogic(db);
+
+        await Assert.ThrowsAsync<InventoryValidationException>(() =>
+            logic.CreateSupplierReceiptAsync(
+                BuildRequest("HD-BAD-QUANTITY", Line(SkuA, "NL-A-001", "LOT-QTY", quantity)),
+                InventoryTestActors.Warehouse,
+                Snapshot(InventoryTestActors.Warehouse, "Thủ kho", "Warehouse")));
+    }
+
+    [Fact]
+    public async Task SubmitSupplierReceipt_RejectsMissingUnitCost()
+    {
+        using var db = NewDb();
+        SeedBaseline(db);
+        var logic = BuildLogic(db);
+
+        var created = await logic.CreateSupplierReceiptAsync(
+            BuildRequest("HD-NULL-COST", Line(SkuA, "NL-A-001", "LOT-NULL-COST", 20, unitCost: null)),
+            InventoryTestActors.Warehouse,
+            Snapshot(InventoryTestActors.Warehouse, "Thủ kho", "Warehouse"));
+
+        var error = await Assert.ThrowsAsync<InventoryValidationException>(() =>
+            logic.SubmitSupplierReceiptAsync(created.Id, InventoryTestActors.Warehouse));
+
+        var stored = await db.SupplierReceipts.Include(r => r.Items).SingleAsync(r => r.Id == created.Id);
+        Assert.Contains("Đơn giá", error.Message);
+        Assert.Equal(SupplierReceiptStatus.Draft, stored.Status);
+        Assert.Null(stored.Items.Single().UnitCost);
+        await AssertNoStockMovementAsync(db);
+    }
+
+    [Fact]
+    public async Task ApproveSupplierReceipt_RevalidatesNonPositiveUnitCost()
+    {
+        using var db = NewDb();
+        SeedBaseline(db);
+        var logic = BuildLogic(db);
+
+        var created = await logic.CreateSupplierReceiptAsync(
+            BuildRequest("HD-INVALID-COST", Line(SkuA, "NL-A-001", "LOT-INVALID-COST", 20)),
+            InventoryTestActors.Warehouse,
+            Snapshot(InventoryTestActors.Warehouse, "Thủ kho", "Warehouse"));
+        await logic.SubmitSupplierReceiptAsync(created.Id, InventoryTestActors.Warehouse);
+
+        var storedItem = await db.SupplierReceiptItems.SingleAsync(item => item.SupplierReceiptId == created.Id);
+        storedItem.UnitCost = 0;
+        await db.SaveChangesAsync();
+
+        var error = await Assert.ThrowsAsync<InventoryValidationException>(() =>
+            logic.ApproveSupplierReceiptAsync(
+                created.Id,
+                InventoryTestActors.Manager,
+                Snapshot(InventoryTestActors.Manager, "Quản lý", "Manager")));
+
+        Assert.Contains("Đơn giá", error.Message);
+        var stored = await db.SupplierReceipts.SingleAsync(receipt => receipt.Id == created.Id);
+        Assert.Equal(SupplierReceiptStatus.PendingApproval, stored.Status);
         await AssertNoStockMovementAsync(db);
     }
 
@@ -281,10 +451,18 @@ public class SupplierReceiptApprovalWorkflowTests
         Assert.Equal(1, await db.WarehouseBatches.CountAsync());
         Assert.Equal(1, await db.StockImportSlips.CountAsync());
         Assert.Equal(1, await db.InventoryLedgerEntries.CountAsync());
+        Assert.Equal(1, await db.InventoryOutboxMessages.CountAsync());
+        var createdBatch = await db.WarehouseBatches.Include(b => b.Items).SingleAsync();
+        Assert.Null(createdBatch.Items.Single().UnitCost);
+        Assert.StartsWith("SR-", createdBatch.BatchCode);
+        Assert.Equal("LOT-A-0005", createdBatch.LotCode);
+        Assert.NotEqual(createdBatch.Items.Single().SkuCode, createdBatch.BatchCode);
+        Assert.NotEqual(createdBatch.Items.Single().SkuCode, createdBatch.LotCode);
 
-        var completed = await db.SupplierReceipts.SingleAsync(r => r.Id == created.Id);
+        var completed = await db.SupplierReceipts.Include(r => r.Items).SingleAsync(r => r.Id == created.Id);
         Assert.Equal(SupplierReceiptStatus.Completed, completed.Status);
         Assert.Equal(InventoryTestActors.Manager, completed.ReviewedBy);
+        Assert.Equal(createdBatch.BatchCode, completed.Items.Single().WarehouseBatchLotCode);
 
         await logic.ApproveSupplierReceiptAsync(
             created.Id,
@@ -296,6 +474,52 @@ public class SupplierReceiptApprovalWorkflowTests
         Assert.Equal(1, await db.WarehouseBatches.CountAsync());
         Assert.Equal(1, await db.StockImportSlips.CountAsync());
         Assert.Equal(1, await db.InventoryLedgerEntries.CountAsync());
+        Assert.Equal(1, await db.InventoryOutboxMessages.CountAsync());
+    }
+
+    [Fact]
+    public async Task ReviewerApprove_CreatesOneInternalBatchPerSupplierLot_AndSearchesBothCodes()
+    {
+        using var db = NewDb();
+        SeedBaseline(db);
+        var logic = BuildLogic(db);
+
+        var created = await logic.CreateSupplierReceiptAsync(
+            BuildRequest(
+                "HD-MULTI-APPROVE",
+                Line(SkuA, "NL-A-001", " Lot-A-Mixed ", 10),
+                Line(SkuA, "NL-A-001", "LOT-B", 20)),
+            InventoryTestActors.Warehouse,
+            Snapshot(InventoryTestActors.Warehouse, "Thủ kho", "Warehouse"));
+        await logic.SubmitSupplierReceiptAsync(created.Id, InventoryTestActors.Warehouse);
+        var completed = await logic.ApproveSupplierReceiptAsync(
+            created.Id,
+            InventoryTestActors.Manager,
+            Snapshot(InventoryTestActors.Manager, "Quản lý", "Manager"));
+
+        var batches = await db.WarehouseBatches
+            .Include(batch => batch.Items)
+            .OrderBy(batch => batch.LotCode)
+            .ToListAsync();
+        Assert.Equal(2, batches.Count);
+        Assert.Equal(2, batches.Select(batch => batch.BatchCode).Distinct().Count());
+        Assert.Equal(["Lot-A-Mixed", "LOT-B"], batches.Select(batch => batch.LotCode).ToArray());
+        Assert.All(batches, batch =>
+        {
+            Assert.StartsWith("SR-", batch.BatchCode);
+            Assert.Single(batch.Items);
+            Assert.Equal(SkuA, batch.Items.Single().SkuId);
+            Assert.Equal("NL-A-001", batch.Items.Single().SkuCode);
+            Assert.DoesNotContain("NL-A-001", batch.BatchCode);
+            Assert.DoesNotContain("NL-A-001", batch.LotCode);
+        });
+        Assert.Equal(
+            batches.Select(batch => batch.BatchCode).OrderBy(code => code),
+            completed.Items.Select(item => item.WarehouseBatchLotCode).OrderBy(code => code));
+
+        var repository = new WarehouseBatchRepository(db);
+        Assert.Single(await repository.GetListAsync(null, batches[0].BatchCode, false));
+        Assert.Single(await repository.GetListAsync(null, "lot-a-mixed", false));
     }
 
     // (8) Duplicate supplier document bị từ chối.
@@ -393,13 +617,18 @@ public class SupplierReceiptApprovalWorkflowTests
                 Line(SkuB, "NL-B-002", "LOT-B-0010", 30)),
             InventoryTestActors.Warehouse,
             Snapshot(InventoryTestActors.Warehouse, "Thủ kho", "Warehouse"));
+        var secondLineId = (await db.SupplierReceipts
+                .Include(receipt => receipt.Items)
+                .SingleAsync(receipt => receipt.Id == created.Id))
+            .Items.Single(item => item.SkuId == SkuB).Id;
         await logic.SubmitSupplierReceiptAsync(created.Id, InventoryTestActors.Warehouse);
 
-        // Lô của dòng thứ hai bị chiếm bởi một lô kho khác trước khi duyệt.
+        // Mã lô nội bộ sinh từ line thứ hai bị chiếm trước khi duyệt.
         db.WarehouseBatches.Add(new WarehouseBatch
         {
             Id = Guid.NewGuid(),
-            LotCode = "LOT-B-0010",
+            BatchCode = $"SR-{secondLineId:N}".ToUpperInvariant(),
+            LotCode = "CONFLICT-LOT",
             Location = "Warehouse",
             Status = "active",
             SourceType = "conflict",
