@@ -12,10 +12,12 @@ const ROLE_GROUPS = {
   customer: ['customer', 'khach hang', 'khách hàng'],
 }
 
-/** Tạm ẩn trên sidebar — bật lại khi backend sẵn sàng. */
+/** Tạm ẩn trên sidebar — bật lại khi backend sẵn sàng / khi đã tách rõ với kiểm kê. */
 const SIDEBAR_DISABLED_MODULES = new Set([
   'reports',
   'integrations',
+  'contracts',
+  'inventory_reports',
 ])
 
 const HOME_MODULE_PRIORITY = [
@@ -41,7 +43,7 @@ const HOME_MODULE_PRIORITY = [
 
 export const navigationItems = [
   { label: 'POS bán hàng', path: '/pos', module: 'pos', icon: 'point_of_sale', roles: ['agencyManager', 'salesStaff', 'customer'] },
-  { label: 'Quỹ ca POS', path: '/pos/cash-sessions', module: 'orders', icon: 'account_balance_wallet', roles: ['admin', 'agencyManager', 'accountant'] },
+  { label: 'Quỹ ca POS', path: '/pos/cash-sessions', module: 'orders', icon: 'account_balance_wallet', roles: ['agencyManager', 'accountant'] },
   {
     label: 'Đơn hàng',
     path: '/orders',
@@ -59,7 +61,7 @@ export const navigationItems = [
         label: 'Quản Lý Đơn COD',
         path: '/orders/cod',
         module: 'cod_ops',
-        roles: ['agencyManager', 'saleCod'],
+        roles: ['admin', 'agencyManager', 'saleCod'],
       },
     ],
   },
@@ -69,14 +71,14 @@ export const navigationItems = [
     path: '/orders/stock-deduct',
     module: 'stock_deduct_ops',
     icon: 'inventory_2',
-    roles: ['admin', 'agencyManager'],
+    roles: ['agencyManager'],
   },
   {
     label: 'Khách hàng',
     path: '/customers',
     module: 'customers',
     icon: 'groups',
-    roles: ['admin', 'agencyManager', 'salesStaff', 'accountant'],
+    roles: ['agencyManager', 'salesStaff', 'accountant'],
     children: CUSTOMER_SIDEBAR_SECTIONS.map((section) => ({
       label: section.label,
       path: buildCustomerPath(section.key),
@@ -88,12 +90,12 @@ export const navigationItems = [
   { label: 'Sản phẩm & Số lượng', path: '/inventory/products', module: 'products', icon: 'inventory_2', roles: ['admin', 'agencyManager', 'inventoryManager'] },
   { label: 'Danh Mục Sản Phẩm', path: '/products/categories', module: 'products', icon: 'category', roles: ['admin', 'agencyManager', 'inventoryManager'] },
   { label: 'Lịch sử tạo hàng hóa', path: '/inventory/product-approvals', module: 'product_creation_requests', icon: 'verified', roles: ['admin', 'inventoryManager'] },
-  { label: 'Yêu cầu xóa hàng hóa', path: '/inventory/product-deletion-requests', module: 'product_deletion_requests', icon: 'delete_sweep', roles: ['admin', 'inventoryManager'] },
+  { label: 'Yêu cầu xóa hàng hóa', path: '/inventory/product-deletion-requests', module: 'product_deletion_requests', icon: 'delete_sweep', roles: ['inventoryManager'] },
   { label: 'Kho tổng', path: '/inventory', module: 'inventory', icon: 'warehouse', roles: ['inventoryManager'] },
   { label: 'Phiếu nhập NCC', path: '/inventory/supplier-receipts', module: 'supplier_receipts', icon: 'assignment_turned_in', roles: ['admin', 'agencyManager', 'accountant'] },
   { label: 'Nhà cung cấp', path: '/inventory/suppliers', module: 'supplier_receipts', icon: 'storefront', roles: ['admin', 'agencyManager', 'accountant', 'inventoryManager'] },
   { label: 'Lô hàng nhập', path: '/inventory/batches', module: 'warehouse_batches', icon: 'inventory', roles: ['admin', 'agencyManager', 'inventoryManager', 'accountant'] },
-  { label: 'Trả hàng nhập', path: '/inventory/returns', module: 'inventory_returns', icon: 'assignment_return', roles: ['admin', 'agencyManager', 'inventoryManager'] },
+  { label: 'Trả hàng nhập', path: '/inventory/returns', module: 'inventory_returns', icon: 'assignment_return', roles: ['agencyManager', 'inventoryManager'] },
   { label: 'Kiểm kê tồn kho', path: '/inventory/stocktake', module: 'inventory_stocktake', icon: 'fact_check', roles: ['admin', 'agencyManager', 'inventoryManager'] },
   { label: 'Báo cáo kho', path: '/inventory/reports', module: 'inventory_reports', icon: 'analytics', roles: ['admin', 'agencyManager', 'accountant'] },
   { label: 'Lô sản xuất', path: '/inventory/production-orders', module: 'inventory', icon: 'precision_manufacturing', roles: ['inventoryManager'] },
@@ -105,7 +107,7 @@ export const navigationItems = [
     path: '/inventory/statistics',
     module: 'inventory_statistics',
     icon: 'analytics',
-    roles: ['inventoryManager', 'accountant'],
+    roles: ['inventoryManager', 'accountant', 'agencyManager'],
     children: [
       { label: 'Tổng quan', path: '/inventory/statistics?section=overview', section: 'overview', sectionScope: 'inventory_statistics' },
       { label: 'Trạng thái hàng hoá', path: '/inventory/statistics?section=alerts', section: 'alerts', sectionScope: 'inventory_statistics' },
@@ -116,7 +118,7 @@ export const navigationItems = [
     path: '/inventory/stock-requests',
     module: 'stock_adjustment_ops',
     icon: 'edit_note',
-    roles: ['admin', 'agencyManager', 'inventoryManager'],
+    roles: ['agencyManager', 'inventoryManager'],
   },
   {
     label: 'Bảng giá vốn & giá bán',
@@ -127,7 +129,7 @@ export const navigationItems = [
   },
   { label: 'Nhân sự', path: '/staff', module: 'staff', icon: 'badge', roles: ['admin', 'agencyManager'] },
   {
-    label: 'Phân ca làm',
+    label: 'Lịch làm việc',
     path: '/shifts',
     module: 'shift_manage',
     icon: 'calendar_month',
@@ -135,7 +137,7 @@ export const navigationItems = [
     roles: ['agencyManager'],
   },
   {
-    label: 'Lịch làm việc',
+    label: 'Lịch làm việc của tôi',
     path: '/my-shifts',
     module: 'my_shifts',
     icon: 'schedule',
@@ -143,7 +145,7 @@ export const navigationItems = [
     roles: ['salesStaff'],
   },
   {
-    label: 'Hạng thẻ',
+    label: 'Hạng khách hàng',
     path: '/admin/membership-tiers',
     module: 'membership_tiers_admin',
     icon: 'military_tech',
@@ -168,7 +170,7 @@ export const navigationItems = [
     path: '/admin/inventory-sync',
     module: 'inventory_sync_monitor',
     icon: 'sync_problem',
-    roles: ['admin', 'agencyManager'],
+    roles: ['agencyManager'],
   },
   {
     label: 'Thống kê bán hàng',
@@ -283,6 +285,233 @@ function groupInventorySidebar(items) {
   return [...groups, ...rest]
 }
 
+function isAdminSession(roles = []) {
+  return hasAnyRoleGroup(roles, ['admin'])
+}
+
+function isAgencyManagerSession(roles = []) {
+  return hasAnyRoleGroup(roles, ['agencyManager'])
+}
+
+function takeNavLeaf(byPath, consumed, path, label) {
+  const found = byPath.get(path)
+  if (!found) return null
+  consumed.add(path)
+  return {
+    label: label || found.label,
+    path: found.path,
+    module: found.module,
+    section: found.section,
+    sectionScope: found.sectionScope,
+  }
+}
+
+function takeNavLeaves(byPath, consumed, entries) {
+  return entries
+    .map(([path, label]) => takeNavLeaf(byPath, consumed, path, label))
+    .filter(Boolean)
+}
+
+/**
+ * Gom sidebar Admin / Manager thành dropdown cha → con (theo phân tích menu).
+ * Admin gọn hơn: không POS, không chờ xử lý / bổ sung tồn / đồng bộ / phân ca.
+ */
+function groupAdminManagerSidebar(items, isAdmin) {
+  const byPath = new Map(items.map((item) => [item.path, item]))
+  const consumed = new Set()
+  const result = []
+
+  // POS — chỉ Manager
+  if (!isAdmin) {
+    const pos = takeNavLeaf(byPath, consumed, '/pos')
+    if (pos) result.push({ ...byPath.get('/pos') })
+  } else if (byPath.has('/pos')) {
+    consumed.add('/pos')
+  }
+
+  // Đơn hàng
+  const orderChildren = []
+  const ordersItem = byPath.get('/orders')
+  if (ordersItem) {
+    consumed.add('/orders')
+    for (const child of ordersItem.children || []) {
+      orderChildren.push({
+        label: child.label,
+        path: child.path,
+        module: child.module,
+        roles: child.roles,
+      })
+    }
+  }
+  const exchange = takeNavLeaf(byPath, consumed, '/orders/exchange', 'Trả / đổi hàng')
+  if (exchange) orderChildren.push(exchange)
+
+  if (!isAdmin) {
+    const waiting = takeNavLeaf(byPath, consumed, '/orders/stock-deduct', 'Chờ xử lý')
+    if (waiting) orderChildren.push(waiting)
+  } else if (byPath.has('/orders/stock-deduct')) {
+    consumed.add('/orders/stock-deduct')
+  }
+
+  if (orderChildren.length) {
+    result.push({
+      label: 'Đơn hàng',
+      icon: 'receipt_long',
+      path: '__grp_orders',
+      module: 'orders',
+      isGroup: true,
+      children: orderChildren,
+    })
+  }
+
+  // Khách hàng (đã có children) — chỉ Manager / Sale / Kế toán
+  const customers = byPath.get('/customers')
+  if (customers && !isAdmin) {
+    consumed.add('/customers')
+    result.push(customers)
+  } else if (customers && isAdmin) {
+    consumed.add('/customers')
+  }
+
+  // Hàng hóa
+  const goodsEntries = isAdmin
+    ? [
+        ['/inventory/products', 'Sản phẩm & số lượng'],
+        ['/products/categories', 'Danh mục sản phẩm'],
+        ['/accounting/cost-profit', 'Bảng giá vốn & giá bán'],
+        ['/inventory/product-approvals', 'Lịch sử tạo hàng hóa'],
+        ['/inventory/stocktake', 'Kiểm kê tồn kho'],
+        ['/inventory/ledger', 'Nhật ký kho (Sổ kho)'],
+      ]
+    : [
+        ['/inventory/products', 'Sản phẩm & số lượng'],
+        ['/products/categories', 'Danh mục sản phẩm'],
+        ['/accounting/cost-profit', 'Bảng giá vốn & giá bán'],
+        ['/inventory/stocktake', 'Kiểm kê tồn kho'],
+        ['/inventory/ledger', 'Nhật ký kho (Sổ kho)'],
+        ['/inventory/stock-requests', 'Bổ sung tồn quầy'],
+        ['/admin/inventory-sync', 'Đồng bộ tồn kho'],
+      ]
+
+  if (isAdmin) {
+    for (const path of ['/inventory/statistics', '/inventory/stock-requests', '/admin/inventory-sync', '/inventory/returns']) {
+      if (byPath.has(path)) consumed.add(path)
+    }
+  }
+
+  const goodsChildren = takeNavLeaves(byPath, consumed, goodsEntries)
+
+  if (!isAdmin) {
+    const statsItem = byPath.get('/inventory/statistics')
+    if (statsItem) {
+      consumed.add('/inventory/statistics')
+      const overview =
+        statsItem.children?.find((child) => child.section === 'overview') ||
+        statsItem.children?.[0]
+      const overviewLeaf = {
+        label: 'Tổng quan tồn kho',
+        path: overview?.path || '/inventory/statistics?section=overview',
+        module: statsItem.module,
+        section: overview?.section || 'overview',
+        sectionScope: overview?.sectionScope || 'inventory_statistics',
+      }
+      const priceIdx = goodsChildren.findIndex((child) => child.path === '/accounting/cost-profit')
+      goodsChildren.splice(priceIdx >= 0 ? priceIdx + 1 : goodsChildren.length, 0, overviewLeaf)
+    }
+  }
+
+  if (goodsChildren.length) {
+    result.push({
+      label: 'Hàng hóa',
+      icon: 'inventory_2',
+      path: '__grp_goods',
+      module: 'products',
+      isGroup: true,
+      children: goodsChildren,
+    })
+  }
+
+  // Nhập hàng & Nhà cung cấp
+  const inboundEntries = isAdmin
+    ? [
+        ['/inventory/suppliers', 'Nhà cung cấp'],
+        ['/inventory/supplier-receipts', 'Phiếu nhập NCC'],
+        ['/inventory/batches', 'Lô hàng nhập'],
+      ]
+    : [
+        ['/inventory/suppliers', 'Nhà cung cấp'],
+        ['/inventory/supplier-receipts', 'Phiếu nhập NCC'],
+        ['/inventory/batches', 'Lô hàng nhập'],
+        ['/inventory/returns', 'Trả hàng nhập'],
+      ]
+  const inboundChildren = takeNavLeaves(byPath, consumed, inboundEntries)
+  if (inboundChildren.length) {
+    result.push({
+      label: 'Nhập hàng & Nhà cung cấp',
+      icon: 'storefront',
+      path: '__grp_inbound',
+      module: 'supplier_receipts',
+      isGroup: true,
+      children: inboundChildren,
+    })
+  }
+
+  // Nhân sự & Vận hành
+  const peopleEntries = isAdmin
+    ? [['/staff', 'Nhân sự']]
+    : [
+        ['/shifts', 'Lịch làm việc'],
+        ['/staff', 'Nhân sự'],
+        ['/pos/cash-sessions', 'Quỹ ca POS'],
+      ]
+  if (isAdmin) {
+    if (byPath.has('/shifts')) consumed.add('/shifts')
+    if (byPath.has('/pos/cash-sessions')) consumed.add('/pos/cash-sessions')
+  }
+  const peopleChildren = takeNavLeaves(byPath, consumed, peopleEntries)
+  if (peopleChildren.length) {
+    result.push({
+      label: 'Nhân sự & Vận hành',
+      icon: 'badge',
+      path: '__grp_people',
+      module: 'staff',
+      isGroup: true,
+      children: peopleChildren,
+    })
+  }
+
+  // Hệ thống — chỉ Admin
+  if (isAdmin) {
+    const systemChildren = takeNavLeaves(byPath, consumed, [
+      ['/admin/system-activities', 'Nhật ký hệ thống'],
+      ['/admin/users', 'Tài khoản'],
+      ['/admin/phan-quyen', 'Phân quyền'],
+      ['/admin/membership-tiers', 'Hạng khách hàng'],
+      ['/admin/promotions', 'Mã giảm giá'],
+    ])
+    if (systemChildren.length) {
+      result.push({
+        label: 'Hệ thống',
+        icon: 'settings',
+        path: '__grp_system',
+        module: 'users_admin',
+        isGroup: true,
+        children: systemChildren,
+      })
+    }
+  }
+
+  // Thống kê bán hàng — giữ nguyên (đã có children)
+  const dashboard = byPath.get('/dashboard')
+  if (dashboard) {
+    consumed.add('/dashboard')
+    result.push(dashboard)
+  }
+
+  const rest = items.filter((item) => !consumed.has(item.path))
+  return [...result, ...rest]
+}
+
 function isSidebarModuleEnabled(module) {
   return !SIDEBAR_DISABLED_MODULES.has(String(module || '').toLowerCase())
 }
@@ -360,6 +589,7 @@ export function getNavigationItemsForRoles(roles = []) {
 
   return navigationItems
     .map((item) => {
+      if (!isSidebarModuleEnabled(item.module)) return null
       if (!hasAnyRoleGroup(roles, item.roles)) return null
 
       const hasModuleChildren = item.children?.some((child) => child.module || child.roles?.length)
@@ -393,7 +623,15 @@ export function getNavigationItemsForSession(session) {
     ? withRoleAwareProductLabel(getNavigationItemsForModules(session.modules, roles), roles)
     : withRoleAwareProductLabel(getNavigationItemsForRoles(roles), roles)
 
-  return isInventoryOnlySession(roles) ? groupInventorySidebar(items) : items
+  if (isInventoryOnlySession(roles)) {
+    return groupInventorySidebar(items)
+  }
+
+  if (isAdminSession(roles) || isAgencyManagerSession(roles)) {
+    return groupAdminManagerSidebar(items, isAdminSession(roles))
+  }
+
+  return items
 }
 
 export function getHomeRouteForModules(modules = []) {
