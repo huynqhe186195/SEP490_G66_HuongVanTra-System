@@ -1465,6 +1465,126 @@ namespace ProductService.Infrastructure.Migrations
                     b.Navigation("Variant");
                 });
 
+            modelBuilder.Entity("ProductService.Domain.Entities.ProductCostPriceHistory", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)");
+
+                    b.Property<Guid>("EventId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<decimal>("IncomingUnitCost")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("NewCostPrice")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("OldCostPrice")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("ProcessingResult")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<int>("ReceiptLineOrder")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
+
+                    b.Property<int>("ReceiptSkuLineCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
+
+                    b.Property<Guid>("SkuId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<DateTime>("SourceApprovedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid>("SourceReceiptId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("SourceReceiptCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<Guid>("SourceReceiptLineId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("SourceType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("UpdatedBy")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<bool>("WasApplied")
+                        .HasColumnType("tinyint(1)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EventId")
+                        .IsUnique();
+
+                    b.HasIndex("SkuId", "SourceApprovedAt");
+
+                    b.HasIndex("SkuId", "SourceApprovedAt", "ReceiptLineOrder");
+
+                    b.HasIndex("SourceReceiptLineId")
+                        .IsUnique();
+
+                    b.ToTable("ProductCostPriceHistories", (string)null);
+                });
+
+            modelBuilder.Entity("ProductService.Domain.Entities.ProductRetailPriceHistory", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)");
+
+                    b.Property<DateTime>("ChangedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid?>("ChangedBy")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("ChangedByName")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<decimal>("NewRetailPrice")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<decimal>("OldRetailPrice")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<Guid>("SkuId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("SourceType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SkuId", "ChangedAt");
+
+                    b.ToTable("ProductRetailPriceHistories", (string)null);
+                });
+
             modelBuilder.Entity("ProductService.Domain.Entities.ProductVariant", b =>
                 {
                     b.HasOne("ProductService.Domain.Entities.ProductVariant", "BaseVariant")
@@ -1556,6 +1676,24 @@ namespace ProductService.Infrastructure.Migrations
             modelBuilder.Entity("ProductService.Domain.Entities.ProductUnit", b =>
                 {
                     b.Navigation("PriceBookEntries");
+                });
+
+            modelBuilder.Entity("ProductService.Domain.Entities.ProductCostPriceHistory", b =>
+                {
+                    b.HasOne("ProductService.Domain.Entities.ProductVariant", null)
+                        .WithMany()
+                        .HasForeignKey("SkuId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ProductService.Domain.Entities.ProductRetailPriceHistory", b =>
+                {
+                    b.HasOne("ProductService.Domain.Entities.ProductVariant", null)
+                        .WithMany()
+                        .HasForeignKey("SkuId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("ProductService.Domain.Entities.ProductVariant", b =>
