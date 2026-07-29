@@ -218,16 +218,6 @@ function MyShiftsPage() {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-[#356647] sm:text-3xl">Lịch làm việc theo tuần</h1>
-            <p className="mt-2 max-w-2xl text-sm text-[#414942]">
-              Đang xem với tư cách <strong>{myName}</strong>
-              {!canManage ? (
-                <>
-                  {' '}
-                  — khu vực <strong>{areaHint}</strong>
-                </>
-              ) : null}
-              . Dùng bộ lọc nhân viên để xem lịch đồng nghiệp.
-            </p>
           </div>
           {canManage ? (
             <Link
@@ -240,39 +230,22 @@ function MyShiftsPage() {
         </div>
 
         <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-stretch">
-          <div
-            className={`flex-1 rounded-2xl border px-5 py-4 ${
-              weekStatus?.hasApprovedShiftThisWeek
-                ? 'border-emerald-200 bg-emerald-50'
-                : canRegisterToday
-                  ? 'border-[#356647]/30 bg-[#356647]/5'
-                  : 'border-amber-200 bg-amber-50'
-            }`}
-          >
-            <p
-              className={`text-xs font-bold uppercase tracking-wide ${
-                weekStatus?.hasApprovedShiftThisWeek
-                  ? 'text-emerald-800'
-                  : canRegisterToday
-                    ? 'text-[#356647]'
-                    : 'text-amber-800'
-              }`}
-            >
-              Đăng ký ca tuần
+          <div className="flex-1 rounded-2xl border border-[#c1c9c0]/50 bg-[#fbf9f1] px-5 py-4">
+            <p className="text-xs font-bold uppercase tracking-wide text-[#717971]">Đang xem</p>
+            <p className="mt-1 text-base font-semibold text-[#1b1c17]">
+              {myName}
+              {!canManage ? <span className="ml-1 font-normal text-[#717971]">— khu vực {areaHint}</span> : null}
             </p>
-            <p className="mt-1 text-sm text-slate-700">
-              Sale chỉ tự đăng ký khi <strong>Manager mở cửa sổ đăng ký</strong> cho tuần tương ứng.
-              Ngoài thời hạn, chỉ Manager chỉ định được bạn vào ca.
-              Hôm nay {canRegisterToday ? (
-                <strong className="text-[#356647]">đang trong thời hạn đăng ký</strong>
-              ) : (
-                <strong className="text-amber-800">không trong thời hạn đăng ký</strong>
-              )}
-              .
+            <p className="mt-1 text-sm text-[#717971]">
+              Dùng bộ lọc nhân viên để xem lịch đồng nghiệp.
             </p>
-            {weekStatus?.message ? (
-              <p className="mt-1 text-sm text-slate-600">{weekStatus.message}</p>
-            ) : null}
+            {weekStatus?.hasApprovedShiftThisWeek ? (
+              <p className="mt-2 text-xs font-semibold text-emerald-700">Bạn đã có ca được duyệt cho tuần này.</p>
+            ) : canRegisterToday ? (
+              <p className="mt-2 text-xs font-semibold text-[#356647]">Hôm nay đang trong thời hạn đăng ký.</p>
+            ) : (
+              <p className="mt-2 text-xs text-amber-800">Hôm nay không trong thời hạn đăng ký.</p>
+            )}
           </div>
 
           <div

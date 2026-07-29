@@ -2478,7 +2478,7 @@ function PosPage() {
                                         return (
                                             <div
                                                 key={item.sku}
-                                                className={`relative grid grid-cols-[minmax(0,1fr)_7.75rem_auto_auto] items-center gap-2 rounded-xl border bg-[#fbf9f1] px-2.5 py-2.5 sm:gap-3 sm:px-3 sm:py-3 ${
+                                                className={`relative grid grid-cols-[minmax(0,1fr)_7.75rem_6.5rem_1.75rem] items-center gap-2 rounded-xl border bg-[#fbf9f1] px-2.5 py-2.5 sm:gap-3 sm:px-3 sm:py-3 ${
                                                     item.isUnavailable ? "border-[#ba1a1a]/60" : "border-[#c1c9c0]/50"
                                                 }`}>
                                                 <div className="min-w-0 overflow-hidden">
@@ -2507,7 +2507,7 @@ function PosPage() {
                                                     </p>
                                                 </div>
 
-                                                <div className="flex w-[7.75rem] shrink-0 items-center justify-self-center overflow-hidden rounded-lg border border-[#c1c9c0] text-sm sm:text-base">
+                                                <div className="flex w-[7.75rem] shrink-0 items-center justify-self-start overflow-hidden rounded-lg border border-[#c1c9c0] text-sm sm:text-base">
                                                     <button
                                                         type="button"
                                                         onClick={() => updateQuantity(item.sku, "dec")}
