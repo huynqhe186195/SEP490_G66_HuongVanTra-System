@@ -130,6 +130,11 @@ function hasAdminRole(session) {
   return (session?.roles ?? []).some((role) => normalizeRoleToken(role) === 'admin')
 }
 
+/** Trang Accounting: chỉ principal có role Admin được sửa Giá bán. */
+export function canEditAccountingSalePrice(session) {
+  return hasAdminRole(session)
+}
+
 export function isSalePosRole(session) {
   return (session?.roles ?? []).some((role) => {
     const key = normalizeRoleToken(role)
