@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
@@ -56,6 +56,152 @@ function getItemSummary(receipt) {
 function formatReceiptAmount(receipt) {
   if (!receipt.items?.some((item) => item.unitCost !== null && item.unitCost !== undefined)) return '—'
   return formatVnd(receipt.totalAmount || 0)
+}
+
+const ACTION_BTN =
+  'inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-40'
+
+function ReceiptRowActions({
+  receipt,
+  canOperate,
+  canReview,
+  isOwn,
+  actionId,
+  onSubmit,
+  onApprove,
+  onReject,
+  onCancel,
+}) {
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef(null)
+  const busy = actionId === receipt.id
+  const anyBusy = Boolean(actionId)
+
+  const canEdit = canOperate && isOwn && (receipt.status === 'draft' || receipt.status === 'rejected')
+  const canSubmit = canEdit
+  const canCancel = canOperate && isOwn && receipt.status === 'draft'
+  const canDecide = canReview && receipt.status === 'pendingapproval' && !isOwn
+  const hasMenu = canEdit || canSubmit || canCancel || canDecide
+
+  useEffect(() => {
+    if (!menuOpen) return undefined
+    function onPointerDown(event) {
+      if (!menuRef.current?.contains(event.target)) setMenuOpen(false)
+    }
+    function onKeyDown(event) {
+      if (event.key === 'Escape') setMenuOpen(false)
+    }
+    document.addEventListener('mousedown', onPointerDown)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [menuOpen])
+
+  function runAction(action) {
+    setMenuOpen(false)
+    action()
+  }
+
+  // 2 ô cố định: Chi tiết | ⋮ — thẳng hàng, chiếm ít chỗ nhất.
+  return (
+    <div className="relative inline-grid grid-cols-2 justify-items-center gap-0.5" ref={menuRef}>
+      <Link
+        to={`/inventory/supplier-receipts/${receipt.id}`}
+        title="Chi tiết"
+        aria-label="Chi tiết"
+        className={ACTION_BTN}
+      >
+        <span className="material-symbols-outlined text-[17px]">visibility</span>
+      </Link>
+
+      {hasMenu ? (
+        <button
+          type="button"
+          title="Thao tác khác"
+          aria-label="Thao tác khác"
+          aria-expanded={menuOpen}
+          disabled={anyBusy && !busy}
+          onClick={() => setMenuOpen((open) => !open)}
+          className={`${ACTION_BTN} ${menuOpen ? 'bg-slate-100 text-slate-800' : ''}`}
+        >
+          <span className={`material-symbols-outlined text-[17px] ${busy ? 'animate-spin' : ''}`}>
+            {busy ? 'progress_activity' : 'more_horiz'}
+          </span>
+        </button>
+      ) : (
+        <span className="inline-block h-7 w-7" aria-hidden="true" />
+      )}
+
+      {menuOpen && hasMenu ? (
+        <div
+          role="menu"
+          className="absolute right-0 top-full z-20 mt-1 min-w-[10.5rem] overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-lg"
+        >
+          {canEdit ? (
+            <Link
+              role="menuitem"
+              to={`/inventory/import/create?receiptId=${receipt.id}`}
+              onClick={() => setMenuOpen(false)}
+              className="flex items-center gap-2 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+            >
+              <span className="material-symbols-outlined text-[16px] text-[#356647]">edit</span>
+              Chỉnh sửa
+            </Link>
+          ) : null}
+          {canSubmit ? (
+            <button
+              type="button"
+              role="menuitem"
+              disabled={anyBusy}
+              onClick={() => runAction(onSubmit)}
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            >
+              <span className="material-symbols-outlined text-[16px] text-[#356647]">send</span>
+              Gửi duyệt
+            </button>
+          ) : null}
+          {canDecide ? (
+            <>
+              <button
+                type="button"
+                role="menuitem"
+                disabled={anyBusy}
+                onClick={() => runAction(onApprove)}
+                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+              >
+                <span className="material-symbols-outlined text-[16px]">check_circle</span>
+                Duyệt
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                disabled={anyBusy}
+                onClick={() => runAction(onReject)}
+                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-rose-600 hover:bg-rose-50 disabled:opacity-50"
+              >
+                <span className="material-symbols-outlined text-[16px]">cancel</span>
+                Từ chối
+              </button>
+            </>
+          ) : null}
+          {canCancel ? (
+            <button
+              type="button"
+              role="menuitem"
+              disabled={anyBusy}
+              onClick={() => runAction(onCancel)}
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+            >
+              <span className="material-symbols-outlined text-[16px]">delete</span>
+              Hủy
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  )
 }
 
 function SupplierReceiptsPage() {
@@ -250,7 +396,7 @@ function SupplierReceiptsPage() {
                 <th className="px-4 py-3">Trạng thái</th>
                 <th className="px-4 py-3">Người tạo</th>
                 <th className="px-4 py-3">Thời gian</th>
-                <th className="px-4 py-3 text-right">Thao tác</th>
+                <th className="w-20 px-2 py-3 text-right">Thao tác</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -279,62 +425,19 @@ function SupplierReceiptsPage() {
                     </td>
                     <td className="px-4 py-4 text-slate-700">{receipt.createdByName || '—'}</td>
                     <td className="px-4 py-4 text-slate-600">{formatVietnamDateTime(receipt.createdAt)}</td>
-                    <td className="px-4 py-4 text-right">
-                      <div className="flex flex-wrap justify-end gap-2">
-                        <Link
-                          to={`/inventory/supplier-receipts/${receipt.id}`}
-                          className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                        >
-                          Chi tiết
-                        </Link>
-                        {canOperate && isOwnReceipt(receipt) && (receipt.status === 'draft' || receipt.status === 'rejected') ? (
-                          <Link
-                            to={`/inventory/import/create?receiptId=${receipt.id}`}
-                            className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                          >
-                            Chỉnh sửa
-                          </Link>
-                        ) : null}
-                        {canOperate && isOwnReceipt(receipt) && (receipt.status === 'draft' || receipt.status === 'rejected') ? (
-                          <button
-                            type="button"
-                            disabled={Boolean(actionId)}
-                            onClick={() => handleSubmitForApproval(receipt)}
-                            className="rounded-lg border border-[#538463] px-3 py-1.5 text-xs font-semibold text-[#538463] hover:bg-[#f2f7f3] disabled:opacity-50"
-                          >
-                            Gửi duyệt
-                          </button>
-                        ) : null}
-                        {canReview && receipt.status === 'pendingapproval' && !isOwnReceipt(receipt) ? (
-                          <>
-                            <button
-                              type="button"
-                              disabled={Boolean(actionId)}
-                              onClick={() => handleApprove(receipt)}
-                              className="rounded-lg bg-[#538463] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#457053] disabled:opacity-50"
-                            >
-                              Duyệt
-                            </button>
-                            <button
-                              type="button"
-                              disabled={Boolean(actionId)}
-                              onClick={() => handleReject(receipt)}
-                              className="rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-50"
-                            >
-                              Từ chối
-                            </button>
-                          </>
-                        ) : null}
-                        {canOperate && isOwnReceipt(receipt) && receipt.status === 'draft' ? (
-                          <button
-                            type="button"
-                            disabled={Boolean(actionId)}
-                            onClick={() => handleCancel(receipt)}
-                            className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
-                          >
-                            Hủy
-                          </button>
-                        ) : null}
+                    <td className="px-2 py-3 text-right">
+                      <div className="flex justify-end">
+                        <ReceiptRowActions
+                          receipt={receipt}
+                          canOperate={canOperate}
+                          canReview={canReview}
+                          isOwn={isOwnReceipt(receipt)}
+                          actionId={actionId}
+                          onSubmit={() => handleSubmitForApproval(receipt)}
+                          onApprove={() => handleApprove(receipt)}
+                          onReject={() => handleReject(receipt)}
+                          onCancel={() => handleCancel(receipt)}
+                        />
                       </div>
                     </td>
                   </tr>

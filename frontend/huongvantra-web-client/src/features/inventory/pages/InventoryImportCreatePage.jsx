@@ -350,6 +350,8 @@ function InventoryImportCreatePage() {
   const [suppliers, setSuppliers] = useState([])
   const [header, setHeader] = useState(EMPTY_HEADER)
   const [lines, setLines] = useState([emptyLine()])
+  const [expandedLineKeys, setExpandedLineKeys] = useState(() => new Set())
+  const didInitExpandRef = useRef(false)
   const [isSkuCatalogLoading, setIsSkuCatalogLoading] = useState(true)
   const [skuCatalogError, setSkuCatalogError] = useState('')
   const [isSupplierLoading, setIsSupplierLoading] = useState(true)
@@ -398,6 +400,12 @@ function InventoryImportCreatePage() {
   }, [loadSupplierReceiptSkus, loadSuppliers])
 
   useEffect(() => {
+    if (didInitExpandRef.current || !lines[0]?.key) return
+    didInitExpandRef.current = true
+    setExpandedLineKeys(new Set([lines[0].key]))
+  }, [lines])
+
+  useEffect(() => {
     if (!editingReceiptId) {
       setIsEditLoading(false)
       return undefined
@@ -428,7 +436,7 @@ function InventoryImportCreatePage() {
           receivedDate: toDateInput(receipt.receivedDate),
           note: receipt.note || '',
         })
-        setLines(receipt.items.map((item) => ({
+        const editLines = receipt.items.map((item) => ({
           key: crypto.randomUUID(),
           skuId: item.skuId,
           documentQuantity: String(item.documentQuantity ?? item.actualQuantity ?? item.submittedQuantity ?? ''),
@@ -439,7 +447,9 @@ function InventoryImportCreatePage() {
           manufacturedAt: toDateInput(item.manufacturedAt),
           expiresAt: toDateInput(item.expiresAt),
           qualityNote: item.qualityNote || '',
-        })))
+        }))
+        setLines(editLines.length ? editLines : [emptyLine()])
+        setExpandedLineKeys(new Set(editLines[0] ? [editLines[0].key] : []))
       } catch (error) {
         if (!cancelled) {
           showError(error.message)
@@ -470,12 +480,36 @@ function InventoryImportCreatePage() {
     setLines((prev) => prev.map((line) => (line.key === key ? { ...line, ...patch } : line)))
   }
 
+  function toggleLineExpanded(key) {
+    setExpandedLineKeys((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
+
+  function expandAllLines() {
+    setExpandedLineKeys(new Set(lines.map((line) => line.key)))
+  }
+
+  function collapseAllLines() {
+    setExpandedLineKeys(new Set())
+  }
+
   function addLine() {
-    setLines((prev) => [...prev, emptyLine()])
+    const line = emptyLine()
+    setLines((prev) => [...prev, line])
+    setExpandedLineKeys((prev) => new Set([...prev, line.key]))
   }
 
   function removeLine(key) {
     setLines((prev) => (prev.length <= 1 ? prev : prev.filter((line) => line.key !== key)))
+    setExpandedLineKeys((prev) => {
+      const next = new Set(prev)
+      next.delete(key)
+      return next
+    })
   }
 
   function applyImportedLines(rawLines, sourceLabel) {
@@ -540,10 +574,13 @@ function InventoryImportCreatePage() {
       throw new Error(`${sourceLabel} không hợp lệ. ${previewErrors.slice(0, 5).join(' ')}`)
     }
 
-    setLines(nextLines.length ? nextLines : [emptyLine()])
+    const appliedLines = nextLines.length ? nextLines : [emptyLine()]
+    setLines(appliedLines)
+    // Import nhiều dòng: thu gọn, chỉ mở dòng đầu.
+    setExpandedLineKeys(new Set(appliedLines[0] ? [appliedLines[0].key] : []))
     setLineWarnings({})
     setLineErrors({})
-    return { nextLines, previewWarnings }
+    return { nextLines: appliedLines, previewWarnings }
   }
 
   async function importExcelPreview(file) {
@@ -831,6 +868,13 @@ function InventoryImportCreatePage() {
 
     setLineErrors(errors)
     setLineWarnings(warnings)
+    if (!valid) {
+      setExpandedLineKeys((prev) => {
+        const next = new Set(prev)
+        Object.keys(errors).forEach((key) => next.add(key))
+        return next
+      })
+    }
     return valid
   }
 
@@ -1089,6 +1133,22 @@ function InventoryImportCreatePage() {
               </label>
               <button
                 type="button"
+                onClick={collapseAllLines}
+                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                <span className="material-symbols-outlined text-[18px]">unfold_less</span>
+                Thu gọn
+              </button>
+              <button
+                type="button"
+                onClick={expandAllLines}
+                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                <span className="material-symbols-outlined text-[18px]">unfold_more</span>
+                Mở hết
+              </button>
+              <button
+                type="button"
                 onClick={addLine}
                 className="inline-flex items-center gap-1 rounded-lg bg-[#538463] px-3 py-1.5 text-sm font-semibold text-white hover:bg-[#457053]"
               >
@@ -1098,7 +1158,7 @@ function InventoryImportCreatePage() {
             </div>
           </div>
 
-          <div className="space-y-3">
+          <div className="space-y-2">
             {lines.map((line, index) => {
               const selectedSku = skuById.get(line.skuId) ?? null
               const errs = lineErrors[line.key] ?? {}
@@ -1117,18 +1177,62 @@ function InventoryImportCreatePage() {
               }
               const hasLineError = Object.values(errs).some(Boolean)
               const hasLineWarning = Object.values(warns).some(Boolean)
+              const isExpanded = expandedLineKeys.has(line.key)
               const fi = (field) => errs[field] ? 'border-red-400 bg-red-50' : 'border-slate-200 bg-white'
+              const summaryName = selectedSku ? getSkuSnapshotName(selectedSku) : 'Chưa chọn hàng'
+              const summaryAmount = line.unitCost === '' || line.actualQuantity === ''
+                ? '—'
+                : formatVnd(calculateLineAmount(line))
               return (
                 <div
                   key={line.key}
                   data-error={hasLineError ? 'true' : undefined}
-                  className={`rounded-xl border p-4 ${hasLineError ? 'border-red-300 bg-red-50/30' : 'border-slate-100 bg-slate-50/50'}`}
+                  className={`overflow-hidden rounded-xl border ${hasLineError ? 'border-red-300 bg-red-50/30' : 'border-slate-200 bg-white'}`}
                 >
-                  <div className="mb-3 flex items-center justify-between">
-                    <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-bold ${hasLineError ? 'bg-red-100 text-red-700' : 'bg-[#538463]/10 text-[#356647]'}`}>
-                      Dòng {index + 1}{selectedSku ? ` — ${selectedSku.skuCode}` : ''}
-                      {hasLineError ? <span className="ml-1 material-symbols-outlined text-[14px]">error</span> : null}
-                    </span>
+                  <div className="flex items-stretch gap-1">
+                    <button
+                      type="button"
+                      onClick={() => toggleLineExpanded(line.key)}
+                      aria-expanded={isExpanded}
+                      className="flex min-w-0 flex-1 items-center gap-3 px-3 py-3 text-left hover:bg-slate-50/80"
+                    >
+                      <span className="material-symbols-outlined shrink-0 text-[22px] text-slate-500">
+                        {isExpanded ? 'expand_less' : 'expand_more'}
+                      </span>
+                      <span className={`inline-flex shrink-0 items-center rounded-md px-2 py-0.5 text-xs font-bold ${hasLineError ? 'bg-red-100 text-red-700' : 'bg-[#538463]/10 text-[#356647]'}`}>
+                        #{index + 1}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold text-slate-800">
+                          {selectedSku ? (
+                            <>
+                              <span className="font-mono text-[#356647]">{selectedSku.skuCode}</span>
+                              <span className="text-slate-400"> · </span>
+                              <span>{summaryName}</span>
+                            </>
+                          ) : (
+                            <span className="text-slate-400">{summaryName}</span>
+                          )}
+                        </p>
+                        {!isExpanded ? (
+                          <p className="mt-0.5 truncate text-xs text-slate-500">
+                            SL {line.actualQuantity || '—'}
+                            {selectedSku ? ` ${getSkuUnitName(selectedSku)}` : ''}
+                            {' · '}
+                            Lô {line.lotCode || '—'}
+                            {' · '}
+                            {summaryAmount}
+                            {hasLineWarning ? ' · Có cảnh báo' : ''}
+                            {hasLineError ? ' · Có lỗi' : ''}
+                          </p>
+                        ) : null}
+                      </div>
+                      {hasLineError ? (
+                        <span className="material-symbols-outlined shrink-0 text-[18px] text-red-500">error</span>
+                      ) : hasLineWarning ? (
+                        <span className="material-symbols-outlined shrink-0 text-[18px] text-amber-500">warning</span>
+                      ) : null}
+                    </button>
                     {lines.length > 1 ? (
                       <button
                         type="button"
@@ -1137,186 +1241,190 @@ function InventoryImportCreatePage() {
                           setLineErrors((prev) => { const n = { ...prev }; delete n[line.key]; return n })
                           setLineWarnings((prev) => { const n = { ...prev }; delete n[line.key]; return n })
                         }}
-                        className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-red-600 hover:bg-red-50"
+                        className="inline-flex shrink-0 items-center gap-1 border-l border-slate-100 px-3 text-xs font-semibold text-red-600 hover:bg-red-50"
+                        title="Xóa dòng"
                       >
-                        <span className="material-symbols-outlined text-[16px]">delete</span>
-                        Xóa
+                        <span className="material-symbols-outlined text-[18px]">delete</span>
                       </button>
                     ) : null}
                   </div>
 
-                  {hasLineWarning ? (
-                    <div className="mb-3 flex flex-wrap gap-2">
-                      {Object.values(warns).filter(Boolean).map((w, i) => (
-                        <span key={i} className="inline-flex items-center gap-1 rounded-lg bg-amber-50 px-2.5 py-1 text-xs text-amber-700">
-                          <span className="material-symbols-outlined text-[14px]">warning</span>
-                          {w}
-                        </span>
-                      ))}
+                  {isExpanded ? (
+                    <div className="border-t border-slate-100 bg-slate-50/40 px-4 pb-4 pt-3">
+                      {hasLineWarning ? (
+                        <div className="mb-3 flex flex-wrap gap-2">
+                          {Object.values(warns).filter(Boolean).map((w, i) => (
+                            <span key={i} className="inline-flex items-center gap-1 rounded-lg bg-amber-50 px-2.5 py-1 text-xs text-amber-700">
+                              <span className="material-symbols-outlined text-[14px]">warning</span>
+                              {w}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+
+                      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_minmax(0,0.8fr)]">
+                        <section className="space-y-3 rounded-xl border border-slate-100 bg-white p-3">
+                          <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">Thông tin hàng hóa</h3>
+                          <label className="block space-y-1">
+                            <span className="text-xs font-semibold text-[#717971]">Hàng hóa <span className="text-red-500">*</span></span>
+                            <SkuSearchPicker
+                              catalogError={skuCatalogError}
+                              duplicate={false}
+                              isCatalogLoading={isSkuCatalogLoading}
+                              onSelect={(sku) => {
+                                updateLine(line.key, { skuId: sku?.id ?? '', submittedUnit: sku ? defaultSubmittedUnit(sku.inventoryUnit) : '' })
+                                setLineErrors((prev) => ({ ...prev, [line.key]: { ...(prev[line.key] ?? {}), skuId: undefined } }))
+                              }}
+                              sku={selectedSku}
+                              skus={supplierReceiptSkus}
+                              hasError={!!errs.skuId}
+                            />
+                            {errs.skuId ? <p className="text-xs text-red-500">{errs.skuId}</p> : null}
+                          </label>
+                          <label className="block space-y-1">
+                            <span className="text-xs font-semibold text-[#717971]">Mã số</span>
+                            <input
+                              readOnly
+                              value={selectedSku?.skuCode || ''}
+                              className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 font-mono text-sm text-slate-700"
+                            />
+                          </label>
+                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                            <label className="space-y-1">
+                              <span className="text-xs font-semibold text-[#717971]">SL chứng từ <span className="text-red-500">*</span></span>
+                              <input
+                                type="text"
+                                inputMode="numeric"
+                                pattern="[0-9]*"
+                                className={`w-full rounded-xl border p-2.5 text-sm ${fi('documentQuantity')}`}
+                                value={line.documentQuantity}
+                                onChange={(event) => {
+                                  updateLine(line.key, { documentQuantity: event.target.value })
+                                  setLineErrors((prev) => ({ ...prev, [line.key]: { ...(prev[line.key] ?? {}), documentQuantity: undefined } }))
+                                }}
+                              />
+                              {errs.documentQuantity ? <p className="text-xs text-red-500">{errs.documentQuantity}</p> : null}
+                            </label>
+                            <label className="space-y-1">
+                              <span className="text-xs font-semibold text-[#717971]">SL thực nhập <span className="text-red-500">*</span></span>
+                              <input
+                                type="text"
+                                inputMode="numeric"
+                                pattern="[0-9]*"
+                                className={`w-full rounded-xl border p-2.5 text-sm ${fi('actualQuantity')}`}
+                                value={line.actualQuantity}
+                                onChange={(event) => {
+                                  updateLine(line.key, { actualQuantity: event.target.value })
+                                  setLineErrors((prev) => ({ ...prev, [line.key]: { ...(prev[line.key] ?? {}), actualQuantity: undefined } }))
+                                }}
+                              />
+                              {errs.actualQuantity ? <p className="text-xs text-red-500">{errs.actualQuantity}</p> : null}
+                            </label>
+                            <label className="space-y-1">
+                              <span className="text-xs font-semibold text-[#717971]">Đơn vị</span>
+                              <input
+                                readOnly
+                                value={selectedSku ? getSkuUnitName(selectedSku) : ''}
+                                className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-sm text-slate-700"
+                              />
+                            </label>
+                          </div>
+                        </section>
+
+                        <section className="space-y-3 rounded-xl border border-slate-100 bg-white p-3">
+                          <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">Giá và thông tin lô</h3>
+                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                            <label className="space-y-1">
+                              <span className="text-xs font-semibold text-[#717971]">Đơn giá <span className="text-red-500">*</span></span>
+                              <div className="relative">
+                                <input
+                                  type="text"
+                                  inputMode="numeric"
+                                  className={`w-full rounded-xl border py-2.5 pl-2.5 pr-8 text-right text-sm ${fi('unitCost')}`}
+                                  value={formatVndInput(line.unitCost)}
+                                  onChange={(event) => {
+                                    updateLine(line.key, { unitCost: sanitizeVndInput(event.target.value) })
+                                    setLineErrors((prev) => ({ ...prev, [line.key]: { ...(prev[line.key] ?? {}), unitCost: undefined } }))
+                                  }}
+                                  placeholder="Có thể để trống khi lưu Draft"
+                                />
+                                <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-400">₫</span>
+                              </div>
+                              {errs.unitCost ? <p className="text-xs text-red-500">{errs.unitCost}</p> : null}
+                            </label>
+                            <div className="space-y-1">
+                              <span className="text-xs font-semibold text-[#717971]">Thành tiền</span>
+                              <div className="rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-right text-sm font-bold text-slate-700">
+                                {summaryAmount}
+                              </div>
+                            </div>
+                          </div>
+                          <label className="block space-y-1">
+                            <span className="text-xs font-semibold text-[#717971]">Mã lô NCC <span className="text-red-500">*</span></span>
+                            <input
+                              className={`w-full rounded-xl border p-2.5 text-sm ${fi('lotCode')}`}
+                              value={line.lotCode}
+                              onChange={(event) => {
+                                updateLine(line.key, { lotCode: event.target.value })
+                                setLineErrors((prev) => ({ ...prev, [line.key]: { ...(prev[line.key] ?? {}), lotCode: undefined } }))
+                              }}
+                            />
+                            {errs.lotCode ? <p className="text-xs text-red-500">{errs.lotCode}</p> : null}
+                          </label>
+                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                            <label className="space-y-1">
+                              <span className="text-xs font-semibold text-[#717971]">Ngày SX <span className="text-red-500">*</span></span>
+                              <input
+                                type="date"
+                                max={today}
+                                className={`w-full rounded-xl border p-2.5 text-sm ${fi('manufacturedAt')}`}
+                                value={line.manufacturedAt}
+                                onChange={(event) => {
+                                  updateLine(line.key, { manufacturedAt: event.target.value })
+                                  setLineErrors((prev) => ({ ...prev, [line.key]: { ...(prev[line.key] ?? {}), manufacturedAt: undefined } }))
+                                }}
+                              />
+                              {errs.manufacturedAt ? <p className="text-xs text-red-500">{errs.manufacturedAt}</p> : null}
+                            </label>
+                            <label className="space-y-1">
+                              <span className="text-xs font-semibold text-[#717971]">Hạn dùng <span className="text-red-500">*</span></span>
+                              <input
+                                type="date"
+                                className={`w-full rounded-xl border p-2.5 text-sm ${errs.expiresAt ? 'border-red-400 bg-red-50' : warns.expiresAt ? 'border-amber-400 bg-amber-50' : 'border-slate-200 bg-white'}`}
+                                value={line.expiresAt}
+                                onChange={(event) => {
+                                  updateLine(line.key, { expiresAt: event.target.value })
+                                  setLineErrors((prev) => ({ ...prev, [line.key]: { ...(prev[line.key] ?? {}), expiresAt: undefined } }))
+                                }}
+                              />
+                              {errs.expiresAt ? <p className="text-xs text-red-500">{errs.expiresAt}</p> : null}
+                            </label>
+                          </div>
+                        </section>
+
+                        <section className="space-y-3 rounded-xl border border-slate-100 bg-white p-3 md:col-span-2 xl:col-span-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">Chất lượng và ghi chú</h3>
+                            <span className="text-xs text-slate-400">{line.qualityNote.length}/300</span>
+                          </div>
+                          <label className="block space-y-1">
+                            <span className="text-xs font-semibold text-[#717971]">Ghi chú chất lượng</span>
+                            <textarea
+                              maxLength={300}
+                              rows={6}
+                              className={`w-full rounded-xl border p-2.5 text-sm ${errs.qualityNote ? 'border-red-400 bg-red-50' : 'border-slate-200 bg-white'}`}
+                              value={line.qualityNote}
+                              onChange={(event) => {
+                                updateLine(line.key, { qualityNote: event.target.value })
+                                setLineErrors((prev) => ({ ...prev, [line.key]: { ...(prev[line.key] ?? {}), qualityNote: undefined } }))
+                              }}
+                            />
+                            {errs.qualityNote ? <p className="text-xs text-red-500">{errs.qualityNote}</p> : null}
+                          </label>
+                        </section>
+                      </div>
                     </div>
                   ) : null}
-
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_minmax(0,0.8fr)]">
-                    <section className="space-y-3 rounded-xl border border-slate-100 bg-white p-3">
-                      <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">Thông tin hàng hóa</h3>
-                      <label className="block space-y-1">
-                        <span className="text-xs font-semibold text-[#717971]">Hàng hóa <span className="text-red-500">*</span></span>
-                        <SkuSearchPicker
-                          catalogError={skuCatalogError}
-                          duplicate={false}
-                          isCatalogLoading={isSkuCatalogLoading}
-                          onSelect={(sku) => {
-                            updateLine(line.key, { skuId: sku?.id ?? '', submittedUnit: sku ? defaultSubmittedUnit(sku.inventoryUnit) : '' })
-                            setLineErrors((prev) => ({ ...prev, [line.key]: { ...(prev[line.key] ?? {}), skuId: undefined } }))
-                          }}
-                          sku={selectedSku}
-                          skus={supplierReceiptSkus}
-                          hasError={!!errs.skuId}
-                        />
-                        {errs.skuId ? <p className="text-xs text-red-500">{errs.skuId}</p> : null}
-                      </label>
-                      <label className="block space-y-1">
-                        <span className="text-xs font-semibold text-[#717971]">Mã số</span>
-                        <input
-                          readOnly
-                          value={selectedSku?.skuCode || ''}
-                          className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 font-mono text-sm text-slate-700"
-                        />
-                      </label>
-                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                        <label className="space-y-1">
-                          <span className="text-xs font-semibold text-[#717971]">SL chứng từ <span className="text-red-500">*</span></span>
-                          <input
-                            type="text"
-                            inputMode="numeric"
-                            pattern="[0-9]*"
-                            className={`w-full rounded-xl border p-2.5 text-sm ${fi('documentQuantity')}`}
-                            value={line.documentQuantity}
-                            onChange={(event) => {
-                              updateLine(line.key, { documentQuantity: event.target.value })
-                              setLineErrors((prev) => ({ ...prev, [line.key]: { ...(prev[line.key] ?? {}), documentQuantity: undefined } }))
-                            }}
-                          />
-                          {errs.documentQuantity ? <p className="text-xs text-red-500">{errs.documentQuantity}</p> : null}
-                        </label>
-                        <label className="space-y-1">
-                          <span className="text-xs font-semibold text-[#717971]">SL thực nhập <span className="text-red-500">*</span></span>
-                          <input
-                            type="text"
-                            inputMode="numeric"
-                            pattern="[0-9]*"
-                            className={`w-full rounded-xl border p-2.5 text-sm ${fi('actualQuantity')}`}
-                            value={line.actualQuantity}
-                            onChange={(event) => {
-                              updateLine(line.key, { actualQuantity: event.target.value })
-                              setLineErrors((prev) => ({ ...prev, [line.key]: { ...(prev[line.key] ?? {}), actualQuantity: undefined } }))
-                            }}
-                          />
-                          {errs.actualQuantity ? <p className="text-xs text-red-500">{errs.actualQuantity}</p> : null}
-                        </label>
-                        <label className="space-y-1">
-                          <span className="text-xs font-semibold text-[#717971]">Đơn vị</span>
-                          <input
-                            readOnly
-                            value={selectedSku ? getSkuUnitName(selectedSku) : ''}
-                            className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-sm text-slate-700"
-                          />
-                        </label>
-                      </div>
-                    </section>
-
-                    <section className="space-y-3 rounded-xl border border-slate-100 bg-white p-3">
-                      <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">Giá và thông tin lô</h3>
-                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                        <label className="space-y-1">
-                          <span className="text-xs font-semibold text-[#717971]">Đơn giá <span className="text-red-500">*</span></span>
-                          <div className="relative">
-                            <input
-                              type="text"
-                              inputMode="numeric"
-                              className={`w-full rounded-xl border py-2.5 pl-2.5 pr-8 text-right text-sm ${fi('unitCost')}`}
-                              value={formatVndInput(line.unitCost)}
-                              onChange={(event) => {
-                                updateLine(line.key, { unitCost: sanitizeVndInput(event.target.value) })
-                                setLineErrors((prev) => ({ ...prev, [line.key]: { ...(prev[line.key] ?? {}), unitCost: undefined } }))
-                              }}
-                              placeholder="Có thể để trống khi lưu Draft"
-                            />
-                            <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-400">₫</span>
-                          </div>
-                          {errs.unitCost ? <p className="text-xs text-red-500">{errs.unitCost}</p> : null}
-                        </label>
-                        <div className="space-y-1">
-                          <span className="text-xs font-semibold text-[#717971]">Thành tiền</span>
-                          <div className="rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-right text-sm font-bold text-slate-700">
-                            {line.unitCost === '' || line.actualQuantity === '' ? '—' : formatVnd(calculateLineAmount(line))}
-                          </div>
-                        </div>
-                      </div>
-                      <label className="block space-y-1">
-                        <span className="text-xs font-semibold text-[#717971]">Mã lô NCC <span className="text-red-500">*</span></span>
-                        <input
-                          className={`w-full rounded-xl border p-2.5 text-sm ${fi('lotCode')}`}
-                          value={line.lotCode}
-                          onChange={(event) => {
-                            updateLine(line.key, { lotCode: event.target.value })
-                            setLineErrors((prev) => ({ ...prev, [line.key]: { ...(prev[line.key] ?? {}), lotCode: undefined } }))
-                          }}
-                        />
-                        {errs.lotCode ? <p className="text-xs text-red-500">{errs.lotCode}</p> : null}
-                      </label>
-                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                        <label className="space-y-1">
-                          <span className="text-xs font-semibold text-[#717971]">Ngày SX <span className="text-red-500">*</span></span>
-                          <input
-                            type="date"
-                            max={today}
-                            className={`w-full rounded-xl border p-2.5 text-sm ${fi('manufacturedAt')}`}
-                            value={line.manufacturedAt}
-                            onChange={(event) => {
-                              updateLine(line.key, { manufacturedAt: event.target.value })
-                              setLineErrors((prev) => ({ ...prev, [line.key]: { ...(prev[line.key] ?? {}), manufacturedAt: undefined } }))
-                            }}
-                          />
-                          {errs.manufacturedAt ? <p className="text-xs text-red-500">{errs.manufacturedAt}</p> : null}
-                        </label>
-                        <label className="space-y-1">
-                          <span className="text-xs font-semibold text-[#717971]">Hạn dùng <span className="text-red-500">*</span></span>
-                          <input
-                            type="date"
-                            className={`w-full rounded-xl border p-2.5 text-sm ${errs.expiresAt ? 'border-red-400 bg-red-50' : warns.expiresAt ? 'border-amber-400 bg-amber-50' : 'border-slate-200 bg-white'}`}
-                            value={line.expiresAt}
-                            onChange={(event) => {
-                              updateLine(line.key, { expiresAt: event.target.value })
-                              setLineErrors((prev) => ({ ...prev, [line.key]: { ...(prev[line.key] ?? {}), expiresAt: undefined } }))
-                            }}
-                          />
-                          {errs.expiresAt ? <p className="text-xs text-red-500">{errs.expiresAt}</p> : null}
-                        </label>
-                      </div>
-                    </section>
-
-                    <section className="space-y-3 rounded-xl border border-slate-100 bg-white p-3 md:col-span-2 xl:col-span-1">
-                      <div className="flex items-center justify-between gap-2">
-                        <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">Chất lượng và ghi chú</h3>
-                        <span className="text-xs text-slate-400">{line.qualityNote.length}/300</span>
-                      </div>
-                      <label className="block space-y-1">
-                        <span className="text-xs font-semibold text-[#717971]">Ghi chú chất lượng</span>
-                        <textarea
-                          maxLength={300}
-                          rows={8}
-                          className={`w-full rounded-xl border p-2.5 text-sm ${errs.qualityNote ? 'border-red-400 bg-red-50' : 'border-slate-200 bg-white'}`}
-                          value={line.qualityNote}
-                          onChange={(event) => {
-                            updateLine(line.key, { qualityNote: event.target.value })
-                            setLineErrors((prev) => ({ ...prev, [line.key]: { ...(prev[line.key] ?? {}), qualityNote: undefined } }))
-                          }}
-                        />
-                        {errs.qualityNote ? <p className="text-xs text-red-500">{errs.qualityNote}</p> : null}
-                      </label>
-                    </section>
-                  </div>
                 </div>
               )
             })}
