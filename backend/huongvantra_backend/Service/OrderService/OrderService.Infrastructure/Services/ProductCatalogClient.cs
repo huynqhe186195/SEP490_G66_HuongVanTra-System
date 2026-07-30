@@ -31,7 +31,12 @@ public class ProductCatalogClient(HttpClient httpClient, ILogger<ProductCatalogC
                 .Select(item => new ProductSkuCatalogProfile(
                     item.SkuId,
                     item.CategoryId,
-                    item.InventoryUnit))
+                    item.InventoryUnit,
+                    item.ProductType,
+                    item.IsPurchasable,
+                    item.CanBeBomComponent,
+                    item.CanUseInCustom,
+                    item.CanHaveBom))
                 .ToList() ?? [];
         }
         catch (Exception ex) when (
@@ -46,5 +51,10 @@ public class ProductCatalogClient(HttpClient httpClient, ILogger<ProductCatalogC
     private sealed record ProductSkuCatalogResponse(
         Guid SkuId,
         int? CategoryId,
-        string InventoryUnit);
+        string InventoryUnit,
+        string ProductType,
+        bool IsPurchasable,
+        bool CanBeBomComponent,
+        bool CanUseInCustom,
+        bool CanHaveBom);
 }

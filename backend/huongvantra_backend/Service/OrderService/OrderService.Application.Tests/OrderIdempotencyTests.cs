@@ -171,7 +171,7 @@ public class OrderIdempotencyTests
             .Setup(client => client.GetSkuProfilesAsync(
                 It.IsAny<IEnumerable<Guid>>(),
                 It.IsAny<CancellationToken>()))
-            .ReturnsAsync([new ProductSkuCatalogProfile(skuId, null, "Piece")]);
+            .ReturnsAsync([new ProductSkuCatalogProfile(skuId, null, "Piece", "THANH_PHAM", true, false, false, true)]);
 
         var codeSequence = 0;
         var codeGenerator = new Mock<IOrderCodeGenerator>();

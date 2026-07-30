@@ -10,4 +10,9 @@ public interface IProductCatalogClient
 public sealed record ProductSkuCatalogProfile(
     Guid SkuId,
     int? CategoryId,
-    string InventoryUnit);
+    string InventoryUnit,
+    string ProductType,
+    bool IsPurchasable,
+    bool CanBeBomComponent,
+    bool CanUseInCustom,
+    bool CanHaveBom);
