@@ -2,27 +2,27 @@ import { isSystemAdmin, isWarehouseRole, isAccountantRole } from '../../auth/uti
 
 export const warehouseNavTabs = [
   { label: 'Kho', to: '/inventory' },
-  { label: 'Theo lô', to: '/inventory/batches' },
+  { label: 'Lô hàng nhập', to: '/inventory/batches' },
   { label: 'Phiếu nhập kho', to: '/inventory/import' },
-  { label: 'Phiếu xuất', to: '/inventory/export' },
-  { label: 'Kiểm kê', to: '/inventory/stocktake' },
-  { label: 'Báo cáo', to: '/inventory/reports' },
-  { label: 'Lệnh SX', to: '/inventory/production-orders' },
+  { label: 'Phiếu xuất kho', to: '/inventory/export' },
+  { label: 'Kiểm kê tồn kho', to: '/inventory/stocktake' },
+  { label: 'Báo cáo kho', to: '/inventory/reports' },
+  { label: 'Quản lý lệnh sản xuất', to: '/inventory/production-orders' },
   { label: 'Định mức BOM', to: '/inventory/boms' },
 ]
 
 export const stockRequestNavTab = {
-  label: 'Bổ sung Kệ Hàng',
+  label: 'Yêu cầu bổ sung tồn quầy',
   to: '/inventory/stock-requests',
 }
 
 export const supplierReceiptNavTab = {
-  label: 'Nhập NCC',
+  label: 'Phiếu nhập nhà cung cấp',
   to: '/inventory/supplier-receipts',
 }
 
 export const inventoryLedgerNavTab = {
-  label: 'Sổ kho',
+  label: 'Nhật ký kho',
   to: '/inventory/ledger',
 }
 
@@ -37,12 +37,12 @@ export const returnInspectionNavTab = {
 }
 
 export const stocktakeNavTab = {
-  label: 'Kiểm kê',
+  label: 'Kiểm kê tồn kho',
   to: '/inventory/stocktake',
 }
 
 export const inventoryReportNavTab = {
-  label: 'Báo cáo',
+  label: 'Báo cáo kho',
   to: '/inventory/reports',
 }
 

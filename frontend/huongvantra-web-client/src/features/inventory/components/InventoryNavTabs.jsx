@@ -52,7 +52,7 @@ export default function InventoryNavTabs({ actions = [] }) {
       {open ? (
         <div
           role="menu"
-          className="absolute right-0 z-50 mt-1 max-h-80 w-56 overflow-y-auto rounded-xl border border-slate-200 bg-white py-1 shadow-lg"
+          className="absolute right-0 z-50 mt-1 max-h-80 w-72 overflow-y-auto rounded-xl border border-slate-200 bg-white py-1 shadow-lg"
         >
           {tabs.map((tab) => {
             const active = isInventoryNavTabActive(location.pathname, tab.to)

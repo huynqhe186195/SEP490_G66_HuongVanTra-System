@@ -91,18 +91,19 @@ export const navigationItems = [
   { label: 'Danh Mục Sản Phẩm', path: '/products/categories', module: 'products', icon: 'category', roles: ['admin', 'agencyManager', 'inventoryManager'] },
   { label: 'Lịch sử tạo hàng hóa', path: '/inventory/product-approvals', module: 'product_creation_requests', icon: 'verified', roles: ['admin', 'inventoryManager'] },
   { label: 'Yêu cầu xóa hàng hóa', path: '/inventory/product-deletion-requests', module: 'product_deletion_requests', icon: 'delete_sweep', roles: ['inventoryManager'] },
-  { label: 'Kho tổng', path: '/inventory', module: 'inventory', icon: 'warehouse', roles: ['inventoryManager'] },
-  { label: 'Phiếu nhập NCC', path: '/inventory/supplier-receipts', module: 'supplier_receipts', icon: 'assignment_turned_in', roles: ['admin', 'agencyManager', 'accountant', 'inventoryManager'] },
+  { label: 'Kho', path: '/inventory', module: 'inventory', icon: 'warehouse', roles: ['inventoryManager'] },
+  { label: 'Phiếu nhập nhà cung cấp', path: '/inventory/supplier-receipts', module: 'supplier_receipts', icon: 'assignment_turned_in', roles: ['admin', 'agencyManager', 'accountant', 'inventoryManager'] },
   { label: 'Nhà cung cấp', path: '/inventory/suppliers', module: 'supplier_receipts', icon: 'storefront', roles: ['admin', 'agencyManager', 'accountant', 'inventoryManager'] },
   { label: 'Lô hàng nhập', path: '/inventory/batches', module: 'warehouse_batches', icon: 'inventory', roles: ['admin', 'agencyManager', 'inventoryManager', 'accountant'] },
   { label: 'Trả hàng nhập', path: '/inventory/returns', module: 'inventory_returns', icon: 'assignment_return', roles: ['agencyManager', 'inventoryManager'] },
-  { label: 'Kiểm kê tồn kho', path: '/inventory/stocktake', module: 'inventory_stocktake', icon: 'fact_check', roles: ['admin', 'agencyManager', 'inventoryManager', 'salesStaff'] },  { label: 'Báo cáo kho', path: '/inventory/reports', module: 'inventory_reports', icon: 'analytics', roles: ['admin', 'agencyManager', 'accountant'] },
-  { label: 'Lô sản xuất', path: '/inventory/production-orders', module: 'production_orders', icon: 'precision_manufacturing', roles: ['admin', 'agencyManager', 'inventoryManager'] },
-  { label: 'Sổ kho', path: '/inventory/ledger', module: 'inventory_ledger', icon: 'fact_check', roles: ['admin', 'agencyManager', 'inventoryManager', 'accountant'] },
+  { label: 'Kiểm kê tồn kho', path: '/inventory/stocktake', module: 'inventory_stocktake', icon: 'fact_check', roles: ['admin', 'agencyManager', 'inventoryManager', 'salesStaff'] },
+  { label: 'Báo cáo kho', path: '/inventory/reports', module: 'inventory_reports', icon: 'analytics', roles: ['admin', 'agencyManager', 'accountant'] },
+  { label: 'Quản lý lệnh sản xuất', path: '/inventory/production-orders', module: 'production_orders', icon: 'precision_manufacturing', roles: ['admin', 'agencyManager', 'inventoryManager'] },
+  { label: 'Nhật ký kho', path: '/inventory/ledger', module: 'inventory_ledger', icon: 'fact_check', roles: ['admin', 'agencyManager', 'inventoryManager', 'accountant'] },
   { label: 'Định mức BOM', path: '/inventory/boms', module: 'inventory', icon: 'schema', roles: ['inventoryManager'] },
   { label: 'Đóng gói theo yêu cầu', path: '/inventory/custom-bundles', module: 'inventory', icon: 'package_2', roles: ['inventoryManager'] },
   {
-    label: 'Thống kê kho',
+    label: 'Thống kê trong kho',
     path: '/inventory/statistics',
     module: 'inventory_statistics',
     icon: 'analytics',
@@ -113,7 +114,7 @@ export const navigationItems = [
     ],
   },
   {
-    label: 'Bổ sung tồn quầy',
+    label: 'Yêu cầu bổ sung tồn quầy',
     path: '/inventory/stock-requests',
     module: 'stock_adjustment_ops',
     icon: 'edit_note',
@@ -222,7 +223,7 @@ const INVENTORY_SIDEBAR_GROUPS = [
     label: 'Kho tổng',
     icon: 'warehouse',
     entries: [
-      { path: '/inventory', label: 'Tồn kho tổng' },
+      { path: '/inventory', label: 'Kho' },
       { path: '/inventory/batches', label: 'Lô hàng nhập' },
       { path: '/inventory/returns' },
       { path: '/inventory/stocktake' },
@@ -389,15 +390,15 @@ function groupAdminManagerSidebar(items, isAdmin) {
         ['/accounting/cost-profit', 'Bảng giá vốn & giá bán'],
         ['/inventory/product-approvals', 'Lịch sử tạo hàng hóa'],
         ['/inventory/stocktake', 'Kiểm kê tồn kho'],
-        ['/inventory/ledger', 'Nhật ký kho (Sổ kho)'],
+        ['/inventory/ledger', 'Nhật ký kho'],
       ]
     : [
         ['/inventory/products', 'Sản phẩm & số lượng'],
         ['/products/categories', 'Danh mục sản phẩm'],
         ['/accounting/cost-profit', 'Bảng giá vốn & giá bán'],
         ['/inventory/stocktake', 'Kiểm kê tồn kho'],
-        ['/inventory/ledger', 'Nhật ký kho (Sổ kho)'],
-        ['/inventory/stock-requests', 'Bổ sung tồn quầy'],
+        ['/inventory/ledger', 'Nhật ký kho'],
+        ['/inventory/stock-requests', 'Yêu cầu bổ sung tồn quầy'],
         ['/admin/inventory-sync', 'Đồng bộ tồn kho'],
       ]
 
@@ -443,12 +444,12 @@ function groupAdminManagerSidebar(items, isAdmin) {
   const inboundEntries = isAdmin
     ? [
         ['/inventory/suppliers', 'Nhà cung cấp'],
-        ['/inventory/supplier-receipts', 'Phiếu nhập NCC'],
+        ['/inventory/supplier-receipts', 'Phiếu nhập nhà cung cấp'],
         ['/inventory/batches', 'Lô hàng nhập'],
       ]
     : [
         ['/inventory/suppliers', 'Nhà cung cấp'],
-        ['/inventory/supplier-receipts', 'Phiếu nhập NCC'],
+        ['/inventory/supplier-receipts', 'Phiếu nhập nhà cung cấp'],
         ['/inventory/batches', 'Lô hàng nhập'],
         ['/inventory/returns', 'Trả hàng nhập'],
       ]

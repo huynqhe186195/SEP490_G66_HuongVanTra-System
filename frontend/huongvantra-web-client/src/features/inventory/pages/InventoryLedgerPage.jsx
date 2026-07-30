@@ -115,7 +115,7 @@ function InventoryLedgerPage() {
   return (
     <PageShell>
       <PageHeader
-        title="Nhật Ký Kho"
+        title="Nhật ký kho"
         titleInfo="Nhật ký bất biến các lần thay đổi tồn Kho/Quầy/Kệ hàng."
         searchPlaceholder="Tìm SKU, tên hàng, mã chứng từ, mã lô..."
         searchValue={searchInput}
