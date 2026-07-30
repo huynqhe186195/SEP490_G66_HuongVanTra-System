@@ -31,7 +31,8 @@ public class ProductCatalogClient(HttpClient httpClient, ILogger<ProductCatalogC
                 .Select(item => new ProductSkuCatalogProfile(
                     item.SkuId,
                     item.CategoryId,
-                    item.InventoryUnit))
+                    item.InventoryUnit,
+                    item.CostPrice))
                 .ToList() ?? [];
         }
         catch (Exception ex) when (
@@ -46,5 +47,6 @@ public class ProductCatalogClient(HttpClient httpClient, ILogger<ProductCatalogC
     private sealed record ProductSkuCatalogResponse(
         Guid SkuId,
         int? CategoryId,
-        string InventoryUnit);
+        string InventoryUnit,
+        decimal CostPrice);
 }

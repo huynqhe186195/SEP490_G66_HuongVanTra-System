@@ -6,4 +6,7 @@ public class TopProductDto
     public string SkuSnapshotName { get; set; } = string.Empty;
     public int TotalQuantitySold { get; set; }
     public decimal TotalRevenue { get; set; }
+    public decimal TotalCostPrice { get; set; }
+    public decimal GrossProfit { get; set; }
+    public double GrossProfitMargin { get; set; }
 }

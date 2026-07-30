@@ -29,17 +29,6 @@ public class WarehouseBatchRepository(InventoryDbContext _db) : IWarehouseBatchR
             .FirstOrDefaultAsync(b => b.LotCode.ToUpper() == normalized, ct);
     }
 
-    public Task<WarehouseBatch?> FindBySupplierLotIdentityAsync(
-        Guid supplierId,
-        Guid skuId,
-        string normalizedSupplierLotCode,
-        CancellationToken ct = default) =>
-        WithItems().FirstOrDefaultAsync(
-            b => b.SupplierId == supplierId
-                && b.SkuId == skuId
-                && b.NormalizedSupplierLotCode == normalizedSupplierLotCode,
-            ct);
-
     public async Task<List<WarehouseBatch>> GetListAsync(
         Guid? skuId, string? search, bool availableOnly, CancellationToken ct = default)
     {
@@ -161,6 +150,13 @@ public class WarehouseBatchRepository(InventoryDbContext _db) : IWarehouseBatchR
     {
         return await _db.WarehouseBatchItems
             .Where(b => b.QuantityOnHand > 0 && b.UnitCost.HasValue && b.Batch != null && b.Batch.Location == WarehouseLocation)
+            .SumAsync(b => b.QuantityOnHand * b.UnitCost!.Value, ct);
+    }
+
+    public async Task<decimal> CalculateTotalShelfValueAsync(CancellationToken ct = default)
+    {
+        return await _db.WarehouseBatchItems
+            .Where(b => b.QuantityOnHand > 0 && b.UnitCost.HasValue && b.Batch != null && b.Batch.Location == "Shelf")
             .SumAsync(b => b.QuantityOnHand * b.UnitCost!.Value, ct);
     }
 
