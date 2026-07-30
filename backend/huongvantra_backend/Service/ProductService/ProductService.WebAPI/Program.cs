@@ -41,6 +41,15 @@ builder.Services.AddHttpClient<IInventoryProductDeletionValidationClient, Invent
     var baseUrl = builder.Configuration["InventoryService:BaseUrl"] ?? "http://inventory-service:8080";
     client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
 });
+builder.Services.AddHttpClient<IInventorySupplierReceiptCostClient, InventorySupplierReceiptCostClient>(client =>
+{
+    var baseUrl = builder.Configuration["InventoryService:BaseUrl"] ?? "http://inventory-service:8080";
+    client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
+});
+// Consumer được dùng lại ngoài luồng message để re-evaluate các receipt group
+// đang treo reconciliation_required. MassTransit cũng TryAddScoped cùng type.
+builder.Services.AddScoped<SupplierReceiptApprovedCostRecordedConsumer>();
+builder.Services.AddScoped<ICostBasisReconciliationService, CostBasisReconciliationService>();
 builder.Services.AddHttpClient<ICloudinaryImageService, CloudinaryImageService>();
 builder.Services.AddScoped<CategoryLogic>();
 builder.Services.AddScoped<BrandLogic>();

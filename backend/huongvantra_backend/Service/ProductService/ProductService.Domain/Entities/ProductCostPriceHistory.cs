@@ -11,6 +11,14 @@ public sealed class ProductCostPriceHistory
     public Guid SkuId { get; set; }
     public decimal OldCostPrice { get; set; }
     public decimal IncomingUnitCost { get; set; }
+    /// <summary>ActualQuantity của dòng phiếu nhập — mẫu số của Weighted Average Cost.</summary>
+    public decimal IncomingQuantity { get; set; }
+    /// <summary>IncomingQuantity * IncomingUnitCost.</summary>
+    public decimal IncomingValue { get; set; }
+    public decimal TotalQuantityBefore { get; set; }
+    public decimal TotalQuantityAfter { get; set; }
+    public decimal TotalValueBefore { get; set; }
+    public decimal TotalValueAfter { get; set; }
     public decimal NewCostPrice { get; set; }
     public string SourceType { get; set; } = "supplier_receipt";
     public Guid SourceReceiptId { get; set; }

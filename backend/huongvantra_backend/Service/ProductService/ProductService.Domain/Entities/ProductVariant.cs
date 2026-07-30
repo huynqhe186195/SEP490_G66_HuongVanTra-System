@@ -9,6 +9,12 @@ public class ProductVariant : BaseEntity
     public string VariantName { get; set; } = string.Empty;
     public string OptionValuesJson { get; set; } = "{}";
     public decimal CostPrice { get; set; }
+    /// <summary>Tổng ActualQuantity đã duyệt tích lũy — mẫu số của Weighted Average Cost.</summary>
+    public decimal TotalApprovedInboundQuantity { get; set; }
+    /// <summary>Tổng ActualQuantity * UnitCost đã duyệt tích lũy — tử số của Weighted Average Cost.</summary>
+    public decimal TotalApprovedInboundValue { get; set; }
+    /// <summary>Null nghĩa là dòng legacy chưa được reconcile lại theo lịch sử phiếu nhập.</summary>
+    public DateTime? CostBasisReconciledAt { get; set; }
     public decimal RetailPrice { get; set; }
     public int? MinStock { get; set; }
     public int? MaxStock { get; set; }

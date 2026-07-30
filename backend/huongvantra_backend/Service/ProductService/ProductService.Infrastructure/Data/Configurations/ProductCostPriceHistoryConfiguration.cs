@@ -13,6 +13,12 @@ public sealed class ProductCostPriceHistoryConfiguration : IEntityTypeConfigurat
         builder.Property(history => history.Id).ValueGeneratedNever();
         builder.Property(history => history.OldCostPrice).HasColumnType("decimal(18,2)");
         builder.Property(history => history.IncomingUnitCost).HasColumnType("decimal(18,2)");
+        builder.Property(history => history.IncomingQuantity).HasColumnType("decimal(18,4)").HasDefaultValue(0m);
+        builder.Property(history => history.IncomingValue).HasColumnType("decimal(20,4)").HasDefaultValue(0m);
+        builder.Property(history => history.TotalQuantityBefore).HasColumnType("decimal(18,4)").HasDefaultValue(0m);
+        builder.Property(history => history.TotalQuantityAfter).HasColumnType("decimal(18,4)").HasDefaultValue(0m);
+        builder.Property(history => history.TotalValueBefore).HasColumnType("decimal(20,4)").HasDefaultValue(0m);
+        builder.Property(history => history.TotalValueAfter).HasColumnType("decimal(20,4)").HasDefaultValue(0m);
         builder.Property(history => history.NewCostPrice).HasColumnType("decimal(18,2)");
         builder.Property(history => history.SourceType).HasMaxLength(50).IsRequired();
         builder.Property(history => history.SourceReceiptCode).HasMaxLength(50).IsRequired();

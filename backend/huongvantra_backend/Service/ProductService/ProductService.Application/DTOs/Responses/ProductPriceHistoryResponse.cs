@@ -6,6 +6,7 @@ public sealed record ProductPriceHistoryResponse(
     decimal OldValue,
     decimal NewValue,
     decimal? IncomingUnitCost,
+    decimal? IncomingQuantity,
     string SourceType,
     Guid? SourceReceiptId,
     string? SourceReceiptCode,

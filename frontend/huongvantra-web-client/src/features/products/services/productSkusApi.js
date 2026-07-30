@@ -88,6 +88,7 @@ function mapPriceHistoryItem(item) {
     oldValue: Number(item.oldValue ?? item.OldValue ?? 0),
     newValue: Number(item.newValue ?? item.NewValue ?? 0),
     incomingUnitCost: numberOrNull(item.incomingUnitCost ?? item.IncomingUnitCost),
+    incomingQuantity: numberOrNull(item.incomingQuantity ?? item.IncomingQuantity),
     sourceType: item.sourceType ?? item.SourceType ?? '',
     sourceReceiptId: item.sourceReceiptId ?? item.SourceReceiptId ?? null,
     sourceReceiptCode: item.sourceReceiptCode ?? item.SourceReceiptCode ?? '',

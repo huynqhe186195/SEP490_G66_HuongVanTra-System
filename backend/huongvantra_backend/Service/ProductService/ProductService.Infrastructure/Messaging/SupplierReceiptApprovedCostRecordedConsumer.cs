@@ -117,6 +117,131 @@ public sealed class SupplierReceiptApprovedCostRecordedConsumer(
         }
     }
 
+    public enum ReceiptGroupReevaluationOutcome
+    {
+        /// <summary>Không còn group nào ở trạng thái reconciliation_required.</summary>
+        NotPending,
+
+        /// <summary>Group đã nằm trong snapshot reconciliation — đánh dấu terminal, không cộng lại.</summary>
+        SettledByReconciliation,
+
+        /// <summary>Group chưa nằm trong snapshot — áp dụng incremental theo luồng chuẩn.</summary>
+        Reapplied,
+
+        /// <summary>Không xử lý được; history giữ nguyên reconciliation_required để chạy lại.</summary>
+        Deferred
+    }
+
+    /// <summary>
+    /// Re-evaluate một receipt group đang ở trạng thái reconciliation_required sau khi
+    /// cost basis của SKU đã được reconcile. Chạy trong SKU lock, tôn trọng sequence
+    /// và idempotency hiện có. Không publish event, không tạo Inventory side effect,
+    /// không xóa history.
+    ///
+    /// <paramref name="reconciledReceiptLineIds"/> là tập SourceReceiptLineId đã được
+    /// tính vào snapshot authoritative. Group nằm trọn trong tập này KHÔNG được cộng
+    /// lại (sẽ double-count); group nằm ngoài mới đi qua đường incremental.
+    /// </summary>
+    public async Task<ReceiptGroupReevaluationOutcome> ReevaluateReconciliationRequiredGroupAsync(
+        Guid skuId,
+        Guid sourceReceiptId,
+        IReadOnlySet<Guid> reconciledReceiptLineIds,
+        CancellationToken cancellationToken = default)
+    {
+        var outcome = ReceiptGroupReevaluationOutcome.Deferred;
+
+        await store.ExecuteReadCommittedAsync(async ct =>
+        {
+            var variant = await store.LockVariantAsync(skuId, ct);
+            if (variant is null)
+            {
+                logger.LogWarning(
+                    "Không thể re-evaluate receipt group {ReceiptId}: ProductVariant {SkuId} không tồn tại.",
+                    sourceReceiptId,
+                    skuId);
+                outcome = ReceiptGroupReevaluationOutcome.Deferred;
+                return;
+            }
+
+            var group = await store.GetReceiptGroupAsync(sourceReceiptId, skuId, ct);
+            var pending = group
+                .Where(history =>
+                    !history.WasApplied
+                    && history.ProcessingResult == "reconciliation_required")
+                .ToList();
+            if (pending.Count == 0)
+            {
+                outcome = ReceiptGroupReevaluationOutcome.NotPending;
+                return;
+            }
+
+            if (EvaluateReceiptSequence(group).State != ReceiptSequenceState.Complete)
+            {
+                logger.LogWarning(
+                    "Receipt group {ReceiptId} của SKU {SkuId} chưa đủ sequence; giữ reconciliation_required.",
+                    sourceReceiptId,
+                    skuId);
+                outcome = ReceiptGroupReevaluationOutcome.Deferred;
+                return;
+            }
+
+            var coveredCount = group.Count(history =>
+                reconciledReceiptLineIds.Contains(history.SourceReceiptLineId));
+
+            if (coveredCount == group.Count)
+            {
+                // Snapshot đã bao gồm toàn bộ dòng của group. Chỉ đóng trạng thái
+                // audit theo snapshot hiện tại; không đụng lũy kế và không đổi CostPrice.
+                var updatedAt = DateTime.UtcNow;
+                foreach (var history in group)
+                {
+                    history.OldCostPrice = variant.CostPrice;
+                    history.NewCostPrice = variant.CostPrice;
+                    history.TotalQuantityBefore = variant.TotalApprovedInboundQuantity;
+                    history.TotalValueBefore = variant.TotalApprovedInboundValue;
+                    history.TotalQuantityAfter = variant.TotalApprovedInboundQuantity;
+                    history.TotalValueAfter = variant.TotalApprovedInboundValue;
+                    history.WasApplied = true;
+                    history.ProcessingResult = "settled_by_reconciliation";
+                    history.UpdatedAt = updatedAt;
+                }
+
+                await store.SaveChangesAsync(ct);
+                outcome = ReceiptGroupReevaluationOutcome.SettledByReconciliation;
+                return;
+            }
+
+            if (coveredCount > 0)
+            {
+                // Một phần dòng nằm trong snapshot, một phần không: cộng incremental sẽ
+                // sai, đóng terminal cũng sai. Giữ recoverable và báo để xử lý thủ công.
+                logger.LogError(
+                    "Receipt group {ReceiptId} của SKU {SkuId} chỉ được snapshot reconciliation bao phủ một phần ({Covered}/{Total}); giữ reconciliation_required.",
+                    sourceReceiptId,
+                    skuId,
+                    coveredCount,
+                    group.Count);
+                outcome = ReceiptGroupReevaluationOutcome.Deferred;
+                return;
+            }
+
+            // Không dòng nào nằm trong snapshot: đi luồng chuẩn, có kiểm tra
+            // superseded và cộng lũy kế đúng một lần.
+            foreach (var history in group)
+                history.ProcessingResult = "waiting_sequence";
+
+            await EvaluateAndApplyGroupAsync(variant, group, ct);
+            await store.SaveChangesAsync(ct);
+
+            outcome = group.Any(history =>
+                history.ProcessingResult == "reconciliation_required")
+                ? ReceiptGroupReevaluationOutcome.Deferred
+                : ReceiptGroupReevaluationOutcome.Reapplied;
+        }, cancellationToken);
+
+        return outcome;
+    }
+
     private static ProductCostPriceHistory CreateHistory(
         SupplierReceiptApprovedCostRecordedEvent message,
         decimal currentCostPrice)
@@ -135,6 +260,8 @@ public sealed class SupplierReceiptApprovedCostRecordedConsumer(
             SkuId = message.SkuId,
             OldCostPrice = currentCostPrice,
             IncomingUnitCost = message.UnitCost,
+            IncomingQuantity = message.ActualQuantity,
+            IncomingValue = message.ActualQuantity * message.UnitCost,
             NewCostPrice = currentCostPrice,
             SourceType = "supplier_receipt",
             SourceReceiptId = message.SupplierReceiptId,
@@ -197,6 +324,31 @@ public sealed class SupplierReceiptApprovedCostRecordedConsumer(
         var latestApplied = await store.GetLatestAppliedHistoryAsync(
             variant.Id,
             cancellationToken);
+
+        if (RequiresCostBasisReconciliation(variant, latestApplied))
+        {
+            foreach (var history in ordered)
+            {
+                history.OldCostPrice = variant.CostPrice;
+                history.NewCostPrice = variant.CostPrice;
+                history.TotalQuantityBefore = variant.TotalApprovedInboundQuantity;
+                history.TotalValueBefore = variant.TotalApprovedInboundValue;
+                history.TotalQuantityAfter = variant.TotalApprovedInboundQuantity;
+                history.TotalValueAfter = variant.TotalApprovedInboundValue;
+                history.WasApplied = false;
+                history.ProcessingResult = "reconciliation_required";
+                history.UpdatedAt = DateTime.UtcNow;
+            }
+
+            logger.LogWarning(
+                "Supplier Receipt cost group requires cost basis reconciliation. ReceiptId {ReceiptId}, SkuId {SkuId}, CostPrice {CostPrice}, TotalQuantity {TotalQuantity}. Chạy cost-basis-reconciliation trước khi phiếu mới được tính vào lũy kế.",
+                groupReceiptId,
+                variant.Id,
+                variant.CostPrice,
+                variant.TotalApprovedInboundQuantity);
+            return;
+        }
+
         var isSuperseded = latestApplied is not null
             && CompareBusinessOrder(
                 groupApprovedAt,
@@ -208,17 +360,38 @@ public sealed class SupplierReceiptApprovedCostRecordedConsumer(
         foreach (var history in ordered)
         {
             var oldCostPrice = variant.CostPrice;
-            var newCostPrice = isSuperseded
-                ? oldCostPrice
-                : CalculateAverageCost(oldCostPrice, history.IncomingUnitCost);
+            var quantityBefore = variant.TotalApprovedInboundQuantity;
+            var valueBefore = variant.TotalApprovedInboundValue;
             history.OldCostPrice = oldCostPrice;
+            history.TotalQuantityBefore = quantityBefore;
+            history.TotalValueBefore = valueBefore;
+
+            if (isSuperseded)
+            {
+                // Sự kiện cũ hơn: không đổi giá vốn và không đổi lũy kế.
+                history.NewCostPrice = oldCostPrice;
+                history.TotalQuantityAfter = quantityBefore;
+                history.TotalValueAfter = valueBefore;
+                history.WasApplied = false;
+                history.ProcessingResult = "superseded";
+                history.UpdatedAt = updatedAt;
+                continue;
+            }
+
+            var quantityAfter = quantityBefore + history.IncomingQuantity;
+            var valueAfter = valueBefore + history.IncomingValue;
+            var newCostPrice = CalculateWeightedAverageCost(quantityAfter, valueAfter, oldCostPrice);
+
+            history.TotalQuantityAfter = quantityAfter;
+            history.TotalValueAfter = valueAfter;
             history.NewCostPrice = newCostPrice;
-            history.WasApplied = !isSuperseded;
-            history.ProcessingResult = isSuperseded ? "superseded" : "applied";
+            history.WasApplied = true;
+            history.ProcessingResult = "applied";
             history.UpdatedAt = updatedAt;
 
-            if (!isSuperseded)
-                variant.CostPrice = newCostPrice;
+            variant.TotalApprovedInboundQuantity = quantityAfter;
+            variant.TotalApprovedInboundValue = valueAfter;
+            variant.CostPrice = newCostPrice;
         }
 
         if (!isSuperseded)
@@ -294,17 +467,38 @@ public sealed class SupplierReceiptApprovedCostRecordedConsumer(
                 rightReceiptId.ToString("D"));
     }
 
+    /// <summary>
+    /// SKU đã có dữ liệu giá vốn legacy (CostPrice &gt; 0 hoặc đã có ProductCostPriceHistory
+    /// được áp dụng) nhưng cumulative snapshot chưa được reconciliation thì không được
+    /// lấy phiếu mới làm baseline — cumulative sẽ thiếu toàn bộ lịch sử trước đó.
+    /// SKU thật sự chưa từng có inbound/cost history vẫn xử lý phiếu đầu tiên bình thường.
+    /// </summary>
+    private static bool RequiresCostBasisReconciliation(
+        ProductVariant variant,
+        ProductCostPriceHistory? latestApplied)
+    {
+        if (variant.CostBasisReconciledAt is not null)
+            return false;
+
+        if (variant.TotalApprovedInboundQuantity > 0 || variant.TotalApprovedInboundValue > 0)
+            return false;
+
+        return variant.CostPrice > 0 || latestApplied is not null;
+    }
+
     private static bool IsRecoverable(ProductCostPriceHistory history) =>
         !history.WasApplied
         && history.ProcessingResult is
             "waiting_sequence"
             or "sequence_incomplete"
+            or "reconciliation_required"
             or "pending";
 
     private static bool IsTerminal(ProductCostPriceHistory history) =>
         history.WasApplied
         || history.ProcessingResult is
             "applied"
+            or "settled_by_reconciliation"
             or "superseded"
             or "sequence_invalid"
             or "invalid";
@@ -332,11 +526,18 @@ public sealed class SupplierReceiptApprovedCostRecordedConsumer(
             && Enumerable.Range(1, expectedCount).SequenceEqual(orders);
     }
 
-    public static decimal CalculateAverageCost(decimal currentCostPrice, decimal incomingUnitCost)
+    /// <summary>
+    /// Weighted Average Cost = TotalApprovedInboundValue / TotalApprovedInboundQuantity.
+    /// Không dùng CostPrice hiện tại làm thành phần tính; fallback chỉ để tránh chia 0.
+    /// </summary>
+    public static decimal CalculateWeightedAverageCost(
+        decimal totalQuantity,
+        decimal totalValue,
+        decimal fallbackCostPrice)
     {
-        var calculated = currentCostPrice <= 0
-            ? incomingUnitCost
-            : (currentCostPrice + incomingUnitCost) / 2m;
-        return Math.Round(calculated, 2, MidpointRounding.AwayFromZero);
+        if (totalQuantity <= 0)
+            return Math.Round(fallbackCostPrice, 2, MidpointRounding.AwayFromZero);
+
+        return Math.Round(totalValue / totalQuantity, 2, MidpointRounding.AwayFromZero);
     }
 }
