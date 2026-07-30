@@ -7596,7 +7596,12 @@ public class InventoryLogic(
         string? search, bool includeDeleted, int page, int pageSize, CancellationToken ct = default)
     {
         var (items, total) = await _supplierRepo.GetPagedAsync(search, includeDeleted, page, pageSize, ct);
-        var responses = await Task.WhenAll(items.Select(s => MapSupplierAsync(s, ct)));
+        // Tuần tự: MapSupplierAsync truy vấn database nên Task.WhenAll dùng chung DbContext
+        // sẽ ném "A second operation was started on this context instance".
+        var responses = new List<SupplierResponse>(items.Count);
+        foreach (var supplier in items)
+            responses.Add(await MapSupplierAsync(supplier, ct));
+
         return new PagedResponse<SupplierResponse>(
             [.. responses],
             page, pageSize, total,
