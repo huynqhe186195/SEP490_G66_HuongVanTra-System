@@ -280,6 +280,6 @@ export function canManageSuppliers(session) {
 
 export function getStaffManagementScopeLabel(session) {
   if (isSystemAdmin(session)) return 'Quản lý nhân sự: Manager'
-  if (isBranchManager(session)) return 'Quản lý nhân sự: SalePos, SaleCod'
+  if (isBranchManager(session)) return 'Quản lý nhân sự: Sale quầy/COD, Kế toán, Thủ kho'
   return 'Quản lý nhân sự'
 }

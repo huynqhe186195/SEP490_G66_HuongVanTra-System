@@ -8,6 +8,7 @@ import {
 } from '../../iam/services/employeesApi.js'
 import { assignUserRoles, lockUser, unlockUser, updateUser } from '../../iam/services/usersApi.js'
 import { fetchAssignableRoles, fetchRoles, mapRole } from '../../iam/services/rolesApi.js'
+import { formatRoleName } from '../../iam/utils/iamLabels.js'
 import { resetPassword } from '../../auth/services/authApi.js'
 
 function mapStaffRow(employee) {
@@ -69,7 +70,7 @@ export async function fetchRoleOptions() {
     .map((role) => ({
       id: role.id,
       name: role.roleName,
-      label: role.roleName,
+      label: formatRoleName(role.roleName),
     }))
 }
 
@@ -220,7 +221,7 @@ export async function updateStaffAccount(employeeId, payload) {
       )
       const roleIds = resolveRoleIds(options, requestedRoles)
       if (!roleIds.length) {
-        throw new Error('Vui lòng chọn ít nhất một vai trò nhân viên (SalePos / SaleCod hoặc vai trò được phép gán).')
+        throw new Error('Vui lòng chọn ít nhất một vai trò được phép gán (Sale quầy/COD, Kế toán hoặc Thủ kho).')
       }
 
       await updateUser(current.userGuid, {

@@ -116,6 +116,32 @@ public class MultiRoleUserManagementTests
     }
 
     [Fact]
+    public async Task Create_employee_accepts_Accountant_and_Warehouse_for_manager()
+    {
+        await using var db = UserServiceTestContext.CreateDb();
+        await DataSeeder.SeedAsync(db);
+        var roleIds = await db.Roles
+            .Where(role => role.RoleName == "Accountant" || role.RoleName == "Warehouse")
+            .OrderBy(role => role.RoleName)
+            .Select(role => role.Id)
+            .ToListAsync();
+        var logic = UserServiceTestContext.CreateEmployeeLogic(db);
+
+        var created = await logic.CreateAsync(
+            new CreateEmployeeRequest(
+                "ops_support_employee",
+                "123456",
+                roleIds,
+                "Ops Support",
+                "Operations",
+                0,
+                "0900000001"),
+            [PermissionNames.ManageEmployee]);
+
+        Assert.Equal(["Accountant", "Warehouse"], created.Roles.OrderBy(role => role));
+    }
+
+    [Fact]
     public async Task Explicit_update_removes_legacy_Sale_and_preserves_all_selected_roles()
     {
         await using var db = UserServiceTestContext.CreateDb();
