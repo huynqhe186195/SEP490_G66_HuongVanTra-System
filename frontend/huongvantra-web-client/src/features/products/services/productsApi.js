@@ -65,6 +65,7 @@ export function mapProductVariant(item) {
     salesTaxMode: item.salesTaxMode ?? item.SalesTaxMode ?? '',
     isSellable: Boolean(item.isSellable ?? item.IsSellable ?? true),
     allowRewardPoints: Boolean(item.allowRewardPoints ?? item.AllowRewardPoints ?? true),
+    isPurchasable: Boolean(item.isPurchasable ?? item.IsPurchasable),
     isActive: Boolean(item.isActive ?? item.IsActive ?? true),
     imageUrl: item.imageUrl ?? item.ImageUrl ?? '',
     unitName: item.unitName ?? item.UnitName ?? '',
@@ -313,6 +314,7 @@ function buildVariantBody(variant) {
     maxStock: numberOrNull(variant.maxStock),
     isSellable: Boolean(variant.isSellable),
     allowRewardPoints: Boolean(variant.allowRewardPoints),
+    isPurchasable: variant.isPurchasable !== false,
     isActive: variant.isActive !== false,
     imageUrl: trimOrNull(variant.imageUrl),
     units: toArray(variant.units).map(buildUnitBody),
@@ -356,6 +358,7 @@ function buildVariantGeneratorBody(generator) {
     maxStock: numberOrNull(generator.maxStock),
     isSellable: generator.isSellable !== false,
     allowRewardPoints: generator.allowRewardPoints !== false,
+    isPurchasable: generator.isPurchasable !== false,
   }
 }
 

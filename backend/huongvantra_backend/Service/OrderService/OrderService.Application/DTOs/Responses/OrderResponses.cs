@@ -35,11 +35,28 @@ public record OrderResponse(
     List<OrderDetailResponse> Items,
     List<PaymentResponse> Payments,
     List<CustomBundleResponse>? CustomBundles = null,
-    StockHandlingSummaryResponse? StockHandlingSummary = null
+    StockHandlingSummaryResponse? StockHandlingSummary = null,
+    Guid? ContractId = null,
+    string? ContractCodeSnapshot = null,
+    decimal? ContractDiscountPercentSnapshot = null,
+    int? ContractPaymentTermDaysSnapshot = null,
+    DateTime? DueDate = null
 );
 
-public record StockHandlingLineResponse(
-    Guid SkuId,
+public record B2BDebtResponse(
+    Guid OrderId,
+    string OrderCode,
+    Guid? CustomerId,
+    string? CustomerSnapshotName,
+    string? ContractCodeSnapshot,
+    decimal FinalAmount,
+    decimal PaidAmount,
+    decimal RemainingAmount,
+    DateTime? DueDate,
+    int DaysOverdue,
+    DateTime CreatedAt);
+
+public record StockHandlingLineResponse(    Guid SkuId,
     string? SkuCode,
     string SkuName,
     int OrderedQuantity,

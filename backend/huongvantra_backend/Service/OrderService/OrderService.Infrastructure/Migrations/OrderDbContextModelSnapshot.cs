@@ -115,6 +115,19 @@ namespace OrderService.Infrastructure.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("char(36)");
 
+                    b.Property<string>("ContractCodeSnapshot")
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<decimal?>("ContractDiscountPercentSnapshot")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<Guid?>("ContractId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<int?>("ContractPaymentTermDaysSnapshot")
+                        .HasColumnType("int");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
 
@@ -127,6 +140,9 @@ namespace OrderService.Infrastructure.Migrations
 
                     b.Property<decimal>("DiscountAmount")
                         .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime?>("DueDate")
+                        .HasColumnType("datetime(6)");
 
                     b.Property<Guid?>("EmployeeId")
                         .HasColumnType("char(36)");
@@ -196,7 +212,11 @@ namespace OrderService.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("ContractId");
+
                     b.HasIndex("CustomerId");
+
+                    b.HasIndex("DueDate");
 
                     b.HasIndex("IdempotencyKey")
                         .IsUnique()
@@ -491,15 +511,15 @@ namespace OrderService.Infrastructure.Migrations
                         .HasColumnType("decimal(18,2)")
                         .HasDefaultValue(0m);
 
-                    b.Property<Guid?>("ClosedByUserId")
-                        .HasColumnType("char(36)");
+                    b.Property<DateTime?>("ClosedAt")
+                        .HasColumnType("datetime(6)");
 
                     b.Property<string>("ClosedByName")
                         .HasMaxLength(100)
                         .HasColumnType("varchar(100)");
 
-                    b.Property<DateTime?>("ClosedAt")
-                        .HasColumnType("datetime(6)");
+                    b.Property<Guid?>("ClosedByUserId")
+                        .HasColumnType("char(36)");
 
                     b.Property<decimal?>("CountedCash")
                         .HasColumnType("decimal(18,2)");

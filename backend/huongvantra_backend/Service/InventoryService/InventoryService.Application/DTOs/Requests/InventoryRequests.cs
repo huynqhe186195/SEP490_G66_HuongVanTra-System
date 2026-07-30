@@ -203,3 +203,46 @@ public record UpdateSupplierRequest(
     string? Address,
     string? Note,
     string? SupplierCode = null);
+
+public record CreateSupplierProductRequest(
+    Guid SkuId,
+    string? SupplierItemCode,
+    string? SupplierItemName,
+    decimal? QuotedPrice,
+    int? MinimumOrderQuantity,
+    int? LeadTimeDays,
+    bool IsPrimarySource = false,
+    string? Note = null);
+
+/// <summary>Không chứa QuotedPrice: đổi giá đi qua endpoint riêng để luôn ghi được lịch sử.</summary>
+public record UpdateSupplierProductRequest(
+    string? SupplierItemCode,
+    string? SupplierItemName,
+    int? MinimumOrderQuantity,
+    int? LeadTimeDays,
+    bool IsPrimarySource = false,
+    string? Note = null);
+
+public record UpdateSupplierProductPriceRequest(
+    decimal? QuotedPrice,
+    DateTime? EffectiveDate = null,
+    string? Reason = null);
+
+/// <summary>
+/// Một dòng Excel import danh mục hàng cung ứng. Client đã tra <c>SkuId</c> từ danh mục SKU
+/// được phép nhập; <c>SkuCode</c> chỉ để echo lại trong thông báo lỗi cho người dùng đọc được.
+/// <c>RowNumber</c> giữ nguyên số dòng trong file Excel để báo lỗi đúng chỗ.
+/// </summary>
+public record ImportSupplierProductRow(
+    int RowNumber,
+    Guid SkuId,
+    string? SkuCode,
+    string? SupplierItemCode,
+    string? SupplierItemName,
+    decimal? QuotedPrice,
+    bool IsPrimarySource = false,
+    string? Note = null);
+
+public record ImportSupplierProductsRequest(
+    List<ImportSupplierProductRow> Rows);
+

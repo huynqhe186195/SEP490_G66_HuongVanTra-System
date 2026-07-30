@@ -822,6 +822,7 @@ function ProductFormPage({ mode }) {
     units: [{ ...EMPTY_UNIT, id: createLocalId('unit') }],
     attributes: [{ ...EMPTY_ATTRIBUTE, id: createLocalId('attr') }],
     isActive: true,
+    isPurchasable: true,
   }))
 
   useEffect(() => {
@@ -923,6 +924,7 @@ function ProductFormPage({ mode }) {
             isThumbnail: image.isThumbnail,
           })) ?? [],
           units: mappedUnits,
+          isPurchasable: product.variants?.[0]?.isPurchasable !== false,
         }))
         setProductType(product.productType || PRODUCT_TYPES.THANH_PHAM)
         setProductVariants(product.variants ?? [])
@@ -1321,6 +1323,7 @@ function ProductFormPage({ mode }) {
         maxStock: toNumber(form.maxStock, 999999999),
         isSellable: isFinishedProduct && row.unit.isDirectSell !== false,
         allowRewardPoints: true,
+        isPurchasable: form.isPurchasable !== false,
         isActive: true,
         imageUrl: form.images.find((image) => image.isThumbnail)?.imageUrl || null,
         bomLines: (bomByVariant[row.key] ?? []).map((line) => ({
@@ -1989,6 +1992,22 @@ function ProductFormPage({ mode }) {
               <FieldError message={fieldErrors.weightValue || fieldErrors.weightUnit} />
             </div>
           </div>
+
+          <label className="mt-4 flex items-start gap-2.5 rounded-xl border border-[#c1c9c0] bg-[#f5f7f4] px-3 py-2.5">
+            <input
+              type="checkbox"
+              className="mt-0.5 h-4 w-4 accent-[#356647]"
+              checked={form.isPurchasable !== false}
+              onChange={(event) => updateField('isPurchasable', event.target.checked)}
+            />
+            <span>
+              <span className="block text-sm font-bold text-[#1b1c17]">Mua từ nhà cung cấp</span>
+              <span className="block text-xs text-[#717971]">
+                Bật để mặt hàng này xuất hiện trong danh mục hàng cung ứng khi lập phiếu nhập từ nhà cung cấp.
+                Bỏ tick nếu chỉ tự sản xuất, không nhập ngoài.
+              </span>
+            </span>
+          </label>
         </section>
 
         <section className="rounded-[1rem] bg-white p-4 shadow-sm sm:p-6 lg:p-8">

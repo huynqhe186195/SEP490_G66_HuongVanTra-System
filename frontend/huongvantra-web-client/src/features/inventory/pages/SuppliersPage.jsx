@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
+import { formatVnd } from '../../../utils/vietnamCurrency.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import { canManageSuppliers } from '../../auth/utils/permissions.js'
 import {
@@ -128,7 +130,7 @@ function SupplierFormModal({ initial, onClose, onSaved }) {
         : 'border-[#c1c9c0] focus:border-[#356647] focus:ring-[#356647]'
     }`
 
-  const FieldError = ({ field }) =>
+  const fieldError = (field) =>
     errors[field] ? <p className="mt-1 text-xs text-red-500">{errors[field]}</p> : null
 
   return (
@@ -156,7 +158,7 @@ function SupplierFormModal({ initial, onClose, onSaved }) {
               placeholder={initial?.id ? '' : 'Để trống để hệ thống tự sinh (NCC-000001)'}
               maxLength={50}
             />
-            <FieldError field="supplierCode" />
+            {fieldError('supplierCode')}
           </div>
           <div>
             <label className="mb-1 block text-xs font-semibold text-[#414942]">
@@ -170,7 +172,7 @@ function SupplierFormModal({ initial, onClose, onSaved }) {
               onBlur={handleBlur('name')}
               maxLength={255}
             />
-            <FieldError field="name" />
+            {fieldError('name')}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -183,7 +185,7 @@ function SupplierFormModal({ initial, onClose, onSaved }) {
                 inputMode="tel"
                 maxLength={12}
               />
-              <FieldError field="phone" />
+              {fieldError('phone')}
             </div>
             <div>
               <label className="mb-1 block text-xs font-semibold text-[#414942]">Email</label>
@@ -195,7 +197,7 @@ function SupplierFormModal({ initial, onClose, onSaved }) {
                 onBlur={handleBlur('email')}
                 maxLength={255}
               />
-              <FieldError field="email" />
+              {fieldError('email')}
             </div>
           </div>
           <div>
@@ -207,7 +209,7 @@ function SupplierFormModal({ initial, onClose, onSaved }) {
               onBlur={handleBlur('address')}
               maxLength={500}
             />
-            <FieldError field="address" />
+            {fieldError('address')}
           </div>
           <div>
             <label className="mb-1 block text-xs font-semibold text-[#414942]">Ghi chú</label>
@@ -219,7 +221,7 @@ function SupplierFormModal({ initial, onClose, onSaved }) {
               onBlur={handleBlur('note')}
               maxLength={1000}
             />
-            <FieldError field="note" />
+            {fieldError('note')}
           </div>
 
           <div className="flex justify-end gap-3 pt-1">
@@ -261,11 +263,12 @@ export default function SuppliersPage() {
   const [modalSupplier, setModalSupplier] = useState(null)
   const [showModal, setShowModal] = useState(false)
   const searchTimerRef = useRef(null)
+  const searchRef = useRef('')
 
   const canManage = canManageSuppliers(loadAuthSession())
 
   const load = useCallback(
-    async (p = 1, q = search, showDeleted = includeDeleted) => {
+    async (p = 1, q = searchRef.current, showDeleted = includeDeleted) => {
       setIsLoading(true)
       try {
         const result = await fetchSuppliers({ search: q, includeDeleted: showDeleted, page: p, pageSize: TABLE_PAGE_SIZE })
@@ -279,16 +282,18 @@ export default function SuppliersPage() {
         setIsLoading(false)
       }
     },
-    [search, includeDeleted],
+    [includeDeleted],
   )
 
   useEffect(() => {
-    load(1)
-  }, [includeDeleted])
+    const timer = window.setTimeout(() => load(1), 0)
+    return () => window.clearTimeout(timer)
+  }, [includeDeleted, load])
 
   function handleSearchChange(e) {
     const q = e.target.value
     setSearch(q)
+    searchRef.current = q
     clearTimeout(searchTimerRef.current)
     searchTimerRef.current = setTimeout(() => load(1, q, includeDeleted), 400)
   }
@@ -303,7 +308,7 @@ export default function SuppliersPage() {
     setShowModal(true)
   }
 
-  function handleSaved(saved) {
+  function handleSaved() {
     setShowModal(false)
     load(page)
   }
@@ -381,6 +386,7 @@ export default function SuppliersPage() {
               <th className="pb-2 pr-4">Email</th>
               <th className="pb-2 pr-4">Địa chỉ</th>
               <th className="pb-2 pr-4 text-right">Số phiếu nhập</th>
+              <th className="pb-2 pr-4 text-right">Tổng giá trị nhập</th>
               <th className="pb-2 pr-4">Trạng thái</th>
               {canManage && <th className="pb-2"></th>}
             </tr>
@@ -388,13 +394,13 @@ export default function SuppliersPage() {
           <tbody>
             {isLoading ? (
               <tr>
-                <td colSpan={canManage ? 8 : 7} className="py-8 text-center text-sm text-[#717971]">
+                <td colSpan={canManage ? 9 : 8} className="py-8 text-center text-sm text-[#717971]">
                   Đang tải...
                 </td>
               </tr>
             ) : items.length === 0 ? (
               <tr>
-                <td colSpan={canManage ? 8 : 7} className="py-8 text-center text-sm text-[#717971]">
+                <td colSpan={canManage ? 9 : 8} className="py-8 text-center text-sm text-[#717971]">
                   Không có nhà cung cấp nào.
                 </td>
               </tr>
@@ -405,13 +411,21 @@ export default function SuppliersPage() {
                   className="border-b border-[#f0f4f0] last:border-0 hover:bg-[#f5f7f4]">
                   <td className="py-3 pr-4 font-mono text-xs text-[#414942]">{s.supplierCode || '—'}</td>
                   <td className="py-3 pr-4">
-                    <p className="font-semibold text-[#1b1c17]">{s.name}</p>
+                    <Link
+                      to={`/inventory/supplier-products?supplierId=${s.id}`}
+                      title="Xem danh mục hàng nhà cung cấp này đang cung ứng"
+                      className="font-semibold text-[#1b1c17] hover:text-[#356647] hover:underline">
+                      {s.name}
+                    </Link>
                     {s.note ? <p className="text-xs text-[#717971] line-clamp-1">{s.note}</p> : null}
                   </td>
                   <td className="py-3 pr-4 text-[#414942]">{s.phone || '—'}</td>
                   <td className="py-3 pr-4 text-[#414942]">{s.email || '—'}</td>
                   <td className="py-3 pr-4 text-[#414942] max-w-[180px] truncate">{s.address || '—'}</td>
                   <td className="py-3 pr-4 text-right text-[#414942]">{s.totalReceiptCount}</td>
+                  <td className="py-3 pr-4 text-right text-[#414942]">
+                    {s.totalReceiptValue > 0 ? formatVnd(s.totalReceiptValue) : '—'}
+                  </td>
                   <td className="py-3 pr-4">
                     <StatusChip isDeleted={s.isDeleted} />
                   </td>
@@ -453,8 +467,10 @@ export default function SuppliersPage() {
         {totalPages > 1 ? (
           <TablePagination
             page={page}
-            totalPages={totalPages}
-            totalItems={totalItems}
+            pageSize={TABLE_PAGE_SIZE}
+            totalCount={totalItems}
+            disabled={isLoading}
+            itemLabel="nhà cung cấp"
             onPageChange={(p) => load(p)}
           />
         ) : null}

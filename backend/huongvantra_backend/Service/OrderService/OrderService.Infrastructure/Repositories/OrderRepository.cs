@@ -202,6 +202,37 @@ public class OrderRepository(OrderDbContext _db) : IOrderRepository
             .OrderByDescending(o => o.CreatedAt)
             .ToListAsync(ct);
 
+    public async Task<(List<Order> Items, int TotalCount)> GetB2BDebtsAsync(
+        Guid? customerId, bool overdueOnly, DateTime today,
+        int page, int pageSize, CancellationToken ct = default)
+    {
+        var query = _db.Orders
+            .Where(o =>
+                o.ContractId != null
+                && o.OrderStatus != OrderStatus.Cancelled
+                && o.FinalAmount > o.Payments
+                    .Where(p => p.PaymentStatus == PaymentStatus.Success)
+                    .Sum(p => p.Amount));
+
+        if (customerId.HasValue)
+            query = query.Where(o => o.CustomerId == customerId);
+
+        if (overdueOnly)
+            query = query.Where(o => o.DueDate != null && o.DueDate < today);
+
+        var total = await query.CountAsync(ct);
+        var items = await query
+            .Include(o => o.Payments)
+            .OrderBy(o => o.DueDate == null)
+            .ThenBy(o => o.DueDate)
+            .ThenBy(o => o.CreatedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(ct);
+
+        return (items, total);
+    }
+
     public async Task<Order?> GetByIdempotencyKeyAsync(string key, CancellationToken ct = default) =>
         await _db.Orders
             .Include(o => o.OrderDetails)

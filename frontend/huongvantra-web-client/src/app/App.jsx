@@ -33,6 +33,7 @@ import OrdersPage from '../features/orders/pages/OrdersPage.jsx'
 import ExchangeOrdersPage from '../features/orders/pages/ExchangeOrdersPage.jsx'
 import ReturnOrderDetailPage from '../features/orders/pages/ReturnOrderDetailPage.jsx'
 import CodOrdersPage from '../features/orders/pages/CodOrdersPage.jsx'
+import B2BDebtsPage from '../features/orders/pages/B2BDebtsPage.jsx'
 import StockDeductQueuePage from '../features/inventory/pages/StockDeductQueuePage.jsx'
 import ReturnInspectionsPage from '../features/inventory/pages/ReturnInspectionsPage.jsx'
 import StockAdjustmentRequestsPage from '../features/inventory/pages/StockAdjustmentRequestsPage.jsx'
@@ -40,6 +41,7 @@ import SupplierReceiptsPage from '../features/inventory/pages/SupplierReceiptsPa
 import ProductionOrdersPage from '../features/inventory/pages/ProductionOrdersPage.jsx'
 import CustomBundlesPage from '../features/inventory/pages/CustomBundlesPage.jsx'
 import SuppliersPage from '../features/inventory/pages/SuppliersPage.jsx'
+import SupplierProductsPage from '../features/inventory/pages/SupplierProductsPage.jsx'
 import OrderDetailPage from '../features/orders/pages/OrderDetailPage.jsx'
 import CustomerDisplayPage from '../features/pos/pages/CustomerDisplayPage.jsx'
 import PosPage from '../features/pos/pages/PosPage.jsx'
@@ -48,6 +50,7 @@ import PosTransferQrPage from '../features/pos/pages/PosTransferQrPage.jsx'
 import ReturnOrderPage from '../features/pos/pages/ReturnOrderPage.jsx'
 import ProductApprovalsPage from '../features/products/pages/ProductApprovalsPage.jsx'
 import ProductDeletionRequestsPage from '../features/products/pages/ProductDeletionRequestsPage.jsx'
+import RetailPriceChangeRequestsPage from '../features/products/pages/RetailPriceChangeRequestsPage.jsx'
 import ProductsListPage from '../features/products/pages/ProductsListPage.jsx'
 import ProductsCategoriesPage from '../features/products/pages/ProductsCategoriesPage.jsx'
 import ProductsPricingPage from '../features/products/pages/ProductsPricingPage.jsx'
@@ -87,6 +90,7 @@ function App() {
         <Route path="/orders/returns" element={<Navigate to="/orders/exchange?tab=returns" replace />} />
         <Route path="/orders/returns/:id" element={<ReturnOrderDetailPage />} />
         <Route path="/orders/cod" element={<CodOrdersPage />} />
+        <Route path="/orders/b2b-debts" element={<B2BDebtsPage />} />
         <Route path="/orders/stock-deduct" element={<StockDeductQueuePage />} />
         <Route path="/orders/create" element={<Navigate to="/pos" replace />} />
         <Route path="/orders/:id" element={<OrderDetailPage />} />
@@ -96,6 +100,8 @@ function App() {
         <Route path="/inventory/products/create" element={<ProductApprovalsPage />} />
         <Route path="/inventory/product-approvals" element={<ProductApprovalsPage />} />
         <Route path="/inventory/product-deletion-requests" element={<ProductDeletionRequestsPage />} />
+        <Route path="/products/retail-price-requests" element={<RetailPriceChangeRequestsPage />} />
+        <Route path="/products/retail-price-requests/:id" element={<RetailPriceChangeRequestsPage />} />
         <Route path="/products/:id/edit" element={<Navigate to="/inventory/products" replace />} />
         <Route path="/inventory" element={<InventoryStockPage />} />
         <Route path="/inventory/statistics" element={<InventoryStatisticsPage />} />
@@ -115,6 +121,7 @@ function App() {
         <Route path="/inventory/production-orders" element={<ProductionOrdersPage />} />
         <Route path="/inventory/custom-bundles" element={<CustomBundlesPage />} />
         <Route path="/inventory/suppliers" element={<SuppliersPage />} />
+        <Route path="/inventory/supplier-products" element={<SupplierProductsPage />} />
         <Route path="/inventory/bom" element={<Navigate to="/inventory/boms" replace />} />
         <Route path="/inventory/boms" element={<InventoryBomPage />} />
         <Route path="/inventory/bom/create" element={<InventoryBomCreatePage />} />

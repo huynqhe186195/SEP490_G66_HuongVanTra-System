@@ -31,6 +31,7 @@ public class InventoryLogic(
     IProductionOrderRepository _productionOrderRepo,
     IProductCatalogClient _productCatalogClient,
     ISupplierRepository _supplierRepo,
+    ISupplierProductRepository _supplierProductRepo,
     IReturnInspectionRepository _returnInspectionRepo,
     IOptions<InventoryOptions> inventoryOptions)
 {
@@ -7702,11 +7703,11 @@ public class InventoryLogic(
 
     private async Task<SupplierResponse> MapSupplierAsync(Supplier s, CancellationToken ct)
     {
-        var receiptCount = await _supplierReceiptRepo.CountBySupplerIdAsync(s.Id, ct);
+        var stats = await _supplierReceiptRepo.GetStatsBySupplierIdAsync(s.Id, ct);
         return new SupplierResponse(
             s.Id, s.SupplierCode, s.Name, s.Phone, s.Email, s.Address, s.Note, s.IsDeleted,
             s.CreatedAt, s.UpdatedAt,
-            receiptCount, 0m);
+            stats.Count, stats.TotalValue);
     }
 
     /// <summary>Trim mã người dùng nhập; chuỗi rỗng hoặc chỉ khoảng trắng coi như không nhập.</summary>
@@ -7754,4 +7755,483 @@ public class InventoryLogic(
         supplier.SupplierCode = code;
         supplier.NormalizedSupplierCode = normalized;
     }
+
+    // ---- Supplier product catalog (danh mục sản phẩm/nguyên liệu theo nhà cung cấp) ----
+
+    private const int SupplierItemCodeMaxLength = 50;
+
+    public async Task<PagedResponse<SupplierProductResponse>> GetSupplierProductsAsync(
+        Guid? supplierId,
+        string? search,
+        string? productType,
+        bool includeInactive,
+        int page,
+        int pageSize,
+        CancellationToken ct = default)
+    {
+        if (page < 1) page = 1;
+        if (pageSize < 1) pageSize = 20;
+
+        var (items, total) = await _supplierProductRepo.GetPagedBySupplierAsync(
+            supplierId, search, productType, includeInactive, page, pageSize, ct);
+
+        return new PagedResponse<SupplierProductResponse>(
+            [.. items.Select(MapSupplierProduct)],
+            page, pageSize, total,
+            (int)Math.Ceiling(total / (double)pageSize));
+    }
+
+    public async Task<SupplierProductResponse> GetSupplierProductAsync(Guid id, CancellationToken ct = default)
+    {
+        var entity = await _supplierProductRepo.GetByIdAsync(id, ct)
+            ?? throw new InventoryNotFoundException("Không tìm thấy sản phẩm nhà cung cấp.");
+        return MapSupplierProduct(entity);
+    }
+
+    /// <summary>
+    /// BR-03: danh sách nhà cung cấp đang cung ứng một SKU, sắp xếp theo giá chào tăng dần.
+    /// </summary>
+    public async Task<List<SupplierProductResponse>> GetSupplierProductsBySkuAsync(
+        Guid skuId, CancellationToken ct = default)
+    {
+        var items = await _supplierProductRepo.GetBySkuIdAsync(skuId, ct);
+        return [.. items.Select(MapSupplierProduct)];
+    }
+
+    /// <summary>
+    /// Danh mục hàng đang cung ứng của một nhà cung cấp — dùng để lọc SKU và điền sẵn giá chào
+    /// ở màn hình lập phiếu nhập (SP-10, SP-11).
+    /// </summary>
+    public async Task<List<SupplierProductResponse>> GetActiveSupplierProductsAsync(
+        Guid supplierId, CancellationToken ct = default)
+    {
+        var supplier = await _supplierRepo.GetByIdAsync(supplierId, ct)
+            ?? throw new InventoryNotFoundException("Không tìm thấy nhà cung cấp.");
+
+        var items = await _supplierProductRepo.GetActiveBySupplierAsync(supplier.Id, ct);
+        // Repository dùng AsNoTracking nên navigation Supplier rỗng — gán snapshot thủ công để map.
+        foreach (var item in items)
+            item.Supplier = supplier;
+
+        return [.. items.Select(MapSupplierProduct)];
+    }
+
+    public async Task<SupplierProductResponse> CreateSupplierProductAsync(
+        Guid supplierId,
+        CreateSupplierProductRequest request,
+        CreatorSnapshot actor,
+        CancellationToken ct = default)
+    {
+        var supplier = await _supplierRepo.GetByIdAsync(supplierId, ct)
+            ?? throw new InventoryNotFoundException("Không tìm thấy nhà cung cấp.");
+
+        // BR-06: nhà cung cấp đã ẩn thì không được bổ sung mặt hàng mới.
+        if (supplier.IsDeleted)
+            throw new InventoryValidationException("Nhà cung cấp đang bị ẩn, không thể thêm mặt hàng.");
+
+        if (request.SkuId == Guid.Empty)
+            throw new InventoryValidationException("Vui lòng chọn SKU.");
+
+        // BR-01: một nhà cung cấp chỉ có một bản ghi cho mỗi SKU.
+        if (await _supplierProductRepo.ExistsAsync(supplier.Id, request.SkuId, null, ct))
+            throw new InventoryValidationException("SKU này đã có trong danh mục của nhà cung cấp.");
+
+        var (skuCode, skuName, productType, inventoryUnit) =
+            await ResolveSupplierProductSkuSnapshotAsync(request.SkuId, ct);
+
+        var itemCode = NormalizeSupplierItemCodeInput(request.SupplierItemCode);
+        string? normalizedItemCode = null;
+        if (itemCode is not null)
+        {
+            normalizedItemCode = NormalizeSupplierCodeKey(itemCode);
+            // BR-02: mã hàng của nhà cung cấp duy nhất trong phạm vi nhà cung cấp đó.
+            if (await _supplierProductRepo.NormalizedItemCodeExistsAsync(supplier.Id, normalizedItemCode, null, ct))
+                throw new InventoryValidationException("Mã hàng của nhà cung cấp đã tồn tại.");
+        }
+
+        ValidateSupplierProductNumbers(request.QuotedPrice, request.MinimumOrderQuantity, request.LeadTimeDays);
+
+        var now = DateTime.UtcNow;
+        var entity = new SupplierProduct
+        {
+            Id = Guid.NewGuid(),
+            SupplierId = supplier.Id,
+            SkuId = request.SkuId,
+            SkuCodeSnapshot = skuCode,
+            SkuNameSnapshot = skuName,
+            ProductTypeSnapshot = productType,
+            InventoryUnitSnapshot = inventoryUnit,
+            SupplierItemCode = itemCode,
+            NormalizedSupplierItemCode = normalizedItemCode,
+            SupplierItemName = NormalizeSnapshotText(request.SupplierItemName),
+            QuotedPrice = request.QuotedPrice,
+            MinimumOrderQuantity = request.MinimumOrderQuantity,
+            LeadTimeDays = request.LeadTimeDays,
+            IsPrimarySource = request.IsPrimarySource,
+            Note = NormalizeSnapshotText(request.Note),
+            IsActive = true,
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+
+        await _supplierProductRepo.AddAsync(entity, ct);
+
+        // BR-04: mỗi SKU tối đa một nguồn cung chính.
+        if (entity.IsPrimarySource)
+            await _supplierProductRepo.ClearPrimarySourceAsync(entity.SkuId, entity.Id, ct);
+
+        if (entity.QuotedPrice.HasValue)
+            await AddSupplierProductPriceHistoryAsync(entity, null, entity.QuotedPrice, now, null, actor, ct);
+
+        await _supplierProductRepo.SaveChangesAsync(ct);
+
+        entity.Supplier = supplier;
+        return MapSupplierProduct(entity);
+    }
+
+    /// <summary>
+    /// SP-08: import danh mục hàng cung ứng từ Excel. Từng dòng độc lập — một dòng lỗi
+    /// chỉ bị bỏ qua, các dòng còn lại vẫn được ghi (partial success).
+    /// Catalog SKU tra một lần cho cả file thay vì mỗi dòng một lượt gọi ProductService.
+    /// </summary>
+    public async Task<SupplierProductImportResultResponse> ImportSupplierProductsAsync(
+        Guid supplierId,
+        ImportSupplierProductsRequest request,
+        CreatorSnapshot actor,
+        CancellationToken ct = default)
+    {
+        var supplier = await _supplierRepo.GetByIdAsync(supplierId, ct)
+            ?? throw new InventoryNotFoundException("Không tìm thấy nhà cung cấp.");
+
+        if (supplier.IsDeleted)
+            throw new InventoryValidationException("Nhà cung cấp đang bị ẩn, không thể thêm mặt hàng.");
+
+        var rows = request.Rows ?? [];
+        if (rows.Count == 0)
+            throw new InventoryValidationException("File không có dòng dữ liệu nào.");
+
+        var skuIds = rows.Select(r => r.SkuId).Where(id => id != Guid.Empty).Distinct().ToList();
+        var catalog = skuIds.Count == 0
+            ? new ProductCatalogSnapshot([])
+            : await _productCatalogClient.GetSupplierReceiptCatalogForVariantIdsAsync(skuIds, ct);
+
+        var results = new List<SupplierProductImportRowResultResponse>(rows.Count);
+        // Chặn trùng ngay trong file: SaveChanges chạy sau mỗi dòng nên query trùng thấy được
+        // dòng trước, nhưng giữ HashSet để báo lỗi rõ ràng "trùng trong file" thay vì "đã tồn tại".
+        var seenSkuIds = new HashSet<Guid>();
+        var seenItemCodes = new HashSet<string>(StringComparer.Ordinal);
+        var successCount = 0;
+        var warningCount = 0;
+        var failedCount = 0;
+
+        foreach (var row in rows)
+        {
+            var messages = new List<string>();
+            try
+            {
+                if (row.SkuId == Guid.Empty)
+                    throw new InventoryValidationException("Không xác định được mặt hàng từ mã SKU.");
+
+                if (!seenSkuIds.Add(row.SkuId))
+                    throw new InventoryValidationException("Mã SKU bị lặp trong file.");
+
+                if (await _supplierProductRepo.ExistsAsync(supplier.Id, row.SkuId, null, ct))
+                    throw new InventoryValidationException("SKU này đã có trong danh mục của nhà cung cấp.");
+
+                var (skuCode, skuName, productType, inventoryUnit) =
+                    ResolveSupplierProductSkuSnapshot(catalog, row.SkuId);
+
+                var itemCode = NormalizeSupplierItemCodeInput(row.SupplierItemCode);
+                string? normalizedItemCode = null;
+                if (itemCode is not null)
+                {
+                    normalizedItemCode = NormalizeSupplierCodeKey(itemCode);
+                    if (!seenItemCodes.Add(normalizedItemCode))
+                        throw new InventoryValidationException("Mã hàng của nhà cung cấp bị lặp trong file.");
+                    if (await _supplierProductRepo.NormalizedItemCodeExistsAsync(
+                            supplier.Id, normalizedItemCode, null, ct))
+                        throw new InventoryValidationException("Mã hàng của nhà cung cấp đã tồn tại.");
+                }
+
+                ValidateSupplierProductNumbers(row.QuotedPrice, null, null);
+
+                var now = DateTime.UtcNow;
+                var entity = new SupplierProduct
+                {
+                    Id = Guid.NewGuid(),
+                    SupplierId = supplier.Id,
+                    SkuId = row.SkuId,
+                    SkuCodeSnapshot = skuCode,
+                    SkuNameSnapshot = skuName,
+                    ProductTypeSnapshot = productType,
+                    InventoryUnitSnapshot = inventoryUnit,
+                    SupplierItemCode = itemCode,
+                    NormalizedSupplierItemCode = normalizedItemCode,
+                    SupplierItemName = NormalizeSnapshotText(row.SupplierItemName),
+                    QuotedPrice = row.QuotedPrice,
+                    IsPrimarySource = row.IsPrimarySource,
+                    Note = NormalizeSnapshotText(row.Note),
+                    IsActive = true,
+                    CreatedAt = now,
+                    UpdatedAt = now,
+                };
+
+                await _supplierProductRepo.AddAsync(entity, ct);
+
+                if (entity.IsPrimarySource)
+                    await _supplierProductRepo.ClearPrimarySourceAsync(entity.SkuId, entity.Id, ct);
+
+                if (entity.QuotedPrice.HasValue)
+                    await AddSupplierProductPriceHistoryAsync(entity, null, entity.QuotedPrice, now, null, actor, ct);
+
+                await _supplierProductRepo.SaveChangesAsync(ct);
+
+                if (!entity.QuotedPrice.HasValue)
+                    messages.Add("Chưa có giá chào — cần bổ sung sau.");
+
+                if (messages.Count > 0)
+                {
+                    warningCount++;
+                    results.Add(new SupplierProductImportRowResultResponse(
+                        row.RowNumber, skuCode, "Warning", messages));
+                }
+                else
+                {
+                    successCount++;
+                    results.Add(new SupplierProductImportRowResultResponse(
+                        row.RowNumber, skuCode, "Success", []));
+                }
+            }
+            catch (Exception ex) when (ex is InventoryValidationException or InventoryNotFoundException)
+            {
+                failedCount++;
+                results.Add(new SupplierProductImportRowResultResponse(
+                    row.RowNumber, NormalizeSnapshotText(row.SkuCode), "Error", [ex.Message]));
+            }
+        }
+
+        return new SupplierProductImportResultResponse(
+            rows.Count, successCount, failedCount, warningCount, results);
+    }
+
+    public async Task<SupplierProductResponse> UpdateSupplierProductAsync(
+        Guid id,
+        UpdateSupplierProductRequest request,
+        CancellationToken ct = default)
+    {
+        var entity = await _supplierProductRepo.GetByIdAsync(id, ct)
+            ?? throw new InventoryNotFoundException("Không tìm thấy sản phẩm nhà cung cấp.");
+
+        var itemCode = NormalizeSupplierItemCodeInput(request.SupplierItemCode);
+        string? normalizedItemCode = null;
+        if (itemCode is not null)
+        {
+            normalizedItemCode = NormalizeSupplierCodeKey(itemCode);
+            if (await _supplierProductRepo.NormalizedItemCodeExistsAsync(
+                    entity.SupplierId, normalizedItemCode, entity.Id, ct))
+                throw new InventoryValidationException("Mã hàng của nhà cung cấp đã tồn tại.");
+        }
+
+        ValidateSupplierProductNumbers(null, request.MinimumOrderQuantity, request.LeadTimeDays);
+
+        entity.SupplierItemCode = itemCode;
+        entity.NormalizedSupplierItemCode = normalizedItemCode;
+        entity.SupplierItemName = NormalizeSnapshotText(request.SupplierItemName);
+        entity.MinimumOrderQuantity = request.MinimumOrderQuantity;
+        entity.LeadTimeDays = request.LeadTimeDays;
+        entity.IsPrimarySource = request.IsPrimarySource;
+        entity.Note = NormalizeSnapshotText(request.Note);
+        entity.UpdatedAt = DateTime.UtcNow;
+
+        if (entity.IsPrimarySource)
+            await _supplierProductRepo.ClearPrimarySourceAsync(entity.SkuId, entity.Id, ct);
+
+        await _supplierProductRepo.SaveChangesAsync(ct);
+        return MapSupplierProduct(entity);
+    }
+
+    /// <summary>
+    /// SP-06: đổi giá chào. Tách khỏi UpdateSupplierProductAsync để mọi lần đổi giá đều ghi lịch sử.
+    /// BR-13: giá chào chỉ là giá mua tham chiếu, tuyệt đối không ghi sang giá vốn/giá bán của SKU.
+    /// </summary>
+    public async Task<SupplierProductResponse> UpdateSupplierProductPriceAsync(
+        Guid id,
+        UpdateSupplierProductPriceRequest request,
+        CreatorSnapshot actor,
+        CancellationToken ct = default)
+    {
+        var entity = await _supplierProductRepo.GetByIdAsync(id, ct)
+            ?? throw new InventoryNotFoundException("Không tìm thấy sản phẩm nhà cung cấp.");
+
+        ValidateSupplierProductNumbers(request.QuotedPrice, null, null);
+
+        var oldPrice = entity.QuotedPrice;
+        var newPrice = request.QuotedPrice;
+        if (oldPrice == newPrice)
+            return MapSupplierProduct(entity);
+
+        var now = DateTime.UtcNow;
+        entity.QuotedPrice = newPrice;
+        entity.UpdatedAt = now;
+
+        await AddSupplierProductPriceHistoryAsync(
+            entity, oldPrice, newPrice, request.EffectiveDate ?? now, request.Reason, actor, ct);
+
+        await _supplierProductRepo.SaveChangesAsync(ct);
+        return MapSupplierProduct(entity);
+    }
+
+    /// <summary>BR-10: ngừng cung cấp là ẩn mềm, giữ nguyên lịch sử phiếu nhập đã phát sinh.</summary>
+    public async Task<SupplierProductResponse> DeactivateSupplierProductAsync(Guid id, CancellationToken ct = default)
+    {
+        var entity = await _supplierProductRepo.GetByIdAsync(id, ct)
+            ?? throw new InventoryNotFoundException("Không tìm thấy sản phẩm nhà cung cấp.");
+        if (!entity.IsActive)
+            throw new InventoryValidationException("Mặt hàng đã ngừng cung cấp.");
+
+        entity.IsActive = false;
+        entity.IsPrimarySource = false;
+        entity.UpdatedAt = DateTime.UtcNow;
+        await _supplierProductRepo.SaveChangesAsync(ct);
+        return MapSupplierProduct(entity);
+    }
+
+    public async Task<SupplierProductResponse> RestoreSupplierProductAsync(Guid id, CancellationToken ct = default)
+    {
+        var entity = await _supplierProductRepo.GetByIdAsync(id, ct)
+            ?? throw new InventoryNotFoundException("Không tìm thấy sản phẩm nhà cung cấp.");
+        if (entity.IsActive)
+            throw new InventoryValidationException("Mặt hàng đang cung cấp bình thường.");
+
+        // BR-06: không mở lại mặt hàng khi nhà cung cấp vẫn đang bị ẩn.
+        if (entity.Supplier is { IsDeleted: true })
+            throw new InventoryValidationException("Nhà cung cấp đang bị ẩn, hãy khôi phục nhà cung cấp trước.");
+
+        entity.IsActive = true;
+        entity.UpdatedAt = DateTime.UtcNow;
+        await _supplierProductRepo.SaveChangesAsync(ct);
+        return MapSupplierProduct(entity);
+    }
+
+    public async Task<List<SupplierProductPriceHistoryResponse>> GetSupplierProductPriceHistoryAsync(
+        Guid id, CancellationToken ct = default)
+    {
+        _ = await _supplierProductRepo.GetByIdAsync(id, ct)
+            ?? throw new InventoryNotFoundException("Không tìm thấy sản phẩm nhà cung cấp.");
+
+        var history = await _supplierProductRepo.GetPriceHistoryAsync(id, ct);
+        return [.. history.Select(h => new SupplierProductPriceHistoryResponse(
+            h.Id, h.SupplierProductId, h.OldPrice, h.NewPrice, h.EffectiveDate,
+            h.ChangedBy, h.ChangedByName, h.ChangedAt, h.Reason))];
+    }
+
+    /// <summary>
+    /// BR-05: chỉ SKU đang hoạt động và được phép nhập từ nhà cung cấp mới vào được danh mục.
+    /// Snapshot lấy từ ProductService qua API, không tin dữ liệu client gửi lên.
+    /// </summary>
+    private async Task<(string SkuCode, string SkuName, string ProductType, string InventoryUnit)>
+        ResolveSupplierProductSkuSnapshotAsync(Guid skuId, CancellationToken ct)
+    {
+        var catalog = await _productCatalogClient.GetSupplierReceiptCatalogForVariantIdsAsync([skuId], ct);
+        return ResolveSupplierProductSkuSnapshot(catalog, skuId);
+    }
+
+    /// <summary>Phần thuần kiểm tra của BR-05 — tách ra để import tra catalog một lần cho cả file.</summary>
+    private static (string SkuCode, string SkuName, string ProductType, string InventoryUnit)
+        ResolveSupplierProductSkuSnapshot(ProductCatalogSnapshot catalog, Guid skuId)
+    {
+        var product = catalog.FindProductByVariant(skuId)
+            ?? throw new InventoryValidationException("SKU không tồn tại hoặc không hoạt động.");
+        var variant = catalog.FindVariant(skuId)
+            ?? throw new InventoryValidationException("SKU không tồn tại hoặc không hoạt động.");
+
+        if (!product.IsActive || !variant.IsActive)
+            throw new InventoryValidationException($"SKU {variant.SkuCode} đang ngưng hoạt động.");
+
+        var productType = NormalizeSnapshotText(product.ProductType)?.ToUpperInvariant() ?? string.Empty;
+        if (productType is not ("NGUYEN_LIEU" or "BAO_BI" or "THANH_PHAM"))
+            throw new InventoryValidationException($"Loại hàng {productType} không được hỗ trợ nhập từ nhà cung cấp.");
+
+        if (!variant.IsPurchasable)
+            throw new InventoryValidationException($"SKU {variant.SkuCode} không được phép nhập từ nhà cung cấp.");
+
+        var inventoryUnit = NormalizeSnapshotText(product.InventoryUnit)
+            ?? throw new InventoryValidationException($"SKU {variant.SkuCode} chưa có đơn vị kho.");
+
+        var rawVariantName = NormalizeSnapshotText(variant.VariantName);
+        var rawProductName = NormalizeSnapshotText(product.Name);
+        string skuName;
+        if (rawVariantName != null && rawProductName != null &&
+            !rawVariantName.StartsWith(rawProductName, StringComparison.OrdinalIgnoreCase))
+            skuName = $"{rawProductName} - {rawVariantName}";
+        else
+            skuName = rawVariantName ?? rawProductName ?? variant.SkuCode;
+
+        return (variant.SkuCode, skuName, productType, inventoryUnit);
+    }
+
+    private Task AddSupplierProductPriceHistoryAsync(
+        SupplierProduct entity,
+        decimal? oldPrice,
+        decimal? newPrice,
+        DateTime effectiveDate,
+        string? reason,
+        CreatorSnapshot actor,
+        CancellationToken ct) =>
+        _supplierProductRepo.AddPriceHistoryAsync(new SupplierProductPriceHistory
+        {
+            Id = Guid.NewGuid(),
+            SupplierProductId = entity.Id,
+            SupplierId = entity.SupplierId,
+            SkuId = entity.SkuId,
+            OldPrice = oldPrice,
+            NewPrice = newPrice,
+            EffectiveDate = effectiveDate,
+            ChangedBy = actor.CreatedById == Guid.Empty ? null : actor.CreatedById,
+            ChangedByName = NormalizeSnapshotText(actor.CreatedByName),
+            ChangedAt = DateTime.UtcNow,
+            Reason = NormalizeSnapshotText(reason),
+        }, ct);
+
+    private static string? NormalizeSupplierItemCodeInput(string? raw)
+    {
+        var trimmed = raw?.Trim();
+        if (string.IsNullOrEmpty(trimmed)) return null;
+        if (trimmed.Length > SupplierItemCodeMaxLength)
+            throw new InventoryValidationException($"Mã hàng nhà cung cấp tối đa {SupplierItemCodeMaxLength} ký tự.");
+        return trimmed;
+    }
+
+    /// <summary>BR-07 giá chào phải dương khi có điền; BR-09 số lượng tối thiểu và số ngày giao không âm.</summary>
+    private static void ValidateSupplierProductNumbers(decimal? quotedPrice, int? minimumOrderQuantity, int? leadTimeDays)
+    {
+        if (quotedPrice is <= 0m)
+            throw new InventoryValidationException("Giá chào phải lớn hơn 0.");
+        if (minimumOrderQuantity is < 0)
+            throw new InventoryValidationException("Số lượng đặt tối thiểu không được âm.");
+        if (leadTimeDays is < 0)
+            throw new InventoryValidationException("Số ngày giao hàng không được âm.");
+    }
+
+    private static SupplierProductResponse MapSupplierProduct(SupplierProduct p) =>
+        new(
+            p.Id,
+            p.SupplierId,
+            p.Supplier?.SupplierCode ?? string.Empty,
+            p.Supplier?.Name ?? string.Empty,
+            p.SkuId,
+            p.SkuCodeSnapshot,
+            p.SkuNameSnapshot,
+            p.ProductTypeSnapshot,
+            p.InventoryUnitSnapshot,
+            p.SupplierItemCode,
+            p.SupplierItemName,
+            p.QuotedPrice,
+            p.MinimumOrderQuantity,
+            p.LeadTimeDays,
+            p.IsPrimarySource,
+            p.Note,
+            p.IsActive,
+            p.CreatedAt,
+            p.UpdatedAt);
 }

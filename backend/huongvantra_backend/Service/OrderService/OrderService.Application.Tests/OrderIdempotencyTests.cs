@@ -197,6 +197,7 @@ public class OrderIdempotencyTests
             promotionLogic,
             productCatalog.Object,
             new Mock<ICustomerCatalogClient>().Object,
+            new Mock<IContractCatalogClient>().Object,
             inventoryCatalog ?? new Mock<IInventoryCatalogClient>().Object,
             new Mock<ICustomBundleRepository>().Object,
             new Mock<IEmailService>().Object,

@@ -10,22 +10,61 @@ public static class OrderBusinessRules
     public static void EnsureManualDiscountAllowed(
         decimal manualDiscount,
         string? customerGroup,
-        int? tierId = null)
+        int? tierId = null,
+        decimal? contractDiscountPercent = null,
+        decimal subtotal = 0m)
     {
         if (manualDiscount <= 0)
             return;
 
-        if (string.Equals(
-            customerGroup?.Trim(),
-            "DoiNgoai",
-            StringComparison.OrdinalIgnoreCase))
+        if (IsGroup(customerGroup, "DoiNgoai"))
+            return;
+
+        if (IsGroup(customerGroup, "DoanhNghiep"))
         {
+            if (contractDiscountPercent is null)
+                throw new OrderValidationException(
+                    "Khách doanh nghiệp cần hợp đồng đang hiệu lực có quy định chiết khấu mới được áp chiết khấu thủ công.");
+
+            var maxDiscount = Math.Round(subtotal * contractDiscountPercent.Value / 100m, 0, MidpointRounding.AwayFromZero);
+            if (manualDiscount > maxDiscount)
+                throw new OrderValidationException(
+                    $"Chiết khấu vượt mức hợp đồng cho phép ({contractDiscountPercent.Value:0.##}% ≈ {maxDiscount:N0}đ).");
+
             return;
         }
 
         _ = tierId;
         throw new OrderValidationException(
             "Chiết khấu thủ công chỉ dành cho khách đối ngoại (VIP). Hạng thành viên không cấp quyền giảm giá thủ công.");
+    }
+
+    public static void EnsureContractRequiredForCorporate(string? customerGroup, Guid? contractId)
+    {
+        if (!IsGroup(customerGroup, "DoanhNghiep"))
+            return;
+
+        if (contractId.HasValue && contractId.Value != Guid.Empty)
+            return;
+
+        throw new OrderValidationException(
+            "Khách doanh nghiệp phải có hợp đồng đang hiệu lực mới được tạo đơn hàng.");
+    }
+
+    public static void EnsureCreditLimitNotExceeded(
+        decimal currentDebt,
+        decimal unpaidAmount,
+        decimal? creditLimit)
+    {
+        if (creditLimit is null || unpaidAmount <= 0)
+            return;
+
+        var projectedDebt = currentDebt + unpaidAmount;
+        if (projectedDebt <= creditLimit.Value)
+            return;
+
+        throw new OrderValidationException(
+            $"Đơn hàng vượt hạn mức công nợ hợp đồng. Nợ hiện tại {currentDebt:N0}đ + ghi nợ đơn này {unpaidAmount:N0}đ = {projectedDebt:N0}đ, vượt hạn mức {creditLimit.Value:N0}đ.");
     }
 
     public static void EnsureGuestFullyPaid(
@@ -110,6 +149,9 @@ public static class OrderBusinessRules
 
         return decimal.ToInt32(quantity);
     }
+
+    private static bool IsGroup(string? customerGroup, string expected) =>
+        string.Equals(customerGroup?.Trim(), expected, StringComparison.OrdinalIgnoreCase);
 
     private static bool IsGram(string? inventoryUnit) =>
         string.Equals(inventoryUnit?.Trim(), "Gram", StringComparison.OrdinalIgnoreCase);

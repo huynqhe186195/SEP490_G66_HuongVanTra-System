@@ -133,6 +133,11 @@ services:
       Cloudinary__CloudName: ${CLOUDINARY_CLOUD_NAME:-dpxbfgxqq}
       Cloudinary__ApiKey: ${CLOUDINARY_API_KEY}
       Cloudinary__ApiSecret: ${CLOUDINARY_API_SECRET}
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASS: ${SMTP_PASS}
+      ADMIN_NOTIFICATION_EMAIL: ${ADMIN_NOTIFICATION_EMAIL}
     ports:
       - "5003:8080"
     networks:
@@ -164,6 +169,7 @@ services:
       RabbitMQ__Password: ${RABBITMQ_PASS:-hvtrabbit123}
       CustomerService__BaseUrl: http://customer-service:8080
       ProductService__BaseUrl: http://product-service:8080
+      DocumentService__BaseUrl: http://document-service:8080
       Jwt__Secret: ${JWT_SECRET:-your-super-secret-key-at-least-32-chars!!}
       Jwt__Issuer: HuongVanTra
       Jwt__Audience: HuongVanTra

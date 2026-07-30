@@ -51,6 +51,7 @@ builder.Services.AddHttpClient<IInventorySupplierReceiptCostClient, InventorySup
 builder.Services.AddScoped<SupplierReceiptApprovedCostRecordedConsumer>();
 builder.Services.AddScoped<ICostBasisReconciliationService, CostBasisReconciliationService>();
 builder.Services.AddHttpClient<ICloudinaryImageService, CloudinaryImageService>();
+builder.Services.AddScoped<IAdminNotificationSender, SmtpAdminNotificationSender>();
 builder.Services.AddScoped<CategoryLogic>();
 builder.Services.AddScoped<BrandLogic>();
 builder.Services.AddScoped<AttributeNameLogic>();
@@ -59,6 +60,8 @@ builder.Services.AddScoped<ProductSkuLogic>();
 builder.Services.AddScoped<ProductApprovalLogic>();
 builder.Services.AddScoped<ProductCreationRequestLogic>();
 builder.Services.AddScoped<ProductDeletionRequestLogic>();
+builder.Services.AddScoped<RetailPriceChangeRequestLogic>();
+builder.Services.AddScoped<NotificationLogic>();
 builder.Services.AddScoped<PriceBookLogic>();
 builder.Services.AddScoped<CatalogSyncLogic>();
 

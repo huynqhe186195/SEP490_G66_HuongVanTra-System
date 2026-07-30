@@ -258,7 +258,9 @@ public class WarehouseBatchConfiguration : IEntityTypeConfiguration<WarehouseBat
             .IsUnique()
             .HasDatabaseName("IX_WarehouseBatches_SupplierLotIdentity");
         builder.HasIndex(e => e.Location);
-        builder.HasIndex(e => e.ParentBatchId);
+        // Khai báo trước HasOne(ParentBatch) nên convention của EF suy ra index unique.
+        // Một lô cha có thể sinh nhiều lô con nên phải ép non-unique.
+        builder.HasIndex(e => e.ParentBatchId).IsUnique(false);
         builder.HasIndex(e => e.SourceBatchId);
         builder.HasIndex(e => e.SourceReferenceId);
         builder.HasIndex(e => e.SourceReferenceCode);
@@ -373,6 +375,52 @@ public class SupplierConfiguration : IEntityTypeConfiguration<Supplier>
         builder.HasIndex(e => e.NormalizedSupplierCode).IsUnique();
         builder.HasIndex(e => e.IsDeleted);
         builder.HasIndex(e => e.Name);
+    }
+}
+
+public class SupplierProductConfiguration : IEntityTypeConfiguration<SupplierProduct>
+{
+    public void Configure(EntityTypeBuilder<SupplierProduct> builder)
+    {
+        builder.ToTable("SupplierProducts");
+        builder.HasKey(e => e.Id);
+        builder.Property(e => e.SkuCodeSnapshot).HasMaxLength(50).IsRequired();
+        builder.Property(e => e.SkuNameSnapshot).HasMaxLength(255).IsRequired();
+        builder.Property(e => e.ProductTypeSnapshot).HasMaxLength(50).IsRequired();
+        builder.Property(e => e.InventoryUnitSnapshot).HasMaxLength(50).IsRequired();
+        builder.Property(e => e.SupplierItemCode).HasMaxLength(50);
+        builder.Property(e => e.NormalizedSupplierItemCode).HasMaxLength(50);
+        builder.Property(e => e.SupplierItemName).HasMaxLength(255);
+        builder.Property(e => e.QuotedPrice).HasColumnType("decimal(18,2)");
+        builder.Property(e => e.Note).HasMaxLength(1000);
+        builder.Property(e => e.IsPrimarySource).HasDefaultValue(false);
+        builder.Property(e => e.IsActive).HasDefaultValue(true);
+        // BR-01: một nhà cung cấp không được có hai bản ghi cho cùng một SKU.
+        builder.HasIndex(e => new { e.SupplierId, e.SkuId }).IsUnique();
+        // BR-02: mã hàng của nhà cung cấp duy nhất trong phạm vi một nhà cung cấp.
+        // MySQL cho phép nhiều NULL trong unique index nên bỏ trống mã vẫn hợp lệ.
+        builder.HasIndex(e => new { e.SupplierId, e.NormalizedSupplierItemCode }).IsUnique();
+        builder.HasIndex(e => e.SkuId);
+        builder.HasIndex(e => e.IsActive);
+        builder.HasOne(e => e.Supplier)
+            .WithMany()
+            .HasForeignKey(e => e.SupplierId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
+public class SupplierProductPriceHistoryConfiguration : IEntityTypeConfiguration<SupplierProductPriceHistory>
+{
+    public void Configure(EntityTypeBuilder<SupplierProductPriceHistory> builder)
+    {
+        builder.ToTable("SupplierProductPriceHistories");
+        builder.HasKey(e => e.Id);
+        builder.Property(e => e.OldPrice).HasColumnType("decimal(18,2)");
+        builder.Property(e => e.NewPrice).HasColumnType("decimal(18,2)");
+        builder.Property(e => e.ChangedByName).HasMaxLength(255);
+        builder.Property(e => e.Reason).HasMaxLength(500);
+        builder.HasIndex(e => e.SupplierProductId);
+        builder.HasIndex(e => new { e.SkuId, e.ChangedAt });
     }
 }
 

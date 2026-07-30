@@ -23,6 +23,12 @@ public class Order : BaseEntity
     public string? Note { get; set; }
     public string? IdempotencyKey { get; set; }
 
+    public Guid? ContractId { get; set; }
+    public string? ContractCodeSnapshot { get; set; }
+    public decimal? ContractDiscountPercentSnapshot { get; set; }
+    public int? ContractPaymentTermDaysSnapshot { get; set; }
+    public DateTime? DueDate { get; set; }
+
     public ICollection<OrderDetail> OrderDetails { get; set; } = new List<OrderDetail>();
     public ICollection<Payment> Payments { get; set; } = new List<Payment>();
     public ICollection<ReturnOrder> ReturnOrders { get; set; } = new List<ReturnOrder>();

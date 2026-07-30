@@ -55,6 +55,15 @@ public class ContractLogic
         return MapToResponse(contract);
     }
 
+    public async Task<ContractResponse?> GetActiveForCustomerAsync(Guid customerId, CancellationToken ct = default)
+    {
+        if (customerId == Guid.Empty) return null;
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow.Date);
+        var contract = await _contractRepo.GetActiveByCustomerAsync(customerId, today, ct);
+        return contract is null ? null : MapToResponse(contract);
+    }
+
     public async Task<ContractResponse> CreateAsync(CreateContractRequest request, DocumentAccessContext access, CancellationToken ct = default)
     {
         ValidateContractFields(request.Title, request.EffectiveDate, request.ExpiryDate,

@@ -108,4 +108,98 @@ public class OrderBusinessRulesTests
             0m,
             100_000m);
     }
+
+    [Fact]
+    public void Corporate_ManualDiscountWithinContractPercent_IsAllowed()
+    {
+        OrderBusinessRules.EnsureManualDiscountAllowed(
+            100_000m,
+            "DoanhNghiep",
+            contractDiscountPercent: 10m,
+            subtotal: 1_000_000m);
+    }
+
+    [Fact]
+    public void Corporate_ManualDiscountAboveContractPercent_IsRejected()
+    {
+        var exception = Assert.Throws<OrderValidationException>(
+            () => OrderBusinessRules.EnsureManualDiscountAllowed(
+                150_000m,
+                "DoanhNghiep",
+                contractDiscountPercent: 10m,
+                subtotal: 1_000_000m));
+
+        Assert.Contains("vượt mức hợp đồng", exception.Message);
+    }
+
+    [Fact]
+    public void Corporate_ManualDiscountWithoutContractPercent_IsRejected()
+    {
+        var exception = Assert.Throws<OrderValidationException>(
+            () => OrderBusinessRules.EnsureManualDiscountAllowed(
+                50_000m,
+                "DoanhNghiep",
+                subtotal: 1_000_000m));
+
+        Assert.Contains("hợp đồng đang hiệu lực", exception.Message);
+    }
+
+    [Fact]
+    public void Corporate_WithoutContract_OrderIsRejected()
+    {
+        Assert.Throws<OrderValidationException>(
+            () => OrderBusinessRules.EnsureContractRequiredForCorporate("DoanhNghiep", null));
+    }
+
+    [Fact]
+    public void Corporate_WithContract_OrderIsAllowed()
+    {
+        OrderBusinessRules.EnsureContractRequiredForCorporate("DoanhNghiep", Guid.NewGuid());
+    }
+
+    [Fact]
+    public void NonCorporate_WithoutContract_OrderIsAllowed()
+    {
+        OrderBusinessRules.EnsureContractRequiredForCorporate("CaNhan", null);
+        OrderBusinessRules.EnsureContractRequiredForCorporate(null, null);
+    }
+
+    [Fact]
+    public void CreditLimit_ProjectedDebtAboveLimit_IsRejected()
+    {
+        var exception = Assert.Throws<OrderValidationException>(
+            () => OrderBusinessRules.EnsureCreditLimitNotExceeded(
+                currentDebt: 4_500_000m,
+                unpaidAmount: 800_000m,
+                creditLimit: 5_000_000m));
+
+        Assert.Contains("vượt hạn mức", exception.Message);
+    }
+
+    [Fact]
+    public void CreditLimit_ProjectedDebtWithinLimit_IsAllowed()
+    {
+        OrderBusinessRules.EnsureCreditLimitNotExceeded(
+            currentDebt: 4_500_000m,
+            unpaidAmount: 300_000m,
+            creditLimit: 5_000_000m);
+    }
+
+    [Fact]
+    public void CreditLimit_NotConfigured_SkipsCheck()
+    {
+        OrderBusinessRules.EnsureCreditLimitNotExceeded(
+            currentDebt: 99_000_000m,
+            unpaidAmount: 99_000_000m,
+            creditLimit: null);
+    }
+
+    [Fact]
+    public void CreditLimit_FullyPaidOrder_SkipsCheck()
+    {
+        OrderBusinessRules.EnsureCreditLimitNotExceeded(
+            currentDebt: 5_000_000m,
+            unpaidAmount: 0m,
+            creditLimit: 5_000_000m);
+    }
 }

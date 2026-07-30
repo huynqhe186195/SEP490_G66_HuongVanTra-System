@@ -18,6 +18,7 @@ import CustomerActivityFeed from '../components/CustomerActivityFeed.jsx'
 import CustomerOpenDebtsPanel from '../components/CustomerOpenDebtsPanel.jsx'
 import CustomerDebtHistory from '../components/CustomerDebtHistory.jsx'
 import CustomerOrderHistory from '../components/CustomerOrderHistory.jsx'
+import CustomerContractsPanel from '../components/CustomerContractsPanel.jsx'
 import {
   changeCustomerStatus,
   createCustomer,
@@ -728,6 +729,7 @@ function CustomerFormPage() {
                 { key: 'overview', label: 'Tổng quan' },
                 { key: 'orders', label: 'Lịch sử đơn' },
                 { key: 'debts', label: 'Lịch sử công nợ' },
+                ...(form.type === 'corporate' ? [{ key: 'contracts', label: 'Hợp đồng' }] : []),
               ].map((tab) => (
                 <button
                   key={tab.key}
@@ -758,6 +760,10 @@ function CustomerFormPage() {
 
             {profileTab === 'debts' ? (
               <CustomerDebtHistory customerId={customerId} />
+            ) : null}
+
+            {profileTab === 'contracts' && form.type === 'corporate' ? (
+              <CustomerContractsPanel customerId={customerId} />
             ) : null}
           </section>
         </>

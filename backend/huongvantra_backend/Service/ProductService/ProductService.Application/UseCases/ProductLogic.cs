@@ -277,6 +277,8 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
                 MaxStock = input.MaxStock,
                 IsSellable = input.IsSellable,
                 AllowRewardPoints = input.AllowRewardPoints,
+                // Mặc định mua được từ NCC; bỏ tick chỉ khi SKU thuần tự sản xuất.
+                IsPurchasable = input.IsPurchasable ?? true,
                 IsActive = input.IsActive,
                 ImageUrl = input.ImageUrl,
                 UnitName = unitName,
@@ -815,7 +817,8 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
             activeBomLines.Count > 0,
             activeBomLines.Count,
             v.Units.Where(u => !u.IsDeleted).Select(MapUnitResponse).ToList(),
-            activeBomLines.Select(MapBomLineResponse).ToList());
+            activeBomLines.Select(MapBomLineResponse).ToList(),
+            v.IsPurchasable);
     }
 
     private static ProductType? ParseProductTypeFilter(string? value)

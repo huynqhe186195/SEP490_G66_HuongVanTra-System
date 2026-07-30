@@ -43,7 +43,7 @@ const HOME_MODULE_PRIORITY = [
 
 export const navigationItems = [
   { label: 'POS bán hàng', path: '/pos', module: 'pos', icon: 'point_of_sale', roles: ['agencyManager', 'salesStaff', 'customer'] },
-  { label: 'Quỹ ca POS', path: '/pos/cash-sessions', module: 'orders', icon: 'account_balance_wallet', roles: ['agencyManager', 'accountant'] },
+  { label: 'Quỹ ca POS', path: '/pos/cash-sessions', module: 'orders', icon: 'account_balance_wallet', roles: ['agencyManager'] },
   {
     label: 'Đơn hàng',
     path: '/orders',
@@ -62,6 +62,12 @@ export const navigationItems = [
         path: '/orders/cod',
         module: 'cod_ops',
         roles: ['admin', 'agencyManager', 'saleCod'],
+      },
+      {
+        label: 'Công nợ doanh nghiệp',
+        path: '/orders/b2b-debts',
+        module: 'orders',
+        roles: ['admin', 'agencyManager', 'accountant'],
       },
     ],
   },
@@ -91,9 +97,11 @@ export const navigationItems = [
   { label: 'Danh Mục Sản Phẩm', path: '/products/categories', module: 'products', icon: 'category', roles: ['admin', 'agencyManager', 'inventoryManager'] },
   { label: 'Lịch sử tạo hàng hóa', path: '/inventory/product-approvals', module: 'product_creation_requests', icon: 'verified', roles: ['admin', 'inventoryManager'] },
   { label: 'Yêu cầu xóa hàng hóa', path: '/inventory/product-deletion-requests', module: 'product_deletion_requests', icon: 'delete_sweep', roles: ['inventoryManager'] },
+  { label: 'Yêu cầu đổi giá bán', path: '/products/retail-price-requests', module: 'retail_price_change_requests', icon: 'price_change', roles: ['admin', 'agencyManager'] },
   { label: 'Kho', path: '/inventory', module: 'inventory', icon: 'warehouse', roles: ['inventoryManager'] },
   { label: 'Phiếu nhập nhà cung cấp', path: '/inventory/supplier-receipts', module: 'supplier_receipts', icon: 'assignment_turned_in', roles: ['admin', 'agencyManager', 'accountant', 'inventoryManager'] },
   { label: 'Nhà cung cấp', path: '/inventory/suppliers', module: 'supplier_receipts', icon: 'storefront', roles: ['admin', 'agencyManager', 'accountant', 'inventoryManager'] },
+  { label: 'Sản phẩm theo nhà cung cấp', path: '/inventory/supplier-products', module: 'supplier_receipts', icon: 'inventory_2', roles: ['admin', 'agencyManager', 'accountant', 'inventoryManager'] },
   { label: 'Lô hàng nhập', path: '/inventory/batches', module: 'warehouse_batches', icon: 'inventory', roles: ['admin', 'agencyManager', 'inventoryManager', 'accountant'] },
   { label: 'Trả hàng nhập', path: '/inventory/returns', module: 'inventory_returns', icon: 'assignment_return', roles: ['agencyManager', 'inventoryManager'] },
   { label: 'Kiểm kê tồn kho', path: '/inventory/stocktake', module: 'inventory_stocktake', icon: 'fact_check', roles: ['admin', 'agencyManager', 'inventoryManager', 'salesStaff'] },
@@ -230,6 +238,7 @@ const INVENTORY_SIDEBAR_GROUPS = [
       { path: '/inventory/ledger' },
       { path: '/inventory/stock-requests' },
       { path: '/inventory/suppliers' },
+      { path: '/inventory/supplier-products' },
     ],
   },
   {
@@ -444,11 +453,13 @@ function groupAdminManagerSidebar(items, isAdmin) {
   const inboundEntries = isAdmin
     ? [
         ['/inventory/suppliers', 'Nhà cung cấp'],
+        ['/inventory/supplier-products', 'Sản phẩm theo nhà cung cấp'],
         ['/inventory/supplier-receipts', 'Phiếu nhập nhà cung cấp'],
         ['/inventory/batches', 'Lô hàng nhập'],
       ]
     : [
         ['/inventory/suppliers', 'Nhà cung cấp'],
+        ['/inventory/supplier-products', 'Sản phẩm theo nhà cung cấp'],
         ['/inventory/supplier-receipts', 'Phiếu nhập nhà cung cấp'],
         ['/inventory/batches', 'Lô hàng nhập'],
         ['/inventory/returns', 'Trả hàng nhập'],
@@ -684,14 +695,23 @@ export function getHomeRouteForRoles(roles = []) {
   return '/profile'
 }
 
+const ROLE_HOME_ROUTES = {
+  accountant: '/dashboard',
+}
+
 export function resolveHomeRoute(authSession) {
   if (!authSession) {
     return '/login'
   }
 
+  const roles = authSession.roles ?? []
+  for (const [groupKey, route] of Object.entries(ROLE_HOME_ROUTES)) {
+    if (hasAnyRoleGroup(roles, [groupKey])) return route
+  }
+
   const homeRoute = authSession.modules?.length
     ? getHomeRouteForModules(authSession.modules)
-    : getHomeRouteForRoles(authSession.roles ?? [])
+    : getHomeRouteForRoles(roles)
 
   if (homeRoute === '/login') {
     const items = getNavigationItemsForSession(authSession)
@@ -720,12 +740,14 @@ const MODULE_PATH_PREFIXES = [
   { module: 'customers', prefix: '/customers' },
   { module: 'product_creation_requests', prefix: '/inventory/product-approvals' },
   { module: 'product_deletion_requests', prefix: '/inventory/product-deletion-requests' },
+  { module: 'retail_price_change_requests', prefix: '/products/retail-price-requests' },
   { module: 'products', prefix: '/products/categories' },
   { module: 'products', prefix: '/inventory/products' },
   { module: 'stock_adjustment_ops', prefix: '/inventory/stock-requests' },
   { module: 'supplier_receipt_create', prefix: '/inventory/import/create' },
   { module: 'supplier_receipts', prefix: '/inventory/supplier-receipts' },
   { module: 'supplier_receipts', prefix: '/inventory/suppliers' },
+  { module: 'supplier_receipts', prefix: '/inventory/supplier-products' },
   { module: 'warehouse_batches', prefix: '/inventory/batches' },
   { module: 'inventory_returns', prefix: '/inventory/return-inspections' },
   { module: 'inventory_returns', prefix: '/inventory/returns' },

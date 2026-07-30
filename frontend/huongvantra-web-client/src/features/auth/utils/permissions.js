@@ -270,12 +270,9 @@ export function canApproveContracts(session) {
   return isSystemAdmin(session)
 }
 
-/** Chỉ Admin được tạo/sửa/ẩn/khôi phục nhà cung cấp; kế toán và thủ kho chỉ xem. */
+/** Chỉ kế toán được tạo/sửa/ẩn/khôi phục nhà cung cấp và mặt hàng nhà cung cấp; Admin/thủ kho chỉ xem. */
 export function canManageSuppliers(session) {
-  if (isSystemAdmin(session)) return true
-  return (session?.roles ?? []).some(
-    (r) => String(r || '').trim().toLowerCase() === 'admin',
-  )
+  return isAccountantRole(session)
 }
 
 export function getStaffManagementScopeLabel(session) {

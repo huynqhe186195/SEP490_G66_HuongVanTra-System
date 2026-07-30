@@ -3,7 +3,7 @@ import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import ModuleRouteGuard from '../app/ModuleRouteGuard.jsx'
 import SaleWeeklyShiftGate from '../features/shifts/components/SaleWeeklyShiftGate.jsx'
 import StockAdjustmentBatchBar from '../features/inventory/components/StockAdjustmentBatchBar.jsx'
-import LowStockBadge from '../features/inventory/components/LowStockBadge.jsx'
+import NotificationBell from '../features/products/components/NotificationBell.jsx'
 import OfflineBanner from '../features/pos/components/OfflineBanner.jsx'
 import SyncStatusBadge from '../features/pos/components/SyncStatusBadge.jsx'
 import Sidebar from '../components/shared/Sidebar.jsx'
@@ -13,7 +13,6 @@ import { syncSessionFromServer } from '../features/auth/services/authApi.js'
 import { loadAuthSession, saveAuthSession } from '../features/auth/services/authSession.js'
 import { useNetworkStatus } from '../hooks/useNetworkStatus.js'
 import { syncOfflineCache } from '../lib/offlineCache.js'
-import { canAccessModule } from '../app/navigation.js'
 
 const OFFLINE_SYNC_INTERVAL_MS = 30 * 60 * 1000
 
@@ -51,6 +50,7 @@ function AdminLayout() {
   const [sidebarWidth, setSidebarWidth] = useState(readSidebarWidth)
   const [shiftLockMode, setShiftLockMode] = useState(null)
   const location = useLocation()
+  const [lastNavPath, setLastNavPath] = useState(location.pathname)
   const isOnline = useNetworkStatus()
   const isPosPage = location.pathname === '/pos'
 
@@ -148,9 +148,12 @@ function AdminLayout() {
     }
   }, [mobileNavOpen])
 
-  useEffect(() => {
+  // Đóng menu mobile khi đổi route. Điều chỉnh state ngay trong render thay vì
+  // trong effect để tránh một frame trung gian còn hiển thị menu cũ.
+  if (lastNavPath !== location.pathname) {
+    setLastNavPath(location.pathname)
     setMobileNavOpen(false)
-  }, [location.pathname])
+  }
 
   if (!authSession) {
     return <Navigate to="/login" replace />
@@ -207,15 +210,13 @@ function AdminLayout() {
               <p className="truncate text-xs text-[#717971]">Quản trị hệ thống</p>
             </div>
             {isPosPage && <SyncStatusBadge />}
-            {isWarehouseUserRole(authSession?.roles ?? []) && <LowStockBadge />}
+            <NotificationBell />
           </header>
 
-          {(isWarehouseUserRole(authSession?.roles ?? []) || isPosPage) && (
-            <div className="hidden lg:flex shrink-0 items-center justify-end gap-2 border-b border-[#c1c9c0]/50 bg-[#fbf9f1] px-4 py-2">
-              {isPosPage && <SyncStatusBadge />}
-              {isWarehouseUserRole(authSession?.roles ?? []) && <LowStockBadge />}
-            </div>
-          )}
+          <div className="hidden lg:flex shrink-0 items-center justify-end gap-2 border-b border-[#c1c9c0]/50 bg-[#fbf9f1] px-4 py-2">
+            {isPosPage && <SyncStatusBadge />}
+            <NotificationBell />
+          </div>
 
           <main
             className={`relative flex min-h-0 min-w-0 flex-1 flex-col p-3 sm:p-4 lg:p-6 xl:p-8 ${

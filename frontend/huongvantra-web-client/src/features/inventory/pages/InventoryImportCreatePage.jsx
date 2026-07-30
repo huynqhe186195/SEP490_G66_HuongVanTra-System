@@ -20,6 +20,7 @@ import {
   updateSupplierReceipt,
 } from '../services/supplierReceiptApi.js'
 import { fetchActiveSuppliers } from '../services/suppliersApi.js'
+import { fetchActiveSupplierProducts } from '../services/supplierProductsApi.js'
 import {
   parseSupplierReceiptTt200Excel,
   TT200_TEMPLATE_URL,
@@ -397,6 +398,7 @@ function InventoryImportCreatePage() {
   )
   const [supplierReceiptSkus, setSupplierReceiptSkus] = useState([])
   const [suppliers, setSuppliers] = useState([])
+  const [supplierCatalog, setSupplierCatalog] = useState({ supplierId: '', items: [] })
   const [header, setHeader] = useState(EMPTY_HEADER)
   const [lines, setLines] = useState([emptyLine()])
   const [expandedLineKeys, setExpandedLineKeys] = useState(() => new Set())
@@ -458,6 +460,45 @@ function InventoryImportCreatePage() {
     return () => clearTimeout(timer)
   }, [loadSupplierReceiptSkus, loadSuppliers])
 
+  // SP-10/11/12: danh mục hàng nhà cung cấp đang cung ứng, dùng để lọc hàng, điền sẵn giá chào và cảnh báo lệch giá.
+  useEffect(() => {
+    if (!header.supplierId) return undefined
+    let cancelled = false
+    const supplierId = header.supplierId
+    fetchActiveSupplierProducts(supplierId)
+      .then((items) => { if (!cancelled) setSupplierCatalog({ supplierId, items }) })
+      .catch(() => { if (!cancelled) setSupplierCatalog({ supplierId, items: [] }) })
+    return () => { cancelled = true }
+  }, [header.supplierId])
+
+  const supplierCatalogBySkuId = useMemo(() => {
+    if (!header.supplierId || supplierCatalog.supplierId !== header.supplierId) return new Map()
+    return new Map(supplierCatalog.items.map((item) => [item.skuId, item]))
+  }, [header.supplierId, supplierCatalog])
+
+  // BR-11/BR-12: NCC chưa khai danh mục thì vẫn cho chọn toàn bộ hàng đủ điều kiện nhập.
+  const selectableSkus = useMemo(() => {
+    if (supplierCatalogBySkuId.size === 0) return supplierReceiptSkus
+    return supplierReceiptSkus.filter((sku) => supplierCatalogBySkuId.has(sku.id))
+  }, [supplierCatalogBySkuId, supplierReceiptSkus])
+
+  // SP-12 / BR-15: lệch giá chào chỉ cảnh báo, không chặn lưu hay gửi duyệt.
+  const quotedPriceOf = useCallback((skuId) => {
+    const quoted = Number(supplierCatalogBySkuId.get(skuId)?.quotedPrice)
+    return Number.isFinite(quoted) && quoted > 0 ? quoted : null
+  }, [supplierCatalogBySkuId])
+
+  const quotedPriceWarning = useCallback((line) => {
+    const quoted = quotedPriceOf(line.skuId)
+    if (quoted === null || line.unitCost === '') return null
+    const unitCost = parseVndInput(line.unitCost)
+    if (!Number.isFinite(unitCost) || unitCost <= 0) return null
+    const gap = unitCost - quoted
+    if (gap === 0) return null
+    const percent = Math.round((Math.abs(gap) / quoted) * 1000) / 10
+    return `Cảnh báo: Đơn giá ${gap > 0 ? 'cao hơn' : 'thấp hơn'} giá chào ${formatVnd(quoted)} là ${formatVnd(Math.abs(gap))} (${percent}%).`
+  }, [quotedPriceOf])
+
   useEffect(() => {
     if (didInitExpandRef.current || !lines[0]?.key) return
     didInitExpandRef.current = true
@@ -465,13 +506,13 @@ function InventoryImportCreatePage() {
   }, [lines])
 
   useEffect(() => {
-    if (!editingReceiptId) {
-      setIsEditLoading(false)
-      return undefined
-    }
-
     let cancelled = false
     async function loadReceiptForEdit() {
+      if (!editingReceiptId) {
+        setIsEditLoading(false)
+        return
+      }
+
       setIsEditLoading(true)
       try {
         const receipt = await fetchSupplierReceiptById(editingReceiptId)
@@ -1433,6 +1474,7 @@ function InventoryImportCreatePage() {
               const warns = {
                 ...(lineWarnings[line.key] ?? {}),
                 quantityVariance: varianceWarning,
+                quotedPriceVariance: quotedPriceWarning(line),
               }
               const hasLineError = Object.values(errs).some(Boolean)
               const hasLineWarning = Object.values(warns).some(Boolean)
@@ -1531,11 +1573,15 @@ function InventoryImportCreatePage() {
                               duplicate={false}
                               isCatalogLoading={isSkuCatalogLoading}
                               onSelect={(sku) => {
-                                updateLine(line.key, { skuId: sku?.id ?? '', submittedUnit: sku ? defaultSubmittedUnit(sku.inventoryUnit) : '' })
-                                setLineErrors((prev) => ({ ...prev, [line.key]: { ...(prev[line.key] ?? {}), skuId: undefined } }))
+                                // SP-11 / BR-14: giá chào chỉ điền sẵn làm gợi ý, thủ kho sửa đè được.
+                                const quoted = Number(supplierCatalogBySkuId.get(sku?.id)?.quotedPrice)
+                                const patch = { skuId: sku?.id ?? '', submittedUnit: sku ? defaultSubmittedUnit(sku.inventoryUnit) : '' }
+                                if (Number.isFinite(quoted) && quoted > 0) patch.unitCost = sanitizeVndInput(String(quoted))
+                                updateLine(line.key, patch)
+                                setLineErrors((prev) => ({ ...prev, [line.key]: { ...(prev[line.key] ?? {}), skuId: undefined, unitCost: undefined } }))
                               }}
                               sku={selectedSku}
-                              skus={supplierReceiptSkus}
+                              skus={selectableSkus}
                               hasError={!!errs.skuId}
                             />
                             {errs.skuId ? <p className="text-xs text-red-500">{errs.skuId}</p> : null}
@@ -1610,6 +1656,9 @@ function InventoryImportCreatePage() {
                                 <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-400">₫</span>
                               </div>
                               {errs.unitCost ? <p className="text-xs text-red-500">{errs.unitCost}</p> : null}
+                              {!errs.unitCost && quotedPriceOf(line.skuId) ? (
+                                <p className="text-xs text-[#717971]">Giá chào của nhà cung cấp: {formatVnd(quotedPriceOf(line.skuId))}</p>
+                              ) : null}
                             </label>
                             <div className="space-y-1">
                               <span className="text-xs font-semibold text-[#717971]">Thành tiền</span>

@@ -143,6 +143,7 @@ public class OrderSinglePaymentMethodTests
                 promotionLogic,
                 productCatalog.Object,
                 _customerCatalog.Object,
+                new Mock<IContractCatalogClient>().Object,
                 _inventoryCatalog.Object,
                 new Mock<ICustomBundleRepository>().Object,
                 new Mock<IEmailService>().Object,

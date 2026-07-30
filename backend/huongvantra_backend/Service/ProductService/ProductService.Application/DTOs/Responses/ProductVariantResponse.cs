@@ -52,4 +52,5 @@ public record ProductVariantResponse(
     bool HasBom,
     int BomLineCount,
     List<ProductUnitResponse> Units,
-    List<BomLineResponse> BomLines);
+    List<BomLineResponse> BomLines,
+    bool IsPurchasable = false);

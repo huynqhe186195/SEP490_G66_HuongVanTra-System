@@ -31,6 +31,12 @@ public class OrdersController(OrderLogic orderLogic, ReceiptReprintLogic receipt
     public async Task<IActionResult> GetByCode(string orderCode, CancellationToken ct) =>
         Ok(await orderLogic.GetByCodeAsync(orderCode, AccessContext(), ct));
 
+    [HttpGet("b2b-debts")]
+    [Authorize(Policy = PermissionNames.ViewOrder)]
+    public async Task<IActionResult> GetB2BDebts(
+        [FromQuery] GetB2BDebtsRequest request, CancellationToken ct) =>
+        Ok(await orderLogic.GetB2BDebtsAsync(request, ct));
+
     [HttpGet("return-slips")]
     [Authorize(Policy = PermissionNames.ViewOrder)]
     public async Task<IActionResult> GetReturnSlipsPaged(
