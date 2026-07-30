@@ -200,6 +200,7 @@ function InventoryBatchesPage() {
                 <th className="px-4 py-3">Dòng SKU</th>
                 <th className="px-4 py-3">Loại lô</th>
                 <th className="px-4 py-3">Tổng còn</th>
+                <th className="px-4 py-3">Ngày nhập</th>
                 <th className="px-4 py-3">HSD</th>
                 <th className="px-4 py-3">NCC</th>
                 <th className="px-4 py-3">Trạng thái</th>
@@ -208,11 +209,11 @@ function InventoryBatchesPage() {
             <tbody className="divide-y divide-slate-100">
               {isLoading ? (
                 <tr>
-                  <td colSpan={8} className="px-6 py-8 text-slate-500">Đang tải...</td>
+                  <td colSpan={9} className="px-6 py-8 text-slate-500">Đang tải...</td>
                 </tr>
               ) : filteredBatches.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-6 py-8 text-slate-500">
+                  <td colSpan={9} className="px-6 py-8 text-slate-500">
                     {searchInput.trim() ? (
                       <>Không tìm thấy lô khớp từ khóa.</>
                     ) : (
@@ -257,6 +258,9 @@ function InventoryBatchesPage() {
                         <td className="px-4 py-4 font-semibold text-slate-800">
                           {formatStockQuantity(batch.totalQuantityOnHand)}
                         </td>
+                        <td className="whitespace-nowrap px-4 py-4 text-slate-600">
+                          {batch.createdAt ? formatVietnamDateTime(batch.createdAt) : '—'}
+                        </td>
                         <td className="px-4 py-4 text-slate-600">
                           {batch.expiresAt ? formatVietnamDateTime(batch.expiresAt) : '—'}
                         </td>
@@ -275,7 +279,7 @@ function InventoryBatchesPage() {
                       </tr>
                       {isOpen ? (
                         <tr key={`${batch.id}-detail`}>
-                          <td colSpan={8} className="bg-[#fbf9f1]/40 px-6 py-4">
+                          <td colSpan={9} className="bg-[#fbf9f1]/40 px-6 py-4">
                             <table className="w-full text-sm">
                               <thead>
                                 <tr className="text-left text-xs font-bold uppercase text-slate-500">
