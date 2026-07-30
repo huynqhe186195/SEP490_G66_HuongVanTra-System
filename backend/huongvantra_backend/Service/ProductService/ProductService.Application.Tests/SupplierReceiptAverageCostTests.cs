@@ -11,20 +11,41 @@ namespace ProductService.Application.Tests;
 public sealed class SupplierReceiptAverageCostTests
 {
     [Theory]
-    [InlineData(0, 120000, 120000)]
-    [InlineData(-1, 120000, 120000)]
-    [InlineData(100000, 120000, 110000)]
-    [InlineData(100000, 100001, 100000.5)]
-    public void CalculateAverageCost_UsesSimpleTwoPriceAverage(
-        decimal currentCost,
-        decimal incomingUnitCost,
+    [InlineData(0, 0, 120000, 120000)]
+    [InlineData(-1, 0, 120000, 120000)]
+    [InlineData(32, 14400, 0, 450)]
+    [InlineData(3, 100001, 0, 33333.67)]
+    public void CalculateWeightedAverageCost_DividesTotalValueByTotalQuantity(
+        decimal totalQuantity,
+        decimal totalValue,
+        decimal fallbackCostPrice,
         decimal expected)
     {
         Assert.Equal(
             expected,
-            SupplierReceiptApprovedCostRecordedConsumer.CalculateAverageCost(
-                currentCost,
-                incomingUnitCost));
+            SupplierReceiptApprovedCostRecordedConsumer.CalculateWeightedAverageCost(
+                totalQuantity,
+                totalValue,
+                fallbackCostPrice));
+    }
+
+    [Fact]
+    public async Task WeightedAverageCost_AccumulatesQuantityAndValueAcrossReceipts()
+    {
+        var skuId = Guid.NewGuid();
+        var store = new TestCostStore(0m, skuId);
+        var baseAt = DateTime.UtcNow.AddMinutes(-10);
+
+        await CreateConsumer(store).ProcessAsync(
+            Event(Guid.NewGuid(), skuId, 1, 1, 300m, baseAt) with { ActualQuantity = 10 });
+        await CreateConsumer(store).ProcessAsync(
+            Event(Guid.NewGuid(), skuId, 1, 1, 400m, baseAt.AddMinutes(1)) with { ActualQuantity = 9 });
+        await CreateConsumer(store).ProcessAsync(
+            Event(Guid.NewGuid(), skuId, 1, 1, 600m, baseAt.AddMinutes(2)) with { ActualQuantity = 13 });
+
+        Assert.Equal(32m, store.Variant.TotalApprovedInboundQuantity);
+        Assert.Equal(14400m, store.Variant.TotalApprovedInboundValue);
+        Assert.Equal(450m, store.Variant.CostPrice);
     }
 
     [Fact]
@@ -80,9 +101,9 @@ public sealed class SupplierReceiptAverageCostTests
             Assert.True(history.WasApplied);
             Assert.Equal("applied", history.ProcessingResult);
         });
-        Assert.Equal(475m, store.Variant.CostPrice);
+        Assert.Equal(500m, store.Variant.CostPrice);
         Assert.Equal(
-            [(300m, 350m), (350m, 475m)],
+            [(300m, 400m), (400m, 500m)],
             store.Histories
                 .OrderBy(history => history.ReceiptLineOrder)
                 .Select(history => (history.OldCostPrice, history.NewCostPrice))
@@ -105,7 +126,7 @@ public sealed class SupplierReceiptAverageCostTests
 
         await consumer.ProcessAsync(Event(receiptId, skuId, 1, 2, 400m, approvedAt));
 
-        Assert.Equal(475m, store.Variant.CostPrice);
+        Assert.Equal(500m, store.Variant.CostPrice);
         Assert.All(store.Histories, history => Assert.Equal("applied", history.ProcessingResult));
     }
 
@@ -125,7 +146,7 @@ public sealed class SupplierReceiptAverageCostTests
         await consumer.ProcessAsync(lineOne);
 
         Assert.Equal(2, store.Histories.Count);
-        Assert.Equal(475m, store.Variant.CostPrice);
+        Assert.Equal(500m, store.Variant.CostPrice);
         Assert.All(store.Histories, history =>
         {
             Assert.True(history.WasApplied);
@@ -150,7 +171,7 @@ public sealed class SupplierReceiptAverageCostTests
         await consumer.ProcessAsync(lineOne);
 
         Assert.Equal(2, store.Histories.Count);
-        Assert.Equal(475m, store.Variant.CostPrice);
+        Assert.Equal(500m, store.Variant.CostPrice);
         Assert.DoesNotContain(
             "SaveChanges",
             store.Calls.Skip(beforeCalls));
@@ -169,7 +190,7 @@ public sealed class SupplierReceiptAverageCostTests
         await consumer.ProcessAsync(Event(receiptTwo, skuId, 1, 2, 800m));
         await consumer.ProcessAsync(Event(receiptOne, skuId, 2, 2, 600m));
 
-        Assert.Equal(475m, store.Variant.CostPrice);
+        Assert.Equal(500m, store.Variant.CostPrice);
         Assert.All(
             store.Histories.Where(history => history.SourceReceiptId == receiptOne),
             history => Assert.Equal("applied", history.ProcessingResult));
@@ -193,11 +214,13 @@ public sealed class SupplierReceiptAverageCostTests
         await consumer.ProcessAsync(Event(newerReceipt, skuId, 1, 1, 600m, newerAt));
         await consumer.ProcessAsync(Event(olderReceipt, skuId, 1, 1, 400m, olderAt));
 
-        Assert.Equal(450m, store.Variant.CostPrice);
+        Assert.Equal(600m, store.Variant.CostPrice);
         var olderHistory = store.Histories.Single(
             history => history.SourceReceiptId == olderReceipt);
         Assert.False(olderHistory.WasApplied);
         Assert.Equal("superseded", olderHistory.ProcessingResult);
+        Assert.Equal(olderHistory.TotalQuantityBefore, olderHistory.TotalQuantityAfter);
+        Assert.Equal(olderHistory.TotalValueBefore, olderHistory.TotalValueAfter);
     }
 
     [Fact]
@@ -296,20 +319,20 @@ public sealed class SupplierReceiptAverageCostTests
         await consumer.ProcessAsync(legacy);
 
         Assert.Single(store.Histories);
-        Assert.Equal(350m, store.Variant.CostPrice);
+        Assert.Equal(400m, store.Variant.CostPrice);
         Assert.Equal("applied", store.Histories[0].ProcessingResult);
     }
 
     [Fact]
-    public async Task ActualQuantity_DoesNotWeightAverageCost()
+    public async Task ActualQuantity_WeightsAverageCost()
     {
-        var firstStore = new TestCostStore(300m);
-        var secondStore = new TestCostStore(300m, firstStore.Variant.Id);
-        var firstEvent = Event(order: 1, count: 1, unitCost: 500m) with
+        var firstStore = new TestCostStore(0m);
+        var secondStore = new TestCostStore(0m, firstStore.Variant.Id);
+        var lightEvent = Event(order: 1, count: 1, unitCost: 500m) with
         {
             ActualQuantity = 1
         };
-        var secondEvent = firstEvent with
+        var heavyEvent = lightEvent with
         {
             EventId = Guid.NewGuid(),
             SupplierReceiptId = Guid.NewGuid(),
@@ -317,11 +340,13 @@ public sealed class SupplierReceiptAverageCostTests
             ActualQuantity = 999
         };
 
-        await CreateConsumer(firstStore).ProcessAsync(firstEvent);
-        await CreateConsumer(secondStore).ProcessAsync(secondEvent);
+        await CreateConsumer(firstStore).ProcessAsync(lightEvent);
+        await CreateConsumer(secondStore).ProcessAsync(heavyEvent);
 
-        Assert.Equal(400m, firstStore.Variant.CostPrice);
-        Assert.Equal(firstStore.Variant.CostPrice, secondStore.Variant.CostPrice);
+        Assert.Equal(1m, firstStore.Variant.TotalApprovedInboundQuantity);
+        Assert.Equal(500m, firstStore.Variant.TotalApprovedInboundValue);
+        Assert.Equal(999m, secondStore.Variant.TotalApprovedInboundQuantity);
+        Assert.Equal(499500m, secondStore.Variant.TotalApprovedInboundValue);
     }
 
     [Fact]
@@ -487,6 +512,8 @@ public sealed class SupplierReceiptAverageCostTests
             _lockHeld = true;
             _snapshot = new TransactionSnapshot(
                 Variant.CostPrice,
+                Variant.TotalApprovedInboundQuantity,
+                Variant.TotalApprovedInboundValue,
                 Variant.UpdatedAt,
                 Histories.Select(Clone).ToList());
             Record("LockSku");
@@ -568,6 +595,8 @@ public sealed class SupplierReceiptAverageCostTests
                 SkuId = message.SkuId,
                 OldCostPrice = Variant.CostPrice,
                 IncomingUnitCost = message.UnitCost,
+                IncomingQuantity = message.ActualQuantity,
+                IncomingValue = message.ActualQuantity * message.UnitCost,
                 NewCostPrice = Variant.CostPrice,
                 SourceReceiptId = message.SupplierReceiptId,
                 SourceReceiptLineId = message.SupplierReceiptLineId,
@@ -597,6 +626,8 @@ public sealed class SupplierReceiptAverageCostTests
         private void Restore(TransactionSnapshot snapshot)
         {
             Variant.CostPrice = snapshot.CostPrice;
+            Variant.TotalApprovedInboundQuantity = snapshot.TotalQuantity;
+            Variant.TotalApprovedInboundValue = snapshot.TotalValue;
             Variant.UpdatedAt = snapshot.UpdatedAt;
             _pendingHistories.Clear();
             Histories.Clear();
@@ -611,6 +642,12 @@ public sealed class SupplierReceiptAverageCostTests
                 SkuId = history.SkuId,
                 OldCostPrice = history.OldCostPrice,
                 IncomingUnitCost = history.IncomingUnitCost,
+                IncomingQuantity = history.IncomingQuantity,
+                IncomingValue = history.IncomingValue,
+                TotalQuantityBefore = history.TotalQuantityBefore,
+                TotalQuantityAfter = history.TotalQuantityAfter,
+                TotalValueBefore = history.TotalValueBefore,
+                TotalValueAfter = history.TotalValueAfter,
                 NewCostPrice = history.NewCostPrice,
                 SourceType = history.SourceType,
                 SourceReceiptId = history.SourceReceiptId,
@@ -627,6 +664,8 @@ public sealed class SupplierReceiptAverageCostTests
 
         private sealed record TransactionSnapshot(
             decimal CostPrice,
+            decimal TotalQuantity,
+            decimal TotalValue,
             DateTime? UpdatedAt,
             List<ProductCostPriceHistory> Histories);
     }

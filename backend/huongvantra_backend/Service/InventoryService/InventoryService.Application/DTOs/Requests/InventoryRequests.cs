@@ -193,11 +193,13 @@ public record CreateSupplierRequest(
     string? Phone,
     string? Email,
     string? Address,
-    string? Note);
+    string? Note,
+    string? SupplierCode = null);
 
 public record UpdateSupplierRequest(
     string Name,
     string? Phone,
     string? Email,
     string? Address,
-    string? Note);
+    string? Note,
+    string? SupplierCode = null);

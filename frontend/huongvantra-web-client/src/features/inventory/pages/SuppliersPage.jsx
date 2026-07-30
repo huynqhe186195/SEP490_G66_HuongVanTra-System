@@ -13,7 +13,7 @@ import {
   updateSupplier,
 } from '../services/suppliersApi.js'
 
-const EMPTY_FORM = { name: '', phone: '', email: '', address: '', note: '' }
+const EMPTY_FORM = { supplierCode: '', name: '', phone: '', email: '', address: '', note: '' }
 
 const PHONE_REGEX = /^(0|\+84)(3[2-9]|5[25689]|7[06-9]|8[1-9]|9[0-9])\d{7}$/
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -21,6 +21,11 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 function validateField(field, value) {
   const trimmed = (value ?? '').trim()
   switch (field) {
+    case 'supplierCode':
+      // Để trống khi tạo mới nghĩa là backend tự sinh NCC-######.
+      if (!trimmed) return ''
+      if (trimmed.length > 50) return 'Mã Nhà Cung Cấp tối đa 50 ký tự.'
+      return ''
     case 'name':
       if (!trimmed) return 'Tên nhà cung cấp không được để trống.'
       if (trimmed.length < 2) return 'Tên nhà cung cấp phải có ít nhất 2 ký tự.'
@@ -49,7 +54,7 @@ function validateField(field, value) {
 
 function validateForm(form) {
   const errors = {}
-  for (const field of ['name', 'phone', 'email', 'address', 'note']) {
+  for (const field of ['supplierCode', 'name', 'phone', 'email', 'address', 'note']) {
     const msg = validateField(field, form[field])
     if (msg) errors[field] = msg
   }
@@ -57,7 +62,7 @@ function validateForm(form) {
 }
 
 function SupplierFormModal({ initial, onClose, onSaved }) {
-  const [form, setForm] = useState(initial ?? EMPTY_FORM)
+  const [form, setForm] = useState(initial ? { ...EMPTY_FORM, ...initial } : EMPTY_FORM)
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState({})
   const [touched, setTouched] = useState({})
@@ -89,12 +94,13 @@ function SupplierFormModal({ initial, onClose, onSaved }) {
     e.preventDefault()
     const nextErrors = validateForm(form)
     setErrors(nextErrors)
-    setTouched({ name: true, phone: true, email: true, address: true, note: true })
+    setTouched({ supplierCode: true, name: true, phone: true, email: true, address: true, note: true })
     if (Object.keys(nextErrors).length > 0) {
       showError('Vui lòng kiểm tra lại thông tin đã nhập.')
       return
     }
     const payload = {
+      supplierCode: form.supplierCode.trim(),
       name: form.name.trim(),
       phone: form.phone.trim(),
       email: form.email.trim(),
@@ -140,6 +146,18 @@ function SupplierFormModal({ initial, onClose, onSaved }) {
         </div>
 
         <form onSubmit={handleSubmit} noValidate className="space-y-4">
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-[#414942]">Mã Nhà Cung Cấp</label>
+            <input
+              className={inputCls('supplierCode')}
+              value={form.supplierCode}
+              onChange={set('supplierCode')}
+              onBlur={handleBlur('supplierCode')}
+              placeholder={initial?.id ? '' : 'Để trống để hệ thống tự sinh (NCC-000001)'}
+              maxLength={50}
+            />
+            <FieldError field="supplierCode" />
+          </div>
           <div>
             <label className="mb-1 block text-xs font-semibold text-[#414942]">
               Tên nhà cung cấp <span className="text-red-500">*</span>
@@ -336,7 +354,7 @@ export default function SuppliersPage() {
           </span>
           <input
             type="text"
-            placeholder="Tìm theo tên, SĐT, email, địa chỉ..."
+            placeholder="Tìm theo mã, tên, SĐT, email, địa chỉ..."
             value={search}
             onChange={handleSearchChange}
             className="w-full rounded-lg border border-[#c1c9c0] bg-white py-2 pl-9 pr-3 text-sm text-[#1b1c17] outline-none focus:border-[#356647]"
@@ -357,6 +375,7 @@ export default function SuppliersPage() {
         <table className="w-full min-w-[640px] text-sm">
           <thead>
             <tr className="border-b border-[#c1c9c0] text-left text-xs font-semibold text-[#717971]">
+              <th className="pb-2 pr-4">Mã NCC</th>
               <th className="pb-2 pr-4">Tên nhà cung cấp</th>
               <th className="pb-2 pr-4">Số điện thoại</th>
               <th className="pb-2 pr-4">Email</th>
@@ -369,13 +388,13 @@ export default function SuppliersPage() {
           <tbody>
             {isLoading ? (
               <tr>
-                <td colSpan={canManage ? 7 : 6} className="py-8 text-center text-sm text-[#717971]">
+                <td colSpan={canManage ? 8 : 7} className="py-8 text-center text-sm text-[#717971]">
                   Đang tải...
                 </td>
               </tr>
             ) : items.length === 0 ? (
               <tr>
-                <td colSpan={canManage ? 7 : 6} className="py-8 text-center text-sm text-[#717971]">
+                <td colSpan={canManage ? 8 : 7} className="py-8 text-center text-sm text-[#717971]">
                   Không có nhà cung cấp nào.
                 </td>
               </tr>
@@ -384,6 +403,7 @@ export default function SuppliersPage() {
                 <tr
                   key={s.id}
                   className="border-b border-[#f0f4f0] last:border-0 hover:bg-[#f5f7f4]">
+                  <td className="py-3 pr-4 font-mono text-xs text-[#414942]">{s.supplierCode || '—'}</td>
                   <td className="py-3 pr-4">
                     <p className="font-semibold text-[#1b1c17]">{s.name}</p>
                     {s.note ? <p className="text-xs text-[#717971] line-clamp-1">{s.note}</p> : null}

@@ -4,6 +4,7 @@ export function mapSupplier(row) {
   if (!row || typeof row !== 'object') return null
   return {
     id: row.id ?? row.Id,
+    supplierCode: row.supplierCode ?? row.SupplierCode ?? '',
     name: row.name ?? row.Name ?? '',
     phone: row.phone ?? row.Phone ?? '',
     email: row.email ?? row.Email ?? '',
@@ -48,6 +49,7 @@ export async function createSupplier(payload) {
     method: 'POST',
     body: JSON.stringify({
       name: payload.name?.trim(),
+      supplierCode: payload.supplierCode?.trim() || null,
       phone: payload.phone?.trim() || null,
       email: payload.email?.trim() || null,
       address: payload.address?.trim() || null,
@@ -62,6 +64,7 @@ export async function updateSupplier(id, payload) {
     method: 'PUT',
     body: JSON.stringify({
       name: payload.name?.trim(),
+      supplierCode: payload.supplierCode?.trim() || null,
       phone: payload.phone?.trim() || null,
       email: payload.email?.trim() || null,
       address: payload.address?.trim() || null,

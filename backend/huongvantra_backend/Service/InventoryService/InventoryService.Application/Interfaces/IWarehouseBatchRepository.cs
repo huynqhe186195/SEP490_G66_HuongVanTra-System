@@ -7,6 +7,16 @@ public interface IWarehouseBatchRepository
     Task<WarehouseBatch?> GetByIdAsync(Guid id, CancellationToken ct = default);
     Task<WarehouseBatch?> GetByBatchCodeAsync(string batchCode, CancellationToken ct = default);
     Task<WarehouseBatch?> GetByLotCodeAsync(string lotCode, CancellationToken ct = default);
+
+    /// <summary>
+    /// Tìm lô NCC theo khóa nghiệp vụ SupplierId + SkuId + mã lô đã chuẩn hóa.
+    /// Trả về lô đang tồn tại để tái sử dụng thay vì tạo lô trùng.
+    /// </summary>
+    Task<WarehouseBatch?> FindBySupplierLotIdentityAsync(
+        Guid supplierId,
+        Guid skuId,
+        string normalizedSupplierLotCode,
+        CancellationToken ct = default);
     Task<List<WarehouseBatch>> GetListAsync(Guid? skuId, string? search, bool availableOnly, CancellationToken ct = default);
     Task<List<WarehouseBatchItem>> GetAvailableItemsForSkuAsync(Guid skuId, CancellationToken ct = default);
     Task<List<WarehouseBatchItem>> GetAvailableItemsForSkuAsync(Guid skuId, string location, CancellationToken ct = default);

@@ -1200,6 +1200,9 @@ namespace ProductService.Infrastructure.Migrations
                         .HasColumnType("decimal(18,4)")
                         .HasDefaultValue(1m);
 
+                    b.Property<DateTime?>("CostBasisReconciledAt")
+                        .HasColumnType("datetime(6)");
+
                     b.Property<decimal>("CostPrice")
                         .HasColumnType("decimal(18,2)");
 
@@ -1260,6 +1263,16 @@ namespace ProductService.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("varchar(50)");
+
+                    b.Property<decimal>("TotalApprovedInboundQuantity")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(18,4)")
+                        .HasDefaultValue(0m);
+
+                    b.Property<decimal>("TotalApprovedInboundValue")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(20,4)")
+                        .HasDefaultValue(0m);
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime(6)");
@@ -1493,8 +1506,18 @@ namespace ProductService.Infrastructure.Migrations
                     b.Property<Guid>("EventId")
                         .HasColumnType("char(36)");
 
+                    b.Property<decimal>("IncomingQuantity")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(18,4)")
+                        .HasDefaultValue(0m);
+
                     b.Property<decimal>("IncomingUnitCost")
                         .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("IncomingValue")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(20,4)")
+                        .HasDefaultValue(0m);
 
                     b.Property<decimal>("NewCostPrice")
                         .HasColumnType("decimal(18,2)");
@@ -1538,6 +1561,26 @@ namespace ProductService.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("varchar(50)");
+
+                    b.Property<decimal>("TotalQuantityAfter")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(18,4)")
+                        .HasDefaultValue(0m);
+
+                    b.Property<decimal>("TotalQuantityBefore")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(18,4)")
+                        .HasDefaultValue(0m);
+
+                    b.Property<decimal>("TotalValueAfter")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(20,4)")
+                        .HasDefaultValue(0m);
+
+                    b.Property<decimal>("TotalValueBefore")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(20,4)")
+                        .HasDefaultValue(0m);
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("datetime(6)");

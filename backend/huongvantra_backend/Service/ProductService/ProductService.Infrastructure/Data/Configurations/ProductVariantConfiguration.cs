@@ -16,6 +16,9 @@ public class ProductVariantConfiguration : IEntityTypeConfiguration<ProductVaria
         builder.Property(v => v.VariantName).IsRequired().HasMaxLength(255);
         builder.Property(v => v.OptionValuesJson).IsRequired().HasColumnType("TEXT");
         builder.Property(v => v.CostPrice).HasColumnType("decimal(18,2)");
+        builder.Property(v => v.TotalApprovedInboundQuantity).HasColumnType("decimal(18,4)").HasDefaultValue(0m);
+        builder.Property(v => v.TotalApprovedInboundValue).HasColumnType("decimal(20,4)").HasDefaultValue(0m);
+        builder.Property(v => v.CostBasisReconciledAt).IsRequired(false);
         builder.Property(v => v.RetailPrice).HasColumnType("decimal(18,2)");
         builder.Property(v => v.IsSellable).HasDefaultValue(true);
         builder.Property(v => v.AllowRewardPoints).HasDefaultValue(true);

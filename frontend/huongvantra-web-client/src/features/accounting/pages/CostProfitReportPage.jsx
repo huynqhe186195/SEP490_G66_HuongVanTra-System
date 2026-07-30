@@ -65,6 +65,16 @@ function historyTypeLabel(type) {
   return type === 'RetailPrice' ? 'Giá bán' : 'Giá vốn trung bình'
 }
 
+const HISTORY_SOURCE_LABELS = {
+  supplier_receipt: 'Phiếu nhập NCC',
+}
+
+// SourceType vẫn được giữ nguyên ở database/API; UI chỉ hiển thị nhãn nghiệp vụ đã biết
+// và ẩn các giá trị kỹ thuật như manual_admin_accounting.
+function historySourceLabel(sourceType) {
+  return HISTORY_SOURCE_LABELS[String(sourceType ?? '').trim().toLowerCase()] ?? null
+}
+
 function historyStatusLabel(item) {
   if (item.type === 'RetailPrice') return null
   if (item.wasApplied === true) return 'Đã áp dụng'
@@ -344,7 +354,7 @@ export default function CostProfitReportPage() {
                         onClick={() => openHistory(row)}
                         className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
                       >
-                        Lịch sử giá
+                        Lịch sử
                       </button>
                       {canEditSalePrice ? (
                         <button
@@ -383,7 +393,7 @@ export default function CostProfitReportPage() {
           >
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
-                <h2 className="text-lg font-bold text-slate-800">Lịch sử giá — {historyState.row.skuCode}</h2>
+                <h2 className="text-lg font-bold text-slate-800">Lịch sử — {historyState.row.skuCode}</h2>
                 <p className="text-sm text-slate-500">{historyState.row.name}</p>
               </div>
               <button
@@ -422,8 +432,12 @@ export default function CostProfitReportPage() {
                             <span className="mx-2 text-slate-400">→</span>
                             <strong className="text-[#356647]">{formatVnd(item.newValue)}</strong>
                           </p>
-                          {item.incomingUnitCost != null ? (
-                            <p className="mt-1 text-xs text-slate-500">Đơn giá nhập: {formatVnd(item.incomingUnitCost)}</p>
+                          {item.incomingUnitCost != null || item.incomingQuantity != null ? (
+                            <p className="mt-1 text-xs text-slate-500">
+                              {item.incomingQuantity != null ? `Số lượng nhập: ${item.incomingQuantity}` : null}
+                              {item.incomingQuantity != null && item.incomingUnitCost != null ? ' · ' : null}
+                              {item.incomingUnitCost != null ? `Đơn giá nhập: ${formatVnd(item.incomingUnitCost)}` : null}
+                            </p>
                           ) : null}
                         </div>
                         <div className="text-right text-xs text-slate-500">
@@ -439,7 +453,11 @@ export default function CostProfitReportPage() {
                         </div>
                       </div>
                       <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
-                        <span className="rounded-md bg-slate-100 px-2 py-1 text-slate-600">{item.sourceType || '—'}</span>
+                        {historySourceLabel(item.sourceType) ? (
+                          <span className="rounded-md bg-slate-100 px-2 py-1 text-slate-600">
+                            {historySourceLabel(item.sourceType)}
+                          </span>
+                        ) : null}
                         {status ? (
                           <span className={`rounded-md px-2 py-1 ${
                             item.wasApplied === true ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'

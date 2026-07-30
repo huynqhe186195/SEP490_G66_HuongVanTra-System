@@ -37,6 +37,7 @@ export default function SupplierReceiptDocument({ receipt }) {
         <p><span className="text-slate-500">Trạng thái:</span> <strong>{statusLabel(receipt.status)}</strong></p>
         <p><span className="text-slate-500">Ngày phiếu:</span> <strong>{receipt.receivedDate ? formatVietnamDateTime(receipt.receivedDate) : '—'}</strong></p>
         <p><span className="text-slate-500">Nhà cung cấp:</span> <strong>{receipt.supplierName || '—'}</strong></p>
+        <p><span className="text-slate-500">Mã Nhà Cung Cấp:</span> <strong>{receipt.supplierCodeSnapshot || '—'}</strong></p>
         <p><span className="text-slate-500">Người giao hàng:</span> <strong>{receipt.deliveredByName || '—'}</strong></p>
         <p><span className="text-slate-500">Số chứng từ NCC:</span> <strong>{receipt.supplierDocumentNumber || '—'}</strong></p>
         <p><span className="text-slate-500">Ngày chứng từ NCC:</span> <strong>{receipt.supplierDocumentDate ? formatVietnamDateTime(receipt.supplierDocumentDate) : '—'}</strong></p>

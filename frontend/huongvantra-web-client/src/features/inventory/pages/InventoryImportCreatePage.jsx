@@ -28,6 +28,7 @@ import {
 const EMPTY_HEADER = {
   supplierId: '',
   supplierName: '',
+  supplierCode: '',
   supplierReference: '',
   supplierDocumentNumber: '',
   supplierDocumentDate: '',
@@ -117,7 +118,7 @@ function tipsForImportErrors(items) {
     tips.add('Số lượng chỉ ghi số tròn dương như 5, 10, 100 — không ghi 0, số âm, hay 1,5.')
   }
   if (/trùng/.test(joined)) {
-    tips.add('Hai dòng không được giống hết: cùng mã hàng + cùng mã lô + cùng ngày sản xuất + cùng hạn dùng.')
+    tips.add('Hai dòng không được cùng mã hàng và cùng mã lô NCC. Hãy gộp thành một dòng.')
   }
   if (/nhà cung cấp/.test(joined)) {
     tips.add('Chọn lại nhà cung cấp trên form (ô tìm kiếm phía trên), hoặc sửa tên trong Excel cho khớp danh sách.')
@@ -184,7 +185,13 @@ function stripHtml(value) {
   return String(value || '').replace(/<[^>]*>/g, '').replace(/&[a-zA-Z0-9#]+;/g, ' ').trim()
 }
 
-function SupplierSearchPicker({ disabled, onSelect, supplierId, supplierName, suppliers, hasError }) {
+function supplierOptionLabel(item) {
+  if (!item) return ''
+  const code = item.supplierCode || item.code || ''
+  return code ? `${code} — ${item.name}` : item.name || ''
+}
+
+function SupplierSearchPicker({ disabled, onSelect, supplierId, supplierCode, supplierName, suppliers, hasError }) {
   const [query, setQuery] = useState('')
   const [isOpen, setIsOpen] = useState(false)
   const wrapperRef = useRef(null)
@@ -205,7 +212,9 @@ function SupplierSearchPicker({ disabled, onSelect, supplierId, supplierName, su
     return suppliers
       .filter((item) => {
         if (!keyword) return true
-        return [item.name, item.phone, item.email].some((value) => normalizeSearch(value).includes(keyword))
+        return [item.supplierCode, item.name, item.phone, item.email].some((value) =>
+          normalizeSearch(value).includes(keyword),
+        )
       })
       .slice(0, 30)
   }, [query, suppliers])
@@ -218,11 +227,12 @@ function SupplierSearchPicker({ disabled, onSelect, supplierId, supplierName, su
 
   function handleSelect(item) {
     onSelect(item)
-    setQuery(item.name)
+    setQuery(supplierOptionLabel(item))
     setIsOpen(false)
   }
 
-  const inputValue = isOpen || !supplierId ? query : supplierName
+  const selectedLabel = supplierOptionLabel({ supplierCode, name: supplierName })
+  const inputValue = isOpen || !supplierId ? query : selectedLabel
 
   return (
     <div ref={wrapperRef} className="relative">
@@ -233,7 +243,7 @@ function SupplierSearchPicker({ disabled, onSelect, supplierId, supplierName, su
         value={inputValue}
         onChange={handleInputChange}
         onFocus={() => {
-          setQuery(supplierId ? supplierName : query)
+          setQuery(supplierId ? selectedLabel : query)
           setIsOpen(true)
         }}
         placeholder={disabled ? 'Đang tải nhà cung cấp...' : 'Gõ để tìm nhà cung cấp'}
@@ -254,7 +264,9 @@ function SupplierSearchPicker({ disabled, onSelect, supplierId, supplierName, su
                 }}
                 className="block w-full rounded-lg px-3 py-2 text-left hover:bg-[#f3f7f4]"
               >
-                <p className="text-sm font-semibold text-slate-800">{item.name}</p>
+                <p className="text-sm font-semibold text-slate-800">
+                  {item.supplierCode ? `${item.supplierCode} — ${item.name}` : item.name}
+                </p>
                 {item.phone || item.email ? (
                   <p className="mt-0.5 text-xs text-slate-500">
                     {[item.phone, item.email].filter(Boolean).join(' · ')}
@@ -475,6 +487,7 @@ function InventoryImportCreatePage() {
         setHeader({
           supplierId: receipt.supplierId || '',
           supplierName: receipt.supplierName || '',
+          supplierCode: receipt.supplierCodeSnapshot || '',
           supplierReference: receipt.supplierReference || '',
           supplierDocumentNumber: receipt.supplierDocumentNumber || '',
           supplierDocumentDate: toDateInput(receipt.supplierDocumentDate),
@@ -616,16 +629,11 @@ function InventoryImportCreatePage() {
         )
       }
 
-      if (sku && supplierLotCode && manufacturedAt && expiresAt) {
-        const composite = [
-          sku.id,
-          supplierLotCode.trim().toUpperCase(),
-          manufacturedAt,
-          expiresAt,
-        ].join('|')
+      if (sku && supplierLotCode) {
+        const composite = [sku.id, supplierLotCode.trim().toUpperCase()].join('|')
         if (compositeKeys.has(composite)) {
           previewErrors.push(
-            `Dòng ${rowLabel}: trùng với dòng khác (cùng mã hàng, mã lô, ngày sản xuất và hạn dùng).`,
+            `Dòng ${rowLabel}: trùng mã hàng và mã lô NCC với dòng khác — gộp thành một dòng.`,
           )
         }
         compositeKeys.add(composite)
@@ -866,11 +874,6 @@ function InventoryImportCreatePage() {
   function validateHeader() {
     const errors = {}
     if (!header.supplierId) errors.supplierId = 'Vui lòng chọn nhà cung cấp.'
-    if (!header.supplierReference.trim()) {
-      errors.supplierReference = 'Mã NCC / tham chiếu không được để trống.'
-    } else if (header.supplierReference.trim().length > 100) {
-      errors.supplierReference = 'Mã NCC / tham chiếu không được vượt quá 100 ký tự.'
-    }
     if (!header.supplierDocumentNumber.trim()) {
       errors.supplierDocumentNumber = 'Số hóa đơn / chứng từ NCC không được để trống.'
     } else if (header.supplierDocumentNumber.trim().length > 100) {
@@ -982,15 +985,10 @@ function InventoryImportCreatePage() {
         lineErr.qualityNote = 'Ghi chú chất lượng không được vượt quá 300 ký tự.'
       }
 
-      if (line.skuId && lotCode && line.manufacturedAt && line.expiresAt) {
-        const composite = [
-          line.skuId,
-          lotCode.toUpperCase(),
-          line.manufacturedAt,
-          line.expiresAt,
-        ].join('|')
+      if (line.skuId && lotCode) {
+        const composite = [line.skuId, lotCode.toUpperCase()].join('|')
         if (compositeKeys.has(composite)) {
-          lineErr.lotCode = 'Trùng Hàng hóa, Mã lô NCC, Ngày SX và Hạn dùng trong cùng phiếu.'
+          lineErr.lotCode = 'Trùng Hàng hóa và Mã lô NCC trong cùng phiếu. Gộp thành một dòng duy nhất.'
         }
         compositeKeys.add(composite)
       }
@@ -1146,12 +1144,14 @@ function InventoryImportCreatePage() {
                 disabled={isSupplierLoading}
                 suppliers={suppliers}
                 supplierId={header.supplierId}
+                supplierCode={header.supplierCode}
                 supplierName={header.supplierName}
                 onSelect={(supplier) => {
                   setHeader((prev) => ({
                     ...prev,
                     supplierId: supplier?.id || '',
                     supplierName: supplier?.name || '',
+                    supplierCode: supplier?.supplierCode || '',
                   }))
                   setHeaderErrors((prev) => ({ ...prev, supplierId: undefined }))
                 }}
@@ -1159,18 +1159,15 @@ function InventoryImportCreatePage() {
               />
               {headerErrors.supplierId ? <p className="text-xs text-red-500">{headerErrors.supplierId}</p> : null}
             </label>
-            <label className="space-y-2" data-error={headerErrors.supplierReference ? 'true' : undefined}>
-              <span className="text-xs font-semibold text-[#717971]">Mã NCC / tham chiếu <span className="text-red-500">*</span></span>
+            <label className="space-y-2">
+              <span className="text-xs font-semibold text-[#717971]">Mã Nhà Cung Cấp</span>
               <input
-                maxLength={100}
-                className={`w-full rounded-xl border p-3 text-sm ${headerErrors.supplierReference ? 'border-red-400 bg-red-50' : 'border-slate-200 bg-white'}`}
-                value={header.supplierReference}
-                onChange={(event) => {
-                  setHeader((prev) => ({ ...prev, supplierReference: event.target.value }))
-                  setHeaderErrors((prev) => ({ ...prev, supplierReference: undefined }))
-                }}
+                readOnly
+                disabled
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600"
+                value={header.supplierCode || '—'}
               />
-              {headerErrors.supplierReference ? <p className="text-xs text-red-500">{headerErrors.supplierReference}</p> : null}
+              <p className="text-xs text-slate-400">Tự động lấy từ nhà cung cấp đã chọn.</p>
             </label>
             <label className="space-y-2" data-error={headerErrors.supplierDocumentNumber ? 'true' : undefined}>
               <span className="text-xs font-semibold text-[#717971]">Số hóa đơn / chứng từ NCC <span className="text-red-500">*</span></span>

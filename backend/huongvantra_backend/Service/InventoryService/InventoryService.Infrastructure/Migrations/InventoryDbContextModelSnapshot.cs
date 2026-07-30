@@ -1372,6 +1372,65 @@ namespace InventoryService.Infrastructure.Migrations
                     b.ToTable("StocktakeRequestItems");
                 });
 
+            modelBuilder.Entity("InventoryService.Domain.Entities.Supplier", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("Address")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("Email")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("tinyint(1)")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("NormalizedSupplierCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(1000)
+                        .HasColumnType("varchar(1000)");
+
+                    b.Property<string>("Phone")
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)");
+
+                    b.Property<string>("SupplierCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IsDeleted");
+
+                    b.HasIndex("Name");
+
+                    b.HasIndex("NormalizedSupplierCode")
+                        .IsUnique();
+
+                    b.ToTable("Suppliers");
+                });
+
             modelBuilder.Entity("InventoryService.Domain.Entities.SupplierReceipt", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1454,7 +1513,18 @@ namespace InventoryService.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("varchar(100)");
 
+                    b.Property<Guid?>("SupplierId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("SupplierCodeSnapshot")
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
                     b.Property<string>("SupplierName")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("SupplierNameSnapshot")
                         .HasMaxLength(255)
                         .HasColumnType("varchar(255)");
 
@@ -1482,6 +1552,8 @@ namespace InventoryService.Infrastructure.Migrations
                     b.HasIndex("Status");
 
                     b.HasIndex("StockImportSlipId");
+
+                    b.HasIndex("SupplierId");
 
                     b.HasIndex("SupplierName");
 
@@ -1618,17 +1690,27 @@ namespace InventoryService.Infrastructure.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("varchar(50)");
 
+                    b.Property<DateTime?>("ManufactureDate")
+                        .HasColumnType("datetime(6)");
+
                     b.Property<string>("Location")
                         .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("varchar(20)")
                         .HasDefaultValue("Warehouse");
 
+                    b.Property<string>("NormalizedSupplierLotCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
                     b.Property<string>("Note")
                         .HasMaxLength(500)
                         .HasColumnType("varchar(500)");
 
                     b.Property<Guid?>("ParentBatchId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<Guid?>("SkuId")
                         .HasColumnType("char(36)");
 
                     b.Property<Guid?>("SourceBatchId")
@@ -1654,6 +1736,9 @@ namespace InventoryService.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("varchar(200)");
 
+                    b.Property<Guid?>("SupplierId")
+                        .HasColumnType("char(36)");
+
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("datetime(6)");
 
@@ -1677,6 +1762,10 @@ namespace InventoryService.Infrastructure.Migrations
                     b.HasIndex("SourceReferenceCode");
 
                     b.HasIndex("SourceReferenceId");
+
+                    b.HasIndex("SupplierId", "SkuId", "NormalizedSupplierLotCode")
+                        .IsUnique()
+                        .HasDatabaseName("IX_WarehouseBatches_SupplierLotIdentity");
 
                     b.ToTable("WarehouseBatches");
                 });
