@@ -89,8 +89,8 @@ export const navigationItems = [
   { label: 'Hợp đồng', path: '/contracts', module: 'contracts', icon: 'description', roles: ['admin', 'agencyManager'] },
   { label: 'Sản phẩm & Số lượng', path: '/inventory/products', module: 'products', icon: 'inventory_2', roles: ['admin', 'agencyManager', 'inventoryManager'] },
   { label: 'Danh Mục Sản Phẩm', path: '/products/categories', module: 'products', icon: 'category', roles: ['admin', 'agencyManager', 'inventoryManager'] },
-  { label: 'Lịch sử tạo hàng hóa', path: '/inventory/product-approvals', module: 'product_creation_requests', icon: 'verified', roles: ['admin', 'agencyManager', 'inventoryManager'] },
-  { label: 'Yêu cầu xóa hàng hóa', path: '/inventory/product-deletion-requests', module: 'product_deletion_requests', icon: 'delete_sweep', roles: ['agencyManager', 'inventoryManager'] },
+  { label: 'Lịch sử tạo hàng hóa', path: '/inventory/product-approvals', module: 'product_creation_requests', icon: 'verified', roles: ['admin', 'inventoryManager'] },
+  { label: 'Yêu cầu xóa hàng hóa', path: '/inventory/product-deletion-requests', module: 'product_deletion_requests', icon: 'delete_sweep', roles: ['inventoryManager'] },
   { label: 'Kho', path: '/inventory', module: 'inventory', icon: 'warehouse', roles: ['inventoryManager'] },
   { label: 'Phiếu nhập nhà cung cấp', path: '/inventory/supplier-receipts', module: 'supplier_receipts', icon: 'assignment_turned_in', roles: ['admin', 'agencyManager', 'accountant', 'inventoryManager'] },
   { label: 'Nhà cung cấp', path: '/inventory/suppliers', module: 'supplier_receipts', icon: 'storefront', roles: ['admin', 'agencyManager', 'accountant', 'inventoryManager'] },
@@ -107,7 +107,7 @@ export const navigationItems = [
     path: '/inventory/statistics',
     module: 'inventory_statistics',
     icon: 'analytics',
-    roles: ['inventoryManager', 'accountant', 'agencyManager'],
+    roles: ['inventoryManager', 'accountant'],
     children: [
       { label: 'Tổng quan', path: '/inventory/statistics?section=overview', section: 'overview', sectionScope: 'inventory_statistics' },
       { label: 'Trạng thái hàng hoá', path: '/inventory/statistics?section=alerts', section: 'alerts', sectionScope: 'inventory_statistics' },
@@ -394,13 +394,20 @@ function groupAdminManagerSidebar(items, isAdmin) {
         ['/inventory/products', 'Sản phẩm & số lượng'],
         ['/products/categories', 'Danh mục sản phẩm'],
         ['/accounting/cost-profit', 'Bảng giá vốn & giá bán'],
-        ['/inventory/product-approvals', 'Lịch sử tạo hàng hóa'],
-        ['/inventory/product-deletion-requests', 'Yêu cầu xóa hàng hóa'],
         ['/inventory/stocktake', 'Kiểm kê tồn kho'],
         ['/inventory/ledger', 'Nhật ký kho'],
         ['/inventory/stock-requests', 'Yêu cầu bổ sung tồn quầy'],
         ['/admin/inventory-sync', 'Đồng bộ tồn kho'],
       ]
+
+  // Manager: ẩn thống kê tồn kho / lịch sử tạo / yêu cầu xóa (không hiện ở nhóm Hàng hóa).
+  for (const path of [
+    '/inventory/statistics',
+    '/inventory/product-approvals',
+    '/inventory/product-deletion-requests',
+  ]) {
+    if (!isAdmin && byPath.has(path)) consumed.add(path)
+  }
 
   if (isAdmin) {
     for (const path of ['/inventory/statistics', '/inventory/stock-requests', '/admin/inventory-sync', '/inventory/returns']) {
@@ -409,25 +416,6 @@ function groupAdminManagerSidebar(items, isAdmin) {
   }
 
   const goodsChildren = takeNavLeaves(byPath, consumed, goodsEntries)
-
-  if (!isAdmin) {
-    const statsItem = byPath.get('/inventory/statistics')
-    if (statsItem) {
-      consumed.add('/inventory/statistics')
-      const overview =
-        statsItem.children?.find((child) => child.section === 'overview') ||
-        statsItem.children?.[0]
-      const overviewLeaf = {
-        label: 'Tổng quan tồn kho',
-        path: overview?.path || '/inventory/statistics?section=overview',
-        module: statsItem.module,
-        section: overview?.section || 'overview',
-        sectionScope: overview?.sectionScope || 'inventory_statistics',
-      }
-      const priceIdx = goodsChildren.findIndex((child) => child.path === '/accounting/cost-profit')
-      goodsChildren.splice(priceIdx >= 0 ? priceIdx + 1 : goodsChildren.length, 0, overviewLeaf)
-    }
-  }
 
   if (goodsChildren.length) {
     result.push({
