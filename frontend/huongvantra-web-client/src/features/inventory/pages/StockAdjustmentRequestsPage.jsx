@@ -9,7 +9,6 @@ import {
   canCancelStockReplenishmentRequest,
   canCreateStockReplenishmentRequest,
   canReviewStockReplenishmentRequest,
-  isSystemAdmin,
   isWarehouseRole,
 } from '../../auth/utils/permissions.js'
 import { formatStockQuantity } from '../../products/utils/productDisplay.js'
@@ -533,7 +532,7 @@ function StockAdjustmentRequestsPage() {
   const canReview = canReviewStockReplenishmentRequest(session)
   const canCreateRequest = canCreateStockReplenishmentRequest(session)
   const canCancelRequest = canCancelStockReplenishmentRequest(session)
-  const canCancelAnyRequest = isSystemAdmin(session)
+  const canCancelAnyRequest = canCancelRequest && canReview
   const currentUserId = session?.userId ? String(session.userId) : ''
   const [activeTab, setActiveTab] = useState(canReview ? 'pending' : 'mine')
   const [searchValue, setSearchValue] = useState(() => location.state?.search ?? '')

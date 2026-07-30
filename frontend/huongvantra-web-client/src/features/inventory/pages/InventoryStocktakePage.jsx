@@ -13,7 +13,6 @@ import {
   canCreateWarehouseStocktake,
   canReviewStocktake,
   isBranchManager,
-  isSystemAdmin,
 } from '../../auth/utils/permissions.js'
 import { fetchSkuStocks, fetchStoreSkuStocks } from '../services/inventoryStockApi.js'
 import {
@@ -706,7 +705,7 @@ function InventoryStocktakePage() {
   const canCreate = canCreateWarehouse || canCreateShelf
   const canReview = canReviewStocktake(session)
   const fixedLocation = canCreateWarehouse ? 'Warehouse' : canCreateShelf ? 'Shelf' : null
-  const canReopenDay = isBranchManager(session) || isSystemAdmin(session)
+  const canReopenDay = isBranchManager(session)
 
   const loadShelfDay = useCallback(async () => {
     if (!canReopenDay) return

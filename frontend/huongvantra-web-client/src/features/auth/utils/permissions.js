@@ -15,10 +15,27 @@ export function isAccountantRole(session) {
   })
 }
 
+function normalizeRoleToken(role) {
+  return String(role || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[._-]+/g, '')
+    .replace(/\s+/g, '')
+}
+
+function hasAdminRole(session) {
+  return (session?.roles ?? []).some((role) => normalizeRoleToken(role) === 'admin')
+}
+
+/** Admin chỉ giám sát + IAM — không thao tác nghiệp vụ. */
+export function isBusinessOpsBlocked(session) {
+  return isSystemAdmin(session) || hasAdminRole(session)
+}
+
 /** Kế toán chỉ xem kho — không tạo/duyệt phiếu, không chỉnh tồn. */
 export function canWriteInventory(session) {
-  if (isAccountantRole(session)) return false
-  return isWarehouseRole(session) || isBranchManager(session) || isManagerRole(session) || isSystemAdmin(session)
+  if (isAccountantRole(session) || isBusinessOpsBlocked(session)) return false
+  return isWarehouseRole(session) || isBranchManager(session) || isManagerRole(session)
 }
 
 export function hasPermission(session, permission) {
@@ -31,21 +48,22 @@ export function canViewAllCustomers(session) {
 }
 
 export function canViewCustomer(session) {
-  return hasPermission(session, 'VIEW_CUSTOMER')
+  return hasPermission(session, 'VIEW_CUSTOMER') || canViewAllCustomers(session)
 }
 
-/** Tạo hồ sơ KH: Manager/Admin và cả Sale (CREATE_ORDER) — một KH có thể mua qua nhiều Sale. */
+/** Tạo hồ sơ KH: Manager và Sale — Admin chỉ xem. */
 export function canCreateCustomer(session) {
+  if (isBusinessOpsBlocked(session)) return false
   return (
     hasPermission(session, 'CREATE_CUSTOMER')
     || hasPermission(session, 'CREATE_ORDER')
-    || hasPermission(session, 'MANAGE_ROLE')
   )
 }
 
-/** Sửa hồ sơ KH: Admin (MANAGE_ROLE) hoặc Manager (CREATE_CUSTOMER). Kế toán chỉ xem. */
+/** Sửa hồ sơ KH: Manager (CREATE_CUSTOMER). Kế toán/Admin chỉ xem. */
 export function canEditCustomer(session) {
-  return hasPermission(session, 'CREATE_CUSTOMER') || hasPermission(session, 'MANAGE_ROLE')
+  if (isBusinessOpsBlocked(session)) return false
+  return hasPermission(session, 'CREATE_CUSTOMER')
 }
 
 /** Sale (hoặc NV chỉ có VIEW_CUSTOMER): xem toàn bộ khách trong cửa hàng, thêm được nhưng không sửa hồ sơ. */
@@ -53,9 +71,10 @@ export function isReadOnlyCustomerViewer(session) {
   return canViewCustomer(session) && !canViewAllCustomers(session)
 }
 
-/** Xóa/khôi phục KH — chỉ Admin. */
+/** Xóa/khôi phục KH — Manager vận hành; Admin chỉ xem. */
 export function canDeleteCustomer(session) {
-  return hasPermission(session, 'MANAGE_ROLE')
+  if (isBusinessOpsBlocked(session)) return false
+  return isBranchManager(session) || isManagerRole(session)
 }
 
 /** Manager/Admin/Kế toán có thêm bộ lọc theo nhân viên; Sale xem mọi đơn nhưng không lọc theo nhân viên. */
@@ -68,19 +87,19 @@ export function canViewAllOrders(session) {
 }
 
 export function canSimulateOrderCompleted(session) {
+  if (isBusinessOpsBlocked(session)) return false
   return hasPermission(session, 'CREATE_ORDER')
 }
 
 export function canManageCatalog(session) {
-  if (hasPermission(session, 'MANAGE_CATALOG') || hasPermission(session, 'MANAGE_ROLE')) {
-    return true
-  }
+  if (isBusinessOpsBlocked(session)) return false
+  if (hasPermission(session, 'MANAGE_CATALOG')) return true
   return isWarehouseRole(session)
 }
 
 /** Chỉ Thủ kho được tạo mới sản phẩm / danh mục / SKU. */
 export function canCreateCatalog(session) {
-  return isWarehouseRole(session)
+  return isWarehouseRole(session) && !isBusinessOpsBlocked(session)
 }
 
 /** Chỉ Thủ kho được ẩn / kích hoạt lại sản phẩm, danh mục. */
@@ -89,7 +108,7 @@ export function canHideCatalog(session) {
 }
 
 export function canCreateProductDeletionRequest(session) {
-  return isWarehouseRole(session)
+  return isWarehouseRole(session) && !isBusinessOpsBlocked(session)
 }
 
 export function canAccessWarehouseInventory(session) {
@@ -115,24 +134,14 @@ export function canCreateOrder(session) {
 
 /** Xác nhận thanh toán COD — chỉ dựa trên action permission. */
 export function canVerifyCodPayment(session) {
+  if (isBusinessOpsBlocked(session)) return false
   return hasPermission(session, 'VERIFY_COD')
 }
 
-function normalizeRoleToken(role) {
-  return String(role || '')
-    .trim()
-    .toLowerCase()
-    .replace(/[._-]+/g, '')
-    .replace(/\s+/g, '')
-}
-
-function hasAdminRole(session) {
-  return (session?.roles ?? []).some((role) => normalizeRoleToken(role) === 'admin')
-}
-
-/** Trang Accounting: chỉ principal có role Admin được sửa Giá bán. */
+/** Trang Accounting: Manager được sửa Giá bán; Admin chỉ xem. */
 export function canEditAccountingSalePrice(session) {
-  return hasAdminRole(session)
+  if (isBusinessOpsBlocked(session)) return false
+  return isBranchManager(session) || isManagerRole(session)
 }
 
 export function isSalePosRole(session) {
@@ -158,6 +167,7 @@ export function canViewOnlyCodOrders(session) {
 
 /** Quầy POS: SalePos (CREATE_POS_ORDER) hoặc Manager. */
 export function canUsePosCounterMode(session) {
+  if (isBusinessOpsBlocked(session)) return false
   return hasPermission(session, 'CREATE_POS_ORDER')
     || isBranchManager(session)
     || isManagerRole(session)
@@ -165,6 +175,7 @@ export function canUsePosCounterMode(session) {
 
 /** Bán COD: action permission độc lập với VERIFY_COD. */
 export function canUsePosCodMode(session) {
+  if (isBusinessOpsBlocked(session)) return false
   return hasPermission(session, 'CREATE_COD_ORDER')
 }
 
@@ -173,20 +184,24 @@ export function canAdjustStoreStock(session) {
 }
 
 export function canCreateStockReplenishmentRequest(session) {
-  return isBranchManager(session) || isManagerRole(session) || isWarehouseRole(session) || isSystemAdmin(session)
+  if (isBusinessOpsBlocked(session)) return false
+  return isBranchManager(session) || isManagerRole(session) || isWarehouseRole(session)
 }
 
 export function canReviewStockReplenishmentRequest(session) {
-  return isBranchManager(session) || isManagerRole(session) || isWarehouseRole(session) || isSystemAdmin(session)
+  if (isBusinessOpsBlocked(session)) return false
+  return isBranchManager(session) || isManagerRole(session) || isWarehouseRole(session)
 }
 
-/** Kiểm tra & quyết định xử lý hàng trả (Restock/Quarantine/Dispose): Thủ kho, Quản lý, Admin. */
+/** Kiểm tra & quyết định xử lý hàng trả (Restock/Quarantine/Dispose): Thủ kho, Quản lý. */
 export function canInspectReturn(session) {
-  return isWarehouseRole(session) || isBranchManager(session) || isManagerRole(session) || isSystemAdmin(session)
+  if (isBusinessOpsBlocked(session)) return false
+  return isWarehouseRole(session) || isBranchManager(session) || isManagerRole(session)
 }
 
 export function canCancelStockReplenishmentRequest(session) {
-  return isBranchManager(session) || isManagerRole(session) || isWarehouseRole(session) || isSystemAdmin(session)
+  if (isBusinessOpsBlocked(session)) return false
+  return isBranchManager(session) || isManagerRole(session) || isWarehouseRole(session)
 }
 
 /** Duyệt / Từ chối phiếu nhập NCC: chỉ Manager không có role Admin. */
@@ -241,9 +256,10 @@ export function isSystemAdmin(session) {
   return hasPermission(session, 'MANAGE_ROLE')
 }
 
-/** Chỉ Admin (MANAGE_ROLE) được tạo/sửa/xóa khách doanh nghiệp. */
+/** Khách doanh nghiệp: không còn thao tác nghiệp vụ từ Admin giám sát. */
 export function canManageCorporateCustomers(session) {
-  return isSystemAdmin(session)
+  if (isBusinessOpsBlocked(session)) return false
+  return isBranchManager(session) || isManagerRole(session)
 }
 
 export function isBranchManager(session) {
@@ -259,23 +275,29 @@ function isManagerRole(session) {
 }
 
 export function canViewContracts(session) {
-  return hasPermission(session, 'VIEW_CUSTOMER')
+  return hasPermission(session, 'VIEW_CUSTOMER') || hasPermission(session, 'MANAGE_ROLE')
 }
 
 export function canCreateContracts(session) {
+  if (isBusinessOpsBlocked(session)) return false
   return Boolean(session?.userId)
 }
 
 export function canApproveContracts(session) {
-  return isSystemAdmin(session)
+  if (isBusinessOpsBlocked(session)) return false
+  return isBranchManager(session) || isManagerRole(session)
 }
 
-/** Chỉ Admin được tạo/sửa/ẩn/khôi phục nhà cung cấp; kế toán và thủ kho chỉ xem. */
+/** Manager/Thủ kho quản lý NCC; Admin chỉ xem. */
 export function canManageSuppliers(session) {
-  if (isSystemAdmin(session)) return true
-  return (session?.roles ?? []).some(
-    (r) => String(r || '').trim().toLowerCase() === 'admin',
-  )
+  if (isBusinessOpsBlocked(session)) return false
+  return isBranchManager(session) || isManagerRole(session) || isWarehouseRole(session)
+}
+
+/** Manager duyệt yêu cầu tạo/xóa hàng hóa; Admin chỉ theo dõi. */
+export function canDecideProductApprovals(session) {
+  if (isBusinessOpsBlocked(session)) return false
+  return isBranchManager(session) || isManagerRole(session)
 }
 
 export function getStaffManagementScopeLabel(session) {
