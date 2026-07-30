@@ -7,7 +7,7 @@ function fmt(amount) {
 }
 
 async function fetchMaterials(search = '') {
-  const query = new URLSearchParams({ pageSize: '100', page: '1', isActive: 'true', productType: 'NGUYEN_LIEU' })
+  const query = new URLSearchParams({ pageSize: '100', page: '1', isActive: 'true' })
   if (search.trim()) query.set('search', search.trim())
   const [data, stocks] = await Promise.all([
     apiRequestAuth(`/api/v1/store/skus?${query.toString()}`, { method: 'GET' }),
@@ -24,9 +24,11 @@ async function fetchMaterials(search = '') {
       unitPrice: Number(item.retailPrice ?? item.RetailPrice ?? item.price ?? item.Price ?? 0),
       packagingType: item.packagingType ?? item.PackagingType ?? '',
       description: item.description ?? item.Description ?? '',
+      productType: item.productType ?? item.ProductType ?? '',
+      canUseInCustom: item.canUseInCustom ?? item.CanUseInCustom ?? false,
       stockOnHand: Number(stockBySkuId.get(skuId) ?? 0),
     }
-  })
+  }).filter((item) => ['NGUYEN_LIEU', 'BAO_BI'].includes(String(item.productType).toUpperCase()) && item.canUseInCustom === true)
 }
 
 function DetailModal({ material, onClose }) {
