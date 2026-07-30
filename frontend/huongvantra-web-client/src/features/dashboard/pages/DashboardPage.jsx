@@ -36,7 +36,6 @@ function DashboardPage() {
     const [topProducts, setTopProducts] = useState([]);
     const [categorySales, setCategorySales] = useState([]);
     const [customerGrowthData, setCustomerGrowthData] = useState([]);
-    const [revenueGrowthData, setRevenueGrowthData] = useState([]);
     const [revenueProfitGrowthData, setRevenueProfitGrowthData] = useState([]);
     const [salesByChannelData, setSalesByChannelData] = useState([]);
     const [orderGrowthData, setOrderGrowthData] = useState([]);
@@ -65,15 +64,13 @@ function DashboardPage() {
 
                 const paramsLastYear = { ...params, year: params.year - 1 };
 
-                const [statsData, topProductsData, categorySalesData, customerGrowth, revenueGrowth, salesByChannel, orderGrowth, revenueGrowthLastYear, revenueProfitGrowth] = await Promise.all([
+                const [statsData, topProductsData, categorySalesData, customerGrowth, salesByChannel, orderGrowth, revenueProfitGrowth] = await Promise.all([
                     dashboardApi.getSalesStatistics(params), 
                     dashboardApi.getTopProducts({ topCount, sortBy: topProductsSortBy, ...params }),
                     dashboardApi.getSalesByCategory(params),
                     dashboardApi.getCustomerGrowth(params),
-                    dashboardApi.getRevenueGrowth(params),
                     dashboardApi.getSalesByChannel(params),
                     dashboardApi.getOrderGrowth(params),
-                    dashboardApi.getRevenueGrowth(paramsLastYear),
                     dashboardApi.getRevenueProfitGrowth(params)
                 ]);
                 setStats(statsData);
@@ -91,16 +88,6 @@ function DashboardPage() {
                 });
                 setCustomerGrowthData(mergedCustomerOrder);
                 
-                // Merge revenue growth data
-                const mergedRevenue = revenueGrowth.map(current => {
-                    const lastYear = revenueGrowthLastYear.find(prev => prev.label === current.label);
-                    return {
-                        label: current.label,
-                        "Năm nay": current.value,
-                        "Năm trước": lastYear ? lastYear.value : 0
-                    };
-                });
-                setRevenueGrowthData(mergedRevenue);
                 setRevenueProfitGrowthData(revenueProfitGrowth);
                 setSalesByChannelData(salesByChannel);
                 setOrderGrowthData(orderGrowth);
@@ -236,29 +223,7 @@ function DashboardPage() {
                             </div>
                         )}
                     </div>
-                    {/* Revenue Growth Chart */}
-                    <div className="lg:col-span-2 rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
-                        <h3 className="mb-6 text-lg font-bold text-gray-800">Doanh Thu Thuần Theo Thời Gian</h3>
-                        {revenueGrowthData && revenueGrowthData.length > 0 ? (
-                            <div className="h-[300px] w-full">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <LineChart data={revenueGrowthData} margin={{ top: 10, right: 30, left: 20, bottom: 10 }}>
-                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
-                                        <XAxis dataKey="label" tick={{fontSize: 12, fill: '#6b7280'}} tickLine={false} axisLine={false} />
-                                        <YAxis tickFormatter={(val) => new Intl.NumberFormat('vi-VN', { notation: "compact" }).format(val)} tick={{fontSize: 12, fill: '#6b7280'}} tickLine={false} axisLine={false} />
-                                        <Tooltip formatter={(value) => formatCurrency(value)} />
-                                        <Legend verticalAlign="top" height={36} />
-                                        <Line type="monotone" dataKey="Năm nay" stroke="#3b82f6" strokeWidth={3} activeDot={{ r: 6 }} name={`Năm ${filterYear}`} />
-                                        <Line type="monotone" dataKey="Năm trước" stroke="#9ca3af" strokeWidth={2} strokeDasharray="5 5" name={`Năm ${filterYear - 1}`} />
-                                    </LineChart>
-                                </ResponsiveContainer>
-                            </div>
-                        ) : (
-                            <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-8 text-center text-sm text-gray-500 min-h-[300px] flex items-center justify-center">
-                                Chưa có dữ liệu doanh thu.
-                            </div>
-                        )}
-                    </div>
+
 
                     {/* Sales by Channel Chart */}
                     <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
