@@ -244,6 +244,7 @@ public class WarehouseBatchConfiguration : IEntityTypeConfiguration<WarehouseBat
         builder.Property(e => e.BatchCode).HasMaxLength(50).IsRequired();
         builder.Property(e => e.LotCode).HasMaxLength(50).IsRequired();
         builder.Property(e => e.Supplier).HasMaxLength(200);
+        builder.Property(e => e.NormalizedSupplierLotCode).HasMaxLength(50);
         builder.Property(e => e.Note).HasMaxLength(500);
         builder.Property(e => e.SourceType).HasMaxLength(50);
         builder.Property(e => e.SourceReferenceCode).HasMaxLength(50);
@@ -251,6 +252,11 @@ public class WarehouseBatchConfiguration : IEntityTypeConfiguration<WarehouseBat
         builder.Property(e => e.Status).HasMaxLength(20).IsRequired();
         builder.HasIndex(e => e.BatchCode).IsUnique();
         builder.HasIndex(e => e.LotCode);
+        // Lô NCC là duy nhất theo SupplierId + SkuId + mã lô đã chuẩn hóa.
+        // Lô legacy/nội bộ để cả ba cột null nên MySQL bỏ qua trong unique index.
+        builder.HasIndex(e => new { e.SupplierId, e.SkuId, e.NormalizedSupplierLotCode })
+            .IsUnique()
+            .HasDatabaseName("IX_WarehouseBatches_SupplierLotIdentity");
         builder.HasIndex(e => e.Location);
         builder.HasIndex(e => e.ParentBatchId);
         builder.HasIndex(e => e.SourceBatchId);
@@ -356,11 +362,15 @@ public class SupplierConfiguration : IEntityTypeConfiguration<Supplier>
     {
         builder.ToTable("Suppliers");
         builder.HasKey(e => e.Id);
+        builder.Property(e => e.SupplierCode).HasMaxLength(50).IsRequired();
+        builder.Property(e => e.NormalizedSupplierCode).HasMaxLength(50).IsRequired();
         builder.Property(e => e.Name).HasMaxLength(255).IsRequired();
         builder.Property(e => e.Phone).HasMaxLength(20);
         builder.Property(e => e.Email).HasMaxLength(255);
         builder.Property(e => e.Address).HasMaxLength(500);
         builder.Property(e => e.Note).HasMaxLength(1000);
+        // Unique toàn hệ thống, không phân biệt hoa thường, không phụ thuộc collation toàn cục.
+        builder.HasIndex(e => e.NormalizedSupplierCode).IsUnique();
         builder.HasIndex(e => e.IsDeleted);
         builder.HasIndex(e => e.Name);
     }
@@ -374,6 +384,8 @@ public class SupplierReceiptConfiguration : IEntityTypeConfiguration<SupplierRec
         builder.HasKey(e => e.Id);
         builder.Property(e => e.ReceiptCode).HasMaxLength(30).IsRequired();
         builder.Property(e => e.SupplierName).HasMaxLength(255);
+        builder.Property(e => e.SupplierNameSnapshot).HasMaxLength(255);
+        builder.Property(e => e.SupplierCodeSnapshot).HasMaxLength(50);
         builder.Property(e => e.SupplierReference).HasMaxLength(100);
         builder.Property(e => e.SupplierDocumentNumber).HasMaxLength(100);
         builder.Property(e => e.DeliveredByName).HasMaxLength(255);

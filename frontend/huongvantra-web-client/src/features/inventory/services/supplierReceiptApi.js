@@ -37,6 +37,8 @@ export function mapSupplierReceipt(row) {
     receiptCode: row.receiptCode ?? row.ReceiptCode ?? '',
     supplierId: row.supplierId ?? row.SupplierId ?? null,
     supplierName: row.supplierName ?? row.SupplierName ?? '',
+    supplierNameSnapshot: row.supplierNameSnapshot ?? row.SupplierNameSnapshot ?? '',
+    supplierCodeSnapshot: row.supplierCodeSnapshot ?? row.SupplierCodeSnapshot ?? '',
     supplierReference: row.supplierReference ?? row.SupplierReference ?? '',
     supplierDocumentNumber: row.supplierDocumentNumber ?? row.SupplierDocumentNumber ?? '',
     supplierDocumentDate: row.supplierDocumentDate ?? row.SupplierDocumentDate ?? null,

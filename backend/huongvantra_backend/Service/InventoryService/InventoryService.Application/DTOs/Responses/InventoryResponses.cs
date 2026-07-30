@@ -415,6 +415,8 @@ public record SupplierReceiptResponse(
     string ReceiptCode,
     Guid? SupplierId,
     string? SupplierName,
+    string? SupplierCodeSnapshot,
+    string? SupplierNameSnapshot,
     string? SupplierReference,
     string? SupplierDocumentNumber,
     DateTime? SupplierDocumentDate,
@@ -646,6 +648,7 @@ public record ProductionOrderResponse(
 
 public record SupplierResponse(
     Guid Id,
+    string SupplierCode,
     string Name,
     string? Phone,
     string? Email,
@@ -659,6 +662,7 @@ public record SupplierResponse(
 
 public record SupplierSimpleResponse(
     Guid Id,
+    string SupplierCode,
     string Name,
     string? Phone,
     string? Email);

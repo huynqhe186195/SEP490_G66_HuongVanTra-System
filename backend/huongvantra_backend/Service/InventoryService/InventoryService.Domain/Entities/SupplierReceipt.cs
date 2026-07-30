@@ -29,6 +29,10 @@ public class SupplierReceipt
     public DateTime? ReviewedAt { get; set; }
     public string? ReviewNote { get; set; }
     public Guid? SupplierId { get; set; }
+    /// <summary>Snapshot tại thời điểm lập phiếu — thay đổi Supplier về sau không được sửa phiếu cũ.</summary>
+    public string? SupplierNameSnapshot { get; set; }
+    /// <summary>Snapshot Mã Nhà Cung Cấp tại thời điểm lập phiếu. Null với phiếu cũ trước migration.</summary>
+    public string? SupplierCodeSnapshot { get; set; }
     public Guid? StockImportSlipId { get; set; }
     public string? StockImportSlipCode { get; set; }
 
