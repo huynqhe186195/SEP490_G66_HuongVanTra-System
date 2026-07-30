@@ -16,6 +16,9 @@ Thumbs.db
 !.env.example
 !.env*.example
 
+# Local runtime/UAT review artifacts (chua credential va JWT)
+/backend/huongvantra_backend/migration-review/
+
 # Docker local overrides (machine-specific)
 docker-compose.override.yml
 
