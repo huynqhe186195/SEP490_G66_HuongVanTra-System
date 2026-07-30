@@ -281,7 +281,7 @@ public class OrderLogic(
                 i.SkuSnapshotCode?.Trim(),
                 i.CategorySnapshotName?.Trim(),
                 OrderBusinessRules.NormalizeBaseQuantity(i.Quantity, profile.InventoryUnit),
-                i.CostPrice,
+                profile.CostPrice,
                 unitPrice,
                 isGift,
                 profile.CategoryId ?? i.CategoryId);
@@ -803,7 +803,7 @@ public class OrderLogic(
                 detail.SkuSnapshotCode = reqItem.SkuSnapshotCode?.Trim();
                 detail.CategorySnapshotName = reqItem.CategorySnapshotName?.Trim();
                 detail.Quantity = quantity;
-                detail.CostPrice = reqItem.CostPrice;
+                detail.CostPrice = detail.CostPrice; // Retain original cost price, do not trust client
                 detail.UnitPrice = unitPrice;
                 detail.SubTotal = unitPrice * quantity;
                 detail.IsGift = reqItem.IsGift;
@@ -823,7 +823,7 @@ public class OrderLogic(
                 SkuSnapshotCode = reqItem.SkuSnapshotCode?.Trim(),
                 CategorySnapshotName = reqItem.CategorySnapshotName?.Trim(),
                 Quantity = quantity,
-                CostPrice = reqItem.CostPrice,
+                CostPrice = profile.CostPrice,
                 UnitPrice = 0m,
                 SubTotal = 0m,
                 IsGift = true,

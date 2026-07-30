@@ -10,4 +10,5 @@ public interface IProductCatalogClient
 public sealed record ProductSkuCatalogProfile(
     Guid SkuId,
     int? CategoryId,
-    string InventoryUnit);
+    string InventoryUnit,
+    decimal CostPrice);

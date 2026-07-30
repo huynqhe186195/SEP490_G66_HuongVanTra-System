@@ -8,4 +8,5 @@ public record ProductSkuOrderCatalogResponse(
     bool IsPurchasable,
     bool CanBeBomComponent,
     bool CanUseInCustom,
-    bool CanHaveBom);
+    bool CanHaveBom,
+    decimal CostPrice);

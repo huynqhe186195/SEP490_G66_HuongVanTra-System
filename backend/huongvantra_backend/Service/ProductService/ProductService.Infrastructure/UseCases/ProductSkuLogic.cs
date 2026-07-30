@@ -215,7 +215,8 @@ public class ProductSkuLogic(
                 v.IsPurchasable,
                 v.CanBeBomComponent,
                 v.CanUseInCustom,
-                v.CanHaveBom))
+                v.CanHaveBom,
+                v.CostPrice))
             .ToListAsync(ct);
     }
 

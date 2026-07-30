@@ -341,6 +341,102 @@ public class ReportRepository(OrderDbContext dbContext) : IReportRepository
         }
     }
 
+    public async Task<List<RevenueProfitTimeSeriesPointDto>> GetRevenueProfitTimeSeriesAsync(int? quarter, int? month, int? year, CancellationToken ct = default)
+    {
+        var query = dbContext.Orders
+            .AsNoTracking()
+            .Where(o => o.OrderStatus == OrderStatus.Completed && o.Payments.Any(p => p.PaymentStatus == PaymentStatus.Success));
+
+        if (year.HasValue) query = query.Where(o => o.CreatedAt.Year == year.Value);
+        if (month.HasValue) query = query.Where(o => o.CreatedAt.Month == month.Value);
+        else if (quarter.HasValue)
+        {
+            var startMonth = (quarter.Value - 1) * 3 + 1;
+            var endMonth = quarter.Value * 3;
+            query = query.Where(o => o.CreatedAt.Month >= startMonth && o.CreatedAt.Month <= endMonth);
+        }
+
+        var orders = await query.Select(o => new { 
+            o.CreatedAt, 
+            GrossRevenue = o.TotalAmount,
+            TotalDiscount = o.DiscountAmount,
+            TotalRefund = (o.ReturnOrders != null) ? o.ReturnOrders.Sum(r => r.RefundAmount) : 0,
+            TotalCost = (o.OrderDetails != null) ? o.OrderDetails.Sum(od => od.CostPrice * (od.Quantity - od.ReturnedQuantity)) : 0
+        }).ToListAsync(ct);
+
+        var projectedOrders = orders.Select(o => new {
+            o.CreatedAt,
+            o.GrossRevenue,
+            NetRevenue = o.GrossRevenue - o.TotalDiscount - o.TotalRefund,
+            GrossProfit = (o.GrossRevenue - o.TotalDiscount - o.TotalRefund) - o.TotalCost
+        }).ToList();
+
+        if (month.HasValue)
+        {
+            return Enumerable.Range(1, DateTime.DaysInMonth(year ?? DateTime.Now.Year, month.Value))
+                .Select(day => {
+                    var dayOrders = projectedOrders.Where(o => o.CreatedAt.Day == day).ToList();
+                    return new RevenueProfitTimeSeriesPointDto
+                    {
+                        Label = $"{day}/{month}",
+                        GrossRevenue = dayOrders.Sum(o => o.GrossRevenue),
+                        NetRevenue = dayOrders.Sum(o => o.NetRevenue),
+                        GrossProfit = dayOrders.Sum(o => o.GrossProfit)
+                    };
+                }).ToList();
+        }
+        else if (quarter.HasValue)
+        {
+            var startMonth = (quarter.Value - 1) * 3 + 1;
+            var endMonth = quarter.Value * 3;
+            var points = new List<RevenueProfitTimeSeriesPointDto>();
+            var startDate = new DateTime(year ?? DateTime.Now.Year, startMonth, 1);
+            var endDate = new DateTime(year ?? DateTime.Now.Year, endMonth, DateTime.DaysInMonth(year ?? DateTime.Now.Year, endMonth));
+            for (var d = startDate; d <= endDate; d = d.AddDays(5))
+            {
+                var dEnd = d.AddDays(4);
+                if (dEnd > endDate) dEnd = endDate;
+                var periodOrders = projectedOrders.Where(o => o.CreatedAt.Date >= d && o.CreatedAt.Date <= dEnd).ToList();
+                points.Add(new RevenueProfitTimeSeriesPointDto { 
+                    Label = $"{d:dd/MM}-{dEnd:dd/MM}", 
+                    GrossRevenue = periodOrders.Sum(o => o.GrossRevenue),
+                    NetRevenue = periodOrders.Sum(o => o.NetRevenue),
+                    GrossProfit = periodOrders.Sum(o => o.GrossProfit)
+                });
+            }
+            return points;
+        }
+        else if (year.HasValue)
+        {
+            return Enumerable.Range(1, 12)
+                .Select(m => {
+                    var monthOrders = projectedOrders.Where(o => o.CreatedAt.Month == m).ToList();
+                    return new RevenueProfitTimeSeriesPointDto
+                    {
+                        Label = $"Tháng {m}",
+                        GrossRevenue = monthOrders.Sum(o => o.GrossRevenue),
+                        NetRevenue = monthOrders.Sum(o => o.NetRevenue),
+                        GrossProfit = monthOrders.Sum(o => o.GrossProfit)
+                    };
+                }).ToList();
+        }
+        else
+        {
+            var years = projectedOrders.Select(o => o.CreatedAt.Year).Distinct().OrderBy(y => y).ToList();
+            if (!years.Any()) return new List<RevenueProfitTimeSeriesPointDto>();
+            return years.Select(y => {
+                var yearOrders = projectedOrders.Where(o => o.CreatedAt.Year == y).ToList();
+                return new RevenueProfitTimeSeriesPointDto
+                {
+                    Label = $"Năm {y}",
+                    GrossRevenue = yearOrders.Sum(o => o.GrossRevenue),
+                    NetRevenue = yearOrders.Sum(o => o.NetRevenue),
+                    GrossProfit = yearOrders.Sum(o => o.GrossProfit)
+                };
+            }).ToList();
+        }
+    }
+
     public async Task<List<CategorySalesDto>> GetSalesByChannelAsync(int? quarter, int? month, int? year, CancellationToken ct = default)
     {
         var query = dbContext.Orders

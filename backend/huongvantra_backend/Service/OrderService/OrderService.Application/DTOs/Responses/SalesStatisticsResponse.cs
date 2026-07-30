@@ -21,4 +21,26 @@ public class SalesStatisticsResponse
     public decimal TotalCostOfGoods { get; set; }
 
     public decimal GrossProfit { get; set; }
+    
+    public double GrossProfitMargin { get; set; }
+    public decimal AverageOrderValue { get; set; }
+    public decimal TotalDiscountAmount { get; set; }
+
+    public decimal PrevGrossRevenue { get; set; }
+    public double GrossRevenueGrowthRate { get; set; }
+
+    public decimal PrevNetRevenue { get; set; }
+    public double NetRevenueGrowthRate { get; set; }
+
+    public decimal PrevGrossProfit { get; set; }
+    public double GrossProfitGrowthRate { get; set; }
+
+    public int PrevTotalCompletedOrders { get; set; }
+    public double TotalOrdersGrowthRate { get; set; }
+
+    public decimal PrevAverageOrderValue { get; set; }
+    public double AverageOrderValueGrowthRate { get; set; }
+
+    public decimal PrevTotalDiscountAmount { get; set; }
+    public double TotalDiscountGrowthRate { get; set; }
 }
