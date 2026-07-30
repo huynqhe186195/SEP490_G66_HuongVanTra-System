@@ -19,7 +19,7 @@ public class PosPaymentController(
     private (Guid? ActorId, string? ActorName) Actor() =>
     (
         User.GetUserId() is var id && id != Guid.Empty ? id : null,
-        string.IsNullOrWhiteSpace(User.GetUsername()) ? null : User.GetUsername()
+        User.GetDisplayName()
     );
 
     [HttpGet("transfer-payment-info")]

@@ -16,6 +16,7 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.HasIndex(e => e.OrderCode).IsUnique();
         builder.HasIndex(e => e.CustomerId);
         builder.Property(e => e.CustomerSnapshotName).HasMaxLength(100);
+        builder.Property(e => e.EmployeeSnapshotName).HasMaxLength(100);
         builder.Property(e => e.OrderChannel).HasConversion<string>().HasMaxLength(20).IsRequired();
         builder.Property(e => e.OrderKind).HasConversion<string>().HasMaxLength(20).HasDefaultValue(OrderKind.Sale).IsRequired();
         builder.HasIndex(e => e.OrderKind);

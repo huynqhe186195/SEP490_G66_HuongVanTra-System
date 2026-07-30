@@ -44,6 +44,16 @@ public class AuthController(AuthLogic authLogic, UserLogic userLogic) : Controll
         return Ok(result);
     }
 
+    [HttpPost("update-profile")]
+    [Authorize]
+    public async Task<IActionResult> UpdateProfile([FromBody] UpdateMyProfileRequest request)
+    {
+        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? User.FindFirstValue("sub")!);
+        var result = await userLogic.UpdateMyProfileAsync(userId, request);
+        return Ok(result);
+    }
+
     [HttpPost("change-password")]
     [Authorize]
     public async Task<IActionResult> ChangePassword([FromBody] AuthChangePasswordRequest request)

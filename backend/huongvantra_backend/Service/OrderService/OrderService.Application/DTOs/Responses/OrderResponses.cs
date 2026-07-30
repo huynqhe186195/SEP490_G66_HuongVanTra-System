@@ -18,6 +18,7 @@ public record OrderResponse(
     Guid? CustomerId,
     string? CustomerSnapshotName,
     Guid? EmployeeId,
+    string? EmployeeSnapshotName,
     string OrderChannel,
     string OrderKind,
     string OrderStatus,
@@ -157,7 +158,8 @@ public record OrderSummaryResponse(
     decimal? CodExpectedAmount = null,
     int TotalQuantity = 0,
     // POS-04 (truy vết giữ chỗ): đơn đang giữ chỗ tồn Kệ Hàng — badge "Đang giữ hàng".
-    bool HasActiveStockReservation = false
+    bool HasActiveStockReservation = false,
+    string? EmployeeSnapshotName = null
 );
 
 public record CustomBundleIngredientResponse(

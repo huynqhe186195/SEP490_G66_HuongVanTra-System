@@ -68,6 +68,13 @@ export function mapOrderSummary(item) {
     orderCode: item.orderCode ?? item.OrderCode ?? '',
     customerId: item.customerId ?? item.CustomerId ?? null,
     customerSnapshotName: item.customerSnapshotName ?? item.CustomerSnapshotName ?? 'Khách lẻ',
+    employeeId: item.employeeId ?? item.EmployeeId ?? null,
+    sellerName:
+      item.employeeSnapshotName
+      ?? item.EmployeeSnapshotName
+      ?? item.sellerName
+      ?? item.SellerName
+      ?? '',
     orderChannel: normalizeEnum(item.orderChannel ?? item.OrderChannel),
     orderKind: normalizeEnum(item.orderKind ?? item.OrderKind ?? 'Sale'),
     orderStatus: normalizeEnum(item.orderStatus ?? item.OrderStatus),
@@ -98,6 +105,12 @@ export function mapOrderDetail(item) {
     customerId: item.customerId ?? item.CustomerId ?? null,
     customerSnapshotName: item.customerSnapshotName ?? item.CustomerSnapshotName ?? 'Khách lẻ',
     employeeId: item.employeeId ?? item.EmployeeId ?? null,
+    sellerName:
+      item.employeeSnapshotName
+      ?? item.EmployeeSnapshotName
+      ?? item.sellerName
+      ?? item.SellerName
+      ?? '',
     orderChannel: normalizeEnum(item.orderChannel ?? item.OrderChannel),
     orderKind: normalizeEnum(item.orderKind ?? item.OrderKind ?? 'Sale'),
     orderStatus: normalizeEnum(item.orderStatus ?? item.OrderStatus),

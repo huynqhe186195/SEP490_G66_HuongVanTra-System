@@ -1,28 +1,56 @@
-import { loadAuthSession } from '../../auth/services/authSession.js'
 import { changePassword } from '../../auth/services/authApi.js'
 import { apiRequestAuth } from '../../../lib/apiClient.js'
 
-export async function fetchMyProfile() {
-  const session = loadAuthSession()
-  if (!session?.accessToken) {
-    throw new Error('Không tìm thấy thông tin phiên đăng nhập.')
-  }
-
-  const user = await apiRequestAuth('/api/auth/me', { method: 'GET' })
+function mapMyProfile(user) {
   const employee = user.employee ?? user.Employee ?? null
   return {
-    userId: user.id ?? user.Id ?? session.userId,
-    username: user.username ?? user.Username,
+    userId: user.id ?? user.Id ?? null,
+    username: user.username ?? user.Username ?? '',
     fullName: employee?.fullName ?? employee?.FullName ?? '',
-    isActive: user.isActive ?? user.IsActive,
-    roles: user.roles ?? user.Roles ?? session.roles ?? [],
+    phone: employee?.bankAccountInfo ?? employee?.BankAccountInfo ?? '',
+    note: employee?.department ?? employee?.Department ?? '',
+    isActive: user.isActive ?? user.IsActive ?? true,
+    roles: user.roles ?? user.Roles ?? [],
     employee,
     lastLoginAt: user.lastLoginAt ?? user.LastLoginAt ?? null,
   }
 }
 
-export async function updateMyProfile(_payload) {
-  throw new Error('Cập nhật hồ sơ cá nhân chưa được hỗ trợ qua API hiện tại.')
+export async function fetchMyProfile() {
+  const user = await apiRequestAuth('/api/auth/me', { method: 'GET' })
+  return mapMyProfile(user)
+}
+
+export async function updateMyProfile(payload) {
+  const fullName = String(payload?.fullName ?? '').trim()
+  if (!fullName) throw new Error('Họ và tên không được để trống.')
+
+  const phone = String(payload?.phone ?? '').trim()
+  const note = String(payload?.note ?? '').trim()
+  const currentPassword = String(payload?.currentPassword ?? '')
+  const newPassword = String(payload?.newPassword ?? '')
+
+  if (newPassword && !currentPassword) {
+    throw new Error('Nhập mật khẩu hiện tại để đổi mật khẩu mới.')
+  }
+  if (newPassword && newPassword.length < 6) {
+    throw new Error('Mật khẩu mới phải có ít nhất 6 ký tự.')
+  }
+
+  const updated = await apiRequestAuth('/api/auth/update-profile', {
+    method: 'POST',
+    body: JSON.stringify({
+      fullName,
+      phone: phone || null,
+      note: note || null,
+    }),
+  })
+
+  if (newPassword) {
+    await changePassword(currentPassword, newPassword)
+  }
+
+  return mapMyProfile(updated)
 }
 
 export function updateMyPassword(currentPassword, newPassword) {

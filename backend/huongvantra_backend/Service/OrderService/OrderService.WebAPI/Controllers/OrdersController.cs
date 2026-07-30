@@ -18,7 +18,7 @@ public class OrdersController(OrderLogic orderLogic, ReceiptReprintLogic receipt
     private (Guid? ActorId, string? ActorName) Actor() =>
     (
         User.GetUserId() is var id && id != Guid.Empty ? id : null,
-        string.IsNullOrWhiteSpace(User.GetUsername()) ? null : User.GetUsername()
+        User.GetDisplayName()
     );
 
     [HttpGet]
