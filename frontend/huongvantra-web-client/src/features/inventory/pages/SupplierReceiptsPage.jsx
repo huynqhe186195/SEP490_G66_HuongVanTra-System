@@ -59,7 +59,7 @@ function formatReceiptAmount(receipt) {
 }
 
 const ACTION_BTN =
-  'inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-40'
+  'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-40'
 
 function ReceiptRowActions({
   receipt,
@@ -73,7 +73,9 @@ function ReceiptRowActions({
   onCancel,
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
+  const [menuPos, setMenuPos] = useState({ top: 0, right: 0 })
   const menuRef = useRef(null)
+  const triggerRef = useRef(null)
   const busy = actionId === receipt.id
   const anyBusy = Boolean(actionId)
 
@@ -83,19 +85,41 @@ function ReceiptRowActions({
   const canDecide = canReview && receipt.status === 'pendingapproval' && !isOwn
   const hasMenu = canEdit || canSubmit || canCancel || canDecide
 
+  function updateMenuPosition() {
+    const rect = triggerRef.current?.getBoundingClientRect()
+    if (!rect) return
+    setMenuPos({
+      top: rect.bottom + 4,
+      right: Math.max(8, window.innerWidth - rect.right),
+    })
+  }
+
   useEffect(() => {
     if (!menuOpen) return undefined
+    updateMenuPosition()
     function onPointerDown(event) {
-      if (!menuRef.current?.contains(event.target)) setMenuOpen(false)
+      if (
+        !menuRef.current?.contains(event.target)
+        && !triggerRef.current?.contains(event.target)
+      ) {
+        setMenuOpen(false)
+      }
     }
     function onKeyDown(event) {
       if (event.key === 'Escape') setMenuOpen(false)
     }
+    function onReposition() {
+      updateMenuPosition()
+    }
     document.addEventListener('mousedown', onPointerDown)
     document.addEventListener('keydown', onKeyDown)
+    window.addEventListener('resize', onReposition)
+    window.addEventListener('scroll', onReposition, true)
     return () => {
       document.removeEventListener('mousedown', onPointerDown)
       document.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('resize', onReposition)
+      window.removeEventListener('scroll', onReposition, true)
     }
   }, [menuOpen])
 
@@ -104,47 +128,52 @@ function ReceiptRowActions({
     action()
   }
 
-  // 2 ô cố định: Chi tiết | ⋮ — thẳng hàng, chiếm ít chỗ nhất.
   return (
-    <div className="relative inline-grid grid-cols-2 justify-items-center gap-0.5" ref={menuRef}>
+    <div className="mx-auto inline-grid grid-cols-2 items-center justify-items-center gap-0.5">
       <Link
         to={`/inventory/supplier-receipts/${receipt.id}`}
         title="Chi tiết"
         aria-label="Chi tiết"
         className={ACTION_BTN}
       >
-        <span className="material-symbols-outlined text-[17px]">visibility</span>
+        <span className="material-symbols-outlined text-[18px]">visibility</span>
       </Link>
 
       {hasMenu ? (
         <button
+          ref={triggerRef}
           type="button"
           title="Thao tác khác"
           aria-label="Thao tác khác"
           aria-expanded={menuOpen}
           disabled={anyBusy && !busy}
-          onClick={() => setMenuOpen((open) => !open)}
+          onClick={() => {
+            if (!menuOpen) updateMenuPosition()
+            setMenuOpen((open) => !open)
+          }}
           className={`${ACTION_BTN} ${menuOpen ? 'bg-slate-100 text-slate-800' : ''}`}
         >
-          <span className={`material-symbols-outlined text-[17px] ${busy ? 'animate-spin' : ''}`}>
+          <span className={`material-symbols-outlined text-[18px] ${busy ? 'animate-spin' : ''}`}>
             {busy ? 'progress_activity' : 'more_horiz'}
           </span>
         </button>
       ) : (
-        <span className="inline-block h-7 w-7" aria-hidden="true" />
+        <span className="inline-block h-8 w-8" aria-hidden="true" />
       )}
 
       {menuOpen && hasMenu ? (
         <div
+          ref={menuRef}
           role="menu"
-          className="absolute right-0 top-full z-20 mt-1 min-w-[10.5rem] overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-lg"
+          style={{ top: menuPos.top, right: menuPos.right }}
+          className="fixed z-50 min-w-[11rem] overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-lg"
         >
           {canEdit ? (
             <Link
               role="menuitem"
               to={`/inventory/import/create?receiptId=${receipt.id}`}
               onClick={() => setMenuOpen(false)}
-              className="flex items-center gap-2 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+              className="flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
             >
               <span className="material-symbols-outlined text-[16px] text-[#356647]">edit</span>
               Chỉnh sửa
@@ -156,7 +185,7 @@ function ReceiptRowActions({
               role="menuitem"
               disabled={anyBusy}
               onClick={() => runAction(onSubmit)}
-              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50"
             >
               <span className="material-symbols-outlined text-[16px] text-[#356647]">send</span>
               Gửi duyệt
@@ -169,7 +198,7 @@ function ReceiptRowActions({
                 role="menuitem"
                 disabled={anyBusy}
                 onClick={() => runAction(onApprove)}
-                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
               >
                 <span className="material-symbols-outlined text-[16px]">check_circle</span>
                 Duyệt
@@ -179,7 +208,7 @@ function ReceiptRowActions({
                 role="menuitem"
                 disabled={anyBusy}
                 onClick={() => runAction(onReject)}
-                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-rose-600 hover:bg-rose-50 disabled:opacity-50"
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-rose-600 hover:bg-rose-50 disabled:opacity-50"
               >
                 <span className="material-symbols-outlined text-[16px]">cancel</span>
                 Từ chối
@@ -192,7 +221,7 @@ function ReceiptRowActions({
               role="menuitem"
               disabled={anyBusy}
               onClick={() => runAction(onCancel)}
-              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50"
             >
               <span className="material-symbols-outlined text-[16px]">delete</span>
               Hủy
@@ -383,20 +412,22 @@ function SupplierReceiptsPage() {
         </select>
       </div>
 
-      <section className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
+      <section className="rounded-2xl border border-slate-100 bg-white shadow-sm">
         <div className="overflow-x-auto">
-          <table className="min-w-full text-left text-sm">
+          <table className="w-full min-w-[1080px] table-fixed text-left text-sm">
             <thead className="bg-slate-50 text-xs font-bold uppercase tracking-wide text-slate-500">
               <tr>
-                <th className="px-6 py-3">Mã phiếu</th>
-                <th className="px-4 py-3">Nhà cung cấp</th>
-                <th className="px-4 py-3">Nội dung</th>
-                <th className="px-4 py-3 text-right">Số lượng</th>
-                <th className="px-4 py-3 text-right">Tổng tiền</th>
-                <th className="px-4 py-3">Trạng thái</th>
-                <th className="px-4 py-3">Người tạo</th>
-                <th className="px-4 py-3">Thời gian</th>
-                <th className="w-20 px-2 py-3 text-right">Thao tác</th>
+                <th className="w-[11%] px-4 py-3 xl:px-6">Mã phiếu</th>
+                <th className="w-[16%] px-3 py-3 xl:px-4">Nhà cung cấp</th>
+                <th className="w-[16%] px-3 py-3 xl:px-4">Nội dung</th>
+                <th className="w-[9%] px-3 py-3 text-right xl:px-4">Số lượng</th>
+                <th className="w-[11%] px-3 py-3 text-right xl:px-4">Tổng tiền</th>
+                <th className="w-[10%] px-3 py-3 xl:px-4">Trạng thái</th>
+                <th className="w-[10%] px-3 py-3 xl:px-4">Người tạo</th>
+                <th className="w-[12%] px-3 py-3 xl:px-4">Thời gian</th>
+                <th className="sticky right-0 z-10 w-[4.75rem] bg-slate-50 px-1 py-3 text-center shadow-[-6px_0_8px_-6px_rgba(15,23,42,0.12)]">
+                  Thao tác
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -409,39 +440,54 @@ function SupplierReceiptsPage() {
                   <td colSpan={9} className="px-6 py-8 text-slate-500">Chưa có phiếu nhập nhà cung cấp.</td>
                 </tr>
               ) : (
-                data.items.map((receipt) => (
-                  <tr key={receipt.id} className="hover:bg-slate-50/80">
-                    <td className="px-6 py-4 font-mono font-semibold text-[#356647]">{receipt.receiptCode}</td>
-                    <td className="px-4 py-4 text-slate-700">{receipt.supplierName || '—'}</td>
-                    <td className="px-4 py-4 text-slate-700">{getItemSummary(receipt)}</td>
-                    <td className="px-4 py-4 text-right font-semibold text-slate-800">
-                      {formatStockQuantity(receipt.totalQuantity)}
-                    </td>
-                    <td className="px-4 py-4 text-right font-semibold text-slate-800">{formatReceiptAmount(receipt)}</td>
-                    <td className="px-4 py-4">
-                      <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusClass(receipt.status)}`}>
-                        {getStatusLabel(receipt.status)}
-                      </span>
-                    </td>
-                    <td className="px-4 py-4 text-slate-700">{receipt.createdByName || '—'}</td>
-                    <td className="px-4 py-4 text-slate-600">{formatVietnamDateTime(receipt.createdAt)}</td>
-                    <td className="px-2 py-3 text-right">
-                      <div className="flex justify-end">
-                        <ReceiptRowActions
-                          receipt={receipt}
-                          canOperate={canOperate}
-                          canReview={canReview}
-                          isOwn={isOwnReceipt(receipt)}
-                          actionId={actionId}
-                          onSubmit={() => handleSubmitForApproval(receipt)}
-                          onApprove={() => handleApprove(receipt)}
-                          onReject={() => handleReject(receipt)}
-                          onCancel={() => handleCancel(receipt)}
-                        />
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                data.items.map((receipt) => {
+                  const itemSummary = getItemSummary(receipt)
+                  return (
+                    <tr key={receipt.id} className="group hover:bg-slate-50/80">
+                      <td className="truncate px-4 py-3 font-mono text-xs font-semibold text-[#356647] xl:px-6 xl:text-sm">
+                        {receipt.receiptCode}
+                      </td>
+                      <td className="truncate px-3 py-3 text-slate-700 xl:px-4" title={receipt.supplierName || ''}>
+                        {receipt.supplierName || '—'}
+                      </td>
+                      <td className="truncate px-3 py-3 text-slate-700 xl:px-4" title={itemSummary}>
+                        {itemSummary}
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-3 text-right font-semibold text-slate-800 xl:px-4">
+                        {formatStockQuantity(receipt.totalQuantity)}
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-3 text-right font-semibold text-slate-800 xl:px-4">
+                        {formatReceiptAmount(receipt)}
+                      </td>
+                      <td className="px-3 py-3 xl:px-4">
+                        <span className={`inline-flex max-w-full truncate rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusClass(receipt.status)}`}>
+                          {getStatusLabel(receipt.status)}
+                        </span>
+                      </td>
+                      <td className="truncate px-3 py-3 text-slate-700 xl:px-4" title={receipt.createdByName || ''}>
+                        {receipt.createdByName || '—'}
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-3 text-xs text-slate-600 xl:px-4 xl:text-sm">
+                        {formatVietnamDateTime(receipt.createdAt)}
+                      </td>
+                      <td className="sticky right-0 z-10 bg-white px-1 py-2 text-center shadow-[-6px_0_8px_-6px_rgba(15,23,42,0.12)] group-hover:bg-slate-50">
+                        <div className="flex justify-center">
+                          <ReceiptRowActions
+                            receipt={receipt}
+                            canOperate={canOperate}
+                            canReview={canReview}
+                            isOwn={isOwnReceipt(receipt)}
+                            actionId={actionId}
+                            onSubmit={() => handleSubmitForApproval(receipt)}
+                            onApprove={() => handleApprove(receipt)}
+                            onReject={() => handleReject(receipt)}
+                            onCancel={() => handleCancel(receipt)}
+                          />
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })
               )}
             </tbody>
           </table>
