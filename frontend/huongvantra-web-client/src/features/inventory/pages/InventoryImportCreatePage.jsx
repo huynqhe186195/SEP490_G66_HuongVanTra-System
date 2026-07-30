@@ -91,6 +91,43 @@ function isPositiveIntegerText(value) {
   return /^[1-9]\d*$/.test(String(value ?? '').trim())
 }
 
+const IMPORT_FORMAT_TIPS = [
+  'Bấm “Tải mẫu”, mở file vừa tải, điền vào các ô trống — đừng xóa dòng tiêu đề có chữ “Mã số” và “Số lượng”.',
+  'Mỗi dòng hàng cần có: Mã số hàng (đúng như trên hệ thống) và Số lượng thực nhập (số nguyên, ví dụ 10).',
+  'Nên điền Đơn giá. Nếu thiếu đơn giá vẫn nạp được nhưng chỉ lưu nháp, chưa gửi duyệt được.',
+  'Ngày sản xuất / hạn dùng viết kiểu 01/07/2026. Tên nhà cung cấp phải giống tên đã có trong hệ thống.',
+]
+
+function tipsForImportErrors(items) {
+  const tips = new Set()
+  const joined = items.join(' ').toLowerCase()
+  if (/không đúng mẫu|không tìm thấy bảng|không có sheet|thiếu cột|sai mẫu/.test(joined)) {
+    tips.add('Bấm “Tải mẫu”, dùng đúng file mẫu đó để điền, rồi nạp lại. Đừng tự tạo file mới từ Word/Excel trống.')
+  }
+  if (/chưa có dòng|không có dòng|trống/.test(joined) && /hàng|dữ liệu/.test(joined)) {
+    tips.add('Trong file mẫu, điền ít nhất 1 dòng hàng phía trên chữ “Cộng”: mã số hàng + số lượng (+ đơn giá nếu muốn gửi duyệt).')
+  }
+  if (/danh sách hàng|hệ thống chưa sẵn|chưa tải được|đang tải danh sách/.test(joined)) {
+    tips.add('Bấm F5 (tải lại trang). Nếu vẫn lỗi, nhờ người phụ trách kỹ thuật khởi động lại hệ thống rồi thử lại.')
+  }
+  if (/không tìm thấy mã|không có trong danh sách|không khớp/.test(joined)) {
+    tips.add('Mở ô chọn hàng trên form, gõ mã hàng để xem mã đúng. Copy đúng mã đó vào cột “Mã số” trên Excel.')
+  }
+  if (/số lượng/.test(joined) && /nguyên|lớn hơn 0|sai/.test(joined)) {
+    tips.add('Số lượng chỉ ghi số tròn dương như 5, 10, 100 — không ghi 0, số âm, hay 1,5.')
+  }
+  if (/trùng/.test(joined)) {
+    tips.add('Hai dòng không được giống hết: cùng mã hàng + cùng mã lô + cùng ngày sản xuất + cùng hạn dùng.')
+  }
+  if (/nhà cung cấp/.test(joined)) {
+    tips.add('Chọn lại nhà cung cấp trên form (ô tìm kiếm phía trên), hoặc sửa tên trong Excel cho khớp danh sách.')
+  }
+  if (tips.size === 0) {
+    IMPORT_FORMAT_TIPS.forEach((tip) => tips.add(tip))
+  }
+  return [...tips]
+}
+
 function getProductTypeLabel(productType) {
   if (productType === 'NGUYEN_LIEU') return 'Nguyên liệu'
   if (productType === 'BAO_BI') return 'Bao bì'
@@ -268,8 +305,8 @@ function SkuSearchPicker({ catalogError, duplicate, hasError, isCatalogLoading, 
   const inputValue = isOpen || !sku ? query : getSkuDisplayText(sku)
   const isCatalogUnavailable = isCatalogLoading || Boolean(catalogError)
   const emptyMessage = skus.length === 0
-    ? 'Không có SKU nào đang hoạt động và được phép nhập từ nhà cung cấp.'
-    : 'Không tìm thấy SKU phù hợp với từ khóa.'
+    ? 'Chưa có hàng nào được phép nhập. Bấm F5 hoặc nhờ người phụ trách kỹ thuật.'
+    : 'Không tìm thấy hàng khớp từ khóa. Thử gõ mã hoặc tên khác.'
 
   return (
     <div ref={wrapperRef} className="relative">
@@ -285,12 +322,12 @@ function SkuSearchPicker({ catalogError, duplicate, hasError, isCatalogLoading, 
           setQuery(sku ? getSkuDisplayText(sku) : query)
           setIsOpen(true)
         }}
-        placeholder={isCatalogLoading ? 'Đang tải danh sách hàng hóa...' : 'Tìm Hàng hóa hoặc Mã số'}
+        placeholder={isCatalogLoading ? 'Đang tải danh sách hàng...' : 'Gõ mã hoặc tên hàng để tìm'}
       />
-      {isCatalogLoading ? <p className="mt-1 text-xs text-slate-500">Đang tải danh sách SKU...</p> : null}
+      {isCatalogLoading ? <p className="mt-1 text-xs text-slate-500">Đang tải danh sách hàng...</p> : null}
       {catalogError ? <p className="mt-1 text-xs font-medium text-red-600">{catalogError}</p> : null}
       {duplicate ? (
-        <p className="mt-1 text-xs font-medium text-amber-700">SKU này đã có trong lô nhập.</p>
+        <p className="mt-1 text-xs font-medium text-amber-700">Mã hàng này đã có trong phiếu.</p>
       ) : null}
 
       {isOpen && !isCatalogUnavailable ? (
@@ -360,8 +397,17 @@ function InventoryImportCreatePage() {
   const [headerErrors, setHeaderErrors] = useState({})
   const [lineErrors, setLineErrors] = useState({})
   const [lineWarnings, setLineWarnings] = useState({})
+  const [importFeedback, setImportFeedback] = useState(null)
   const errorSummaryRef = useRef(null)
+  const importFeedbackRef = useRef(null)
   const today = new Date().toISOString().slice(0, 10)
+
+  function showImportFeedback(next) {
+    setImportFeedback(next)
+    requestAnimationFrame(() => {
+      importFeedbackRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    })
+  }
 
   const loadSupplierReceiptSkus = useCallback(async () => {
     setIsSkuCatalogLoading(true)
@@ -370,7 +416,8 @@ function InventoryImportCreatePage() {
       const skuItems = await fetchSupplierReceiptSkus()
       setSupplierReceiptSkus(skuItems.filter(isSupplierReceiptEligibleSku).sort(sortSkuOptions))
     } catch {
-      const message = 'Không tải được danh sách SKU được phép nhập từ nhà cung cấp. Vui lòng thử lại.'
+      const message =
+        'Chưa tải được danh sách hàng được phép nhập. Bấm F5 để thử lại. Nếu vẫn lỗi, nhờ người phụ trách kỹ thuật kiểm tra hệ thống.'
       setSupplierReceiptSkus([])
       setSkuCatalogError(message)
       showError(message)
@@ -385,7 +432,7 @@ function InventoryImportCreatePage() {
       setSuppliers(await fetchActiveSuppliers())
     } catch {
       setSuppliers([])
-      showError('Không tải được danh sách nhà cung cấp đang hoạt động. Vui lòng thử lại.')
+      showError('Chưa tải được danh sách nhà cung cấp. Bấm F5 rồi thử lại.')
     } finally {
       setIsSupplierLoading(false)
     }
@@ -512,7 +559,27 @@ function InventoryImportCreatePage() {
     })
   }
 
-  function applyImportedLines(rawLines, sourceLabel) {
+  function applyImportedLines(rawLines) {
+    if (skuCatalogError || isSkuCatalogLoading) {
+      return {
+        nextLines: [],
+        previewWarnings: [],
+        previewErrors: [
+          skuCatalogError
+            || 'Hệ thống đang tải danh sách hàng. Đợi vài giây rồi bấm “Nạp file” lại.',
+        ],
+      }
+    }
+    if (!supplierReceiptSkus.length) {
+      return {
+        nextLines: [],
+        previewWarnings: [],
+        previewErrors: [
+          'Chưa có danh sách hàng trên trang này nên không kiểm tra được file. Bấm F5. Nếu vẫn trống, nhờ người phụ trách kỹ thuật.',
+        ],
+      }
+    }
+
     const previewErrors = []
     const previewWarnings = []
     const compositeKeys = new Set()
@@ -530,15 +597,23 @@ function InventoryImportCreatePage() {
 
       if (!sku) {
         previewErrors.push(
-          `Dòng ${rowLabel}: SKU ${skuCode || 'trống'} không hợp lệ hoặc không được phép nhập NCC.`,
+          skuCode
+            ? `Dòng ${rowLabel}: không tìm thấy mã “${skuCode}” trong danh sách hàng được phép nhập.`
+            : `Dòng ${rowLabel}: chưa điền mã số hàng.`,
         )
       }
       if (!isPositiveIntegerText(documentQuantity) || !isPositiveIntegerText(actualQuantity)) {
-        previewErrors.push(`Dòng ${rowLabel}: Số lượng phải là số nguyên lớn hơn 0.`)
+        previewErrors.push(
+          `Dòng ${rowLabel}: số lượng chưa đúng — cần số tròn lớn hơn 0 (ví dụ 10), không ghi 0 hay 1,5.`,
+        )
       }
-      if (!unitCost) previewWarnings.push(`Dòng ${rowLabel}: thiếu Unit Cost; chỉ có thể lưu Draft.`)
+      if (!unitCost) {
+        previewWarnings.push(`Dòng ${rowLabel}: thiếu đơn giá — vẫn nạp được, nhưng chỉ lưu nháp.`)
+      }
       if (!String(raw.documentQuantity ?? '').trim() && actualQuantity) {
-        previewWarnings.push(`Dòng ${rowLabel}: thiếu Document Quantity, đã preview theo Actual Quantity.`)
+        previewWarnings.push(
+          `Dòng ${rowLabel}: thiếu số lượng theo chứng từ — hệ thống tạm dùng số lượng thực nhập.`,
+        )
       }
 
       if (sku && supplierLotCode && manufacturedAt && expiresAt) {
@@ -550,7 +625,7 @@ function InventoryImportCreatePage() {
         ].join('|')
         if (compositeKeys.has(composite)) {
           previewErrors.push(
-            `Dòng ${rowLabel}: trùng SKU, Supplier Lot Code, Manufacture Date và Expiry Date.`,
+            `Dòng ${rowLabel}: trùng với dòng khác (cùng mã hàng, mã lô, ngày sản xuất và hạn dùng).`,
           )
         }
         compositeKeys.add(composite)
@@ -571,7 +646,7 @@ function InventoryImportCreatePage() {
     })
 
     if (previewErrors.length > 0) {
-      throw new Error(`${sourceLabel} không hợp lệ. ${previewErrors.slice(0, 5).join(' ')}`)
+      return { nextLines: [], previewWarnings, previewErrors }
     }
 
     const appliedLines = nextLines.length ? nextLines : [emptyLine()]
@@ -580,15 +655,25 @@ function InventoryImportCreatePage() {
     setExpandedLineKeys(new Set(appliedLines[0] ? [appliedLines[0].key] : []))
     setLineWarnings({})
     setLineErrors({})
-    return { nextLines: appliedLines, previewWarnings }
+    return { nextLines: appliedLines, previewWarnings, previewErrors: [] }
   }
 
   async function importExcelPreview(file) {
     if (!file) return
+    const fileName = file.name || 'Excel'
     try {
       const buffer = await file.arrayBuffer()
       const { headerPatch = {}, rawLines, errors } = parseSupplierReceiptTt200Excel(buffer)
-      if (errors.length > 0) throw new Error(errors[0])
+      if (errors.length > 0) {
+        showImportFeedback({
+          kind: 'error',
+          fileName,
+          items: errors,
+          tips: tipsForImportErrors(errors),
+        })
+        showError('File chưa nạp được. Xem phần hướng dẫn ngay bên dưới nút “Nạp file”.')
+        return
+      }
 
       const importWarnings = []
       const nextHeader = { ...headerPatch }
@@ -605,7 +690,7 @@ function InventoryImportCreatePage() {
         } else {
           delete nextHeader.supplierId
           importWarnings.push(
-            `Không khớp nhà cung cấp "${nextHeader.supplierName}" trong danh sách — vui lòng chọn lại trên form.`,
+            `Không tìm thấy nhà cung cấp “${nextHeader.supplierName}” — hãy chọn lại trên form.`,
           )
           delete nextHeader.supplierName
         }
@@ -621,15 +706,41 @@ function InventoryImportCreatePage() {
         setHeaderErrors({})
       }
 
-      const { nextLines, previewWarnings } = applyImportedLines(rawLines, 'Excel')
+      const { nextLines, previewWarnings, previewErrors } = applyImportedLines(rawLines)
+      if (previewErrors.length > 0) {
+        showImportFeedback({
+          kind: 'error',
+          fileName,
+          items: previewErrors,
+          tips: tipsForImportErrors(previewErrors),
+        })
+        showError('File còn chỗ cần sửa. Làm theo hướng dẫn bên dưới rồi nạp lại.')
+        return
+      }
+
       const allWarnings = [...importWarnings, ...previewWarnings]
       if (allWarnings.length > 0) {
-        showSuccess(`Đã nạp ${nextLines.length} dòng hàng hóa. ${allWarnings.slice(0, 3).join(' ')}`)
+        showImportFeedback({
+          kind: 'warning',
+          fileName,
+          items: allWarnings,
+          tips: [
+            'File đã nạp. Kiểm tra nhà cung cấp và đơn giá trước khi gửi duyệt.',
+          ],
+        })
+        showSuccess(`Đã nạp ${nextLines.length} dòng hàng (cần kiểm tra thêm).`)
       } else {
-        showSuccess(`Đã nạp ${nextLines.length} dòng hàng hóa từ Excel.`)
+        setImportFeedback(null)
+        showSuccess(`Đã nạp ${nextLines.length} dòng hàng từ file.`)
       }
-    } catch (error) {
-      showError(error.message || 'Không đọc được file Excel.')
+    } catch {
+      showImportFeedback({
+        kind: 'error',
+        fileName,
+        items: ['Không mở được file này. Hãy dùng file Excel mẫu (.xlsx) tải từ nút “Tải mẫu”.'],
+        tips: IMPORT_FORMAT_TIPS,
+      })
+      showError('Không mở được file. Xem hướng dẫn bên dưới.')
     }
   }
 
@@ -640,10 +751,21 @@ function InventoryImportCreatePage() {
       await importExcelPreview(file)
       return
     }
+    const fileName = file.name || 'CSV'
     try {
       const text = await file.text()
       const rows = text.split(/\r?\n/).filter((row) => row.trim())
-      if (rows.length < 2) throw new Error('File CSV không có dòng dữ liệu.')
+      if (rows.length < 2) {
+        const items = ['File chưa có dòng hàng nào. Hãy điền dữ liệu rồi nạp lại.']
+        showImportFeedback({
+          kind: 'error',
+          fileName,
+          items,
+          tips: tipsForImportErrors(items),
+        })
+        showError('File chưa nạp được. Xem hướng dẫn bên dưới.')
+        return
+      }
 
       const headers = parseCsvLine(rows[0]).map(normalizeCsvHeader)
       const indexOf = (...names) => headers.findIndex((header) => names.includes(header))
@@ -672,9 +794,20 @@ function InventoryImportCreatePage() {
         note: indexOf('note', 'qualitynote', 'ghichu'),
       }
       if (indexes.skuCode < 0 || indexes.actualQuantity < 0) {
-        throw new Error(
-          'CSV phải có cột SKU Code (hoặc Mã số) và Actual Quantity (hoặc Số lượng / Thực nhập). File Excel TT200 hãy dùng nút Nạp Excel.',
-        )
+        const items = [
+          'File thiếu cột “Mã số” và “Số lượng / Thực nhập”. Nên dùng “Tải mẫu” rồi điền vào file mẫu.',
+        ]
+        showImportFeedback({
+          kind: 'error',
+          fileName,
+          items,
+          tips: [
+            ...tipsForImportErrors(items),
+            'Cách dễ nhất: bấm “Tải mẫu”, điền xong, rồi bấm “Nạp file”.',
+          ],
+        })
+        showError('File chưa đúng mẫu. Xem hướng dẫn bên dưới.')
+        return
       }
 
       const rawLines = rows.slice(1).map((rawRow, rowIndex) => {
@@ -694,14 +827,39 @@ function InventoryImportCreatePage() {
         }
       })
 
-      const { nextLines, previewWarnings } = applyImportedLines(rawLines, 'CSV')
-      if (previewWarnings.length > 0) {
-        showSuccess(`Đã nạp ${nextLines.length} dòng. ${previewWarnings.slice(0, 3).join(' ')}`)
-      } else {
-        showSuccess(`Đã nạp ${nextLines.length} dòng từ CSV để kiểm tra trước khi lưu.`)
+      const { nextLines, previewWarnings, previewErrors } = applyImportedLines(rawLines)
+      if (previewErrors.length > 0) {
+        showImportFeedback({
+          kind: 'error',
+          fileName,
+          items: previewErrors,
+          tips: tipsForImportErrors(previewErrors),
+        })
+        showError('File còn chỗ cần sửa. Làm theo hướng dẫn bên dưới rồi nạp lại.')
+        return
       }
-    } catch (error) {
-      showError(error.message)
+
+      if (previewWarnings.length > 0) {
+        showImportFeedback({
+          kind: 'warning',
+          fileName,
+          items: previewWarnings,
+          tips: ['File đã nạp. Kiểm tra đơn giá trước khi gửi duyệt.'],
+        })
+        showSuccess(`Đã nạp ${nextLines.length} dòng hàng (cần kiểm tra thêm).`)
+      } else {
+        setImportFeedback(null)
+        showSuccess(`Đã nạp ${nextLines.length} dòng hàng từ file.`)
+      }
+    } catch {
+      const items = ['Không mở được file. Hãy dùng file mẫu tải từ nút “Tải mẫu”.']
+      showImportFeedback({
+        kind: 'error',
+        fileName,
+        items,
+        tips: tipsForImportErrors(items),
+      })
+      showError('Không mở được file. Xem hướng dẫn bên dưới.')
     }
   }
 
@@ -1106,7 +1264,7 @@ function InventoryImportCreatePage() {
             <div>
               <h2 className="text-lg font-bold text-slate-800">Dòng hàng nhập</h2>
               <p className="mt-1 text-xs text-slate-500">
-                Nạp Excel lấy NCC + ghi chú phiếu + dòng hàng (lô / NSX / HSD / ghi chú chất lượng nếu có). Tên NCC phải khớp danh sách hệ thống.
+                Cách dễ: bấm “Tải mẫu” → điền mã hàng, số lượng, đơn giá → bấm “Nạp file”. Tên nhà cung cấp trong file phải giống tên trên hệ thống.
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -1116,11 +1274,11 @@ function InventoryImportCreatePage() {
                 className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
               >
                 <span className="material-symbols-outlined text-[18px]">download</span>
-                Tải mẫu CSV
+                Tải mẫu
               </a>
               <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">
                 <span className="material-symbols-outlined text-[18px]">upload_file</span>
-                Nạp CSV
+                Nạp file
                 <input
                   type="file"
                   accept=".csv,.xlsx,.xls,text/csv"
@@ -1157,6 +1315,110 @@ function InventoryImportCreatePage() {
               </button>
             </div>
           </div>
+
+          {importFeedback ? (
+            <div
+              ref={importFeedbackRef}
+              className={`mb-4 rounded-xl border p-4 ${
+                importFeedback.kind === 'error'
+                  ? 'border-red-200 bg-red-50'
+                  : 'border-amber-200 bg-amber-50'
+              }`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p
+                    className={`text-sm font-bold ${
+                      importFeedback.kind === 'error' ? 'text-red-700' : 'text-amber-800'
+                    }`}
+                  >
+                    {importFeedback.kind === 'error'
+                      ? 'File chưa nạp được — sửa theo hướng dẫn rồi thử lại'
+                      : 'Đã nạp file — vui lòng kiểm tra thêm'}
+                  </p>
+                  {importFeedback.fileName ? (
+                    <p
+                      className={`mt-0.5 text-xs ${
+                        importFeedback.kind === 'error' ? 'text-red-600' : 'text-amber-700'
+                      }`}
+                    >
+                      Tên file: {importFeedback.fileName}
+                    </p>
+                  ) : null}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setImportFeedback(null)}
+                  className={`shrink-0 rounded-md p-1 ${
+                    importFeedback.kind === 'error'
+                      ? 'text-red-500 hover:bg-red-100'
+                      : 'text-amber-600 hover:bg-amber-100'
+                  }`}
+                  aria-label="Đóng thông báo"
+                >
+                  <span className="material-symbols-outlined text-[18px]">close</span>
+                </button>
+              </div>
+
+              <ul
+                className={`mt-3 max-h-40 space-y-1.5 overflow-y-auto text-sm ${
+                  importFeedback.kind === 'error' ? 'text-red-700' : 'text-amber-900'
+                }`}
+              >
+                {importFeedback.items.slice(0, 12).map((item, index) => (
+                  <li key={`${index}-${item}`} className="flex items-start gap-1.5">
+                    <span className="material-symbols-outlined mt-0.5 text-[15px]">
+                      {importFeedback.kind === 'error' ? 'error' : 'warning'}
+                    </span>
+                    <span>{item}</span>
+                  </li>
+                ))}
+                {importFeedback.items.length > 12 ? (
+                  <li className="text-xs opacity-80">… và còn {importFeedback.items.length - 12} chỗ nữa cần xem</li>
+                ) : null}
+              </ul>
+
+              {importFeedback.tips?.length ? (
+                <div
+                  className={`mt-3 rounded-lg border px-3 py-2 ${
+                    importFeedback.kind === 'error'
+                      ? 'border-red-100 bg-white/70'
+                      : 'border-amber-100 bg-white/70'
+                  }`}
+                >
+                  <p
+                    className={`text-xs font-semibold ${
+                      importFeedback.kind === 'error' ? 'text-red-700' : 'text-amber-800'
+                    }`}
+                  >
+                    Làm thế nào để sửa
+                  </p>
+                  <ul
+                    className={`mt-1.5 space-y-1 text-xs ${
+                      importFeedback.kind === 'error' ? 'text-red-600' : 'text-amber-800'
+                    }`}
+                  >
+                    {importFeedback.tips.map((tip) => (
+                      <li key={tip} className="flex items-start gap-1.5">
+                        <span className="material-symbols-outlined mt-0.5 text-[14px]">lightbulb</span>
+                        <span>{tip}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <a
+                    href={TT200_TEMPLATE_URL}
+                    download="phieu-nhap-kho-excel-tt200.xlsx"
+                    className={`mt-2 inline-flex items-center gap-1 text-xs font-semibold underline-offset-2 hover:underline ${
+                      importFeedback.kind === 'error' ? 'text-red-700' : 'text-amber-900'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-[14px]">download</span>
+                    Tải lại file mẫu trống
+                  </a>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
 
           <div className="space-y-2">
             {lines.map((line, index) => {

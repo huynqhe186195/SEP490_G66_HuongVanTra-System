@@ -214,7 +214,7 @@ function parseHeaderFields(rows, tableStart) {
 export function parseSupplierReceiptTt200Excel(buffer) {
   const workbook = XLSX.read(buffer, { type: 'array', cellDates: true })
   if (!workbook.SheetNames?.length) {
-    return { headerPatch: {}, rawLines: [], errors: ['File Excel không có sheet nào.'] }
+    return { headerPatch: {}, rawLines: [], errors: ['File Excel trống hoặc bị lỗi. Hãy dùng file mẫu từ nút “Tải mẫu”.'] }
   }
 
   const sheet = findSheet(workbook)
@@ -224,7 +224,7 @@ export function parseSupplierReceiptTt200Excel(buffer) {
     return {
       headerPatch: {},
       rawLines: [],
-      errors: ['Không tìm thấy bảng hàng (cột Mã số / Số lượng). Kiểm tra đúng mẫu Excel.'],
+      errors: ['File không đúng mẫu phiếu nhập. Hãy bấm “Tải mẫu”, điền vào file đó, rồi nạp lại.'],
     }
   }
 
@@ -297,7 +297,7 @@ export function parseSupplierReceiptTt200Excel(buffer) {
 
   if (rawLines.length === 0) {
     errors.push(
-      'Chưa có dòng hàng hóa. Điền Mã số (SKU), Số lượng và Đơn giá vào bảng phía trên “Cộng”, rồi nạp lại.',
+      'File chưa có dòng hàng. Hãy điền Mã số, Số lượng (và Đơn giá nếu cần) vào bảng phía trên chữ “Cộng”, rồi nạp lại.',
     )
   }
 

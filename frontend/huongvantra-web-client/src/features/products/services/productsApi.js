@@ -165,7 +165,7 @@ export function isSupplierReceiptEligibleSku(sku) {
 
 export function mapSupplierReceiptSku(item) {
   if (!item || typeof item !== 'object') return null
-  const id = item.skuId ?? item.SkuId ?? item.variantId ?? item.VariantId ?? null
+  const id = item.skuId ?? item.SkuId ?? item.variantId ?? item.VariantId ?? item.id ?? item.Id ?? null
   if (!id) return null
 
   const skuCode = item.skuCode ?? item.SkuCode ?? ''
