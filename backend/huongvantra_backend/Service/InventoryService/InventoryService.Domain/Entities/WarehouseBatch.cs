@@ -3,7 +3,14 @@ namespace InventoryService.Domain.Entities;
 /// <summary>Phiếu/lô nhập kho — một mã lô có thể chứa nhiều SKU.</summary>
 public class WarehouseBatch
 {
+    private string _batchCode = string.Empty;
+
     public Guid Id { get; set; }
+    public string BatchCode
+    {
+        get => string.IsNullOrWhiteSpace(_batchCode) ? LotCode : _batchCode;
+        set => _batchCode = value;
+    }
     public string LotCode { get; set; } = string.Empty;
     public string? Supplier { get; set; }
     public DateTime? ExpiresAt { get; set; }

@@ -15,10 +15,18 @@ public class WarehouseBatchRepository(InventoryDbContext _db) : IWarehouseBatchR
     public Task<WarehouseBatch?> GetByIdAsync(Guid id, CancellationToken ct = default) =>
         WithItems().FirstOrDefaultAsync(b => b.Id == id, ct);
 
+    public Task<WarehouseBatch?> GetByBatchCodeAsync(string batchCode, CancellationToken ct = default)
+    {
+        var normalized = batchCode.Trim().ToUpperInvariant();
+        return WithItems().FirstOrDefaultAsync(b => b.BatchCode == normalized, ct);
+    }
+
     public Task<WarehouseBatch?> GetByLotCodeAsync(string lotCode, CancellationToken ct = default)
     {
         var normalized = lotCode.Trim().ToUpperInvariant();
-        return WithItems().FirstOrDefaultAsync(b => b.LotCode == normalized, ct);
+        return WithItems()
+            .OrderByDescending(b => b.CreatedAt)
+            .FirstOrDefaultAsync(b => b.LotCode.ToUpper() == normalized, ct);
     }
 
     public async Task<List<WarehouseBatch>> GetListAsync(
@@ -36,6 +44,7 @@ public class WarehouseBatchRepository(InventoryDbContext _db) : IWarehouseBatchR
         {
             var s = search.Trim().ToLower();
             query = query.Where(b =>
+                b.BatchCode.ToLower().Contains(s) ||
                 b.LotCode.ToLower().Contains(s) ||
                 (b.Supplier != null && b.Supplier.ToLower().Contains(s)) ||
                 (b.Note != null && b.Note.ToLower().Contains(s)) ||
@@ -71,7 +80,16 @@ public class WarehouseBatchRepository(InventoryDbContext _db) : IWarehouseBatchR
     public Task<bool> ExistsLotCodeAsync(string lotCode, Guid? excludeId = null, CancellationToken ct = default)
     {
         var normalized = lotCode.Trim().ToUpperInvariant();
-        var query = _db.WarehouseBatches.Where(b => b.LotCode == normalized);
+        var query = _db.WarehouseBatches.Where(b => b.LotCode.ToUpper() == normalized);
+        if (excludeId.HasValue)
+            query = query.Where(b => b.Id != excludeId.Value);
+        return query.AnyAsync(ct);
+    }
+
+    public Task<bool> ExistsBatchCodeAsync(string batchCode, Guid? excludeId = null, CancellationToken ct = default)
+    {
+        var normalized = batchCode.Trim().ToUpperInvariant();
+        var query = _db.WarehouseBatches.Where(b => b.BatchCode == normalized);
         if (excludeId.HasValue)
             query = query.Where(b => b.Id != excludeId.Value);
         return query.AnyAsync(ct);

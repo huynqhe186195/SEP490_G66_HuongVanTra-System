@@ -10,8 +10,11 @@ function mapReceiptItem(row) {
     inventoryUnitSnapshot: row.inventoryUnitSnapshot ?? row.InventoryUnitSnapshot ?? '',
     submittedUnit: row.submittedUnit ?? row.SubmittedUnit ?? '',
     submittedQuantity: Number(row.submittedQuantity ?? row.SubmittedQuantity ?? 0),
+    documentQuantity: Number(row.documentQuantity ?? row.DocumentQuantity ?? row.submittedQuantity ?? row.SubmittedQuantity ?? 0),
+    actualQuantity: Number(row.actualQuantity ?? row.ActualQuantity ?? row.submittedQuantity ?? row.SubmittedQuantity ?? 0),
     quantity: Number(row.quantity ?? row.Quantity ?? 0),
     unitCost: row.unitCost ?? row.UnitCost ?? null,
+    lineAmount: row.lineAmount ?? row.LineAmount ?? null,
     lotCode: row.lotCode ?? row.LotCode ?? '',
     manufacturedAt: row.manufacturedAt ?? row.ManufacturedAt ?? null,
     expiresAt: row.expiresAt ?? row.ExpiresAt ?? null,
@@ -32,15 +35,26 @@ export function mapSupplierReceipt(row) {
   return {
     id: row.id ?? row.Id,
     receiptCode: row.receiptCode ?? row.ReceiptCode ?? '',
+    supplierId: row.supplierId ?? row.SupplierId ?? null,
     supplierName: row.supplierName ?? row.SupplierName ?? '',
     supplierReference: row.supplierReference ?? row.SupplierReference ?? '',
     supplierDocumentNumber: row.supplierDocumentNumber ?? row.SupplierDocumentNumber ?? '',
     supplierDocumentDate: row.supplierDocumentDate ?? row.SupplierDocumentDate ?? null,
+    deliveredByName: row.deliveredByName ?? row.DeliveredByName ?? '',
+    originalDocumentReference: row.originalDocumentReference ?? row.OriginalDocumentReference ?? '',
+    warehouseLocation: row.warehouseLocation ?? row.WarehouseLocation ?? 'Warehouse',
     receivedDate: row.receivedDate ?? row.ReceivedDate ?? null,
     note: row.note ?? row.Note ?? '',
     status: row.status ?? row.Status ?? '',
     createdBy: row.createdBy ?? row.CreatedBy,
-    createdByName: row.createdByName ?? row.CreatedByName ?? '',
+    createdByName:
+      row.createdByName
+      ?? row.CreatedByName
+      ?? row.creatorSnapshot?.createdByName
+      ?? row.CreatorSnapshot?.CreatedByName
+      ?? row.createdByDisplayName
+      ?? row.CreatedByDisplayName
+      ?? '',
     createdByRoleName: row.createdByRoleName ?? row.CreatedByRoleName ?? '',
     createdAt: row.createdAt ?? row.CreatedAt ?? null,
     updatedAt: row.updatedAt ?? row.UpdatedAt ?? null,
@@ -54,6 +68,7 @@ export function mapSupplierReceipt(row) {
     stockImportSlipId: row.stockImportSlipId ?? row.StockImportSlipId ?? null,
     stockImportSlipCode: row.stockImportSlipCode ?? row.StockImportSlipCode ?? '',
     totalQuantity: Number(row.totalQuantity ?? row.TotalQuantity ?? items.reduce((sum, item) => sum + item.quantity, 0)),
+    totalAmount: Number(row.totalAmount ?? row.TotalAmount ?? items.reduce((sum, item) => sum + Number(item.lineAmount || 0), 0)),
     items,
   }
 }
@@ -65,6 +80,8 @@ function buildReceiptPayload(payload) {
     supplierReference: payload.supplierReference?.trim() || null,
     supplierDocumentNumber: payload.supplierDocumentNumber?.trim() || null,
     supplierDocumentDate: payload.supplierDocumentDate || null,
+    deliveredByName: payload.deliveredByName?.trim() || null,
+    originalDocumentReference: payload.originalDocumentReference?.trim() || null,
     receivedDate: payload.receivedDate || null,
     note: payload.note?.trim() || null,
     items: (payload.items || []).map((line) => ({
@@ -74,8 +91,10 @@ function buildReceiptPayload(payload) {
       productTypeSnapshot: line.productTypeSnapshot || null,
       inventoryUnitSnapshot: line.inventoryUnitSnapshot || null,
       submittedUnit: line.submittedUnit || null,
-      submittedQuantity: Number(line.submittedQuantity),
-      unitCost: line.unitCost != null && line.unitCost !== '' ? Number(line.unitCost) : null,
+      submittedQuantity: Number(line.actualQuantity ?? line.submittedQuantity),
+      documentQuantity: Number(line.documentQuantity),
+      actualQuantity: Number(line.actualQuantity ?? line.submittedQuantity),
+      unitCost: line.unitCost === '' || line.unitCost == null ? null : Number(line.unitCost),
       lotCode: line.lotCode?.trim(),
       manufacturedAt: line.manufacturedAt || null,
       expiresAt: line.expiresAt || null,
@@ -104,6 +123,19 @@ export async function fetchSupplierReceipts({ status, mine, search, page = 1, pa
 export async function createSupplierReceipt(payload) {
   const data = await apiRequestAuth('/api/v1/inventory/supplier-receipts', {
     method: 'POST',
+    body: JSON.stringify(buildReceiptPayload(payload)),
+  })
+  return mapSupplierReceipt(data)
+}
+
+export async function fetchSupplierReceiptById(id) {
+  const data = await apiRequestAuth(`/api/v1/inventory/supplier-receipts/${id}`, { method: 'GET' })
+  return mapSupplierReceipt(data)
+}
+
+export async function updateSupplierReceipt(id, payload) {
+  const data = await apiRequestAuth(`/api/v1/inventory/supplier-receipts/${id}`, {
+    method: 'PUT',
     body: JSON.stringify(buildReceiptPayload(payload)),
   })
   return mapSupplierReceipt(data)

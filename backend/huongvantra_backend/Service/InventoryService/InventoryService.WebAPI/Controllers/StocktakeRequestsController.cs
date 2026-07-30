@@ -23,15 +23,23 @@ public class StocktakeRequestsController(InventoryLogic _logic) : ControllerBase
     private bool HasPermission(string permission) =>
         User.HasClaim("permission", permission);
 
-    private bool IsPrivilegedStocktakeRole =>
-        HasRole("Warehouse", "Manager", "Admin", "Accountant");
+    private bool IsWarehouseActor =>
+        HasRole("Warehouse") && !HasRole("Manager", "Admin");
+
+    private bool IsManagerActor =>
+        HasRole("Manager") && !HasRole("Admin");
+
+    private bool IsAdminActor => HasRole("Admin");
+
+    private bool CanViewAllStocktakes =>
+        IsWarehouseActor || IsManagerActor || IsAdminActor;
 
     private bool IsSaleActor =>
-        HasRole("SalePos", "SaleCod", "Sale") || HasPermission(PermissionNames.CreateOrder);
+        !CanViewAllStocktakes
+        && (HasRole("SalePos", "SaleCod", "Sale") || HasPermission(PermissionNames.CreateOrder));
 
     private bool CanCreateOrSubmitShelfAsSale(string? location) =>
         IsSaleActor
-        && !IsPrivilegedStocktakeRole
         && string.Equals(location?.Trim(), "Shelf", StringComparison.OrdinalIgnoreCase);
 
     [HttpGet]
@@ -44,25 +52,25 @@ public class StocktakeRequestsController(InventoryLogic _logic) : ControllerBase
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 10)
     {
-        if (!IsPrivilegedStocktakeRole && !IsSaleActor)
+        if (!CanViewAllStocktakes && !IsSaleActor)
             return Forbid();
 
         // Sale chỉ xem phiếu mình tạo (kiểm kệ đầu ca).
-        if (!IsPrivilegedStocktakeRole)
+        if (IsSaleActor)
             mine = true;
 
         Guid? createdBy = mine ? User.GetUserId() : null;
         if (mine && createdBy == Guid.Empty)
             return Unauthorized(new { message = "Khong xac dinh duoc nguoi dung." });
 
-        var loc = !IsPrivilegedStocktakeRole ? "Shelf" : location;
+        var loc = IsWarehouseActor ? "Warehouse" : IsSaleActor ? "Shelf" : location;
         return Ok(await _logic.GetStocktakeRequestsAsync(status, loc, createdBy, search, page, pageSize, ct));
     }
 
     [HttpGet("reason-codes")]
     public IActionResult GetReasonCodes()
     {
-        if (!IsPrivilegedStocktakeRole && !IsSaleActor)
+        if (!CanViewAllStocktakes && !IsSaleActor)
             return Forbid();
         return Ok(InventoryLogic.GetStocktakeReasonCodes());
     }
@@ -73,7 +81,7 @@ public class StocktakeRequestsController(InventoryLogic _logic) : ControllerBase
     [HttpGet("shelf-day-status")]
     public async Task<IActionResult> GetShelfDayStatus([FromQuery] DateTime? date, CancellationToken ct)
     {
-        if (!IsPrivilegedStocktakeRole && !IsSaleActor)
+        if (!CanViewAllStocktakes && !IsSaleActor)
             return Forbid();
 
         return Ok(await _logic.GetShelfDayStocktakeStatusAsync(date, ct));
@@ -97,13 +105,16 @@ public class StocktakeRequestsController(InventoryLogic _logic) : ControllerBase
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
     {
-        if (!IsPrivilegedStocktakeRole && !IsSaleActor)
+        if (!CanViewAllStocktakes && !IsSaleActor)
             return Forbid();
 
         var item = await _logic.GetStocktakeRequestAsync(id, ct);
         if (item == null) return NotFound();
 
-        if (!IsPrivilegedStocktakeRole)
+        if (IsWarehouseActor && !string.Equals(item.Location, "Warehouse", StringComparison.OrdinalIgnoreCase))
+            return Forbid();
+
+        if (IsSaleActor)
         {
             var userId = User.GetUserId();
             if (item.CreatedBy != userId || !string.Equals(item.Location, "Shelf", StringComparison.OrdinalIgnoreCase))
@@ -120,14 +131,17 @@ public class StocktakeRequestsController(InventoryLogic _logic) : ControllerBase
         if (userId == Guid.Empty)
             return Unauthorized(new { message = "Khong xac dinh duoc nguoi dung." });
 
-        var canPrivileged = IsPrivilegedStocktakeRole && HasRole("Warehouse", "Manager", "Admin");
-        if (!canPrivileged && !CanCreateOrSubmitShelfAsSale(request.Location))
+        if (IsWarehouseActor)
+        {
+            if (!string.Equals(request.Location?.Trim(), "Warehouse", StringComparison.OrdinalIgnoreCase))
+                return BadRequest(new { message = "Thủ kho chỉ được tạo phiếu kiểm kê vị trí Kho." });
+        }
+        else if (!CanCreateOrSubmitShelfAsSale(request.Location))
         {
             return Forbid();
         }
 
-        if (!canPrivileged
-            && !string.Equals(request.Location?.Trim(), "Shelf", StringComparison.OrdinalIgnoreCase))
+        if (IsSaleActor && !string.Equals(request.Location?.Trim(), "Shelf", StringComparison.OrdinalIgnoreCase))
         {
             return BadRequest(new { message = "Nhân viên Sale chỉ được tạo phiếu kiểm kê vị trí Kệ Hàng." });
         }
@@ -146,8 +160,12 @@ public class StocktakeRequestsController(InventoryLogic _logic) : ControllerBase
         var existing = await _logic.GetStocktakeRequestAsync(id, ct);
         if (existing == null) return NotFound();
 
-        var canPrivileged = IsPrivilegedStocktakeRole && HasRole("Warehouse", "Manager", "Admin");
-        if (!canPrivileged)
+        if (IsWarehouseActor)
+        {
+            if (!string.Equals(existing.Location, "Warehouse", StringComparison.OrdinalIgnoreCase))
+                return Forbid();
+        }
+        else
         {
             if (!CanCreateOrSubmitShelfAsSale(existing.Location) || existing.CreatedBy != userId)
                 return Forbid();
@@ -157,17 +175,19 @@ public class StocktakeRequestsController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpPost("{id:guid}/approve")]
-    [Authorize(Roles = "Warehouse,Manager,Admin")]
+    [Authorize(Roles = "Manager")]
     public async Task<IActionResult> Approve(Guid id, [FromBody] ReviewStocktakeRequest? request, CancellationToken ct)
     {
+        if (!IsManagerActor) return Forbid();
         var result = await _logic.ApproveStocktakeRequestAsync(id, User.GetUserId(), User.ToCreatorSnapshot(), request, ct);
         return Ok(result);
     }
 
     [HttpPost("{id:guid}/reject")]
-    [Authorize(Roles = "Warehouse,Manager,Admin")]
+    [Authorize(Roles = "Manager")]
     public async Task<IActionResult> Reject(Guid id, [FromBody] ReviewStocktakeRequest request, CancellationToken ct)
     {
+        if (!IsManagerActor) return Forbid();
         var result = await _logic.RejectStocktakeRequestAsync(id, User.GetUserId(), User.ToCreatorSnapshot(), request, ct);
         return Ok(result);
     }
@@ -179,17 +199,23 @@ public class StocktakeRequestsController(InventoryLogic _logic) : ControllerBase
         if (userId == Guid.Empty)
             return Unauthorized(new { message = "Khong xac dinh duoc nguoi dung." });
 
-        var canPrivileged = IsPrivilegedStocktakeRole && HasRole("Warehouse", "Manager", "Admin");
-        if (!canPrivileged)
+        var canEscalate = IsManagerActor || IsAdminActor;
+        var existing = await _logic.GetStocktakeRequestAsync(id, ct);
+        if (existing == null) return NotFound();
+
+        if (IsWarehouseActor)
         {
-            var existing = await _logic.GetStocktakeRequestAsync(id, ct);
-            if (existing == null) return NotFound();
+            if (!string.Equals(existing.Location, "Warehouse", StringComparison.OrdinalIgnoreCase))
+                return Forbid();
+        }
+        else if (!canEscalate)
+        {
             if (!CanCreateOrSubmitShelfAsSale(existing.Location) || existing.CreatedBy != userId)
                 return Forbid();
         }
 
         var result = await _logic.CancelStocktakeRequestAsync(
-            id, userId, canPrivileged, User.ToCreatorSnapshot(), request, ct);
+            id, userId, canEscalate, User.ToCreatorSnapshot(), request, ct);
         return Ok(result);
     }
 }

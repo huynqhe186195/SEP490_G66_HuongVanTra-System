@@ -18,6 +18,10 @@ import { canAccessModule } from '../app/navigation.js'
 const OFFLINE_SYNC_INTERVAL_MS = 30 * 60 * 1000
 
 const SIDEBAR_COLLAPSED_KEY = 'hvt-sidebar-collapsed'
+const SIDEBAR_WIDTH_KEY = 'hvt-sidebar-width'
+const SIDEBAR_DEFAULT_WIDTH = 256
+const SIDEBAR_MIN_WIDTH = 180
+const SIDEBAR_MAX_WIDTH = 400
 
 function readSidebarCollapsed() {
   try {
@@ -27,12 +31,24 @@ function readSidebarCollapsed() {
   }
 }
 
+function readSidebarWidth() {
+  try {
+    const v = localStorage.getItem(SIDEBAR_WIDTH_KEY)
+    if (!v) return SIDEBAR_DEFAULT_WIDTH
+    const n = Number(v)
+    return Number.isFinite(n) ? Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, n)) : SIDEBAR_DEFAULT_WIDTH
+  } catch {
+    return SIDEBAR_DEFAULT_WIDTH
+  }
+}
+
 function AdminLayout() {
   const [authSession, setAuthSession] = useState(() => loadAuthSession())
   const [sidebarItems, setSidebarItems] = useState(() => getNavigationItemsForSession(loadAuthSession()))
   const [isLoadingAccess, setIsLoadingAccess] = useState(() => !loadAuthSession()?.modules?.length)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(readSidebarCollapsed)
+  const [sidebarWidth, setSidebarWidth] = useState(readSidebarWidth)
   const [shiftLockMode, setShiftLockMode] = useState(null)
   const location = useLocation()
   const isOnline = useNetworkStatus()
@@ -69,6 +85,16 @@ function AdminLayout() {
       }
       return next
     })
+  }
+
+  const handleSidebarWidthChange = (w) => {
+    const clamped = Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, w))
+    setSidebarWidth(clamped)
+    try {
+      localStorage.setItem(SIDEBAR_WIDTH_KEY, String(clamped))
+    } catch {
+      // ignore
+    }
   }
 
   useEffect(() => {
@@ -163,6 +189,8 @@ function AdminLayout() {
           collapsed={sidebarCollapsed}
           onToggleCollapsed={toggleSidebarCollapsed}
           onNavigate={() => setMobileNavOpen(false)}
+          width={sidebarCollapsed ? null : sidebarWidth}
+          onWidthChange={sidebarCollapsed ? null : handleSidebarWidthChange}
         />
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">

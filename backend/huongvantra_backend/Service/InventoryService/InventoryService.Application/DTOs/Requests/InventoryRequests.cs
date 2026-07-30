@@ -122,7 +122,9 @@ public record SupplierReceiptItemRequest(
     string LotCode,
     DateTime? ManufacturedAt,
     DateTime? ExpiresAt,
-    string? QualityNote);
+    string? QualityNote,
+    decimal? DocumentQuantity = null,
+    decimal? ActualQuantity = null);
 
 public record UpsertSupplierReceiptRequest(
     Guid? SupplierId,
@@ -132,7 +134,9 @@ public record UpsertSupplierReceiptRequest(
     DateTime? SupplierDocumentDate,
     DateTime? ReceivedDate,
     string? Note,
-    List<SupplierReceiptItemRequest> Items);
+    List<SupplierReceiptItemRequest> Items,
+    string? DeliveredByName = null,
+    string? OriginalDocumentReference = null);
 
 public record ReviewSupplierReceiptRequest(string? Reason);
 

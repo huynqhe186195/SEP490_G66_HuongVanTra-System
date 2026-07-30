@@ -99,6 +99,37 @@ public class ProductCatalogClient(HttpClient httpClient, ILogger<ProductCatalogC
         return new ProductCatalogSnapshot(data.Products.Select(MapProduct).ToList());
     }
 
+    public async Task<ProductCatalogSnapshot> GetSupplierReceiptCatalogForVariantIdsAsync(
+        IEnumerable<Guid> variantIds,
+        CancellationToken ct = default)
+    {
+        var ids = variantIds
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToList();
+        if (ids.Count == 0)
+            return new ProductCatalogSnapshot([]);
+
+        var path = "api/v1/skus/supplier-receipt-catalog?" +
+            string.Join("&", ids.Select(id => $"skuIds={id:D}"));
+
+        List<ProductSkuSupplierReceiptCatalogResponse>? data;
+        try
+        {
+            data = await httpClient.GetFromJsonAsync<List<ProductSkuSupplierReceiptCatalogResponse>>(path, ct);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            logger.LogError(ex, "Failed to load ProductService Supplier Receipt SKU catalog at {Path}.", path);
+            throw new InventoryValidationException("Không tải được danh sách SKU được phép nhập từ nhà cung cấp. Vui lòng thử lại.");
+        }
+
+        if (data is null)
+            throw new InventoryValidationException("Không tải được danh sách SKU được phép nhập từ nhà cung cấp. Vui lòng thử lại.");
+
+        return new ProductCatalogSnapshot(data.Select(MapSupplierReceiptCatalogItem).ToList());
+    }
+
     private static CatalogProduct MapProduct(ProductResponse product) => new(
         product.Id,
         product.Name ?? string.Empty,
@@ -123,7 +154,14 @@ public class ProductCatalogClient(HttpClient httpClient, ILogger<ProductCatalogC
                 b.ComponentVariantId,
                 b.ComponentSkuCode,
                 b.ComponentVariantName,
-                b.IsRequiredBaseComponent)).ToList())).ToList());
+                b.IsRequiredBaseComponent)).ToList(),
+            v.IsPurchasable,
+            v.CanBeBomComponent,
+            v.CanUseInCustom,
+            v.CanHaveBom,
+            v.IsBaseUnitVariant,
+            v.BaseVariantId,
+            v.ConversionRate)).ToList());
 
     private static CatalogProduct MapProduct(ProductBomCatalogProductResponse product) => new(
         product.Id,
@@ -149,7 +187,34 @@ public class ProductCatalogClient(HttpClient httpClient, ILogger<ProductCatalogC
                 b.ComponentVariantId,
                 b.ComponentSkuCode,
                 b.ComponentVariantName,
-                b.IsRequiredBaseComponent)).ToList())).ToList());
+                b.IsRequiredBaseComponent)).ToList(),
+            v.IsPurchasable,
+            v.CanBeBomComponent,
+            v.CanUseInCustom,
+            v.CanHaveBom,
+            v.IsBaseUnitVariant,
+            v.BaseVariantId,
+            v.ConversionRate)).ToList());
+
+    private static CatalogProduct MapSupplierReceiptCatalogItem(ProductSkuSupplierReceiptCatalogResponse sku) => new(
+        sku.ProductId,
+        sku.ProductName ?? string.Empty,
+        sku.ProductType ?? string.Empty,
+        sku.InventoryUnit ?? string.Empty,
+        null,
+        sku.IsActive,
+        [new CatalogVariant(
+            sku.SkuId,
+            sku.ProductId,
+            sku.SkuCode ?? string.Empty,
+            sku.VariantName ?? string.Empty,
+            sku.IsActive,
+            false,
+            false,
+            0,
+            [],
+            sku.IsPurchasable,
+            UnitName: sku.UnitName)]);
 
     private sealed record ProductPagedResponse(
         List<ProductResponse> Items,
@@ -174,6 +239,13 @@ public class ProductCatalogClient(HttpClient httpClient, ILogger<ProductCatalogC
         string? VariantName,
         bool IsActive,
         bool IsSellable,
+        bool IsPurchasable,
+        bool CanBeBomComponent,
+        bool CanUseInCustom,
+        bool CanHaveBom,
+        bool IsBaseUnitVariant,
+        Guid? BaseVariantId,
+        decimal ConversionRate,
         bool HasBom,
         int BomLineCount,
         List<BomLineResponse>? BomLines);
@@ -207,7 +279,26 @@ public class ProductCatalogClient(HttpClient httpClient, ILogger<ProductCatalogC
         string? VariantName,
         bool IsActive,
         bool IsSellable,
+        bool IsPurchasable,
+        bool CanBeBomComponent,
+        bool CanUseInCustom,
+        bool CanHaveBom,
+        bool IsBaseUnitVariant,
+        Guid? BaseVariantId,
+        decimal ConversionRate,
         bool HasBom,
         int BomLineCount,
         List<BomLineResponse>? BomLines);
+
+    private sealed record ProductSkuSupplierReceiptCatalogResponse(
+        Guid SkuId,
+        Guid ProductId,
+        string? ProductName,
+        string? SkuCode,
+        string? VariantName,
+        string? UnitName,
+        string? ProductType,
+        string? InventoryUnit,
+        bool IsActive,
+        bool IsPurchasable);
 }

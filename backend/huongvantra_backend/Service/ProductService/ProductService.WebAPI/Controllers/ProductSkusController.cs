@@ -50,6 +50,39 @@ public class ProductSkusController(ProductSkuLogic _skuLogic) : ControllerBase
         CancellationToken ct) =>
         Ok(await _skuLogic.GetOrderCatalogBySkuIdsAsync(skuIds, ct));
 
+    /// <summary>
+    /// Internal catalog for InventoryService Supplier Receipt validation.
+    /// It intentionally contains SKU capability only and never resolves BOM.
+    /// </summary>
+    [HttpGet("supplier-receipt-catalog")]
+    [AllowAnonymous]
+    public async Task<IActionResult> GetSupplierReceiptCatalog(
+        [FromQuery] List<Guid>? skuIds,
+        CancellationToken ct) =>
+        Ok(await _skuLogic.GetSupplierReceiptCatalogBySkuIdsAsync(skuIds, ct));
+
+    [HttpGet("accounting-cost-profit")]
+    [Authorize(Roles = "Admin,Manager,Accountant")]
+    public async Task<IActionResult> GetAccountingCostProfit(CancellationToken ct) =>
+        Ok(await _skuLogic.GetAccountingCostProfitAsync(ct));
+
+    [HttpPatch("{id:guid}/retail-price")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> UpdateRetailPrice(
+        Guid id,
+        [FromBody] UpdateProductVariantRetailPriceRequest request,
+        CancellationToken ct) =>
+        Ok(await _skuLogic.UpdateRetailPriceAsync(id, request, User.ToProductApprovalActorSnapshot(), ct));
+
+    [HttpGet("{id:guid}/price-history")]
+    [Authorize(Roles = "Admin,Manager,Accountant")]
+    public async Task<IActionResult> GetPriceHistory(
+        Guid id,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken ct = default) =>
+        Ok(await _skuLogic.GetPriceHistoryAsync(id, page, pageSize, ct));
+
     [HttpGet("{id:guid}")]
     [Authorize(Roles = "Warehouse,Accountant,Admin")]
     public async Task<IActionResult> GetById(Guid id) =>

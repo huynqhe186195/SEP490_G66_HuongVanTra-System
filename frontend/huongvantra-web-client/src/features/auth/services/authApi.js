@@ -186,7 +186,11 @@ export function enrichSessionWithAccess(session) {
   const permissions = mergePermissions(session, session?.accessToken)
   const modules = deriveModulesFromRoles(session.roles ?? []).filter((module) => {
     if (module !== 'pos') return true
-    return permissions.includes('CREATE_POS_ORDER') || permissions.includes('CREATE_COD_ORDER')
+    return (
+      permissions.includes('CREATE_POS_ORDER')
+      || permissions.includes('CREATE_COD_ORDER')
+      || permissions.includes('MANAGE_EMPLOYEE')
+    )
   })
   return {
     ...session,

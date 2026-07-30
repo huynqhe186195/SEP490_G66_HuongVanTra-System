@@ -4,7 +4,6 @@ export const warehouseNavTabs = [
   { label: 'Kho', to: '/inventory' },
   { label: 'Theo lô', to: '/inventory/batches' },
   { label: 'Phiếu nhập kho', to: '/inventory/import' },
-  { label: 'Nhập nguyên liệu', to: '/inventory/import/create' },
   { label: 'Phiếu xuất', to: '/inventory/export' },
   { label: 'Kiểm kê', to: '/inventory/stocktake' },
   { label: 'Báo cáo', to: '/inventory/reports' },
@@ -72,7 +71,7 @@ export function getInventoryNavTabs(session) {
   if (isWarehouseRole(session)) {
     tabs.push(...warehouseNavTabs)
   }
-  if (isSystemAdmin(session) || isManagerLike(session) || accountant) {
+  if (isSystemAdmin(session) || isManagerLike(session) || isWarehouseRole(session) || accountant) {
     tabs.push(supplierReceiptNavTab)
   }
   if (isSystemAdmin(session) || isManagerLike(session) || isWarehouseRole(session)) {

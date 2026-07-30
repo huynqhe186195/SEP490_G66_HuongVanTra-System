@@ -117,6 +117,15 @@ function normalizeRoleToken(role) {
     .replace(/\s+/g, '')
 }
 
+function hasAdminRole(session) {
+  return (session?.roles ?? []).some((role) => normalizeRoleToken(role) === 'admin')
+}
+
+/** Trang Accounting: chỉ principal có role Admin được sửa Giá bán. */
+export function canEditAccountingSalePrice(session) {
+  return hasAdminRole(session)
+}
+
 export function isSalePosRole(session) {
   return (session?.roles ?? []).some((role) => {
     const key = normalizeRoleToken(role)
@@ -137,8 +146,11 @@ export function canViewOnlyCodOrders(session) {
   return canUsePosCodMode(session) && !canUsePosCounterMode(session)
 }
 
+/** Quầy POS: SalePos (CREATE_POS_ORDER) hoặc Manager. */
 export function canUsePosCounterMode(session) {
   return hasPermission(session, 'CREATE_POS_ORDER')
+    || isBranchManager(session)
+    || isManagerRole(session)
 }
 
 export function canUsePosCodMode(session) {
@@ -166,9 +178,52 @@ export function canCancelStockReplenishmentRequest(session) {
 
 }
 
-/** Duyệt / Từ chối phiếu nhập NCC: Manager hoặc Admin. Người tạo không được tự duyệt (backend chặn). */
+/** Duyệt / Từ chối phiếu nhập NCC: chỉ Manager không có role Admin. */
 export function canReviewSupplierReceipt(session) {
-  return isBranchManager(session) || isManagerRole(session) || isSystemAdmin(session)
+  return (isBranchManager(session) || isManagerRole(session)) && !hasAdminRole(session)
+}
+
+/** Warehouse là actor vận hành duy nhất của Supplier Receipt trong Batch 1A. */
+export function canOperateSupplierReceipt(session) {
+  return isWarehouseRole(session) && !hasAdminRole(session)
+}
+
+export function canCreateProductionOrder(session) {
+  return isWarehouseRole(session) && !hasAdminRole(session)
+}
+
+export function canSubmitProductionOrder(session) {
+  return isWarehouseRole(session) && !hasAdminRole(session)
+}
+
+export function canCompleteProductionOrder(session) {
+  return isWarehouseRole(session) && !hasAdminRole(session)
+}
+
+export function canCancelProductionOrder(session) {
+  return isWarehouseRole(session) && !hasAdminRole(session)
+}
+
+export function canReviewProductionOrder(session) {
+  return (isBranchManager(session) || isManagerRole(session)) && !hasAdminRole(session)
+}
+
+export function canCreateWarehouseStocktake(session) {
+  return isWarehouseRole(session) && !hasAdminRole(session)
+}
+
+export function canCreateShelfStocktake(session) {
+  return (
+    canCreateOrder(session)
+    && !isWarehouseRole(session)
+    && !isBranchManager(session)
+    && !isManagerRole(session)
+    && !hasAdminRole(session)
+  )
+}
+
+export function canReviewStocktake(session) {
+  return (isBranchManager(session) || isManagerRole(session)) && !hasAdminRole(session)
 }
 
 export function isSystemAdmin(session) {
@@ -223,8 +278,7 @@ export function canManageSuppliers(session) {
 }
 
 export function getStaffManagementScopeLabel(session) {
-  if (isSystemAdmin(session)) return 'Quản lý tài khoản hệ thống: Chủ hợp tác xã. Quản lý nhân sự: Warehouse, Accountant, Manager, SalePos, SaleCod'
-  if (isCooperativeOwner(session)) return 'Quản lý nhân sự: Manager, Warehouse, Accountant'
+  if (isSystemAdmin(session)) return 'Quản lý nhân sự: Manager'
   if (isBranchManager(session)) return 'Quản lý nhân sự: SalePos, SaleCod'
   return 'Quản lý nhân sự'
 }

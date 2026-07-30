@@ -96,15 +96,24 @@ function StaffPage() {
       />
 
       <section className="rounded-[24px] border border-[#c1c9c0]/30 bg-white p-6 shadow-sm">
-        <div className="mb-8">
-          <div className="mb-2 flex items-center gap-2 text-sm text-[#414942]">
-            <span>Hệ thống</span>
-            <span>/</span>
-            <span className="font-semibold text-[#356647]">Nhân viên</span>
+          <div className="mb-8 flex flex-col justify-between gap-3 md:flex-row md:items-center">
+            <div>
+              <div className="mb-2 flex items-center gap-2 text-sm text-[#414942]">
+                <span>Hệ thống</span>
+                <span>/</span>
+                <span className="font-semibold text-[#356647]">Nhân viên</span>
+              </div>
+              <h1 className="text-2xl font-bold text-[#356647] sm:text-3xl">Quản lý nhân sự</h1>
+              <p className="mt-2 text-sm text-[#414942]">{scopeLabel}</p>
+            </div>
+            <Link
+              to="/staff/create"
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#356647] px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-[#2d553b]"
+            >
+              <span className="material-symbols-outlined text-[20px]">person_add</span>
+              Thêm nhân viên
+            </Link>
           </div>
-          <h1 className="text-2xl font-bold text-[#356647] sm:text-3xl">Quản lý nhân sự</h1>
-          <p className="mt-2 text-sm text-[#414942]">{scopeLabel}</p>
-        </div>
 
         <div className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-3">
           {stats.map((stat) => (
@@ -214,13 +223,14 @@ function StaffPage() {
                     </td>
 
                     <td className="px-6 py-4 text-right">
-                      <div className="flex justify-end gap-1 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100">
-                        <Link to={`/staff/${staff.userId}`} className="rounded-full p-2 text-[#356647] transition-colors hover:bg-[#eae8e0]" title="Chỉnh sửa">
+                      <div className="flex justify-end gap-1">
+                        <Link
+                          to={`/staff/${staff.employeeId ?? staff.userId}`}
+                          className="rounded-full p-2 text-[#356647] transition-colors hover:bg-[#eae8e0]"
+                          title="Chỉnh sửa"
+                        >
                           <span className="material-symbols-outlined">edit</span>
                         </Link>
-                        <button type="button" className="rounded-full p-2 text-[#414942] transition-colors hover:bg-[#eae8e0]" title="Lịch sử">
-                          <span className="material-symbols-outlined">history</span>
-                        </button>
                       </div>
                     </td>
                   </tr>

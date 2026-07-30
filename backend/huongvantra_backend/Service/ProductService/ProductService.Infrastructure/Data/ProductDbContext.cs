@@ -13,6 +13,8 @@ public class ProductDbContext(DbContextOptions<ProductDbContext> options) : DbCo
     public DbSet<ProductImage> ProductImages => Set<ProductImage>();
     public DbSet<ProductAttributeValue> ProductAttributeValues => Set<ProductAttributeValue>();
     public DbSet<ProductVariant> ProductVariants => Set<ProductVariant>();
+    public DbSet<ProductCostPriceHistory> ProductCostPriceHistories => Set<ProductCostPriceHistory>();
+    public DbSet<ProductRetailPriceHistory> ProductRetailPriceHistories => Set<ProductRetailPriceHistory>();
     public DbSet<ProductUnit> ProductUnits => Set<ProductUnit>();
     public DbSet<PriceBook> PriceBooks => Set<PriceBook>();
     public DbSet<PriceBookEntry> PriceBookEntries => Set<PriceBookEntry>();
@@ -34,6 +36,8 @@ public class ProductDbContext(DbContextOptions<ProductDbContext> options) : DbCo
         modelBuilder.ApplyConfiguration(new ProductImageConfiguration());
         modelBuilder.ApplyConfiguration(new ProductAttributeValueConfiguration());
         modelBuilder.ApplyConfiguration(new ProductVariantConfiguration());
+        modelBuilder.ApplyConfiguration(new ProductCostPriceHistoryConfiguration());
+        modelBuilder.ApplyConfiguration(new ProductRetailPriceHistoryConfiguration());
         modelBuilder.ApplyConfiguration(new ProductUnitConfiguration());
         modelBuilder.ApplyConfiguration(new PriceBookConfiguration());
         modelBuilder.ApplyConfiguration(new PriceBookEntryConfiguration());

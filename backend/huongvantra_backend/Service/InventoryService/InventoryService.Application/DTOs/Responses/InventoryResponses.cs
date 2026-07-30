@@ -263,6 +263,7 @@ public record WarehouseBatchItemResponse(
 
 public record WarehouseBatchResponse(
     Guid Id,
+    string BatchCode,
     string LotCode,
     string? Supplier,
     DateTime? ExpiresAt,
@@ -394,6 +395,9 @@ public record SupplierReceiptItemResponse(
     decimal SubmittedQuantity,
     int Quantity,
     decimal? UnitCost,
+    decimal DocumentQuantity,
+    decimal ActualQuantity,
+    decimal? LineAmount,
     string LotCode,
     DateTime? ManufacturedAt,
     DateTime? ExpiresAt,
@@ -409,10 +413,14 @@ public record SupplierReceiptItemResponse(
 public record SupplierReceiptResponse(
     Guid Id,
     string ReceiptCode,
+    Guid? SupplierId,
     string? SupplierName,
     string? SupplierReference,
     string? SupplierDocumentNumber,
     DateTime? SupplierDocumentDate,
+    string? DeliveredByName,
+    string? OriginalDocumentReference,
+    string WarehouseLocation,
     DateTime ReceivedDate,
     string? Note,
     string Status,
@@ -431,6 +439,7 @@ public record SupplierReceiptResponse(
     Guid? StockImportSlipId,
     string? StockImportSlipCode,
     int TotalQuantity,
+    decimal TotalAmount,
     List<SupplierReceiptItemResponse> Items);
 
 public record ShelfReturnRequestItemResponse(
