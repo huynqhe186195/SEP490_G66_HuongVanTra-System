@@ -84,7 +84,7 @@ export const navigationItems = [
     path: '/customers',
     module: 'customers',
     icon: 'groups',
-    roles: ['agencyManager', 'salesStaff', 'accountant'],
+    roles: ['admin', 'agencyManager', 'salesStaff', 'accountant'],
     children: CUSTOMER_SIDEBAR_SECTIONS.map((section) => ({
       label: section.label,
       path: buildCustomerPath(section.key),
@@ -115,7 +115,7 @@ export const navigationItems = [
     path: '/inventory/statistics',
     module: 'inventory_statistics',
     icon: 'analytics',
-    roles: ['inventoryManager', 'accountant', 'agencyManager'],
+    roles: ['inventoryManager', 'accountant'],
     children: [
       { label: 'Tổng quan', path: '/inventory/statistics?section=overview', section: 'overview', sectionScope: 'inventory_statistics' },
       { label: 'Trạng thái hàng hoá', path: '/inventory/statistics?section=alerts', section: 'alerts', sectionScope: 'inventory_statistics' },
@@ -382,34 +382,41 @@ function groupAdminManagerSidebar(items, isAdmin) {
     })
   }
 
-  // Khách hàng (đã có children) — chỉ Manager / Sale / Kế toán
+  // Khách hàng — Admin xem/theo dõi; Manager / Sale / Kế toán vận hành
   const customers = byPath.get('/customers')
-  if (customers && !isAdmin) {
+  if (customers) {
     consumed.add('/customers')
     result.push(customers)
-  } else if (customers && isAdmin) {
-    consumed.add('/customers')
   }
 
   // Hàng hóa
   const goodsEntries = isAdmin
     ? [
-        ['/inventory/products', 'Sản phẩm & số lượng'],
-        ['/products/categories', 'Danh mục sản phẩm'],
-        ['/accounting/cost-profit', 'Bảng giá vốn & giá bán'],
-        ['/inventory/product-approvals', 'Lịch sử tạo hàng hóa'],
-        ['/inventory/stocktake', 'Kiểm kê tồn kho'],
-        ['/inventory/ledger', 'Nhật ký kho'],
-      ]
+      ['/inventory/products', 'Sản phẩm & số lượng'],
+      ['/products/categories', 'Danh mục sản phẩm'],
+      ['/accounting/cost-profit', 'Bảng giá vốn & giá bán'],
+      ['/inventory/product-approvals', 'Lịch sử tạo hàng hóa'],
+      ['/inventory/stocktake', 'Kiểm kê tồn kho'],
+      ['/inventory/ledger', 'Nhật ký kho'],
+    ]
     : [
-        ['/inventory/products', 'Sản phẩm & số lượng'],
-        ['/products/categories', 'Danh mục sản phẩm'],
-        ['/accounting/cost-profit', 'Bảng giá vốn & giá bán'],
-        ['/inventory/stocktake', 'Kiểm kê tồn kho'],
-        ['/inventory/ledger', 'Nhật ký kho'],
-        ['/inventory/stock-requests', 'Yêu cầu bổ sung tồn quầy'],
-        ['/admin/inventory-sync', 'Đồng bộ tồn kho'],
-      ]
+      ['/inventory/products', 'Sản phẩm & số lượng'],
+      ['/products/categories', 'Danh mục sản phẩm'],
+      ['/accounting/cost-profit', 'Bảng giá vốn & giá bán'],
+      ['/inventory/stocktake', 'Kiểm kê tồn kho'],
+      ['/inventory/ledger', 'Nhật ký kho'],
+      ['/inventory/stock-requests', 'Yêu cầu bổ sung tồn quầy'],
+      ['/admin/inventory-sync', 'Đồng bộ tồn kho'],
+    ]
+
+  // Manager: ẩn thống kê tồn kho / lịch sử tạo / yêu cầu xóa (không hiện ở nhóm Hàng hóa).
+  for (const path of [
+    '/inventory/statistics',
+    '/inventory/product-approvals',
+    '/inventory/product-deletion-requests',
+  ]) {
+    if (!isAdmin && byPath.has(path)) consumed.add(path)
+  }
 
   if (isAdmin) {
     for (const path of ['/inventory/statistics', '/inventory/stock-requests', '/admin/inventory-sync', '/inventory/returns']) {
@@ -418,25 +425,6 @@ function groupAdminManagerSidebar(items, isAdmin) {
   }
 
   const goodsChildren = takeNavLeaves(byPath, consumed, goodsEntries)
-
-  if (!isAdmin) {
-    const statsItem = byPath.get('/inventory/statistics')
-    if (statsItem) {
-      consumed.add('/inventory/statistics')
-      const overview =
-        statsItem.children?.find((child) => child.section === 'overview') ||
-        statsItem.children?.[0]
-      const overviewLeaf = {
-        label: 'Tổng quan tồn kho',
-        path: overview?.path || '/inventory/statistics?section=overview',
-        module: statsItem.module,
-        section: overview?.section || 'overview',
-        sectionScope: overview?.sectionScope || 'inventory_statistics',
-      }
-      const priceIdx = goodsChildren.findIndex((child) => child.path === '/accounting/cost-profit')
-      goodsChildren.splice(priceIdx >= 0 ? priceIdx + 1 : goodsChildren.length, 0, overviewLeaf)
-    }
-  }
 
   if (goodsChildren.length) {
     result.push({
@@ -452,18 +440,20 @@ function groupAdminManagerSidebar(items, isAdmin) {
   // Nhập hàng & Nhà cung cấp
   const inboundEntries = isAdmin
     ? [
-        ['/inventory/suppliers', 'Nhà cung cấp'],
-        ['/inventory/supplier-products', 'Sản phẩm theo nhà cung cấp'],
-        ['/inventory/supplier-receipts', 'Phiếu nhập nhà cung cấp'],
-        ['/inventory/batches', 'Lô hàng nhập'],
-      ]
+      ['/inventory/suppliers', 'Nhà cung cấp'],
+      ['/inventory/supplier-products', 'Sản phẩm theo nhà cung cấp'],
+      ['/inventory/supplier-receipts', 'Phiếu nhập nhà cung cấp'],
+      ['/inventory/batches', 'Lô hàng nhập'],
+      ['/inventory/production-orders', 'Quản lý lệnh sản xuất'],
+    ]
     : [
-        ['/inventory/suppliers', 'Nhà cung cấp'],
-        ['/inventory/supplier-products', 'Sản phẩm theo nhà cung cấp'],
-        ['/inventory/supplier-receipts', 'Phiếu nhập nhà cung cấp'],
-        ['/inventory/batches', 'Lô hàng nhập'],
-        ['/inventory/returns', 'Trả hàng nhập'],
-      ]
+      ['/inventory/suppliers', 'Nhà cung cấp'],
+      ['/inventory/supplier-products', 'Sản phẩm theo nhà cung cấp'],
+      ['/inventory/supplier-receipts', 'Phiếu nhập nhà cung cấp'],
+      ['/inventory/batches', 'Lô hàng nhập'],
+      ['/inventory/production-orders', 'Quản lý lệnh sản xuất'],
+      ['/inventory/returns', 'Trả hàng nhập'],
+    ]
   const inboundChildren = takeNavLeaves(byPath, consumed, inboundEntries)
   if (inboundChildren.length) {
     result.push({
@@ -480,10 +470,10 @@ function groupAdminManagerSidebar(items, isAdmin) {
   const peopleEntries = isAdmin
     ? [['/staff', 'Nhân sự']]
     : [
-        ['/shifts', 'Lịch làm việc'],
-        ['/staff', 'Nhân sự'],
-        ['/pos/cash-sessions', 'Quỹ ca POS'],
-      ]
+      ['/shifts', 'Lịch làm việc'],
+      ['/staff', 'Nhân sự'],
+      ['/pos/cash-sessions', 'Quỹ ca POS'],
+    ]
   if (isAdmin) {
     if (byPath.has('/shifts')) consumed.add('/shifts')
     if (byPath.has('/pos/cash-sessions')) consumed.add('/pos/cash-sessions')
@@ -521,11 +511,15 @@ function groupAdminManagerSidebar(items, isAdmin) {
     }
   }
 
-  // Thống kê bán hàng — giữ nguyên (đã có children)
+  // Thống kê bán hàng — Admin đưa lên đầu sidebar
   const dashboard = byPath.get('/dashboard')
   if (dashboard) {
     consumed.add('/dashboard')
-    result.push(dashboard)
+    if (isAdmin) {
+      result.unshift(dashboard)
+    } else {
+      result.push(dashboard)
+    }
   }
 
   const rest = items.filter((item) => !consumed.has(item.path))
@@ -704,9 +698,9 @@ export function resolveHomeRoute(authSession) {
     return '/login'
   }
 
-  const roles = authSession.roles ?? []
-  for (const [groupKey, route] of Object.entries(ROLE_HOME_ROUTES)) {
-    if (hasAnyRoleGroup(roles, [groupKey])) return route
+  // Admin luôn vào trang thống kê bán hàng để giám sát.
+  if (isAdminSession(authSession.roles ?? []) || hasPermissionManageRole(authSession)) {
+    return '/dashboard'
   }
 
   const homeRoute = authSession.modules?.length
@@ -721,6 +715,10 @@ export function resolveHomeRoute(authSession) {
   }
 
   return homeRoute
+}
+
+function hasPermissionManageRole(authSession) {
+  return (authSession?.permissions ?? []).includes('MANAGE_ROLE')
 }
 
 const MODULE_PATH_PREFIXES = [
@@ -798,6 +796,10 @@ export function canAccessModule(session, module) {
     return (
       session.permissions.includes('CREATE_COD_ORDER')
       || session.permissions.includes('VERIFY_COD')
+      // Admin / Manager: xem & theo dõi COD, không cần quyền tạo/thu.
+      || session.permissions.includes('MANAGE_EMPLOYEE')
+      || session.permissions.includes('MANAGE_ROLE')
+      || session.permissions.includes('VIEW_ALL_CUSTOMERS')
     )
   }
 
@@ -900,13 +902,13 @@ export function canConfirmStockDeduct(session) {
   )
 }
 
-/** Hủy Queue là xử lý ngoại lệ/escalation của Manager hoặc Admin. */
+/** Hủy Queue là xử lý ngoại lệ/escalation của Manager. */
 export function canCancelStockDeduct(session) {
   if (!session?.roles?.length) {
     return false
   }
 
-  return hasAnyRoleGroup(session.roles, ['admin', 'agencyManager'])
+  return hasAnyRoleGroup(session.roles, ['agencyManager'])
 }
 
 export function getAccessDeniedMessage(pathname) {
@@ -918,7 +920,7 @@ export function getAccessDeniedMessage(pathname) {
     return 'Chỉ Sale COD hoặc Quản lý chi nhánh mới được truy cập Quản lý COD.'
   }
   if (module === 'stock_deduct_ops') {
-    return 'Chỉ Thủ kho xác nhận đóng gói/trừ Kho; Quản lý hoặc Admin chỉ xử lý ngoại lệ.'
+    return 'Chỉ Thủ kho xác nhận đóng gói/trừ Kho; Quản lý xử lý ngoại lệ (hủy queue).'
   }
   if (module === 'supplier_receipt_create') {
     return 'Chỉ Thủ kho được tạo hoặc gửi Phiếu nhập nhà cung cấp.'

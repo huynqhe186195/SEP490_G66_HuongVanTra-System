@@ -11,7 +11,7 @@ namespace ProductService.WebAPI.Controllers;
 public class ProductDeletionRequestsController(ProductDeletionRequestLogic _logic) : ControllerBase
 {
     [HttpGet]
-    [Authorize(Roles = "Admin,Warehouse")]
+    [Authorize(Roles = "Admin,Manager,Warehouse")]
     public async Task<IActionResult> GetPaged(
         [FromQuery] string? status,
         [FromQuery] string? search,
@@ -25,7 +25,7 @@ public class ProductDeletionRequestsController(ProductDeletionRequestLogic _logi
             ct));
 
     [HttpGet("{id:guid}")]
-    [Authorize(Roles = "Admin,Warehouse")]
+    [Authorize(Roles = "Admin,Manager,Warehouse")]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct = default) =>
         Ok(await _logic.GetByIdAsync(id, User.ToProductApprovalActorSnapshot(), ct));
 
@@ -48,17 +48,17 @@ public class ProductDeletionRequestsController(ProductDeletionRequestLogic _logi
         Ok(await _logic.SubmitAsync(id, request, User.ToProductApprovalActorSnapshot(), GetAuthorizationHeader(), ct));
 
     [HttpPost("{id:guid}/approve")]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Manager")]
     public async Task<IActionResult> Approve(Guid id, [FromBody] ApproveProductDeletionRequest request, CancellationToken ct = default) =>
         Ok(await _logic.ApproveAsync(id, request, User.ToProductApprovalActorSnapshot(), GetAuthorizationHeader(), ct));
 
     [HttpPost("{id:guid}/reject")]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Manager")]
     public async Task<IActionResult> Reject(Guid id, [FromBody] RejectProductDeletionRequest request, CancellationToken ct = default) =>
         Ok(await _logic.RejectAsync(id, request, User.ToProductApprovalActorSnapshot(), ct));
 
     [HttpPost("{id:guid}/cancel")]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Manager")]
     public async Task<IActionResult> Cancel(Guid id, [FromBody] CancelProductDeletionRequest request, CancellationToken ct = default) =>
         Ok(await _logic.CancelAsync(id, request, User.ToProductApprovalActorSnapshot(), ct));
 

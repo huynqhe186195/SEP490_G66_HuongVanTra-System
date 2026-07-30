@@ -9,10 +9,24 @@ import PageHeader from "../../../components/shared/PageHeader.jsx";
 import EndOfDayReportModal from "../components/EndOfDayReportModal.jsx";
 import { dashboardApi } from "../services/dashboardApi.js";
 import { loadAuthSession } from '../../auth/services/authSession.js'
+import {
+  hasPermission,
+  isAccountantRole,
+  isBranchManager,
+  isSystemAdmin,
+} from '../../auth/utils/permissions.js'
 import { getDashboardSectionFromSearch, getDashboardSectionLabel } from '../../../app/dashboardSections.js'
 
 const VALID_SECTIONS = new Set(['overview', 'sales-growth', 'customer-growth']);
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#ffc658'];
+
+function normalizeRoleToken(role) {
+  return String(role || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[._-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+}
 
 function DashboardPage() {
     const [searchParams] = useSearchParams();
@@ -23,19 +37,30 @@ function DashboardPage() {
     const sectionLabel = getDashboardSectionLabel(activeSection);
 
     const session = loadAuthSession();
-    const roles = (session?.roles || []).map(r => String(r || '').toLowerCase().trim());
-    const isAdmin = roles.includes('admin') || roles.includes('agencymanager') || roles.includes('agency manager');
-    const isAccountant = roles.includes('accountant');
-    const isSalesStaff = roles.includes('salesstaff') || roles.includes('sale') || roles.includes('sales staff');
-    
-    const canViewRevenue = isAdmin || isAccountant || isSalesStaff;
-    const canViewCustomerGrowth = isAdmin || isAccountant || isSalesStaff;
+    const roles = (session?.roles || []).map(normalizeRoleToken);
+    const isSalesStaff = roles.some((role) =>
+      ['sale', 'sales staff', 'salepos', 'sale pos', 'salecod', 'sale cod', 'salesstaff'].includes(role),
+    );
+    // Khớp backend ReportsController.CanViewRevenue + role vận hành trên HieuTH/HoangNL.
+    const canViewRevenue =
+      isSystemAdmin(session) ||
+      isBranchManager(session) ||
+      isAccountantRole(session) ||
+      hasPermission(session, 'VIEW_ALL_CUSTOMERS') ||
+      hasPermission(session, 'MANAGE_BUSINESS_POLICY') ||
+      hasPermission(session, 'MANAGE_EMPLOYEE') ||
+      roles.includes('admin') ||
+      roles.includes('manager') ||
+      roles.includes('agency manager') ||
+      roles.includes('cooperative owner') ||
+      isSalesStaff;
+    const canViewCustomerGrowth = canViewRevenue;
 
     const [stats, setStats] = useState(null);
     const [topProducts, setTopProducts] = useState([]);
     const [categorySales, setCategorySales] = useState([]);
     const [customerGrowthData, setCustomerGrowthData] = useState([]);
-    const [revenueGrowthData, setRevenueGrowthData] = useState([]);
+    const [revenueProfitGrowthData, setRevenueProfitGrowthData] = useState([]);
     const [salesByChannelData, setSalesByChannelData] = useState([]);
     const [orderGrowthData, setOrderGrowthData] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -57,51 +82,63 @@ function DashboardPage() {
         const fetchStats = async () => {
             try {
                 setIsLoading(true);
+                setError(null);
                 const params = { year: filterYear };
                 if (filterPeriod === 'month') params.month = filterMonth;
                 if (filterPeriod === 'quarter') params.quarter = filterQuarter;
 
-                const paramsLastYear = { ...params, year: params.year - 1 };
-
-                const [statsData, topProductsData, categorySalesData, customerGrowth, revenueGrowth, salesByChannel, orderGrowth, revenueGrowthLastYear] = await Promise.all([
-                    dashboardApi.getSalesStatistics(params), 
+                const settled = await Promise.allSettled([
+                    dashboardApi.getSalesStatistics(params),
                     dashboardApi.getTopProducts({ topCount, sortBy: topProductsSortBy, ...params }),
                     dashboardApi.getSalesByCategory(params),
                     dashboardApi.getCustomerGrowth(params),
-                    dashboardApi.getRevenueGrowth(params),
                     dashboardApi.getSalesByChannel(params),
                     dashboardApi.getOrderGrowth(params),
-                    dashboardApi.getRevenueGrowth(paramsLastYear)
+                    dashboardApi.getRevenueProfitGrowth(params),
                 ]);
+
+                const valueOr = (index, fallback) =>
+                    settled[index].status === 'fulfilled' ? settled[index].value : fallback;
+
+                const statsData = valueOr(0, null);
+                const topProductsData = valueOr(1, []);
+                const categorySalesData = valueOr(2, []);
+                const customerGrowth = valueOr(3, []);
+                const salesByChannel = valueOr(4, []);
+                const orderGrowth = valueOr(5, []);
+                const revenueProfitGrowth = valueOr(6, []);
+
+                const failed = settled.filter((item) => item.status === 'rejected');
+                if (failed.length === settled.length) {
+                    const firstError = failed[0].reason;
+                    throw firstError instanceof Error ? firstError : new Error('Không thể tải dữ liệu thống kê');
+                }
+
                 setStats(statsData);
-                setTopProducts(topProductsData);
-                setCategorySales(categorySalesData);
-                
-                // Merge customer and order growth
-                const mergedCustomerOrder = customerGrowth.map(c => {
-                    const o = orderGrowth.find(x => x.label === c.label);
+                setTopProducts(Array.isArray(topProductsData) ? topProductsData : []);
+                setCategorySales(Array.isArray(categorySalesData) ? categorySalesData : []);
+
+                const customerRows = Array.isArray(customerGrowth) ? customerGrowth : [];
+                const orderRows = Array.isArray(orderGrowth) ? orderGrowth : [];
+                const mergedCustomerOrder = customerRows.map((c) => {
+                    const o = orderRows.find((x) => x.label === c.label);
                     return {
                         label: c.label,
                         "Khách hàng mới": c.value,
-                        "Số lượng đơn": o ? o.value : 0
+                        "Số lượng đơn": o ? o.value : 0,
                     };
                 });
                 setCustomerGrowthData(mergedCustomerOrder);
-                
-                // Merge revenue growth data
-                const mergedRevenue = revenueGrowth.map(current => {
-                    const lastYear = revenueGrowthLastYear.find(prev => prev.label === current.label);
-                    return {
-                        label: current.label,
-                        "Năm nay": current.value,
-                        "Năm trước": lastYear ? lastYear.value : 0
-                    };
-                });
-                setRevenueGrowthData(mergedRevenue);
-                setSalesByChannelData(salesByChannel);
-                setOrderGrowthData(orderGrowth);
+
+                setRevenueProfitGrowthData(Array.isArray(revenueProfitGrowth) ? revenueProfitGrowth : []);
+                setSalesByChannelData(Array.isArray(salesByChannel) ? salesByChannel : []);
+                setOrderGrowthData(orderRows);
+
+                if (failed.length > 0) {
+                    console.warn('Một số API thống kê lỗi:', failed.map((item) => item.reason));
+                }
             } catch (err) {
-                setError("Không thể tải dữ liệu thống kê");
+                setError(err?.message || "Không thể tải dữ liệu thống kê");
                 console.error(err);
             } finally {
                 setIsLoading(false);
@@ -155,26 +192,54 @@ function DashboardPage() {
             <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
                 <MetricCard title="Số đơn bán ra" value={stats?.totalCompletedOrders || 0} icon="receipt_long" colorClass="text-purple-600" bgClass="bg-purple-50" />
                 
-                {canViewRevenue && (
+                {canViewRevenue ? (
                     <>
                         <MetricCard title="Doanh thu gộp" value={formatCurrency(stats?.grossRevenue)} icon="payments" colorClass="text-blue-600" bgClass="bg-blue-50" />
                         <MetricCard title="Doanh thu thuần" value={formatCurrency(stats?.netRevenue)} icon="account_balance_wallet" colorClass="text-[#356647]" bgClass="bg-[#eaf4eb]" />
-                        <MetricCard title="Tổng giá vốn" value={formatCurrency(stats?.totalCostOfGoods)} icon="sell" colorClass="text-slate-700" bgClass="bg-slate-100" />
                         <MetricCard title="Lợi nhuận gộp" value={formatCurrency(stats?.grossProfit)} icon="savings" colorClass="text-yellow-600" bgClass="bg-yellow-50" />
                     </>
-                )}
+                ) : null}
 
                 <MetricCard title="Số đơn trả hàng" value={(stats?.partiallyReturnedOrders || 0) + (stats?.fullyReturnedOrders || 0)} icon="remove_shopping_cart" colorClass="text-orange-600" bgClass="bg-orange-50" />
                 
-                {canViewRevenue && (
-                    <MetricCard title="Tổng tiền hoàn trả" value={formatCurrency(stats?.refundAmount)} icon="assignment_return" colorClass="text-red-600" bgClass="bg-red-50" />
-                )}
+                {canViewRevenue ? (
+                    <>
+                        <MetricCard title="Tổng tiền hoàn trả" value={formatCurrency(stats?.refundAmount)} icon="assignment_return" colorClass="text-red-600" bgClass="bg-red-50" />
+                        <MetricCard title="Tổng chiết khấu" value={formatCurrency(stats?.totalDiscountAmount)} icon="local_offer" colorClass="text-teal-600" bgClass="bg-teal-50" />
+                        <MetricCard title="Tổng giá vốn" value={formatCurrency(stats?.totalCostOfGoods)} icon="sell" colorClass="text-slate-700" bgClass="bg-slate-100" />
+                    </>
+                ) : null}
             </div>
 
-            {canViewRevenue && (
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    {/* Orders Ratio Chart */}
-                    <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    {canViewRevenue ? (
+                    <div className="lg:col-span-3 rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+                        <h3 className="mb-6 text-lg font-bold text-gray-800">Biểu Đồ Doanh Thu & Lợi Nhuận</h3>
+                        {revenueProfitGrowthData && revenueProfitGrowthData.length > 0 ? (
+                            <div className="h-[300px] w-full">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <LineChart data={revenueProfitGrowthData} margin={{ top: 10, right: 30, left: 20, bottom: 10 }}>
+                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                                        <XAxis dataKey="label" tick={{fontSize: 12, fill: '#6b7280'}} tickLine={false} axisLine={false} />
+                                        <YAxis tickFormatter={(val) => new Intl.NumberFormat('vi-VN', { notation: "compact" }).format(val)} tick={{fontSize: 12, fill: '#6b7280'}} tickLine={false} axisLine={false} />
+                                        <Tooltip formatter={(value) => formatCurrency(value)} />
+                                        <Legend verticalAlign="top" height={36} />
+                                        <Line type="monotone" dataKey="grossRevenue" stroke="#3b82f6" strokeWidth={3} name="Doanh thu gộp" />
+                                        <Line type="monotone" dataKey="netRevenue" stroke="#10b981" strokeWidth={3} name="Doanh thu thuần" />
+                                        <Line type="monotone" dataKey="grossProfit" stroke="#f59e0b" strokeWidth={3} name="Lợi nhuận gộp" />
+                                    </LineChart>
+                                </ResponsiveContainer>
+                            </div>
+                        ) : (
+                            <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-8 text-center text-sm text-gray-500 min-h-[300px] flex items-center justify-center">
+                                Chưa có dữ liệu doanh thu.
+                            </div>
+                        )}
+                    </div>
+                    ) : null}
+
+                    {/* Orders Ratio Chart — luôn hiện */}
+                    <div className={`rounded-2xl border border-gray-100 bg-white p-6 shadow-sm ${canViewRevenue ? '' : 'lg:col-span-3'}`}>
                         <h3 className="mb-6 text-lg font-bold text-gray-800">Tỷ Lệ Đơn Hàng</h3>
                         {ordersRatioData && ordersRatioData.length > 0 ? (
                             <div className="h-[300px] w-full flex flex-col items-center">
@@ -204,31 +269,9 @@ function DashboardPage() {
                             </div>
                         )}
                     </div>
-                    {/* Revenue Growth Chart */}
-                    <div className="lg:col-span-2 rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
-                        <h3 className="mb-6 text-lg font-bold text-gray-800">Doanh Thu Thuần Theo Thời Gian</h3>
-                        {revenueGrowthData && revenueGrowthData.length > 0 ? (
-                            <div className="h-[300px] w-full">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <LineChart data={revenueGrowthData} margin={{ top: 10, right: 30, left: 20, bottom: 10 }}>
-                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
-                                        <XAxis dataKey="label" tick={{fontSize: 12, fill: '#6b7280'}} tickLine={false} axisLine={false} />
-                                        <YAxis tickFormatter={(val) => new Intl.NumberFormat('vi-VN', { notation: "compact" }).format(val)} tick={{fontSize: 12, fill: '#6b7280'}} tickLine={false} axisLine={false} />
-                                        <Tooltip formatter={(value) => formatCurrency(value)} />
-                                        <Legend verticalAlign="top" height={36} />
-                                        <Line type="monotone" dataKey="Năm nay" stroke="#3b82f6" strokeWidth={3} activeDot={{ r: 6 }} name={`Năm ${filterYear}`} />
-                                        <Line type="monotone" dataKey="Năm trước" stroke="#9ca3af" strokeWidth={2} strokeDasharray="5 5" name={`Năm ${filterYear - 1}`} />
-                                    </LineChart>
-                                </ResponsiveContainer>
-                            </div>
-                        ) : (
-                            <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-8 text-center text-sm text-gray-500 min-h-[300px] flex items-center justify-center">
-                                Chưa có dữ liệu doanh thu.
-                            </div>
-                        )}
-                    </div>
 
-                    {/* Sales by Channel Chart */}
+
+                    {canViewRevenue ? (
                     <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
                         <h3 className="mb-6 text-lg font-bold text-gray-800">Doanh Số Theo Kênh Bán</h3>
                         {salesByChannelData && salesByChannelData.length > 0 ? (
@@ -258,8 +301,8 @@ function DashboardPage() {
                             </div>
                         )}
                     </div>
-                </div>
-            )}
+                    ) : null}
+            </div>
         </div>
     );
     };

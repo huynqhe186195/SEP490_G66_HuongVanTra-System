@@ -9,6 +9,8 @@ public class Order : BaseEntity
     public Guid? CustomerId { get; set; }
     public string? CustomerSnapshotName { get; set; }
     public Guid? EmployeeId { get; set; }
+    /// <summary>Snapshot tên người bán tại thời điểm tạo đơn.</summary>
+    public string? EmployeeSnapshotName { get; set; }
     public OrderChannel OrderChannel { get; set; }
     public OrderKind OrderKind { get; set; } = OrderKind.Sale;
     public OrderStatus OrderStatus { get; set; }

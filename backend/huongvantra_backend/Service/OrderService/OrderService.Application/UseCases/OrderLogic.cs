@@ -456,6 +456,7 @@ public class OrderLogic(
             CustomerId = req.CustomerId,
             CustomerSnapshotName = req.CustomerSnapshotName?.Trim(),
             EmployeeId = ownerId,
+            EmployeeSnapshotName = string.IsNullOrWhiteSpace(actorName) ? null : actorName.Trim(),
             OrderChannel = req.OrderChannel,
             OrderKind = req.OrderKind,
             OrderStatus = isPosCompletedOnCreate ? OrderStatus.Completed : OrderStatus.PendingPayment,
@@ -2099,7 +2100,7 @@ public class OrderLogic(
 
     private static OrderResponse MapToResponse(Order o, StockHandlingSummaryResponse? stockHandlingSummary = null) => new(
         o.Id, o.OrderCode, o.CustomerId, o.CustomerSnapshotName,
-        o.EmployeeId, o.OrderChannel.ToString(), o.OrderKind.ToString(), o.OrderStatus.ToString(),
+        o.EmployeeId, o.EmployeeSnapshotName, o.OrderChannel.ToString(), o.OrderKind.ToString(), o.OrderStatus.ToString(),
         o.InventorySyncStatus.ToString(), o.TotalAmount, o.DiscountAmount,
         o.PromotionId, o.PromotionCode, o.PromotionDiscountAmount, o.FinalAmount,
         o.ShippingAddress, o.Note, o.CreatedAt, o.UpdatedAt,
@@ -2136,7 +2137,9 @@ public class OrderLogic(
             codPayment?.IsCodVerified,
             codPayment?.CodWarningDate,
             codPayment is { IsCodVerified: false } && codPayment.Amount > 0 ? codPayment.Amount : null,
-            o.OrderDetails?.Sum(d => d.Quantity) ?? 0);
+            o.OrderDetails?.Sum(d => d.Quantity) ?? 0,
+            HasActiveStockReservation: false,
+            EmployeeSnapshotName: o.EmployeeSnapshotName);
     }
 
     private static string FormatVnd(decimal amount)

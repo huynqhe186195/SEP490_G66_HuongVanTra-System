@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using OrderService.Infrastructure.Data;
 
@@ -10,9 +11,11 @@ using OrderService.Infrastructure.Data;
 namespace OrderService.Infrastructure.Migrations
 {
     [DbContext(typeof(OrderDbContext))]
-    partial class OrderDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260730161856_AddOrderEmployeeSnapshotName")]
+    partial class AddOrderEmployeeSnapshotName
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -115,19 +118,6 @@ namespace OrderService.Infrastructure.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("char(36)");
 
-                    b.Property<string>("ContractCodeSnapshot")
-                        .HasMaxLength(50)
-                        .HasColumnType("varchar(50)");
-
-                    b.Property<decimal?>("ContractDiscountPercentSnapshot")
-                        .HasColumnType("decimal(5,2)");
-
-                    b.Property<Guid?>("ContractId")
-                        .HasColumnType("char(36)");
-
-                    b.Property<int?>("ContractPaymentTermDaysSnapshot")
-                        .HasColumnType("int");
-
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
 
@@ -140,9 +130,6 @@ namespace OrderService.Infrastructure.Migrations
 
                     b.Property<decimal>("DiscountAmount")
                         .HasColumnType("decimal(18,2)");
-
-                    b.Property<DateTime?>("DueDate")
-                        .HasColumnType("datetime(6)");
 
                     b.Property<Guid?>("EmployeeId")
                         .HasColumnType("char(36)");
@@ -216,11 +203,7 @@ namespace OrderService.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ContractId");
-
                     b.HasIndex("CustomerId");
-
-                    b.HasIndex("DueDate");
 
                     b.HasIndex("IdempotencyKey")
                         .IsUnique()

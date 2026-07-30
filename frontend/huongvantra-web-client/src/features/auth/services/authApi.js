@@ -8,11 +8,8 @@ import { loadAuthSession } from './authSession.js'
 
 const ROLE_MODULE_MAP = {
   admin: [
-    'pos',
     'orders',
     'cod_ops',
-    'stock_deduct_ops',
-    'stock_adjustment_ops',
     'customers',
     'products',
     'product_creation_requests',
@@ -23,6 +20,11 @@ const ROLE_MODULE_MAP = {
     'system_activity_log',
     'users_admin',
     'phan_quyen_admin',
+    'supplier_receipts',
+    'warehouse_batches',
+    'production_orders',
+    'inventory_ledger',
+    'inventory_stocktake',
     'dashboard',
   ],
   manager: ['pos', 'orders', 'cod_ops', 'stock_deduct_ops', 'stock_adjustment_ops', 'customers', 'products', 'staff', 'dashboard'],

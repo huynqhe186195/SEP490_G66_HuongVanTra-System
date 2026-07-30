@@ -65,13 +65,17 @@ test('role names do not override action permissions', () => {
   assert.equal(canUsePosCodMode(misleadingRole), false)
 })
 
-test('Manager and Admin permission sets keep both create modes', () => {
-  for (const elevated of [
-    session('CREATE_POS_ORDER', 'CREATE_COD_ORDER', 'MANAGE_EMPLOYEE', 'VERIFY_COD'),
-    session('CREATE_POS_ORDER', 'CREATE_COD_ORDER', 'MANAGE_ROLE', 'VERIFY_COD'),
-  ]) {
-    assert.equal(canUsePosCounterMode(elevated), true)
-    assert.equal(canUsePosCodMode(elevated), true)
-    assert.equal(canViewOnlyCodOrders(elevated), false)
+test('Manager keeps both create modes; Admin is blocked from POS ops', () => {
+  const manager = session('CREATE_POS_ORDER', 'CREATE_COD_ORDER', 'MANAGE_EMPLOYEE', 'VERIFY_COD')
+  assert.equal(canUsePosCounterMode(manager), true)
+  assert.equal(canUsePosCodMode(manager), true)
+  assert.equal(canViewOnlyCodOrders(manager), false)
+
+  const admin = {
+    roles: ['Admin'],
+    permissions: ['CREATE_POS_ORDER', 'CREATE_COD_ORDER', 'MANAGE_ROLE', 'VERIFY_COD'],
   }
+  assert.equal(canUsePosCounterMode(admin), false)
+  assert.equal(canUsePosCodMode(admin), false)
+  assert.equal(canVerifyCodPayment(admin), false)
 })

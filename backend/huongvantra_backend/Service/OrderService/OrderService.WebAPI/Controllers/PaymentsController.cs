@@ -37,13 +37,13 @@ public class PaymentsController(PaymentLogic paymentLogic) : ControllerBase
     {
         // Policy VERIFY_COD: SaleCod / Manager (seed) / Admin (all perms).
         var actorId = User.GetUserId();
-        var actorName = User.GetUsername();
+        var actorName = User.GetDisplayName();
         return Ok(await paymentLogic.VerifyCodAsync(
             id,
             request,
             AccessContext(),
             actorId == Guid.Empty ? null : actorId,
-            string.IsNullOrWhiteSpace(actorName) ? null : actorName,
+            actorName,
             ct));
     }
 }

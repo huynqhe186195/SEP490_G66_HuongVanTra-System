@@ -20,7 +20,6 @@ public static class AuthorizationServiceExtensions
 
             options.AddPolicy(PermissionNames.CatalogManagement, policy =>
                 policy.Requirements.Add(new AnyPermissionRequirement(
-                    PermissionNames.ManageRole,
                     PermissionNames.ManageCatalog)));
 
             options.AddPolicy(PermissionNames.ViewCustomerAccess, policy =>
@@ -31,20 +30,17 @@ public static class AuthorizationServiceExtensions
 
             options.AddPolicy(PermissionNames.EditCustomerProfile, policy =>
                 policy.Requirements.Add(new AnyPermissionRequirement(
-                    PermissionNames.CreateCustomer,
-                    PermissionNames.ManageRole)));
+                    PermissionNames.CreateCustomer)));
 
             options.AddPolicy(PermissionNames.CreateCustomerProfile, policy =>
                 policy.Requirements.Add(new AnyPermissionRequirement(
                     PermissionNames.CreateCustomer,
-                    PermissionNames.CreateOrder,
-                    PermissionNames.ManageRole)));
+                    PermissionNames.CreateOrder)));
 
             options.AddPolicy(PermissionNames.ApplyDebtPayment, policy =>
                 policy.Requirements.Add(new AnyPermissionRequirement(
                     PermissionNames.CreateOrder,
-                    PermissionNames.CreateCustomer,
-                    PermissionNames.ManageRole)));
+                    PermissionNames.CreateCustomer)));
         });
 
         return services;

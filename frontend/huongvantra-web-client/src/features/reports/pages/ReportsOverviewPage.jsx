@@ -1,5 +1,8 @@
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
+import { reportsApi } from '../services/reportsApi'
+import { formatVnd } from '../../../utils/vietnamCurrency'
 
 const topProducts = [
   {
@@ -69,6 +72,30 @@ const revenueBars = ['h-2/3', 'h-3/4', 'h-1/2', 'h-full', 'h-4/5', 'h-2/3']
 const weekLabels = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7']
 
 function ReportsOverviewPage() {
+  const [stats, setStats] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        setLoading(true)
+        const [salesStats] = await Promise.all([
+          reportsApi.getSalesStatistics({})
+        ])
+        setStats(salesStats)
+      } catch (error) {
+        console.error('Failed to fetch reports', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchStats()
+  }, [])
+
+  if (loading || !stats) {
+    return <div className="p-8 text-center">Đang tải dữ liệu báo cáo...</div>
+  }
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-6 [font-family:'Manrope',sans-serif]">
       <PageHeader
@@ -92,8 +119,8 @@ function ReportsOverviewPage() {
             <p className="text-sm text-[#414942]">Tổng doanh thu (tháng này)</p>
             <h2 className="mt-2 text-4xl font-bold text-[#356647]">1.284.500.000d</h2>
             <div className="mt-4 flex items-center gap-2 text-sm">
-              <span className="material-symbols-outlined text-[#356647]">trending_up</span>
-              <span className="font-bold text-[#356647]">+12.5%</span>
+              <span className={`material-symbols-outlined ${isUp(stats.netRevenueGrowthRate) ? 'text-[#356647]' : 'text-red-500'}`}>{isUp(stats.netRevenueGrowthRate) ? 'trending_up' : 'trending_down'}</span>
+              <span className="font-bold text-[#356647]">{stats.netRevenueGrowthRate >= 0 ? '+' : ''}{stats.netRevenueGrowthRate.toFixed(1)}%</span>
               <span className="text-[#717971]">so với tháng trước</span>
             </div>
           </article>
@@ -112,10 +139,10 @@ function ReportsOverviewPage() {
                   strokeWidth="8"
                   className="text-[#4a6242]"
                   strokeDasharray="251.2"
-                  strokeDashoffset="80"
+                  strokeDashoffset={251.2 - (251.2 * stats.grossProfitMargin) / 100}
                 />
               </svg>
-              <span className="absolute inset-0 flex items-center justify-center text-xl font-bold text-[#4a6242]">68%</span>
+              <span className="absolute inset-0 flex items-center justify-center text-xl font-bold text-[#4a6242]">{stats.grossProfitMargin.toFixed(1)}%</span>
             </div>
           </article>
 
@@ -171,17 +198,17 @@ function ReportsOverviewPage() {
           <section className="rounded-xl bg-[#ffffff] p-5 shadow-sm">
             <h3 className="mb-5 text-xl font-semibold text-[#1b1c17]">Kênh bán hàng</h3>
             <div className="space-y-5">
-              {channelRows.map((channel) => (
+              {channels.map((channel) => (
                 <div key={channel.label} className="space-y-2">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <span className={`material-symbols-outlined ${channel.textClass}`}>{channel.icon}</span>
                       <span className="text-sm font-semibold text-[#1b1c17]">{channel.label}</span>
                     </div>
-                    <span className="text-sm font-bold text-[#1b1c17]">{channel.percent}%</span>
+                    <span className="text-sm font-bold text-[#1b1c17]">{channel.percentage || 0}%</span>
                   </div>
                   <div className="h-2 w-full overflow-hidden rounded-full bg-[#f0eee6]">
-                    <div className={`h-full ${channel.colorClass}`} style={{ width: `${channel.percent}%` }} />
+                    <div className={`h-full ${channel.colorClass}`} style={{ width: `${channel.percentage || 0}%` }} />
                   </div>
                 </div>
               ))}

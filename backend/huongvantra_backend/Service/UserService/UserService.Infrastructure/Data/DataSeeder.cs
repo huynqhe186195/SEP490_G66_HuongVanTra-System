@@ -146,9 +146,19 @@ public static class DataSeeder
 
     private static async Task<Role> SeedAdminRoleAsync(UserDbContext context)
     {
-        var permissions = await context.Permissions.Where(p => !p.IsDeleted).ToListAsync();
-        return await SeedRoleAsync(context, AdminRoleName, "System administrator",
-            permissions.Select(p => p.PermissionName).ToArray());
+        // Admin chỉ IAM + giám sát (xem), không thao tác nghiệp vụ bán hàng / kho.
+        return await SeedRoleAsync(
+            context,
+            AdminRoleName,
+            "Quản trị hệ thống — giám sát và quản lý nhân sự/phân quyền",
+            [
+                PermissionNames.ManageRole,
+                PermissionNames.ManageUser,
+                PermissionNames.ManageEmployee,
+                PermissionNames.ViewOrder,
+                PermissionNames.ViewCustomer,
+                PermissionNames.ViewAllCustomers,
+            ]);
     }
 
     private static async Task<Role> SeedRoleAsync(

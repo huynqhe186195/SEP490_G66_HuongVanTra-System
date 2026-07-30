@@ -7,6 +7,7 @@ import { showError } from '../../../app/toast.js'
 import { AUTH_SESSION_CHANGED_EVENT, loadAuthSession } from '../../auth/services/authSession.js'
 import { getStaffManagementScopeLabel } from '../../auth/utils/permissions.js'
 import { fetchRoleOptions, fetchStaffAccounts } from '../services/staffApi.js'
+import { formatRoleName } from '../../iam/utils/iamLabels.js'
 
 function StaffPage() {
   const [authSession, setAuthSession] = useState(() => loadAuthSession())
@@ -142,7 +143,7 @@ function StaffPage() {
             >
               <option value="">Tất cả vai trò</option>
               {roleOptions.map((role) => (
-                <option key={role.id ?? role.name} value={role.name}>{role.name}</option>
+                <option key={role.id ?? role.name} value={role.name}>{role.label || formatRoleName(role.name)}</option>
               ))}
             </select>
 
@@ -191,7 +192,9 @@ function StaffPage() {
                         </div>
                         <div>
                           <p className={`text-sm font-semibold text-[#1b1c17] ${staff.isActive ? '' : 'opacity-60'}`}>{staff.fullName}</p>
-                          <p className={`text-xs text-[#356647] ${staff.isActive ? '' : 'opacity-70'}`}>{(staff.roles || []).join(', ') || 'Chưa gán vai trò'}</p>
+                          <p className={`text-xs text-[#356647] ${staff.isActive ? '' : 'opacity-70'}`}>
+                            {(staff.roles || []).map(formatRoleName).join(', ') || 'Chưa gán vai trò'}
+                          </p>
                         </div>
                       </div>
                     </td>

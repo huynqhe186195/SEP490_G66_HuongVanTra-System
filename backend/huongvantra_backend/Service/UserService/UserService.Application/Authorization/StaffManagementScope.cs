@@ -8,6 +8,8 @@ public static class StaffManagementScope
     public const string SaleRoleName = "Sale";
     public const string SalePosRoleName = "SalePos";
     public const string SaleCodRoleName = "SaleCod";
+    public const string WarehouseRoleName = "Warehouse";
+    public const string AccountantRoleName = "Accountant";
 
     private static readonly HashSet<string> AdminAssignableRoles = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -19,6 +21,29 @@ public static class StaffManagementScope
         SaleRoleName,
         SalePosRoleName,
         SaleCodRoleName,
+    };
+
+    /// <summary>
+    /// Vai trò Manager được phép gán khi tạo/sửa nhân sự chi nhánh.
+    /// </summary>
+    private static readonly HashSet<string> ManagerAssignableRoles = new(StringComparer.OrdinalIgnoreCase)
+    {
+        SalePosRoleName,
+        SaleCodRoleName,
+        WarehouseRoleName,
+        AccountantRoleName,
+    };
+
+    /// <summary>
+    /// Vai trò Manager được phép xem/quản lý (gồm Sale legacy).
+    /// </summary>
+    private static readonly HashSet<string> ManagerViewableRoles = new(StringComparer.OrdinalIgnoreCase)
+    {
+        SaleRoleName,
+        SalePosRoleName,
+        SaleCodRoleName,
+        WarehouseRoleName,
+        AccountantRoleName,
     };
 
     public static bool IsSystemAdmin(IEnumerable<string> permissions) =>
@@ -38,13 +63,16 @@ public static class StaffManagementScope
             return AdminAssignableRoles.ToList();
 
         if (IsBranchManager(permissions))
-            return [SalePosRoleName, SaleCodRoleName];
+            return ManagerAssignableRoles.OrderBy(name => name, StringComparer.OrdinalIgnoreCase).ToList();
 
         return [];
     }
 
     public static bool IsSaleRole(string? roleName) =>
         !string.IsNullOrWhiteSpace(roleName) && SaleFamilyRoles.Contains(roleName);
+
+    public static bool IsManagerViewableRole(string? roleName) =>
+        !string.IsNullOrWhiteSpace(roleName) && ManagerViewableRoles.Contains(roleName);
 
     public static bool CanViewEmployee(IEnumerable<string> permissions, IEnumerable<string> employeeRoles)
     {
@@ -55,9 +83,9 @@ public static class StaffManagementScope
         if (IsSystemAdmin(permissions))
             return roles.All(role => AdminAssignableRoles.Contains(role));
 
-        // Manager: chỉ Sale (SalePos/SaleCod/Sale legacy)
+        // Manager: Sale (SalePos/SaleCod/Sale legacy) + Kế toán + Thủ kho.
         if (IsBranchManager(permissions))
-            return roles.Any(IsSaleRole);
+            return roles.All(IsManagerViewableRole);
 
         return false;
     }

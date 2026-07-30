@@ -14,6 +14,21 @@ public static class ClaimsPrincipalExtensions
     public static string GetUsername(this ClaimsPrincipal principal) =>
         principal.FindFirstValue(ClaimTypes.Name) ?? string.Empty;
 
+    /// <summary>
+    /// Ưu tiên họ tên nhân viên (full_name / name), sau đó username.
+    /// </summary>
+    public static string? GetDisplayName(this ClaimsPrincipal principal)
+    {
+        foreach (var claimType in new[] { "full_name", "name", ClaimTypes.Name, "username", "unique_name" })
+        {
+            var value = principal.FindFirstValue(claimType)?.Trim();
+            if (!string.IsNullOrWhiteSpace(value))
+                return value;
+        }
+
+        return null;
+    }
+
     public static IEnumerable<string> GetRoles(this ClaimsPrincipal principal) =>
         principal.FindAll(ClaimTypes.Role).Select(c => c.Value);
 

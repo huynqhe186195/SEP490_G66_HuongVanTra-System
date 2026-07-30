@@ -14,6 +14,7 @@ export function useCustomersList({
   const [customers, setCustomers] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const isInactiveTab = activeTab === 'inactive'
+  const isDebtsTab = activeTab === 'debts'
 
   const reload = useCallback(async () => {
     const keyword = searchValue.trim() || undefined
@@ -30,13 +31,23 @@ export function useCustomersList({
       return data
     }
 
+    if (isDebtsTab) {
+      const data = await fetchCustomers({
+        keyword,
+        debtFilter: debtFilter || 'with_debt',
+        sortBy: sortBy || 'debt',
+      })
+      setCustomers(Array.isArray(data) ? data : [])
+      return data
+    }
+
     const data = await fetchCustomers({
       ...filterParams,
       customerType: CUSTOMER_TYPE_BY_TAB[activeTab],
     })
     setCustomers(Array.isArray(data) ? data : [])
     return data
-  }, [activeTab, searchValue, tierFilter, debtFilter, sortBy, isInactiveTab])
+  }, [activeTab, searchValue, tierFilter, debtFilter, sortBy, isInactiveTab, isDebtsTab])
 
   useEffect(() => {
     let mounted = true
@@ -70,6 +81,7 @@ export function useCustomersList({
 
     return () => clearInterval(interval)
   }, [reload, pollIntervalMs, isInactiveTab])
+
 
   return { customers, setCustomers, isLoading, reload }
 }

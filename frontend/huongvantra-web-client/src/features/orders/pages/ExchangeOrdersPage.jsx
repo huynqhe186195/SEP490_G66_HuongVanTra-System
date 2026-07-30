@@ -417,6 +417,7 @@ function ExchangeOrdersPage() {
               <tr>
                 <th className="px-6 py-3 text-xs font-bold uppercase tracking-wide text-[#717971]">Mã đơn đổi</th>
                 <th className="px-4 py-3 text-xs font-bold uppercase tracking-wide text-[#717971]">Khách hàng</th>
+                <th className="px-4 py-3 text-xs font-bold uppercase tracking-wide text-[#717971]">Người bán</th>
                 <th className="px-4 py-3 text-xs font-bold uppercase tracking-wide text-[#717971]">Kênh</th>
                 <th className="px-4 py-3 text-xs font-bold uppercase tracking-wide text-[#717971]">Ghi chú</th>
                 <th className="px-4 py-3 text-xs font-bold uppercase tracking-wide text-[#717971]">Trạng thái</th>
@@ -429,14 +430,14 @@ function ExchangeOrdersPage() {
             <tbody className="divide-y divide-slate-100 bg-white">
               {isLoading ? (
                 <tr>
-                  <td className="px-6 py-10 text-slate-500" colSpan={9}>
+                  <td className="px-6 py-10 text-slate-500" colSpan={10}>
                     Đang tải...
                   </td>
                 </tr>
               ) : null}
               {!isLoading && orders.length === 0 ? (
                 <tr>
-                  <td className="px-6 py-10 text-slate-500" colSpan={9}>
+                  <td className="px-6 py-10 text-slate-500" colSpan={10}>
                     {hasActiveFilters ? 'Không có đơn đổi phù hợp bộ lọc.' : 'Chưa có đơn đổi hàng.'}
                   </td>
                 </tr>
@@ -462,6 +463,9 @@ function ExchangeOrdersPage() {
                             snapshot={order.customerSnapshotName}
                             customerId={order.customerId}
                           />
+                        </td>
+                        <td className="px-4 py-4 text-sm text-slate-700">
+                          {order.sellerName?.trim() ? order.sellerName : <span className="text-slate-300">—</span>}
                         </td>
                         <td className="px-4 py-4">
                           <span

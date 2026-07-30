@@ -104,6 +104,36 @@ public class UserLogic(IUserRepository userRepo, IRoleRepository roleRepo, IEmpl
         return MapToResponse(user);
     }
 
+    public async Task<UserResponse> UpdateMyProfileAsync(Guid userId, UpdateMyProfileRequest request)
+    {
+        var fullName = (request.FullName ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(fullName))
+            throw new UserValidationException("Họ và tên không được để trống.");
+        if (fullName.Length > 200)
+            throw new UserValidationException("Họ và tên không được vượt quá 200 ký tự.");
+
+        var phone = string.IsNullOrWhiteSpace(request.Phone) ? null : request.Phone.Trim();
+        var note = string.IsNullOrWhiteSpace(request.Note) ? null : request.Note.Trim();
+        if (note is { Length: > 500 })
+            throw new UserValidationException("Ghi chú không được vượt quá 500 ký tự.");
+
+        UserInputValidator.ValidatePhoneIfProvided(phone);
+
+        var user = await userRepo.GetByIdAsync(userId) ?? throw new UserNotFoundException(userId);
+        var employee = user.Employee ?? await employeeRepo.GetByUserIdAsync(userId);
+        if (employee is null)
+            throw new UserValidationException("Tài khoản chưa có hồ sơ nhân viên để cập nhật.");
+
+        employee.FullName = fullName;
+        employee.BankAccountInfo = phone;
+        employee.Department = note;
+        employee.UpdatedAt = DateTime.UtcNow;
+        employeeRepo.Update(employee);
+        await employeeRepo.SaveChangesAsync();
+
+        return await GetByIdAsync(userId);
+    }
+
     public async Task<UserResponse> GetByIdAsync(Guid id, IReadOnlyList<string> actorPermissions)
     {
         var user = await userRepo.GetByIdAsync(id) ?? throw new UserNotFoundException(id);
