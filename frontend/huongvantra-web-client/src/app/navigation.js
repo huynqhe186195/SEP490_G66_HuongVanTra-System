@@ -78,7 +78,7 @@ export const navigationItems = [
     path: '/customers',
     module: 'customers',
     icon: 'groups',
-    roles: ['agencyManager', 'salesStaff', 'accountant'],
+    roles: ['admin', 'agencyManager', 'salesStaff', 'accountant'],
     children: CUSTOMER_SIDEBAR_SECTIONS.map((section) => ({
       label: section.label,
       path: buildCustomerPath(section.key),
@@ -373,13 +373,11 @@ function groupAdminManagerSidebar(items, isAdmin) {
     })
   }
 
-  // Khách hàng (đã có children) — chỉ Manager / Sale / Kế toán
+  // Khách hàng — Admin xem/theo dõi; Manager / Sale / Kế toán vận hành
   const customers = byPath.get('/customers')
-  if (customers && !isAdmin) {
+  if (customers) {
     consumed.add('/customers')
     result.push(customers)
-  } else if (customers && isAdmin) {
-    consumed.add('/customers')
   }
 
   // Hàng hóa
