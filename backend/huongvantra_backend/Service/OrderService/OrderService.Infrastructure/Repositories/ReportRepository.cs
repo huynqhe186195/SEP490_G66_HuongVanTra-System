@@ -38,8 +38,7 @@ public class ReportRepository(OrderDbContext dbContext) : IReportRepository
         var completedOrders = await query.ToListAsync(ct);
 
         // Filter orders where Payment is Success
-        var validOrders = completedOrders.Where(o => 
-            o.Payments.Any(p => p.PaymentStatus == PaymentStatus.Success)).ToList();
+        var validOrders = completedOrders.ToList();
 
         var grossRevenue = validOrders.Sum(o => o.TotalAmount);
         // DiscountAmount is the persisted aggregate (manual + promotion + membership).
@@ -93,7 +92,7 @@ public class ReportRepository(OrderDbContext dbContext) : IReportRepository
             var prevMonth = month.Value == 1 ? 12 : month.Value - 1;
             var prevYear = month.Value == 1 ? year.Value - 1 : year.Value;
             prevCustomerCount = await dbContext.Orders
-                .Where(o => o.OrderStatus == OrderStatus.Completed && o.CreatedAt.Year == prevYear && o.CreatedAt.Month == prevMonth && o.Payments.Any(p => p.PaymentStatus == PaymentStatus.Success))
+                .Where(o => o.OrderStatus == OrderStatus.Completed && o.CreatedAt.Year == prevYear && o.CreatedAt.Month == prevMonth)
                 .Select(o => o.CustomerId).Distinct().CountAsync(ct);
         }
         else if (year.HasValue && quarter.HasValue)
@@ -103,13 +102,13 @@ public class ReportRepository(OrderDbContext dbContext) : IReportRepository
             var startMonth = (prevQuarter - 1) * 3 + 1;
             var endMonth = prevQuarter * 3;
             prevCustomerCount = await dbContext.Orders
-                .Where(o => o.OrderStatus == OrderStatus.Completed && o.CreatedAt.Year == prevYear && o.CreatedAt.Month >= startMonth && o.CreatedAt.Month <= endMonth && o.Payments.Any(p => p.PaymentStatus == PaymentStatus.Success))
+                .Where(o => o.OrderStatus == OrderStatus.Completed && o.CreatedAt.Year == prevYear && o.CreatedAt.Month >= startMonth && o.CreatedAt.Month <= endMonth)
                 .Select(o => o.CustomerId).Distinct().CountAsync(ct);
         }
         else if (year.HasValue)
         {
             prevCustomerCount = await dbContext.Orders
-                .Where(o => o.OrderStatus == OrderStatus.Completed && o.CreatedAt.Year == year.Value - 1 && o.Payments.Any(p => p.PaymentStatus == PaymentStatus.Success))
+                .Where(o => o.OrderStatus == OrderStatus.Completed && o.CreatedAt.Year == year.Value - 1)
                 .Select(o => o.CustomerId).Distinct().CountAsync(ct);
         }
         
@@ -137,8 +136,7 @@ public class ReportRepository(OrderDbContext dbContext) : IReportRepository
     public async Task<List<TopProductDto>> GetTopSellingProductsAsync(int topCount, string sortBy, int? quarter, int? month, int? year, CancellationToken ct = default)
     {
         var query = dbContext.OrderDetails
-            .Where(od => od.Order.OrderStatus == OrderStatus.Completed &&
-                         od.Order.Payments.Any(p => p.PaymentStatus == PaymentStatus.Success));
+            .Where(od => od.Order.OrderStatus == OrderStatus.Completed);
 
         if (year.HasValue)
         {
@@ -185,8 +183,7 @@ public class ReportRepository(OrderDbContext dbContext) : IReportRepository
     public async Task<List<CategorySalesDto>> GetSalesByCategoryAsync(int? quarter, int? month, int? year, CancellationToken ct = default)
     {
         var query = dbContext.OrderDetails
-            .Where(od => od.Order.OrderStatus == OrderStatus.Completed &&
-                         od.Order.Payments.Any(p => p.PaymentStatus == PaymentStatus.Success));
+            .Where(od => od.Order.OrderStatus == OrderStatus.Completed);
 
         if (year.HasValue)
         {
@@ -223,7 +220,7 @@ public class ReportRepository(OrderDbContext dbContext) : IReportRepository
     {
         var query = dbContext.Orders
             .AsNoTracking()
-            .Where(o => o.OrderStatus == OrderStatus.Completed && o.Payments.Any(p => p.PaymentStatus == PaymentStatus.Success));
+            .Where(o => o.OrderStatus == OrderStatus.Completed);
 
         if (year.HasValue) query = query.Where(o => o.CreatedAt.Year == year.Value);
         
@@ -285,7 +282,7 @@ public class ReportRepository(OrderDbContext dbContext) : IReportRepository
     {
         var query = dbContext.Orders
             .AsNoTracking()
-            .Where(o => o.OrderStatus == OrderStatus.Completed && o.Payments.Any(p => p.PaymentStatus == PaymentStatus.Success));
+            .Where(o => o.OrderStatus == OrderStatus.Completed);
 
         if (year.HasValue) query = query.Where(o => o.CreatedAt.Year == year.Value);
         
@@ -346,7 +343,7 @@ public class ReportRepository(OrderDbContext dbContext) : IReportRepository
     {
         var query = dbContext.Orders
             .AsNoTracking()
-            .Where(o => o.OrderStatus == OrderStatus.Completed && o.Payments.Any(p => p.PaymentStatus == PaymentStatus.Success));
+            .Where(o => o.OrderStatus == OrderStatus.Completed);
 
         if (year.HasValue) query = query.Where(o => o.CreatedAt.Year == year.Value);
         if (month.HasValue) query = query.Where(o => o.CreatedAt.Month == month.Value);
@@ -441,7 +438,7 @@ public class ReportRepository(OrderDbContext dbContext) : IReportRepository
     public async Task<List<CategorySalesDto>> GetSalesByChannelAsync(int? quarter, int? month, int? year, CancellationToken ct = default)
     {
         var query = dbContext.Orders
-            .Where(o => o.OrderStatus == OrderStatus.Completed && o.Payments.Any(p => p.PaymentStatus == PaymentStatus.Success));
+            .Where(o => o.OrderStatus == OrderStatus.Completed);
 
         if (year.HasValue) query = query.Where(o => o.CreatedAt.Year == year.Value);
         if (quarter.HasValue)
@@ -471,7 +468,7 @@ public class ReportRepository(OrderDbContext dbContext) : IReportRepository
     {
         var query = dbContext.Orders
             .AsNoTracking()
-            .Where(o => o.OrderStatus == OrderStatus.Completed && o.Payments.Any(p => p.PaymentStatus == PaymentStatus.Success));
+            .Where(o => o.OrderStatus == OrderStatus.Completed);
 
         if (year.HasValue) query = query.Where(o => o.CreatedAt.Year == year.Value);
         
