@@ -1952,6 +1952,8 @@ public class InventoryLogic(
 
             foreach (var bomLine in finishedVariant.BomLines)
             {
+                if (bomLine.IsRequiredBaseComponent || bomLine.Quantity <= 0)
+                    throw new InventoryValidationException($"Operational BOM của SKU {displaySku} không hợp lệ.");
                 var required = CeilRequiredQuantity(bomLine.Quantity * decision.PendingBomQuantity);
                 CatalogProduct? materialProduct;
                 List<CatalogVariant> candidateVariants;
@@ -1965,6 +1967,12 @@ public class InventoryLogic(
                         throw new InventoryValidationException(
                             $"Không tìm thấy component SKU {bomLine.ComponentSkuCode ?? bomLine.ComponentVariantId.Value.ToString()} của BOM sản phẩm {displaySku}.");
                     }
+
+                    if (!componentVariant.CanBeBomComponent
+                        || !string.Equals(materialProduct.ProductType, "NGUYEN_LIEU", StringComparison.OrdinalIgnoreCase)
+                           && !string.Equals(materialProduct.ProductType, "BAO_BI", StringComparison.OrdinalIgnoreCase)
+                           && !string.Equals(materialProduct.ProductType, "THANH_PHAM", StringComparison.OrdinalIgnoreCase))
+                        throw new InventoryValidationException($"Operational BOM của SKU {displaySku} có component không hợp lệ.");
 
                     candidateVariants = [componentVariant];
                 }
@@ -1981,7 +1989,7 @@ public class InventoryLogic(
                     }
 
                     candidateVariants = materialProduct.Variants
-                        .Where(v => v.IsActive)
+                        .Where(v => v.IsActive && v.CanBeBomComponent)
                         .OrderBy(v => v.SkuCode)
                         .ThenBy(v => v.VariantName)
                         .ToList();
@@ -2061,6 +2069,10 @@ public class InventoryLogic(
                 throw new InventoryValidationException($"SKU {displaySku} không còn hoạt động.");
             if (!variant.IsSellable)
                 throw new InventoryValidationException($"SKU {displaySku} chưa được cấu hình cho phép bán tại POS.");
+            if (!string.Equals(product.ProductType, "THANH_PHAM", StringComparison.OrdinalIgnoreCase))
+                throw new InventoryValidationException($"SKU {displaySku} không được phép bán tại POS.");
+            if (!variant.CanHaveBom)
+                throw new InventoryValidationException($"SKU {displaySku} không có operational BOM hợp lệ để xử lý phần tồn thiếu.");
         }
     }
 
@@ -2594,6 +2606,8 @@ public class InventoryLogic(
 
             if (entity.Items.Count == 0)
                 throw new InventoryValidationException("Yêu cầu không có dòng SKU.");
+
+            await ValidateShelfReplenishmentCatalogAsync(entity.Items, innerCt);
 
             var exportSlips = new List<StockAdjustmentExportSlipSummary>();
             var ledgerEntries = new List<InventoryLedgerEntry>();
@@ -5231,6 +5245,30 @@ public class InventoryLogic(
         return created;
     }
 
+    private async Task ValidateShelfReplenishmentCatalogAsync(
+        IEnumerable<StockAdjustmentRequestItem> items,
+        CancellationToken ct)
+    {
+        var skuInputs = items
+            .GroupBy(item => item.SkuId)
+            .Select(group => group.First())
+            .ToList();
+        var catalog = await _productCatalogClient.GetCatalogForVariantIdsAsync(
+            skuInputs.Select(item => item.SkuId), ct);
+
+        foreach (var item in skuInputs)
+        {
+            var product = catalog.FindProductByVariant(item.SkuId);
+            var variant = catalog.FindVariant(item.SkuId);
+            if (product is null || variant is null || !product.IsActive || !variant.IsActive
+                || !string.Equals(product.ProductType, "THANH_PHAM", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InventoryValidationException(
+                    $"SKU {item.SkuCode} không hợp lệ cho Kệ. Chỉ SKU Thành phẩm đang hoạt động mới được phép đưa lên Kệ.");
+            }
+        }
+    }
+
     private async Task<List<WarehouseBatch>> CreateWarehouseBatchesFromShelfAllocationsAsync(
         string referenceCode,
         Guid referenceId,
@@ -5391,6 +5429,18 @@ public class InventoryLogic(
 
         var now = DateTime.UtcNow;
         var normalizedLocation = NormalizeInventoryLocationName(location);
+        if (normalizedLocation == LocationShelf)
+        {
+            var shelfCatalog = await _productCatalogClient.GetCatalogForVariantIdsAsync(items.Select(item => item.SkuId), ct);
+            foreach (var item in items)
+            {
+                var product = shelfCatalog.FindProductByVariant(item.SkuId);
+                var variant = shelfCatalog.FindVariant(item.SkuId);
+                if (product is null || variant is null || !product.IsActive || !variant.IsActive
+                    || !string.Equals(product.ProductType, "THANH_PHAM", StringComparison.OrdinalIgnoreCase))
+                    throw new InventoryValidationException($"SKU {item.SkuCode} không được đặt tại Kệ.");
+            }
+        }
         var batch = new WarehouseBatch
         {
             Id = Guid.NewGuid(),
@@ -6709,6 +6759,7 @@ public class InventoryLogic(
     {
         var outputs = ResolveProductionOutputs(request.OutputLines);
         var materialLines = ResolveProductionMaterialLines(request.Lines);
+        await ValidateProductionCatalogAsync(outputs, materialLines, ct);
 
         if (request.Lines == null || request.Lines.Count == 0)
             throw new InventoryValidationException("Lệnh sản xuất phải có ít nhất một dòng nguyên liệu.");
@@ -6761,6 +6812,73 @@ public class InventoryLogic(
         await _productionOrderRepo.SaveChangesAsync(ct);
 
         return MapProductionOrder(order);
+    }
+
+    private Task ValidateStoredProductionCatalogAsync(ProductionOrder order, CancellationToken ct) =>
+        ValidateProductionCatalogAsync(
+            order.OutputLines.Select(line => new ProductionOrderOutputLineInput(
+                line.FinishedSkuId, line.FinishedSkuCode, line.FinishedSkuSnapshotName,
+                line.PlannedQuantity, line.ExpiresAt, line.DestinationLocation)).ToList(),
+            order.Lines.Select(line => new ProductionOrderLineInput(
+                line.MaterialSkuId, line.MaterialSkuCode, line.MaterialSnapshotName, line.PlannedQuantity)).ToList(),
+            ct);
+
+    private async Task ValidateProductionCatalogAsync(
+        List<ProductionOrderOutputLineInput> outputs,
+        List<ProductionOrderLineInput> materials,
+        CancellationToken ct)
+    {
+        // Full catalog is intentionally used here: consumer-side validation must
+        // resolve every BOM component without choosing an arbitrary SKU.
+        var catalog = await _productCatalogClient.GetCatalogAsync(ct);
+
+        foreach (var output in outputs)
+        {
+            var product = catalog.FindProductByVariant(output.FinishedSkuId)
+                ?? throw new InventoryValidationException($"SKU đầu ra {output.FinishedSkuCode} không tồn tại hoặc capability catalog bị thiếu.");
+            var variant = catalog.FindVariant(output.FinishedSkuId)
+                ?? throw new InventoryValidationException($"SKU đầu ra {output.FinishedSkuCode} không tồn tại hoặc capability catalog bị thiếu.");
+
+            if (!product.IsActive || !variant.IsActive)
+                throw new InventoryValidationException($"SKU đầu ra {output.FinishedSkuCode} đang ngừng hoạt động.");
+            if (!string.Equals(product.ProductType, "THANH_PHAM", StringComparison.OrdinalIgnoreCase))
+                throw new InventoryValidationException($"SKU {output.FinishedSkuCode} không được phép làm đầu ra sản xuất.");
+            if (!variant.CanHaveBom)
+                throw new InventoryValidationException($"SKU {output.FinishedSkuCode} không được phép sản xuất vì CanHaveBom=false.");
+            if (variant.BomLines.Count == 0)
+                throw new InventoryValidationException($"SKU {output.FinishedSkuCode} chưa có operational BOM để sản xuất.");
+            if (string.Equals(output.DestinationLocation, LocationShelf, StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(product.ProductType, "THANH_PHAM", StringComparison.OrdinalIgnoreCase))
+                throw new InventoryValidationException($"SKU {output.FinishedSkuCode} không được đặt tại Kệ.");
+
+            foreach (var bomLine in variant.BomLines)
+            {
+                if (bomLine.IsRequiredBaseComponent || bomLine.Quantity <= 0 || !bomLine.ComponentVariantId.HasValue)
+                    throw new InventoryValidationException($"Operational BOM của SKU {output.FinishedSkuCode} không hợp lệ.");
+                var component = catalog.FindVariant(bomLine.ComponentVariantId.Value)
+                    ?? throw new InventoryValidationException($"Operational BOM của SKU {output.FinishedSkuCode} có component không resolve được.");
+                var componentProduct = catalog.FindProductByVariant(component.Id)
+                    ?? throw new InventoryValidationException($"Operational BOM của SKU {output.FinishedSkuCode} có component không resolve được.");
+                if (!component.IsActive || !component.CanBeBomComponent
+                    || !string.Equals(componentProduct.ProductType, "NGUYEN_LIEU", StringComparison.OrdinalIgnoreCase)
+                       && !string.Equals(componentProduct.ProductType, "BAO_BI", StringComparison.OrdinalIgnoreCase)
+                       && !string.Equals(componentProduct.ProductType, "THANH_PHAM", StringComparison.OrdinalIgnoreCase))
+                    throw new InventoryValidationException($"Operational BOM của SKU {output.FinishedSkuCode} có component không hợp lệ.");
+            }
+        }
+
+        foreach (var material in materials)
+        {
+            var product = catalog.FindProductByVariant(material.MaterialSkuId)
+                ?? throw new InventoryValidationException($"SKU nguyên liệu {material.MaterialSkuCode} không tồn tại hoặc capability catalog bị thiếu.");
+            var variant = catalog.FindVariant(material.MaterialSkuId)
+                ?? throw new InventoryValidationException($"SKU nguyên liệu {material.MaterialSkuCode} không tồn tại hoặc capability catalog bị thiếu.");
+            if (!product.IsActive || !variant.IsActive || !variant.CanBeBomComponent
+                || !string.Equals(product.ProductType, "NGUYEN_LIEU", StringComparison.OrdinalIgnoreCase)
+                   && !string.Equals(product.ProductType, "BAO_BI", StringComparison.OrdinalIgnoreCase)
+                   && !string.Equals(product.ProductType, "THANH_PHAM", StringComparison.OrdinalIgnoreCase))
+                throw new InventoryValidationException($"SKU {material.MaterialSkuCode} không được phép làm component BOM.");
+        }
     }
 
     private static void ValidateSupplierReceiptHeaderMetadata(UpsertSupplierReceiptRequest request)
@@ -6860,6 +6978,7 @@ public class InventoryLogic(
         ResolveCompletionOutputLines(order);
         if (order.Lines.Count == 0)
             throw new InventoryValidationException("Lệnh sản xuất phải có ít nhất một dòng nguyên liệu.");
+        await ValidateStoredProductionCatalogAsync(order, ct);
 
         var now = DateTime.UtcNow;
         order.Status = ProductionOrderStatus.PendingApproval;
@@ -6899,6 +7018,7 @@ public class InventoryLogic(
         ResolveCompletionOutputLines(order);
         if (order.Lines.Count == 0)
             throw new InventoryValidationException("Lệnh sản xuất phải có ít nhất một dòng nguyên liệu.");
+        await ValidateStoredProductionCatalogAsync(order, ct);
 
         var now = DateTime.UtcNow;
         order.Status = ProductionOrderStatus.Approved;
@@ -6976,6 +7096,13 @@ public class InventoryLogic(
             var materialLines = order.Lines.OrderBy(l => l.MaterialSkuCode).ToList();
             if (materialLines.Count == 0)
                 throw new InventoryValidationException("Lệnh sản xuất phải có ít nhất một dòng nguyên liệu.");
+            await ValidateProductionCatalogAsync(
+                outputLines.Select(line => new ProductionOrderOutputLineInput(
+                    line.FinishedSkuId, line.FinishedSkuCode, line.FinishedSkuSnapshotName,
+                    line.PlannedQuantity, line.ExpiresAt, line.DestinationLocation)).ToList(),
+                materialLines.Select(line => new ProductionOrderLineInput(
+                    line.MaterialSkuId, line.MaterialSkuCode, line.MaterialSnapshotName, line.PlannedQuantity)).ToList(),
+                innerCt);
             foreach (var line in materialLines)
             {
                 if (line.PlannedQuantity <= 0)
