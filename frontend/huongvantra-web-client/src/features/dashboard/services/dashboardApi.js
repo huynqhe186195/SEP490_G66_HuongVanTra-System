@@ -28,6 +28,11 @@ export const dashboardApi = {
     const path = `/api/reports/revenue-growth${query ? `?${query}` : ''}`
     return await apiRequestAuth(path)
   },
+  getRevenueProfitGrowth: async (params) => {
+    const query = params ? new URLSearchParams(params).toString() : ''
+    const path = `/api/reports/revenue-profit-growth${query ? `?${query}` : ''}`
+    return await apiRequestAuth(path)
+  },
   getSalesByChannel: async (params) => {
     const query = params ? new URLSearchParams(params).toString() : ''
     const path = `/api/reports/sales-by-channel${query ? `?${query}` : ''}`
