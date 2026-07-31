@@ -25,6 +25,7 @@ public class InventoryLogic(
     IShelfReturnRequestRepository _shelfReturnRepo,
     ISupplierReturnRequestRepository _supplierReturnRepo,
     IStocktakeRequestRepository _stocktakeRepo,
+    IShelfReplenishmentSuggestionRepository _suggestionRepo,
     IProcessedIntegrationEventRepository _processedEvents,
     IInventoryEventPublisher _eventPublisher,
     IInventoryUnitOfWork _unitOfWork,
@@ -4241,11 +4242,190 @@ public class InventoryLogic(
                 await _ledgerRepo.SaveChangesAsync(innerCt);
             }
 
+            await GenerateShelfReplenishmentSuggestionAsync(request, location, innerCt);
+
             foreach (var skuId in touchedSkuIds)
                 await PublishLowStockForSkuLocationAsync(skuId, location, innerCt);
 
             return MapStocktakeRequest(request);
         }, ct);
+    }
+
+    /// <summary>
+    /// Sinh gợi ý bổ sung Kệ Hàng sau khi duyệt phiếu kiểm kệ (Location = Shelf).
+    /// Gợi ý KHÔNG chứa số lượng cần bổ sung — chỉ chụp lại hiện trạng tồn Kệ / ngưỡng / tồn Kho;
+    /// Warehouse tự quyết số lượng khi tạo phiếu điều chuyển.
+    /// </summary>
+    private async Task GenerateShelfReplenishmentSuggestionAsync(
+        StocktakeRequest request,
+        string location,
+        CancellationToken ct)
+    {
+        if (location != LocationShelf)
+            return;
+        if (await _suggestionRepo.ExistsForStocktakeAsync(request.Id, ct))
+            return;
+
+        var items = new List<ShelfReplenishmentSuggestionItem>();
+        var suggestionId = Guid.NewGuid();
+
+        // ProductTypeSnapshot trên dòng kiểm kê có thể null, nên đối chiếu trực tiếp với Product catalog.
+        var catalog = await _productCatalogClient.GetCatalogForVariantIdsAsync(
+            request.Items.Select(i => i.SkuId), ct);
+
+        foreach (var line in request.Items.OrderBy(i => i.SkuCode))
+        {
+            // Chỉ thành phẩm còn hoạt động và cho phép bán mới điều chuyển được lên Kệ.
+            var product = catalog.FindProductByVariant(line.SkuId);
+            var variant = catalog.FindVariant(line.SkuId);
+            if (product is null || variant is null
+                || !product.IsActive || !variant.IsActive || !variant.IsSellable
+                || !string.Equals(product.ProductType, "THANH_PHAM", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var stock = await _skuStockRepo.GetBySkuIdAsync(line.SkuId, ct);
+            if (stock is null || stock.ShelfLowStockThreshold <= 0)
+                continue;
+
+            var available = stock.QuantityOnHand - stock.ReservedQuantity;
+            if (available > stock.ShelfLowStockThreshold)
+                continue;
+
+            items.Add(new ShelfReplenishmentSuggestionItem
+            {
+                Id = Guid.NewGuid(),
+                SuggestionId = suggestionId,
+                SkuId = line.SkuId,
+                SkuCode = line.SkuCode,
+                SkuSnapshotName = line.SkuSnapshotName,
+                InventoryUnitSnapshot = line.InventoryUnitSnapshot,
+                ShelfQuantityAtStocktake = stock.QuantityOnHand,
+                ShelfReservedAtStocktake = stock.ReservedQuantity,
+                ShelfLowStockThreshold = stock.ShelfLowStockThreshold,
+                WarehouseQuantityAtStocktake = stock.WarehouseQuantityOnHand,
+            });
+        }
+
+        if (items.Count == 0)
+            return;
+
+        var now = DateTime.UtcNow;
+        var countToday = await _suggestionRepo.CountCreatedSinceAsync(now.Date, ct);
+        var suggestion = new ShelfReplenishmentSuggestion
+        {
+            Id = suggestionId,
+            SuggestionCode = $"GY-{now:yyyyMMdd}-{(countToday + 1):D4}",
+            SourceStocktakeRequestId = request.Id,
+            SourceStocktakeCode = request.RequestCode,
+            Status = ShelfReplenishmentSuggestionStatus.Open,
+            CreatedAt = now,
+            Items = items,
+        };
+
+        await _suggestionRepo.AddAsync(suggestion, ct);
+        await _suggestionRepo.SaveChangesAsync(ct);
+    }
+
+    public async Task<PagedResponse<ShelfReplenishmentSuggestionResponse>> GetShelfReplenishmentSuggestionsAsync(
+        string? status,
+        string? search,
+        int page,
+        int pageSize,
+        CancellationToken ct = default)
+    {
+        var parsedStatus = ParseShelfReplenishmentSuggestionStatus(status);
+        var (safePage, safePageSize) = NormalizePagination(page, pageSize);
+        var (items, totalCount) = await _suggestionRepo.GetPagedAsync(
+            parsedStatus, search, safePage, safePageSize, ct);
+        var totalPages = Math.Max(1, (int)Math.Ceiling(totalCount / (double)safePageSize));
+        return new PagedResponse<ShelfReplenishmentSuggestionResponse>(
+            items.Select(MapShelfReplenishmentSuggestion).ToList(),
+            safePage,
+            safePageSize,
+            totalCount,
+            totalPages);
+    }
+
+    public async Task<ShelfReplenishmentSuggestionResponse?> GetShelfReplenishmentSuggestionAsync(
+        Guid id,
+        CancellationToken ct = default)
+    {
+        var suggestion = await _suggestionRepo.GetByIdAsync(id, ct);
+        return suggestion is null ? null : MapShelfReplenishmentSuggestion(suggestion);
+    }
+
+    public async Task<int> CountOpenShelfReplenishmentSuggestionsAsync(CancellationToken ct = default) =>
+        await _suggestionRepo.CountOpenAsync(ct);
+
+    public async Task<ShelfReplenishmentSuggestionResponse> DismissShelfReplenishmentSuggestionAsync(
+        Guid id,
+        Guid actorId,
+        CreatorSnapshot? actor,
+        DismissShelfReplenishmentSuggestionRequest request,
+        CancellationToken ct = default)
+    {
+        var suggestion = await _suggestionRepo.GetByIdAsync(id, ct)
+            ?? throw new InventoryNotFoundException("Không tìm thấy gợi ý bổ sung kệ.");
+        if (suggestion.Status != ShelfReplenishmentSuggestionStatus.Open)
+            throw new InventoryValidationException("Chỉ gợi ý đang mở mới có thể bỏ qua.");
+
+        var reason = request.Reason?.Trim();
+        if (string.IsNullOrWhiteSpace(reason))
+            throw new InventoryValidationException("Vui lòng nhập lý do bỏ qua gợi ý.");
+
+        suggestion.Status = ShelfReplenishmentSuggestionStatus.Dismissed;
+        suggestion.HandledBy = actorId;
+        suggestion.HandledByName = actor?.CreatedByName;
+        suggestion.HandledByRoleName = actor?.CreatedByRoleName;
+        suggestion.HandledAt = DateTime.UtcNow;
+        suggestion.HandledNote = reason;
+        await _suggestionRepo.SaveChangesAsync(ct);
+
+        return MapShelfReplenishmentSuggestion(suggestion);
+    }
+
+    private static ShelfReplenishmentSuggestionStatus? ParseShelfReplenishmentSuggestionStatus(string? status) =>
+        (status ?? string.Empty).Trim().ToLowerInvariant() switch
+        {
+            "" => null,
+            "all" => null,
+            "open" => ShelfReplenishmentSuggestionStatus.Open,
+            "handled" => ShelfReplenishmentSuggestionStatus.Handled,
+            "dismissed" => ShelfReplenishmentSuggestionStatus.Dismissed,
+            _ => throw new InventoryValidationException("Trạng thái gợi ý không hợp lệ."),
+        };
+
+    private static ShelfReplenishmentSuggestionResponse MapShelfReplenishmentSuggestion(
+        ShelfReplenishmentSuggestion suggestion)
+    {
+        var items = suggestion.Items
+            .OrderBy(item => item.SkuCode)
+            .Select(item => new ShelfReplenishmentSuggestionItemResponse(
+                item.Id,
+                item.SkuId,
+                item.SkuCode,
+                item.SkuSnapshotName,
+                item.InventoryUnitSnapshot,
+                item.ShelfQuantityAtStocktake,
+                item.ShelfReservedAtStocktake,
+                item.ShelfLowStockThreshold,
+                item.WarehouseQuantityAtStocktake))
+            .ToList();
+
+        return new ShelfReplenishmentSuggestionResponse(
+            suggestion.Id,
+            suggestion.SuggestionCode,
+            suggestion.SourceStocktakeRequestId,
+            suggestion.SourceStocktakeCode,
+            suggestion.Status.ToString(),
+            suggestion.CreatedAt,
+            suggestion.HandledBy,
+            suggestion.HandledByName,
+            suggestion.HandledByRoleName,
+            suggestion.HandledAt,
+            suggestion.HandledNote,
+            items.Count,
+            items);
     }
 
     public async Task<StocktakeRequestResponse> RejectStocktakeRequestAsync(

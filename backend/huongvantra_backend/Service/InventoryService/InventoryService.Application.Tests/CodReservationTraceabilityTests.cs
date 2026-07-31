@@ -65,6 +65,7 @@ public sealed class CodReservationTraceabilityTests
             Mock.Of<IShelfReturnRequestRepository>(),
             Mock.Of<ISupplierReturnRequestRepository>(),
             Mock.Of<IStocktakeRequestRepository>(),
+            Mock.Of<IShelfReplenishmentSuggestionRepository>(),
             new ProcessedIntegrationEventRepository(db),
             Mock.Of<IInventoryEventPublisher>(),
             new PassThroughUnitOfWork(),

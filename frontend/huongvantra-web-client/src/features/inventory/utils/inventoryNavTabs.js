@@ -21,6 +21,11 @@ export const stockTransferNavTab = {
   to: '/inventory/stock-transfers',
 }
 
+export const shelfReplenishmentSuggestionNavTab = {
+  label: 'Gợi ý bổ sung Kệ Hàng',
+  to: '/inventory/shelf-replenishment-suggestions',
+}
+
 export const supplierReceiptNavTab = {
   label: 'Phiếu nhập nhà cung cấp',
   to: '/inventory/supplier-receipts',
@@ -103,6 +108,7 @@ export function getInventoryNavTabs(session) {
   }
   if (isWarehouseRole(session) || isManagerLike(session) || isAdminLike(session) || isSystemAdmin(session)) {
     tabs.push(stockTransferNavTab)
+    tabs.push(shelfReplenishmentSuggestionNavTab)
   }
   return tabs
 }

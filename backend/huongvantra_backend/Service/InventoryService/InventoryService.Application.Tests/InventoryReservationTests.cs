@@ -71,6 +71,7 @@ public sealed class InventoryReservationTests
             Mock.Of<IShelfReturnRequestRepository>(),
             Mock.Of<ISupplierReturnRequestRepository>(),
             Mock.Of<IStocktakeRequestRepository>(),
+            Mock.Of<IShelfReplenishmentSuggestionRepository>(),
             processed,
             publisher ?? Mock.Of<IInventoryEventPublisher>(),
             BuildPassThroughUnitOfWork(db),

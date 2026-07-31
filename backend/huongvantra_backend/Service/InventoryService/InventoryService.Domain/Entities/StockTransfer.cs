@@ -29,6 +29,10 @@ public class StockTransfer
     public Guid? SourceRequestId { get; set; }
     public StockAdjustmentRequest? SourceRequest { get; set; }
 
+    /// <summary>Gợi ý bổ sung Kệ Hàng nguồn; đánh dấu đã xử lý khi phiếu hoàn tất.</summary>
+    public Guid? SourceSuggestionId { get; set; }
+    public ShelfReplenishmentSuggestion? SourceSuggestion { get; set; }
+
     public StockExportSlip? ExportSlip { get; set; }
     public StockImportSlip? ImportSlip { get; set; }
     public ICollection<StockTransferLine> Lines { get; set; } = new List<StockTransferLine>();

@@ -330,7 +330,9 @@ public record StockTransferResponse(
     int TotalQuantity,
     List<StockTransferLineResponse> Lines,
     Guid? SourceRequestId = null,
-    string? SourceRequestCode = null);
+    string? SourceRequestCode = null,
+    Guid? SourceSuggestionId = null,
+    string? SourceSuggestionCode = null);
 
 public record StockExportBatchAllocationResponse(
     Guid Id,
@@ -708,6 +710,32 @@ public record StocktakeRequestResponse(
     int TotalNegativeVariance,
     int TotalAbsoluteVariance,
     List<StocktakeRequestItemResponse> Items);
+
+public record ShelfReplenishmentSuggestionItemResponse(
+    Guid Id,
+    Guid SkuId,
+    string SkuCode,
+    string SkuSnapshotName,
+    string? InventoryUnitSnapshot,
+    int ShelfQuantityAtStocktake,
+    int ShelfReservedAtStocktake,
+    int ShelfLowStockThreshold,
+    int WarehouseQuantityAtStocktake);
+
+public record ShelfReplenishmentSuggestionResponse(
+    Guid Id,
+    string SuggestionCode,
+    Guid SourceStocktakeRequestId,
+    string SourceStocktakeCode,
+    string Status,
+    DateTime CreatedAt,
+    Guid? HandledBy,
+    string? HandledByName,
+    string? HandledByRoleName,
+    DateTime? HandledAt,
+    string? HandledNote,
+    int ItemCount,
+    List<ShelfReplenishmentSuggestionItemResponse> Items);
 
 public record ProductionOrderLineResponse(
     Guid Id,

@@ -83,9 +83,12 @@ public record UpsertStockTransferLineRequest(
 public record UpsertStockTransferRequest(
     string? Note,
     List<UpsertStockTransferLineRequest> Lines,
-    Guid? SourceRequestId = null);
+    Guid? SourceRequestId = null,
+    Guid? SourceSuggestionId = null);
 
 public record CancelStockTransferRequest(string? Reason);
+
+public record DismissShelfReplenishmentSuggestionRequest(string? Reason);
 
 public record CreateWarehouseBatchItemRequest(
     Guid SkuId,

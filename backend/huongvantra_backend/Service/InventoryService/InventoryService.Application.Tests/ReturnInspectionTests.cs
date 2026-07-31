@@ -91,6 +91,7 @@ public sealed class ReturnInspectionTests
             Mock.Of<IShelfReturnRequestRepository>(),
             Mock.Of<ISupplierReturnRequestRepository>(),
             Mock.Of<IStocktakeRequestRepository>(),
+            Mock.Of<IShelfReplenishmentSuggestionRepository>(),
             new ProcessedIntegrationEventRepository(db),
             Mock.Of<IInventoryEventPublisher>(),
             new PassThrough(),

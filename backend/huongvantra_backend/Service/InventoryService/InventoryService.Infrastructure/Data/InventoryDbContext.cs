@@ -31,6 +31,8 @@ public class InventoryDbContext(DbContextOptions<InventoryDbContext> options) : 
     public DbSet<SupplierReturnRequestItem> SupplierReturnRequestItems => Set<SupplierReturnRequestItem>();
     public DbSet<StocktakeRequest> StocktakeRequests => Set<StocktakeRequest>();
     public DbSet<StocktakeRequestItem> StocktakeRequestItems => Set<StocktakeRequestItem>();
+    public DbSet<ShelfReplenishmentSuggestion> ShelfReplenishmentSuggestions => Set<ShelfReplenishmentSuggestion>();
+    public DbSet<ShelfReplenishmentSuggestionItem> ShelfReplenishmentSuggestionItems => Set<ShelfReplenishmentSuggestionItem>();
     public DbSet<ProductionOrder> ProductionOrders => Set<ProductionOrder>();
     public DbSet<ProductionOrderLine> ProductionOrderLines => Set<ProductionOrderLine>();
     public DbSet<ProductionOrderOutputLine> ProductionOrderOutputLines => Set<ProductionOrderOutputLine>();

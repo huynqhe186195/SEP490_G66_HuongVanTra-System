@@ -368,6 +368,7 @@ public sealed class StockTransferLogicTests
             (importRepo ?? new Mock<IStockImportSlipRepository>()).Object,
             (ledgerRepo ?? new Mock<IInventoryLedgerRepository>()).Object,
             catalogClient.Object,
+            Mock.Of<IShelfReplenishmentSuggestionRepository>(),
             unitOfWork.Object);
     }
 

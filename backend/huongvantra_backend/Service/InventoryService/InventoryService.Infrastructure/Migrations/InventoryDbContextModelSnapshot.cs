@@ -512,6 +512,116 @@ namespace InventoryService.Infrastructure.Migrations
                     b.ToTable("ReturnInspections", (string)null);
                 });
 
+            modelBuilder.Entity("InventoryService.Domain.Entities.ShelfReplenishmentSuggestion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("char(36)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<DateTime?>("HandledAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid?>("HandledBy")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("HandledByName")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("HandledByRoleName")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<string>("HandledNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<string>("SourceStocktakeCode")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)");
+
+                    b.Property<Guid>("SourceStocktakeRequestId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)");
+
+                    b.Property<string>("SuggestionCode")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("SourceStocktakeRequestId")
+                        .IsUnique();
+
+                    b.HasIndex("Status");
+
+                    b.HasIndex("SuggestionCode")
+                        .IsUnique();
+
+                    b.ToTable("ShelfReplenishmentSuggestions", (string)null);
+                });
+
+            modelBuilder.Entity("InventoryService.Domain.Entities.ShelfReplenishmentSuggestionItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("InventoryUnitSnapshot")
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)");
+
+                    b.Property<int>("ShelfLowStockThreshold")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ShelfQuantityAtStocktake")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ShelfReservedAtStocktake")
+                        .HasColumnType("int");
+
+                    b.Property<string>("SkuCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<Guid>("SkuId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("SkuSnapshotName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<Guid>("SuggestionId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<int>("WarehouseQuantityAtStocktake")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SkuId");
+
+                    b.HasIndex("SuggestionId");
+
+                    b.HasIndex("SuggestionId", "SkuId")
+                        .IsUnique();
+
+                    b.ToTable("ShelfReplenishmentSuggestionItems", (string)null);
+                });
+
             modelBuilder.Entity("InventoryService.Domain.Entities.ShelfReturnRequest", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1530,6 +1640,9 @@ namespace InventoryService.Infrastructure.Migrations
                     b.Property<Guid?>("SourceRequestId")
                         .HasColumnType("char(36)");
 
+                    b.Property<Guid?>("SourceSuggestionId")
+                        .HasColumnType("char(36)");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -1556,6 +1669,8 @@ namespace InventoryService.Infrastructure.Migrations
                     b.HasIndex("ImportSlipId");
 
                     b.HasIndex("SourceRequestId");
+
+                    b.HasIndex("SourceSuggestionId");
 
                     b.HasIndex("Status");
 
@@ -2639,6 +2754,28 @@ namespace InventoryService.Infrastructure.Migrations
                     b.Navigation("QuarantineBatch");
                 });
 
+            modelBuilder.Entity("InventoryService.Domain.Entities.ShelfReplenishmentSuggestion", b =>
+                {
+                    b.HasOne("InventoryService.Domain.Entities.StocktakeRequest", "SourceStocktakeRequest")
+                        .WithMany()
+                        .HasForeignKey("SourceStocktakeRequestId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("SourceStocktakeRequest");
+                });
+
+            modelBuilder.Entity("InventoryService.Domain.Entities.ShelfReplenishmentSuggestionItem", b =>
+                {
+                    b.HasOne("InventoryService.Domain.Entities.ShelfReplenishmentSuggestion", "Suggestion")
+                        .WithMany("Items")
+                        .HasForeignKey("SuggestionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Suggestion");
+                });
+
             modelBuilder.Entity("InventoryService.Domain.Entities.ShelfReturnRequestItem", b =>
                 {
                     b.HasOne("InventoryService.Domain.Entities.WarehouseBatch", "ShelfBatch")
@@ -2806,11 +2943,18 @@ namespace InventoryService.Infrastructure.Migrations
                         .HasForeignKey("SourceRequestId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("InventoryService.Domain.Entities.ShelfReplenishmentSuggestion", "SourceSuggestion")
+                        .WithMany()
+                        .HasForeignKey("SourceSuggestionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("ExportSlip");
 
                     b.Navigation("ImportSlip");
 
                     b.Navigation("SourceRequest");
+
+                    b.Navigation("SourceSuggestion");
                 });
 
             modelBuilder.Entity("InventoryService.Domain.Entities.StockTransferBatchAllocation", b =>
@@ -2994,6 +3138,11 @@ namespace InventoryService.Infrastructure.Migrations
                     b.Navigation("Lines");
 
                     b.Navigation("OutputLines");
+                });
+
+            modelBuilder.Entity("InventoryService.Domain.Entities.ShelfReplenishmentSuggestion", b =>
+                {
+                    b.Navigation("Items");
                 });
 
             modelBuilder.Entity("InventoryService.Domain.Entities.ShelfReturnRequest", b =>

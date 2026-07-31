@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
@@ -14,6 +14,7 @@ import {
   fetchStockAdjustmentRequests,
 } from '../services/stockAdjustmentRequestApi.js'
 import { createStockTransfer } from '../services/stockTransferApi.js'
+import { fetchShelfReplenishmentSuggestionById } from '../services/shelfReplenishmentSuggestionApi.js'
 import { getStockFlowErrorMessage, STOCK_FLOW_TERMS } from '../utils/stockFlowLabels.js'
 
 const LABEL_CLASS = 'mb-1 block text-xs font-bold uppercase tracking-wider text-slate-500'
@@ -321,11 +322,14 @@ export default function StockTransferCreatePage() {
 
   const isDirectMode = searchParams.get('mode') === 'direct'
   const presetRequestId = searchParams.get('sourceRequestId') || ''
+  const presetSuggestionId = searchParams.get('sourceSuggestionId') || ''
 
   const [catalog, setCatalog] = useState([])
   const [stocks, setStocks] = useState([])
   const [catalogSearch, setCatalogSearch] = useState('')
   const [directLines, setDirectLines] = useState([])
+  const [suggestion, setSuggestion] = useState(null)
+  const hasPrefilledSuggestion = useRef(false)
 
   const [requests, setRequests] = useState([])
   const [isLoadingRequests, setIsLoadingRequests] = useState(!isDirectMode)
@@ -389,6 +393,45 @@ export default function StockTransferCreatePage() {
       mounted = false
     }
   }, [canOperate, isDirectMode])
+
+  useEffect(() => {
+    if (!canOperate || !isDirectMode || !presetSuggestionId) return undefined
+    let mounted = true
+    fetchShelfReplenishmentSuggestionById(presetSuggestionId)
+      .then((result) => {
+        if (!mounted) return
+        setSuggestion(result)
+      })
+      .catch((error) => {
+        if (!mounted) return
+        setSuggestion(null)
+        showError(getStockFlowErrorMessage(error, 'Không tải được gợi ý bổ sung Kệ Hàng.'))
+      })
+    return () => {
+      mounted = false
+    }
+  }, [canOperate, isDirectMode, presetSuggestionId])
+
+  // Điền sẵn SKU từ gợi ý nhưng để trống số lượng: Thủ kho tự quyết số lượng điều chuyển.
+  useEffect(() => {
+    if (!suggestion || catalog.length === 0 || hasPrefilledSuggestion.current) return
+    hasPrefilledSuggestion.current = true
+    const eligibleIds = new Set(catalog.map((sku) => sku.id))
+    const prefilled = suggestion.items
+      .filter((item) => eligibleIds.has(item.skuId))
+      .map((item) => ({
+        skuId: item.skuId,
+        skuCode: item.skuCode,
+        skuName: item.skuSnapshotName || 'Thành phẩm',
+        warehouseQuantityOnHand: Number(stockBySkuId.get(item.skuId)?.warehouseQuantityOnHand ?? 0),
+        quantity: '',
+      }))
+    setDirectLines(prefilled)
+    const skippedCount = suggestion.items.length - prefilled.length
+    if (skippedCount > 0) {
+      showError(`${skippedCount} sản phẩm trong gợi ý không còn đủ điều kiện điều chuyển lên Kệ Hàng.`)
+    }
+  }, [suggestion, catalog, stockBySkuId])
 
   const selectRequest = useCallback(async (requestId) => {
     try {
@@ -524,6 +567,7 @@ export default function StockTransferCreatePage() {
       const created = await createStockTransfer({
         note,
         sourceRequestId: isDirectMode ? null : selectedRequest.id,
+        sourceSuggestionId: isDirectMode ? (suggestion?.id ?? null) : null,
         lines: payloadLines,
       })
       showSuccess(
@@ -571,6 +615,18 @@ export default function StockTransferCreatePage() {
       />
 
       <form onSubmit={handleSubmit} className="mt-6 space-y-6">
+        {suggestion ? (
+          <section className="rounded-2xl border border-[#cfe2d6] bg-[#f2f8f4] px-5 py-4">
+            <p className="text-sm font-bold text-[#356647]">
+              Tạo từ gợi ý {suggestion.suggestionCode}
+            </p>
+            <p className="mt-1 text-xs text-slate-600">
+              Sinh từ phiếu kiểm kệ {suggestion.sourceStocktakeCode}. Sản phẩm đã được điền sẵn,
+              số lượng điều chuyển do Thủ kho tự quyết định. Gợi ý sẽ tự động đóng khi phiếu hoàn tất.
+            </p>
+          </section>
+        ) : null}
+
         {isDirectMode ? (
           <DirectModeSection
             catalog={catalog}

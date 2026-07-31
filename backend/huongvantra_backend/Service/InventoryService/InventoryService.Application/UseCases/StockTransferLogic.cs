@@ -17,6 +17,7 @@ public class StockTransferLogic(
     IStockImportSlipRepository _importSlipRepo,
     IInventoryLedgerRepository _ledgerRepo,
     IProductCatalogClient _productCatalogClient,
+    IShelfReplenishmentSuggestionRepository _suggestionRepo,
     IInventoryUnitOfWork _unitOfWork)
 {
     private const string LocationWarehouse = "Warehouse";
@@ -86,6 +87,8 @@ public class StockTransferLogic(
         var normalizedLines = await ValidateAndNormalizeLinesAsync(request.Lines, ct);
         var sourceRequest = await ValidateSourceRequestAsync(
             request.SourceRequestId, normalizedLines, null, ct);
+        var sourceSuggestion = await ValidateSourceSuggestionAsync(
+            request.SourceSuggestionId, request.SourceRequestId, ct);
         var now = DateTime.UtcNow;
         var id = Guid.NewGuid();
         var transfer = new StockTransfer
@@ -97,6 +100,7 @@ public class StockTransferLogic(
             Status = StockTransferStatus.Draft,
             Note = NormalizeText(request.Note),
             SourceRequestId = sourceRequest?.Id,
+            SourceSuggestionId = sourceSuggestion?.Id,
             CreatedBy = actorId,
             CreatedByName = NormalizeText(actor?.CreatedByName),
             CreatedByRoleName = NormalizeText(actor?.CreatedByRoleName),
@@ -108,6 +112,7 @@ public class StockTransferLogic(
         await _transferRepo.AddAsync(transfer, ct);
         await _transferRepo.SaveChangesAsync(ct);
         transfer.SourceRequest = sourceRequest;
+        transfer.SourceSuggestion = sourceSuggestion;
         return Map(transfer);
     }
 
@@ -140,6 +145,10 @@ public class StockTransferLogic(
                     : "Không thể đổi Yêu cầu bổ sung Kệ Hàng nguồn của Phiếu điều chuyển.");
         }
 
+        var requestedSuggestionId = request.SourceSuggestionId == Guid.Empty ? null : request.SourceSuggestionId;
+        if (existing.SourceSuggestionId != requestedSuggestionId)
+            throw new InventoryValidationException("Không thể đổi Gợi ý bổ sung Kệ Hàng nguồn của Phiếu điều chuyển.");
+
         var normalizedLines = await ValidateAndNormalizeLinesAsync(request.Lines, ct);
         var sourceRequest = await ValidateSourceRequestAsync(
             request.SourceRequestId, normalizedLines, id, ct);
@@ -169,6 +178,34 @@ public class StockTransferLogic(
             await _transferRepo.SaveChangesAsync(innerCt);
             return Map(transfer);
         }, ct);
+    }
+
+    /// <summary>
+    /// Kiểm tra liên kết Gợi ý bổ sung Kệ Hàng: gợi ý phải tồn tại, còn mở, và không đi kèm
+    /// Yêu cầu bổ sung Kệ Hàng (một phiếu chỉ có một nguồn duy nhất).
+    /// Gợi ý không ràng buộc số lượng — Warehouse tự quyết số lượng điều chuyển.
+    /// </summary>
+    private async Task<ShelfReplenishmentSuggestion?> ValidateSourceSuggestionAsync(
+        Guid? suggestionId,
+        Guid? sourceRequestId,
+        CancellationToken ct)
+    {
+        if (suggestionId is not { } id || id == Guid.Empty)
+            return null;
+
+        if (sourceRequestId.HasValue && sourceRequestId != Guid.Empty)
+        {
+            throw new InventoryValidationException(
+                "Phiếu điều chuyển không thể vừa gắn Yêu cầu bổ sung Kệ Hàng vừa gắn Gợi ý bổ sung Kệ Hàng.");
+        }
+
+        var suggestion = await _suggestionRepo.GetByIdAsync(id, ct)
+            ?? throw new InventoryNotFoundException("Không tìm thấy Gợi ý bổ sung Kệ Hàng nguồn.");
+
+        if (suggestion.Status != ShelfReplenishmentSuggestionStatus.Open)
+            throw new InventoryValidationException("Gợi ý bổ sung Kệ Hàng đã được xử lý hoặc đã bỏ qua.");
+
+        return suggestion;
     }
 
     /// <summary>
@@ -467,6 +504,7 @@ public class StockTransferLogic(
 
             // Chỉ luồng đã claim được Draft mới tới đây, nên FulfilledQuantity không bị cộng hai lần.
             var sourceRequest = await ApplyFulfillmentToSourceRequestAsync(transfer, innerCt);
+            var sourceSuggestion = await MarkSourceSuggestionHandledAsync(transfer, actorId, actor, now, innerCt);
 
             // One SaveChanges and the surrounding Inventory transaction commit the claim, both
             // stock locations, batches, lineage, slips, ledger and terminal status together.
@@ -474,8 +512,36 @@ public class StockTransferLogic(
             transfer.ExportSlip = exportSlip;
             transfer.ImportSlip = importSlip;
             transfer.SourceRequest = sourceRequest ?? transfer.SourceRequest;
+            transfer.SourceSuggestion = sourceSuggestion ?? transfer.SourceSuggestion;
             return Map(transfer, transferAllocations);
         }, ct);
+    }
+
+    /// <summary>
+    /// Đóng Gợi ý bổ sung Kệ Hàng nguồn khi phiếu điều chuyển hoàn tất. Idempotent: gợi ý đã rời
+    /// trạng thái Open thì bỏ qua, không ghi đè người/thời điểm xử lý trước đó.
+    /// </summary>
+    private async Task<ShelfReplenishmentSuggestion?> MarkSourceSuggestionHandledAsync(
+        StockTransfer transfer,
+        Guid actorId,
+        CreatorSnapshot? actor,
+        DateTime handledAt,
+        CancellationToken ct)
+    {
+        if (transfer.SourceSuggestionId is not { } suggestionId || suggestionId == Guid.Empty)
+            return null;
+
+        var suggestion = await _suggestionRepo.GetByIdAsync(suggestionId, ct);
+        if (suggestion is null || suggestion.Status != ShelfReplenishmentSuggestionStatus.Open)
+            return suggestion;
+
+        suggestion.Status = ShelfReplenishmentSuggestionStatus.Handled;
+        suggestion.HandledBy = actorId;
+        suggestion.HandledByName = NormalizeText(actor?.CreatedByName);
+        suggestion.HandledByRoleName = NormalizeText(actor?.CreatedByRoleName);
+        suggestion.HandledAt = handledAt;
+        suggestion.HandledNote = $"Đã tạo Phiếu điều chuyển {transfer.TransferCode}.";
+        return suggestion;
     }
 
     /// <summary>
@@ -847,7 +913,9 @@ public class StockTransferLogic(
             lines.Sum(line => line.Quantity),
             lines,
             transfer.SourceRequestId,
-            transfer.SourceRequest?.RequestCode);
+            transfer.SourceRequest?.RequestCode,
+            transfer.SourceSuggestionId,
+            transfer.SourceSuggestion?.SuggestionCode);
     }
 
     private static void EnsureActor(Guid actorId)

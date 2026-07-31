@@ -44,6 +44,7 @@ public sealed class InventoryLogicIdempotencyTests
             Mock.Of<IShelfReturnRequestRepository>(),
             Mock.Of<ISupplierReturnRequestRepository>(),
             Mock.Of<IStocktakeRequestRepository>(),
+            Mock.Of<IShelfReplenishmentSuggestionRepository>(),
             processed,
             Mock.Of<IInventoryEventPublisher>(),
             BuildPassThroughUnitOfWork(),

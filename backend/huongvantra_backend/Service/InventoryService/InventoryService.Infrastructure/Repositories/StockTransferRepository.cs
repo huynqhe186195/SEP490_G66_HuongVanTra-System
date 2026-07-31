@@ -13,6 +13,7 @@ public class StockTransferRepository(InventoryDbContext _db) : IStockTransferRep
             .Include(transfer => transfer.Lines)
             .Include(transfer => transfer.BatchAllocations)
             .Include(transfer => transfer.SourceRequest)
+            .Include(transfer => transfer.SourceSuggestion)
             .Include(transfer => transfer.ExportSlip)
             .Include(transfer => transfer.ImportSlip);
 
@@ -77,6 +78,7 @@ public class StockTransferRepository(InventoryDbContext _db) : IStockTransferRep
         var items = await ApplySort(query, sort)
             .Include(transfer => transfer.Lines)
             .Include(transfer => transfer.SourceRequest)
+            .Include(transfer => transfer.SourceSuggestion)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync(ct);

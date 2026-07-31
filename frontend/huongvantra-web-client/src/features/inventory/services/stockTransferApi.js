@@ -54,6 +54,8 @@ export function mapStockTransfer(row) {
     itemCount: Number(row.itemCount ?? row.ItemCount ?? row.lineCount ?? row.LineCount ?? lines.length),
     sourceRequestId: row.sourceRequestId ?? row.SourceRequestId ?? null,
     sourceRequestCode: row.sourceRequestCode ?? row.SourceRequestCode ?? '',
+    sourceSuggestionId: row.sourceSuggestionId ?? row.SourceSuggestionId ?? null,
+    sourceSuggestionCode: row.sourceSuggestionCode ?? row.SourceSuggestionCode ?? '',
     totalQuantity: Number(
       row.totalQuantity
       ?? row.TotalQuantity
@@ -67,6 +69,7 @@ function buildBody(payload) {
   return {
     note: String(payload.note ?? '').trim() || null,
     sourceRequestId: payload.sourceRequestId || null,
+    sourceSuggestionId: payload.sourceSuggestionId || null,
     lines: (payload.lines ?? []).map((line) => ({
       skuId: line.skuId,
       skuCode: String(line.skuCode ?? '').trim() || null,

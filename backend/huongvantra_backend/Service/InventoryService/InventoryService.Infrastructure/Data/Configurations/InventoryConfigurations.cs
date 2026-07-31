@@ -152,6 +152,11 @@ public class StockTransferConfiguration : IEntityTypeConfiguration<StockTransfer
             .WithMany()
             .HasForeignKey(transfer => transfer.SourceRequestId)
             .OnDelete(DeleteBehavior.Restrict);
+        builder.HasIndex(transfer => transfer.SourceSuggestionId);
+        builder.HasOne(transfer => transfer.SourceSuggestion)
+            .WithMany()
+            .HasForeignKey(transfer => transfer.SourceSuggestionId)
+            .OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(transfer => transfer.ExportSlip)
             .WithMany()
             .HasForeignKey(transfer => transfer.ExportSlipId)
@@ -814,6 +819,49 @@ public class StocktakeRequestItemConfiguration : IEntityTypeConfiguration<Stockt
             .WithMany()
             .HasForeignKey(e => e.WarehouseBatchId)
             .OnDelete(DeleteBehavior.SetNull);
+    }
+}
+
+public class ShelfReplenishmentSuggestionConfiguration : IEntityTypeConfiguration<ShelfReplenishmentSuggestion>
+{
+    public void Configure(EntityTypeBuilder<ShelfReplenishmentSuggestion> builder)
+    {
+        builder.ToTable("ShelfReplenishmentSuggestions");
+        builder.HasKey(e => e.Id);
+        builder.Property(e => e.SuggestionCode).HasMaxLength(30).IsRequired();
+        builder.Property(e => e.SourceStocktakeCode).HasMaxLength(30).IsRequired();
+        builder.Property(e => e.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+        builder.Property(e => e.HandledByName).HasMaxLength(255);
+        builder.Property(e => e.HandledByRoleName).HasMaxLength(100);
+        builder.Property(e => e.HandledNote).HasMaxLength(500);
+        builder.HasIndex(e => e.SuggestionCode).IsUnique();
+        // Idempotency: duyệt lại cùng một phiếu kiểm kệ không được sinh gợi ý trùng.
+        builder.HasIndex(e => e.SourceStocktakeRequestId).IsUnique();
+        builder.HasIndex(e => e.Status);
+        builder.HasIndex(e => e.CreatedAt);
+        builder.HasOne(e => e.SourceStocktakeRequest)
+            .WithMany()
+            .HasForeignKey(e => e.SourceStocktakeRequestId)
+            .OnDelete(DeleteBehavior.Restrict);
+        builder.HasMany(e => e.Items)
+            .WithOne(i => i.Suggestion)
+            .HasForeignKey(i => i.SuggestionId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
+public class ShelfReplenishmentSuggestionItemConfiguration : IEntityTypeConfiguration<ShelfReplenishmentSuggestionItem>
+{
+    public void Configure(EntityTypeBuilder<ShelfReplenishmentSuggestionItem> builder)
+    {
+        builder.ToTable("ShelfReplenishmentSuggestionItems");
+        builder.HasKey(e => e.Id);
+        builder.Property(e => e.SkuCode).HasMaxLength(50).IsRequired();
+        builder.Property(e => e.SkuSnapshotName).HasMaxLength(255).IsRequired();
+        builder.Property(e => e.InventoryUnitSnapshot).HasMaxLength(20);
+        builder.HasIndex(e => e.SuggestionId);
+        builder.HasIndex(e => e.SkuId);
+        builder.HasIndex(e => new { e.SuggestionId, e.SkuId }).IsUnique();
     }
 }
 

@@ -137,6 +137,13 @@ export const navigationItems = [
     roles: ['admin', 'agencyManager', 'inventoryManager'],
   },
   {
+    label: 'Gợi ý bổ sung Kệ Hàng',
+    path: '/inventory/shelf-replenishment-suggestions',
+    module: 'stock_transfer_ops',
+    icon: 'lightbulb',
+    roles: ['admin', 'agencyManager', 'inventoryManager'],
+  },
+  {
     label: 'Bảng giá vốn & giá bán',
     path: '/accounting/cost-profit',
     module: 'accounting_cost',
@@ -246,6 +253,7 @@ const INVENTORY_SIDEBAR_GROUPS = [
       { path: '/inventory/ledger' },
       { path: '/inventory/stock-requests' },
       { path: '/inventory/stock-transfers' },
+      { path: '/inventory/shelf-replenishment-suggestions' },
       { path: '/inventory/suppliers' },
       { path: '/inventory/supplier-products' },
     ],
@@ -757,6 +765,7 @@ const MODULE_PATH_PREFIXES = [
   { module: 'products', prefix: '/products/categories' },
   { module: 'products', prefix: '/inventory/products' },
   { module: 'stock_transfer_ops', prefix: '/inventory/stock-transfers' },
+  { module: 'stock_transfer_ops', prefix: '/inventory/shelf-replenishment-suggestions' },
   { module: 'stock_adjustment_ops', prefix: '/inventory/stock-requests' },
   { module: 'supplier_receipt_create', prefix: '/inventory/import/create' },
   { module: 'supplier_receipts', prefix: '/inventory/supplier-receipts' },
@@ -1015,6 +1024,7 @@ export function isNavigationItemActive(pathname, item, search = '') {
     if (
       path === '/inventory/stock-transfers'
       || path.startsWith('/inventory/stock-transfers/')
+      || path === '/inventory/shelf-replenishment-suggestions'
       || path === '/inventory/stock-requests'
       || path.startsWith('/inventory/stock-requests/')
     ) {
