@@ -150,6 +150,23 @@ public class WarehouseBatchRepository(InventoryDbContext _db) : IWarehouseBatchR
         return rows.ToDictionary(x => x.SkuId, x => x.Total);
     }
 
+    public async Task<Dictionary<Guid, int>> GetQuantitySumsByBatchAsync(
+        IEnumerable<Guid> batchIds,
+        CancellationToken ct = default)
+    {
+        var ids = batchIds.Distinct().ToList();
+        if (ids.Count == 0) return new Dictionary<Guid, int>();
+
+        var rows = await _db.WarehouseBatchItems
+            .AsNoTracking()
+            .Where(i => ids.Contains(i.WarehouseBatchId))
+            .GroupBy(i => i.WarehouseBatchId)
+            .Select(g => new { BatchId = g.Key, Total = g.Sum(i => i.QuantityOnHand) })
+            .ToListAsync(ct);
+
+        return ids.ToDictionary(id => id, id => rows.FirstOrDefault(r => r.BatchId == id)?.Total ?? 0);
+    }
+
     public Task<int> CountActiveLotsForSkuAsync(Guid skuId, CancellationToken ct = default) =>
         _db.WarehouseBatchItems
             .Where(i => i.SkuId == skuId && i.QuantityOnHand > 0 && i.Batch != null && i.Batch.Status == "active")

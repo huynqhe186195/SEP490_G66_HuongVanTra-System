@@ -1,11 +1,10 @@
 using InventoryService.Application.Interfaces;
 using InventoryService.Application.Options;
-using InventoryService.Application.DTOs.Responses;
 using InventoryService.Application.Tests.TestSupport;
 using InventoryService.Application.UseCases;
 using InventoryService.Domain.Entities;
+using InventoryService.Domain.Enums;
 using InventoryService.Domain.Exceptions;
-using Microsoft.Extensions.Options;
 using Moq;
 using Xunit;
 
@@ -17,7 +16,7 @@ public sealed class StockAdjustmentShelfCatalogGuardTests
     [InlineData("NGUYEN_LIEU")]
     [InlineData("BAO_BI")]
     [InlineData("")]
-    public async Task ApproveStockAdjustmentRequest_NonFinishedOrInvalidProductType_RejectsBeforeStockMutation(string productType)
+    public async Task ReviewStockAdjustmentRequest_NonFinishedOrInvalidProductType_RejectsBeforeStockMutation(string productType)
     {
         var stockRepo = new Mock<ISkuStockRepository>(MockBehavior.Strict);
         var logic = BuildLogic(
@@ -30,7 +29,7 @@ public sealed class StockAdjustmentShelfCatalogGuardTests
             stockRepo.Object);
 
         await Assert.ThrowsAsync<InventoryValidationException>(
-            () => logic.ApproveStockAdjustmentRequestAsync(
+            () => logic.ReviewStockAdjustmentRequestAsync(
                 InventoryWorkflowTestBuilders.PendingShelfReplenishmentRequest().Id,
                 Guid.NewGuid(), null));
 
@@ -38,20 +37,20 @@ public sealed class StockAdjustmentShelfCatalogGuardTests
     }
 
     [Fact]
-    public async Task ApproveStockAdjustmentRequest_MissingSkuInCatalog_RejectsBeforeStockMutation()
+    public async Task ReviewStockAdjustmentRequest_MissingSkuInCatalog_RejectsBeforeStockMutation()
     {
         var stockRepo = new Mock<ISkuStockRepository>(MockBehavior.Strict);
         var request = InventoryWorkflowTestBuilders.PendingShelfReplenishmentRequest();
         var logic = BuildLogic(request, new ProductCatalogSnapshot([]), stockRepo.Object);
 
         await Assert.ThrowsAsync<InventoryValidationException>(
-            () => logic.ApproveStockAdjustmentRequestAsync(request.Id, Guid.NewGuid(), null));
+            () => logic.ReviewStockAdjustmentRequestAsync(request.Id, Guid.NewGuid(), null));
 
         stockRepo.VerifyNoOtherCalls();
     }
 
     [Fact]
-    public async Task ApproveStockAdjustmentRequest_InactiveSku_RejectsBeforeStockMutation()
+    public async Task ReviewStockAdjustmentRequest_InactiveSku_RejectsBeforeStockMutation()
     {
         var stockRepo = new Mock<ISkuStockRepository>(MockBehavior.Strict);
         var request = InventoryWorkflowTestBuilders.PendingShelfReplenishmentRequest();
@@ -62,33 +61,38 @@ public sealed class StockAdjustmentShelfCatalogGuardTests
         var logic = BuildLogic(request, catalog, stockRepo.Object);
 
         await Assert.ThrowsAsync<InventoryValidationException>(
-            () => logic.ApproveStockAdjustmentRequestAsync(request.Id, Guid.NewGuid(), null));
+            () => logic.ReviewStockAdjustmentRequestAsync(request.Id, Guid.NewGuid(), null));
 
         stockRepo.VerifyNoOtherCalls();
     }
 
+    /// <summary>
+    /// Duyệt chỉ chốt số lượng được duyệt theo từng dòng. Bước duyệt không được chạm vào tồn kho;
+    /// tồn kho chỉ thay đổi khi hoàn tất phiếu điều chuyển.
+    /// </summary>
     [Fact]
-    public async Task ApproveStockAdjustmentRequest_ActiveFinishedSku_ReachesStockProcessingAfterCatalogGuard()
+    public async Task ReviewStockAdjustmentRequest_ActiveFinishedSku_ApprovesWithoutTouchingStock()
     {
         var stockRepo = new Mock<ISkuStockRepository>(MockBehavior.Strict);
         var request = InventoryWorkflowTestBuilders.PendingShelfReplenishmentRequest();
-        stockRepo.Setup(repo => repo.GetBySkuIdWithLockAsync(request.Items[0].SkuId, It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new InventoryValidationException("downstream stock sentinel"));
         var catalog = new ProductCatalogSnapshot([
             new CatalogProduct(Guid.NewGuid(), "Thành phẩm", "THANH_PHAM", "Piece", "Cái", true,
                 [new CatalogVariant(request.Items[0].SkuId, Guid.NewGuid(), "TP-VALID", "TP valid", true, true, false, 0, [])])
         ]);
         var logic = BuildLogic(request, catalog, stockRepo.Object);
 
-        var exception = await Assert.ThrowsAsync<InventoryValidationException>(
-            () => logic.ApproveStockAdjustmentRequestAsync(request.Id, Guid.NewGuid(), null));
+        var response = await logic.ReviewStockAdjustmentRequestAsync(request.Id, Guid.NewGuid(), null);
 
-        Assert.Contains("downstream stock sentinel", exception.Message);
-        stockRepo.Verify(repo => repo.GetBySkuIdWithLockAsync(request.Items[0].SkuId, It.IsAny<CancellationToken>()), Times.Once);
+        Assert.Equal(request.Items[0].QuantityDelta, request.Items[0].ApprovedQuantity);
+        Assert.Equal(0, request.Items[0].FulfilledQuantity);
+        Assert.Equal(StockAdjustmentRequestItemStatus.WaitingForStock, request.Items[0].Status);
+        Assert.Equal(StockAdjustmentRequestStatus.Approved, request.Status);
+        Assert.NotNull(response);
+        stockRepo.VerifyNoOtherCalls();
     }
 
     [Fact]
-    public async Task ApproveStockAdjustmentRequest_MixedValidAndInvalidSku_RejectsBeforeStockMutation()
+    public async Task ReviewStockAdjustmentRequest_MixedValidAndInvalidSku_RejectsBeforeStockMutation()
     {
         var stockRepo = new Mock<ISkuStockRepository>(MockBehavior.Strict);
         var request = InventoryWorkflowTestBuilders.PendingShelfReplenishmentRequest();
@@ -108,7 +112,7 @@ public sealed class StockAdjustmentShelfCatalogGuardTests
         var logic = BuildLogic(request, catalog, stockRepo.Object);
 
         await Assert.ThrowsAsync<InventoryValidationException>(
-            () => logic.ApproveStockAdjustmentRequestAsync(request.Id, Guid.NewGuid(), null));
+            () => logic.ReviewStockAdjustmentRequestAsync(request.Id, Guid.NewGuid(), null));
 
         stockRepo.VerifyNoOtherCalls();
     }
@@ -125,11 +129,6 @@ public sealed class StockAdjustmentShelfCatalogGuardTests
         productCatalog.Setup(client => client.GetCatalogForVariantIdsAsync(
                 It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(catalog);
-        var unitOfWork = new Mock<IInventoryUnitOfWork>();
-        unitOfWork.Setup(unit => unit.ExecuteInTransactionAsync(
-                It.IsAny<Func<CancellationToken, Task<StockAdjustmentReviewResponse>>>(),
-                It.IsAny<CancellationToken>()))
-            .Returns((Func<CancellationToken, Task<StockAdjustmentReviewResponse>> action, CancellationToken ct) => action(ct));
 
         return new InventoryLogic(
             stockRepo, Mock.Of<IStockDeductQueueRepository>(), adjustmentRepo.Object,
@@ -138,7 +137,7 @@ public sealed class StockAdjustmentShelfCatalogGuardTests
             Mock.Of<IInventoryLedgerRepository>(), Mock.Of<ISupplierReceiptRepository>(),
             Mock.Of<IShelfReturnRequestRepository>(), Mock.Of<ISupplierReturnRequestRepository>(),
             Mock.Of<IStocktakeRequestRepository>(), Mock.Of<IProcessedIntegrationEventRepository>(),
-            Mock.Of<IInventoryEventPublisher>(), unitOfWork.Object,
+            Mock.Of<IInventoryEventPublisher>(), Mock.Of<IInventoryUnitOfWork>(),
             Mock.Of<IProductionOrderRepository>(), productCatalog.Object, Mock.Of<ISupplierRepository>(),
             Mock.Of<IReturnInspectionRepository>(), Microsoft.Extensions.Options.Options.Create(new InventoryOptions()));
     }

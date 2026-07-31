@@ -36,14 +36,30 @@ public class StockAdjustmentRequestRepository(InventoryDbContext _db) : IStockAd
         string? search,
         int page,
         int pageSize,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        string? creatorRole = null,
+        DateTime? fromDateUtc = null,
+        DateTime? toDateUtc = null,
+        bool onlyRemaining = false,
+        string? sort = null)
     {
-        var query = BuildListQuery(status, excludePending, requestedBy, search);
+        var query = BuildListQuery(status, excludePending, requestedBy, search, creatorRole, fromDateUtc, toDateUtc);
+
+        if (onlyRemaining)
+        {
+            // Còn thiếu = còn ít nhất một dòng chưa kết thúc và chưa giao đủ.
+            query = query.Where(r => r.Items.Any(i =>
+                i.Status != StockAdjustmentRequestItemStatus.Fulfilled &&
+                i.Status != StockAdjustmentRequestItemStatus.Rejected &&
+                i.Status != StockAdjustmentRequestItemStatus.ClosedPartial &&
+                i.Status != StockAdjustmentRequestItemStatus.Cancelled &&
+                i.QuantityDelta - i.FulfilledQuantity - i.RejectedQuantity > 0));
+        }
+
         var totalCount = await query.CountAsync(ct);
-        var items = await query
+        var items = await ApplySort(query, sort)
             .Include(r => r.Items)
             .ThenInclude(i => i.ExportSlip)
-            .OrderByDescending(r => r.RequestedAt)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync(ct);
@@ -51,11 +67,68 @@ public class StockAdjustmentRequestRepository(InventoryDbContext _db) : IStockAd
         return (items, totalCount);
     }
 
+    /// <summary>
+    /// Thứ tự ưu tiên xử lý của Thủ kho: Chờ tiếp nhận → Đang xử lý → Đã bổ sung một phần →
+    /// Chờ bổ sung tồn Kho → các trạng thái đã kết thúc; cùng nhóm thì cũ trước.
+    /// </summary>
+    private static IQueryable<StockAdjustmentRequest> ApplySort(
+        IQueryable<StockAdjustmentRequest> query,
+        string? sort) => (sort ?? string.Empty).Trim().ToLowerInvariant() switch
+        {
+            "oldest" => query.OrderBy(r => r.RequestedAt),
+            "code_asc" => query.OrderBy(r => r.RequestCode),
+            "code_desc" => query.OrderByDescending(r => r.RequestCode),
+            "status" => query.OrderBy(r => r.Status).ThenByDescending(r => r.RequestedAt),
+            "warehouse_priority" => query
+                .OrderBy(r =>
+                    r.Status == StockAdjustmentRequestStatus.Pending ? 0
+                    : r.Status == StockAdjustmentRequestStatus.Approved
+                        || r.Status == StockAdjustmentRequestStatus.Processing ? 1
+                    : r.Status == StockAdjustmentRequestStatus.PartiallyFulfilled ? 2
+                    : r.Status == StockAdjustmentRequestStatus.Draft ? 3
+                    : 4)
+                .ThenBy(r => r.RequestedAt),
+            _ => query.OrderByDescending(r => r.RequestedAt),
+        };
+
+    public async Task<List<string>> GetCreatorRolesAsync(CancellationToken ct = default) =>
+        await _db.StockAdjustmentRequests
+            .AsNoTracking()
+            .Where(r => r.RequestedByRoleName != null && r.RequestedByRoleName != "")
+            .Select(r => r.RequestedByRoleName!)
+            .Distinct()
+            .OrderBy(role => role)
+            .ToListAsync(ct);
+
+    public async Task<List<(Guid Id, string? Name, string? RoleName)>> GetCreatorsAsync(
+        CancellationToken ct = default)
+    {
+        var rows = await _db.StockAdjustmentRequests
+            .AsNoTracking()
+            .GroupBy(r => r.RequestedBy)
+            .Select(g => new
+            {
+                Id = g.Key,
+                // Yêu cầu mới nhất giữ tên và vai trò gần đúng nhất với hiện tại.
+                Name = g.OrderByDescending(r => r.RequestedAt).Select(r => r.RequestedByName).First(),
+                RoleName = g.OrderByDescending(r => r.RequestedAt).Select(r => r.RequestedByRoleName).First(),
+            })
+            .ToListAsync(ct);
+
+        return rows
+            .Select(row => (row.Id, row.Name, row.RoleName))
+            .OrderBy(row => row.Name ?? string.Empty)
+            .ToList();
+    }
+
     private IQueryable<StockAdjustmentRequest> BuildListQuery(
         StockAdjustmentRequestStatus? status,
         bool excludePending,
         Guid? requestedBy,
-        string? search)
+        string? search,
+        string? creatorRole = null,
+        DateTime? fromDateUtc = null,
+        DateTime? toDateUtc = null)
     {
         var query = _db.StockAdjustmentRequests.AsQueryable();
 
@@ -67,6 +140,18 @@ public class StockAdjustmentRequestRepository(InventoryDbContext _db) : IStockAd
 
         if (requestedBy.HasValue)
             query = query.Where(r => r.RequestedBy == requestedBy.Value);
+
+        if (!string.IsNullOrWhiteSpace(creatorRole))
+        {
+            var role = creatorRole.Trim().ToLower();
+            query = query.Where(r => r.RequestedByRoleName != null && r.RequestedByRoleName.ToLower() == role);
+        }
+
+        if (fromDateUtc.HasValue)
+            query = query.Where(r => r.RequestedAt >= fromDateUtc.Value);
+
+        if (toDateUtc.HasValue)
+            query = query.Where(r => r.RequestedAt < toDateUtc.Value);
 
         if (!string.IsNullOrWhiteSpace(search))
         {
@@ -83,6 +168,34 @@ public class StockAdjustmentRequestRepository(InventoryDbContext _db) : IStockAd
 
     public Task<int> CountCreatedSinceAsync(DateTime sinceUtc, CancellationToken ct = default) =>
         _db.StockAdjustmentRequests.CountAsync(r => r.RequestedAt >= sinceUtc, ct);
+
+    public Task<List<StockTransfer>> GetTransfersBySourceRequestAsync(Guid requestId, CancellationToken ct = default) =>
+        _db.StockTransfers
+            .AsNoTracking()
+            .Include(t => t.Lines)
+            .Where(t => t.SourceRequestId == requestId)
+            .OrderByDescending(t => t.CreatedAt)
+            .ToListAsync(ct);
+
+    public async Task<Dictionary<Guid, int>> GetDraftReservedQuantitiesAsync(
+        IEnumerable<Guid> requestIds,
+        CancellationToken ct = default)
+    {
+        var ids = requestIds.Distinct().ToList();
+        if (ids.Count == 0) return new Dictionary<Guid, int>();
+
+        var rows = await _db.StockTransferLines
+            .AsNoTracking()
+            .Where(line => line.SourceRequestLineId != null
+                && line.StockTransfer!.SourceRequestId != null
+                && ids.Contains(line.StockTransfer.SourceRequestId!.Value)
+                && line.StockTransfer.Status == StockTransferStatus.Draft)
+            .GroupBy(line => line.SourceRequestLineId!.Value)
+            .Select(g => new { SourceRequestLineId = g.Key, Quantity = g.Sum(line => line.Quantity) })
+            .ToListAsync(ct);
+
+        return rows.ToDictionary(row => row.SourceRequestLineId, row => row.Quantity);
+    }
 
     public async Task AddAsync(StockAdjustmentRequest request, CancellationToken ct = default) =>
         await _db.StockAdjustmentRequests.AddAsync(request, ct);

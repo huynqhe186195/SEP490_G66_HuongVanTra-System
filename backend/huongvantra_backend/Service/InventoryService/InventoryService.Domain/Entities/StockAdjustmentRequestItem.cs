@@ -1,3 +1,5 @@
+using InventoryService.Domain.Enums;
+
 namespace InventoryService.Domain.Entities;
 
 public class StockAdjustmentRequestItem
@@ -14,4 +16,15 @@ public class StockAdjustmentRequestItem
     public int? WarehouseQuantityOnHandAfter { get; set; }
     public Guid? ExportSlipId { get; set; }
     public StockExportSlip? ExportSlip { get; set; }
+
+    public int ApprovedQuantity { get; set; }
+    public int FulfilledQuantity { get; set; }
+    public int RejectedQuantity { get; set; }
+    public StockAdjustmentRequestItemStatus Status { get; set; } = StockAdjustmentRequestItemStatus.Pending;
+    public string? ReviewNote { get; set; }
+    public string? RejectionReason { get; set; }
+    public string? ClosedReason { get; set; }
+
+    /// <summary>Số lượng còn phải điều chuyển; luôn dẫn xuất, không lưu database.</summary>
+    public int RemainingQuantity => Math.Max(0, QuantityDelta - FulfilledQuantity - RejectedQuantity);
 }

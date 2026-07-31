@@ -40,6 +40,7 @@ builder.Services.AddScoped<IInventoryUnitOfWork, InventoryUnitOfWork>();
 builder.Services.AddScoped<ISkuStockRepository, SkuStockRepository>();
 builder.Services.AddScoped<IStockDeductQueueRepository, StockDeductQueueRepository>();
 builder.Services.AddScoped<IStockAdjustmentRequestRepository, StockAdjustmentRequestRepository>();
+builder.Services.AddScoped<IStockTransferRepository, StockTransferRepository>();
 builder.Services.AddScoped<IStockExportSlipRepository, StockExportSlipRepository>();
 builder.Services.AddScoped<IStockImportSlipRepository, StockImportSlipRepository>();
 builder.Services.AddScoped<IWarehouseBatchRepository, WarehouseBatchRepository>();
@@ -60,6 +61,7 @@ builder.Services.AddHttpClient<IProductCatalogClient, ProductCatalogClient>(clie
     client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
 });
 builder.Services.AddScoped<InventoryLogic>();
+builder.Services.AddScoped<StockTransferLogic>();
 builder.Services.AddScoped<StatisticsLogic>();
 builder.Services.AddHostedService<InventoryOutboxDispatcherHostedService>();
 builder.Services.AddMassTransit(x =>

@@ -1,14 +1,12 @@
 namespace InventoryService.Domain.Enums;
 
-public enum StockAdjustmentRequestStatus
+public enum StockAdjustmentRequestItemStatus
 {
-    Draft,
     Pending,
     Approved,
-    Processing,
+    WaitingForStock,
     PartiallyFulfilled,
     Fulfilled,
-    Completed,
     Rejected,
     ClosedPartial,
     Cancelled

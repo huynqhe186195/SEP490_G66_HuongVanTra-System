@@ -57,6 +57,36 @@ public record RejectStockAdjustmentRequest(string? Reason);
 
 public record CancelStockAdjustmentRequest(string? Reason);
 
+/// <summary>Duyệt một dòng yêu cầu bổ sung Kệ Hàng: Warehouse chọn số lượng duyệt cho từng dòng.</summary>
+public record ReviewStockAdjustmentLineRequest(
+    Guid ItemId,
+    bool Approved,
+    int? ApprovedQuantity,
+    string? Note);
+
+/// <summary>Duyệt/từ chối theo dòng. Dòng không liệt kê sẽ được duyệt nguyên số lượng yêu cầu.</summary>
+public record ReviewStockAdjustmentRequestLines(
+    string? ReviewNote,
+    List<ReviewStockAdjustmentLineRequest>? Lines);
+
+/// <summary>Đóng phần còn lại của yêu cầu (ClosedPartial) kèm lý do bắt buộc.</summary>
+public record CloseStockAdjustmentRemainingRequest(string? Reason);
+
+public record UpsertStockTransferLineRequest(
+    Guid SkuId,
+    string? SkuCode,
+    string? SkuName,
+    string? UnitName,
+    int Quantity,
+    Guid? SourceRequestLineId = null);
+
+public record UpsertStockTransferRequest(
+    string? Note,
+    List<UpsertStockTransferLineRequest> Lines,
+    Guid? SourceRequestId = null);
+
+public record CancelStockTransferRequest(string? Reason);
+
 public record CreateWarehouseBatchItemRequest(
     Guid SkuId,
     string? SkuCode,

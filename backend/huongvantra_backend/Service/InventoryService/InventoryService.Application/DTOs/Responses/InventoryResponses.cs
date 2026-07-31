@@ -202,7 +202,20 @@ public record StockAdjustmentRequestItemResponse(
     int? QuantityOnHandAfter,
     int? WarehouseQuantityOnHandAfter,
     Guid? ExportSlipId,
-    string? ExportSlipCode);
+    string? ExportSlipCode,
+    int RequestedQuantity = 0,
+    int ApprovedQuantity = 0,
+    int FulfilledQuantity = 0,
+    int RejectedQuantity = 0,
+    int RemainingQuantity = 0,
+    string Status = "pending",
+    string? ReviewNote = null,
+    string? RejectionReason = null,
+    string? ClosedReason = null,
+    // Availability tường minh cho màn hình "Tạo phiếu điều chuyển từ yêu cầu".
+    // AvailableToTransferQuantity = ApprovedQuantity - FulfilledQuantity - DraftReservedQuantity.
+    int DraftReservedQuantity = 0,
+    int AvailableToTransferQuantity = 0);
 
 public record StockAdjustmentRequestResponse(
     Guid Id,
@@ -214,7 +227,48 @@ public record StockAdjustmentRequestResponse(
     Guid? ReviewedBy,
     DateTime? ReviewedAt,
     string? ReviewNote,
-    List<StockAdjustmentRequestItemResponse> Items);
+    List<StockAdjustmentRequestItemResponse> Items,
+    int TotalRequestedQuantity = 0,
+    int TotalFulfilledQuantity = 0,
+    int TotalRejectedQuantity = 0,
+    int TotalRemainingQuantity = 0,
+    // Ảnh chụp người tạo và người xử lý gần nhất, phục vụ màn hình audit của Admin.
+    string? RequestedByName = null,
+    string? RequestedByRoleName = null,
+    string? ReviewedByName = null,
+    string? ReviewedByRoleName = null,
+    int TotalApprovedQuantity = 0,
+    // Tổng số lượng còn có thể đưa vào phiếu điều chuyển mới của cả yêu cầu.
+    int TotalAvailableToTransferQuantity = 0);
+
+/// <summary>Tùy chọn đổ vào bộ lọc của màn hình audit Yêu cầu bổ sung Kệ Hàng.</summary>
+public record StockAdjustmentRequestFilterOptionsResponse(
+    List<StockAdjustmentRequestCreatorOption> Creators,
+    List<string> CreatorRoles);
+
+public record StockAdjustmentRequestCreatorOption(
+    Guid Id,
+    string? Name,
+    string? RoleName);
+
+/// <summary>Tóm tắt một phiếu điều chuyển đã sinh ra từ một yêu cầu bổ sung Kệ Hàng.</summary>
+public record StockAdjustmentRelatedTransferResponse(
+    Guid TransferId,
+    string TransferCode,
+    string Status,
+    DateTime CreatedAt,
+    DateTime? CompletedAt,
+    string? CreatedByName,
+    int TotalQuantity,
+    List<StockAdjustmentRelatedTransferLineResponse> Lines);
+
+public record StockAdjustmentRelatedTransferLineResponse(
+    Guid LineId,
+    Guid? SourceRequestLineId,
+    Guid SkuId,
+    string SkuCode,
+    string SkuName,
+    int Quantity);
 
 public record StockAdjustmentExportSlipSummary(
     Guid ExportSlipId,
@@ -228,6 +282,55 @@ public record StockAdjustmentReviewResponse(
     string Status,
     DateTime? ReviewedAt,
     List<StockAdjustmentExportSlipSummary> ExportSlips);
+
+public record StockTransferBatchAllocationResponse(
+    Guid Id,
+    Guid StockTransferLineId,
+    Guid SourceWarehouseBatchId,
+    Guid SourceWarehouseBatchItemId,
+    Guid DestinationWarehouseBatchId,
+    Guid DestinationWarehouseBatchItemId,
+    int Quantity);
+
+public record StockTransferLineResponse(
+    Guid Id,
+    Guid SkuId,
+    string SkuCode,
+    string SkuName,
+    string? UnitName,
+    int Quantity,
+    DateTime CreatedAt,
+    List<StockTransferBatchAllocationResponse> BatchAllocations,
+    Guid? SourceRequestLineId = null);
+
+public record StockTransferResponse(
+    Guid TransferId,
+    string TransferCode,
+    string Status,
+    string SourceLocation,
+    string DestinationLocation,
+    string? Note,
+    Guid CreatedBy,
+    string? CreatedByName,
+    string? CreatedByRoleName,
+    DateTime CreatedAt,
+    DateTime UpdatedAt,
+    Guid? CompletedBy,
+    string? CompletedByName,
+    string? CompletedByRoleName,
+    DateTime? CompletedAt,
+    Guid? CancelledBy,
+    DateTime? CancelledAt,
+    string? CancellationReason,
+    Guid? ExportSlipId,
+    string? ExportSlipCode,
+    Guid? ImportSlipId,
+    string? ImportSlipCode,
+    int LineCount,
+    int TotalQuantity,
+    List<StockTransferLineResponse> Lines,
+    Guid? SourceRequestId = null,
+    string? SourceRequestCode = null);
 
 public record StockExportBatchAllocationResponse(
     Guid Id,
