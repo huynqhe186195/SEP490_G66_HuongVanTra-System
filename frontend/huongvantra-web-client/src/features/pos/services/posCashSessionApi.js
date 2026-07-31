@@ -33,10 +33,30 @@ export function normalizeCashSession(raw) {
   return mapCashSession(raw)
 }
 
+/** Quỹ đang mở và khớp ca hiện tại (đủ điều kiện bán). */
+export function isCashSessionReadyForSale(session) {
+  return Boolean(session && !session.requiresCloseForNewShift)
+}
+
 export async function fetchCurrentCashSession() {
   const data = await apiRequestAuth('/api/pos/cash-sessions/current')
-  const session = data?.session ?? data?.Session ?? null
-  return normalizeCashSession(session)
+  const session = normalizeCashSession(data?.session ?? data?.Session ?? null)
+  if (!session) return null
+
+  const requiresCloseForNewShift = Boolean(
+    data?.requiresCloseForNewShift ?? data?.RequiresCloseForNewShift,
+  )
+  const previousShiftLabel =
+    data?.previousShiftLabel
+    ?? data?.PreviousShiftLabel
+    ?? session.shiftLabel
+    ?? ''
+
+  return {
+    ...session,
+    requiresCloseForNewShift,
+    previousShiftLabel,
+  }
 }
 
 export async function fetchCashSessionHistory(params = {}) {
@@ -67,7 +87,10 @@ export async function openCashSessionApi(payload) {
       openedByRole: payload.openedByRole || null,
     }),
   })
-  return normalizeCashSession(data)
+  const session = normalizeCashSession(data)
+  return session
+    ? { ...session, requiresCloseForNewShift: false, previousShiftLabel: '' }
+    : null
 }
 
 export async function closeCashSessionApi({ countedCash, varianceNote }) {

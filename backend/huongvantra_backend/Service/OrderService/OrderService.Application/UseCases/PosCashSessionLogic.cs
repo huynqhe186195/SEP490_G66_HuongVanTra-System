@@ -20,10 +20,24 @@ public class PosCashSessionLogic(
     private const decimal VarianceNoteRequiredThreshold = 1000m;
     private const string DefaultOpenedByName = "Nhân viên POS";
 
-    public async Task<PosCashSessionResponse?> GetCurrentAsync(CancellationToken ct = default)
+    public async Task<CurrentPosCashSessionResponse> GetCurrentAsync(CancellationToken ct = default)
     {
         var session = await _repo.GetOpenAsync(ct);
-        return session is null ? null : MapToResponse(session);
+        if (session is null)
+            return new CurrentPosCashSessionResponse(null);
+
+        var onDuty = await _shifts.GetMyOnDutyAsync("Shelf", ct);
+        if (onDuty is not null
+            && session.ShiftSlotId.HasValue
+            && session.ShiftSlotId.Value != onDuty.SlotId)
+        {
+            return new CurrentPosCashSessionResponse(
+                MapToResponse(session),
+                RequiresCloseForNewShift: true,
+                PreviousShiftLabel: session.ShiftLabel);
+        }
+
+        return new CurrentPosCashSessionResponse(MapToResponse(session));
     }
 
     public async Task<PagedResponse<PosCashSessionResponse>> GetHistoryAsync(
@@ -64,7 +78,13 @@ public class PosCashSessionLogic(
     {
         var existing = await _repo.GetOpenAsync(ct);
         if (existing is not null)
-            throw new OrderValidationException("Đã có ca quỹ đang mở. Vui lòng đóng ca hiện tại trước khi mở ca mới.");
+        {
+            var label = string.IsNullOrWhiteSpace(existing.ShiftLabel)
+                ? "ca trước"
+                : existing.ShiftLabel;
+            throw new OrderValidationException(
+                $"Quỹ «{label}» vẫn đang mở. Hãy đóng quỹ ca đó trước khi mở quỹ cho ca hiện tại.");
+        }
 
         // Nhân viên bán hàng phải đang trong ca quầy đã duyệt; Manager/Admin được bỏ qua.
         var onDuty = await _shifts.GetMyOnDutyAsync("Shelf", ct);
@@ -146,7 +166,7 @@ public class PosCashSessionLogic(
     {
         if (amount <= 0) return;
 
-        var session = await _repo.GetOpenAsync(ct);
+        var session = await RequireOpenSessionForCurrentShiftAsync(ct);
         if (session is null) return;
 
         session.CashSalesTotal += amount;
@@ -160,12 +180,35 @@ public class PosCashSessionLogic(
     {
         if (amount <= 0) return;
 
-        var session = await _repo.GetOpenAsync(ct);
+        var session = await RequireOpenSessionForCurrentShiftAsync(ct);
         if (session is null) return;
 
         session.CashRefundTotal += amount;
         session.UpdatedAt = DateTime.UtcNow;
         await _repo.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Trả về quỹ Open khớp ca on-duty hiện tại.
+    /// Nếu quỹ Open thuộc ca khác → báo lỗi để buộc đóng/mở lại đúng ca.
+    /// Nếu không có on-duty (Manager bypass) → dùng quỹ Open bất kỳ.
+    /// </summary>
+    private async Task<PosCashSession?> RequireOpenSessionForCurrentShiftAsync(CancellationToken ct)
+    {
+        var session = await _repo.GetOpenAsync(ct);
+        if (session is null) return null;
+
+        var onDuty = await _shifts.GetMyOnDutyAsync("Shelf", ct);
+        if (onDuty is not null
+            && session.ShiftSlotId.HasValue
+            && session.ShiftSlotId.Value != onDuty.SlotId)
+        {
+            var previous = string.IsNullOrWhiteSpace(session.ShiftLabel) ? "ca trước" : session.ShiftLabel;
+            throw new OrderValidationException(
+                $"Quỹ «{previous}» vẫn đang mở — không ghi tiền vào quỹ ca khác. Hãy đóng quỹ ca đó rồi mở quỹ cho ca hiện tại.");
+        }
+
+        return session;
     }
 
     private static decimal ComputeExpectedCash(PosCashSession session) =>
