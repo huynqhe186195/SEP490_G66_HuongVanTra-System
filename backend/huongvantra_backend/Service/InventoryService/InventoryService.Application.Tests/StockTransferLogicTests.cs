@@ -122,6 +122,14 @@ public sealed class StockTransferLogicTests
         var (lateBatch, lateItem) = SourceLot(
             SkuA, "SKU-A", "LOT-LATE", 5, DateTime.UtcNow.AddDays(10));
         var transferRepo = TransferRepositoryForCompletion(transfer, claimResult: true, setCompletedOnClaim: true);
+        // Allocation được Add thẳng vào DbSet thay vì qua navigation của aggregate đang tracked,
+        // nên phải bắt qua repository chứ không đọc transfer.BatchAllocations.
+        List<StockTransferBatchAllocation> savedAllocations = [];
+        transferRepo.Setup(repo => repo.AddBatchAllocationsAsync(
+                It.IsAny<IEnumerable<StockTransferBatchAllocation>>(), It.IsAny<CancellationToken>()))
+            .Callback<IEnumerable<StockTransferBatchAllocation>, CancellationToken>(
+                (rows, _) => savedAllocations = rows.ToList())
+            .Returns(Task.CompletedTask);
         var stockRepo = new Mock<ISkuStockRepository>();
         stockRepo.Setup(repo => repo.GetBySkuIdWithLockAsync(SkuA, It.IsAny<CancellationToken>()))
             .ReturnsAsync(stock);
@@ -187,9 +195,9 @@ public sealed class StockTransferLogicTests
             Assert.Single(batch.Items);
         });
         Assert.Equal([2, 3], destinationBatches.Select(batch => batch.Items.Single().QuantityOnHand).ToArray());
-        Assert.Equal(2, transfer.BatchAllocations.Count);
-        Assert.Equal(5, transfer.BatchAllocations.Sum(allocation => allocation.Quantity));
-        Assert.All(transfer.BatchAllocations, allocation =>
+        Assert.Equal(2, savedAllocations.Count);
+        Assert.Equal(5, savedAllocations.Sum(allocation => allocation.Quantity));
+        Assert.All(savedAllocations, allocation =>
         {
             Assert.NotEqual(Guid.Empty, allocation.SourceWarehouseBatchId);
             Assert.NotEqual(Guid.Empty, allocation.SourceWarehouseBatchItemId);
