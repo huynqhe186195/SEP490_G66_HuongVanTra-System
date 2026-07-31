@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { confirmDialog } from '../../../app/dialog.js'
 import { showError, showSuccess } from '../../../app/toast.js'
 import {
   createCustomerAddress,
@@ -102,7 +103,7 @@ function CustomerAddressesPanel({ customerId, standalone = false, readOnly = fal
   }
 
   async function handleDelete(addressId) {
-    if (!window.confirm('Xóa địa chỉ này?')) return
+    if (!(await confirmDialog({ title: 'Xác nhận', message: 'Xóa địa chỉ này?', tone: 'danger' }))) return
     try {
       await deleteCustomerAddress(customerId, addressId)
       showSuccess('Đã xóa địa chỉ.')

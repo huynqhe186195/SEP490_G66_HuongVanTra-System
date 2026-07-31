@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
+import { confirmDialog } from '../../../app/dialog.js'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import { canApproveContracts } from '../../auth/utils/permissions.js'
@@ -140,7 +141,11 @@ function ContractDetailPage() {
   useEffect(() => { load() }, [id])
 
   async function handleSubmit() {
-    if (!window.confirm('Gửi hợp đồng để duyệt? Bạn sẽ không thể chỉnh sửa cho đến khi Admin xem xét.')) return
+    if (!(await confirmDialog({
+      title: 'Gửi duyệt',
+      message: 'Gửi hợp đồng để duyệt? Bạn sẽ không thể chỉnh sửa cho đến khi Admin xem xét.',
+      tone: 'primary',
+    }))) return
     setIsActionBusy(true)
     try {
       const updated = await submitContract(id)
@@ -154,7 +159,11 @@ function ContractDetailPage() {
   }
 
   async function handleApprove() {
-    if (!window.confirm('Duyệt hợp đồng này?')) return
+    if (!(await confirmDialog({
+      title: 'Xác nhận duyệt',
+      message: 'Duyệt hợp đồng này?',
+      tone: 'primary',
+    }))) return
     setIsActionBusy(true)
     try {
       const updated = await reviewContract(id, true, null)
@@ -182,7 +191,11 @@ function ContractDetailPage() {
   }
 
   async function handleDelete() {
-    if (!window.confirm(`Xóa hợp đồng "${contract.contractCode}"?`)) return
+    if (!(await confirmDialog({
+      title: 'Xác nhận',
+      message: `Xóa hợp đồng "${contract.contractCode}"?`,
+      tone: 'danger',
+    }))) return
     setIsActionBusy(true)
     try {
       await deleteContract(id)

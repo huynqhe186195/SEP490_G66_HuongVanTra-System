@@ -4,6 +4,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
+import { confirmDialog } from '../../../app/dialog.js'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { getCustomerSectionFromSearch, getCustomerSectionLabel, buildCustomerPath } from '../../../app/customerSections.js'
 import { canCreateCustomer, canDeleteCustomer, canEditCustomer, canManageCorporateCustomers, isReadOnlyCustomerViewer } from '../../auth/utils/permissions.js'
@@ -447,7 +448,11 @@ function CustomersPage() {
   }
 
   async function handleRestore(customerId) {
-    if (!window.confirm('Khôi phục khách hàng này? Khách sẽ xuất hiện lại trong danh sách đang hoạt động.')) return
+    if (!(await confirmDialog({
+      title: 'Khôi phục',
+      message: 'Khôi phục khách hàng này? Khách sẽ xuất hiện lại trong danh sách đang hoạt động.',
+      tone: 'primary',
+    }))) return
     try {
       setRestoringId(customerId)
       await restoreCustomer(customerId)

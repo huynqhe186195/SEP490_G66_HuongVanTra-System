@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
+import { promptDialog } from '../../../app/dialog.js'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import { canWriteInventory } from '../../auth/utils/permissions.js'
@@ -557,8 +558,13 @@ export default function InventoryReturnsPage() {
   }
 
   async function handleReject(request) {
-    const reason = window.prompt('Nhập lý do từ chối yêu cầu trả hàng nhập')
-    if (!reason?.trim()) return
+    const reason = await promptDialog({
+      title: 'Nhập lý do',
+      message: 'Nhập lý do từ chối yêu cầu trả hàng nhập',
+      required: true,
+      tone: 'danger',
+    })
+    if (reason == null) return
     const action = request.flow === 'shelf'
       ? (id) => rejectShelfReturnRequest(id, reason)
       : (id) => rejectSupplierReturnRequest(id, reason)
@@ -566,8 +572,13 @@ export default function InventoryReturnsPage() {
   }
 
   async function handleCancel(request) {
-    const reason = window.prompt('Nhập lý do hủy yêu cầu trả hàng nhập')
-    if (!reason?.trim()) return
+    const reason = await promptDialog({
+      title: 'Nhập lý do',
+      message: 'Nhập lý do hủy yêu cầu trả hàng nhập',
+      required: true,
+      tone: 'danger',
+    })
+    if (reason == null) return
     const action = request.flow === 'shelf'
       ? (id) => cancelShelfReturnRequest(id, reason)
       : (id) => cancelSupplierReturnRequest(id, reason)

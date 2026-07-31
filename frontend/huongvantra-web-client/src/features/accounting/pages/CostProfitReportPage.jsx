@@ -69,8 +69,6 @@ const HISTORY_SOURCE_LABELS = {
   supplier_receipt: 'Phiếu nhập NCC',
 }
 
-// SourceType vẫn được giữ nguyên ở database/API; UI chỉ hiển thị nhãn nghiệp vụ đã biết
-// và ẩn các giá trị kỹ thuật như manual_admin_accounting.
 function historySourceLabel(sourceType) {
   return HISTORY_SOURCE_LABELS[String(sourceType ?? '').trim().toLowerCase()] ?? null
 }
@@ -85,6 +83,21 @@ function historyStatusLabel(item) {
     return 'Đang chờ đủ thứ tự dòng'
   }
   return item.processingResult || 'Không áp dụng'
+}
+
+function PriceDraftInput({ value, onChange }) {
+  return (
+    <div className="relative w-full max-w-[9.5rem]">
+      <input
+        type="text"
+        inputMode="numeric"
+        value={formatVndInput(value ?? '')}
+        onChange={(event) => onChange(sanitizeVndInput(event.target.value))}
+        className="w-full rounded-lg border border-slate-200 py-1.5 pl-2 pr-7 text-right text-sm"
+      />
+      <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-slate-400">₫</span>
+    </div>
+  )
 }
 
 export default function CostProfitReportPage() {
@@ -102,6 +115,8 @@ export default function CostProfitReportPage() {
   const [sortField, setSortField] = useState('skuCode')
   const [sortDirection, setSortDirection] = useState('asc')
   const [historyState, setHistoryState] = useState(null)
+
+  const tableColSpan = canEditSalePrice ? 11 : 10
 
   const load = useCallback(async () => {
     setIsLoading(true)
@@ -206,12 +221,12 @@ export default function CostProfitReportPage() {
     <PageShell>
       <PageHeader
         title="Bảng giá vốn trung bình & giá bán"
-        titleInfo="Giá vốn trung bình do ProductService cập nhật từ Phiếu nhập NCC đã duyệt. Chỉ Admin được điều chỉnh Giá bán."
+        titleInfo="Giá vốn trung bình cập nhật từ Phiếu nhập NCC đã duyệt. Chỉ Kế toán được chỉnh giá bán; Admin/Manager chỉ xem."
         rightContent={(
           <button
             type="button"
             onClick={handleExport}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-[#538463] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#457053]"
+            className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-[#538463] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#457053] sm:w-auto"
           >
             <span className="material-symbols-outlined text-[18px]">download</span>
             Xuất CSV
@@ -219,12 +234,12 @@ export default function CostProfitReportPage() {
         )}
       />
 
-      <div className="mb-3 grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-6">
+      <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <input
           value={search}
           onChange={(event) => resetPageAnd(setSearch, event.target.value)}
           placeholder="Tìm SKU, tên hàng hoặc phiếu nhập..."
-          className="rounded-xl border border-slate-200 px-3 py-2 text-sm xl:col-span-2"
+          className="rounded-xl border border-slate-200 px-3 py-2 text-sm sm:col-span-2 xl:col-span-2"
         />
         <select
           value={costFilter}
@@ -262,37 +277,129 @@ export default function CostProfitReportPage() {
         </button>
       </div>
 
-      <div className="mb-3 flex flex-wrap items-center gap-2">
+      <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
         <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Sắp xếp</span>
-        <select
-          value={sortField}
-          onChange={(event) => resetPageAnd(setSortField, event.target.value)}
-          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
-        >
-          {SORT_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-        </select>
-        <button
-          type="button"
-          onClick={() => resetPageAnd(setSortDirection, sortDirection === 'asc' ? 'desc' : 'asc')}
-          className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700"
-        >
-          <span className="material-symbols-outlined text-[18px]">
-            {sortDirection === 'asc' ? 'arrow_upward' : 'arrow_downward'}
-          </span>
-          {sortDirection === 'asc' ? 'Tăng dần' : 'Giảm dần'}
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            value={sortField}
+            onChange={(event) => resetPageAnd(setSortField, event.target.value)}
+            className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm sm:flex-none"
+          >
+            {SORT_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </select>
+          <button
+            type="button"
+            onClick={() => resetPageAnd(setSortDirection, sortDirection === 'asc' ? 'desc' : 'asc')}
+            className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700"
+          >
+            <span className="material-symbols-outlined text-[18px]">
+              {sortDirection === 'asc' ? 'arrow_upward' : 'arrow_downward'}
+            </span>
+            {sortDirection === 'asc' ? 'Tăng dần' : 'Giảm dần'}
+          </button>
+        </div>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+      {!canEditSalePrice ? (
+        <p className="mb-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+          Bạn đang xem ở chế độ chỉ đọc. Chỉ tài khoản <strong>Kế toán</strong> mới chỉnh được giá bán.
+        </p>
+      ) : null}
+
+      {/* Mobile / tablet cards */}
+      <div className="space-y-3 lg:hidden">
+        {isLoading ? (
+          <p className="rounded-2xl border border-slate-200 bg-white px-4 py-8 text-center text-sm text-slate-500">Đang tải...</p>
+        ) : pageItems.length === 0 ? (
+          <p className="rounded-2xl border border-slate-200 bg-white px-4 py-8 text-center text-sm text-slate-500">Không có dữ liệu</p>
+        ) : pageItems.map((row) => (
+          <article key={row.skuId} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="font-mono text-sm font-bold text-slate-800">{row.skuCode}</p>
+                <p className="mt-0.5 text-sm text-slate-700">{row.name}</p>
+                <p className="mt-1 text-xs text-slate-500">Đơn vị: {row.unitName || '—'}</p>
+              </div>
+              <p className={`shrink-0 text-sm font-semibold ${row.profit >= 0 ? 'text-[#356647]' : 'text-rose-600'}`}>
+                {formatVnd(row.profit)}
+              </p>
+            </div>
+
+            <dl className="mt-3 grid grid-cols-2 gap-2 text-sm">
+              <div className="rounded-xl bg-slate-50 px-3 py-2">
+                <dt className="text-[11px] uppercase tracking-wide text-slate-500">Giá bán</dt>
+                <dd className="mt-0.5 font-semibold text-slate-800">{formatVnd(row.retailPrice)}</dd>
+              </div>
+              <div className="rounded-xl bg-slate-50 px-3 py-2">
+                <dt className="text-[11px] uppercase tracking-wide text-slate-500">Giá vốn TB</dt>
+                <dd className="mt-0.5 font-semibold text-slate-800">{formatVnd(row.averageCostPrice)}</dd>
+              </div>
+              <div className="rounded-xl bg-slate-50 px-3 py-2">
+                <dt className="text-[11px] uppercase tracking-wide text-slate-500">Đơn giá nhập gần nhất</dt>
+                <dd className="mt-0.5 text-slate-700">{formatVnd(row.lastPurchaseUnitCost)}</dd>
+              </div>
+              <div className="rounded-xl bg-slate-50 px-3 py-2">
+                <dt className="text-[11px] uppercase tracking-wide text-slate-500">Cập nhật giá vốn</dt>
+                <dd className="mt-0.5 text-xs text-slate-700">
+                  {row.costUpdatedAt ? formatVietnamDateTime(row.costUpdatedAt) : '—'}
+                </dd>
+              </div>
+            </dl>
+
+            <div className="mt-2 text-xs text-slate-600">
+              Phiếu nhập:{' '}
+              {row.sourceReceiptId ? (
+                <Link
+                  to={`/inventory/supplier-receipts/${row.sourceReceiptId}`}
+                  className="font-semibold text-[#356647] underline underline-offset-2"
+                >
+                  {row.sourceReceiptCode || 'Xem Phiếu nhập'}
+                </Link>
+              ) : '—'}
+            </div>
+
+            {canEditSalePrice ? (
+              <div className="mt-3 flex flex-col gap-2 border-t border-slate-100 pt-3 sm:flex-row sm:items-center">
+                <div className="flex-1">
+                  <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Giá bán mới</p>
+                  <PriceDraftInput
+                    value={draftPrices[row.skuId]}
+                    onChange={(next) => setDraftPrices((current) => ({ ...current, [row.skuId]: next }))}
+                  />
+                </div>
+                <button
+                  type="button"
+                  disabled={savingId === row.skuId || parseVndInput(draftPrices[row.skuId]) === row.retailPrice}
+                  onClick={() => saveRetailPrice(row)}
+                  className="rounded-lg bg-[#538463] px-3 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40 sm:self-end"
+                >
+                  {savingId === row.skuId ? 'Đang lưu...' : 'Lưu Giá bán'}
+                </button>
+              </div>
+            ) : null}
+
+            <button
+              type="button"
+              onClick={() => openHistory(row)}
+              className="mt-3 w-full rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Xem lịch sử giá
+            </button>
+          </article>
+        ))}
+      </div>
+
+      {/* Desktop table */}
+      <div className="hidden overflow-hidden rounded-2xl border border-slate-200 bg-white lg:block">
         <div className="overflow-x-auto">
-          <table className="min-w-[1380px] text-left text-sm">
+          <table className={`w-full text-left text-sm ${canEditSalePrice ? 'min-w-[1280px]' : 'min-w-[1100px]'}`}>
             <thead className="bg-slate-50 text-xs uppercase text-slate-500">
               <tr>
                 <th className="px-4 py-3">SKU</th>
                 <th className="px-4 py-3">Tên sản phẩm</th>
                 <th className="px-4 py-3">Đơn vị</th>
                 <th className="px-4 py-3 text-right">Giá bán hiện tại</th>
-                <th className="px-4 py-3 text-right">Giá bán mới</th>
+                {canEditSalePrice ? <th className="px-4 py-3 text-right">Giá bán mới</th> : null}
                 <th className="px-4 py-3 text-right">Giá vốn trung bình</th>
                 <th className="px-4 py-3 text-right">Đơn giá nhập gần nhất</th>
                 <th className="px-4 py-3">Phiếu nhập nguồn</th>
@@ -303,34 +410,25 @@ export default function CostProfitReportPage() {
             </thead>
             <tbody>
               {isLoading ? (
-                <tr><td colSpan={11} className="px-4 py-8 text-center text-slate-500">Đang tải...</td></tr>
+                <tr><td colSpan={tableColSpan} className="px-4 py-8 text-center text-slate-500">Đang tải...</td></tr>
               ) : pageItems.length === 0 ? (
-                <tr><td colSpan={11} className="px-4 py-8 text-center text-slate-500">Không có dữ liệu</td></tr>
+                <tr><td colSpan={tableColSpan} className="px-4 py-8 text-center text-slate-500">Không có dữ liệu</td></tr>
               ) : pageItems.map((row) => (
                 <tr key={row.skuId} className="border-t border-slate-100">
                   <td className="px-4 py-3 font-mono font-medium text-slate-800">{row.skuCode}</td>
-                  <td className="px-4 py-3 text-slate-700">{row.name}</td>
+                  <td className="max-w-[220px] px-4 py-3 text-slate-700">{row.name}</td>
                   <td className="px-4 py-3 text-slate-600">{row.unitName || '—'}</td>
                   <td className="px-4 py-3 text-right">{formatVnd(row.retailPrice)}</td>
-                  <td className="px-4 py-3 text-right">
-                    {canEditSalePrice ? (
-                      <div className="relative ml-auto w-36">
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          value={formatVndInput(draftPrices[row.skuId] ?? '')}
-                          onChange={(event) => setDraftPrices((current) => ({
-                            ...current,
-                            [row.skuId]: sanitizeVndInput(event.target.value),
-                          }))}
-                          className="w-full rounded-lg border border-slate-200 py-1.5 pl-2 pr-7 text-right"
+                  {canEditSalePrice ? (
+                    <td className="px-4 py-3 text-right">
+                      <div className="ml-auto">
+                        <PriceDraftInput
+                          value={draftPrices[row.skuId]}
+                          onChange={(next) => setDraftPrices((current) => ({ ...current, [row.skuId]: next }))}
                         />
-                        <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-slate-400">₫</span>
                       </div>
-                    ) : (
-                      <span className="text-slate-400">Read-only</span>
-                    )}
-                  </td>
+                    </td>
+                  ) : null}
                   <td className="px-4 py-3 text-right font-semibold text-slate-800">{formatVnd(row.averageCostPrice)}</td>
                   <td className="px-4 py-3 text-right">{formatVnd(row.lastPurchaseUnitCost)}</td>
                   <td className="px-4 py-3 font-mono text-xs text-[#356647]">
@@ -373,6 +471,9 @@ export default function CostProfitReportPage() {
             </tbody>
           </table>
         </div>
+      </div>
+
+      <div className="mt-3 overflow-hidden rounded-2xl border border-slate-200 bg-white">
         <TablePagination
           page={page}
           pageSize={TABLE_PAGE_SIZE}

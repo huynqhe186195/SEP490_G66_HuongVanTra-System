@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { confirmDialog } from '../../../app/dialog.js'
 import { showError, showSuccess } from '../../../app/toast.js'
 import ProductImage, { ProductImagePreview } from './ProductImage.jsx'
 import { useStockAdjustmentBatch } from '../../inventory/hooks/useStockAdjustmentBatch.js'
@@ -192,7 +193,11 @@ function ProductSkusPanel({
 
   async function handleDelete(sku) {
     if (!canManage) return
-    if (!window.confirm(`Xóa SKU "${sku.skuCode}"? SKU sẽ được ẩn khỏi hệ thống (soft delete).`)) return
+    if (!(await confirmDialog({
+      title: 'Xác nhận',
+      message: `Xóa SKU "${sku.skuCode}"? SKU sẽ được ẩn khỏi hệ thống (soft delete).`,
+      tone: 'danger',
+    }))) return
     try {
       await deleteSku(sku.id)
       showSuccess('Đã xóa SKU.')

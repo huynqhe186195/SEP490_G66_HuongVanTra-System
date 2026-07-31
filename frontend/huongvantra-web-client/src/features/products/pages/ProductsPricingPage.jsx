@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
+import { confirmDialog } from '../../../app/dialog.js'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { AUTH_SESSION_CHANGED_EVENT, loadAuthSession } from '../../auth/services/authSession.js'
 import { canCreateCatalog } from '../../auth/utils/permissions.js'
@@ -257,7 +258,11 @@ function ProductsPricingPage() {
 
   async function handleDelete(priceBook) {
     if (!canManage) return
-    if (!window.confirm(`Xóa bảng giá "${priceBook.name}"?`)) return
+    if (!(await confirmDialog({
+      title: 'Xác nhận',
+      message: `Xóa bảng giá "${priceBook.name}"?`,
+      tone: 'danger',
+    }))) return
     setIsSaving(true)
     try {
       await deletePriceBook(priceBook.id)

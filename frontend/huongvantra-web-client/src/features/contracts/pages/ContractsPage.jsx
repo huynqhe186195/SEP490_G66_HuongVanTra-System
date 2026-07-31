@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
+import { confirmDialog } from '../../../app/dialog.js'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import { canCreateContracts, canApproveContracts } from '../../auth/utils/permissions.js'
@@ -93,7 +94,11 @@ function ContractsPage() {
   }
 
   async function handleDelete(contract) {
-    if (!window.confirm(`Xóa hợp đồng "${contract.contractCode} — ${contract.title}"?`)) return
+    if (!(await confirmDialog({
+      title: 'Xác nhận',
+      message: `Xóa hợp đồng "${contract.contractCode} — ${contract.title}"?`,
+      tone: 'danger',
+    }))) return
     setDeletingId(contract.id)
     try {
       await deleteContract(contract.id)

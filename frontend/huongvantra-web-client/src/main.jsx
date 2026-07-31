@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import './index.css'
 import App from './app/App.jsx'
+import DialogProvider from './app/DialogProvider.jsx'
 import ToastProvider from './app/ToastProvider'
 import { installApiDebugPanel } from './lib/apiDebugPanel.js'
 
@@ -16,7 +17,9 @@ createRoot(document.getElementById('root')).render(
   <StrictMode>
     <BrowserRouter>
       <ToastProvider>
-        <App />
+        <DialogProvider>
+          <App />
+        </DialogProvider>
       </ToastProvider>
     </BrowserRouter>
   </StrictMode>,

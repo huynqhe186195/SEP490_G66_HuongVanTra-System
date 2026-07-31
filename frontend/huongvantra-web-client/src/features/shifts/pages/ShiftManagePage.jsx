@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
+import { confirmDialog } from '../../../app/dialog.js'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import { hasPermission } from '../../auth/utils/permissions.js'
@@ -248,7 +249,11 @@ function ShiftManagePage() {
 
   const unassignStaff = async (registrationId, staffName) => {
     if (!registrationId) return
-    if (!window.confirm(`Gỡ «${staffName || 'nhân viên'}» khỏi ca này?`)) return
+    if (!(await confirmDialog({
+      title: 'Xác nhận',
+      message: `Gỡ «${staffName || 'nhân viên'}» khỏi ca này?`,
+      tone: 'danger',
+    }))) return
     setUnassigningId(registrationId)
     try {
       await unassignShiftRegistration(registrationId)

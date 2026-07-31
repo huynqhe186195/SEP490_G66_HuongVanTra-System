@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
+import { confirmDialog } from '../../../app/dialog.js'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { formatVnd, formatVndInput, parseVndInput, sanitizeVndInput } from '../../../utils/vietnamCurrency.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
@@ -900,7 +901,11 @@ export default function SupplierProductsPage() {
   }
 
   async function handleDeactivate(item) {
-    if (!window.confirm(`Ngừng cung ứng "${item.skuNameSnapshot}" từ ${item.supplierName}?`)) return
+    if (!(await confirmDialog({
+      title: 'Ngừng cung ứng',
+      message: `Ngừng cung ứng "${item.skuNameSnapshot}" từ ${item.supplierName}?`,
+      tone: 'danger',
+    }))) return
     try {
       await deactivateSupplierProduct(item.id)
       showSuccess('Đã đánh dấu ngừng cung ứng.')

@@ -1,10 +1,10 @@
-import { normalizePhoneInput, validatePhoneNumber } from '../../customers/utils/customerValidation.js'
+import { normalizePhoneInput, validatePhoneNumber, getPhoneMaxLength } from '../../customers/utils/customerValidation.js'
 
 export function validateAccountPhone(phone, { required = false } = {}) {
   return validatePhoneNumber(phone, { required })
 }
 
-export { normalizePhoneInput }
+export { normalizePhoneInput, getPhoneMaxLength }
 
 export function validateCreateAccountForm({ username, password, fullName, phone, roleIds, roleId }) {
   const errors = {}

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import { TitleInfoButton } from '../../../components/shared/PageHeader.jsx'
+import { confirmDialog, promptDialog } from '../../../app/dialog.js'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { useAuthSession } from '../../auth/hooks/useAuthSession.js'
 import { canCreateProductDeletionRequest, canDecideProductApprovals, isWarehouseRole } from '../../auth/utils/permissions.js'
@@ -271,10 +272,22 @@ export default function ProductDeletionRequestsPage() {
 
   async function handleAdminAction(request, action) {
     if (!canAdmin) return
-    const reasonPrompt = action === 'reject' ? 'Nhập lý do từ chối:' : 'Nhập lý do hủy:'
-    const reasonText = action === 'approve' ? '' : window.prompt(reasonPrompt)
-    if (action !== 'approve' && !normalizeText(reasonText)) return
-    if (action === 'approve' && !window.confirm(`Duyệt xóa mềm ${request.items.length} Product trong ${request.requestCode}?`)) return
+    let reasonText = ''
+    if (action !== 'approve') {
+      reasonText = await promptDialog({
+        title: 'Nhập lý do',
+        message: action === 'reject' ? 'Nhập lý do từ chối:' : 'Nhập lý do hủy:',
+        required: true,
+        tone: 'danger',
+      })
+      if (reasonText == null) return
+    } else if (!(await confirmDialog({
+      title: 'Xác nhận duyệt',
+      message: `Duyệt xóa mềm ${request.items.length} Product trong ${request.requestCode}?`,
+      tone: 'danger',
+    }))) {
+      return
+    }
 
     setIsSaving(true)
     try {

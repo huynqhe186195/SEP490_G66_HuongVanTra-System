@@ -5,6 +5,7 @@ namespace UserService.Application.Authorization;
 
 public static class StaffManagementScope
 {
+    public const string AdminRoleName = "Admin";
     public const string SaleRoleName = "Sale";
     public const string SalePosRoleName = "SalePos";
     public const string SaleCodRoleName = "SaleCod";
@@ -45,6 +46,51 @@ public static class StaffManagementScope
         WarehouseRoleName,
         AccountantRoleName,
     };
+
+    public static bool IsAdminRoleName(string? roleName) =>
+        !string.IsNullOrWhiteSpace(roleName)
+        && string.Equals(roleName, AdminRoleName, StringComparison.OrdinalIgnoreCase);
+
+    public static bool HasAdminRole(IEnumerable<string>? roleNames) =>
+        roleNames is not null && roleNames.Any(IsAdminRoleName);
+
+    /// <summary>
+    /// Tài khoản Admin không bị khóa / ngừng sử dụng qua thao tác IAM thường.
+    /// </summary>
+    public static void EnsureAdminAccountNotDisabled(IEnumerable<string> currentRoles)
+    {
+        if (HasAdminRole(currentRoles))
+        {
+            throw new UserValidationException(
+                "Tài khoản Quản trị viên thuộc nhóm đặc quyền: không khóa hoặc ngừng sử dụng trên trang này.");
+        }
+    }
+
+    /// <summary>
+    /// Tài khoản Admin chỉ xem trên IAM — không sửa / gán-gỡ role qua thao tác thường.
+    /// </summary>
+    public static void EnsureAdminAccountNotMutated(IEnumerable<string> currentRoles)
+    {
+        if (HasAdminRole(currentRoles))
+        {
+            throw new UserValidationException(
+                "Tài khoản Quản trị viên thuộc nhóm đặc quyền: trên trang này chỉ xem thông tin. Thay đổi cần quy trình vận hành riêng.");
+        }
+    }
+
+    /// <summary>
+    /// Không cho gỡ vai trò Admin khỏi tài khoản đang mang Admin qua IAM thường.
+    /// </summary>
+    public static void EnsureAdminRoleNotRemoved(
+        IEnumerable<string> currentRoles,
+        IEnumerable<string> nextRoles)
+    {
+        if (HasAdminRole(currentRoles) && !HasAdminRole(nextRoles))
+        {
+            throw new UserValidationException(
+                "Không thể gỡ vai trò Quản trị viên qua thao tác thường. Vui lòng dùng quy trình vận hành riêng.");
+        }
+    }
 
     public static bool IsSystemAdmin(IEnumerable<string> permissions) =>
         permissions.Contains(PermissionNames.ManageRole, StringComparer.Ordinal);

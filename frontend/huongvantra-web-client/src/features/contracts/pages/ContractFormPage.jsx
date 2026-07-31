@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
+import { confirmDialog } from '../../../app/dialog.js'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import { fetchCustomers } from '../../customers/services/customersApi.js'
@@ -218,7 +219,11 @@ function ContractFormPage() {
   async function handleSubmitForApproval() {
     const errs = validate()
     if (Object.keys(errs).length) { setErrors(errs); return }
-    if (!window.confirm('Gửi hợp đồng để duyệt? Sau khi gửi bạn sẽ không thể chỉnh sửa cho đến khi Admin xem xét.')) return
+    if (!(await confirmDialog({
+      title: 'Gửi duyệt',
+      message: 'Gửi hợp đồng để duyệt? Sau khi gửi bạn sẽ không thể chỉnh sửa cho đến khi Admin xem xét.',
+      tone: 'primary',
+    }))) return
     setIsSubmitting(true)
     try {
       const payload = buildPayload()

@@ -3,15 +3,19 @@ import { useNavigate, useParams } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
+import { useAuthSession } from '../../auth/hooks/useAuthSession.js'
+import { getPhoneMaxLength, normalizePhoneInput } from '../../iam/utils/accountValidation.js'
 import { fetchRoleOptions, fetchStaffAccount, normalizeStaffRolesForEdit, updateStaffAccount } from '../services/staffApi.js'
 
 function StaffDetailPage() {
   const navigate = useNavigate()
+  const session = useAuthSession()
   const { id: employeeId } = useParams()
   const [isLoading, setIsLoading] = useState(Boolean(employeeId))
   const [isSaving, setIsSaving] = useState(false)
   const [roleOptions, setRoleOptions] = useState([])
   const [currentRoles, setCurrentRoles] = useState([])
+  const [userGuid, setUserGuid] = useState(null)
   const [form, setForm] = useState({
     fullName: '',
     phone: '',
@@ -21,6 +25,12 @@ function StaffDetailPage() {
     newPassword: '',
     active: true,
   })
+
+  const isOwnAccount = Boolean(
+    userGuid
+    && session?.userId
+    && String(userGuid).toLowerCase() === String(session.userId).toLowerCase(),
+  )
 
   useEffect(() => {
     if (!employeeId) {
@@ -39,6 +49,7 @@ function StaffDetailPage() {
 
         setRoleOptions(roles || [])
         setCurrentRoles(normalizeStaffRolesForEdit(account.roles || [], roles || []))
+        setUserGuid(account.userGuid || null)
         setForm({
           fullName: account.fullName || '',
           phone: account.phone || '',
@@ -60,20 +71,26 @@ function StaffDetailPage() {
   }, [employeeId])
 
   const canSave = useMemo(() => {
-    if (!form.active) return true
+    if (!form.active) return !isOwnAccount
     return Boolean(form.fullName.trim() && form.username.trim() && currentRoles.length > 0)
-  }, [form.active, form.fullName, form.username, currentRoles.length])
+  }, [form.active, form.fullName, form.username, currentRoles.length, isOwnAccount])
 
   const saveBlockedReason = useMemo(() => {
+    if (!form.active && isOwnAccount) {
+      return 'Không thể khóa chính tài khoản đang đăng nhập.'
+    }
     if (!form.active) return ''
     if (!form.fullName.trim()) return 'Cần nhập họ tên.'
     if (!form.username.trim()) return 'Thiếu tên đăng nhập.'
     if (!currentRoles.length) return 'Cần chọn ít nhất một vai trò.'
     return ''
-  }, [form.active, form.fullName, form.username, currentRoles.length])
+  }, [form.active, form.fullName, form.username, currentRoles.length, isOwnAccount])
 
   const handleChange = (field) => (event) => {
-    setForm((current) => ({ ...current, [field]: event.target.value }))
+    const value = field === 'phone'
+      ? normalizePhoneInput(event.target.value)
+      : event.target.value
+    setForm((current) => ({ ...current, [field]: value }))
   }
 
   const toggleRole = (roleName) => {
@@ -84,10 +101,23 @@ function StaffDetailPage() {
     ))
   }
 
+  const handleToggleActive = () => {
+    if (isOwnAccount && form.active) {
+      showError('Không thể khóa chính tài khoản đang đăng nhập.')
+      return
+    }
+    setForm((current) => ({ ...current, active: !current.active }))
+  }
+
   const handleSave = async () => {
     if (!employeeId) return
 
     const isDeactivating = !form.active
+
+    if (isDeactivating && isOwnAccount) {
+      showError('Không thể khóa chính tài khoản đang đăng nhập.')
+      return
+    }
 
     if (!isDeactivating) {
       if (!canSave) {
@@ -128,11 +158,11 @@ function StaffDetailPage() {
       <section className="rounded-[24px] border border-[#c1c9c0]/30 bg-white p-6 shadow-sm">
         <div className="mb-8">
           <nav className="mb-2 flex items-center gap-2 text-xs text-[#414942]">
-            <span>He thong</span>
+            <span>Hệ thống</span>
             <span className="material-symbols-outlined text-[16px]">chevron_right</span>
-            <span>Nhan vien</span>
+            <span>Nhân viên</span>
             <span className="material-symbols-outlined text-[16px]">chevron_right</span>
-            <span className="font-semibold text-[#356647]">Chi tiet</span>
+            <span className="font-semibold text-[#356647]">Chi tiết</span>
           </nav>
 
           <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
@@ -143,7 +173,7 @@ function StaffDetailPage() {
                 className="rounded-lg border border-[#356647] px-6 py-2 text-[#356647] transition-all hover:bg-[#356647]/5 active:scale-95"
                 onClick={() => navigate('/staff')}
               >
-                Huy bo
+                Hủy bỏ
               </button>
               <button
                 type="button"
@@ -166,12 +196,12 @@ function StaffDetailPage() {
             <section className="rounded-xl bg-white p-5 shadow-[0px_4px_20px_rgba(0,0,0,0.04)]">
               <div className="mb-6 flex items-center gap-2 text-[#356647]">
                 <span className="material-symbols-outlined">person</span>
-                <h3 className="text-xl font-semibold">Thong tin ca nhan</h3>
+                <h3 className="text-xl font-semibold">Thông tin cá nhân</h3>
               </div>
 
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                 <label className="flex flex-col gap-2">
-                  <span className="text-xs font-semibold text-[#414942]">Ho va ten</span>
+                  <span className="text-xs font-semibold text-[#414942]">Họ và tên</span>
                   <input
                     className="rounded-lg border-none bg-[#f6f4ec] p-3 text-sm shadow-inner outline-none focus:ring-2 focus:ring-[#356647]/30"
                     value={form.fullName}
@@ -182,10 +212,13 @@ function StaffDetailPage() {
                 <label className="flex flex-col gap-2">
                   <span className="text-xs font-semibold text-[#414942]">Số điện thoại (tuỳ chọn)</span>
                   <input
+                    type="tel"
+                    inputMode="numeric"
+                    maxLength={getPhoneMaxLength(form.phone)}
                     className="rounded-lg border-none bg-[#f6f4ec] p-3 text-sm shadow-inner outline-none focus:ring-2 focus:ring-[#356647]/30"
                     value={form.phone}
                     onChange={handleChange('phone')}
-                    placeholder="Có thể để trống"
+                    placeholder="Di động 10 số hoặc máy bàn 02… (11 số)"
                   />
                 </label>
 
@@ -217,7 +250,7 @@ function StaffDetailPage() {
                 </fieldset>
 
                 <label className="flex flex-col gap-2">
-                  <span className="text-xs font-semibold text-[#414942]">Mat khau moi</span>
+                  <span className="text-xs font-semibold text-[#414942]">Mật khẩu mới</span>
                   <input
                     type="password"
                     className="rounded-lg border-none bg-[#f6f4ec] p-3 text-sm shadow-inner outline-none focus:ring-2 focus:ring-[#356647]/30"
@@ -228,7 +261,7 @@ function StaffDetailPage() {
                 </label>
 
                 <label className="flex flex-col gap-2 md:col-span-2">
-                  <span className="text-xs font-semibold text-[#414942]">Ghi chu</span>
+                  <span className="text-xs font-semibold text-[#414942]">Ghi chú</span>
                   <input
                     className="rounded-lg border-none bg-[#f6f4ec] p-3 text-sm shadow-inner outline-none focus:ring-2 focus:ring-[#356647]/30"
                     value={form.note}
@@ -239,19 +272,23 @@ function StaffDetailPage() {
             </section>
 
             <section className="rounded-xl bg-white p-5 shadow-[0px_4px_20px_rgba(0,0,0,0.04)]">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center gap-2 text-[#356647]">
                   <span className="material-symbols-outlined">online_prediction</span>
-                  <h3 className="text-xl font-semibold">Trang thai he thong</h3>
+                  <h3 className="text-xl font-semibold">Trạng thái hệ thống</h3>
                 </div>
 
                 <div className="flex items-center gap-4">
-                  <span className={`text-sm font-bold ${form.active ? 'text-[#356647]' : 'text-[#414942]'}`}>{form.active ? 'Đang hoạt động' : 'Ngừng hoạt động'}</span>
+                  <span className={`text-sm font-bold ${form.active ? 'text-[#356647]' : 'text-[#414942]'}`}>
+                    {form.active ? 'Đang hoạt động' : 'Ngừng hoạt động'}
+                  </span>
                   <button
                     type="button"
-                    className={`relative h-6 w-12 rounded-full transition-colors ${form.active ? 'bg-[#356647]' : 'bg-[#dcdad2]'}`}
-                    onClick={() => setForm((current) => ({ ...current, active: !current.active }))}
-                    aria-label="Toggle status"
+                    className={`relative h-6 w-12 rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${form.active ? 'bg-[#356647]' : 'bg-[#dcdad2]'}`}
+                    onClick={handleToggleActive}
+                    disabled={isOwnAccount && form.active}
+                    title={isOwnAccount ? 'Không thể khóa chính tài khoản đang đăng nhập' : 'Đổi trạng thái hoạt động'}
+                    aria-label="Đổi trạng thái hoạt động"
                   >
                     <span
                       className={`absolute top-[2px] h-5 w-5 rounded-full bg-white transition-transform ${form.active ? 'translate-x-6' : 'translate-x-0.5'}`}
@@ -259,10 +296,13 @@ function StaffDetailPage() {
                   </button>
                 </div>
               </div>
+              {isOwnAccount ? (
+                <p className="mt-3 text-sm text-amber-800">
+                  Đây là tài khoản bạn đang đăng nhập — không thể tự khóa / ngừng hoạt động.
+                </p>
+              ) : null}
             </section>
           </div>
-
-         
         </div>
       </section>
     </PageShell>

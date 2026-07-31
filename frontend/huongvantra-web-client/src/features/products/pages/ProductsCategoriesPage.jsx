@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
+import { confirmDialog } from '../../../app/dialog.js'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { AUTH_SESSION_CHANGED_EVENT, loadAuthSession } from '../../auth/services/authSession.js'
 import { canCreateCatalog, canHideCatalog, canSyncCatalog, isWarehouseRole } from '../../auth/utils/permissions.js'
@@ -217,7 +218,11 @@ function ProductsCategoriesPage() {
 
   async function handleHide(category) {
     if (category.isDeleted) return
-    if (!window.confirm(`Ẩn danh mục "${category.name}"? Có thể kích hoạt lại sau.`)) return
+    if (!(await confirmDialog({
+      title: 'Ẩn danh mục',
+      message: `Ẩn danh mục "${category.name}"? Có thể kích hoạt lại sau.`,
+      tone: 'danger',
+    }))) return
 
     setIsSaving(true)
     try {
@@ -253,7 +258,11 @@ function ProductsCategoriesPage() {
 
   async function handleRestore(category) {
     if (!category.isDeleted) return
-    if (!window.confirm(`Kích hoạt lại danh mục "${category.name}"?`)) return
+    if (!(await confirmDialog({
+      title: 'Khôi phục',
+      message: `Kích hoạt lại danh mục "${category.name}"?`,
+      tone: 'primary',
+    }))) return
 
     setIsSaving(true)
     try {
