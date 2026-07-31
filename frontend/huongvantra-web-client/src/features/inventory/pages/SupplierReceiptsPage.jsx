@@ -29,6 +29,13 @@ const STATUS_OPTIONS = [
   { value: 'cancelled', label: 'Đã hủy' },
 ]
 
+const ICON_ACTION_BASE =
+  'inline-flex h-8 w-8 items-center justify-center rounded-lg border transition disabled:opacity-50'
+const ICON_ACTION_NEUTRAL = `${ICON_ACTION_BASE} border-slate-200 text-slate-600 hover:bg-slate-50`
+const ICON_ACTION_PRIMARY_OUTLINE = `${ICON_ACTION_BASE} border-[#538463] text-[#538463] hover:bg-[#f2f7f3]`
+const ICON_ACTION_PRIMARY = `${ICON_ACTION_BASE} border-[#538463] bg-[#538463] text-white hover:bg-[#457053]`
+const ICON_ACTION_DANGER = `${ICON_ACTION_BASE} border-rose-200 text-rose-600 hover:bg-rose-50`
+
 function getStatusLabel(status) {
   const normalized = String(status || '').toLowerCase()
   if (normalized === 'draft') return 'Nháp'
@@ -250,7 +257,7 @@ function SupplierReceiptsPage() {
                 <th className="px-4 py-3">Trạng thái</th>
                 <th className="px-4 py-3">Người tạo</th>
                 <th className="px-4 py-3">Thời gian</th>
-                <th className="px-4 py-3 text-right">Thao tác</th>
+                <th className="w-px whitespace-nowrap px-4 py-3 text-right">Thao tác</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -279,20 +286,24 @@ function SupplierReceiptsPage() {
                     </td>
                     <td className="px-4 py-4 text-slate-700">{receipt.createdByName || '—'}</td>
                     <td className="px-4 py-4 text-slate-600">{formatVietnamDateTime(receipt.createdAt)}</td>
-                    <td className="px-4 py-4 text-right">
-                      <div className="flex flex-wrap justify-end gap-2">
+                    <td className="w-px whitespace-nowrap px-4 py-4 text-right">
+                      <div className="flex items-center justify-end gap-1">
                         <Link
                           to={`/inventory/supplier-receipts/${receipt.id}`}
-                          className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                          title="Xem chi tiết"
+                          aria-label="Xem chi tiết"
+                          className={ICON_ACTION_NEUTRAL}
                         >
-                          Chi tiết
+                          <span className="material-symbols-outlined text-[18px]">visibility</span>
                         </Link>
                         {canOperate && isOwnReceipt(receipt) && (receipt.status === 'draft' || receipt.status === 'rejected') ? (
                           <Link
                             to={`/inventory/import/create?receiptId=${receipt.id}`}
-                            className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                            title="Chỉnh sửa phiếu"
+                            aria-label="Chỉnh sửa phiếu"
+                            className={ICON_ACTION_NEUTRAL}
                           >
-                            Chỉnh sửa
+                            <span className="material-symbols-outlined text-[18px]">edit</span>
                           </Link>
                         ) : null}
                         {canOperate && isOwnReceipt(receipt) && (receipt.status === 'draft' || receipt.status === 'rejected') ? (
@@ -300,9 +311,11 @@ function SupplierReceiptsPage() {
                             type="button"
                             disabled={Boolean(actionId)}
                             onClick={() => handleSubmitForApproval(receipt)}
-                            className="rounded-lg border border-[#538463] px-3 py-1.5 text-xs font-semibold text-[#538463] hover:bg-[#f2f7f3] disabled:opacity-50"
+                            title="Gửi duyệt"
+                            aria-label="Gửi duyệt"
+                            className={ICON_ACTION_PRIMARY_OUTLINE}
                           >
-                            Gửi duyệt
+                            <span className="material-symbols-outlined text-[18px]">send</span>
                           </button>
                         ) : null}
                         {canReview && receipt.status === 'pendingapproval' && !isOwnReceipt(receipt) ? (
@@ -311,17 +324,21 @@ function SupplierReceiptsPage() {
                               type="button"
                               disabled={Boolean(actionId)}
                               onClick={() => handleApprove(receipt)}
-                              className="rounded-lg bg-[#538463] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#457053] disabled:opacity-50"
+                              title="Duyệt phiếu"
+                              aria-label="Duyệt phiếu"
+                              className={ICON_ACTION_PRIMARY}
                             >
-                              Duyệt
+                              <span className="material-symbols-outlined text-[18px]">check</span>
                             </button>
                             <button
                               type="button"
                               disabled={Boolean(actionId)}
                               onClick={() => handleReject(receipt)}
-                              className="rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-50"
+                              title="Từ chối phiếu"
+                              aria-label="Từ chối phiếu"
+                              className={ICON_ACTION_DANGER}
                             >
-                              Từ chối
+                              <span className="material-symbols-outlined text-[18px]">close</span>
                             </button>
                           </>
                         ) : null}
@@ -330,9 +347,11 @@ function SupplierReceiptsPage() {
                             type="button"
                             disabled={Boolean(actionId)}
                             onClick={() => handleCancel(receipt)}
-                            className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                            title="Hủy phiếu"
+                            aria-label="Hủy phiếu"
+                            className={ICON_ACTION_NEUTRAL}
                           >
-                            Hủy
+                            <span className="material-symbols-outlined text-[18px]">cancel</span>
                           </button>
                         ) : null}
                       </div>
