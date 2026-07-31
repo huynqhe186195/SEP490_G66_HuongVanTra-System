@@ -97,6 +97,7 @@ public sealed class ReturnInspectionTests
             Mock.Of<IProductionOrderRepository>(),
             FinishedGoodsCatalogClient(),
             Mock.Of<ISupplierRepository>(),
+            new SupplierProductRepository(db),
             new ReturnInspectionRepository(db),
             opts);
     }

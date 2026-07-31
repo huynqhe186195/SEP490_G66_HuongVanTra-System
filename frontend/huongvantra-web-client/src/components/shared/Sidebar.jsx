@@ -20,6 +20,8 @@ function Sidebar({
   collapsed = false,
   onToggleCollapsed,
   onNavigate,
+  width = null,
+  onWidthChange = null,
 }) {
   const navigate = useNavigate()
   const location = useLocation()
@@ -38,6 +40,35 @@ function Sidebar({
   const authSession = loadAuthSession()
   const userLabel = formatDisplayName(authSession?.username) || 'Quản trị'
   const isCompact = collapsed
+
+  // Drag-to-resize (desktop only, not in compact/collapsed mode)
+  const dragStartRef = useRef(null)
+  const handleDragMouseDown = useCallback(
+    (e) => {
+      if (isCompact) return
+      e.preventDefault()
+      dragStartRef.current = { x: e.clientX, startWidth: width ?? 256 }
+
+      const onMouseMove = (ev) => {
+        if (!dragStartRef.current) return
+        const delta = ev.clientX - dragStartRef.current.x
+        const next = Math.min(400, Math.max(180, dragStartRef.current.startWidth + delta))
+        onWidthChange?.(next)
+      }
+      const onMouseUp = () => {
+        dragStartRef.current = null
+        document.removeEventListener('mousemove', onMouseMove)
+        document.removeEventListener('mouseup', onMouseUp)
+        document.body.style.cursor = ''
+        document.body.style.userSelect = ''
+      }
+      document.body.style.cursor = 'col-resize'
+      document.body.style.userSelect = 'none'
+      document.addEventListener('mousemove', onMouseMove)
+      document.addEventListener('mouseup', onMouseUp)
+    },
+    [isCompact, width, onWidthChange],
+  )
 
   const updateScrollIndicator = useCallback(() => {
     const scrollElement = navScrollRef.current
@@ -209,13 +240,14 @@ function Sidebar({
   return (
     <aside
       className={[
-        'relative z-50 flex shrink-0 flex-col overflow-hidden bg-[#538463] text-white shadow-[0_12px_40px_rgba(36,64,48,0.18)] transition-[width,transform,padding] duration-300 ease-out',
+        'relative z-50 flex shrink-0 flex-col overflow-hidden bg-[#538463] text-white shadow-[0_12px_40px_rgba(36,64,48,0.18)] transition-[transform,padding] duration-300 ease-out',
         'fixed inset-y-0 left-0 rounded-none lg:static lg:z-auto lg:m-4 lg:translate-x-0 lg:rounded-[32px]',
         isCompact
           ? 'w-[min(100vw-2rem,5.25rem)] p-3 lg:w-[5.25rem]'
-          : 'w-[min(100vw-2rem,17rem)] max-w-[85vw] p-4 lg:w-64 lg:p-5',
+          : 'w-[min(100vw-2rem,17rem)] max-w-[85vw] p-4 lg:p-5',
         mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
       ].join(' ')}
+      style={!isCompact && width ? { width: `${width}px` } : undefined}
       aria-expanded={!isCompact}
     >
       {/* Header */}
@@ -546,6 +578,19 @@ function Sidebar({
           ) : null}
         </button>
       </div>
+
+      {/* Drag-to-resize handle — desktop only, hidden in compact mode */}
+      {!isCompact && onWidthChange ? (
+        <div
+          aria-hidden="true"
+          onMouseDown={handleDragMouseDown}
+          className="absolute inset-y-0 right-0 hidden w-1.5 cursor-col-resize lg:block"
+          style={{ background: 'transparent' }}
+          title="Kéo để thay đổi độ rộng"
+        >
+          <div className="absolute inset-y-4 right-px w-px rounded-full bg-white/20 opacity-0 transition-opacity duration-150 hover:opacity-100" />
+        </div>
+      ) : null}
     </aside>
   )
 }

@@ -50,6 +50,15 @@ public class ContractRepository(DocumentDbContext db) : IContractRepository
     public Task<Contract?> GetByIdAsync(Guid id, CancellationToken ct = default) =>
         db.Contracts.FirstOrDefaultAsync(c => c.Id == id, ct);
 
+    public Task<Contract?> GetActiveByCustomerAsync(Guid customerId, DateOnly today, CancellationToken ct = default) =>
+        db.Contracts
+            .Where(c => c.CustomerId == customerId && c.Status == ContractStatus.Active)
+            .Where(c => c.EffectiveDate == null || c.EffectiveDate <= today)
+            .Where(c => c.ExpiryDate == null || c.ExpiryDate >= today)
+            .OrderByDescending(c => c.EffectiveDate)
+            .ThenByDescending(c => c.CreatedAt)
+            .FirstOrDefaultAsync(ct);
+
     public async Task AddAsync(Contract contract, CancellationToken ct = default) =>
         await db.Contracts.AddAsync(contract, ct);
 

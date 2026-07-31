@@ -3,7 +3,7 @@ import PageShell from '../../../components/shared/PageShell.jsx'
 import { TitleInfoButton } from '../../../components/shared/PageHeader.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { useAuthSession } from '../../auth/hooks/useAuthSession.js'
-import { canCreateProductDeletionRequest, isSystemAdmin, isWarehouseRole } from '../../auth/utils/permissions.js'
+import { canCreateProductDeletionRequest, canDecideProductApprovals, isWarehouseRole } from '../../auth/utils/permissions.js'
 import { formatDateTimeVN } from '../../../utils/vietnamDateTime.js'
 import {
   approveProductDeletionRequest,
@@ -72,7 +72,7 @@ function normalizeId(value) {
 
 export default function ProductDeletionRequestsPage() {
   const session = useAuthSession()
-  const canAdmin = isSystemAdmin(session)
+  const canAdmin = canDecideProductApprovals(session)
   const canWarehouse = canCreateProductDeletionRequest(session)
   const formRef = useRef(null)
   const [products, setProducts] = useState([])

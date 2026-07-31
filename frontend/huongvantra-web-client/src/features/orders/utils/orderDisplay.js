@@ -28,6 +28,7 @@ export const ORDER_CHANNEL_OPTIONS = [
   { value: '', label: 'Tất cả kênh' },
   { value: 'POS', label: 'Bán trực tiếp tại quầy' },
   { value: 'COD', label: 'COD (giao hàng thu tiền)' },
+  { value: 'B2B', label: 'Doanh nghiệp (hợp đồng)' },
   { value: 'Website', label: 'Website' },
   { value: 'Zalo', label: 'Zalo' },
   { value: 'Phone', label: 'Điện thoại' },
@@ -65,6 +66,7 @@ export function getOrderChannelLabel(channel) {
   const map = {
     POS: 'Bán tại quầy',
     COD: 'COD (giao hàng thu tiền)',
+    B2B: 'Doanh nghiệp (hợp đồng)',
     Website: 'Website',
     Zalo: 'Zalo',
     Phone: 'Điện thoại',

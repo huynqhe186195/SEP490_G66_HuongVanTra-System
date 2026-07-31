@@ -52,6 +52,7 @@ public class OrderUnavailableSkuTests
             promotionLogic,
             productCatalog.Object,
             customerCatalog.Object,
+            new Mock<IContractCatalogClient>().Object,
             new Mock<IInventoryCatalogClient>().Object,
             new Mock<ICustomBundleRepository>().Object,
             new Mock<IEmailService>().Object,

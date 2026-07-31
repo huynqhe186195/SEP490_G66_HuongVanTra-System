@@ -153,9 +153,18 @@ public class PosTransferPaymentLogic(
             payment.TransferQrExpiresAtUtc.Value);
     }
 
-    private static decimal GetTransferQrAmount(Order order, Payment payment) =>
+    private decimal GetTransferQrAmount(Order order, Payment payment) =>
+        ApplyTestQrAmount(GetRealTransferAmount(order, payment));
+
+    private static decimal GetRealTransferAmount(Order order, Payment payment) =>
         ResolveTransferQrAmount(payment.Amount, order.FinalAmount)
         + GetDebtSettlementAmount(payment.CodDebtSettlementJson);
+
+    /// Chế độ test: QR hiển thị số tiền cố định nhỏ thay vì giá trị thật của đơn.
+    private decimal ApplyTestQrAmount(decimal realAmount) =>
+        _pos.TestQrFixedAmountVnd > 0 && realAmount > 0
+            ? Math.Min(_pos.TestQrFixedAmountVnd, realAmount)
+            : realAmount;
 
     private static decimal ResolveTransferQrAmount(decimal paymentAmount, decimal orderFinalAmount) =>
         paymentAmount > 0 ? paymentAmount : orderFinalAmount;
@@ -289,11 +298,12 @@ public class PosTransferPaymentLogic(
                 : order.FinalAmount);
     }
 
-    private static decimal GetTransferQrAmountForResponse(
+    private decimal GetTransferQrAmountForResponse(
         OrderResponse order,
         PaymentResponse payment) =>
-        ResolveTransferQrAmount(payment.Amount, order.FinalAmount)
-        + GetDebtSettlementAmount(payment.CodDebtSettlementJson);
+        ApplyTestQrAmount(
+            ResolveTransferQrAmount(payment.Amount, order.FinalAmount)
+            + GetDebtSettlementAmount(payment.CodDebtSettlementJson));
 
     public async Task HandleSepayWebhookAsync(SepayWebhookPayload payload, CancellationToken ct = default)
     {
@@ -337,10 +347,13 @@ public class PosTransferPaymentLogic(
         }
         else
         {
-            order = await orderRepo.GetSinglePendingTransferByAmountAsync(
-                receivedAmount,
-                _sepay.AmountToleranceVnd,
-                ct);
+            // Chế độ QR test ép mọi QR về cùng một số tiền nên không thể dò đơn theo FinalAmount.
+            order = _pos.TestQrFixedAmountVnd > 0
+                ? await orderRepo.GetLatestPendingTransferAsync(DateTime.UtcNow, ct)
+                : await orderRepo.GetSinglePendingTransferByAmountAsync(
+                    receivedAmount,
+                    _sepay.AmountToleranceVnd,
+                    ct);
 
             if (order is null)
             {
@@ -416,11 +429,18 @@ public class PosTransferPaymentLogic(
 
         payment.TransactionRef = payload.ReferenceCode ?? payload.Id.ToString(CultureInfo.InvariantCulture);
         await orderRepo.SaveChangesAsync(ct);
+
+        // Ở chế độ QR test, khách chỉ chuyển số tiền tượng trưng nhưng đơn phải ghi nhận
+        // đủ giá trị thật, nếu không phần chênh sẽ bị tính thành công nợ khách hàng.
+        var creditedAmount = _pos.TestQrFixedAmountVnd > 0
+            ? GetRealTransferAmount(order, payment)
+            : receivedAmount;
+
         await orderLogic.CompleteAsync(
             order.Id,
             new OrderAccessContext(Guid.Empty, CanViewAllOrders: true),
             actorName: "SePay Webhook",
-            actualReceivedAmount: (decimal)receivedAmount,
+            actualReceivedAmount: creditedAmount,
             ct: ct);
         logger.LogInformation("SePay webhook completed order {OrderCode}.", orderCode);
     }

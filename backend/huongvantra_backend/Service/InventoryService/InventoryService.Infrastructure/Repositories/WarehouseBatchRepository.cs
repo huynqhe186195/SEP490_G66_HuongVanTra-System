@@ -181,6 +181,13 @@ public class WarehouseBatchRepository(InventoryDbContext _db) : IWarehouseBatchR
             .SumAsync(b => b.QuantityOnHand * b.UnitCost!.Value, ct);
     }
 
+    public async Task<decimal> CalculateTotalShelfValueAsync(CancellationToken ct = default)
+    {
+        return await _db.WarehouseBatchItems
+            .Where(b => b.QuantityOnHand > 0 && b.UnitCost.HasValue && b.Batch != null && b.Batch.Location == "Shelf")
+            .SumAsync(b => b.QuantityOnHand * b.UnitCost!.Value, ct);
+    }
+
     public async Task AddAsync(WarehouseBatch batch, CancellationToken ct = default) =>
         await _db.WarehouseBatches.AddAsync(batch, ct);
 

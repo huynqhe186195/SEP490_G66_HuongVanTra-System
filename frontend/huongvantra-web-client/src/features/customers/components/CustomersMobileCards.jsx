@@ -8,7 +8,6 @@ import {
   getMembershipTierLabel,
   getStatusDisplay,
   getTierClass,
-  isCorporateCustomerType,
 } from '../utils/customerDisplay.js'
 
 function MobileField({ label, children, className = '' }) {
@@ -31,6 +30,7 @@ function CustomersMobileCards({
   restoringId,
   canEditCustomer = true,
   canEditRow,
+  onDebtClick,
 }) {
   const resolveCanEdit = (row) =>
     typeof canEditRow === 'function' ? canEditRow(row) : canEditCustomer
@@ -56,6 +56,7 @@ function CustomersMobileCards({
         const status = getStatusDisplay(row.status)
         const tierLabel = getMembershipTierLabel(row)
         const rowCanEdit = resolveCanEdit(row)
+        const debtValue = Number(row.currentDebt || 0)
 
         return (
           <li key={row.customerId} className="space-y-3 p-4">
@@ -66,7 +67,9 @@ function CustomersMobileCards({
                     ? 'bg-[#ffdad6]/50 text-[#93000a]'
                     : variant === 'vip'
                       ? 'bg-[#fec25b]/30 text-[#744f00]'
-                      : 'bg-[#ffdead] text-[#281900]'
+                      : variant === 'debts'
+                        ? 'bg-[#fff8e8] text-[#7e5700]'
+                        : 'bg-[#ffdead] text-[#281900]'
                 }`}
               >
                 {getInitials(row.fullName)}
@@ -96,9 +99,11 @@ function CustomersMobileCards({
                 </MobileField>
               ) : null}
 
-              {variant === 'corporate' ? (
+              {variant === 'corporate' || variant === 'debts' ? (
                 <>
-                  <MobileField label="NV phụ trách">{row.assignedEmployeeName || '—'}</MobileField>
+                  {variant === 'corporate' ? (
+                    <MobileField label="NV phụ trách">{row.assignedEmployeeName || '—'}</MobileField>
+                  ) : null}
                   <MobileField label="Loại">{customerTypeLabelFromType(row.customerType)}</MobileField>
                 </>
               ) : null}
@@ -112,7 +117,17 @@ function CustomersMobileCards({
               </MobileField>
 
               <MobileField label="Công nợ">
-                <span className={getDebtClass(row.currentDebt)}>{formatDebtVnd(row.currentDebt)}</span>
+                {onDebtClick && debtValue > 0 ? (
+                  <button
+                    type="button"
+                    className={`font-bold underline decoration-dotted underline-offset-2 ${getDebtClass(row.currentDebt)}`}
+                    onClick={() => onDebtClick(row)}
+                  >
+                    {formatDebtVnd(row.currentDebt)}
+                  </button>
+                ) : (
+                  <span className={getDebtClass(row.currentDebt)}>{formatDebtVnd(row.currentDebt)}</span>
+                )}
               </MobileField>
 
               {variant === 'general' && membershipTiers.length > 0 && row.tierId ? (
@@ -141,12 +156,21 @@ function CustomersMobileCards({
               <div className="flex flex-wrap items-center gap-1 border-t border-[#f0eee6] pt-3">
                 {renderRowActions?.(row)}
                 <Link
-                  to={`/customers/${row.customerId}/edit`}
-                  className="inline-flex items-center gap-1 rounded-lg bg-[#4a6242] px-3 py-2 text-xs font-semibold text-white hover:opacity-90"
+                  to={`/customers/${row.customerId}/edit?mode=view`}
+                  className="inline-flex items-center gap-1 rounded-lg border border-[#356647] px-3 py-2 text-xs font-semibold text-[#356647] hover:bg-[#356647]/5"
                 >
-                  <span className="material-symbols-outlined text-[16px]">{rowCanEdit ? 'edit' : 'visibility'}</span>
-                  {rowCanEdit ? 'Sửa' : 'Xem'}
+                  <span className="material-symbols-outlined text-[16px]">visibility</span>
+                  Xem
                 </Link>
+                {rowCanEdit ? (
+                  <Link
+                    to={`/customers/${row.customerId}/edit`}
+                    className="inline-flex items-center gap-1 rounded-lg bg-[#4a6242] px-3 py-2 text-xs font-semibold text-white hover:opacity-90"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">edit</span>
+                    Sửa
+                  </Link>
+                ) : null}
               </div>
             )}
           </li>

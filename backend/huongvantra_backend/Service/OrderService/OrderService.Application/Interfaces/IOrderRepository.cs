@@ -15,8 +15,12 @@ public interface IOrderRepository
         int page, int pageSize, CancellationToken ct = default,
         IReadOnlyCollection<Guid>? restrictToOrderIds = null);
     Task<List<Order>> GetPendingCodAsync(CancellationToken ct = default);
+    Task<(List<Order> Items, int TotalCount)> GetB2BDebtsAsync(
+        Guid? customerId, bool overdueOnly, DateTime today,
+        int page, int pageSize, CancellationToken ct = default);
     Task<Order?> GetSinglePendingTransferByAmountAsync(
         decimal amount, int toleranceVnd, CancellationToken ct = default);
+    Task<Order?> GetLatestPendingTransferAsync(DateTime utcNow, CancellationToken ct = default);
     Task<Order?> GetByIdempotencyKeyAsync(string key, CancellationToken ct = default);
     Task<bool> TryTransitionStatusAsync(
         Guid orderId,

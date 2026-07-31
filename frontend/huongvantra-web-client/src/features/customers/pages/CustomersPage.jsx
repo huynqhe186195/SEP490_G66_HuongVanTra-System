@@ -5,9 +5,10 @@ import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
-import { getCustomerSectionFromSearch, getCustomerSectionLabel } from '../../../app/customerSections.js'
-import { canCreateCustomer, canDeleteCustomer, canEditCustomer, canManageCorporateCustomers, canViewAllCustomers, isReadOnlyCustomerViewer } from '../../auth/utils/permissions.js'
+import { getCustomerSectionFromSearch, getCustomerSectionLabel, buildCustomerPath } from '../../../app/customerSections.js'
+import { canCreateCustomer, canDeleteCustomer, canEditCustomer, canManageCorporateCustomers, isReadOnlyCustomerViewer } from '../../auth/utils/permissions.js'
 import CustomerActivityFeed from '../components/CustomerActivityFeed.jsx'
+import CustomerDebtDetailModal from '../components/CustomerDebtDetailModal.jsx'
 import CustomersTableShell from '../components/CustomersTableShell.jsx'
 import CustomersMobileCards from '../components/CustomersMobileCards.jsx'
 import { useCustomersList } from '../hooks/useCustomersList.js'
@@ -34,7 +35,7 @@ import {
   isCorporateCustomerType,
 } from '../utils/customerDisplay.js'
 
-const VALID_CUSTOMER_SECTIONS = new Set(['general', 'vip', 'corporate', 'inactive'])
+const VALID_CUSTOMER_SECTIONS = new Set(['general', 'vip', 'corporate', 'debts', 'inactive'])
 
 const corporateIcons = ['corporate_fare', 'business', 'domain', 'factory']
 const corporateIconClasses = [
@@ -69,6 +70,46 @@ const growthBars = [
 ]
 
 const IMPORT_ROW_PREVIEW_LIMIT = 30
+
+function CustomerRowActions({ customerId, canEdit }) {
+  return (
+    <div className="inline-flex items-center justify-end gap-1">
+      <Link
+        to={`/customers/${customerId}/edit?mode=view`}
+        className="rounded-full p-2 text-[#717971] transition-colors hover:bg-[#e4e3db] hover:text-[#356647]"
+        title="Xem chi tiết"
+      >
+        <span className="material-symbols-outlined text-[20px]">visibility</span>
+      </Link>
+      {canEdit ? (
+        <Link
+          to={`/customers/${customerId}/edit`}
+          className="rounded-full p-2 text-[#717971] transition-colors hover:bg-[#e4e3db] hover:text-[#356647]"
+          title="Sửa thông tin phụ"
+        >
+          <span className="material-symbols-outlined text-[20px]">edit</span>
+        </Link>
+      ) : null}
+    </div>
+  )
+}
+
+function DebtAmountCell({ row, onDebtClick }) {
+  const debt = Number(row.currentDebt || 0)
+  if (debt > 0 && onDebtClick) {
+    return (
+      <button
+        type="button"
+        className={`${getDebtClass(row.currentDebt)} font-bold underline decoration-dotted underline-offset-2 hover:opacity-80`}
+        onClick={() => onDebtClick(row)}
+        title="Xem / thu công nợ"
+      >
+        {formatDebtVnd(row.currentDebt)}
+      </button>
+    )
+  }
+  return <span className={getDebtClass(row.currentDebt)}>{formatDebtVnd(row.currentDebt)}</span>
+}
 
 function normalizeImportMessage(message) {
   return String(message || '').replace(/\s+/g, ' ').trim()
@@ -244,6 +285,7 @@ function CustomersPage() {
   const [isImporting, setIsImporting] = useState(false)
   const [isTemplateDownloading, setIsTemplateDownloading] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
+  const [debtCustomer, setDebtCustomer] = useState(null)
 
   const { customers, isLoading, reload } = useCustomersList({
     activeTab,
@@ -270,8 +312,8 @@ function CustomersPage() {
   function clearFilters() {
     setPage(1)
     setTierFilter('')
-    setDebtFilter('')
-    setSortBy('')
+    setDebtFilter(activeTab === 'debts' ? 'with_debt' : '')
+    setSortBy(activeTab === 'debts' ? 'debt' : '')
   }
 
   useEffect(() => {
@@ -308,9 +350,9 @@ function CustomersPage() {
 
   useEffect(() => {
     setTierFilter('')
-    setDebtFilter('')
-    setSortBy('')
-    setFilterOpen(false)
+    setDebtFilter(activeTab === 'debts' ? 'with_debt' : '')
+    setSortBy(activeTab === 'debts' ? 'debt' : '')
+    setFilterOpen(activeTab === 'debts')
   }, [activeTab])
 
   async function handleManualRefresh() {
@@ -382,10 +424,19 @@ function CustomersPage() {
       await exportCustomersToExcel({
         activeTab,
         keyword: searchValue.trim() || undefined,
-        customerType: activeTab === 'inactive' ? undefined : CUSTOMER_TYPE_BY_TAB[activeTab],
+        customerType:
+          activeTab === 'inactive' || activeTab === 'debts'
+            ? undefined
+            : CUSTOMER_TYPE_BY_TAB[activeTab],
         tierCode: activeTab === 'general' ? tierFilter || undefined : undefined,
-        debtFilter: activeTab === 'inactive' ? undefined : debtFilter || undefined,
-        sortBy: activeTab === 'inactive' ? undefined : sortBy || undefined,
+        debtFilter:
+          activeTab === 'inactive'
+            ? undefined
+            : debtFilter || (activeTab === 'debts' ? 'with_debt' : undefined),
+        sortBy:
+          activeTab === 'inactive'
+            ? undefined
+            : sortBy || (activeTab === 'debts' ? 'debt' : undefined),
       })
       showSuccess('Đã tải file export khách hàng.')
     } catch (error) {
@@ -435,11 +486,7 @@ function CustomersPage() {
   }, [customers])
 
   const generalStats = useMemo(() => {
-    const withTier = customers.filter((item) => item.tierCode).length
     const activeCount = customers.filter((item) => item.status?.toUpperCase() === 'ACTIVE').length
-    const tierSummary = statistics?.customersByTier?.length
-      ? statistics.customersByTier.map((t) => `${t.tierName}: ${t.count}`).join(' · ')
-      : 'Member / Silver / Gold / Diamond'
     return [
       {
         label: 'Khách phổ thông',
@@ -451,24 +498,42 @@ function CustomersPage() {
         glow: 'bg-[#356647]/10',
       },
       {
-        label: 'Đã gán hạng',
-        value: String(withTier),
-        note: tierSummary,
-        icon: 'workspace_premium',
+        label: 'Tổng công nợ',
+        value: formatDebtVnd(customers.reduce((sum, item) => sum + Number(item.currentDebt || 0), 0)).replace(' VND', ''),
+        note: `${customers.filter((item) => Number(item.currentDebt) > 0).length} khách còn nợ · bấm để quản lý`,
+        noteIcon: 'account_balance_wallet',
+        icon: 'payments',
+        toneClass: 'text-[#7e5700] bg-[#fec25b]/10',
+        glow: 'bg-[#7e5700]/10',
+        href: buildCustomerPath('debts'),
+      },
+    ]
+  }, [customers, statistics])
+
+  const debtsStats = useMemo(() => {
+    const totalDebt = customers.reduce((sum, item) => sum + Number(item.currentDebt || 0), 0)
+    const withDebt = customers.filter((item) => Number(item.currentDebt) > 0).length
+    return [
+      {
+        label: 'Khách còn nợ',
+        value: String(withDebt || customers.length),
+        note: 'lọc theo công nợ',
+        noteIcon: 'group',
+        icon: 'account_balance_wallet',
         toneClass: 'text-[#7e5700] bg-[#fec25b]/10',
         glow: 'bg-[#7e5700]/10',
       },
       {
         label: 'Tổng công nợ',
-        value: formatDebtVnd(customers.reduce((sum, item) => sum + Number(item.currentDebt || 0), 0)).replace(' VND', ''),
-        note: `${customers.filter((item) => Number(item.currentDebt) > 0).length} khách còn nợ`,
-        noteIcon: 'account_balance_wallet',
+        value: formatDebtVnd(totalDebt).replace(' VND', ''),
+        note: 'bấm số tiền trên bảng để xem chi tiết',
+        noteIcon: 'payments',
         icon: 'payments',
         toneClass: 'text-[#7e5700] bg-[#fec25b]/10',
         glow: 'bg-[#7e5700]/10',
       },
     ]
-  }, [customers, statistics])
+  }, [customers])
 
   const vipStats = useMemo(() => {
     const activeCount = customers.filter((item) => item.status?.toUpperCase() === 'ACTIVE').length
@@ -591,7 +656,7 @@ function CustomersPage() {
                   onClick={() => setFilterOpen((open) => !open)}
                 >
                   <span className="material-symbols-outlined text-[20px]">filter_list</span>
-                  Lọc
+                  Lọc / Sắp xếp
                   {hasActiveFilters ? (
                     <span className="rounded-full bg-[#356647] px-2 py-0.5 text-[10px] font-bold text-white">Đang lọc</span>
                   ) : null}
@@ -604,7 +669,7 @@ function CustomersPage() {
                     onClick={clearFilters}
                   >
                     <span className="material-symbols-outlined text-[18px]">close</span>
-                    Xóa lọc
+                    {activeTab === 'debts' ? 'Đặt lại lọc công nợ' : 'Xóa lọc'}
                   </button>
                 ) : null}
               </div>
@@ -809,6 +874,7 @@ function CustomersPage() {
                 isLoading={isLoading}
                 emptyMessage="Chưa có khách hàng doanh nghiệp."
                 canEditCustomer={canManageCorporate}
+                onDebtClick={setDebtCustomer}
               />
 
               <CustomersTableShell minWidthClass="min-w-[900px]">
@@ -857,17 +923,13 @@ function CustomersPage() {
                             <td className={`${CORP_TABLE_CELL} font-mono text-xs`}>{row.customerCode}</td>
                             <td className={`${CORP_TABLE_CELL} font-bold text-[#356647]`}>{formatVnd(row.totalSpend)}</td>
                             <td className={CORP_TABLE_CELL}>
-                              <span className={getDebtClass(row.currentDebt)}>{formatDebtVnd(row.currentDebt)}</span>
+                              <DebtAmountCell row={row} onDebtClick={setDebtCustomer} />
                             </td>
                             <td className={CORP_TABLE_CELL}>
                               <span className={`rounded-full px-2 py-1 text-[11px] font-bold uppercase ${status.className}`}>{status.label}</span>
                             </td>
                             <td className={CORP_TABLE_CELL}>
-                              <div className="flex items-center gap-1 sm:gap-2">
-                                <Link to={`/customers/${row.customerId}/edit`} className="p-2 text-[#717971] hover:text-[#356647]" title={canManageCorporate ? 'Sửa' : 'Xem'}>
-                                  <span className="material-symbols-outlined text-sm">{canManageCorporate ? 'edit' : 'visibility'}</span>
-                                </Link>
-                              </div>
+                              <CustomerRowActions customerId={row.customerId} canEdit={canManageCorporate} />
                             </td>
                           </tr>
                         )
@@ -923,11 +985,121 @@ function CustomersPage() {
               </article>
             </section>
           </>
+        ) : activeTab === 'debts' ? (
+          <>
+            <section className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {debtsStats.map((stat) => (
+                <article key={stat.label} className="group relative min-w-0 overflow-hidden rounded-xl border border-[#eae8e0] bg-white p-4 shadow-[0px_4px_20px_rgba(0,0,0,0.04)] sm:p-5">
+                  <div className={`absolute -right-4 -top-4 h-24 w-24 rounded-full blur-2xl ${stat.glow}`} />
+                  <div className="relative flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="mb-1 text-[10px] uppercase tracking-widest text-[#414942] sm:text-xs">{stat.label}</p>
+                      <h3 className="text-2xl font-bold text-[#1b1c17] sm:text-3xl">{stat.value}</h3>
+                      <p className="mt-2 line-clamp-3 text-xs font-bold text-[#7e5700] sm:text-sm">
+                        {stat.noteIcon ? <span className="material-symbols-outlined align-middle text-[16px] sm:text-[18px]">{stat.noteIcon}</span> : null}{' '}
+                        {stat.note}
+                      </p>
+                    </div>
+                    <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg sm:h-12 sm:w-12 ${stat.toneClass}`}>
+                      <span className="material-symbols-outlined text-[24px] sm:text-[28px]" style={{ fontVariationSettings: "'FILL' 1" }}>
+                        {stat.icon}
+                      </span>
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </section>
+
+            <section className="flex flex-col rounded-xl border border-[#eae8e0] bg-white shadow-[0px_4px_20px_rgba(0,0,0,0.04)]">
+              <div className="flex flex-col gap-2 border-b border-[#f0eee6] bg-[#fff8e8]/60 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+                <div>
+                  <h4 className="text-lg font-bold text-[#1b1c17] sm:text-xl">Quản lý công nợ</h4>
+                  <p className="mt-1 text-xs text-[#717971]">Lọc / sắp xếp theo khách. Bấm số tiền công nợ để mở popup chi tiết và thu nợ.</p>
+                </div>
+              </div>
+
+              <CustomersMobileCards
+                variant="debts"
+                rows={paginatedCustomers}
+                isLoading={isLoading}
+                emptyMessage="Không có khách còn công nợ theo bộ lọc hiện tại."
+                canEditRow={canEditCustomerRow}
+                onDebtClick={setDebtCustomer}
+              />
+
+              <CustomersTableShell minWidthClass="min-w-[900px]">
+                <table className="w-full border-collapse text-left">
+                  <thead>
+                    <tr className="text-xs uppercase tracking-wider text-[#717971]">
+                      <th className={`${TABLE_HEAD} font-semibold`}>Khách hàng</th>
+                      <th className={`${TABLE_HEAD} font-semibold`}>Loại</th>
+                      <th className={`${TABLE_HEAD} font-semibold`}>Số điện thoại</th>
+                      <th className={`${TABLE_HEAD} font-semibold`}>Mã KH</th>
+                      <th className={`${TABLE_HEAD} font-semibold`}>Tổng chi tiêu</th>
+                      <th className={`${TABLE_HEAD} font-semibold`}>Công nợ</th>
+                      <th className={`${TABLE_HEAD} text-right font-semibold`}>Thao tác</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-sm">
+                    {isLoading ? (
+                      <tr>
+                        <td className={TABLE_EMPTY} colSpan={7}>
+                          Đang tải danh sách công nợ...
+                        </td>
+                      </tr>
+                    ) : customers.length === 0 ? (
+                      <tr>
+                        <td className={TABLE_EMPTY} colSpan={7}>
+                          Không có khách còn công nợ theo bộ lọc hiện tại.
+                        </td>
+                      </tr>
+                    ) : (
+                      paginatedCustomers.map((row) => (
+                        <tr key={row.customerId} className="transition-colors hover:bg-[#fff8e8]/50">
+                          <td className={TABLE_CELL}>
+                            <div className="flex items-center gap-3">
+                              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#fff8e8] text-sm font-bold text-[#7e5700]">
+                                {getInitials(row.fullName)}
+                              </div>
+                              <div>
+                                <p className="font-bold text-[#1b1c17]">{row.fullName}</p>
+                                <p className="text-xs text-[#717971]">{row.email || '—'}</p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className={`${TABLE_CELL} text-[#414942]`}>{customerTypeLabelFromType(row.customerType)}</td>
+                          <td className={`${TABLE_CELL} text-[#414942]`}>{row.phone || '—'}</td>
+                          <td className={`${TABLE_CELL} font-bold text-[#1b1c17]`}>{row.customerCode}</td>
+                          <td className={`${TABLE_CELL} font-bold text-[#356647]`}>{formatVnd(row.totalSpend)}</td>
+                          <td className={TABLE_CELL}>
+                            <DebtAmountCell row={row} onDebtClick={setDebtCustomer} />
+                          </td>
+                          <td className={TABLE_CELL_RIGHT}>
+                            <CustomerRowActions customerId={row.customerId} canEdit={canEditCustomerRow(row)} />
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </CustomersTableShell>
+
+              <TablePagination
+                page={page}
+                pageSize={pageSize}
+                totalCount={customers.length}
+                itemLabel="khách hàng"
+                onPageChange={setPage}
+                onPageSizeChange={setPageSize}
+              />
+            </section>
+          </>
         ) : activeTab === 'general' ? (
           <>
-            <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3">
-              {generalStats.map((stat) => (
-                <article key={stat.label} className="group relative min-w-0 overflow-hidden rounded-xl border border-[#eae8e0] bg-white p-4 shadow-[0px_4px_20px_rgba(0,0,0,0.04)] sm:p-5 transition-all duration-300 hover:shadow-[0px_8px_24px_rgba(0,0,0,0.08)]">
+            <section className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {generalStats.map((stat) => {
+                const content = (
+                  <>
                   <div className={`absolute -right-4 -top-4 h-24 w-24 rounded-full blur-2xl ${stat.glow}`} />
                   <div className="relative flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
@@ -944,8 +1116,22 @@ function CustomersPage() {
                       </span>
                     </div>
                   </div>
+                  </>
+                )
+                return stat.href ? (
+                  <Link
+                    key={stat.label}
+                    to={stat.href}
+                    className="group relative min-w-0 overflow-hidden rounded-xl border border-[#eae8e0] bg-white p-4 shadow-[0px_4px_20px_rgba(0,0,0,0.04)] transition-all duration-300 hover:shadow-[0px_8px_24px_rgba(0,0,0,0.08)] sm:p-5"
+                  >
+                    {content}
+                  </Link>
+                ) : (
+                <article key={stat.label} className="group relative min-w-0 overflow-hidden rounded-xl border border-[#eae8e0] bg-white p-4 shadow-[0px_4px_20px_rgba(0,0,0,0.04)] sm:p-5 transition-all duration-300 hover:shadow-[0px_8px_24px_rgba(0,0,0,0.08)]">
+                  {content}
                 </article>
-              ))}
+                )
+              })}
             </section>
 
             {statistics ? (
@@ -985,7 +1171,12 @@ function CustomersPage() {
                   {statistics.topDebtors?.length ? (
                     <ul className="space-y-2">
                       {statistics.topDebtors.map((item, index) => (
-                        <li key={item.customerId} className="flex items-center justify-between gap-3 rounded-lg bg-[#f6f4ec]/70 px-3 py-2">
+                        <li key={item.customerId}>
+                          <button
+                            type="button"
+                            className="flex w-full items-center justify-between gap-3 rounded-lg bg-[#f6f4ec]/70 px-3 py-2 text-left hover:bg-[#fff8e8]"
+                            onClick={() => setDebtCustomer(item)}
+                          >
                           <div className="flex min-w-0 items-center gap-2">
                             <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#7e5700]/15 text-xs font-bold text-[#7e5700]">
                               {index + 1}
@@ -998,6 +1189,7 @@ function CustomersPage() {
                           <span className={`shrink-0 text-sm font-bold ${getDebtClass(item.currentDebt)}`}>
                             {formatDebtVnd(item.currentDebt)}
                           </span>
+                          </button>
                         </li>
                       ))}
                     </ul>
@@ -1037,6 +1229,7 @@ function CustomersPage() {
                 emptyMessage="Chưa có khách phổ thông."
                 membershipTiers={membershipTiers}
                 canEditCustomer={canManageCustomers}
+                onDebtClick={setDebtCustomer}
               />
 
               <CustomersTableShell>
@@ -1099,14 +1292,10 @@ function CustomersPage() {
                           <td className={`${TABLE_CELL} font-bold text-[#1b1c17]`}>{row.customerCode}</td>
                           <td className={`${TABLE_CELL} text-base font-bold text-[#356647] sm:text-lg`}>{formatVnd(row.totalSpend)}</td>
                           <td className={TABLE_CELL}>
-                            <span className={getDebtClass(row.currentDebt)}>{formatDebtVnd(row.currentDebt)}</span>
+                            <DebtAmountCell row={row} onDebtClick={setDebtCustomer} />
                           </td>
                           <td className={TABLE_CELL_RIGHT}>
-                            <div className="inline-flex items-center justify-end gap-1">
-                              <Link to={`/customers/${row.customerId}/edit`} className="rounded-full p-2 text-[#717971] transition-colors hover:bg-[#e4e3db]" title={canManageCustomers ? 'Sửa' : 'Xem'}>
-                                <span className="material-symbols-outlined">{canManageCustomers ? 'edit' : 'visibility'}</span>
-                              </Link>
-                            </div>
+                            <CustomerRowActions customerId={row.customerId} canEdit={canManageCustomers} />
                           </td>
                         </tr>
                       ))
@@ -1230,6 +1419,7 @@ function CustomersPage() {
                 isLoading={isLoading}
                 emptyMessage="Chưa có khách VIP."
                 canEditCustomer={canManageCustomers}
+                onDebtClick={setDebtCustomer}
               />
 
               <CustomersTableShell>
@@ -1278,7 +1468,7 @@ function CustomersPage() {
                             <td className={`${TABLE_CELL} font-bold text-[#1b1c17]`}>{row.customerCode}</td>
                             <td className={`${TABLE_CELL} text-base font-bold text-[#356647] sm:text-lg`}>{formatVnd(row.totalSpend)}</td>
                             <td className={TABLE_CELL}>
-                              <span className={getDebtClass(row.currentDebt)}>{formatDebtVnd(row.currentDebt)}</span>
+                              <DebtAmountCell row={row} onDebtClick={setDebtCustomer} />
                             </td>
                             <td className={TABLE_CELL}>
                               <span className={`rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-tight ${status.className}`}>
@@ -1286,11 +1476,7 @@ function CustomersPage() {
                               </span>
                             </td>
                             <td className={TABLE_CELL_RIGHT}>
-                              <div className="inline-flex items-center justify-end gap-1">
-                                <Link to={`/customers/${row.customerId}/edit`} className="rounded-full p-2 text-[#717971] transition-colors hover:bg-[#e4e3db]" title={canManageCustomers ? 'Sửa' : 'Xem'}>
-                                  <span className="material-symbols-outlined">{canManageCustomers ? 'edit' : 'visibility'}</span>
-                                </Link>
-                              </div>
+                              <CustomerRowActions customerId={row.customerId} canEdit={canManageCustomers} />
                             </td>
                           </tr>
                         )
@@ -1438,6 +1624,17 @@ function CustomersPage() {
             </div>
           </div>
         </div>
+      ) : null}
+
+      {debtCustomer ? (
+        <CustomerDebtDetailModal
+          customer={debtCustomer}
+          onClose={() => setDebtCustomer(null)}
+          onUpdated={async () => {
+            await Promise.all([reload(), loadStatistics()])
+            setActivityRefreshKey((key) => key + 1)
+          }}
+        />
       ) : null}
 
       <button

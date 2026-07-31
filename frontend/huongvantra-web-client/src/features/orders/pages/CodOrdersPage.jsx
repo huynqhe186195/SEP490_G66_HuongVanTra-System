@@ -163,6 +163,7 @@ function CodOrdersPage() {
               <tr>
                 <th className="px-8 py-4">Mã đơn</th>
                 <th className="px-4 py-4">Khách hàng</th>
+                <th className="px-4 py-4">Người bán</th>
                 <th className="px-4 py-4">Trạng thái</th>
                 <th className="px-4 py-4">Hạn cảnh báo</th>
                 <th className="px-8 py-4 text-right">Thành tiền</th>
@@ -172,13 +173,13 @@ function CodOrdersPage() {
             <tbody className="divide-y divide-slate-50">
               {isLoading ? (
                 <tr>
-                  <td className="px-8 py-10 text-slate-500" colSpan={6}>
+                  <td className="px-8 py-10 text-slate-500" colSpan={7}>
                     Đang tải...
                   </td>
                 </tr>
               ) : orders.length === 0 ? (
                 <tr>
-                  <td className="px-8 py-10 text-slate-500" colSpan={6}>
+                  <td className="px-8 py-10 text-slate-500" colSpan={7}>
                     Không có đơn trong mục này.
                   </td>
                 </tr>
@@ -203,6 +204,9 @@ function CodOrdersPage() {
                       </td>
                       <td className="px-4 py-5">
                         <OrderCustomerCell snapshot={order.customerSnapshotName} customerId={order.customerId} />
+                      </td>
+                      <td className="px-4 py-5 text-sm text-slate-700">
+                        {order.sellerName?.trim() ? order.sellerName : <span className="text-slate-300">—</span>}
                       </td>
                       <td className="px-4 py-5">
                         <span

@@ -16,7 +16,8 @@ public enum OrderChannel
     Website,
     Zalo,
     Phone,
-    COD
+    COD,
+    B2B
 }
 
 public enum OrderKind
@@ -45,7 +46,8 @@ public enum PaymentStatus
 {
     Pending,
     Success,
-    Failed
+    Failed,
+    Deferred
 }
 
 public enum PosCashSessionStatus

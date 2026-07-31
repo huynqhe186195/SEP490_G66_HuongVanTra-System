@@ -10,7 +10,6 @@ import {
   canCreateStockReplenishmentRequest,
   canReviewStockReplenishmentRequest,
   isAuditOnlyAdmin,
-  isSystemAdmin,
   isWarehouseRole,
 } from '../../auth/utils/permissions.js'
 import { formatStockQuantity } from '../../products/utils/productDisplay.js'
@@ -277,7 +276,7 @@ function StockAdjustmentRequestOperationsPage() {
   const canReview = canReviewStockReplenishmentRequest(session)
   const canCreateRequest = canCreateStockReplenishmentRequest(session)
   const canCancelRequest = canCancelStockReplenishmentRequest(session)
-  const canCancelAnyRequest = isSystemAdmin(session)
+  const canCancelAnyRequest = canCancelRequest && canReview
   const currentUserId = session?.userId ? String(session.userId) : ''
 
   const quickFilters = canReview ? WAREHOUSE_QUICK_FILTERS : MANAGER_QUICK_FILTERS

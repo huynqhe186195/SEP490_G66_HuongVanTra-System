@@ -20,7 +20,7 @@ public class ContractsController : ControllerBase
         User.HasPermission(PermissionNames.ManageRole));
 
     [HttpGet]
-    [Authorize(Policy = PermissionNames.ViewCustomer)]
+    [Authorize(Policy = PermissionNames.ViewCustomerAccess)]
     public async Task<IActionResult> GetAll(
         [FromQuery] string? search,
         [FromQuery] Guid? customerId,
@@ -34,11 +34,19 @@ public class ContractsController : ControllerBase
     }
 
     [HttpGet("{id:guid}")]
-    [Authorize(Policy = PermissionNames.ViewCustomer)]
+    [Authorize(Policy = PermissionNames.ViewCustomerAccess)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct = default)
     {
         var result = await _logic.GetByIdAsync(id, AccessContext(), ct);
         return Ok(result);
+    }
+
+    [HttpGet("active-for-customer/{customerId:guid}")]
+    [Authorize(Policy = PermissionNames.ViewCustomerAccess)]
+    public async Task<IActionResult> GetActiveForCustomer(Guid customerId, CancellationToken ct = default)
+    {
+        var result = await _logic.GetActiveForCustomerAsync(customerId, ct);
+        return result is null ? NotFound() : Ok(result);
     }
 
     [HttpPost]

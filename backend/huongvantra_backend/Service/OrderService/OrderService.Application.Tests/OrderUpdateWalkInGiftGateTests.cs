@@ -70,7 +70,7 @@ public class OrderUpdateWalkInGiftGateTests
                 .Setup(client => client.GetSkuProfilesAsync(
                     It.IsAny<IEnumerable<Guid>>(),
                     It.IsAny<CancellationToken>()))
-                .ReturnsAsync([new ProductSkuCatalogProfile(SkuId, null, "Piece", "THANH_PHAM", true, false, false, true)]);
+                .ReturnsAsync([new ProductSkuCatalogProfile(SkuId, null, "Piece", "THANH_PHAM", true, false, false, true, 0m)]);
 
             _orderRepository
                 .Setup(repository => repository.SaveChangesAsync(
@@ -102,6 +102,7 @@ public class OrderUpdateWalkInGiftGateTests
                 promotionLogic,
                 productCatalog.Object,
                 _customerCatalog.Object,
+                new Mock<IContractCatalogClient>().Object,
                 _inventoryCatalog.Object,
                 new Mock<ICustomBundleRepository>().Object,
                 new Mock<IEmailService>().Object,

@@ -68,6 +68,13 @@ export function mapOrderSummary(item) {
     orderCode: item.orderCode ?? item.OrderCode ?? '',
     customerId: item.customerId ?? item.CustomerId ?? null,
     customerSnapshotName: item.customerSnapshotName ?? item.CustomerSnapshotName ?? 'Khách lẻ',
+    employeeId: item.employeeId ?? item.EmployeeId ?? null,
+    sellerName:
+      item.employeeSnapshotName
+      ?? item.EmployeeSnapshotName
+      ?? item.sellerName
+      ?? item.SellerName
+      ?? '',
     orderChannel: normalizeEnum(item.orderChannel ?? item.OrderChannel),
     orderKind: normalizeEnum(item.orderKind ?? item.OrderKind ?? 'Sale'),
     orderStatus: normalizeEnum(item.orderStatus ?? item.OrderStatus),
@@ -98,6 +105,12 @@ export function mapOrderDetail(item) {
     customerId: item.customerId ?? item.CustomerId ?? null,
     customerSnapshotName: item.customerSnapshotName ?? item.CustomerSnapshotName ?? 'Khách lẻ',
     employeeId: item.employeeId ?? item.EmployeeId ?? null,
+    sellerName:
+      item.employeeSnapshotName
+      ?? item.EmployeeSnapshotName
+      ?? item.sellerName
+      ?? item.SellerName
+      ?? '',
     orderChannel: normalizeEnum(item.orderChannel ?? item.OrderChannel),
     orderKind: normalizeEnum(item.orderKind ?? item.OrderKind ?? 'Sale'),
     orderStatus: normalizeEnum(item.orderStatus ?? item.OrderStatus),
@@ -115,6 +128,13 @@ export function mapOrderDetail(item) {
     items: Array.isArray(rawItems) ? rawItems.map(mapOrderItem).filter(Boolean) : [],
     payments: Array.isArray(rawPayments) ? rawPayments.map(mapPayment).filter(Boolean) : [],
     stockHandlingSummary: mapStockHandlingSummary(item.stockHandlingSummary ?? item.StockHandlingSummary),
+    contractId: item.contractId ?? item.ContractId ?? null,
+    contractCodeSnapshot: item.contractCodeSnapshot ?? item.ContractCodeSnapshot ?? null,
+    contractDiscountPercentSnapshot:
+      item.contractDiscountPercentSnapshot ?? item.ContractDiscountPercentSnapshot ?? null,
+    contractPaymentTermDaysSnapshot:
+      item.contractPaymentTermDaysSnapshot ?? item.ContractPaymentTermDaysSnapshot ?? null,
+    dueDate: item.dueDate ?? item.DueDate ?? null,
   }
 }
 
@@ -156,6 +176,35 @@ export async function fetchOrders(params = {}) {
     items: paged.items.map(mapOrderSummary).filter(Boolean),
     totalPages: Number(data?.totalPages ?? data?.TotalPages ?? (Math.ceil(paged.totalCount / paged.pageSize) || 1)),
   }
+}
+
+function mapB2BDebt(item) {
+  if (!item || typeof item !== 'object') return null
+  return {
+    orderId: item.orderId ?? item.OrderId,
+    orderCode: item.orderCode ?? item.OrderCode ?? '',
+    customerId: item.customerId ?? item.CustomerId ?? null,
+    customerSnapshotName: item.customerSnapshotName ?? item.CustomerSnapshotName ?? '',
+    contractCodeSnapshot: item.contractCodeSnapshot ?? item.ContractCodeSnapshot ?? '',
+    finalAmount: Number(item.finalAmount ?? item.FinalAmount ?? 0),
+    paidAmount: Number(item.paidAmount ?? item.PaidAmount ?? 0),
+    remainingAmount: Number(item.remainingAmount ?? item.RemainingAmount ?? 0),
+    dueDate: item.dueDate ?? item.DueDate ?? null,
+    daysOverdue: Number(item.daysOverdue ?? item.DaysOverdue ?? 0),
+    createdAt: item.createdAt ?? item.CreatedAt,
+  }
+}
+
+export async function fetchB2BDebts({ customerId, overdueOnly = false, page = 1, pageSize = 20 } = {}) {
+  const search = new URLSearchParams()
+  if (customerId && isValidGuid(customerId)) search.set('customerId', String(customerId).trim())
+  if (overdueOnly) search.set('overdueOnly', 'true')
+  search.set('page', String(Math.max(1, Number(page) || 1)))
+  search.set('pageSize', String(Math.min(200, Math.max(1, Number(pageSize) || 20))))
+
+  const data = await apiRequestAuth(`/api/v1/orders/b2b-debts?${search}`, { method: 'GET' })
+  const paged = toPagedResult(data)
+  return { ...paged, items: paged.items.map(mapB2BDebt).filter(Boolean) }
 }
 
 function mapOrderActivity(item) {
@@ -256,6 +305,7 @@ export function buildCreateOrderBody(payload) {
     customerSnapshotName: payload.customerSnapshotName?.trim() || null,
     employeeId: payload.employeeId || null,
     orderChannel: payload.orderChannel,
+    contractId: payload.contractId || null,
     shippingAddress: payload.shippingAddress?.trim() || null,
     note: payload.note?.trim() || null,
     discountAmount: Number(payload.discountAmount ?? 0),

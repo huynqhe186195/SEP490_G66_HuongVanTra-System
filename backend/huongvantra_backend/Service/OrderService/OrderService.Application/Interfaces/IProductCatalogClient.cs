@@ -15,4 +15,5 @@ public sealed record ProductSkuCatalogProfile(
     bool IsPurchasable,
     bool CanBeBomComponent,
     bool CanUseInCustom,
-    bool CanHaveBom);
+    bool CanHaveBom,
+    decimal CostPrice);

@@ -93,7 +93,7 @@ public class OrderSinglePaymentMethodTests
                 .Setup(client => client.GetSkuProfilesAsync(
                     It.IsAny<IEnumerable<Guid>>(),
                     It.IsAny<CancellationToken>()))
-                .ReturnsAsync([new ProductSkuCatalogProfile(SkuId, null, "Piece", "THANH_PHAM", true, false, false, true)]);
+                .ReturnsAsync([new ProductSkuCatalogProfile(SkuId, null, "Piece", "THANH_PHAM", true, false, false, true, 0m)]);
 
             _codeGenerator
                 .Setup(generator => generator.GenerateAsync(
@@ -143,6 +143,7 @@ public class OrderSinglePaymentMethodTests
                 promotionLogic,
                 productCatalog.Object,
                 _customerCatalog.Object,
+                new Mock<IContractCatalogClient>().Object,
                 _inventoryCatalog.Object,
                 new Mock<ICustomBundleRepository>().Object,
                 new Mock<IEmailService>().Object,

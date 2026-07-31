@@ -131,7 +131,7 @@ function getSupplierReceiptCatalogItems(response) {
   if (Array.isArray(response?.data?.items)) return response.data.items
   if (Array.isArray(response?.Data?.Items)) return response.Data.Items
 
-  throw new Error('Dữ liệu danh sách SKU được phép nhập từ nhà cung cấp không hợp lệ.')
+  throw new Error('Danh sách hàng trả về không đúng. Bấm F5 rồi thử lại.')
 }
 
 /** SKU cho Admin/Manager — gọi endpoint riêng, luôn trả catalog cửa hàng. */

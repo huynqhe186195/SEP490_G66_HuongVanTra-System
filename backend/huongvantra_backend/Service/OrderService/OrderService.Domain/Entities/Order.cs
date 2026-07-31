@@ -9,6 +9,8 @@ public class Order : BaseEntity
     public Guid? CustomerId { get; set; }
     public string? CustomerSnapshotName { get; set; }
     public Guid? EmployeeId { get; set; }
+    /// <summary>Snapshot tên người bán tại thời điểm tạo đơn.</summary>
+    public string? EmployeeSnapshotName { get; set; }
     public OrderChannel OrderChannel { get; set; }
     public OrderKind OrderKind { get; set; } = OrderKind.Sale;
     public OrderStatus OrderStatus { get; set; }
@@ -22,6 +24,12 @@ public class Order : BaseEntity
     public string? ShippingAddress { get; set; }
     public string? Note { get; set; }
     public string? IdempotencyKey { get; set; }
+
+    public Guid? ContractId { get; set; }
+    public string? ContractCodeSnapshot { get; set; }
+    public decimal? ContractDiscountPercentSnapshot { get; set; }
+    public int? ContractPaymentTermDaysSnapshot { get; set; }
+    public DateTime? DueDate { get; set; }
 
     public ICollection<OrderDetail> OrderDetails { get; set; } = new List<OrderDetail>();
     public ICollection<Payment> Payments { get; set; } = new List<Payment>();

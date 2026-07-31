@@ -390,6 +390,13 @@ function OrderDetailPage() {
             ) : null}
           </section>
 
+          <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+            <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-400">Người bán</h2>
+            <p className="text-sm font-semibold text-slate-800">
+              {order.sellerName?.trim() ? order.sellerName : '—'}
+            </p>
+          </section>
+
           <OrderReturnsSection returns={orderReturns} />
 
           {order.note?.trim() ? (

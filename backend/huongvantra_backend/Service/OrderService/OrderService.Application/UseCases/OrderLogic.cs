@@ -23,6 +23,7 @@ public class OrderLogic(
     PromotionLogic _promotionLogic,
     IProductCatalogClient _productCatalogClient,
     ICustomerCatalogClient _customerCatalogClient,
+    IContractCatalogClient _contractCatalogClient,
     IInventoryCatalogClient _inventoryCatalogClient,
     ICustomBundleRepository _customBundleRepo,
     IEmailService _emailService,
@@ -83,6 +84,45 @@ public class OrderLogic(
         }
 
         return new PagedResponse<OrderSummaryResponse>(
+            dtos, page, pageSize, total,
+            (int)Math.Ceiling((double)total / pageSize));
+    }
+
+    public async Task<PagedResponse<B2BDebtResponse>> GetB2BDebtsAsync(
+        GetB2BDebtsRequest req, CancellationToken ct = default)
+    {
+        var page = ParsePositiveInt(req.Page, 1);
+        var pageSize = Math.Clamp(ParsePositiveInt(req.PageSize, 20), 1, 200);
+        OrderInputValidator.ValidatePagination(page, pageSize);
+
+        var customerId = ParseOptionalGuid(req.CustomerId);
+        var today = DateTime.UtcNow.Date;
+
+        var (items, total) = await _orderRepo.GetB2BDebtsAsync(
+            customerId, req.OverdueOnly, today, page, pageSize, ct);
+
+        var dtos = items.Select(o =>
+        {
+            var paid = GetOrderCollectedAmount(o);
+            var daysOverdue = o.DueDate is DateTime due && due < today
+                ? (int)(today - due.Date).TotalDays
+                : 0;
+
+            return new B2BDebtResponse(
+                o.Id,
+                o.OrderCode,
+                o.CustomerId,
+                o.CustomerSnapshotName,
+                o.ContractCodeSnapshot,
+                o.FinalAmount,
+                paid,
+                Math.Max(0, o.FinalAmount - paid),
+                o.DueDate,
+                daysOverdue,
+                o.CreatedAt);
+        }).ToList();
+
+        return new PagedResponse<B2BDebtResponse>(
             dtos, page, pageSize, total,
             (int)Math.Ceiling((double)total / pageSize));
     }
@@ -318,21 +358,44 @@ public class OrderLogic(
         }
 
         var hasGiftItems = detailInputs.Any(i => i.IsGift);
+        var customer = req.CustomerId.HasValue && req.CustomerId.Value != Guid.Empty
+            ? await _customerCatalogClient.GetCustomerAsync(req.CustomerId.Value, ct)
+            : null;
+
+        ContractCatalogProfile? contract = null;
+        if (customer?.IsDoanhNghiep == true)
+        {
+            contract = await _contractCatalogClient.GetActiveContractAsync(customer.Id, ct);
+            OrderBusinessRules.EnsureContractRequiredForCorporate(customer.CustomerGroup, contract?.Id);
+
+            if (req.ContractId.HasValue && req.ContractId.Value != contract!.Id)
+                throw new OrderValidationException(
+                    "Hợp đồng gửi lên không khớp hợp đồng đang hiệu lực của khách hàng. Vui lòng tải lại trang.");
+        }
+
         if (hasGiftItems)
-            await EnsureVipCustomerAsync(req.CustomerId, ct);
+            EnsureVipCustomer(customer, req.CustomerId);
         var isAuthorizedVipGiftOrder =
             hasGiftItems
             && detailInputs.All(item => item.IsGift)
             && !(req.CustomBundles ?? []).Any(bundle => (bundle.Ingredients ?? []).Count > 0);
 
-        // Exchange: DiscountAmount includes return credit (+ tier/manual already validated in ReturnAsync).
-        // Do not treat that credit as a VIP/manual POS discount.
-        if (req.DiscountAmount > 0 && req.OrderKind != OrderKind.Exchange)
-            await EnsureManualDiscountAllowedAsync(req.CustomerId, ct);
-
         var totalAmount = detailInputs.Sum(i => i.UnitPrice * i.Quantity);
         var bundleTotal = (req.CustomBundles ?? []).Sum(b => b.Ingredients.Sum(i => i.UnitPrice * i.Quantity));
         totalAmount += bundleTotal;
+
+        // Exchange: DiscountAmount includes return credit (+ tier/manual already validated in ReturnAsync).
+        // Do not treat that credit as a VIP/manual POS discount.
+        if (req.DiscountAmount > 0 && req.OrderKind != OrderKind.Exchange)
+        {
+            OrderBusinessRules.EnsureManualDiscountAllowed(
+                req.DiscountAmount,
+                customer?.CustomerGroup,
+                customer?.TierId,
+                contract?.DiscountPercent,
+                totalAmount);
+        }
+
         var manualDiscount = req.DiscountAmount;
         if (req.OrderKind != OrderKind.Exchange)
         {
@@ -351,10 +414,9 @@ public class OrderLogic(
             req.PromotionId, req.PromotionCode, promotionItems, manualDiscount, req.CustomerId, ct);
         var membershipDiscount = req.OrderKind == OrderKind.Exchange
             ? 0m
-            : await GetMembershipTierDiscountAsync(
-                req.CustomerId,
-                Math.Max(0, totalAmount - manualDiscount - promotionDiscount.DiscountAmount),
-                ct);
+            : CalculateMembershipTierDiscount(
+                customer,
+                Math.Max(0, totalAmount - manualDiscount - promotionDiscount.DiscountAmount));
         var totalDiscount = manualDiscount + promotionDiscount.DiscountAmount + membershipDiscount;
         var finalAmount = Math.Max(0, totalAmount - totalDiscount);
         if (req.OrderKind != OrderKind.Exchange)
@@ -373,6 +435,15 @@ public class OrderLogic(
             req.CustomerId,
             allocatedPaymentTotal,
             finalAmount);
+
+        if (contract is not null)
+        {
+            OrderBusinessRules.EnsureCreditLimitNotExceeded(
+                customer!.CurrentDebt,
+                Math.Max(0, finalAmount - allocatedPaymentTotal),
+                contract.CreditLimit);
+        }
+
         var orderCode = await _codeGen.GenerateAsync(req.OrderKind, ct);
 
         var hasPendingTransfer = paymentAllocations.Any(item =>
@@ -402,6 +473,7 @@ public class OrderLogic(
             CustomerId = req.CustomerId,
             CustomerSnapshotName = req.CustomerSnapshotName?.Trim(),
             EmployeeId = ownerId,
+            EmployeeSnapshotName = string.IsNullOrWhiteSpace(actorName) ? null : actorName.Trim(),
             OrderChannel = req.OrderChannel,
             OrderKind = req.OrderKind,
             OrderStatus = isPosCompletedOnCreate ? OrderStatus.Completed : OrderStatus.PendingPayment,
@@ -415,6 +487,13 @@ public class OrderLogic(
             ShippingAddress = req.ShippingAddress?.Trim(),
             Note = req.Note?.Trim(),
             IdempotencyKey = effectiveIdempotencyKey,
+            ContractId = contract?.Id,
+            ContractCodeSnapshot = contract?.ContractCode,
+            ContractDiscountPercentSnapshot = contract?.DiscountPercent,
+            ContractPaymentTermDaysSnapshot = contract?.PaymentTermDays,
+            DueDate = contract?.PaymentTermDays is int termDays
+                ? DateTime.UtcNow.Date.AddDays(termDays)
+                : null,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
@@ -741,6 +820,17 @@ public class OrderLogic(
         PaymentStatus PaymentStatus,
         string? DebtSettlementJson);
 
+    private static void EnsureVipCustomer(CustomerCatalogProfile? customer, Guid? customerId)
+    {
+        if (!customerId.HasValue || customerId == Guid.Empty)
+            throw new OrderValidationException(
+                "Quà tặng và chiết khấu thủ công chỉ áp dụng cho khách đối ngoại (VIP). Vui lòng chọn khách VIP.");
+
+        if (customer is null || !customer.IsVipCustomer)
+            throw new OrderValidationException(
+                "Quà tặng và chiết khấu thủ công chỉ dành cho khách đối ngoại (VIP).");
+    }
+
     private async Task EnsureVipCustomerAsync(Guid? customerId, CancellationToken ct)
     {
         if (!customerId.HasValue || customerId == Guid.Empty)
@@ -748,24 +838,25 @@ public class OrderLogic(
                 "Quà tặng và chiết khấu thủ công chỉ áp dụng cho khách đối ngoại (VIP). Vui lòng chọn khách VIP.");
 
         var customer = await _customerCatalogClient.GetCustomerAsync(customerId.Value, ct);
-        if (customer is null || !customer.IsVipCustomer)
-            throw new OrderValidationException(
-                "Quà tặng và chiết khấu thủ công chỉ dành cho khách đối ngoại (VIP).");
+        EnsureVipCustomer(customer, customerId);
     }
 
-    private async Task EnsureManualDiscountAllowedAsync(Guid? customerId, CancellationToken ct)
+    private async Task EnsureManualDiscountAllowedAsync(
+        Order order, decimal manualDiscount, CancellationToken ct)
     {
-        if (!customerId.HasValue || customerId == Guid.Empty)
+        if (!order.CustomerId.HasValue || order.CustomerId.Value == Guid.Empty)
         {
-            OrderBusinessRules.EnsureManualDiscountAllowed(1m, null);
+            OrderBusinessRules.EnsureManualDiscountAllowed(manualDiscount, null);
             return;
         }
 
-        var customer = await _customerCatalogClient.GetCustomerAsync(customerId.Value, ct);
+        var customer = await _customerCatalogClient.GetCustomerAsync(order.CustomerId.Value, ct);
         OrderBusinessRules.EnsureManualDiscountAllowed(
-            1m,
+            manualDiscount,
             customer?.CustomerGroup,
-            customer?.TierId);
+            customer?.TierId,
+            order.ContractDiscountPercentSnapshot,
+            order.TotalAmount);
     }
 
     private async Task ApplyOrderDetailUpdatesAsync(
@@ -893,7 +984,7 @@ public class OrderLogic(
 
         var manualDiscount = Math.Max(0, req.DiscountAmount);
         if (manualDiscount > 0)
-            await EnsureManualDiscountAllowedAsync(order.CustomerId, ct);
+            await EnsureManualDiscountAllowedAsync(order, manualDiscount, ct);
 
         if (manualDiscount > order.TotalAmount)
             throw new OrderValidationException("Giảm giá thủ công không được lớn hơn tạm tính.");
@@ -1885,6 +1976,19 @@ public class OrderLogic(
         return changed;
     }
 
+    private static decimal CalculateMembershipTierDiscount(
+        CustomerCatalogProfile? customer,
+        decimal amount)
+    {
+        if (customer is null || amount <= 0 || customer.IsVipCustomer || customer.TierDiscountPercent <= 0)
+            return 0m;
+
+        return Math.Round(
+            amount * customer.TierDiscountPercent / 100m,
+            0,
+            MidpointRounding.AwayFromZero);
+    }
+
     private async Task<decimal> GetMembershipTierDiscountAsync(
         Guid? customerId,
         decimal amount,
@@ -1894,13 +1998,7 @@ public class OrderLogic(
             return 0m;
 
         var customer = await _customerCatalogClient.GetCustomerAsync(customerId.Value, ct);
-        if (customer is null || customer.IsVipCustomer || customer.TierDiscountPercent <= 0)
-            return 0m;
-
-        return Math.Round(
-            amount * customer.TierDiscountPercent / 100m,
-            0,
-            MidpointRounding.AwayFromZero);
+        return CalculateMembershipTierDiscount(customer, amount);
     }
 
     private static decimal GetOrderCollectedAmount(Order order)
@@ -2029,7 +2127,7 @@ public class OrderLogic(
 
     private static OrderResponse MapToResponse(Order o, StockHandlingSummaryResponse? stockHandlingSummary = null) => new(
         o.Id, o.OrderCode, o.CustomerId, o.CustomerSnapshotName,
-        o.EmployeeId, o.OrderChannel.ToString(), o.OrderKind.ToString(), o.OrderStatus.ToString(),
+        o.EmployeeId, o.EmployeeSnapshotName, o.OrderChannel.ToString(), o.OrderKind.ToString(), o.OrderStatus.ToString(),
         o.InventorySyncStatus.ToString(), o.TotalAmount, o.DiscountAmount,
         o.PromotionId, o.PromotionCode, o.PromotionDiscountAmount, o.FinalAmount,
         o.ShippingAddress, o.Note, o.CreatedAt, o.UpdatedAt,
@@ -2046,7 +2144,12 @@ public class OrderLogic(
             (b.Ingredients ?? []).Select(i => new CustomBundleIngredientResponse(
                 i.Id, i.MaterialSkuId, i.MaterialSkuCode, i.MaterialSnapshotName,
                 i.Quantity, i.UnitPrice, i.SubTotal)).ToList())).ToList(),
-        stockHandlingSummary
+        stockHandlingSummary,
+        o.ContractId,
+        o.ContractCodeSnapshot,
+        o.ContractDiscountPercentSnapshot,
+        o.ContractPaymentTermDaysSnapshot,
+        o.DueDate
     );
 
     private static OrderSummaryResponse MapToSummary(Order o)
@@ -2061,7 +2164,9 @@ public class OrderLogic(
             codPayment?.IsCodVerified,
             codPayment?.CodWarningDate,
             codPayment is { IsCodVerified: false } && codPayment.Amount > 0 ? codPayment.Amount : null,
-            o.OrderDetails?.Sum(d => d.Quantity) ?? 0);
+            o.OrderDetails?.Sum(d => d.Quantity) ?? 0,
+            HasActiveStockReservation: false,
+            EmployeeSnapshotName: o.EmployeeSnapshotName);
     }
 
     private static string FormatVnd(decimal amount)

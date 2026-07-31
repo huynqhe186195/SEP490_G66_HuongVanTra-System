@@ -8,7 +8,6 @@ import { loadAuthSession } from './authSession.js'
 
 const ROLE_MODULE_MAP = {
   admin: [
-    'pos',
     'orders',
     'cod_ops',
     'stock_deduct_ops',
@@ -24,6 +23,11 @@ const ROLE_MODULE_MAP = {
     'system_activity_log',
     'users_admin',
     'phan_quyen_admin',
+    'supplier_receipts',
+    'warehouse_batches',
+    'production_orders',
+    'inventory_ledger',
+    'inventory_stocktake',
     'dashboard',
   ],
   manager: ['pos', 'orders', 'cod_ops', 'stock_deduct_ops', 'stock_adjustment_ops', 'stock_transfer_ops', 'customers', 'products', 'staff', 'dashboard'],
@@ -181,7 +185,11 @@ export function enrichSessionWithAccess(session) {
   const permissions = mergePermissions(session, session?.accessToken)
   const modules = deriveModulesFromRoles(session.roles ?? []).filter((module) => {
     if (module !== 'pos') return true
-    return permissions.includes('CREATE_POS_ORDER') || permissions.includes('CREATE_COD_ORDER')
+    return (
+      permissions.includes('CREATE_POS_ORDER')
+      || permissions.includes('CREATE_COD_ORDER')
+      || permissions.includes('MANAGE_EMPLOYEE')
+    )
   })
   return {
     ...session,

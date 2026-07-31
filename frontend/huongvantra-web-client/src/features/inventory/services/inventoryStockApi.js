@@ -104,12 +104,6 @@ export async function fetchInventorySettings() {
   }
 }
 
-export async function fetchLowStockSkus() {
-  const data = await apiRequestAuth('/api/v1/inventory/sku-stocks/low-stock', { method: 'GET' })
-  if (!Array.isArray(data)) return []
-  return data.map(mapSkuStock)
-}
-
 export async function updateLowStockThreshold(skuId, threshold, location = 'Shelf') {
   await apiRequestAuth(`/api/v1/inventory/sku-stocks/${skuId}/threshold`, {
     method: 'PUT',

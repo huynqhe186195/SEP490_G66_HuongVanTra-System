@@ -189,6 +189,26 @@ public class OrderRepository(OrderDbContext _db) : IOrderRepository
         return candidates.Count == 1 ? candidates[0] : null;
     }
 
+    // Chế độ QR test: số tiền nhận được không còn phản ánh FinalAmount nên không dò theo tiền được.
+    // Chỉ nhận khi có đúng một đơn đang chờ chuyển khoản và QR chưa hết hạn.
+    public async Task<Order?> GetLatestPendingTransferAsync(
+        DateTime utcNow, CancellationToken ct = default)
+    {
+        var candidates = await _db.Orders
+            .Include(o => o.Payments)
+            .Where(o =>
+                o.OrderStatus == OrderStatus.PendingPayment
+                && o.Payments.Any(p =>
+                    (p.PaymentMethod == PaymentMethod.VietQR || p.PaymentMethod == PaymentMethod.BankTransfer)
+                    && p.PaymentStatus == PaymentStatus.Pending
+                    && (p.TransferQrExpiresAtUtc == null || p.TransferQrExpiresAtUtc > utcNow)))
+            .OrderByDescending(o => o.CreatedAt)
+            .Take(2)
+            .ToListAsync(ct);
+
+        return candidates.Count == 1 ? candidates[0] : null;
+    }
+
     public async Task<List<Order>> GetPendingCodAsync(CancellationToken ct = default) =>
         await _db.Orders
             .Include(o => o.Payments)
@@ -201,6 +221,37 @@ public class OrderRepository(OrderDbContext _db) : IOrderRepository
                     && p.CodWarningDate <= DateTime.UtcNow))
             .OrderByDescending(o => o.CreatedAt)
             .ToListAsync(ct);
+
+    public async Task<(List<Order> Items, int TotalCount)> GetB2BDebtsAsync(
+        Guid? customerId, bool overdueOnly, DateTime today,
+        int page, int pageSize, CancellationToken ct = default)
+    {
+        var query = _db.Orders
+            .Where(o =>
+                o.ContractId != null
+                && o.OrderStatus != OrderStatus.Cancelled
+                && o.FinalAmount > o.Payments
+                    .Where(p => p.PaymentStatus == PaymentStatus.Success)
+                    .Sum(p => p.Amount));
+
+        if (customerId.HasValue)
+            query = query.Where(o => o.CustomerId == customerId);
+
+        if (overdueOnly)
+            query = query.Where(o => o.DueDate != null && o.DueDate < today);
+
+        var total = await query.CountAsync(ct);
+        var items = await query
+            .Include(o => o.Payments)
+            .OrderBy(o => o.DueDate == null)
+            .ThenBy(o => o.DueDate)
+            .ThenBy(o => o.CreatedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(ct);
+
+        return (items, total);
+    }
 
     public async Task<Order?> GetByIdempotencyKeyAsync(string key, CancellationToken ct = default) =>
         await _db.Orders

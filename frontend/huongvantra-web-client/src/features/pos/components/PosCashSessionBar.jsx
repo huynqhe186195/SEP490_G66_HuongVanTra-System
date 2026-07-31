@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import { canUsePosCounterMode } from '../../auth/utils/permissions.js'
@@ -23,8 +24,8 @@ function formatMoneyInput(value) {
 }
 
 function ModalShell({ eyebrow, title, subtitle, onClose, children, footer }) {
-  return (
-    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/40 p-4">
+  const content = (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 p-4">
       <div
         className="w-full max-w-md rounded-2xl border border-[#c1c9c0]/50 bg-white shadow-xl"
         onClick={(e) => e.stopPropagation()}
@@ -49,6 +50,7 @@ function ModalShell({ eyebrow, title, subtitle, onClose, children, footer }) {
       </div>
     </div>
   )
+  return createPortal(content, document.body)
 }
 
 function StatusDot({ ok }) {
@@ -166,7 +168,7 @@ export default function PosCashSessionBar({
 
   return (
     <>
-      <div className="relative z-30 flex max-w-full flex-col gap-1.5 sm:flex-row sm:items-stretch sm:gap-2">
+      <div className="relative z-30 flex max-w-full flex-row items-stretch gap-1.5">
         <div className="flex min-w-0 flex-wrap items-center gap-1.5 rounded-2xl border border-[#c1c9c0]/70 bg-white px-2.5 py-1.5 shadow-sm">
           <div className="flex items-center gap-1.5 pr-1.5">
             <span className="material-symbols-outlined text-[18px] text-[#356647]">payments</span>

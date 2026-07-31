@@ -36,7 +36,8 @@ public class ProductCatalogClient(HttpClient httpClient, ILogger<ProductCatalogC
                     item.IsPurchasable,
                     item.CanBeBomComponent,
                     item.CanUseInCustom,
-                    item.CanHaveBom))
+                    item.CanHaveBom,
+                    item.CostPrice))
                 .ToList() ?? [];
         }
         catch (Exception ex) when (
@@ -56,5 +57,6 @@ public class ProductCatalogClient(HttpClient httpClient, ILogger<ProductCatalogC
         bool IsPurchasable,
         bool CanBeBomComponent,
         bool CanUseInCustom,
-        bool CanHaveBom);
+        bool CanHaveBom,
+        decimal CostPrice);
 }

@@ -15,6 +15,10 @@ public interface IContractRepository
         CancellationToken ct = default);
 
     Task<Contract?> GetByIdAsync(Guid id, CancellationToken ct = default);
+
+    /// <summary>Không lọc theo người tạo: OrderService cần tra hợp đồng bất kể ai lập.</summary>
+    Task<Contract?> GetActiveByCustomerAsync(Guid customerId, DateOnly today, CancellationToken ct = default);
+
     Task AddAsync(Contract contract, CancellationToken ct = default);
     void Update(Contract contract);
     Task<int> SaveChangesAsync(CancellationToken ct = default);

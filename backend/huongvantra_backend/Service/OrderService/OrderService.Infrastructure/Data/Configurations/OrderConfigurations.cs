@@ -16,6 +16,7 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.HasIndex(e => e.OrderCode).IsUnique();
         builder.HasIndex(e => e.CustomerId);
         builder.Property(e => e.CustomerSnapshotName).HasMaxLength(100);
+        builder.Property(e => e.EmployeeSnapshotName).HasMaxLength(100);
         builder.Property(e => e.OrderChannel).HasConversion<string>().HasMaxLength(20).IsRequired();
         builder.Property(e => e.OrderKind).HasConversion<string>().HasMaxLength(20).HasDefaultValue(OrderKind.Sale).IsRequired();
         builder.HasIndex(e => e.OrderKind);
@@ -31,6 +32,10 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.Property(e => e.Note).HasMaxLength(500);
         builder.Property(e => e.IdempotencyKey).HasMaxLength(100);
         builder.HasIndex(e => e.IdempotencyKey).IsUnique().HasFilter("`IdempotencyKey` IS NOT NULL");
+        builder.Property(e => e.ContractCodeSnapshot).HasMaxLength(50);
+        builder.Property(e => e.ContractDiscountPercentSnapshot).HasColumnType("decimal(5,2)");
+        builder.HasIndex(e => e.ContractId);
+        builder.HasIndex(e => e.DueDate);
         builder.Property(e => e.CreatedAt).IsRequired();
         builder.Property(e => e.UpdatedAt).IsRequired();
 

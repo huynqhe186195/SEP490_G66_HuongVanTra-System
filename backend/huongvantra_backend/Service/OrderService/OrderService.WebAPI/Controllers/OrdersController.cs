@@ -18,7 +18,7 @@ public class OrdersController(OrderLogic orderLogic, ReceiptReprintLogic receipt
     private (Guid? ActorId, string? ActorName) Actor() =>
     (
         User.GetUserId() is var id && id != Guid.Empty ? id : null,
-        string.IsNullOrWhiteSpace(User.GetUsername()) ? null : User.GetUsername()
+        User.GetDisplayName()
     );
 
     [HttpGet]
@@ -30,6 +30,12 @@ public class OrdersController(OrderLogic orderLogic, ReceiptReprintLogic receipt
     [Authorize(Policy = PermissionNames.ViewOrder)]
     public async Task<IActionResult> GetByCode(string orderCode, CancellationToken ct) =>
         Ok(await orderLogic.GetByCodeAsync(orderCode, AccessContext(), ct));
+
+    [HttpGet("b2b-debts")]
+    [Authorize(Policy = PermissionNames.ViewOrder)]
+    public async Task<IActionResult> GetB2BDebts(
+        [FromQuery] GetB2BDebtsRequest request, CancellationToken ct) =>
+        Ok(await orderLogic.GetB2BDebtsAsync(request, ct));
 
     [HttpGet("return-slips")]
     [Authorize(Policy = PermissionNames.ViewOrder)]

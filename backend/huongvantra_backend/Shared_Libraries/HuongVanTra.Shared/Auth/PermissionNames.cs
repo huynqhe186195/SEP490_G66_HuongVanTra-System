@@ -13,6 +13,9 @@ public static class PermissionNames
     public const string ManageUser = "MANAGE_USER";
     public const string ManageRole = "MANAGE_ROLE";
     public const string ManageCatalog = "MANAGE_CATALOG";
+    public const string ApprovePrice = "APPROVE_PRICE";
+    public const string ApproveContract = "APPROVE_CONTRACT";
+    public const string ManageBusinessPolicy = "MANAGE_BUSINESS_POLICY";
 
     /// <summary>Tạo/theo dõi/xác nhận thu COD — SaleCod, Manager, Admin.</summary>
     public const string VerifyCod = "VERIFY_COD";
@@ -48,6 +51,9 @@ public static class PermissionNames
         ManageUser,
         ManageRole,
         ManageCatalog,
+        ApprovePrice,
+        ApproveContract,
+        ManageBusinessPolicy,
         VerifyCod
     ];
 }

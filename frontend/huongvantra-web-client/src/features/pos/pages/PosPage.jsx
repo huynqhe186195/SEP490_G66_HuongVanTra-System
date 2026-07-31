@@ -2293,13 +2293,12 @@ function PosPage() {
             }
         >
         <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-[#c1c9c0]/40 bg-[#fbf9f1] shadow-[0_10px_30px_rgba(27,28,23,0.04)] lg:rounded-[28px]">
-            <header className="relative z-20 shrink-0 border-b border-[#c1c9c0]/60 bg-[#f6f4ec] px-4 py-2.5">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto no-scrollbar">
-                    <div className="relative w-[min(520px,70%)] shrink-0">
+            <header className="relative z-20 shrink-0 border-b border-[#c1c9c0]/60 bg-[#f6f4ec] px-3 py-2">
+                <div className="flex min-w-0 items-center gap-2 overflow-x-auto no-scrollbar">
+                    <div className="relative w-[min(340px,30%)] shrink-0">
                         <Icon className="absolute left-3 top-1/2 -translate-y-1/2 text-[18px] text-[#717971]">search</Icon>
                         <input
-                            className="w-full rounded-full border border-[#c1c9c0] bg-white py-2 pl-9 pr-9 text-sm outline-none focus:border-[#356647] focus:ring-2 focus:ring-[#356647]/20"
+                            className="w-full rounded-full border border-[#c1c9c0] bg-white py-1.5 pl-9 pr-9 text-sm outline-none focus:border-[#356647] focus:ring-2 focus:ring-[#356647]/20"
                             placeholder="Tìm SP, SKU, barcode..."
                             type="text"
                             value={searchValue}
@@ -2365,34 +2364,35 @@ function PosPage() {
                             <Icon>add</Icon>
                         </button>
                     </div>
-                    </div>
 
                     {showCashSessionUi ? (
-                      <PosCashSessionBar
-                        dayStartDone={Boolean(shelfDayStatus.dayStartDone)}
-                        dayEndDone={Boolean(shelfDayStatus.dayEndDone)}
-                        onCashOpened={() => setCashSessionOpen(true)}
-                        sellerName={authSession?.username || ''}
-                        sellerRole={(authSession?.roles || []).join(', ')}
-                        shiftSlotId={shelfOnDuty?.slotId || null}
-                        shiftLabel={shelfOnDuty?.bypassed ? null : undefined}
-                        onRequestDayEnd={
-                          canViewAllOrders(authSession)
-                            ? undefined
-                            : () => setDayEndRequested(true)
-                        }
-                      />
+                      <div className="ml-auto shrink-0">
+                        <PosCashSessionBar
+                          dayStartDone={Boolean(shelfDayStatus.dayStartDone)}
+                          dayEndDone={Boolean(shelfDayStatus.dayEndDone)}
+                          onCashOpened={() => setCashSessionOpen(true)}
+                          sellerName={authSession?.username || ''}
+                          sellerRole={(authSession?.roles || []).join(', ')}
+                          shiftSlotId={shelfOnDuty?.slotId || null}
+                          shiftLabel={shelfOnDuty?.bypassed ? null : undefined}
+                          onRequestDayEnd={
+                            canViewAllOrders(authSession)
+                              ? undefined
+                              : () => setDayEndRequested(true)
+                          }
+                        />
+                      </div>
                     ) : null}
                 </div>
             </header>
 
             <ResizableSplitPane
                 storageKey="hvt-pos-panel-ratio"
-                defaultRatio={0.38}
-                minStartPx={420}
-                minEndPx={620}
-                fallbackMinStartPx={360}
-                fallbackMinEndPx={480}
+                defaultRatio={0.35}
+                minStartPx={360}
+                minEndPx={520}
+                fallbackMinStartPx={300}
+                fallbackMinEndPx={400}
                 className="grid-cols-1 lg:grid-rows-1"
                 startClassName="flex min-h-[42vh] flex-col border-t border-[#c1c9c0] bg-[#f6f4ec] lg:min-h-0 lg:border-t-0 lg:shadow-[4px_0_20px_rgba(0,0,0,0.04)]"
                 endClassName="flex min-h-[38vh] flex-col bg-white text-base lg:min-h-0"
@@ -2478,7 +2478,7 @@ function PosPage() {
                                         return (
                                             <div
                                                 key={item.sku}
-                                                className={`relative grid grid-cols-[minmax(0,1fr)_7.75rem_auto] items-center gap-2 rounded-xl border bg-[#fbf9f1] px-2.5 py-2.5 sm:gap-3 sm:px-3 sm:py-3 ${
+                                                className={`relative grid grid-cols-[minmax(0,1fr)_7.75rem_6.5rem_1.75rem] items-center gap-2 rounded-xl border bg-[#fbf9f1] px-2.5 py-2.5 sm:gap-3 sm:px-3 sm:py-3 ${
                                                     item.isUnavailable ? "border-[#ba1a1a]/60" : "border-[#c1c9c0]/50"
                                                 }`}>
                                                 <div className="min-w-0 overflow-hidden">
@@ -2507,7 +2507,7 @@ function PosPage() {
                                                     </p>
                                                 </div>
 
-                                                <div className="flex w-[7.75rem] shrink-0 items-center justify-self-center overflow-hidden rounded-lg border border-[#c1c9c0] text-sm sm:text-base">
+                                                <div className="flex w-[7.75rem] shrink-0 items-center justify-self-start overflow-hidden rounded-lg border border-[#c1c9c0] text-sm sm:text-base">
                                                     <button
                                                         type="button"
                                                         onClick={() => updateQuantity(item.sku, "dec")}

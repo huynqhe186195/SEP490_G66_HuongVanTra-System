@@ -11,7 +11,8 @@ import { showError, showInfo, showSuccess } from '../../../app/toast.js'
 import { fetchStoreSkus } from '../../products/services/productSkusApi.js'
 
 import OrderCustomerSection from '../components/OrderCustomerSection.jsx'
-import { isVipCustomerType } from '../../customers/utils/customerDisplay.js'
+import { isCorporateCustomerType, isVipCustomerType } from '../../customers/utils/customerDisplay.js'
+import { fetchActiveContractForCustomer } from '../../contracts/services/contractsApi.js'
 import {
   getPosBaseUnitLabel,
   normalizePosBaseQuantity,
@@ -55,13 +56,26 @@ const EMPTY_LINE = {
   priceUnit: '',
 }
 
-function calculateCreatePricing(items, discountAmount, customer) {
+function getContractDiscountCap(subtotal, contract) {
+  const percent = Number(contract?.discountPercent ?? 0)
+  if (!contract || !(percent > 0)) return 0
+  return Math.round(Math.max(0, subtotal) * percent / 100)
+}
+
+function calculateCreatePricing(items, discountAmount, customer, contract) {
   const subtotal = calcOrderLineSubtotal(items)
   const isVip = isVipCustomerType(customer?.customerType)
-  const manualDiscountAmount = isVip
-    ? Math.max(0, Number(discountAmount) || 0)
-    : 0
-  const tierDiscountPercent = isVip
+  const isCorporate = isCorporateCustomerType(customer?.customerType)
+  const requested = Math.max(0, Number(discountAmount) || 0)
+
+  let manualDiscountAmount = 0
+  if (isVip) {
+    manualDiscountAmount = requested
+  } else if (isCorporate) {
+    manualDiscountAmount = Math.min(requested, getContractDiscountCap(subtotal, contract))
+  }
+
+  const tierDiscountPercent = isVip || isCorporate
     ? 0
     : Number(customer?.tier?.discountPercent ?? customer?.tierDiscountPercent ?? 0)
   const membershipDiscountAmount = Math.round(
@@ -121,6 +135,12 @@ function OrderCreatePage() {
 
   })
 
+  const [contractState, setContractState] = useState({
+    customerId: null,
+    contract: null,
+    error: null,
+  })
+
 
 
   useEffect(() => {
@@ -155,6 +175,36 @@ function OrderCreatePage() {
 
 
 
+  const isCorporateCustomer = isCorporateCustomerType(form.selectedCustomer?.customerType)
+
+  useEffect(() => {
+    if (!isCorporateCustomer || !form.customerId) return undefined
+
+    let mounted = true
+    fetchActiveContractForCustomer(form.customerId)
+      .then((contract) => {
+        if (mounted) setContractState({ customerId: form.customerId, contract, error: null })
+      })
+      .catch((error) => {
+        if (mounted) {
+          setContractState({
+            customerId: form.customerId,
+            contract: null,
+            error: error?.message || 'Không tải được hợp đồng của khách hàng.',
+          })
+        }
+      })
+
+    return () => {
+      mounted = false
+    }
+  }, [isCorporateCustomer, form.customerId])
+
+  const contractLoaded = isCorporateCustomer && contractState.customerId === form.customerId
+  const contract = contractLoaded ? contractState.contract : null
+  const contractError = contractLoaded ? contractState.error : null
+  const isCorporateBlocked = contractLoaded && !contract
+
   const {
     subtotal,
     manualDiscountAmount,
@@ -165,11 +215,23 @@ function OrderCreatePage() {
       form.items,
       form.discountAmount,
       form.selectedCustomer,
+      contract,
     ),
-    [form.discountAmount, form.items, form.selectedCustomer],
+    [form.discountAmount, form.items, form.selectedCustomer, contract],
   )
 
+  const contractDiscountCap = getContractDiscountCap(subtotal, contract)
+
   const canUseManualDiscount = isVipCustomerType(form.selectedCustomer?.customerType)
+    || (isCorporateCustomer && contractDiscountCap > 0)
+
+  const contractDueDate = useMemo(() => {
+    const days = Number(contract?.paymentTermDays ?? 0)
+    if (!contract || !(days > 0)) return null
+    const due = new Date()
+    due.setDate(due.getDate() + days)
+    return due
+  }, [contract])
 
   useEffect(() => {
     if (isManager) {
@@ -209,9 +271,10 @@ function OrderCreatePage() {
         prev.items,
         prev.discountAmount,
         prev.selectedCustomer,
+        contract,
       ).finalAmount,
     }))
-  }, [finalAmount, form.orderChannel])
+  }, [finalAmount, form.orderChannel, contract])
 
 
 
@@ -239,6 +302,7 @@ function OrderCreatePage() {
               prev.items,
               prev.discountAmount,
               prev.selectedCustomer,
+              contract,
             ).finalAmount
           : prev.paidAmount,
       }
@@ -256,6 +320,7 @@ function OrderCreatePage() {
     const nextCustomer = changesCustomer ? patch.selectedCustomer : form.selectedCustomer
     const mustClearManualDiscount = changesCustomer
       && !isVipCustomerType(nextCustomer?.customerType)
+      && !isCorporateCustomerType(nextCustomer?.customerType)
       && Number(form.discountAmount || 0) > 0
 
     setForm((prev) => ({
@@ -264,7 +329,7 @@ function OrderCreatePage() {
       ...(mustClearManualDiscount ? { discountAmount: 0 } : {}),
     }))
     if (mustClearManualDiscount) {
-      showInfo('Đã xóa chiết khấu thủ công vì khách mới không phải khách đối ngoại (VIP).')
+      showInfo('Đã xóa chiết khấu thủ công vì khách mới không phải khách đối ngoại (VIP) hay khách doanh nghiệp.')
     }
 
   }
@@ -411,6 +476,25 @@ function OrderCreatePage() {
       return
     }
 
+    if (isCorporateCustomer && !contract) {
+      showError('Khách doanh nghiệp cần hợp đồng đang hiệu lực mới tạo được đơn.')
+      return
+    }
+
+    if (contract) {
+      const creditLimit = Number(contract.creditLimit ?? 0)
+      if (creditLimit > 0) {
+        const currentDebt = Number(form.selectedCustomer?.currentDebt ?? 0)
+        const unpaidAmount = Math.max(0, finalAmount - enteredPaidAmount)
+        if (currentDebt + unpaidAmount > creditLimit) {
+          showError(
+            `Vượt hạn mức công nợ hợp đồng. Đang nợ ${formatVnd(currentDebt)}, đơn này ghi nợ ${formatVnd(unpaidAmount)}, hạn mức ${formatVnd(creditLimit)}.`,
+          )
+          return
+        }
+      }
+    }
+
 
 
     try {
@@ -427,8 +511,11 @@ function OrderCreatePage() {
 
         customerSnapshotName: form.customerSnapshotName.trim() || null,
 
-        orderChannel:
-          form.paymentMethod === 'COD' && !isPosChannel(form.orderChannel) ? 'COD' : form.orderChannel,
+        orderChannel: contract
+          ? 'B2B'
+          : form.paymentMethod === 'COD' && !isPosChannel(form.orderChannel) ? 'COD' : form.orderChannel,
+
+        contractId: contract?.id || null,
 
         shippingAddress: form.shippingAddress,
 
@@ -596,6 +683,62 @@ function OrderCreatePage() {
 
         />
 
+        {isCorporateCustomer && contract ? (
+          <section className="rounded-2xl border border-[#c1c9c0] bg-[#e8f0e9] p-5">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h2 className="text-base font-bold text-[#1b1c17]">
+                Hợp đồng doanh nghiệp · {contract.contractCode}
+              </h2>
+              <Link className="text-sm font-semibold text-[#356647] underline" to={`/contracts/${contract.id}`}>
+                Xem hợp đồng
+              </Link>
+            </div>
+            <dl className="grid grid-cols-2 gap-3 text-sm md:grid-cols-4">
+              <div>
+                <dt className="text-xs font-semibold text-[#717971]">Chiết khấu tối đa</dt>
+                <dd className="font-semibold text-[#1b1c17]">
+                  {Number(contract.discountPercent ?? 0) > 0
+                    ? `${Number(contract.discountPercent)}% (≈ ${formatVnd(contractDiscountCap)})`
+                    : 'Không có'}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs font-semibold text-[#717971]">Hạn mức công nợ</dt>
+                <dd className="font-semibold text-[#1b1c17]">
+                  {Number(contract.creditLimit ?? 0) > 0 ? formatVnd(contract.creditLimit) : 'Không giới hạn'}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs font-semibold text-[#717971]">Đang nợ</dt>
+                <dd className="font-semibold text-[#1b1c17]">
+                  {formatVnd(form.selectedCustomer?.currentDebt ?? 0)}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs font-semibold text-[#717971]">Hạn thanh toán</dt>
+                <dd className="font-semibold text-[#1b1c17]">
+                  {contractDueDate
+                    ? `${contractDueDate.toLocaleDateString('vi-VN')} (${contract.paymentTermDays} ngày)`
+                    : 'Thu ngay'}
+                </dd>
+              </div>
+            </dl>
+          </section>
+        ) : null}
+
+        {isCorporateBlocked ? (
+          <section className="flex items-start gap-2 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+            <span className="material-symbols-outlined text-[18px]">error</span>
+            <p>
+              {contractError
+                || 'Khách doanh nghiệp cần hợp đồng đang hiệu lực mới tạo được đơn.'}{' '}
+              <Link className="font-semibold underline" to={`/contracts/new?customerId=${form.customerId || ''}`}>
+                Tạo hợp đồng
+              </Link>
+            </p>
+          </section>
+        ) : null}
+
 
 
         <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
@@ -752,17 +895,26 @@ function OrderCreatePage() {
 
             {canUseManualDiscount ? (
               <label className="space-y-1">
-                <span className="text-xs font-semibold text-slate-500">Chiết khấu thủ công VIP</span>
+                <span className="text-xs font-semibold text-slate-500">
+                  {isCorporateCustomer ? 'Chiết khấu theo hợp đồng' : 'Chiết khấu thủ công VIP'}
+                </span>
                 <input
                   className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
                   inputMode="decimal"
                   value={form.discountAmount}
                   onChange={(e) => updateField('discountAmount', e.target.value)}
                 />
+                {isCorporateCustomer ? (
+                  <span className="block text-xs text-slate-500">
+                    Tối đa {formatVnd(contractDiscountCap)} ({Number(contract?.discountPercent ?? 0)}% theo hợp đồng).
+                  </span>
+                ) : null}
               </label>
             ) : (
               <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs text-slate-500">
-                Chiết khấu thủ công chỉ dành cho khách đối ngoại (VIP). Ưu đãi hạng thành viên được tự động áp dụng.
+                {isCorporateCustomer
+                  ? 'Hợp đồng của khách không quy định chiết khấu nên không thể giảm giá thủ công.'
+                  : 'Chiết khấu thủ công chỉ dành cho khách đối ngoại (VIP). Ưu đãi hạng thành viên được tự động áp dụng.'}
               </div>
             )}
 
@@ -804,7 +956,7 @@ function OrderCreatePage() {
 
             {manualDiscountAmount > 0 ? (
               <div className="flex justify-between py-1 text-slate-600">
-                <span>Chiết khấu thủ công VIP</span>
+                <span>{isCorporateCustomer ? 'Chiết khấu hợp đồng' : 'Chiết khấu thủ công VIP'}</span>
                 <span>-{formatVnd(manualDiscountAmount)}</span>
               </div>
             ) : null}
@@ -836,7 +988,7 @@ function OrderCreatePage() {
 
             type="submit"
 
-            disabled={isSaving || !canMutate}
+            disabled={isSaving || !canMutate || isCorporateBlocked}
 
             className="rounded-xl bg-[#538463] px-6 py-3 text-sm font-bold text-white hover:bg-[#457053] disabled:opacity-50"
 

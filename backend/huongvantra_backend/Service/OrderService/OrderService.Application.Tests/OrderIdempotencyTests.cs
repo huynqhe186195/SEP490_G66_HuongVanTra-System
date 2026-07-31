@@ -171,7 +171,7 @@ public class OrderIdempotencyTests
             .Setup(client => client.GetSkuProfilesAsync(
                 It.IsAny<IEnumerable<Guid>>(),
                 It.IsAny<CancellationToken>()))
-            .ReturnsAsync([new ProductSkuCatalogProfile(skuId, null, "Piece", "THANH_PHAM", true, false, false, true)]);
+            .ReturnsAsync([new ProductSkuCatalogProfile(skuId, null, "Piece", "THANH_PHAM", true, false, false, true, 0m)]);
 
         var codeSequence = 0;
         var codeGenerator = new Mock<IOrderCodeGenerator>();
@@ -197,6 +197,7 @@ public class OrderIdempotencyTests
             promotionLogic,
             productCatalog.Object,
             new Mock<ICustomerCatalogClient>().Object,
+            new Mock<IContractCatalogClient>().Object,
             inventoryCatalog ?? new Mock<IInventoryCatalogClient>().Object,
             new Mock<ICustomBundleRepository>().Object,
             new Mock<IEmailService>().Object,
@@ -337,12 +338,22 @@ public class OrderIdempotencyTests
             IReadOnlyCollection<Guid>? restrictToOrderIds = null) =>
             throw new NotSupportedException();
 
+        public Task<(List<Order> Items, int TotalCount)> GetB2BDebtsAsync(
+            Guid? customerId, bool overdueOnly, DateTime today,
+            int page, int pageSize, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
         public Task<List<Order>> GetPendingCodAsync(CancellationToken ct = default) =>
             throw new NotSupportedException();
 
         public Task<Order?> GetSinglePendingTransferByAmountAsync(
             decimal amount,
             int toleranceVnd,
+            CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public Task<Order?> GetLatestPendingTransferAsync(
+            DateTime utcNow,
             CancellationToken ct = default) =>
             throw new NotSupportedException();
 

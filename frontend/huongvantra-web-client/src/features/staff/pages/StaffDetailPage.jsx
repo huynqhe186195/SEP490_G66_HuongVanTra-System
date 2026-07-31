@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
-import { fetchRoleOptions, fetchStaffAccount, updateStaffAccount } from '../services/staffApi.js'
+import { fetchRoleOptions, fetchStaffAccount, normalizeStaffRolesForEdit, updateStaffAccount } from '../services/staffApi.js'
 
 function StaffDetailPage() {
   const navigate = useNavigate()
@@ -38,7 +38,7 @@ function StaffDetailPage() {
         if (!mounted) return
 
         setRoleOptions(roles || [])
-        setCurrentRoles(account.roles || [])
+        setCurrentRoles(normalizeStaffRolesForEdit(account.roles || [], roles || []))
         setForm({
           fullName: account.fullName || '',
           phone: account.phone || '',
@@ -61,8 +61,16 @@ function StaffDetailPage() {
 
   const canSave = useMemo(() => {
     if (!form.active) return true
-    return Boolean(form.fullName.trim() && form.phone.trim() && form.username.trim() && currentRoles.length)
-  }, [form.active, form.fullName, form.phone, form.username, currentRoles.length])
+    return Boolean(form.fullName.trim() && form.username.trim() && currentRoles.length > 0)
+  }, [form.active, form.fullName, form.username, currentRoles.length])
+
+  const saveBlockedReason = useMemo(() => {
+    if (!form.active) return ''
+    if (!form.fullName.trim()) return 'Cần nhập họ tên.'
+    if (!form.username.trim()) return 'Thiếu tên đăng nhập.'
+    if (!currentRoles.length) return 'Cần chọn ít nhất một vai trò.'
+    return ''
+  }, [form.active, form.fullName, form.username, currentRoles.length])
 
   const handleChange = (field) => (event) => {
     setForm((current) => ({ ...current, [field]: event.target.value }))
@@ -83,7 +91,7 @@ function StaffDetailPage() {
 
     if (!isDeactivating) {
       if (!canSave) {
-        showError('Vui lòng nhập đủ họ tên, số điện thoại và tên đăng nhập.')
+        showError(saveBlockedReason || 'Vui lòng nhập đủ họ tên và chọn vai trò.')
         return
       }
     }
@@ -142,10 +150,14 @@ function StaffDetailPage() {
                 className="rounded-lg bg-[#4a6242] px-6 py-2 text-white shadow-[0px_4px_20px_rgba(0,0,0,0.04)] transition-all hover:brightness-110 active:scale-95 disabled:opacity-50"
                 onClick={handleSave}
                 disabled={isLoading || isSaving || !canSave}
+                title={!canSave ? saveBlockedReason : undefined}
               >
                 {isSaving ? 'Đang lưu...' : 'Lưu thay đổi'}
               </button>
             </div>
+            {saveBlockedReason ? (
+              <p className="mt-2 text-sm text-amber-800">{saveBlockedReason}</p>
+            ) : null}
           </div>
         </div>
 
@@ -168,21 +180,22 @@ function StaffDetailPage() {
                 </label>
 
                 <label className="flex flex-col gap-2">
-                  <span className="text-xs font-semibold text-[#414942]">So dien thoai</span>
+                  <span className="text-xs font-semibold text-[#414942]">Số điện thoại (tuỳ chọn)</span>
                   <input
-                    required
                     className="rounded-lg border-none bg-[#f6f4ec] p-3 text-sm shadow-inner outline-none focus:ring-2 focus:ring-[#356647]/30"
                     value={form.phone}
                     onChange={handleChange('phone')}
+                    placeholder="Có thể để trống"
                   />
                 </label>
 
                 <label className="flex flex-col gap-2">
                   <span className="text-xs font-semibold text-[#414942]">Tên đăng nhập</span>
                   <input
-                    className="rounded-lg border-none bg-[#f6f4ec] p-3 text-sm shadow-inner outline-none focus:ring-2 focus:ring-[#356647]/30"
+                    className="rounded-lg border-none bg-[#eae8e0] p-3 text-sm text-[#717971] shadow-inner outline-none"
                     value={form.username}
-                    onChange={handleChange('username')}
+                    readOnly
+                    title="Tên đăng nhập không đổi tại đây"
                   />
                 </label>
 

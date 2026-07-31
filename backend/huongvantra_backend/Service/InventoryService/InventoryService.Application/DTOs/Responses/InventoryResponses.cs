@@ -769,3 +769,50 @@ public record SupplierSimpleResponse(
     string Name,
     string? Phone,
     string? Email);
+
+public record SupplierProductResponse(
+    Guid Id,
+    Guid SupplierId,
+    string SupplierCodeSnapshot,
+    string SupplierName,
+    Guid SkuId,
+    string SkuCodeSnapshot,
+    string SkuNameSnapshot,
+    string ProductTypeSnapshot,
+    string InventoryUnitSnapshot,
+    string? SupplierItemCode,
+    string? SupplierItemName,
+    decimal? QuotedPrice,
+    int? MinimumOrderQuantity,
+    int? LeadTimeDays,
+    bool IsPrimarySource,
+    string? Note,
+    bool IsActive,
+    DateTime CreatedAt,
+    DateTime UpdatedAt);
+
+public record SupplierProductPriceHistoryResponse(
+    Guid Id,
+    Guid SupplierProductId,
+    decimal? OldPrice,
+    decimal? NewPrice,
+    DateTime EffectiveDate,
+    Guid? ChangedBy,
+    string? ChangedByName,
+    DateTime ChangedAt,
+    string? Reason);
+
+/// <summary>Kết quả một dòng import. Status: Success | Warning | Error.</summary>
+public record SupplierProductImportRowResultResponse(
+    int RowNumber,
+    string? SkuCode,
+    string Status,
+    IReadOnlyList<string> Messages);
+
+public record SupplierProductImportResultResponse(
+    int TotalRows,
+    int SuccessCount,
+    int FailedCount,
+    int WarningCount,
+    IReadOnlyList<SupplierProductImportRowResultResponse> Rows);
+

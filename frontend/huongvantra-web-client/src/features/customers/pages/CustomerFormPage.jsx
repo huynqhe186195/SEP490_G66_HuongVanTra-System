@@ -18,6 +18,7 @@ import CustomerActivityFeed from '../components/CustomerActivityFeed.jsx'
 import CustomerOpenDebtsPanel from '../components/CustomerOpenDebtsPanel.jsx'
 import CustomerDebtHistory from '../components/CustomerDebtHistory.jsx'
 import CustomerOrderHistory from '../components/CustomerOrderHistory.jsx'
+import CustomerContractsPanel from '../components/CustomerContractsPanel.jsx'
 import {
   changeCustomerStatus,
   createCustomer,
@@ -60,6 +61,7 @@ function CustomerFormPage() {
   const { customerId } = useParams()
   const [searchParams] = useSearchParams()
   const isEditMode = Boolean(customerId)
+  const isViewMode = isEditMode && searchParams.get('mode') === 'view'
 
   const [tiers, setTiers] = useState([])
   const [isLoading, setIsLoading] = useState(isEditMode)
@@ -105,7 +107,10 @@ function CustomerFormPage() {
   })
   const isCorporateProfile = form.type === 'corporate'
   const isCorporateLocked = isCorporateProfile && !canManageCorporate
-  const isReadOnly = (isEditMode && !canManageProfile) || isCorporateLocked
+  const isReadOnly = isViewMode || (isEditMode && !canManageProfile) || isCorporateLocked
+  /** Khi chỉnh sửa: khóa thông tin định danh; chỉ sửa email, nguồn, phòng ban, Sale phụ trách. */
+  const isPrimaryLocked = isEditMode && !isViewMode && canManageProfile && !isCorporateLocked
+  const isFieldLocked = isReadOnly || isPrimaryLocked
 
   useEffect(() => {
     if (!isEditMode && !canCreateCustomer(session)) {
@@ -399,16 +404,20 @@ function CustomerFormPage() {
   return (
     <PageShell className="[font-family:'Manrope',sans-serif]">
       <PageHeader
-        title={isReadOnly ? 'Xem khách hàng' : isEditMode ? 'Chỉnh sửa khách hàng' : 'Thêm khách hàng'}
+        title={isViewMode || isReadOnly ? 'Xem khách hàng' : isEditMode ? 'Chỉnh sửa khách hàng' : 'Thêm khách hàng'}
         titleInfo={
-          isReadOnly
+          isViewMode
+            ? 'Xem đầy đủ thông tin khách hàng (chỉ đọc).'
+            : isReadOnly
             ? isCorporateLocked
               ? 'Chỉ Admin được chỉnh sửa khách doanh nghiệp. Bạn đang xem ở chế độ chỉ đọc.'
               : 'Xem thông tin liên hệ, hạng thành viên và lịch sử giao dịch'
-            : 'Cập nhật thông tin liên hệ, hạng thành viên và trạng thái tài khoản'
+            : isEditMode
+              ? 'Chỉ được sửa thông tin phụ (email, nguồn, phòng ban, Sale phụ trách). Họ tên, SĐT, địa chỉ và MST giữ nguyên.'
+              : 'Cập nhật thông tin liên hệ, hạng thành viên và trạng thái tài khoản'
         }
         rightContent={
-          isReadOnly || isCorporateProfile ? null : (
+          isReadOnly || isCorporateProfile || isEditMode ? null : (
           <div className="flex w-full flex-col gap-2 sm:w-auto">
             <span className="text-xs font-medium text-[#717971]">Loại khách</span>
             <div className="inline-flex max-w-full flex-wrap gap-1 rounded-full bg-[#f6f4ec] p-1">
@@ -454,31 +463,34 @@ function CustomerFormPage() {
                   {form.type === 'corporate' ? 'Tên công ty *' : 'Họ tên khách hàng *'}
                 </span>
                 <input
-                  className={`w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20 ${fieldErrors.name ? 'ring-2 ring-[#b42318]/40' : ''} ${isReadOnly ? 'cursor-default opacity-90' : ''}`}
+                  className={`w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20 ${fieldErrors.name ? 'ring-2 ring-[#b42318]/40' : ''} ${isFieldLocked ? 'cursor-default opacity-90' : ''}`}
                   placeholder={form.type === 'corporate' ? 'Nhập tên công ty' : 'Nhập họ tên'}
                   type="text"
                   value={form.name}
                   onChange={handleNameChange}
                   onCompositionStart={() => setIsNameComposing(true)}
                   onCompositionEnd={handleNameCompositionEnd}
-                  readOnly={isReadOnly}
-                  disabled={isReadOnly}
+                  readOnly={isFieldLocked}
+                  disabled={isFieldLocked}
                 />
+                {isPrimaryLocked ? (
+                  <p className="text-[11px] text-[#717971]">Thông tin định danh — không chỉnh sửa sau khi tạo.</p>
+                ) : null}
                 <FieldError message={fieldErrors.name} />
               </label>
 
               <label className="space-y-2">
                 <span className="text-xs font-semibold text-[#717971]">Số điện thoại *</span>
                 <input
-                  className={`w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20 ${fieldErrors.phone ? 'ring-2 ring-[#b42318]/40' : ''} ${isReadOnly ? 'cursor-default opacity-90' : ''}`}
+                  className={`w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20 ${fieldErrors.phone ? 'ring-2 ring-[#b42318]/40' : ''} ${isFieldLocked ? 'cursor-default opacity-90' : ''}`}
                   placeholder="0xxxxxxxxx hoặc 02xxxxxxxx"
                   type="tel"
                   inputMode="numeric"
                   maxLength={getPhoneMaxLength(form.phone)}
                   value={form.phone}
                   onChange={handlePhoneChange}
-                  readOnly={isReadOnly}
-                  disabled={isReadOnly}
+                  readOnly={isFieldLocked}
+                  disabled={isFieldLocked}
                 />
                 <FieldError message={fieldErrors.phone} />
               </label>
@@ -500,13 +512,13 @@ function CustomerFormPage() {
               <label className="space-y-2 md:col-span-2">
                 <span className="text-xs font-semibold text-[#717971]">Địa chỉ giao hàng *</span>
                 <input
-                  className={`w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20 ${fieldErrors.address ? 'ring-2 ring-[#b42318]/40' : ''} ${isReadOnly ? 'cursor-default opacity-90' : ''}`}
+                  className={`w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20 ${fieldErrors.address ? 'ring-2 ring-[#b42318]/40' : ''} ${isFieldLocked ? 'cursor-default opacity-90' : ''}`}
                   placeholder="Số nhà, đường, phường/xã, quận/huyện, tỉnh/thành"
                   type="text"
                   value={form.address}
                   onChange={updateField('address')}
-                  readOnly={isReadOnly}
-                  disabled={isReadOnly}
+                  readOnly={isFieldLocked}
+                  disabled={isFieldLocked}
                 />
                 <FieldError message={fieldErrors.address} />
               </label>
@@ -515,13 +527,13 @@ function CustomerFormPage() {
                 <label className="space-y-2 md:col-span-2">
                   <span className="text-xs font-semibold text-[#717971]">Mã số thuế *</span>
                   <input
-                    className={`w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20 ${fieldErrors.taxCode ? 'ring-2 ring-[#b42318]/40' : ''} ${isReadOnly ? 'cursor-default opacity-90' : ''}`}
+                    className={`w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20 ${fieldErrors.taxCode ? 'ring-2 ring-[#b42318]/40' : ''} ${isFieldLocked ? 'cursor-default opacity-90' : ''}`}
                     placeholder="VD: 0312345678 hoặc 0312345678-001"
                     type="text"
                     value={form.taxCode}
                     onChange={updateField('taxCode')}
-                    readOnly={isReadOnly}
-                    disabled={isReadOnly}
+                    readOnly={isFieldLocked}
+                    disabled={isFieldLocked}
                   />
                   <FieldError message={fieldErrors.taxCode} />
                 </label>
@@ -560,9 +572,10 @@ function CustomerFormPage() {
                 <label className="space-y-2 md:col-span-2">
                   <span className="text-xs font-semibold text-[#717971]">Sale phụ trách</span>
                   <select
-                    className="w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20"
+                    className={`w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20 ${isReadOnly ? 'cursor-default opacity-90' : ''}`}
                     value={form.assignedEmployeeId}
                     onChange={updateField('assignedEmployeeId')}
+                    disabled={isReadOnly}
                   >
                     <option value="">— Chưa gán —</option>
                     {saleOptions.map((sale) => (
@@ -637,6 +650,14 @@ function CustomerFormPage() {
                 <Link to="/customers" className="inline-flex w-full items-center justify-center rounded-xl border border-[#356647] px-5 py-2.5 text-sm font-semibold text-[#356647] hover:bg-[#356647]/5 sm:w-auto">
                   {isReadOnly ? 'Quay lại danh sách' : 'Hủy'}
                 </Link>
+                {isViewMode && canManageProfile && !isCorporateLocked ? (
+                  <Link
+                    to={`/customers/${customerId}/edit`}
+                    className="inline-flex w-full items-center justify-center rounded-xl bg-[#4a6242] px-5 py-2.5 text-sm font-semibold text-white hover:opacity-90 sm:w-auto"
+                  >
+                    Chỉnh sửa thông tin phụ
+                  </Link>
+                ) : null}
                 {!isReadOnly ? (
                   <button
                     type="button"
@@ -728,6 +749,7 @@ function CustomerFormPage() {
                 { key: 'overview', label: 'Tổng quan' },
                 { key: 'orders', label: 'Lịch sử đơn' },
                 { key: 'debts', label: 'Lịch sử công nợ' },
+                ...(form.type === 'corporate' ? [{ key: 'contracts', label: 'Hợp đồng' }] : []),
               ].map((tab) => (
                 <button
                   key={tab.key}
@@ -758,6 +780,10 @@ function CustomerFormPage() {
 
             {profileTab === 'debts' ? (
               <CustomerDebtHistory customerId={customerId} />
+            ) : null}
+
+            {profileTab === 'contracts' && form.type === 'corporate' ? (
+              <CustomerContractsPanel customerId={customerId} />
             ) : null}
           </section>
         </>

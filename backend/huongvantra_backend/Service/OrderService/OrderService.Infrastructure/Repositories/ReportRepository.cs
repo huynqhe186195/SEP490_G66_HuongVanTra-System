@@ -38,8 +38,7 @@ public class ReportRepository(OrderDbContext dbContext) : IReportRepository
         var completedOrders = await query.ToListAsync(ct);
 
         // Filter orders where Payment is Success
-        var validOrders = completedOrders.Where(o => 
-            o.Payments.Any(p => p.PaymentStatus == PaymentStatus.Success)).ToList();
+        var validOrders = completedOrders.ToList();
 
         var grossRevenue = validOrders.Sum(o => o.TotalAmount);
         // DiscountAmount is the persisted aggregate (manual + promotion + membership).
@@ -93,7 +92,7 @@ public class ReportRepository(OrderDbContext dbContext) : IReportRepository
             var prevMonth = month.Value == 1 ? 12 : month.Value - 1;
             var prevYear = month.Value == 1 ? year.Value - 1 : year.Value;
             prevCustomerCount = await dbContext.Orders
-                .Where(o => o.OrderStatus == OrderStatus.Completed && o.CreatedAt.Year == prevYear && o.CreatedAt.Month == prevMonth && o.Payments.Any(p => p.PaymentStatus == PaymentStatus.Success))
+                .Where(o => o.OrderStatus == OrderStatus.Completed && o.CreatedAt.Year == prevYear && o.CreatedAt.Month == prevMonth)
                 .Select(o => o.CustomerId).Distinct().CountAsync(ct);
         }
         else if (year.HasValue && quarter.HasValue)
@@ -103,13 +102,13 @@ public class ReportRepository(OrderDbContext dbContext) : IReportRepository
             var startMonth = (prevQuarter - 1) * 3 + 1;
             var endMonth = prevQuarter * 3;
             prevCustomerCount = await dbContext.Orders
-                .Where(o => o.OrderStatus == OrderStatus.Completed && o.CreatedAt.Year == prevYear && o.CreatedAt.Month >= startMonth && o.CreatedAt.Month <= endMonth && o.Payments.Any(p => p.PaymentStatus == PaymentStatus.Success))
+                .Where(o => o.OrderStatus == OrderStatus.Completed && o.CreatedAt.Year == prevYear && o.CreatedAt.Month >= startMonth && o.CreatedAt.Month <= endMonth)
                 .Select(o => o.CustomerId).Distinct().CountAsync(ct);
         }
         else if (year.HasValue)
         {
             prevCustomerCount = await dbContext.Orders
-                .Where(o => o.OrderStatus == OrderStatus.Completed && o.CreatedAt.Year == year.Value - 1 && o.Payments.Any(p => p.PaymentStatus == PaymentStatus.Success))
+                .Where(o => o.OrderStatus == OrderStatus.Completed && o.CreatedAt.Year == year.Value - 1)
                 .Select(o => o.CustomerId).Distinct().CountAsync(ct);
         }
         
@@ -129,15 +128,15 @@ public class ReportRepository(OrderDbContext dbContext) : IReportRepository
             CustomerCount = customerCount,
             CustomerGrowthRate = customerGrowthRate,
             TotalCostOfGoods = totalCost,
-            GrossProfit = grossProfit
+            GrossProfit = grossProfit,
+            TotalDiscountAmount = totalDiscountAmount
         };
     }
 
     public async Task<List<TopProductDto>> GetTopSellingProductsAsync(int topCount, string sortBy, int? quarter, int? month, int? year, CancellationToken ct = default)
     {
         var query = dbContext.OrderDetails
-            .Where(od => od.Order.OrderStatus == OrderStatus.Completed &&
-                         od.Order.Payments.Any(p => p.PaymentStatus == PaymentStatus.Success));
+            .Where(od => od.Order.OrderStatus == OrderStatus.Completed);
 
         if (year.HasValue)
         {
@@ -184,8 +183,7 @@ public class ReportRepository(OrderDbContext dbContext) : IReportRepository
     public async Task<List<CategorySalesDto>> GetSalesByCategoryAsync(int? quarter, int? month, int? year, CancellationToken ct = default)
     {
         var query = dbContext.OrderDetails
-            .Where(od => od.Order.OrderStatus == OrderStatus.Completed &&
-                         od.Order.Payments.Any(p => p.PaymentStatus == PaymentStatus.Success));
+            .Where(od => od.Order.OrderStatus == OrderStatus.Completed);
 
         if (year.HasValue)
         {
@@ -222,7 +220,7 @@ public class ReportRepository(OrderDbContext dbContext) : IReportRepository
     {
         var query = dbContext.Orders
             .AsNoTracking()
-            .Where(o => o.OrderStatus == OrderStatus.Completed && o.Payments.Any(p => p.PaymentStatus == PaymentStatus.Success));
+            .Where(o => o.OrderStatus == OrderStatus.Completed);
 
         if (year.HasValue) query = query.Where(o => o.CreatedAt.Year == year.Value);
         
@@ -284,7 +282,7 @@ public class ReportRepository(OrderDbContext dbContext) : IReportRepository
     {
         var query = dbContext.Orders
             .AsNoTracking()
-            .Where(o => o.OrderStatus == OrderStatus.Completed && o.Payments.Any(p => p.PaymentStatus == PaymentStatus.Success));
+            .Where(o => o.OrderStatus == OrderStatus.Completed);
 
         if (year.HasValue) query = query.Where(o => o.CreatedAt.Year == year.Value);
         
@@ -341,10 +339,106 @@ public class ReportRepository(OrderDbContext dbContext) : IReportRepository
         }
     }
 
+    public async Task<List<RevenueProfitTimeSeriesPointDto>> GetRevenueProfitTimeSeriesAsync(int? quarter, int? month, int? year, CancellationToken ct = default)
+    {
+        var query = dbContext.Orders
+            .AsNoTracking()
+            .Where(o => o.OrderStatus == OrderStatus.Completed);
+
+        if (year.HasValue) query = query.Where(o => o.CreatedAt.Year == year.Value);
+        if (month.HasValue) query = query.Where(o => o.CreatedAt.Month == month.Value);
+        else if (quarter.HasValue)
+        {
+            var startMonth = (quarter.Value - 1) * 3 + 1;
+            var endMonth = quarter.Value * 3;
+            query = query.Where(o => o.CreatedAt.Month >= startMonth && o.CreatedAt.Month <= endMonth);
+        }
+
+        var orders = await query.Select(o => new { 
+            o.CreatedAt, 
+            GrossRevenue = o.TotalAmount,
+            TotalDiscount = o.DiscountAmount,
+            TotalRefund = (o.ReturnOrders != null) ? o.ReturnOrders.Sum(r => r.RefundAmount) : 0,
+            TotalCost = (o.OrderDetails != null) ? o.OrderDetails.Sum(od => od.CostPrice * (od.Quantity - od.ReturnedQuantity)) : 0
+        }).ToListAsync(ct);
+
+        var projectedOrders = orders.Select(o => new {
+            o.CreatedAt,
+            o.GrossRevenue,
+            NetRevenue = o.GrossRevenue - o.TotalDiscount - o.TotalRefund,
+            GrossProfit = (o.GrossRevenue - o.TotalDiscount - o.TotalRefund) - o.TotalCost
+        }).ToList();
+
+        if (month.HasValue)
+        {
+            return Enumerable.Range(1, DateTime.DaysInMonth(year ?? DateTime.Now.Year, month.Value))
+                .Select(day => {
+                    var dayOrders = projectedOrders.Where(o => o.CreatedAt.Day == day).ToList();
+                    return new RevenueProfitTimeSeriesPointDto
+                    {
+                        Label = $"{day}/{month}",
+                        GrossRevenue = dayOrders.Sum(o => o.GrossRevenue),
+                        NetRevenue = dayOrders.Sum(o => o.NetRevenue),
+                        GrossProfit = dayOrders.Sum(o => o.GrossProfit)
+                    };
+                }).ToList();
+        }
+        else if (quarter.HasValue)
+        {
+            var startMonth = (quarter.Value - 1) * 3 + 1;
+            var endMonth = quarter.Value * 3;
+            var points = new List<RevenueProfitTimeSeriesPointDto>();
+            var startDate = new DateTime(year ?? DateTime.Now.Year, startMonth, 1);
+            var endDate = new DateTime(year ?? DateTime.Now.Year, endMonth, DateTime.DaysInMonth(year ?? DateTime.Now.Year, endMonth));
+            for (var d = startDate; d <= endDate; d = d.AddDays(5))
+            {
+                var dEnd = d.AddDays(4);
+                if (dEnd > endDate) dEnd = endDate;
+                var periodOrders = projectedOrders.Where(o => o.CreatedAt.Date >= d && o.CreatedAt.Date <= dEnd).ToList();
+                points.Add(new RevenueProfitTimeSeriesPointDto { 
+                    Label = $"{d:dd/MM}-{dEnd:dd/MM}", 
+                    GrossRevenue = periodOrders.Sum(o => o.GrossRevenue),
+                    NetRevenue = periodOrders.Sum(o => o.NetRevenue),
+                    GrossProfit = periodOrders.Sum(o => o.GrossProfit)
+                });
+            }
+            return points;
+        }
+        else if (year.HasValue)
+        {
+            return Enumerable.Range(1, 12)
+                .Select(m => {
+                    var monthOrders = projectedOrders.Where(o => o.CreatedAt.Month == m).ToList();
+                    return new RevenueProfitTimeSeriesPointDto
+                    {
+                        Label = $"Tháng {m}",
+                        GrossRevenue = monthOrders.Sum(o => o.GrossRevenue),
+                        NetRevenue = monthOrders.Sum(o => o.NetRevenue),
+                        GrossProfit = monthOrders.Sum(o => o.GrossProfit)
+                    };
+                }).ToList();
+        }
+        else
+        {
+            var years = projectedOrders.Select(o => o.CreatedAt.Year).Distinct().OrderBy(y => y).ToList();
+            if (!years.Any()) return new List<RevenueProfitTimeSeriesPointDto>();
+            return years.Select(y => {
+                var yearOrders = projectedOrders.Where(o => o.CreatedAt.Year == y).ToList();
+                return new RevenueProfitTimeSeriesPointDto
+                {
+                    Label = $"Năm {y}",
+                    GrossRevenue = yearOrders.Sum(o => o.GrossRevenue),
+                    NetRevenue = yearOrders.Sum(o => o.NetRevenue),
+                    GrossProfit = yearOrders.Sum(o => o.GrossProfit)
+                };
+            }).ToList();
+        }
+    }
+
     public async Task<List<CategorySalesDto>> GetSalesByChannelAsync(int? quarter, int? month, int? year, CancellationToken ct = default)
     {
         var query = dbContext.Orders
-            .Where(o => o.OrderStatus == OrderStatus.Completed && o.Payments.Any(p => p.PaymentStatus == PaymentStatus.Success));
+            .Where(o => o.OrderStatus == OrderStatus.Completed);
 
         if (year.HasValue) query = query.Where(o => o.CreatedAt.Year == year.Value);
         if (quarter.HasValue)
@@ -374,7 +468,7 @@ public class ReportRepository(OrderDbContext dbContext) : IReportRepository
     {
         var query = dbContext.Orders
             .AsNoTracking()
-            .Where(o => o.OrderStatus == OrderStatus.Completed && o.Payments.Any(p => p.PaymentStatus == PaymentStatus.Success));
+            .Where(o => o.OrderStatus == OrderStatus.Completed);
 
         if (year.HasValue) query = query.Where(o => o.CreatedAt.Year == year.Value);
         

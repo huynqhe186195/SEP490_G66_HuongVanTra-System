@@ -88,7 +88,8 @@ public class AuthLogic(
         var user = await userRepo.GetByUsernameAsync(request.Username)
             ?? throw new UserNotFoundByUsernameException(request.Username);
 
-        if (actorPermissions is not null)
+        if (actorPermissions is not null
+            && !StaffManagementScope.HasFullUserManagement(actorPermissions))
         {
             StaffManagementScope.EnsureCanManageEmployee(
                 actorPermissions,

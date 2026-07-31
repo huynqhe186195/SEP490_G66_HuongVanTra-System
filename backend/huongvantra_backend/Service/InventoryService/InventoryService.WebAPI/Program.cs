@@ -53,6 +53,7 @@ builder.Services.AddScoped<IStocktakeRequestRepository, StocktakeRequestReposito
 builder.Services.AddScoped<IProcessedIntegrationEventRepository, ProcessedIntegrationEventRepository>();
 builder.Services.AddScoped<IProductionOrderRepository, ProductionOrderRepository>();
 builder.Services.AddScoped<ISupplierRepository, SupplierRepository>();
+builder.Services.AddScoped<ISupplierProductRepository, SupplierProductRepository>();
 builder.Services.AddScoped<IReturnInspectionRepository, ReturnInspectionRepository>();
 builder.Services.AddScoped<IInventoryEventPublisher, InventoryEventPublisher>();
 builder.Services.AddHttpClient<IProductCatalogClient, ProductCatalogClient>(client =>

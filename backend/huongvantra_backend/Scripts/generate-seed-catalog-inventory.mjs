@@ -205,19 +205,48 @@ ON DUPLICATE KEY UPDATE
   WeightUnit=VALUES(WeightUnit), IsVariantParent=VALUES(IsVariantParent), IsActive=1,
   SyncedToStoreAt=VALUES(SyncedToStoreAt), UpdatedAt=@NOW, IsDeleted=0;
 
+-- SkuCode va Barcode deu co UNIQUE index. Neu mot ban ghi cu (seed doi truoc, Id khac)
+-- dang giu cung SkuCode/Barcode thi ON DUPLICATE KEY UPDATE se ghi vao ban ghi cu thay vi
+-- tao Id namespace HVT-*, khien BOM va ton kho tham chieu ProductVariantId khong ton tai
+-- (ERROR 1452 tren FK_ProductVariantBomLines_ProductVariants_ProductVariantId).
+-- Giai phong hai khoa nay truoc khi insert; soft-delete chu khong xoa hang de khong pha FK.
+DROP TEMPORARY TABLE IF EXISTS _seed_variant_keys;
+CREATE TEMPORARY TABLE _seed_variant_keys (
+  Id char(36) NOT NULL PRIMARY KEY,
+  SkuCode varchar(50) NOT NULL,
+  Barcode varchar(100) NULL
+);
+INSERT INTO _seed_variant_keys (Id, SkuCode, Barcode) VALUES
+${skus.map((s) => `  ('${s.skuId}', '${s.code}', '${s.barcode}')`).join(',\n')};
+
+UPDATE ProductVariants v
+JOIN _seed_variant_keys k
+  ON (v.SkuCode = k.SkuCode OR (v.Barcode IS NOT NULL AND v.Barcode = k.Barcode))
+SET v.SkuCode = CONCAT('OLD-', LEFT(v.Id, 8), '-', LEFT(v.SkuCode, 30)),
+    v.Barcode = NULL,
+    v.IsActive = 0,
+    v.IsDeleted = 1,
+    v.UpdatedAt = @NOW
+WHERE v.Id <> k.Id;
+
+DROP TEMPORARY TABLE _seed_variant_keys;
+
+-- IsPurchasable mac dinh 0 trong DB. Seed bat 1 cho moi SKU de chung xuat hien
+-- trong danh muc "mat hang cung ung" cua nha cung cap.
 INSERT INTO ProductVariants
   (Id, ProductId, SkuCode, Barcode, VariantName, OptionValuesJson, CostPrice, RetailPrice,
-   MinStock, MaxStock, IsSellable, AllowRewardPoints, IsActive, ImageUrl, WeightInGrams,
+   MinStock, MaxStock, IsSellable, IsPurchasable, AllowRewardPoints, IsActive, ImageUrl, WeightInGrams,
    SyncedToStoreAt, CreatedAt, UpdatedAt, IsDeleted)
 VALUES
 ${skus.map((s) => {
   const sync = s.sync ? '@NOW' : 'NULL'
-  return `  ('${s.skuId}', '${s.prodId}', '${s.code}', '${s.barcode}', '${esc(s.vname)}', '{"sku":"${s.code}"}', ${s.cost}, ${s.retail}, ${s.min}, ${s.max}, ${s.sell}, ${s.pts}, 1, NULL, ${s.wg}, ${sync}, @NOW, @NOW, 0)`
+  return `  ('${s.skuId}', '${s.prodId}', '${s.code}', '${s.barcode}', '${esc(s.vname)}', '{"sku":"${s.code}"}', ${s.cost}, ${s.retail}, ${s.min}, ${s.max}, ${s.sell}, 1, ${s.pts}, 1, NULL, ${s.wg}, ${sync}, @NOW, @NOW, 0)`
 }).join(',\n')}
 ON DUPLICATE KEY UPDATE
   ProductId=VALUES(ProductId), Barcode=VALUES(Barcode), VariantName=VALUES(VariantName),
   CostPrice=VALUES(CostPrice), RetailPrice=VALUES(RetailPrice), MinStock=VALUES(MinStock),
-  MaxStock=VALUES(MaxStock), IsSellable=VALUES(IsSellable), AllowRewardPoints=VALUES(AllowRewardPoints),
+  MaxStock=VALUES(MaxStock), IsSellable=VALUES(IsSellable), IsPurchasable=VALUES(IsPurchasable),
+  AllowRewardPoints=VALUES(AllowRewardPoints),
   IsActive=1, WeightInGrams=VALUES(WeightInGrams), SyncedToStoreAt=VALUES(SyncedToStoreAt),
   UpdatedAt=@NOW, IsDeleted=0;
 
@@ -263,14 +292,16 @@ WHERE wb.LotCode LIKE 'HVT-LOT-%' OR wb.LotCode LIKE 'HVT-SHELF-%';
 DELETE FROM WarehouseBatches
 WHERE LotCode LIKE 'HVT-LOT-%' OR LotCode LIKE 'HVT-SHELF-%';
 
+-- BatchCode do migration moi hon them vao: NOT NULL + UNIQUE, khong co default.
+-- Dung chinh LotCode lam BatchCode cho du lieu seed (unique, <= 50 ky tu).
 INSERT INTO WarehouseBatches
-  (Id, LotCode, Supplier, ExpiresAt, Note, SourceType, SourceReferenceId,
+  (Id, LotCode, BatchCode, Supplier, ExpiresAt, Note, SourceType, SourceReferenceId,
    SourceReferenceCode, Location, ParentBatchId, SourceBatchId, Status,
    CreatedBy, CreatedAt, UpdatedAt)
 VALUES
 ${batches.map((b) => {
   const exp = b.exp ? `'${b.exp}'` : 'NULL'
-  return `  ('${b.bid}', '${esc(b.lot)}', '${esc(b.sup)}', ${exp}, '${esc(b.note)}', 'hvt_seed', NULL,\n   'HVT-SEED', '${b.loc}', NULL, NULL, 'active', @SEED_USER, @NOW, @NOW)`
+  return `  ('${b.bid}', '${esc(b.lot)}', '${esc(b.lot)}', '${esc(b.sup)}', ${exp}, '${esc(b.note)}', 'hvt_seed', NULL,\n   'HVT-SEED', '${b.loc}', NULL, NULL, 'active', @SEED_USER, @NOW, @NOW)`
 }).join(',\n')}
 ON DUPLICATE KEY UPDATE
   Supplier=VALUES(Supplier), ExpiresAt=VALUES(ExpiresAt), Note=VALUES(Note),

@@ -8,6 +8,9 @@ public sealed record SupplierReceiptApprovalContext(
     Guid CreatedBy,
     IReadOnlyList<Guid> SkuIds);
 
+/// <summary>Thống kê phiếu nhập đã hoàn tất của một nhà cung cấp. Phiếu nháp/chờ duyệt/bị từ chối/đã huỷ không tính.</summary>
+public sealed record SupplierReceiptStats(int Count, decimal TotalValue);
+
 public interface ISupplierReceiptRepository
 {
     Task<SupplierReceipt?> GetByIdAsync(Guid id, CancellationToken ct = default);
@@ -22,7 +25,7 @@ public interface ISupplierReceiptRepository
         int pageSize,
         CancellationToken ct = default);
     Task<int> CountCreatedSinceAsync(DateTime sinceUtc, CancellationToken ct = default);
-    Task<int> CountBySupplerIdAsync(Guid supplierId, CancellationToken ct = default);
+    Task<SupplierReceiptStats> GetStatsBySupplierIdAsync(Guid supplierId, CancellationToken ct = default);
     Task<SupplierReceipt?> FindDuplicateDocumentAsync(Guid? supplierId, string? supplierDocumentNumber, Guid? excludeId, CancellationToken ct = default);
     Task AddAsync(SupplierReceipt receipt, CancellationToken ct = default);
     Task<int> SaveChangesAsync(CancellationToken ct = default);

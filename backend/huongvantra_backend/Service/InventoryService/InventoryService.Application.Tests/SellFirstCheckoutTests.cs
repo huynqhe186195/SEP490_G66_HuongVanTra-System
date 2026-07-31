@@ -74,6 +74,7 @@ public sealed class SellFirstCheckoutTests
             Mock.Of<IProductionOrderRepository>(),
             catalogClient ?? Mock.Of<IProductCatalogClient>(),
             Mock.Of<ISupplierRepository>(),
+            new SupplierProductRepository(db),
             new ReturnInspectionRepository(db),
             opts);
     }

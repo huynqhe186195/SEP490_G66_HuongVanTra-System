@@ -18,6 +18,7 @@ public record OrderResponse(
     Guid? CustomerId,
     string? CustomerSnapshotName,
     Guid? EmployeeId,
+    string? EmployeeSnapshotName,
     string OrderChannel,
     string OrderKind,
     string OrderStatus,
@@ -35,11 +36,28 @@ public record OrderResponse(
     List<OrderDetailResponse> Items,
     List<PaymentResponse> Payments,
     List<CustomBundleResponse>? CustomBundles = null,
-    StockHandlingSummaryResponse? StockHandlingSummary = null
+    StockHandlingSummaryResponse? StockHandlingSummary = null,
+    Guid? ContractId = null,
+    string? ContractCodeSnapshot = null,
+    decimal? ContractDiscountPercentSnapshot = null,
+    int? ContractPaymentTermDaysSnapshot = null,
+    DateTime? DueDate = null
 );
 
-public record StockHandlingLineResponse(
-    Guid SkuId,
+public record B2BDebtResponse(
+    Guid OrderId,
+    string OrderCode,
+    Guid? CustomerId,
+    string? CustomerSnapshotName,
+    string? ContractCodeSnapshot,
+    decimal FinalAmount,
+    decimal PaidAmount,
+    decimal RemainingAmount,
+    DateTime? DueDate,
+    int DaysOverdue,
+    DateTime CreatedAt);
+
+public record StockHandlingLineResponse(    Guid SkuId,
     string? SkuCode,
     string SkuName,
     int OrderedQuantity,
@@ -157,7 +175,8 @@ public record OrderSummaryResponse(
     decimal? CodExpectedAmount = null,
     int TotalQuantity = 0,
     // POS-04 (truy vết giữ chỗ): đơn đang giữ chỗ tồn Kệ Hàng — badge "Đang giữ hàng".
-    bool HasActiveStockReservation = false
+    bool HasActiveStockReservation = false,
+    string? EmployeeSnapshotName = null
 );
 
 public record CustomBundleIngredientResponse(

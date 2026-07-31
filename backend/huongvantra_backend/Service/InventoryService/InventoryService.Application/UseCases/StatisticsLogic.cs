@@ -21,6 +21,7 @@ public class StatisticsLogic(
 
         var pendingQueueCount = await _deductQueueRepo.CountWaitingAsync(ct);
         var totalWarehouseValue = await _warehouseBatchRepo.CalculateTotalWarehouseValueAsync(ct);
+        var totalShelfValue = await _warehouseBatchRepo.CalculateTotalShelfValueAsync(ct);
 
         return new InventoryStatisticsResponse
         {
@@ -29,7 +30,8 @@ public class StatisticsLogic(
             TotalWarehouseQuantity = totalWarehouseQuantity,
             LowStockSkuCount = lowStockCount,
             PendingDeductQueueCount = pendingQueueCount,
-            TotalWarehouseValue = totalWarehouseValue
+            TotalWarehouseValue = totalWarehouseValue,
+            TotalShelfValue = totalShelfValue
         };
     }
 }

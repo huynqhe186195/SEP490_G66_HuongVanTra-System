@@ -7,5 +7,6 @@ public class InventoryStatisticsResponse
     public int TotalWarehouseQuantity { get; set; }
     public int LowStockSkuCount { get; set; }
     public decimal TotalWarehouseValue { get; set; }
+    public decimal TotalShelfValue { get; set; }
     public int PendingDeductQueueCount { get; set; }
 }

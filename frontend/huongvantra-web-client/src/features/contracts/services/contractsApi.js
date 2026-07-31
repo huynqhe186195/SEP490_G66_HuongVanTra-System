@@ -39,6 +39,17 @@ export async function fetchContracts({ search, customerId, status, page = 1, pag
   return { ...paged, items: paged.items.map(mapContract).filter(Boolean) }
 }
 
+export async function fetchActiveContractForCustomer(customerId) {
+  if (!customerId) return null
+  try {
+    const data = await apiRequestAuth(`/api/contracts/active-for-customer/${customerId}`)
+    return mapContract(data)
+  } catch (err) {
+    if (err?.statusCode === 404) return null
+    throw err
+  }
+}
+
 export async function fetchContractById(id) {
   const data = await apiRequestAuth(`/api/contracts/${id}`)
   return mapContract(data)

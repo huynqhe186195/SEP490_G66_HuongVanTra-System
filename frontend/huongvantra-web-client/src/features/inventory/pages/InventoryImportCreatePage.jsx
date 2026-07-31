@@ -16,11 +16,15 @@ import { isSupplierReceiptEligibleSku } from '../../products/services/productsAp
 import {
   createSupplierReceipt,
   fetchSupplierReceiptById,
-  getSupplierReceiptTemplateUrl,
   submitSupplierReceipt,
   updateSupplierReceipt,
 } from '../services/supplierReceiptApi.js'
 import { fetchActiveSuppliers } from '../services/suppliersApi.js'
+import { fetchActiveSupplierProducts } from '../services/supplierProductsApi.js'
+import {
+  parseSupplierReceiptTt200Excel,
+  TT200_TEMPLATE_URL,
+} from '../utils/supplierReceiptTt200Excel.js'
 
 const EMPTY_HEADER = {
   supplierId: '',
@@ -87,6 +91,43 @@ function normalizeCsvHeader(value) {
 
 function isPositiveIntegerText(value) {
   return /^[1-9]\d*$/.test(String(value ?? '').trim())
+}
+
+const IMPORT_FORMAT_TIPS = [
+  'Bấm “Tải mẫu”, mở file vừa tải, điền vào các ô trống — đừng xóa dòng tiêu đề có chữ “Mã số” và “Số lượng”.',
+  'Mỗi dòng hàng cần có: Mã số hàng (đúng như trên hệ thống) và Số lượng thực nhập (số nguyên, ví dụ 10).',
+  'Nên điền Đơn giá. Nếu thiếu đơn giá vẫn nạp được nhưng chỉ lưu nháp, chưa gửi duyệt được.',
+  'Ngày sản xuất / hạn dùng viết kiểu 01/07/2026. Tên nhà cung cấp phải giống tên đã có trong hệ thống.',
+]
+
+function tipsForImportErrors(items) {
+  const tips = new Set()
+  const joined = items.join(' ').toLowerCase()
+  if (/không đúng mẫu|không tìm thấy bảng|không có sheet|thiếu cột|sai mẫu/.test(joined)) {
+    tips.add('Bấm “Tải mẫu”, dùng đúng file mẫu đó để điền, rồi nạp lại. Đừng tự tạo file mới từ Word/Excel trống.')
+  }
+  if (/chưa có dòng|không có dòng|trống/.test(joined) && /hàng|dữ liệu/.test(joined)) {
+    tips.add('Trong file mẫu, điền ít nhất 1 dòng hàng phía trên chữ “Cộng”: mã số hàng + số lượng (+ đơn giá nếu muốn gửi duyệt).')
+  }
+  if (/danh sách hàng|hệ thống chưa sẵn|chưa tải được|đang tải danh sách/.test(joined)) {
+    tips.add('Bấm F5 (tải lại trang). Nếu vẫn lỗi, nhờ người phụ trách kỹ thuật khởi động lại hệ thống rồi thử lại.')
+  }
+  if (/không tìm thấy mã|không có trong danh sách|không khớp/.test(joined)) {
+    tips.add('Mở ô chọn hàng trên form, gõ mã hàng để xem mã đúng. Copy đúng mã đó vào cột “Mã số” trên Excel.')
+  }
+  if (/số lượng/.test(joined) && /nguyên|lớn hơn 0|sai/.test(joined)) {
+    tips.add('Số lượng chỉ ghi số tròn dương như 5, 10, 100 — không ghi 0, số âm, hay 1,5.')
+  }
+  if (/trùng/.test(joined)) {
+    tips.add('Hai dòng không được cùng mã hàng và cùng mã lô NCC. Hãy gộp thành một dòng.')
+  }
+  if (/nhà cung cấp/.test(joined)) {
+    tips.add('Chọn lại nhà cung cấp trên form (ô tìm kiếm phía trên), hoặc sửa tên trong Excel cho khớp danh sách.')
+  }
+  if (tips.size === 0) {
+    IMPORT_FORMAT_TIPS.forEach((tip) => tips.add(tip))
+  }
+  return [...tips]
 }
 
 function getProductTypeLabel(productType) {
@@ -277,8 +318,8 @@ function SkuSearchPicker({ catalogError, duplicate, hasError, isCatalogLoading, 
   const inputValue = isOpen || !sku ? query : getSkuDisplayText(sku)
   const isCatalogUnavailable = isCatalogLoading || Boolean(catalogError)
   const emptyMessage = skus.length === 0
-    ? 'Không có SKU nào đang hoạt động và được phép nhập từ nhà cung cấp.'
-    : 'Không tìm thấy SKU phù hợp với từ khóa.'
+    ? 'Chưa có hàng nào được phép nhập. Bấm F5 hoặc nhờ người phụ trách kỹ thuật.'
+    : 'Không tìm thấy hàng khớp từ khóa. Thử gõ mã hoặc tên khác.'
 
   return (
     <div ref={wrapperRef} className="relative">
@@ -294,12 +335,12 @@ function SkuSearchPicker({ catalogError, duplicate, hasError, isCatalogLoading, 
           setQuery(sku ? getSkuDisplayText(sku) : query)
           setIsOpen(true)
         }}
-        placeholder={isCatalogLoading ? 'Đang tải danh sách hàng hóa...' : 'Tìm Hàng hóa hoặc Mã số'}
+        placeholder={isCatalogLoading ? 'Đang tải danh sách hàng...' : 'Gõ mã hoặc tên hàng để tìm'}
       />
-      {isCatalogLoading ? <p className="mt-1 text-xs text-slate-500">Đang tải danh sách SKU...</p> : null}
+      {isCatalogLoading ? <p className="mt-1 text-xs text-slate-500">Đang tải danh sách hàng...</p> : null}
       {catalogError ? <p className="mt-1 text-xs font-medium text-red-600">{catalogError}</p> : null}
       {duplicate ? (
-        <p className="mt-1 text-xs font-medium text-amber-700">SKU này đã có trong lô nhập.</p>
+        <p className="mt-1 text-xs font-medium text-amber-700">Mã hàng này đã có trong phiếu.</p>
       ) : null}
 
       {isOpen && !isCatalogUnavailable ? (
@@ -357,8 +398,11 @@ function InventoryImportCreatePage() {
   )
   const [supplierReceiptSkus, setSupplierReceiptSkus] = useState([])
   const [suppliers, setSuppliers] = useState([])
+  const [supplierCatalog, setSupplierCatalog] = useState({ supplierId: '', items: [] })
   const [header, setHeader] = useState(EMPTY_HEADER)
   const [lines, setLines] = useState([emptyLine()])
+  const [expandedLineKeys, setExpandedLineKeys] = useState(() => new Set())
+  const didInitExpandRef = useRef(false)
   const [isSkuCatalogLoading, setIsSkuCatalogLoading] = useState(true)
   const [skuCatalogError, setSkuCatalogError] = useState('')
   const [isSupplierLoading, setIsSupplierLoading] = useState(true)
@@ -367,8 +411,17 @@ function InventoryImportCreatePage() {
   const [headerErrors, setHeaderErrors] = useState({})
   const [lineErrors, setLineErrors] = useState({})
   const [lineWarnings, setLineWarnings] = useState({})
+  const [importFeedback, setImportFeedback] = useState(null)
   const errorSummaryRef = useRef(null)
+  const importFeedbackRef = useRef(null)
   const today = new Date().toISOString().slice(0, 10)
+
+  function showImportFeedback(next) {
+    setImportFeedback(next)
+    requestAnimationFrame(() => {
+      importFeedbackRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    })
+  }
 
   const loadSupplierReceiptSkus = useCallback(async () => {
     setIsSkuCatalogLoading(true)
@@ -377,7 +430,8 @@ function InventoryImportCreatePage() {
       const skuItems = await fetchSupplierReceiptSkus()
       setSupplierReceiptSkus(skuItems.filter(isSupplierReceiptEligibleSku).sort(sortSkuOptions))
     } catch {
-      const message = 'Không tải được danh sách SKU được phép nhập từ nhà cung cấp. Vui lòng thử lại.'
+      const message =
+        'Chưa tải được danh sách hàng được phép nhập. Bấm F5 để thử lại. Nếu vẫn lỗi, nhờ người phụ trách kỹ thuật kiểm tra hệ thống.'
       setSupplierReceiptSkus([])
       setSkuCatalogError(message)
       showError(message)
@@ -392,7 +446,7 @@ function InventoryImportCreatePage() {
       setSuppliers(await fetchActiveSuppliers())
     } catch {
       setSuppliers([])
-      showError('Không tải được danh sách nhà cung cấp đang hoạt động. Vui lòng thử lại.')
+      showError('Chưa tải được danh sách nhà cung cấp. Bấm F5 rồi thử lại.')
     } finally {
       setIsSupplierLoading(false)
     }
@@ -406,14 +460,59 @@ function InventoryImportCreatePage() {
     return () => clearTimeout(timer)
   }, [loadSupplierReceiptSkus, loadSuppliers])
 
+  // SP-10/11/12: danh mục hàng nhà cung cấp đang cung ứng, dùng để lọc hàng, điền sẵn giá chào và cảnh báo lệch giá.
   useEffect(() => {
-    if (!editingReceiptId) {
-      setIsEditLoading(false)
-      return undefined
-    }
+    if (!header.supplierId) return undefined
+    let cancelled = false
+    const supplierId = header.supplierId
+    fetchActiveSupplierProducts(supplierId)
+      .then((items) => { if (!cancelled) setSupplierCatalog({ supplierId, items }) })
+      .catch(() => { if (!cancelled) setSupplierCatalog({ supplierId, items: [] }) })
+    return () => { cancelled = true }
+  }, [header.supplierId])
 
+  const supplierCatalogBySkuId = useMemo(() => {
+    if (!header.supplierId || supplierCatalog.supplierId !== header.supplierId) return new Map()
+    return new Map(supplierCatalog.items.map((item) => [item.skuId, item]))
+  }, [header.supplierId, supplierCatalog])
+
+  // BR-11/BR-12: NCC chưa khai danh mục thì vẫn cho chọn toàn bộ hàng đủ điều kiện nhập.
+  const selectableSkus = useMemo(() => {
+    if (supplierCatalogBySkuId.size === 0) return supplierReceiptSkus
+    return supplierReceiptSkus.filter((sku) => supplierCatalogBySkuId.has(sku.id))
+  }, [supplierCatalogBySkuId, supplierReceiptSkus])
+
+  // SP-12 / BR-15: lệch giá chào chỉ cảnh báo, không chặn lưu hay gửi duyệt.
+  const quotedPriceOf = useCallback((skuId) => {
+    const quoted = Number(supplierCatalogBySkuId.get(skuId)?.quotedPrice)
+    return Number.isFinite(quoted) && quoted > 0 ? quoted : null
+  }, [supplierCatalogBySkuId])
+
+  const quotedPriceWarning = useCallback((line) => {
+    const quoted = quotedPriceOf(line.skuId)
+    if (quoted === null || line.unitCost === '') return null
+    const unitCost = parseVndInput(line.unitCost)
+    if (!Number.isFinite(unitCost) || unitCost <= 0) return null
+    const gap = unitCost - quoted
+    if (gap === 0) return null
+    const percent = Math.round((Math.abs(gap) / quoted) * 1000) / 10
+    return `Cảnh báo: Đơn giá ${gap > 0 ? 'cao hơn' : 'thấp hơn'} giá chào ${formatVnd(quoted)} là ${formatVnd(Math.abs(gap))} (${percent}%).`
+  }, [quotedPriceOf])
+
+  useEffect(() => {
+    if (didInitExpandRef.current || !lines[0]?.key) return
+    didInitExpandRef.current = true
+    setExpandedLineKeys(new Set([lines[0].key]))
+  }, [lines])
+
+  useEffect(() => {
     let cancelled = false
     async function loadReceiptForEdit() {
+      if (!editingReceiptId) {
+        setIsEditLoading(false)
+        return
+      }
+
       setIsEditLoading(true)
       try {
         const receipt = await fetchSupplierReceiptById(editingReceiptId)
@@ -438,7 +537,7 @@ function InventoryImportCreatePage() {
           receivedDate: toDateInput(receipt.receivedDate),
           note: receipt.note || '',
         })
-        setLines(receipt.items.map((item) => ({
+        const editLines = receipt.items.map((item) => ({
           key: crypto.randomUUID(),
           skuId: item.skuId,
           documentQuantity: String(item.documentQuantity ?? item.actualQuantity ?? item.submittedQuantity ?? ''),
@@ -449,7 +548,9 @@ function InventoryImportCreatePage() {
           manufacturedAt: toDateInput(item.manufacturedAt),
           expiresAt: toDateInput(item.expiresAt),
           qualityNote: item.qualityNote || '',
-        })))
+        }))
+        setLines(editLines.length ? editLines : [emptyLine()])
+        setExpandedLineKeys(new Set(editLines[0] ? [editLines[0].key] : []))
       } catch (error) {
         if (!cancelled) {
           showError(error.message)
@@ -480,105 +581,334 @@ function InventoryImportCreatePage() {
     setLines((prev) => prev.map((line) => (line.key === key ? { ...line, ...patch } : line)))
   }
 
+  function toggleLineExpanded(key) {
+    setExpandedLineKeys((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
+
+  function expandAllLines() {
+    setExpandedLineKeys(new Set(lines.map((line) => line.key)))
+  }
+
+  function collapseAllLines() {
+    setExpandedLineKeys(new Set())
+  }
+
   function addLine() {
-    setLines((prev) => [...prev, emptyLine()])
+    const line = emptyLine()
+    setLines((prev) => [...prev, line])
+    setExpandedLineKeys((prev) => new Set([...prev, line.key]))
   }
 
   function removeLine(key) {
     setLines((prev) => (prev.length <= 1 ? prev : prev.filter((line) => line.key !== key)))
+    setExpandedLineKeys((prev) => {
+      const next = new Set(prev)
+      next.delete(key)
+      return next
+    })
+  }
+
+  function applyImportedLines(rawLines) {
+    if (skuCatalogError || isSkuCatalogLoading) {
+      return {
+        nextLines: [],
+        previewWarnings: [],
+        previewErrors: [
+          skuCatalogError
+            || 'Hệ thống đang tải danh sách hàng. Đợi vài giây rồi bấm “Nạp file” lại.',
+        ],
+      }
+    }
+    if (!supplierReceiptSkus.length) {
+      return {
+        nextLines: [],
+        previewWarnings: [],
+        previewErrors: [
+          'Chưa có danh sách hàng trên trang này nên không kiểm tra được file. Bấm F5. Nếu vẫn trống, nhờ người phụ trách kỹ thuật.',
+        ],
+      }
+    }
+
+    const previewErrors = []
+    const previewWarnings = []
+    const compositeKeys = new Set()
+    const nextLines = rawLines.map((raw, rowIndex) => {
+      const rowLabel = raw.rowNumber ?? rowIndex + 2
+      const skuCode = String(raw.skuCode || '').trim().toUpperCase()
+      const sku = skuByCode.get(skuCode)
+      const actualQuantity = String(raw.actualQuantity ?? '').trim()
+      const documentQuantity = String(raw.documentQuantity || actualQuantity).trim()
+      const unitCost = String(raw.unitCost ?? '').trim()
+      const supplierLotCode = String(raw.lotCode ?? '').trim()
+      const manufacturedAt = String(raw.manufacturedAt ?? '').trim()
+      const expiresAt = String(raw.expiresAt ?? '').trim()
+      // ĐVT trên Excel chỉ mang tính tham khảo — form luôn lấy đơn vị chuẩn của SKU.
+
+      if (!sku) {
+        previewErrors.push(
+          skuCode
+            ? `Dòng ${rowLabel}: không tìm thấy mã “${skuCode}” trong danh sách hàng được phép nhập.`
+            : `Dòng ${rowLabel}: chưa điền mã số hàng.`,
+        )
+      }
+      if (!isPositiveIntegerText(documentQuantity) || !isPositiveIntegerText(actualQuantity)) {
+        previewErrors.push(
+          `Dòng ${rowLabel}: số lượng chưa đúng — cần số tròn lớn hơn 0 (ví dụ 10), không ghi 0 hay 1,5.`,
+        )
+      }
+      if (!unitCost) {
+        previewWarnings.push(`Dòng ${rowLabel}: thiếu đơn giá — vẫn nạp được, nhưng chỉ lưu nháp.`)
+      }
+      if (!String(raw.documentQuantity ?? '').trim() && actualQuantity) {
+        previewWarnings.push(
+          `Dòng ${rowLabel}: thiếu số lượng theo chứng từ — hệ thống tạm dùng số lượng thực nhập.`,
+        )
+      }
+
+      if (sku && supplierLotCode) {
+        const composite = [sku.id, supplierLotCode.trim().toUpperCase()].join('|')
+        if (compositeKeys.has(composite)) {
+          previewErrors.push(
+            `Dòng ${rowLabel}: trùng mã hàng và mã lô NCC với dòng khác — gộp thành một dòng.`,
+          )
+        }
+        compositeKeys.add(composite)
+      }
+
+      return {
+        key: crypto.randomUUID(),
+        skuId: sku?.id ?? '',
+        documentQuantity,
+        actualQuantity,
+        unitCost: sanitizeVndInput(unitCost),
+        submittedUnit: defaultSubmittedUnit(sku?.inventoryUnit),
+        lotCode: supplierLotCode,
+        manufacturedAt,
+        expiresAt,
+        qualityNote: String(raw.qualityNote ?? raw.note ?? '').trim(),
+      }
+    })
+
+    if (previewErrors.length > 0) {
+      return { nextLines: [], previewWarnings, previewErrors }
+    }
+
+    const appliedLines = nextLines.length ? nextLines : [emptyLine()]
+    setLines(appliedLines)
+    // Import nhiều dòng: thu gọn, chỉ mở dòng đầu.
+    setExpandedLineKeys(new Set(appliedLines[0] ? [appliedLines[0].key] : []))
+    setLineWarnings({})
+    setLineErrors({})
+    return { nextLines: appliedLines, previewWarnings, previewErrors: [] }
+  }
+
+  async function importExcelPreview(file) {
+    if (!file) return
+    const fileName = file.name || 'Excel'
+    try {
+      const buffer = await file.arrayBuffer()
+      const { headerPatch = {}, rawLines, errors } = parseSupplierReceiptTt200Excel(buffer)
+      if (errors.length > 0) {
+        showImportFeedback({
+          kind: 'error',
+          fileName,
+          items: errors,
+          tips: tipsForImportErrors(errors),
+        })
+        showError('File chưa nạp được. Xem phần hướng dẫn ngay bên dưới nút “Nạp file”.')
+        return
+      }
+
+      const importWarnings = []
+      const nextHeader = { ...headerPatch }
+      if (nextHeader.supplierName) {
+        const needle = normalizeSearch(nextHeader.supplierName)
+        const matched = suppliers.find((s) => normalizeSearch(s.name) === needle)
+          || suppliers.find((s) => {
+            const name = normalizeSearch(s.name)
+            return name.includes(needle) || needle.includes(name)
+          })
+        if (matched) {
+          nextHeader.supplierId = matched.id
+          nextHeader.supplierName = matched.name
+        } else {
+          delete nextHeader.supplierId
+          importWarnings.push(
+            `Không tìm thấy nhà cung cấp “${nextHeader.supplierName}” — hãy chọn lại trên form.`,
+          )
+          delete nextHeader.supplierName
+        }
+      }
+
+      if (Object.keys(nextHeader).length > 0) {
+        setHeader((prev) => ({
+          ...prev,
+          ...Object.fromEntries(
+            Object.entries(nextHeader).filter(([, value]) => value != null && String(value).trim() !== ''),
+          ),
+        }))
+        setHeaderErrors({})
+      }
+
+      const { nextLines, previewWarnings, previewErrors } = applyImportedLines(rawLines)
+      if (previewErrors.length > 0) {
+        showImportFeedback({
+          kind: 'error',
+          fileName,
+          items: previewErrors,
+          tips: tipsForImportErrors(previewErrors),
+        })
+        showError('File còn chỗ cần sửa. Làm theo hướng dẫn bên dưới rồi nạp lại.')
+        return
+      }
+
+      const allWarnings = [...importWarnings, ...previewWarnings]
+      if (allWarnings.length > 0) {
+        showImportFeedback({
+          kind: 'warning',
+          fileName,
+          items: allWarnings,
+          tips: [
+            'File đã nạp. Kiểm tra nhà cung cấp và đơn giá trước khi gửi duyệt.',
+          ],
+        })
+        showSuccess(`Đã nạp ${nextLines.length} dòng hàng (cần kiểm tra thêm).`)
+      } else {
+        setImportFeedback(null)
+        showSuccess(`Đã nạp ${nextLines.length} dòng hàng từ file.`)
+      }
+    } catch {
+      showImportFeedback({
+        kind: 'error',
+        fileName,
+        items: ['Không mở được file này. Hãy dùng file Excel mẫu (.xlsx) tải từ nút “Tải mẫu”.'],
+        tips: IMPORT_FORMAT_TIPS,
+      })
+      showError('Không mở được file. Xem hướng dẫn bên dưới.')
+    }
   }
 
   async function importCsvPreview(file) {
     if (!file) return
+    const lowerName = String(file.name || '').toLowerCase()
+    if (lowerName.endsWith('.xlsx') || lowerName.endsWith('.xls')) {
+      await importExcelPreview(file)
+      return
+    }
+    const fileName = file.name || 'CSV'
     try {
       const text = await file.text()
       const rows = text.split(/\r?\n/).filter((row) => row.trim())
-      if (rows.length < 2) throw new Error('File CSV không có dòng dữ liệu.')
+      if (rows.length < 2) {
+        const items = ['File chưa có dòng hàng nào. Hãy điền dữ liệu rồi nạp lại.']
+        showImportFeedback({
+          kind: 'error',
+          fileName,
+          items,
+          tips: tipsForImportErrors(items),
+        })
+        showError('File chưa nạp được. Xem hướng dẫn bên dưới.')
+        return
+      }
 
       const headers = parseCsvLine(rows[0]).map(normalizeCsvHeader)
       const indexOf = (...names) => headers.findIndex((header) => names.includes(header))
       const indexes = {
-        skuCode: indexOf('skucode', 'sku'),
-        documentQuantity: indexOf('documentquantity', 'soluongtheochungtu'),
-        actualQuantity: indexOf('actualquantity', 'submittedquantity', 'quantity', 'soluong', 'soluongthucnhap'),
-        unitCost: indexOf('unitcost', 'dongia'),
-        submittedUnit: indexOf('submittedunit', 'unit', 'donvi'),
+        skuCode: indexOf('skucode', 'sku', 'maso', 'mahang', 'ma'),
+        documentQuantity: indexOf(
+          'documentquantity',
+          'soluongtheochungtu',
+          'theochungtu',
+          'sltheochungtu',
+        ),
+        actualQuantity: indexOf(
+          'actualquantity',
+          'submittedquantity',
+          'quantity',
+          'soluong',
+          'soluongthucnhap',
+          'thucnhap',
+          'slthucnhap',
+        ),
+        unitCost: indexOf('unitcost', 'dongia', 'gia'),
+        submittedUnit: indexOf('submittedunit', 'unit', 'donvi', 'dvt'),
         lotCode: indexOf('supplierlotcode', 'lotcode', 'malo', 'maloncc'),
         manufacturedAt: indexOf('manufacturedat', 'manufacturedate', 'ngaysanxuat'),
         expiresAt: indexOf('expiresat', 'expirydate', 'hansudung'),
         note: indexOf('note', 'qualitynote', 'ghichu'),
       }
       if (indexes.skuCode < 0 || indexes.actualQuantity < 0) {
-        throw new Error('CSV phải có SKU Code và Actual Quantity (hoặc cột Quantity cũ).')
+        const items = [
+          'File thiếu cột “Mã số” và “Số lượng / Thực nhập”. Nên dùng “Tải mẫu” rồi điền vào file mẫu.',
+        ]
+        showImportFeedback({
+          kind: 'error',
+          fileName,
+          items,
+          tips: [
+            ...tipsForImportErrors(items),
+            'Cách dễ nhất: bấm “Tải mẫu”, điền xong, rồi bấm “Nạp file”.',
+          ],
+        })
+        showError('File chưa đúng mẫu. Xem hướng dẫn bên dưới.')
+        return
       }
 
-      const previewErrors = []
-      const previewWarnings = []
-      const compositeKeys = new Set()
-      const nextLines = rows.slice(1).map((rawRow, rowIndex) => {
+      const rawLines = rows.slice(1).map((rawRow, rowIndex) => {
         const cells = parseCsvLine(rawRow)
         const get = (index) => (index >= 0 ? String(cells[index] ?? '').trim() : '')
-        const skuCode = get(indexes.skuCode).toUpperCase()
-        const sku = skuByCode.get(skuCode)
-        const actualQuantity = get(indexes.actualQuantity)
-        const documentQuantity = get(indexes.documentQuantity) || actualQuantity
-        const unitCost = get(indexes.unitCost)
-        const supplierLotCode = get(indexes.lotCode)
-        const manufacturedAt = get(indexes.manufacturedAt)
-        const expiresAt = get(indexes.expiresAt)
-        const csvUnit = get(indexes.submittedUnit)
-
-        if (!sku) previewErrors.push(`Dòng ${rowIndex + 2}: SKU ${skuCode || 'trống'} không hợp lệ hoặc không được phép nhập NCC.`)
-        if (!isPositiveIntegerText(documentQuantity) || !isPositiveIntegerText(actualQuantity)) {
-          previewErrors.push(`Dòng ${rowIndex + 2}: Số lượng phải là số nguyên lớn hơn 0.`)
-        }
-        if (csvUnit && sku && normalizeSearch(csvUnit) !== normalizeSearch(getSkuUnitName(sku))) {
-          previewErrors.push(
-            `Dòng ${rowIndex + 2}: Đơn vị "${csvUnit}" không khớp UnitName "${getSkuUnitName(sku)}" của SKU.`,
-          )
-        }
-        if (!unitCost) previewWarnings.push(`Dòng ${rowIndex + 2}: thiếu Unit Cost; chỉ có thể lưu Draft.`)
-        if (indexes.documentQuantity < 0) {
-          previewWarnings.push(`Dòng ${rowIndex + 2}: thiếu Document Quantity, đã preview theo Actual Quantity.`)
-        }
-
-        if (sku && supplierLotCode) {
-          const composite = [sku.id, supplierLotCode.trim().toUpperCase()].join('|')
-          if (compositeKeys.has(composite)) {
-            previewErrors.push(
-              `Dòng ${rowIndex + 2}: trùng SKU và Supplier Lot Code. Gộp thành một dòng duy nhất.`,
-            )
-          }
-          compositeKeys.add(composite)
-        }
-
         return {
-          key: crypto.randomUUID(),
-          skuId: sku?.id ?? '',
-          documentQuantity,
-          actualQuantity,
-          unitCost: sanitizeVndInput(unitCost),
-          submittedUnit: defaultSubmittedUnit(sku?.inventoryUnit),
-          lotCode: supplierLotCode,
-          manufacturedAt,
-          expiresAt,
-          qualityNote: get(indexes.note),
+          rowNumber: rowIndex + 2,
+          skuCode: get(indexes.skuCode),
+          documentQuantity: get(indexes.documentQuantity),
+          actualQuantity: get(indexes.actualQuantity),
+          unitCost: get(indexes.unitCost),
+          submittedUnit: get(indexes.submittedUnit),
+          lotCode: get(indexes.lotCode),
+          manufacturedAt: get(indexes.manufacturedAt),
+          expiresAt: get(indexes.expiresAt),
+          note: get(indexes.note),
         }
       })
 
+      const { nextLines, previewWarnings, previewErrors } = applyImportedLines(rawLines)
       if (previewErrors.length > 0) {
-        throw new Error(`CSV không hợp lệ. ${previewErrors.slice(0, 5).join(' ')}`)
+        showImportFeedback({
+          kind: 'error',
+          fileName,
+          items: previewErrors,
+          tips: tipsForImportErrors(previewErrors),
+        })
+        showError('File còn chỗ cần sửa. Làm theo hướng dẫn bên dưới rồi nạp lại.')
+        return
       }
-      setLines(nextLines.length ? nextLines : [emptyLine()])
-      setLineWarnings({})
-      setLineErrors({})
+
       if (previewWarnings.length > 0) {
-        showSuccess(`Đã nạp ${nextLines.length} dòng. ${previewWarnings.slice(0, 3).join(' ')}`)
+        showImportFeedback({
+          kind: 'warning',
+          fileName,
+          items: previewWarnings,
+          tips: ['File đã nạp. Kiểm tra đơn giá trước khi gửi duyệt.'],
+        })
+        showSuccess(`Đã nạp ${nextLines.length} dòng hàng (cần kiểm tra thêm).`)
       } else {
-        showSuccess(`Đã nạp ${nextLines.length} dòng từ CSV để kiểm tra trước khi lưu.`)
+        setImportFeedback(null)
+        showSuccess(`Đã nạp ${nextLines.length} dòng hàng từ file.`)
       }
-    } catch (error) {
-      showError(error.message)
+    } catch {
+      const items = ['Không mở được file. Hãy dùng file mẫu tải từ nút “Tải mẫu”.']
+      showImportFeedback({
+        kind: 'error',
+        fileName,
+        items,
+        tips: tipsForImportErrors(items),
+      })
+      showError('Không mở được file. Xem hướng dẫn bên dưới.')
     }
   }
 
@@ -735,6 +1065,13 @@ function InventoryImportCreatePage() {
 
     setLineErrors(errors)
     setLineWarnings(warnings)
+    if (!valid) {
+      setExpandedLineKeys((prev) => {
+        const next = new Set(prev)
+        Object.keys(errors).forEach((key) => next.add(key))
+        return next
+      })
+    }
     return valid
   }
 
@@ -962,21 +1299,27 @@ function InventoryImportCreatePage() {
           </div>
 
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-lg font-bold text-slate-800">Dòng hàng nhập</h2>
+            <div>
+              <h2 className="text-lg font-bold text-slate-800">Dòng hàng nhập</h2>
+              <p className="mt-1 text-xs text-slate-500">
+                Cách dễ: bấm “Tải mẫu” → điền mã hàng, số lượng, đơn giá → bấm “Nạp file”. Tên nhà cung cấp trong file phải giống tên trên hệ thống.
+              </p>
+            </div>
             <div className="flex flex-wrap items-center gap-2">
               <a
-                href={getSupplierReceiptTemplateUrl()}
+                href={TT200_TEMPLATE_URL}
+                download="phieu-nhap-kho-excel-tt200.xlsx"
                 className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
               >
                 <span className="material-symbols-outlined text-[18px]">download</span>
-                Tải mẫu CSV
+                Tải mẫu
               </a>
               <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">
                 <span className="material-symbols-outlined text-[18px]">upload_file</span>
-                Nạp CSV để preview
+                Nạp file
                 <input
                   type="file"
-                  accept=".csv,text/csv"
+                  accept=".csv,.xlsx,.xls,text/csv"
                   className="hidden"
                   onChange={(event) => {
                     void importCsvPreview(event.target.files?.[0])
@@ -984,6 +1327,22 @@ function InventoryImportCreatePage() {
                   }}
                 />
               </label>
+              <button
+                type="button"
+                onClick={collapseAllLines}
+                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                <span className="material-symbols-outlined text-[18px]">unfold_less</span>
+                Thu gọn
+              </button>
+              <button
+                type="button"
+                onClick={expandAllLines}
+                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                <span className="material-symbols-outlined text-[18px]">unfold_more</span>
+                Mở hết
+              </button>
               <button
                 type="button"
                 onClick={addLine}
@@ -995,7 +1354,111 @@ function InventoryImportCreatePage() {
             </div>
           </div>
 
-          <div className="space-y-3">
+          {importFeedback ? (
+            <div
+              ref={importFeedbackRef}
+              className={`mb-4 rounded-xl border p-4 ${
+                importFeedback.kind === 'error'
+                  ? 'border-red-200 bg-red-50'
+                  : 'border-amber-200 bg-amber-50'
+              }`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p
+                    className={`text-sm font-bold ${
+                      importFeedback.kind === 'error' ? 'text-red-700' : 'text-amber-800'
+                    }`}
+                  >
+                    {importFeedback.kind === 'error'
+                      ? 'File chưa nạp được — sửa theo hướng dẫn rồi thử lại'
+                      : 'Đã nạp file — vui lòng kiểm tra thêm'}
+                  </p>
+                  {importFeedback.fileName ? (
+                    <p
+                      className={`mt-0.5 text-xs ${
+                        importFeedback.kind === 'error' ? 'text-red-600' : 'text-amber-700'
+                      }`}
+                    >
+                      Tên file: {importFeedback.fileName}
+                    </p>
+                  ) : null}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setImportFeedback(null)}
+                  className={`shrink-0 rounded-md p-1 ${
+                    importFeedback.kind === 'error'
+                      ? 'text-red-500 hover:bg-red-100'
+                      : 'text-amber-600 hover:bg-amber-100'
+                  }`}
+                  aria-label="Đóng thông báo"
+                >
+                  <span className="material-symbols-outlined text-[18px]">close</span>
+                </button>
+              </div>
+
+              <ul
+                className={`mt-3 max-h-40 space-y-1.5 overflow-y-auto text-sm ${
+                  importFeedback.kind === 'error' ? 'text-red-700' : 'text-amber-900'
+                }`}
+              >
+                {importFeedback.items.slice(0, 12).map((item, index) => (
+                  <li key={`${index}-${item}`} className="flex items-start gap-1.5">
+                    <span className="material-symbols-outlined mt-0.5 text-[15px]">
+                      {importFeedback.kind === 'error' ? 'error' : 'warning'}
+                    </span>
+                    <span>{item}</span>
+                  </li>
+                ))}
+                {importFeedback.items.length > 12 ? (
+                  <li className="text-xs opacity-80">… và còn {importFeedback.items.length - 12} chỗ nữa cần xem</li>
+                ) : null}
+              </ul>
+
+              {importFeedback.tips?.length ? (
+                <div
+                  className={`mt-3 rounded-lg border px-3 py-2 ${
+                    importFeedback.kind === 'error'
+                      ? 'border-red-100 bg-white/70'
+                      : 'border-amber-100 bg-white/70'
+                  }`}
+                >
+                  <p
+                    className={`text-xs font-semibold ${
+                      importFeedback.kind === 'error' ? 'text-red-700' : 'text-amber-800'
+                    }`}
+                  >
+                    Làm thế nào để sửa
+                  </p>
+                  <ul
+                    className={`mt-1.5 space-y-1 text-xs ${
+                      importFeedback.kind === 'error' ? 'text-red-600' : 'text-amber-800'
+                    }`}
+                  >
+                    {importFeedback.tips.map((tip) => (
+                      <li key={tip} className="flex items-start gap-1.5">
+                        <span className="material-symbols-outlined mt-0.5 text-[14px]">lightbulb</span>
+                        <span>{tip}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <a
+                    href={TT200_TEMPLATE_URL}
+                    download="phieu-nhap-kho-excel-tt200.xlsx"
+                    className={`mt-2 inline-flex items-center gap-1 text-xs font-semibold underline-offset-2 hover:underline ${
+                      importFeedback.kind === 'error' ? 'text-red-700' : 'text-amber-900'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-[14px]">download</span>
+                    Tải lại file mẫu trống
+                  </a>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          <div className="space-y-2">
             {lines.map((line, index) => {
               const selectedSku = skuById.get(line.skuId) ?? null
               const errs = lineErrors[line.key] ?? {}
@@ -1011,21 +1474,66 @@ function InventoryImportCreatePage() {
               const warns = {
                 ...(lineWarnings[line.key] ?? {}),
                 quantityVariance: varianceWarning,
+                quotedPriceVariance: quotedPriceWarning(line),
               }
               const hasLineError = Object.values(errs).some(Boolean)
               const hasLineWarning = Object.values(warns).some(Boolean)
+              const isExpanded = expandedLineKeys.has(line.key)
               const fi = (field) => errs[field] ? 'border-red-400 bg-red-50' : 'border-slate-200 bg-white'
+              const summaryName = selectedSku ? getSkuSnapshotName(selectedSku) : 'Chưa chọn hàng'
+              const summaryAmount = line.unitCost === '' || line.actualQuantity === ''
+                ? '—'
+                : formatVnd(calculateLineAmount(line))
               return (
                 <div
                   key={line.key}
                   data-error={hasLineError ? 'true' : undefined}
-                  className={`rounded-xl border p-4 ${hasLineError ? 'border-red-300 bg-red-50/30' : 'border-slate-100 bg-slate-50/50'}`}
+                  className={`overflow-hidden rounded-xl border ${hasLineError ? 'border-red-300 bg-red-50/30' : 'border-slate-200 bg-white'}`}
                 >
-                  <div className="mb-3 flex items-center justify-between">
-                    <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-bold ${hasLineError ? 'bg-red-100 text-red-700' : 'bg-[#538463]/10 text-[#356647]'}`}>
-                      Dòng {index + 1}{selectedSku ? ` — ${selectedSku.skuCode}` : ''}
-                      {hasLineError ? <span className="ml-1 material-symbols-outlined text-[14px]">error</span> : null}
-                    </span>
+                  <div className="flex items-stretch gap-1">
+                    <button
+                      type="button"
+                      onClick={() => toggleLineExpanded(line.key)}
+                      aria-expanded={isExpanded}
+                      className="flex min-w-0 flex-1 items-center gap-3 px-3 py-3 text-left hover:bg-slate-50/80"
+                    >
+                      <span className="material-symbols-outlined shrink-0 text-[22px] text-slate-500">
+                        {isExpanded ? 'expand_less' : 'expand_more'}
+                      </span>
+                      <span className={`inline-flex shrink-0 items-center rounded-md px-2 py-0.5 text-xs font-bold ${hasLineError ? 'bg-red-100 text-red-700' : 'bg-[#538463]/10 text-[#356647]'}`}>
+                        #{index + 1}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold text-slate-800">
+                          {selectedSku ? (
+                            <>
+                              <span className="font-mono text-[#356647]">{selectedSku.skuCode}</span>
+                              <span className="text-slate-400"> · </span>
+                              <span>{summaryName}</span>
+                            </>
+                          ) : (
+                            <span className="text-slate-400">{summaryName}</span>
+                          )}
+                        </p>
+                        {!isExpanded ? (
+                          <p className="mt-0.5 truncate text-xs text-slate-500">
+                            SL {line.actualQuantity || '—'}
+                            {selectedSku ? ` ${getSkuUnitName(selectedSku)}` : ''}
+                            {' · '}
+                            Lô {line.lotCode || '—'}
+                            {' · '}
+                            {summaryAmount}
+                            {hasLineWarning ? ' · Có cảnh báo' : ''}
+                            {hasLineError ? ' · Có lỗi' : ''}
+                          </p>
+                        ) : null}
+                      </div>
+                      {hasLineError ? (
+                        <span className="material-symbols-outlined shrink-0 text-[18px] text-red-500">error</span>
+                      ) : hasLineWarning ? (
+                        <span className="material-symbols-outlined shrink-0 text-[18px] text-amber-500">warning</span>
+                      ) : null}
+                    </button>
                     {lines.length > 1 ? (
                       <button
                         type="button"
@@ -1034,186 +1542,197 @@ function InventoryImportCreatePage() {
                           setLineErrors((prev) => { const n = { ...prev }; delete n[line.key]; return n })
                           setLineWarnings((prev) => { const n = { ...prev }; delete n[line.key]; return n })
                         }}
-                        className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-red-600 hover:bg-red-50"
+                        className="inline-flex shrink-0 items-center gap-1 border-l border-slate-100 px-3 text-xs font-semibold text-red-600 hover:bg-red-50"
+                        title="Xóa dòng"
                       >
-                        <span className="material-symbols-outlined text-[16px]">delete</span>
-                        Xóa
+                        <span className="material-symbols-outlined text-[18px]">delete</span>
                       </button>
                     ) : null}
                   </div>
 
-                  {hasLineWarning ? (
-                    <div className="mb-3 flex flex-wrap gap-2">
-                      {Object.values(warns).filter(Boolean).map((w, i) => (
-                        <span key={i} className="inline-flex items-center gap-1 rounded-lg bg-amber-50 px-2.5 py-1 text-xs text-amber-700">
-                          <span className="material-symbols-outlined text-[14px]">warning</span>
-                          {w}
-                        </span>
-                      ))}
+                  {isExpanded ? (
+                    <div className="border-t border-slate-100 bg-slate-50/40 px-4 pb-4 pt-3">
+                      {hasLineWarning ? (
+                        <div className="mb-3 flex flex-wrap gap-2">
+                          {Object.values(warns).filter(Boolean).map((w, i) => (
+                            <span key={i} className="inline-flex items-center gap-1 rounded-lg bg-amber-50 px-2.5 py-1 text-xs text-amber-700">
+                              <span className="material-symbols-outlined text-[14px]">warning</span>
+                              {w}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+
+                      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_minmax(0,0.8fr)]">
+                        <section className="space-y-3 rounded-xl border border-slate-100 bg-white p-3">
+                          <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">Thông tin hàng hóa</h3>
+                          <label className="block space-y-1">
+                            <span className="text-xs font-semibold text-[#717971]">Hàng hóa <span className="text-red-500">*</span></span>
+                            <SkuSearchPicker
+                              catalogError={skuCatalogError}
+                              duplicate={false}
+                              isCatalogLoading={isSkuCatalogLoading}
+                              onSelect={(sku) => {
+                                // SP-11 / BR-14: giá chào chỉ điền sẵn làm gợi ý, thủ kho sửa đè được.
+                                const quoted = Number(supplierCatalogBySkuId.get(sku?.id)?.quotedPrice)
+                                const patch = { skuId: sku?.id ?? '', submittedUnit: sku ? defaultSubmittedUnit(sku.inventoryUnit) : '' }
+                                if (Number.isFinite(quoted) && quoted > 0) patch.unitCost = sanitizeVndInput(String(quoted))
+                                updateLine(line.key, patch)
+                                setLineErrors((prev) => ({ ...prev, [line.key]: { ...(prev[line.key] ?? {}), skuId: undefined, unitCost: undefined } }))
+                              }}
+                              sku={selectedSku}
+                              skus={selectableSkus}
+                              hasError={!!errs.skuId}
+                            />
+                            {errs.skuId ? <p className="text-xs text-red-500">{errs.skuId}</p> : null}
+                          </label>
+                          <label className="block space-y-1">
+                            <span className="text-xs font-semibold text-[#717971]">Mã số</span>
+                            <input
+                              readOnly
+                              value={selectedSku?.skuCode || ''}
+                              className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 font-mono text-sm text-slate-700"
+                            />
+                          </label>
+                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                            <label className="space-y-1">
+                              <span className="text-xs font-semibold text-[#717971]">SL chứng từ <span className="text-red-500">*</span></span>
+                              <input
+                                type="text"
+                                inputMode="numeric"
+                                pattern="[0-9]*"
+                                className={`w-full rounded-xl border p-2.5 text-sm ${fi('documentQuantity')}`}
+                                value={line.documentQuantity}
+                                onChange={(event) => {
+                                  updateLine(line.key, { documentQuantity: event.target.value })
+                                  setLineErrors((prev) => ({ ...prev, [line.key]: { ...(prev[line.key] ?? {}), documentQuantity: undefined } }))
+                                }}
+                              />
+                              {errs.documentQuantity ? <p className="text-xs text-red-500">{errs.documentQuantity}</p> : null}
+                            </label>
+                            <label className="space-y-1">
+                              <span className="text-xs font-semibold text-[#717971]">SL thực nhập <span className="text-red-500">*</span></span>
+                              <input
+                                type="text"
+                                inputMode="numeric"
+                                pattern="[0-9]*"
+                                className={`w-full rounded-xl border p-2.5 text-sm ${fi('actualQuantity')}`}
+                                value={line.actualQuantity}
+                                onChange={(event) => {
+                                  updateLine(line.key, { actualQuantity: event.target.value })
+                                  setLineErrors((prev) => ({ ...prev, [line.key]: { ...(prev[line.key] ?? {}), actualQuantity: undefined } }))
+                                }}
+                              />
+                              {errs.actualQuantity ? <p className="text-xs text-red-500">{errs.actualQuantity}</p> : null}
+                            </label>
+                            <label className="space-y-1">
+                              <span className="text-xs font-semibold text-[#717971]">Đơn vị</span>
+                              <input
+                                readOnly
+                                value={selectedSku ? getSkuUnitName(selectedSku) : ''}
+                                className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-sm text-slate-700"
+                              />
+                            </label>
+                          </div>
+                        </section>
+
+                        <section className="space-y-3 rounded-xl border border-slate-100 bg-white p-3">
+                          <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">Giá và thông tin lô</h3>
+                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                            <label className="space-y-1">
+                              <span className="text-xs font-semibold text-[#717971]">Đơn giá <span className="text-red-500">*</span></span>
+                              <div className="relative">
+                                <input
+                                  type="text"
+                                  inputMode="numeric"
+                                  className={`w-full rounded-xl border py-2.5 pl-2.5 pr-8 text-right text-sm ${fi('unitCost')}`}
+                                  value={formatVndInput(line.unitCost)}
+                                  onChange={(event) => {
+                                    updateLine(line.key, { unitCost: sanitizeVndInput(event.target.value) })
+                                    setLineErrors((prev) => ({ ...prev, [line.key]: { ...(prev[line.key] ?? {}), unitCost: undefined } }))
+                                  }}
+                                  placeholder="Có thể để trống khi lưu Draft"
+                                />
+                                <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-400">₫</span>
+                              </div>
+                              {errs.unitCost ? <p className="text-xs text-red-500">{errs.unitCost}</p> : null}
+                              {!errs.unitCost && quotedPriceOf(line.skuId) ? (
+                                <p className="text-xs text-[#717971]">Giá chào của nhà cung cấp: {formatVnd(quotedPriceOf(line.skuId))}</p>
+                              ) : null}
+                            </label>
+                            <div className="space-y-1">
+                              <span className="text-xs font-semibold text-[#717971]">Thành tiền</span>
+                              <div className="rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-right text-sm font-bold text-slate-700">
+                                {summaryAmount}
+                              </div>
+                            </div>
+                          </div>
+                          <label className="block space-y-1">
+                            <span className="text-xs font-semibold text-[#717971]">Mã lô NCC <span className="text-red-500">*</span></span>
+                            <input
+                              className={`w-full rounded-xl border p-2.5 text-sm ${fi('lotCode')}`}
+                              value={line.lotCode}
+                              onChange={(event) => {
+                                updateLine(line.key, { lotCode: event.target.value })
+                                setLineErrors((prev) => ({ ...prev, [line.key]: { ...(prev[line.key] ?? {}), lotCode: undefined } }))
+                              }}
+                            />
+                            {errs.lotCode ? <p className="text-xs text-red-500">{errs.lotCode}</p> : null}
+                          </label>
+                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                            <label className="space-y-1">
+                              <span className="text-xs font-semibold text-[#717971]">Ngày SX <span className="text-red-500">*</span></span>
+                              <input
+                                type="date"
+                                max={today}
+                                className={`w-full rounded-xl border p-2.5 text-sm ${fi('manufacturedAt')}`}
+                                value={line.manufacturedAt}
+                                onChange={(event) => {
+                                  updateLine(line.key, { manufacturedAt: event.target.value })
+                                  setLineErrors((prev) => ({ ...prev, [line.key]: { ...(prev[line.key] ?? {}), manufacturedAt: undefined } }))
+                                }}
+                              />
+                              {errs.manufacturedAt ? <p className="text-xs text-red-500">{errs.manufacturedAt}</p> : null}
+                            </label>
+                            <label className="space-y-1">
+                              <span className="text-xs font-semibold text-[#717971]">Hạn dùng <span className="text-red-500">*</span></span>
+                              <input
+                                type="date"
+                                className={`w-full rounded-xl border p-2.5 text-sm ${errs.expiresAt ? 'border-red-400 bg-red-50' : warns.expiresAt ? 'border-amber-400 bg-amber-50' : 'border-slate-200 bg-white'}`}
+                                value={line.expiresAt}
+                                onChange={(event) => {
+                                  updateLine(line.key, { expiresAt: event.target.value })
+                                  setLineErrors((prev) => ({ ...prev, [line.key]: { ...(prev[line.key] ?? {}), expiresAt: undefined } }))
+                                }}
+                              />
+                              {errs.expiresAt ? <p className="text-xs text-red-500">{errs.expiresAt}</p> : null}
+                            </label>
+                          </div>
+                        </section>
+
+                        <section className="space-y-3 rounded-xl border border-slate-100 bg-white p-3 md:col-span-2 xl:col-span-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">Chất lượng và ghi chú</h3>
+                            <span className="text-xs text-slate-400">{line.qualityNote.length}/300</span>
+                          </div>
+                          <label className="block space-y-1">
+                            <span className="text-xs font-semibold text-[#717971]">Ghi chú chất lượng</span>
+                            <textarea
+                              maxLength={300}
+                              rows={6}
+                              className={`w-full rounded-xl border p-2.5 text-sm ${errs.qualityNote ? 'border-red-400 bg-red-50' : 'border-slate-200 bg-white'}`}
+                              value={line.qualityNote}
+                              onChange={(event) => {
+                                updateLine(line.key, { qualityNote: event.target.value })
+                                setLineErrors((prev) => ({ ...prev, [line.key]: { ...(prev[line.key] ?? {}), qualityNote: undefined } }))
+                              }}
+                            />
+                            {errs.qualityNote ? <p className="text-xs text-red-500">{errs.qualityNote}</p> : null}
+                          </label>
+                        </section>
+                      </div>
                     </div>
                   ) : null}
-
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_minmax(0,0.8fr)]">
-                    <section className="space-y-3 rounded-xl border border-slate-100 bg-white p-3">
-                      <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">Thông tin hàng hóa</h3>
-                      <label className="block space-y-1">
-                        <span className="text-xs font-semibold text-[#717971]">Hàng hóa <span className="text-red-500">*</span></span>
-                        <SkuSearchPicker
-                          catalogError={skuCatalogError}
-                          duplicate={false}
-                          isCatalogLoading={isSkuCatalogLoading}
-                          onSelect={(sku) => {
-                            updateLine(line.key, { skuId: sku?.id ?? '', submittedUnit: sku ? defaultSubmittedUnit(sku.inventoryUnit) : '' })
-                            setLineErrors((prev) => ({ ...prev, [line.key]: { ...(prev[line.key] ?? {}), skuId: undefined } }))
-                          }}
-                          sku={selectedSku}
-                          skus={supplierReceiptSkus}
-                          hasError={!!errs.skuId}
-                        />
-                        {errs.skuId ? <p className="text-xs text-red-500">{errs.skuId}</p> : null}
-                      </label>
-                      <label className="block space-y-1">
-                        <span className="text-xs font-semibold text-[#717971]">Mã số</span>
-                        <input
-                          readOnly
-                          value={selectedSku?.skuCode || ''}
-                          className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 font-mono text-sm text-slate-700"
-                        />
-                      </label>
-                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                        <label className="space-y-1">
-                          <span className="text-xs font-semibold text-[#717971]">SL chứng từ <span className="text-red-500">*</span></span>
-                          <input
-                            type="text"
-                            inputMode="numeric"
-                            pattern="[0-9]*"
-                            className={`w-full rounded-xl border p-2.5 text-sm ${fi('documentQuantity')}`}
-                            value={line.documentQuantity}
-                            onChange={(event) => {
-                              updateLine(line.key, { documentQuantity: event.target.value })
-                              setLineErrors((prev) => ({ ...prev, [line.key]: { ...(prev[line.key] ?? {}), documentQuantity: undefined } }))
-                            }}
-                          />
-                          {errs.documentQuantity ? <p className="text-xs text-red-500">{errs.documentQuantity}</p> : null}
-                        </label>
-                        <label className="space-y-1">
-                          <span className="text-xs font-semibold text-[#717971]">SL thực nhập <span className="text-red-500">*</span></span>
-                          <input
-                            type="text"
-                            inputMode="numeric"
-                            pattern="[0-9]*"
-                            className={`w-full rounded-xl border p-2.5 text-sm ${fi('actualQuantity')}`}
-                            value={line.actualQuantity}
-                            onChange={(event) => {
-                              updateLine(line.key, { actualQuantity: event.target.value })
-                              setLineErrors((prev) => ({ ...prev, [line.key]: { ...(prev[line.key] ?? {}), actualQuantity: undefined } }))
-                            }}
-                          />
-                          {errs.actualQuantity ? <p className="text-xs text-red-500">{errs.actualQuantity}</p> : null}
-                        </label>
-                        <label className="space-y-1">
-                          <span className="text-xs font-semibold text-[#717971]">Đơn vị</span>
-                          <input
-                            readOnly
-                            value={selectedSku ? getSkuUnitName(selectedSku) : ''}
-                            className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-sm text-slate-700"
-                          />
-                        </label>
-                      </div>
-                    </section>
-
-                    <section className="space-y-3 rounded-xl border border-slate-100 bg-white p-3">
-                      <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">Giá và thông tin lô</h3>
-                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                        <label className="space-y-1">
-                          <span className="text-xs font-semibold text-[#717971]">Đơn giá <span className="text-red-500">*</span></span>
-                          <div className="relative">
-                            <input
-                              type="text"
-                              inputMode="numeric"
-                              className={`w-full rounded-xl border py-2.5 pl-2.5 pr-8 text-right text-sm ${fi('unitCost')}`}
-                              value={formatVndInput(line.unitCost)}
-                              onChange={(event) => {
-                                updateLine(line.key, { unitCost: sanitizeVndInput(event.target.value) })
-                                setLineErrors((prev) => ({ ...prev, [line.key]: { ...(prev[line.key] ?? {}), unitCost: undefined } }))
-                              }}
-                              placeholder="Có thể để trống khi lưu Draft"
-                            />
-                            <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-400">₫</span>
-                          </div>
-                          {errs.unitCost ? <p className="text-xs text-red-500">{errs.unitCost}</p> : null}
-                        </label>
-                        <div className="space-y-1">
-                          <span className="text-xs font-semibold text-[#717971]">Thành tiền</span>
-                          <div className="rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-right text-sm font-bold text-slate-700">
-                            {line.unitCost === '' || line.actualQuantity === '' ? '—' : formatVnd(calculateLineAmount(line))}
-                          </div>
-                        </div>
-                      </div>
-                      <label className="block space-y-1">
-                        <span className="text-xs font-semibold text-[#717971]">Mã lô NCC <span className="text-red-500">*</span></span>
-                        <input
-                          className={`w-full rounded-xl border p-2.5 text-sm ${fi('lotCode')}`}
-                          value={line.lotCode}
-                          onChange={(event) => {
-                            updateLine(line.key, { lotCode: event.target.value })
-                            setLineErrors((prev) => ({ ...prev, [line.key]: { ...(prev[line.key] ?? {}), lotCode: undefined } }))
-                          }}
-                        />
-                        {errs.lotCode ? <p className="text-xs text-red-500">{errs.lotCode}</p> : null}
-                      </label>
-                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                        <label className="space-y-1">
-                          <span className="text-xs font-semibold text-[#717971]">Ngày SX <span className="text-red-500">*</span></span>
-                          <input
-                            type="date"
-                            max={today}
-                            className={`w-full rounded-xl border p-2.5 text-sm ${fi('manufacturedAt')}`}
-                            value={line.manufacturedAt}
-                            onChange={(event) => {
-                              updateLine(line.key, { manufacturedAt: event.target.value })
-                              setLineErrors((prev) => ({ ...prev, [line.key]: { ...(prev[line.key] ?? {}), manufacturedAt: undefined } }))
-                            }}
-                          />
-                          {errs.manufacturedAt ? <p className="text-xs text-red-500">{errs.manufacturedAt}</p> : null}
-                        </label>
-                        <label className="space-y-1">
-                          <span className="text-xs font-semibold text-[#717971]">Hạn dùng <span className="text-red-500">*</span></span>
-                          <input
-                            type="date"
-                            className={`w-full rounded-xl border p-2.5 text-sm ${errs.expiresAt ? 'border-red-400 bg-red-50' : warns.expiresAt ? 'border-amber-400 bg-amber-50' : 'border-slate-200 bg-white'}`}
-                            value={line.expiresAt}
-                            onChange={(event) => {
-                              updateLine(line.key, { expiresAt: event.target.value })
-                              setLineErrors((prev) => ({ ...prev, [line.key]: { ...(prev[line.key] ?? {}), expiresAt: undefined } }))
-                            }}
-                          />
-                          {errs.expiresAt ? <p className="text-xs text-red-500">{errs.expiresAt}</p> : null}
-                        </label>
-                      </div>
-                    </section>
-
-                    <section className="space-y-3 rounded-xl border border-slate-100 bg-white p-3 md:col-span-2 xl:col-span-1">
-                      <div className="flex items-center justify-between gap-2">
-                        <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">Chất lượng và ghi chú</h3>
-                        <span className="text-xs text-slate-400">{line.qualityNote.length}/300</span>
-                      </div>
-                      <label className="block space-y-1">
-                        <span className="text-xs font-semibold text-[#717971]">Ghi chú chất lượng</span>
-                        <textarea
-                          maxLength={300}
-                          rows={8}
-                          className={`w-full rounded-xl border p-2.5 text-sm ${errs.qualityNote ? 'border-red-400 bg-red-50' : 'border-slate-200 bg-white'}`}
-                          value={line.qualityNote}
-                          onChange={(event) => {
-                            updateLine(line.key, { qualityNote: event.target.value })
-                            setLineErrors((prev) => ({ ...prev, [line.key]: { ...(prev[line.key] ?? {}), qualityNote: undefined } }))
-                          }}
-                        />
-                        {errs.qualityNote ? <p className="text-xs text-red-500">{errs.qualityNote}</p> : null}
-                      </label>
-                    </section>
-                  </div>
                 </div>
               )
             })}

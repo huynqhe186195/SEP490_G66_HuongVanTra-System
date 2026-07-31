@@ -57,6 +57,27 @@ function BigButton({ children, variant = 'primary', className = '', ...props }) 
   )
 }
 
+function IconActionButton({ icon, label, variant = 'secondary', onClick }) {
+  const styles =
+    variant === 'danger'
+      ? 'border-[#ba1a1a]/40 text-[#ba1a1a] hover:bg-[#fff5f5]'
+      : variant === 'amber'
+        ? 'border-[#b45309]/40 text-[#b45309] hover:bg-[#fffbeb]'
+        : 'border-[#356647]/30 text-[#356647] hover:bg-[#356647]/5'
+
+  return (
+    <button
+      type="button"
+      title={label}
+      aria-label={label}
+      onClick={onClick}
+      className={`inline-flex h-11 w-11 items-center justify-center rounded-xl border-2 bg-white transition-all active:scale-[0.96] ${styles}`}
+    >
+      <span className="material-symbols-outlined text-[22px]">{icon}</span>
+    </button>
+  )
+}
+
 function UsersPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const view = searchParams.get('view') === 'restore' ? 'restore' : 'active'
@@ -73,6 +94,7 @@ function UsersPage() {
 
   const [createOpen, setCreateOpen] = useState(false)
   const [editUser, setEditUser] = useState(null)
+  const [viewUser, setViewUser] = useState(null)
   const [createForm, setCreateForm] = useState(EMPTY_CREATE)
   const [editRoleIds, setEditRoleIds] = useState([])
   const [editActive, setEditActive] = useState(true)
@@ -399,16 +421,21 @@ function UsersPage() {
                       </span>
                     </div>
                   </div>
-                  <div className="flex flex-wrap gap-2 lg:flex-col xl:flex-row">
-                    <BigButton variant="secondary" className="flex-1 lg:flex-none" onClick={() => openEdit(user)}>
-                      Sửa
-                    </BigButton>
-                    <BigButton variant="amber" className="flex-1 lg:flex-none" onClick={() => handleLockToggle(user)}>
-                      {user.isActive ? 'Khóa' : 'Mở khóa'}
-                    </BigButton>
-                    <BigButton variant="danger" className="flex-1 lg:flex-none" onClick={() => handleSoftDelete(user)}>
-                      Ngừng sử dụng
-                    </BigButton>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <IconActionButton icon="visibility" label="Xem thông tin" onClick={() => setViewUser(user)} />
+                    <IconActionButton icon="edit" label="Sửa" onClick={() => openEdit(user)} />
+                    <IconActionButton
+                      icon={user.isActive ? 'lock' : 'lock_open'}
+                      label={user.isActive ? 'Khóa' : 'Mở khóa'}
+                      variant="amber"
+                      onClick={() => handleLockToggle(user)}
+                    />
+                    <IconActionButton
+                      icon="person_off"
+                      label="Ngừng sử dụng"
+                      variant="danger"
+                      onClick={() => handleSoftDelete(user)}
+                    />
                   </div>
                 </div>
               </article>
@@ -547,6 +574,66 @@ function UsersPage() {
               <BigButton variant="secondary" onClick={() => setEditUser(null)}>Hủy bỏ</BigButton>
               <BigButton disabled={isSaving} onClick={handleUpdate}>
                 {isSaving ? 'Đang lưu...' : 'Lưu lại'}
+              </BigButton>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {viewUser ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setViewUser(null)}>
+          <div
+            className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl sm:p-8"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-[#717971]">Thông tin tài khoản</p>
+                <h2 className="mt-1 text-2xl font-bold text-[#356647]">
+                  {viewUser.employee?.fullName || viewUser.username}
+                </h2>
+              </div>
+              <button
+                type="button"
+                className="rounded-full p-2 text-[#717971] hover:bg-[#eae8e0]"
+                onClick={() => setViewUser(null)}
+                title="Đóng"
+              >
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+
+            <dl className="mt-6 space-y-3">
+              {[
+                ['Họ và tên', viewUser.employee?.fullName || '—'],
+                ['Tên đăng nhập', viewUser.username],
+                ['Vai trò', (viewUser.roles || []).map(formatRoleName).join(', ') || 'Chưa gán'],
+                ['Phòng ban', viewUser.employee?.department || '—'],
+                [
+                  'Đăng nhập lần cuối',
+                  viewUser.lastLoginAt ? new Date(viewUser.lastLoginAt).toLocaleString('vi-VN') : 'Chưa có',
+                ],
+                ['Trạng thái', viewUser.isActive ? 'Đang hoạt động' : 'Đã khóa'],
+              ].map(([label, value]) => (
+                <div key={label} className="rounded-2xl bg-[#f6f4ec] px-4 py-3">
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-[#717971]">{label}</dt>
+                  <dd className="mt-1 text-base font-semibold text-[#1b1c17]">{value}</dd>
+                </div>
+              ))}
+            </dl>
+
+            <div className="mt-8 flex flex-wrap justify-end gap-3">
+              <BigButton variant="secondary" onClick={() => setViewUser(null)}>
+                Đóng
+              </BigButton>
+              <BigButton
+                onClick={() => {
+                  const user = viewUser
+                  setViewUser(null)
+                  openEdit(user)
+                }}
+              >
+                Sửa tài khoản
               </BigButton>
             </div>
           </div>

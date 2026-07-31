@@ -5,7 +5,7 @@ import PageHeader from '../../../components/shared/PageHeader.jsx'
 import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
 import { showError, showSuccess, showToast } from '../../../app/toast.js'
 import { useAuthSession } from '../../auth/hooks/useAuthSession.js'
-import { isSystemAdmin, isWarehouseRole } from '../../auth/utils/permissions.js'
+import { canDecideProductApprovals, isSystemAdmin, isWarehouseRole } from '../../auth/utils/permissions.js'
 import VndCurrencyInput from '../components/VndCurrencyInput.jsx'
 import { fetchAttributeNames } from '../services/attributeNamesApi.js'
 import { fetchCategories } from '../services/categoriesApi.js'
@@ -44,7 +44,7 @@ import { formatWholeVnd, parseWholeVndInput } from '../utils/productDisplay.js'
 
 const STATUS_LABELS = {
   Draft: 'Nháp',
-  PendingApproval: 'Chờ Admin duyệt',
+  PendingApproval: 'Chờ Manager duyệt',
   Rejected: 'Bị từ chối',
   Completed: 'Đã tạo hàng hóa',
   Cancelled: 'Đã hủy',
@@ -1981,9 +1981,9 @@ function getVariantValue(variant, key, fallback = '') {
   return variant?.[key] ?? variant?.[pascalKey] ?? fallback
 }
 
-function ProductCreationRequestDetailModal({ request, onClose, onApprove, onReject, isSaving }) {
+function ProductCreationRequestDetailModal({ request, onClose, onApprove, onReject, isSaving, allowDecision = false }) {
   if (!request) return null
-  const canDecide = request.status === 'PendingApproval'
+  const canDecide = allowDecision && request.status === 'PendingApproval'
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 p-4">
@@ -2388,10 +2388,11 @@ export default function ProductApprovalsPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const admin = isSystemAdmin(session)
+  const canDecideApprovals = canDecideProductApprovals(session)
   const warehouse = isWarehouseRole(session)
   const showCreateForm = warehouse && pathname !== '/inventory/product-approvals'
   const fileInputRef = useRef(null)
-  const initialRequestStatus = admin ? 'PendingApproval' : 'all'
+  const initialRequestStatus = canDecideApprovals ? 'PendingApproval' : 'all'
   const [categories, setCategories] = useState([])
   const [materials, setMaterials] = useState([])
   const [existingProducts, setExistingProducts] = useState([])
@@ -2818,7 +2819,7 @@ export default function ProductApprovalsPage() {
       <PageHeader
         title={showCreateForm ? 'Tạo biên bản yêu cầu' : 'Lịch sử tạo hàng hóa'}
         titleInfo={showCreateForm ? 'Tạo biên bản nhiều sản phẩm, gửi Admin duyệt.' : 'Lịch sử các yêu cầu tạo hàng hóa đã gửi.'}
-        rightContent={!admin && warehouse ? (
+        rightContent={warehouse ? (
           <select className="rounded-lg border border-slate-200 px-3 py-2 text-sm" value={statusFilter} onChange={(event) => handleStatusFilterChange(event.target.value)}>
             {PRODUCT_CREATION_STATUS_FILTERS.map((option) => (
               <option key={option.value} value={option.value}>{option.label}</option>
@@ -2984,8 +2985,8 @@ export default function ProductApprovalsPage() {
       <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
           <div>
-            <h2 className="text-base font-bold text-slate-900">{admin ? 'Yêu cầu chờ xử lý' : 'Yêu cầu tạo hàng hóa'}</h2>
-            {admin ? (
+            <h2 className="text-base font-bold text-slate-900">{canDecideApprovals ? 'Yêu cầu chờ xử lý' : 'Yêu cầu tạo hàng hóa'}</h2>
+            {canDecideApprovals ? (
               <p className="mt-1 text-sm text-slate-500">
                 Đang xem: {PRODUCT_CREATION_STATUS_FILTERS.find((option) => option.value === statusFilter)?.label ?? 'Tất cả'}
               </p>
@@ -3001,7 +3002,7 @@ export default function ProductApprovalsPage() {
                 onChange={(e) => { setRequestSearch(e.target.value); setAdminPage(1) }}
               />
             </div>
-            {admin ? (
+            {(canDecideApprovals || admin) ? (
               <label className="flex items-center gap-2 text-sm font-semibold text-slate-600">
                 Trạng thái
                 <select className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700" value={statusFilter} onChange={(event) => handleStatusFilterChange(event.target.value)}>
@@ -3013,7 +3014,7 @@ export default function ProductApprovalsPage() {
             ) : null}
           </div>
         </div>
-        {admin ? (
+        {canDecideApprovals ? (
           <AdminProductCreationRequestsTable
             requests={adminPagedRequests}
             isLoading={isLoading}
@@ -3075,7 +3076,7 @@ export default function ProductApprovalsPage() {
                       {warehouse && ['Completed', 'Cancelled', 'PendingApproval'].includes(request.status) ? (
                         <button type="button" className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600" onClick={() => setDetailRequest(request)}>Xem</button>
                       ) : null}
-                      {admin && request.status === 'PendingApproval' ? (
+                      {canDecideApprovals && request.status === 'PendingApproval' ? (
                         <>
                           <button type="button" className="rounded-lg bg-[#356647] px-3 py-1.5 text-xs font-semibold text-white" onClick={() => handleDecision(request, 'approve')}>Duyệt</button>
                           <button type="button" className="rounded-lg bg-amber-100 px-3 py-1.5 text-xs font-semibold text-amber-700" onClick={() => handleDecision(request, 'reject')}>Từ chối</button>
@@ -3098,6 +3099,7 @@ export default function ProductApprovalsPage() {
         onApprove={(request) => handleDecision(request, 'approve')}
         onReject={(request) => handleDecision(request, 'reject')}
         isSaving={isSaving}
+        allowDecision={canDecideApprovals}
       />
       <DecisionReasonModal
         isOpen={Boolean(decisionModal)}

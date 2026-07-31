@@ -19,7 +19,8 @@ public record CreateOrderRequest(
     string? CodDebtSettlementJson = null,
     OrderKind OrderKind = OrderKind.Sale,
     List<CreateCustomBundleRequest>? CustomBundles = null,
-    List<CreatePaymentAllocationRequest>? Payments = null
+    List<CreatePaymentAllocationRequest>? Payments = null,
+    Guid? ContractId = null
 );
 
 public record CreatePaymentAllocationRequest(
@@ -104,6 +105,13 @@ public record CreateCustomBundleIngredientRequest(
     decimal UnitPrice);
 
 public record ReprintReceiptRequest(string Reason);
+
+public record GetB2BDebtsRequest(
+    string? CustomerId = null,
+    bool OverdueOnly = false,
+    string? Page = null,
+    string? PageSize = null
+);
 
 public record GetOrdersRequest(
     string? Search,
