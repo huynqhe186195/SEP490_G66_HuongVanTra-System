@@ -17,8 +17,24 @@ namespace InventoryService.WebAPI.Controllers;
 [Authorize]
 public class StockAdjustmentRequestsController(InventoryLogic _logic) : ControllerBase
 {
+    // JWT phát tên vai trò cụ thể (SalePos/SaleCod); "Sale" giữ lại cho dữ liệu vai trò gộp cũ.
+    private const string SaleRoles = "Sale,SalePos,SaleCod";
+    private const string ReadRoles = SaleRoles + ",Manager,Warehouse,Admin,Accountant";
+    private const string CreateRoles = SaleRoles + ",Manager";
+
+    private bool IsSaleRole() =>
+        User.IsInRole("Sale") || User.IsInRole("SalePos") || User.IsInRole("SaleCod");
+
+    /// <summary>Sale thuần chỉ được xem yêu cầu do chính mình tạo.</summary>
+    private bool IsSaleOnly() =>
+        IsSaleRole()
+        && !User.IsInRole("Manager")
+        && !User.IsInRole("Warehouse")
+        && !User.IsInRole("Admin")
+        && !User.IsInRole("Accountant");
+
     [HttpGet]
-    [Authorize(Roles = "Sale,Manager,Warehouse,Admin,Accountant")]
+    [Authorize(Roles = ReadRoles)]
     public async Task<IActionResult> GetList(
         CancellationToken ct,
         [FromQuery] string? status,
@@ -33,12 +49,7 @@ public class StockAdjustmentRequestsController(InventoryLogic _logic) : Controll
         [FromQuery] bool onlyRemaining = false,
         [FromQuery] string? sort = null)
     {
-        // Sale chỉ được xem yêu cầu do chính mình tạo.
-        var saleOnly = User.IsInRole("Sale")
-            && !User.IsInRole("Manager")
-            && !User.IsInRole("Warehouse")
-            && !User.IsInRole("Admin")
-            && !User.IsInRole("Accountant");
+        var saleOnly = IsSaleOnly();
 
         Guid? requestedBy;
         if (mine || saleOnly)
@@ -83,18 +94,13 @@ public class StockAdjustmentRequestsController(InventoryLogic _logic) : Controll
         value.HasValue ? DateTime.SpecifyKind(value.Value.Date.AddDays(1), DateTimeKind.Utc) : null;
 
     [HttpGet("{id:guid}")]
-    [Authorize(Roles = "Sale,Manager,Warehouse,Admin,Accountant")]
+    [Authorize(Roles = ReadRoles)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
     {
         var item = await _logic.GetStockAdjustmentRequestAsync(id, ct);
         if (item == null) return NotFound();
 
-        var saleOnly = User.IsInRole("Sale")
-            && !User.IsInRole("Manager")
-            && !User.IsInRole("Warehouse")
-            && !User.IsInRole("Admin")
-            && !User.IsInRole("Accountant");
-        if (saleOnly && item.RequestedBy != User.GetUserId())
+        if (IsSaleOnly() && item.RequestedBy != User.GetUserId())
             return Forbid();
 
         return Ok(item);
@@ -102,12 +108,12 @@ public class StockAdjustmentRequestsController(InventoryLogic _logic) : Controll
 
     /// <summary>Các Phiếu điều chuyển đã sinh ra từ yêu cầu này. Một yêu cầu có thể có nhiều phiếu.</summary>
     [HttpGet("{id:guid}/transfers")]
-    [Authorize(Roles = "Sale,Manager,Warehouse,Admin,Accountant")]
+    [Authorize(Roles = ReadRoles)]
     public async Task<IActionResult> GetTransfers(Guid id, CancellationToken ct) =>
         Ok(await _logic.GetStockAdjustmentRequestTransfersAsync(id, ct));
 
     [HttpPost]
-    [Authorize(Roles = "Sale,Manager")]
+    [Authorize(Roles = CreateRoles)]
     public async Task<IActionResult> Create([FromBody] CreateStockAdjustmentRequest request, CancellationToken ct)
     {
         if (User.IsInRole("Admin")) return Forbid();
@@ -167,7 +173,7 @@ public class StockAdjustmentRequestsController(InventoryLogic _logic) : Controll
     }
 
     [HttpPost("{id:guid}/cancel")]
-    [Authorize(Roles = "Sale,Manager")]
+    [Authorize(Roles = CreateRoles)]
     public async Task<IActionResult> Cancel(
         Guid id,
         [FromBody] CancelStockAdjustmentRequest? request,
