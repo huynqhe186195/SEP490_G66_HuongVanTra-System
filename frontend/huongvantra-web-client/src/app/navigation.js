@@ -26,6 +26,7 @@ const HOME_MODULE_PRIORITY = [
   'customers',
   'products',
   'stock_adjustment_ops',
+  'stock_transfer_ops',
   'supplier_receipts',
   'inventory_returns',
   'inventory_ledger',
@@ -112,10 +113,17 @@ export const navigationItems = [
     ],
   },
   {
-    label: 'Bổ sung tồn quầy',
+    label: 'Yêu cầu bổ sung Kệ Hàng',
     path: '/inventory/stock-requests',
     module: 'stock_adjustment_ops',
     icon: 'edit_note',
+    roles: ['admin', 'agencyManager', 'inventoryManager', 'salesStaff'],
+  },
+  {
+    label: 'Phiếu điều chuyển Kho → Kệ',
+    path: '/inventory/stock-transfers',
+    module: 'stock_transfer_ops',
+    icon: 'move_down',
     roles: ['admin', 'agencyManager', 'inventoryManager'],
   },
   {
@@ -227,6 +235,7 @@ const INVENTORY_SIDEBAR_GROUPS = [
       { path: '/inventory/stocktake' },
       { path: '/inventory/ledger' },
       { path: '/inventory/stock-requests' },
+      { path: '/inventory/stock-transfers' },
       { path: '/inventory/suppliers' },
     ],
   },
@@ -475,6 +484,7 @@ const MODULE_PATH_PREFIXES = [
   { module: 'product_deletion_requests', prefix: '/inventory/product-deletion-requests' },
   { module: 'products', prefix: '/products/categories' },
   { module: 'products', prefix: '/inventory/products' },
+  { module: 'stock_transfer_ops', prefix: '/inventory/stock-transfers' },
   { module: 'stock_adjustment_ops', prefix: '/inventory/stock-requests' },
   { module: 'supplier_receipt_create', prefix: '/inventory/import/create' },
   { module: 'supplier_receipts', prefix: '/inventory/supplier-receipts' },
@@ -652,6 +662,12 @@ export function getAccessDeniedMessage(pathname) {
   if (module === 'supplier_receipt_create') {
     return 'Chỉ Thủ kho được tạo hoặc gửi Phiếu nhập nhà cung cấp.'
   }
+  if (module === 'stock_adjustment_ops') {
+    return 'Chỉ Nhân viên bán hàng, Quản lý, Thủ kho hoặc Admin được xem Yêu cầu bổ sung Kệ Hàng; chỉ Thủ kho không có role Admin được duyệt hoặc từ chối.'
+  }
+  if (module === 'stock_transfer_ops') {
+    return 'Chỉ Thủ kho, Quản lý hoặc Admin được xem điều chuyển Kho → Kệ; chỉ Thủ kho không có role Admin được thao tác.'
+  }
   if (module === 'inventory') {
     return 'Chỉ Thủ kho Kho tổng mới được truy cập module kho tổng.'
   }
@@ -712,8 +728,17 @@ export function isNavigationItemActive(pathname, item, search = '') {
     return path === target || path.startsWith(`${target}/`)
   }
 
+  if (item.module === 'stock_transfer_ops') {
+    return path === target || path.startsWith(`${target}/`)
+  }
+
   if (item.module === 'inventory') {
-    if (path === '/inventory/stock-requests' || path.startsWith('/inventory/stock-requests/')) {
+    if (
+      path === '/inventory/stock-transfers'
+      || path.startsWith('/inventory/stock-transfers/')
+      || path === '/inventory/stock-requests'
+      || path.startsWith('/inventory/stock-requests/')
+    ) {
       return false
     }
     if (path === '/inventory/products' || path.startsWith('/inventory/products/')) {

@@ -1,7 +1,14 @@
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { formatStockQuantity } from '../../products/utils/productDisplay.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
-import { getAdjustmentStatusClass, getAdjustmentStatusLabel } from '../services/stockAdjustmentRequestApi.js'
+import {
+  getAdjustmentLineStatusLabel,
+  getAdjustmentStatusClass,
+  getAdjustmentStatusLabel,
+} from '../services/stockAdjustmentRequestApi.js'
+import { getStockTransferStatusLabel, STOCK_FLOW_TERMS } from '../utils/stockFlowLabels.js'
+
+const CLOSEABLE_STATUSES = ['approved', 'processing', 'partiallyfulfilled']
 
 function DetailField({ label, value }) {
   return (
@@ -12,35 +19,33 @@ function DetailField({ label, value }) {
   )
 }
 
-function formatDelta(delta) {
-  const value = Number(delta)
-  if (!Number.isFinite(value)) return '—'
-  if (value > 0) return `+${formatStockQuantity(value)}`
-  return formatStockQuantity(value)
-}
-
 export default function StockAdjustmentRequestDetailPanel({
   request,
+  relatedTransfers,
   canReview,
   canCancel,
   canCancelAny,
   currentUserId,
   activeTab,
   actingId,
-  onApprove,
+  onReview,
   onReject,
   onCancel,
+  onCloseRemaining,
 }) {
-  const navigate = useNavigate()
-
   if (!request) {
-    return <p className="text-sm text-slate-500">Chọn một yêu cầu để xem chi tiết lô.</p>
+    return <p className="text-sm text-slate-500">Chọn một yêu cầu để xem chi tiết.</p>
   }
 
   const items = Array.isArray(request.items) ? request.items : []
+  const transfers = Array.isArray(relatedTransfers) ? relatedTransfers : []
   const isOwnRequest = currentUserId && String(request.requestedBy).toLowerCase() === String(currentUserId).toLowerCase()
   const showReviewActions = request.status === 'pending' && canReview && !isOwnRequest
   const showCancelAction = request.status === 'pending' && canCancel && (canCancelAny || isOwnRequest || activeTab === 'mine')
+  const showCloseAction =
+    canReview
+    && CLOSEABLE_STATUSES.includes(request.status)
+    && Number(request.totalRemainingQuantity ?? 0) > 0
 
   return (
     <div className="space-y-6">
@@ -58,9 +63,44 @@ export default function StockAdjustmentRequestDetailPanel({
         </span>
       </div>
 
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+            {STOCK_FLOW_TERMS.requestedQuantity}
+          </p>
+          <p className="mt-1 text-lg font-bold text-slate-800">
+            {formatStockQuantity(request.totalRequestedQuantity ?? 0)}
+          </p>
+        </div>
+        <div className="rounded-xl border border-emerald-100 bg-[#f0f7f2] p-3">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-700">
+            {STOCK_FLOW_TERMS.fulfilledQuantity}
+          </p>
+          <p className="mt-1 text-lg font-bold text-emerald-800">
+            {formatStockQuantity(request.totalFulfilledQuantity ?? 0)}
+          </p>
+        </div>
+        <div className="rounded-xl border border-rose-100 bg-rose-50 p-3">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-rose-700">
+            {STOCK_FLOW_TERMS.rejectedQuantity}
+          </p>
+          <p className="mt-1 text-lg font-bold text-rose-800">
+            {formatStockQuantity(request.totalRejectedQuantity ?? 0)}
+          </p>
+        </div>
+        <div className="rounded-xl border border-amber-100 bg-amber-50 p-3">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-amber-700">
+            {STOCK_FLOW_TERMS.remainingQuantity}
+          </p>
+          <p className="mt-1 text-lg font-bold text-amber-800">
+            {formatStockQuantity(request.totalRemainingQuantity ?? 0)}
+          </p>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <DetailField label="Kho xuất" value="Kho tổng" />
-        <DetailField label="Kho nhận" value="Tồn quầy POS mặc định" />
+        <DetailField label="Nơi cấp hàng" value={STOCK_FLOW_TERMS.warehouse} />
+        <DetailField label="Nơi nhận hàng" value={STOCK_FLOW_TERMS.shelf} />
         <DetailField label="Lý do gửi" value={request.reason} />
         <DetailField
           label="Thời gian duyệt"
@@ -78,11 +118,12 @@ export default function StockAdjustmentRequestDetailPanel({
           <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
             <tr>
               <th className="px-4 py-3">SKU</th>
-              <th className="px-4 py-3 text-right">SL bổ sung</th>
-              <th className="px-4 py-3 text-right">Tồn quầy POS lúc gửi</th>
-              <th className="px-4 py-3 text-right">Tồn quầy POS sau duyệt</th>
-              <th className="px-4 py-3 text-right">Kho tổng sau duyệt</th>
-              <th className="px-4 py-3">Phiếu xuất</th>
+              <th className="px-4 py-3 text-right">{STOCK_FLOW_TERMS.requestedQuantity}</th>
+              <th className="px-4 py-3 text-right">{STOCK_FLOW_TERMS.approvedQuantity}</th>
+              <th className="px-4 py-3 text-right">{STOCK_FLOW_TERMS.fulfilledQuantity}</th>
+              <th className="px-4 py-3 text-right">{STOCK_FLOW_TERMS.rejectedQuantity}</th>
+              <th className="px-4 py-3 text-right">{STOCK_FLOW_TERMS.remainingQuantity}</th>
+              <th className="px-4 py-3">Trạng thái dòng</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -92,47 +133,43 @@ export default function StockAdjustmentRequestDetailPanel({
                   <td className="px-4 py-3">
                     <p className="font-mono text-xs font-bold text-[#356647]">{item.skuCode || '—'}</p>
                     <p className="mt-0.5 text-xs text-slate-500">{item.skuSnapshotName || '—'}</p>
+                    {item.reviewNote ? (
+                      <p className="mt-1 text-xs text-slate-500">Ghi chú: {item.reviewNote}</p>
+                    ) : null}
+                    {item.rejectionReason ? (
+                      <p className="mt-1 text-xs text-rose-600">Lý do từ chối: {item.rejectionReason}</p>
+                    ) : null}
+                    {item.closedReason ? (
+                      <p className="mt-1 text-xs text-slate-600">Lý do đóng phần còn lại: {item.closedReason}</p>
+                    ) : null}
                   </td>
-                  <td
-                    className={`px-4 py-3 text-right font-bold ${
-                      item.quantityDelta > 0 ? 'text-emerald-700' : 'text-rose-700'
-                    }`}
-                  >
-                    {formatDelta(item.quantityDelta)}
-                  </td>
-                  <td className="px-4 py-3 text-right text-slate-600">
-                    {formatStockQuantity(item.quantityOnHandSnapshot)}
-                  </td>
-                  <td className="px-4 py-3 text-right text-slate-600">
-                    {item.quantityOnHandAfter != null
-                      ? formatStockQuantity(item.quantityOnHandAfter)
-                      : '—'}
+                  <td className="px-4 py-3 text-right font-bold text-slate-800">
+                    {formatStockQuantity(item.requestedQuantity)}
                   </td>
                   <td className="px-4 py-3 text-right text-slate-600">
-                    {item.warehouseQuantityOnHandAfter != null
-                      ? formatStockQuantity(item.warehouseQuantityOnHandAfter)
-                      : '—'}
+                    {formatStockQuantity(item.approvedQuantity)}
+                  </td>
+                  <td className="px-4 py-3 text-right font-semibold text-emerald-700">
+                    {formatStockQuantity(item.fulfilledQuantity)}
+                  </td>
+                  <td className="px-4 py-3 text-right text-rose-700">
+                    {formatStockQuantity(item.rejectedQuantity)}
+                  </td>
+                  <td className="px-4 py-3 text-right font-semibold text-amber-700">
+                    {formatStockQuantity(item.remainingQuantity)}
                   </td>
                   <td className="px-4 py-3">
-                    {item.exportSlipCode ? (
-                      <button
-                        type="button"
-                        className="font-semibold text-[#356647] hover:underline"
-                        onClick={() =>
-                          navigate('/inventory/export', { state: { search: item.exportSlipCode } })
-                        }
-                      >
-                        {item.exportSlipCode}
-                      </button>
-                    ) : (
-                      <span className="text-slate-400">—</span>
-                    )}
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${getAdjustmentStatusClass(item.status)}`}
+                    >
+                      {getAdjustmentLineStatusLabel(item.status)}
+                    </span>
                   </td>
                 </tr>
               ))
             ) : (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-sm text-slate-500">
+                <td colSpan={7} className="px-4 py-6 text-center text-sm text-slate-500">
                   Chưa có dòng SKU trong yêu cầu này.
                 </td>
               </tr>
@@ -141,17 +178,54 @@ export default function StockAdjustmentRequestDetailPanel({
         </table>
       </div>
 
-      {showReviewActions || showCancelAction ? (
+      <div className="rounded-xl border border-slate-200">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-slate-50 px-4 py-3">
+          <p className="text-xs font-bold uppercase tracking-wide text-slate-600">
+            {STOCK_FLOW_TERMS.transfer} liên quan
+          </p>
+          <Link to={`/inventory/stock-transfers?sourceRequestId=${request.id}`} className="text-xs font-semibold text-[#356647] hover:underline">
+            Mở danh sách phiếu điều chuyển
+          </Link>
+        </div>
+        {transfers.length > 0 ? (
+          <ul className="divide-y divide-slate-100">
+            {transfers.map((transfer) => (
+              <li key={transfer.transferId} className="px-4 py-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="font-mono text-sm font-bold text-[#356647]">{transfer.transferCode}</p>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${getAdjustmentStatusClass(transfer.status)}`}
+                  >
+                    {getStockTransferStatusLabel(transfer.status)}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-slate-500">
+                  {STOCK_FLOW_TERMS.transferQuantity}: {formatStockQuantity(transfer.totalQuantity)}
+                  {' · tạo '}
+                  {formatVietnamDateTime(transfer.createdAt)}
+                  {transfer.completedAt ? ` · hoàn tất ${formatVietnamDateTime(transfer.completedAt)}` : ''}
+                </p>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="px-4 py-4 text-sm text-slate-500">
+            Chưa có phiếu điều chuyển nào từ yêu cầu này. Một yêu cầu có thể được đáp ứng bằng nhiều phiếu điều chuyển.
+          </p>
+        )}
+      </div>
+
+      {showReviewActions || showCancelAction || showCloseAction ? (
         <div className="flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4">
           {showReviewActions ? (
             <>
               <button
                 type="button"
                 disabled={actingId === request.id}
-                onClick={() => onApprove?.(request)}
+                onClick={() => onReview?.(request)}
                 className="rounded-xl bg-[#538463] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#457053] disabled:opacity-50"
               >
-                Duyệt bổ sung
+                Duyệt theo dòng
               </button>
               <button
                 type="button"
@@ -162,6 +236,16 @@ export default function StockAdjustmentRequestDetailPanel({
                 Từ chối
               </button>
             </>
+          ) : null}
+          {showCloseAction ? (
+            <button
+              type="button"
+              disabled={actingId === request.id}
+              onClick={() => onCloseRemaining?.(request)}
+              className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            >
+              Đóng phần còn lại
+            </button>
           ) : null}
           {showCancelAction ? (
             <button
@@ -174,16 +258,6 @@ export default function StockAdjustmentRequestDetailPanel({
             </button>
           ) : null}
         </div>
-      ) : null}
-
-      {request.exportSlipCodes?.length > 0 ? (
-        <p className="text-xs text-slate-500">
-          Xem tất cả phiếu xuất tại{' '}
-          <Link to="/inventory/export" className="font-semibold text-[#356647] hover:underline">
-            Phiếu xuất kho
-          </Link>
-          .
-        </p>
       ) : null}
     </div>
   )

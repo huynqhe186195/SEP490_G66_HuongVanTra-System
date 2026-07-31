@@ -12,8 +12,13 @@ export const warehouseNavTabs = [
 ]
 
 export const stockRequestNavTab = {
-  label: 'Bổ sung Kệ Hàng',
+  label: 'Yêu cầu bổ sung Kệ Hàng',
   to: '/inventory/stock-requests',
+}
+
+export const stockTransferNavTab = {
+  label: 'Phiếu điều chuyển Kho → Kệ',
+  to: '/inventory/stock-transfers',
 }
 
 export const supplierReceiptNavTab = {
@@ -54,6 +59,7 @@ export const inventoryNavTabs = [
   returnInspectionNavTab,
   inventoryLedgerNavTab,
   stockRequestNavTab,
+  stockTransferNavTab,
 ]
 
 function normalizeRole(role) {
@@ -62,6 +68,10 @@ function normalizeRole(role) {
 
 function isManagerLike(session) {
   return (session?.roles ?? []).some((role) => ['manager', 'agency manager', 'branch manager', 'owner'].includes(normalizeRole(role)))
+}
+
+function isAdminLike(session) {
+  return (session?.roles ?? []).some((role) => normalizeRole(role) === 'admin')
 }
 
 export function getInventoryNavTabs(session) {
@@ -87,9 +97,12 @@ export function getInventoryNavTabs(session) {
   if (isSystemAdmin(session) || isManagerLike(session) || isWarehouseRole(session) || accountant) {
     tabs.push(inventoryLedgerNavTab)
   }
-  // Kế toán không thao tác bổ sung kệ
+  // Kế toán không tham gia luồng bổ sung Kệ Hàng.
   if (!accountant) {
     tabs.push(stockRequestNavTab)
+  }
+  if (isWarehouseRole(session) || isManagerLike(session) || isAdminLike(session) || isSystemAdmin(session)) {
+    tabs.push(stockTransferNavTab)
   }
   return tabs
 }
