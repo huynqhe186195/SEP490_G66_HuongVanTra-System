@@ -920,7 +920,7 @@ export default function SupplierProductsPage() {
     }
   }
 
-  const colSpan = canManage ? 10 : 9
+  const colSpan = canManage ? 8 : 7
 
   return (
     <PageShell>
@@ -1008,8 +1008,6 @@ export default function SupplierProductsPage() {
               <th className="pb-2 pr-4">Loại</th>
               <th className="pb-2 pr-4">Mã / tên theo NCC</th>
               <th className="pb-2 pr-4 text-right">Giá chào</th>
-              <th className="pb-2 pr-4 text-right">SL tối thiểu</th>
-              <th className="pb-2 pr-4 text-right">Ngày giao</th>
               <th className="pb-2 pr-4">Trạng thái</th>
               {canManage && <th className="pb-2"></th>}
             </tr>
@@ -1051,10 +1049,6 @@ export default function SupplierProductsPage() {
                   </td>
                   <td className="py-3 pr-4 text-right text-[#1b1c17]">
                     {item.quotedPrice == null ? '—' : formatVnd(item.quotedPrice)}
-                  </td>
-                  <td className="py-3 pr-4 text-right text-[#414942]">{item.minimumOrderQuantity ?? '—'}</td>
-                  <td className="py-3 pr-4 text-right text-[#414942]">
-                    {item.leadTimeDays == null ? '—' : `${item.leadTimeDays} ngày`}
                   </td>
                   <td className="py-3 pr-4"><StatusChip isActive={item.isActive} /></td>
                   {canManage && (

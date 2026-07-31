@@ -698,9 +698,15 @@ export function resolveHomeRoute(authSession) {
     return '/login'
   }
 
+  const roles = authSession.roles ?? []
+
   // Admin luôn vào trang thống kê bán hàng để giám sát.
-  if (isAdminSession(authSession.roles ?? []) || hasPermissionManageRole(authSession)) {
+  if (isAdminSession(roles) || hasPermissionManageRole(authSession)) {
     return '/dashboard'
+  }
+
+  for (const [groupKey, route] of Object.entries(ROLE_HOME_ROUTES)) {
+    if (hasAnyRoleGroup(roles, [groupKey])) return route
   }
 
   const homeRoute = authSession.modules?.length

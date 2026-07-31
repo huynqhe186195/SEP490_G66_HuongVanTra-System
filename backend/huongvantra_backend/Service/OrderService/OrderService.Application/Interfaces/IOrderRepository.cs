@@ -20,6 +20,7 @@ public interface IOrderRepository
         int page, int pageSize, CancellationToken ct = default);
     Task<Order?> GetSinglePendingTransferByAmountAsync(
         decimal amount, int toleranceVnd, CancellationToken ct = default);
+    Task<Order?> GetLatestPendingTransferAsync(DateTime utcNow, CancellationToken ct = default);
     Task<Order?> GetByIdempotencyKeyAsync(string key, CancellationToken ct = default);
     Task<bool> TryTransitionStatusAsync(
         Guid orderId,

@@ -189,6 +189,26 @@ public class OrderRepository(OrderDbContext _db) : IOrderRepository
         return candidates.Count == 1 ? candidates[0] : null;
     }
 
+    // Chế độ QR test: số tiền nhận được không còn phản ánh FinalAmount nên không dò theo tiền được.
+    // Chỉ nhận khi có đúng một đơn đang chờ chuyển khoản và QR chưa hết hạn.
+    public async Task<Order?> GetLatestPendingTransferAsync(
+        DateTime utcNow, CancellationToken ct = default)
+    {
+        var candidates = await _db.Orders
+            .Include(o => o.Payments)
+            .Where(o =>
+                o.OrderStatus == OrderStatus.PendingPayment
+                && o.Payments.Any(p =>
+                    (p.PaymentMethod == PaymentMethod.VietQR || p.PaymentMethod == PaymentMethod.BankTransfer)
+                    && p.PaymentStatus == PaymentStatus.Pending
+                    && (p.TransferQrExpiresAtUtc == null || p.TransferQrExpiresAtUtc > utcNow)))
+            .OrderByDescending(o => o.CreatedAt)
+            .Take(2)
+            .ToListAsync(ct);
+
+        return candidates.Count == 1 ? candidates[0] : null;
+    }
+
     public async Task<List<Order>> GetPendingCodAsync(CancellationToken ct = default) =>
         await _db.Orders
             .Include(o => o.Payments)

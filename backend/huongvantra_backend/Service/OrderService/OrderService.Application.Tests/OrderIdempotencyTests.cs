@@ -347,6 +347,11 @@ public class OrderIdempotencyTests
             CancellationToken ct = default) =>
             throw new NotSupportedException();
 
+        public Task<Order?> GetLatestPendingTransferAsync(
+            DateTime utcNow,
+            CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
         public Task<bool> TryTransitionStatusAsync(
             Guid orderId,
             OrderStatus expectedStatus,

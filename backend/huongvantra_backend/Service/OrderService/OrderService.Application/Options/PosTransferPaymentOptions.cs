@@ -14,4 +14,8 @@ public class PosTransferPaymentOptions
     public string ApiKey { get; set; } = "";
     public bool AllowSimulateWebhook { get; set; }
     public string SimulateWebhookSecret { get; set; } = "";
+
+    /// Chỉ dùng khi test: ép mọi QR về số tiền này để không phải chuyển khoản thật số lớn.
+    /// 0 = tắt. Đơn vẫn được ghi nhận thanh toán đủ theo giá trị thật.
+    public long TestQrFixedAmountVnd { get; set; }
 }

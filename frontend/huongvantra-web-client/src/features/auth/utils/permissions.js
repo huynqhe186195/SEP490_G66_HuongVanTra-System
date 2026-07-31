@@ -293,6 +293,12 @@ export function canManageSuppliers(session) {
   return isAccountantRole(session)
 }
 
+/** Manager duyệt yêu cầu tạo/xóa hàng hóa; Admin chỉ theo dõi. */
+export function canDecideProductApprovals(session) {
+  if (isBusinessOpsBlocked(session)) return false
+  return isBranchManager(session) || isManagerRole(session)
+}
+
 export function getStaffManagementScopeLabel(session) {
   if (isSystemAdmin(session)) return 'Quản lý nhân sự: Manager'
   if (isBranchManager(session)) return 'Quản lý nhân sự: Sale quầy/COD, Kế toán, Thủ kho'
