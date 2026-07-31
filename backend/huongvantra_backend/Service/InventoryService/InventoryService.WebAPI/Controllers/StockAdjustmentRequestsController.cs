@@ -107,7 +107,7 @@ public class StockAdjustmentRequestsController(InventoryLogic _logic) : Controll
         Ok(await _logic.GetStockAdjustmentRequestTransfersAsync(id, ct));
 
     [HttpPost]
-    [Authorize(Roles = "Sale,Manager,Warehouse")]
+    [Authorize(Roles = "Sale,Manager")]
     public async Task<IActionResult> Create([FromBody] CreateStockAdjustmentRequest request, CancellationToken ct)
     {
         if (User.IsInRole("Admin")) return Forbid();
@@ -167,7 +167,7 @@ public class StockAdjustmentRequestsController(InventoryLogic _logic) : Controll
     }
 
     [HttpPost("{id:guid}/cancel")]
-    [Authorize(Roles = "Sale,Manager,Warehouse")]
+    [Authorize(Roles = "Sale,Manager")]
     public async Task<IActionResult> Cancel(
         Guid id,
         [FromBody] CancelStockAdjustmentRequest? request,
@@ -178,8 +178,6 @@ public class StockAdjustmentRequestsController(InventoryLogic _logic) : Controll
         if (requestedBy == Guid.Empty)
             return Unauthorized(new { message = "Không xác định được người dùng." });
 
-        // Warehouse được hủy yêu cầu của người khác; Sale/Manager chỉ hủy yêu cầu của chính mình.
-        var canCancelAny = User.IsInRole("Warehouse");
-        return Ok(await _logic.CancelStockAdjustmentRequestAsync(id, requestedBy, canCancelAny, request, ct, User.ToCreatorSnapshot()));
+        return Ok(await _logic.CancelStockAdjustmentRequestAsync(id, requestedBy, false, request, ct, User.ToCreatorSnapshot()));
     }
 }
