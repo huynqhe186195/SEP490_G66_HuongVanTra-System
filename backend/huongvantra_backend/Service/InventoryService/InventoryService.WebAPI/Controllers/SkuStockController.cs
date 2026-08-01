@@ -43,11 +43,11 @@ public class SkuStockController(InventoryLogic _logic) : ControllerBase
         return Ok(result);
     }
 
-    [HttpPut("{skuId:guid}/threshold")]
+    [HttpPut("{skuId:guid}/warehouse-threshold")]
     [Authorize(Roles = "Warehouse")]
-    public async Task<IActionResult> UpdateThreshold(Guid skuId, [FromBody] UpdateLowStockThresholdRequest request, CancellationToken ct)
+    public async Task<IActionResult> UpdateWarehouseThreshold(Guid skuId, [FromBody] UpdateWarehouseLowStockThresholdRequest request, CancellationToken ct)
     {
-        var result = await _logic.UpdateLowStockThresholdAsync(skuId, request, ct);
+        var result = await _logic.UpdateWarehouseLowStockThresholdAsync(skuId, request, ct);
         return Ok(result);
     }
 }

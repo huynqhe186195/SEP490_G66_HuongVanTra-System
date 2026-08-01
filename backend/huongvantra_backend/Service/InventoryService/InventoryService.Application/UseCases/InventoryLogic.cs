@@ -1101,55 +1101,42 @@ public class InventoryLogic(
             s.ShortageQuantity,
             "insufficient")).ToList();
 
-    public async Task<SkuStockResponse> UpdateLowStockThresholdAsync(
+    /// <summary>Ngưỡng Kho do Thủ kho quản lý — không đụng tới ngưỡng Kệ.</summary>
+    public async Task<SkuStockResponse> UpdateWarehouseLowStockThresholdAsync(
         Guid skuId,
-        UpdateLowStockThresholdRequest request,
+        UpdateWarehouseLowStockThresholdRequest request,
         CancellationToken ct = default)
     {
-        if (request is null)
-            throw new InventoryValidationException("Request body là bắt buộc.");
-
-        var location = ParseInventoryLocation(request.Location);
-        var threshold = request.Threshold;
-
-        if (request.WarehouseLowStockThreshold.HasValue)
-            ValidateThreshold(request.WarehouseLowStockThreshold.Value);
-        if (request.ShelfLowStockThreshold.HasValue)
-            ValidateThreshold(request.ShelfLowStockThreshold.Value);
-        ValidateThreshold(threshold);
-
-        static void ValidateThreshold(int value)
-        {
-            if (value < 0)
-                throw new InventoryValidationException("Ngưỡng tồn thấp không được âm.");
-        }
-
-        var stock = await _skuStockRepo.GetBySkuIdAsync(skuId, ct)
-            ?? throw new InventoryNotFoundException($"Không tìm thấy tồn kho cho SKU '{skuId}'.");
-
-        if (request.WarehouseLowStockThreshold.HasValue || request.ShelfLowStockThreshold.HasValue)
-        {
-            if (request.WarehouseLowStockThreshold.HasValue)
-                stock.WarehouseLowStockThreshold = request.WarehouseLowStockThreshold.Value;
-            if (request.ShelfLowStockThreshold.HasValue)
-            {
-                stock.ShelfLowStockThreshold = request.ShelfLowStockThreshold.Value;
-                stock.LowStockThreshold = request.ShelfLowStockThreshold.Value;
-            }
-        }
-        else if (location == InventoryLocation.Warehouse)
-        {
-            stock.WarehouseLowStockThreshold = threshold;
-        }
-        else
-        {
-            stock.ShelfLowStockThreshold = threshold;
-            stock.LowStockThreshold = threshold;
-        }
-
+        var stock = await LoadStockForThresholdAsync(skuId, request?.Threshold, ct);
+        stock.WarehouseLowStockThreshold = request!.Threshold;
         stock.UpdatedAt = DateTime.UtcNow;
         await _skuStockRepo.SaveChangesAsync(ct);
         return MapSkuStock(stock);
+    }
+
+    /// <summary>Ngưỡng Kệ Hàng do Quản lý quản lý — không đụng tới ngưỡng Kho.</summary>
+    public async Task<SkuStockResponse> UpdateShelfLowStockThresholdAsync(
+        Guid skuId,
+        UpdateShelfLowStockThresholdRequest request,
+        CancellationToken ct = default)
+    {
+        var stock = await LoadStockForThresholdAsync(skuId, request?.Threshold, ct);
+        stock.ShelfLowStockThreshold = request!.Threshold;
+        stock.LowStockThreshold = request.Threshold;
+        stock.UpdatedAt = DateTime.UtcNow;
+        await _skuStockRepo.SaveChangesAsync(ct);
+        return MapSkuStock(stock);
+    }
+
+    private async Task<SkuStock> LoadStockForThresholdAsync(Guid skuId, int? threshold, CancellationToken ct)
+    {
+        if (threshold is null)
+            throw new InventoryValidationException("Request body là bắt buộc.");
+        if (threshold < 0)
+            throw new InventoryValidationException("Ngưỡng tồn thấp không được âm.");
+
+        return await _skuStockRepo.GetBySkuIdAsync(skuId, ct)
+            ?? throw new InventoryNotFoundException($"Không tìm thấy tồn kho cho SKU '{skuId}'.");
     }
 
     public async Task<List<SkuStockResponse>> GetSkuStocksAsync(CancellationToken ct = default)

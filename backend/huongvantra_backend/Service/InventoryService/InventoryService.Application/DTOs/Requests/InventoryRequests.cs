@@ -37,11 +37,11 @@ public record ReplaceCodReservationRequest(
     decimal TotalAmount,
     List<ReplaceCodReservationItemRequest> Items);
 
-public record UpdateLowStockThresholdRequest(
-    int Threshold,
-    string? Location = null,
-    int? WarehouseLowStockThreshold = null,
-    int? ShelfLowStockThreshold = null);
+/// <summary>Ngưỡng tồn thấp Kho — chỉ Thủ kho được đặt.</summary>
+public record UpdateWarehouseLowStockThresholdRequest(int Threshold);
+
+/// <summary>Ngưỡng tồn thấp Kệ Hàng — chỉ Quản lý được đặt.</summary>
+public record UpdateShelfLowStockThresholdRequest(int Threshold);
 
 public record CreateStockAdjustmentRequestItem(
     Guid SkuId,

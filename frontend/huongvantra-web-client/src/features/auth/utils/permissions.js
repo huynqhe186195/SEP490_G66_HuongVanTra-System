@@ -38,6 +38,18 @@ export function canWriteInventory(session) {
   return isWarehouseRole(session) || isBranchManager(session) || isManagerRole(session)
 }
 
+/** Ngưỡng cảnh báo tồn Kho thuộc quyền Thủ kho. */
+export function canEditWarehouseThreshold(session) {
+  if (isBusinessOpsBlocked(session)) return false
+  return isWarehouseRole(session)
+}
+
+/** Ngưỡng cảnh báo tồn Kệ Hàng thuộc quyền Quản lý. */
+export function canEditShelfThreshold(session) {
+  if (isBusinessOpsBlocked(session)) return false
+  return isBranchManager(session) || isManagerRole(session)
+}
+
 export function hasPermission(session, permission) {
   if (!session?.permissions?.length) return false
   return session.permissions.includes(permission)
@@ -212,6 +224,22 @@ export function canViewStockReplenishmentRequest(session) {
     || isBranchManager(session)
     || isManagerRole(session)
     || isWarehouseRole(session)
+    || hasAdminRole(session)
+    || isSystemAdmin(session)
+  )
+}
+
+/**
+ * Bộ lọc theo người tạo / chức vụ người tạo của màn hình Yêu cầu bổ sung Kệ Hàng.
+ * Sale thuần chỉ thấy yêu cầu của chính mình nên không có dữ liệu để lọc; backend
+ * cũng chặn endpoint filter-options với Sale.
+ */
+export function canFilterStockReplenishmentByCreator(session) {
+  return (
+    isBranchManager(session)
+    || isManagerRole(session)
+    || isWarehouseRole(session)
+    || isAccountantRole(session)
     || hasAdminRole(session)
     || isSystemAdmin(session)
   )

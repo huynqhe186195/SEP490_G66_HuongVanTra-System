@@ -5,9 +5,13 @@ import PageShell from '../../../components/shared/PageShell.jsx'
 import { TitleInfoButton } from '../../../components/shared/PageHeader.jsx'
 import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
-import { canAdjustStoreStock, canSyncCatalog } from '../../auth/utils/permissions.js'
+import { canAdjustStoreStock, canEditShelfThreshold, canSyncCatalog } from '../../auth/utils/permissions.js'
 import { fetchCategories } from '../services/categoriesApi.js'
-import { buildStockBySkuIdMap, fetchStoreSkuStocks } from '../../inventory/services/inventoryStockApi.js'
+import {
+  buildStockBySkuIdMap,
+  fetchStoreSkuStocks,
+  updateShelfLowStockThreshold,
+} from '../../inventory/services/inventoryStockApi.js'
 import { fetchPendingCatalogSync, syncCatalogToStore } from '../services/catalogSyncApi.js'
 import { fetchAllActiveStoreSkus } from '../services/productSkusApi.js'
 import ProductImage from '../components/ProductImage.jsx'
@@ -63,6 +67,7 @@ export default function ProductsStoreListPage() {
   const [session, setSession] = useState(() => loadAuthSession())
   const canSync = canSyncCatalog(session)
   const canAdjustStock = canAdjustStoreStock(session)
+  const canEditThreshold = canEditShelfThreshold(session)
 
   const [isSyncing, setIsSyncing] = useState(false)
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
@@ -93,6 +98,9 @@ export default function ProductsStoreListPage() {
   const [stockBySkuId, setStockBySkuId] = useState(() => new Map())
   // POS-04 (H6): tồn Kệ đang giữ chỗ theo skuId để hiển thị "khả bán / giữ chỗ".
   const [reservedBySkuId, setReservedBySkuId] = useState(() => new Map())
+  const [shelfThresholdBySkuId, setShelfThresholdBySkuId] = useState(() => new Map())
+  const [editingThreshold, setEditingThreshold] = useState(null) // { skuId, value }
+  const [savingThresholdSkuId, setSavingThresholdSkuId] = useState(null)
   const [simulateWarehouse, setSimulateWarehouse] = useState(true)
   const [pendingSyncTotal, setPendingSyncTotal] = useState(0)
 
@@ -118,9 +126,11 @@ export default function ProductsStoreListPage() {
       const stocks = await fetchStoreSkuStocks()
       setStockBySkuId(buildStockBySkuIdMap(stocks))
       setReservedBySkuId(new Map(stocks.map((row) => [row.skuId, Number(row.reservedQuantity ?? 0)])))
+      setShelfThresholdBySkuId(new Map(stocks.map((row) => [row.skuId, Number(row.shelfLowStockThreshold ?? 0)])))
     } catch {
       setStockBySkuId(new Map())
       setReservedBySkuId(new Map())
+      setShelfThresholdBySkuId(new Map())
     }
   }, [])
 
@@ -315,7 +325,81 @@ export default function ProductsStoreListPage() {
     }))
   }
 
-  const tableColSpan = canAdjustStock ? 13 : 12
+  async function commitThreshold(skuId) {
+    const parsed = parseInt(editingThreshold?.value ?? '', 10)
+    if (isNaN(parsed) || parsed < 0) {
+      showError('Ngưỡng phải là số nguyên không âm')
+      return
+    }
+    setSavingThresholdSkuId(skuId)
+    setEditingThreshold(null)
+    try {
+      await updateShelfLowStockThreshold(skuId, parsed)
+      setShelfThresholdBySkuId((prev) => new Map(prev).set(skuId, parsed))
+      showSuccess('Đã cập nhật ngưỡng cảnh báo Kệ')
+    } catch (error) {
+      showError(error.message)
+    } finally {
+      setSavingThresholdSkuId(null)
+    }
+  }
+
+  function renderShelfThresholdCell(sku) {
+    const value = Number(shelfThresholdBySkuId.get(sku.id) ?? 0)
+    const isEditing = editingThreshold?.skuId === sku.id
+    const isSaving = savingThresholdSkuId === sku.id
+
+    if (canEditThreshold && isEditing) {
+      return (
+        <input
+          autoFocus
+          type="number"
+          min={0}
+          className="w-16 rounded border border-[#356647] px-1.5 py-1 text-right text-sm font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-[#356647]/25"
+          value={editingThreshold.value}
+          onChange={(event) => setEditingThreshold((prev) => ({ ...prev, value: event.target.value }))}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') commitThreshold(sku.id)
+            if (event.key === 'Escape') setEditingThreshold(null)
+          }}
+          onBlur={() => commitThreshold(sku.id)}
+        />
+      )
+    }
+
+    if (!canEditThreshold) {
+      return (
+        <span className={value === 0 ? 'text-slate-400' : 'font-semibold text-slate-700'}>
+          {value === 0 ? 'Chưa đặt' : value}
+        </span>
+      )
+    }
+
+    return (
+      <button
+        type="button"
+        title="Click để sửa ngưỡng cảnh báo Kệ"
+        disabled={isSaving}
+        onClick={() => setEditingThreshold({ skuId: sku.id, value: String(value) })}
+        className="group inline-flex items-center gap-1 rounded px-1.5 py-1 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+      >
+        {isSaving ? (
+          <span className="text-xs text-slate-400">Đang lưu...</span>
+        ) : (
+          <>
+            <span className={value === 0 ? 'text-slate-400' : 'text-slate-800'}>
+              {value === 0 ? 'Chưa đặt' : value}
+            </span>
+            <span className="material-symbols-outlined text-[14px] text-slate-400 opacity-0 group-hover:opacity-100">
+              edit
+            </span>
+          </>
+        )}
+      </button>
+    )
+  }
+
+  const tableColSpan = canAdjustStock ? 14 : 13
 
   const filterProps = {
     categories,
@@ -479,6 +563,9 @@ export default function ProductsStoreListPage() {
                     <th className="hidden px-3 py-3 text-right lg:table-cell">Giá vốn</th>
                     <th className="hidden px-3 py-3 xl:table-cell">Quy cách</th>
                     <th className="px-3 py-3 text-right">Tồn cửa hàng</th>
+                    <th className="px-3 py-3 text-right" title="Ngưỡng cảnh báo tồn Kệ Hàng — do Quản lý đặt">
+                      Ngưỡng Kệ
+                    </th>
                     <th className="hidden px-3 py-3 text-center sm:table-cell">Bán POS</th>
                     {canAdjustStock ? (
                       <th className="hidden px-3 py-3 text-right md:table-cell">Lô</th>
@@ -635,6 +722,9 @@ export default function ProductsStoreListPage() {
                                   {formatStockQuantity(Math.max(0, stockQty - reservedQty))}
                                 </span>
                               ) : null}
+                            </td>
+                            <td className="px-3 py-3 text-right" onClick={(event) => event.stopPropagation()}>
+                              {renderShelfThresholdCell(selectedSku)}
                             </td>
                             <td
                               className="hidden px-3 py-3 text-center sm:table-cell"

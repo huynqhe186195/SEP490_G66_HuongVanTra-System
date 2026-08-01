@@ -4,12 +4,12 @@ import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
-import { canWriteInventory } from '../../auth/utils/permissions.js'
+import { canEditWarehouseThreshold, canWriteInventory } from '../../auth/utils/permissions.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import { fetchAllActiveSkus } from '../../products/services/productSkusApi.js'
 import { fetchProducts } from '../../products/services/productsApi.js'
 import { formatStockQuantity } from '../../products/utils/productDisplay.js'
-import { fetchSkuStocks, updateLowStockThreshold } from '../services/inventoryStockApi.js'
+import { fetchSkuStocks, updateWarehouseLowStockThreshold } from '../services/inventoryStockApi.js'
 import { fetchWarehouseBatches } from '../services/warehouseBatchApi.js'
 
 function InventoryStockPage() {
@@ -18,10 +18,12 @@ function InventoryStockPage() {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE)
   const [isLoading, setIsLoading] = useState(true)
-  const [editingThreshold, setEditingThreshold] = useState(null) // { skuId, location, value }
-  const [savingCell, setSavingCell] = useState(null) // { skuId, location }
+  const [editingThreshold, setEditingThreshold] = useState(null) // { skuId, value }
+  const [savingSkuId, setSavingSkuId] = useState(null)
   const inputRef = useRef(null)
-  const canWrite = canWriteInventory(loadAuthSession())
+  const session = loadAuthSession()
+  const canWrite = canWriteInventory(session)
+  const canEditThreshold = canEditWarehouseThreshold(session)
 
   const loadData = useCallback(async () => {
     setIsLoading(true)
@@ -53,7 +55,6 @@ function InventoryStockPage() {
           warehouseQuantityOnHand: stock?.warehouseQuantityOnHand ?? 0,
           quantityOnHand: stock?.quantityOnHand ?? 0,
           warehouseLowStockThreshold: stock?.warehouseLowStockThreshold ?? 0,
-          shelfLowStockThreshold: stock?.shelfLowStockThreshold ?? 0,
           activeLotCount: batchCountBySku.get(sku.id) || 0,
         }
       })
@@ -102,46 +103,45 @@ function InventoryStockPage() {
     if (editingThreshold && inputRef.current) inputRef.current.focus()
   }, [editingThreshold])
 
-  function startEdit(skuId, location, currentValue) {
-    setEditingThreshold({ skuId, location, value: String(currentValue) })
+  function startEdit(skuId, currentValue) {
+    setEditingThreshold({ skuId, value: String(currentValue) })
   }
 
   function cancelEdit() {
     setEditingThreshold(null)
   }
 
-  async function commitEdit(skuId, location) {
+  async function commitEdit(skuId) {
     const raw = editingThreshold?.value ?? ''
     const parsed = parseInt(raw, 10)
     if (isNaN(parsed) || parsed < 0) {
       showError('Ngưỡng phải là số nguyên không âm')
       return
     }
-    const field = location === 'Warehouse' ? 'warehouseLowStockThreshold' : 'shelfLowStockThreshold'
-    setSavingCell({ skuId, location })
+    setSavingSkuId(skuId)
     setEditingThreshold(null)
     try {
-      await updateLowStockThreshold(skuId, parsed, location)
-      setRows((prev) => prev.map((r) => (r.skuId === skuId ? { ...r, [field]: parsed } : r)))
-      showSuccess(location === 'Warehouse' ? 'Đã cập nhật ngưỡng cảnh báo Kho' : 'Đã cập nhật ngưỡng cảnh báo Kệ')
+      await updateWarehouseLowStockThreshold(skuId, parsed)
+      setRows((prev) => prev.map((r) => (r.skuId === skuId ? { ...r, warehouseLowStockThreshold: parsed } : r)))
+      showSuccess('Đã cập nhật ngưỡng cảnh báo Kho')
     } catch (err) {
       showError(err.message)
     } finally {
-      setSavingCell(null)
+      setSavingSkuId(null)
     }
   }
 
-  function handleKeyDown(e, skuId, location) {
-    if (e.key === 'Enter') commitEdit(skuId, location)
+  function handleKeyDown(e, skuId) {
+    if (e.key === 'Enter') commitEdit(skuId)
     if (e.key === 'Escape') cancelEdit()
   }
 
-  function renderThresholdCell(row, location) {
-    const value = location === 'Warehouse' ? row.warehouseLowStockThreshold : row.shelfLowStockThreshold
-    const isEditing = editingThreshold?.skuId === row.skuId && editingThreshold?.location === location
-    const isSaving = savingCell?.skuId === row.skuId && savingCell?.location === location
+  function renderThresholdCell(row) {
+    const value = row.warehouseLowStockThreshold
+    const isEditing = editingThreshold?.skuId === row.skuId
+    const isSaving = savingSkuId === row.skuId
 
-    if (canWrite && isEditing) {
+    if (canEditThreshold && isEditing) {
       return (
         <input
           ref={inputRef}
@@ -150,13 +150,13 @@ function InventoryStockPage() {
           className="w-20 rounded-lg border border-[#356647] px-2 py-1 text-sm font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-[#356647]/30"
           value={editingThreshold.value}
           onChange={(e) => setEditingThreshold((prev) => ({ ...prev, value: e.target.value }))}
-          onKeyDown={(e) => handleKeyDown(e, row.skuId, location)}
-          onBlur={() => commitEdit(row.skuId, location)}
+          onKeyDown={(e) => handleKeyDown(e, row.skuId)}
+          onBlur={() => commitEdit(row.skuId)}
         />
       )
     }
 
-    if (!canWrite) {
+    if (!canEditThreshold) {
       return (
         <span className={value === 0 ? 'text-slate-400' : 'font-semibold text-slate-800'}>
           {value === 0 ? 'Chưa đặt' : value}
@@ -169,7 +169,7 @@ function InventoryStockPage() {
         type="button"
         title="Click để sửa ngưỡng"
         disabled={isSaving}
-        onClick={() => startEdit(row.skuId, location, value)}
+        onClick={() => startEdit(row.skuId, value)}
         className="group flex items-center gap-1.5 rounded-lg px-2 py-1 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
       >
         {isSaving ? (
@@ -227,19 +227,18 @@ function InventoryStockPage() {
                 <th className="px-4 py-3">Lô đang còn</th>
                 <th className="px-4 py-3">Ngưỡng cảnh báo Kho</th>
                 <th className="px-4 py-3">Tồn Kệ</th>
-                <th className="px-4 py-3">Ngưỡng cảnh báo Kệ</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {isLoading ? (
                 <tr>
-                  <td className="px-6 py-8 text-slate-500" colSpan={7}>
+                  <td className="px-6 py-8 text-slate-500" colSpan={6}>
                     Đang tải...
                   </td>
                 </tr>
               ) : filteredRows.length === 0 ? (
                 <tr>
-                  <td className="px-6 py-8 text-slate-500" colSpan={7}>
+                  <td className="px-6 py-8 text-slate-500" colSpan={6}>
                     Chưa có SKU — tạo sản phẩm và biến thể trước.
                   </td>
                 </tr>
@@ -265,11 +264,10 @@ function InventoryStockPage() {
                         <span className="text-amber-700">Chưa có lô</span>
                       )}
                     </td>
-                    <td className="px-4 py-4">{renderThresholdCell(row, 'Warehouse')}</td>
+                    <td className="px-4 py-4">{renderThresholdCell(row)}</td>
                     <td className="px-4 py-4 font-semibold text-slate-800">
                       {formatStockQuantity(row.quantityOnHand)}
                     </td>
-                    <td className="px-4 py-4">{renderThresholdCell(row, 'Shelf')}</td>
                   </tr>
                 ))
               )}
