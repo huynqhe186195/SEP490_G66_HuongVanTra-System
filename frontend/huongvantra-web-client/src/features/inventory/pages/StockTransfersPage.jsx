@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
@@ -679,6 +679,20 @@ function StockTransfersPage() {
               <span className="material-symbols-outlined text-[20px]">add</span>
               Tạo phiếu trực tiếp
             </button>
+            <Link
+              to="/inventory/stock-requests"
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              <span className="material-symbols-outlined text-[20px]">edit_note</span>
+              Yêu cầu bổ sung Kệ Hàng
+            </Link>
+            <Link
+              to="/inventory/shelf-replenishment-suggestions"
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              <span className="material-symbols-outlined text-[20px]">lightbulb</span>
+              Gợi ý bổ sung Kệ Hàng
+            </Link>
           </div>
         ) : null}
       />

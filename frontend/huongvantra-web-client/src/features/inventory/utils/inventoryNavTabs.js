@@ -47,7 +47,7 @@ export const returnInspectionNavTab = {
 }
 
 export const stocktakeNavTab = {
-  label: 'Kiểm kê tồn kho',
+  label: 'Kiểm kê Kệ Hàng',
   to: '/inventory/stocktake',
 }
 

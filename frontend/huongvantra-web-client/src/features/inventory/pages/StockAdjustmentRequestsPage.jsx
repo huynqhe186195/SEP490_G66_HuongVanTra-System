@@ -10,6 +10,7 @@ import {
   canCreateStockReplenishmentRequest,
   canFilterStockReplenishmentByCreator,
   canReviewStockReplenishmentRequest,
+  canViewStockTransfer,
   isAuditOnlyAdmin,
   isWarehouseRole,
 } from '../../auth/utils/permissions.js'
@@ -279,6 +280,9 @@ function StockAdjustmentRequestOperationsPage() {
   const canCancelRequest = canCancelStockReplenishmentRequest(session)
   const canCancelAnyRequest = canCancelRequest && canReview
   const canFilterByCreator = canFilterStockReplenishmentByCreator(session)
+  // Quản lý vào Điều chuyển / Gợi ý từ đây; Thủ kho dùng nút bên trang Điều chuyển, Admin dùng sidebar.
+  const canViewTransferShortcuts =
+    canViewStockTransfer(session) && !isWarehouseRole(session) && !isAuditOnlyAdmin(session)
   const currentUserId = session?.userId ? String(session.userId) : ''
 
   const quickFilters = canReview ? WAREHOUSE_QUICK_FILTERS : MANAGER_QUICK_FILTERS
@@ -595,6 +599,22 @@ function StockAdjustmentRequestOperationsPage() {
             Tạo yêu cầu
           </button>
         ) : <span className="ml-auto" />}
+        {canViewTransferShortcuts ? (
+          <>
+            <Link
+              className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              to="/inventory/stock-transfers"
+            >
+              Phiếu điều chuyển Kho → Kệ
+            </Link>
+            <Link
+              className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              to="/inventory/shelf-replenishment-suggestions"
+            >
+              Gợi ý bổ sung Kệ Hàng
+            </Link>
+          </>
+        ) : null}
         <Link
           className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
           to="/inventory/products"
