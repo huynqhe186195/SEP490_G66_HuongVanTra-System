@@ -33,9 +33,10 @@ self.addEventListener('fetch', event => {
   // Skip API calls — IndexedDB handles data caching
   if (url.pathname.startsWith('/api')) return
 
-  // Skip Vite dev server internals so hot reload always works
+  // Skip Vite/dev module graph — never cache transformed sources
   if (
     url.pathname.startsWith('/@') ||
+    url.pathname.startsWith('/src/') ||
     url.pathname.startsWith('/node_modules') ||
     url.searchParams.has('t') ||
     url.host !== self.location.host

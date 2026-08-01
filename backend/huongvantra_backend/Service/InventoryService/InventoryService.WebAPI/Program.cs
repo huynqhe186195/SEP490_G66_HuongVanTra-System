@@ -56,7 +56,9 @@ builder.Services.AddScoped<IProductionOrderRepository, ProductionOrderRepository
 builder.Services.AddScoped<ISupplierRepository, SupplierRepository>();
 builder.Services.AddScoped<ISupplierProductRepository, SupplierProductRepository>();
 builder.Services.AddScoped<IReturnInspectionRepository, ReturnInspectionRepository>();
-builder.Services.AddScoped<IInventoryEventPublisher, InventoryEventPublisher>();
+builder.Services.AddScoped<IWarehouseDailyReportRepository, WarehouseDailyReportRepository>();
+    builder.Services.AddScoped<IWarehouseDailyReportSubmissionRepository, WarehouseDailyReportSubmissionRepository>();
+    builder.Services.AddScoped<IInventoryEventPublisher, InventoryEventPublisher>();
 builder.Services.AddHttpClient<IProductCatalogClient, ProductCatalogClient>(client =>
 {
     var baseUrl = builder.Configuration["ProductService:BaseUrl"] ?? "http://product-service:8080";
@@ -65,6 +67,8 @@ builder.Services.AddHttpClient<IProductCatalogClient, ProductCatalogClient>(clie
 builder.Services.AddScoped<InventoryLogic>();
 builder.Services.AddScoped<StockTransferLogic>();
 builder.Services.AddScoped<StatisticsLogic>();
+builder.Services.AddScoped<WarehouseDailyReportLogic>();
+builder.Services.AddScoped<WarehouseDailyReportSubmissionLogic>();
 builder.Services.AddHostedService<InventoryOutboxDispatcherHostedService>();
 builder.Services.AddMassTransit(x =>
 {

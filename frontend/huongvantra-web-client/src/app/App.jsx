@@ -28,6 +28,9 @@ import InventoryReturnsPage from '../features/inventory/pages/InventoryReturnsPa
 import InventoryStockPage from '../features/inventory/pages/InventoryStockPage.jsx'
 import InventoryStocktakePage from '../features/inventory/pages/InventoryStocktakePage.jsx'
 import InventoryStatisticsPage from '../features/inventory/pages/InventoryStatisticsPage.jsx'
+import WarehouseDailyReportPage from '../features/inventory/pages/WarehouseDailyReportPage.jsx'
+import WarehouseDailyReportSubmissionsPage from '../features/inventory/pages/WarehouseDailyReportSubmissionsPage.jsx'
+import WarehouseDailyReportSubmissionDetailPage from '../features/inventory/pages/WarehouseDailyReportSubmissionDetailPage.jsx'
 import ProfilePage from '../features/profile/pages/ProfilePage.jsx'
 import OrdersPage from '../features/orders/pages/OrdersPage.jsx'
 import ExchangeOrdersPage from '../features/orders/pages/ExchangeOrdersPage.jsx'
@@ -106,6 +109,9 @@ function App() {
         <Route path="/products/:id/edit" element={<Navigate to="/inventory/products" replace />} />
         <Route path="/inventory" element={<InventoryStockPage />} />
         <Route path="/inventory/statistics" element={<InventoryStatisticsPage />} />
+        <Route path="/inventory/warehouse-daily-report" element={<WarehouseDailyReportPage />} />
+        <Route path="/inventory/warehouse-daily-report/submissions" element={<WarehouseDailyReportSubmissionsPage />} />
+        <Route path="/inventory/warehouse-daily-report/submissions/:id" element={<WarehouseDailyReportSubmissionDetailPage />} />
         <Route path="/inventory/stock-requests" element={<StockAdjustmentRequestsPage />} />
         <Route path="/inventory/stock-requests/create" element={<StockAdjustmentRequestCreatePage />} />
         <Route path="/inventory/stock-transfers" element={<StockTransfersPage />} />

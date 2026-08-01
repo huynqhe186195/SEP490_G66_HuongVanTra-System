@@ -40,6 +40,7 @@ public class InventoryDbContext(DbContextOptions<InventoryDbContext> options) : 
     public DbSet<SupplierProduct> SupplierProducts => Set<SupplierProduct>();
     public DbSet<SupplierProductPriceHistory> SupplierProductPriceHistories => Set<SupplierProductPriceHistory>();
     public DbSet<ReturnInspection> ReturnInspections => Set<ReturnInspection>();
+    public DbSet<WarehouseDailyReportSubmission> WarehouseDailyReportSubmissions => Set<WarehouseDailyReportSubmission>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

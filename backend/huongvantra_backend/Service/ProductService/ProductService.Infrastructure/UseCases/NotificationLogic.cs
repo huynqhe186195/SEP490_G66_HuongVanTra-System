@@ -10,6 +10,17 @@ namespace ProductService.Infrastructure.UseCases;
 
 public class NotificationLogic(ProductDbContext _db)
 {
+    private static readonly HashSet<string> AllowedBroadcastRoles = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Manager",
+        "Admin",
+    };
+
+    private static readonly HashSet<string> AllowedBroadcastTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "warehouse_daily_report_shared",
+    };
+
     public async Task<PagedResponse<NotificationResponse>> GetPagedAsync(
         GetNotificationsRequest request,
         ProductApprovalActorSnapshot actor,
@@ -92,6 +103,68 @@ public class NotificationLogic(ProductDbContext _db)
         return new NotificationSummaryResponse(0);
     }
 
+    public async Task<BroadcastNotificationResponse> BroadcastAsync(
+        BroadcastNotificationRequest request,
+        ProductApprovalActorSnapshot actor,
+        CancellationToken ct = default)
+    {
+        if (request is null)
+            throw new ProductValidationException("Thiếu nội dung thông báo.");
+
+        var type = NormalizeRequired(request.Type, "Loại thông báo");
+        if (!AllowedBroadcastTypes.Contains(type))
+            throw new ProductValidationException("Loại thông báo không được hỗ trợ.");
+
+        var title = NormalizeRequired(request.Title, "Tiêu đề");
+        if (title.Length > 200)
+            throw new ProductValidationException("Tiêu đề tối đa 200 ký tự.");
+
+        var body = NormalizeRequired(request.Body, "Nội dung");
+        if (body.Length > 2000)
+            throw new ProductValidationException("Nội dung tối đa 2000 ký tự.");
+
+        var link = NormalizeOptional(request.Link);
+        if (link is not null && !IsSafeInternalLink(link))
+            throw new ProductValidationException("Link thông báo không hợp lệ.");
+
+        var roles = (request.RecipientRoleNames ?? Array.Empty<string>())
+            .Select(r => r?.Trim())
+            .Where(r => !string.IsNullOrWhiteSpace(r))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (roles.Count == 0)
+            throw new ProductValidationException("Cần chọn ít nhất một vai trò nhận thông báo.");
+
+        foreach (var role in roles)
+        {
+            if (!AllowedBroadcastRoles.Contains(role!))
+                throw new ProductValidationException($"Không được gửi tới vai trò '{role}'.");
+        }
+
+        var referenceType = NormalizeOptional(request.ReferenceType);
+        var now = DateTime.UtcNow;
+        var entities = roles.Select(role => new Notification
+        {
+            Id = Guid.NewGuid(),
+            RecipientRoleName = CanonicalRoleName(role!),
+            Type = type.ToLowerInvariant(),
+            Title = title,
+            Body = body,
+            Link = link,
+            ReferenceId = request.ReferenceId,
+            ReferenceType = referenceType,
+            CreatedAt = now,
+        }).ToList();
+
+        _db.Notifications.AddRange(entities);
+        await _db.SaveChangesAsync(ct);
+
+        return new BroadcastNotificationResponse(
+            entities.Count,
+            entities.Select(MapToResponse).ToList());
+    }
+
     // Thông báo nhắm tới cá nhân (RecipientUserId) hoặc tới toàn bộ một vai trò (RecipientRoleName).
     private IQueryable<Notification> BuildRecipientQuery(ProductApprovalActorSnapshot actor)
     {
@@ -125,4 +198,34 @@ public class NotificationLogic(ProductDbContext _db)
 
     private static Guid? NormalizeActorId(ProductApprovalActorSnapshot actor) =>
         actor.UserId.HasValue && actor.UserId.Value != Guid.Empty ? actor.UserId.Value : null;
+
+    private static string NormalizeRequired(string? value, string label)
+    {
+        var text = value?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(text))
+            throw new ProductValidationException($"{label} không được để trống.");
+        return text;
+    }
+
+    private static string? NormalizeOptional(string? value)
+    {
+        var text = value?.Trim();
+        return string.IsNullOrWhiteSpace(text) ? null : text;
+    }
+
+    private static bool IsSafeInternalLink(string link)
+    {
+        if (!link.StartsWith('/') || link.StartsWith("//"))
+            return false;
+        if (link.Contains("://", StringComparison.Ordinal) || link.Contains('\\'))
+            return false;
+        return link.Length <= 500;
+    }
+
+    private static string CanonicalRoleName(string role)
+    {
+        if (role.Equals("Manager", StringComparison.OrdinalIgnoreCase)) return "Manager";
+        if (role.Equals("Admin", StringComparison.OrdinalIgnoreCase)) return "Admin";
+        return role;
+    }
 }
