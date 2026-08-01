@@ -38,6 +38,18 @@ export function canWriteInventory(session) {
   return isWarehouseRole(session) || isBranchManager(session) || isManagerRole(session)
 }
 
+/** Ngưỡng cảnh báo tồn Kho thuộc quyền Thủ kho. */
+export function canEditWarehouseThreshold(session) {
+  if (isBusinessOpsBlocked(session)) return false
+  return isWarehouseRole(session)
+}
+
+/** Ngưỡng cảnh báo tồn Kệ Hàng thuộc quyền Quản lý. */
+export function canEditShelfThreshold(session) {
+  if (isBusinessOpsBlocked(session)) return false
+  return isBranchManager(session) || isManagerRole(session)
+}
+
 export function hasPermission(session, permission) {
   if (!session?.permissions?.length) return false
   return session.permissions.includes(permission)
@@ -138,6 +150,14 @@ export function canVerifyCodPayment(session) {
   return hasPermission(session, 'VERIFY_COD')
 }
 
+/**
+ * Admin là vai trò chỉ xem/audit và có độ ưu tiên cao nhất: người dùng kiêm nhiệm
+ * Admin + Sale/Manager/Warehouse vẫn phải nhận giao diện read-only, không có thao tác nghiệp vụ.
+ */
+export function isAuditOnlyAdmin(session) {
+  return hasAdminRole(session)
+}
+
 /** Trang Accounting: chỉ Kế toán được sửa Giá bán; Admin/Manager chỉ xem. */
 export function canEditAccountingSalePrice(session) {
   if (isBusinessOpsBlocked(session)) return false
@@ -183,14 +203,51 @@ export function canAdjustStoreStock(session) {
   return canCreateStockReplenishmentRequest(session)
 }
 
+/** Yêu cầu bổ sung Kệ Hàng: Sale, Manager được tạo; Thủ kho và Admin chỉ được xem/duyệt. */
 export function canCreateStockReplenishmentRequest(session) {
-  if (isBusinessOpsBlocked(session)) return false
-  return isBranchManager(session) || isManagerRole(session) || isWarehouseRole(session)
+  if (hasAdminRole(session)) return false
+  if (isWarehouseRole(session)) return false
+  return (
+    isSalePosRole(session)
+    || isSaleCodRole(session)
+    || isBranchManager(session)
+    || isManagerRole(session)
+    || isSystemAdmin(session)
+  )
 }
 
+/** Xem Yêu cầu bổ sung Kệ Hàng: Sale (đơn của mình), Manager, Thủ kho, Admin (chỉ xem). */
+export function canViewStockReplenishmentRequest(session) {
+  return (
+    isSalePosRole(session)
+    || isSaleCodRole(session)
+    || isBranchManager(session)
+    || isManagerRole(session)
+    || isWarehouseRole(session)
+    || hasAdminRole(session)
+    || isSystemAdmin(session)
+  )
+}
+
+/**
+ * Bộ lọc theo người tạo / chức vụ người tạo của màn hình Yêu cầu bổ sung Kệ Hàng.
+ * Sale thuần chỉ thấy yêu cầu của chính mình nên không có dữ liệu để lọc; backend
+ * cũng chặn endpoint filter-options với Sale.
+ */
+export function canFilterStockReplenishmentByCreator(session) {
+  return (
+    isBranchManager(session)
+    || isManagerRole(session)
+    || isWarehouseRole(session)
+    || isAccountantRole(session)
+    || hasAdminRole(session)
+    || isSystemAdmin(session)
+  )
+}
+
+/** Duyệt / Từ chối / Đóng phần còn lại: chỉ Thủ kho không có role Admin. */
 export function canReviewStockReplenishmentRequest(session) {
-  if (isBusinessOpsBlocked(session)) return false
-  return isBranchManager(session) || isManagerRole(session) || isWarehouseRole(session)
+  return isWarehouseRole(session) && !hasAdminRole(session)
 }
 
 /** Kiểm tra & quyết định xử lý hàng trả (Restock/Quarantine/Dispose): Thủ kho, Quản lý. */
@@ -199,9 +256,33 @@ export function canInspectReturn(session) {
   return isWarehouseRole(session) || isBranchManager(session) || isManagerRole(session)
 }
 
+/** Huỷ yêu cầu: người tạo (Sale/Manager); Thủ kho và Admin không được huỷ yêu cầu của người khác. */
 export function canCancelStockReplenishmentRequest(session) {
-  if (isBusinessOpsBlocked(session)) return false
-  return isBranchManager(session) || isManagerRole(session) || isWarehouseRole(session)
+  if (hasAdminRole(session)) return false
+  if (isWarehouseRole(session)) return false
+  return (
+    isSalePosRole(session)
+    || isSaleCodRole(session)
+    || isBranchManager(session)
+    || isManagerRole(session)
+    || isSystemAdmin(session)
+  )
+}
+
+/** Kho → Kệ: Warehouse vận hành; principal có role Admin luôn chỉ được xem. */
+export function canOperateStockTransfer(session) {
+  return isWarehouseRole(session) && !hasAdminRole(session)
+}
+
+/** Warehouse, Manager và Admin được xem lịch sử/chi tiết Phiếu điều chuyển. */
+export function canViewStockTransfer(session) {
+  return (
+    isWarehouseRole(session)
+    || isBranchManager(session)
+    || isManagerRole(session)
+    || hasAdminRole(session)
+    || isSystemAdmin(session)
+  )
 }
 
 /** Duyệt / Từ chối phiếu nhập NCC: chỉ Manager không có role Admin. */

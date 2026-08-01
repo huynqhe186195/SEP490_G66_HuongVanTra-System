@@ -10,6 +10,9 @@ const ROLE_MODULE_MAP = {
   admin: [
     'orders',
     'cod_ops',
+    'stock_deduct_ops',
+    'stock_adjustment_ops',
+    'stock_transfer_ops',
     'customers',
     'products',
     'product_creation_requests',
@@ -28,12 +31,12 @@ const ROLE_MODULE_MAP = {
     'accounting_cost',
     'dashboard',
   ],
-  manager: ['pos', 'orders', 'cod_ops', 'stock_deduct_ops', 'stock_adjustment_ops', 'customers', 'products', 'staff', 'accounting_cost', 'dashboard'],
-  salepos: ['pos', 'orders', 'customers', 'dashboard'],
-  salecod: ['pos', 'cod_ops', 'customers', 'dashboard'],
+  manager: ['pos', 'orders', 'cod_ops', 'stock_deduct_ops', 'stock_adjustment_ops', 'stock_transfer_ops', 'customers', 'products', 'staff', 'accounting_cost', 'dashboard'],
+  salepos: ['pos', 'orders', 'customers', 'stock_adjustment_ops', 'dashboard'],
+  salecod: ['pos', 'cod_ops', 'customers', 'stock_adjustment_ops', 'dashboard'],
   // Legacy single Sale → quầy (không COD ops).
-  sale: ['pos', 'orders', 'customers', 'dashboard'],
-  warehouse: ['products', 'product_creation_requests', 'product_deletion_requests', 'stock_adjustment_ops', 'inventory'],
+  sale: ['pos', 'orders', 'customers', 'stock_adjustment_ops', 'dashboard'],
+  warehouse: ['products', 'product_creation_requests', 'product_deletion_requests', 'stock_adjustment_ops', 'stock_transfer_ops', 'inventory'],
   accountant: [
     'orders',
     'customers',

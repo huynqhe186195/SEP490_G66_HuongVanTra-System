@@ -18,6 +18,7 @@ public interface IProductRepository
     Task<List<Domain.Entities.ProductVariant>> SyncPendingVariantsToStoreAsync(DateTime syncedAt, CancellationToken ct = default);
     Task<Product?> GetByIdAsync(Guid id, bool includeDeleted = false);
     Task<ProductVariant?> GetVariantByIdAsync(Guid id, bool includeDeleted = false);
+    Task<VariantBomSynchronizationAggregate?> GetVariantBomSynchronizationAggregateAsync(Guid variantId);
     Task<List<ProductVariant>> GetVariantsByIdsAsync(IEnumerable<Guid> ids, bool includeDeleted = false);
     Task<List<ProductVariant>> GetVariantsBySkuCodesAsync(IEnumerable<string> skuCodes, bool includeDeleted = false);
     Task<List<ProductVariantBomEdge>> GetActiveBomEdgesAsync();
@@ -27,6 +28,7 @@ public interface IProductRepository
     Task<Product> CreateAsync(Product product);
     Task<Product> UpdateAsync(Product product);
     Task<ProductVariant> ReplaceVariantBomAsync(Guid variantId, List<ProductVariantBomLine> lines);
+    Task ApplyVariantBomSynchronizationAsync(VariantBomSynchronizationPlan plan);
     Task DeleteAsync(Product product);
     Task RestoreAsync(Product product);
 }

@@ -744,11 +744,6 @@ function PromotionsPage() {
         }
       />
 
-      <p className="mb-6 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-        Loại giảm: <strong>PERCENTAGE</strong> (% trên đơn sau CK thủ công) hoặc <strong>FIXED</strong> (số tiền cố định).
-        Thời hạn để trống = không giới hạn. Ngừng hoạt động thay vì xóa cứng — mã đã dùng trên đơn vẫn giữ lịch sử.
-      </p>
-
       <div className="mb-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_180px_180px_180px]">
         <input
           type="search"

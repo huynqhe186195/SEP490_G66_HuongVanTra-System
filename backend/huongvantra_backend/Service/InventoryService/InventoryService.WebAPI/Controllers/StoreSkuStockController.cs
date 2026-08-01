@@ -1,4 +1,5 @@
 using HuongVanTra.Shared.Auth;
+using InventoryService.Application.DTOs.Requests;
 using InventoryService.Application.UseCases;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -31,5 +32,14 @@ public class StoreSkuStockController(InventoryLogic _logic) : ControllerBase
         var stocks = await _logic.GetStoreSkuStocksAsync(ct);
         var lowStock = stocks.Where(s => s.QuantityOnHand <= s.ShelfLowStockThreshold).ToList();
         return Ok(lowStock);
+    }
+
+    /// <summary>Ngưỡng cảnh báo tồn Kệ Hàng do Quản lý đặt; ngưỡng Kho thuộc Thủ kho, đi qua endpoint khác.</summary>
+    [HttpPut("{skuId:guid}/threshold")]
+    [Authorize(Roles = "Manager")]
+    public async Task<IActionResult> UpdateShelfThreshold(Guid skuId, [FromBody] UpdateShelfLowStockThresholdRequest request, CancellationToken ct)
+    {
+        var result = await _logic.UpdateShelfLowStockThresholdAsync(skuId, request, ct);
+        return Ok(result);
     }
 }

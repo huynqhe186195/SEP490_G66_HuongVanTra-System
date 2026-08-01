@@ -104,9 +104,18 @@ export async function fetchInventorySettings() {
   }
 }
 
-export async function updateLowStockThreshold(skuId, threshold, location = 'Shelf') {
-  await apiRequestAuth(`/api/v1/inventory/sku-stocks/${skuId}/threshold`, {
+/** Ngưỡng cảnh báo tồn Kho — chỉ Thủ kho. */
+export async function updateWarehouseLowStockThreshold(skuId, threshold) {
+  await apiRequestAuth(`/api/v1/inventory/sku-stocks/${skuId}/warehouse-threshold`, {
     method: 'PUT',
-    body: JSON.stringify({ threshold: Number(threshold), location }),
+    body: JSON.stringify({ threshold: Number(threshold) }),
+  })
+}
+
+/** Ngưỡng cảnh báo tồn Kệ Hàng — chỉ Quản lý. */
+export async function updateShelfLowStockThreshold(skuId, threshold) {
+  await apiRequestAuth(`/api/v1/store/sku-stocks/${skuId}/threshold`, {
+    method: 'PUT',
+    body: JSON.stringify({ threshold: Number(threshold) }),
   })
 }

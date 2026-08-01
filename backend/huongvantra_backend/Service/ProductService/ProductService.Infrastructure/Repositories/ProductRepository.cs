@@ -3,6 +3,7 @@ using ProductService.Application;
 using ProductService.Application.Interfaces;
 using ProductService.Domain.Entities;
 using ProductService.Domain.Enums;
+using ProductService.Domain.Exceptions;
 using ProductService.Infrastructure.Data;
 
 namespace ProductService.Infrastructure.Repositories;
@@ -174,6 +175,29 @@ public class ProductRepository(ProductDbContext _db) : IProductRepository
             .FirstOrDefaultAsync(v => v.Id == id);
     }
 
+    public async Task<VariantBomSynchronizationAggregate?> GetVariantBomSynchronizationAggregateAsync(Guid variantId)
+    {
+        var targetVariant = await _db.ProductVariants
+            .AsNoTracking()
+            .AsSplitQuery()
+            .Include(v => v.Product)
+            .Include(v => v.BomLines)
+            .Include(v => v.DerivedVariants)
+                .ThenInclude(v => v.Product)
+            .Include(v => v.DerivedVariants)
+                .ThenInclude(v => v.BomLines)
+            .FirstOrDefaultAsync(v => v.Id == variantId);
+
+        if (targetVariant is null)
+            return null;
+
+        var directDerivedVariants = targetVariant.DerivedVariants
+            .Where(v => v.ProductId == targetVariant.ProductId && v.BaseVariantId == targetVariant.Id)
+            .ToList();
+
+        return new VariantBomSynchronizationAggregate(targetVariant, directDerivedVariants);
+    }
+
     public async Task<List<ProductVariant>> GetVariantsByIdsAsync(IEnumerable<Guid> ids, bool includeDeleted = false)
     {
         var targetIds = ids.Where(id => id != Guid.Empty).ToHashSet();
@@ -269,6 +293,100 @@ public class ProductRepository(ProductDbContext _db) : IProductRepository
         variant.UpdatedAt = now;
         await _db.SaveChangesAsync();
         return (await GetVariantByIdAsync(variantId))!;
+    }
+
+    public async Task ApplyVariantBomSynchronizationAsync(VariantBomSynchronizationPlan plan)
+    {
+        if (plan is null)
+            throw new ProductValidationException("VariantBomSynchronizationPlan là bắt buộc.");
+        if (plan.ProductId == Guid.Empty || plan.BaseVariantId == Guid.Empty)
+            throw new ProductValidationException("ProductId và BaseVariantId của synchronization plan là bắt buộc.");
+        if (plan.Replacements is null || plan.Replacements.Count == 0)
+            throw new ProductValidationException("Synchronization plan phải có ít nhất một BOM replacement.");
+
+        var replacementIds = plan.Replacements.Select(x => x.VariantId).ToList();
+        if (replacementIds.Any(id => id == Guid.Empty) || replacementIds.Distinct().Count() != replacementIds.Count)
+            throw new ProductValidationException("VariantId trong synchronization plan không hợp lệ hoặc bị trùng.");
+        if (!replacementIds.Contains(plan.BaseVariantId))
+            throw new ProductValidationException("Synchronization plan phải chứa replacement của base SKU.");
+
+        foreach (var replacement in plan.Replacements)
+        {
+            if (replacement.Lines is null)
+                throw new ProductValidationException($"BOM replacement của SKU {replacement.VariantId} là bắt buộc.");
+
+            var duplicateLine = replacement.Lines
+                .GroupBy(line => (
+                    UsesVariant: line.ComponentVariantId.HasValue,
+                    ComponentId: line.ComponentVariantId ?? line.MaterialId))
+                .FirstOrDefault(group => group.Count() > 1);
+            if (duplicateLine is not null)
+                throw new ProductValidationException($"BOM replacement của SKU {replacement.VariantId} có component bị trùng.");
+        }
+
+        var ownsTransaction = _db.Database.CurrentTransaction is null;
+        await using var transaction = ownsTransaction ? await _db.Database.BeginTransactionAsync() : null;
+        try
+        {
+            var variants = await _db.ProductVariants
+                .Include(v => v.BomLines)
+                .Where(v => v.ProductId == plan.ProductId
+                    && (v.Id == plan.BaseVariantId || v.BaseVariantId == plan.BaseVariantId))
+                .ToListAsync();
+
+            var aggregateIds = variants.Select(v => v.Id).ToHashSet();
+            if (!aggregateIds.SetEquals(replacementIds))
+                throw new ProductValidationException(
+                    "Synchronization plan không còn khớp với base SKU và toàn bộ direct derived SKU hiện tại.");
+
+            var baseVariant = variants.SingleOrDefault(v => v.Id == plan.BaseVariantId);
+            if (baseVariant is null
+                || !baseVariant.IsBaseUnitVariant
+                || baseVariant.BaseVariantId.HasValue)
+            {
+                throw new ProductValidationException("Base SKU trong synchronization plan không hợp lệ.");
+            }
+
+            if (variants.Any(v => v.ProductId != plan.ProductId))
+                throw new ProductValidationException("Có SKU không thuộc đúng Product aggregate.");
+
+            var now = DateTime.UtcNow;
+            foreach (var replacement in plan.Replacements)
+            {
+                var variant = variants.Single(v => v.Id == replacement.VariantId);
+                foreach (var oldLine in variant.BomLines)
+                {
+                    oldLine.IsDeleted = true;
+                    oldLine.UpdatedAt = now;
+                }
+
+                foreach (var line in replacement.Lines)
+                {
+                    _db.ProductVariantBomLines.Add(new ProductVariantBomLine
+                    {
+                        ProductVariantId = variant.Id,
+                        MaterialId = line.MaterialId,
+                        ComponentVariantId = line.ComponentVariantId,
+                        Quantity = line.Quantity,
+                        IsRequiredBaseComponent = false,
+                        CreatedAt = now,
+                        UpdatedAt = now
+                    });
+                }
+
+                variant.UpdatedAt = now;
+            }
+
+            await _db.SaveChangesAsync();
+            if (transaction is not null)
+                await transaction.CommitAsync();
+        }
+        catch
+        {
+            if (transaction is not null)
+                await transaction.RollbackAsync();
+            throw;
+        }
     }
 
     public async Task DeleteAsync(Product product)

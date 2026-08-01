@@ -4,12 +4,12 @@ import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
-import { canWriteInventory } from '../../auth/utils/permissions.js'
+import { canEditWarehouseThreshold, canWriteInventory } from '../../auth/utils/permissions.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import { fetchAllActiveSkus } from '../../products/services/productSkusApi.js'
 import { fetchProducts } from '../../products/services/productsApi.js'
 import { formatStockQuantity } from '../../products/utils/productDisplay.js'
-import { fetchSkuStocks, updateLowStockThreshold } from '../services/inventoryStockApi.js'
+import { fetchSkuStocks, updateWarehouseLowStockThreshold } from '../services/inventoryStockApi.js'
 import { fetchWarehouseBatches } from '../services/warehouseBatchApi.js'
 
 function InventoryStockPage() {
@@ -21,7 +21,9 @@ function InventoryStockPage() {
   const [editingThreshold, setEditingThreshold] = useState(null) // { skuId, value }
   const [savingSkuId, setSavingSkuId] = useState(null)
   const inputRef = useRef(null)
-  const canWrite = canWriteInventory(loadAuthSession())
+  const session = loadAuthSession()
+  const canWrite = canWriteInventory(session)
+  const canEditThreshold = canEditWarehouseThreshold(session)
 
   const loadData = useCallback(async () => {
     setIsLoading(true)
@@ -51,9 +53,8 @@ function InventoryStockPage() {
           productName: productNameById.get(sku.productId) || '—',
           packagingType: sku.packagingType || '',
           warehouseQuantityOnHand: stock?.warehouseQuantityOnHand ?? 0,
-          lowStockThreshold: stock?.warehouseLowStockThreshold ?? 0,
+          quantityOnHand: stock?.quantityOnHand ?? 0,
           warehouseLowStockThreshold: stock?.warehouseLowStockThreshold ?? 0,
-          shelfLowStockThreshold: stock?.shelfLowStockThreshold ?? 0,
           activeLotCount: batchCountBySku.get(sku.id) || 0,
         }
       })
@@ -120,8 +121,8 @@ function InventoryStockPage() {
     setSavingSkuId(skuId)
     setEditingThreshold(null)
     try {
-      await updateLowStockThreshold(skuId, parsed, 'Warehouse')
-      setRows((prev) => prev.map((r) => (r.skuId === skuId ? { ...r, lowStockThreshold: parsed, warehouseLowStockThreshold: parsed } : r)))
+      await updateWarehouseLowStockThreshold(skuId, parsed)
+      setRows((prev) => prev.map((r) => (r.skuId === skuId ? { ...r, warehouseLowStockThreshold: parsed } : r)))
       showSuccess('Đã cập nhật ngưỡng cảnh báo Kho')
     } catch (err) {
       showError(err.message)
@@ -133,6 +134,58 @@ function InventoryStockPage() {
   function handleKeyDown(e, skuId) {
     if (e.key === 'Enter') commitEdit(skuId)
     if (e.key === 'Escape') cancelEdit()
+  }
+
+  function renderThresholdCell(row) {
+    const value = row.warehouseLowStockThreshold
+    const isEditing = editingThreshold?.skuId === row.skuId
+    const isSaving = savingSkuId === row.skuId
+
+    if (canEditThreshold && isEditing) {
+      return (
+        <input
+          ref={inputRef}
+          type="number"
+          min={0}
+          className="w-20 rounded-lg border border-[#356647] px-2 py-1 text-sm font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-[#356647]/30"
+          value={editingThreshold.value}
+          onChange={(e) => setEditingThreshold((prev) => ({ ...prev, value: e.target.value }))}
+          onKeyDown={(e) => handleKeyDown(e, row.skuId)}
+          onBlur={() => commitEdit(row.skuId)}
+        />
+      )
+    }
+
+    if (!canEditThreshold) {
+      return (
+        <span className={value === 0 ? 'text-slate-400' : 'font-semibold text-slate-800'}>
+          {value === 0 ? 'Chưa đặt' : value}
+        </span>
+      )
+    }
+
+    return (
+      <button
+        type="button"
+        title="Click để sửa ngưỡng"
+        disabled={isSaving}
+        onClick={() => startEdit(row.skuId, value)}
+        className="group flex items-center gap-1.5 rounded-lg px-2 py-1 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+      >
+        {isSaving ? (
+          <span className="text-xs text-slate-400">Đang lưu...</span>
+        ) : (
+          <>
+            <span className={value === 0 ? 'text-slate-400' : 'text-slate-800'}>
+              {value === 0 ? 'Chưa đặt' : value}
+            </span>
+            <span className="material-symbols-outlined text-[14px] text-slate-400 opacity-0 group-hover:opacity-100">
+              edit
+            </span>
+          </>
+        )}
+      </button>
+    )
   }
 
   return (
@@ -173,18 +226,19 @@ function InventoryStockPage() {
                 <th className="px-4 py-3">Tồn Kho</th>
                 <th className="px-4 py-3">Lô đang còn</th>
                 <th className="px-4 py-3">Ngưỡng cảnh báo Kho</th>
+                <th className="px-4 py-3">Tồn Kệ</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {isLoading ? (
                 <tr>
-                  <td className="px-6 py-8 text-slate-500" colSpan={5}>
+                  <td className="px-6 py-8 text-slate-500" colSpan={6}>
                     Đang tải...
                   </td>
                 </tr>
               ) : filteredRows.length === 0 ? (
                 <tr>
-                  <td className="px-6 py-8 text-slate-500" colSpan={5}>
+                  <td className="px-6 py-8 text-slate-500" colSpan={6}>
                     Chưa có SKU — tạo sản phẩm và biến thể trước.
                   </td>
                 </tr>
@@ -210,44 +264,9 @@ function InventoryStockPage() {
                         <span className="text-amber-700">Chưa có lô</span>
                       )}
                     </td>
-                    <td className="px-4 py-4">
-                      {canWrite && editingThreshold?.skuId === row.skuId ? (
-                        <input
-                          ref={inputRef}
-                          type="number"
-                          min={0}
-                          className="w-20 rounded-lg border border-[#356647] px-2 py-1 text-sm font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-[#356647]/30"
-                          value={editingThreshold.value}
-                          onChange={(e) => setEditingThreshold((prev) => ({ ...prev, value: e.target.value }))}
-                          onKeyDown={(e) => handleKeyDown(e, row.skuId)}
-                          onBlur={() => commitEdit(row.skuId)}
-                        />
-                      ) : canWrite ? (
-                        <button
-                          type="button"
-                          title="Click để sửa ngưỡng"
-                          disabled={savingSkuId === row.skuId}
-                          onClick={() => startEdit(row.skuId, row.lowStockThreshold)}
-                          className="group flex items-center gap-1.5 rounded-lg px-2 py-1 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
-                        >
-                          {savingSkuId === row.skuId ? (
-                            <span className="text-xs text-slate-400">Đang lưu...</span>
-                          ) : (
-                            <>
-                              <span className={row.lowStockThreshold === 0 ? 'text-slate-400' : 'text-slate-800'}>
-                                {row.lowStockThreshold === 0 ? 'Chưa đặt' : row.lowStockThreshold}
-                              </span>
-                              <span className="material-symbols-outlined text-[14px] text-slate-400 opacity-0 group-hover:opacity-100">
-                                edit
-                              </span>
-                            </>
-                          )}
-                        </button>
-                      ) : (
-                        <span className={row.lowStockThreshold === 0 ? 'text-slate-400' : 'font-semibold text-slate-800'}>
-                          {row.lowStockThreshold === 0 ? 'Chưa đặt' : row.lowStockThreshold}
-                        </span>
-                      )}
+                    <td className="px-4 py-4">{renderThresholdCell(row)}</td>
+                    <td className="px-4 py-4 font-semibold text-slate-800">
+                      {formatStockQuantity(row.quantityOnHand)}
                     </td>
                   </tr>
                 ))

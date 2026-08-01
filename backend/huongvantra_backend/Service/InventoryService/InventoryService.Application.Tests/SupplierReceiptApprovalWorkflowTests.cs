@@ -104,12 +104,14 @@ public class SupplierReceiptApprovalWorkflowTests
             Mock.Of<IShelfReturnRequestRepository>(),
             Mock.Of<ISupplierReturnRequestRepository>(),
             Mock.Of<IStocktakeRequestRepository>(),
+            Mock.Of<IShelfReplenishmentSuggestionRepository>(),
             new ProcessedIntegrationEventRepository(db),
             eventPublisher,
             new PassThrough(),
             Mock.Of<IProductionOrderRepository>(),
             new FakeCatalogClient(BuildCatalog()),
             new SupplierRepository(db),
+            new SupplierProductRepository(db),
             new ReturnInspectionRepository(db),
             opts);
     }

@@ -77,8 +77,10 @@ public class ProductApprovalLogic(ProductDbContext _db, ProductLogic _productLog
         if (request?.Product is null)
             throw new ProductValidationException("Thông tin sản phẩm cần phê duyệt là bắt buộc.");
 
+        ProductRequestLegacyBomValidator.RejectLegacyRequiredBaseComponents(request.Product);
+
         var now = DateTime.UtcNow;
-        var product = request.Product;
+        var product = ProductRequestCapabilityNormalizer.Normalize(request.Product);
         await ValidateApprovalSnapshotAsync(product, ct);
         var approval = new NewProductApprovalRequest
         {
@@ -86,7 +88,7 @@ public class ProductApprovalLogic(ProductDbContext _db, ProductLogic _productLog
             Status = NewProductApprovalStatus.Draft,
             ProductSnapshotJson = SerializeProduct(product),
             ProductName = NormalizeRequired(product.Name, "Tên sản phẩm trong biên bản là bắt buộc."),
-            ProductType = NormalizeText(product.ProductType) ?? ProductType.THANH_PHAM.ToString(),
+            ProductType = ResolveProductTypeText(product.ProductType),
             CategoryId = product.CategoryId > 0 ? product.CategoryId : null,
             InitialPrice = ResolveInitialPrice(product),
             RequestedBy = NormalizeActorId(actor),
@@ -216,10 +218,20 @@ public class ProductApprovalLogic(ProductDbContext _db, ProductLogic _productLog
 
             EnsureCanUse(approval);
 
-            var approvedProduct = DeserializeProduct(approval.ProductSnapshotJson);
-            var productRequest = method == ProductCreationMethod.Automatic
-                ? approvedProduct
-                : manualProductRequest ?? throw new ProductValidationException("Thông tin sản phẩm nhập thủ công là bắt buộc.");
+            var approvedProduct = ProductRequestCapabilityNormalizer.Normalize(
+                DeserializeProduct(approval.ProductSnapshotJson));
+            CreateProductRequest productRequest;
+            if (method == ProductCreationMethod.Automatic)
+            {
+                productRequest = approvedProduct;
+            }
+            else
+            {
+                var manualProduct = manualProductRequest
+                    ?? throw new ProductValidationException("Thông tin sản phẩm nhập thủ công là bắt buộc.");
+                ProductRequestLegacyBomValidator.RejectLegacyRequiredBaseComponents(manualProduct);
+                productRequest = ProductRequestCapabilityNormalizer.Normalize(manualProduct);
+            }
 
             if (method == ProductCreationMethod.Manual)
             {
@@ -237,6 +249,7 @@ public class ProductApprovalLogic(ProductDbContext _db, ProductLogic _productLog
 
             var attributeNameCache = await ProductAttributeNameResolver.LoadAsync(_db, ct);
             productRequest = await ProductAttributeNameResolver.ResolveAsync(_db, productRequest, attributeNameCache, ct);
+            productRequest = ProductRequestCapabilityNormalizer.Normalize(productRequest);
             var created = await _productLogic.CreateAsync(productRequest);
 
             var now = DateTime.UtcNow;
@@ -357,7 +370,7 @@ public class ProductApprovalLogic(ProductDbContext _db, ProductLogic _productLog
         {
             errors.Add("Loại hàng là bắt buộc.");
         }
-        else if (!Enum.TryParse<ProductType>(productTypeText, ignoreCase: true, out productType))
+        else if (!ProductTypeValidation.TryParseDefined(productTypeText, out productType))
         {
             errors.Add("Loại hàng không hợp lệ.");
         }
@@ -429,7 +442,7 @@ public class ProductApprovalLogic(ProductDbContext _db, ProductLogic _productLog
                 errors.Add($"Barcode '{barcode}' bị trùng trong danh sách SKU.");
 
             ValidateOptionJson(variant.OptionValuesJson, row, errors);
-            ValidateApprovalBomLines(variant.BomLines, productType, row, materialIds, errors);
+            ValidateApprovalBomLines(variant.BomLines, productType, variant.CanHaveBom ?? false, variant.IsActive, row, materialIds, errors);
         }
 
         if (skuCodes.Count > 0)
@@ -462,7 +475,7 @@ public class ProductApprovalLogic(ProductDbContext _db, ProductLogic _productLog
                 if (material.ProductType != ProductType.NGUYEN_LIEU
                     && material.ProductType != ProductType.BAO_BI
                     && material.ProductType != ProductType.THANH_PHAM)
-                    errors.Add($"'{material.Name}' không phải là nguyên liệu.");
+                    errors.Add($"'{material.Name}' không được phép dùng làm component BOM.");
             }
         }
 
@@ -531,6 +544,8 @@ public class ProductApprovalLogic(ProductDbContext _db, ProductLogic _productLog
     private static void ValidateApprovalBomLines(
         List<BomLineRequest>? bomLines,
         ProductType productType,
+        bool canHaveBom,
+        bool isActive,
         int variantRow,
         HashSet<Guid> materialIds,
         List<string> errors)
@@ -538,7 +553,7 @@ public class ProductApprovalLogic(ProductDbContext _db, ProductLogic _productLog
         var rows = bomLines ?? [];
         if (rows.Count == 0) return;
 
-        if (productType != ProductType.THANH_PHAM)
+        if (!BomCapabilityRules.CanOwnBom(productType, canHaveBom, isActive))
         {
             errors.Add("BOM chỉ áp dụng cho thành phẩm.");
             return;
@@ -549,6 +564,8 @@ public class ProductApprovalLogic(ProductDbContext _db, ProductLogic _productLog
         foreach (var (line, index) in rows.Select((value, index) => (value, index)))
         {
             var row = index + 1;
+            if (line.IsRequiredBaseComponent)
+                errors.Add($"SKU {variantRow}, BOM dòng {row}: IsRequiredBaseComponent không còn được hỗ trợ.");
             var componentKey = GetBomLineDedupKey(line);
             if (componentKey is not null && !usedComponents.Add(componentKey))
                 errors.Add($"SKU {variantRow}: Khong duoc chon trung component trong cung BOM.");
@@ -605,8 +622,8 @@ public class ProductApprovalLogic(ProductDbContext _db, ProductLogic _productLog
         if (!approvedUnits.SequenceEqual(manualUnits))
             differences.Add("Đơn vị bán khác.");
 
-        var approvedVariants = BuildComparableVariants(approved.Variants);
-        var manualVariants = BuildComparableVariants(manual.Variants);
+        var approvedVariants = BuildComparableVariants(approved.Variants, ParseComparableProductType(approved.ProductType));
+        var manualVariants = BuildComparableVariants(manual.Variants, ParseComparableProductType(manual.ProductType));
         if (approvedVariants.Count != manualVariants.Count)
         {
             differences.Add("Số lượng SKU khác.");
@@ -629,6 +646,8 @@ public class ProductApprovalLogic(ProductDbContext _db, ProductLogic _productLog
                 differences.Add($"Giá bán {approvedVariant.SkuCode} khác.");
             if (approvedVariant.MinStock != manualVariant.MinStock || approvedVariant.MaxStock != manualVariant.MaxStock)
                 differences.Add($"Tồn min/max {approvedVariant.SkuCode} khác.");
+            if (approvedVariant.Capabilities != manualVariant.Capabilities)
+                differences.Add($"Capability {approvedVariant.SkuCode} khác.");
             if (!approvedVariant.BomLines.SequenceEqual(manualVariant.BomLines))
                 differences.Add($"BOM {approvedVariant.SkuCode} khác.");
         }
@@ -648,21 +667,38 @@ public class ProductApprovalLogic(ProductDbContext _db, ProductLogic _productLog
             .ThenBy(x => x.ConversionRate)
             .ToList();
 
-    private static List<ComparableVariant> BuildComparableVariants(List<ProductVariantRequest>? variants) =>
+    private static List<ComparableVariant> BuildComparableVariants(
+        List<ProductVariantRequest>? variants,
+        ProductType productType) =>
         (variants ?? [])
-            .Select(x => new ComparableVariant(
-                NormalizeComparableText(x.SkuCode).ToUpperInvariant(),
-                NormalizeComparableText(x.VariantName),
-                NormalizeDecimal(x.CostPrice),
-                NormalizeDecimal(x.RetailPrice),
-                x.MinStock,
-                x.MaxStock,
-                (x.BomLines ?? [])
-                    .Select(line => new ComparableBomLine(GetBomLineDedupKey(line) ?? $"material:{line.MaterialId}", NormalizeDecimal(line.Quantity), line.IsRequiredBaseComponent))
-                    .OrderBy(line => line.ComponentKey)
-                    .ToList()))
+            .Select(x =>
+            {
+                var capabilities = ProductCapabilityRules.Resolve(
+                    productType,
+                    x.IsPurchasable,
+                    x.CanBeBomComponent,
+                    x.CanUseInCustom,
+                    x.CanHaveBom);
+                return new ComparableVariant(
+                    NormalizeComparableText(x.SkuCode).ToUpperInvariant(),
+                    NormalizeComparableText(x.VariantName),
+                    NormalizeDecimal(x.CostPrice),
+                    NormalizeDecimal(x.RetailPrice),
+                    x.MinStock,
+                    x.MaxStock,
+                    capabilities,
+                    (x.BomLines ?? [])
+                        .Select(line => new ComparableBomLine(GetBomLineDedupKey(line) ?? $"material:{line.MaterialId}", NormalizeDecimal(line.Quantity), line.IsRequiredBaseComponent))
+                        .OrderBy(line => line.ComponentKey)
+                        .ToList());
+            })
             .OrderBy(x => x.SkuCode)
             .ToList();
+
+    private static ProductType ParseComparableProductType(string? value) =>
+        ProductTypeValidation.TryParseDefined(NormalizeText(value), out var productType)
+            ? productType
+            : throw new ProductValidationException("Loại hàng không hợp lệ.");
 
     private static bool StringEquals(string? left, string? right) =>
         string.Equals(NormalizeComparableText(left), NormalizeComparableText(right), StringComparison.OrdinalIgnoreCase);
@@ -692,6 +728,7 @@ public class ProductApprovalLogic(ProductDbContext _db, ProductLogic _productLog
         decimal RetailPrice,
         int? MinStock,
         int? MaxStock,
+        ProductVariantCapabilities Capabilities,
         List<ComparableBomLine> BomLines);
 
     private static Guid? NormalizeActorId(ProductApprovalActorSnapshot actor) =>
@@ -708,6 +745,11 @@ public class ProductApprovalLogic(ProductDbContext _db, ProductLogic _productLog
 
     private static string NormalizeRequired(string? value, string message) =>
         NormalizeText(value) ?? throw new ProductValidationException(message);
+
+    private static string ResolveProductTypeText(string? value) =>
+        ProductTypeValidation.TryParseDefined(NormalizeText(value), out var productType)
+            ? productType.ToString()
+            : throw new ProductValidationException("Loại hàng không hợp lệ.");
 
     private static decimal? ResolveInitialPrice(CreateProductRequest product)
     {

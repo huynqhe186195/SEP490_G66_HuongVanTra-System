@@ -308,8 +308,25 @@ public class OrderLogic(
         }
 
         var skuProfiles = await GetRequiredSkuProfilesAsync(
-            req.Items.Select(i => i.SkuId),
+            req.Items.Select(i => i.SkuId)
+                .Concat((req.CustomBundles ?? []).SelectMany(bundle => bundle.Ingredients).Select(ingredient => ingredient.MaterialSkuId)),
             ct);
+        foreach (var item in req.Items)
+        {
+            var profile = skuProfiles[item.SkuId];
+            if (!string.Equals(profile.ProductType, "THANH_PHAM", StringComparison.OrdinalIgnoreCase))
+                throw new OrderValidationException("SKU bán phải là THANH_PHAM đang hoạt động.");
+        }
+        foreach (var ingredient in (req.CustomBundles ?? []).SelectMany(bundle => bundle.Ingredients))
+        {
+            var profile = skuProfiles[ingredient.MaterialSkuId];
+            if (ingredient.Quantity <= 0)
+                throw new OrderValidationException("Số lượng component Custom phải lớn hơn 0.");
+            if (!profile.CanUseInCustom
+                || !string.Equals(profile.ProductType, "NGUYEN_LIEU", StringComparison.OrdinalIgnoreCase)
+                   && !string.Equals(profile.ProductType, "BAO_BI", StringComparison.OrdinalIgnoreCase))
+                throw new OrderValidationException("SKU không được phép dùng trong Custom.");
+        }
         var detailInputs = req.Items.Select(i =>
         {
             var profile = skuProfiles[i.SkuId];
@@ -2064,6 +2081,16 @@ public class OrderLogic(
 
         if (bundle.PackingStatus == PackingStatus.Packed)
             throw new OrderValidationException("Gói này đã được đóng gói.");
+
+        var profiles = await GetRequiredSkuProfilesAsync(bundle.Ingredients.Select(i => i.MaterialSkuId), ct);
+        foreach (var ingredient in bundle.Ingredients)
+        {
+            var profile = profiles[ingredient.MaterialSkuId];
+            if (ingredient.Quantity <= 0 || !profile.CanUseInCustom
+                || !string.Equals(profile.ProductType, "NGUYEN_LIEU", StringComparison.OrdinalIgnoreCase)
+                   && !string.Equals(profile.ProductType, "BAO_BI", StringComparison.OrdinalIgnoreCase))
+                throw new OrderValidationException("SKU không còn được phép dùng trong Custom.");
+        }
 
         List<(Guid SkuId, string? SkuCode, string? SkuName, int Quantity)> ingredients = bundle.Ingredients
             .Select(i => (

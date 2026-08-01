@@ -50,6 +50,31 @@ public sealed class ReturnInspectionTests
             Func<CancellationToken, Task<T>> action, CancellationToken ct = default) => action(ct);
     }
 
+    private static IProductCatalogClient FinishedGoodsCatalogClient()
+    {
+        var mock = new Mock<IProductCatalogClient>();
+        mock.Setup(c => c.GetCatalogForVariantIdsAsync(
+                It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IEnumerable<Guid> ids, CancellationToken _) =>
+                new ProductCatalogSnapshot(ids.Distinct().Select(BuildFinishedProduct).ToList()));
+        return mock.Object;
+    }
+
+    private static CatalogProduct BuildFinishedProduct(Guid variantId)
+    {
+        var productId = Guid.NewGuid();
+        return new CatalogProduct(
+            productId, "Thành phẩm", "THANH_PHAM", "cái", "cái",
+            IsActive: true,
+            Variants:
+            [
+                new CatalogVariant(
+                    variantId, productId, "SKU-RI", "Thành phẩm",
+                    IsActive: true, IsSellable: true, HasBom: false, BomLineCount: 0, BomLines: [],
+                    CanHaveBom: true)
+            ]);
+    }
+
     private static InventoryLogic BuildLogic(InventoryDbContext db)
     {
         var opts = MSOptions.Create(new InventoryOptions { SimulateWarehouse = false });
@@ -66,12 +91,14 @@ public sealed class ReturnInspectionTests
             Mock.Of<IShelfReturnRequestRepository>(),
             Mock.Of<ISupplierReturnRequestRepository>(),
             Mock.Of<IStocktakeRequestRepository>(),
+            Mock.Of<IShelfReplenishmentSuggestionRepository>(),
             new ProcessedIntegrationEventRepository(db),
             Mock.Of<IInventoryEventPublisher>(),
             new PassThrough(),
             Mock.Of<IProductionOrderRepository>(),
-            Mock.Of<IProductCatalogClient>(),
+            FinishedGoodsCatalogClient(),
             Mock.Of<ISupplierRepository>(),
+            new SupplierProductRepository(db),
             new ReturnInspectionRepository(db),
             opts);
     }

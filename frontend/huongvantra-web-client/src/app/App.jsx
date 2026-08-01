@@ -37,6 +37,10 @@ import B2BDebtsPage from '../features/orders/pages/B2BDebtsPage.jsx'
 import StockDeductQueuePage from '../features/inventory/pages/StockDeductQueuePage.jsx'
 import ReturnInspectionsPage from '../features/inventory/pages/ReturnInspectionsPage.jsx'
 import StockAdjustmentRequestsPage from '../features/inventory/pages/StockAdjustmentRequestsPage.jsx'
+import StockAdjustmentRequestCreatePage from '../features/inventory/pages/StockAdjustmentRequestCreatePage.jsx'
+import StockTransfersPage from '../features/inventory/pages/StockTransfersPage.jsx'
+import StockTransferCreatePage from '../features/inventory/pages/StockTransferCreatePage.jsx'
+import ShelfReplenishmentSuggestionsPage from '../features/inventory/pages/ShelfReplenishmentSuggestionsPage.jsx'
 import SupplierReceiptsPage from '../features/inventory/pages/SupplierReceiptsPage.jsx'
 import ProductionOrdersPage from '../features/inventory/pages/ProductionOrdersPage.jsx'
 import CustomBundlesPage from '../features/inventory/pages/CustomBundlesPage.jsx'
@@ -103,6 +107,13 @@ function App() {
         <Route path="/inventory" element={<InventoryStockPage />} />
         <Route path="/inventory/statistics" element={<InventoryStatisticsPage />} />
         <Route path="/inventory/stock-requests" element={<StockAdjustmentRequestsPage />} />
+        <Route path="/inventory/stock-requests/create" element={<StockAdjustmentRequestCreatePage />} />
+        <Route path="/inventory/stock-transfers" element={<StockTransfersPage />} />
+        <Route path="/inventory/stock-transfers/create" element={<StockTransferCreatePage />} />
+        <Route
+          path="/inventory/shelf-replenishment-suggestions"
+          element={<ShelfReplenishmentSuggestionsPage />}
+        />
         <Route path="/inventory/batches" element={<InventoryBatchesPage />} />
         <Route path="/inventory/supplier-receipts" element={<SupplierReceiptsPage />} />
         <Route path="/inventory/supplier-receipts/:receiptId" element={<SupplierReceiptsPage />} />

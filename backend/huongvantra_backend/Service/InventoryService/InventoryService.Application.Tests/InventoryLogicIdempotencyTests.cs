@@ -44,12 +44,14 @@ public sealed class InventoryLogicIdempotencyTests
             Mock.Of<IShelfReturnRequestRepository>(),
             Mock.Of<ISupplierReturnRequestRepository>(),
             Mock.Of<IStocktakeRequestRepository>(),
+            Mock.Of<IShelfReplenishmentSuggestionRepository>(),
             processed,
             Mock.Of<IInventoryEventPublisher>(),
             BuildPassThroughUnitOfWork(),
             Mock.Of<IProductionOrderRepository>(),
             Mock.Of<IProductCatalogClient>(),
             Mock.Of<ISupplierRepository>(),
+            Mock.Of<ISupplierProductRepository>(),
             Mock.Of<IReturnInspectionRepository>(),
             Microsoft.Extensions.Options.Options.Create(new InventoryOptions()));
     }

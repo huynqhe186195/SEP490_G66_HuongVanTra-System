@@ -65,12 +65,14 @@ public sealed class CodReservationTraceabilityTests
             Mock.Of<IShelfReturnRequestRepository>(),
             Mock.Of<ISupplierReturnRequestRepository>(),
             Mock.Of<IStocktakeRequestRepository>(),
+            Mock.Of<IShelfReplenishmentSuggestionRepository>(),
             new ProcessedIntegrationEventRepository(db),
             Mock.Of<IInventoryEventPublisher>(),
             new PassThroughUnitOfWork(),
             Mock.Of<IProductionOrderRepository>(),
             Mock.Of<IProductCatalogClient>(),
             Mock.Of<ISupplierRepository>(),
+            Mock.Of<ISupplierProductRepository>(),
             Mock.Of<IReturnInspectionRepository>(),
             Microsoft.Extensions.Options.Options.Create(
                 new InventoryOptions { SimulateWarehouse = true }));

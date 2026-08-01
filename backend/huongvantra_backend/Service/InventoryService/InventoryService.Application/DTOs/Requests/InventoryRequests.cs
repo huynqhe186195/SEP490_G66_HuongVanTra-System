@@ -37,11 +37,11 @@ public record ReplaceCodReservationRequest(
     decimal TotalAmount,
     List<ReplaceCodReservationItemRequest> Items);
 
-public record UpdateLowStockThresholdRequest(
-    int Threshold,
-    string? Location = null,
-    int? WarehouseLowStockThreshold = null,
-    int? ShelfLowStockThreshold = null);
+/// <summary>Ngưỡng tồn thấp Kho — chỉ Thủ kho được đặt.</summary>
+public record UpdateWarehouseLowStockThresholdRequest(int Threshold);
+
+/// <summary>Ngưỡng tồn thấp Kệ Hàng — chỉ Quản lý được đặt.</summary>
+public record UpdateShelfLowStockThresholdRequest(int Threshold);
 
 public record CreateStockAdjustmentRequestItem(
     Guid SkuId,
@@ -56,6 +56,39 @@ public record CreateStockAdjustmentRequest(
 public record RejectStockAdjustmentRequest(string? Reason);
 
 public record CancelStockAdjustmentRequest(string? Reason);
+
+/// <summary>Duyệt một dòng yêu cầu bổ sung Kệ Hàng: Warehouse chọn số lượng duyệt cho từng dòng.</summary>
+public record ReviewStockAdjustmentLineRequest(
+    Guid ItemId,
+    bool Approved,
+    int? ApprovedQuantity,
+    string? Note);
+
+/// <summary>Duyệt/từ chối theo dòng. Dòng không liệt kê sẽ được duyệt nguyên số lượng yêu cầu.</summary>
+public record ReviewStockAdjustmentRequestLines(
+    string? ReviewNote,
+    List<ReviewStockAdjustmentLineRequest>? Lines);
+
+/// <summary>Đóng phần còn lại của yêu cầu (ClosedPartial) kèm lý do bắt buộc.</summary>
+public record CloseStockAdjustmentRemainingRequest(string? Reason);
+
+public record UpsertStockTransferLineRequest(
+    Guid SkuId,
+    string? SkuCode,
+    string? SkuName,
+    string? UnitName,
+    int Quantity,
+    Guid? SourceRequestLineId = null);
+
+public record UpsertStockTransferRequest(
+    string? Note,
+    List<UpsertStockTransferLineRequest> Lines,
+    Guid? SourceRequestId = null,
+    Guid? SourceSuggestionId = null);
+
+public record CancelStockTransferRequest(string? Reason);
+
+public record DismissShelfReplenishmentSuggestionRequest(string? Reason);
 
 public record CreateWarehouseBatchItemRequest(
     Guid SkuId,

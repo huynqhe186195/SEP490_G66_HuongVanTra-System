@@ -138,7 +138,9 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
             finishedProducts.map((product) => String(product.id)),
           )
           const tp = items.filter(
-            (sku) => finishedProductIds.has(String(sku.productId)) && sku.isSellable !== false,
+            (sku) => finishedProductIds.has(String(sku.productId))
+              && sku.isActive !== false
+              && sku.canHaveBom === true,
           )
           setTpSkus(tp)
         })
