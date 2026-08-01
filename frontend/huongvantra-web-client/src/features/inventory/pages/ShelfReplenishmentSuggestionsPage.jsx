@@ -8,7 +8,6 @@ import { loadAuthSession } from '../../auth/services/authSession.js'
 import { canOperateStockTransfer } from '../../auth/utils/permissions.js'
 import { formatStockQuantity } from '../../products/utils/productDisplay.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
-import { formatCreatorRole, UNKNOWN_CREATOR_VALUE } from '../utils/inventoryCreatorDisplay.js'
 import {
   dismissShelfReplenishmentSuggestion,
   fetchShelfReplenishmentSuggestions,
@@ -27,11 +26,6 @@ const STATUS_CLASS = {
   Open: 'bg-amber-100 text-amber-800',
   Handled: 'bg-[#e8f1eb] text-[#356647]',
   Dismissed: 'bg-slate-100 text-slate-600',
-}
-
-function textOrDash(value) {
-  const trimmed = String(value ?? '').trim()
-  return trimmed || UNKNOWN_CREATOR_VALUE
 }
 
 /** Bảng chi tiết SKU của một gợi ý: chỉ hiện số liệu tại thời điểm kiểm kệ, không có số lượng đề xuất. */
@@ -196,7 +190,7 @@ export default function ShelfReplenishmentSuggestionsPage() {
                 <th className="whitespace-nowrap px-4 py-3">Trạng thái</th>
                 <th className="whitespace-nowrap px-4 py-3">Thời điểm sinh</th>
                 <th className="whitespace-nowrap px-4 py-3 text-right">Sản phẩm</th>
-                <th className="whitespace-nowrap px-4 py-3">Người xử lý</th>
+                <th className="whitespace-nowrap px-4 py-3">Lý do gợi ý</th>
                 <th className="whitespace-nowrap px-4 py-3 text-right">Thao tác</th>
               </tr>
             </thead>
@@ -247,17 +241,11 @@ export default function ShelfReplenishmentSuggestionsPage() {
                       <td className="whitespace-nowrap px-4 py-3 text-right text-slate-700">
                         {row.itemCount} sản phẩm
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-slate-700">
-                        {row.handledAt ? (
-                          <>
-                            <span className="block font-medium">{textOrDash(row.handledByName)}</span>
-                            <span className="mt-0.5 block text-xs text-slate-500">
-                              {formatCreatorRole(row.handledByRoleName)} · {formatVietnamDateTime(row.handledAt)}
-                            </span>
-                          </>
-                        ) : (
-                          <span className="text-xs text-slate-400">—</span>
-                        )}
+                      <td className="px-4 py-3">
+                        <span className="inline-flex items-center gap-1.5 rounded-lg bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-900">
+                          <span className="material-symbols-outlined text-[14px]">warning</span>
+                          Sản phẩm đang dưới ngưỡng cảnh báo — yêu cầu bổ sung
+                        </span>
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-right">
                         {canOperate && isOpen ? (
@@ -270,8 +258,9 @@ export default function ShelfReplenishmentSuggestionsPage() {
                                 )
                               }
                               className="rounded-xl bg-[#538463] px-3 py-2 text-xs font-bold text-white hover:bg-[#457053]"
+                              title={`Tạo ${STOCK_FLOW_TERMS.transfer}`}
                             >
-                              Tạo {STOCK_FLOW_TERMS.transfer}
+                              Tạo phiếu
                             </button>
                             <button
                               type="button"

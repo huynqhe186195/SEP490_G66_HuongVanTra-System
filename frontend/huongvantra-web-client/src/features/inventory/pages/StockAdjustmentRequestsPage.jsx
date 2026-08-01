@@ -8,6 +8,7 @@ import { loadAuthSession } from '../../auth/services/authSession.js'
 import {
   canCancelStockReplenishmentRequest,
   canCreateStockReplenishmentRequest,
+  canFilterStockReplenishmentByCreator,
   canReviewStockReplenishmentRequest,
   isAuditOnlyAdmin,
   isWarehouseRole,
@@ -277,6 +278,7 @@ function StockAdjustmentRequestOperationsPage() {
   const canCreateRequest = canCreateStockReplenishmentRequest(session)
   const canCancelRequest = canCancelStockReplenishmentRequest(session)
   const canCancelAnyRequest = canCancelRequest && canReview
+  const canFilterByCreator = canFilterStockReplenishmentByCreator(session)
   const currentUserId = session?.userId ? String(session.userId) : ''
 
   const quickFilters = canReview ? WAREHOUSE_QUICK_FILTERS : MANAGER_QUICK_FILTERS
@@ -348,6 +350,9 @@ function StockAdjustmentRequestOperationsPage() {
   }, [])
 
   useEffect(() => {
+    // Sale thuần chỉ xem yêu cầu của chính mình nên không có bộ lọc người tạo;
+    // backend cũng chặn endpoint filter-options với vai trò này.
+    if (!canFilterByCreator) return undefined
     let mounted = true
     fetchStockAdjustmentRequestFilterOptions()
       .then((options) => {
@@ -363,7 +368,7 @@ function StockAdjustmentRequestOperationsPage() {
     return () => {
       mounted = false
     }
-  }, [])
+  }, [canFilterByCreator])
 
   useEffect(() => {
     const nextSearch = location.state?.search
@@ -619,37 +624,41 @@ function StockAdjustmentRequestOperationsPage() {
             </select>
           </label>
 
-          <label className="min-w-[200px]">
-            <span className={LABEL_CLASS}>{creatorColumnLabel}</span>
-            <select
-              value={draftFilters.createdBy}
-              onChange={(event) => updateDraft({ createdBy: event.target.value })}
-              className={FIELD_CLASS}
-            >
-              <option value="">Tất cả</option>
-              {creatorOptions.map((creator) => (
-                <option key={creator.id} value={creator.id}>
-                  {textOrDash(creator.name)}
-                </option>
-              ))}
-            </select>
-          </label>
+          {canFilterByCreator ? (
+            <>
+              <label className="min-w-[200px]">
+                <span className={LABEL_CLASS}>{creatorColumnLabel}</span>
+                <select
+                  value={draftFilters.createdBy}
+                  onChange={(event) => updateDraft({ createdBy: event.target.value })}
+                  className={FIELD_CLASS}
+                >
+                  <option value="">Tất cả</option>
+                  {creatorOptions.map((creator) => (
+                    <option key={creator.id} value={creator.id}>
+                      {textOrDash(creator.name)}
+                    </option>
+                  ))}
+                </select>
+              </label>
 
-          <label className="min-w-[180px]">
-            <span className={LABEL_CLASS}>Chức vụ người tạo</span>
-            <select
-              value={draftFilters.creatorRole}
-              onChange={(event) => updateDraft({ creatorRole: event.target.value })}
-              className={FIELD_CLASS}
-            >
-              <option value="">Tất cả chức vụ</option>
-              {creatorRoleOptions.map((role) => (
-                <option key={role} value={role}>
-                  {formatCreatorRole(role)}
-                </option>
-              ))}
-            </select>
-          </label>
+              <label className="min-w-[180px]">
+                <span className={LABEL_CLASS}>Chức vụ người tạo</span>
+                <select
+                  value={draftFilters.creatorRole}
+                  onChange={(event) => updateDraft({ creatorRole: event.target.value })}
+                  className={FIELD_CLASS}
+                >
+                  <option value="">Tất cả chức vụ</option>
+                  {creatorRoleOptions.map((role) => (
+                    <option key={role} value={role}>
+                      {formatCreatorRole(role)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </>
+          ) : null}
 
           <label className="min-w-[150px]">
             <span className={LABEL_CLASS}>Từ ngày</span>

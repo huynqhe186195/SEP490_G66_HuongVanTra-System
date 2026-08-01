@@ -197,32 +197,23 @@ function StocktakeDetailModal({ request, onClose, onAction, canSubmit = false, c
             <table className="min-w-full text-left text-sm">
               <thead className="bg-slate-50 text-xs font-bold uppercase tracking-wide text-slate-500">
                 <tr>
-                  <th className="px-4 py-3">SKU</th>
+                  <th className="px-4 py-3">Sản phẩm</th>
                   <th className="px-4 py-3 text-right">Hệ thống</th>
                   <th className="px-4 py-3 text-right">Thực đếm</th>
                   <th className="px-4 py-3 text-right">Chênh lệch</th>
                   <th className="px-4 py-3">Lý do</th>
-                  <th className="px-4 py-3">Chứng từ</th>
-                  <th className="px-4 py-3">Lô điều chỉnh</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {request.items.map((line) => (
                   <tr key={line.id}>
-                    <td className="px-4 py-3">
-                      <p className="font-mono font-semibold text-[#356647]">{line.skuCode}</p>
-                      <p className="text-xs text-slate-500">{line.skuSnapshotName}</p>
-                    </td>
+                    <td className="px-4 py-3 font-semibold text-slate-800">{line.skuSnapshotName || '—'}</td>
                     <td className="px-4 py-3 text-right">{formatStockQuantity(line.systemQuantitySnapshot)}</td>
                     <td className="px-4 py-3 text-right">{formatStockQuantity(line.actualQuantity)}</td>
                     <td className={`px-4 py-3 text-right font-semibold ${line.variance >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
                       {line.variance > 0 ? '+' : ''}{formatStockQuantity(line.variance)}
                     </td>
                     <td className="px-4 py-3">{getReasonLabel(line.reasonCode)}</td>
-                    <td className="px-4 py-3 font-mono text-xs text-slate-600">
-                      {line.stockImportSlipCode || line.stockExportSlipCode || '—'}
-                    </td>
-                    <td className="px-4 py-3 font-mono text-xs text-slate-600">{line.warehouseBatchLotCode || '—'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -704,7 +695,8 @@ function InventoryStocktakePage() {
   const canCreateShelf = canCreateShelfStocktake(session)
   const canCreate = canCreateWarehouse || canCreateShelf
   const canReview = canReviewStocktake(session)
-  const fixedLocation = canCreateWarehouse ? 'Warehouse' : canCreateShelf ? 'Shelf' : null
+  // Quản lý chỉ theo dõi kiểm kê Kệ Hàng; kiểm kê Kho thuộc Thủ kho.
+  const fixedLocation = canCreateWarehouse ? 'Warehouse' : canCreateShelf || canReview ? 'Shelf' : null
   const canReopenDay = isBranchManager(session)
 
   const loadShelfDay = useCallback(async () => {
@@ -817,9 +809,13 @@ function InventoryStocktakePage() {
   return (
     <PageShell>
       <PageHeader
-        title="Kiểm kê tồn kho"
-        titleInfo="Ghi nhận chênh lệch thực đếm theo Kho hoặc Kệ Hàng, chờ duyệt trước khi áp tồn."
-        searchPlaceholder="Tìm mã phiếu, SKU, tên hàng, mã lô..."
+        title={fixedLocation === 'Warehouse' ? 'Kiểm kê Kho' : 'Kiểm kê Kệ Hàng'}
+        titleInfo={
+          fixedLocation === 'Warehouse'
+            ? 'Ghi nhận chênh lệch thực đếm tại Kho, chờ duyệt trước khi áp tồn.'
+            : 'Ghi nhận chênh lệch thực đếm tại Kệ Hàng, chờ duyệt trước khi áp tồn.'
+        }
+        searchPlaceholder="Tìm mã phiếu, tên hàng..."
         searchValue={searchInput}
         onSearchChange={(value) => resetPageAndSet(setSearchInput, value)}
         rightContent={(
