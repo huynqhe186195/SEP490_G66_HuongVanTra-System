@@ -438,9 +438,18 @@ public class ProductCreationRequestLogic(ProductDbContext _db, ProductLogic _pro
             if (variants.Count == 0)
                 errors.Add($"{prefix}: Cần ít nhất một SKU.");
 
-            if (productType == ProductType.THANH_PHAM
-                && !variants.Any(variant => (variant.BomLines ?? []).Count > 0))
-                errors.Add("Sản phẩm kệ bắt buộc phải có BOM trước khi gửi duyệt.");
+            if (productType == ProductType.THANH_PHAM)
+            {
+                var baseVariant = variants.FirstOrDefault(variant => variant.IsBaseUnitVariant == true)
+                    ?? variants.FirstOrDefault();
+                var hasBom = baseVariant?.BomLines?.Any(line =>
+                    line.MaterialId != Guid.Empty
+                    || (line.ComponentVariantId.HasValue && line.ComponentVariantId.Value != Guid.Empty)
+                    || NormalizeText(line.ComponentSkuCode) is not null
+                    || NormalizeText(line.ComponentRequestSkuKey) is not null) == true;
+                if (!hasBom)
+                    errors.Add($"{prefix}: Sản phẩm kệ bắt buộc phải có BOM trước khi gửi duyệt.");
+            }
 
             foreach (var (variant, variantIndex) in variants.Select((value, index) => (value, index)))
             {

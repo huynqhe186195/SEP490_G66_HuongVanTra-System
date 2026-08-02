@@ -1,11 +1,20 @@
 import * as XLSX from 'xlsx'
 import { PRODUCT_TYPE, getDefaultSellableByType, getInventoryUnitShortLabel } from './productTypes.js'
 import { parseWholeVndInput } from './productDisplay.js'
+import {
+  MULTI_SHEET,
+  buildMultiSheetProductCreationWorkbookBuffer,
+  collectImportRowsFromMultiSheet,
+  isMultiSheetProductCreationWorkbook,
+} from './productCreationExcelMultiSheet.js'
+import { injectXlsxWorkbookColors } from '../../utils/xlsxColorInject.js'
 
 export const PRODUCT_CREATION_TEMPLATE_SHEET_NAME = 'NHAP_HANG_HOA'
 export const PRODUCT_CREATION_REFERENCE_SHEET_NAME = '_DANH_MUC_THAM_CHIEU'
 export const PRODUCT_CREATION_TEMPLATE_FILENAME = 'FileMau_YeuCauTaoHangHoaMoi.xlsx'
+export const PRODUCT_CREATION_SAMPLE_FILENAME = 'FileMau_YeuCauTaoHangHoaMoi_CoDuLieu.xlsx'
 export const PRODUCT_CREATION_TEMPLATE_URL = `/templates/${PRODUCT_CREATION_TEMPLATE_FILENAME}`
+export const PRODUCT_CREATION_SAMPLE_URL = `/templates/${PRODUCT_CREATION_SAMPLE_FILENAME}`
 export const LEGACY_PRODUCT_CREATION_TEMPLATE_MESSAGE =
   `File đang sử dụng mẫu cũ. Vui lòng tải và sử dụng ${PRODUCT_CREATION_TEMPLATE_FILENAME}.`
 
@@ -60,7 +69,7 @@ const HEADER_LABELS = {
   conversionRate: 'Quy đổi',
   isBaseUnit: 'Đơn vị cơ bản',
   skuCode: 'Mã SKU (để trống = tự sinh)',
-  retailPrice: 'Giá bán',
+  retailPrice: 'Giá trước thuế',
   costPrice: 'Giá vốn',
   barcode: 'Barcode',
   isSellable: 'Bán trực tiếp',
@@ -98,15 +107,34 @@ function toReferenceArray(value) {
 
 function normalizeComparable(value) {
   return normalizeText(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
     .replace(/\s+/g, ' ')
-    .normalize('NFC')
-    .toLocaleUpperCase('vi-VN')
+    .toLocaleUpperCase('en-US')
 }
 
 function normalizeHeaderName(value) {
   return normalizeComparable(value)
     .replace(/\s*\*/g, '')
     .replace(/[“”"]/g, '')
+}
+
+const HEADER_ALIASES = {
+  retailPrice: ['Giá trước thuế', 'Giá bán', 'Giá bán trước thuế', 'Price before tax', 'Retail price'],
+  costPrice: ['Giá vốn', 'Cost price'],
+  salesTaxPercent: ['Thuế %', 'Thuế bán hàng', 'Thuế', 'Sales tax', 'Tax %'],
+}
+
+function resolveHeaderColumnIndex(headerMap, key) {
+  const aliases = HEADER_ALIASES[key] || [HEADER_LABELS[key]]
+  for (const alias of aliases) {
+    const columnIndex = headerMap.get(normalizeHeaderName(alias))
+    if (columnIndex !== undefined) return columnIndex
+  }
+  // Also try official label
+  return headerMap.get(normalizeHeaderName(HEADER_LABELS[key]))
 }
 
 function normalizeSkuCode(value) {
@@ -390,13 +418,26 @@ function parseNonNegativeInteger(value) {
 
 function parseVndAmount(value) {
   if (typeof value === 'number') {
-    return Number.isSafeInteger(value) && value >= 0 ? value : null
+    if (!Number.isFinite(value) || value < 0) return null
+    const amount = Math.round(value)
+    return Number.isSafeInteger(amount) ? amount : null
   }
 
   const text = normalizeText(value)
   if (!text) return null
   const amount = parseWholeVndInput(text)
   return Number.isSafeInteger(amount) && amount >= 0 ? amount : null
+}
+
+function parseTaxPercent(value) {
+  if (isBlankValue(value)) return 0
+  if (typeof value === 'number') {
+    return Number.isFinite(value) && value >= 0 ? value : null
+  }
+  const text = normalizeText(value).replace('%', '').replace(',', '.')
+  if (!text) return 0
+  const amount = Number(text)
+  return Number.isFinite(amount) && amount >= 0 ? amount : null
 }
 
 function toSkuToken(value) {
@@ -493,14 +534,17 @@ function findHeaderContract(sheet) {
     const columnByKey = {}
     const missingHeaders = []
     REQUIRED_HEADER_KEYS.forEach((key) => {
-      const normalizedHeader = normalizeHeaderName(HEADER_LABELS[key])
-      const columnIndex = headerMap.get(normalizedHeader)
+      const columnIndex = resolveHeaderColumnIndex(headerMap, key)
       if (columnIndex === undefined) {
         missingHeaders.push(HEADER_LABELS[key])
       } else {
         columnByKey[key] = columnIndex
       }
     })
+
+    // Optional tax column (multi-sheet / newer templates)
+    const taxColumn = resolveHeaderColumnIndex(headerMap, 'salesTaxPercent')
+    if (taxColumn !== undefined) columnByKey.salesTaxPercent = taxColumn
 
     return {
       rowIndex,
@@ -822,7 +866,98 @@ function referenceFormula(column, rowCount) {
 }
 
 function buildValidationXml(sqref, formula1) {
-  return `<dataValidation type="list" allowBlank="1" showErrorMessage="0" sqref="${escapeXml(sqref)}"><formula1>${escapeXml(formula1)}</formula1></dataValidation>`
+  return `<dataValidation type="list" allowBlank="1" showErrorMessage="1" showDropDown="0" errorStyle="warning" errorTitle="Giá trị không hợp lệ" error="Vui lòng chọn từ danh sách dropdown." sqref="${escapeXml(sqref)}"><formula1>${escapeXml(formula1)}</formula1></dataValidation>`
+}
+
+function buildDataValidationsXml(validations) {
+  if (!validations.length) return ''
+  return `<dataValidations count="${validations.length}">${validations.join('')}</dataValidations>`
+}
+
+function injectDataValidationsIntoSheetXml(sheetXml, validations) {
+  const validationXml = buildDataValidationsXml(validations)
+  if (!validationXml) return sheetXml
+  const cleanedXml = sheetXml.replace(/<dataValidations[\s\S]*?<\/dataValidations>/, '')
+  if (cleanedXml.includes('<pageMargins')) {
+    return cleanedXml.replace('<pageMargins', `${validationXml}<pageMargins`)
+  }
+  return cleanedXml.replace('</worksheet>', `${validationXml}</worksheet>`)
+}
+
+function resolveWorkbookSheetPartPaths(workbookXml, relsXml) {
+  const relTargetById = new Map()
+  for (const match of relsXml.matchAll(/Id="(rId\d+)"[^>]*Target="([^"]+)"/g)) {
+    relTargetById.set(match[1], match[2].replace(/^\//, ''))
+  }
+  // Also support Target before Id
+  for (const match of relsXml.matchAll(/Target="([^"]+)"[^>]*Id="(rId\d+)"/g)) {
+    relTargetById.set(match[2], match[1].replace(/^\//, ''))
+  }
+
+  const sheetPathByName = new Map()
+  for (const match of workbookXml.matchAll(/<sheet\b[^>]*>/g)) {
+    const tag = match[0]
+    const name = tag.match(/\bname="([^"]+)"/)?.[1]
+    const rId = tag.match(/\br:id="(rId\d+)"/)?.[1] || tag.match(/\bid="(rId\d+)"/)?.[1]
+    if (!name || !rId) continue
+    const target = relTargetById.get(rId)
+    if (!target) continue
+    const partName = target.startsWith('xl/') ? target : `xl/${target.replace(/^\.\//, '')}`
+    sheetPathByName.set(name, partName)
+  }
+  return sheetPathByName
+}
+
+function multiSheetReferenceFormula(columnLetter, rowCount) {
+  // buildDataSheet: title row1, subtitle row2, header row3, data from row4
+  const endRow = Math.max(4, 3 + Math.max(1, rowCount))
+  return `'${MULTI_SHEET.reference.replace(/'/g, "''")}'!$${columnLetter}$4:$${columnLetter}$${endRow}`
+}
+
+function buildMultiSheetDropdownValidations(referenceData, lastRow = 200) {
+  const categories = referenceData.categories?.length || 1
+  const componentSkus = referenceData.componentSkus?.length || 1
+  const attributeNames = referenceData.attributeNames?.length || 1
+
+  return {
+    [MULTI_SHEET.product]: [
+      buildValidationXml(`C4:C${lastRow}`, '"THANH_PHAM,NGUYEN_LIEU,BAO_BI"'),
+      buildValidationXml(`D4:D${lastRow}`, multiSheetReferenceFormula('C', categories)),
+      buildValidationXml(`E4:E${lastRow}`, '"Piece,Gram"'),
+    ],
+    [MULTI_SHEET.sku]: [
+      buildValidationXml(`F4:F${lastRow}`, '"Có,Không"'),
+      buildValidationXml(`J4:J${lastRow}`, '"Có,Không"'),
+    ],
+    [MULTI_SHEET.attribute]: [
+      buildValidationXml(`B4:B${lastRow}`, multiSheetReferenceFormula('E', attributeNames)),
+    ],
+    [MULTI_SHEET.bom]: [
+      buildValidationXml(`C4:C${lastRow}`, multiSheetReferenceFormula('D', componentSkus)),
+    ],
+  }
+}
+
+async function injectMultiSheetDropdownValidations(arrayBuffer, referenceData) {
+  const decoder = new TextDecoder()
+  const entries = await parseZipEntries(arrayBuffer)
+  const byName = new Map(entries.map((entry) => [entry.name, entry]))
+  const workbookXml = decoder.decode(byName.get('xl/workbook.xml')?.bytes || new Uint8Array())
+  const relsXml = decoder.decode(byName.get('xl/_rels/workbook.xml.rels')?.bytes || new Uint8Array())
+  if (!workbookXml || !relsXml) return arrayBuffer
+
+  const sheetPathByName = resolveWorkbookSheetPartPaths(workbookXml, relsXml)
+  const validationsBySheet = buildMultiSheetDropdownValidations(referenceData)
+  const transforms = {}
+
+  Object.entries(validationsBySheet).forEach(([sheetName, validations]) => {
+    const partName = sheetPathByName.get(sheetName)
+    if (!partName || !byName.has(partName)) return
+    transforms[partName] = (sheetXml) => injectDataValidationsIntoSheetXml(sheetXml, validations)
+  })
+
+  if (!Object.keys(transforms).length) return arrayBuffer
+  return patchXlsxTextEntries(arrayBuffer, transforms)
 }
 
 function buildGuidedInputValidations(referenceData, lastRowNumber) {
@@ -838,7 +973,7 @@ function buildGuidedInputValidations(referenceData, lastRowNumber) {
     buildValidationXml(`U13:U${lastRow}`, referenceFormula('F', referenceData.componentSkus.length)),
   ]
 
-  return `<dataValidations count="${validations.length}">${validations.join('')}</dataValidations>`
+  return buildDataValidationsXml(validations)
 }
 
 function injectGuidedInputValidations(sheetXml, referenceData, lastRowNumber) {
@@ -1534,6 +1669,38 @@ export async function downloadOfficialProductCreationTemplate({
   downloadArrayBuffer(buffer, PRODUCT_CREATION_TEMPLATE_FILENAME)
 }
 
+export async function buildOfficialProductCreationSampleBuffer({
+  categories = [],
+  materials = [],
+  attributeNameOptions = [],
+  referenceLoadStatuses = [],
+} = {}) {
+  const referenceData = buildProductCreationReferenceData({
+    categories,
+    materials,
+    attributeNameOptions,
+    referenceLoadStatuses,
+  })
+  const buffer = buildMultiSheetProductCreationWorkbookBuffer(referenceData, [], { mode: 'sample' })
+  const colored = await injectXlsxWorkbookColors(buffer, { kind: 'productCreation' })
+  return injectMultiSheetDropdownValidations(colored, referenceData)
+}
+
+export async function downloadOfficialProductCreationSample({
+  categories = [],
+  materials = [],
+  attributeNameOptions = [],
+  referenceLoadStatuses = [],
+} = {}) {
+  const buffer = await buildOfficialProductCreationSampleBuffer({
+    categories,
+    materials,
+    attributeNameOptions,
+    referenceLoadStatuses,
+  })
+  downloadArrayBuffer(buffer, PRODUCT_CREATION_SAMPLE_FILENAME)
+}
+
 export async function readOfficialProductCreationTemplateWorkbook() {
   const response = await fetch(PRODUCT_CREATION_TEMPLATE_URL, { cache: 'no-store' })
   if (!response.ok) {
@@ -1555,8 +1722,9 @@ export async function buildOfficialProductCreationTemplateBuffer({
     attributeNameOptions,
     referenceLoadStatuses,
   })
-
-  return buildStylePreservingWorkbookBuffer(referenceData)
+  const buffer = buildMultiSheetProductCreationWorkbookBuffer(referenceData, [], { mode: 'template' })
+  const colored = await injectXlsxWorkbookColors(buffer, { kind: 'productCreation' })
+  return injectMultiSheetDropdownValidations(colored, referenceData)
 }
 
 export async function parseOfficialProductCreationFile(file, context) {
@@ -1606,50 +1774,60 @@ export function parseOfficialProductCreationWorkbook(workbook, context) {
     }
   }
 
-  if (!workbook.SheetNames.includes(PRODUCT_CREATION_TEMPLATE_SHEET_NAME)) {
-    return {
-      sourceFilename,
-      sheetName: workbook.SheetNames[0] ?? '',
-      rows: [],
-      errors: [detectLegacyWorkbook(workbook) ? LEGACY_PRODUCT_CREATION_TEMPLATE_MESSAGE : `Không tìm thấy worksheet ${PRODUCT_CREATION_TEMPLATE_SHEET_NAME}.`],
-      warnings,
-      counts: { products: 0, skus: 0, attributes: 0, manualBomLines: 0 },
-    }
-  }
-
-  const sheet = workbook.Sheets[PRODUCT_CREATION_TEMPLATE_SHEET_NAME]
-  const headerContract = findHeaderContract(sheet)
-  if (!headerContract) {
-    return {
-      sourceFilename,
-      sheetName: PRODUCT_CREATION_TEMPLATE_SHEET_NAME,
-      rows: [],
-      errors: ['Không tìm thấy dòng header của mẫu import.'],
-      warnings,
-      counts: { products: 0, skus: 0, attributes: 0, manualBomLines: 0 },
-    }
-  }
-
-  errors.push(...headerContract.errors)
-  warnings.push('Capability SKU được gán mặc định an toàn theo ProductType: THANH_PHAM mặc định mua được, có BOM và CanBeBomComponent=false (phải bật riêng nếu muốn dùng làm component); NGUYEN_LIEU và BAO_BI mặc định mua/có thể là BOM component; CanUseInCustom luôn false.')
-  const range = XLSX.utils.decode_range(sheet['!ref'] ?? 'A1:X1')
   const importRows = []
-  for (let rowIndex = headerContract.rowIndex + 1; rowIndex <= range.e.r; rowIndex += 1) {
-    const firstColumnValue = getCellValue(sheet, rowIndex, 0)
-    if (startsExampleSection(firstColumnValue)) break
+  let sheetName = workbook.SheetNames[0] ?? ''
 
-    const values = readImportRow(sheet, rowIndex, headerContract.columnByKey)
-    if (isBlankImportRow(values)) continue
-
-    const excelRow = rowIndex + 1
-    const rowType = normalizeRowType(values.rowType)
-    if (!rowType) {
-      errors.push(`Dòng ${excelRow}: Loại dòng không được hỗ trợ: "${normalizeText(values.rowType) || '(trống)'}".`)
-      continue
+  if (isMultiSheetProductCreationWorkbook(workbook)) {
+    sheetName = MULTI_SHEET.product
+    const collected = collectImportRowsFromMultiSheet(workbook)
+    errors.push(...collected.errors)
+    importRows.push(...collected.importRows)
+    warnings.push('Đã đọc mẫu multi-sheet (1_SanPham / 2_SKU / 3_ThuocTinh / 4_BOM).')
+  } else if (!workbook.SheetNames.includes(PRODUCT_CREATION_TEMPLATE_SHEET_NAME)) {
+    return {
+      sourceFilename,
+      sheetName,
+      rows: [],
+      errors: [detectLegacyWorkbook(workbook) ? LEGACY_PRODUCT_CREATION_TEMPLATE_MESSAGE : `Không tìm thấy worksheet ${PRODUCT_CREATION_TEMPLATE_SHEET_NAME} hoặc mẫu multi-sheet 1_SanPham.`],
+      warnings,
+      counts: { products: 0, skus: 0, attributes: 0, manualBomLines: 0 },
+    }
+  } else {
+    sheetName = PRODUCT_CREATION_TEMPLATE_SHEET_NAME
+    const sheet = workbook.Sheets[PRODUCT_CREATION_TEMPLATE_SHEET_NAME]
+    const headerContract = findHeaderContract(sheet)
+    if (!headerContract) {
+      return {
+        sourceFilename,
+        sheetName: PRODUCT_CREATION_TEMPLATE_SHEET_NAME,
+        rows: [],
+        errors: ['Không tìm thấy dòng header của mẫu import.'],
+        warnings,
+        counts: { products: 0, skus: 0, attributes: 0, manualBomLines: 0 },
+      }
     }
 
-    importRows.push({ excelRow, rowType, values })
+    errors.push(...headerContract.errors)
+    const range = XLSX.utils.decode_range(sheet['!ref'] ?? 'A1:X1')
+    for (let rowIndex = headerContract.rowIndex + 1; rowIndex <= range.e.r; rowIndex += 1) {
+      const firstColumnValue = getCellValue(sheet, rowIndex, 0)
+      if (startsExampleSection(firstColumnValue)) break
+
+      const values = readImportRow(sheet, rowIndex, headerContract.columnByKey)
+      if (isBlankImportRow(values)) continue
+
+      const excelRow = rowIndex + 1
+      const rowType = normalizeRowType(values.rowType)
+      if (!rowType) {
+        errors.push(`Dòng ${excelRow}: Loại dòng không được hỗ trợ: "${normalizeText(values.rowType) || '(trống)'}".`)
+        continue
+      }
+
+      importRows.push({ excelRow, rowType, values })
+    }
   }
+
+  warnings.push('Capability SKU được gán mặc định an toàn theo ProductType: THANH_PHAM mặc định mua được, có BOM và CanBeBomComponent=false (phải bật riêng nếu muốn dùng làm component); NGUYEN_LIEU và BAO_BI mặc định mua/có thể là BOM component; CanUseInCustom luôn false.')
 
   if (importRows.length === 0) {
     errors.push('File không có dữ liệu hàng hóa để import.')
@@ -1730,6 +1908,7 @@ export function parseOfficialProductCreationWorkbook(workbook, context) {
     const providedSkuCode = normalizeSkuCode(values.skuCode)
     const skuCode = providedSkuCode || buildGeneratedSkuCode(product.name, unitName, conversionRate || '')
     const retailPrice = isBlankValue(values.retailPrice) ? '' : parseVndAmount(values.retailPrice)
+    const salesTaxPercent = parseTaxPercent(values.salesTaxPercent)
     const costPrice = isBlankValue(values.costPrice) ? 0 : parseVndAmount(values.costPrice)
     const minStock = isBlankValue(values.minStock) ? 0 : parseNonNegativeInteger(values.minStock)
     const maxStock = isBlankValue(values.maxStock) ? '' : parseNonNegativeInteger(values.maxStock)
@@ -1740,7 +1919,8 @@ export function parseOfficialProductCreationWorkbook(workbook, context) {
     if (!conversionRate) errors.push(`Dòng ${excelRow}: Quy đổi phải là số nguyên dương.`)
     if (isBaseUnitVariant === null) errors.push(`Dòng ${excelRow}: Đơn vị cơ bản chỉ nhận Có hoặc Không.`)
     if (isSellable === null) errors.push(`Dòng ${excelRow}: Bán trực tiếp chỉ nhận Có hoặc Không.`)
-    if (retailPrice === null && !isBlankValue(values.retailPrice)) errors.push(`Dòng ${excelRow}: Giá bán không hợp lệ.`)
+    if (retailPrice === null && !isBlankValue(values.retailPrice)) errors.push(`Dòng ${excelRow}: Giá trước thuế không hợp lệ.`)
+    if (salesTaxPercent === null) errors.push(`Dòng ${excelRow}: Thuế % không hợp lệ.`)
     if (costPrice === null && !isBlankValue(values.costPrice)) errors.push(`Dòng ${excelRow}: Giá vốn không hợp lệ.`)
     if (minStock === null) errors.push(`Dòng ${excelRow}: Tồn tối thiểu phải là số nguyên không âm.`)
     if (maxStock === null) errors.push(`Dòng ${excelRow}: Tồn tối đa phải là số nguyên không âm.`)
@@ -1768,6 +1948,8 @@ export function parseOfficialProductCreationWorkbook(workbook, context) {
       barcodes.set(barcodeKey, excelRow)
     }
 
+    const taxPercent = salesTaxPercent ?? 0
+    const salesTaxMode = [8, 10].includes(Number(taxPercent)) ? String(taxPercent) : 'custom'
     const skuEntry = {
       excelRow,
       productKey,
@@ -1778,6 +1960,8 @@ export function parseOfficialProductCreationWorkbook(workbook, context) {
       variantName: `${product.name || 'Sản phẩm'} - ${unitName || 'đơn vị'}`,
       retailPrice: retailPrice === '' ? '' : String(retailPrice ?? ''),
       importedRetailPrice: retailPrice,
+      salesTaxMode,
+      salesTaxPercent: String(taxPercent),
       costPrice: String(costPrice ?? 0),
       barcode,
       minStock: String(minStock ?? 0),
@@ -1819,19 +2003,21 @@ export function parseOfficialProductCreationWorkbook(workbook, context) {
       if (!sku.isBaseUnitVariant) {
         const calculatedPrice = calculateDerivedRetailPrice(baseSku.retailPrice, sku.conversionRate)
         if (sku.importedRetailPrice !== '' && calculatedPrice && Number(sku.importedRetailPrice) !== Number(calculatedPrice)) {
-          warnings.push(`Dòng ${sku.excelRow}: Giá bán SKU quy đổi được tính lại theo giá SKU cơ bản × Quy đổi.`)
+          warnings.push(`Dòng ${sku.excelRow}: Giá trước thuế SKU quy đổi được tính lại theo giá SKU cơ bản × Quy đổi.`)
         }
         sku.retailPrice = calculatedPrice
+        sku.salesTaxMode = baseSku.salesTaxMode ?? 'custom'
+        sku.salesTaxPercent = baseSku.salesTaxPercent ?? '0'
         sku.baseRequestSkuKey = baseSku.requestSkuKey
         sku.baseSkuCode = baseSku.skuCode
       }
       if ((parseVndAmount(sku.retailPrice) ?? 0) <= 0 && sku.isSellable) {
-        errors.push(`Dòng ${sku.excelRow}: SKU bán trực tiếp cần Giá bán > 0.`)
+        errors.push(`Dòng ${sku.excelRow}: SKU bán trực tiếp cần Giá trước thuế > 0 (sau thuế sẽ > 0).`)
       }
     })
 
     if ((basePrice ?? 0) <= 0 && baseSku.isSellable) {
-      errors.push(`Dòng ${baseSku.excelRow}: SKU đơn vị cơ bản bán trực tiếp cần Giá bán > 0.`)
+      errors.push(`Dòng ${baseSku.excelRow}: SKU đơn vị cơ bản bán trực tiếp cần Giá trước thuế > 0.`)
     }
   })
 
@@ -1938,6 +2124,17 @@ export function parseOfficialProductCreationWorkbook(workbook, context) {
     outputSku.bomLines.push(line)
   })
 
+  productsByKey.forEach((product) => {
+    if (product.productType !== PRODUCT_TYPE.THANH_PHAM) return
+    const baseSku = product.skuEntries.find((sku) => sku.isBaseUnitVariant) ?? product.skuEntries[0]
+    const bomCount = (baseSku?.bomLines ?? []).length
+    if (!baseSku || bomCount === 0) {
+      errors.push(
+        `Sản phẩm ${product.productKey}${product.name ? ` (${product.name})` : ''}: Sản phẩm kệ bắt buộc phải có BOM trước khi gửi duyệt.`,
+      )
+    }
+  })
+
   const rows = Array.from(productsByKey.values()).map((product) => {
     const draft = context.createDraftProduct()
     const skuRows = product.skuEntries.map((sku) => ({
@@ -1947,6 +2144,8 @@ export function parseOfficialProductCreationWorkbook(workbook, context) {
       skuCode: sku.skuCode,
       variantName: sku.variantName,
       retailPrice: sku.retailPrice,
+      salesTaxMode: sku.salesTaxMode ?? 'custom',
+      salesTaxPercent: sku.salesTaxPercent ?? '0',
       costPrice: sku.costPrice,
       barcode: sku.barcode,
       minStock: sku.minStock,
@@ -1982,7 +2181,7 @@ export function parseOfficialProductCreationWorkbook(workbook, context) {
 
   return {
     sourceFilename,
-    sheetName: PRODUCT_CREATION_TEMPLATE_SHEET_NAME,
+    sheetName,
     rows,
     errors,
     warnings,
@@ -2028,6 +2227,7 @@ function makeExportRows({ rows, categories, helpers }) {
         isBaseUnit: sku.isBaseUnitVariant ? 'Có' : 'Không',
         skuCode: sku.isAutoGeneratedSku ? '' : sku.skuCode,
         retailPrice: helpers.moneyOrNull(sku.retailPrice) ?? '',
+        salesTaxPercent: Number(sku.salesTaxPercent ?? 0),
         costPrice: helpers.moneyOrNull(sku.costPrice) ?? 0,
         barcode: sku.barcode || '',
         isSellable: sku.isSellable !== false ? 'Có' : 'Không',
@@ -2090,8 +2290,10 @@ export async function exportProductCreationDraftToTemplate({
     referenceLoadStatuses,
   })
   const exportRows = makeExportRows({ rows, categories, helpers })
-  const buffer = await buildStylePreservingWorkbookBuffer(referenceData, exportRows)
-  downloadArrayBuffer(buffer, filename)
+  const buffer = buildMultiSheetProductCreationWorkbookBuffer(referenceData, exportRows, { mode: 'template' })
+  const colored = await injectXlsxWorkbookColors(buffer, { kind: 'productCreation' })
+  const withDropdowns = await injectMultiSheetDropdownValidations(colored, referenceData)
+  downloadArrayBuffer(withDropdowns, filename)
 }
 
 

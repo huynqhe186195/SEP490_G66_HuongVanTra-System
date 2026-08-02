@@ -1,40 +1,40 @@
-import { formatVietnamDateTimeMinute } from '../../../utils/vietnamDateTime.js'
+﻿import { formatVietnamDateTimeMinute } from '../../../utils/vietnamDateTime.js'
 
 function statusVi(status) {
   const map = {
-    Completed: 'Đã xong',
-    Draft: 'Nháp',
-    PendingApproval: 'Chờ duyệt',
-    Approved: 'Đã duyệt',
-    Rejected: 'Từ chối',
-    Cancelled: 'Đã hủy',
-    Pending: 'Chờ xử lý',
-    Processing: 'Đang làm',
-    PartiallyFulfilled: 'Một phần',
-    Waiting: 'Chờ trừ kho',
-    Insufficient: 'Thiếu hàng',
-    Confirmed: 'Đã xác nhận',
-    Open: 'Chưa xử lý',
+    Completed: 'ÄÃ£ xong',
+    Draft: 'NhÃ¡p',
+    PendingApproval: 'Chá» duyá»‡t',
+    Approved: 'ÄÃ£ duyá»‡t',
+    Rejected: 'Tá»« chá»‘i',
+    Cancelled: 'ÄÃ£ há»§y',
+    Pending: 'Chá» xá»­ lÃ½',
+    Processing: 'Äang lÃ m',
+    PartiallyFulfilled: 'Má»™t pháº§n',
+    Waiting: 'Chá» trá»« kho',
+    Insufficient: 'Thiáº¿u hÃ ng',
+    Confirmed: 'ÄÃ£ xÃ¡c nháº­n',
+    Open: 'ChÆ°a xá»­ lÃ½',
   }
-  return map[status] || status || '—'
+  return map[status] || status || 'â€”'
 }
 
 function ledgerTypeVi(type) {
   const map = {
-    SUPPLIER_RECEIPT: 'Nhập NCC',
-    STOCK_TRANSFER_WAREHOUSE_OUT: 'Xuất kho → kệ',
-    STOCK_TRANSFER_SHELF_IN: 'Nhập kệ',
-    SHELF_REPLENISHMENT_OUT: 'Xuất kho → kệ',
-    SHELF_REPLENISHMENT_IN: 'Nhập kệ',
-    PRODUCTION_MATERIAL_EXPORT: 'Xuất NL sản xuất',
-    PRODUCTION_FINISHED_RECEIPT: 'Nhập thành phẩm',
-    STOCKTAKE_ADJUSTMENT: 'Điều chỉnh kiểm kê',
-    SALES_DEDUCT_LATER: 'Trừ kho theo đơn',
-    CUSTOM_BUNDLE_MATERIAL_EXPORT: 'Xuất đóng gói',
-    CUSTOMER_RETURN_RECEIPT: 'Nhận hàng trả',
-    SUPPLIER_RETURN: 'Trả NCC',
+    SUPPLIER_RECEIPT: 'Nháº­p NCC',
+    STOCK_TRANSFER_WAREHOUSE_OUT: 'Xuáº¥t kho â†’ ká»‡',
+    STOCK_TRANSFER_SHELF_IN: 'Nháº­p ká»‡',
+    SHELF_REPLENISHMENT_OUT: 'Xuáº¥t kho â†’ ká»‡',
+    SHELF_REPLENISHMENT_IN: 'Nháº­p ká»‡',
+    PRODUCTION_MATERIAL_EXPORT: 'Xuáº¥t NL sáº£n xuáº¥t',
+    PRODUCTION_FINISHED_RECEIPT: 'Nháº­p thÃ nh pháº©m',
+    STOCKTAKE_ADJUSTMENT: 'Äiá»u chá»‰nh kiá»ƒm kÃª',
+    SALES_DEDUCT_LATER: 'Trá»« kho theo Ä‘Æ¡n',
+    CUSTOM_BUNDLE_MATERIAL_EXPORT: 'Xuáº¥t Ä‘Ã³ng gÃ³i',
+    CUSTOMER_RETURN_RECEIPT: 'Nháº­n hÃ ng tráº£',
+    SUPPLIER_RETURN: 'Tráº£ NCC',
   }
-  return map[type] || type || 'Khác'
+  return map[type] || type || 'KhÃ¡c'
 }
 
 function escapeXml(value) {
@@ -70,27 +70,27 @@ function padRow(values, colCount) {
 function buildStylesXml() {
   return `
   <Styles>
-    <Style ss:ID="Default"><Alignment ss:Vertical="Center"/><Font ss:FontName="Calibri" ss:Size="11"/></Style>
+    <Style ss:ID="Default"><Alignment ss:Vertical="Center"/><Font ss:FontName="Times New Roman" ss:Size="12"/></Style>
     <Style ss:ID="Title">
       <Alignment ss:Horizontal="Left" ss:Vertical="Center"/>
-      <Font ss:FontName="Calibri" ss:Size="16" ss:Bold="1" ss:Color="#FFFFFF"/>
+      <Font ss:FontName="Times New Roman" ss:Size="12.5" ss:Bold="1" ss:Color="#FFFFFF"/>
       <Interior ss:Color="#356647" ss:Pattern="Solid"/>
     </Style>
     <Style ss:ID="Subtitle">
-      <Font ss:FontName="Calibri" ss:Size="11" ss:Italic="1" ss:Color="#356647"/>
+      <Font ss:FontName="Times New Roman" ss:Size="12" ss:Italic="1" ss:Color="#356647"/>
       <Interior ss:Color="#E8F1EB" ss:Pattern="Solid"/>
     </Style>
     <Style ss:ID="Section">
-      <Font ss:FontName="Calibri" ss:Size="12" ss:Bold="1" ss:Color="#FFFFFF"/>
+      <Font ss:FontName="Times New Roman" ss:Size="12.5" ss:Bold="1" ss:Color="#FFFFFF"/>
       <Interior ss:Color="#356647" ss:Pattern="Solid"/>
     </Style>
     <Style ss:ID="SectionAmber">
-      <Font ss:FontName="Calibri" ss:Size="12" ss:Bold="1" ss:Color="#FFFFFF"/>
+      <Font ss:FontName="Times New Roman" ss:Size="12.5" ss:Bold="1" ss:Color="#FFFFFF"/>
       <Interior ss:Color="#B45309" ss:Pattern="Solid"/>
     </Style>
     <Style ss:ID="Header">
       <Alignment ss:Horizontal="Center" ss:Vertical="Center" ss:WrapText="1"/>
-      <Font ss:FontName="Calibri" ss:Size="11" ss:Bold="1" ss:Color="#FFFFFF"/>
+      <Font ss:FontName="Times New Roman" ss:Size="12.5" ss:Bold="1" ss:Color="#FFFFFF"/>
       <Interior ss:Color="#538463" ss:Pattern="Solid"/>
       <Borders>
         <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#356647"/>
@@ -101,24 +101,24 @@ function buildStylesXml() {
     </Style>
     <Style ss:ID="HeaderAmber">
       <Alignment ss:Horizontal="Center" ss:Vertical="Center" ss:WrapText="1"/>
-      <Font ss:FontName="Calibri" ss:Size="11" ss:Bold="1" ss:Color="#FFFFFF"/>
+      <Font ss:FontName="Times New Roman" ss:Size="12.5" ss:Bold="1" ss:Color="#FFFFFF"/>
       <Interior ss:Color="#B45309" ss:Pattern="Solid"/>
     </Style>
     <Style ss:ID="Label">
-      <Font ss:FontName="Calibri" ss:Size="11" ss:Bold="1" ss:Color="#334155"/>
+      <Font ss:FontName="Times New Roman" ss:Size="12" ss:Bold="1" ss:Color="#334155"/>
       <Interior ss:Color="#E8F1EB" ss:Pattern="Solid"/>
     </Style>
-    <Style ss:ID="Value"><Font ss:FontName="Calibri" ss:Size="11"/></Style>
+    <Style ss:ID="Value"><Font ss:FontName="Times New Roman" ss:Size="12"/></Style>
     <Style ss:ID="Note">
-      <Font ss:FontName="Calibri" ss:Size="10" ss:Italic="1" ss:Color="#475569"/>
+      <Font ss:FontName="Times New Roman" ss:Size="12" ss:Italic="1" ss:Color="#475569"/>
       <Interior ss:Color="#FEF3C7" ss:Pattern="Solid"/>
     </Style>
     <Style ss:ID="Warn">
-      <Font ss:FontName="Calibri" ss:Size="11" ss:Bold="1" ss:Color="#B45309"/>
+      <Font ss:FontName="Times New Roman" ss:Size="12" ss:Bold="1" ss:Color="#B45309"/>
       <Interior ss:Color="#FEF3C7" ss:Pattern="Solid"/>
     </Style>
     <Style ss:ID="Cell">
-      <Font ss:FontName="Calibri" ss:Size="11"/>
+      <Font ss:FontName="Times New Roman" ss:Size="12"/>
       <Borders>
         <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
         <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
@@ -127,7 +127,7 @@ function buildStylesXml() {
       </Borders>
     </Style>
     <Style ss:ID="Zebra">
-      <Font ss:FontName="Calibri" ss:Size="11"/>
+      <Font ss:FontName="Times New Roman" ss:Size="12"/>
       <Interior ss:Color="#F8FAFC" ss:Pattern="Solid"/>
       <Borders>
         <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
@@ -147,25 +147,25 @@ function columnXml(widths) {
 
 function buildOverviewSheet({ dateLabel, date, generated, doneTotal, snap, openCount, stockLabel, openLabel, notes }) {
   const rows = [
-    rowXml([cellXml('BÁO CÁO CUỐI NGÀY KHO', 'Title'), cellXml('', 'Title')], 28),
-    rowXml([cellXml('Hương Vân Trà — HVTPOSIMS', 'Subtitle'), cellXml('', 'Subtitle')], 20),
+    rowXml([cellXml('BÃO CÃO CUá»I NGÃ€Y KHO', 'Title'), cellXml('', 'Title')], 28),
+    rowXml([cellXml('HÆ°Æ¡ng VÃ¢n TrÃ  â€” HVTPOSIMS', 'Subtitle'), cellXml('', 'Subtitle')], 20),
     rowXml([cellXml('', 'Value'), cellXml('', 'Value')]),
-    rowXml([cellXml('Ngày xem', 'Label'), cellXml(dateLabel, 'Value')]),
-    rowXml([cellXml('Ngày (YYYY-MM-DD)', 'Label'), cellXml(date, 'Value')]),
-    rowXml([cellXml('Thời điểm tạo báo cáo', 'Label'), cellXml(generated, 'Value')]),
+    rowXml([cellXml('NgÃ y xem', 'Label'), cellXml(dateLabel, 'Value')]),
+    rowXml([cellXml('NgÃ y (YYYY-MM-DD)', 'Label'), cellXml(date, 'Value')]),
+    rowXml([cellXml('Thá»i Ä‘iá»ƒm táº¡o bÃ¡o cÃ¡o', 'Label'), cellXml(generated, 'Value')]),
     rowXml([cellXml('', 'Value'), cellXml('', 'Value')]),
-    rowXml([cellXml('TÓM TẮT', 'Section'), cellXml('', 'Section')]),
-    rowXml([cellXml('Chỉ số', 'Header'), cellXml('Giá trị', 'Header')]),
-    rowXml([cellXml('Việc đã làm trong ngày', 'Label'), cellXml(doneTotal, 'NumCell', 'Number')]),
+    rowXml([cellXml('TÃ“M Táº®T', 'Section'), cellXml('', 'Section')]),
+    rowXml([cellXml('Chá»‰ sá»‘', 'Header'), cellXml('GiÃ¡ trá»‹', 'Header')]),
+    rowXml([cellXml('Viá»‡c Ä‘Ã£ lÃ m trong ngÃ y', 'Label'), cellXml(doneTotal, 'NumCell', 'Number')]),
     rowXml([cellXml(stockLabel, 'Label'), cellXml(snap.totalWarehouseQuantity, 'NumCell', 'Number')]),
-    rowXml([cellXml('Mặt hàng sắp hết', 'Label'), cellXml(snap.lowStockSkuCount, 'NumCell', 'Number')]),
-    rowXml([cellXml('Lô sắp hết hạn (30 ngày)', 'Label'), cellXml(snap.expiringBatchCount30Days, 'NumCell', 'Number')]),
+    rowXml([cellXml('Máº·t hÃ ng sáº¯p háº¿t', 'Label'), cellXml(snap.lowStockSkuCount, 'NumCell', 'Number')]),
+    rowXml([cellXml('LÃ´ sáº¯p háº¿t háº¡n (30 ngÃ y)', 'Label'), cellXml(snap.expiringBatchCount30Days, 'NumCell', 'Number')]),
     rowXml([
       cellXml(openLabel, 'Label'),
       cellXml(openCount, openCount > 0 ? 'Warn' : 'NumCell', 'Number'),
     ]),
     rowXml([cellXml('', 'Value'), cellXml('', 'Value')]),
-    rowXml([cellXml('GHI CHÚ', 'Section'), cellXml('', 'Section')]),
+    rowXml([cellXml('GHI CHÃš', 'Section'), cellXml('', 'Section')]),
     ...notes.map((note) => rowXml([cellXml(note, 'Note'), cellXml('', 'Note')])),
   ]
 
@@ -198,7 +198,7 @@ function buildDataSheet({
       26,
     ),
     rowXml(
-      padRow(['Ngày xem', dateLabel], colCount).map((v, i) => cellXml(v, i === 0 ? 'Label' : 'Value')),
+      padRow(['NgÃ y xem', dateLabel], colCount).map((v, i) => cellXml(v, i === 0 ? 'Label' : 'Value')),
     ),
     ...extraMeta.map((meta) => rowXml(
       padRow(meta, colCount).map((v, i) => cellXml(v, amber ? 'Note' : (i === 0 ? 'Label' : 'Value'))),
@@ -209,7 +209,7 @@ function buildDataSheet({
 
   const data = rows.length
     ? rows
-    : [padRow(['(Không có dữ liệu)'], colCount)]
+    : [padRow(['(KhÃ´ng cÃ³ dá»¯ liá»‡u)'], colCount)]
 
   data.forEach((row, idx) => {
     const style = idx % 2 === 1 ? 'Zebra' : 'Cell'
@@ -243,8 +243,8 @@ function downloadXmlExcel(filename, xml) {
 }
 
 /**
- * Xuất báo cáo cuối ngày kho ra Excel có màu (SpreadsheetML).
- * Không phụ thuộc package ngoài — chạy được trong Docker.
+ * Xuáº¥t bÃ¡o cÃ¡o cuá»‘i ngÃ y kho ra Excel cÃ³ mÃ u (SpreadsheetML).
+ * KhÃ´ng phá»¥ thuá»™c package ngoÃ i â€” cháº¡y Ä‘Æ°á»£c trong Docker.
  */
 export function exportWarehouseDailyReportExcel({
   report,
@@ -259,30 +259,30 @@ export function exportWarehouseDailyReportExcel({
   const openCount = report.summary.openCarryCount
   const isSnapshot = source === 'snapshot'
   const isPointInTime = Boolean(snap?.isPointInTime) || isSnapshot
-  const stockLabel = isPointInTime ? 'Tồn kho cuối ngày' : 'Tồn kho hiện tại'
+  const stockLabel = isPointInTime ? 'Tá»“n kho cuá»‘i ngÃ y' : 'Tá»“n kho hiá»‡n táº¡i'
   const openLabel = isSnapshot
-    ? 'Việc còn dở lúc gửi'
+    ? 'Viá»‡c cÃ²n dá»Ÿ lÃºc gá»­i'
     : isPointInTime
-      ? 'Việc còn dở cuối ngày'
-      : 'Việc còn dở hiện tại'
+      ? 'Viá»‡c cÃ²n dá»Ÿ cuá»‘i ngÃ y'
+      : 'Viá»‡c cÃ²n dá»Ÿ hiá»‡n táº¡i'
   const openSheetTitle = isSnapshot
-    ? 'VIỆC CÒN DỞ LÚC GỬI'
+    ? 'VIá»†C CÃ’N Dá»ž LÃšC Gá»¬I'
     : isPointInTime
-      ? 'VIỆC CÒN DỞ CUỐI NGÀY'
-      : 'VIỆC CÒN DỞ HIỆN TẠI'
+      ? 'VIá»†C CÃ’N Dá»ž CUá»I NGÃ€Y'
+      : 'VIá»†C CÃ’N Dá»ž HIá»†N Táº I'
   const notes = isSnapshot
     ? [
-      'Xuất từ snapshot đã gửi — số liệu cố định tại thời điểm Thủ kho gửi.',
-      'Các sheet còn lại liệt kê việc đã hoàn tất trong ngày chọn.',
+      'Xuáº¥t tá»« snapshot Ä‘Ã£ gá»­i â€” sá»‘ liá»‡u cá»‘ Ä‘á»‹nh táº¡i thá»i Ä‘iá»ƒm Thá»§ kho gá»­i.',
+      'CÃ¡c sheet cÃ²n láº¡i liá»‡t kÃª viá»‡c Ä‘Ã£ hoÃ n táº¥t trong ngÃ y chá»n.',
     ]
     : isPointInTime
       ? [
-        'Tồn kho / còn dở được tái dựng về cuối ngày chọn (không phải thời điểm xuất file).',
-        'Các sheet còn lại liệt kê việc đã hoàn tất trong ngày chọn.',
+        'Tá»“n kho / cÃ²n dá»Ÿ Ä‘Æ°á»£c tÃ¡i dá»±ng vá» cuá»‘i ngÃ y chá»n (khÃ´ng pháº£i thá»i Ä‘iá»ƒm xuáº¥t file).',
+        'CÃ¡c sheet cÃ²n láº¡i liá»‡t kÃª viá»‡c Ä‘Ã£ hoÃ n táº¥t trong ngÃ y chá»n.',
       ]
       : [
-        'Tồn kho / còn dở là số liệu hiện tại tại thời điểm xuất.',
-        'Các sheet còn lại liệt kê việc đã hoàn tất trong ngày chọn.',
+        'Tá»“n kho / cÃ²n dá»Ÿ lÃ  sá»‘ liá»‡u hiá»‡n táº¡i táº¡i thá»i Ä‘iá»ƒm xuáº¥t.',
+        'CÃ¡c sheet cÃ²n láº¡i liá»‡t kÃª viá»‡c Ä‘Ã£ hoÃ n táº¥t trong ngÃ y chá»n.',
       ]
 
   const sheets = [
@@ -299,9 +299,9 @@ export function exportWarehouseDailyReportExcel({
     }),
     buildDataSheet({
       name: 'Nhap NCC',
-      title: 'NHẬP NCC ĐÃ HOÀN TẤT',
+      title: 'NHáº¬P NCC ÄÃƒ HOÃ€N Táº¤T',
       dateLabel,
-      headers: ['Mã phiếu', 'Người xử lý', 'Giá trị (đ)', 'Hoàn tất', 'Số dòng'],
+      headers: ['MÃ£ phiáº¿u', 'NgÆ°á»i xá»­ lÃ½', 'GiÃ¡ trá»‹ (Ä‘)', 'HoÃ n táº¥t', 'Sá»‘ dÃ²ng'],
       rows: report.supplierReceipts.map((r) => [
         r.code,
         r.actorName || '',
@@ -314,9 +314,9 @@ export function exportWarehouseDailyReportExcel({
     }),
     buildDataSheet({
       name: 'San xuat',
-      title: 'SẢN XUẤT ĐÃ HOÀN TẤT',
+      title: 'Sáº¢N XUáº¤T ÄÃƒ HOÃ€N Táº¤T',
       dateLabel,
-      headers: ['Mã SX', 'Người lập', 'Số dòng NL', 'Số dòng TP', 'Hoàn tất'],
+      headers: ['MÃ£ SX', 'NgÆ°á»i láº­p', 'Sá»‘ dÃ²ng NL', 'Sá»‘ dÃ²ng TP', 'HoÃ n táº¥t'],
       rows: report.productionOrders.map((r) => [
         r.code,
         r.actorName || '',
@@ -329,9 +329,9 @@ export function exportWarehouseDailyReportExcel({
     }),
     buildDataSheet({
       name: 'Chuyen ke',
-      title: 'CHUYỂN KỆ ĐÃ HOÀN TẤT',
+      title: 'CHUYá»‚N Ká»† ÄÃƒ HOÃ€N Táº¤T',
       dateLabel,
-      headers: ['Mã phiếu', 'YC / Người', 'Số lượng', 'Hoàn tất'],
+      headers: ['MÃ£ phiáº¿u', 'YC / NgÆ°á»i', 'Sá»‘ lÆ°á»£ng', 'HoÃ n táº¥t'],
       rows: report.stockTransfers.map((r) => [
         r.code,
         r.sourceRequestCode || r.actorName || '',
@@ -343,9 +343,9 @@ export function exportWarehouseDailyReportExcel({
     }),
     buildDataSheet({
       name: 'Duyet YC ke',
-      title: 'DUYỆT YÊU CẦU BỔ SUNG KỆ',
+      title: 'DUYá»†T YÃŠU Cáº¦U Bá»” SUNG Ká»†',
       dateLabel,
-      headers: ['Mã YC', 'Người xử lý', 'Trạng thái', 'Thời điểm'],
+      headers: ['MÃ£ YC', 'NgÆ°á»i xá»­ lÃ½', 'Tráº¡ng thÃ¡i', 'Thá»i Ä‘iá»ƒm'],
       rows: report.stockAdjustmentReviews.map((r) => [
         r.code,
         r.reviewedByName || '',
@@ -356,9 +356,9 @@ export function exportWarehouseDailyReportExcel({
     }),
     buildDataSheet({
       name: 'Tru kho',
-      title: 'TRỪ KHO ĐÃ XÁC NHẬN',
+      title: 'TRá»ª KHO ÄÃƒ XÃC NHáº¬N',
       dateLabel,
-      headers: ['Mã đơn', 'Người xác nhận', 'Thời điểm'],
+      headers: ['MÃ£ Ä‘Æ¡n', 'NgÆ°á»i xÃ¡c nháº­n', 'Thá»i Ä‘iá»ƒm'],
       rows: report.stockDeductConfirmations.map((r) => [
         r.orderCode,
         r.confirmedByName || '',
@@ -368,9 +368,9 @@ export function exportWarehouseDailyReportExcel({
     }),
     buildDataSheet({
       name: 'Kiem ke',
-      title: 'KIỂM KÊ KHO ĐÃ DUYỆT',
+      title: 'KIá»‚M KÃŠ KHO ÄÃƒ DUYá»†T',
       dateLabel,
-      headers: ['Mã KK', 'Người duyệt', 'Số dòng', 'Duyệt lúc'],
+      headers: ['MÃ£ KK', 'NgÆ°á»i duyá»‡t', 'Sá»‘ dÃ²ng', 'Duyá»‡t lÃºc'],
       rows: report.warehouseStocktakes.map((r) => [
         r.code,
         r.reviewedByName || '',
@@ -382,9 +382,9 @@ export function exportWarehouseDailyReportExcel({
     }),
     buildDataSheet({
       name: 'Bien dong',
-      title: 'BIẾN ĐỘNG KHO THEO LOẠI (TRONG NGÀY)',
+      title: 'BIáº¾N Äá»˜NG KHO THEO LOáº I (TRONG NGÃ€Y)',
       dateLabel,
-      headers: ['Loại biến động', 'Số lần', 'Δ số lượng'],
+      headers: ['Loáº¡i biáº¿n Ä‘á»™ng', 'Sá»‘ láº§n', 'Î” sá»‘ lÆ°á»£ng'],
       rows: report.ledgerByType.map((r) => [
         ledgerTypeVi(r.transactionType),
         r.entryCount,
@@ -396,14 +396,14 @@ export function exportWarehouseDailyReportExcel({
     buildDataSheet({
       name: 'Con do',
       title: openSheetTitle,
-      dateLabel: isPointInTime ? dateLabel : 'Tồn đọng hiện tại',
-      headers: ['Loại việc', 'Mã phiếu / đơn', 'Trạng thái'],
+      dateLabel: isPointInTime ? dateLabel : 'Tá»“n Ä‘á»ng hiá»‡n táº¡i',
+      headers: ['Loáº¡i viá»‡c', 'MÃ£ phiáº¿u / Ä‘Æ¡n', 'Tráº¡ng thÃ¡i'],
       rows: openRows.map((r) => [r.kind, r.code, statusVi(r.status)]),
       widths: [22, 22, 16],
       amber: true,
       extraMeta: [
-        ['Lưu ý', isSnapshot ? 'Theo snapshot lúc gửi' : isPointInTime ? 'Tái dựng cuối ngày chọn' : 'Không gắn ngày đang xem'],
-        ['Thời điểm xuất', generated],
+        ['LÆ°u Ã½', isSnapshot ? 'Theo snapshot lÃºc gá»­i' : isPointInTime ? 'TÃ¡i dá»±ng cuá»‘i ngÃ y chá»n' : 'KhÃ´ng gáº¯n ngÃ y Ä‘ang xem'],
+        ['Thá»i Ä‘iá»ƒm xuáº¥t', generated],
       ],
     }),
   ]
@@ -416,7 +416,7 @@ export function exportWarehouseDailyReportExcel({
  xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
  xmlns:html="http://www.w3.org/TR/REC-html40">
   <DocumentProperties xmlns="urn:schemas-microsoft-com:office:office">
-    <Title>Báo cáo cuối ngày kho</Title>
+    <Title>BÃ¡o cÃ¡o cuá»‘i ngÃ y kho</Title>
     <Author>HVTPOSIMS</Author>
   </DocumentProperties>
   ${buildStylesXml()}

@@ -96,7 +96,7 @@ export const navigationItems = [
   { label: 'Hợp đồng', path: '/contracts', module: 'contracts', icon: 'description', roles: ['admin', 'agencyManager'] },
   { label: 'Sản phẩm & Số lượng', path: '/inventory/products', module: 'products', icon: 'inventory_2', roles: ['admin', 'agencyManager', 'inventoryManager'] },
   { label: 'Danh Mục Sản Phẩm', path: '/products/categories', module: 'products', icon: 'category', roles: ['admin', 'agencyManager', 'inventoryManager'] },
-  { label: 'Lịch sử tạo hàng hóa', path: '/inventory/product-approvals', module: 'product_creation_requests', icon: 'verified', roles: ['admin', 'inventoryManager'] },
+  { label: 'Lịch sử tạo hàng hóa', path: '/inventory/product-approvals', module: 'product_creation_requests', icon: 'verified', roles: ['admin', 'agencyManager', 'inventoryManager'] },
   { label: 'Yêu cầu xóa hàng hóa', path: '/inventory/product-deletion-requests', module: 'product_deletion_requests', icon: 'delete_sweep', roles: ['inventoryManager'] },
   { label: 'Kho', path: '/inventory', module: 'inventory', icon: 'warehouse', roles: ['inventoryManager'] },
   { label: 'Phiếu nhập nhà cung cấp', path: '/inventory/supplier-receipts', module: 'supplier_receipts', icon: 'assignment_turned_in', roles: ['admin', 'agencyManager', 'accountant', 'inventoryManager'] },
@@ -430,6 +430,12 @@ function groupAdminManagerSidebar(items, isAdmin) {
   }
 
   // Hàng hóa
+  // Manager: luôn có Lịch sử tạo hàng hóa để duyệt (inject nếu bị lọc modules cũ).
+  if (!isAdmin && !byPath.has('/inventory/product-approvals')) {
+    const approvalsItem = navigationItems.find((item) => item.path === '/inventory/product-approvals')
+    if (approvalsItem) byPath.set(approvalsItem.path, approvalsItem)
+  }
+
   const goodsEntries = isAdmin
     ? [
       ['/inventory/products', 'Sản phẩm & số lượng'],
@@ -443,13 +449,15 @@ function groupAdminManagerSidebar(items, isAdmin) {
       ['/inventory/products', 'Sản phẩm & số lượng'],
       ['/products/categories', 'Danh mục sản phẩm'],
       ['/accounting/cost-profit', 'Bảng giá vốn & giá bán'],
+      ['/inventory/product-approvals', 'Lịch sử tạo hàng hóa'],
       ['/inventory/stocktake', 'Kiểm kê tồn kho'],
       ['/inventory/ledger', 'Nhật ký kho'],
       ['/inventory/stock-requests', 'Yêu cầu bổ sung tồn quầy'],
       ['/admin/inventory-sync', 'Đồng bộ tồn kho'],
     ]
 
-  // Manager: ẩn thống kê tồn kho / lịch sử tạo / yêu cầu xóa (không hiện ở nhóm Hàng hóa).
+  // Manager: ẩn thống kê tồn kho / yêu cầu xóa (không hiện ở nhóm Hàng hóa).
+  // Lịch sử tạo hàng hóa hiện cho Manager để duyệt.
   // Trước khi consume statistics: giữ mục Báo cáo đã gửi cho Admin/Manager giám sát.
   const statsItem = byPath.get('/inventory/statistics')
   const submissionsNav = statsItem?.children?.find((child) =>
@@ -466,7 +474,6 @@ function groupAdminManagerSidebar(items, isAdmin) {
 
   for (const path of [
     '/inventory/statistics',
-    '/inventory/product-approvals',
     '/inventory/product-deletion-requests',
   ]) {
     if (!isAdmin && byPath.has(path)) consumed.add(path)
