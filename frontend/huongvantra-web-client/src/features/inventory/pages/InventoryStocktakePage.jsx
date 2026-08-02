@@ -4,6 +4,7 @@ import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
 import { promptDialog } from '../../../app/dialog.js'
 import { showError, showSuccess } from '../../../app/toast.js'
+import { getReasonSuggestions } from '../../shared/reasonSuggestions.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import { formatStockQuantity } from '../../products/utils/productDisplay.js'
 import { fetchAllActiveSkus, fetchAllActiveStoreSkus } from '../../products/services/productSkusApi.js'
@@ -760,6 +761,7 @@ function InventoryStocktakePage() {
       defaultValue: 'Mở lại ngày bán',
       required: true,
       tone: 'primary',
+      suggestions: getReasonSuggestions('stocktakeReopenDay'),
     })
     if (reason == null) return
     setIsReopening(true)
@@ -789,6 +791,7 @@ function InventoryStocktakePage() {
           defaultValue: defaultReason,
           required: action === 'reject',
           tone: action === 'approve' ? 'primary' : 'danger',
+          suggestions: action === 'reject' ? getReasonSuggestions('stocktakeReject') : [],
         })
         if (reason == null) return
         if (action === 'approve') {

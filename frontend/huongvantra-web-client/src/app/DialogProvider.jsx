@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react'
+import ReasonSuggestionChips from '../components/shared/ReasonSuggestionChips.jsx'
 
 const EVENT_NAME = 'app-dialog'
 
@@ -124,23 +125,30 @@ export default function DialogProvider({ children }) {
             )}
 
             {dialog.kind === 'prompt' ? (
-              <label className="mt-4 block">
-                <span className="sr-only">{dialog.placeholder || 'Nội dung'}</span>
-                <textarea
-                  ref={inputRef}
-                  rows={3}
-                  className="w-full rounded-xl border-2 border-[#c1c9c0] px-3 py-2.5 text-sm text-[#1b1c17] outline-none focus:border-[#356647]"
+              <div className="mt-4 space-y-3">
+                <ReasonSuggestionChips
+                  suggestions={dialog.suggestions}
                   value={inputValue}
-                  placeholder={dialog.placeholder || 'Nhập nội dung...'}
-                  onChange={(event) => setInputValue(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
-                      event.preventDefault()
-                      handleConfirm()
-                    }
-                  }}
+                  onSelect={setInputValue}
                 />
-              </label>
+                <label className="block">
+                  <span className="sr-only">{dialog.placeholder || 'Nội dung'}</span>
+                  <textarea
+                    ref={inputRef}
+                    rows={3}
+                    className="w-full rounded-xl border-2 border-[#c1c9c0] px-3 py-2.5 text-sm text-[#1b1c17] outline-none focus:border-[#356647]"
+                    value={inputValue}
+                    placeholder={dialog.placeholder || 'Nhập nội dung...'}
+                    onChange={(event) => setInputValue(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+                        event.preventDefault()
+                        handleConfirm()
+                      }
+                    }}
+                  />
+                </label>
+              </div>
             ) : null}
 
             <div className="mt-6 flex justify-end gap-3">

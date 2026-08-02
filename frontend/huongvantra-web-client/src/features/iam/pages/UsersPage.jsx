@@ -359,23 +359,16 @@ function UsersPage() {
         }
       />
 
-      <InfoBox>
-        <p><strong>Tab Đang sử dụng:</strong> quản lý tài khoản đang hoạt động.</p>
-        <p><strong>Tab Khôi phục:</strong> xem tài khoản đã ngừng sử dụng và bấm <strong>Khôi phục</strong> để dùng lại.</p>
-        <p className="mt-1"><strong>Khóa:</strong> tạm chặn đăng nhập. <strong>Ngừng sử dụng:</strong> chuyển sang tab Khôi phục.</p>
-        <p className="mt-2 rounded-xl border border-[#356647]/25 bg-white/70 p-3 text-[#1b1c17]">
-          <strong>Quản trị viên (Admin):</strong> tài khoản đặc quyền — trên trang này chỉ <strong>xem</strong> thông tin.
-          Không sửa, khóa hay ngừng sử dụng qua thao tác thường. Có thể tạo thêm Admin dự phòng;
-          nếu cần thu hồi quyền, dùng quy trình vận hành riêng (ops/DB).
-        </p>
-        {legacySaleReview.length > 0 ? (
-          <p className="mt-3 rounded-xl border border-[#b45309]/40 bg-[#fffbeb] p-3 text-[#7c2d12]">
+      {legacySaleReview.length > 0 ? (
+        <InfoBox>
+          <p className="rounded-xl border border-[#b45309]/40 bg-[#fffbeb] p-3 text-[#7c2d12]">
             <strong>Cần phân loại Sale legacy ({legacySaleReview.length}):</strong>{' '}
             {legacySaleReview.map((item) => item.username ?? item.Username).join(', ')}.
             Hãy sửa tài khoản và chọn SalePos, SaleCod hoặc cả hai; quyền POS an toàn hiện vẫn được giữ trong thời gian chờ.
           </p>
-        ) : null}
-      </InfoBox>
+        </InfoBox>
+      ) : null}
+
 
       <div className="mb-6">
         <ViewTabs view={view} onViewChange={setView} restoreCount={deletedUsers.length} />

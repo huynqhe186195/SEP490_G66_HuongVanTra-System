@@ -44,6 +44,7 @@ export function confirmDialog(options = {}) {
  *   cancelLabel?: string,
  *   required?: boolean,
  *   tone?: 'danger' | 'primary',
+ *   suggestions?: string[],
  * }} [options]
  * @returns {Promise<string|null>} null nếu hủy
  */
@@ -58,6 +59,7 @@ export function promptDialog(options = {}) {
     cancelLabel: options.cancelLabel ?? 'Hủy bỏ',
     required: Boolean(options.required),
     tone: options.tone ?? 'primary',
+    suggestions: Array.isArray(options.suggestions) ? options.suggestions : [],
   })
 }
 

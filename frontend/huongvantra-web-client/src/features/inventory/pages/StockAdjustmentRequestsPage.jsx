@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
+import ReasonSuggestionChips from '../../../components/shared/ReasonSuggestionChips.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import {
@@ -13,6 +14,7 @@ import {
   isAuditOnlyAdmin,
   isWarehouseRole,
 } from '../../auth/utils/permissions.js'
+import { getReasonSuggestions } from '../../shared/reasonSuggestions.js'
 import { formatStockQuantity } from '../../products/utils/productDisplay.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import InventorySimulationBanner from '../components/InventorySimulationBanner.jsx'
@@ -891,6 +893,11 @@ function StockAdjustmentRequestOperationsPage() {
             </p>
             <label className="mt-4 block space-y-2">
               <span className="text-xs font-semibold text-slate-500">Lý do từ chối *</span>
+              <ReasonSuggestionChips
+                suggestions={getReasonSuggestions('stockAdjustmentReject')}
+                value={rejectReason}
+                onSelect={setRejectReason}
+              />
               <textarea
                 rows={3}
                 required
@@ -930,6 +937,11 @@ function StockAdjustmentRequestOperationsPage() {
             <p className="mt-2 text-sm text-slate-600">Hủy yêu cầu đang chờ tiếp nhận, không thay đổi tồn kho.</p>
             <label className="mt-4 block space-y-2">
               <span className="text-xs font-semibold text-slate-500">Lý do hủy *</span>
+              <ReasonSuggestionChips
+                suggestions={getReasonSuggestions('stockAdjustmentCancel')}
+                value={cancelReason}
+                onSelect={setCancelReason}
+              />
               <textarea
                 rows={3}
                 required
@@ -972,6 +984,11 @@ function StockAdjustmentRequestOperationsPage() {
             </p>
             <label className="mt-4 block space-y-2">
               <span className="text-xs font-semibold text-slate-500">Lý do đóng *</span>
+              <ReasonSuggestionChips
+                suggestions={getReasonSuggestions('stockAdjustmentCloseRemaining')}
+                value={closeReason}
+                onSelect={setCloseReason}
+              />
               <textarea
                 rows={3}
                 required

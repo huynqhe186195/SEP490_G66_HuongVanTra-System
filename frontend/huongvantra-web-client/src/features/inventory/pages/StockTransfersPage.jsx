@@ -3,9 +3,11 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
+import { promptDialog } from '../../../app/dialog.js'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import { canOperateStockTransfer, canViewStockTransfer } from '../../auth/utils/permissions.js'
+import { getReasonSuggestions } from '../../shared/reasonSuggestions.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import { formatStockQuantity } from '../../products/utils/productDisplay.js'
 import { fetchAllActiveSkus } from '../../products/services/productSkusApi.js'
@@ -624,12 +626,14 @@ function StockTransfersPage() {
 
   async function handleCancel() {
     if (isCompleting || !selected) return
-    const reason = window.prompt(`Nhập lý do hủy ${selected.transferCode}:`)
-    if (reason === null) return
-    if (!reason.trim()) {
-      showError('Lý do hủy là bắt buộc.')
-      return
-    }
+    const reason = await promptDialog({
+      title: 'Hủy phiếu điều chuyển',
+      message: `Nhập lý do hủy ${selected.transferCode}:`,
+      required: true,
+      tone: 'danger',
+      suggestions: getReasonSuggestions('stockTransferCancel'),
+    })
+    if (reason == null) return
     try {
       const cancelled = await cancelStockTransfer(selected.id, reason)
       showSuccess('Đã hủy Phiếu điều chuyển.')

@@ -5,6 +5,7 @@ import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
 import { promptDialog } from '../../../app/dialog.js'
 import { showError, showSuccess } from '../../../app/toast.js'
+import { getReasonSuggestions } from '../../shared/reasonSuggestions.js'
 import {
   canCreateCatalog,
   canCreateStockReplenishmentRequest,
@@ -462,6 +463,7 @@ export default function ProductsWarehouseListPage() {
       message: `Nhập lý do yêu cầu xóa sản phẩm "${product.name}":`,
       required: true,
       tone: 'danger',
+      suggestions: getReasonSuggestions('productHideSubmit'),
     })
     if (reason == null) return
     try {

@@ -26,7 +26,6 @@ const MODULE_LABELS = {
   payments: 'Thanh toán',
   pos: 'POS bán hàng',
   'product-creation-requests': 'Yêu cầu tạo hàng',
-  'product-deletion-requests': 'Yêu cầu xóa hàng',
   promotions: 'Mã giảm giá',
   shifts: 'Lịch làm việc',
   'stock-deduct-queue': 'Hàng đợi trừ kho',

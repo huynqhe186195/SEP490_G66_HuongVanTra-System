@@ -56,7 +56,6 @@ import PosCashSessionsPage from '../features/pos/pages/PosCashSessionsPage.jsx'
 import PosTransferQrPage from '../features/pos/pages/PosTransferQrPage.jsx'
 import ReturnOrderPage from '../features/pos/pages/ReturnOrderPage.jsx'
 import ProductApprovalsPage from '../features/products/pages/ProductApprovalsPage.jsx'
-import ProductDeletionRequestsPage from '../features/products/pages/ProductDeletionRequestsPage.jsx'
 import ProductsListPage from '../features/products/pages/ProductsListPage.jsx'
 import ProductsCategoriesPage from '../features/products/pages/ProductsCategoriesPage.jsx'
 import ProductsPricingPage from '../features/products/pages/ProductsPricingPage.jsx'
@@ -105,7 +104,6 @@ function App() {
         <Route path="/products/categories" element={<ProductsCategoriesPage />} />
         <Route path="/inventory/products/create" element={<ProductApprovalsPage />} />
         <Route path="/inventory/product-approvals" element={<ProductApprovalsPage />} />
-        <Route path="/inventory/product-deletion-requests" element={<ProductDeletionRequestsPage />} />
         <Route path="/products/:id/edit" element={<Navigate to="/inventory/products" replace />} />
         <Route path="/inventory" element={<InventoryStockPage />} />
         <Route path="/inventory/statistics" element={<InventoryStatisticsPage />} />

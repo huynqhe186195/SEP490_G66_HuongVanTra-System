@@ -3,9 +3,11 @@ import { useNavigate } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
+import ReasonSuggestionChips from '../../../components/shared/ReasonSuggestionChips.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import { canOperateStockTransfer } from '../../auth/utils/permissions.js'
+import { getReasonSuggestions } from '../../shared/reasonSuggestions.js'
 import { formatStockQuantity } from '../../products/utils/productDisplay.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import {
@@ -317,6 +319,11 @@ export default function ShelfReplenishmentSuggestionsPage() {
             </p>
             <label className="mt-4 block space-y-2">
               <span className="text-xs font-semibold text-slate-500">Lý do bỏ qua *</span>
+              <ReasonSuggestionChips
+                suggestions={getReasonSuggestions('shelfReplenishmentDismiss')}
+                value={dismissReason}
+                onSelect={setDismissReason}
+              />
               <textarea
                 rows={3}
                 required

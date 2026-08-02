@@ -2,6 +2,7 @@ import { Fragment, useCallback, useEffect, useState } from 'react'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
+import ReasonSuggestionChips from '../../../components/shared/ReasonSuggestionChips.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { formatVietnamDate, formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
@@ -12,6 +13,7 @@ import {
   canReviewProductionOrder,
   canSubmitProductionOrder,
 } from '../../auth/utils/permissions.js'
+import { getReasonSuggestions } from '../../shared/reasonSuggestions.js'
 import CreateProductionOrderModal from '../components/CreateProductionOrderModal.jsx'
 import {
   approveProductionOrder,
@@ -34,7 +36,7 @@ const STATUS_TABS = [
   { key: 'Cancelled', label: 'Đã hủy' },
 ]
 
-function ConfirmDialog({ message, requiresReason = false, reasonLabel = 'Lý do', onConfirm, onCancel }) {
+function ConfirmDialog({ message, requiresReason = false, reasonLabel = 'Lý do', reasonSuggestions = [], onConfirm, onCancel }) {
   const [reason, setReason] = useState('')
 
   return (
@@ -47,6 +49,11 @@ function ConfirmDialog({ message, requiresReason = false, reasonLabel = 'Lý do'
         {requiresReason && (
           <label className="mb-6 block space-y-1.5 text-sm">
             <span className="text-xs font-semibold text-[#717971]">{reasonLabel}</span>
+            <ReasonSuggestionChips
+              suggestions={reasonSuggestions}
+              value={reason}
+              onSelect={setReason}
+            />
             <textarea
               rows={3}
               className="w-full rounded-xl border border-slate-200 p-2.5 text-sm text-slate-700"
@@ -592,6 +599,9 @@ function ProductionOrdersPage() {
           message={getConfirmActionMessage(confirmAction)}
           requiresReason={['reject', 'cancel'].includes(confirmAction.type)}
           reasonLabel={confirmAction.type === 'reject' ? 'Lý do từ chối' : 'Lý do hủy'}
+          reasonSuggestions={getReasonSuggestions(
+            confirmAction.type === 'reject' ? 'productionReject' : 'productionCancel',
+          )}
           onConfirm={(reason) => handleAction(confirmAction.type, confirmAction.order, reason)}
           onCancel={() => setConfirmAction(null)}
         />

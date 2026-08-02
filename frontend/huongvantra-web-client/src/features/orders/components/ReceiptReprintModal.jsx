@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import ReasonSuggestionChips from '../../../components/shared/ReasonSuggestionChips.jsx'
+import { getReasonSuggestions } from '../../shared/reasonSuggestions.js'
 
 const MAX_REASON_LENGTH = 500
 
@@ -38,6 +40,12 @@ function ReceiptReprintModal({ isOpen, order, isSaving, onClose, onConfirm }) {
         <label className="mt-4 block text-sm font-semibold text-slate-700" htmlFor="reprint-reason">
           Lý do in lại <span className="text-red-500">*</span>
         </label>
+        <ReasonSuggestionChips
+          className="mt-2"
+          suggestions={getReasonSuggestions('receiptReprint')}
+          value={reason}
+          onSelect={setReason}
+        />
         <textarea
           id="reprint-reason"
           rows={3}
@@ -46,7 +54,7 @@ function ReceiptReprintModal({ isOpen, order, isSaving, onClose, onConfirm }) {
           disabled={isSaving}
           onChange={(event) => setReason(event.target.value)}
           placeholder="Ví dụ: khách yêu cầu bản in bổ sung, máy in lỗi giấy..."
-          className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#538463] disabled:bg-slate-50"
+          className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#538463] disabled:bg-slate-50"
         />
         <p className="mt-1 text-xs text-slate-400">
           {trimmedReason.length}/{MAX_REASON_LENGTH} ký tự

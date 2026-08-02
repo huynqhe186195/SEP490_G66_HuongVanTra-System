@@ -97,7 +97,6 @@ export const navigationItems = [
   { label: 'Sản phẩm & Số lượng', path: '/inventory/products', module: 'products', icon: 'inventory_2', roles: ['admin', 'agencyManager', 'inventoryManager'] },
   { label: 'Danh Mục Sản Phẩm', path: '/products/categories', module: 'products', icon: 'category', roles: ['admin', 'agencyManager', 'inventoryManager'] },
   { label: 'Lịch sử tạo hàng hóa', path: '/inventory/product-approvals', module: 'product_creation_requests', icon: 'verified', roles: ['admin', 'agencyManager', 'inventoryManager'] },
-  { label: 'Yêu cầu xóa hàng hóa', path: '/inventory/product-deletion-requests', module: 'product_deletion_requests', icon: 'delete_sweep', roles: ['inventoryManager'] },
   { label: 'Kho', path: '/inventory', module: 'inventory', icon: 'warehouse', roles: ['inventoryManager'] },
   { label: 'Phiếu nhập nhà cung cấp', path: '/inventory/supplier-receipts', module: 'supplier_receipts', icon: 'assignment_turned_in', roles: ['admin', 'agencyManager', 'accountant', 'inventoryManager'] },
   { label: 'Nhà cung cấp', path: '/inventory/suppliers', module: 'supplier_receipts', icon: 'storefront', roles: ['admin', 'agencyManager', 'accountant', 'inventoryManager'] },
@@ -261,7 +260,6 @@ const INVENTORY_SIDEBAR_GROUPS = [
       { path: '/products/categories', label: 'Danh mục sản phẩm' },
       { path: '/inventory/boms' },
       { path: '/inventory/product-approvals', label: 'Lịch sử tạo hàng hóa' },
-      { path: '/inventory/product-deletion-requests', label: 'Yêu cầu xóa hàng hóa' },
     ],
   },
   {
@@ -456,7 +454,7 @@ function groupAdminManagerSidebar(items, isAdmin) {
       ['/admin/inventory-sync', 'Đồng bộ tồn kho'],
     ]
 
-  // Manager: ẩn thống kê tồn kho / yêu cầu xóa (không hiện ở nhóm Hàng hóa).
+  // Manager: ẩn thống kê tồn kho (không hiện ở nhóm Hàng hóa).
   // Lịch sử tạo hàng hóa hiện cho Manager để duyệt.
   // Trước khi consume statistics: giữ mục Báo cáo đã gửi cho Admin/Manager giám sát.
   const statsItem = byPath.get('/inventory/statistics')
@@ -474,7 +472,6 @@ function groupAdminManagerSidebar(items, isAdmin) {
 
   for (const path of [
     '/inventory/statistics',
-    '/inventory/product-deletion-requests',
   ]) {
     if (!isAdmin && byPath.has(path)) consumed.add(path)
   }
@@ -804,7 +801,6 @@ const MODULE_PATH_PREFIXES = [
   { module: 'phan_quyen_admin', prefix: '/admin/phan-quyen' },
   { module: 'customers', prefix: '/customers' },
   { module: 'product_creation_requests', prefix: '/inventory/product-approvals' },
-  { module: 'product_deletion_requests', prefix: '/inventory/product-deletion-requests' },
   { module: 'products', prefix: '/products/categories' },
   { module: 'products', prefix: '/inventory/products' },
   { module: 'stock_transfer_ops', prefix: '/inventory/stock-transfers' },

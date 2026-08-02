@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import ReasonSuggestionChips from '../../../components/shared/ReasonSuggestionChips.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { getStockStatusLabel } from '../../orders/utils/orderDisplay.js'
+import { getReasonSuggestions } from '../../shared/reasonSuggestions.js'
 import {
   cancelStockDeductQueue,
   confirmStockDeductQueue,
@@ -291,6 +293,12 @@ function StockDeductPreviewModal({ queueId, orderCode, canConfirm = false, canCa
                 <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-950">
                   <label className="block">
                     <span className="font-semibold">Lý do hủy *</span>
+                    <ReasonSuggestionChips
+                      className="mt-2"
+                      suggestions={getReasonSuggestions('stockDeductCancel')}
+                      value={cancelReason}
+                      onSelect={setCancelReason}
+                    />
                     <textarea
                       className="mt-2 min-h-24 w-full rounded-lg border border-red-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-red-400"
                       value={cancelReason}

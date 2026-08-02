@@ -3,9 +3,11 @@ import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
+import ReasonSuggestionChips from '../../../components/shared/ReasonSuggestionChips.jsx'
 import { showError, showSuccess, showToast } from '../../../app/toast.js'
 import { useAuthSession } from '../../auth/hooks/useAuthSession.js'
 import { canDecideProductApprovals, isSystemAdmin, isWarehouseRole } from '../../auth/utils/permissions.js'
+import { getReasonSuggestions } from '../../shared/reasonSuggestions.js'
 import VndCurrencyInput from '../components/VndCurrencyInput.jsx'
 import { fetchAttributeNames } from '../services/attributeNamesApi.js'
 import { fetchCategories } from '../services/categoriesApi.js'
@@ -1637,18 +1639,6 @@ function ProductRow({ row, rowIndex, categories, materials, existingProducts, at
     applySkuRows(row, skuRows.filter((_, currentIndex) => currentIndex !== index))
   }
 
-  function markBaseSku(index) {
-    const baseSku = skuRows[index]
-    const nextSkuRows = skuRows.map((sku, currentIndex) => ({
-      ...sku,
-      isBaseUnitVariant: currentIndex === index,
-      conversionRate: currentIndex === index ? '1' : sku.conversionRate,
-      baseRequestSkuKey: currentIndex === index ? null : baseSku.requestSkuKey,
-      baseSkuCode: currentIndex === index ? null : baseSku.skuCode,
-    }))
-    applySkuRows({ ...row, baseUnit: baseSku.unitName || row.baseUnit }, nextSkuRows)
-  }
-
   function getAvailableComponentOptions(skuIndex) {
     const sku = skuRows[skuIndex]
     const selectedKeys = new Set((sku?.bomLines ?? []).map(getBomComponentKey).filter(Boolean))
@@ -2004,24 +1994,12 @@ function ProductRow({ row, rowIndex, categories, materials, existingProducts, at
                   Barcode
                   <input className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={sku.barcode || ''} onChange={(event) => updateSku(index, { barcode: event.target.value })} />
                 </label>
-                <label className="flex items-center gap-2 pt-6 text-sm font-semibold text-slate-700">
-                  <input type="checkbox" checked={sku.isSellable !== false} onChange={(event) => updateSku(index, { isSellable: event.target.checked })} />
-                  Bán trực tiếp
-                </label>
-                <label className="flex items-center gap-2 pt-6 text-sm font-semibold text-slate-700">
-                  <input type="radio" name={`${row.clientKey}-base-sku`} checked={Boolean(sku.isBaseUnitVariant)} onChange={() => markBaseSku(index)} />
-                  Đơn vị cơ bản
-                </label>
-                <label className="flex items-center gap-2 pt-6 text-sm font-semibold text-slate-700">
-                  <input type="checkbox" checked={sku.isPurchasable !== false} onChange={(event) => updateSku(index, { isPurchasable: event.target.checked })} />
-                  Có thể nhập mua
-                </label>
                 {isFinishedProduct ? (
                   <>
-                    <p className="col-span-full pt-4 text-xs font-semibold text-amber-700">
+                    <p className="col-span-full pt-2 text-xs font-semibold text-amber-700 md:col-span-4 md:pt-6">
                       Sản phẩm kệ bắt buộc phải có BOM trên SKU đơn vị cơ bản trước khi gửi duyệt.
                     </p>
-                    <label className="flex items-center gap-2 pt-2 text-sm font-semibold text-slate-700">
+                    <label className="flex items-center gap-2 pt-2 text-sm font-semibold text-slate-700 md:col-span-2">
                       <input type="checkbox" checked={sku.canBeBomComponent === true} onChange={(event) => updateSku(index, { canBeBomComponent: event.target.checked })} />
                       BOM component
                     </label>
@@ -2468,6 +2446,12 @@ function DecisionReasonModal({ isOpen, action, request, onClose, onConfirm, isSa
         <div className="px-6 py-4">
           <label className="block text-sm font-semibold text-slate-700">
             Lý do {isReject ? 'từ chối' : 'hủy'} <span className="text-rose-500">*</span>
+            <ReasonSuggestionChips
+              className="mt-2"
+              suggestions={getReasonSuggestions(isReject ? 'productCreationReject' : 'productCreationCancel')}
+              value={reason}
+              onSelect={setReason}
+            />
             <textarea
               className="mt-2 w-full resize-none rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-[#356647] focus:outline-none focus:ring-2 focus:ring-[#356647]/15"
               rows={3}

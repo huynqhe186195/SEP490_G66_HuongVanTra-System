@@ -4,6 +4,7 @@ import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
 import { promptDialog } from '../../../app/dialog.js'
 import { showError, showSuccess } from '../../../app/toast.js'
+import { getReasonSuggestions } from '../../shared/reasonSuggestions.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import { canWriteInventory } from '../../auth/utils/permissions.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
@@ -563,6 +564,7 @@ export default function InventoryReturnsPage() {
       message: 'Nhập lý do từ chối yêu cầu trả hàng nhập',
       required: true,
       tone: 'danger',
+      suggestions: getReasonSuggestions('inventoryReturnReject'),
     })
     if (reason == null) return
     const action = request.flow === 'shelf'
@@ -577,6 +579,7 @@ export default function InventoryReturnsPage() {
       message: 'Nhập lý do hủy yêu cầu trả hàng nhập',
       required: true,
       tone: 'danger',
+      suggestions: getReasonSuggestions('inventoryReturnCancel'),
     })
     if (reason == null) return
     const action = request.flow === 'shelf'
