@@ -1211,7 +1211,7 @@ function PromotionsPage() {
                   {isCategoryLoading ? (
                     <p className="text-xs text-slate-500">Đang tải danh mục...</p>
                   ) : null}
-                  {!isCategoryLoading && displayCategoryOptions.length === 0 ? (
+                  {!isCategoryLoading && categoryTreeOptions.length === 0 ? (
                     <p className="text-xs text-slate-500">Không có danh mục khả dụng.</p>
                   ) : null}
                   {!isCategoryLoading && categoryTreeOptions.length > 0 ? (
