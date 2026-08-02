@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
-import { canCreateOrder, canVerifyCodPayment, canViewAllOrders } from '../../auth/utils/permissions.js'
+import { canConfirmB2BDelivery, canConfirmOrderShipping, canCreateOrder, canVerifyCodPayment, canViewAllOrders } from '../../auth/utils/permissions.js'
 import { fetchOnDutyShift } from '../../shifts/services/shiftsApi.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import CodVerifyModal from '../components/CodVerifyModal.jsx'
@@ -36,6 +36,7 @@ import {
   canShipOrder,
   canVerifyCod,
   isCodChannelOrder,
+  isContractOrder,
   isPendingPaymentOrder,
   isPendingTransferPayment,
   formatVnd,
@@ -62,6 +63,8 @@ function OrderDetailPage() {
   const fromExchange = searchParams.get('from') === 'exchange'
   const session = loadAuthSession()
   const canManage = canCreateOrder(session)
+  const canShipContract = canConfirmOrderShipping(session)
+  const canReceiveContract = canConfirmB2BDelivery(session)
   const canCollectCod = canVerifyCodPayment(session)
   const isManager = canViewAllOrders(session)
 
@@ -125,6 +128,11 @@ function OrderDetailPage() {
   }, [isManager])
 
   const canMutate = isManager || Boolean(shelfOnDuty)
+  const contractOrder = isContractOrder(order)
+  // Đơn hợp đồng do Kế toán lập và Kho xuất — cả hai bộ phận đều làm việc ngoài ca quầy POS.
+  const canOperateContract = contractOrder && (canShipContract || canReceiveContract)
+  const canRunActions = canManage || canOperateContract
+  const canApplyChanges = contractOrder ? canOperateContract : (canManage && canMutate)
 
   useEffect(() => {
     if (!order?.customerId) {
@@ -196,7 +204,7 @@ function OrderDetailPage() {
   }, [])
 
   async function handleSaveMeta(values) {
-    if (!canManage || !canMutate || !order) return
+    if (!canApplyChanges || !order) return
     try {
       setIsSaving(true)
       const updated = await updateOrder(order.id, values)
@@ -221,7 +229,7 @@ function OrderDetailPage() {
   }, [order?.items, catalogLookups])
 
   async function handleConfirmCancel() {
-    if (!canManage || !canMutate || !order) return
+    if (!canApplyChanges || !order) return
     setConfirmCancelOpen(false)
     try {
       setIsSaving(true)
@@ -261,7 +269,7 @@ function OrderDetailPage() {
   }
 
   async function runAction(action) {
-    if (!canManage || !canMutate || !order) return
+    if (!canApplyChanges || !order) return
     try {
       setIsSaving(true)
       if (action === 'ship') {
@@ -323,6 +331,15 @@ function OrderDetailPage() {
   const showTransferQr = isPendingTransferPayment(order)
   const compactProducts = isPendingPaymentOrder(order)
   const inventorySyncMeta = resolveInventorySyncMeta(order)
+  const contractStepHint = contractOrder
+    ? {
+        PendingPayment: 'Bước 1/3 — Đã lập đơn và giữ chỗ hàng. Chờ kho soạn và xác nhận xuất hàng.',
+        Processing: 'Bước 1/3 — Đơn đang xử lý. Chờ kho soạn và xác nhận xuất hàng.',
+        Shipping: 'Bước 2/3 — Kho đã xuất hàng. Chờ kế toán xác nhận khách đã nhận để ghi công nợ.',
+        Completed: 'Bước 3/3 — Khách đã nhận hàng, công nợ đã ghi theo điều khoản hợp đồng.',
+        Cancelled: 'Đơn đã hủy — hàng giữ chỗ đã được nhả về tồn kệ.',
+      }[String(order.orderStatus || '').trim()] || ''
+    : ''
 
   return (
     <PageShell>
@@ -353,7 +370,7 @@ function OrderDetailPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {canManage && canMutate && canEditOrderMeta(order) ? (
+          {canApplyChanges && canEditOrderMeta(order) ? (
             <button
               type="button"
               onClick={() => setIsUpdateModalOpen(true)}
@@ -389,6 +406,47 @@ function OrderDetailPage() {
               <p className="mt-2 text-sm text-slate-600">{order.shippingAddress}</p>
             ) : null}
           </section>
+
+          {contractOrder ? (
+            <section className="rounded-2xl border border-[#538463]/25 bg-[#f6f4ec] p-5 shadow-sm">
+              <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-[#356647]">Đơn bán theo hợp đồng</h2>
+              <dl className="space-y-1.5 text-sm">
+                <div className="flex justify-between gap-3">
+                  <dt className="text-slate-500">Mã hợp đồng</dt>
+                  <dd className="font-semibold text-slate-800">{order.contractCodeSnapshot || '—'}</dd>
+                </div>
+                {order.contractDiscountPercentSnapshot != null ? (
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-slate-500">Chiết khấu hợp đồng</dt>
+                    <dd className="font-semibold text-slate-800">{order.contractDiscountPercentSnapshot}%</dd>
+                  </div>
+                ) : null}
+                {order.contractPaymentTermDaysSnapshot != null ? (
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-slate-500">Điều khoản thanh toán</dt>
+                    <dd className="font-semibold text-slate-800">{order.contractPaymentTermDaysSnapshot} ngày</dd>
+                  </div>
+                ) : null}
+                {order.dueDate ? (
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-slate-500">Hạn thanh toán</dt>
+                    <dd className="font-semibold text-slate-800">{formatVietnamDateTime(order.dueDate)}</dd>
+                  </div>
+                ) : null}
+              </dl>
+              <p className="mt-3 border-t border-[#538463]/20 pt-3 text-xs leading-relaxed text-[#356647]">
+                {contractStepHint}
+              </p>
+              {order.contractId ? (
+                <Link
+                  to={`/contracts/${order.contractId}`}
+                  className="mt-2 inline-block text-xs font-semibold text-[#356647] underline"
+                >
+                  Xem hợp đồng
+                </Link>
+              ) : null}
+            </section>
+          ) : null}
 
           <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
             <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-400">Người bán</h2>
@@ -447,28 +505,28 @@ function OrderDetailPage() {
             </section>
           ) : null}
 
-          {canManage ? (
+          {canRunActions ? (
             <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
               <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-400">Thao tác</h2>
               <div className="flex flex-col gap-2">
-                {canShipOrder(order) ? (
+                {canShipOrder(order) && (!contractOrder || canShipContract) ? (
                   <button
                     type="button"
-                    disabled={isSaving || !canMutate}
+                    disabled={isSaving || !canApplyChanges}
                     onClick={() => runAction('ship')}
                     className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-50"
                   >
-                    Chuyển sang đang giao
+                    {contractOrder ? 'Xác nhận đã xuất hàng khỏi kho' : 'Chuyển sang đang giao'}
                   </button>
                 ) : null}
-                {canCompleteOrder(order) ? (
+                {canCompleteOrder(order) && (!contractOrder || canReceiveContract) ? (
                   <button
                     type="button"
-                    disabled={isSaving || !canMutate}
+                    disabled={isSaving || !canApplyChanges}
                     onClick={() => runAction('complete')}
                     className="rounded-xl bg-[#538463] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#457053] disabled:opacity-50"
                   >
-                    Hoàn tất đơn
+                    {contractOrder ? 'Khách đã nhận hàng — ghi công nợ' : 'Hoàn tất đơn'}
                   </button>
                 ) : null}
                 {canCollectCod && canVerifyCod(order) ? (
@@ -481,7 +539,7 @@ function OrderDetailPage() {
                     Đã giao &amp; thu tiền (COD)
                   </button>
                 ) : null}
-                {canReturnOrder(order) ? (
+                {canManage && canReturnOrder(order) ? (
                   <button
                     type="button"
                     disabled={!canMutate}
@@ -504,7 +562,7 @@ function OrderDetailPage() {
                 {canCancelOrder(order) ? (
                   <button
                     type="button"
-                    disabled={isSaving || !canMutate}
+                    disabled={isSaving || !canApplyChanges}
                     onClick={() => runAction('cancel')}
                     className="rounded-xl border border-red-200 px-4 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50"
                   >
@@ -517,7 +575,7 @@ function OrderDetailPage() {
         </aside>
       </div>
 
-      {String(order.orderChannel).toUpperCase() === 'COD' ? (
+      {String(order.orderChannel).toUpperCase() === 'COD' || contractOrder ? (
         <OrderStockReservationSection orderId={order.id} refreshKey={timelineRefreshKey} />
       ) : null}
 

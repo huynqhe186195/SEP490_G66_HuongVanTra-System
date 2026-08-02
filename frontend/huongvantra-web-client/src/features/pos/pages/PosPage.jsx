@@ -42,7 +42,7 @@ import {
   validatePosDiscountsBeforePayment,
   validateZeroTotalCheckout,
 } from '../utils/posDiscountValidation.js'
-import { formatCustomerOrderSnapshot, isVipCustomerType } from '../../customers/utils/customerDisplay.js'
+import { formatCustomerOrderSnapshot, isCorporateCustomerType, isVipCustomerType } from '../../customers/utils/customerDisplay.js'
 import { fetchPendingCatalogSync, syncCatalogToStore } from '../../products/services/catalogSyncApi.js'
 import { fetchCategories } from '../../products/services/categoriesApi.js'
 import ProductImage from '../../products/components/ProductImage.jsx'
@@ -100,8 +100,9 @@ const CUSTOMER_SEARCH_TYPES = [
     { id: "", label: "Tất cả loại KH" },
     { id: "GENERAL", label: "Phổ thông" },
     { id: "VIP", label: "Đối ngoại (VIP)" },
-    { id: "CORPORATE", label: "Doanh nghiệp" },
 ];
+
+const CORPORATE_AT_POS_MESSAGE = "Khách doanh nghiệp phải lập đơn theo hợp đồng tại mục «Bán theo hợp đồng», không bán tại quầy POS.";
 
 const PRICE_FILTER_OPTIONS = [
     { id: "", label: "Tất cả giá" },
@@ -1441,6 +1442,8 @@ function PosPage() {
     const hasPendingQrOrder = Boolean(session?.pendingQrOrderId);
     const hasCustomerSelected = Boolean(selectedCustomer?.customerId);
     const hasShippingAddress = Boolean(shippingAddress?.trim());
+    // Khách DN chỉ bán qua hợp đồng; state cũ khôi phục từ workspace storage vẫn phải bị chặn.
+    const hasCorporateCustomer = isCorporateCustomerType(selectedCustomer?.customerType);
     const isZeroAmountSale = total === 0 && grossSubtotal > 0;
     // Quầy: cho phép khách vãng lai (không mã KH). COD/takeaway vẫn bắt buộc KH + địa chỉ.
     const canPayCash = hasCartItems && !isRestoredCatalogValidating && !hasUnavailableItems && !hasPendingQrOrder && (hasCustomerSelected || !isTakeaway);
@@ -1453,13 +1456,13 @@ function PosPage() {
         && hasShippingAddress
         && (isTransferPayment ? total > 0 : true);
     // Quầy: bắt buộc mở ca quỹ và đang trong ca quầy trước khi bán (TM + CK). COD/takeaway: chỉ cần trong ca, không khóa két / kiểm kệ.
-    const canPay = isTakeaway
+    const canPay = !hasCorporateCustomer && (isTakeaway
         ? canPayTakeaway && Boolean(shelfOnDuty) && !isSubmitting
         : cashSessionOpen
           && shelfOnDuty
           && !shelfDayStatus.dayEndDone
           && (isTransferPayment ? canPayTransfer : canPayCash)
-          && !isSubmitting;
+          && !isSubmitting);
     const normalizedPromoSearch = promoCodeInput.trim().toUpperCase();
     const visibleAvailablePromotions = availablePromotions
         .filter((promotion) => !normalizedPromoSearch || promotion.promoCode.toUpperCase().includes(normalizedPromoSearch))
@@ -1987,6 +1990,10 @@ function PosPage() {
             showError("Giỏ có sản phẩm không còn bán. Vui lòng xóa sản phẩm được đánh dấu trước khi thanh toán.");
             return;
         }
+        if (hasCorporateCustomer) {
+            showError(CORPORATE_AT_POS_MESSAGE);
+            return;
+        }
         if (isTakeaway && !hasCustomerSelected) {
             showError("Vui lòng chọn hoặc thêm khách hàng trước khi tạo đơn COD/giao hàng.");
             return;
@@ -2194,6 +2201,10 @@ function PosPage() {
     const showCustomerSearchEmpty = customerSearchDisplayState === "empty";
 
     const selectCustomer = (customer) => {
+        if (isCorporateCustomerType(customer?.customerType)) {
+            showError(CORPORATE_AT_POS_MESSAGE);
+            return;
+        }
         const keepVipAdjustments = isVipCustomerType(customer?.customerType);
         const removedVipAdjustments = !keepVipAdjustments && (
             orderDiscountPercent > 0

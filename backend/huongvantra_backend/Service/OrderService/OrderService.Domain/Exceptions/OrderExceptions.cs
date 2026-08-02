@@ -82,3 +82,16 @@ public class OrderForbiddenException : Exception
     public OrderForbiddenException(string message = "Bạn không có quyền truy cập đơn hàng này.")
         : base(message) { }
 }
+
+/// <summary>
+/// Service phụ thuộc (CustomerService/DocumentService) không phản hồi. Phải chặn đơn thay vì
+/// bỏ qua ràng buộc hợp đồng/hạn mức một cách im lặng.
+/// </summary>
+public class OrderDependencyUnavailableException : Exception
+{
+    public OrderDependencyUnavailableException(string dependency, Exception? innerException = null)
+        : base($"Không thể kết nối tới dịch vụ {dependency}. Vui lòng thử lại sau ít phút.", innerException)
+    { Dependency = dependency; }
+
+    public string Dependency { get; }
+}

@@ -132,9 +132,10 @@ public class CustomerAddressesController : ControllerBase
             ?? throw new CustomerNotFoundException(customerId);
 
         if (customer.CustomerGroup == CustomerGroup.DoanhNghiep
+            && !User.HasPermission(PermissionNames.ManageCorporateCustomer)
             && !User.HasPermission(PermissionNames.ManageRole))
         {
-            throw new CustomerForbiddenException("Chỉ Admin được tạo hoặc chỉnh sửa khách doanh nghiệp.");
+            throw new CustomerForbiddenException("Chỉ Quản lý, Kế toán hoặc Admin được tạo hoặc chỉnh sửa khách doanh nghiệp.");
         }
     }
 }

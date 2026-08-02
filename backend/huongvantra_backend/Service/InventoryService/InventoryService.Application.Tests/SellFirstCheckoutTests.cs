@@ -68,14 +68,13 @@ public sealed class SellFirstCheckoutTests
             Mock.Of<IShelfReturnRequestRepository>(),
             Mock.Of<ISupplierReturnRequestRepository>(),
             Mock.Of<IStocktakeRequestRepository>(),
-            Mock.Of<IShelfReplenishmentSuggestionRepository>(),
             new ProcessedIntegrationEventRepository(db),
             Mock.Of<IInventoryEventPublisher>(),
             new PassThrough(),
             Mock.Of<IProductionOrderRepository>(),
             catalogClient ?? Mock.Of<IProductCatalogClient>(),
             Mock.Of<ISupplierRepository>(),
-            new SupplierProductRepository(db),
+            Mock.Of<ISupplierProductRepository>(),
             new ReturnInspectionRepository(db),
             opts);
     }
@@ -330,23 +329,21 @@ public sealed class SellFirstCheckoutTests
     {
         var materialVariant = new CatalogVariant(
             materialSku, Guid.NewGuid(), "MAT-CODE", "Nguyên liệu",
-            IsActive: true, IsSellable: false, HasBom: false, BomLineCount: 0, BomLines: [],
-            CanBeBomComponent: true);
+            IsActive: true, IsSellable: false, HasBom: false, BomLineCount: 0, BomLines: []);
         var materialProduct = new CatalogProduct(
-            Guid.NewGuid(), "Nguyên liệu", "NGUYEN_LIEU", "gram", "gram",
+            Guid.NewGuid(), "Nguyên liệu", "material", "gram", "gram",
             IsActive: true, Variants: [materialVariant]);
 
         var bomLine = new CatalogBomLine(
             materialProduct.Id, "Nguyên liệu", "gram", bomQty,
             ComponentVariantId: materialSku, ComponentSkuCode: "MAT-CODE",
-            ComponentVariantName: "Nguyên liệu", IsRequiredBaseComponent: false);
+            ComponentVariantName: "Nguyên liệu", IsRequiredBaseComponent: true);
 
         var finishedVariant = new CatalogVariant(
             finishedSku, Guid.NewGuid(), "FINISH-CODE", "Thành phẩm",
-            IsActive: true, IsSellable: true, HasBom: true, BomLineCount: 1, BomLines: [bomLine],
-            CanHaveBom: true);
+            IsActive: true, IsSellable: true, HasBom: true, BomLineCount: 1, BomLines: [bomLine]);
         var finishedProduct = new CatalogProduct(
-            Guid.NewGuid(), "Thành phẩm", "THANH_PHAM", "cái", "cái",
+            Guid.NewGuid(), "Thành phẩm", "finished", "cái", "cái",
             IsActive: true, Variants: [finishedVariant]);
 
         return new ProductCatalogSnapshot([finishedProduct, materialProduct]);

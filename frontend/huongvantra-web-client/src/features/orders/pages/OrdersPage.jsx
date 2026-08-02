@@ -279,6 +279,23 @@ function OrdersPage() {
             Có hàng đang giữ
           </button>
 
+          <button
+            type="button"
+            onClick={() => {
+              setFilters((prev) => ({ ...prev, channel: prev.channel === 'B2B' ? '' : 'B2B' }))
+              setPage(1)
+            }}
+            aria-pressed={filters.channel === 'B2B'}
+            className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold ${
+              filters.channel === 'B2B'
+                ? 'border-indigo-300 bg-indigo-100 text-indigo-800'
+                : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+            }`}
+          >
+            <span className="material-symbols-outlined text-base">description</span>
+            Đơn hợp đồng
+          </button>
+
           {hasActiveFilters ? (
             <button
               type="button"

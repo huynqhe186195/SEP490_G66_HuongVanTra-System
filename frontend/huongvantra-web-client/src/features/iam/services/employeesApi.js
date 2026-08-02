@@ -23,6 +23,20 @@ export function fetchSalesAssignees() {
   )
 }
 
+export function fetchManagerAssignees() {
+  return apiRequestAuth('/api/employees/manager-assignees', { method: 'GET' }).then((data) =>
+    Array.isArray(data)
+      ? data
+          .map((item) => ({
+            userId: item.userId ?? item.UserId,
+            fullName: item.fullName ?? item.FullName ?? '',
+            department: item.department ?? item.Department ?? '',
+          }))
+          .filter((item) => item.userId)
+      : [],
+  )
+}
+
 export function fetchEmployeeById(id) {
   return apiRequestAuth(`/api/employees/${id}`, { method: 'GET' })
 }

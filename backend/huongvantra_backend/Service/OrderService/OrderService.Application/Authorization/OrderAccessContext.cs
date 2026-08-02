@@ -16,7 +16,10 @@ public record OrderAccessContext(
     Guid UserId,
     bool CanViewAllOrders,
     bool CanViewAllCodOrders = false,
-    bool CanViewOwnOrders = true)
+    bool CanViewOwnOrders = true,
+    bool CanCreateB2BOrder = false,
+    bool CanShipOrder = false,
+    bool CanConfirmB2BDelivery = false)
 {
     public bool CodOrdersOnly =>
         !CanViewAllOrders && CanViewAllCodOrders && !CanViewOwnOrders;
@@ -46,6 +49,10 @@ public record OrderAccessContext(
         if (CanViewAllOrders)
             return true;
 
+        // Đơn hợp đồng do Kế toán lập nhưng Thủ kho phải thao tác được bước xuất hàng.
+        if (IsContractOrder(order))
+            return CanShipOrder || CanConfirmB2BDelivery;
+
         if (IsCodOrder(order))
             return CanViewAllCodOrders;
 
@@ -66,4 +73,7 @@ public record OrderAccessContext(
 
     public static bool IsCodOrder(Order order) =>
         order.OrderChannel == OrderChannel.COD;
+
+    public static bool IsContractOrder(Order order) =>
+        order.ContractId.HasValue;
 }

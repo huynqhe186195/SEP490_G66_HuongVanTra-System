@@ -39,7 +39,9 @@ public enum PaymentMethod
     Cash,
     VietQR,
     BankTransfer,
-    COD
+    COD,
+    // Ghi nợ theo điều khoản hợp đồng B2B — không phải một lần thu tiền.
+    Debt
 }
 
 public enum PaymentStatus

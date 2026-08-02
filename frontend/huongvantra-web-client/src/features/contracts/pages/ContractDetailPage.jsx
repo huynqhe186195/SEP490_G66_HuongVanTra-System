@@ -27,6 +27,7 @@ const STATUS_BADGES = {
   PendingApproval: { label: 'Chờ duyệt', cls: 'bg-[#fef3c7] text-[#92400e]' },
   Active: { label: 'Hiệu lực', cls: 'bg-[#dcfce7] text-[#166534]' },
   Rejected: { label: 'Từ chối', cls: 'bg-[#fee2e2] text-[#991b1b]' },
+  Expired: { label: 'Hết hạn', cls: 'bg-[#e2e8f0] text-[#475569]' },
 }
 
 function StatusBadge({ status }) {
@@ -124,7 +125,7 @@ function ContractDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const session = useMemo(() => loadAuthSession(), [])
-  const isAdmin = canApproveContracts(session)
+  const canApprove = canApproveContracts(session)
   const currentUserId = session?.userId
 
   const [contract, setContract] = useState(null)
@@ -150,15 +151,17 @@ function ContractDetailPage() {
 
   async function handleSubmit() {
     if (!(await confirmDialog({
-      title: 'Gửi duyệt',
-      message: 'Gửi hợp đồng để duyệt? Bạn sẽ không thể chỉnh sửa cho đến khi Admin xem xét.',
+      title: canApprove ? 'Ban hành hợp đồng' : 'Gửi duyệt',
+      message: canApprove
+        ? 'Ban hành hợp đồng này? Hợp đồng sẽ có hiệu lực ngay và không thể chỉnh sửa.'
+        : 'Gửi hợp đồng để duyệt? Bạn sẽ không thể chỉnh sửa cho đến khi Quản lý phản hồi.',
       tone: 'primary',
     }))) return
     setIsActionBusy(true)
     try {
       const updated = await submitContract(id)
       setContract(updated)
-      showSuccess('Đã gửi hợp đồng chờ duyệt.')
+      showSuccess(canApprove ? 'Đã ban hành hợp đồng.' : 'Đã gửi hợp đồng chờ duyệt.')
     } catch (err) {
       showError(err?.message ?? 'Không thể gửi hợp đồng.')
     } finally {
@@ -227,11 +230,13 @@ function ContractDetailPage() {
   if (!contract) return null
 
   const isOwner = contract.createdByUserId === currentUserId
-  const isDraft = contract.status === 'Draft'
   const isPending = contract.status === 'PendingApproval'
+  const isRejected = contract.status === 'Rejected'
+  const isEditable = contract.status === 'Draft' || contract.status === 'Rejected'
 
-  const showEditActions = isOwner && isDraft
-  const showApproveActions = isAdmin && isPending
+  const showEditActions = isOwner && isEditable
+  // Người tạo không tự phán quyết hợp đồng của mình.
+  const showApproveActions = canApprove && isPending && !isOwner
 
   return (
     <PageShell>
@@ -262,7 +267,7 @@ function ContractDetailPage() {
                   className="inline-flex items-center gap-1.5 rounded-lg bg-[#1a1a1a] px-3 py-2 text-sm font-medium text-white hover:bg-[#333] disabled:opacity-50"
                 >
                   <span className="material-symbols-outlined text-base">send</span>
-                  Gửi duyệt
+                  {canApprove ? 'Ban hành' : 'Gửi duyệt'}
                 </button>
                 <button
                   onClick={handleDelete}
@@ -299,12 +304,29 @@ function ContractDetailPage() {
       />
 
       {/* Rejection note banner */}
-      {contract.status === 'Rejected' && contract.rejectionNote && (
+      {isRejected && contract.rejectionNote && (
         <div className="mb-6 flex gap-3 rounded-xl border border-[#fecaca] bg-[#fee2e2] px-4 py-3">
           <span className="material-symbols-outlined mt-0.5 text-base text-[#b42318]">report</span>
           <div>
             <p className="text-sm font-semibold text-[#991b1b]">Hợp đồng bị từ chối</p>
             <p className="mt-0.5 text-sm text-[#b42318]">{contract.rejectionNote}</p>
+            {isOwner && (
+              <p className="mt-1 text-xs text-[#b42318]">
+                Bạn có thể chỉnh sửa và gửi duyệt lại.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {isPending && isOwner && (
+        <div className="mb-6 flex gap-3 rounded-xl border border-[#fde68a] bg-[#fef3c7] px-4 py-3">
+          <span className="material-symbols-outlined mt-0.5 text-base text-[#92400e]">hourglass_top</span>
+          <div>
+            <p className="text-sm font-semibold text-[#92400e]">Đang chờ Quản lý phán quyết</p>
+            <p className="mt-0.5 text-sm text-[#92400e]">
+              Hợp đồng bị khóa chỉnh sửa cho tới khi có phản hồi. Nếu bị từ chối, bạn sẽ sửa lại được.
+            </p>
           </div>
         </div>
       )}
@@ -370,16 +392,23 @@ function ContractDetailPage() {
                 <div className="flex gap-2">
                   <span
                     className={`material-symbols-outlined mt-0.5 text-base ${
-                      contract.status === 'Active' ? 'text-[#166534]' : 'text-[#b42318]'
+                      isRejected ? 'text-[#b42318]' : 'text-[#166534]'
                     }`}
                   >
-                    {contract.status === 'Active' ? 'check_circle' : 'cancel'}
+                    {isRejected ? 'cancel' : 'check_circle'}
                   </span>
                   <div>
-                    <p className="font-medium text-[#1a1a1a]">
-                      {contract.status === 'Active' ? 'Đã duyệt' : 'Đã từ chối'}
-                    </p>
+                    <p className="font-medium text-[#1a1a1a]">{isRejected ? 'Đã từ chối' : 'Đã duyệt'}</p>
                     <p className="text-xs text-[#717971]">{formatDateTime(contract.reviewedAt)}</p>
+                  </div>
+                </div>
+              )}
+              {contract.status === 'Expired' && (
+                <div className="flex gap-2">
+                  <span className="material-symbols-outlined mt-0.5 text-base text-[#475569]">event_busy</span>
+                  <div>
+                    <p className="font-medium text-[#1a1a1a]">Đã hết hạn</p>
+                    <p className="text-xs text-[#717971]">{formatDate(contract.expiryDate)}</p>
                   </div>
                 </div>
               )}

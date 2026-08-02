@@ -106,13 +106,6 @@ public record CreateCustomBundleIngredientRequest(
 
 public record ReprintReceiptRequest(string Reason);
 
-public record GetB2BDebtsRequest(
-    string? CustomerId = null,
-    bool OverdueOnly = false,
-    string? Page = null,
-    string? PageSize = null
-);
-
 public record GetOrdersRequest(
     string? Search,
     string? CustomerId,

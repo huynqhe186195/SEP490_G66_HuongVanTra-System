@@ -31,12 +31,6 @@ public class OrdersController(OrderLogic orderLogic, ReceiptReprintLogic receipt
     public async Task<IActionResult> GetByCode(string orderCode, CancellationToken ct) =>
         Ok(await orderLogic.GetByCodeAsync(orderCode, AccessContext(), ct));
 
-    [HttpGet("b2b-debts")]
-    [Authorize(Policy = PermissionNames.ViewOrder)]
-    public async Task<IActionResult> GetB2BDebts(
-        [FromQuery] GetB2BDebtsRequest request, CancellationToken ct) =>
-        Ok(await orderLogic.GetB2BDebtsAsync(request, ct));
-
     [HttpGet("return-slips")]
     [Authorize(Policy = PermissionNames.ViewOrder)]
     public async Task<IActionResult> GetReturnSlipsPaged(
@@ -89,13 +83,19 @@ public class OrdersController(OrderLogic orderLogic, ReceiptReprintLogic receipt
     [Authorize]
     public async Task<IActionResult> Create([FromBody] CreateOrderRequest request, CancellationToken ct)
     {
-        if (IsCodCheckout(request) && !CanOperateCod())
+        if (IsB2BCheckout(request) && !CanOperateB2B())
+            return StatusCode(StatusCodes.Status403Forbidden, new
+            {
+                message = "Chỉ Kế toán / Quản lý mới được lập đơn bán theo hợp đồng."
+            });
+
+        if (!IsB2BCheckout(request) && IsCodCheckout(request) && !CanOperateCod())
             return StatusCode(StatusCodes.Status403Forbidden, new
             {
                 message = "Chỉ Sale COD / Quản lý mới được tạo đơn COD."
             });
 
-        if (!IsCodCheckout(request) && !CanOperatePosCounter())
+        if (!IsB2BCheckout(request) && !IsCodCheckout(request) && !CanOperatePosCounter())
             return StatusCode(StatusCodes.Status403Forbidden, new
             {
                 message = "Chỉ Sale quầy (POS) / Quản lý mới được tạo đơn bán tại quầy."
@@ -115,9 +115,16 @@ public class OrdersController(OrderLogic orderLogic, ReceiptReprintLogic receipt
     private bool CanOperatePosCounter() =>
         User.HasPermission(PermissionNames.CreatePosOrder);
 
+    private bool CanOperateB2B() =>
+        User.HasPermission(PermissionNames.CreateB2BOrder);
+
     private static bool IsCodCheckout(CreateOrderRequest request) =>
         request.OrderChannel == OrderService.Domain.Enums.OrderChannel.COD
         || request.PaymentMethod == OrderService.Domain.Enums.PaymentMethod.COD;
+
+    private static bool IsB2BCheckout(CreateOrderRequest request) =>
+        request.OrderChannel == OrderService.Domain.Enums.OrderChannel.B2B
+        || request.ContractId.HasValue;
 
     [HttpPut("{id:guid}")]
     [Authorize(Policy = PermissionNames.CreateOrder)]
@@ -137,7 +144,7 @@ public class OrdersController(OrderLogic orderLogic, ReceiptReprintLogic receipt
     }
 
     [HttpPost("{id:guid}/ship")]
-    [Authorize(Policy = PermissionNames.CreateOrder)]
+    [Authorize(Policy = PermissionNames.ShipOrderAccess)]
     public async Task<IActionResult> Ship(Guid id, CancellationToken ct)
     {
         var (actorId, actorName) = Actor();

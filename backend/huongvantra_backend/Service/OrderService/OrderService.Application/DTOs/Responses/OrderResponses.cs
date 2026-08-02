@@ -44,19 +44,6 @@ public record OrderResponse(
     DateTime? DueDate = null
 );
 
-public record B2BDebtResponse(
-    Guid OrderId,
-    string OrderCode,
-    Guid? CustomerId,
-    string? CustomerSnapshotName,
-    string? ContractCodeSnapshot,
-    decimal FinalAmount,
-    decimal PaidAmount,
-    decimal RemainingAmount,
-    DateTime? DueDate,
-    int DaysOverdue,
-    DateTime CreatedAt);
-
 public record StockHandlingLineResponse(    Guid SkuId,
     string? SkuCode,
     string SkuName,

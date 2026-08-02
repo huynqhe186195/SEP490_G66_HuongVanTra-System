@@ -171,11 +171,11 @@ public class InventoryLogic(
             {
                 await TryAutoConfirmQueueAsync(existingQueue.Id, ct);
             }
-            else if (IsCodOrderChannel(message.OrderChannel)
+            else if (RequiresStockReservation(message.OrderChannel)
                 && existingQueue.QueueStatus == QueueStatus.Waiting
                 && !existingQueue.IsDeducted)
             {
-                // POS-04 (quyết định #5): chỉ đơn COD chờ xác nhận mới giữ chỗ tồn Kệ Hàng
+                // POS-04: đơn COD chờ thu tiền và đơn hợp đồng chờ giao đều giữ chỗ tồn Kệ Hàng
                 // (idempotent). Các kênh khác chưa thanh toán không tự giữ chỗ.
                 await ReserveQueueStockAsync(existingQueue.Id, ct);
             }
@@ -217,9 +217,9 @@ public class InventoryLogic(
 
         if (IsPaidOrderPaymentStatus(paymentStatus))
             await TryAutoConfirmQueueAsync(queue.Id, ct);
-        else if (IsCodOrderChannel(message.OrderChannel))
-            // POS-04 (quyết định #5): đơn COD chờ xác nhận → giữ chỗ tồn Kệ Hàng ngay khi
-            // vào queue. Kênh khác chưa thanh toán (Website/Zalo/Phone) không tự giữ chỗ.
+        else if (RequiresStockReservation(message.OrderChannel))
+            // POS-04: đơn COD chờ thu tiền và đơn hợp đồng (B2B) chờ giao → giữ chỗ tồn Kệ Hàng
+            // ngay khi vào queue. Kênh khác chưa thanh toán (Website/Zalo/Phone) không tự giữ chỗ.
             await ReserveQueueStockAsync(queue.Id, ct);
     }
 
@@ -239,11 +239,16 @@ public class InventoryLogic(
     }
 
     /// <summary>
-    /// POS-04 (quyết định #5): chỉ đơn kênh COD (tạo qua workflow có quyền COD) mới giữ chỗ.
-    /// OrderChannel rỗng = contract cũ trước khi thêm field → không coi là COD.
+    /// POS-04 mở rộng: COD (chờ thu tiền) và B2B (chờ giao theo hợp đồng) đều cam kết hàng
+    /// từ lúc lập đơn ⇒ giữ chỗ tồn Kệ Hàng.
+    /// OrderChannel rỗng = đơn cũ trước khi thêm field → không giữ chỗ.
     /// </summary>
-    private static bool IsCodOrderChannel(string? channel) =>
-        string.Equals((channel ?? string.Empty).Trim(), "COD", StringComparison.OrdinalIgnoreCase);
+    private static bool RequiresStockReservation(string? channel)
+    {
+        var key = (channel ?? string.Empty).Trim();
+        return key.Equals("COD", StringComparison.OrdinalIgnoreCase)
+            || key.Equals("B2B", StringComparison.OrdinalIgnoreCase);
+    }
 
     private async Task TryAutoConfirmQueueAsync(Guid queueId, CancellationToken ct)
     {

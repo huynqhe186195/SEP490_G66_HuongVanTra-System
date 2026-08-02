@@ -1,6 +1,8 @@
+using System.Net;
 using System.Net.Http.Json;
 using Microsoft.Extensions.Logging;
 using OrderService.Application.Interfaces;
+using OrderService.Domain.Exceptions;
 
 namespace OrderService.Infrastructure.Services;
 
@@ -8,11 +10,33 @@ public class CustomerCatalogClient(HttpClient httpClient, ILogger<CustomerCatalo
 {
     public async Task<CustomerCatalogProfile?> GetCustomerAsync(Guid customerId, CancellationToken ct = default)
     {
+        HttpResponseMessage httpResponse;
         try
         {
-            var response = await httpClient.GetFromJsonAsync<CustomerCatalogResponse>(
-                $"api/customers/{customerId}",
-                cancellationToken: ct);
+            httpResponse = await httpClient.GetAsync($"api/customers/{customerId}", ct);
+        }
+        catch (Exception ex) when (
+            ex is HttpRequestException ||
+            ex is TaskCanceledException && !ct.IsCancellationRequested)
+        {
+            // Không được nuốt lỗi: khách doanh nghiệp sẽ lọt qua toàn bộ ràng buộc hợp đồng/hạn mức.
+            logger.LogError(ex, "CustomerService unreachable while resolving customer {CustomerId}", customerId);
+            throw new OrderDependencyUnavailableException("Khách hàng", ex);
+        }
+
+        if (httpResponse.StatusCode == HttpStatusCode.NotFound)
+            return null;
+
+        if (!httpResponse.IsSuccessStatusCode)
+        {
+            logger.LogError("CustomerService returned {StatusCode} for customer {CustomerId}",
+                (int)httpResponse.StatusCode, customerId);
+            throw new OrderDependencyUnavailableException("Khách hàng");
+        }
+
+        try
+        {
+            var response = await httpResponse.Content.ReadFromJsonAsync<CustomerCatalogResponse>(ct);
 
             return response is null
                 ? null
@@ -26,12 +50,10 @@ public class CustomerCatalogClient(HttpClient httpClient, ILogger<CustomerCatalo
                     response.Tier?.DiscountPercent ?? 0m,
                     response.CurrentDebt);
         }
-        catch (Exception ex) when (
-            ex is HttpRequestException or NotSupportedException ||
-            ex is TaskCanceledException && !ct.IsCancellationRequested)
+        catch (Exception ex) when (ex is NotSupportedException or System.Text.Json.JsonException)
         {
-            logger.LogWarning(ex, "Unable to resolve customer {CustomerId} for promotion tier validation", customerId);
-            return null;
+            logger.LogError(ex, "Invalid customer payload for {CustomerId}", customerId);
+            throw new OrderDependencyUnavailableException("Khách hàng", ex);
         }
     }
 

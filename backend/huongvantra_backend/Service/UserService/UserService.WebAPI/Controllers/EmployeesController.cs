@@ -22,6 +22,14 @@ public class EmployeesController(EmployeeLogic employeeLogic) : ControllerBase
         return Ok(result);
     }
 
+    [HttpGet("manager-assignees")]
+    [Authorize(Policy = PermissionNames.ViewAllCustomers)]
+    public async Task<IActionResult> GetManagerAssignees()
+    {
+        var result = await employeeLogic.GetManagerAssigneesAsync();
+        return Ok(result);
+    }
+
     [HttpGet]
     [Authorize(Policy = PermissionNames.ManageEmployee)]
     public async Task<IActionResult> GetAll([FromQuery] int page = 1, [FromQuery] int pageSize = 20)

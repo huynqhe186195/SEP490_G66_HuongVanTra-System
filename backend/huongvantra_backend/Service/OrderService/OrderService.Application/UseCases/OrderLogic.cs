@@ -88,45 +88,6 @@ public class OrderLogic(
             (int)Math.Ceiling((double)total / pageSize));
     }
 
-    public async Task<PagedResponse<B2BDebtResponse>> GetB2BDebtsAsync(
-        GetB2BDebtsRequest req, CancellationToken ct = default)
-    {
-        var page = ParsePositiveInt(req.Page, 1);
-        var pageSize = Math.Clamp(ParsePositiveInt(req.PageSize, 20), 1, 200);
-        OrderInputValidator.ValidatePagination(page, pageSize);
-
-        var customerId = ParseOptionalGuid(req.CustomerId);
-        var today = DateTime.UtcNow.Date;
-
-        var (items, total) = await _orderRepo.GetB2BDebtsAsync(
-            customerId, req.OverdueOnly, today, page, pageSize, ct);
-
-        var dtos = items.Select(o =>
-        {
-            var paid = GetOrderCollectedAmount(o);
-            var daysOverdue = o.DueDate is DateTime due && due < today
-                ? (int)(today - due.Date).TotalDays
-                : 0;
-
-            return new B2BDebtResponse(
-                o.Id,
-                o.OrderCode,
-                o.CustomerId,
-                o.CustomerSnapshotName,
-                o.ContractCodeSnapshot,
-                o.FinalAmount,
-                paid,
-                Math.Max(0, o.FinalAmount - paid),
-                o.DueDate,
-                daysOverdue,
-                o.CreatedAt);
-        }).ToList();
-
-        return new PagedResponse<B2BDebtResponse>(
-            dtos, page, pageSize, total,
-            (int)Math.Ceiling((double)total / pageSize));
-    }
-
     private static int ParsePositiveInt(string? value, int fallback)
     {
         return int.TryParse(value, out var parsed) && parsed > 0 ? parsed : fallback;
@@ -349,7 +310,10 @@ public class OrderLogic(
             req.OrderChannel, req.ShippingAddress,
             hasCustomBundles: (req.CustomBundles ?? []).Any(b => (b.Ingredients ?? []).Count > 0));
 
-        await _shiftGuard.EnsureShelfOnDutyAsync(access, ct);
+        // Đơn hợp đồng do Kế toán lập ngoài quầy — không thuộc ca bán hàng Kệ Hàng.
+        var isContractCheckout = req.ContractId.HasValue || req.OrderChannel == OrderChannel.B2B;
+        if (!isContractCheckout)
+            await _shiftGuard.EnsureShelfOnDutyAsync(access, ct);
 
         if (req.OrderKind != OrderKind.Exchange)
         {
@@ -365,6 +329,11 @@ public class OrderLogic(
         ContractCatalogProfile? contract = null;
         if (customer?.IsDoanhNghiep == true)
         {
+            // B2B chỉ bán qua kênh hợp đồng — POS/COD không phục vụ khách doanh nghiệp.
+            if (req.OrderChannel is OrderChannel.POS or OrderChannel.COD)
+                throw new OrderValidationException(
+                    "Khách doanh nghiệp phải lập đơn theo hợp đồng tại mục «Bán theo hợp đồng», không bán tại quầy POS.");
+
             contract = await _contractCatalogClient.GetActiveContractAsync(customer.Id, ct);
             OrderBusinessRules.EnsureContractRequiredForCorporate(customer.CustomerGroup, contract?.Id);
 
@@ -438,8 +407,13 @@ public class OrderLogic(
 
         if (contract is not null)
         {
+            // B2: CurrentDebt bên CustomerService chỉ tăng khi đơn Completed ⇒ phải cộng thêm
+            // nợ của các đơn hợp đồng đang chờ, nếu không lập nhiều đơn liên tiếp sẽ lọt hạn mức.
+            var pendingContractDebt = await _orderRepo.GetPendingContractDebtAsync(
+                customer!.Id, excludeOrderId: null, ct);
+
             OrderBusinessRules.EnsureCreditLimitNotExceeded(
-                customer!.CurrentDebt,
+                customer.CurrentDebt + pendingContractDebt,
                 Math.Max(0, finalAmount - allocatedPaymentTotal),
                 contract.CreditLimit);
         }
@@ -1075,6 +1049,24 @@ public class OrderLogic(
             }
         }
 
+        // B5: tạo đơn nhỏ (qua hạn mức) rồi sửa lên số lớn phải bị chặn như lúc tạo.
+        // Dùng snapshot ContractId của đơn — không cho đổi hợp đồng khi sửa.
+        if (order.ContractId.HasValue && order.CustomerId.HasValue && remainingAmount > 0)
+        {
+            var contract = await _contractCatalogClient.GetActiveContractAsync(order.CustomerId.Value, ct);
+            if (contract is not null)
+            {
+                var customerProfile = await _customerCatalogClient.GetCustomerAsync(order.CustomerId.Value, ct);
+                var pendingContractDebt = await _orderRepo.GetPendingContractDebtAsync(
+                    order.CustomerId.Value, excludeOrderId: order.Id, ct);
+
+                OrderBusinessRules.EnsureCreditLimitNotExceeded(
+                    (customerProfile?.CurrentDebt ?? 0m) + pendingContractDebt,
+                    remainingAmount,
+                    contract.CreditLimit);
+            }
+        }
+
         await RecordActivityAsync(
             order.Id,
             OrderActivityType.Updated,
@@ -1134,7 +1126,8 @@ public class OrderLogic(
         var order = await _orderRepo.GetByIdAsync(id, ct)
             ?? throw new OrderNotFoundException(id);
         EnsureCanModify(order, access);
-        await _shiftGuard.EnsureShelfOnDutyAsync(access, ct);
+        if (!OrderAccessContext.IsContractOrder(order))
+            await _shiftGuard.EnsureShelfOnDutyAsync(access, ct);
 
         if (order.OrderStatus == OrderStatus.Completed || order.OrderStatus == OrderStatus.Cancelled)
             throw new OrderCannotBeCancelledException(id, order.OrderStatus.ToString());
@@ -1265,7 +1258,16 @@ public class OrderLogic(
         var order = await _orderRepo.GetByIdAsync(id, ct)
             ?? throw new OrderNotFoundException(id);
         EnsureCanModify(order, access);
-        await _shiftGuard.EnsureShelfOnDutyAsync(access, ct);
+        if (OrderAccessContext.IsContractOrder(order))
+        {
+            // Bước 2 của luồng hợp đồng: chỉ Thủ kho / Quản lý xác nhận xuất hàng.
+            if (!access.CanShipOrder)
+                throw new OrderForbiddenException();
+        }
+        else
+        {
+            await _shiftGuard.EnsureShelfOnDutyAsync(access, ct);
+        }
 
         if (order.OrderStatus != OrderStatus.Processing && order.OrderStatus != OrderStatus.PendingPayment)
             throw new OrderCannotBeModifiedException(id, order.OrderStatus.ToString());
@@ -1307,7 +1309,20 @@ public class OrderLogic(
         var order = await _orderRepo.GetByIdAsync(id, ct)
             ?? throw new OrderNotFoundException(id);
         EnsureCanModify(order, access);
-        await _shiftGuard.EnsureShelfOnDutyAsync(access, ct);
+        if (OrderAccessContext.IsContractOrder(order))
+        {
+            // Bước 3 của luồng hợp đồng: chỉ Kế toán / Quản lý xác nhận khách đã ký nhận.
+            if (!access.CanConfirmB2BDelivery)
+                throw new OrderForbiddenException();
+
+            if (order.OrderStatus != OrderStatus.Shipping)
+                throw new OrderValidationException(
+                    "Đơn hợp đồng phải được kho xác nhận xuất hàng trước khi hoàn tất.");
+        }
+        else
+        {
+            await _shiftGuard.EnsureShelfOnDutyAsync(access, ct);
+        }
 
         if (order.OrderStatus == OrderStatus.Cancelled || order.OrderStatus == OrderStatus.Completed)
             throw new OrderCannotBeModifiedException(id, order.OrderStatus.ToString());
@@ -1431,6 +1446,38 @@ public class OrderLogic(
             completedDebt = Math.Max(0, order.FinalAmount - paidAmount);
             await EnqueueOrderCompletedAsync(order, completedDebt, ct);
             shouldSendInvoice = true;
+        }
+
+        // B6: đơn hợp đồng còn dư nợ khi bàn giao → ghi một dòng Deferred để phân biệt
+        // "đã ghi nợ theo điều khoản" với "payment chưa xử lý".
+        if (completedDebt > 0
+            && OrderAccessContext.IsContractOrder(order)
+            && !payments.Any(p => p.PaymentMethod == PaymentMethod.Debt))
+        {
+            var debtRecordedAt = DateTime.UtcNow;
+            await _paymentRepo.AddAsync(new Payment
+            {
+                Id = Guid.NewGuid(),
+                OrderId = order.Id,
+                PaymentMethod = PaymentMethod.Debt,
+                Amount = completedDebt,
+                PaymentStatus = PaymentStatus.Deferred,
+                IsCodVerified = false,
+                CodWarningDate = null,
+                PaidAt = null,
+                CreatedAt = debtRecordedAt,
+                UpdatedAt = debtRecordedAt
+            }, ct);
+
+            await RecordActivityAsync(
+                order.Id,
+                OrderActivityType.PaymentPending,
+                order.DueDate.HasValue
+                    ? $"Ghi nợ {completedDebt:N0}đ theo điều khoản hợp đồng, hạn thanh toán {order.DueDate.Value:dd/MM/yyyy}."
+                    : $"Ghi nợ {completedDebt:N0}đ theo điều khoản hợp đồng.",
+                actorId,
+                actorName,
+                ct);
         }
 
         await _orderRepo.SaveChangesAsync(ct);
@@ -1959,6 +2006,9 @@ public class OrderLogic(
         foreach (var payment in payments)
         {
             if (payment.PaymentMethod == PaymentMethod.COD) continue;
+            // Dòng ghi nợ hợp đồng là công nợ đang mở, không phải payment lỡ kẹt ở Pending.
+            if (payment.PaymentMethod == PaymentMethod.Debt) continue;
+            if (payment.PaymentStatus == PaymentStatus.Deferred) continue;
             if (payment.PaymentStatus == PaymentStatus.Success) continue;
 
             var shouldBeSuccess = order.OrderChannel == OrderChannel.POS
@@ -2211,6 +2261,7 @@ public class OrderLogic(
         PaymentMethod.VietQR => "VietQR",
         PaymentMethod.BankTransfer => "chuyển khoản",
         PaymentMethod.COD => "COD",
+        PaymentMethod.Debt => "ghi nợ theo hợp đồng",
         _ => method.ToString()
     };
 

@@ -6,7 +6,7 @@ import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/Tab
 import { confirmDialog } from '../../../app/dialog.js'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
-import { canCreateContracts, canApproveContracts } from '../../auth/utils/permissions.js'
+import { canCreateContracts } from '../../auth/utils/permissions.js'
 import { fetchContracts, deleteContract } from '../services/contractsApi.js'
 
 const STATUS_TABS = [
@@ -15,6 +15,7 @@ const STATUS_TABS = [
   { key: 'PendingApproval', label: 'Chờ duyệt' },
   { key: 'Active', label: 'Hiệu lực' },
   { key: 'Rejected', label: 'Từ chối' },
+  { key: 'Expired', label: 'Hết hạn' },
 ]
 
 const CONTRACT_TYPE_LABELS = {
@@ -29,6 +30,7 @@ const STATUS_BADGES = {
   PendingApproval: { label: 'Chờ duyệt', cls: 'bg-[#fef3c7] text-[#92400e]' },
   Active: { label: 'Hiệu lực', cls: 'bg-[#dcfce7] text-[#166534]' },
   Rejected: { label: 'Từ chối', cls: 'bg-[#fee2e2] text-[#991b1b]' },
+  Expired: { label: 'Hết hạn', cls: 'bg-[#e2e8f0] text-[#475569]' },
 }
 
 function StatusBadge({ status }) {
@@ -52,7 +54,6 @@ function ContractsPage() {
   const navigate = useNavigate()
   const session = useMemo(() => loadAuthSession(), [])
   const canCreate = canCreateContracts(session)
-  const isAdmin = canApproveContracts(session)
   const currentUserId = session?.userId
 
   const [statusTab, setStatusTab] = useState('')
@@ -176,6 +177,7 @@ function ContractsPage() {
                 <th className={TH}>Loại</th>
                 <th className={TH}>Tiêu đề</th>
                 <th className={TH}>Ngày hiệu lực</th>
+                <th className={TH}>Ngày hết hạn</th>
                 <th className={TH}>Trạng thái</th>
                 <th className={TH}></th>
               </tr>
@@ -183,21 +185,22 @@ function ContractsPage() {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-10 text-center text-sm text-[#717971]">
+                  <td colSpan={8} className="px-6 py-10 text-center text-sm text-[#717971]">
                     Đang tải...
                   </td>
                 </tr>
               ) : contracts.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-10 text-center text-sm text-[#717971]">
+                  <td colSpan={8} className="px-6 py-10 text-center text-sm text-[#717971]">
                     Không có hợp đồng nào.
                   </td>
                 </tr>
               ) : (
                 contracts.map((c) => {
                   const isOwner = c.createdByUserId === currentUserId
-                  const canEdit = isOwner && c.status === 'Draft'
-                  const canDel = isOwner && c.status === 'Draft'
+                  const isEditable = c.status === 'Draft' || c.status === 'Rejected'
+                  const canEdit = isOwner && isEditable
+                  const canDel = isOwner && isEditable
                   return (
                     <tr key={c.id} className="hover:bg-[#fafaf8]">
                       <td className={TD}>
@@ -219,6 +222,9 @@ function ContractsPage() {
                       </td>
                       <td className={TD}>
                         <span className="text-sm text-[#717971]">{formatDate(c.effectiveDate)}</span>
+                      </td>
+                      <td className={TD}>
+                        <span className="text-sm text-[#717971]">{formatDate(c.expiryDate)}</span>
                       </td>
                       <td className={TD}>
                         <StatusBadge status={c.status} />

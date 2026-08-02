@@ -16,7 +16,6 @@ const ROLE_GROUPS = {
 const SIDEBAR_DISABLED_MODULES = new Set([
   'reports',
   'integrations',
-  'contracts',
   'inventory_reports',
 ])
 
@@ -38,7 +37,6 @@ const HOME_MODULE_PRIORITY = [
 
 // --- Tạm ẩn (chưa xử lý backend) ---
 // { label: 'Sản phẩm', path: '/products', module: 'products', roles: ['admin', 'agencyManager', 'inventoryManager'] },
-// { label: 'Hợp đồng', path: '/contracts', module: 'contracts', roles: ['admin', 'agencyManager'] },
 // { label: 'Báo cáo', path: '/reports', module: 'reports', roles: ['admin', 'agencyManager', 'accountant'] },
 // { label: 'Tích hợp', path: '/integrations', module: 'integrations', roles: ['admin'] },
 
@@ -53,6 +51,12 @@ export const navigationItems = [
     roles: ['admin', 'agencyManager', 'salePos', 'saleCod', 'accountant'],
     children: [
       {
+        label: 'Bán theo hợp đồng',
+        path: '/orders/create',
+        module: 'orders',
+        roles: ['admin', 'agencyManager', 'accountant'],
+      },
+      {
         label: 'Quản Lý Đơn POS',
         path: '/orders',
         module: 'orders',
@@ -63,12 +67,6 @@ export const navigationItems = [
         path: '/orders/cod',
         module: 'cod_ops',
         roles: ['admin', 'agencyManager', 'saleCod'],
-      },
-      {
-        label: 'Công nợ doanh nghiệp',
-        path: '/orders/b2b-debts',
-        module: 'orders',
-        roles: ['admin', 'agencyManager', 'accountant'],
       },
     ],
   },
@@ -93,7 +91,7 @@ export const navigationItems = [
       sectionScope: 'customers',
     })),
   },
-  { label: 'Hợp đồng', path: '/contracts', module: 'contracts', icon: 'description', roles: ['admin', 'agencyManager'] },
+  { label: 'Hợp đồng', path: '/contracts', module: 'contracts', icon: 'description', roles: ['admin', 'agencyManager', 'accountant'] },
   { label: 'Sản phẩm & Số lượng', path: '/inventory/products', module: 'products', icon: 'inventory_2', roles: ['admin', 'agencyManager', 'inventoryManager'] },
   { label: 'Danh Mục Sản Phẩm', path: '/products/categories', module: 'products', icon: 'category', roles: ['admin', 'agencyManager', 'inventoryManager'] },
   { label: 'Lịch sử tạo hàng hóa', path: '/inventory/product-approvals', module: 'product_creation_requests', icon: 'verified', roles: ['admin', 'agencyManager', 'inventoryManager'] },

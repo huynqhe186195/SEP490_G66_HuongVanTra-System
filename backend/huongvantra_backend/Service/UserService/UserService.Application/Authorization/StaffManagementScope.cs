@@ -6,6 +6,7 @@ namespace UserService.Application.Authorization;
 public static class StaffManagementScope
 {
     public const string AdminRoleName = "Admin";
+    public const string ManagerRoleName = "Manager";
     public const string SaleRoleName = "Sale";
     public const string SalePosRoleName = "SalePos";
     public const string SaleCodRoleName = "SaleCod";
@@ -116,6 +117,10 @@ public static class StaffManagementScope
 
     public static bool IsSaleRole(string? roleName) =>
         !string.IsNullOrWhiteSpace(roleName) && SaleFamilyRoles.Contains(roleName);
+
+    public static bool IsManagerRole(string? roleName) =>
+        !string.IsNullOrWhiteSpace(roleName)
+        && string.Equals(roleName, ManagerRoleName, StringComparison.OrdinalIgnoreCase);
 
     public static bool IsManagerViewableRole(string? roleName) =>
         !string.IsNullOrWhiteSpace(roleName) && ManagerViewableRoles.Contains(roleName);
