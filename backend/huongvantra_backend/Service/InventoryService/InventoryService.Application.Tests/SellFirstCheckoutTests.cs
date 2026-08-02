@@ -65,7 +65,6 @@ public sealed class SellFirstCheckoutTests
             Mock.Of<IStockExportBatchAllocationRepository>(),
             Mock.Of<IInventoryLedgerRepository>(),
             Mock.Of<ISupplierReceiptRepository>(),
-            Mock.Of<IShelfReturnRequestRepository>(),
             Mock.Of<ISupplierReturnRequestRepository>(),
             Mock.Of<IStocktakeRequestRepository>(),
             Mock.Of<IShelfReplenishmentSuggestionRepository>(),

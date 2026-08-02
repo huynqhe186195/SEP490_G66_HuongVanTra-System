@@ -205,7 +205,7 @@ function ReturnInspectionsPage() {
             <thead className="bg-[#fbf9f1]/50 text-xs font-bold uppercase tracking-wider text-slate-400">
               <tr>
                 <th className="px-8 py-4">Mã trả / Đơn</th>
-                <th className="px-4 py-4">SKU</th>
+                <th className="px-4 py-4">Sản Phẩm</th>
                 <th className="px-4 py-4 text-right">SL</th>
                 <th className="px-4 py-4">Quyết định</th>
                 <th className="px-4 py-4">Người kiểm tra</th>
@@ -247,8 +247,8 @@ function ReturnInspectionsPage() {
                           )}
                         </td>
                         <td className="px-4 py-5 text-sm text-slate-600">
-                          <p className="font-semibold">{row.skuCode || '—'}</p>
-                          <p className="text-xs text-slate-400">{row.skuSnapshotName}</p>
+                          <p className="font-semibold text-slate-900">{row.skuSnapshotName || '—'}</p>
+                          <p className="font-mono text-xs text-slate-400">{row.skuCode}</p>
                         </td>
                         <td className="px-4 py-5 text-right font-semibold text-slate-700">
                           {row.quantity}

@@ -125,6 +125,17 @@ public class StockAdjustmentRequestsController(InventoryLogic _logic) : Controll
         return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
     }
 
+    /// <summary>
+    /// Kiểm tra trước các SKU sắp gửi có trùng yêu cầu nào chưa xử lý xong không.
+    /// Không tạo dữ liệu; dùng để màn hình tạo yêu cầu chặn sớm trước bước xác nhận.
+    /// </summary>
+    [HttpPost("check-duplicates")]
+    [Authorize(Roles = CreateRoles)]
+    public async Task<IActionResult> CheckDuplicates(
+        [FromBody] CheckStockAdjustmentDuplicatesRequest request,
+        CancellationToken ct) =>
+        Ok(await _logic.CheckStockAdjustmentDuplicatesAsync(request.SkuIds ?? [], ct));
+
     /// <summary>Warehouse duyệt/từ chối theo từng dòng. Không làm thay đổi tồn kho.</summary>
     [HttpPost("{id:guid}/review")]
     [Authorize(Roles = "Warehouse")]

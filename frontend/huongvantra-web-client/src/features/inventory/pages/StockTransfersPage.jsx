@@ -381,7 +381,7 @@ function TransferDetailModal({ transfer, canOperate, isCompleting, onClose, onEd
             <table className="min-w-full text-left text-sm">
               <thead className="bg-slate-50 text-xs font-bold uppercase text-slate-500">
                 <tr>
-                  <th className="px-4 py-3">SKU</th>
+                  <th className="px-4 py-3">Sản Phẩm</th>
                   <th className="px-4 py-3 text-right">{STOCK_FLOW_TERMS.transferQuantity}</th>
                   <th className="px-4 py-3 text-right">Phân bổ lô</th>
                 </tr>
@@ -390,8 +390,8 @@ function TransferDetailModal({ transfer, canOperate, isCompleting, onClose, onEd
                 {transfer.lines.map((line) => (
                   <tr key={line.id}>
                     <td className="px-4 py-3">
-                      <p className="font-mono font-semibold text-[#356647]">{line.skuCode}</p>
-                      <p className="text-xs text-slate-500">{line.skuNameSnapshot}</p>
+                      <p className="font-semibold text-slate-900">{line.skuNameSnapshot}</p>
+                      <p className="font-mono text-xs text-slate-500">{line.skuCode}</p>
                     </td>
                     <td className="px-4 py-3 text-right font-semibold">{formatStockQuantity(line.quantity)}</td>
                     <td className="px-4 py-3 text-right">{line.batchAllocations.length || '—'}</td>

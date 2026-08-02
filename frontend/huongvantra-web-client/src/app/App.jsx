@@ -24,6 +24,7 @@ import InventoryImportCreatePage from '../features/inventory/pages/InventoryImpo
 import InventoryImportPage from '../features/inventory/pages/InventoryImportPage.jsx'
 import InventoryLedgerPage from '../features/inventory/pages/InventoryLedgerPage.jsx'
 import InventoryReportsPage from '../features/inventory/pages/InventoryReportsPage.jsx'
+import InventoryReturnCreatePage from '../features/inventory/pages/InventoryReturnCreatePage.jsx'
 import InventoryReturnsPage from '../features/inventory/pages/InventoryReturnsPage.jsx'
 import InventoryStockPage from '../features/inventory/pages/InventoryStockPage.jsx'
 import InventoryStocktakePage from '../features/inventory/pages/InventoryStocktakePage.jsx'
@@ -126,6 +127,7 @@ function App() {
         <Route path="/inventory/import" element={<InventoryImportPage />} />
         <Route path="/inventory/import/create" element={<InventoryImportCreatePage />} />
         <Route path="/inventory/returns" element={<InventoryReturnsPage />} />
+        <Route path="/inventory/returns/create" element={<InventoryReturnCreatePage />} />
         <Route path="/inventory/return-inspections" element={<ReturnInspectionsPage />} />
         <Route path="/inventory/stocktake" element={<InventoryStocktakePage />} />
         <Route path="/inventory/reports" element={<InventoryReportsPage />} />

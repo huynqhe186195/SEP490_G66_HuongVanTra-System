@@ -465,7 +465,7 @@ function groupAdminManagerSidebar(items, isAdmin) {
       ['/products/categories', 'Danh mục sản phẩm'],
       ['/accounting/cost-profit', 'Bảng giá vốn & giá bán'],
       ['/products/retail-price-requests', 'Yêu cầu đổi giá bán'],
-      ['/inventory/stocktake', 'Kiểm kê Kệ Hàng'],
+      ['/inventory/stocktake', 'Kiểm kê kệ hàng'],
       ['/inventory/ledger', 'Nhật ký kho'],
       ['/inventory/stock-requests', 'Yêu cầu bổ sung Kệ Hàng'],
       ['/admin/inventory-sync', 'Đồng bộ tồn kho'],

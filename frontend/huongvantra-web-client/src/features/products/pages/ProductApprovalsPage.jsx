@@ -1877,7 +1877,7 @@ function ProductRow({ row, rowIndex, categories, materials, existingProducts, at
                       <table className="min-w-full text-left text-xs">
                         <thead className="text-slate-500">
                           <tr>
-                            <th className="py-2 pr-3">Component SKU</th>
+                            <th className="py-2 pr-3">Sản Phẩm</th>
                             <th className="py-2 pr-3">Định mức</th>
                             <th className="py-2 text-right">Thao tác</th>
                           </tr>
@@ -1887,7 +1887,7 @@ function ProductRow({ row, rowIndex, categories, materials, existingProducts, at
                             <tr key={`${line.componentVariantId || line.componentRequestSkuKey || line.materialId}-${lineIndex}`} className={line.isRequiredBaseComponent ? 'bg-emerald-50/45' : ''}>
                               <td className="py-2 pr-3">
                                 <div className="flex flex-wrap items-center gap-2">
-                                  <p className="font-semibold text-slate-700">{line.componentSkuCode || line.materialName || line.materialId}</p>
+                                  <p className="font-semibold text-slate-700">{line.componentVariantName || line.materialName || line.materialId}</p>
                                   {line.isRequiredBaseComponent ? (
                                     <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-bold text-emerald-700">
                                       <span className="material-symbols-outlined text-[14px]">lock</span>
@@ -1895,7 +1895,7 @@ function ProductRow({ row, rowIndex, categories, materials, existingProducts, at
                                     </span>
                                   ) : null}
                                 </div>
-                                <p className="text-[11px] text-slate-400">{line.componentVariantName || line.materialName}</p>
+                                <p className="font-mono text-[11px] text-slate-400">{line.componentSkuCode || '—'}</p>
                               </td>
                               <td className="py-2 pr-3">
                                 <div className="flex items-center gap-2">
@@ -2055,7 +2055,7 @@ function ProductCreationRequestDetailModal({ request, onClose, onApprove, onReje
                         <th className="px-3 py-2">Tên đơn vị</th>
                         <th className="px-3 py-2 text-right">Quy đổi</th>
                         <th className="px-3 py-2">Đơn vị cơ bản</th>
-                        <th className="px-3 py-2">Mã SKU</th>
+                        <th className="px-3 py-2">Sản Phẩm</th>
                         <th className="px-3 py-2 text-right">Giá trước thuế</th>
                         <th className="px-3 py-2 text-right">Thuế bán hàng</th>
                         <th className="px-3 py-2 text-right">Giá sau thuế</th>
@@ -2072,7 +2072,10 @@ function ProductCreationRequestDetailModal({ request, onClose, onApprove, onReje
                           <td className="px-3 py-2">{getVariantValue(variant, 'unitName', getVariantValue(variant, 'variantName', '—'))}</td>
                           <td className="px-3 py-2 text-right">{getVariantValue(variant, 'conversionRate', '—')}</td>
                           <td className="px-3 py-2">{getVariantValue(variant, 'isBaseUnitVariant', false) ? 'Có' : 'Không'}</td>
-                          <td className="px-3 py-2 font-mono font-semibold text-[#356647]">{getVariantValue(variant, 'skuCode', '—')}</td>
+                          <td className="px-3 py-2">
+                            <p className="font-medium text-slate-800">{getVariantValue(variant, 'variantName', '—')}</p>
+                            <p className="font-mono text-[11px] text-slate-500">{getVariantValue(variant, 'skuCode', '—')}</p>
+                          </td>
                           <td className="px-3 py-2 text-right">{formatWholeVnd(getVariantPriceBeforeTax(variant))}</td>
                           <td className="px-3 py-2 text-right">{getVariantTaxPercent(variant)}%</td>
                           <td className="px-3 py-2 text-right">{formatWholeVnd(getVariantPriceAfterTax(variant))}</td>

@@ -120,8 +120,7 @@ function DirectModeSection({ catalog, stockBySkuId, lines, onAdd, onRemove, onQu
           <table className="min-w-full text-left text-sm">
             <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
               <tr>
-                <th className="whitespace-nowrap px-4 py-3">Mã SKU</th>
-                <th className="whitespace-nowrap px-4 py-3">Tên sản phẩm</th>
+                <th className="whitespace-nowrap px-4 py-3">Sản Phẩm</th>
                 <th className="whitespace-nowrap px-4 py-3 text-right">Tồn {STOCK_FLOW_TERMS.warehouse}</th>
                 <th className="whitespace-nowrap px-4 py-3 text-right">{STOCK_FLOW_TERMS.transferQuantity}</th>
                 <th className="whitespace-nowrap px-4 py-3 text-right">Xóa</th>
@@ -130,7 +129,7 @@ function DirectModeSection({ catalog, stockBySkuId, lines, onAdd, onRemove, onQu
             <tbody className="divide-y divide-slate-100">
               {lines.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center text-sm text-slate-500">
+                  <td colSpan={4} className="px-4 py-10 text-center text-sm text-slate-500">
                     Chưa chọn sản phẩm nào. Hãy chọn sản phẩm ở danh mục bên trái.
                   </td>
                 </tr>
@@ -141,10 +140,10 @@ function DirectModeSection({ catalog, stockBySkuId, lines, onAdd, onRemove, onQu
                     Number.isFinite(quantity) && quantity > 0 && quantity > line.warehouseQuantityOnHand
                   return (
                     <tr key={line.skuId} className="align-top">
-                      <td className="whitespace-nowrap px-4 py-3 font-mono text-xs font-bold text-[#356647]">
-                        {line.skuCode}
+                      <td className="px-4 py-3 text-slate-800">
+                        <p className="font-semibold">{line.skuName}</p>
+                        <p className="font-mono text-xs text-slate-500">{line.skuCode}</p>
                       </td>
-                      <td className="px-4 py-3 text-slate-800">{line.skuName}</td>
                       <td className="whitespace-nowrap px-4 py-3 text-right text-slate-700">
                         {formatStockQuantity(line.warehouseQuantityOnHand)}
                       </td>

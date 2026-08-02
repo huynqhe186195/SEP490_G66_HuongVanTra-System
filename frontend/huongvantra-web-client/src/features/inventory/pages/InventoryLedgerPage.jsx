@@ -157,7 +157,7 @@ function InventoryLedgerPage() {
             <thead className="bg-slate-50 text-xs font-bold uppercase tracking-wide text-slate-500">
               <tr>
                 <th className="px-6 py-3">Thời gian</th>
-                <th className="px-4 py-3">SKU</th>
+                <th className="px-4 py-3">Sản Phẩm</th>
                 <th className="px-4 py-3">Vị trí</th>
                 <th className="px-4 py-3 text-right">Trước</th>
                 <th className="px-4 py-3 text-right">+/−</th>
@@ -177,8 +177,8 @@ function InventoryLedgerPage() {
                   <tr key={entry.id} className="hover:bg-slate-50/80">
                     <td className="px-6 py-4 text-slate-600">{formatVietnamDateTime(entry.occurredAtUtc)}</td>
                     <td className="px-4 py-4">
-                      <p className="font-mono font-semibold text-[#356647]">{entry.skuCode}</p>
-                      <p className="text-xs text-slate-500">{entry.skuNameSnapshot}</p>
+                      <p className="font-semibold text-slate-900">{entry.skuNameSnapshot}</p>
+                      <p className="font-mono text-xs text-slate-500">{entry.skuCode}</p>
                     </td>
                     <td className="px-4 py-4">{getLocationLabel(entry.location)}</td>
                     <td className="px-4 py-4 text-right">{formatStockQuantity(entry.quantityBefore)}</td>

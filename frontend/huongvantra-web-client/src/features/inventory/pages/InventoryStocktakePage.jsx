@@ -57,6 +57,16 @@ const REASON_OPTIONS = [
   { value: 'OTHER', label: 'Khác' },
 ]
 
+/** Lý do từ chối gợi ý cho người duyệt kiểm kê, bấm để điền nhanh. */
+const REJECT_REASON_PRESETS = [
+  'Số liệu thực đếm chưa khớp, cần đếm lại.',
+  'Thiếu chứng từ hoặc hình ảnh minh chứng cho chênh lệch.',
+  'Chênh lệch quá lớn, cần giải trình chi tiết hơn.',
+  'Lý do chênh lệch khai báo chưa phù hợp thực tế.',
+  'Phiếu kiểm kê bị trùng với phiếu đã duyệt trước đó.',
+  'Kiểm kê thực hiện sai thời điểm quy định.',
+]
+
 function getLocationLabel(location) {
   return LOCATION_OPTIONS.find((item) => item.value === location)?.label || location || '—'
 }
@@ -208,7 +218,10 @@ function StocktakeDetailModal({ request, onClose, onAction, canSubmit = false, c
               <tbody className="divide-y divide-slate-100">
                 {request.items.map((line) => (
                   <tr key={line.id}>
-                    <td className="px-4 py-3 font-semibold text-slate-800">{line.skuSnapshotName || '—'}</td>
+                    <td className="px-4 py-3">
+                      <p className="font-semibold text-slate-800">{line.skuSnapshotName || '—'}</p>
+                      <p className="mt-0.5 font-mono text-xs font-bold text-[#356647]">{line.skuCode || '—'}</p>
+                    </td>
                     <td className="px-4 py-3 text-right">{formatStockQuantity(line.systemQuantitySnapshot)}</td>
                     <td className="px-4 py-3 text-right">{formatStockQuantity(line.actualQuantity)}</td>
                     <td className={`px-4 py-3 text-right font-semibold ${line.variance >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
@@ -784,10 +797,13 @@ function InventoryStocktakePage() {
       } else {
         const defaultReason = action === 'approve' ? 'Duyệt kiểm kê' : ''
         const reason = await promptDialog({
-          title: action === 'approve' ? 'Ghi chú duyệt' : 'Nhập lý do',
-          message: action === 'approve' ? 'Ghi chú duyệt' : 'Nhập lý do',
+          title: action === 'approve' ? 'Ghi chú duyệt' : 'Nhập lý do từ chối',
+          message: action === 'approve' ? 'Ghi chú duyệt' : 'Nhập lý do từ chối',
           defaultValue: defaultReason,
           required: action === 'reject',
+          presets: action === 'reject' ? REJECT_REASON_PRESETS : [],
+          placeholder:
+            action === 'reject' ? 'Chọn lý do gợi ý phía trên hoặc nhập lý do khác...' : '',
           tone: action === 'approve' ? 'primary' : 'danger',
         })
         if (reason == null) return
@@ -811,7 +827,7 @@ function InventoryStocktakePage() {
   return (
     <PageShell>
       <PageHeader
-        title={fixedLocation === 'Warehouse' ? 'Kiểm kê Kho' : 'Kiểm kê Kệ Hàng'}
+        title={fixedLocation === 'Warehouse' ? 'Kiểm kê Kho' : 'Kiểm kê kệ hàng'}
         titleInfo={
           fixedLocation === 'Warehouse'
             ? 'Ghi nhận chênh lệch thực đếm tại Kho, chờ duyệt trước khi áp tồn.'

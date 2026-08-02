@@ -116,7 +116,7 @@ export default function CostProfitReportPage() {
   const [sortDirection, setSortDirection] = useState('asc')
   const [historyState, setHistoryState] = useState(null)
 
-  const tableColSpan = canEditSalePrice ? 11 : 10
+  const tableColSpan = canEditSalePrice ? 10 : 9
 
   const load = useCallback(async () => {
     setIsLoading(true)
@@ -316,8 +316,8 @@ export default function CostProfitReportPage() {
           <article key={row.skuId} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="font-mono text-sm font-bold text-slate-800">{row.skuCode}</p>
-                <p className="mt-0.5 text-sm text-slate-700">{row.name}</p>
+                <p className="text-sm font-semibold text-slate-900">{row.name}</p>
+                <p className="mt-0.5 font-mono text-xs text-slate-500">{row.skuCode}</p>
                 <p className="mt-1 text-xs text-slate-500">Đơn vị: {row.unitName || '—'}</p>
               </div>
               <p className={`shrink-0 text-sm font-semibold ${row.profit >= 0 ? 'text-[#356647]' : 'text-rose-600'}`}>
@@ -395,8 +395,7 @@ export default function CostProfitReportPage() {
           <table className={`w-full text-left text-sm ${canEditSalePrice ? 'min-w-[1280px]' : 'min-w-[1100px]'}`}>
             <thead className="bg-slate-50 text-xs uppercase text-slate-500">
               <tr>
-                <th className="px-4 py-3">SKU</th>
-                <th className="px-4 py-3">Tên sản phẩm</th>
+                <th className="px-4 py-3">Sản Phẩm</th>
                 <th className="px-4 py-3">Đơn vị</th>
                 <th className="px-4 py-3 text-right">Giá bán hiện tại</th>
                 {canEditSalePrice ? <th className="px-4 py-3 text-right">Giá bán mới</th> : null}
@@ -415,8 +414,10 @@ export default function CostProfitReportPage() {
                 <tr><td colSpan={tableColSpan} className="px-4 py-8 text-center text-slate-500">Không có dữ liệu</td></tr>
               ) : pageItems.map((row) => (
                 <tr key={row.skuId} className="border-t border-slate-100">
-                  <td className="px-4 py-3 font-mono font-medium text-slate-800">{row.skuCode}</td>
-                  <td className="max-w-[220px] px-4 py-3 text-slate-700">{row.name}</td>
+                  <td className="max-w-[240px] px-4 py-3 text-slate-700">
+                    <p className="font-semibold text-slate-900">{row.name}</p>
+                    <p className="font-mono text-xs text-slate-500">{row.skuCode}</p>
+                  </td>
                   <td className="px-4 py-3 text-slate-600">{row.unitName || '—'}</td>
                   <td className="px-4 py-3 text-right">{formatVnd(row.retailPrice)}</td>
                   {canEditSalePrice ? (

@@ -88,7 +88,6 @@ public sealed class ReturnInspectionTests
             new StockExportBatchAllocationRepository(db),
             new InventoryLedgerRepository(db),
             Mock.Of<ISupplierReceiptRepository>(),
-            Mock.Of<IShelfReturnRequestRepository>(),
             Mock.Of<ISupplierReturnRequestRepository>(),
             Mock.Of<IStocktakeRequestRepository>(),
             Mock.Of<IShelfReplenishmentSuggestionRepository>(),

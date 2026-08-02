@@ -142,6 +142,10 @@ function buildReportRows(reportType, source, filters) {
         location: batch.location,
         productType: getBatchProductType(batch, source.skuProductTypeById),
         skuSummary: (batch.items ?? []).map((item) => item.skuCode).join(', '),
+        // Một lô có thể gồm nhiều SKU nên gộp tên để cột Sản Phẩm hiển thị đủ.
+        nameSummary: [...new Set((batch.items ?? [])
+          .map((item) => item.productSnapshotName)
+          .filter(Boolean))].join(', '),
         name: batch.items?.[0]?.productSnapshotName || `${batch.skuLineCount} SKU`,
         quantity: batch.totalQuantityOnHand,
         expiresAt: batch.expiresAt,
@@ -330,13 +334,13 @@ function InventoryReportsPage() {
           {reportType === 'movement' ? (
             <table className="min-w-full text-left text-sm">
               <thead className="bg-slate-50 text-xs font-bold uppercase tracking-wide text-slate-500">
-                <tr><th className="px-6 py-3">Thời gian</th><th className="px-4 py-3">SKU</th><th className="px-4 py-3">Vị trí</th><th className="px-4 py-3 text-right">Trước</th><th className="px-4 py-3 text-right">+/-</th><th className="px-4 py-3 text-right">Sau</th><th className="px-4 py-3">Tham chiếu</th></tr>
+                <tr><th className="px-6 py-3">Thời gian</th><th className="px-4 py-3">Sản Phẩm</th><th className="px-4 py-3">Vị trí</th><th className="px-4 py-3 text-right">Trước</th><th className="px-4 py-3 text-right">+/-</th><th className="px-4 py-3 text-right">Sau</th><th className="px-4 py-3">Tham chiếu</th></tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {isLoading ? <tr><td colSpan={7} className="px-6 py-8 text-slate-500">Đang tải...</td></tr> : pageRows.map((row) => (
                   <tr key={row.id}>
                     <td className="px-6 py-4">{formatVietnamDateTime(row.occurredAtUtc)}</td>
-                    <td className="px-4 py-4"><p className="font-mono font-semibold text-[#356647]">{row.skuCode}</p><p className="text-xs text-slate-500">{row.skuNameSnapshot}</p></td>
+                    <td className="px-4 py-4"><p className="font-semibold text-slate-900">{row.skuNameSnapshot}</p><p className="font-mono text-xs text-slate-500">{row.skuCode}</p></td>
                     <td className="px-4 py-4">{getLocationLabel(row.location)}</td>
                     <td className="px-4 py-4 text-right">{formatStockQuantity(row.quantityBefore)}</td>
                     <td className={`px-4 py-4 text-right font-semibold ${row.quantityDelta >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>{row.quantityDelta > 0 ? '+' : ''}{formatStockQuantity(row.quantityDelta)}</td>
@@ -349,11 +353,11 @@ function InventoryReportsPage() {
           ) : reportType === 'expiry' ? (
             <table className="min-w-full text-left text-sm">
               <thead className="bg-slate-50 text-xs font-bold uppercase tracking-wide text-slate-500">
-                <tr><th className="px-6 py-3">Mã lô</th><th className="px-4 py-3">Vị trí</th><th className="px-4 py-3">SKU</th><th className="px-4 py-3 text-right">Tồn</th><th className="px-4 py-3">Hạn dùng</th></tr>
+                <tr><th className="px-6 py-3">Mã lô</th><th className="px-4 py-3">Vị trí</th><th className="px-4 py-3">Sản Phẩm</th><th className="px-4 py-3 text-right">Tồn</th><th className="px-4 py-3">Hạn dùng</th></tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {isLoading ? <tr><td colSpan={5} className="px-6 py-8 text-slate-500">Đang tải...</td></tr> : pageRows.map((row) => (
-                  <tr key={row.id}><td className="px-6 py-4 font-mono font-semibold text-[#356647]">{row.lotCode}</td><td className="px-4 py-4">{getLocationLabel(row.location)}</td><td className="px-4 py-4">{row.skuSummary}</td><td className="px-4 py-4 text-right">{formatStockQuantity(row.quantity)}</td><td className="px-4 py-4">{formatVietnamDateTime(row.expiresAt)}</td></tr>
+                  <tr key={row.id}><td className="px-6 py-4 font-mono font-semibold text-[#356647]">{row.lotCode}</td><td className="px-4 py-4">{getLocationLabel(row.location)}</td><td className="px-4 py-4"><p className="font-semibold text-slate-900">{row.nameSummary || row.name}</p><p className="font-mono text-xs text-slate-500">{row.skuSummary}</p></td><td className="px-4 py-4 text-right">{formatStockQuantity(row.quantity)}</td><td className="px-4 py-4">{formatVietnamDateTime(row.expiresAt)}</td></tr>
                 ))}
               </tbody>
             </table>
@@ -402,11 +406,11 @@ function InventoryReportsPage() {
           ) : (
             <table className="min-w-full text-left text-sm">
               <thead className="bg-slate-50 text-xs font-bold uppercase tracking-wide text-slate-500">
-                <tr><th className="px-6 py-3">SKU</th><th className="px-4 py-3">Vị trí</th><th className="px-4 py-3">Loại</th><th className="px-4 py-3 text-right">Tồn</th><th className="px-4 py-3 text-right">Ngưỡng</th></tr>
+                <tr><th className="px-6 py-3">Sản Phẩm</th><th className="px-4 py-3">Vị trí</th><th className="px-4 py-3">Loại</th><th className="px-4 py-3 text-right">Tồn</th><th className="px-4 py-3 text-right">Ngưỡng</th></tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {isLoading ? <tr><td colSpan={5} className="px-6 py-8 text-slate-500">Đang tải...</td></tr> : pageRows.map((row) => (
-                  <tr key={row.id}><td className="px-6 py-4"><p className="font-mono font-semibold text-[#356647]">{row.skuCode}</p><p className="text-xs text-slate-500">{row.name}</p></td><td className="px-4 py-4">{getLocationLabel(row.location)}</td><td className="px-4 py-4">{getProductTypeLabel(row.productType)}</td><td className="px-4 py-4 text-right">{formatStockQuantity(row.quantity)}</td><td className="px-4 py-4 text-right">{formatStockQuantity(row.threshold)}</td></tr>
+                  <tr key={row.id}><td className="px-6 py-4"><p className="font-semibold text-slate-900">{row.name}</p><p className="font-mono text-xs text-slate-500">{row.skuCode}</p></td><td className="px-4 py-4">{getLocationLabel(row.location)}</td><td className="px-4 py-4">{getProductTypeLabel(row.productType)}</td><td className="px-4 py-4 text-right">{formatStockQuantity(row.quantity)}</td><td className="px-4 py-4 text-right">{formatStockQuantity(row.threshold)}</td></tr>
                 ))}
               </tbody>
             </table>

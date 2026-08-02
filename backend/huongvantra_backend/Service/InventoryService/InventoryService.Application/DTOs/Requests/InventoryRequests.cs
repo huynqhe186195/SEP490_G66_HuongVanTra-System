@@ -49,12 +49,19 @@ public record CreateStockAdjustmentRequestItem(
     string? SkuSnapshotName,
     int QuantityDelta);
 
+/// <summary>
+/// AcknowledgeDuplicates: người tạo đã xem cảnh báo trùng SKU và vẫn muốn gửi.
+/// Chỉ bỏ qua được cảnh báo mềm; trùng với yêu cầu chưa ai tiếp nhận vẫn bị chặn.
+/// </summary>
 public record CreateStockAdjustmentRequest(
     string? Reason,
-    List<CreateStockAdjustmentRequestItem> Items);
+    List<CreateStockAdjustmentRequestItem> Items,
+    bool AcknowledgeDuplicates = false);
+
+/// <summary>Kiểm tra trùng SKU trước khi gửi yêu cầu, không tạo dữ liệu.</summary>
+public record CheckStockAdjustmentDuplicatesRequest(List<Guid>? SkuIds);
 
 public record RejectStockAdjustmentRequest(string? Reason);
-
 public record CancelStockAdjustmentRequest(string? Reason);
 
 /// <summary>Duyệt một dòng yêu cầu bổ sung Kệ Hàng: Warehouse chọn số lượng duyệt cho từng dòng.</summary>
@@ -182,25 +189,24 @@ public record InventoryReturnItemRequest(
     string? LotCode,
     string? Note);
 
-public record CreateShelfReturnRequest(
-    string ReturnMode,
-    Guid? OriginalStockAdjustmentRequestId,
-    string? OriginalStockAdjustmentRequestCode,
-    string? Reason,
-    string? Note,
-    List<InventoryReturnItemRequest> Items);
-
+/// <summary>
+/// Trả hàng nhập (Kho → NCC) là thao tác một bước: Thủ kho tạo và tồn Kho bị trừ ngay.
+/// <paramref name="OperationId"/> là idempotency key của một lần bấm gửi — gọi lại cùng key
+/// trả về phiếu đã tạo thay vì trừ kho lần nữa.
+/// </summary>
 public record CreateSupplierReturnRequest(
-    string ReturnMode,
-    Guid? SupplierReceiptId,
+    Guid OperationId,
+    Guid SupplierReceiptId,
     string? SupplierReceiptCode,
     string? SupplierName,
     string? SupplierReference,
+    string DefectReasonCode,
+    List<string> EvidenceImageUrls,
     string? Reason,
     string? Note,
     List<InventoryReturnItemRequest> Items);
 
-public record ReviewInventoryReturnRequest(string? Reason);
+public record SupplierReturnDefectReasonResponse(string Code, string Label);
 
 public record InspectReturnRequest(string Disposition, string? Note);
 

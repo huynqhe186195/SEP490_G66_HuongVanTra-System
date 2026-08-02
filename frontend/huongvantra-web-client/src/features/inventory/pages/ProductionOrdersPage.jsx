@@ -445,8 +445,7 @@ function ProductionOrdersPage() {
                             <table className="min-w-full text-left text-xs">
                               <thead className="bg-slate-50 text-[#717971]">
                                 <tr>
-                                  <th className="px-4 py-2 font-semibold">SKU</th>
-                                  <th className="px-4 py-2 font-semibold">Tên thành phẩm</th>
+                                  <th className="px-4 py-2 font-semibold">Sản Phẩm</th>
                                   <th className="px-4 py-2 text-right font-semibold">Số lượng SX</th>
                                   <th className="px-4 py-2 font-semibold">Nơi nhập</th>
                                   <th className="px-4 py-2 font-semibold">Hạn sử dụng</th>
@@ -456,10 +455,10 @@ function ProductionOrdersPage() {
                               <tbody className="divide-y divide-slate-100">
                                 {outputLines.map((line) => (
                                   <tr key={line.id}>
-                                    <td className="px-4 py-2 font-mono font-semibold text-[#356647]">
-                                      {getOutputSku(line)}
+                                    <td className="px-4 py-2">
+                                      <p className="font-medium text-slate-800">{getOutputName(line)}</p>
+                                      <p className="font-mono text-[11px] text-slate-500">{getOutputSku(line)}</p>
                                     </td>
-                                    <td className="px-4 py-2 font-medium text-slate-800">{getOutputName(line)}</td>
                                     <td className="px-4 py-2 text-right font-semibold text-slate-800">
                                       {formatQuantity(line.plannedQuantity)}
                                     </td>
@@ -496,7 +495,7 @@ function ProductionOrdersPage() {
                               <table className="min-w-full text-left text-xs">
                                 <thead className="bg-emerald-50/60 text-[#717971]">
                                   <tr>
-                                    <th className="px-4 py-2 font-semibold">SKU thành phẩm</th>
+                                    <th className="px-4 py-2 font-semibold">Sản Phẩm</th>
                                     <th className="px-4 py-2 text-right font-semibold">Số lượng</th>
                                     <th className="px-4 py-2 font-semibold">Nơi nhập</th>
                                     <th className="px-4 py-2 font-semibold">Mã lô thành phẩm</th>
@@ -507,8 +506,8 @@ function ProductionOrdersPage() {
                                   {finishedGoodsLots.map((line) => (
                                     <tr key={`${line.id}-lot`}>
                                       <td className="px-4 py-2">
-                                        <p className="font-mono font-semibold text-[#356647]">{getOutputSku(line)}</p>
-                                        <p className="mt-0.5 text-slate-600">{getOutputName(line)}</p>
+                                        <p className="font-medium text-slate-800">{getOutputName(line)}</p>
+                                        <p className="mt-0.5 font-mono text-[11px] text-slate-500">{getOutputSku(line)}</p>
                                       </td>
                                       <td className="px-4 py-2 text-right font-semibold text-slate-800">
                                         {formatQuantity(line.plannedQuantity)}
@@ -533,19 +532,16 @@ function ProductionOrdersPage() {
                               <table className="min-w-full text-left text-xs">
                                 <thead className="bg-slate-50 text-[#717971]">
                                   <tr>
-                                    <th className="px-4 py-2 font-semibold">SKU</th>
-                                    <th className="px-4 py-2 font-semibold">Nguyên liệu</th>
+                                    <th className="px-4 py-2 font-semibold">Sản Phẩm</th>
                                     <th className="px-4 py-2 text-right font-semibold">Số lượng</th>
                                   </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
                                   {order.lines.map((line) => (
                                     <tr key={line.id}>
-                                      <td className="px-4 py-2 font-mono font-semibold text-[#356647]">
-                                        {line.materialSkuCode || '-'}
-                                      </td>
-                                      <td className="px-4 py-2 font-medium text-slate-800">
-                                        {line.materialSnapshotName || '-'}
+                                      <td className="px-4 py-2">
+                                        <p className="font-medium text-slate-800">{line.materialSnapshotName || '-'}</p>
+                                        <p className="font-mono text-[11px] text-slate-500">{line.materialSkuCode || '-'}</p>
                                       </td>
                                       <td className="px-4 py-2 text-right font-semibold text-slate-800">
                                         {formatQuantity(line.plannedQuantity)}

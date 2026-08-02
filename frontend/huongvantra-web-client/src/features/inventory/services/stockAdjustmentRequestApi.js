@@ -195,6 +195,32 @@ export async function createStockAdjustmentRequest(payload) {
   return mapRequest(data)
 }
 
+/** Kiểm tra trùng SKU trước khi gửi, để chặn sớm thay vì báo lỗi sau bước xác nhận. */
+export async function checkStockAdjustmentDuplicates(skuIds) {
+  const data = await apiRequestAuth('/api/v1/inventory/stock-adjustment-requests/check-duplicates', {
+    method: 'POST',
+    body: JSON.stringify({ skuIds }),
+  })
+  return {
+    blocking: Boolean(data?.blocking),
+    warning: Boolean(data?.warning),
+    message: data?.message ?? '',
+    duplicates: (data?.duplicates ?? []).map((row) => ({
+      skuId: row.skuId,
+      skuCode: row.skuCode ?? '',
+      skuSnapshotName: row.skuSnapshotName ?? '',
+      requestId: row.requestId,
+      requestCode: row.requestCode ?? '',
+      requestStatus: row.requestStatus ?? '',
+      lineStatus: row.lineStatus ?? '',
+      requestedAt: row.requestedAt,
+      requestedByName: row.requestedByName ?? '',
+      remainingQuantity: Number(row.remainingQuantity ?? 0),
+      isUntouched: Boolean(row.isUntouched),
+    })),
+  }
+}
+
 /** Warehouse duyệt/từ chối theo từng dòng. Không làm thay đổi tồn kho. */
 export async function reviewStockAdjustmentRequest(id, { reviewNote, lines } = {}) {
   const body = {

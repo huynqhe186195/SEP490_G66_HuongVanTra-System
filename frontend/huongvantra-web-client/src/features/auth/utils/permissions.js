@@ -295,6 +295,11 @@ export function canOperateSupplierReceipt(session) {
   return isWarehouseRole(session) && !hasAdminRole(session)
 }
 
+/** Trả hàng nhập (Kho → NCC): chỉ Thủ kho được tạo, Admin/Manager chỉ xem. */
+export function canOperateSupplierReturn(session) {
+  return isWarehouseRole(session) && !hasAdminRole(session)
+}
+
 export function canCreateProductionOrder(session) {
   return isWarehouseRole(session) && !hasAdminRole(session)
 }

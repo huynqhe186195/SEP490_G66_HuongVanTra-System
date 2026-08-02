@@ -358,7 +358,7 @@ export default function ProductItemCreatePage() {
                 <table className="min-w-full text-left text-sm">
                   <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                     <tr>
-                      <th className="px-4 py-3 font-semibold">Mã SKU</th>
+                      <th className="px-4 py-3 font-semibold">Sản Phẩm</th>
                       <th className="px-4 py-3 font-semibold">Đơn vị</th>
                       <th className="px-4 py-3 font-semibold">Thuộc tính</th>
                       <th className="px-4 py-3 font-semibold text-right">Giá vốn (Auto)</th>
@@ -372,8 +372,11 @@ export default function ProductItemCreatePage() {
                       return (
                         <tr key={variant.id} className="hover:bg-slate-50/60">
                           <td className="px-4 py-3">
+                            <p className="font-medium text-slate-800">
+                              {[name, variant.unit, variant.attribute].filter(Boolean).join(' - ') || '—'}
+                            </p>
                             <input
-                              className="w-full min-w-[120px] rounded-lg border border-slate-200 px-2 py-1.5 font-mono text-xs font-bold text-[#356647]"
+                              className="mt-1 w-full min-w-[120px] rounded-lg border border-slate-200 px-2 py-1.5 font-mono text-xs font-bold text-[#356647]"
                               value={variant.sku}
                               onChange={(e) =>
                                 setVariants((current) =>

@@ -505,8 +505,7 @@ function ApprovalProductPreview({ product, categories = [] }) {
         <table className="min-w-full text-left text-sm">
           <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
             <tr>
-              <th className="px-4 py-3 font-semibold">SKU</th>
-              <th className="px-4 py-3 font-semibold">Tên biến thể</th>
+              <th className="px-4 py-3 font-semibold">Sản Phẩm</th>
               <th className="px-4 py-3 text-right font-semibold">Giá bán</th>
               <th className="px-4 py-3 text-center font-semibold">BOM</th>
             </tr>
@@ -516,15 +515,17 @@ function ApprovalProductPreview({ product, categories = [] }) {
               const bomLines = Array.isArray(variant.bomLines) ? variant.bomLines : []
               return (
                 <tr key={`${variant.skuCode || index}-${index}`}>
-                  <td className="px-4 py-3 font-mono text-xs font-semibold text-[#356647]">{variant.skuCode || 'Tự sinh'}</td>
-                  <td className="px-4 py-3 font-medium text-slate-800">{variant.variantName || '—'}</td>
+                  <td className="px-4 py-3">
+                    <p className="font-medium text-slate-800">{variant.variantName || '—'}</p>
+                    <p className="font-mono text-xs text-slate-500">{variant.skuCode || 'Tự sinh'}</p>
+                  </td>
                   <td className="px-4 py-3 text-right text-slate-700">{formatCurrency(variant.retailPrice)} đ</td>
                   <td className="px-4 py-3 text-center text-slate-600">{bomLines.length ? `${bomLines.length} dòng` : '—'}</td>
                 </tr>
               )
             }) : (
               <tr>
-                <td colSpan={4} className="px-4 py-8 text-center text-sm text-slate-400">Chưa có SKU trong snapshot.</td>
+                <td colSpan={3} className="px-4 py-8 text-center text-sm text-slate-400">Chưa có SKU trong snapshot.</td>
               </tr>
             )}
           </tbody>
@@ -724,8 +725,7 @@ function ManualCreationConfirmModal({ payload, approval, reason, categories = []
             <table className="min-w-full text-left text-sm">
               <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                 <tr>
-                  <th className="px-4 py-3 font-semibold">SKU</th>
-                  <th className="px-4 py-3 font-semibold">Tên biến thể</th>
+                  <th className="px-4 py-3 font-semibold">Sản Phẩm</th>
                   <th className="px-4 py-3 text-right font-semibold">Giá bán</th>
                   <th className="px-4 py-3 text-center font-semibold">BOM</th>
                 </tr>
@@ -733,8 +733,10 @@ function ManualCreationConfirmModal({ payload, approval, reason, categories = []
               <tbody className="divide-y divide-slate-100">
                 {variants.map((variant, index) => (
                   <tr key={`${variant.skuCode || index}-${index}`}>
-                    <td className="px-4 py-3 font-mono text-xs font-semibold text-[#356647]">{variant.skuCode || 'Tự sinh'}</td>
-                    <td className="px-4 py-3 font-medium text-slate-800">{variant.variantName || '—'}</td>
+                    <td className="px-4 py-3">
+                      <p className="font-medium text-slate-800">{variant.variantName || '—'}</p>
+                      <p className="font-mono text-xs text-slate-500">{variant.skuCode || 'Tự sinh'}</p>
+                    </td>
                     <td className="px-4 py-3 text-right">{formatCurrency(variant.retailPrice)} đ</td>
                     <td className="px-4 py-3 text-center">{variant.bomLines?.length ? `${variant.bomLines.length} dòng` : '—'}</td>
                   </tr>
@@ -2152,8 +2154,7 @@ function ProductFormPage({ mode }) {
               <table className="min-w-full text-left text-sm">
                 <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                   <tr>
-                    <th className="px-4 py-3 font-semibold">SKU</th>
-                    <th className="px-4 py-3 font-semibold">Tên biến thể</th>
+                    <th className="px-4 py-3 font-semibold">Sản Phẩm</th>
                     <th className="px-4 py-3 text-right font-semibold">Giá bán</th>
                     <th className="px-4 py-3 text-center font-semibold">BOM</th>
                   </tr>
@@ -2166,14 +2167,14 @@ function ProductFormPage({ mode }) {
                     return (
                       <tr key={row.key}>
                         <td className="px-4 py-3">
+                          <p className="font-medium text-slate-800">{variantName || '—'}</p>
                           <input
-                            className="w-44 rounded-lg border border-slate-200 px-3 py-2 font-mono text-xs uppercase outline-none focus:border-[#538463]"
+                            className="mt-1 w-44 rounded-lg border border-slate-200 px-3 py-2 font-mono text-xs uppercase outline-none focus:border-[#538463]"
                             value={row.skuCode}
                             onChange={(event) => updateVariantDraft(row.key, 'skuCode', event.target.value.toUpperCase())}
                             placeholder={row.skuSuggestion || 'Tự sinh'}
                           />
                         </td>
-                        <td className="px-4 py-3 font-medium text-slate-800">{variantName || '—'}</td>
                         <td className="px-4 py-3 text-right">
                           <CurrencyInput
                             className="ml-auto w-32 rounded-lg border border-slate-200 px-3 py-2 text-right text-sm outline-none focus:border-[#538463]"

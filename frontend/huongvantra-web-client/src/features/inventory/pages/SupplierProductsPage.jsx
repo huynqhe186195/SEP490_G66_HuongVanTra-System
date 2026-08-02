@@ -925,7 +925,7 @@ export default function SupplierProductsPage() {
     }
   }
 
-  const colSpan = canManage ? 8 : 7
+  const colSpan = canManage ? 7 : 6
 
   return (
     <PageShell>
@@ -1008,8 +1008,7 @@ export default function SupplierProductsPage() {
           <thead>
             <tr className="border-b border-[#c1c9c0] text-left text-xs font-semibold text-[#717971]">
               <th className="pb-2 pr-4">Nhà cung cấp</th>
-              <th className="pb-2 pr-4">Mã SKU</th>
-              <th className="pb-2 pr-4">Tên hàng</th>
+              <th className="pb-2 pr-4">Sản Phẩm</th>
               <th className="pb-2 pr-4">Loại</th>
               <th className="pb-2 pr-4">Mã / tên theo NCC</th>
               <th className="pb-2 pr-4 text-right">Giá chào</th>
@@ -1033,9 +1032,9 @@ export default function SupplierProductsPage() {
                     <p className="text-[#1b1c17]">{item.supplierName || '—'}</p>
                     <p className="font-mono text-xs text-[#717971]">{item.supplierCodeSnapshot || '—'}</p>
                   </td>
-                  <td className="py-3 pr-4 font-mono text-xs text-[#414942]">{item.skuCodeSnapshot}</td>
                   <td className="py-3 pr-4">
                     <p className="font-semibold text-[#1b1c17]">{item.skuNameSnapshot}</p>
+                    <p className="font-mono text-xs text-[#717971]">{item.skuCodeSnapshot}</p>
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-[#717971]">{item.inventoryUnitSnapshot}</span>
                       {item.isPrimarySource ? (

@@ -6,6 +6,7 @@ namespace InventoryService.Application.Interfaces;
 public interface ISupplierReturnRequestRepository
 {
     Task<SupplierReturnRequest?> GetByIdAsync(Guid id, CancellationToken ct = default);
+    Task<SupplierReturnRequest?> GetByOperationIdAsync(Guid operationId, CancellationToken ct = default);
     Task<(List<SupplierReturnRequest> Items, int TotalCount)> GetPagedAsync(
         InventoryReturnRequestStatus? status,
         Guid? createdBy,

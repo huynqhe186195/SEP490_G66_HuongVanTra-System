@@ -46,8 +46,7 @@ function OrderProductsSection({
           >
             <tr>
               <th className={`pr-3 ${constrained ? 'pb-2 pl-2 pt-1' : 'pb-3 pr-4'}`}>Ảnh</th>
-              <th className={`pr-3 ${constrained ? 'pb-2 pr-3 pt-1' : 'pb-3 pr-4'}`}>Sản phẩm</th>
-              <th className={`pr-3 ${constrained ? 'pb-2 pr-3 pt-1' : 'pb-3 pr-4'}`}>Biến thể / SKU</th>
+              <th className={`pr-3 ${constrained ? 'pb-2 pr-3 pt-1' : 'pb-3 pr-4'}`}>Sản Phẩm</th>
               <th className={`pr-3 ${constrained ? 'pb-2 pr-3 pt-1' : 'pb-3 pr-4'}`}>SL</th>
               {!constrained ? <th className="pb-3 pr-4">Đã trả</th> : null}
               <th className={`pr-3 ${constrained ? 'pb-2 pr-3 pt-1' : 'pb-3 pr-4'}`}>Đơn giá</th>
@@ -82,20 +81,20 @@ function OrderProductsSection({
                   {!constrained && display.flavorProfile ? (
                     <p className="mt-0.5 text-xs text-slate-500">Hương vị: {display.flavorProfile}</p>
                   ) : null}
-                </td>
-                <td className={constrained ? 'py-1.5 pr-3' : 'py-3 pr-4'}>
                   {display.packagingType ? (
-                    <p className={constrained ? 'text-slate-600' : 'text-sm text-slate-700'}>{display.packagingType}</p>
+                    <p className={`mt-0.5 ${constrained ? 'text-slate-600' : 'text-sm text-slate-700'}`}>
+                      {display.packagingType}
+                    </p>
                   ) : null}
                   {display.skuCode ? (
-                    <p className={`font-mono text-slate-500 ${constrained ? 'text-[10px]' : 'text-xs'}`}>
+                    <p className={`mt-0.5 font-mono text-slate-500 ${constrained ? 'text-[10px]' : 'text-xs'}`}>
                       {display.skuCode}
                     </p>
                   ) : null}
-                  {!constrained && display.weightLabel ? (
-                    <p className="text-xs text-slate-500">{display.weightLabel}</p>
-                  ) : constrained && display.weightLabel ? (
-                    <p className="text-[10px] text-slate-500">{display.weightLabel}</p>
+                  {display.weightLabel ? (
+                    <p className={`text-slate-500 ${constrained ? 'text-[10px]' : 'text-xs'}`}>
+                      {display.weightLabel}
+                    </p>
                   ) : null}
                 </td>
                 <td className={constrained ? 'py-1.5 pr-3' : 'py-3 pr-4'}>{line.quantity}</td>

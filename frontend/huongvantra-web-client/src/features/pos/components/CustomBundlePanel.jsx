@@ -264,8 +264,7 @@ export default function CustomBundlePanel({ bundles, onChange }) {
                 <thead>
                   <tr className="border-b border-[#c1c9c0] bg-[#f6f4ec]">
                     <th className="w-8 px-3 py-2" />
-                    <th className="px-3 py-2 text-left text-xs font-semibold text-[#717971]">Tên nguyên liệu</th>
-                    <th className="px-3 py-2 text-left text-xs font-semibold text-[#717971]">Mã SKU</th>
+                    <th className="px-3 py-2 text-left text-xs font-semibold text-[#717971]">Sản Phẩm</th>
                     <th className="px-3 py-2 text-right text-xs font-semibold text-[#717971]">Tồn đang có</th>
                     <th className="px-3 py-2 text-right text-xs font-semibold text-[#717971]">Giá/đv</th>
                     <th className="w-24 px-3 py-2 text-center text-xs font-semibold text-[#717971]">Số lượng</th>
@@ -298,8 +297,10 @@ export default function CustomBundlePanel({ bundles, onChange }) {
                             )}
                           </span>
                         </td>
-                        <td className="px-3 py-2.5 font-medium text-[#1b1c17]">{m.name}</td>
-                        <td className="px-3 py-2.5 text-[#717971]">{m.skuCode}</td>
+                        <td className="px-3 py-2.5">
+                          <p className="font-medium text-[#1b1c17]">{m.name}</p>
+                          <p className="font-mono text-[11px] text-[#717971]">{m.skuCode}</p>
+                        </td>
                         <td className="px-3 py-2.5 text-right">
                           <span className={m.stockOnHand <= 0 ? 'font-semibold text-red-500' : 'text-[#1b1c17]'}>
                             {m.stockOnHand.toLocaleString('vi-VN')}

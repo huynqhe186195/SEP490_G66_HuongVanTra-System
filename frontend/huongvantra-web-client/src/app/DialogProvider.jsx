@@ -2,6 +2,22 @@ import { useEffect, useId, useRef, useState } from 'react'
 
 const EVENT_NAME = 'app-dialog'
 
+/** Cho phép in đậm một đoạn trong message bằng cú pháp **...**. */
+function renderMessage(message) {
+  return String(message)
+    .split(/(\*\*[^*]+\*\*)/g)
+    .filter(Boolean)
+    .map((part, index) =>
+      part.startsWith('**') && part.endsWith('**') ? (
+        <strong key={index} className="font-semibold text-[#1b1c17]">
+          {part.slice(2, -2)}
+        </strong>
+      ) : (
+        part
+      ),
+    )
+}
+
 export default function DialogProvider({ children }) {
   const [dialog, setDialog] = useState(null)
   const [inputValue, setInputValue] = useState('')
@@ -114,8 +130,11 @@ export default function DialogProvider({ children }) {
             </div>
 
             {dialog.message ? (
-              <p id={messageId} className="whitespace-pre-line text-sm leading-relaxed text-[#414942]">
-                {dialog.message}
+              <p
+                id={messageId}
+                className="custom-scrollbar max-h-[55vh] overflow-y-auto whitespace-pre-line pr-1 text-sm leading-relaxed text-[#414942]"
+              >
+                {renderMessage(dialog.message)}
               </p>
             ) : (
               <span id={messageId} className="sr-only">
@@ -124,23 +143,49 @@ export default function DialogProvider({ children }) {
             )}
 
             {dialog.kind === 'prompt' ? (
-              <label className="mt-4 block">
-                <span className="sr-only">{dialog.placeholder || 'Nội dung'}</span>
-                <textarea
-                  ref={inputRef}
-                  rows={3}
-                  className="w-full rounded-xl border-2 border-[#c1c9c0] px-3 py-2.5 text-sm text-[#1b1c17] outline-none focus:border-[#356647]"
-                  value={inputValue}
-                  placeholder={dialog.placeholder || 'Nhập nội dung...'}
-                  onChange={(event) => setInputValue(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
-                      event.preventDefault()
-                      handleConfirm()
-                    }
-                  }}
-                />
-              </label>
+              <>
+                {dialog.presets?.length ? (
+                  <div className="mt-4 space-y-2">
+                    <span className="text-xs font-semibold text-[#414942]">{dialog.presetsLabel}</span>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      {dialog.presets.map((preset) => {
+                        const selected = inputValue.trim() === preset
+                        return (
+                          <button
+                            key={preset}
+                            type="button"
+                            onClick={() => setInputValue(preset)}
+                            className={`rounded-lg border px-3 py-2 text-left text-xs font-semibold transition ${
+                              selected
+                                ? 'border-[#356647] bg-[#356647]/10 text-[#356647]'
+                                : 'border-[#c1c9c0] bg-[#fbf9f1] text-[#414942] hover:border-[#356647]/40'
+                            }`}
+                          >
+                            {preset}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ) : null}
+                <label className="mt-4 block">
+                  <span className="sr-only">{dialog.placeholder || 'Nội dung'}</span>
+                  <textarea
+                    ref={inputRef}
+                    rows={3}
+                    className="w-full rounded-xl border-2 border-[#c1c9c0] px-3 py-2.5 text-sm text-[#1b1c17] outline-none focus:border-[#356647]"
+                    value={inputValue}
+                    placeholder={dialog.placeholder || 'Nhập nội dung...'}
+                    onChange={(event) => setInputValue(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+                        event.preventDefault()
+                        handleConfirm()
+                      }
+                    }}
+                  />
+                </label>
+              </>
             ) : null}
 
             <div className="mt-6 flex justify-end gap-3">

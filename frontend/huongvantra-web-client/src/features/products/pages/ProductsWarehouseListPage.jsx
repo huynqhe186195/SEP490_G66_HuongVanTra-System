@@ -239,7 +239,7 @@ function matchesSkuRowStatus(row, statusFilter) {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-const COL = 11
+const COL = 10
 
 export default function ProductsWarehouseListPage() {
   const location = useLocation()
@@ -659,8 +659,7 @@ export default function ProductsWarehouseListPage() {
                   <tr>
                     <th className="w-10 px-2 py-3" />
                     <th className="w-14 px-2 py-3" />
-                    <th className="min-w-[180px] px-3 py-3">Tên hàng</th>
-                    <th className="px-3 py-3">Mã SKU</th>
+                    <th className="min-w-[180px] px-3 py-3">Sản Phẩm</th>
                     <th className="hidden px-3 py-3 md:table-cell">Nhóm hàng</th>
                     <th className="hidden px-3 py-3 text-right lg:table-cell">Giá vốn</th>
                     <th className="px-3 py-3 text-right">Giá bán</th>
@@ -745,7 +744,7 @@ export default function ProductsWarehouseListPage() {
                               />
                             </td>
 
-                            {/* Tên hàng + variant */}
+                            {/* Tên hàng + variant + SKU */}
                             <td className="px-3 py-3" onClick={() => toggleExpand(row.rowKey)}>
                               <span className="block font-semibold text-slate-900">{product.name}</span>
                               {selectedVariant ? (
@@ -753,11 +752,9 @@ export default function ProductsWarehouseListPage() {
                                   {getVariantLabel(selectedVariant, product.name)}
                                 </span>
                               ) : null}
-                            </td>
-
-                            {/* SKU code */}
-                            <td className="px-3 py-3 font-mono text-xs font-bold text-[#356647]" onClick={() => toggleExpand(row.rowKey)}>
-                              {selectedVariant?.skuCode || '—'}
+                              <span className="mt-0.5 block font-mono text-xs text-slate-500">
+                                {selectedVariant?.skuCode || '—'}
+                              </span>
                             </td>
 
                             {/* Danh mục */}
