@@ -125,7 +125,7 @@ public class StockAdjustmentRequestsController(InventoryLogic _logic) : Controll
     /// Không tạo dữ liệu; dùng để màn hình tạo yêu cầu chặn sớm trước bước xác nhận.
     /// </summary>
     [HttpPost("check-duplicates")]
-    [Authorize(Roles = CreateRoles)]
+    [Authorize(Policy = PermissionNames.StockAdjustmentCreateAccess)]
     public async Task<IActionResult> CheckDuplicates(
         [FromBody] CheckStockAdjustmentDuplicatesRequest request,
         CancellationToken ct) =>

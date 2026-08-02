@@ -23,10 +23,15 @@ const SOURCE_LOCATION = 'Warehouse'
 const DEFECT_REASON_OTHER = 'OTHER'
 const MAX_EVIDENCE_IMAGES = 5
 const MAX_EVIDENCE_IMAGE_BYTES = 5 * 1024 * 1024
+/** Chiều cao tối thiểu hàng 1 để hai cột luôn kéo bằng nhau kể cả khi một bên ít nội dung. */
+const ROW1_MIN_H = 'min-h-[28rem]'
 const LABEL_CLASS = 'mb-1 block text-xs font-bold uppercase tracking-wider text-slate-500'
 const FIELD_CLASS =
   'min-h-[44px] w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-[#538463]'
-const RECEIPT_GRID = 'grid grid-cols-[1.1fr_1.4fr_1.1fr_auto] items-center gap-3'
+const RECEIPT_GRID = 'grid grid-cols-[1.1fr_1.3fr_1.1fr_auto] items-center gap-2'
+/** Cột cố định để mọi dòng Hàng trả thẳng hàng với nhau. */
+const RETURN_LINE_GRID =
+  'grid grid-cols-[minmax(11rem,1.4fr)_4.75rem_4.75rem_7.25rem_2.25rem] items-center gap-2'
 
 function newOperationId() {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID()
@@ -66,16 +71,19 @@ function buildReceiptLineOptions(receipt, batches) {
     })
 }
 
-function StepBadge({ index, title, hint }) {
+function StepHeading({ index, title, hint, right }) {
   return (
-    <div className="flex items-start gap-3">
-      <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#538463] text-xs font-bold text-white">
-        {index}
-      </span>
-      <div className="min-w-0">
-        <p className="text-sm font-bold text-slate-800">{title}</p>
-        {hint ? <p className="mt-0.5 text-xs text-slate-500">{hint}</p> : null}
+    <div className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-100 px-4 py-3 sm:px-5 sm:py-4">
+      <div className="flex min-w-0 items-start gap-3">
+        <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#538463] text-xs font-bold text-white">
+          {index}
+        </span>
+        <div className="min-w-0">
+          <p className="text-sm font-bold text-slate-800">{title}</p>
+          {hint ? <p className="mt-0.5 text-xs text-slate-500">{hint}</p> : null}
+        </div>
       </div>
+      {right}
     </div>
   )
 }
@@ -183,7 +191,6 @@ export default function InventoryReturnCreatePage() {
   }
 
   function chooseOriginal(option) {
-    // Bấm lại đúng phiếu đang chọn là bỏ chọn.
     if (selectedOriginal?.id === option.id) {
       clearOriginal('')
       return
@@ -194,7 +201,7 @@ export default function InventoryReturnCreatePage() {
     setOriginalSearch(option.receiptCode)
   }
 
-  function clearOriginal(nextSearch) {
+  function clearOriginal(nextSearch = '') {
     resetReceiptSelection()
     setIsLoadingReceiptLines(false)
     setSelectedOriginal(null)
@@ -206,7 +213,6 @@ export default function InventoryReturnCreatePage() {
     [receiptDetail, batches],
   )
 
-  // Dòng trả chính là các dòng của phiếu nhập được nhập số lượng > 0, không còn bước "Thêm" riêng.
   const lines = useMemo(
     () =>
       receiptLineOptions
@@ -224,6 +230,14 @@ export default function InventoryReturnCreatePage() {
   )
   const totalQuantity = lines.reduce((sum, line) => sum + line.quantity, 0)
   const selectedDefectReason = defectReasons.find((item) => item.code === defectReasonCode)
+  const canSubmit = Boolean(
+    selectedOriginal
+    && defectReasonCode
+    && evidenceImageUrls.length > 0
+    && uploadingCount === 0
+    && lines.length > 0
+    && (defectReasonCode !== DEFECT_REASON_OTHER || reason.trim()),
+  )
 
   function changeReturnQuantity(option, raw) {
     if (raw === '') {
@@ -362,7 +376,11 @@ export default function InventoryReturnCreatePage() {
   if (!canOperate) {
     return (
       <PageShell>
-        <PageHeader title="Tạo phiếu trả hàng nhập" description="Bạn không có quyền tạo phiếu trả hàng nhập." />
+        <PageHeader
+          title="Tạo phiếu trả hàng nhập"
+          titleInfo={SUPPLIER_RETURN_FLOW_DESCRIPTION}
+          description="Bạn không có quyền tạo phiếu trả hàng nhập."
+        />
         <section className="mt-6 rounded-2xl border border-slate-100 bg-white p-8 text-sm text-slate-600 shadow-sm">
           Chỉ Thủ kho được tạo phiếu trả hàng nhập. Admin và Quản lý chỉ được xem danh sách và chi tiết.
           <button
@@ -381,7 +399,8 @@ export default function InventoryReturnCreatePage() {
     <PageShell>
       <PageHeader
         title="Tạo phiếu trả hàng nhập"
-        description={SUPPLIER_RETURN_FLOW_DESCRIPTION}
+        titleInfo={SUPPLIER_RETURN_FLOW_DESCRIPTION}
+        description="Chọn phiếu nhập NCC gốc, nhập số lượng trả theo đúng lô, đính kèm ảnh hàng lỗi rồi xác nhận."
         rightContent={
           <button
             type="button"
@@ -393,19 +412,25 @@ export default function InventoryReturnCreatePage() {
         }
       />
 
-      <form onSubmit={handleSubmit} className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-12">
-        <div className="space-y-6 lg:col-span-8">
-          <section className="rounded-2xl border border-slate-100 bg-white shadow-sm">
-            <div className="border-b border-slate-100 px-5 py-4">
-              <StepBadge
-                index={1}
-                title="Chọn phiếu nhập NCC gốc"
-                hint="Chỉ hiện phiếu nhập đã hoàn tất. Bấm lại phiếu đang chọn để bỏ chọn."
-              />
-            </div>
+      <form onSubmit={handleSubmit} className="mt-2 space-y-6">
+        {/*
+          Hàng 1 — cặp cột bằng nhau:
+          - grid items-stretch kéo 2 section cùng chiều cao hàng
+          - section: flex flex-col h-full + min-h chung
+          - phần thân: flex-1 min-h-0 overflow-y-auto để phần dư cuộn trong card
+        */}
+        <div className="grid grid-cols-1 items-stretch gap-6 lg:grid-cols-12">
+          <section
+            className={`flex h-full min-h-0 flex-col rounded-2xl border border-slate-100 bg-white shadow-sm lg:col-span-5 ${ROW1_MIN_H}`}
+          >
+            <StepHeading
+              index={1}
+              title="Phiếu nhập NCC gốc"
+              hint="Chỉ phiếu đã hoàn tất. Bấm lại phiếu đang chọn để bỏ chọn."
+            />
 
-            <div className="px-5 py-4">
-              <label className="block">
+            <div className="flex min-h-0 flex-1 flex-col px-4 pb-4 pt-3 sm:px-5">
+              <label className="block shrink-0">
                 <span className={LABEL_CLASS}>Tìm phiếu nhập *</span>
                 <input
                   value={originalSearch}
@@ -415,20 +440,20 @@ export default function InventoryReturnCreatePage() {
                 />
               </label>
 
-              <div className="mt-3 overflow-hidden rounded-xl border border-slate-200">
+              <div className="mt-3 flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200">
                 <div
-                  className={`${RECEIPT_GRID} border-b border-slate-100 bg-slate-50 px-4 py-2 text-xs font-bold uppercase tracking-wide text-slate-500`}
+                  className={`${RECEIPT_GRID} shrink-0 border-b border-slate-100 bg-slate-50 px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-slate-500`}
                 >
                   <span>Mã phiếu</span>
-                  <span>Nhà cung cấp</span>
-                  <span>Thời gian nhập</span>
-                  <span className="text-right">Sản phẩm</span>
+                  <span>NCC</span>
+                  <span>Thời gian</span>
+                  <span className="text-right">Dòng</span>
                 </div>
-                <div className="custom-scrollbar max-h-72 overflow-y-auto">
+                <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto">
                   {isLoadingOriginals ? (
-                    <p className="px-4 py-3 text-sm text-slate-500">Đang tải phiếu gốc...</p>
+                    <p className="px-3 py-4 text-sm text-slate-500">Đang tải phiếu gốc...</p>
                   ) : originalOptions.length === 0 ? (
-                    <p className="px-4 py-3 text-sm text-slate-500">Không tìm thấy phiếu nhập NCC phù hợp.</p>
+                    <p className="px-3 py-4 text-sm text-slate-500">Không tìm thấy phiếu nhập NCC phù hợp.</p>
                   ) : (
                     originalOptions.map((option) => {
                       const selected = selectedOriginal?.id === option.id
@@ -438,25 +463,25 @@ export default function InventoryReturnCreatePage() {
                           type="button"
                           onClick={() => chooseOriginal(option)}
                           title={selected ? 'Bấm lại để bỏ chọn' : 'Chọn phiếu này'}
-                          className={`${RECEIPT_GRID} w-full border-b border-slate-100 px-4 py-3 text-left last:border-b-0 ${
+                          className={`${RECEIPT_GRID} w-full border-b border-slate-100 px-3 py-2.5 text-left last:border-b-0 ${
                             selected ? 'bg-emerald-50' : 'bg-white hover:bg-slate-50'
                           }`}
                         >
                           <span
-                            className={`truncate font-mono text-sm font-semibold ${
+                            className={`truncate font-mono text-xs font-semibold sm:text-sm ${
                               selected ? 'text-[#356647]' : 'text-slate-800'
                             }`}
                           >
                             {option.receiptCode}
                           </span>
-                          <span className="truncate text-sm text-slate-700">
+                          <span className="truncate text-xs text-slate-700 sm:text-sm">
                             {option.supplierName || 'Chưa có tên NCC'}
                           </span>
-                          <span className="truncate text-xs text-slate-500">
+                          <span className="truncate text-[11px] text-slate-500">
                             {formatVietnamDateTime(option.receivedDate)}
                           </span>
-                          <span className="text-right text-sm font-semibold text-slate-800">
-                            {option.items.length} dòng
+                          <span className="text-right text-xs font-semibold text-slate-800 sm:text-sm">
+                            {option.items.length}
                           </span>
                         </button>
                       )
@@ -467,112 +492,133 @@ export default function InventoryReturnCreatePage() {
             </div>
           </section>
 
-          <section className="rounded-2xl border border-slate-100 bg-white shadow-sm">
-            <div className="flex items-center justify-between gap-4 border-b border-slate-100 px-5 py-4">
-              <StepBadge
-                index={2}
-                title="Chọn hàng trả"
-                hint="Chỉ được trả đúng lô đã nhập theo phiếu gốc. Nhập số lượng để đưa dòng vào phiếu trả."
-              />
-              <p className="shrink-0 text-sm font-semibold text-slate-700">
-                Tổng trả: {formatStockQuantity(totalQuantity)}
-              </p>
-            </div>
+          <section
+            className={`flex h-full min-h-0 flex-col rounded-2xl border border-slate-100 bg-white shadow-sm lg:col-span-7 ${ROW1_MIN_H}`}
+          >
+            <StepHeading
+              index={2}
+              title="Hàng trả"
+              hint="Chỉ trả đúng lô đã nhập. Nhập số lượng trả để đưa dòng vào phiếu."
+              right={(
+                <div className="shrink-0 rounded-xl bg-slate-50 px-3 py-1.5 text-right">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Tổng trả</p>
+                  <p className="text-sm font-bold text-[#356647]">{formatStockQuantity(totalQuantity)}</p>
+                </div>
+              )}
+            />
 
-            <div className="custom-scrollbar max-h-[32rem] overflow-y-auto">
-              {!selectedOriginal ? (
-                <p className="px-5 py-4 text-sm text-slate-500">Vui lòng chọn phiếu nhập NCC gốc trước.</p>
-              ) : isLoadingReceiptLines ? (
-                <p className="px-5 py-4 text-sm text-slate-500">Đang tải hàng của phiếu...</p>
-              ) : receiptLineOptions.length === 0 ? (
-                <p className="px-5 py-4 text-sm text-slate-500">Phiếu này không có lô nào truy vết được ở Kho.</p>
-              ) : (
-                receiptLineOptions.map((option) => {
-                  const canReturn = option.availableQuantity > 0
-                  const draft = quantityDrafts[option.key] ?? ''
-                  const picked = Number(draft) > 0
-                  return (
-                    <div
-                      key={option.key}
-                      className={`flex flex-wrap items-center gap-3 border-b border-slate-100 px-5 py-3 last:border-b-0 ${
-                        picked ? 'bg-emerald-50/60' : ''
-                      }`}
-                    >
-                      <div className="min-w-[12rem] flex-1">
-                        <p className="text-sm font-semibold text-slate-800">{option.receiptLine.skuNameSnapshot}</p>
-                        <p className="font-mono text-xs text-slate-500">{option.receiptLine.skuCode}</p>
-                        <p className="mt-0.5 font-mono text-xs text-[#356647]">Lô {option.lotCode || '—'}</p>
-                      </div>
-                      <div className="flex shrink-0 gap-2">
-                        <div className="rounded-lg bg-slate-50 px-3 py-1.5 text-center">
-                          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Đã nhập</p>
-                          <p className="text-sm font-bold text-slate-800">
-                            {formatStockQuantity(option.receivedQuantity)}
-                          </p>
-                        </div>
-                        <div className={`rounded-lg px-3 py-1.5 text-center ${canReturn ? 'bg-emerald-50' : 'bg-rose-50'}`}>
-                          <p
-                            className={`text-[11px] font-semibold uppercase tracking-wide ${
-                              canReturn ? 'text-emerald-700' : 'text-rose-600'
+            {/* Chiều cao cố định + cuộn; lưới cột cố định để các dòng thẳng hàng */}
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              <div className="min-h-0 flex-1 overflow-x-auto">
+                <div className="min-w-[36rem]">
+                  <div
+                    className={`${RETURN_LINE_GRID} border-b border-slate-100 bg-slate-50 px-4 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-500 sm:px-5`}
+                  >
+                    <span>Sản phẩm / SKU / Lô</span>
+                    <span className="text-center">Đã nhập</span>
+                    <span className="text-center">Còn ở Kho</span>
+                    <span className="text-center">Số lượng trả</span>
+                    <span />
+                  </div>
+
+                  <div className="custom-scrollbar h-96 overflow-y-auto">
+                    {!selectedOriginal ? (
+                      <p className="px-5 py-6 text-sm text-slate-500">Vui lòng chọn phiếu nhập NCC gốc trước.</p>
+                    ) : isLoadingReceiptLines ? (
+                      <p className="px-5 py-6 text-sm text-slate-500">Đang tải hàng của phiếu...</p>
+                    ) : receiptLineOptions.length === 0 ? (
+                      <p className="px-5 py-6 text-sm text-slate-500">Phiếu này không có lô nào truy vết được ở Kho.</p>
+                    ) : (
+                      receiptLineOptions.map((option) => {
+                        const canReturn = option.availableQuantity > 0
+                        const draft = quantityDrafts[option.key] ?? ''
+                        const picked = Number(draft) > 0
+                        return (
+                          <div
+                            key={option.key}
+                            className={`${RETURN_LINE_GRID} border-b border-slate-100 px-4 py-3 last:border-b-0 sm:px-5 ${
+                              picked ? 'bg-emerald-50/60' : ''
                             }`}
                           >
-                            Còn ở Kho
-                          </p>
-                          <p className={`text-sm font-bold ${canReturn ? 'text-[#356647]' : 'text-rose-700'}`}>
-                            {canReturn ? formatStockQuantity(option.availableQuantity) : '0'}
-                          </p>
-                        </div>
-                      </div>
-                      {canReturn ? (
-                        <div className="flex shrink-0 items-center gap-2">
-                          <input
-                            type="number"
-                            min="0"
-                            step="1"
-                            max={option.availableQuantity}
-                            value={draft}
-                            onChange={(event) => changeReturnQuantity(option, event.target.value)}
-                            className="w-24 rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#538463]"
-                            placeholder="SL trả"
-                          />
-                          {picked ? (
-                            <button
-                              type="button"
-                              onClick={() => changeReturnQuantity(option, '')}
-                              className="rounded-lg border border-rose-200 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50"
-                            >
-                              Bỏ
-                            </button>
-                          ) : null}
-                        </div>
-                      ) : (
-                        <span className="shrink-0 rounded-lg bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500">
-                          Hết tồn
-                        </span>
-                      )}
-                    </div>
-                  )
-                })
-              )}
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-semibold text-slate-800">
+                                {option.receiptLine.skuNameSnapshot}
+                              </p>
+                              <p className="mt-0.5 truncate font-mono text-xs text-slate-500">
+                                {option.receiptLine.skuCode}
+                              </p>
+                              <p className="mt-0.5 truncate font-mono text-xs text-[#356647]">
+                                Lô {option.lotCode || '—'}
+                              </p>
+                            </div>
+
+                            <div className="rounded-lg bg-slate-50 px-1.5 py-1.5 text-center">
+                              <p className="text-sm font-bold text-slate-800">
+                                {formatStockQuantity(option.receivedQuantity)}
+                              </p>
+                            </div>
+
+                            <div className={`rounded-lg px-1.5 py-1.5 text-center ${canReturn ? 'bg-emerald-50' : 'bg-rose-50'}`}>
+                              <p className={`text-sm font-bold ${canReturn ? 'text-[#356647]' : 'text-rose-700'}`}>
+                                {formatStockQuantity(option.availableQuantity)}
+                              </p>
+                            </div>
+
+                            <div className="flex justify-center">
+                              {canReturn ? (
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="1"
+                                  max={option.availableQuantity}
+                                  value={draft}
+                                  onChange={(event) => changeReturnQuantity(option, event.target.value)}
+                                  className="w-full rounded-xl border border-slate-200 px-2 py-2 text-center text-sm outline-none focus:border-[#538463]"
+                                  placeholder="0"
+                                  aria-label="Số lượng trả"
+                                  title="Số lượng trả"
+                                />
+                              ) : (
+                                <span className="rounded-lg bg-slate-100 px-2 py-1.5 text-[11px] font-semibold text-slate-500">
+                                  Hết tồn
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="flex justify-center">
+                              {picked ? (
+                                <button
+                                  type="button"
+                                  onClick={() => changeReturnQuantity(option, '')}
+                                  title="Bỏ dòng này"
+                                  className="rounded-lg p-1.5 text-slate-500 hover:bg-rose-50 hover:text-rose-600"
+                                >
+                                  <span className="material-symbols-outlined text-[18px]">close</span>
+                                </button>
+                              ) : null}
+                            </div>
+                          </div>
+                        )
+                      })
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
           </section>
         </div>
 
-        <div className="space-y-6 lg:col-span-4">
-          <section className="rounded-2xl border border-slate-100 bg-white shadow-sm">
-            <div className="border-b border-slate-100 px-5 py-4">
-              <StepBadge index={3} title="Lý do & bằng chứng" hint="Ảnh hàng lỗi là bằng chứng hậu kiểm bắt buộc." />
-            </div>
+        {/* Hàng 2 — form (8) + tóm tắt (4), cùng kỹ thuật kéo cao bằng nhau */}
+        <div className="grid grid-cols-1 items-stretch gap-6 lg:grid-cols-12">
+          <section className="flex h-full min-h-0 flex-col rounded-2xl border border-slate-100 bg-white shadow-sm lg:col-span-8">
+            <StepHeading
+              index={3}
+              title="Lý do & bằng chứng"
+              hint="Ảnh hàng lỗi là bằng chứng hậu kiểm bắt buộc."
+            />
 
-            <div className="space-y-4 px-5 py-4">
-              <div>
-                <span className={LABEL_CLASS}>Luồng trả</span>
-                <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-800">
-                  Kho → Nhà cung cấp
-                </div>
-              </div>
-
-              <label className="block">
+            <div className="grid flex-1 gap-4 px-4 py-4 sm:grid-cols-2 sm:px-5">
+              <label className="block sm:col-span-2">
                 <span className={LABEL_CLASS}>Lý do trả hàng *</span>
                 <select
                   value={defectReasonCode}
@@ -586,37 +632,39 @@ export default function InventoryReturnCreatePage() {
                 </select>
               </label>
 
-              <label className="block">
+              <label className="block sm:col-span-2">
                 <span className={LABEL_CLASS}>
                   Mô tả chi tiết {defectReasonCode === DEFECT_REASON_OTHER ? '*' : ''}
                 </span>
-                <input
+                <textarea
+                  rows={2}
                   value={reason}
                   onChange={(event) => setReason(event.target.value)}
-                  className={FIELD_CLASS}
+                  className={`${FIELD_CLASS} min-h-[72px] resize-y`}
                   placeholder={defectReasonCode === DEFECT_REASON_OTHER ? 'Bắt buộc khi chọn lý do Khác' : 'Không bắt buộc'}
                 />
               </label>
 
-              <label className="block">
+              <label className="block sm:col-span-2">
                 <span className={LABEL_CLASS}>Ghi chú</span>
                 <input value={note} onChange={(event) => setNote(event.target.value)} className={FIELD_CLASS} />
               </label>
 
-              <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-4">
+              <div className="sm:col-span-2">
                 <span className={LABEL_CLASS}>Ảnh hàng lỗi *</span>
                 <p className="text-xs text-slate-500">
                   Tối đa {MAX_EVIDENCE_IMAGES} ảnh, mỗi ảnh dưới 5MB.
                 </p>
                 <div className="mt-3 flex flex-wrap items-center gap-3">
                   <label
-                    className={`rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 ${
+                    className={`inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 ${
                       evidenceImageUrls.length >= MAX_EVIDENCE_IMAGES || uploadingCount > 0
                         ? 'cursor-not-allowed opacity-50'
                         : 'cursor-pointer hover:bg-slate-50'
                     }`}
                   >
-                    {uploadingCount > 0 ? `Đang tải ${uploadingCount} ảnh...` : 'Thêm ảnh'}
+                    <span className="material-symbols-outlined text-[18px]">add_photo_alternate</span>
+                    {uploadingCount > 0 ? `Đang tải ${uploadingCount}...` : 'Thêm ảnh'}
                     <input
                       type="file"
                       accept="image/*"
@@ -627,7 +675,7 @@ export default function InventoryReturnCreatePage() {
                     />
                   </label>
                   <span className="text-sm text-slate-500">
-                    {evidenceImageUrls.length}/{MAX_EVIDENCE_IMAGES} ảnh
+                    {evidenceImageUrls.length}/{MAX_EVIDENCE_IMAGES}
                   </span>
                 </div>
                 {evidenceImageUrls.length > 0 ? (
@@ -655,9 +703,9 @@ export default function InventoryReturnCreatePage() {
             </div>
           </section>
 
-          <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm lg:sticky lg:top-6">
-            <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Tóm tắt phiếu trả</p>
-            <dl className="mt-3 space-y-2 text-sm">
+          <section className="flex h-full min-h-0 flex-col rounded-2xl border border-slate-100 bg-white p-5 shadow-sm lg:col-span-4">
+            <p className="shrink-0 text-xs font-bold uppercase tracking-wider text-slate-500">Tóm tắt</p>
+            <dl className="mt-3 flex-1 space-y-2.5 text-sm">
               <div className="flex items-start justify-between gap-3">
                 <dt className="text-slate-500">Phiếu nhập gốc</dt>
                 <dd className="text-right font-mono font-semibold text-slate-800">
@@ -666,9 +714,13 @@ export default function InventoryReturnCreatePage() {
               </div>
               <div className="flex items-start justify-between gap-3">
                 <dt className="text-slate-500">Nhà cung cấp</dt>
-                <dd className="text-right font-semibold text-slate-800">
+                <dd className="max-w-[55%] text-right font-semibold text-slate-800">
                   {selectedOriginal?.supplierName || '—'}
                 </dd>
+              </div>
+              <div className="flex items-start justify-between gap-3">
+                <dt className="text-slate-500">Luồng</dt>
+                <dd className="text-right font-semibold text-slate-800">Kho → NCC</dd>
               </div>
               <div className="flex items-start justify-between gap-3">
                 <dt className="text-slate-500">Dòng trả</dt>
@@ -686,25 +738,27 @@ export default function InventoryReturnCreatePage() {
               </div>
             </dl>
 
-            <p className="mt-4 rounded-xl bg-rose-50 px-3 py-2 text-xs text-rose-700">
-              Phiếu chốt ngay và trừ tồn Kho khi xác nhận, không thể hoàn tác.
-            </p>
+            <div className="mt-auto space-y-4 pt-4">
+              <p className="rounded-xl bg-rose-50 px-3 py-2 text-xs leading-5 text-rose-700">
+                Phiếu chốt ngay và trừ tồn Kho khi xác nhận, không thể hoàn tác.
+              </p>
 
-            <div className="mt-4 flex gap-3">
-              <button
-                type="button"
-                onClick={() => navigate(LIST_PATH)}
-                className="flex-1 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50"
-              >
-                Hủy
-              </button>
-              <button
-                type="submit"
-                disabled={isSaving || uploadingCount > 0}
-                className="flex-1 rounded-xl bg-[#538463] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#457053] disabled:opacity-60"
-              >
-                Tiếp tục
-              </button>
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => navigate(LIST_PATH)}
+                  className="flex-1 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSaving || uploadingCount > 0 || !canSubmit}
+                  className="flex-1 rounded-xl bg-[#538463] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#457053] disabled:opacity-60"
+                >
+                  Tiếp tục
+                </button>
+              </div>
             </div>
           </section>
         </div>
