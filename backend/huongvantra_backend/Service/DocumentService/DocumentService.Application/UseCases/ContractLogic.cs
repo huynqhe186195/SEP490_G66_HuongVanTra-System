@@ -7,7 +7,8 @@ using DocumentService.Domain.Exceptions;
 
 namespace DocumentService.Application.UseCases;
 
-public sealed record DocumentAccessContext(Guid UserId, bool IsAdmin);
+/// <param name="CanApprove">Quyền phán quyết hợp đồng (APPROVE_CONTRACT) — Manager. Cũng dùng làm phạm vi xem toàn bộ hợp đồng.</param>
+public sealed record DocumentAccessContext(Guid UserId, bool CanApprove);
 
 public class ContractLogic
 {
@@ -35,7 +36,7 @@ public class ContractLogic
         pageSize = Math.Clamp(pageSize, 1, MaxPageSize);
 
         ContractStatus? status = ParseStatus(statusStr);
-        Guid? filterByOwner = access.IsAdmin ? null : access.UserId;
+        Guid? filterByOwner = access.CanApprove ? null : access.UserId;
 
         var (items, total) = await _contractRepo.GetPagedAsync(
             search, customerId, status, filterByOwner, page, pageSize, ct);
@@ -79,6 +80,7 @@ public class ContractLogic
             throw new ContractValidationException("Hợp đồng chỉ có thể được tạo cho khách doanh nghiệp.");
 
         var code = await _contractRepo.GenerateNextContractCodeAsync(ct);
+        var now = DateTime.UtcNow;
 
         var contract = new Contract
         {
@@ -97,8 +99,8 @@ public class ContractLogic
             CreditLimit = request.CreditLimit,
             PaymentTermDays = request.PaymentTermDays,
             Notes = request.Notes?.Trim(),
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
+            CreatedAt = now,
+            UpdatedAt = now
         };
 
         await _contractRepo.AddAsync(contract, ct);
@@ -114,7 +116,7 @@ public class ContractLogic
             ?? throw new ContractNotFoundException(id);
 
         EnsureIsOwner(contract, access);
-        EnsureIsDraft(contract);
+        EnsureIsEditable(contract);
 
         ValidateContractFields(request.Title, request.EffectiveDate, request.ExpiryDate,
             request.DiscountPercent, request.CreditLimit, request.PaymentTermDays, request.Notes);
@@ -142,11 +144,24 @@ public class ContractLogic
             ?? throw new ContractNotFoundException(id);
 
         EnsureIsOwner(contract, access);
-        EnsureIsDraft(contract);
+        EnsureIsEditable(contract);
 
-        contract.Status = ContractStatus.PendingApproval;
-        contract.SubmittedAt = DateTime.UtcNow;
-        contract.UpdatedAt = DateTime.UtcNow;
+        var now = DateTime.UtcNow;
+
+        // Người tự tạo mà đã có quyền duyệt thì gửi duyệt cũng chính là duyệt luôn.
+        if (access.CanApprove)
+        {
+            contract.Status = ContractStatus.Active;
+            contract.RejectionNote = null;
+            contract.ReviewedAt = now;
+        }
+        else
+        {
+            contract.Status = ContractStatus.PendingApproval;
+        }
+
+        contract.SubmittedAt = now;
+        contract.UpdatedAt = now;
 
         _contractRepo.Update(contract);
         await _contractRepo.SaveChangesAsync(ct);
@@ -157,11 +172,14 @@ public class ContractLogic
 
     public async Task<ContractResponse> ReviewAsync(Guid id, ReviewContractRequest request, DocumentAccessContext access, CancellationToken ct = default)
     {
-        if (!access.IsAdmin)
-            throw new ContractForbiddenException("Chỉ Admin mới có quyền phán quyết hợp đồng.");
+        if (!access.CanApprove)
+            throw new ContractForbiddenException("Chỉ Quản lý mới có quyền phán quyết hợp đồng.");
 
         var contract = await _contractRepo.GetByIdAsync(id, ct)
             ?? throw new ContractNotFoundException(id);
+
+        if (contract.CreatedByUserId == access.UserId)
+            throw new ContractForbiddenException("Không thể tự phán quyết hợp đồng do chính mình tạo.");
 
         if (contract.Status != ContractStatus.PendingApproval)
             throw new ContractValidationException("Chỉ có thể duyệt hợp đồng đang ở trạng thái Chờ duyệt.");
@@ -182,7 +200,8 @@ public class ContractLogic
             if (trimmedNote.Length > 1000)
                 throw new ContractValidationException("Lý do từ chối không được vượt quá 1000 ký tự.");
 
-            contract.Status = ContractStatus.Draft;
+            // Trả về Bị từ chối để người tạo mở khóa chỉnh sửa và gửi duyệt lại.
+            contract.Status = ContractStatus.Rejected;
             contract.RejectionNote = trimmedNote;
         }
 
@@ -202,7 +221,7 @@ public class ContractLogic
             ?? throw new ContractNotFoundException(id);
 
         EnsureIsOwner(contract, access);
-        EnsureIsDraft(contract);
+        EnsureIsEditable(contract);
 
         contract.IsDeleted = true;
         contract.UpdatedAt = DateTime.UtcNow;
@@ -271,7 +290,7 @@ public class ContractLogic
 
     private static void EnsureCanView(Contract contract, DocumentAccessContext access)
     {
-        if (access.IsAdmin) return;
+        if (access.CanApprove) return;
         if (contract.CreatedByUserId == access.UserId) return;
         throw new ContractForbiddenException("Bạn không có quyền xem hợp đồng này.");
     }
@@ -282,10 +301,21 @@ public class ContractLogic
             throw new ContractForbiddenException("Chỉ người tạo hợp đồng mới có quyền thực hiện thao tác này.");
     }
 
-    private static void EnsureIsDraft(Contract contract)
+    /// <summary>
+    /// Hợp đồng chỉ mở khóa chỉnh sửa ở Nháp hoặc sau khi bị từ chối.
+    /// Chờ duyệt = khóa để chờ phán quyết; Đã duyệt/Hết hạn = khóa vĩnh viễn.
+    /// </summary>
+    private static void EnsureIsEditable(Contract contract)
     {
-        if (contract.Status != ContractStatus.Draft)
-            throw new ContractValidationException("Hợp đồng đã bị khóa. Chỉ có thể chỉnh sửa khi ở trạng thái Nháp.");
+        if (contract.Status is ContractStatus.Draft or ContractStatus.Rejected) return;
+
+        var reason = contract.Status switch
+        {
+            ContractStatus.PendingApproval => "Hợp đồng đang chờ Quản lý phán quyết nên không thể chỉnh sửa.",
+            ContractStatus.Active => "Hợp đồng đã được duyệt nên không thể chỉnh sửa.",
+            _ => "Hợp đồng đã bị khóa. Chỉ có thể chỉnh sửa khi ở trạng thái Nháp hoặc Bị từ chối."
+        };
+        throw new ContractValidationException(reason);
     }
 
     private static ContractStatus? ParseStatus(string? value) =>

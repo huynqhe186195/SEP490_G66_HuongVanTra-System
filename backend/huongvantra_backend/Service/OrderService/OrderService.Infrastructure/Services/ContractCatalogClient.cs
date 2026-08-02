@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using Microsoft.Extensions.Logging;
 using OrderService.Application.Interfaces;
+using OrderService.Domain.Exceptions;
 
 namespace OrderService.Infrastructure.Services;
 
@@ -29,11 +30,13 @@ public class ContractCatalogClient(HttpClient httpClient, ILogger<ContractCatalo
                     response.ExpiryDate);
         }
         catch (Exception ex) when (
-            ex is HttpRequestException or NotSupportedException ||
+            ex is HttpRequestException or NotSupportedException or System.Text.Json.JsonException ||
             ex is TaskCanceledException && !ct.IsCancellationRequested)
         {
-            logger.LogWarning(ex, "Unable to resolve active contract for customer {CustomerId}", customerId);
-            return null;
+            // Không được trả null: khách doanh nghiệp sẽ bị coi như "chưa có hợp đồng" hoặc
+            // tệ hơn là lọt qua ràng buộc chiết khấu/hạn mức.
+            logger.LogError(ex, "DocumentService unreachable while resolving active contract for customer {CustomerId}", customerId);
+            throw new OrderDependencyUnavailableException("Hợp đồng", ex);
         }
     }
 

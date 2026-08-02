@@ -566,6 +566,46 @@ public sealed class SupplierReceiptAverageCostTests
                     .FirstOrDefault());
         }
 
+        // Reconciliation đọc ngoài transaction lock nên không AssertLocked.
+        public Task<List<Guid>> GetActiveVariantIdsAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(new List<Guid> { Variant.Id });
+
+        public Task<List<ProductCostPriceHistory>> GetAppliedHistoryForSkuAsync(
+            Guid skuId,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(
+                Histories
+                    .Where(history =>
+                        history.SkuId == skuId
+                        && history.WasApplied
+                        && history.IncomingQuantity > 0
+                        && history.IncomingUnitCost > 0)
+                    .OrderBy(history => history.SourceApprovedAt)
+                    .ThenBy(history => history.SourceReceiptId)
+                    .ThenBy(history => history.ReceiptLineOrder)
+                    .ThenBy(history => history.SourceReceiptLineId)
+                    .ToList());
+
+        public Task<List<Guid>> GetPendingReconciliationReceiptIdsAsync(
+            Guid skuId,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(
+                Histories
+                    .Where(history =>
+                        history.SkuId == skuId
+                        && !history.WasApplied
+                        && history.ProcessingResult == "reconciliation_required")
+                    .GroupBy(history => history.SourceReceiptId)
+                    .Select(group => new
+                    {
+                        SourceReceiptId = group.Key,
+                        ApprovedAt = group.Min(history => history.SourceApprovedAt)
+                    })
+                    .OrderBy(group => group.ApprovedAt)
+                    .ThenBy(group => group.SourceReceiptId.ToString("D"), StringComparer.Ordinal)
+                    .Select(group => group.SourceReceiptId)
+                    .ToList());
+
         public void AddHistory(ProductCostPriceHistory history)
         {
             AssertLocked();

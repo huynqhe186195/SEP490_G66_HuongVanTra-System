@@ -81,6 +81,9 @@ export function getOrderChannelClass(channel) {
   }
   if (key === 'zalo') return 'border border-blue-200 bg-blue-50 text-blue-700'
   if (key === 'website') return 'border border-purple-200 bg-purple-50 text-purple-700'
+  if (key === 'b2b' || key.includes('doanhnghiep') || key.includes('hopdong')) {
+    return 'border border-indigo-200 bg-indigo-50 text-indigo-700'
+  }
   if (key === 'phone' || key.includes('dienthoai')) {
     return 'border border-emerald-200 bg-emerald-50 text-emerald-700'
   }
@@ -127,6 +130,7 @@ export function getPaymentMethodLabel(method) {
     VietQR: 'VietQR',
     BankTransfer: 'Chuyển khoản',
     COD: 'COD',
+    Debt: 'Ghi nợ hợp đồng',
   }
   return map[key] || method || '—'
 }
@@ -137,6 +141,7 @@ export function getPaymentStatusLabel(status) {
     Pending: 'Chờ xử lý',
     Success: 'Thành công',
     Failed: 'Thất bại',
+    Deferred: 'Ghi nợ theo hợp đồng',
   }
   return map[key] || status || '—'
 }
@@ -357,6 +362,7 @@ export function getPaymentStatusClass(status) {
   const key = normalizeOrderKey(status)
   if (key === 'Success') return 'bg-emerald-50 text-emerald-700'
   if (key === 'Failed') return 'bg-red-50 text-red-600'
+  if (key === 'Deferred') return 'bg-indigo-50 text-indigo-700'
   return 'bg-amber-50 text-amber-700'
 }
 
@@ -435,6 +441,10 @@ export function requiresDelivery(order) {
 }
 
 export function canShipOrder(order) {
+  if (isContractOrder(order)) {
+    const contractStatus = normalizeOrderKey(order?.orderStatus)
+    return contractStatus === 'PendingPayment' || contractStatus === 'Processing'
+  }
   if (!requiresDelivery(order)) return false
   if (isPendingTransferPayment(order)) return false
   const status = normalizeOrderKey(order?.orderStatus)
@@ -444,9 +454,15 @@ export function canShipOrder(order) {
 export function canCompleteOrder(order) {
   const status = normalizeOrderKey(order?.orderStatus)
   if (status === 'Cancelled' || status === 'Completed') return false
+  // Đơn hợp đồng bắt buộc qua bước kho xác nhận xuất hàng trước khi ghi nợ.
+  if (isContractOrder(order) && status !== 'Shipping') return false
   if (isPendingTransferPayment(order)) return false
   if (canVerifyCod(order)) return false
   return true
+}
+
+export function isContractOrder(order) {
+  return normalizeOrderKey(order?.orderChannel) === 'B2B' || Boolean(order?.contractId)
 }
 
 export function isCodChannelOrder(order) {

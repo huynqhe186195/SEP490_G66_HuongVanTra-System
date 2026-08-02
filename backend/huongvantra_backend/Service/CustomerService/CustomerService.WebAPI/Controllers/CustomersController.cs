@@ -20,7 +20,8 @@ public class CustomersController : ControllerBase
     private CustomerAccessContext AccessContext() => new(
         User.GetUserId(),
         User.HasPermission(PermissionNames.ViewAllCustomers),
-        User.HasPermission(PermissionNames.ManageRole));
+        User.HasPermission(PermissionNames.ManageCorporateCustomer)
+            || User.HasPermission(PermissionNames.ManageRole));
 
     [HttpGet("statistics")]
     [Authorize(Policy = PermissionNames.ViewCustomerAccess)]

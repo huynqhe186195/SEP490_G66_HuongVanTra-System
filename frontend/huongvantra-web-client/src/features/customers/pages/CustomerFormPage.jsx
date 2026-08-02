@@ -13,7 +13,7 @@ import {
   canViewAllCustomers,
   canViewCustomer,
 } from '../../auth/utils/permissions.js'
-import { fetchSalesAssignees } from '../../iam/services/employeesApi.js'
+import { fetchManagerAssignees, fetchSalesAssignees } from '../../iam/services/employeesApi.js'
 import MembershipTierProgress from '../components/MembershipTierProgress.jsx'
 import CustomerActivityFeed from '../components/CustomerActivityFeed.jsx'
 import CustomerOpenDebtsPanel from '../components/CustomerOpenDebtsPanel.jsx'
@@ -79,6 +79,7 @@ function CustomerFormPage() {
   const [fieldErrors, setFieldErrors] = useState({})
   const [isNameComposing, setIsNameComposing] = useState(false)
   const [saleOptions, setSaleOptions] = useState([])
+  const [managerOptions, setManagerOptions] = useState([])
   const [profileTab, setProfileTab] = useState('overview')
   const session = useAuthSession()
   const canAssignSale = canViewAllCustomers(session)
@@ -102,14 +103,13 @@ function CustomerFormPage() {
     address: '',
     taxCode: '',
     source: '',
-    department: '',
     assignedEmployeeId: '',
     status: 'active',
   })
   const isCorporateProfile = form.type === 'corporate'
   const isCorporateLocked = isCorporateProfile && !canManageCorporate
   const isReadOnly = isViewMode || (isEditMode && !canManageProfile) || isCorporateLocked
-  /** Khi chỉnh sửa: khóa thông tin định danh; chỉ sửa email, nguồn, phòng ban, Sale phụ trách. */
+  /** Khi chỉnh sửa: khóa thông tin định danh; chỉ sửa email, nguồn, người phụ trách. */
   const isPrimaryLocked = isEditMode && !isViewMode && canManageProfile && !isCorporateLocked
   const isFieldLocked = isReadOnly || isPrimaryLocked
 
@@ -153,19 +153,25 @@ function CustomerFormPage() {
 
     let mounted = true
 
-    async function loadSales() {
+    async function loadAssignees() {
       try {
-        const options = await fetchSalesAssignees()
-        if (mounted) setSaleOptions(options)
+        const [sales, managers] = await Promise.all([
+          fetchSalesAssignees(),
+          fetchManagerAssignees(),
+        ])
+        if (!mounted) return
+        setSaleOptions(sales)
+        setManagerOptions(managers)
       } catch (error) {
         if (mounted) {
           setSaleOptions([])
-          showError(error.message || 'Không tải được danh sách Sale phụ trách.')
+          setManagerOptions([])
+          showError(error.message || 'Không tải được danh sách nhân sự phụ trách.')
         }
       }
     }
 
-    loadSales()
+    loadAssignees()
     return () => {
       mounted = false
     }
@@ -255,7 +261,6 @@ function CustomerFormPage() {
       address: customer.address || '',
       taxCode: customer.taxCode || '',
       source: customer.source || '',
-      department: customer.department || '',
       assignedEmployeeId: customer.assignedEmployeeId || '',
       status: customer.status?.toLowerCase() === 'inactive' ? 'inactive' : 'active',
     })
@@ -301,7 +306,6 @@ function CustomerFormPage() {
     address: form.address.trim(),
     taxCode: form.type === 'corporate' ? form.taxCode.trim() : null,
     source: form.source || null,
-    department: form.department.trim() || null,
     assignedSaleId: form.assignedEmployeeId || null,
     tierId: null,
   })
@@ -366,7 +370,6 @@ function CustomerFormPage() {
           address: payload.address,
           taxCode: payload.taxCode,
           source: payload.source,
-          department: payload.department,
           assignedSaleId: payload.assignedSaleId,
           tierId: payload.tierId,
         })
@@ -388,7 +391,6 @@ function CustomerFormPage() {
           address: payload.address,
           taxCode: payload.taxCode,
           source: payload.source,
-          department: payload.department,
           assignedSaleId: payload.assignedSaleId,
           tierId: payload.tierId,
         })
@@ -416,10 +418,10 @@ function CustomerFormPage() {
             ? 'Xem đầy đủ thông tin khách hàng (chỉ đọc).'
             : isReadOnly
             ? isCorporateLocked
-              ? 'Chỉ Admin được chỉnh sửa khách doanh nghiệp. Bạn đang xem ở chế độ chỉ đọc.'
+              ? 'Chỉ Quản lý, Kế toán hoặc Admin được chỉnh sửa khách doanh nghiệp. Bạn đang xem ở chế độ chỉ đọc.'
               : 'Xem thông tin liên hệ, hạng thành viên và lịch sử giao dịch'
             : isEditMode
-              ? 'Chỉ được sửa thông tin phụ (email, nguồn, phòng ban, Sale phụ trách). Họ tên, SĐT, địa chỉ và MST giữ nguyên.'
+              ? `Chỉ được sửa thông tin phụ (email, nguồn, ${isCorporateProfile ? 'chi nhánh' : 'Sale'} phụ trách). Họ tên, SĐT, địa chỉ và MST giữ nguyên.`
               : 'Cập nhật thông tin liên hệ, hạng thành viên và trạng thái tài khoản'
         }
         rightContent={
@@ -561,22 +563,11 @@ function CustomerFormPage() {
                 </select>
               </label>
 
-              <label className="space-y-2">
-                <span className="text-xs font-semibold text-[#717971]">Phòng ban</span>
-                <input
-                  className={`w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20 ${isReadOnly ? 'cursor-default opacity-90' : ''}`}
-                  placeholder="VD: Sales, Marketing"
-                  type="text"
-                  value={form.department}
-                  onChange={updateField('department')}
-                  readOnly={isReadOnly}
-                  disabled={isReadOnly}
-                />
-              </label>
-
               {canAssignSale ? (
-                <label className="space-y-2 md:col-span-2">
-                  <span className="text-xs font-semibold text-[#717971]">Sale phụ trách</span>
+                <label className="space-y-2">
+                  <span className="text-xs font-semibold text-[#717971]">
+                    {isCorporateProfile ? 'Chi nhánh phụ trách' : 'Sale phụ trách'}
+                  </span>
                   <select
                     className={`w-full rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20 ${isReadOnly ? 'cursor-default opacity-90' : ''}`}
                     value={form.assignedEmployeeId}
@@ -584,9 +575,9 @@ function CustomerFormPage() {
                     disabled={isReadOnly}
                   >
                     <option value="">— Chưa gán —</option>
-                    {saleOptions.map((sale) => (
-                      <option key={sale.userId} value={sale.userId}>
-                        {sale.fullName}
+                    {(isCorporateProfile ? managerOptions : saleOptions).map((assignee) => (
+                      <option key={assignee.userId} value={assignee.userId}>
+                        {assignee.fullName}
                       </option>
                     ))}
                   </select>
@@ -611,10 +602,6 @@ function CustomerFormPage() {
               ) : form.type === 'vip' ? (
                 <div className="rounded-xl border border-[#7e5700]/20 bg-[#fff8e8] p-3 text-sm leading-relaxed text-[#744f00] md:col-span-2">
                   Khách VIP không dùng hạng Member / Silver / Gold / Diamond. Chiết khấu và quyền lợi áp dụng thủ công trên đơn (POS), chờ DN chốt bảng VIP riêng.
-                </div>
-              ) : form.type === 'corporate' ? (
-                <div className="rounded-xl bg-[#fff8e8] p-3 text-sm leading-relaxed text-[#744f00] md:col-span-2">
-                  Khách doanh nghiệp: bắt buộc MST, không dùng hạng Member. Chỉ Admin được tạo và chỉnh sửa hồ sơ.
                 </div>
               ) : null}
 

@@ -35,14 +35,20 @@ public static class CustomerInputValidator
         string? department)
     {
         var errors = new List<string>();
+        var isCorporate = customerGroup == CustomerGroup.DoanhNghiep;
 
         var fullName = fullNameValue?.Trim().Normalize(NormalizationForm.FormC);
         if (string.IsNullOrWhiteSpace(fullName))
-            errors.Add("Họ tên là bắt buộc.");
+            errors.Add(isCorporate ? "Tên công ty là bắt buộc." : "Họ tên là bắt buộc.");
         else if (fullName.Length < 2)
-            errors.Add("Họ tên phải có ít nhất 2 ký tự.");
+            errors.Add(isCorporate ? "Tên công ty phải có ít nhất 2 ký tự." : "Họ tên phải có ít nhất 2 ký tự.");
         else if (fullName.Length > 100)
-            errors.Add("Họ tên tối đa 100 ký tự.");
+            errors.Add(isCorporate ? "Tên công ty tối đa 100 ký tự." : "Họ tên tối đa 100 ký tự.");
+        else if (isCorporate)
+        {
+            if (!fullName.Any(char.IsLetter))
+                errors.Add("Tên công ty phải chứa ít nhất một chữ cái.");
+        }
         else if (!IsLettersOnly(fullName))
             errors.Add("Họ tên chỉ được chứa chữ cái và khoảng trắng (hỗ trợ tiếng Việt có dấu).");
 

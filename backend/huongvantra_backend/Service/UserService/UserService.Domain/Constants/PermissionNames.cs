@@ -15,6 +15,21 @@ public static class PermissionNames
     public const string ManageCatalog = "MANAGE_CATALOG";
     public const string VerifyCod = "VERIFY_COD";
 
+    /// <summary>Tạo/sửa hồ sơ khách doanh nghiệp — Kế toán, Manager, Admin.</summary>
+    public const string ManageCorporateCustomer = "MANAGE_CORPORATE_CUSTOMER";
+
+    /// <summary>Lập đơn bán theo hợp đồng — Kế toán, Manager. Sale quầy/COD không có.</summary>
+    public const string CreateB2BOrder = "CREATE_B2B_ORDER";
+
+    /// <summary>Xác nhận xuất hàng khỏi kho cho đơn hợp đồng — Thủ kho, Manager.</summary>
+    public const string ShipOrder = "SHIP_ORDER";
+
+    /// <summary>Xác nhận khách đã nhận hàng + ghi công nợ đơn hợp đồng — Kế toán, Manager.</summary>
+    public const string ConfirmB2BDelivery = "CONFIRM_B2B_DELIVERY";
+
+    /// <summary>Phán quyết hợp đồng khách doanh nghiệp (duyệt/từ chối) — chỉ Manager.</summary>
+    public const string ApproveContract = "APPROVE_CONTRACT";
+
     public static readonly string[] All =
     [
         CreateOrder,
@@ -28,6 +43,11 @@ public static class PermissionNames
         ManageUser,
         ManageRole,
         ManageCatalog,
-        VerifyCod
+        VerifyCod,
+        ManageCorporateCustomer,
+        CreateB2BOrder,
+        ShipOrder,
+        ConfirmB2BDelivery,
+        ApproveContract
     ];
 }

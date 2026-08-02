@@ -2522,7 +2522,7 @@ public class CustomerLogic
     private static void EnsureCanManageCorporateCustomer(CustomerGroup customerGroup, CustomerAccessContext access)
     {
         if (customerGroup == CustomerGroup.DoanhNghiep && !access.CanManageCorporateCustomers)
-            throw new CustomerForbiddenException("Chỉ Admin được tạo hoặc chỉnh sửa khách doanh nghiệp.");
+            throw new CustomerForbiddenException("Chỉ Quản lý, Kế toán hoặc Admin được tạo hoặc chỉnh sửa khách doanh nghiệp.");
     }
 
     private static Guid? ResolveAssignedSaleId(Guid? requestedSaleId, CustomerAccessContext access)

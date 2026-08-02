@@ -110,6 +110,7 @@ public class SupplierReceiptApprovalWorkflowTests
             Mock.Of<IProductionOrderRepository>(),
             new FakeCatalogClient(BuildCatalog()),
             new SupplierRepository(db),
+            new SupplierProductRepository(db),
             new ReturnInspectionRepository(db),
             opts);
     }

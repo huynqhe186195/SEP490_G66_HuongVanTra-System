@@ -33,7 +33,6 @@ import OrdersPage from '../features/orders/pages/OrdersPage.jsx'
 import ExchangeOrdersPage from '../features/orders/pages/ExchangeOrdersPage.jsx'
 import ReturnOrderDetailPage from '../features/orders/pages/ReturnOrderDetailPage.jsx'
 import CodOrdersPage from '../features/orders/pages/CodOrdersPage.jsx'
-import B2BDebtsPage from '../features/orders/pages/B2BDebtsPage.jsx'
 import StockDeductQueuePage from '../features/inventory/pages/StockDeductQueuePage.jsx'
 import ReturnInspectionsPage from '../features/inventory/pages/ReturnInspectionsPage.jsx'
 import StockAdjustmentRequestsPage from '../features/inventory/pages/StockAdjustmentRequestsPage.jsx'
@@ -43,6 +42,7 @@ import CustomBundlesPage from '../features/inventory/pages/CustomBundlesPage.jsx
 import SuppliersPage from '../features/inventory/pages/SuppliersPage.jsx'
 import SupplierProductsPage from '../features/inventory/pages/SupplierProductsPage.jsx'
 import OrderDetailPage from '../features/orders/pages/OrderDetailPage.jsx'
+import OrderCreatePage from '../features/orders/pages/OrderCreatePage.jsx'
 import CustomerDisplayPage from '../features/pos/pages/CustomerDisplayPage.jsx'
 import PosPage from '../features/pos/pages/PosPage.jsx'
 import PosCashSessionsPage from '../features/pos/pages/PosCashSessionsPage.jsx'
@@ -89,9 +89,8 @@ function App() {
         <Route path="/orders/returns" element={<Navigate to="/orders/exchange?tab=returns" replace />} />
         <Route path="/orders/returns/:id" element={<ReturnOrderDetailPage />} />
         <Route path="/orders/cod" element={<CodOrdersPage />} />
-        <Route path="/orders/b2b-debts" element={<B2BDebtsPage />} />
         <Route path="/orders/stock-deduct" element={<StockDeductQueuePage />} />
-        <Route path="/orders/create" element={<Navigate to="/pos" replace />} />
+        <Route path="/orders/create" element={<OrderCreatePage />} />
         <Route path="/orders/:id" element={<OrderDetailPage />} />
         <Route path="/inventory/products" element={<ProductsListPage />} />
         <Route path="/products/pricing" element={<ProductsPricingPage />} />

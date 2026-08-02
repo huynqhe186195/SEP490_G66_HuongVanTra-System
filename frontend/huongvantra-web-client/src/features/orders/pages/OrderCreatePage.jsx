@@ -24,7 +24,7 @@ import { validateZeroTotalCheckout } from '../../pos/utils/posDiscountValidation
 
 import { loadAuthSession } from '../../auth/services/authSession.js'
 
-import { canViewAllOrders } from '../../auth/utils/permissions.js'
+import { canCreateB2BOrder, canViewAllOrders } from '../../auth/utils/permissions.js'
 
 import { fetchOnDutyShift } from '../../shifts/services/shiftsApi.js'
 
@@ -102,6 +102,8 @@ function OrderCreatePage() {
   const session = loadAuthSession()
 
   const isManager = canViewAllOrders(session)
+
+  const canCreateContractOrder = canCreateB2BOrder(session)
 
   const [isSaving, setIsSaving] = useState(false)
   const checkoutAttemptRef = useRef(createCheckoutAttemptManager())
@@ -204,6 +206,7 @@ function OrderCreatePage() {
   const contract = contractLoaded ? contractState.contract : null
   const contractError = contractLoaded ? contractState.error : null
   const isCorporateBlocked = contractLoaded && !contract
+  const isContractRoleBlocked = isCorporateCustomer && !canCreateContractOrder
 
   const {
     subtotal,
@@ -318,14 +321,19 @@ function OrderCreatePage() {
   function updateCustomer(patch) {
     const changesCustomer = Object.prototype.hasOwnProperty.call(patch, 'selectedCustomer')
     const nextCustomer = changesCustomer ? patch.selectedCustomer : form.selectedCustomer
+    const nextIsCorporate = isCorporateCustomerType(nextCustomer?.customerType)
     const mustClearManualDiscount = changesCustomer
       && !isVipCustomerType(nextCustomer?.customerType)
-      && !isCorporateCustomerType(nextCustomer?.customerType)
+      && !nextIsCorporate
       && Number(form.discountAmount || 0) > 0
 
     setForm((prev) => ({
       ...prev,
       ...patch,
+      // Khách doanh nghiệp chỉ bán qua hợp đồng — khóa kênh về B2B, không cho rơi lại POS.
+      ...(changesCustomer && nextIsCorporate
+        ? { orderChannel: 'B2B', paymentMethod: prev.paymentMethod === 'COD' ? 'BankTransfer' : prev.paymentMethod }
+        : {}),
       ...(mustClearManualDiscount ? { discountAmount: 0 } : {}),
     }))
     if (mustClearManualDiscount) {
@@ -476,6 +484,11 @@ function OrderCreatePage() {
       return
     }
 
+    if (isCorporateCustomer && !canCreateContractOrder) {
+      showError('Chỉ Kế toán hoặc Quản lý mới được lập đơn bán theo hợp đồng.')
+      return
+    }
+
     if (isCorporateCustomer && !contract) {
       showError('Khách doanh nghiệp cần hợp đồng đang hiệu lực mới tạo được đơn.')
       return
@@ -619,6 +632,17 @@ function OrderCreatePage() {
 
               <span className="text-xs font-semibold text-slate-500">Kênh bán *</span>
 
+              {isCorporateCustomer ? (
+                <>
+                  <div className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-700">
+                    Doanh nghiệp (hợp đồng)
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    Khách doanh nghiệp chỉ bán qua hợp đồng — không bán tại quầy POS.
+                  </p>
+                </>
+              ) : (
+                <>
               <select
 
                 className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
@@ -645,6 +669,8 @@ function OrderCreatePage() {
                   Bán tại quầy — không bắt buộc địa chỉ giao. Đơn thanh toán đủ sẽ được hoàn tất ngay.
                 </p>
               ) : null}
+                </>
+              )}
             </label>
 
             <label className="space-y-1 md:col-span-2">
@@ -723,6 +749,13 @@ function OrderCreatePage() {
                 </dd>
               </div>
             </dl>
+          </section>
+        ) : null}
+
+        {isContractRoleBlocked ? (
+          <section className="flex items-start gap-2 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+            <span className="material-symbols-outlined text-[18px]">lock</span>
+            <p>Chỉ Kế toán hoặc Quản lý mới được lập đơn bán theo hợp đồng cho khách doanh nghiệp.</p>
           </section>
         ) : null}
 
@@ -988,7 +1021,7 @@ function OrderCreatePage() {
 
             type="submit"
 
-            disabled={isSaving || !canMutate || isCorporateBlocked}
+            disabled={isSaving || !canMutate || isCorporateBlocked || isContractRoleBlocked}
 
             className="rounded-xl bg-[#538463] px-6 py-3 text-sm font-bold text-white hover:bg-[#457053] disabled:opacity-50"
 

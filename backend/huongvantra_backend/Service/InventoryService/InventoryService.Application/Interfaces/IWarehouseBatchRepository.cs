@@ -7,6 +7,7 @@ public interface IWarehouseBatchRepository
     Task<WarehouseBatch?> GetByIdAsync(Guid id, CancellationToken ct = default);
     Task<WarehouseBatch?> GetByBatchCodeAsync(string batchCode, CancellationToken ct = default);
     Task<WarehouseBatch?> GetByLotCodeAsync(string lotCode, CancellationToken ct = default);
+    Task<WarehouseBatch?> FindBySupplierLotIdentityAsync(Guid supplierId, Guid skuId, string normalizedLotCode, CancellationToken ct = default);
     Task<List<WarehouseBatch>> GetListAsync(Guid? skuId, string? search, bool availableOnly, CancellationToken ct = default);
     Task<List<WarehouseBatchItem>> GetAvailableItemsForSkuAsync(Guid skuId, CancellationToken ct = default);
     Task<List<WarehouseBatchItem>> GetAvailableItemsForSkuAsync(Guid skuId, string location, CancellationToken ct = default);

@@ -38,9 +38,21 @@ public static class DataSeeder
             PermissionNames.ViewCustomer
         ]),
         ("Warehouse", "Thủ kho Kho tổng",
-        [PermissionNames.ViewOrder, PermissionNames.ManageCatalog]),
+        [
+            PermissionNames.ViewOrder,
+            PermissionNames.ManageCatalog,
+            PermissionNames.ShipOrder
+        ]),
         ("Accountant", "Kế toán",
-        [PermissionNames.ViewOrder, PermissionNames.ViewAllCustomers]),
+        [
+            PermissionNames.ViewOrder,
+            PermissionNames.ViewAllCustomers,
+            PermissionNames.ViewCustomer,
+            PermissionNames.CreateOrder,
+            PermissionNames.ManageCorporateCustomer,
+            PermissionNames.CreateB2BOrder,
+            PermissionNames.ConfirmB2BDelivery
+        ]),
         ("Manager", "Quản lý",
         [
             PermissionNames.CreateOrder,
@@ -51,7 +63,12 @@ public static class DataSeeder
             PermissionNames.ManageEmployee,
             PermissionNames.CreateCustomer,
             PermissionNames.ViewCustomer,
-            PermissionNames.VerifyCod
+            PermissionNames.VerifyCod,
+            PermissionNames.ManageCorporateCustomer,
+            PermissionNames.CreateB2BOrder,
+            PermissionNames.ShipOrder,
+            PermissionNames.ConfirmB2BDelivery,
+            PermissionNames.ApproveContract
         ])
     ];
 
@@ -60,7 +77,8 @@ public static class DataSeeder
         ("sale01", "Nguyen Van Sale Quay", "Sales", "SalePos"),
         ("sale_cod01", "Tran Thi Sale COD", "Sales", "SaleCod"),
         ("manager01", "Tran Thi Manager", "Operations", "Manager"),
-        ("accountant01", "Le Thi Ke Toan", "Accounting", "Accountant")
+        ("accountant01", "Le Thi Ke Toan", "Accounting", "Accountant"),
+        ("warehouse01", "Pham Van Thu Kho", "Warehouse", "Warehouse")
     ];
 
     private static readonly (Guid Id, string Name, ShiftArea Area, TimeSpan Start, TimeSpan End, int Capacity, string Color, int SortOrder)[] DefaultShiftTemplates =
@@ -239,6 +257,7 @@ public static class DataSeeder
             ["sale_cod01"] = "SaleCod",
             ["manager01"] = "Manager",
             ["accountant01"] = "Accountant",
+            ["warehouse01"] = "Warehouse",
         };
 
         var legacySaleRole = await context.Roles

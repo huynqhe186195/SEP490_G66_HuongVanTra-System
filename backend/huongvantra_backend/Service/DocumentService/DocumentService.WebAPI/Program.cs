@@ -34,6 +34,7 @@ builder.Services.AddDbContext<DocumentDbContext>(options =>
 
 builder.Services.AddScoped<IContractRepository, ContractRepository>();
 builder.Services.AddScoped<ContractLogic>();
+builder.Services.AddHostedService<DocumentService.WebAPI.Services.ContractExpiryHostedService>();
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddTransient<ForwardAuthorizationHeaderHandler>();

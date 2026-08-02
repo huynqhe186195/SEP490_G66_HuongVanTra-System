@@ -86,6 +86,22 @@ public class WarehouseBatchRepository(InventoryDbContext _db) : IWarehouseBatchR
         return query.AnyAsync(ct);
     }
 
+    public Task<WarehouseBatch?> FindBySupplierLotIdentityAsync(
+        Guid supplierId,
+        Guid skuId,
+        string normalizedLotCode,
+        CancellationToken ct = default)
+    {
+        var normalized = normalizedLotCode.Trim().ToUpperInvariant();
+        return WithItems()
+            .OrderByDescending(b => b.CreatedAt)
+            .FirstOrDefaultAsync(
+                b => b.SupplierId == supplierId
+                    && b.SkuId == skuId
+                    && b.NormalizedSupplierLotCode == normalized,
+                ct);
+    }
+
     public Task<bool> ExistsBatchCodeAsync(string batchCode, Guid? excludeId = null, CancellationToken ct = default)
     {
         var normalized = batchCode.Trim().ToUpperInvariant();

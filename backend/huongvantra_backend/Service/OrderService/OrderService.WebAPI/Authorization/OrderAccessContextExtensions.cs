@@ -16,6 +16,9 @@ public static class OrderAccessContextExtensions
             user.GetUserId(),
             canViewAll,
             CanViewAllCodOrders: user.HasPermission(PermissionNames.CreateCodOrder),
-            CanViewOwnOrders: user.HasPermission(PermissionNames.CreatePosOrder));
+            CanViewOwnOrders: user.HasPermission(PermissionNames.CreatePosOrder),
+            CanCreateB2BOrder: user.HasPermission(PermissionNames.CreateB2BOrder),
+            CanShipOrder: user.HasPermission(PermissionNames.ShipOrder),
+            CanConfirmB2BDelivery: user.HasPermission(PermissionNames.ConfirmB2BDelivery));
     }
 }

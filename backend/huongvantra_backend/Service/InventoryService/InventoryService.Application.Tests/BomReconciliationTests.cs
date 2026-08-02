@@ -76,6 +76,7 @@ public sealed class BomReconciliationTests
             Mock.Of<IProductionOrderRepository>(),
             Mock.Of<IProductCatalogClient>(),
             Mock.Of<ISupplierRepository>(),
+            Mock.Of<ISupplierProductRepository>(),
             new ReturnInspectionRepository(db),
             opts);
     }

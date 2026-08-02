@@ -60,10 +60,13 @@ export function canCreateCustomer(session) {
   )
 }
 
-/** Sửa hồ sơ KH: Manager (CREATE_CUSTOMER). Kế toán/Admin chỉ xem. */
+/** Sửa hồ sơ KH: Manager (CREATE_CUSTOMER) và Kế toán (MANAGE_CORPORATE_CUSTOMER). Admin chỉ xem. */
 export function canEditCustomer(session) {
   if (isBusinessOpsBlocked(session)) return false
-  return hasPermission(session, 'CREATE_CUSTOMER')
+  return (
+    hasPermission(session, 'CREATE_CUSTOMER')
+    || hasPermission(session, 'MANAGE_CORPORATE_CUSTOMER')
+  )
 }
 
 /** Sale (hoặc NV chỉ có VIEW_CUSTOMER): xem toàn bộ khách trong cửa hàng, thêm được nhưng không sửa hồ sơ. */
@@ -130,6 +133,24 @@ export function canViewOrders(session) {
 
 export function canCreateOrder(session) {
   return canUsePosCounterMode(session) || canUsePosCodMode(session)
+}
+
+/** Lập đơn bán theo hợp đồng — Kế toán, Quản lý. Sale quầy/COD không có quyền này. */
+export function canCreateB2BOrder(session) {
+  if (isBusinessOpsBlocked(session)) return false
+  return hasPermission(session, 'CREATE_B2B_ORDER')
+}
+
+/** Xác nhận đã xuất hàng khỏi kho — Thủ kho, Quản lý. */
+export function canConfirmOrderShipping(session) {
+  if (isBusinessOpsBlocked(session)) return false
+  return hasPermission(session, 'SHIP_ORDER')
+}
+
+/** Xác nhận khách đã nhận hàng và ghi công nợ hợp đồng — Kế toán, Quản lý. */
+export function canConfirmB2BDelivery(session) {
+  if (isBusinessOpsBlocked(session)) return false
+  return hasPermission(session, 'CONFIRM_B2B_DELIVERY')
 }
 
 /** Xác nhận thanh toán COD — chỉ dựa trên action permission. */
@@ -256,10 +277,15 @@ export function isSystemAdmin(session) {
   return hasPermission(session, 'MANAGE_ROLE')
 }
 
-/** Khách doanh nghiệp: không còn thao tác nghiệp vụ từ Admin giám sát. */
+/** Khách doanh nghiệp: Quản lý và Kế toán; Admin giám sát không thao tác nghiệp vụ. */
 export function canManageCorporateCustomers(session) {
   if (isBusinessOpsBlocked(session)) return false
-  return isBranchManager(session) || isManagerRole(session)
+  return (
+    hasPermission(session, 'MANAGE_CORPORATE_CUSTOMER')
+    || isBranchManager(session)
+    || isManagerRole(session)
+    || isAccountantRole(session)
+  )
 }
 
 export function isBranchManager(session) {
@@ -278,14 +304,16 @@ export function canViewContracts(session) {
   return hasPermission(session, 'VIEW_CUSTOMER') || hasPermission(session, 'MANAGE_ROLE')
 }
 
+/** Lập hợp đồng: Kế toán và Quản lý — Admin chỉ giám sát. */
 export function canCreateContracts(session) {
   if (isBusinessOpsBlocked(session)) return false
-  return Boolean(session?.userId)
+  return hasPermission(session, 'MANAGE_CORPORATE_CUSTOMER')
 }
 
+/** Phán quyết hợp đồng: chỉ Quản lý (APPROVE_CONTRACT). */
 export function canApproveContracts(session) {
   if (isBusinessOpsBlocked(session)) return false
-  return isBranchManager(session) || isManagerRole(session)
+  return hasPermission(session, 'APPROVE_CONTRACT')
 }
 
 /** Chỉ kế toán được tạo/sửa/ẩn/khôi phục nhà cung cấp và mặt hàng nhà cung cấp; Admin/thủ kho chỉ xem. */

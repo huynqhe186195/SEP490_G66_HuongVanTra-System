@@ -171,7 +171,7 @@ public class OrderIdempotencyTests
             .Setup(client => client.GetSkuProfilesAsync(
                 It.IsAny<IEnumerable<Guid>>(),
                 It.IsAny<CancellationToken>()))
-            .ReturnsAsync([new ProductSkuCatalogProfile(skuId, null, "Piece")]);
+            .ReturnsAsync([new ProductSkuCatalogProfile(skuId, null, "Piece", 0m)]);
 
         var codeSequence = 0;
         var codeGenerator = new Mock<IOrderCodeGenerator>();
@@ -324,6 +324,10 @@ public class OrderIdempotencyTests
 
         public Task<Order?> GetByIdAsync(Guid id, CancellationToken ct = default) =>
             Task.FromResult(store.Orders.FirstOrDefault(order => order.Id == id));
+
+        public Task<decimal> GetPendingContractDebtAsync(
+            Guid customerId, Guid? excludeOrderId, CancellationToken ct = default) =>
+            Task.FromResult(0m);
 
         public Task<Order?> GetByCodeAsync(string orderCode, CancellationToken ct = default) =>
             Task.FromResult(store.Orders.FirstOrDefault(order => order.OrderCode == orderCode));

@@ -59,6 +59,17 @@ public class ContractRepository(DocumentDbContext db) : IContractRepository
             .ThenByDescending(c => c.CreatedAt)
             .FirstOrDefaultAsync(ct);
 
+    public Task<int> ExpireOutdatedContractsAsync(DateOnly today, CancellationToken ct = default) =>
+        db.Contracts
+            .Where(c => c.Status == ContractStatus.Active
+                && c.ExpiryDate != null
+                && c.ExpiryDate < today)
+            .ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(c => c.Status, ContractStatus.Expired)
+                    .SetProperty(c => c.UpdatedAt, DateTime.UtcNow),
+                ct);
+
     public async Task AddAsync(Contract contract, CancellationToken ct = default) =>
         await db.Contracts.AddAsync(contract, ct);
 

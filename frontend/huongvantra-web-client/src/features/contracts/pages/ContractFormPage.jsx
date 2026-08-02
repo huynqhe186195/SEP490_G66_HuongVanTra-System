@@ -5,6 +5,7 @@ import PageShell from '../../../components/shared/PageShell.jsx'
 import { confirmDialog } from '../../../app/dialog.js'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
+import { canApproveContracts } from '../../auth/utils/permissions.js'
 import { fetchCustomers } from '../../customers/services/customersApi.js'
 import {
   createContract,
@@ -70,6 +71,7 @@ function ContractFormPage() {
   const isEdit = Boolean(id)
   const session = useMemo(() => loadAuthSession(), [])
   const currentUserId = session?.userId
+  const canApprove = canApproveContracts(session)
 
   const [form, setForm] = useState(EMPTY_FORM)
   const [creditLimitDisplay, setCreditLimitDisplay] = useState('')
@@ -90,7 +92,7 @@ function ContractFormPage() {
     fetchContractById(id)
       .then((c) => {
         if (!c) return navigate('/contracts')
-        if (c.createdByUserId !== currentUserId || c.status !== 'Draft') {
+        if (c.createdByUserId !== currentUserId || (c.status !== 'Draft' && c.status !== 'Rejected')) {
           navigate(`/contracts/${id}`)
           return
         }
@@ -220,8 +222,10 @@ function ContractFormPage() {
     const errs = validate()
     if (Object.keys(errs).length) { setErrors(errs); return }
     if (!(await confirmDialog({
-      title: 'Gửi duyệt',
-      message: 'Gửi hợp đồng để duyệt? Sau khi gửi bạn sẽ không thể chỉnh sửa cho đến khi Admin xem xét.',
+      title: canApprove ? 'Ban hành hợp đồng' : 'Gửi duyệt',
+      message: canApprove
+        ? 'Ban hành hợp đồng này? Hợp đồng sẽ có hiệu lực ngay và không thể chỉnh sửa.'
+        : 'Gửi hợp đồng để duyệt? Sau khi gửi bạn sẽ không thể chỉnh sửa cho đến khi Quản lý phản hồi.',
       tone: 'primary',
     }))) return
     setIsSubmitting(true)
@@ -235,7 +239,7 @@ function ContractFormPage() {
         contractId = created.id
       }
       await submitContract(contractId)
-      showSuccess('Đã gửi hợp đồng chờ duyệt.')
+      showSuccess(canApprove ? 'Đã ban hành hợp đồng.' : 'Đã gửi hợp đồng chờ duyệt.')
       navigate(`/contracts/${contractId}`)
     } catch (err) {
       showError(err?.message ?? 'Không thể gửi hợp đồng.')
@@ -457,7 +461,7 @@ function ContractFormPage() {
             disabled={isSaving || isSubmitting}
             className="rounded-lg bg-[#1a1a1a] px-4 py-2 text-sm font-medium text-white hover:bg-[#333] disabled:opacity-50"
           >
-            {isSubmitting ? 'Đang gửi...' : 'Gửi duyệt'}
+            {isSubmitting ? 'Đang gửi...' : canApprove ? 'Ban hành' : 'Gửi duyệt'}
           </button>
         </div>
       </div>

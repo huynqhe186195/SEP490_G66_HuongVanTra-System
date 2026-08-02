@@ -19,6 +19,11 @@ public interface IContractRepository
     /// <summary>Không lọc theo người tạo: OrderService cần tra hợp đồng bất kể ai lập.</summary>
     Task<Contract?> GetActiveByCustomerAsync(Guid customerId, DateOnly today, CancellationToken ct = default);
 
+    /// <summary>
+    /// Chuyển hợp đồng Active đã quá ExpiryDate sang Expired. Trả về số bản ghi đã đổi.
+    /// </summary>
+    Task<int> ExpireOutdatedContractsAsync(DateOnly today, CancellationToken ct = default);
+
     Task AddAsync(Contract contract, CancellationToken ct = default);
     void Update(Contract contract);
     Task<int> SaveChangesAsync(CancellationToken ct = default);
