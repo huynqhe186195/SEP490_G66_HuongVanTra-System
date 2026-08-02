@@ -408,7 +408,10 @@ export function canViewContracts(session) {
 /** Lập hợp đồng: Kế toán và Quản lý — Admin chỉ giám sát. */
 export function canCreateContracts(session) {
   if (isBusinessOpsBlocked(session)) return false
-  return hasPermission(session, 'MANAGE_CORPORATE_CUSTOMER')
+  if (hasPermission(session, 'MANAGE_CORPORATE_CUSTOMER') || hasPermission(session, 'CREATE_B2B_ORDER')) {
+    return true
+  }
+  return isAccountantRole(session) || isBranchManager(session) || isManagerRole(session)
 }
 
 /** Phán quyết hợp đồng: chỉ Quản lý (APPROVE_CONTRACT). */

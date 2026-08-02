@@ -209,13 +209,6 @@ export const navigationItems = [
     roles: ['admin'],
   },
   {
-    label: 'Đồng bộ tồn kho',
-    path: '/admin/inventory-sync',
-    module: 'inventory_sync_monitor',
-    icon: 'sync_problem',
-    roles: ['agencyManager'],
-  },
-  {
     label: 'Thống kê bán hàng',
     path: '/dashboard',
     module: 'dashboard',
@@ -379,15 +372,41 @@ function groupAdminManagerSidebar(items, isAdmin) {
         roles: posItem.roles,
       })
     }
+    const cashSessions = takeNavLeaf(byPath, consumed, '/pos/cash-sessions', 'Quỹ ca POS')
+      || (() => {
+        const fallback = navigationItems.find((item) => item.path === '/pos/cash-sessions')
+        if (!fallback) return null
+        consumed.add('/pos/cash-sessions')
+        return {
+          label: 'Quỹ ca POS',
+          path: fallback.path,
+          module: fallback.module,
+          icon: fallback.icon,
+          roles: fallback.roles,
+        }
+      })()
+    if (cashSessions) {
+      result.push({
+        ...cashSessions,
+        icon: cashSessions.icon || 'account_balance_wallet',
+      })
+    }
   } else if (byPath.has('/pos')) {
     consumed.add('/pos')
   }
+  if (isAdmin && byPath.has('/pos/cash-sessions')) {
+    consumed.add('/pos/cash-sessions')
+  }
 
-  // Đơn hàng
+  // Đơn hàng — parent path có thể bị rewrite thành child path đầu tiên (/orders/create).
   const orderChildren = []
   const ordersItem = byPath.get('/orders')
+    || items.find((item) => (item.children || []).some((child) =>
+      child.path === '/orders'
+      || child.path === '/orders/create'
+      || child.path === '/orders/cod'))
   if (ordersItem) {
-    consumed.add('/orders')
+    consumed.add(ordersItem.path)
     for (const child of ordersItem.children || []) {
       orderChildren.push({
         label: child.label,
@@ -449,7 +468,6 @@ function groupAdminManagerSidebar(items, isAdmin) {
       ['/inventory/stocktake', 'Kiểm kê tồn kho'],
       ['/inventory/ledger', 'Nhật ký kho'],
       ['/inventory/stock-requests', 'Yêu cầu bổ sung tồn quầy'],
-      ['/admin/inventory-sync', 'Đồng bộ tồn kho'],
     ]
 
   // Manager: ẩn thống kê tồn kho (không hiện ở nhóm Hàng hóa).
@@ -528,11 +546,9 @@ function groupAdminManagerSidebar(items, isAdmin) {
     : [
       ['/shifts', 'Lịch làm việc'],
       ['/staff', 'Nhân sự'],
-      ['/pos/cash-sessions', 'Quỹ ca POS'],
     ]
   if (isAdmin) {
     if (byPath.has('/shifts')) consumed.add('/shifts')
-    if (byPath.has('/pos/cash-sessions')) consumed.add('/pos/cash-sessions')
   }
   const peopleChildren = takeNavLeaves(byPath, consumed, peopleEntries)
   if (peopleChildren.length) {
@@ -1117,7 +1133,9 @@ export function isNavigationItemActive(pathname, item, search = '') {
   if (item.module === 'orders') {
     // Các route anh em dưới /orders — không được kích hoạt "Quản Lý Đơn POS" (/orders).
     const isOrdersSiblingPath = (current) =>
-      current === '/orders/cod'
+      current === '/orders/create'
+      || current.startsWith('/orders/create/')
+      || current === '/orders/cod'
       || current.startsWith('/orders/cod/')
       || current === '/orders/b2b-debts'
       || current.startsWith('/orders/b2b-debts/')
@@ -1136,6 +1154,10 @@ export function isNavigationItemActive(pathname, item, search = '') {
         || path.startsWith('/orders/returns/')
         || orderDetailContext === 'exchange'
       )
+    }
+
+    if (target === '/orders/create') {
+      return path === '/orders/create' || path.startsWith('/orders/create/')
     }
 
     if (target === '/orders/b2b-debts') {
