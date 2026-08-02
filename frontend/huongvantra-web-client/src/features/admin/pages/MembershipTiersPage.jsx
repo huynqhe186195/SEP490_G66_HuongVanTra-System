@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
+import { confirmDialog } from '../../../app/dialog.js'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { normalizeTierNameInput, TIER_READONLY_HINT } from '../../customers/utils/membershipTierUtils.js'
 import {
@@ -89,7 +90,11 @@ function MembershipTiersPage() {
   }
 
   const handleDeactivate = async (tier) => {
-    if (!window.confirm(`Ngừng hoạt động hạng "${tier.tierCode}"?`)) return
+    if (!(await confirmDialog({
+      title: 'Ngừng hoạt động',
+      message: `Ngừng hoạt động hạng "${tier.tierCode}"?`,
+      tone: 'danger',
+    }))) return
     try {
       await deactivateAdminMembershipTier(tier.id)
       showSuccess('Đã ngừng hoạt động hạng thẻ.')

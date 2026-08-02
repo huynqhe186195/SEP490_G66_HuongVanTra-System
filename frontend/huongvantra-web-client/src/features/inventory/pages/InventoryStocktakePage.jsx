@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
+import { promptDialog } from '../../../app/dialog.js'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import { formatStockQuantity } from '../../products/utils/productDisplay.js'
@@ -753,15 +754,14 @@ function InventoryStocktakePage() {
 
   async function handleReopenDay() {
     if (!shelfDay?.dayEndDone) return
-    const reason = window.prompt(
-      'Mở lại ngày bán sẽ hủy phiếu kiểm kệ cuối ngày (không đảo tồn đã duyệt). Nhập lý do:',
-      'Mở lại ngày bán',
-    )
-    if (reason === null) return
-    if (!reason.trim()) {
-      showError('Vui lòng nhập lý do mở lại ngày bán.')
-      return
-    }
+    const reason = await promptDialog({
+      title: 'Mở lại ngày bán',
+      message: 'Mở lại ngày bán sẽ hủy phiếu kiểm kệ cuối ngày (không đảo tồn đã duyệt). Nhập lý do:',
+      defaultValue: 'Mở lại ngày bán',
+      required: true,
+      tone: 'primary',
+    })
+    if (reason == null) return
     setIsReopening(true)
     try {
       const next = await reopenShelfDay(reason, shelfDay.date || vietnamTodayDateInput())
@@ -783,12 +783,14 @@ function InventoryStocktakePage() {
         showSuccess(`Đã gửi duyệt ${result.requestCode}.`)
       } else {
         const defaultReason = action === 'approve' ? 'Duyệt kiểm kê' : ''
-        const reason = window.prompt(action === 'approve' ? 'Ghi chú duyệt' : 'Nhập lý do', defaultReason)
-        if (reason === null) return
-        if ((action === 'reject') && !reason.trim()) {
-          showError('Vui lòng nhập lý do.')
-          return
-        }
+        const reason = await promptDialog({
+          title: action === 'approve' ? 'Ghi chú duyệt' : 'Nhập lý do',
+          message: action === 'approve' ? 'Ghi chú duyệt' : 'Nhập lý do',
+          defaultValue: defaultReason,
+          required: action === 'reject',
+          tone: action === 'approve' ? 'primary' : 'danger',
+        })
+        if (reason == null) return
         if (action === 'approve') {
           result = await approveStocktakeRequest(request.id, reason)
           notifyInventoryStockChanged()

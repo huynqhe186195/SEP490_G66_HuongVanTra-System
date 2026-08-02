@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
+import { promptDialog } from '../../../app/dialog.js'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import { formatVnd } from '../../../utils/vietnamCurrency.js'
@@ -311,8 +312,13 @@ function SupplierReceiptsPage() {
   }
 
   async function handleCancel(receipt) {
-    const reason = window.prompt('Nhập lý do hủy phiếu nhập')
-    if (!reason?.trim()) return
+    const reason = await promptDialog({
+      title: 'Nhập lý do',
+      message: 'Nhập lý do hủy phiếu nhập',
+      required: true,
+      tone: 'danger',
+    })
+    if (reason == null) return
     await runAction(receipt, (id) => cancelSupplierReceipt(id, reason), (updated) => `Đã hủy ${updated.receiptCode}.`)
   }
 
@@ -325,8 +331,13 @@ function SupplierReceiptsPage() {
   }
 
   async function handleReject(receipt) {
-    const reason = window.prompt('Nhập lý do từ chối phiếu nhập')
-    if (!reason?.trim()) return
+    const reason = await promptDialog({
+      title: 'Nhập lý do',
+      message: 'Nhập lý do từ chối phiếu nhập',
+      required: true,
+      tone: 'danger',
+    })
+    if (reason == null) return
     await runAction(receipt, (id) => rejectSupplierReceipt(id, reason), (updated) => `Đã từ chối ${updated.receiptCode}.`)
   }
 

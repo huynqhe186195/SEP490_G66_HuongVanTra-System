@@ -158,10 +158,10 @@ export function isAuditOnlyAdmin(session) {
   return hasAdminRole(session)
 }
 
-/** Trang Accounting: Manager được sửa Giá bán; Admin chỉ xem. */
+/** Trang Accounting: chỉ Kế toán được sửa Giá bán; Admin/Manager chỉ xem. */
 export function canEditAccountingSalePrice(session) {
   if (isBusinessOpsBlocked(session)) return false
-  return isBranchManager(session) || isManagerRole(session)
+  return isAccountantRole(session)
 }
 
 export function isSalePosRole(session) {

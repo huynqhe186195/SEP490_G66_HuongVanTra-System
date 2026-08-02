@@ -28,6 +28,9 @@ import InventoryReturnsPage from '../features/inventory/pages/InventoryReturnsPa
 import InventoryStockPage from '../features/inventory/pages/InventoryStockPage.jsx'
 import InventoryStocktakePage from '../features/inventory/pages/InventoryStocktakePage.jsx'
 import InventoryStatisticsPage from '../features/inventory/pages/InventoryStatisticsPage.jsx'
+import WarehouseDailyReportPage from '../features/inventory/pages/WarehouseDailyReportPage.jsx'
+import WarehouseDailyReportSubmissionsPage from '../features/inventory/pages/WarehouseDailyReportSubmissionsPage.jsx'
+import WarehouseDailyReportSubmissionDetailPage from '../features/inventory/pages/WarehouseDailyReportSubmissionDetailPage.jsx'
 import ProfilePage from '../features/profile/pages/ProfilePage.jsx'
 import OrdersPage from '../features/orders/pages/OrdersPage.jsx'
 import ExchangeOrdersPage from '../features/orders/pages/ExchangeOrdersPage.jsx'
@@ -54,7 +57,6 @@ import PosTransferQrPage from '../features/pos/pages/PosTransferQrPage.jsx'
 import ReturnOrderPage from '../features/pos/pages/ReturnOrderPage.jsx'
 import ProductApprovalsPage from '../features/products/pages/ProductApprovalsPage.jsx'
 import ProductDeletionRequestsPage from '../features/products/pages/ProductDeletionRequestsPage.jsx'
-import RetailPriceChangeRequestsPage from '../features/products/pages/RetailPriceChangeRequestsPage.jsx'
 import ProductsListPage from '../features/products/pages/ProductsListPage.jsx'
 import ProductsCategoriesPage from '../features/products/pages/ProductsCategoriesPage.jsx'
 import ProductsPricingPage from '../features/products/pages/ProductsPricingPage.jsx'
@@ -104,11 +106,12 @@ function App() {
         <Route path="/inventory/products/create" element={<ProductApprovalsPage />} />
         <Route path="/inventory/product-approvals" element={<ProductApprovalsPage />} />
         <Route path="/inventory/product-deletion-requests" element={<ProductDeletionRequestsPage />} />
-        <Route path="/products/retail-price-requests" element={<RetailPriceChangeRequestsPage />} />
-        <Route path="/products/retail-price-requests/:id" element={<RetailPriceChangeRequestsPage />} />
         <Route path="/products/:id/edit" element={<Navigate to="/inventory/products" replace />} />
         <Route path="/inventory" element={<InventoryStockPage />} />
         <Route path="/inventory/statistics" element={<InventoryStatisticsPage />} />
+        <Route path="/inventory/warehouse-daily-report" element={<WarehouseDailyReportPage />} />
+        <Route path="/inventory/warehouse-daily-report/submissions" element={<WarehouseDailyReportSubmissionsPage />} />
+        <Route path="/inventory/warehouse-daily-report/submissions/:id" element={<WarehouseDailyReportSubmissionDetailPage />} />
         <Route path="/inventory/stock-requests" element={<StockAdjustmentRequestsPage />} />
         <Route path="/inventory/stock-requests/create" element={<StockAdjustmentRequestCreatePage />} />
         <Route path="/inventory/stock-transfers" element={<StockTransfersPage />} />

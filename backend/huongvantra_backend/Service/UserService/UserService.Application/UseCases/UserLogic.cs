@@ -147,6 +147,7 @@ public class UserLogic(IUserRepository userRepo, IRoleRepository roleRepo, IEmpl
 
         var user = await userRepo.GetByIdAsync(id) ?? throw new UserNotFoundException(id);
         var currentRoles = user.UserRoles.Select(ur => ur.Role.RoleName).ToList();
+        StaffManagementScope.EnsureAdminAccountNotMutated(currentRoles);
 
         var assignedRoles = new List<Role>();
         foreach (var roleId in roleIds)
@@ -155,10 +156,15 @@ public class UserLogic(IUserRepository userRepo, IRoleRepository roleRepo, IEmpl
             assignedRoles.Add(role);
         }
 
+        var nextRoleNames = assignedRoles.Select(r => r.RoleName).ToList();
+        StaffManagementScope.EnsureAdminRoleNotRemoved(currentRoles, nextRoleNames);
+        if (!request.IsActive)
+            StaffManagementScope.EnsureAdminAccountNotDisabled(currentRoles);
+
         EnforceStaffScopeIfNeeded(
             actorPermissions,
             currentRoles,
-            assignedRoles.Select(r => r.RoleName));
+            nextRoleNames);
 
         user.IsActive = request.IsActive;
         user.UpdatedAt = DateTime.UtcNow;
@@ -171,9 +177,9 @@ public class UserLogic(IUserRepository userRepo, IRoleRepository roleRepo, IEmpl
     public async Task LockAsync(Guid id, IReadOnlyList<string>? actorPermissions = null)
     {
         var user = await userRepo.GetByIdAsync(id) ?? throw new UserNotFoundException(id);
-        EnforceStaffScopeIfNeeded(
-            actorPermissions,
-            user.UserRoles.Select(ur => ur.Role.RoleName));
+        var currentRoles = user.UserRoles.Select(ur => ur.Role.RoleName).ToList();
+        StaffManagementScope.EnsureAdminAccountNotDisabled(currentRoles);
+        EnforceStaffScopeIfNeeded(actorPermissions, currentRoles);
         user.IsActive = false;
         user.UpdatedAt = DateTime.UtcNow;
         userRepo.Update(user);
@@ -194,7 +200,9 @@ public class UserLogic(IUserRepository userRepo, IRoleRepository roleRepo, IEmpl
 
     public async Task SoftDeleteAsync(Guid id)
     {
-        _ = await userRepo.GetByIdAsync(id) ?? throw new UserNotFoundException(id);
+        var user = await userRepo.GetByIdAsync(id) ?? throw new UserNotFoundException(id);
+        StaffManagementScope.EnsureAdminAccountNotDisabled(
+            user.UserRoles.Select(ur => ur.Role.RoleName));
         await userRepo.SoftDeleteAsync(id);
     }
 
@@ -229,15 +237,22 @@ public class UserLogic(IUserRepository userRepo, IRoleRepository roleRepo, IEmpl
             assignedRoles.Add(role);
         }
 
-        EnforceStaffScopeIfNeeded(
-            actorPermissions,
-            user.UserRoles.Select(ur => ur.Role.RoleName),
-            assignedRoles.Select(r => r.RoleName));
+        var currentRoles = user.UserRoles.Select(ur => ur.Role.RoleName).ToList();
+        StaffManagementScope.EnsureAdminAccountNotMutated(currentRoles);
 
         var existingRoles = user.UserRoles
             .Select(userRole => userRole.Role)
             .Where(role => role is not null)
-            .Concat(assignedRoles);
+            .Concat(assignedRoles)
+            .ToList();
+        var nextRoleNames = existingRoles.Select(role => role.RoleName).ToList();
+        StaffManagementScope.EnsureAdminRoleNotRemoved(currentRoles, nextRoleNames);
+
+        EnforceStaffScopeIfNeeded(
+            actorPermissions,
+            currentRoles,
+            assignedRoles.Select(r => r.RoleName));
+
         RoleAssignmentRules.Replace(user, existingRoles);
 
         user.UpdatedAt = DateTime.UtcNow;
@@ -250,6 +265,15 @@ public class UserLogic(IUserRepository userRepo, IRoleRepository roleRepo, IEmpl
         var user = await userRepo.GetByIdAsync(userId) ?? throw new UserNotFoundException(userId);
         var userRole = user.UserRoles.FirstOrDefault(ur => ur.RoleId == roleId)
             ?? throw new RoleNotFoundException(roleId);
+
+        var currentRoles = user.UserRoles.Select(ur => ur.Role.RoleName).ToList();
+        StaffManagementScope.EnsureAdminAccountNotMutated(currentRoles);
+
+        var nextRoles = user.UserRoles
+            .Where(ur => ur.RoleId != roleId)
+            .Select(ur => ur.Role.RoleName)
+            .ToList();
+        StaffManagementScope.EnsureAdminRoleNotRemoved(currentRoles, nextRoles);
 
         user.UserRoles.Remove(userRole);
         user.UpdatedAt = DateTime.UtcNow;

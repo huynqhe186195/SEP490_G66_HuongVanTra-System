@@ -3,7 +3,9 @@ import { useSearchParams } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
+import { confirmDialog } from '../../../app/dialog.js'
 import { showError, showSuccess } from '../../../app/toast.js'
+import { useAuthSession } from '../../auth/hooks/useAuthSession.js'
 import ViewTabs from '../components/ViewTabs.jsx'
 import { fetchRoles, mapRole } from '../services/rolesApi.js'
 import {
@@ -18,7 +20,7 @@ import {
   updateUser,
 } from '../services/usersApi.js'
 import { RESTORE_CONFIRM, SOFT_DELETE_CONFIRM, formatRoleName } from '../utils/iamLabels.js'
-import { normalizePhoneInput, validateCreateAccountForm } from '../utils/accountValidation.js'
+import { normalizePhoneInput, getPhoneMaxLength, validateCreateAccountForm } from '../utils/accountValidation.js'
 
 const EMPTY_CREATE = {
   username: '',
@@ -27,6 +29,18 @@ const EMPTY_CREATE = {
   phone: '',
   roleIds: [],
 }
+
+function isSameUserId(left, right) {
+  if (!left || !right) return false
+  return String(left).toLowerCase() === String(right).toLowerCase()
+}
+
+function userHasAdminRole(user) {
+  return (user?.roles || []).some((role) => String(role).toLowerCase() === 'admin')
+}
+
+const ADMIN_ACCOUNT_PROTECTED_MESSAGE =
+  'Tài khoản Quản trị viên thuộc nhóm đặc quyền: trên trang này chỉ xem thông tin. Thay đổi hoặc thu hồi quyền cần quy trình vận hành riêng.'
 
 function InfoBox({ children }) {
   return (
@@ -79,6 +93,7 @@ function IconActionButton({ icon, label, variant = 'secondary', onClick }) {
 }
 
 function UsersPage() {
+  const session = useAuthSession()
   const [searchParams, setSearchParams] = useSearchParams()
   const view = searchParams.get('view') === 'restore' ? 'restore' : 'active'
 
@@ -166,6 +181,10 @@ function UsersPage() {
   }
 
   const openEdit = (user) => {
+    if (userHasAdminRole(user)) {
+      showError(ADMIN_ACCOUNT_PROTECTED_MESSAGE)
+      return
+    }
     setEditUser(user)
     setEditRoleIds(
       assignableRoles
@@ -234,8 +253,16 @@ function UsersPage() {
 
   const handleUpdate = async () => {
     if (!editUser) return
+    if (userHasAdminRole(editUser)) {
+      showError(ADMIN_ACCOUNT_PROTECTED_MESSAGE)
+      return
+    }
     if (editRoleIds.length === 0) {
       showError('Vui lòng chọn ít nhất một vai trò.')
+      return
+    }
+    if (isSameUserId(editUser.id, session?.userId) && !editActive) {
+      showError('Không thể khóa chính tài khoản đang đăng nhập.')
       return
     }
 
@@ -253,10 +280,23 @@ function UsersPage() {
   }
 
   const handleLockToggle = async (user) => {
+    if (userHasAdminRole(user) && user.isActive) {
+      showError(ADMIN_ACCOUNT_PROTECTED_MESSAGE)
+      return
+    }
+    if (isSameUserId(user.id, session?.userId) && user.isActive) {
+      showError('Không thể khóa chính tài khoản đang đăng nhập.')
+      return
+    }
+
     const label = user.employee?.fullName || user.username
     try {
       if (user.isActive) {
-        if (!window.confirm(`Khóa tài khoản "${label}"?\n\nNgười này sẽ không đăng nhập được cho đến khi bạn mở khóa.`)) return
+        if (!(await confirmDialog({
+          title: 'Khóa tài khoản',
+          message: `Khóa tài khoản "${label}"?\n\nNgười này sẽ không đăng nhập được cho đến khi bạn mở khóa.`,
+          tone: 'danger',
+        }))) return
         await lockUser(user.id)
         showSuccess('Đã khóa tài khoản.')
       } else {
@@ -270,8 +310,17 @@ function UsersPage() {
   }
 
   const handleSoftDelete = async (user) => {
+    if (userHasAdminRole(user)) {
+      showError(ADMIN_ACCOUNT_PROTECTED_MESSAGE)
+      return
+    }
+    if (isSameUserId(user.id, session?.userId)) {
+      showError('Không thể ngừng sử dụng chính tài khoản đang đăng nhập.')
+      return
+    }
+
     const label = user.employee?.fullName || user.username
-    if (!window.confirm(SOFT_DELETE_CONFIRM.user(label))) return
+    if (!(await confirmDialog({ title: 'Ngừng sử dụng', message: SOFT_DELETE_CONFIRM.user(label), tone: 'danger' }))) return
     try {
       await softDeleteUser(user.id)
       showSuccess(`Đã ngừng sử dụng tài khoản "${label}". Chuyển sang tab Khôi phục.`)
@@ -284,7 +333,7 @@ function UsersPage() {
 
   const handleRestore = async (user) => {
     const label = user.employee?.fullName || user.username
-    if (!window.confirm(RESTORE_CONFIRM.user(label))) return
+    if (!(await confirmDialog({ title: 'Khôi phục', message: RESTORE_CONFIRM.user(label), tone: 'primary' }))) return
     try {
       await restoreUser(user.id)
       showSuccess(`Đã khôi phục tài khoản "${label}".`)
@@ -314,6 +363,11 @@ function UsersPage() {
         <p><strong>Tab Đang sử dụng:</strong> quản lý tài khoản đang hoạt động.</p>
         <p><strong>Tab Khôi phục:</strong> xem tài khoản đã ngừng sử dụng và bấm <strong>Khôi phục</strong> để dùng lại.</p>
         <p className="mt-1"><strong>Khóa:</strong> tạm chặn đăng nhập. <strong>Ngừng sử dụng:</strong> chuyển sang tab Khôi phục.</p>
+        <p className="mt-2 rounded-xl border border-[#356647]/25 bg-white/70 p-3 text-[#1b1c17]">
+          <strong>Quản trị viên (Admin):</strong> tài khoản đặc quyền — trên trang này chỉ <strong>xem</strong> thông tin.
+          Không sửa, khóa hay ngừng sử dụng qua thao tác thường. Có thể tạo thêm Admin dự phòng;
+          nếu cần thu hồi quyền, dùng quy trình vận hành riêng (ops/DB).
+        </p>
         {legacySaleReview.length > 0 ? (
           <p className="mt-3 rounded-xl border border-[#b45309]/40 bg-[#fffbeb] p-3 text-[#7c2d12]">
             <strong>Cần phân loại Sale legacy ({legacySaleReview.length}):</strong>{' '}
@@ -423,19 +477,41 @@ function UsersPage() {
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <IconActionButton icon="visibility" label="Xem thông tin" onClick={() => setViewUser(user)} />
-                    <IconActionButton icon="edit" label="Sửa" onClick={() => openEdit(user)} />
-                    <IconActionButton
-                      icon={user.isActive ? 'lock' : 'lock_open'}
-                      label={user.isActive ? 'Khóa' : 'Mở khóa'}
-                      variant="amber"
-                      onClick={() => handleLockToggle(user)}
-                    />
-                    <IconActionButton
-                      icon="person_off"
-                      label="Ngừng sử dụng"
-                      variant="danger"
-                      onClick={() => handleSoftDelete(user)}
-                    />
+                    {userHasAdminRole(user) ? (
+                      <IconActionButton
+                        icon="verified_user"
+                        label="Tài khoản Admin — chỉ xem"
+                        variant="amber"
+                        onClick={() => showError(ADMIN_ACCOUNT_PROTECTED_MESSAGE)}
+                      />
+                    ) : (
+                      <>
+                        <IconActionButton icon="edit" label="Sửa" onClick={() => openEdit(user)} />
+                        {isSameUserId(user.id, session?.userId) ? (
+                          <IconActionButton
+                            icon="lock"
+                            label="Không thể khóa tài khoản đang đăng nhập"
+                            variant="amber"
+                            onClick={() => showError('Không thể khóa chính tài khoản đang đăng nhập.')}
+                          />
+                        ) : (
+                          <IconActionButton
+                            icon={user.isActive ? 'lock' : 'lock_open'}
+                            label={user.isActive ? 'Khóa' : 'Mở khóa'}
+                            variant="amber"
+                            onClick={() => handleLockToggle(user)}
+                          />
+                        )}
+                        {isSameUserId(user.id, session?.userId) ? null : (
+                          <IconActionButton
+                            icon="person_off"
+                            label="Ngừng sử dụng"
+                            variant="danger"
+                            onClick={() => handleSoftDelete(user)}
+                          />
+                        )}
+                      </>
+                    )}
                   </div>
                 </div>
               </article>
@@ -478,14 +554,14 @@ function UsersPage() {
                 ['username', 'Tên đăng nhập', 'text', 'VD: nv01', false],
                 ['password', 'Mật khẩu (≥6 ký tự)', 'password', '', false],
                 ['fullName', 'Họ và tên', 'text', 'VD: Nguyễn Văn A', false],
-                ['phone', 'Số điện thoại', 'tel', '0xxxxxxxxx (tùy chọn)', true],
+                ['phone', 'Số điện thoại', 'tel', 'Di động 10 số hoặc máy bàn 02… (11 số)', true],
               ].map(([field, label, type, placeholder, isPhone]) => (
                 <label key={field} className="block">
                   <span className="text-base font-bold text-[#1b1c17]">{label}</span>
                   <input
                     type={type}
                     inputMode={isPhone ? 'numeric' : undefined}
-                    maxLength={isPhone ? 10 : undefined}
+                    maxLength={isPhone ? getPhoneMaxLength(createForm.phone) : undefined}
                     className={`mt-2 w-full rounded-2xl border-2 px-4 py-3 text-base ${
                       createFieldErrors[field] ? 'border-[#ba1a1a]' : 'border-[#c1c9c0]'
                     }`}
@@ -493,6 +569,11 @@ function UsersPage() {
                     value={createForm[field]}
                     onChange={handleCreateFieldChange(field)}
                   />
+                  {isPhone ? (
+                    <p className="mt-1 text-sm text-[#717971]">
+                      Tuỳ chọn. Di động: 10 số (VD: 0901234567). Máy bàn: 11 số bắt đầu 02 (VD: 02838123456).
+                    </p>
+                  ) : null}
                   {createFieldErrors[field] ? (
                     <p className="mt-1 text-sm text-[#ba1a1a]">{createFieldErrors[field]}</p>
                   ) : null}
@@ -543,11 +624,22 @@ function UsersPage() {
                 <span className="text-base font-bold">Cho phép đăng nhập</span>
                 <input
                   type="checkbox"
-                  className="h-6 w-6"
+                  className="h-6 w-6 disabled:cursor-not-allowed disabled:opacity-50"
                   checked={editActive}
-                  onChange={(e) => setEditActive(e.target.checked)}
+                  disabled={isSameUserId(editUser.id, session?.userId)}
+                  title={isSameUserId(editUser.id, session?.userId) ? 'Không thể khóa chính tài khoản đang đăng nhập' : undefined}
+                  onChange={(e) => {
+                    if (isSameUserId(editUser.id, session?.userId) && !e.target.checked) {
+                      showError('Không thể khóa chính tài khoản đang đăng nhập.')
+                      return
+                    }
+                    setEditActive(e.target.checked)
+                  }}
                 />
               </label>
+              {isSameUserId(editUser.id, session?.userId) ? (
+                <p className="text-sm text-amber-800">Không thể tắt đăng nhập trên chính tài khoản đang dùng.</p>
+              ) : null}
               <fieldset>
                 <legend className="text-base font-bold text-[#1b1c17]">Vai trò (có thể chọn nhiều)</legend>
                 <div className="mt-3 space-y-2">
@@ -626,15 +718,17 @@ function UsersPage() {
               <BigButton variant="secondary" onClick={() => setViewUser(null)}>
                 Đóng
               </BigButton>
-              <BigButton
-                onClick={() => {
-                  const user = viewUser
-                  setViewUser(null)
-                  openEdit(user)
-                }}
-              >
-                Sửa tài khoản
-              </BigButton>
+              {userHasAdminRole(viewUser) ? null : (
+                <BigButton
+                  onClick={() => {
+                    const user = viewUser
+                    setViewUser(null)
+                    openEdit(user)
+                  }}
+                >
+                  Sửa tài khoản
+                </BigButton>
+              )}
             </div>
           </div>
         </div>

@@ -65,6 +65,12 @@ public class UsersController(UserLogic userLogic) : ControllerBase
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateUserRequest request)
     {
         if (!CanManageStaffAccounts()) return Forbid();
+
+        var currentUserId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? User.FindFirstValue("sub")!);
+        if (id == currentUserId && !request.IsActive)
+            return BadRequest(new { message = "Không thể khóa chính tài khoản đang đăng nhập." });
+
         await userLogic.UpdateAsync(id, request, ActorPermissions);
         return NoContent();
     }
@@ -73,6 +79,12 @@ public class UsersController(UserLogic userLogic) : ControllerBase
     public async Task<IActionResult> Lock(Guid id)
     {
         if (!CanManageStaffAccounts()) return Forbid();
+
+        var currentUserId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? User.FindFirstValue("sub")!);
+        if (id == currentUserId)
+            return BadRequest(new { message = "Không thể khóa chính tài khoản đang đăng nhập." });
+
         await userLogic.LockAsync(id, ActorPermissions);
         return NoContent();
     }
@@ -89,6 +101,11 @@ public class UsersController(UserLogic userLogic) : ControllerBase
     [Authorize(Policy = PermissionNames.ManageUser)]
     public async Task<IActionResult> Delete(Guid id)
     {
+        var currentUserId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? User.FindFirstValue("sub")!);
+        if (id == currentUserId)
+            return BadRequest(new { message = "Không thể ngừng sử dụng chính tài khoản đang đăng nhập." });
+
         await userLogic.SoftDeleteAsync(id);
         return NoContent();
     }

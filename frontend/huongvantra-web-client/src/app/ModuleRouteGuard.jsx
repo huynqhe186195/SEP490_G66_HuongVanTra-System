@@ -22,14 +22,7 @@ function ModuleRouteGuard({ session, isLoadingAccess, children }) {
     }
 
     lastDeniedPathRef.current = location.pathname
-    const message = getAccessDeniedMessage(location.pathname)
-    showError(message)
-
-    try {
-      window.alert(message)
-    } catch {
-      // ignore if alert blocked
-    }
+    showError(getAccessDeniedMessage(location.pathname))
   }, [isLoadingAccess, session, location.pathname, location.search])
 
   if (isLoadingAccess) {

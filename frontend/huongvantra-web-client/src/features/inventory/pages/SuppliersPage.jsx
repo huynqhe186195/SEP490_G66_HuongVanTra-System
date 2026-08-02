@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
+import { confirmDialog } from '../../../app/dialog.js'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { formatVnd } from '../../../utils/vietnamCurrency.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
@@ -314,7 +315,11 @@ export default function SuppliersPage() {
   }
 
   async function handleDelete(s) {
-    if (!window.confirm(`Ẩn nhà cung cấp "${s.name}"?`)) return
+    if (!(await confirmDialog({
+      title: 'Ẩn nhà cung cấp',
+      message: `Ẩn nhà cung cấp "${s.name}"?`,
+      tone: 'danger',
+    }))) return
     try {
       await deleteSupplier(s.id)
       showSuccess('Đã ẩn nhà cung cấp.')

@@ -23,8 +23,23 @@ test('account form rejects an empty role selection', () => {
   assert.match(result.errors.roleIds, /ít nhất một vai trò/)
 })
 
-test('account form remains compatible with legacy roleId input', () => {
-  const result = validateCreateAccountForm({ ...validForm, roleId: 2 })
+test('account form accepts landline phone starting with 02 (11 digits)', () => {
+  const result = validateCreateAccountForm({
+    ...validForm,
+    phone: '02838123456',
+    roleIds: [2],
+  })
 
   assert.equal(result.valid, true)
+})
+
+test('account form rejects incomplete landline phone', () => {
+  const result = validateCreateAccountForm({
+    ...validForm,
+    phone: '0283812345',
+    roleIds: [2],
+  })
+
+  assert.equal(result.valid, false)
+  assert.match(result.errors.phone, /máy bàn/i)
 })

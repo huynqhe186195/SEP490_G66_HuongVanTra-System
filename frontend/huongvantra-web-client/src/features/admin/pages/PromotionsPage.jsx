@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination from '../../../components/shared/TablePagination.jsx'
+import { confirmDialog } from '../../../app/dialog.js'
 import { showError, showSuccess } from '../../../app/toast.js'
 import {
   formatVietnamDateTimeMinute,
@@ -251,6 +252,7 @@ function PromotionsPage() {
   const [promotions, setPromotions] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [modalOpen, setModalOpen] = useState(false)
+  const [viewPromotion, setViewPromotion] = useState(null)
   const [editingId, setEditingId] = useState(null)
   const [editingOrderCount, setEditingOrderCount] = useState(0)
   const [editingOriginalValidity, setEditingOriginalValidity] = useState({ validFrom: '', validTo: '' })
@@ -577,7 +579,11 @@ function PromotionsPage() {
       showError('Mã giảm giá đã hết hạn. Vui lòng gia hạn thời gian sử dụng trước khi kích hoạt lại.')
       return
     }
-    if (!window.confirm(`Ngừng hoạt động mã "${promotion.promoCode}"?`)) return
+    if (!(await confirmDialog({
+      title: 'Ngừng hoạt động',
+      message: `Ngừng hoạt động mã "${promotion.promoCode}"?`,
+      tone: 'danger',
+    }))) return
     try {
       await deactivateAdminPromotion(promotion.id)
       showSuccess('Đã ngừng hoạt động mã giảm giá.')
@@ -794,28 +800,22 @@ function PromotionsPage() {
             <thead className="bg-[#fbf9f1]/50 text-xs font-bold uppercase tracking-wider text-slate-400">
               <tr>
                 <th className="px-8 py-4">Mã</th>
-                <th className="px-4 py-4">Loại</th>
-                <th className="px-4 py-4">Giá trị</th>
-                <th className="px-4 py-4">Đơn tối thiểu</th>
-                <th className="px-4 py-4">Thời hạn</th>
-                <th className="px-4 py-4">Phạm vi</th>
+                <th className="px-4 py-4">Giảm giá</th>
                 <th className="px-4 py-4">Trạng thái</th>
-                <th className="px-4 py-4">Mô tả</th>
-                <th className="px-4 py-4">Lượt dùng</th>
                 <th className="px-8 py-4 text-right">Thao tác</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
               {isLoading ? (
                 <tr>
-                  <td className="px-8 py-10 text-slate-500" colSpan={10}>
+                  <td className="px-8 py-10 text-slate-500" colSpan={4}>
                     Đang tải...
                   </td>
                 </tr>
               ) : null}
               {!isLoading && promotions.length === 0 ? (
                 <tr>
-                  <td className="px-8 py-10 text-slate-500" colSpan={10}>
+                  <td className="px-8 py-10 text-slate-500" colSpan={4}>
                     {hasActivePromotionFilter
                       ? 'Không tìm thấy mã giảm giá phù hợp.'
                       : 'Chưa có mã giảm giá. Bấm "Thêm mã" để tạo.'}
@@ -831,37 +831,23 @@ function PromotionsPage() {
                     return (
                       <tr key={promotion.id} className={`hover:bg-[#fbf9f1]/30 ${promotion.isEffectivelyActive === false ? 'opacity-60' : ''}`}>
                         <td className="px-8 py-5 font-bold text-slate-800">{promotion.promoCode}</td>
-                        <td className="px-4 py-5 text-slate-600">{promotion.discountType}</td>
                         <td className="px-4 py-5 text-slate-700">
                           {formatPromotionDiscountText(promotion)}
-                        </td>
-                        <td className="px-4 py-5 text-sm text-slate-600">
-                          {formatPromotionMinimumOrderSummary(promotion)}
-                        </td>
-                        <td className="px-4 py-5 text-sm text-slate-600">
-                          {formatPromotionPeriod(promotion)}
-                        </td>
-                        <td className="max-w-[220px] px-4 py-5 text-sm text-slate-600">
-                          <span className="line-clamp-2">{formatAdminPromotionScopeSummary(promotion)}</span>
-                          <span className="mt-1 block text-xs text-slate-500">
-                            {formatPromotionCustomerTierSummary(promotion)}
-                          </span>
                         </td>
                         <td className="px-4 py-5">
                           <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${badgeClass}`}>
                             {getAdminPromotionValidityLabel(status)}
                           </span>
                         </td>
-                        <td className="px-4 py-5 text-sm text-[#538463]">
-                          {formatPromotionLabel(promotion)}
-                        </td>
-                        <td className="px-4 py-5 text-sm text-slate-600">
-                          {formatPromotionUsageSummary(promotion).map((line) => (
-                            <span key={line} className="block">{line}</span>
-                          ))}
-                        </td>
                         <td className="px-8 py-5">
                           <div className="flex justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setViewPromotion(promotion)}
+                              className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                            >
+                              Xem
+                            </button>
                             <button
                               type="button"
                               onClick={() => openEdit(promotion)}
@@ -917,6 +903,83 @@ function PromotionsPage() {
           itemLabel="mã giảm giá"
         />
       </div>
+
+      {viewPromotion ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
+          onClick={() => setViewPromotion(null)}
+        >
+          <div
+            className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-6 shadow-xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Chi tiết mã giảm giá</p>
+                <h2 className="mt-1 text-xl font-bold text-slate-800">{viewPromotion.promoCode}</h2>
+              </div>
+              <button
+                type="button"
+                className="rounded-full p-2 text-slate-500 hover:bg-slate-100"
+                onClick={() => setViewPromotion(null)}
+                title="Đóng"
+              >
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+
+            <dl className="mt-5 space-y-3">
+              {[
+                ['Giảm giá', formatPromotionDiscountText(viewPromotion)],
+                [
+                  'Loại',
+                  String(viewPromotion.discountType || '').toUpperCase() === 'FIXED'
+                    ? 'Giảm số tiền cố định'
+                    : 'Giảm theo phần trăm',
+                ],
+                ['Đơn tối thiểu', formatPromotionMinimumOrderSummary(viewPromotion)],
+                ['Thời hạn', formatPromotionPeriod(viewPromotion)],
+                ['Phạm vi', formatAdminPromotionScopeSummary(viewPromotion)],
+                ['Hạng khách hàng', formatPromotionCustomerTierSummary(viewPromotion)],
+                ['Mô tả', formatPromotionLabel(viewPromotion)],
+                ['Lượt dùng', formatPromotionUsageSummary(viewPromotion).join(' · ')],
+                [
+                  'Trạng thái',
+                  getAdminPromotionValidityLabel(
+                    String(viewPromotion.validityStatus || (viewPromotion.isActive ? 'ACTIVE' : 'INACTIVE')).toUpperCase(),
+                  ),
+                ],
+              ].map(([label, value]) => (
+                <div key={label} className="rounded-xl bg-[#fbf9f1] px-4 py-3">
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</dt>
+                  <dd className="mt-1 text-sm font-semibold text-slate-800">{value || '—'}</dd>
+                </div>
+              ))}
+            </dl>
+
+            <div className="mt-6 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setViewPromotion(null)}
+                className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Đóng
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const promotion = viewPromotion
+                  setViewPromotion(null)
+                  openEdit(promotion)
+                }}
+                className="rounded-lg bg-[#538463] px-4 py-2 text-sm font-semibold text-white hover:brightness-110"
+              >
+                Sửa mã
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {modalOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">

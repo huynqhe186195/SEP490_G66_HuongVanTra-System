@@ -3,6 +3,7 @@ import { AUTH_SESSION_CHANGED_EVENT, loadAuthSession } from '../../auth/services
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
+import { promptDialog } from '../../../app/dialog.js'
 import { showError, showSuccess } from '../../../app/toast.js'
 import {
   canCreateCatalog,
@@ -446,8 +447,13 @@ export default function ProductsWarehouseListPage() {
 
   async function handleHide(product) {
     if (!canHide || product.isDeleted) return
-    const reason = window.prompt(`Nhập lý do yêu cầu xóa sản phẩm "${product.name}":`)
-    if (!String(reason || '').trim()) return
+    const reason = await promptDialog({
+      title: 'Nhập lý do',
+      message: `Nhập lý do yêu cầu xóa sản phẩm "${product.name}":`,
+      required: true,
+      tone: 'danger',
+    })
+    if (reason == null) return
     try {
       setTogglingId(product.id)
       const request = await createProductDeletionRequest({

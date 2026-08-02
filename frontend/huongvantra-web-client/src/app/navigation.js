@@ -98,7 +98,6 @@ export const navigationItems = [
   { label: 'Danh Mục Sản Phẩm', path: '/products/categories', module: 'products', icon: 'category', roles: ['admin', 'agencyManager', 'inventoryManager'] },
   { label: 'Lịch sử tạo hàng hóa', path: '/inventory/product-approvals', module: 'product_creation_requests', icon: 'verified', roles: ['admin', 'inventoryManager'] },
   { label: 'Yêu cầu xóa hàng hóa', path: '/inventory/product-deletion-requests', module: 'product_deletion_requests', icon: 'delete_sweep', roles: ['inventoryManager'] },
-  { label: 'Yêu cầu đổi giá bán', path: '/products/retail-price-requests', module: 'retail_price_change_requests', icon: 'price_change', roles: ['admin', 'agencyManager'] },
   { label: 'Kho', path: '/inventory', module: 'inventory', icon: 'warehouse', roles: ['inventoryManager'] },
   { label: 'Phiếu nhập nhà cung cấp', path: '/inventory/supplier-receipts', module: 'supplier_receipts', icon: 'assignment_turned_in', roles: ['admin', 'agencyManager', 'accountant', 'inventoryManager'] },
   { label: 'Nhà cung cấp', path: '/inventory/suppliers', module: 'supplier_receipts', icon: 'storefront', roles: ['admin', 'agencyManager', 'accountant', 'inventoryManager'] },
@@ -116,10 +115,34 @@ export const navigationItems = [
     path: '/inventory/statistics',
     module: 'inventory_statistics',
     icon: 'analytics',
-    roles: ['inventoryManager', 'accountant'],
+    roles: ['inventoryManager', 'accountant', 'admin', 'agencyManager'],
     children: [
-      { label: 'Tổng quan', path: '/inventory/statistics?section=overview', section: 'overview', sectionScope: 'inventory_statistics' },
-      { label: 'Trạng thái hàng hoá', path: '/inventory/statistics?section=alerts', section: 'alerts', sectionScope: 'inventory_statistics' },
+      {
+        label: 'Tổng quan',
+        path: '/inventory/statistics?section=overview',
+        section: 'overview',
+        sectionScope: 'inventory_statistics',
+        roles: ['inventoryManager', 'accountant'],
+      },
+      {
+        label: 'Trạng thái hàng hoá',
+        path: '/inventory/statistics?section=alerts',
+        section: 'alerts',
+        sectionScope: 'inventory_statistics',
+        roles: ['inventoryManager', 'accountant'],
+      },
+      {
+        label: 'Báo cáo cuối ngày',
+        path: '/inventory/warehouse-daily-report',
+        module: 'warehouse_daily_report',
+        roles: ['inventoryManager'],
+      },
+      {
+        label: 'Báo cáo đã gửi',
+        path: '/inventory/warehouse-daily-report/submissions',
+        module: 'warehouse_daily_report',
+        roles: ['inventoryManager', 'admin', 'agencyManager'],
+      },
     ],
   },
   {
@@ -593,9 +616,9 @@ function hasAnyRoleGroup(userRoles, allowedGroups) {
 
 function filterModuleChildren(children = [], allowedModules, roles = []) {
   return children.filter((child) => {
+    if (child.roles?.length && !hasAnyRoleGroup(roles, child.roles)) return false
     if (!child.module) return true
     if (!isSidebarModuleEnabled(child.module)) return false
-    if (child.roles?.length && !hasAnyRoleGroup(roles, child.roles)) return false
     if (allowedModules.has(child.module)) return true
     if (roles.length && child.roles?.length && hasAnyRoleGroup(roles, child.roles)) return true
     return false
@@ -604,8 +627,8 @@ function filterModuleChildren(children = [], allowedModules, roles = []) {
 
 function filterRoleChildren(children = [], roles = []) {
   return children.filter((child) => {
-    if (!child.module && !child.roles?.length) return true
     if (child.roles?.length) return hasAnyRoleGroup(roles, child.roles)
+    if (!child.module && !child.roles?.length) return true
     return true
   })
 }
@@ -788,7 +811,6 @@ const MODULE_PATH_PREFIXES = [
   { module: 'customers', prefix: '/customers' },
   { module: 'product_creation_requests', prefix: '/inventory/product-approvals' },
   { module: 'product_deletion_requests', prefix: '/inventory/product-deletion-requests' },
-  { module: 'retail_price_change_requests', prefix: '/products/retail-price-requests' },
   { module: 'products', prefix: '/products/categories' },
   { module: 'products', prefix: '/inventory/products' },
   { module: 'stock_transfer_ops', prefix: '/inventory/stock-transfers' },
@@ -805,6 +827,7 @@ const MODULE_PATH_PREFIXES = [
   { module: 'production_orders', prefix: '/inventory/production-orders' },
   { module: 'inventory_reports', prefix: '/inventory/reports' },
   { module: 'inventory_ledger', prefix: '/inventory/ledger' },
+  { module: 'warehouse_daily_report', prefix: '/inventory/warehouse-daily-report' },
   { module: 'inventory', prefix: '/inventory' },
   { module: 'cod_ops', prefix: '/orders/cod' },
   { module: 'stock_deduct_ops', prefix: '/orders/stock-deduct' },
@@ -1067,7 +1090,21 @@ export function isNavigationItemActive(pathname, item, search = '') {
   }
 
   if (item.module === 'inventory_statistics') {
-    return path === target || path.startsWith(`${target}/`)
+    return (
+      path === target
+      || path.startsWith(`${target}/`)
+      || path === '/inventory/warehouse-daily-report'
+      || path.startsWith('/inventory/warehouse-daily-report/')
+    )
+  }
+
+  // Live vs đã gửi: path live là prefix của /submissions → không dùng startsWith chung.
+  if (item.module === 'warehouse_daily_report') {
+    const submissionsPrefix = '/inventory/warehouse-daily-report/submissions'
+    if (target === submissionsPrefix || target.startsWith(`${submissionsPrefix}/`)) {
+      return path === submissionsPrefix || path.startsWith(`${submissionsPrefix}/`)
+    }
+    return path === '/inventory/warehouse-daily-report'
   }
 
   if (item.module === 'products') {

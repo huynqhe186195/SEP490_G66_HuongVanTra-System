@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
+import { confirmDialog } from '../../../app/dialog.js'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { useAuthSession } from '../../auth/hooks/useAuthSession.js'
 import {
@@ -314,7 +315,12 @@ function CustomerFormPage() {
   }
 
   const handleDelete = async () => {
-    if (!customerId || !window.confirm('Ngừng hoạt động khách hàng này? (xóa mềm — có thể khôi phục sau)')) return
+    if (!customerId) return
+    if (!(await confirmDialog({
+      title: 'Ngừng hoạt động',
+      message: 'Ngừng hoạt động khách hàng này? (xóa mềm — có thể khôi phục sau)',
+      tone: 'danger',
+    }))) return
     try {
       setIsDeleting(true)
       await deleteCustomer(customerId)

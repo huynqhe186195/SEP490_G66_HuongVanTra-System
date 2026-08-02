@@ -1,6 +1,7 @@
 import {
   closeCashSessionApi,
   fetchCurrentCashSession,
+  isCashSessionReadyForSale,
   openCashSessionApi,
 } from '../services/posCashSessionApi.js'
 
@@ -17,6 +18,11 @@ export function formatVnd(amount) {
 
 export function loadOpenCashSession() {
   return cachedOpenSession
+}
+
+/** true khi có quỹ Open và đúng ca hiện tại (không phải quỹ ca trước còn sót). */
+export function isOpenCashSessionReady() {
+  return isCashSessionReadyForSale(cachedOpenSession)
 }
 
 export function expectedCash(session) {

@@ -2,7 +2,15 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
-import { createStaffAccount, fetchRoleOptions } from '../services/staffApi.js'
+import {
+  createStaffAccount,
+  fetchRoleOptions,
+} from '../services/staffApi.js'
+import {
+  getPhoneMaxLength,
+  normalizePhoneInput,
+  validateAccountPhone,
+} from '../../iam/utils/accountValidation.js'
 
 function StaffCreatePage() {
   const navigate = useNavigate()
@@ -36,7 +44,10 @@ function StaffCreatePage() {
   }, [])
 
   const handleChange = (field) => (event) => {
-    setForm((current) => ({ ...current, [field]: event.target.value }))
+    const value = field === 'phone'
+      ? normalizePhoneInput(event.target.value)
+      : event.target.value
+    setForm((current) => ({ ...current, [field]: value }))
   }
 
   const toggleRole = (roleName) => {
@@ -56,6 +67,12 @@ function StaffCreatePage() {
   const handleSave = async () => {
     if (!canSubmit) {
       showError('Vui lòng nhập đủ họ tên, số điện thoại, tên đăng nhập, mật khẩu (≥6) và vai trò.')
+      return
+    }
+
+    const phoneError = validateAccountPhone(form.phone, { required: true })
+    if (phoneError) {
+      showError(phoneError)
       return
     }
 
@@ -89,9 +106,9 @@ function StaffCreatePage() {
       <section className="rounded-[24px] border border-[#c1c9c0]/30 bg-white p-6 shadow-sm">
         <div className="mb-8">
           <nav className="mb-2 flex items-center gap-2 text-xs text-[#414942]">
-            <span>He thong</span>
+            <span>Hệ thống</span>
             <span className="material-symbols-outlined text-[16px]">chevron_right</span>
-            <span>Nhan vien</span>
+            <span>Nhân viên</span>
             <span className="material-symbols-outlined text-[16px]">chevron_right</span>
             <span className="font-semibold text-[#356647]">Thêm mới</span>
           </nav>
@@ -104,7 +121,7 @@ function StaffCreatePage() {
                 className="rounded-lg border border-[#356647] px-6 py-2 text-[#356647] transition-all hover:bg-[#356647]/5 active:scale-95"
                 onClick={() => navigate('/staff')}
               >
-                Huy bo
+                Hủy bỏ
               </button>
               <button
                 type="button"
@@ -123,18 +140,30 @@ function StaffCreatePage() {
             <section className="rounded-xl bg-white p-5 shadow-[0px_4px_20px_rgba(0,0,0,0.04)]">
               <div className="mb-6 flex items-center gap-2 text-[#356647]">
                 <span className="material-symbols-outlined">person</span>
-                <h3 className="text-xl font-semibold">Thong tin ca nhan</h3>
+                <h3 className="text-xl font-semibold">Thông tin cá nhân</h3>
               </div>
 
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                 <label className="flex flex-col gap-2">
-                  <span className="text-xs font-semibold text-[#414942]">Ho va ten</span>
+                  <span className="text-xs font-semibold text-[#414942]">Họ và tên</span>
                   <input className="rounded-lg border-none bg-[#f6f4ec] p-3 text-sm shadow-inner outline-none focus:ring-2 focus:ring-[#356647]/30" value={form.fullName} onChange={handleChange('fullName')} />
                 </label>
 
                 <label className="flex flex-col gap-2">
-                  <span className="text-xs font-semibold text-[#414942]">So dien thoai</span>
-                  <input required className="rounded-lg border-none bg-[#f6f4ec] p-3 text-sm shadow-inner outline-none focus:ring-2 focus:ring-[#356647]/30" value={form.phone} onChange={handleChange('phone')} />
+                  <span className="text-xs font-semibold text-[#414942]">Số điện thoại</span>
+                  <input
+                    required
+                    type="tel"
+                    inputMode="numeric"
+                    maxLength={getPhoneMaxLength(form.phone)}
+                    className="rounded-lg border-none bg-[#f6f4ec] p-3 text-sm shadow-inner outline-none focus:ring-2 focus:ring-[#356647]/30"
+                    value={form.phone}
+                    onChange={handleChange('phone')}
+                    placeholder="Di động 10 số hoặc máy bàn 02… (11 số)"
+                  />
+                  <span className="text-xs text-[#717971]">
+                    Di động: 10 số. Máy bàn: 11 số bắt đầu bằng 02.
+                  </span>
                 </label>
 
                 <label className="flex flex-col gap-2">
@@ -143,12 +172,12 @@ function StaffCreatePage() {
                 </label>
 
                 <label className="flex flex-col gap-2">
-                  <span className="text-xs font-semibold text-[#414942]">Mat khau</span>
+                  <span className="text-xs font-semibold text-[#414942]">Mật khẩu</span>
                   <input type="password" className="rounded-lg border-none bg-[#f6f4ec] p-3 text-sm shadow-inner outline-none focus:ring-2 focus:ring-[#356647]/30" value={form.password} onChange={handleChange('password')} />
                 </label>
 
                 <label className="flex flex-col gap-2 md:col-span-2">
-                  <span className="text-xs font-semibold text-[#414942]">Ghi chu</span>
+                  <span className="text-xs font-semibold text-[#414942]">Ghi chú</span>
                   <input className="rounded-lg border-none bg-[#f6f4ec] p-3 text-sm shadow-inner outline-none focus:ring-2 focus:ring-[#356647]/30" value={form.note} onChange={handleChange('note')} />
                 </label>
               </div>
@@ -186,7 +215,7 @@ function StaffCreatePage() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 text-[#356647]">
                   <span className="material-symbols-outlined">online_prediction</span>
-                  <h3 className="text-xl font-semibold">Trang thai he thong</h3>
+                  <h3 className="text-xl font-semibold">Trạng thái hệ thống</h3>
                 </div>
 
                 <div className="flex items-center gap-4">
