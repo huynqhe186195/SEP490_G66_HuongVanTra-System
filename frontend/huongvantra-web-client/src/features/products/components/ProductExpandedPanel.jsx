@@ -334,8 +334,7 @@ export default function ProductExpandedPanel({
           <table className="min-w-full text-left text-sm">
             <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
               <tr>
-                <th className="px-4 py-2.5">Mã SKU</th>
-                <th className="px-4 py-2.5">Quy cách / biến thể</th>
+                <th className="px-4 py-2.5">Sản Phẩm</th>
                 <th className="px-4 py-2.5 text-right">Giá vốn</th>
                 <th className="px-4 py-2.5 text-right">Giá bán</th>
                 <th className="px-4 py-2.5 text-center">Bán POS</th>
@@ -344,8 +343,10 @@ export default function ProductExpandedPanel({
             <tbody className="divide-y divide-slate-100">
               {(product.variants?.length ? product.variants : skus).map((item) => (
                 <tr key={item.id} className={rowClass(item.id)}>
-                  <td className="px-4 py-2.5 font-mono text-xs font-bold text-[#356647]">{item.skuCode}</td>
-                  <td className="px-4 py-2.5">{item.variantName || item.packagingType || '—'}</td>
+                  <td className="px-4 py-2.5">
+                    <p className="font-medium text-slate-800">{item.variantName || item.packagingType || '—'}</p>
+                    <p className="font-mono text-xs text-slate-500">{item.skuCode}</p>
+                  </td>
                   <td className="px-4 py-2.5 text-right">{formatProductPrice(item.costPrice ?? 0)}</td>
                   <td className="px-4 py-2.5 text-right font-medium">{formatProductPrice(item.retailPrice || item.basePrice)}</td>
                   <td className="px-4 py-2.5 text-center">{item.isSellable !== false ? 'Có' : 'Không'}</td>

@@ -3,6 +3,7 @@ using System;
 using InventoryService.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace InventoryService.Infrastructure.Migrations
 {
     [DbContext(typeof(InventoryDbContext))]
-    partial class InventoryDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260803010000_AddSupplierReturnDefectEvidenceAndOperationId")]
+    partial class AddSupplierReturnDefectEvidenceAndOperationId
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -2217,33 +2220,6 @@ namespace InventoryService.Infrastructure.Migrations
                     b.ToTable("SupplierReceiptItems", (string)null);
                 });
 
-            modelBuilder.Entity("InventoryService.Domain.Entities.SupplierReturnEvidenceImage", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("char(36)");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<string>("ImageUrl")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("varchar(500)");
-
-                    b.Property<int>("SortOrder")
-                        .HasColumnType("int");
-
-                    b.Property<Guid>("SupplierReturnRequestId")
-                        .HasColumnType("char(36)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("SupplierReturnRequestId");
-
-                    b.ToTable("SupplierReturnEvidenceImages", (string)null);
-                });
-
             modelBuilder.Entity("InventoryService.Domain.Entities.SupplierReturnRequest", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2268,6 +2244,11 @@ namespace InventoryService.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(40)
                         .HasColumnType("varchar(40)");
+
+                    b.Property<string>("EvidenceImageUrl")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
 
                     b.Property<string>("Note")
                         .HasMaxLength(500)
@@ -2972,17 +2953,6 @@ namespace InventoryService.Infrastructure.Migrations
                     b.Navigation("WarehouseBatch");
                 });
 
-            modelBuilder.Entity("InventoryService.Domain.Entities.SupplierReturnEvidenceImage", b =>
-                {
-                    b.HasOne("InventoryService.Domain.Entities.SupplierReturnRequest", "SupplierReturnRequest")
-                        .WithMany("EvidenceImages")
-                        .HasForeignKey("SupplierReturnRequestId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("SupplierReturnRequest");
-                });
-
             modelBuilder.Entity("InventoryService.Domain.Entities.SupplierReturnRequestItem", b =>
                 {
                     b.HasOne("InventoryService.Domain.Entities.SupplierReturnRequest", "SupplierReturnRequest")
@@ -3092,8 +3062,6 @@ namespace InventoryService.Infrastructure.Migrations
 
             modelBuilder.Entity("InventoryService.Domain.Entities.SupplierReturnRequest", b =>
                 {
-                    b.Navigation("EvidenceImages");
-
                     b.Navigation("Items");
                 });
 

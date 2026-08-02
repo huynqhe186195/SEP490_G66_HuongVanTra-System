@@ -246,8 +246,7 @@ function InventoryBomPage() {
           <div className="overflow-x-auto rounded-xl border border-slate-200">
             <table className="min-w-full table-fixed text-left text-sm">
               <colgroup>
-                <col style={{ width: '13%' }} />
-                <col style={{ width: '18%' }} />
+                <col style={{ width: '31%' }} />
                 <col style={{ width: '12%' }} />
                 <col style={{ width: '10%' }} />
                 <col style={{ width: '8%' }} />
@@ -256,8 +255,7 @@ function InventoryBomPage() {
               </colgroup>
               <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                 <tr>
-                  <th className="px-4 py-3 font-semibold">SKU Sản phẩm kệ</th>
-                  <th className="px-4 py-3 font-semibold">Sản phẩm kệ</th>
+                  <th className="px-4 py-3 font-semibold">Sản Phẩm</th>
                   <th className="px-4 py-3 font-semibold">Biến thể</th>
                   <th className="px-4 py-3 text-right font-semibold">Giá bán</th>
                   <th className="px-4 py-3 text-center font-semibold">Số component</th>
@@ -269,10 +267,8 @@ function InventoryBomPage() {
                 {filteredRows.map((row) => (
                   <tr key={row.variantId} className="hover:bg-slate-50/70">
                     <td className="px-4 py-3 align-top">
-                      <span className="font-mono text-xs font-bold text-[#356647]">{row.skuCode}</span>
-                    </td>
-                    <td className="px-4 py-3 align-top">
                       <div className="font-medium text-slate-900">{row.productName}</div>
+                      <div className="font-mono text-xs text-slate-500">{row.skuCode}</div>
                       <div className="text-xs text-slate-500">{row.categoryName || '-'}</div>
                     </td>
                     <td className="px-4 py-3 align-top text-slate-700">{row.variantName || '-'}</td>

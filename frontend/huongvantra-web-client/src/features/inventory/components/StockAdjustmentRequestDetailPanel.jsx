@@ -117,7 +117,7 @@ export default function StockAdjustmentRequestDetailPanel({
         <table className="min-w-full text-left text-sm">
           <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
             <tr>
-              <th className="px-4 py-3">SKU</th>
+              <th className="px-4 py-3">Sản phẩm</th>
               <th className="px-4 py-3 text-right">{STOCK_FLOW_TERMS.requestedQuantity}</th>
               <th className="px-4 py-3 text-right">{STOCK_FLOW_TERMS.approvedQuantity}</th>
               <th className="px-4 py-3 text-right">{STOCK_FLOW_TERMS.fulfilledQuantity}</th>
@@ -131,8 +131,8 @@ export default function StockAdjustmentRequestDetailPanel({
               items.map((item) => (
                 <tr key={item.id ?? item.skuId ?? item.skuCode}>
                   <td className="px-4 py-3">
-                    <p className="font-mono text-xs font-bold text-[#356647]">{item.skuCode || '—'}</p>
-                    <p className="mt-0.5 text-xs text-slate-500">{item.skuSnapshotName || '—'}</p>
+                    <p className="font-semibold text-slate-800">{item.skuSnapshotName || '—'}</p>
+                    <p className="mt-0.5 font-mono text-xs font-bold text-[#356647]">{item.skuCode || '—'}</p>
                     {item.reviewNote ? (
                       <p className="mt-1 text-xs text-slate-500">Ghi chú: {item.reviewNote}</p>
                     ) : null}

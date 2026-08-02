@@ -32,6 +32,13 @@ public interface IStockAdjustmentRequestRepository
     /// <summary>Danh sách người tạo (id kèm tên snapshot) đã xuất hiện trong dữ liệu.</summary>
     Task<List<(Guid Id, string? Name, string? RoleName)>> GetCreatorsAsync(CancellationToken ct = default);
     Task<int> CountCreatedSinceAsync(DateTime sinceUtc, CancellationToken ct = default);
+    /// <summary>
+    /// Các dòng yêu cầu chưa xử lý xong của những SKU truyền vào, kèm phiếu cha.
+    /// Dùng để chặn gửi trùng SKU khi yêu cầu trước đó còn treo.
+    /// </summary>
+    Task<List<StockAdjustmentRequestItem>> GetOpenItemsBySkuIdsAsync(
+        IEnumerable<Guid> skuIds,
+        CancellationToken ct = default);
     /// <summary>Các Phiếu điều chuyển Kho → Kệ đã sinh ra từ một Yêu cầu bổ sung Kệ Hàng.</summary>
     Task<List<StockTransfer>> GetTransfersBySourceRequestAsync(Guid requestId, CancellationToken ct = default);
     /// <summary>
@@ -42,5 +49,10 @@ public interface IStockAdjustmentRequestRepository
         IEnumerable<Guid> requestIds,
         CancellationToken ct = default);
     Task AddAsync(StockAdjustmentRequest request, CancellationToken ct = default);
+    /// <summary>
+    /// Sinh RequestCode theo ngày rồi lưu, thử lại khi hai người gửi cùng lúc trùng mã.
+    /// Mã được gán vào entity trước khi trả về.
+    /// </summary>
+    Task AddWithGeneratedCodeAsync(StockAdjustmentRequest request, CancellationToken ct = default);
     Task<int> SaveChangesAsync(CancellationToken ct = default);
 }

@@ -614,67 +614,6 @@ public class SupplierReceiptItemConfiguration : IEntityTypeConfiguration<Supplie
     }
 }
 
-public class ShelfReturnRequestConfiguration : IEntityTypeConfiguration<ShelfReturnRequest>
-{
-    public void Configure(EntityTypeBuilder<ShelfReturnRequest> builder)
-    {
-        builder.ToTable("ShelfReturnRequests");
-        builder.HasKey(e => e.Id);
-        builder.Property(e => e.ReturnCode).HasMaxLength(30).IsRequired();
-        builder.Property(e => e.ReturnMode).HasMaxLength(30).IsRequired();
-        builder.Property(e => e.OriginalStockAdjustmentRequestCode).HasMaxLength(30);
-        builder.Property(e => e.Reason).HasMaxLength(500);
-        builder.Property(e => e.Note).HasMaxLength(500);
-        builder.Property(e => e.Status).HasConversion<string>().HasMaxLength(30).IsRequired();
-        builder.Property(e => e.CreatedByName).HasMaxLength(255);
-        builder.Property(e => e.CreatedByRoleName).HasMaxLength(100);
-        builder.Property(e => e.ReviewedByName).HasMaxLength(255);
-        builder.Property(e => e.ReviewedByRoleName).HasMaxLength(100);
-        builder.Property(e => e.ReviewNote).HasMaxLength(500);
-        builder.HasIndex(e => e.ReturnCode).IsUnique();
-        builder.HasIndex(e => e.ReturnMode);
-        builder.HasIndex(e => e.Status);
-        builder.HasIndex(e => e.CreatedBy);
-        builder.HasIndex(e => e.CreatedAt);
-        builder.HasIndex(e => e.OriginalStockAdjustmentRequestId);
-        builder.HasIndex(e => e.OriginalStockAdjustmentRequestCode);
-        builder.HasMany(e => e.Items)
-            .WithOne(i => i.ShelfReturnRequest)
-            .HasForeignKey(i => i.ShelfReturnRequestId)
-            .OnDelete(DeleteBehavior.Cascade);
-    }
-}
-
-public class ShelfReturnRequestItemConfiguration : IEntityTypeConfiguration<ShelfReturnRequestItem>
-{
-    public void Configure(EntityTypeBuilder<ShelfReturnRequestItem> builder)
-    {
-        builder.ToTable("ShelfReturnRequestItems");
-        builder.HasKey(e => e.Id);
-        builder.Property(e => e.SkuCode).HasMaxLength(50).IsRequired();
-        builder.Property(e => e.SkuSnapshotName).HasMaxLength(255).IsRequired();
-        builder.Property(e => e.ShelfLotCode).HasMaxLength(50);
-        builder.Property(e => e.StockExportSlipCode).HasMaxLength(30);
-        builder.Property(e => e.StockImportSlipCode).HasMaxLength(30);
-        builder.Property(e => e.WarehouseBatchLotCode).HasMaxLength(50);
-        builder.Property(e => e.Note).HasMaxLength(500);
-        builder.HasIndex(e => e.ShelfReturnRequestId);
-        builder.HasIndex(e => e.SkuId);
-        builder.HasIndex(e => e.ShelfBatchId);
-        builder.HasIndex(e => e.WarehouseBatchId);
-        builder.HasIndex(e => e.StockExportSlipId);
-        builder.HasIndex(e => e.StockImportSlipId);
-        builder.HasOne(e => e.ShelfBatch)
-            .WithMany()
-            .HasForeignKey(e => e.ShelfBatchId)
-            .OnDelete(DeleteBehavior.SetNull);
-        builder.HasOne(e => e.WarehouseBatch)
-            .WithMany()
-            .HasForeignKey(e => e.WarehouseBatchId)
-            .OnDelete(DeleteBehavior.SetNull);
-    }
-}
-
 public class SupplierReturnRequestConfiguration : IEntityTypeConfiguration<SupplierReturnRequest>
 {
     public void Configure(EntityTypeBuilder<SupplierReturnRequest> builder)
@@ -682,10 +621,10 @@ public class SupplierReturnRequestConfiguration : IEntityTypeConfiguration<Suppl
         builder.ToTable("SupplierReturnRequests");
         builder.HasKey(e => e.Id);
         builder.Property(e => e.ReturnCode).HasMaxLength(30).IsRequired();
-        builder.Property(e => e.ReturnMode).HasMaxLength(30).IsRequired();
         builder.Property(e => e.SupplierReceiptCode).HasMaxLength(30);
         builder.Property(e => e.SupplierName).HasMaxLength(255);
         builder.Property(e => e.SupplierReference).HasMaxLength(100);
+        builder.Property(e => e.DefectReasonCode).HasMaxLength(40).IsRequired();
         builder.Property(e => e.Reason).HasMaxLength(500);
         builder.Property(e => e.Note).HasMaxLength(500);
         builder.Property(e => e.Status).HasConversion<string>().HasMaxLength(30).IsRequired();
@@ -695,16 +634,31 @@ public class SupplierReturnRequestConfiguration : IEntityTypeConfiguration<Suppl
         builder.Property(e => e.ReviewedByRoleName).HasMaxLength(100);
         builder.Property(e => e.ReviewNote).HasMaxLength(500);
         builder.HasIndex(e => e.ReturnCode).IsUnique();
-        builder.HasIndex(e => e.ReturnMode);
         builder.HasIndex(e => e.Status);
         builder.HasIndex(e => e.CreatedBy);
         builder.HasIndex(e => e.CreatedAt);
         builder.HasIndex(e => e.SupplierReceiptId);
         builder.HasIndex(e => e.SupplierReceiptCode);
+        builder.HasIndex(e => e.OperationId).IsUnique();
         builder.HasMany(e => e.Items)
             .WithOne(i => i.SupplierReturnRequest)
             .HasForeignKey(i => i.SupplierReturnRequestId)
             .OnDelete(DeleteBehavior.Cascade);
+        builder.HasMany(e => e.EvidenceImages)
+            .WithOne(i => i.SupplierReturnRequest)
+            .HasForeignKey(i => i.SupplierReturnRequestId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
+public class SupplierReturnEvidenceImageConfiguration : IEntityTypeConfiguration<SupplierReturnEvidenceImage>
+{
+    public void Configure(EntityTypeBuilder<SupplierReturnEvidenceImage> builder)
+    {
+        builder.ToTable("SupplierReturnEvidenceImages");
+        builder.HasKey(e => e.Id);
+        builder.Property(e => e.ImageUrl).HasMaxLength(500).IsRequired();
+        builder.HasIndex(e => e.SupplierReturnRequestId);
     }
 }
 

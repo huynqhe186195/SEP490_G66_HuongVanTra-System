@@ -399,7 +399,7 @@ export default function ProductsStoreListPage() {
     )
   }
 
-  const tableColSpan = canAdjustStock ? 14 : 13
+  const tableColSpan = canAdjustStock ? 13 : 12
 
   const filterProps = {
     categories,
@@ -556,8 +556,7 @@ export default function ProductsStoreListPage() {
                     <th className="w-10 px-2 py-3" />
                     <th className="w-10 px-2 py-3" />
                     <th className="w-14 px-2 py-3" />
-                    <th className="px-3 py-3">Mã hàng</th>
-                    <th className="min-w-[180px] px-3 py-3">Tên hàng</th>
+                    <th className="min-w-[180px] px-3 py-3">Sản Phẩm</th>
                     <th className="hidden px-3 py-3 md:table-cell">Nhóm hàng</th>
                     <th className="px-3 py-3 text-right">Giá bán</th>
                     <th className="hidden px-3 py-3 text-right lg:table-cell">Giá vốn</th>
@@ -652,15 +651,10 @@ export default function ProductsStoreListPage() {
                                 iconClassName="text-lg"
                               />
                             </td>
-                            <td
-                              className="px-3 py-3 font-mono text-xs font-bold text-[#356647]"
-                              onClick={() => toggleExpand(group.productId)}
-                            >
-                              {selectedSku.skuCode}
-                            </td>
-                            {/* Tên hàng — shows product name + variant selector when multiple SKUs */}
+                            {/* Sản phẩm — tên + mã SKU, kèm bộ chọn biến thể khi có nhiều SKU */}
                             <td className="px-3 py-3" onClick={() => toggleExpand(group.productId)}>
                               <span className="block font-semibold text-slate-900">{group.productName}</span>
+                              <span className="mt-0.5 block font-mono text-xs text-slate-500">{selectedSku.skuCode}</span>
                               {hasMultipleSkus ? (
                                 <select
                                   value={String(selectedSku.id)}

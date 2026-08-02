@@ -283,8 +283,7 @@ function InventoryBatchesPage() {
                             <table className="w-full text-sm">
                               <thead>
                                 <tr className="text-left text-xs font-bold uppercase text-slate-500">
-                                  <th className="pb-2 pr-4">SKU</th>
-                                  <th className="pb-2 pr-4">Sản phẩm</th>
+                                  <th className="pb-2 pr-4">Sản Phẩm</th>
                                   <th className="pb-2 pr-4">Còn / Nhập</th>
                                   <th className="pb-2">Giá vốn</th>
                                 </tr>
@@ -292,8 +291,10 @@ function InventoryBatchesPage() {
                               <tbody className="divide-y divide-slate-100/80">
                                 {batch.items.map((item) => (
                                   <tr key={item.id}>
-                                    <td className="py-2 pr-4 font-mono text-[#356647]">{item.skuCode}</td>
-                                    <td className="py-2 pr-4 text-slate-700">{item.productSnapshotName || '—'}</td>
+                                    <td className="py-2 pr-4 text-slate-700">
+                                      <p className="font-semibold text-slate-900">{item.productSnapshotName || '—'}</p>
+                                      <p className="font-mono text-xs text-slate-500">{item.skuCode}</p>
+                                    </td>
                                     <td className="py-2 pr-4 font-semibold">
                                       {formatStockQuantity(item.quantityOnHand)}
                                       <span className="text-xs font-normal text-slate-500">

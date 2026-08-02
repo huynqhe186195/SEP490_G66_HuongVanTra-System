@@ -263,11 +263,17 @@ const INVENTORY_SIDEBAR_GROUPS = [
       { path: '/inventory/returns' },
       { path: '/inventory/stocktake' },
       { path: '/inventory/ledger' },
-      { path: '/inventory/stock-requests' },
-      { path: '/inventory/stock-transfers' },
-      { path: '/inventory/shelf-replenishment-suggestions' },
-      { path: '/inventory/suppliers' },
-      { path: '/inventory/supplier-products' },
+      { path: '/inventory/stock-transfers', label: 'Điều chuyển Kho → Kệ' },
+    ],
+  },
+  {
+    key: '__grp_inventory_inbound',
+    label: 'Nhập hàng & Nhà cung cấp',
+    icon: 'storefront',
+    entries: [
+      { path: '/inventory/supplier-receipts', label: 'Phiếu nhập nhà cung cấp' },
+      { path: '/inventory/suppliers', label: 'Nhà cung cấp' },
+      { path: '/inventory/supplier-products', label: 'Sản phẩm theo nhà cung cấp' },
     ],
   },
   {
@@ -277,9 +283,19 @@ const INVENTORY_SIDEBAR_GROUPS = [
     entries: [
       { path: '/inventory/production-orders' },
       { path: '/inventory/custom-bundles' },
+      { path: '/orders/stock-deduct', label: 'Chờ đóng gói / trừ Kho' },
     ],
   },
 ]
+
+/**
+ * Thủ kho vào hai màn hình này bằng nút trong trang Điều chuyển Kho → Kệ,
+ * nên không lặp lại trên sidebar.
+ */
+const INVENTORY_SIDEBAR_HIDDEN_PATHS = new Set([
+  '/inventory/stock-requests',
+  '/inventory/shelf-replenishment-suggestions',
+])
 
 function isInventoryOnlySession(roles = []) {
   if (!roles.length) return false
@@ -319,7 +335,9 @@ function groupInventorySidebar(items) {
     }
   }).filter(Boolean)
 
-  const rest = items.filter((item) => !consumed.has(item.path))
+  const rest = items.filter(
+    (item) => !consumed.has(item.path) && !INVENTORY_SIDEBAR_HIDDEN_PATHS.has(item.path),
+  )
   return [...groups, ...rest]
 }
 
@@ -455,18 +473,22 @@ function groupAdminManagerSidebar(items, isAdmin) {
       ['/inventory/products', 'Sản phẩm & số lượng'],
       ['/products/categories', 'Danh mục sản phẩm'],
       ['/accounting/cost-profit', 'Bảng giá vốn & giá bán'],
+      ['/products/retail-price-requests', 'Yêu cầu đổi giá bán'],
       ['/inventory/product-approvals', 'Lịch sử tạo hàng hóa'],
       ['/inventory/stocktake', 'Kiểm kê tồn kho'],
       ['/inventory/ledger', 'Nhật ký kho'],
+      ['/inventory/stock-transfers', 'Phiếu điều chuyển Kho → Kệ'],
+      ['/inventory/shelf-replenishment-suggestions', 'Gợi ý bổ sung Kệ Hàng'],
     ]
     : [
       ['/inventory/products', 'Sản phẩm & số lượng'],
       ['/products/categories', 'Danh mục sản phẩm'],
       ['/accounting/cost-profit', 'Bảng giá vốn & giá bán'],
+      ['/products/retail-price-requests', 'Yêu cầu đổi giá bán'],
       ['/inventory/product-approvals', 'Lịch sử tạo hàng hóa'],
       ['/inventory/stocktake', 'Kiểm kê tồn kho'],
       ['/inventory/ledger', 'Nhật ký kho'],
-      ['/inventory/stock-requests', 'Yêu cầu bổ sung tồn quầy'],
+      ['/inventory/stock-requests', 'Yêu cầu bổ sung Kệ Hàng'],
     ]
 
   // Manager: ẩn thống kê tồn kho (không hiện ở nhóm Hàng hóa).
@@ -488,6 +510,11 @@ function groupAdminManagerSidebar(items, isAdmin) {
   for (const path of [
     '/inventory/statistics',
   ]) {
+    if (!isAdmin && byPath.has(path)) consumed.add(path)
+  }
+
+  // Manager vào hai màn hình này bằng nút trong trang Yêu cầu bổ sung Kệ Hàng.
+  for (const path of ['/inventory/stock-transfers', '/inventory/shelf-replenishment-suggestions']) {
     if (!isAdmin && byPath.has(path)) consumed.add(path)
   }
 

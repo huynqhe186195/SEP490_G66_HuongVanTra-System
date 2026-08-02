@@ -263,8 +263,7 @@ export function ExportSlipDocument({ slip, getTypeLabel }) {
         <table className="min-w-full border border-slate-200 text-left text-sm">
           <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
             <tr>
-              <th className="border-b border-slate-200 px-3 py-2">SKU</th>
-              <th className="border-b border-slate-200 px-3 py-2">Nguyên liệu</th>
+              <th className="border-b border-slate-200 px-3 py-2">Sản Phẩm</th>
               <th className="border-b border-slate-200 px-3 py-2 text-right">Số lượng</th>
               <th className="border-b border-slate-200 px-3 py-2">Kho trước {'->'} sau</th>
               <th className="border-b border-slate-200 px-3 py-2">Tồn quầy POS trước {'->'} sau</th>
@@ -274,8 +273,10 @@ export function ExportSlipDocument({ slip, getTypeLabel }) {
           <tbody className="divide-y divide-slate-100">
             {lines.map((line) => (
               <tr key={line.id}>
-                <td className="px-3 py-2 font-mono text-[#356647]">{line.skuCode}</td>
-                <td className="px-3 py-2 text-slate-800">{line.productSnapshotName || '-'}</td>
+                <td className="px-3 py-2">
+                  <p className="text-slate-800">{line.productSnapshotName || '-'}</p>
+                  <p className="font-mono text-xs text-slate-500">{line.skuCode}</p>
+                </td>
                 <td className="px-3 py-2 text-right font-semibold">{formatStockQuantity(line.quantity)}</td>
                 <td className="px-3 py-2 text-slate-700">
                   {formatQuantityTransition(line.warehouseQtyBefore, line.warehouseQtyAfter)}
@@ -301,7 +302,6 @@ export function ImportSlipDocument({ slip, getTypeLabel }) {
   const creator = getCreatorDisplay(slip)
   const isManualMaterialImport = isManualMaterialImportSlip(slip)
   const lineKindLabel = isManualMaterialImport ? 'nguyên liệu' : 'thành phẩm'
-  const productColumnLabel = isManualMaterialImport ? 'Nguyên liệu' : 'Thành phẩm'
   const lotColumnLabel = isManualMaterialImport ? 'Mã lô nhập' : 'Lô thành phẩm'
   const note = getProductionAwareNote(
     slip,
@@ -338,8 +338,7 @@ export function ImportSlipDocument({ slip, getTypeLabel }) {
         <table className="min-w-full border border-slate-200 text-left text-sm">
           <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
             <tr>
-              <th className="border-b border-slate-200 px-3 py-2">SKU</th>
-              <th className="border-b border-slate-200 px-3 py-2">{productColumnLabel}</th>
+              <th className="border-b border-slate-200 px-3 py-2">Sản Phẩm</th>
               <th className="border-b border-slate-200 px-3 py-2 text-right">Số lượng</th>
               <th className="border-b border-slate-200 px-3 py-2">{lotColumnLabel}</th>
               <th className="border-b border-slate-200 px-3 py-2">Nơi nhập</th>
@@ -350,8 +349,10 @@ export function ImportSlipDocument({ slip, getTypeLabel }) {
           <tbody className="divide-y divide-slate-100">
             {lines.map((line) => (
               <tr key={line.id}>
-                <td className="px-3 py-2 font-mono text-[#356647]">{line.skuCode}</td>
-                <td className="px-3 py-2 text-slate-800">{line.productSnapshotName || '-'}</td>
+                <td className="px-3 py-2">
+                  <p className="text-slate-800">{line.productSnapshotName || '-'}</p>
+                  <p className="font-mono text-xs text-slate-500">{line.skuCode}</p>
+                </td>
                 <td className="px-3 py-2 text-right font-semibold">{formatStockQuantity(line.quantity)}</td>
                 <td className="px-3 py-2 text-slate-700">
                   <span className="font-mono">{line.warehouseBatchLotCode || '-'}</span>

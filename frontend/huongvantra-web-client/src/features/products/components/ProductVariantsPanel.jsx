@@ -33,8 +33,7 @@ export default function ProductVariantsPanel({ variants = [], productName = '' }
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-100 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
-              <th className="pb-2 pr-4">Mã SKU</th>
-              <th className="pb-2 pr-4">Tên biến thể</th>
+              <th className="pb-2 pr-4">Sản Phẩm</th>
               <th className="pb-2 pr-4 text-right">Giá vốn</th>
               <th className="pb-2 pr-4 text-right">Giá bán</th>
               <th className="pb-2 pr-4">Đơn vị</th>
@@ -44,8 +43,10 @@ export default function ProductVariantsPanel({ variants = [], productName = '' }
           <tbody className="divide-y divide-slate-50">
             {variants.map((v) => (
               <tr key={v.id} className="group">
-                <td className="py-2.5 pr-4 font-mono text-xs text-slate-600">{v.skuCode || '—'}</td>
-                <td className="py-2.5 pr-4 font-medium text-slate-800">{v.variantName || '—'}</td>
+                <td className="py-2.5 pr-4">
+                  <p className="font-medium text-slate-800">{v.variantName || '—'}</p>
+                  <p className="font-mono text-xs text-slate-500">{v.skuCode || '—'}</p>
+                </td>
                 <td className="py-2.5 pr-4 text-right text-slate-600">{formatProductPrice(v.costPrice)}</td>
                 <td className="py-2.5 pr-4 text-right font-semibold text-[#356647]">
                   {v.isSellable ? formatProductPrice(v.retailPrice) : <span className="text-slate-400">Không bán</span>}

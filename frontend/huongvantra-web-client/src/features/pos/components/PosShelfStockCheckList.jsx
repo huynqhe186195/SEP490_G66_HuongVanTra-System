@@ -201,8 +201,7 @@ export default function PosShelfStockCheckList({ compact = false, fullHeight = f
           <table className="w-full text-left text-xs">
             <thead className="sticky top-0 z-[1] bg-[#f6f4ec] text-[10px] uppercase tracking-wide text-slate-500">
               <tr>
-                <th className="px-2 py-1.5 font-semibold">Sản phẩm</th>
-                <th className="hidden px-2 py-1.5 font-semibold sm:table-cell">SKU</th>
+                <th className="px-2 py-1.5 font-semibold">Sản Phẩm</th>
                 <th className="w-20 px-1 py-1.5 text-right font-semibold">Hệ thống</th>
                 <th className="w-[4.5rem] px-1 py-1.5 text-right font-semibold">Thực tế</th>
               </tr>
@@ -218,10 +217,10 @@ export default function PosShelfStockCheckList({ compact = false, fullHeight = f
                     key={row.skuId}
                     className={`border-t border-[#e7e8e0] ${mismatch ? 'bg-amber-50/80' : ''}`}
                   >
-                    <td className="px-2 py-1 font-medium text-slate-800">
-                      <span className="line-clamp-2">{row.productName}</span>
+                    <td className="px-2 py-1 text-slate-800">
+                      <span className="line-clamp-2 font-medium">{row.productName}</span>
+                      <span className="block font-mono text-[10px] text-slate-500">{row.skuCode}</span>
                     </td>
-                    <td className="hidden px-2 py-1 text-slate-500 sm:table-cell">{row.skuCode}</td>
                     <td
                       className={`px-1 py-1 text-right font-bold tabular-nums ${
                         row.low ? 'text-amber-800' : 'text-slate-900'

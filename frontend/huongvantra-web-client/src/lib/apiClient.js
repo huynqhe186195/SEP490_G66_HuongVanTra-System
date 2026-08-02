@@ -37,7 +37,7 @@ export async function parseApiErrorBody(response) {
     (typeof body.title === 'string' && body.title.trim()) ||
     fallback
 
-  return { message, errors, statusCode: body.statusCode ?? status }
+  return { message, errors, statusCode: body.statusCode ?? status, body }
 }
 
 export async function parseResponseError(response) {
@@ -182,13 +182,14 @@ export async function apiRequestAuth(path, options = {}, retry = true) {
   }
 
   if (!response.ok) {
-    const { message, errors } = await parseApiErrorBody(response)
+    const { message, errors, body } = await parseApiErrorBody(response)
     if (!silentAuthErrors && (response.status === 401 || response.status === 403)) {
       handleAuthFailure(message, response.status)
     }
     const error = new Error(message)
     error.apiErrors = errors
     error.statusCode = response.status
+    error.body = body
     throw error
   }
 

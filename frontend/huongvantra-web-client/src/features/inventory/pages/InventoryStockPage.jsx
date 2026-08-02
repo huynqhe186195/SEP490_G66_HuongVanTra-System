@@ -221,8 +221,7 @@ function InventoryStockPage() {
           <table className="min-w-full text-left text-sm">
             <thead className="bg-slate-50 text-xs font-bold uppercase tracking-wide text-slate-500">
               <tr>
-                <th className="px-6 py-3">SKU</th>
-                <th className="px-4 py-3">Sản phẩm</th>
+                <th className="px-6 py-3">Sản Phẩm</th>
                 <th className="px-4 py-3">Tồn Kho</th>
                 <th className="px-4 py-3">Lô đang còn</th>
                 <th className="px-4 py-3">Ngưỡng cảnh báo Kho</th>
@@ -232,22 +231,22 @@ function InventoryStockPage() {
             <tbody className="divide-y divide-slate-100">
               {isLoading ? (
                 <tr>
-                  <td className="px-6 py-8 text-slate-500" colSpan={6}>
+                  <td className="px-6 py-8 text-slate-500" colSpan={5}>
                     Đang tải...
                   </td>
                 </tr>
               ) : filteredRows.length === 0 ? (
                 <tr>
-                  <td className="px-6 py-8 text-slate-500" colSpan={6}>
+                  <td className="px-6 py-8 text-slate-500" colSpan={5}>
                     Chưa có SKU — tạo sản phẩm và biến thể trước.
                   </td>
                 </tr>
               ) : (
                 pagedRows.map((row) => (
                   <tr key={row.skuId}>
-                    <td className="px-6 py-4 font-mono font-semibold text-[#356647]">{row.skuCode}</td>
-                    <td className="px-4 py-4 text-slate-700">
-                      {row.productName}
+                    <td className="px-6 py-4 text-slate-700">
+                      <p className="font-semibold text-slate-900">{row.productName}</p>
+                      <p className="font-mono text-xs text-slate-500">{row.skuCode}</p>
                       {row.packagingType ? (
                         <span className="mt-0.5 block text-xs text-slate-500">{row.packagingType}</span>
                       ) : null}

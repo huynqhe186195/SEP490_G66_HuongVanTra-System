@@ -29,6 +29,10 @@ public class SupplierReturnRequestsController(InventoryLogic _logic) : Controlle
         return Ok(await _logic.GetSupplierReturnRequestsAsync(status, createdBy, search, page, pageSize, ct));
     }
 
+    [HttpGet("defect-reasons")]
+    [Authorize(Policy = PermissionNames.ViewInventory)]
+    public IActionResult GetDefectReasons() => Ok(InventoryLogic.GetSupplierReturnDefectReasons());
+
     [HttpGet("{id:guid}")]
     [Authorize(Policy = PermissionNames.ViewInventory)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
@@ -38,38 +42,12 @@ public class SupplierReturnRequestsController(InventoryLogic _logic) : Controlle
     }
 
     [HttpPost]
-    [Authorize(Policy = PermissionNames.ApproveInventory)]
+    [Authorize(Policy = PermissionNames.OperateWarehouse)]
     public async Task<IActionResult> Create([FromBody] CreateSupplierReturnRequest request, CancellationToken ct)
     {
         var userId = User.GetUserId();
         if (userId == Guid.Empty) return Unauthorized(new { message = "Không xác định được người dùng." });
         var created = await _logic.CreateSupplierReturnRequestAsync(request, userId, User.ToCreatorSnapshot(), ct);
         return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
-    }
-
-    [HttpPost("{id:guid}/approve")]
-    [Authorize(Policy = PermissionNames.ApproveInventory)]
-    public async Task<IActionResult> Approve(Guid id, CancellationToken ct)
-    {
-        var result = await _logic.ApproveSupplierReturnRequestAsync(id, User.GetUserId(), User.ToCreatorSnapshot(), ct);
-        return Ok(result);
-    }
-
-    [HttpPost("{id:guid}/reject")]
-    [Authorize(Policy = PermissionNames.ApproveInventory)]
-    public async Task<IActionResult> Reject(Guid id, [FromBody] ReviewInventoryReturnRequest request, CancellationToken ct)
-    {
-        var result = await _logic.RejectSupplierReturnRequestAsync(id, User.GetUserId(), User.ToCreatorSnapshot(), request, ct);
-        return Ok(result);
-    }
-
-    [HttpPost("{id:guid}/cancel")]
-    [Authorize(Policy = PermissionNames.ApproveInventory)]
-    public async Task<IActionResult> Cancel(Guid id, [FromBody] ReviewInventoryReturnRequest request, CancellationToken ct)
-    {
-        var userId = User.GetUserId();
-        if (userId == Guid.Empty) return Unauthorized(new { message = "Không xác định được người dùng." });
-        var result = await _logic.CancelSupplierReturnRequestAsync(id, userId, User.IsInRole("Manager"), User.ToCreatorSnapshot(), request, ct);
-        return Ok(result);
     }
 }

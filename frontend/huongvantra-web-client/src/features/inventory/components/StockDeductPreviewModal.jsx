@@ -178,7 +178,7 @@ function StockDeductPreviewModal({ queueId, orderCode, canConfirm = false, canCa
                   <table className="w-full text-left text-sm">
                     <thead className="bg-[#fbf9f1]/50 text-xs font-bold uppercase tracking-wider text-slate-400">
                       <tr>
-                        <th className="px-4 py-3">SKU bán</th>
+                        <th className="px-4 py-3">Sản Phẩm</th>
                         <th className="px-4 py-3 text-right">Đã bán</th>
                         <th className="px-4 py-3 text-right">Đã trừ thành phẩm</th>
                         <th className="px-4 py-3 text-right">Chờ xử lý BOM</th>
@@ -187,8 +187,9 @@ function StockDeductPreviewModal({ queueId, orderCode, canConfirm = false, canCa
                     <tbody className="divide-y divide-slate-50">
                       {preview.lines.map((line) => (
                         <tr key={line.skuId}>
-                          <td className="px-4 py-3 font-medium text-slate-800">
-                            {line.skuCode || line.skuName}
+                          <td className="px-4 py-3">
+                            <p className="font-medium text-slate-800">{line.skuName || '—'}</p>
+                            <p className="font-mono text-xs text-slate-500">{line.skuCode}</p>
                           </td>
                           <td className="px-4 py-3 text-right text-slate-700">{line.orderedQuantity}</td>
                           <td className="px-4 py-3 text-right text-slate-700">{line.finishedDeductedQuantity}</td>
@@ -206,7 +207,7 @@ function StockDeductPreviewModal({ queueId, orderCode, canConfirm = false, canCa
                 <table className="w-full text-left text-sm">
                   <thead className="bg-[#fbf9f1]/50 text-xs font-bold uppercase tracking-wider text-slate-400">
                     <tr>
-                      <th className="px-4 py-3">SKU</th>
+                      <th className="px-4 py-3">Sản Phẩm</th>
                       <th className="px-4 py-3 text-right">Cần trừ</th>
                       <th className="px-4 py-3 text-right">Tồn hiện có</th>
                       <th className="px-4 py-3 text-right">Thiếu</th>

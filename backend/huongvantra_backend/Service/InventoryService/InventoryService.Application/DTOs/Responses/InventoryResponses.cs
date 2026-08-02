@@ -241,6 +241,29 @@ public record StockAdjustmentRequestResponse(
     // Tổng số lượng còn có thể đưa vào phiếu điều chuyển mới của cả yêu cầu.
     int TotalAvailableToTransferQuantity = 0);
 
+/// <summary>
+/// Kết quả kiểm tra trùng SKU trước khi gửi Yêu cầu bổ sung Kệ Hàng.
+/// Cho phép màn hình tạo yêu cầu chặn sớm thay vì để người dùng xác nhận rồi mới nhận lỗi.
+/// </summary>
+public record StockAdjustmentDuplicateCheckResponse(
+    bool Blocking,
+    bool Warning,
+    string? Message,
+    List<StockAdjustmentDuplicateSkuResponse> Duplicates);
+
+public record StockAdjustmentDuplicateSkuResponse(
+    Guid SkuId,
+    string SkuCode,
+    string SkuSnapshotName,
+    Guid RequestId,
+    string RequestCode,
+    string RequestStatus,
+    string LineStatus,
+    DateTime RequestedAt,
+    string? RequestedByName,
+    int RemainingQuantity,
+    bool IsUntouched);
+
 /// <summary>Tùy chọn đổ vào bộ lọc của màn hình audit Yêu cầu bổ sung Kệ Hàng.</summary>
 public record StockAdjustmentRequestFilterOptionsResponse(
     List<StockAdjustmentRequestCreatorOption> Creators,
@@ -549,48 +572,6 @@ public record SupplierReceiptResponse(
     decimal TotalAmount,
     List<SupplierReceiptItemResponse> Items);
 
-public record ShelfReturnRequestItemResponse(
-    Guid Id,
-    Guid SkuId,
-    string SkuCode,
-    string SkuSnapshotName,
-    int Quantity,
-    Guid? ShelfBatchId,
-    string? ShelfLotCode,
-    int? ShelfQtyBefore,
-    int? ShelfQtyAfter,
-    int? WarehouseQtyBefore,
-    int? WarehouseQtyAfter,
-    Guid? StockExportSlipId,
-    string? StockExportSlipCode,
-    Guid? StockImportSlipId,
-    string? StockImportSlipCode,
-    Guid? WarehouseBatchId,
-    string? WarehouseBatchLotCode,
-    string? Note);
-
-public record ShelfReturnRequestResponse(
-    Guid Id,
-    string ReturnCode,
-    string ReturnMode,
-    Guid? OriginalStockAdjustmentRequestId,
-    string? OriginalStockAdjustmentRequestCode,
-    string? Reason,
-    string? Note,
-    string Status,
-    Guid CreatedBy,
-    string? CreatedByName,
-    string? CreatedByRoleName,
-    DateTime CreatedAt,
-    DateTime UpdatedAt,
-    Guid? ReviewedBy,
-    string? ReviewedByName,
-    string? ReviewedByRoleName,
-    DateTime? ReviewedAt,
-    string? ReviewNote,
-    int TotalQuantity,
-    List<ShelfReturnRequestItemResponse> Items);
-
 public record SupplierReturnRequestItemResponse(
     Guid Id,
     Guid SkuId,
@@ -610,11 +591,13 @@ public record SupplierReturnRequestItemResponse(
 public record SupplierReturnRequestResponse(
     Guid Id,
     string ReturnCode,
-    string ReturnMode,
     Guid? SupplierReceiptId,
     string? SupplierReceiptCode,
     string? SupplierName,
     string? SupplierReference,
+    string DefectReasonCode,
+    string DefectReasonLabel,
+    List<string> EvidenceImageUrls,
     string? Reason,
     string? Note,
     string Status,
@@ -623,11 +606,6 @@ public record SupplierReturnRequestResponse(
     string? CreatedByRoleName,
     DateTime CreatedAt,
     DateTime UpdatedAt,
-    Guid? ReviewedBy,
-    string? ReviewedByName,
-    string? ReviewedByRoleName,
-    DateTime? ReviewedAt,
-    string? ReviewNote,
     int TotalQuantity,
     List<SupplierReturnRequestItemResponse> Items);
 

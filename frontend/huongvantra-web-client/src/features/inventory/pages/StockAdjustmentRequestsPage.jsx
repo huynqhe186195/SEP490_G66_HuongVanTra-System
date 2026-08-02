@@ -11,6 +11,7 @@ import {
   canCreateStockReplenishmentRequest,
   canFilterStockReplenishmentByCreator,
   canReviewStockReplenishmentRequest,
+  canViewStockTransfer,
   isAuditOnlyAdmin,
   isWarehouseRole,
 } from '../../auth/utils/permissions.js'
@@ -80,6 +81,16 @@ const SORT_OPTIONS = [
 const FIELD_CLASS =
   'min-h-[44px] w-full rounded-xl border border-slate-200 bg-[#fbf9f1] px-4 py-3 text-sm outline-none focus:border-[#538463]'
 const LABEL_CLASS = 'mb-1 block text-xs font-bold uppercase tracking-wider text-slate-400'
+
+/** Lý do từ chối gợi ý cho Thủ kho, bấm để điền nhanh vào ô lý do. */
+const REJECT_REASON_PRESETS = [
+  'Kho không đủ tồn để đáp ứng yêu cầu.',
+  'Sản phẩm yêu cầu đã hết hàng tại Kho.',
+  'Số lượng yêu cầu vượt quá nhu cầu thực tế của Kệ.',
+  'Sai sản phẩm hoặc sai đơn vị tính trong yêu cầu.',
+  'Trùng với yêu cầu bổ sung đã được duyệt trước đó.',
+  'Hàng đang chờ kiểm tra chất lượng, chưa thể xuất Kho.',
+]
 
 function textOrDash(value) {
   const trimmed = String(value ?? '').trim()
@@ -179,10 +190,10 @@ function ReviewStockRequestModal({ request, onClose, onConfirm, isSaving }) {
             <table className="min-w-full text-left text-sm">
               <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
                 <tr>
-                  <th className="px-4 py-3">SKU</th>
+                  <th className="px-4 py-3">Sản phẩm</th>
                   <th className="px-4 py-3 text-right">{STOCK_FLOW_TERMS.requestedQuantity}</th>
                   <th className="px-4 py-3 text-right">Tồn {STOCK_FLOW_TERMS.warehouse}</th>
-                  <th className="px-4 py-3">Quyết định</th>
+                  <th className="px-4 py-3">Xác nhận</th>
                   <th className="px-4 py-3 text-right">{STOCK_FLOW_TERMS.approvedQuantity}</th>
                 </tr>
               </thead>
@@ -197,23 +208,21 @@ function ReviewStockRequestModal({ request, onClose, onConfirm, isSaving }) {
                     return (
                       <tr key={item.id ?? item.skuId ?? item.skuCode}>
                         <td className="px-4 py-3">
-                          <p className="font-mono text-xs font-bold text-[#356647]">{item.skuCode || '—'}</p>
-                          <p className="mt-0.5 text-xs text-slate-500">{item.skuSnapshotName || '—'}</p>
+                          <p className="font-semibold text-slate-800">{item.skuSnapshotName || '—'}</p>
+                          <p className="mt-0.5 font-mono text-xs font-bold text-[#356647]">{item.skuCode || '—'}</p>
                         </td>
                         <td className="px-4 py-3 text-right font-bold text-slate-800">{formatStockQuantity(requested)}</td>
                         <td className={`px-4 py-3 text-right ${insufficient ? 'font-semibold text-rose-700' : 'text-slate-600'}`}>
                           {isLoading ? 'Đang tải...' : formatStockQuantity(warehouseOnHand)}
                         </td>
                         <td className="px-4 py-3">
-                          <label className="inline-flex items-center gap-2 text-xs font-semibold text-slate-700">
-                            <input
-                              type="checkbox"
-                              checked={Boolean(state.approved)}
-                              onChange={(event) => patchLine(item.id, { approved: event.target.checked })}
-                              className="h-4 w-4 rounded border-slate-300 text-[#538463] focus:ring-[#538463]"
-                            />
-                            {state.approved ? 'Duyệt dòng này' : 'Từ chối dòng này'}
-                          </label>
+                          <input
+                            type="checkbox"
+                            aria-label={`Xác nhận duyệt ${item.skuSnapshotName || item.skuCode || 'dòng này'}`}
+                            checked={Boolean(state.approved)}
+                            onChange={(event) => patchLine(item.id, { approved: event.target.checked })}
+                            className="h-4 w-4 rounded border-slate-300 text-[#538463] focus:ring-[#538463]"
+                          />
                         </td>
                         <td className="px-4 py-3 text-right">
                           <input
@@ -281,6 +290,9 @@ function StockAdjustmentRequestOperationsPage() {
   const canCancelRequest = canCancelStockReplenishmentRequest(session)
   const canCancelAnyRequest = canCancelRequest && canReview
   const canFilterByCreator = canFilterStockReplenishmentByCreator(session)
+  // Quản lý vào Điều chuyển / Gợi ý từ đây; Thủ kho dùng nút bên trang Điều chuyển, Admin dùng sidebar.
+  const canViewTransferShortcuts =
+    canViewStockTransfer(session) && !isWarehouseRole(session) && !isAuditOnlyAdmin(session)
   const currentUserId = session?.userId ? String(session.userId) : ''
 
   const quickFilters = canReview ? WAREHOUSE_QUICK_FILTERS : MANAGER_QUICK_FILTERS
@@ -597,6 +609,22 @@ function StockAdjustmentRequestOperationsPage() {
             Tạo yêu cầu
           </button>
         ) : <span className="ml-auto" />}
+        {canViewTransferShortcuts ? (
+          <>
+            <Link
+              className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              to="/inventory/stock-transfers"
+            >
+              Phiếu điều chuyển Kho → Kệ
+            </Link>
+            <Link
+              className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              to="/inventory/shelf-replenishment-suggestions"
+            >
+              Gợi ý bổ sung Kệ Hàng
+            </Link>
+          </>
+        ) : null}
         <Link
           className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
           to="/inventory/products"
@@ -835,7 +863,7 @@ function StockAdjustmentRequestOperationsPage() {
 
       {detailId ? (
         <div className="inventory-modal fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/40 p-4">
-          <div className="my-8 w-full max-w-4xl rounded-2xl bg-white p-6 shadow-xl sm:p-8">
+          <div className="my-auto w-full max-w-4xl rounded-2xl bg-white p-6 shadow-xl sm:p-8">
             <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
               <h3 className="text-lg font-bold text-slate-800">Chi tiết {STOCK_FLOW_TERMS.request}</h3>
               <div className="flex flex-wrap gap-2">
@@ -891,6 +919,28 @@ function StockAdjustmentRequestOperationsPage() {
             <p className="mt-2 text-sm text-slate-600">
               {rejectTarget.itemCount} sản phẩm trong yêu cầu. Từ chối không làm thay đổi tồn kho.
             </p>
+            <div className="mt-4 space-y-2">
+              <span className="text-xs font-semibold text-slate-500">Lý do thường gặp</span>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {REJECT_REASON_PRESETS.map((preset) => {
+                  const selected = rejectReason.trim() === preset
+                  return (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => setRejectReason(preset)}
+                      className={`rounded-lg border px-3 py-2 text-left text-xs font-semibold transition ${
+                        selected
+                          ? 'border-[#356647] bg-[#356647]/10 text-[#356647]'
+                          : 'border-slate-200 bg-[#fbf9f1] text-slate-600 hover:border-[#356647]/40'
+                      }`}
+                    >
+                      {preset}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
             <label className="mt-4 block space-y-2">
               <span className="text-xs font-semibold text-slate-500">Lý do từ chối *</span>
               <ReasonSuggestionChips
@@ -899,10 +949,11 @@ function StockAdjustmentRequestOperationsPage() {
                 onSelect={setRejectReason}
               />
               <textarea
-                rows={3}
+                rows={5}
                 required
                 value={rejectReason}
                 onChange={(event) => setRejectReason(event.target.value)}
+                placeholder="Chọn lý do gợi ý phía trên hoặc nhập lý do khác..."
                 className="w-full resize-none rounded-xl border-none bg-[#f0eee6] p-3 text-sm focus:ring-2 focus:ring-[#356647]/20"
               />
             </label>

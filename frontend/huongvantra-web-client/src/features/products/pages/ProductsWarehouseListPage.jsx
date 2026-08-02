@@ -37,7 +37,7 @@ import {
   summarizeProductSkus,
 } from '../utils/productDisplay.js'
 import { getProductTypeLabel, PRODUCT_TYPE, PRODUCT_TYPE_OPTIONS } from '../utils/productTypes.js'
-import { buildCategoryTree } from '../utils/categoryTreeUtils.js'
+import { flattenCategoryTreeForSelect } from '../utils/categoryTreeUtils.js'
 import { consumeProductListFocus, readHighlightProductIdFromUrl } from '../utils/productListFocus.js'
 
 // ─── Sidebar filter ──────────────────────────────────────────────────────────
@@ -96,7 +96,11 @@ function WarehouseFilterContent({
   onProductTypeChange,
   canCreate = false,
 }) {
-  const tree = buildCategoryTree(categories.filter((c) => !c.isDeleted))
+  const categoryTreeOptions = useMemo(() => {
+    const visible = categories.filter((c) => !c.isDeleted && c.isActive !== false)
+    return flattenCategoryTreeForSelect(visible)
+  }, [categories])
+
   return (
     <>
       <FilterSection
@@ -109,32 +113,18 @@ function WarehouseFilterContent({
           ) : null
         }
       >
-        <div className="space-y-0.5">
-          <button
-            type="button"
-            onClick={() => onCategoryChange('')}
-            className={`w-full rounded px-2 py-1.5 text-left text-xs font-semibold transition ${
-              !categoryId ? 'bg-[#356647]/10 text-[#356647]' : 'text-slate-600 hover:bg-slate-100'
-            }`}
-          >
-            Tất cả nhóm hàng
-          </button>
-          {tree.map((node) => (
-            <button
-              key={node.id}
-              type="button"
-              onClick={() => onCategoryChange(String(node.id))}
-              className={`w-full rounded px-2 py-1.5 text-left text-xs transition ${
-                String(categoryId) === String(node.id)
-                  ? 'bg-[#356647]/10 font-semibold text-[#356647]'
-                  : 'text-slate-600 hover:bg-slate-100'
-              }`}
-              style={{ paddingLeft: `${8 + (node.depth || 0) * 12}px` }}
-            >
-              {node.name}
-            </button>
+        <select
+          className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm text-slate-700 outline-none focus:border-[#356647]"
+          value={categoryId}
+          onChange={(event) => onCategoryChange(event.target.value)}
+        >
+          <option value="">Tất cả nhóm hàng</option>
+          {categoryTreeOptions.map((cat) => (
+            <option key={cat.id} value={String(cat.id)}>
+              {cat.selectLabel}
+            </option>
           ))}
-        </div>
+        </select>
       </FilterSection>
 
       <FilterSection title="Loại hàng">
@@ -250,7 +240,7 @@ function matchesSkuRowStatus(row, statusFilter) {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-const COL = 11
+const COL = 10
 
 export default function ProductsWarehouseListPage() {
   const location = useLocation()
@@ -671,8 +661,7 @@ export default function ProductsWarehouseListPage() {
                   <tr>
                     <th className="w-10 px-2 py-3" />
                     <th className="w-14 px-2 py-3" />
-                    <th className="min-w-[180px] px-3 py-3">Tên hàng</th>
-                    <th className="px-3 py-3">Mã SKU</th>
+                    <th className="min-w-[180px] px-3 py-3">Sản Phẩm</th>
                     <th className="hidden px-3 py-3 md:table-cell">Nhóm hàng</th>
                     <th className="hidden px-3 py-3 text-right lg:table-cell">Giá vốn</th>
                     <th className="px-3 py-3 text-right">Giá bán</th>
@@ -757,7 +746,7 @@ export default function ProductsWarehouseListPage() {
                               />
                             </td>
 
-                            {/* Tên hàng + variant */}
+                            {/* Tên hàng + variant + SKU */}
                             <td className="px-3 py-3" onClick={() => toggleExpand(row.rowKey)}>
                               <span className="block font-semibold text-slate-900">{product.name}</span>
                               {selectedVariant ? (
@@ -765,11 +754,9 @@ export default function ProductsWarehouseListPage() {
                                   {getVariantLabel(selectedVariant, product.name)}
                                 </span>
                               ) : null}
-                            </td>
-
-                            {/* SKU code */}
-                            <td className="px-3 py-3 font-mono text-xs font-bold text-[#356647]" onClick={() => toggleExpand(row.rowKey)}>
-                              {selectedVariant?.skuCode || '—'}
+                              <span className="mt-0.5 block font-mono text-xs text-slate-500">
+                                {selectedVariant?.skuCode || '—'}
+                              </span>
                             </td>
 
                             {/* Danh mục */}

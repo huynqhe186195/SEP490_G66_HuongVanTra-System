@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import { showError, showInfo, showSuccess } from '../../../app/toast.js'
+import { alertDialog } from '../../../app/dialog.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import {
   canCreateStockReplenishmentRequest,
@@ -12,7 +13,11 @@ import { formatStockQuantity } from '../../products/utils/productDisplay.js'
 import { buildSkuSnapshotName } from '../../products/components/BatchStockAdjustmentModal.jsx'
 import { fetchSkus, fetchStoreSkus } from '../../products/services/productSkusApi.js'
 import { fetchSkuStocks, fetchStoreSkuStocks } from '../services/inventoryStockApi.js'
-import { createStockAdjustmentRequest } from '../services/stockAdjustmentRequestApi.js'
+import StockAdjustmentRequestConfirmModal from '../components/StockAdjustmentRequestConfirmModal.jsx'
+import {
+  checkStockAdjustmentDuplicates,
+  createStockAdjustmentRequest,
+} from '../services/stockAdjustmentRequestApi.js'
 import { getStockFlowErrorMessage, STOCK_FLOW_TERMS } from '../utils/stockFlowLabels.js'
 
 const CATALOG_PAGE_SIZE = 30
@@ -31,6 +36,48 @@ function isShelfEligibleSku(sku) {
     && Boolean(sku?.isSellable)
     && String(sku?.productType ?? '').toUpperCase() === 'THANH_PHAM'
   )
+}
+
+/** Lỗi 409 do trùng SKU với yêu cầu chưa xử lý xong, hoặc null nếu là lỗi khác. */
+function getDuplicateConflict(error) {
+  const body = error?.body
+  if (error?.statusCode !== 409 || body?.code !== 'DUPLICATE_STOCK_ADJUSTMENT_SKU') return null
+  return { blocking: Boolean(body.blocking), duplicates: body.duplicates ?? [] }
+}
+
+/**
+ * Message từ server nêu tên sản phẩm ở dạng thuần. Bọc **...** để popup in đậm.
+ */
+function emphasizeSkuNames(message, duplicates) {
+  const names = [...new Set(duplicates.map((row) => row.skuSnapshotName))]
+    // Tên dài trước để tên ngắn không cắt mất phần đầu của tên dài hơn.
+    .sort((a, b) => b.length - a.length)
+
+  let result = String(message)
+  for (const name of names) {
+    if (!name) continue
+    result = result.split(name).join(`**${name}**`)
+  }
+  return result
+}
+
+/** Gom theo sản phẩm, mỗi sản phẩm một dòng liệt kê các phiếu đang treo. */
+function describeDuplicates(duplicates) {
+  const bySku = new Map()
+  for (const row of duplicates) {
+    const entry = bySku.get(row.skuId) ?? { name: row.skuSnapshotName, codes: [], remaining: 0 }
+    entry.codes.push(row.requestCode)
+    entry.remaining += row.remainingQuantity
+    bySku.set(row.skuId, entry)
+  }
+
+  return [...bySku.values()]
+    .map(({ name, codes, remaining }) => {
+      const shown = codes.slice(0, 3).join(', ')
+      const more = codes.length > 3 ? ` và ${codes.length - 3} phiếu khác` : ''
+      return `**${name}** — còn thiếu ${remaining}\n${codes.length} yêu cầu: ${shown}${more}`
+    })
+    .join('\n\n')
 }
 
 function normalizeSearchTerm(value) {
@@ -58,6 +105,7 @@ function toCatalogOption(sku, stockBySkuId) {
     skuCode: sku.skuCode ?? '',
     productName: sku.productName ?? '',
     skuSnapshotName: buildSkuSnapshotName(sku, sku.productName ?? ''),
+    categoryName: sku.categoryName ?? '',
     unitName: sku.inventoryUnit || sku.unitName || '',
     warehouseQuantityOnHand: Number(stock?.warehouseQuantityOnHand ?? 0),
     shelfQuantityOnHand: Number(stock?.quantityOnHand ?? 0),
@@ -78,6 +126,8 @@ export default function StockAdjustmentRequestCreatePage() {
   const [lines, setLines] = useState([])
   const [reason, setReason] = useState('Bổ sung hàng thành phẩm từ Kho sang Kệ Hàng')
   const [isSaving, setIsSaving] = useState(false)
+  // Giữ kết quả kiểm tra trùng để popup xác nhận hiển thị đúng cảnh báo đã tính trước đó.
+  const [confirmPrecheck, setConfirmPrecheck] = useState(null)
 
   const searchTerm = search.trim()
 
@@ -156,9 +206,32 @@ export default function StockAdjustmentRequestCreatePage() {
     )
   }
 
+  /**
+   * Gửi yêu cầu. Trùng SKU đã được kiểm tra trước khi mở popup xác nhận, nên tới đây
+   * chỉ còn trường hợp hiếm: có yêu cầu khác vừa được tạo xen vào giữa hai bước.
+   * Trả về null khi không gửi được.
+   */
+  async function submitWithDuplicateHandling(payload) {
+    try {
+      return await createStockAdjustmentRequest(payload)
+    } catch (error) {
+      const duplicate = getDuplicateConflict(error)
+      if (!duplicate) throw error
+
+      await alertDialog({
+        title: 'Không thể gửi yêu cầu',
+        message:
+          `${emphasizeSkuNames(error.message, duplicate.duplicates)}\n\n`
+          + `${describeDuplicates(duplicate.duplicates)}\n\n`
+          + 'Vừa có yêu cầu khác được tạo cho sản phẩm này. Hãy kiểm tra lại phiếu rồi gửi lại.',
+      })
+      return null
+    }
+  }
+
   async function handleSubmit(event) {
     event.preventDefault()
-    if (isSaving) return
+    if (isSaving || confirmPrecheck) return
 
     if (lines.length === 0) {
       showError('Vui lòng chọn ít nhất một sản phẩm cần bổ sung cho Kệ Hàng.')
@@ -179,8 +252,36 @@ export default function StockAdjustmentRequestCreatePage() {
 
     setIsSaving(true)
     try {
-      const created = await createStockAdjustmentRequest({
+      // Kiểm tra trùng trước để phiếu bị khóa dừng ngay, không bắt người dùng
+      // xác nhận xong mới nhận thông báo chặn.
+      const precheck = await checkStockAdjustmentDuplicates(lines.map((line) => line.skuId))
+      if (precheck.blocking) {
+        await alertDialog({
+          title: 'Không thể gửi yêu cầu',
+          message:
+            `${emphasizeSkuNames(precheck.message, precheck.duplicates)}\n\n`
+            + `${describeDuplicates(precheck.duplicates)}\n\n`
+            + 'Hãy bỏ các sản phẩm này khỏi phiếu rồi gửi lại.',
+        })
+        return
+      }
+      setConfirmPrecheck(precheck)
+    } catch (error) {
+      showError(getStockFlowErrorMessage(error, 'Không kiểm tra được yêu cầu trước khi gửi.'))
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  async function handleConfirmSend() {
+    if (isSaving || !confirmPrecheck) return
+
+    setIsSaving(true)
+    try {
+      const created = await submitWithDuplicateHandling({
         reason: reason.trim() || null,
+        // Cảnh báo mềm đã nằm trong popup xác nhận nên không hỏi lại lần nữa.
+        acknowledgeDuplicates: confirmPrecheck.warning,
         items: lines.map((line) => ({
           skuId: line.skuId,
           skuCode: line.skuCode,
@@ -188,6 +289,11 @@ export default function StockAdjustmentRequestCreatePage() {
           quantityDelta: Number(line.quantity),
         })),
       })
+      if (!created) {
+        setConfirmPrecheck(null)
+        return
+      }
+
       showSuccess(
         `Đã gửi ${STOCK_FLOW_TERMS.request} ${created.requestCode}. Yêu cầu chưa làm thay đổi tồn kho.`,
       )
@@ -279,6 +385,14 @@ export default function StockAdjustmentRequestCreatePage() {
                         <span className="block font-mono text-xs font-bold">{option.skuCode}</span>
                         <span className="mt-0.5 block truncate font-semibold">{option.skuSnapshotName}</span>
                         <span className="mt-0.5 block text-xs text-slate-500">{option.productName}</span>
+                        <span className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px]">
+                          <span className="rounded-full bg-[#e8f1eb] px-2 py-0.5 font-semibold text-[#356647]">
+                            Thành phẩm
+                          </span>
+                          {option.categoryName ? (
+                            <span className="truncate text-slate-500">Danh mục: {option.categoryName}</span>
+                          ) : null}
+                        </span>
                         {selected ? (
                           <span className="mt-1 inline-flex rounded-full bg-[#356647] px-2 py-0.5 text-[10px] font-bold text-white">
                             Đã chọn
@@ -324,8 +438,7 @@ export default function StockAdjustmentRequestCreatePage() {
             <table className="min-w-full text-left text-sm">
               <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
                 <tr>
-                  <th className="whitespace-nowrap px-4 py-3">Mã SKU</th>
-                  <th className="whitespace-nowrap px-4 py-3">Tên sản phẩm</th>
+                  <th className="whitespace-nowrap px-4 py-3">Sản Phẩm</th>
                   <th className="whitespace-nowrap px-4 py-3">Đơn vị</th>
                   <th className="whitespace-nowrap px-4 py-3 text-right">Tồn {STOCK_FLOW_TERMS.warehouse}</th>
                   <th className="whitespace-nowrap px-4 py-3 text-right">Tồn {STOCK_FLOW_TERMS.shelf}</th>
@@ -336,7 +449,7 @@ export default function StockAdjustmentRequestCreatePage() {
               <tbody className="divide-y divide-slate-100">
                 {lines.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-10 text-center text-sm text-slate-500">
+                    <td colSpan={6} className="px-4 py-10 text-center text-sm text-slate-500">
                       Chưa chọn sản phẩm nào. Hãy chọn sản phẩm ở danh mục bên trái.
                     </td>
                   </tr>
@@ -349,12 +462,10 @@ export default function StockAdjustmentRequestCreatePage() {
                       && quantity > line.warehouseQuantityOnHand
                     return (
                       <tr key={line.skuId} className="align-top">
-                        <td className="whitespace-nowrap px-4 py-3 font-mono text-xs font-bold text-[#356647]">
-                          {line.skuCode}
-                        </td>
                         <td className="px-4 py-3 text-slate-800">
                           <span className="block font-semibold">{line.skuSnapshotName}</span>
                           <span className="mt-0.5 block text-xs text-slate-500">{line.productName}</span>
+                          <span className="mt-0.5 block font-mono text-xs text-slate-500">{line.skuCode}</span>
                         </td>
                         <td className="whitespace-nowrap px-4 py-3 text-slate-600">{line.unitName || '—'}</td>
                         <td className="whitespace-nowrap px-4 py-3 text-right text-slate-700">
@@ -431,11 +542,21 @@ export default function StockAdjustmentRequestCreatePage() {
               disabled={isSaving || lines.length === 0}
               className="rounded-xl bg-[#538463] px-5 py-2.5 text-sm font-bold text-white hover:bg-[#457053] disabled:opacity-50"
             >
-              {isSaving ? 'Đang gửi...' : 'Gửi yêu cầu'}
+              {isSaving ? 'Đang xử lý...' : 'Gửi yêu cầu'}
             </button>
           </div>
         </section>
       </form>
+
+      <StockAdjustmentRequestConfirmModal
+        isOpen={Boolean(confirmPrecheck)}
+        onClose={() => setConfirmPrecheck(null)}
+        onConfirm={handleConfirmSend}
+        isSubmitting={isSaving}
+        lines={lines}
+        reason={reason}
+        duplicateWarning={confirmPrecheck?.warning ? confirmPrecheck : null}
+      />
     </PageShell>
   )
 }

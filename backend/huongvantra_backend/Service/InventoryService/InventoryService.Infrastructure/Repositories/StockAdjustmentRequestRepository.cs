@@ -169,6 +169,31 @@ public class StockAdjustmentRequestRepository(InventoryDbContext _db) : IStockAd
     public Task<int> CountCreatedSinceAsync(DateTime sinceUtc, CancellationToken ct = default) =>
         _db.StockAdjustmentRequests.CountAsync(r => r.RequestedAt >= sinceUtc, ct);
 
+    public async Task<List<StockAdjustmentRequestItem>> GetOpenItemsBySkuIdsAsync(
+        IEnumerable<Guid> skuIds,
+        CancellationToken ct = default)
+    {
+        var ids = skuIds.Distinct().ToList();
+        if (ids.Count == 0) return [];
+
+        // Dòng đang mở = chưa Fulfilled/Rejected/ClosedPartial/Cancelled, và phiếu cha cũng chưa kết thúc.
+        return await _db.StockAdjustmentRequestItems
+            .AsNoTracking()
+            .Include(i => i.Request)
+            .Where(i => ids.Contains(i.SkuId)
+                && i.Status != StockAdjustmentRequestItemStatus.Fulfilled
+                && i.Status != StockAdjustmentRequestItemStatus.Rejected
+                && i.Status != StockAdjustmentRequestItemStatus.ClosedPartial
+                && i.Status != StockAdjustmentRequestItemStatus.Cancelled
+                && i.Request!.Status != StockAdjustmentRequestStatus.Cancelled
+                && i.Request.Status != StockAdjustmentRequestStatus.Rejected
+                && i.Request.Status != StockAdjustmentRequestStatus.Fulfilled
+                && i.Request.Status != StockAdjustmentRequestStatus.ClosedPartial
+                && i.Request.Status != StockAdjustmentRequestStatus.Completed)
+            .OrderBy(i => i.Request!.RequestedAt)
+            .ToListAsync(ct);
+    }
+
     public Task<List<StockTransfer>> GetTransfersBySourceRequestAsync(Guid requestId, CancellationToken ct = default) =>
         _db.StockTransfers
             .AsNoTracking()
@@ -199,6 +224,35 @@ public class StockAdjustmentRequestRepository(InventoryDbContext _db) : IStockAd
 
     public async Task AddAsync(StockAdjustmentRequest request, CancellationToken ct = default) =>
         await _db.StockAdjustmentRequests.AddAsync(request, ct);
+
+    public async Task AddWithGeneratedCodeAsync(
+        StockAdjustmentRequest request,
+        CancellationToken ct = default)
+    {
+        await _db.StockAdjustmentRequests.AddAsync(request, ct);
+
+        // Mã sinh từ số lượng phiếu trong ngày nên hai người gửi cùng lúc có thể ra cùng mã.
+        // RequestCode có unique index, nên bắt lỗi trùng và sinh lại thay vì để vỡ ra tầng trên.
+        const int maxAttempts = 5;
+        for (var attempt = 0; ; attempt++)
+        {
+            var today = request.RequestedAt.Date;
+            var countToday = await _db.StockAdjustmentRequests
+                .CountAsync(r => r.RequestedAt >= today && r.Id != request.Id, ct);
+            request.RequestCode = $"YC-{today:yyyyMMdd}-{(countToday + 1 + attempt):D4}";
+
+            try
+            {
+                await _db.SaveChangesAsync(ct);
+                return;
+            }
+            catch (DbUpdateException) when (attempt < maxAttempts - 1)
+            {
+                // SaveChanges thất bại nên EF giữ nguyên trạng thái Added của cả phiếu lẫn các dòng;
+                // chỉ cần sinh lại mã rồi lưu lại.
+            }
+        }
+    }
 
     public Task<int> SaveChangesAsync(CancellationToken ct = default) =>
         _db.SaveChangesAsync(ct);
