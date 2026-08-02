@@ -54,6 +54,8 @@ function DirectModeSection({ catalog, stockBySkuId, lines, onAdd, onRemove, onQu
           <h2 className="text-base font-bold text-slate-800">Danh mục sản phẩm</h2>
           <p className="mt-1 text-xs text-slate-500">
             Chỉ SKU Thành phẩm đang hoạt động và được phép tồn trên {STOCK_FLOW_TERMS.shelf}.
+            Nguyên liệu và Bao bì không hiển thị ở đây — nhãn &ldquo;Danh mục&rdquo; bên dưới là danh mục
+            phân loại của cửa hàng, không phải loại sản phẩm.
           </p>
         </div>
         <div className="px-5 py-4">
@@ -87,6 +89,14 @@ function DirectModeSection({ catalog, stockBySkuId, lines, onAdd, onRemove, onQu
                     <span className="block font-mono text-xs font-bold">{sku.skuCode}</span>
                     <span className="mt-0.5 block truncate font-semibold">
                       {sku.variantName || sku.productName || 'Thành phẩm'}
+                    </span>
+                    <span className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px]">
+                      <span className="rounded-full bg-[#e8f1eb] px-2 py-0.5 font-semibold text-[#356647]">
+                        Thành phẩm
+                      </span>
+                      {sku.categoryName ? (
+                        <span className="truncate text-slate-500">Danh mục: {sku.categoryName}</span>
+                      ) : null}
                     </span>
                   </span>
                   <span className="shrink-0 text-right text-xs text-slate-600">

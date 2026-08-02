@@ -58,6 +58,7 @@ function toCatalogOption(sku, stockBySkuId) {
     skuCode: sku.skuCode ?? '',
     productName: sku.productName ?? '',
     skuSnapshotName: buildSkuSnapshotName(sku, sku.productName ?? ''),
+    categoryName: sku.categoryName ?? '',
     unitName: sku.inventoryUnit || sku.unitName || '',
     warehouseQuantityOnHand: Number(stock?.warehouseQuantityOnHand ?? 0),
     shelfQuantityOnHand: Number(stock?.quantityOnHand ?? 0),
@@ -279,6 +280,14 @@ export default function StockAdjustmentRequestCreatePage() {
                         <span className="block font-mono text-xs font-bold">{option.skuCode}</span>
                         <span className="mt-0.5 block truncate font-semibold">{option.skuSnapshotName}</span>
                         <span className="mt-0.5 block text-xs text-slate-500">{option.productName}</span>
+                        <span className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px]">
+                          <span className="rounded-full bg-[#e8f1eb] px-2 py-0.5 font-semibold text-[#356647]">
+                            Thành phẩm
+                          </span>
+                          {option.categoryName ? (
+                            <span className="truncate text-slate-500">Danh mục: {option.categoryName}</span>
+                          ) : null}
+                        </span>
                         {selected ? (
                           <span className="mt-1 inline-flex rounded-full bg-[#356647] px-2 py-0.5 text-[10px] font-bold text-white">
                             Đã chọn
