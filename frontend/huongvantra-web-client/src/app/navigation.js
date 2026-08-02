@@ -400,11 +400,10 @@ function groupAdminManagerSidebar(items, isAdmin) {
 
   // Đơn hàng — parent path có thể bị rewrite thành child path đầu tiên (/orders/create).
   const orderChildren = []
+  // Path của mục cha bị ghi đè bằng path child đầu tiên khi lọc theo module/role,
+  // nên phải dò thêm theo module thay vì chỉ tra '/orders'.
   const ordersItem = byPath.get('/orders')
-    || items.find((item) => (item.children || []).some((child) =>
-      child.path === '/orders'
-      || child.path === '/orders/create'
-      || child.path === '/orders/cod'))
+    || items.find((item) => item.module === 'orders' && item.children?.length)
   if (ordersItem) {
     consumed.add(ordersItem.path)
     for (const child of ordersItem.children || []) {
