@@ -1874,7 +1874,7 @@ function ProductFormPage({ mode }) {
                   <option value="">Chọn nhóm hàng</option>
                   {categoryTreeOptions.map((cat) => (
                     <option key={cat.id} value={String(cat.id)}>
-                      {cat.pathLabel}{cat.isActive === false || cat.isDeleted ? ' (đã ẩn)' : ''}
+                      {cat.selectLabel}{cat.isActive === false || cat.isDeleted ? ' (đã ẩn)' : ''}
                     </option>
                   ))}
                 </select>

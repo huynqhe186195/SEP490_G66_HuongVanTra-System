@@ -9,6 +9,7 @@ import { canDecideProductApprovals, isSystemAdmin, isWarehouseRole } from '../..
 import VndCurrencyInput from '../components/VndCurrencyInput.jsx'
 import { fetchAttributeNames } from '../services/attributeNamesApi.js'
 import { fetchCategories } from '../services/categoriesApi.js'
+import { flattenCategoryTreeForSelect } from '../utils/categoryTreeUtils.js'
 import { searchMaterials } from '../services/bomApi.js'
 import {
   approveProductCreationRequest,
@@ -1318,6 +1319,11 @@ function ProductRow({ row, rowIndex, categories, materials, existingProducts, at
   const [pendingAttributeFocusKey, setPendingAttributeFocusKey] = useState(null)
   const [isExpanded, setIsExpanded] = useState(!row.name)
 
+  const categoryTreeOptions = useMemo(() => {
+    const visible = categories.filter((c) => !c.isDeleted && c.isActive !== false)
+    return flattenCategoryTreeForSelect(visible)
+  }, [categories])
+
   function applySkuRows(nextRow, nextSkuRows) {
     onChange(syncLegacySkuFields(nextRow, nextSkuRows))
   }
@@ -1642,7 +1648,7 @@ function ProductRow({ row, rowIndex, categories, materials, existingProducts, at
           Danh mục
           <select className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={row.categoryId} onChange={(event) => updateProduct({ categoryId: event.target.value })}>
             <option value="">Chọn danh mục</option>
-            {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+            {categoryTreeOptions.map((cat) => <option key={cat.id} value={cat.id}>{cat.selectLabel}</option>)}
           </select>
         </label>
         <label className="text-xs font-semibold text-slate-500">

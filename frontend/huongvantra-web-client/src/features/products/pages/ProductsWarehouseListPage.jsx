@@ -35,7 +35,7 @@ import {
   summarizeProductSkus,
 } from '../utils/productDisplay.js'
 import { getProductTypeLabel, PRODUCT_TYPE, PRODUCT_TYPE_OPTIONS } from '../utils/productTypes.js'
-import { buildCategoryTree } from '../utils/categoryTreeUtils.js'
+import { flattenCategoryTreeForSelect } from '../utils/categoryTreeUtils.js'
 import { consumeProductListFocus, readHighlightProductIdFromUrl } from '../utils/productListFocus.js'
 
 // ─── Sidebar filter ──────────────────────────────────────────────────────────
@@ -94,7 +94,11 @@ function WarehouseFilterContent({
   onProductTypeChange,
   canCreate = false,
 }) {
-  const tree = buildCategoryTree(categories.filter((c) => !c.isDeleted))
+  const categoryTreeOptions = useMemo(() => {
+    const visible = categories.filter((c) => !c.isDeleted && c.isActive !== false)
+    return flattenCategoryTreeForSelect(visible)
+  }, [categories])
+
   return (
     <>
       <FilterSection
@@ -107,32 +111,18 @@ function WarehouseFilterContent({
           ) : null
         }
       >
-        <div className="space-y-0.5">
-          <button
-            type="button"
-            onClick={() => onCategoryChange('')}
-            className={`w-full rounded px-2 py-1.5 text-left text-xs font-semibold transition ${
-              !categoryId ? 'bg-[#356647]/10 text-[#356647]' : 'text-slate-600 hover:bg-slate-100'
-            }`}
-          >
-            Tất cả nhóm hàng
-          </button>
-          {tree.map((node) => (
-            <button
-              key={node.id}
-              type="button"
-              onClick={() => onCategoryChange(String(node.id))}
-              className={`w-full rounded px-2 py-1.5 text-left text-xs transition ${
-                String(categoryId) === String(node.id)
-                  ? 'bg-[#356647]/10 font-semibold text-[#356647]'
-                  : 'text-slate-600 hover:bg-slate-100'
-              }`}
-              style={{ paddingLeft: `${8 + (node.depth || 0) * 12}px` }}
-            >
-              {node.name}
-            </button>
+        <select
+          className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm text-slate-700 outline-none focus:border-[#356647]"
+          value={categoryId}
+          onChange={(event) => onCategoryChange(event.target.value)}
+        >
+          <option value="">Tất cả nhóm hàng</option>
+          {categoryTreeOptions.map((cat) => (
+            <option key={cat.id} value={String(cat.id)}>
+              {cat.selectLabel}
+            </option>
           ))}
-        </div>
+        </select>
       </FilterSection>
 
       <FilterSection title="Loại hàng">

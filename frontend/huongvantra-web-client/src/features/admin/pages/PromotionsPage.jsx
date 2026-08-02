@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination from '../../../components/shared/TablePagination.jsx'
@@ -14,6 +14,7 @@ import {
 } from '../../pos/utils/posPromotionUtils.js'
 import { fetchAllActiveStoreSkus } from '../../products/services/productSkusApi.js'
 import { fetchCategories } from '../../products/services/categoriesApi.js'
+import { flattenCategoryTreeForSelect } from '../../products/utils/categoryTreeUtils.js'
 import {
   createAdminPromotion,
   deactivateAdminPromotion,
@@ -271,6 +272,11 @@ function PromotionsPage() {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(PROMOTION_PAGE_SIZE)
   const [pagination, setPagination] = useState(DEFAULT_PAGINATION)
+
+  const categoryTreeOptions = useMemo(() => {
+    const visible = categoryOptions.filter((c) => !c.isDeleted && c.isActive !== false)
+    return flattenCategoryTreeForSelect(visible)
+  }, [categoryOptions])
 
   const loadData = useCallback(async () => {
     setIsLoading(true)
@@ -631,22 +637,14 @@ function PromotionsPage() {
     })
     .slice(0, 12)
   const selectedSkuScopes = form.skuScopes ?? []
-  const displayCategoryOptions = [
-    ...categoryOptions,
-    ...(form.categoryScopes ?? [])
-      .filter((scope) => scope.categoryId && !categoryOptions.some((category) => Number(category.id) === Number(scope.categoryId)))
-      .map((scope) => ({
-        id: scope.categoryId,
-        name: scope.categoryName || scope.categorySnapshotName || '',
-      })),
-  ]
   const normalizedCategorySearch = categorySearchTerm.trim().toLowerCase()
-  const visibleCategoryOptions = displayCategoryOptions
+  const visibleCategoryOptions = categoryTreeOptions
     .filter((category) => {
       if (!normalizedCategorySearch) return true
       return [
         category.name,
-        category.categoryName,
+        category.selectLabel,
+        category.pathLabel,
         category.description,
         category.id,
       ]
@@ -1216,7 +1214,7 @@ function PromotionsPage() {
                   {!isCategoryLoading && displayCategoryOptions.length === 0 ? (
                     <p className="text-xs text-slate-500">Không có danh mục khả dụng.</p>
                   ) : null}
-                  {!isCategoryLoading && displayCategoryOptions.length > 0 ? (
+                  {!isCategoryLoading && categoryTreeOptions.length > 0 ? (
                     <div className="max-h-52 space-y-1 overflow-y-auto pr-1">
                       {visibleCategoryOptions.length === 0 ? (
                         <p className="px-2 py-2 text-xs text-slate-500">Không tìm thấy danh mục phù hợp.</p>
@@ -1231,7 +1229,7 @@ function PromotionsPage() {
                           >
                             <span className="min-w-0 flex-1">
                               <span className="block truncate font-semibold text-slate-700">
-                                {getCategoryDisplayName(category)}
+                                {category.selectLabel || getCategoryDisplayName(category)}
                               </span>
                             </span>
                             <button
