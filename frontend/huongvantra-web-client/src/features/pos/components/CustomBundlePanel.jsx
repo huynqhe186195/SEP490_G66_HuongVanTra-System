@@ -7,7 +7,7 @@ function fmt(amount) {
 }
 
 async function fetchMaterials(search = '') {
-  const query = new URLSearchParams({ pageSize: '100', page: '1', isActive: 'true', productType: 'NGUYEN_LIEU' })
+  const query = new URLSearchParams({ pageSize: '100', page: '1', isActive: 'true' })
   if (search.trim()) query.set('search', search.trim())
   const [data, stocks] = await Promise.all([
     apiRequestAuth(`/api/v1/store/skus?${query.toString()}`, { method: 'GET' }),
@@ -24,9 +24,11 @@ async function fetchMaterials(search = '') {
       unitPrice: Number(item.retailPrice ?? item.RetailPrice ?? item.price ?? item.Price ?? 0),
       packagingType: item.packagingType ?? item.PackagingType ?? '',
       description: item.description ?? item.Description ?? '',
+      productType: item.productType ?? item.ProductType ?? '',
+      canUseInCustom: item.canUseInCustom ?? item.CanUseInCustom ?? false,
       stockOnHand: Number(stockBySkuId.get(skuId) ?? 0),
     }
-  })
+  }).filter((item) => ['NGUYEN_LIEU', 'BAO_BI'].includes(String(item.productType).toUpperCase()) && item.canUseInCustom === true)
 }
 
 function DetailModal({ material, onClose }) {
@@ -262,8 +264,7 @@ export default function CustomBundlePanel({ bundles, onChange }) {
                 <thead>
                   <tr className="border-b border-[#c1c9c0] bg-[#f6f4ec]">
                     <th className="w-8 px-3 py-2" />
-                    <th className="px-3 py-2 text-left text-xs font-semibold text-[#717971]">Tên nguyên liệu</th>
-                    <th className="px-3 py-2 text-left text-xs font-semibold text-[#717971]">Mã SKU</th>
+                    <th className="px-3 py-2 text-left text-xs font-semibold text-[#717971]">Sản Phẩm</th>
                     <th className="px-3 py-2 text-right text-xs font-semibold text-[#717971]">Tồn đang có</th>
                     <th className="px-3 py-2 text-right text-xs font-semibold text-[#717971]">Giá/đv</th>
                     <th className="w-24 px-3 py-2 text-center text-xs font-semibold text-[#717971]">Số lượng</th>
@@ -296,8 +297,10 @@ export default function CustomBundlePanel({ bundles, onChange }) {
                             )}
                           </span>
                         </td>
-                        <td className="px-3 py-2.5 font-medium text-[#1b1c17]">{m.name}</td>
-                        <td className="px-3 py-2.5 text-[#717971]">{m.skuCode}</td>
+                        <td className="px-3 py-2.5">
+                          <p className="font-medium text-[#1b1c17]">{m.name}</p>
+                          <p className="font-mono text-[11px] text-[#717971]">{m.skuCode}</p>
+                        </td>
                         <td className="px-3 py-2.5 text-right">
                           <span className={m.stockOnHand <= 0 ? 'font-semibold text-red-500' : 'text-[#1b1c17]'}>
                             {m.stockOnHand.toLocaleString('vi-VN')}

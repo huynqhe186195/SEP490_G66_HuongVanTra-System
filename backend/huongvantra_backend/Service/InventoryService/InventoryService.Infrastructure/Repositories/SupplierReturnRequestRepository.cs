@@ -9,10 +9,13 @@ namespace InventoryService.Infrastructure.Repositories;
 public class SupplierReturnRequestRepository(InventoryDbContext _db) : ISupplierReturnRequestRepository
 {
     private IQueryable<SupplierReturnRequest> WithItems() =>
-        _db.SupplierReturnRequests.Include(r => r.Items);
+        _db.SupplierReturnRequests.Include(r => r.Items).Include(r => r.EvidenceImages);
 
     public Task<SupplierReturnRequest?> GetByIdAsync(Guid id, CancellationToken ct = default) =>
         WithItems().FirstOrDefaultAsync(r => r.Id == id, ct);
+
+    public Task<SupplierReturnRequest?> GetByOperationIdAsync(Guid operationId, CancellationToken ct = default) =>
+        WithItems().FirstOrDefaultAsync(r => r.OperationId == operationId, ct);
 
     public async Task<(List<SupplierReturnRequest> Items, int TotalCount)> GetPagedAsync(
         InventoryReturnRequestStatus? status,

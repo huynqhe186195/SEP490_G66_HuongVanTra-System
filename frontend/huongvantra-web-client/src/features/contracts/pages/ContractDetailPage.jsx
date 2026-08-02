@@ -2,10 +2,12 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
+import ReasonSuggestionChips from '../../../components/shared/ReasonSuggestionChips.jsx'
 import { confirmDialog } from '../../../app/dialog.js'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import { canApproveContracts } from '../../auth/utils/permissions.js'
+import { getReasonSuggestions } from '../../shared/reasonSuggestions.js'
 import {
   deleteContract,
   fetchContractById,
@@ -77,6 +79,12 @@ function RejectModal({ onClose, onConfirm, isBusy }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
         <h3 className="mb-4 text-base font-semibold text-[#1a1a1a]">Lý do từ chối</h3>
+        <ReasonSuggestionChips
+          className="mb-3"
+          suggestions={getReasonSuggestions('contractReject')}
+          value={note}
+          onSelect={(text) => { setNote(text); setErr('') }}
+        />
         <textarea
           className={`w-full rounded-lg border px-3 py-2 text-sm outline-none focus:border-[#1a1a1a] ${err ? 'border-[#b42318]' : 'border-[#e8e5de]'}`}
           rows={4}

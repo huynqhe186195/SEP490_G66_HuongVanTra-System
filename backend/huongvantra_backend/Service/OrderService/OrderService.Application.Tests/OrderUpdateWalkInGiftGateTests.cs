@@ -70,7 +70,7 @@ public class OrderUpdateWalkInGiftGateTests
                 .Setup(client => client.GetSkuProfilesAsync(
                     It.IsAny<IEnumerable<Guid>>(),
                     It.IsAny<CancellationToken>()))
-                .ReturnsAsync([new ProductSkuCatalogProfile(SkuId, null, "Piece", 0m)]);
+                .ReturnsAsync([new ProductSkuCatalogProfile(SkuId, null, "Piece", "THANH_PHAM", true, false, false, true, 0m)]);
 
             _orderRepository
                 .Setup(repository => repository.SaveChangesAsync(

@@ -67,7 +67,6 @@ public sealed class BomReconciliationTests
             Mock.Of<IStockExportBatchAllocationRepository>(),
             Mock.Of<IInventoryLedgerRepository>(),
             Mock.Of<ISupplierReceiptRepository>(),
-            Mock.Of<IShelfReturnRequestRepository>(),
             Mock.Of<ISupplierReturnRequestRepository>(),
             Mock.Of<IStocktakeRequestRepository>(),
             new ProcessedIntegrationEventRepository(db),

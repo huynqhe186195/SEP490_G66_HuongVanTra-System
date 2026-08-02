@@ -51,11 +51,16 @@ export default function EndOfDayReportModal({ isOpen, onClose }) {
           method: 'GET',
           silentAuthErrors: true,
         })
-        const allowedRoles = ['Sale', 'AgencyManager']
+        const allowedRoles = ['Sale', 'SalePos', 'SaleCod', 'Manager', 'AgencyManager']
+        const normalizeRole = (value) => String(value || '').trim().toLowerCase().replace(/[\s._-]+/g, '')
+        const allowedCompact = new Set(allowedRoles.map(normalizeRole))
         const fetchedUsers = res?.items || []
-        const filtered = fetchedUsers.filter(u => {
+        const filtered = fetchedUsers.filter((u) => {
           const uRoles = Array.isArray(u.roles) ? u.roles : [u.role].filter(Boolean)
-          return uRoles.some(r => allowedRoles.includes(r) || allowedRoles.includes(r?.name))
+          return uRoles.some((r) => {
+            const name = typeof r === 'string' ? r : r?.name
+            return allowedCompact.has(normalizeRole(name))
+          })
         })
         setUsers(filtered)
       } catch (err) {

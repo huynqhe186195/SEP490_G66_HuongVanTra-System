@@ -152,7 +152,9 @@ public class ProductCreationRequestLogic(ProductDbContext _db, ProductLogic _pro
 
         var itemInputs = request.Items
             .OrderBy(x => x.SortOrder)
-            .Select(x => new ProductCreationRequestItemInput(x.ClientKey, DeserializeProduct(x.ProductSnapshotJson)))
+            .Select(x => new ProductCreationRequestItemInput(
+                x.ClientKey,
+                ProductRequestCapabilityNormalizer.Normalize(DeserializeProduct(x.ProductSnapshotJson))))
             .ToList();
         await ValidateProductsAsync(itemInputs, ct);
 
@@ -205,7 +207,9 @@ public class ProductCreationRequestLogic(ProductDbContext _db, ProductLogic _pro
             EnsureAdminCanDecide(request, actor);
             var itemInputs = request.Items
                 .OrderBy(x => x.SortOrder)
-                .Select(x => new ProductCreationRequestItemInput(x.ClientKey, DeserializeProduct(x.ProductSnapshotJson)))
+                .Select(x => new ProductCreationRequestItemInput(
+                    x.ClientKey,
+                    ProductRequestCapabilityNormalizer.Normalize(DeserializeProduct(x.ProductSnapshotJson))))
                 .ToList();
 
             await ValidateProductsAsync(itemInputs, ct);
@@ -304,6 +308,8 @@ public class ProductCreationRequestLogic(ProductDbContext _db, ProductLogic _pro
             var product = TryDeserializeProduct(item.ProductSnapshotJson);
             if (product is null) continue;
 
+            product = ProductRequestCapabilityNormalizer.Normalize(product);
+
             if (product.Images is { Count: > 0 })
                 urls.AddRange(product.Images
                     .Select(i => i.ImageUrl)
@@ -400,7 +406,8 @@ public class ProductCreationRequestLogic(ProductDbContext _db, ProductLogic _pro
 
             var productType = ProductType.THANH_PHAM;
             var productTypeText = NormalizeText(product?.ProductType);
-            if (productTypeText is null || !Enum.TryParse(productTypeText, ignoreCase: true, out productType))
+            if (productTypeText is null
+                || !ProductTypeValidation.TryParseDefined(productTypeText, out productType))
                 errors.Add($"{prefix}: Loại hàng không hợp lệ.");
 
             try
@@ -431,9 +438,18 @@ public class ProductCreationRequestLogic(ProductDbContext _db, ProductLogic _pro
             if (variants.Count == 0)
                 errors.Add($"{prefix}: Cần ít nhất một SKU.");
 
-            if (productType == ProductType.THANH_PHAM
-                && !variants.Any(variant => (variant.BomLines ?? []).Count > 0))
-                errors.Add("Sản phẩm kệ bắt buộc phải có BOM trước khi gửi duyệt.");
+            if (productType == ProductType.THANH_PHAM)
+            {
+                var baseVariant = variants.FirstOrDefault(variant => variant.IsBaseUnitVariant == true)
+                    ?? variants.FirstOrDefault();
+                var hasBom = baseVariant?.BomLines?.Any(line =>
+                    line.MaterialId != Guid.Empty
+                    || (line.ComponentVariantId.HasValue && line.ComponentVariantId.Value != Guid.Empty)
+                    || NormalizeText(line.ComponentSkuCode) is not null
+                    || NormalizeText(line.ComponentRequestSkuKey) is not null) == true;
+                if (!hasBom)
+                    errors.Add($"{prefix}: Sản phẩm kệ bắt buộc phải có BOM trước khi gửi duyệt.");
+            }
 
             foreach (var (variant, variantIndex) in variants.Select((value, index) => (value, index)))
             {
@@ -454,7 +470,8 @@ public class ProductCreationRequestLogic(ProductDbContext _db, ProductLogic _pro
                     errors.Add($"{row}: RequestSkuKey '{requestSkuKey}' bi trung trong cung yeu cau.");
 
                 var bomLines = variant.BomLines ?? [];
-                if (bomLines.Count > 0 && productType != ProductType.THANH_PHAM)
+                if (bomLines.Count > 0
+                    && !BomCapabilityRules.CanOwnBom(productType, variant.CanHaveBom ?? false, variant.IsActive))
                     errors.Add($"{row}: BOM chỉ áp dụng cho Sản phẩm kệ.");
 
                 var usedMaterials = new HashSet<Guid>();
@@ -534,7 +551,7 @@ public class ProductCreationRequestLogic(ProductDbContext _db, ProductLogic _pro
                 if (material.ProductType != ProductType.NGUYEN_LIEU
                     && material.ProductType != ProductType.BAO_BI
                     && material.ProductType != ProductType.THANH_PHAM)
-                    errors.Add($"'{material.Name}' không phải là Nguyên liệu hoặc Bao bì.");
+                    errors.Add($"'{material.Name}' không được phép dùng làm component BOM.");
             }
         }
 
@@ -543,7 +560,7 @@ public class ProductCreationRequestLogic(ProductDbContext _db, ProductLogic _pro
             var components = await _db.ProductVariants.AsNoTracking()
                 .Include(x => x.Product)
                 .Where(x => componentVariantIds.Contains(x.Id) && !x.IsDeleted && x.IsActive)
-                .Select(x => new { x.Id, x.SkuCode, ProductType = x.Product.ProductType })
+                .Select(x => new { x.Id, x.SkuCode, x.IsActive, x.CanBeBomComponent, ProductType = x.Product.ProductType })
                 .ToListAsync(ct);
             var componentById = components.ToDictionary(x => x.Id);
 
@@ -555,9 +572,7 @@ public class ProductCreationRequestLogic(ProductDbContext _db, ProductLogic _pro
                     continue;
                 }
 
-                if (component.ProductType != ProductType.NGUYEN_LIEU
-                    && component.ProductType != ProductType.BAO_BI
-                    && component.ProductType != ProductType.THANH_PHAM)
+                if (!BomCapabilityRules.CanBeComponent(component.ProductType, component.CanBeBomComponent, component.IsActive))
                     errors.Add($"SKU component '{component.SkuCode}' khong hop le cho BOM.");
             }
         }
@@ -570,7 +585,7 @@ public class ProductCreationRequestLogic(ProductDbContext _db, ProductLogic _pro
             var components = await _db.ProductVariants.AsNoTracking()
                 .Include(x => x.Product)
                 .Where(x => externalComponentSkuCodes.Contains(x.SkuCode) && !x.IsDeleted && x.IsActive)
-                .Select(x => new { x.SkuCode, ProductType = x.Product.ProductType })
+                .Select(x => new { x.SkuCode, x.IsActive, x.CanBeBomComponent, ProductType = x.Product.ProductType })
                 .ToListAsync(ct);
             var componentBySku = components.ToDictionary(x => x.SkuCode, StringComparer.OrdinalIgnoreCase);
 
@@ -582,9 +597,7 @@ public class ProductCreationRequestLogic(ProductDbContext _db, ProductLogic _pro
                     continue;
                 }
 
-                if (component.ProductType != ProductType.NGUYEN_LIEU
-                    && component.ProductType != ProductType.BAO_BI
-                    && component.ProductType != ProductType.THANH_PHAM)
+                if (!BomCapabilityRules.CanBeComponent(component.ProductType, component.CanBeBomComponent, component.IsActive))
                     errors.Add($"SKU component '{component.SkuCode}' khong hop le cho BOM.");
             }
         }
@@ -619,10 +632,16 @@ public class ProductCreationRequestLogic(ProductDbContext _db, ProductLogic _pro
             if (item.Product is null)
                 throw new ProductValidationException($"Sản phẩm {index + 1}: dữ liệu sản phẩm là bắt buộc.");
 
+            if (!ProductTypeValidation.TryParseDefined(item.Product.ProductType, out _))
+                throw new ProductValidationException($"Sản phẩm {index + 1}: Loại hàng không hợp lệ.");
+
+            ProductRequestLegacyBomValidator.RejectLegacyRequiredBaseComponents(item.Product);
+
             var clientKey = NormalizeText(item.ClientKey) ?? $"item-{index + 1}";
-            var product = item.Product with
+            var normalizedProduct = ProductRequestCapabilityNormalizer.Normalize(item.Product);
+            var product = normalizedProduct with
             {
-                Attributes = ProductInputValidator.ValidateAttributes(item.Product.Attributes, $"Sản phẩm {index + 1}")
+                Attributes = ProductInputValidator.ValidateAttributes(normalizedProduct.Attributes, $"Sản phẩm {index + 1}")
             };
             return new ProductCreationRequestItemInput(clientKey, product);
         }).ToList();
@@ -631,14 +650,14 @@ public class ProductCreationRequestLogic(ProductDbContext _db, ProductLogic _pro
     private static List<ProductCreationRequestItem> BuildEntities(List<ProductCreationRequestItemInput> items, DateTime now) =>
         items.Select((item, index) =>
         {
-            var product = item.Product;
+            var product = ProductRequestCapabilityNormalizer.Normalize(item.Product);
             return new ProductCreationRequestItem
             {
                 ClientKey = item.ClientKey!,
                 SortOrder = index,
                 ProductSnapshotJson = SerializeProduct(product),
                 ProductName = NormalizeText(product.Name) ?? $"Sản phẩm {index + 1}",
-                ProductType = NormalizeText(product.ProductType) ?? ProductType.THANH_PHAM.ToString(),
+                ProductType = ResolveProductTypeText(product.ProductType),
                 CategoryId = product.CategoryId > 0 ? product.CategoryId : null,
                 BaseUnit = NormalizeText(product.BaseUnit),
                 InventoryUnit = NormalizeText(product.InventoryUnit),
@@ -705,6 +724,11 @@ public class ProductCreationRequestLogic(ProductDbContext _db, ProductLogic _pro
 
     private static string NormalizeRequired(string? value, string message) =>
         NormalizeText(value) ?? throw new ProductValidationException(message);
+
+    private static string ResolveProductTypeText(string? value) =>
+        ProductTypeValidation.TryParseDefined(NormalizeText(value), out var productType)
+            ? productType.ToString()
+            : throw new ProductValidationException("Loại hàng không hợp lệ.");
 
     private static string? MergeNote(string? current, string? addition)
     {

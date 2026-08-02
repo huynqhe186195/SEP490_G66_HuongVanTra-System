@@ -13,7 +13,7 @@ namespace InventoryService.WebAPI.Controllers;
 public class SupplierReceiptsController(InventoryLogic _logic) : ControllerBase
 {
     [HttpGet]
-    [Authorize(Roles = "Manager,Admin,Accountant,Warehouse")]
+    [Authorize(Policy = PermissionNames.ViewInventory)]
     public async Task<IActionResult> GetList(
         CancellationToken ct,
         [FromQuery] string? status = null,
@@ -31,7 +31,7 @@ public class SupplierReceiptsController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpGet("{id:guid}")]
-    [Authorize(Roles = "Manager,Admin,Accountant,Warehouse")]
+    [Authorize(Policy = PermissionNames.ViewInventory)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
     {
         var item = await _logic.GetSupplierReceiptAsync(id, ct);
@@ -40,7 +40,7 @@ public class SupplierReceiptsController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "Warehouse")]
+    [Authorize(Policy = PermissionNames.OperateWarehouse)]
     public async Task<IActionResult> Create([FromBody] UpsertSupplierReceiptRequest request, CancellationToken ct)
     {
         if (User.IsInRole("Admin")) return Forbid();
@@ -53,7 +53,7 @@ public class SupplierReceiptsController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
-    [Authorize(Roles = "Warehouse")]
+    [Authorize(Policy = PermissionNames.OperateWarehouse)]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpsertSupplierReceiptRequest request, CancellationToken ct)
     {
         if (User.IsInRole("Admin")) return Forbid();
@@ -65,7 +65,7 @@ public class SupplierReceiptsController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpPost("{id:guid}/submit")]
-    [Authorize(Roles = "Warehouse")]
+    [Authorize(Policy = PermissionNames.OperateWarehouse)]
     public async Task<IActionResult> Submit(Guid id, CancellationToken ct)
     {
         if (User.IsInRole("Admin")) return Forbid();
@@ -77,7 +77,7 @@ public class SupplierReceiptsController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpPost("{id:guid}/approve")]
-    [Authorize(Roles = "Manager")]
+    [Authorize(Policy = PermissionNames.ApproveInventory)]
     public async Task<IActionResult> Approve(Guid id, CancellationToken ct)
     {
         if (User.IsInRole("Admin")) return Forbid();
@@ -89,7 +89,7 @@ public class SupplierReceiptsController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpPost("{id:guid}/reject")]
-    [Authorize(Roles = "Manager")]
+    [Authorize(Policy = PermissionNames.ApproveInventory)]
     public async Task<IActionResult> Reject(Guid id, [FromBody] ReviewSupplierReceiptRequest request, CancellationToken ct)
     {
         if (User.IsInRole("Admin")) return Forbid();
@@ -101,7 +101,7 @@ public class SupplierReceiptsController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpPost("{id:guid}/cancel")]
-    [Authorize(Roles = "Warehouse")]
+    [Authorize(Policy = PermissionNames.OperateWarehouse)]
     public async Task<IActionResult> Cancel(Guid id, [FromBody] ReviewSupplierReceiptRequest request, CancellationToken ct)
     {
         if (User.IsInRole("Admin")) return Forbid();
@@ -113,7 +113,7 @@ public class SupplierReceiptsController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpGet("template")]
-    [AllowAnonymous]
+    [Authorize(Policy = PermissionNames.OperateWarehouse)]
     public IActionResult Template()
     {
         const string csv = "SkuCode,SupplierLotCode,DocumentQuantity,ActualQuantity,UnitCost,ManufactureDate,ExpiryDate,Note\r\n"

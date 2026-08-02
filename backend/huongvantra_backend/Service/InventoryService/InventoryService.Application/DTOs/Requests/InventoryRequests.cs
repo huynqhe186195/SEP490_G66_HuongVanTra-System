@@ -37,11 +37,11 @@ public record ReplaceCodReservationRequest(
     decimal TotalAmount,
     List<ReplaceCodReservationItemRequest> Items);
 
-public record UpdateLowStockThresholdRequest(
-    int Threshold,
-    string? Location = null,
-    int? WarehouseLowStockThreshold = null,
-    int? ShelfLowStockThreshold = null);
+/// <summary>Ngưỡng tồn thấp Kho — chỉ Thủ kho được đặt.</summary>
+public record UpdateWarehouseLowStockThresholdRequest(int Threshold);
+
+/// <summary>Ngưỡng tồn thấp Kệ Hàng — chỉ Quản lý được đặt.</summary>
+public record UpdateShelfLowStockThresholdRequest(int Threshold);
 
 public record CreateStockAdjustmentRequestItem(
     Guid SkuId,
@@ -49,13 +49,53 @@ public record CreateStockAdjustmentRequestItem(
     string? SkuSnapshotName,
     int QuantityDelta);
 
+/// <summary>
+/// AcknowledgeDuplicates: người tạo đã xem cảnh báo trùng SKU và vẫn muốn gửi.
+/// Chỉ bỏ qua được cảnh báo mềm; trùng với yêu cầu chưa ai tiếp nhận vẫn bị chặn.
+/// </summary>
 public record CreateStockAdjustmentRequest(
     string? Reason,
-    List<CreateStockAdjustmentRequestItem> Items);
+    List<CreateStockAdjustmentRequestItem> Items,
+    bool AcknowledgeDuplicates = false);
+
+/// <summary>Kiểm tra trùng SKU trước khi gửi yêu cầu, không tạo dữ liệu.</summary>
+public record CheckStockAdjustmentDuplicatesRequest(List<Guid>? SkuIds);
 
 public record RejectStockAdjustmentRequest(string? Reason);
-
 public record CancelStockAdjustmentRequest(string? Reason);
+
+/// <summary>Duyệt một dòng yêu cầu bổ sung Kệ Hàng: Warehouse chọn số lượng duyệt cho từng dòng.</summary>
+public record ReviewStockAdjustmentLineRequest(
+    Guid ItemId,
+    bool Approved,
+    int? ApprovedQuantity,
+    string? Note);
+
+/// <summary>Duyệt/từ chối theo dòng. Dòng không liệt kê sẽ được duyệt nguyên số lượng yêu cầu.</summary>
+public record ReviewStockAdjustmentRequestLines(
+    string? ReviewNote,
+    List<ReviewStockAdjustmentLineRequest>? Lines);
+
+/// <summary>Đóng phần còn lại của yêu cầu (ClosedPartial) kèm lý do bắt buộc.</summary>
+public record CloseStockAdjustmentRemainingRequest(string? Reason);
+
+public record UpsertStockTransferLineRequest(
+    Guid SkuId,
+    string? SkuCode,
+    string? SkuName,
+    string? UnitName,
+    int Quantity,
+    Guid? SourceRequestLineId = null);
+
+public record UpsertStockTransferRequest(
+    string? Note,
+    List<UpsertStockTransferLineRequest> Lines,
+    Guid? SourceRequestId = null,
+    Guid? SourceSuggestionId = null);
+
+public record CancelStockTransferRequest(string? Reason);
+
+public record DismissShelfReplenishmentSuggestionRequest(string? Reason);
 
 public record CreateWarehouseBatchItemRequest(
     Guid SkuId,
@@ -149,25 +189,24 @@ public record InventoryReturnItemRequest(
     string? LotCode,
     string? Note);
 
-public record CreateShelfReturnRequest(
-    string ReturnMode,
-    Guid? OriginalStockAdjustmentRequestId,
-    string? OriginalStockAdjustmentRequestCode,
-    string? Reason,
-    string? Note,
-    List<InventoryReturnItemRequest> Items);
-
+/// <summary>
+/// Trả hàng nhập (Kho → NCC) là thao tác một bước: Thủ kho tạo và tồn Kho bị trừ ngay.
+/// <paramref name="OperationId"/> là idempotency key của một lần bấm gửi — gọi lại cùng key
+/// trả về phiếu đã tạo thay vì trừ kho lần nữa.
+/// </summary>
 public record CreateSupplierReturnRequest(
-    string ReturnMode,
-    Guid? SupplierReceiptId,
+    Guid OperationId,
+    Guid SupplierReceiptId,
     string? SupplierReceiptCode,
     string? SupplierName,
     string? SupplierReference,
+    string DefectReasonCode,
+    List<string> EvidenceImageUrls,
     string? Reason,
     string? Note,
     List<InventoryReturnItemRequest> Items);
 
-public record ReviewInventoryReturnRequest(string? Reason);
+public record SupplierReturnDefectReasonResponse(string Code, string Label);
 
 public record InspectReturnRequest(string Disposition, string? Note);
 

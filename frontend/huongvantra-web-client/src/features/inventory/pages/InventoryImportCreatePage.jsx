@@ -23,6 +23,7 @@ import { fetchActiveSuppliers } from '../services/suppliersApi.js'
 import { fetchActiveSupplierProducts } from '../services/supplierProductsApi.js'
 import {
   parseSupplierReceiptTt200Excel,
+  TT200_SAMPLE_URL,
   TT200_TEMPLATE_URL,
 } from '../utils/supplierReceiptTt200Excel.js'
 
@@ -1302,7 +1303,7 @@ function InventoryImportCreatePage() {
             <div>
               <h2 className="text-lg font-bold text-slate-800">Dòng hàng nhập</h2>
               <p className="mt-1 text-xs text-slate-500">
-                Cách dễ: bấm “Tải mẫu” → điền mã hàng, số lượng, đơn giá → bấm “Nạp file”. Tên nhà cung cấp trong file phải giống tên trên hệ thống.
+                Cách dễ: bấm “Tải file có dữ liệu mẫu” để xem cách điền, hoặc “Tải mẫu” (trống) → điền mã hàng, số lượng, đơn giá → bấm “Nạp file”.
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -1313,6 +1314,14 @@ function InventoryImportCreatePage() {
               >
                 <span className="material-symbols-outlined text-[18px]">download</span>
                 Tải mẫu
+              </a>
+              <a
+                href={TT200_SAMPLE_URL}
+                download="phieu-nhap-kho-excel-tt200-co-du-lieu.xlsx"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                <span className="material-symbols-outlined text-[18px]">table</span>
+                Tải file có dữ liệu mẫu
               </a>
               <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">
                 <span className="material-symbols-outlined text-[18px]">upload_file</span>

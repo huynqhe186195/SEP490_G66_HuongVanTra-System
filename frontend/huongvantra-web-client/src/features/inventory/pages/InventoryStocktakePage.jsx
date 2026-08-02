@@ -4,6 +4,7 @@ import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
 import { promptDialog } from '../../../app/dialog.js'
 import { showError, showSuccess } from '../../../app/toast.js'
+import { getReasonSuggestions } from '../../shared/reasonSuggestions.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import { formatStockQuantity } from '../../products/utils/productDisplay.js'
 import { fetchAllActiveSkus, fetchAllActiveStoreSkus } from '../../products/services/productSkusApi.js'
@@ -55,6 +56,16 @@ const REASON_OPTIONS = [
   { value: 'FOUND_STOCK', label: 'Tìm thấy tồn' },
   { value: 'INBOUND_NOT_RECORDED', label: 'Nhập kho chưa ghi nhận' },
   { value: 'OTHER', label: 'Khác' },
+]
+
+/** Lý do từ chối gợi ý cho người duyệt kiểm kê, bấm để điền nhanh. */
+const REJECT_REASON_PRESETS = [
+  'Số liệu thực đếm chưa khớp, cần đếm lại.',
+  'Thiếu chứng từ hoặc hình ảnh minh chứng cho chênh lệch.',
+  'Chênh lệch quá lớn, cần giải trình chi tiết hơn.',
+  'Lý do chênh lệch khai báo chưa phù hợp thực tế.',
+  'Phiếu kiểm kê bị trùng với phiếu đã duyệt trước đó.',
+  'Kiểm kê thực hiện sai thời điểm quy định.',
 ]
 
 function getLocationLabel(location) {
@@ -198,21 +209,19 @@ function StocktakeDetailModal({ request, onClose, onAction, canSubmit = false, c
             <table className="min-w-full text-left text-sm">
               <thead className="bg-slate-50 text-xs font-bold uppercase tracking-wide text-slate-500">
                 <tr>
-                  <th className="px-4 py-3">SKU</th>
+                  <th className="px-4 py-3">Sản phẩm</th>
                   <th className="px-4 py-3 text-right">Hệ thống</th>
                   <th className="px-4 py-3 text-right">Thực đếm</th>
                   <th className="px-4 py-3 text-right">Chênh lệch</th>
                   <th className="px-4 py-3">Lý do</th>
-                  <th className="px-4 py-3">Chứng từ</th>
-                  <th className="px-4 py-3">Lô điều chỉnh</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {request.items.map((line) => (
                   <tr key={line.id}>
                     <td className="px-4 py-3">
-                      <p className="font-mono font-semibold text-[#356647]">{line.skuCode}</p>
-                      <p className="text-xs text-slate-500">{line.skuSnapshotName}</p>
+                      <p className="font-semibold text-slate-800">{line.skuSnapshotName || '—'}</p>
+                      <p className="mt-0.5 font-mono text-xs font-bold text-[#356647]">{line.skuCode || '—'}</p>
                     </td>
                     <td className="px-4 py-3 text-right">{formatStockQuantity(line.systemQuantitySnapshot)}</td>
                     <td className="px-4 py-3 text-right">{formatStockQuantity(line.actualQuantity)}</td>
@@ -220,10 +229,6 @@ function StocktakeDetailModal({ request, onClose, onAction, canSubmit = false, c
                       {line.variance > 0 ? '+' : ''}{formatStockQuantity(line.variance)}
                     </td>
                     <td className="px-4 py-3">{getReasonLabel(line.reasonCode)}</td>
-                    <td className="px-4 py-3 font-mono text-xs text-slate-600">
-                      {line.stockImportSlipCode || line.stockExportSlipCode || '—'}
-                    </td>
-                    <td className="px-4 py-3 font-mono text-xs text-slate-600">{line.warehouseBatchLotCode || '—'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -705,7 +710,8 @@ function InventoryStocktakePage() {
   const canCreateShelf = canCreateShelfStocktake(session)
   const canCreate = canCreateWarehouse || canCreateShelf
   const canReview = canReviewStocktake(session)
-  const fixedLocation = canCreateWarehouse ? 'Warehouse' : canCreateShelf ? 'Shelf' : null
+  // Quản lý chỉ theo dõi kiểm kê Kệ Hàng; kiểm kê Kho thuộc Thủ kho.
+  const fixedLocation = canCreateWarehouse ? 'Warehouse' : canCreateShelf || canReview ? 'Shelf' : null
   const canReopenDay = isBranchManager(session)
 
   const loadShelfDay = useCallback(async () => {
@@ -768,6 +774,7 @@ function InventoryStocktakePage() {
       defaultValue: 'Mở lại ngày bán',
       required: true,
       tone: 'primary',
+      suggestions: getReasonSuggestions('stocktakeReopenDay'),
     })
     if (reason == null) return
     setIsReopening(true)
@@ -792,11 +799,15 @@ function InventoryStocktakePage() {
       } else {
         const defaultReason = action === 'approve' ? 'Duyệt kiểm kê' : ''
         const reason = await promptDialog({
-          title: action === 'approve' ? 'Ghi chú duyệt' : 'Nhập lý do',
-          message: action === 'approve' ? 'Ghi chú duyệt' : 'Nhập lý do',
+          title: action === 'approve' ? 'Ghi chú duyệt' : 'Nhập lý do từ chối',
+          message: action === 'approve' ? 'Ghi chú duyệt' : 'Nhập lý do từ chối',
           defaultValue: defaultReason,
           required: action === 'reject',
+          presets: action === 'reject' ? REJECT_REASON_PRESETS : [],
+          placeholder:
+            action === 'reject' ? 'Chọn lý do gợi ý phía trên hoặc nhập lý do khác...' : '',
           tone: action === 'approve' ? 'primary' : 'danger',
+          suggestions: action === 'reject' ? getReasonSuggestions('stocktakeReject') : [],
         })
         if (reason == null) return
         if (action === 'approve') {
@@ -819,9 +830,13 @@ function InventoryStocktakePage() {
   return (
     <PageShell>
       <PageHeader
-        title="Kiểm kê tồn kho"
-        titleInfo="Ghi nhận chênh lệch thực đếm theo Kho hoặc Kệ Hàng, chờ duyệt trước khi áp tồn."
-        searchPlaceholder="Tìm mã phiếu, SKU, tên hàng, mã lô..."
+        title={fixedLocation === 'Warehouse' ? 'Kiểm kê Kho' : 'Kiểm kê kệ hàng'}
+        titleInfo={
+          fixedLocation === 'Warehouse'
+            ? 'Ghi nhận chênh lệch thực đếm tại Kho, chờ duyệt trước khi áp tồn.'
+            : 'Ghi nhận chênh lệch thực đếm tại Kệ Hàng, chờ duyệt trước khi áp tồn.'
+        }
+        searchPlaceholder="Tìm mã phiếu, tên hàng..."
         searchValue={searchInput}
         onSearchChange={(value) => resetPageAndSet(setSearchInput, value)}
         rightContent={(

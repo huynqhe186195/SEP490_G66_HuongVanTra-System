@@ -22,3 +22,13 @@ public record GetNotificationsRequest(
     bool UnreadOnly = false,
     int Page = 1,
     int PageSize = 20);
+
+public record BroadcastNotificationRequest(
+    string Type,
+    string Title,
+    string Body,
+    string? Link,
+    IReadOnlyList<string> RecipientRoleNames,
+    Guid? ReferenceId = null,
+    string? ReferenceType = null);
+

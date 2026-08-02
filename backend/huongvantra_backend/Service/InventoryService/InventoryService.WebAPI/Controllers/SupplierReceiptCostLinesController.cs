@@ -1,3 +1,4 @@
+using HuongVanTra.Shared.Auth;
 using InventoryService.Domain.Enums;
 using InventoryService.Infrastructure.Data;
 using Microsoft.AspNetCore.Authorization;
@@ -27,7 +28,7 @@ public record SupplierReceiptCostLinesResponse(List<SupplierReceiptCostLineResul
 public class SupplierReceiptCostLinesController(InventoryDbContext _db) : ControllerBase
 {
     [HttpGet]
-    [Authorize(Roles = "Admin,Manager,Accountant")]
+    [Authorize(Policy = PermissionNames.ViewCost)]
     public async Task<IActionResult> GetApprovedLines(
         [FromQuery] Guid? skuId = null,
         CancellationToken ct = default)

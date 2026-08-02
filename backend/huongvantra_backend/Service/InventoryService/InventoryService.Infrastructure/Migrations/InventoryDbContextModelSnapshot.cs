@@ -512,7 +512,7 @@ namespace InventoryService.Infrastructure.Migrations
                     b.ToTable("ReturnInspections", (string)null);
                 });
 
-            modelBuilder.Entity("InventoryService.Domain.Entities.ShelfReturnRequest", b =>
+            modelBuilder.Entity("InventoryService.Domain.Entities.ShelfReplenishmentSuggestion", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -521,116 +521,75 @@ namespace InventoryService.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
 
-                    b.Property<Guid>("CreatedBy")
-                        .HasColumnType("char(36)");
-
-                    b.Property<string>("CreatedByName")
-                        .HasMaxLength(255)
-                        .HasColumnType("varchar(255)");
-
-                    b.Property<string>("CreatedByRoleName")
-                        .HasMaxLength(100)
-                        .HasColumnType("varchar(100)");
-
-                    b.Property<string>("Note")
-                        .HasMaxLength(500)
-                        .HasColumnType("varchar(500)");
-
-                    b.Property<string>("OriginalStockAdjustmentRequestCode")
-                        .HasMaxLength(30)
-                        .HasColumnType("varchar(30)");
-
-                    b.Property<Guid?>("OriginalStockAdjustmentRequestId")
-                        .HasColumnType("char(36)");
-
-                    b.Property<string>("Reason")
-                        .HasMaxLength(500)
-                        .HasColumnType("varchar(500)");
-
-                    b.Property<string>("ReturnCode")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("varchar(30)");
-
-                    b.Property<string>("ReturnMode")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("varchar(30)");
-
-                    b.Property<string>("ReviewNote")
-                        .HasMaxLength(500)
-                        .HasColumnType("varchar(500)");
-
-                    b.Property<DateTime?>("ReviewedAt")
+                    b.Property<DateTime?>("HandledAt")
                         .HasColumnType("datetime(6)");
 
-                    b.Property<Guid?>("ReviewedBy")
+                    b.Property<Guid?>("HandledBy")
                         .HasColumnType("char(36)");
 
-                    b.Property<string>("ReviewedByName")
+                    b.Property<string>("HandledByName")
                         .HasMaxLength(255)
                         .HasColumnType("varchar(255)");
 
-                    b.Property<string>("ReviewedByRoleName")
+                    b.Property<string>("HandledByRoleName")
                         .HasMaxLength(100)
                         .HasColumnType("varchar(100)");
+
+                    b.Property<string>("HandledNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<string>("SourceStocktakeCode")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)");
+
+                    b.Property<Guid>("SourceStocktakeRequestId")
+                        .HasColumnType("char(36)");
 
                     b.Property<string>("Status")
                         .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)");
+
+                    b.Property<string>("SuggestionCode")
+                        .IsRequired()
                         .HasMaxLength(30)
                         .HasColumnType("varchar(30)");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("datetime(6)");
 
                     b.HasKey("Id");
 
                     b.HasIndex("CreatedAt");
 
-                    b.HasIndex("CreatedBy");
-
-                    b.HasIndex("OriginalStockAdjustmentRequestCode");
-
-                    b.HasIndex("OriginalStockAdjustmentRequestId");
-
-                    b.HasIndex("ReturnCode")
+                    b.HasIndex("SourceStocktakeRequestId")
                         .IsUnique();
-
-                    b.HasIndex("ReturnMode");
 
                     b.HasIndex("Status");
 
-                    b.ToTable("ShelfReturnRequests", (string)null);
+                    b.HasIndex("SuggestionCode")
+                        .IsUnique();
+
+                    b.ToTable("ShelfReplenishmentSuggestions", (string)null);
                 });
 
-            modelBuilder.Entity("InventoryService.Domain.Entities.ShelfReturnRequestItem", b =>
+            modelBuilder.Entity("InventoryService.Domain.Entities.ShelfReplenishmentSuggestionItem", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("char(36)");
 
-                    b.Property<string>("Note")
-                        .HasMaxLength(500)
-                        .HasColumnType("varchar(500)");
+                    b.Property<string>("InventoryUnitSnapshot")
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)");
 
-                    b.Property<int>("Quantity")
+                    b.Property<int>("ShelfLowStockThreshold")
                         .HasColumnType("int");
 
-                    b.Property<Guid?>("ShelfBatchId")
-                        .HasColumnType("char(36)");
-
-                    b.Property<string>("ShelfLotCode")
-                        .HasMaxLength(50)
-                        .HasColumnType("varchar(50)");
-
-                    b.Property<int?>("ShelfQtyAfter")
+                    b.Property<int>("ShelfQuantityAtStocktake")
                         .HasColumnType("int");
 
-                    b.Property<int?>("ShelfQtyBefore")
+                    b.Property<int>("ShelfReservedAtStocktake")
                         .HasColumnType("int");
-
-                    b.Property<Guid>("ShelfReturnRequestId")
-                        .HasColumnType("char(36)");
 
                     b.Property<string>("SkuCode")
                         .IsRequired()
@@ -645,48 +604,22 @@ namespace InventoryService.Infrastructure.Migrations
                         .HasMaxLength(255)
                         .HasColumnType("varchar(255)");
 
-                    b.Property<string>("StockExportSlipCode")
-                        .HasMaxLength(30)
-                        .HasColumnType("varchar(30)");
-
-                    b.Property<Guid?>("StockExportSlipId")
+                    b.Property<Guid>("SuggestionId")
                         .HasColumnType("char(36)");
 
-                    b.Property<string>("StockImportSlipCode")
-                        .HasMaxLength(30)
-                        .HasColumnType("varchar(30)");
-
-                    b.Property<Guid?>("StockImportSlipId")
-                        .HasColumnType("char(36)");
-
-                    b.Property<Guid?>("WarehouseBatchId")
-                        .HasColumnType("char(36)");
-
-                    b.Property<string>("WarehouseBatchLotCode")
-                        .HasMaxLength(50)
-                        .HasColumnType("varchar(50)");
-
-                    b.Property<int?>("WarehouseQtyAfter")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("WarehouseQtyBefore")
+                    b.Property<int>("WarehouseQuantityAtStocktake")
                         .HasColumnType("int");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ShelfBatchId");
-
-                    b.HasIndex("ShelfReturnRequestId");
-
                     b.HasIndex("SkuId");
 
-                    b.HasIndex("StockExportSlipId");
+                    b.HasIndex("SuggestionId");
 
-                    b.HasIndex("StockImportSlipId");
+                    b.HasIndex("SuggestionId", "SkuId")
+                        .IsUnique();
 
-                    b.HasIndex("WarehouseBatchId");
-
-                    b.ToTable("ShelfReturnRequestItems", (string)null);
+                    b.ToTable("ShelfReplenishmentSuggestionItems", (string)null);
                 });
 
             modelBuilder.Entity("InventoryService.Domain.Entities.SkuStock", b =>
@@ -763,6 +696,14 @@ namespace InventoryService.Infrastructure.Migrations
                     b.Property<Guid>("RequestedBy")
                         .HasColumnType("char(36)");
 
+                    b.Property<string>("RequestedByName")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("RequestedByRoleName")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
                     b.Property<string>("ReviewNote")
                         .HasMaxLength(500)
                         .HasColumnType("varchar(500)");
@@ -772,6 +713,14 @@ namespace InventoryService.Infrastructure.Migrations
 
                     b.Property<Guid?>("ReviewedBy")
                         .HasColumnType("char(36)");
+
+                    b.Property<string>("ReviewedByName")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("ReviewedByRoleName")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -787,6 +736,8 @@ namespace InventoryService.Infrastructure.Migrations
 
                     b.HasIndex("RequestedBy");
 
+                    b.HasIndex("RequestedByRoleName");
+
                     b.HasIndex("Status");
 
                     b.ToTable("StockAdjustmentRequests", (string)null);
@@ -798,8 +749,22 @@ namespace InventoryService.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("char(36)");
 
+                    b.Property<int>("ApprovedQuantity")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
+
+                    b.Property<string>("ClosedReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
                     b.Property<Guid?>("ExportSlipId")
                         .HasColumnType("char(36)");
+
+                    b.Property<int>("FulfilledQuantity")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
 
                     b.Property<int>("QuantityDelta")
                         .HasColumnType("int");
@@ -810,8 +775,21 @@ namespace InventoryService.Infrastructure.Migrations
                     b.Property<int>("QuantityOnHandSnapshot")
                         .HasColumnType("int");
 
+                    b.Property<int>("RejectedQuantity")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
+
+                    b.Property<string>("RejectionReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
                     b.Property<Guid>("RequestId")
                         .HasColumnType("char(36)");
+
+                    b.Property<string>("ReviewNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
 
                     b.Property<string>("SkuCode")
                         .IsRequired()
@@ -826,6 +804,11 @@ namespace InventoryService.Infrastructure.Migrations
                         .HasMaxLength(255)
                         .HasColumnType("varchar(255)");
 
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)");
+
                     b.Property<int?>("WarehouseQuantityOnHandAfter")
                         .HasColumnType("int");
 
@@ -836,6 +819,8 @@ namespace InventoryService.Infrastructure.Migrations
                     b.HasIndex("RequestId");
 
                     b.HasIndex("SkuId");
+
+                    b.HasIndex("Status");
 
                     b.ToTable("StockAdjustmentRequestItems", (string)null);
                 });
@@ -1409,6 +1394,206 @@ namespace InventoryService.Infrastructure.Migrations
                     b.HasIndex("WarehouseBatchId");
 
                     b.ToTable("StockImportSlipLines", (string)null);
+                });
+
+            modelBuilder.Entity("InventoryService.Domain.Entities.StockTransfer", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("CancellationReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<DateTime?>("CancelledAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid?>("CancelledBy")
+                        .HasColumnType("char(36)");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid?>("CompletedBy")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("CompletedByName")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("CompletedByRoleName")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("CreatedByName")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("CreatedByRoleName")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<string>("DestinationLocation")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)");
+
+                    b.Property<Guid?>("ExportSlipId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<Guid?>("ImportSlipId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<string>("SourceLocation")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)");
+
+                    b.Property<Guid?>("SourceRequestId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<Guid?>("SourceSuggestionId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)");
+
+                    b.Property<string>("TransferCode")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompletedAt");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("CreatedBy");
+
+                    b.HasIndex("ExportSlipId");
+
+                    b.HasIndex("ImportSlipId");
+
+                    b.HasIndex("SourceRequestId");
+
+                    b.HasIndex("SourceSuggestionId");
+
+                    b.HasIndex("Status");
+
+                    b.HasIndex("TransferCode")
+                        .IsUnique();
+
+                    b.ToTable("StockTransfers", (string)null);
+                });
+
+            modelBuilder.Entity("InventoryService.Domain.Entities.StockTransferBatchAllocation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("char(36)");
+
+                    b.Property<Guid>("DestinationWarehouseBatchId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<Guid>("DestinationWarehouseBatchItemId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("SourceWarehouseBatchId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<Guid>("SourceWarehouseBatchItemId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<Guid>("StockTransferId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<Guid>("StockTransferLineId")
+                        .HasColumnType("char(36)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DestinationWarehouseBatchId");
+
+                    b.HasIndex("DestinationWarehouseBatchItemId");
+
+                    b.HasIndex("SourceWarehouseBatchId");
+
+                    b.HasIndex("SourceWarehouseBatchItemId");
+
+                    b.HasIndex("StockTransferId");
+
+                    b.HasIndex("StockTransferLineId");
+
+                    b.ToTable("StockTransferBatchAllocations", (string)null);
+                });
+
+            modelBuilder.Entity("InventoryService.Domain.Entities.StockTransferLine", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("char(36)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("int");
+
+                    b.Property<string>("SkuCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<Guid>("SkuId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("SkuNameSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<Guid?>("SourceRequestLineId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<Guid>("StockTransferId")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("UnitNameSnapshot")
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SkuId");
+
+                    b.HasIndex("SourceRequestLineId");
+
+                    b.HasIndex("StockTransferId");
+
+                    b.HasIndex("StockTransferId", "SkuId")
+                        .IsUnique();
+
+                    b.ToTable("StockTransferLines", (string)null);
                 });
 
             modelBuilder.Entity("InventoryService.Domain.Entities.StocktakeRequest", b =>
@@ -2032,6 +2217,33 @@ namespace InventoryService.Infrastructure.Migrations
                     b.ToTable("SupplierReceiptItems", (string)null);
                 });
 
+            modelBuilder.Entity("InventoryService.Domain.Entities.SupplierReturnEvidenceImage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("char(36)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("ImageUrl")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("SupplierReturnRequestId")
+                        .HasColumnType("char(36)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SupplierReturnRequestId");
+
+                    b.ToTable("SupplierReturnEvidenceImages", (string)null);
+                });
+
             modelBuilder.Entity("InventoryService.Domain.Entities.SupplierReturnRequest", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2052,20 +2264,23 @@ namespace InventoryService.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("varchar(100)");
 
+                    b.Property<string>("DefectReasonCode")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("varchar(40)");
+
                     b.Property<string>("Note")
                         .HasMaxLength(500)
                         .HasColumnType("varchar(500)");
+
+                    b.Property<Guid>("OperationId")
+                        .HasColumnType("char(36)");
 
                     b.Property<string>("Reason")
                         .HasMaxLength(500)
                         .HasColumnType("varchar(500)");
 
                     b.Property<string>("ReturnCode")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("varchar(30)");
-
-                    b.Property<string>("ReturnMode")
                         .IsRequired()
                         .HasMaxLength(30)
                         .HasColumnType("varchar(30)");
@@ -2117,10 +2332,11 @@ namespace InventoryService.Infrastructure.Migrations
 
                     b.HasIndex("CreatedBy");
 
-                    b.HasIndex("ReturnCode")
+                    b.HasIndex("OperationId")
                         .IsUnique();
 
-                    b.HasIndex("ReturnMode");
+                    b.HasIndex("ReturnCode")
+                        .IsUnique();
 
                     b.HasIndex("Status");
 
@@ -2353,6 +2569,62 @@ namespace InventoryService.Infrastructure.Migrations
                     b.ToTable("WarehouseBatchItems", (string)null);
                 });
 
+            modelBuilder.Entity("InventoryService.Domain.Entities.WarehouseDailyReportSubmission", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("char(36)");
+
+                    b.Property<DateOnly>("BusinessDate")
+                        .HasColumnType("date");
+
+                    b.Property<int>("DoneTotal")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ExpiringBatchCount30Days")
+                        .HasColumnType("int");
+
+                    b.Property<int>("LowStockSkuCount")
+                        .HasColumnType("int");
+
+                    b.Property<int>("OpenCarryCount")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("SentAtUtc")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<Guid>("SentBy")
+                        .HasColumnType("char(36)");
+
+                    b.Property<string>("SentByName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<string>("SentByRoleName")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<string>("SnapshotJson")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<int>("TotalWarehouseQuantity")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BusinessDate")
+                        .IsUnique();
+
+                    b.HasIndex("SentAtUtc");
+
+                    b.HasIndex("SentBy");
+
+                    b.HasIndex("BusinessDate", "SentAtUtc");
+
+                    b.ToTable("WarehouseDailyReportSubmissions", (string)null);
+                });
+
             modelBuilder.Entity("InventoryService.Domain.Entities.ProductionOrderLine", b =>
                 {
                     b.HasOne("InventoryService.Domain.Entities.ProductionOrder", "Order")
@@ -2392,29 +2664,26 @@ namespace InventoryService.Infrastructure.Migrations
                     b.Navigation("QuarantineBatch");
                 });
 
-            modelBuilder.Entity("InventoryService.Domain.Entities.ShelfReturnRequestItem", b =>
+            modelBuilder.Entity("InventoryService.Domain.Entities.ShelfReplenishmentSuggestion", b =>
                 {
-                    b.HasOne("InventoryService.Domain.Entities.WarehouseBatch", "ShelfBatch")
+                    b.HasOne("InventoryService.Domain.Entities.StocktakeRequest", "SourceStocktakeRequest")
                         .WithMany()
-                        .HasForeignKey("ShelfBatchId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("SourceStocktakeRequestId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
 
-                    b.HasOne("InventoryService.Domain.Entities.ShelfReturnRequest", "ShelfReturnRequest")
+                    b.Navigation("SourceStocktakeRequest");
+                });
+
+            modelBuilder.Entity("InventoryService.Domain.Entities.ShelfReplenishmentSuggestionItem", b =>
+                {
+                    b.HasOne("InventoryService.Domain.Entities.ShelfReplenishmentSuggestion", "Suggestion")
                         .WithMany("Items")
-                        .HasForeignKey("ShelfReturnRequestId")
+                        .HasForeignKey("SuggestionId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("InventoryService.Domain.Entities.WarehouseBatch", "WarehouseBatch")
-                        .WithMany()
-                        .HasForeignKey("WarehouseBatchId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.Navigation("ShelfBatch");
-
-                    b.Navigation("ShelfReturnRequest");
-
-                    b.Navigation("WarehouseBatch");
+                    b.Navigation("Suggestion");
                 });
 
             modelBuilder.Entity("InventoryService.Domain.Entities.StockAdjustmentRequestItem", b =>
@@ -2542,6 +2811,106 @@ namespace InventoryService.Infrastructure.Migrations
                     b.Navigation("WarehouseBatch");
                 });
 
+            modelBuilder.Entity("InventoryService.Domain.Entities.StockTransfer", b =>
+                {
+                    b.HasOne("InventoryService.Domain.Entities.StockExportSlip", "ExportSlip")
+                        .WithMany()
+                        .HasForeignKey("ExportSlipId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("InventoryService.Domain.Entities.StockImportSlip", "ImportSlip")
+                        .WithMany()
+                        .HasForeignKey("ImportSlipId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("InventoryService.Domain.Entities.StockAdjustmentRequest", "SourceRequest")
+                        .WithMany()
+                        .HasForeignKey("SourceRequestId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("InventoryService.Domain.Entities.ShelfReplenishmentSuggestion", "SourceSuggestion")
+                        .WithMany()
+                        .HasForeignKey("SourceSuggestionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("ExportSlip");
+
+                    b.Navigation("ImportSlip");
+
+                    b.Navigation("SourceRequest");
+
+                    b.Navigation("SourceSuggestion");
+                });
+
+            modelBuilder.Entity("InventoryService.Domain.Entities.StockTransferBatchAllocation", b =>
+                {
+                    b.HasOne("InventoryService.Domain.Entities.WarehouseBatch", "DestinationWarehouseBatch")
+                        .WithMany()
+                        .HasForeignKey("DestinationWarehouseBatchId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("InventoryService.Domain.Entities.WarehouseBatchItem", "DestinationWarehouseBatchItem")
+                        .WithMany()
+                        .HasForeignKey("DestinationWarehouseBatchItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("InventoryService.Domain.Entities.WarehouseBatch", "SourceWarehouseBatch")
+                        .WithMany()
+                        .HasForeignKey("SourceWarehouseBatchId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("InventoryService.Domain.Entities.WarehouseBatchItem", "SourceWarehouseBatchItem")
+                        .WithMany()
+                        .HasForeignKey("SourceWarehouseBatchItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("InventoryService.Domain.Entities.StockTransfer", "StockTransfer")
+                        .WithMany("BatchAllocations")
+                        .HasForeignKey("StockTransferId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("InventoryService.Domain.Entities.StockTransferLine", "StockTransferLine")
+                        .WithMany("BatchAllocations")
+                        .HasForeignKey("StockTransferLineId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("DestinationWarehouseBatch");
+
+                    b.Navigation("DestinationWarehouseBatchItem");
+
+                    b.Navigation("SourceWarehouseBatch");
+
+                    b.Navigation("SourceWarehouseBatchItem");
+
+                    b.Navigation("StockTransfer");
+
+                    b.Navigation("StockTransferLine");
+                });
+
+            modelBuilder.Entity("InventoryService.Domain.Entities.StockTransferLine", b =>
+                {
+                    b.HasOne("InventoryService.Domain.Entities.StockAdjustmentRequestItem", "SourceRequestLine")
+                        .WithMany()
+                        .HasForeignKey("SourceRequestLineId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("InventoryService.Domain.Entities.StockTransfer", "StockTransfer")
+                        .WithMany("Lines")
+                        .HasForeignKey("StockTransferId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("SourceRequestLine");
+
+                    b.Navigation("StockTransfer");
+                });
+
             modelBuilder.Entity("InventoryService.Domain.Entities.StocktakeRequestItem", b =>
                 {
                     b.HasOne("InventoryService.Domain.Entities.StockExportSlip", "StockExportSlip")
@@ -2603,6 +2972,17 @@ namespace InventoryService.Infrastructure.Migrations
                     b.Navigation("WarehouseBatch");
                 });
 
+            modelBuilder.Entity("InventoryService.Domain.Entities.SupplierReturnEvidenceImage", b =>
+                {
+                    b.HasOne("InventoryService.Domain.Entities.SupplierReturnRequest", "SupplierReturnRequest")
+                        .WithMany("EvidenceImages")
+                        .HasForeignKey("SupplierReturnRequestId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("SupplierReturnRequest");
+                });
+
             modelBuilder.Entity("InventoryService.Domain.Entities.SupplierReturnRequestItem", b =>
                 {
                     b.HasOne("InventoryService.Domain.Entities.SupplierReturnRequest", "SupplierReturnRequest")
@@ -2656,7 +3036,7 @@ namespace InventoryService.Infrastructure.Migrations
                     b.Navigation("OutputLines");
                 });
 
-            modelBuilder.Entity("InventoryService.Domain.Entities.ShelfReturnRequest", b =>
+            modelBuilder.Entity("InventoryService.Domain.Entities.ShelfReplenishmentSuggestion", b =>
                 {
                     b.Navigation("Items");
                 });
@@ -2688,6 +3068,18 @@ namespace InventoryService.Infrastructure.Migrations
                     b.Navigation("Lines");
                 });
 
+            modelBuilder.Entity("InventoryService.Domain.Entities.StockTransfer", b =>
+                {
+                    b.Navigation("BatchAllocations");
+
+                    b.Navigation("Lines");
+                });
+
+            modelBuilder.Entity("InventoryService.Domain.Entities.StockTransferLine", b =>
+                {
+                    b.Navigation("BatchAllocations");
+                });
+
             modelBuilder.Entity("InventoryService.Domain.Entities.StocktakeRequest", b =>
                 {
                     b.Navigation("Items");
@@ -2700,6 +3092,8 @@ namespace InventoryService.Infrastructure.Migrations
 
             modelBuilder.Entity("InventoryService.Domain.Entities.SupplierReturnRequest", b =>
                 {
+                    b.Navigation("EvidenceImages");
+
                     b.Navigation("Items");
                 });
 

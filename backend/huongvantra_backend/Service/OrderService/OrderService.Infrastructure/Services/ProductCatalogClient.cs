@@ -32,6 +32,11 @@ public class ProductCatalogClient(HttpClient httpClient, ILogger<ProductCatalogC
                     item.SkuId,
                     item.CategoryId,
                     item.InventoryUnit,
+                    item.ProductType,
+                    item.IsPurchasable,
+                    item.CanBeBomComponent,
+                    item.CanUseInCustom,
+                    item.CanHaveBom,
                     item.CostPrice))
                 .ToList() ?? [];
         }
@@ -48,5 +53,10 @@ public class ProductCatalogClient(HttpClient httpClient, ILogger<ProductCatalogC
         Guid SkuId,
         int? CategoryId,
         string InventoryUnit,
+        string ProductType,
+        bool IsPurchasable,
+        bool CanBeBomComponent,
+        bool CanUseInCustom,
+        bool CanHaveBom,
         decimal CostPrice);
 }

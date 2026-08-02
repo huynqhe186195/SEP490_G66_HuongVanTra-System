@@ -43,7 +43,10 @@ export function confirmDialog(options = {}) {
  *   confirmLabel?: string,
  *   cancelLabel?: string,
  *   required?: boolean,
+ *   presets?: string[],
+ *   presetsLabel?: string,
  *   tone?: 'danger' | 'primary',
+ *   suggestions?: string[],
  * }} [options]
  * @returns {Promise<string|null>} null nếu hủy
  */
@@ -57,7 +60,10 @@ export function promptDialog(options = {}) {
     confirmLabel: options.confirmLabel ?? 'Xác nhận',
     cancelLabel: options.cancelLabel ?? 'Hủy bỏ',
     required: Boolean(options.required),
+    presets: Array.isArray(options.presets) ? options.presets : [],
+    presetsLabel: options.presetsLabel ?? 'Lý do thường gặp',
     tone: options.tone ?? 'primary',
+    suggestions: Array.isArray(options.suggestions) ? options.suggestions : [],
   })
 }
 

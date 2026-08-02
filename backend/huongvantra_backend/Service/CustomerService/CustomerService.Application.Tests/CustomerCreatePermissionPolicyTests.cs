@@ -10,7 +10,8 @@ namespace CustomerService.Application.Tests;
 /// <summary>
 /// PM không tước quyền tạo khách hàng mới của Sale: Sale (CREATE_ORDER) phải tạo được hồ sơ
 /// khách hàng qua <c>POST /api/customers</c>, trong khi quyền sửa hồ sơ vẫn giới hạn ở
-/// Manager (CREATE_CUSTOMER) và Admin (MANAGE_ROLE).
+/// Manager (CREATE_CUSTOMER).
+/// Admin (MANAGE_ROLE) là vai trò audit-only: không được ghi dữ liệu nghiệp vụ khách hàng.
 /// </summary>
 public sealed class CustomerCreatePermissionPolicyTests
 {
@@ -35,14 +36,23 @@ public sealed class CustomerCreatePermissionPolicyTests
     [Theory]
     [InlineData(PermissionNames.CreateOrder)]
     [InlineData(PermissionNames.CreateCustomer)]
-    [InlineData(PermissionNames.ManageRole)]
-    public async Task Create_customer_profile_allows_sale_manager_and_admin(string permission)
+    public async Task Create_customer_profile_allows_sale_and_manager(string permission)
     {
         var result = await AuthorizeAsync(
             UserWith(PermissionNames.ViewCustomer, permission),
             PermissionNames.CreateCustomerProfile);
 
         Assert.True(result.Succeeded);
+    }
+
+    [Fact]
+    public async Task Create_customer_profile_denies_audit_only_admin()
+    {
+        var result = await AuthorizeAsync(
+            UserWith(PermissionNames.ViewCustomer, PermissionNames.ManageRole),
+            PermissionNames.CreateCustomerProfile);
+
+        Assert.False(result.Succeeded);
     }
 
     [Fact]

@@ -52,7 +52,6 @@ function DashboardPage() {
       roles.includes('admin') ||
       roles.includes('manager') ||
       roles.includes('agency manager') ||
-      roles.includes('cooperative owner') ||
       isSalesStaff;
     const canViewCustomerGrowth = canViewRevenue;
 

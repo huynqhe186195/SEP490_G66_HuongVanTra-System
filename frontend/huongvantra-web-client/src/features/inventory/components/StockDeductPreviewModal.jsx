@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import ReasonSuggestionChips from '../../../components/shared/ReasonSuggestionChips.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { getStockStatusLabel } from '../../orders/utils/orderDisplay.js'
+import { getReasonSuggestions } from '../../shared/reasonSuggestions.js'
 import {
   cancelStockDeductQueue,
   confirmStockDeductQueue,
@@ -176,7 +178,7 @@ function StockDeductPreviewModal({ queueId, orderCode, canConfirm = false, canCa
                   <table className="w-full text-left text-sm">
                     <thead className="bg-[#fbf9f1]/50 text-xs font-bold uppercase tracking-wider text-slate-400">
                       <tr>
-                        <th className="px-4 py-3">SKU bán</th>
+                        <th className="px-4 py-3">Sản Phẩm</th>
                         <th className="px-4 py-3 text-right">Đã bán</th>
                         <th className="px-4 py-3 text-right">Đã trừ thành phẩm</th>
                         <th className="px-4 py-3 text-right">Chờ xử lý BOM</th>
@@ -185,8 +187,9 @@ function StockDeductPreviewModal({ queueId, orderCode, canConfirm = false, canCa
                     <tbody className="divide-y divide-slate-50">
                       {preview.lines.map((line) => (
                         <tr key={line.skuId}>
-                          <td className="px-4 py-3 font-medium text-slate-800">
-                            {line.skuCode || line.skuName}
+                          <td className="px-4 py-3">
+                            <p className="font-medium text-slate-800">{line.skuName || '—'}</p>
+                            <p className="font-mono text-xs text-slate-500">{line.skuCode}</p>
                           </td>
                           <td className="px-4 py-3 text-right text-slate-700">{line.orderedQuantity}</td>
                           <td className="px-4 py-3 text-right text-slate-700">{line.finishedDeductedQuantity}</td>
@@ -204,7 +207,7 @@ function StockDeductPreviewModal({ queueId, orderCode, canConfirm = false, canCa
                 <table className="w-full text-left text-sm">
                   <thead className="bg-[#fbf9f1]/50 text-xs font-bold uppercase tracking-wider text-slate-400">
                     <tr>
-                      <th className="px-4 py-3">SKU</th>
+                      <th className="px-4 py-3">Sản Phẩm</th>
                       <th className="px-4 py-3 text-right">Cần trừ</th>
                       <th className="px-4 py-3 text-right">Tồn hiện có</th>
                       <th className="px-4 py-3 text-right">Thiếu</th>
@@ -291,6 +294,12 @@ function StockDeductPreviewModal({ queueId, orderCode, canConfirm = false, canCa
                 <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-950">
                   <label className="block">
                     <span className="font-semibold">Lý do hủy *</span>
+                    <ReasonSuggestionChips
+                      className="mt-2"
+                      suggestions={getReasonSuggestions('stockDeductCancel')}
+                      value={cancelReason}
+                      onSelect={setCancelReason}
+                    />
                     <textarea
                       className="mt-2 min-h-24 w-full rounded-lg border border-red-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-red-400"
                       value={cancelReason}

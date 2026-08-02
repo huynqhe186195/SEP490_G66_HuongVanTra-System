@@ -1,3 +1,4 @@
+using HuongVanTra.Shared.Auth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using ProductService.Application.DTOs.Requests;
@@ -18,7 +19,7 @@ public class BrandsController(BrandLogic _brandLogic) : ControllerBase
         Ok(await _brandLogic.GetByIdAsync(id));
 
     [HttpPost]
-    [Authorize(Roles = "Warehouse")]
+    [Authorize(Policy = PermissionNames.ManageCatalog)]
     public async Task<IActionResult> Create([FromBody] CreateBrandRequest request)
     {
         var result = await _brandLogic.CreateAsync(request);
@@ -26,12 +27,12 @@ public class BrandsController(BrandLogic _brandLogic) : ControllerBase
     }
 
     [HttpPut("{id:int}")]
-    [Authorize(Roles = "Warehouse")]
+    [Authorize(Policy = PermissionNames.ManageCatalog)]
     public async Task<IActionResult> Update(int id, [FromBody] UpdateBrandRequest request) =>
         Ok(await _brandLogic.UpdateAsync(id, request));
 
     [HttpDelete("{id:int}")]
-    [Authorize(Roles = "Warehouse")]
+    [Authorize(Policy = PermissionNames.ManageCatalog)]
     public async Task<IActionResult> Delete(int id)
     {
         await _brandLogic.DeleteAsync(id);
@@ -39,7 +40,7 @@ public class BrandsController(BrandLogic _brandLogic) : ControllerBase
     }
 
     [HttpPost("{id:int}/restore")]
-    [Authorize(Roles = "Warehouse")]
+    [Authorize(Policy = PermissionNames.ManageCatalog)]
     public async Task<IActionResult> Restore(int id) =>
         Ok(await _brandLogic.RestoreAsync(id));
 }

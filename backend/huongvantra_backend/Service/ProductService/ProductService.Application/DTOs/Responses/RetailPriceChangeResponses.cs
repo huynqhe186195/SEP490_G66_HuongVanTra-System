@@ -39,3 +39,5 @@ public record NotificationResponse(
     DateTime CreatedAt);
 
 public record NotificationSummaryResponse(int UnreadCount);
+
+public record BroadcastNotificationResponse(int CreatedCount, IReadOnlyList<NotificationResponse> Items);

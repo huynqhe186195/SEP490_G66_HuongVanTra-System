@@ -11,11 +11,8 @@ namespace InventoryService.WebAPI.Controllers;
 [Authorize]
 public class SuppliersController(InventoryLogic _logic) : ControllerBase
 {
-    private const string ViewRoles = "Manager,Admin,Accountant,Warehouse";
-    private const string WriteRoles = "Accountant";
-
     [HttpGet]
-    [Authorize(Roles = ViewRoles)]
+    [Authorize(Policy = PermissionNames.ViewInventory)]
     public async Task<IActionResult> GetList(
         CancellationToken ct,
         [FromQuery] string? search = null,
@@ -27,21 +24,21 @@ public class SuppliersController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpGet("active")]
-    [Authorize(Roles = ViewRoles)]
+    [Authorize(Policy = PermissionNames.ViewInventory)]
     public async Task<IActionResult> GetActiveList(CancellationToken ct)
     {
         return Ok(await _logic.GetActiveSuppliersAsync(ct));
     }
 
     [HttpGet("{id:guid}")]
-    [Authorize(Roles = ViewRoles)]
+    [Authorize(Policy = PermissionNames.ViewInventory)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
     {
         return Ok(await _logic.GetSupplierAsync(id, ct));
     }
 
     [HttpPost]
-    [Authorize(Roles = WriteRoles)]
+    [Authorize(Policy = PermissionNames.ManageSuppliers)]
     public async Task<IActionResult> Create([FromBody] CreateSupplierRequest request, CancellationToken ct)
     {
         var created = await _logic.CreateSupplierAsync(request, ct);
@@ -49,21 +46,21 @@ public class SuppliersController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
-    [Authorize(Roles = WriteRoles)]
+    [Authorize(Policy = PermissionNames.ManageSuppliers)]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateSupplierRequest request, CancellationToken ct)
     {
         return Ok(await _logic.UpdateSupplierAsync(id, request, ct));
     }
 
     [HttpDelete("{id:guid}")]
-    [Authorize(Roles = WriteRoles)]
+    [Authorize(Policy = PermissionNames.ManageSuppliers)]
     public async Task<IActionResult> SoftDelete(Guid id, CancellationToken ct)
     {
         return Ok(await _logic.SoftDeleteSupplierAsync(id, ct));
     }
 
     [HttpPost("{id:guid}/restore")]
-    [Authorize(Roles = WriteRoles)]
+    [Authorize(Policy = PermissionNames.ManageSuppliers)]
     public async Task<IActionResult> Restore(Guid id, CancellationToken ct)
     {
         return Ok(await _logic.RestoreSupplierAsync(id, ct));

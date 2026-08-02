@@ -43,6 +43,7 @@ public class StocktakeRequestsController(InventoryLogic _logic) : ControllerBase
         && string.Equals(location?.Trim(), "Shelf", StringComparison.OrdinalIgnoreCase);
 
     [HttpGet]
+    [Authorize(Policy = PermissionNames.StockAdjustmentReadAccess)]
     public async Task<IActionResult> GetList(
         CancellationToken ct,
         [FromQuery] string? status,
@@ -68,6 +69,7 @@ public class StocktakeRequestsController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpGet("reason-codes")]
+    [Authorize(Policy = PermissionNames.StockAdjustmentReadAccess)]
     public IActionResult GetReasonCodes()
     {
         if (!CanViewAllStocktakes && !IsSaleActor)
@@ -79,6 +81,7 @@ public class StocktakeRequestsController(InventoryLogic _logic) : ControllerBase
     /// Trạng thái kiểm kê kệ đầu/cuối ngày (toàn cửa hàng — không giới hạn theo người tạo).
     /// </summary>
     [HttpGet("shelf-day-status")]
+    [Authorize(Policy = PermissionNames.StockAdjustmentReadAccess)]
     public async Task<IActionResult> GetShelfDayStatus([FromQuery] DateTime? date, CancellationToken ct)
     {
         if (!CanViewAllStocktakes && !IsSaleActor)
@@ -87,9 +90,9 @@ public class StocktakeRequestsController(InventoryLogic _logic) : ControllerBase
         return Ok(await _logic.GetShelfDayStocktakeStatusAsync(date, ct));
     }
 
-    /// <summary>Manager/Admin mở lại ngày bán — hủy marker kiểm kệ cuối ngày.</summary>
+    /// <summary>Manager mở lại ngày bán — hủy marker kiểm kệ cuối ngày.</summary>
     [HttpPost("reopen-shelf-day")]
-    [Authorize(Roles = "Manager,Admin")]
+    [Authorize(Policy = PermissionNames.ApproveInventory)]
     public async Task<IActionResult> ReopenShelfDay(
         [FromBody] ReviewStocktakeRequest request,
         [FromQuery] DateTime? date,
@@ -103,6 +106,7 @@ public class StocktakeRequestsController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpGet("{id:guid}")]
+    [Authorize(Policy = PermissionNames.StockAdjustmentReadAccess)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
     {
         if (!CanViewAllStocktakes && !IsSaleActor)
@@ -125,6 +129,7 @@ public class StocktakeRequestsController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpPost]
+    [Authorize(Policy = PermissionNames.StockAdjustmentCreateAccess)]
     public async Task<IActionResult> Create([FromBody] CreateStocktakeRequest request, CancellationToken ct)
     {
         var userId = User.GetUserId();
@@ -175,7 +180,7 @@ public class StocktakeRequestsController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpPost("{id:guid}/approve")]
-    [Authorize(Roles = "Manager")]
+    [Authorize(Policy = PermissionNames.ApproveInventory)]
     public async Task<IActionResult> Approve(Guid id, [FromBody] ReviewStocktakeRequest? request, CancellationToken ct)
     {
         if (!IsManagerActor) return Forbid();
@@ -184,7 +189,7 @@ public class StocktakeRequestsController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpPost("{id:guid}/reject")]
-    [Authorize(Roles = "Manager")]
+    [Authorize(Policy = PermissionNames.ApproveInventory)]
     public async Task<IActionResult> Reject(Guid id, [FromBody] ReviewStocktakeRequest request, CancellationToken ct)
     {
         if (!IsManagerActor) return Forbid();

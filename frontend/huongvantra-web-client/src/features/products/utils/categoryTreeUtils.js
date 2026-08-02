@@ -64,7 +64,7 @@ export function flattenCategoryTreeForSelect(categories = []) {
         depth,
         pathParts,
         pathLabel: pathParts.join(' > '),
-        selectLabel: `${'  '.repeat(depth)}${depth > 0 ? '└ ' : ''}${node.name}`,
+        selectLabel: depth > 0 ? `└${node.name}` : node.name,
       })
       if (node.children?.length) walk(node.children, depth + 1, pathParts)
     }

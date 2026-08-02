@@ -396,6 +396,27 @@ public sealed class SupplierReceiptAverageCostTests
                 [(1, 3), (2, 3)]));
     }
 
+    [Fact]
+    public async Task LegacyCostPriceWithoutReconciliation_BlocksGroupAsReconciliationRequired()
+    {
+        var skuId = Guid.NewGuid();
+        var store = new TestCostStore(300m, skuId);
+        store.Variant.CostBasisReconciledAt = null;
+        var consumer = CreateConsumer(store);
+
+        await consumer.ProcessAsync(Event(Guid.NewGuid(), skuId, 1, 1, 400m));
+
+        Assert.Equal(300m, store.Variant.CostPrice);
+        Assert.Equal(0m, store.Variant.TotalApprovedInboundQuantity);
+        Assert.Equal(0m, store.Variant.TotalApprovedInboundValue);
+        var history = store.Histories.Single();
+        Assert.False(history.WasApplied);
+        Assert.Equal("reconciliation_required", history.ProcessingResult);
+        Assert.Equal(
+            [history.SourceReceiptId],
+            await store.GetPendingReconciliationReceiptIdsAsync(skuId, CancellationToken.None));
+    }
+
     private static SupplierReceiptApprovedCostRecordedConsumer CreateConsumer(
         ISupplierReceiptCostStore store) =>
         new(
@@ -467,7 +488,12 @@ public sealed class SupplierReceiptAverageCostTests
                 ProductId = Guid.NewGuid(),
                 SkuCode = "UAT-SKU",
                 VariantName = "UAT SKU",
-                CostPrice = costPrice
+                CostPrice = costPrice,
+                // Fixture mặc định là SKU đã có cost basis hợp lệ, nếu không gate
+                // RequiresCostBasisReconciliation sẽ chặn mọi phiếu và các test
+                // sequence/idempotency/superseded bên dưới không còn kiểm được gì.
+                // Test nào cần kiểm chính gate thì set lại thành null.
+                CostBasisReconciledAt = DateTime.UtcNow
             };
         }
 
@@ -566,14 +592,20 @@ public sealed class SupplierReceiptAverageCostTests
                     .FirstOrDefault());
         }
 
-        // Reconciliation đọc ngoài transaction lock nên không AssertLocked.
-        public Task<List<Guid>> GetActiveVariantIdsAsync(CancellationToken cancellationToken) =>
-            Task.FromResult(new List<Guid> { Variant.Id });
+        // Ba method dưới đây được gọi ngoài phạm vi LockVariant trong
+        // CostBasisReconciliationService nên không AssertLocked.
+        public Task<List<Guid>> GetActiveVariantIdsAsync(CancellationToken cancellationToken)
+        {
+            Record("GetActiveVariantIds");
+            return Task.FromResult(new List<Guid> { Variant.Id });
+        }
 
         public Task<List<ProductCostPriceHistory>> GetAppliedHistoryForSkuAsync(
             Guid skuId,
-            CancellationToken cancellationToken) =>
-            Task.FromResult(
+            CancellationToken cancellationToken)
+        {
+            Record("GetAppliedHistoryForSku");
+            return Task.FromResult(
                 Histories
                     .Where(history =>
                         history.SkuId == skuId
@@ -584,12 +616,16 @@ public sealed class SupplierReceiptAverageCostTests
                     .ThenBy(history => history.SourceReceiptId)
                     .ThenBy(history => history.ReceiptLineOrder)
                     .ThenBy(history => history.SourceReceiptLineId)
+                    .Select(Clone)
                     .ToList());
+        }
 
         public Task<List<Guid>> GetPendingReconciliationReceiptIdsAsync(
             Guid skuId,
-            CancellationToken cancellationToken) =>
-            Task.FromResult(
+            CancellationToken cancellationToken)
+        {
+            Record("GetPendingReconciliationReceiptIds");
+            return Task.FromResult(
                 Histories
                     .Where(history =>
                         history.SkuId == skuId
@@ -605,6 +641,7 @@ public sealed class SupplierReceiptAverageCostTests
                     .ThenBy(group => group.SourceReceiptId.ToString("D"), StringComparer.Ordinal)
                     .Select(group => group.SourceReceiptId)
                     .ToList());
+        }
 
         public void AddHistory(ProductCostPriceHistory history)
         {

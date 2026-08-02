@@ -60,7 +60,7 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
             ?? throw new ProductValidationException("Không tìm thấy SKU/ProductVariant.");
 
         return variant.BomLines
-            .Where(line => !line.IsDeleted)
+            .Where(line => !line.IsDeleted && !line.IsRequiredBaseComponent)
             .Select(MapBomLineResponse)
             .ToList();
     }
@@ -70,30 +70,61 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
         if (request is null)
             throw new ProductValidationException("Request body là bắt buộc.");
 
-        var variant = await _productRepository.GetVariantByIdAsync(variantId)
+        var aggregate = await _productRepository.GetVariantBomSynchronizationAggregateAsync(variantId)
             ?? throw new ProductValidationException("Không tìm thấy SKU/ProductVariant.");
+        var variant = aggregate.TargetVariant;
+
+        if (!variant.IsBaseUnitVariant || variant.BaseVariantId.HasValue)
+        {
+            throw new ProductValidationException(
+                "BOM của SKU quy đổi được tự động tính từ SKU đơn vị cơ bản. Hãy cập nhật BOM của SKU đơn vị cơ bản hoặc tỷ lệ quy đổi.");
+        }
 
         if (variant.Product.ProductType != ProductType.THANH_PHAM)
             throw new ProductValidationException("Chỉ SKU Sản phẩm kệ mới được cấu hình BOM.");
+        if (!BomCapabilityRules.CanOwnBom(
+                variant.Product.ProductType,
+                variant.CanHaveBom,
+                variant.IsActive))
+        {
+            throw new ProductValidationException($"SKU {variant.SkuCode} không được phép có BOM.");
+        }
 
         var lines = request.Lines ?? [];
-        var resolvedLines = await BuildVariantBomLinesAsync(
+        var resolvedBaseLines = await BuildVariantBomLinesAsync(
             lines,
             variant.Product.ProductType,
             variant,
             new Dictionary<string, ProductVariant>(StringComparer.OrdinalIgnoreCase),
             new Dictionary<string, ProductVariant>(StringComparer.OrdinalIgnoreCase));
-        await EnsureNoBomCyclesAsync(new Dictionary<Guid, List<Guid>>
+
+        var replacements = new List<VariantBomReplacement>
         {
-            [variant.Id] = resolvedLines
+            new(variant.Id, resolvedBaseLines)
+        };
+
+        foreach (var derivedVariant in aggregate.DirectDerivedVariants)
+        {
+            ValidateDirectDerivedVariant(variant, derivedVariant);
+            replacements.Add(new VariantBomReplacement(
+                derivedVariant.Id,
+                DerivedBomGenerator.Generate(resolvedBaseLines, derivedVariant)));
+        }
+
+        await EnsureNoBomCyclesAsync(replacements.ToDictionary(
+            replacement => replacement.VariantId,
+            replacement => replacement.Lines
                 .Where(line => line.ComponentVariantId.HasValue)
                 .Select(line => line.ComponentVariantId!.Value)
-                .ToList()
-        });
+                .ToList()));
 
-        var updatedBom = await _productRepository.ReplaceVariantBomAsync(variantId, resolvedLines);
+        await _productRepository.ApplyVariantBomSynchronizationAsync(
+            new VariantBomSynchronizationPlan(variant.ProductId, variant.Id, replacements));
+
+        var updatedBom = await _productRepository.GetVariantByIdAsync(variantId)
+            ?? throw new ProductValidationException("Không tìm thấy SKU/ProductVariant sau khi cập nhật BOM.");
         return updatedBom.BomLines
-            .Where(line => !line.IsDeleted)
+            .Where(line => !line.IsDeleted && !line.IsRequiredBaseComponent)
             .Select(MapBomLineResponse)
             .ToList();
     }
@@ -176,6 +207,7 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
         var variants = MergeVariants(
             ProductInputValidator.ValidateVariants(request.Variants),
             ProductInputValidator.ValidateVariantGenerator(request.VariantGenerator));
+        ValidateBaseDerivedTransitions(product.Variants, variants, request.Variants);
         var attributes = ProductInputValidator.ValidateAttributes(request.Attributes);
 
         _ = await _categoryRepository.GetByIdAsync(input.CategoryId)
@@ -202,7 +234,13 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
         Replace(product.Images, images.Select(MapImage));
         Replace(product.Units, units.Select(MapUnit));
         Replace(product.AttributeValues, MapAttributeValues(attributes));
-        Replace(product.Variants, await MapVariantsAsync(product.Id, input.Name, variants, request.Variants, product.ProductType));
+        Replace(product.Variants, await MapVariantsAsync(
+            product.Id,
+            input.Name,
+            variants,
+            request.Variants,
+            product.ProductType,
+            product.Variants));
 
         var updated = await _productRepository.UpdateAsync(product);
         return MapToResponse(updated, CatalogViewScope.Warehouse);
@@ -237,10 +275,14 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
         string productName,
         List<ValidatedProductVariantInput> inputs,
         List<ProductVariantRequest>? rawRequests = null,
-        ProductType productType = ProductType.THANH_PHAM)
+        ProductType productType = ProductType.THANH_PHAM,
+        IEnumerable<ProductVariant>? existingVariants = null)
     {
         var variants = new List<ProductVariant>();
         var usedInBatch = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var existingBySku = (existingVariants ?? [])
+            .Where(variant => !string.IsNullOrWhiteSpace(variant.SkuCode))
+            .ToDictionary(variant => variant.SkuCode, StringComparer.OrdinalIgnoreCase);
         var explicitBaseCount = inputs.Count(input => input.IsBaseUnitVariant == true);
         if (explicitBaseCount > 1)
             throw new ProductValidationException("Chi duoc chon mot SKU don vi goc.");
@@ -250,9 +292,14 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
             var skuCode = string.IsNullOrWhiteSpace(input.SkuCode)
                 ? await GenerateUniqueVariantSkuAsync(productName, input.VariantName, usedInBatch)
                 : input.SkuCode;
-            if (await _productRepository.ExistsVariantSkuCodeAsync(skuCode))
+            if (!usedInBatch.Add(skuCode))
+                throw new ProductValidationException($"Mã SKU '{skuCode}' bị trùng trong danh sách đơn vị tính.");
+
+            existingBySku.TryGetValue(skuCode, out var existingVariant);
+            if (existingVariant is not null && existingVariant.ProductId != productId)
+                throw new ProductValidationException($"SKU '{skuCode}' không thuộc Product đang cập nhật.");
+            if (await _productRepository.ExistsVariantSkuCodeAsync(skuCode, existingVariant?.Id))
                 throw new DuplicateSkuCodeException(skuCode);
-            usedInBatch.Add(skuCode);
 
             var unitName = ResolveVariantUnitName(input);
             var isBaseUnitVariant = input.IsBaseUnitVariant ?? (explicitBaseCount == 0 && i == 0);
@@ -261,32 +308,42 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
                 throw new ProductValidationException($"Ty le quy doi cua SKU {skuCode} phai lon hon 0.");
             if (!BomUnitRules.IsIntegerQuantity(conversionRate))
                 throw new ProductValidationException($"Ty le quy doi cua SKU {skuCode} phai la so nguyen duong.");
-            var variantId = Guid.NewGuid();
-
-            variants.Add(new ProductVariant
+            var variant = existingVariant ?? new ProductVariant
             {
-                Id = variantId,
-                ProductId = productId,
-                SkuCode = skuCode,
-                Barcode = input.Barcode,
-                VariantName = input.VariantName,
-                OptionValuesJson = input.OptionValuesJson,
-                CostPrice = input.CostPrice,
-                RetailPrice = input.RetailPrice,
-                MinStock = input.MinStock,
-                MaxStock = input.MaxStock,
-                IsSellable = input.IsSellable,
-                AllowRewardPoints = input.AllowRewardPoints,
-                // Mặc định mua được từ NCC; bỏ tick chỉ khi SKU thuần tự sản xuất.
-                IsPurchasable = input.IsPurchasable ?? true,
-                IsActive = input.IsActive,
-                ImageUrl = input.ImageUrl,
-                UnitName = unitName,
-                ConversionRate = conversionRate,
-                IsBaseUnitVariant = isBaseUnitVariant,
-                IsAutoGeneratedSku = input.IsAutoGeneratedSku ?? string.IsNullOrWhiteSpace(input.SkuCode),
-                Units = BuildVariantUnits(productId, variantId, unitName, input)
-            });
+                Id = Guid.NewGuid(),
+                ProductId = productId
+            };
+            var variantId = variant.Id;
+            var capabilities = ProductCapabilityRules.Resolve(
+                productType,
+                input.IsPurchasable,
+                input.CanBeBomComponent,
+                input.CanUseInCustom,
+                input.CanHaveBom);
+
+            variant.ProductId = productId;
+            variant.SkuCode = skuCode;
+            variant.Barcode = input.Barcode;
+            variant.VariantName = input.VariantName;
+            variant.OptionValuesJson = input.OptionValuesJson;
+            variant.CostPrice = input.CostPrice;
+            variant.RetailPrice = input.RetailPrice;
+            variant.MinStock = input.MinStock;
+            variant.MaxStock = input.MaxStock;
+            variant.IsSellable = input.IsSellable;
+            variant.AllowRewardPoints = input.AllowRewardPoints;
+            variant.IsActive = input.IsActive;
+            variant.ImageUrl = input.ImageUrl;
+            variant.UnitName = unitName;
+            variant.ConversionRate = conversionRate;
+            variant.IsBaseUnitVariant = isBaseUnitVariant;
+            variant.IsAutoGeneratedSku = input.IsAutoGeneratedSku ?? string.IsNullOrWhiteSpace(input.SkuCode);
+            variant.IsPurchasable = capabilities.IsPurchasable;
+            variant.CanBeBomComponent = capabilities.CanBeBomComponent;
+            variant.CanUseInCustom = capabilities.CanUseInCustom;
+            variant.CanHaveBom = capabilities.CanHaveBom;
+            Replace(variant.Units, BuildVariantUnits(productId, variantId, unitName, input));
+            variants.Add(variant);
         }
 
         var localBySku = variants.ToDictionary(v => v.SkuCode, StringComparer.OrdinalIgnoreCase);
@@ -301,17 +358,36 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
         await ResolveBaseVariantReferencesAsync(inputs, variants, localBySku, localByRequestKey);
 
         var pendingEdges = new Dictionary<Guid, List<Guid>>();
-        for (var i = 0; i < variants.Count; i++)
-        {
-            var bomLines = rawRequests != null && i < rawRequests.Count
-                ? await BuildVariantBomLinesAsync(rawRequests[i].BomLines, productType, variants[i], localBySku, localByRequestKey)
-                : [];
 
-            variants[i].BomLines = bomLines;
-            pendingEdges[variants[i].Id] = bomLines
+        async Task BuildAndAssignBomAsync(int index)
+        {
+            var rawLines = rawRequests != null && index < rawRequests.Count
+                ? rawRequests[index].BomLines
+                : null;
+            var bomLines = await BuildVariantBomLinesAsync(
+                rawLines,
+                productType,
+                variants[index],
+                localBySku,
+                localByRequestKey);
+
+            variants[index].BomLines = bomLines;
+            pendingEdges[variants[index].Id] = bomLines
                 .Where(line => line.ComponentVariantId.HasValue)
                 .Select(line => line.ComponentVariantId!.Value)
                 .ToList();
+        }
+
+        for (var i = 0; i < variants.Count; i++)
+        {
+            if (variants[i].IsBaseUnitVariant)
+                await BuildAndAssignBomAsync(i);
+        }
+
+        for (var i = 0; i < variants.Count; i++)
+        {
+            if (!variants[i].IsBaseUnitVariant)
+                await BuildAndAssignBomAsync(i);
         }
 
         await EnsureNoBomCyclesAsync(pendingEdges);
@@ -334,14 +410,25 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
             return [];
         }
 
+        if (lines.Count > 0 && !BomCapabilityRules.CanOwnBom(productType, outputVariant.CanHaveBom, outputVariant.IsActive))
+            throw new ProductValidationException($"SKU {outputVariant.SkuCode} khong duoc phep co BOM.");
+
         foreach (var line in lines)
             ValidatePositiveIntegerBomQuantity(line.Quantity);
 
-        var manualLines = lines
-            .Where(line => !line.IsRequiredBaseComponent)
-            .ToList();
+        if (lines.Any(line => line.IsRequiredBaseComponent))
+            throw new ProductValidationException("Client khong duoc gui IsRequiredBaseComponent.");
+
+        var manualLines = lines;
 
         var requiredBaseVariant = await ResolveRequiredBaseVariantAsync(outputVariant, localBySku);
+        if (requiredBaseVariant is not null)
+        {
+            if (manualLines.Count > 0)
+                throw new ProductValidationException("SKU quy doi chi nhan BOM tu SKU don vi co ban.");
+
+            return DerivedBomGenerator.Generate(requiredBaseVariant, outputVariant);
+        }
 
         var duplicate = manualLines
             .GroupBy(GetBomLineDedupKey, StringComparer.OrdinalIgnoreCase)
@@ -350,17 +437,6 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
             throw new ProductValidationException("Không được chọn trùng component trong một BOM.");
 
         var result = new List<ProductVariantBomLine>();
-        if (requiredBaseVariant != null)
-        {
-            result.Add(new ProductVariantBomLine
-            {
-                MaterialId = requiredBaseVariant.ProductId,
-                ComponentVariantId = requiredBaseVariant.Id,
-                Quantity = outputVariant.ConversionRate,
-                IsRequiredBaseComponent = true
-            });
-        }
-
         foreach (var line in manualLines)
         {
             var componentVariant = await ResolveComponentVariantAsync(line, localBySku, localByRequestKey);
@@ -371,7 +447,7 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
                 if (requiredBaseVariant != null && componentVariant.Id == requiredBaseVariant.Id)
                     throw new ProductValidationException($"SKU {outputVariant.SkuCode} da co component bat buoc theo quy doi, khong duoc them trung base SKU.");
 
-                EnsureAllowedBomComponentType(componentVariant.Product?.ProductType ?? productType, componentVariant.SkuCode);
+                EnsureAllowedBomComponent(componentVariant);
                 result.Add(new ProductVariantBomLine
                 {
                     MaterialId = componentVariant.ProductId,
@@ -389,10 +465,11 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
             var materialCandidate = materialCandidates.FirstOrDefault()
                 ?? throw new ProductValidationException("Co component BOM khong ton tai hoac da bi xoa.");
             var inferredVariant = InferSingleActiveVariant(materialCandidate);
-            if (inferredVariant != null)
-                EnsureAllowedBomComponentType(materialCandidate.ProductType, inferredVariant.SkuCode);
-            else
-                EnsureAllowedLegacyBomComponentType(materialCandidate);
+            if (inferredVariant is null)
+                throw new ProductValidationException(
+                    $"Product component {materialCandidate.Name} phai chon ComponentVariantId cu the de kiem tra capability SKU.");
+
+            EnsureAllowedBomComponent(inferredVariant);
 
             var quantity = inferredVariant == null
                 ? NormalizeBomQuantities([new BomLineRequest(line.MaterialId, line.Quantity)], [materialCandidate])[0].Quantity
@@ -410,6 +487,7 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
         return result;
     }
 
+
     private async Task<ProductVariant?> ResolveRequiredBaseVariantAsync(
         ProductVariant outputVariant,
         Dictionary<string, ProductVariant> localBySku)
@@ -422,6 +500,7 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
         {
             if (localBaseVariant.ProductId != outputVariant.ProductId)
                 throw new ProductValidationException($"SKU {outputVariant.SkuCode} phai tham chieu base SKU cung Product.");
+            EnsureValidBaseVariant(localBaseVariant, outputVariant);
             return localBaseVariant;
         }
 
@@ -432,7 +511,19 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
         if (baseVariant.ProductId != outputVariant.ProductId)
             throw new ProductValidationException($"SKU {outputVariant.SkuCode} phai tham chieu base SKU cung Product.");
 
+        EnsureValidBaseVariant(baseVariant, outputVariant);
         return baseVariant;
+    }
+
+    private static void EnsureValidBaseVariant(ProductVariant baseVariant, ProductVariant derivedVariant)
+    {
+        if (baseVariant.Id == derivedVariant.Id)
+            throw new ProductValidationException($"SKU {derivedVariant.SkuCode} khong duoc dat chinh no lam base SKU.");
+        if (!baseVariant.IsBaseUnitVariant || baseVariant.BaseVariantId.HasValue)
+            throw new ProductValidationException(
+                $"SKU {derivedVariant.SkuCode} phai tham chieu SKU don vi goc, khong duoc tham chieu SKU quy doi khac.");
+        if (!baseVariant.IsActive)
+            throw new ProductValidationException($"Base SKU {baseVariant.SkuCode} dang bi khoa.");
     }
 
     private async Task ResolveBaseVariantReferencesAsync(
@@ -479,12 +570,24 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
                 baseVariant = localBySku.GetValueOrDefault(baseSkuCode) ?? baseBySku.GetValueOrDefault(baseSkuCode);
             if (baseVariant == null && input.BaseVariantId.HasValue)
                 baseById.TryGetValue(input.BaseVariantId.Value, out baseVariant);
+            if (baseVariant != null
+                && !localBySku.Values.Contains(baseVariant)
+                && localBySku.TryGetValue(baseVariant.SkuCode, out var replacementBaseVariant))
+            {
+                baseVariant = replacementBaseVariant;
+            }
             baseVariant ??= localBase;
 
             if (baseVariant == null)
                 throw new ProductValidationException($"SKU {variant.SkuCode} phai co SKU don vi goc.");
             if (baseVariant.Id == variant.Id)
                 throw new ProductValidationException($"SKU {variant.SkuCode} khong duoc dat chinh no lam base SKU.");
+            if (baseVariant.ProductId != variant.ProductId || !localBySku.Values.Contains(baseVariant))
+            {
+                throw new ProductValidationException(
+                    $"SKU {variant.SkuCode} phai tham chieu base SKU trong cung Product aggregate.");
+            }
+            EnsureValidBaseVariant(baseVariant, variant);
 
             variant.BaseVariantId = baseVariant.Id;
         }
@@ -562,21 +665,65 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
         return activeVariants.Count == 1 ? activeVariants[0] : null;
     }
 
-    private static void EnsureAllowedBomComponentType(ProductType productType, string componentLabel)
+    private static void EnsureAllowedBomComponent(ProductVariant componentVariant)
     {
-        if (productType is ProductType.THANH_PHAM or ProductType.NGUYEN_LIEU or ProductType.BAO_BI)
+        var productType = componentVariant.Product?.ProductType;
+        if (productType.HasValue
+            && BomCapabilityRules.CanBeComponent(productType.Value, componentVariant.CanBeBomComponent, componentVariant.IsActive))
             return;
 
-        throw new ProductValidationException($"SKU component {componentLabel} khong hop le cho BOM.");
+        throw new ProductValidationException($"SKU component {componentVariant.SkuCode} khong duoc phep dung trong BOM.");
     }
 
-    private static void EnsureAllowedLegacyBomComponentType(Product material)
+    private static void ValidateDirectDerivedVariant(
+        ProductVariant baseVariant,
+        ProductVariant derivedVariant)
     {
-        if (material.ProductType is ProductType.NGUYEN_LIEU or ProductType.BAO_BI)
+        if (derivedVariant.ProductId != baseVariant.ProductId
+            || derivedVariant.IsBaseUnitVariant
+            || derivedVariant.BaseVariantId != baseVariant.Id)
+        {
+            throw new ProductValidationException(
+                $"SKU quy đổi {derivedVariant.SkuCode} không thuộc đúng base SKU/Product aggregate.");
+        }
+
+        if (derivedVariant.ConversionRate <= 0
+            || !BomUnitRules.IsIntegerQuantity(derivedVariant.ConversionRate))
+        {
+            throw new ProductValidationException(
+                $"Tỷ lệ quy đổi của SKU {derivedVariant.SkuCode} phải là số nguyên dương.");
+        }
+    }
+
+    private static void ValidateBaseDerivedTransitions(
+        IEnumerable<ProductVariant> existingVariants,
+        IReadOnlyList<ValidatedProductVariantInput> requestedVariants,
+        IReadOnlyList<ProductVariantRequest>? rawRequests)
+    {
+        if (rawRequests is null || rawRequests.Count == 0)
             return;
 
-        throw new ProductValidationException(
-            $"Product component {material.Name} phai chon SKU cu the khi dung trong BOM.");
+        var existingBySku = existingVariants
+            .Where(variant => !string.IsNullOrWhiteSpace(variant.SkuCode))
+            .ToDictionary(variant => variant.SkuCode, StringComparer.OrdinalIgnoreCase);
+        var explicitBaseCount = requestedVariants.Count(input => input.IsBaseUnitVariant == true);
+
+        for (var i = 0; i < rawRequests.Count && i < requestedVariants.Count; i++)
+        {
+            var skuCode = NormalizeText(requestedVariants[i].SkuCode);
+            if (skuCode is null || !existingBySku.TryGetValue(skuCode, out var existingVariant))
+                continue;
+
+            var becomesBase = requestedVariants[i].IsBaseUnitVariant
+                ?? (explicitBaseCount == 0 && i == 0);
+            var wasDerived = !existingVariant.IsBaseUnitVariant && existingVariant.BaseVariantId.HasValue;
+
+            if (wasDerived && becomesBase && rawRequests[i].BomLines is null)
+            {
+                throw new ProductValidationException(
+                    $"SKU {skuCode} chuyển từ SKU quy đổi thành base SKU phải khai báo BOM mới.");
+            }
+        }
     }
 
     private static string GetBomLineDedupKey(BomLineRequest line)
@@ -814,11 +961,14 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
             v.BaseVariantId,
             v.IsBaseUnitVariant,
             v.IsAutoGeneratedSku,
+            v.IsPurchasable,
+            v.CanBeBomComponent,
+            v.CanUseInCustom,
+            v.CanHaveBom,
             activeBomLines.Count > 0,
             activeBomLines.Count,
             v.Units.Where(u => !u.IsDeleted).Select(MapUnitResponse).ToList(),
-            activeBomLines.Select(MapBomLineResponse).ToList(),
-            v.IsPurchasable);
+            activeBomLines.Select(MapBomLineResponse).ToList());
     }
 
     private static ProductType? ParseProductTypeFilter(string? value)
@@ -829,6 +979,11 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
             : null;
     }
 
-    private static ProductType ParseProductType(string? value) =>
-        ParseProductTypeFilter(value) ?? ProductType.THANH_PHAM;
+    private static ProductType ParseProductType(string? value)
+    {
+        if (ProductTypeValidation.TryParseDefined(value, out var productType))
+            return productType;
+
+        throw new ProductValidationException("Loai hang khong hop le.");
+    }
 }

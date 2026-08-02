@@ -73,8 +73,7 @@ function OrderStockReservationSection({ orderId, refreshKey = 0 }) {
         <table className="min-w-full divide-y divide-slate-100 text-left text-sm">
           <thead className="bg-slate-50">
             <tr>
-              <th className="px-4 py-3 text-xs font-bold uppercase tracking-wide text-[#717971]">Mã SKU</th>
-              <th className="px-4 py-3 text-xs font-bold uppercase tracking-wide text-[#717971]">Tên sản phẩm</th>
+              <th className="px-4 py-3 text-xs font-bold uppercase tracking-wide text-[#717971]">Sản Phẩm</th>
               <th className="px-4 py-3 text-right text-xs font-bold uppercase tracking-wide text-[#717971]">
                 SL đặt
               </th>
@@ -91,10 +90,10 @@ function OrderStockReservationSection({ orderId, refreshKey = 0 }) {
           <tbody className="divide-y divide-slate-100 bg-white">
             {data.lines.map((line) => (
               <tr key={line.skuId} className="align-top">
-                <td className="px-4 py-3 font-semibold text-slate-700" title={line.skuId}>
-                  {line.skuCode || '—'}
+                <td className="px-4 py-3 text-slate-700" title={line.skuId}>
+                  <p className="font-semibold text-slate-800">{line.skuName || '—'}</p>
+                  <p className="font-mono text-xs text-slate-500">{line.skuCode || '—'}</p>
                 </td>
-                <td className="px-4 py-3 text-slate-700">{line.skuName || '—'}</td>
                 <td className="px-4 py-3 text-right text-slate-700">{line.orderedQuantity}</td>
                 <td className="px-4 py-3 text-right font-semibold text-slate-800">
                   {line.reservationStatus === 'Active' ? line.reservedQuantity : 0}

@@ -21,4 +21,11 @@ public record PosCashSessionResponse(
     string? ClosedByName,
     DateTime? ClosedAt);
 
-public record CurrentPosCashSessionResponse(PosCashSessionResponse? Session);
+/// <summary>
+/// Phiên quỹ hiện tại. Khi RequiresCloseForNewShift = true, Session vẫn là quỹ Open
+/// của ca trước — phải đóng trước khi mở quỹ cho ca đang on-duty.
+/// </summary>
+public record CurrentPosCashSessionResponse(
+    PosCashSessionResponse? Session,
+    bool RequiresCloseForNewShift = false,
+    string? PreviousShiftLabel = null);

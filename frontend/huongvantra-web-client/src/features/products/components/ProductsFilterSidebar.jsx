@@ -1,5 +1,6 @@
+import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { buildCategoryTree } from '../utils/categoryTreeUtils.js'
+import { flattenCategoryTreeForSelect } from '../utils/categoryTreeUtils.js'
 
 const STOCK_FILTERS = [
   { value: 'all', label: 'Tất cả' },
@@ -67,7 +68,10 @@ export function ProductsFilterContent({
   canCreate = false,
   showFooterNote = true,
 }) {
-  const categoryTree = buildCategoryTree(categories.filter((item) => !item.isDeleted))
+  const categoryTreeOptions = useMemo(() => {
+    const visible = categories.filter((c) => !c.isDeleted && c.isActive !== false)
+    return flattenCategoryTreeForSelect(visible)
+  }, [categories])
 
   return (
     <>
@@ -87,18 +91,11 @@ export function ProductsFilterContent({
           onChange={(event) => onCategoryChange(event.target.value)}
         >
           <option value="">Tất cả nhóm hàng</option>
-          {categoryTree.map((node) => (
-            <option key={node.id} value={String(node.id)}>
-              {node.name}
+          {categoryTreeOptions.map((cat) => (
+            <option key={cat.id} value={String(cat.id)}>
+              {cat.selectLabel}
             </option>
           ))}
-          {categories
-            .filter((item) => item.parentId && !categoryTree.some((node) => node.id === item.id))
-            .map((item) => (
-              <option key={item.id} value={String(item.id)}>
-                {item.name}
-              </option>
-            ))}
         </select>
       </FilterSection>
 

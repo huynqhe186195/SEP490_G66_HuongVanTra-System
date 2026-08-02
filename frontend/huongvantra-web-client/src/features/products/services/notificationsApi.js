@@ -40,3 +40,27 @@ export async function markAllNotificationsRead() {
   const data = await apiRequestAuth('/api/v1/notifications/read-all', { method: 'POST' })
   return Number(data?.unreadCount ?? data?.UnreadCount ?? 0)
 }
+
+/**
+ * Gửi thông báo theo vai trò (vd. báo cáo cuối ngày kho → Manager + Admin).
+ */
+export async function broadcastNotification(payload) {
+  const data = await apiRequestAuth('/api/v1/notifications/broadcast', {
+    method: 'POST',
+    body: JSON.stringify({
+      type: payload.type,
+      title: payload.title,
+      body: payload.body,
+      link: payload.link ?? null,
+      recipientRoleNames: payload.recipientRoleNames ?? [],
+      referenceId: payload.referenceId ?? null,
+      referenceType: payload.referenceType ?? null,
+    }),
+  })
+  return {
+    createdCount: Number(data?.createdCount ?? data?.CreatedCount ?? 0),
+    items: Array.isArray(data?.items ?? data?.Items)
+      ? (data.items ?? data.Items).map(mapNotification).filter(Boolean)
+      : [],
+  }
+}

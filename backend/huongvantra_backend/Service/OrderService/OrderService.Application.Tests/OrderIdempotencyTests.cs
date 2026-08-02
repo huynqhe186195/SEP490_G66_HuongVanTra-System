@@ -171,7 +171,7 @@ public class OrderIdempotencyTests
             .Setup(client => client.GetSkuProfilesAsync(
                 It.IsAny<IEnumerable<Guid>>(),
                 It.IsAny<CancellationToken>()))
-            .ReturnsAsync([new ProductSkuCatalogProfile(skuId, null, "Piece", 0m)]);
+            .ReturnsAsync([new ProductSkuCatalogProfile(skuId, null, "Piece", "THANH_PHAM", true, false, false, true, 0m)]);
 
         var codeSequence = 0;
         var codeGenerator = new Mock<IOrderCodeGenerator>();
@@ -325,10 +325,6 @@ public class OrderIdempotencyTests
         public Task<Order?> GetByIdAsync(Guid id, CancellationToken ct = default) =>
             Task.FromResult(store.Orders.FirstOrDefault(order => order.Id == id));
 
-        public Task<decimal> GetPendingContractDebtAsync(
-            Guid customerId, Guid? excludeOrderId, CancellationToken ct = default) =>
-            Task.FromResult(0m);
-
         public Task<Order?> GetByCodeAsync(string orderCode, CancellationToken ct = default) =>
             Task.FromResult(store.Orders.FirstOrDefault(order => order.OrderCode == orderCode));
 
@@ -340,6 +336,11 @@ public class OrderIdempotencyTests
             bool includeAllCodOrders, int page, int pageSize,
             CancellationToken ct = default,
             IReadOnlyCollection<Guid>? restrictToOrderIds = null) =>
+            throw new NotSupportedException();
+
+        public Task<(List<Order> Items, int TotalCount)> GetB2BDebtsAsync(
+            Guid? customerId, bool overdueOnly, DateTime today,
+            int page, int pageSize, CancellationToken ct = default) =>
             throw new NotSupportedException();
 
         public Task<List<Order>> GetPendingCodAsync(CancellationToken ct = default) =>

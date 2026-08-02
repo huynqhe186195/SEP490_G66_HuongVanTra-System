@@ -5,6 +5,7 @@ import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
 import { promptDialog } from '../../../app/dialog.js'
 import { showError, showSuccess } from '../../../app/toast.js'
+import { getReasonSuggestions } from '../../shared/reasonSuggestions.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import { formatVnd } from '../../../utils/vietnamCurrency.js'
 import { formatStockQuantity } from '../../products/utils/productDisplay.js'
@@ -317,6 +318,7 @@ function SupplierReceiptsPage() {
       message: 'Nhập lý do hủy phiếu nhập',
       required: true,
       tone: 'danger',
+      suggestions: getReasonSuggestions('supplierReceiptCancel'),
     })
     if (reason == null) return
     await runAction(receipt, (id) => cancelSupplierReceipt(id, reason), (updated) => `Đã hủy ${updated.receiptCode}.`)
@@ -336,6 +338,7 @@ function SupplierReceiptsPage() {
       message: 'Nhập lý do từ chối phiếu nhập',
       required: true,
       tone: 'danger',
+      suggestions: getReasonSuggestions('supplierReceiptReject'),
     })
     if (reason == null) return
     await runAction(receipt, (id) => rejectSupplierReceipt(id, reason), (updated) => `Đã từ chối ${updated.receiptCode}.`)

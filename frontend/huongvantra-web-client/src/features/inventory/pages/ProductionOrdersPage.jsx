@@ -2,6 +2,7 @@ import { Fragment, useCallback, useEffect, useState } from 'react'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
+import ReasonSuggestionChips from '../../../components/shared/ReasonSuggestionChips.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { formatVietnamDate, formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
@@ -12,6 +13,7 @@ import {
   canReviewProductionOrder,
   canSubmitProductionOrder,
 } from '../../auth/utils/permissions.js'
+import { getReasonSuggestions } from '../../shared/reasonSuggestions.js'
 import CreateProductionOrderModal from '../components/CreateProductionOrderModal.jsx'
 import {
   approveProductionOrder,
@@ -34,7 +36,7 @@ const STATUS_TABS = [
   { key: 'Cancelled', label: 'Đã hủy' },
 ]
 
-function ConfirmDialog({ message, requiresReason = false, reasonLabel = 'Lý do', onConfirm, onCancel }) {
+function ConfirmDialog({ message, requiresReason = false, reasonLabel = 'Lý do', reasonSuggestions = [], onConfirm, onCancel }) {
   const [reason, setReason] = useState('')
 
   return (
@@ -47,6 +49,11 @@ function ConfirmDialog({ message, requiresReason = false, reasonLabel = 'Lý do'
         {requiresReason && (
           <label className="mb-6 block space-y-1.5 text-sm">
             <span className="text-xs font-semibold text-[#717971]">{reasonLabel}</span>
+            <ReasonSuggestionChips
+              suggestions={reasonSuggestions}
+              value={reason}
+              onSelect={setReason}
+            />
             <textarea
               rows={3}
               className="w-full rounded-xl border border-slate-200 p-2.5 text-sm text-slate-700"
@@ -445,8 +452,7 @@ function ProductionOrdersPage() {
                             <table className="min-w-full text-left text-xs">
                               <thead className="bg-slate-50 text-[#717971]">
                                 <tr>
-                                  <th className="px-4 py-2 font-semibold">SKU</th>
-                                  <th className="px-4 py-2 font-semibold">Tên thành phẩm</th>
+                                  <th className="px-4 py-2 font-semibold">Sản Phẩm</th>
                                   <th className="px-4 py-2 text-right font-semibold">Số lượng SX</th>
                                   <th className="px-4 py-2 font-semibold">Nơi nhập</th>
                                   <th className="px-4 py-2 font-semibold">Hạn sử dụng</th>
@@ -456,10 +462,10 @@ function ProductionOrdersPage() {
                               <tbody className="divide-y divide-slate-100">
                                 {outputLines.map((line) => (
                                   <tr key={line.id}>
-                                    <td className="px-4 py-2 font-mono font-semibold text-[#356647]">
-                                      {getOutputSku(line)}
+                                    <td className="px-4 py-2">
+                                      <p className="font-medium text-slate-800">{getOutputName(line)}</p>
+                                      <p className="font-mono text-[11px] text-slate-500">{getOutputSku(line)}</p>
                                     </td>
-                                    <td className="px-4 py-2 font-medium text-slate-800">{getOutputName(line)}</td>
                                     <td className="px-4 py-2 text-right font-semibold text-slate-800">
                                       {formatQuantity(line.plannedQuantity)}
                                     </td>
@@ -496,7 +502,7 @@ function ProductionOrdersPage() {
                               <table className="min-w-full text-left text-xs">
                                 <thead className="bg-emerald-50/60 text-[#717971]">
                                   <tr>
-                                    <th className="px-4 py-2 font-semibold">SKU thành phẩm</th>
+                                    <th className="px-4 py-2 font-semibold">Sản Phẩm</th>
                                     <th className="px-4 py-2 text-right font-semibold">Số lượng</th>
                                     <th className="px-4 py-2 font-semibold">Nơi nhập</th>
                                     <th className="px-4 py-2 font-semibold">Mã lô thành phẩm</th>
@@ -507,8 +513,8 @@ function ProductionOrdersPage() {
                                   {finishedGoodsLots.map((line) => (
                                     <tr key={`${line.id}-lot`}>
                                       <td className="px-4 py-2">
-                                        <p className="font-mono font-semibold text-[#356647]">{getOutputSku(line)}</p>
-                                        <p className="mt-0.5 text-slate-600">{getOutputName(line)}</p>
+                                        <p className="font-medium text-slate-800">{getOutputName(line)}</p>
+                                        <p className="mt-0.5 font-mono text-[11px] text-slate-500">{getOutputSku(line)}</p>
                                       </td>
                                       <td className="px-4 py-2 text-right font-semibold text-slate-800">
                                         {formatQuantity(line.plannedQuantity)}
@@ -533,19 +539,16 @@ function ProductionOrdersPage() {
                               <table className="min-w-full text-left text-xs">
                                 <thead className="bg-slate-50 text-[#717971]">
                                   <tr>
-                                    <th className="px-4 py-2 font-semibold">SKU</th>
-                                    <th className="px-4 py-2 font-semibold">Nguyên liệu</th>
+                                    <th className="px-4 py-2 font-semibold">Sản Phẩm</th>
                                     <th className="px-4 py-2 text-right font-semibold">Số lượng</th>
                                   </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
                                   {order.lines.map((line) => (
                                     <tr key={line.id}>
-                                      <td className="px-4 py-2 font-mono font-semibold text-[#356647]">
-                                        {line.materialSkuCode || '-'}
-                                      </td>
-                                      <td className="px-4 py-2 font-medium text-slate-800">
-                                        {line.materialSnapshotName || '-'}
+                                      <td className="px-4 py-2">
+                                        <p className="font-medium text-slate-800">{line.materialSnapshotName || '-'}</p>
+                                        <p className="font-mono text-[11px] text-slate-500">{line.materialSkuCode || '-'}</p>
                                       </td>
                                       <td className="px-4 py-2 text-right font-semibold text-slate-800">
                                         {formatQuantity(line.plannedQuantity)}
@@ -592,6 +595,9 @@ function ProductionOrdersPage() {
           message={getConfirmActionMessage(confirmAction)}
           requiresReason={['reject', 'cancel'].includes(confirmAction.type)}
           reasonLabel={confirmAction.type === 'reject' ? 'Lý do từ chối' : 'Lý do hủy'}
+          reasonSuggestions={getReasonSuggestions(
+            confirmAction.type === 'reject' ? 'productionReject' : 'productionCancel',
+          )}
           onConfirm={(reason) => handleAction(confirmAction.type, confirmAction.order, reason)}
           onCancel={() => setConfirmAction(null)}
         />

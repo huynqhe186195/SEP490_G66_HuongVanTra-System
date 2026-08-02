@@ -75,7 +75,7 @@ import {
 import PosCashSessionBar, { assertCashSessionOpenForPayment } from '../components/PosCashSessionBar.jsx'
 import PosShiftDutyGate from '../components/PosShiftDutyGate.jsx'
 import {
-  loadOpenCashSession,
+  isOpenCashSessionReady,
   recordCashSale,
   refreshCashSession,
   subscribeCashSession,
@@ -291,15 +291,21 @@ function PosPage() {
   const [openModal, setOpenModal] = useState(null)
   const [openDiscountSku, setOpenDiscountSku] = useState(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [cashSessionOpen, setCashSessionOpen] = useState(() => Boolean(loadOpenCashSession()))
+  const [cashSessionOpen, setCashSessionOpen] = useState(() => isOpenCashSessionReady())
   const [shelfDayStatus, setShelfDayStatus] = useState({ dayStartDone: false, dayEndDone: false })
   const [dayEndRequested, setDayEndRequested] = useState(false)
   const [shelfOnDuty, setShelfOnDuty] = useState(null)
 
   useEffect(() => {
-    refreshCashSession().then((s) => setCashSessionOpen(Boolean(s)))
-    return subscribeCashSession(() => setCashSessionOpen(Boolean(loadOpenCashSession())))
+    refreshCashSession().then(() => setCashSessionOpen(isOpenCashSessionReady()))
+    return subscribeCashSession(() => setCashSessionOpen(isOpenCashSessionReady()))
   }, [])
+
+  // Đổi ca on-duty (sáng → tối) → kiểm tra lại quỹ có khớp ca mới không
+  useEffect(() => {
+    if (!shelfOnDuty?.slotId) return
+    refreshCashSession().then(() => setCashSessionOpen(isOpenCashSessionReady()))
+  }, [shelfOnDuty?.slotId])
   const [isApplyingPromo, setIsApplyingPromo] = useState(false)
   const [availablePromotions, setAvailablePromotions] = useState([])
   const [isPromotionListLoading, setIsPromotionListLoading] = useState(false)

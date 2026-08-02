@@ -8,7 +8,7 @@ Read the acceptance and UAT guide here:
 
 - `docs/inventory-acceptance-guide.md`
 
-# Hướng dẫn cách build docker 
+#  Hướng dẫn cách build docker 
 1. Build lại images (bắt buộc phải rebuild vì đã thay đổi Dockerfile)
 
   # Đứng tại thư mục gốc backend

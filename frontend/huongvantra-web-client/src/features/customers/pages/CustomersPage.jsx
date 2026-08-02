@@ -725,10 +725,7 @@ function CustomersPage() {
         {activeTab === 'inactive' ? (
           <section className="flex flex-col rounded-xl border border-[#eae8e0] bg-white shadow-[0px_4px_20px_rgba(0,0,0,0.04)]">
             <div className="flex flex-col gap-2 border-b border-[#f0eee6] bg-[#fff5f5] p-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:p-6">
-              <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
-                <h4 className="text-lg font-bold text-[#1b1c17] sm:text-xl lg:text-2xl">Khách đã ngừng hoạt động</h4>
-                <span className="w-fit rounded-full bg-[#93000a]/10 px-2.5 py-1 text-[10px] text-[#93000a] sm:px-3 sm:text-xs">Xóa mềm — có thể khôi phục</span>
-              </div>
+              <h4 className="text-lg font-bold text-[#1b1c17] sm:text-xl lg:text-2xl">Khách đã ngừng hoạt động</h4>
             </div>
 
             <CustomersMobileCards
@@ -1017,10 +1014,7 @@ function CustomersPage() {
 
             <section className="flex flex-col rounded-xl border border-[#eae8e0] bg-white shadow-[0px_4px_20px_rgba(0,0,0,0.04)]">
               <div className="flex flex-col gap-2 border-b border-[#f0eee6] bg-[#fff8e8]/60 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-6">
-                <div>
-                  <h4 className="text-lg font-bold text-[#1b1c17] sm:text-xl">Quản lý công nợ</h4>
-                  <p className="mt-1 text-xs text-[#717971]">Lọc / sắp xếp theo khách. Bấm số tiền công nợ để mở popup chi tiết và thu nợ.</p>
-                </div>
+                <h4 className="text-lg font-bold text-[#1b1c17] sm:text-xl">Quản lý công nợ</h4>
               </div>
 
               <CustomersMobileCards

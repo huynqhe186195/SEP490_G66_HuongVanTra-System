@@ -305,3 +305,23 @@ export function parseSupplierReceiptTt200Excel(buffer) {
 }
 
 export const TT200_TEMPLATE_URL = '/templates/phieu-nhap-kho-excel-tt200.xlsx'
+export const TT200_SAMPLE_FILENAME = 'phieu-nhap-kho-excel-tt200-co-du-lieu.xlsx'
+export const TT200_SAMPLE_URL = `/templates/${TT200_SAMPLE_FILENAME}`
+
+/** Tải file mẫu TT200 đã có sẵn dữ liệu (file tĩnh trong public/templates). */
+export async function downloadTt200SampleWithData() {
+  const response = await fetch(TT200_SAMPLE_URL, { cache: 'no-store' })
+  if (!response.ok) {
+    throw new Error('Không tìm thấy file có dữ liệu mẫu phiếu nhập kho.')
+  }
+  const buffer = await response.arrayBuffer()
+  const blob = new Blob([buffer], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = TT200_SAMPLE_FILENAME
+  link.click()
+  URL.revokeObjectURL(url)
+}

@@ -29,6 +29,17 @@ public class WarehouseBatchRepository(InventoryDbContext _db) : IWarehouseBatchR
             .FirstOrDefaultAsync(b => b.LotCode.ToUpper() == normalized, ct);
     }
 
+    public Task<WarehouseBatch?> FindBySupplierLotIdentityAsync(
+        Guid supplierId,
+        Guid skuId,
+        string normalizedSupplierLotCode,
+        CancellationToken ct = default) =>
+        WithItems().FirstOrDefaultAsync(
+            b => b.SupplierId == supplierId
+                && b.SkuId == skuId
+                && b.NormalizedSupplierLotCode == normalizedSupplierLotCode,
+            ct);
+
     public async Task<List<WarehouseBatch>> GetListAsync(
         Guid? skuId, string? search, bool availableOnly, CancellationToken ct = default)
     {
@@ -86,22 +97,6 @@ public class WarehouseBatchRepository(InventoryDbContext _db) : IWarehouseBatchR
         return query.AnyAsync(ct);
     }
 
-    public Task<WarehouseBatch?> FindBySupplierLotIdentityAsync(
-        Guid supplierId,
-        Guid skuId,
-        string normalizedLotCode,
-        CancellationToken ct = default)
-    {
-        var normalized = normalizedLotCode.Trim().ToUpperInvariant();
-        return WithItems()
-            .OrderByDescending(b => b.CreatedAt)
-            .FirstOrDefaultAsync(
-                b => b.SupplierId == supplierId
-                    && b.SkuId == skuId
-                    && b.NormalizedSupplierLotCode == normalized,
-                ct);
-    }
-
     public Task<bool> ExistsBatchCodeAsync(string batchCode, Guid? excludeId = null, CancellationToken ct = default)
     {
         var normalized = batchCode.Trim().ToUpperInvariant();
@@ -153,6 +148,23 @@ public class WarehouseBatchRepository(InventoryDbContext _db) : IWarehouseBatchR
             .ToListAsync(ct);
 
         return rows.ToDictionary(x => x.SkuId, x => x.Total);
+    }
+
+    public async Task<Dictionary<Guid, int>> GetQuantitySumsByBatchAsync(
+        IEnumerable<Guid> batchIds,
+        CancellationToken ct = default)
+    {
+        var ids = batchIds.Distinct().ToList();
+        if (ids.Count == 0) return new Dictionary<Guid, int>();
+
+        var rows = await _db.WarehouseBatchItems
+            .AsNoTracking()
+            .Where(i => ids.Contains(i.WarehouseBatchId))
+            .GroupBy(i => i.WarehouseBatchId)
+            .Select(g => new { BatchId = g.Key, Total = g.Sum(i => i.QuantityOnHand) })
+            .ToListAsync(ct);
+
+        return ids.ToDictionary(id => id, id => rows.FirstOrDefault(r => r.BatchId == id)?.Total ?? 0);
     }
 
     public Task<int> CountActiveLotsForSkuAsync(Guid skuId, CancellationToken ct = default) =>

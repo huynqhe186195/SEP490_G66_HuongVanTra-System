@@ -1,3 +1,4 @@
+using HuongVanTra.Shared.Auth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using ProductService.Application.DTOs.Requests;
@@ -22,7 +23,7 @@ public class PriceBooksController(PriceBookLogic _priceBookLogic) : ControllerBa
         Ok(await _priceBookLogic.GetByIdAsync(id));
 
     [HttpPost]
-    [Authorize(Roles = "Warehouse")]
+    [Authorize(Policy = PermissionNames.ManageCatalog)]
     public async Task<IActionResult> Create([FromBody] CreatePriceBookRequest request)
     {
         var result = await _priceBookLogic.CreateAsync(request);
@@ -30,12 +31,12 @@ public class PriceBooksController(PriceBookLogic _priceBookLogic) : ControllerBa
     }
 
     [HttpPut("{id:guid}")]
-    [Authorize(Roles = "Warehouse")]
+    [Authorize(Policy = PermissionNames.ManageCatalog)]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdatePriceBookRequest request) =>
         Ok(await _priceBookLogic.UpdateAsync(id, request));
 
     [HttpDelete("{id:guid}")]
-    [Authorize(Roles = "Warehouse")]
+    [Authorize(Policy = PermissionNames.ManageCatalog)]
     public async Task<IActionResult> Delete(Guid id)
     {
         await _priceBookLogic.DeleteAsync(id);

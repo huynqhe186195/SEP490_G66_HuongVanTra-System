@@ -31,16 +31,18 @@ function getMaterialUnit(material) {
 function getComponentSkuOptions(products) {
   return products.flatMap((product) => {
     const variants = product.variants?.length ? product.variants : product.skus ?? []
-    return variants.map((variant) => ({
-      id: variant.id,
-      material_id: product.id,
-      materialName: product.name,
-      materialUnitName: getMaterialUnit(product),
-      componentVariantId: variant.id,
-      componentSkuCode: variant.skuCode,
-      componentVariantName: variant.variantName || variant.packagingType || variant.unitName || product.name,
-      unitName: variant.unitName || '',
-    }))
+    return variants
+      .filter((variant) => variant.canBeBomComponent === true && variant.isActive !== false)
+      .map((variant) => ({
+        id: variant.id,
+        material_id: product.id,
+        materialName: product.name,
+        materialUnitName: getMaterialUnit(product),
+        componentVariantId: variant.id,
+        componentSkuCode: variant.skuCode,
+        componentVariantName: variant.variantName || variant.packagingType || variant.unitName || product.name,
+        unitName: variant.unitName || '',
+      }))
   })
 }
 
@@ -262,7 +264,7 @@ export default function ProductBomConfigModal({
         </header>
 
         <div className="border-b border-slate-100 px-6 py-4">
-          <label className="block text-xs font-semibold text-slate-500">Nguyên liệu / Bao bì</label>
+          <label className="block text-xs font-semibold text-slate-500">Thành phần BOM</label>
           <div className="relative mt-2" ref={dropdownRef}>
             <span className="material-symbols-outlined pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[20px] text-slate-400">
               search
@@ -274,7 +276,7 @@ export default function ProductBomConfigModal({
             ) : null}
             <input
               className="w-full rounded-xl border border-slate-200 bg-[#f0eee6] py-3 pl-10 pr-10 text-sm focus:border-[#356647] focus:outline-none focus:ring-2 focus:ring-[#356647]/15"
-              placeholder="Tìm tên hoặc mã nguyên liệu / bao bì..."
+              placeholder="Tìm tên hoặc mã SKU thành phần..."
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
             />
@@ -321,7 +323,7 @@ export default function ProductBomConfigModal({
               <table className="min-w-full text-left text-sm">
                 <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                   <tr>
-                    <th className="px-4 py-3 font-semibold">Nguyên liệu / Bao bì</th>
+                    <th className="px-4 py-3 font-semibold">Thành phần BOM</th>
                     <th className="px-4 py-3 text-center font-semibold">Định mức cho 1 đơn vị Sản phẩm kệ</th>
                     <th className="px-4 py-3 font-semibold">Đơn vị</th>
                     <th className="px-4 py-3 text-right font-semibold">Hành động</th>

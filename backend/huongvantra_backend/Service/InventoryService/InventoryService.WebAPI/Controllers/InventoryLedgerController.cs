@@ -1,3 +1,4 @@
+using HuongVanTra.Shared.Auth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using InventoryService.Application.UseCases;
@@ -6,7 +7,7 @@ namespace InventoryService.WebAPI.Controllers;
 
 [ApiController]
 [Route("api/v1/inventory/ledger")]
-[Authorize(Roles = "Admin,Warehouse,Manager,Accountant")]
+[Authorize(Policy = PermissionNames.ViewInventory)]
 public class InventoryLedgerController(InventoryLogic _logic) : ControllerBase
 {
     [HttpGet]

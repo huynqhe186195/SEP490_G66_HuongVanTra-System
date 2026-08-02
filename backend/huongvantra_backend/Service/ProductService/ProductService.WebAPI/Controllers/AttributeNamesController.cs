@@ -1,3 +1,4 @@
+using HuongVanTra.Shared.Auth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using ProductService.Application.DTOs.Requests;
@@ -18,7 +19,7 @@ public class AttributeNamesController(AttributeNameLogic _logic) : ControllerBas
         Ok(await _logic.GetByIdAsync(id));
 
     [HttpPost]
-    [Authorize(Roles = "Warehouse")]
+    [Authorize(Policy = PermissionNames.ManageCatalog)]
     public async Task<IActionResult> Create([FromBody] CreateAttributeNameRequest request)
     {
         var result = await _logic.CreateAsync(request);
@@ -26,12 +27,12 @@ public class AttributeNamesController(AttributeNameLogic _logic) : ControllerBas
     }
 
     [HttpPut("{id:int}")]
-    [Authorize(Roles = "Warehouse")]
+    [Authorize(Policy = PermissionNames.ManageCatalog)]
     public async Task<IActionResult> Update(int id, [FromBody] UpdateAttributeNameRequest request) =>
         Ok(await _logic.UpdateAsync(id, request));
 
     [HttpDelete("{id:int}")]
-    [Authorize(Roles = "Warehouse")]
+    [Authorize(Policy = PermissionNames.ManageCatalog)]
     public async Task<IActionResult> Delete(int id)
     {
         await _logic.DeleteAsync(id);
@@ -39,7 +40,7 @@ public class AttributeNamesController(AttributeNameLogic _logic) : ControllerBas
     }
 
     [HttpPost("{id:int}/restore")]
-    [Authorize(Roles = "Warehouse")]
+    [Authorize(Policy = PermissionNames.ManageCatalog)]
     public async Task<IActionResult> Restore(int id) =>
         Ok(await _logic.RestoreAsync(id));
 }

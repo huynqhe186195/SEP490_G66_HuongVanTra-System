@@ -13,7 +13,7 @@ namespace InventoryService.WebAPI.Controllers;
 public class ProductionOrdersController(InventoryLogic _logic) : ControllerBase
 {
     [HttpGet]
-    [Authorize(Roles = "Warehouse,Manager,Admin")]
+    [Authorize(Policy = PermissionNames.ViewInventory)]
     public async Task<IActionResult> GetList(
         CancellationToken ct,
         [FromQuery] string? status,
@@ -22,7 +22,7 @@ public class ProductionOrdersController(InventoryLogic _logic) : ControllerBase
         Ok(await _logic.GetProductionOrdersAsync(status, page, pageSize, ct));
 
     [HttpGet("{id:guid}")]
-    [Authorize(Roles = "Warehouse,Manager,Admin")]
+    [Authorize(Policy = PermissionNames.ViewInventory)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
     {
         var item = await _logic.GetProductionOrderByIdAsync(id, ct);
@@ -31,7 +31,7 @@ public class ProductionOrdersController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "Warehouse")]
+    [Authorize(Policy = PermissionNames.OperateWarehouse)]
     public async Task<IActionResult> Create([FromBody] CreateProductionOrderRequest request, CancellationToken ct)
     {
         if (User.IsInRole("Admin")) return Forbid();
@@ -41,7 +41,7 @@ public class ProductionOrdersController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpPost("{id:guid}/submit")]
-    [Authorize(Roles = "Warehouse")]
+    [Authorize(Policy = PermissionNames.OperateWarehouse)]
     public async Task<IActionResult> Submit(Guid id, CancellationToken ct)
     {
         if (User.IsInRole("Admin")) return Forbid();
@@ -51,7 +51,7 @@ public class ProductionOrdersController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpPost("{id:guid}/approve")]
-    [Authorize(Roles = "Manager")]
+    [Authorize(Policy = PermissionNames.ApproveInventory)]
     public async Task<IActionResult> Approve(Guid id, [FromBody] ReviewProductionOrderRequest? request, CancellationToken ct)
     {
         if (User.IsInRole("Admin")) return Forbid();
@@ -61,7 +61,7 @@ public class ProductionOrdersController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpPost("{id:guid}/reject")]
-    [Authorize(Roles = "Manager")]
+    [Authorize(Policy = PermissionNames.ApproveInventory)]
     public async Task<IActionResult> Reject(Guid id, [FromBody] ReviewProductionOrderRequest request, CancellationToken ct)
     {
         if (User.IsInRole("Admin")) return Forbid();
@@ -71,7 +71,7 @@ public class ProductionOrdersController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpPost("{id:guid}/complete")]
-    [Authorize(Roles = "Warehouse")]
+    [Authorize(Policy = PermissionNames.OperateWarehouse)]
     public async Task<IActionResult> Complete(Guid id, CancellationToken ct)
     {
         if (User.IsInRole("Admin")) return Forbid();
@@ -81,7 +81,7 @@ public class ProductionOrdersController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpPost("{id:guid}/cancel")]
-    [Authorize(Roles = "Warehouse")]
+    [Authorize(Policy = PermissionNames.OperateWarehouse)]
     public async Task<IActionResult> Cancel(Guid id, [FromBody] ReviewProductionOrderRequest? request, CancellationToken ct)
     {
         if (User.IsInRole("Admin")) return Forbid();

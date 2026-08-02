@@ -79,11 +79,6 @@ function formatDestinationLocation(value) {
   return value === 'Shelf' ? 'Kệ Hàng' : 'Kho'
 }
 
-function getSkuDisplayName(sku) {
-  if (!sku) return ''
-  return [sku.skuCode, sku.productName].filter(Boolean).join(' - ')
-}
-
 function getCreatorName(session, currentUser) {
   const fullName = String(currentUser?.fullName || session?.fullName || '').trim()
   const username = String(currentUser?.username || session?.username || '').trim()
@@ -138,7 +133,9 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
             finishedProducts.map((product) => String(product.id)),
           )
           const tp = items.filter(
-            (sku) => finishedProductIds.has(String(sku.productId)) && sku.isSellable !== false,
+            (sku) => finishedProductIds.has(String(sku.productId))
+              && sku.isActive !== false
+              && sku.canHaveBom === true,
           )
           setTpSkus(tp)
         })
@@ -560,7 +557,7 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
                       <table className="min-w-full text-left text-xs">
                         <thead className="bg-slate-50 text-[#717971]">
                           <tr>
-                            <th className="px-4 py-2 font-semibold">SKU thành phẩm</th>
+                            <th className="px-4 py-2 font-semibold">Sản Phẩm</th>
                             <th className="px-4 py-2 text-right font-semibold">Số lượng sản xuất</th>
                             <th className="px-4 py-2 font-semibold">Nơi nhập thành phẩm</th>
                             <th className="px-4 py-2 font-semibold">Hạn sử dụng</th>
@@ -569,7 +566,12 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
                         <tbody className="divide-y divide-slate-100">
                           {selectedOutputs.map((output) => (
                             <tr key={output.key}>
-                              <td className="px-4 py-2 font-medium text-slate-800">{getSkuDisplayName(output.sku)}</td>
+                              <td className="px-4 py-2">
+                                <p className="font-medium text-slate-800">{output.sku?.productName || '—'}</p>
+                                <p className="mt-0.5 font-mono text-[11px] text-slate-500">
+                                  {output.sku?.skuCode || '—'}
+                                </p>
+                              </td>
                               <td className="px-4 py-2 text-right font-semibold text-slate-800">
                                 {formatQuantity(output.quantityNumber)}
                               </td>
@@ -596,23 +598,22 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
                       <table className="min-w-full text-left text-xs">
                         <thead className="bg-slate-50 text-[#717971]">
                           <tr>
-                            <th className="px-4 py-2 font-semibold">Nguyên liệu / Bao bì</th>
-                            <th className="px-4 py-2 font-semibold">SKU xuất kho</th>
+                            <th className="px-4 py-2 font-semibold">Sản Phẩm</th>
                             <th className="px-4 py-2 text-right font-semibold">Số lượng cần xuất</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                           {bomLines.map((line) => (
                             <tr key={line.key ?? line.materialId}>
-                              <td className="px-4 py-2 font-medium text-slate-800">{line.materialName}</td>
                               <td className="px-4 py-2">
+                                <p className="font-medium text-slate-800">{line.materialName}</p>
                                 {line.skuOptions.length === 0 ? (
                                   <span className="text-red-600">Nguyên liệu / Bao bì chưa có SKU nào.</span>
                                 ) : line.skuOptions.length === 1 ? (
-                                  <span className="font-mono font-semibold text-[#356647]">{line.skuCode}</span>
+                                  <p className="mt-0.5 font-mono text-[11px] text-slate-500">{line.skuCode}</p>
                                 ) : (
                                   <select
-                                    className="w-full min-w-44 rounded-lg border border-slate-200 bg-white p-2 text-xs"
+                                    className="mt-1 w-full min-w-44 rounded-lg border border-slate-200 bg-white p-2 text-xs"
                                     value={line.skuId}
                                     onChange={(event) => updateBomLineSku(line.key ?? line.materialId, event.target.value)}
                                   >
@@ -716,8 +717,7 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
                       <thead className="bg-slate-50 text-[#717971]">
                         <tr>
                           <th className="w-12 px-4 py-2 font-semibold">STT</th>
-                          <th className="px-4 py-2 font-semibold">SKU thành phẩm</th>
-                          <th className="px-4 py-2 font-semibold">Tên thành phẩm</th>
+                          <th className="px-4 py-2 font-semibold">Sản Phẩm</th>
                           <th className="px-4 py-2 text-right font-semibold">Số lượng sản xuất</th>
                           <th className="px-4 py-2 font-semibold">Nơi nhập thành phẩm</th>
                           <th className="px-4 py-2 font-semibold">Hạn sử dụng</th>
@@ -727,9 +727,6 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
                         {selectedOutputs.map((output, index) => (
                           <tr key={output.key}>
                             <td className="px-4 py-2 text-slate-500">{index + 1}</td>
-                            <td className="px-4 py-2 font-mono font-semibold text-[#356647]">
-                              {output.sku?.skuCode || '—'}
-                            </td>
                             <td className="px-4 py-2 font-medium text-slate-800">
                               {output.sku?.productName || '—'}
                               {output.sku?.variantName ? (
@@ -737,6 +734,9 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
                                   {output.sku.variantName}
                                 </span>
                               ) : null}
+                              <span className="mt-0.5 block font-mono text-[11px] font-normal text-slate-500">
+                                {output.sku?.skuCode || '—'}
+                              </span>
                             </td>
                             <td className="px-4 py-2 text-right font-semibold text-slate-800">
                               {formatQuantity(output.quantityNumber)}
@@ -764,8 +764,7 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
                       <thead className="bg-slate-50 text-[#717971]">
                         <tr>
                           <th className="w-12 px-4 py-2 font-semibold">STT</th>
-                          <th className="px-4 py-2 font-semibold">Nguyên liệu / Bao bì</th>
-                          <th className="px-4 py-2 font-semibold">SKU xuất kho</th>
+                          <th className="px-4 py-2 font-semibold">Sản Phẩm</th>
                           <th className="px-4 py-2 text-right font-semibold">Số lượng cần xuất</th>
                         </tr>
                       </thead>
@@ -773,8 +772,10 @@ function CreateProductionOrderModal({ isOpen, onClose, onCreated }) {
                         {bomLines.map((line, index) => (
                           <tr key={line.key ?? line.materialId}>
                             <td className="px-4 py-2 text-slate-500">{index + 1}</td>
-                            <td className="px-4 py-2 font-medium text-slate-800">{line.materialName}</td>
-                            <td className="px-4 py-2 font-mono font-semibold text-[#356647]">{line.skuCode}</td>
+                            <td className="px-4 py-2">
+                              <p className="font-medium text-slate-800">{line.materialName}</p>
+                              <p className="mt-0.5 font-mono text-[11px] text-slate-500">{line.skuCode}</p>
+                            </td>
                             <td className="px-4 py-2 text-right font-semibold text-slate-800">
                               {formatQuantity(line.requiredQuantity)}
                             </td>

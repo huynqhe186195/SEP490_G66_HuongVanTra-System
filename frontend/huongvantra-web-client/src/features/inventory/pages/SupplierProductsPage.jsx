@@ -22,6 +22,7 @@ import {
   updateSupplierProductPrice,
 } from '../services/supplierProductsApi.js'
 import {
+  downloadSupplierProductsSample,
   downloadSupplierProductsTemplate,
   parseSupplierProductsExcel,
 } from '../utils/supplierProductsExcel.js'
@@ -613,8 +614,8 @@ function ImportRowList({ emptyText, rows, tone, title }) {
 }
 
 /**
- * Import 5 cột từ Excel. Mã SKU được tra sang skuId ngay tại client bằng danh mục
- * đã nạp sẵn của trang — backend chỉ nhận Guid nên không phải gọi thêm ProductService.
+ * Import từ Excel (6 cột, hỗ trợ file cũ 5 cột). Mã SKU được tra sang skuId
+ * ngay tại client bằng danh mục đã nạp sẵn — backend chỉ nhận Guid.
  */
 function SupplierProductImportModal({ onClose, onImported, skuCatalog, supplierId, supplierName }) {
   const [fileName, setFileName] = useState('')
@@ -627,7 +628,7 @@ function SupplierProductImportModal({ onClose, onImported, skuCatalog, supplierI
   const skuByCode = useMemo(() => {
     const map = new Map()
     for (const sku of skuCatalog) {
-      if (sku.skuCode) map.set(String(sku.skuCode).trim().toUpperCase(), sku.id)
+      if (sku.skuCode) map.set(String(sku.skuCode).trim().toUpperCase(), sku)
     }
     return map
   }, [skuCatalog])
@@ -647,9 +648,12 @@ function SupplierProductImportModal({ onClose, onImported, skuCatalog, supplierI
       const matched = []
       const unknown = []
       for (const line of rawLines) {
-        const skuId = line.skuCode ? skuByCode.get(line.skuCode) : null
-        if (skuId) matched.push({ ...line, skuId })
-        else {
+        const sku = line.skuCode ? skuByCode.get(line.skuCode) : null
+        if (sku) {
+          const productName = line.productName
+            || [sku.productName, sku.variantName].filter(Boolean).join(' — ')
+          matched.push({ ...line, skuId: sku.id, productName })
+        } else {
           unknown.push({
             rowNumber: line.rowNumber,
             skuCode: line.skuCode,
@@ -728,8 +732,8 @@ function SupplierProductImportModal({ onClose, onImported, skuCatalog, supplierI
               className="w-full rounded-lg border border-[#c1c9c0] bg-[#f5f7f4] px-3 py-2.5 text-sm text-[#414942] file:mr-3 file:rounded-lg file:border-0 file:bg-[#356647] file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-white"
             />
             <p className="mt-1 text-xs text-[#717971]">
-              5 cột: Mã SKU (bắt buộc), Mã hàng của NCC, Tên hàng theo NCC, Giá chào (VNĐ), Ghi chú.
-              Dòng lỗi sẽ bị bỏ qua, các dòng hợp lệ vẫn được thêm.
+              Chỉ dùng file mẫu tải từ trang này (có dropdown SKU theo dữ liệu hệ thống lúc tải).
+              Chọn “Mã — Tên” từ dropdown → Tên sản phẩm tự điền; chỉ cần điền thêm thông tin phía NCC.
             </p>
           </div>
 
@@ -791,10 +795,26 @@ function SupplierProductImportModal({ onClose, onImported, skuCatalog, supplierI
           <button
             type="button"
             disabled={isImporting}
-            onClick={() => downloadSupplierProductsTemplate(skuCatalog.slice(0, 3).map((s) => s.skuCode))}
+            onClick={() => {
+              downloadSupplierProductsTemplate(skuCatalog).catch(() => {
+                showError('Không tạo được file mẫu Excel.')
+              })
+            }}
             className="inline-flex items-center gap-1.5 rounded-lg border border-[#c1c9c0] bg-white px-4 py-2 text-sm font-semibold text-[#356647] hover:bg-[#e8f0e9] disabled:opacity-50">
             <span className="material-symbols-outlined text-[18px]">download</span>
             Tải file mẫu
+          </button>
+          <button
+            type="button"
+            disabled={isImporting}
+            onClick={() => {
+              downloadSupplierProductsSample(skuCatalog).catch(() => {
+                showError('Không tạo được file mẫu có dữ liệu.')
+              })
+            }}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[#c1c9c0] bg-white px-4 py-2 text-sm font-semibold text-[#356647] hover:bg-[#e8f0e9] disabled:opacity-50">
+            <span className="material-symbols-outlined text-[18px]">table</span>
+            Tải file có dữ liệu mẫu
           </button>
           <button
             type="button"
@@ -925,7 +945,7 @@ export default function SupplierProductsPage() {
     }
   }
 
-  const colSpan = canManage ? 8 : 7
+  const colSpan = canManage ? 7 : 6
 
   return (
     <PageShell>
@@ -1008,8 +1028,7 @@ export default function SupplierProductsPage() {
           <thead>
             <tr className="border-b border-[#c1c9c0] text-left text-xs font-semibold text-[#717971]">
               <th className="pb-2 pr-4">Nhà cung cấp</th>
-              <th className="pb-2 pr-4">Mã SKU</th>
-              <th className="pb-2 pr-4">Tên hàng</th>
+              <th className="pb-2 pr-4">Sản Phẩm</th>
               <th className="pb-2 pr-4">Loại</th>
               <th className="pb-2 pr-4">Mã / tên theo NCC</th>
               <th className="pb-2 pr-4 text-right">Giá chào</th>
@@ -1033,9 +1052,9 @@ export default function SupplierProductsPage() {
                     <p className="text-[#1b1c17]">{item.supplierName || '—'}</p>
                     <p className="font-mono text-xs text-[#717971]">{item.supplierCodeSnapshot || '—'}</p>
                   </td>
-                  <td className="py-3 pr-4 font-mono text-xs text-[#414942]">{item.skuCodeSnapshot}</td>
                   <td className="py-3 pr-4">
                     <p className="font-semibold text-[#1b1c17]">{item.skuNameSnapshot}</p>
+                    <p className="font-mono text-xs text-[#717971]">{item.skuCodeSnapshot}</p>
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-[#717971]">{item.inventoryUnitSnapshot}</span>
                       {item.isPrimarySource ? (

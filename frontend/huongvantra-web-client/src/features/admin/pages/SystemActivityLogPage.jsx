@@ -4,6 +4,13 @@ import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { fetchSystemActivities, fetchSystemActivityDetail } from '../services/systemActivityApi.js'
+import {
+  formatActivityAction,
+  formatActivityActorRole,
+  formatActivityModule,
+  formatActivityService,
+  formatEntityType,
+} from '../utils/systemActivityLabels.js'
 
 const EMPTY_FILTERS = {
   fromUtc: '',
@@ -55,22 +62,24 @@ function buildCsvRows(items) {
     'Thời gian',
     'Người thao tác',
     'Vai trò',
-    'Service',
-    'Module',
-    'Action',
+    'Dịch vụ',
+    'Phân hệ',
+    'Hành động',
     'Đối tượng',
+    'Loại đối tượng',
     'Kết quả',
-    'HTTP',
-    'CorrelationId',
+    'Mã HTTP',
+    'Mã lần thao tác',
   ]
   const rows = items.map((item) => [
     formatDateTime(item.occurredAtUtc),
     item.actorName || item.actorId || '',
-    item.actorRole || '',
-    item.serviceName || '',
-    item.module || '',
-    item.action || '',
-    item.entityCode || item.entityId || item.entityType || '',
+    formatActivityActorRole(item.actorRole),
+    formatActivityService(item.serviceName),
+    formatActivityModule(item.module),
+    formatActivityAction(item.action),
+    item.entityCode || item.entityId || '',
+    formatEntityType(item.entityType),
     formatResult(item.result),
     item.statusCode || '',
     item.correlationId || '',
@@ -159,7 +168,7 @@ function SystemActivityLogPage() {
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = 'system-activity-log.csv'
+    link.download = 'nhat-ky-he-thong.csv'
     link.click()
     URL.revokeObjectURL(url)
     showSuccess('Đã xuất CSV nhật ký hệ thống.')
@@ -169,7 +178,7 @@ function SystemActivityLogPage() {
     <PageShell>
       <PageHeader
         title="Nhật ký hoạt động hệ thống"
-        titleInfo="Theo dõi các thao tác ghi dữ liệu từ Product, Inventory, Order, User, Customer và Document."
+        titleInfo="Theo dõi các thao tác ghi dữ liệu từ sản phẩm, kho, đơn hàng, tài khoản, khách hàng và tài liệu."
         rightContent={
           <button
             type="button"
@@ -203,13 +212,13 @@ function SystemActivityLogPage() {
             />
           </label>
           <FilterInput label="Người thao tác" value={filters.actor} onChange={(value) => updateFilter('actor', value)} />
-          <FilterInput label="Vai trò" value={filters.role} onChange={(value) => updateFilter('role', value)} />
-          <FilterInput label="Service" value={filters.serviceName} onChange={(value) => updateFilter('serviceName', value)} />
-          <FilterInput label="Module" value={filters.module} onChange={(value) => updateFilter('module', value)} />
-          <FilterInput label="Action" value={filters.action} onChange={(value) => updateFilter('action', value)} />
+          <FilterInput label="Vai trò" value={filters.role} onChange={(value) => updateFilter('role', value)} placeholder="Admin, Manager…" />
+          <FilterInput label="Dịch vụ" value={filters.serviceName} onChange={(value) => updateFilter('serviceName', value)} placeholder="OrderService…" />
+          <FilterInput label="Phân hệ" value={filters.module} onChange={(value) => updateFilter('module', value)} placeholder="orders, inventory…" />
+          <FilterInput label="Hành động" value={filters.action} onChange={(value) => updateFilter('action', value)} placeholder="POST /api/…" />
           <FilterInput label="Mã đối tượng" value={filters.entityCode} onChange={(value) => updateFilter('entityCode', value)} />
           <FilterInput
-            label="CorrelationId"
+            label="Mã lần thao tác"
             value={filters.correlationId}
             onChange={(value) => updateFilter('correlationId', value)}
           />
@@ -244,9 +253,9 @@ function SystemActivityLogPage() {
               <tr>
                 <th className="px-4 py-3">Thời gian</th>
                 <th className="px-4 py-3">Người thao tác</th>
-                <th className="px-4 py-3">Service</th>
-                <th className="px-4 py-3">Module</th>
-                <th className="px-4 py-3">Action</th>
+                <th className="px-4 py-3">Dịch vụ</th>
+                <th className="px-4 py-3">Phân hệ</th>
+                <th className="px-4 py-3">Hành động</th>
                 <th className="px-4 py-3">Đối tượng</th>
                 <th className="px-4 py-3">Kết quả</th>
                 <th className="px-4 py-3 text-right">Thao tác</th>
@@ -273,14 +282,14 @@ function SystemActivityLogPage() {
                       <td className="px-4 py-4 text-slate-700">{formatDateTime(activity.occurredAtUtc)}</td>
                       <td className="px-4 py-4">
                         <div className="font-semibold text-slate-800">{display(activity.actorName || activity.actorId)}</div>
-                        <div className="text-xs text-slate-500">{display(activity.actorRole)}</div>
+                        <div className="text-xs text-slate-500">{formatActivityActorRole(activity.actorRole)}</div>
                       </td>
-                      <td className="px-4 py-4 text-slate-700">{display(activity.serviceName)}</td>
-                      <td className="px-4 py-4 text-slate-700">{display(activity.module)}</td>
-                      <td className="px-4 py-4 text-slate-700">{display(activity.action)}</td>
+                      <td className="px-4 py-4 text-slate-700">{formatActivityService(activity.serviceName)}</td>
+                      <td className="px-4 py-4 text-slate-700">{formatActivityModule(activity.module)}</td>
+                      <td className="px-4 py-4 text-slate-700">{formatActivityAction(activity.action)}</td>
                       <td className="px-4 py-4">
                         <div className="font-semibold text-slate-800">{display(activity.entityCode || activity.entityId)}</div>
-                        <div className="text-xs text-slate-500">{display(activity.entityType)}</div>
+                        <div className="text-xs text-slate-500">{formatEntityType(activity.entityType)}</div>
                       </td>
                       <td className="px-4 py-4">
                         <span
@@ -292,7 +301,7 @@ function SystemActivityLogPage() {
                         >
                           {formatResult(activity.result)}
                         </span>
-                        <div className="mt-1 text-xs text-slate-500">HTTP {display(activity.statusCode)}</div>
+                        <div className="mt-1 text-xs text-slate-500">Mã HTTP {display(activity.statusCode)}</div>
                       </td>
                       <td className="px-4 py-4 text-right">
                         <button
@@ -331,13 +340,14 @@ function SystemActivityLogPage() {
   )
 }
 
-function FilterInput({ label, value, onChange }) {
+function FilterInput({ label, value, onChange, placeholder = '' }) {
   return (
     <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
       {label}
       <input
         type="text"
         value={value}
+        placeholder={placeholder}
         onChange={(event) => onChange(event.target.value)}
         className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm normal-case tracking-normal text-slate-700"
       />
@@ -352,7 +362,7 @@ function ActivityDetailModal({ activity, isLoading, onClose }) {
         <div className="flex items-start justify-between border-b border-slate-100 px-6 py-4">
           <div>
             <h2 className="text-lg font-bold text-slate-900">Chi tiết hoạt động</h2>
-            <p className="text-sm text-slate-500">{display(activity.correlationId)}</p>
+            <p className="text-sm text-slate-500">Mã lần thao tác: {display(activity.correlationId)}</p>
           </div>
           <button
             type="button"
@@ -367,24 +377,24 @@ function ActivityDetailModal({ activity, isLoading, onClose }) {
           <dl className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             <DetailItem label="Thời gian" value={formatDateTime(activity.occurredAtUtc)} />
             <DetailItem label="Người thao tác" value={activity.actorName || activity.actorId} />
-            <DetailItem label="Vai trò" value={activity.actorRole} />
-            <DetailItem label="Service" value={activity.serviceName} />
-            <DetailItem label="Module" value={activity.module} />
-            <DetailItem label="Action" value={activity.action} />
-            <DetailItem label="EntityType" value={activity.entityType} />
-            <DetailItem label="EntityId" value={activity.entityId} />
-            <DetailItem label="EntityCode" value={activity.entityCode} />
+            <DetailItem label="Vai trò" value={formatActivityActorRole(activity.actorRole)} />
+            <DetailItem label="Dịch vụ" value={formatActivityService(activity.serviceName)} />
+            <DetailItem label="Phân hệ" value={formatActivityModule(activity.module)} />
+            <DetailItem label="Hành động" value={formatActivityAction(activity.action)} />
+            <DetailItem label="Loại đối tượng" value={formatEntityType(activity.entityType)} />
+            <DetailItem label="Mã định danh đối tượng" value={activity.entityId} />
+            <DetailItem label="Mã đối tượng" value={activity.entityCode} />
             <DetailItem label="Kết quả" value={formatResult(activity.result)} />
-            <DetailItem label="HTTP" value={activity.statusCode} />
-            <DetailItem label="ClientIp" value={activity.clientIp} />
-            <DetailItem label="RequestPath" value={activity.requestPath} wide />
-            <DetailItem label="CorrelationId" value={activity.correlationId} wide />
-            <DetailItem label="UserAgent" value={activity.userAgent} wide />
+            <DetailItem label="Mã HTTP" value={activity.statusCode} />
+            <DetailItem label="Địa chỉ IP" value={activity.clientIp} />
+            <DetailItem label="Đường dẫn yêu cầu" value={activity.requestPath} wide />
+            <DetailItem label="Mã lần thao tác" value={activity.correlationId} wide />
+            <DetailItem label="Trình duyệt / thiết bị" value={activity.userAgent} wide />
             <DetailItem label="Mô tả" value={activity.description} wide />
             <DetailItem label="Lý do lỗi" value={activity.reason} wide />
           </dl>
-          <SnapshotBlock title="BeforeSnapshotJson" value={activity.beforeSnapshotJson} />
-          <SnapshotBlock title="AfterSnapshotJson" value={activity.afterSnapshotJson} />
+          <SnapshotBlock title="Dữ liệu trước khi thay đổi" value={activity.beforeSnapshotJson} />
+          <SnapshotBlock title="Dữ liệu sau khi thay đổi" value={activity.afterSnapshotJson} />
         </div>
       </div>
     </div>

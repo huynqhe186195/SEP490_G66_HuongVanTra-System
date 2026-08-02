@@ -13,7 +13,7 @@ namespace InventoryService.WebAPI.Controllers;
 public class ReturnInspectionController(InventoryLogic _logic) : ControllerBase
 {
     [HttpGet]
-    [Authorize(Roles = "Warehouse,Manager,Admin,Staff")]
+    [Authorize(Policy = PermissionNames.ViewInventory)]
     public async Task<IActionResult> GetPaged(
         [FromQuery] string? disposition,
         [FromQuery] string? search,
@@ -26,15 +26,17 @@ public class ReturnInspectionController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpGet("by-return/{returnId:guid}")]
-    [Authorize(Roles = "Warehouse,Manager,Admin,Staff")]
+    [Authorize(Policy = PermissionNames.ViewInventory)]
     public async Task<IActionResult> GetByReturnId(Guid returnId, CancellationToken ct)
     {
         var result = await _logic.GetReturnInspectionsByReturnIdAsync(returnId, ct);
         return Ok(result);
     }
 
+    // Giữ Roles: nghiệp vụ hiện tại cho phép cả Warehouse và Manager kiểm tra hàng trả;
+    // OPERATE_WAREHOUSE (chỉ Warehouse) sẽ làm mất quyền của Manager — chưa có permission ghép sẵn.
     [HttpPost("{id:guid}/inspect")]
-    [Authorize(Roles = "Warehouse,Manager,Admin")]
+    [Authorize(Policy = PermissionNames.WarehouseOrManagerOps)]
     public async Task<IActionResult> Inspect(
         Guid id,
         [FromBody] InspectReturnRequest request,

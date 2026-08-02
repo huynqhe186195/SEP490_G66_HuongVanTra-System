@@ -12,6 +12,9 @@ public class InventoryDbContext(DbContextOptions<InventoryDbContext> options) : 
     public DbSet<InventoryOutboxMessage> InventoryOutboxMessages => Set<InventoryOutboxMessage>();
     public DbSet<StockAdjustmentRequest> StockAdjustmentRequests => Set<StockAdjustmentRequest>();
     public DbSet<StockAdjustmentRequestItem> StockAdjustmentRequestItems => Set<StockAdjustmentRequestItem>();
+    public DbSet<StockTransfer> StockTransfers => Set<StockTransfer>();
+    public DbSet<StockTransferLine> StockTransferLines => Set<StockTransferLine>();
+    public DbSet<StockTransferBatchAllocation> StockTransferBatchAllocations => Set<StockTransferBatchAllocation>();
     public DbSet<StockExportSlip> StockExportSlips => Set<StockExportSlip>();
     public DbSet<StockExportSlipLine> StockExportSlipLines => Set<StockExportSlipLine>();
     public DbSet<StockImportSlip> StockImportSlips => Set<StockImportSlip>();
@@ -22,12 +25,14 @@ public class InventoryDbContext(DbContextOptions<InventoryDbContext> options) : 
     public DbSet<InventoryLedgerEntry> InventoryLedgerEntries => Set<InventoryLedgerEntry>();
     public DbSet<SupplierReceipt> SupplierReceipts => Set<SupplierReceipt>();
     public DbSet<SupplierReceiptItem> SupplierReceiptItems => Set<SupplierReceiptItem>();
-    public DbSet<ShelfReturnRequest> ShelfReturnRequests => Set<ShelfReturnRequest>();
-    public DbSet<ShelfReturnRequestItem> ShelfReturnRequestItems => Set<ShelfReturnRequestItem>();
     public DbSet<SupplierReturnRequest> SupplierReturnRequests => Set<SupplierReturnRequest>();
     public DbSet<SupplierReturnRequestItem> SupplierReturnRequestItems => Set<SupplierReturnRequestItem>();
+    public DbSet<SupplierReturnEvidenceImage> SupplierReturnEvidenceImages => Set<SupplierReturnEvidenceImage>();
+
     public DbSet<StocktakeRequest> StocktakeRequests => Set<StocktakeRequest>();
     public DbSet<StocktakeRequestItem> StocktakeRequestItems => Set<StocktakeRequestItem>();
+    public DbSet<ShelfReplenishmentSuggestion> ShelfReplenishmentSuggestions => Set<ShelfReplenishmentSuggestion>();
+    public DbSet<ShelfReplenishmentSuggestionItem> ShelfReplenishmentSuggestionItems => Set<ShelfReplenishmentSuggestionItem>();
     public DbSet<ProductionOrder> ProductionOrders => Set<ProductionOrder>();
     public DbSet<ProductionOrderLine> ProductionOrderLines => Set<ProductionOrderLine>();
     public DbSet<ProductionOrderOutputLine> ProductionOrderOutputLines => Set<ProductionOrderOutputLine>();
@@ -35,6 +40,7 @@ public class InventoryDbContext(DbContextOptions<InventoryDbContext> options) : 
     public DbSet<SupplierProduct> SupplierProducts => Set<SupplierProduct>();
     public DbSet<SupplierProductPriceHistory> SupplierProductPriceHistories => Set<SupplierProductPriceHistory>();
     public DbSet<ReturnInspection> ReturnInspections => Set<ReturnInspection>();
+    public DbSet<WarehouseDailyReportSubmission> WarehouseDailyReportSubmissions => Set<WarehouseDailyReportSubmission>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

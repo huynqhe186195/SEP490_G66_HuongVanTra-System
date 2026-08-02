@@ -12,8 +12,9 @@ namespace InventoryService.WebAPI.Controllers;
 [Authorize]
 public class MaterialsController(InventoryLogic _logic) : ControllerBase
 {
+    // Giữ comment: OrderService/CustomBundle có thể forward JWT Warehouse/Manager/Admin.
     [HttpPost("deduct-materials")]
-    [Authorize(Roles = "Warehouse,Manager,Admin")]
+    [Authorize(Policy = PermissionNames.MaterialsDeductAccess)]
     public async Task<IActionResult> DeductMaterials(
         [FromBody] DeductMaterialsRequest request,
         CancellationToken ct)

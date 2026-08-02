@@ -19,6 +19,13 @@ public record ProductBomCatalogVariantResponse(
     string VariantName,
     bool IsActive,
     bool IsSellable,
+    bool IsPurchasable,
+    bool CanBeBomComponent,
+    bool CanUseInCustom,
+    bool CanHaveBom,
+    bool IsBaseUnitVariant,
+    Guid? BaseVariantId,
+    decimal ConversionRate,
     bool HasBom,
     int BomLineCount,
     List<BomLineResponse> BomLines);

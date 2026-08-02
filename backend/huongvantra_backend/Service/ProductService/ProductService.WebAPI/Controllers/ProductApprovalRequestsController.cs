@@ -1,3 +1,4 @@
+using HuongVanTra.Shared.Auth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using ProductService.Application.DTOs.Requests;
@@ -16,7 +17,7 @@ public class ProductApprovalRequestsController(ProductApprovalLogic _logic) : Co
     };
 
     [HttpGet]
-    [Authorize(Roles = "Admin,Warehouse")]
+    [Authorize(Policy = PermissionNames.ViewProductRequest)]
     public async Task<IActionResult> GetPaged(
         [FromQuery] string? status,
         [FromQuery] string? search,
@@ -26,37 +27,37 @@ public class ProductApprovalRequestsController(ProductApprovalLogic _logic) : Co
         Ok(await _logic.GetPagedAsync(new GetProductApprovalRequestsRequest(status, search, page, pageSize), ct));
 
     [HttpGet("{id:guid}")]
-    [Authorize(Roles = "Admin,Warehouse")]
+    [Authorize(Policy = PermissionNames.ViewProductRequest)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct = default) =>
         Ok(await _logic.GetByIdAsync(id, ct));
 
     [HttpPost]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Policy = PermissionNames.ApproveProductRequest)]
     public IActionResult Create([FromBody] CreateNewProductApprovalRequest request, CancellationToken ct = default) =>
         StatusCode(StatusCodes.Status410Gone, LegacyWriteDisabled);
 
     [HttpPost("{id:guid}/authorize")]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Policy = PermissionNames.ApproveProductRequest)]
     public IActionResult Authorize(Guid id, [FromBody] AuthorizeProductApprovalRequest request, CancellationToken ct = default) =>
         StatusCode(StatusCodes.Status410Gone, LegacyWriteDisabled);
 
     [HttpPost("{id:guid}/cancel")]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Policy = PermissionNames.ApproveProductRequest)]
     public IActionResult Cancel(Guid id, [FromBody] CancelProductApprovalRequest request, CancellationToken ct = default) =>
         StatusCode(StatusCodes.Status410Gone, LegacyWriteDisabled);
 
     [HttpPost("validate-code")]
-    [Authorize(Roles = "Warehouse")]
+    [Authorize(Policy = PermissionNames.ManageCatalog)]
     public IActionResult ValidateCode([FromBody] ValidateProductApprovalCodeRequest request, CancellationToken ct = default) =>
         StatusCode(StatusCodes.Status410Gone, LegacyWriteDisabled);
 
     [HttpPost("create-automatic")]
-    [Authorize(Roles = "Warehouse")]
+    [Authorize(Policy = PermissionNames.ManageCatalog)]
     public IActionResult CreateAutomatic([FromBody] CreateProductFromApprovalRequest request, CancellationToken ct = default) =>
         StatusCode(StatusCodes.Status410Gone, LegacyWriteDisabled);
 
     [HttpPost("create-manual")]
-    [Authorize(Roles = "Warehouse")]
+    [Authorize(Policy = PermissionNames.ManageCatalog)]
     public IActionResult CreateManual([FromBody] CreateProductManualFromApprovalRequest request, CancellationToken ct = default) =>
         StatusCode(StatusCodes.Status410Gone, LegacyWriteDisabled);
 }

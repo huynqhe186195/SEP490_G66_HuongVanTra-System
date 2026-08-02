@@ -4,6 +4,7 @@ using ProductService.Application;
 using ProductService.Application.DTOs.Requests;
 using ProductService.Infrastructure.UseCases;
 using ProductService.WebAPI.Extensions;
+using ProductService.WebAPI.Filters;
 using HuongVanTra.Shared.Auth;
 
 namespace ProductService.WebAPI.Controllers;
@@ -18,7 +19,7 @@ public class ProductSkusController(ProductSkuLogic _skuLogic) : ControllerBase
     };
 
     [HttpGet]
-    [Authorize(Roles = "Warehouse,Accountant,Admin")]
+    [Authorize(Policy = PermissionNames.ViewCatalogAccess)]
     public async Task<IActionResult> GetPaged(
         [FromQuery] string? search,
         [FromQuery] Guid? productId,
@@ -31,10 +32,11 @@ public class ProductSkusController(ProductSkuLogic _skuLogic) : ControllerBase
 
     /// <summary>
     /// Internal catalog for InventoryService sell-before-deduct (BOM check).
-    /// Anonymous service-to-service call; always uses warehouse scope so BOM + materials are visible.
+    /// Service-to-service only (X-Internal-Api-Key); warehouse scope so BOM + materials are visible.
     /// </summary>
     [HttpGet("bom-catalog")]
     [AllowAnonymous]
+    [RequireInternalApiKey]
     public async Task<IActionResult> GetBomCatalog(
         [FromQuery] List<Guid>? skuIds,
         CancellationToken ct) =>
@@ -45,6 +47,7 @@ public class ProductSkusController(ProductSkuLogic _skuLogic) : ControllerBase
     /// </summary>
     [HttpGet("order-catalog")]
     [AllowAnonymous]
+    [RequireInternalApiKey]
     public async Task<IActionResult> GetOrderCatalog(
         [FromQuery] List<Guid>? skuIds,
         CancellationToken ct) =>
@@ -56,18 +59,19 @@ public class ProductSkusController(ProductSkuLogic _skuLogic) : ControllerBase
     /// </summary>
     [HttpGet("supplier-receipt-catalog")]
     [AllowAnonymous]
+    [RequireInternalApiKey]
     public async Task<IActionResult> GetSupplierReceiptCatalog(
         [FromQuery] List<Guid>? skuIds,
         CancellationToken ct) =>
         Ok(await _skuLogic.GetSupplierReceiptCatalogBySkuIdsAsync(skuIds, ct));
 
     [HttpGet("accounting-cost-profit")]
-    [Authorize(Roles = "Admin,Manager,Accountant")]
+    [Authorize(Policy = PermissionNames.ViewCost)]
     public async Task<IActionResult> GetAccountingCostProfit(CancellationToken ct) =>
         Ok(await _skuLogic.GetAccountingCostProfitAsync(ct));
 
     [HttpPatch("{id:guid}/retail-price")]
-    [Authorize(Roles = "Accountant")]
+    [Authorize(Policy = PermissionNames.ManageCost)]
     public async Task<IActionResult> UpdateRetailPrice(
         Guid id,
         [FromBody] UpdateProductVariantRetailPriceRequest request,
@@ -75,7 +79,7 @@ public class ProductSkusController(ProductSkuLogic _skuLogic) : ControllerBase
         Ok(await _skuLogic.UpdateRetailPriceAsync(id, request, User.ToProductApprovalActorSnapshot(), ct));
 
     [HttpGet("{id:guid}/price-history")]
-    [Authorize(Roles = "Admin,Manager,Accountant")]
+    [Authorize(Policy = PermissionNames.ViewCost)]
     public async Task<IActionResult> GetPriceHistory(
         Guid id,
         [FromQuery] int page = 1,
@@ -84,32 +88,32 @@ public class ProductSkusController(ProductSkuLogic _skuLogic) : ControllerBase
         Ok(await _skuLogic.GetPriceHistoryAsync(id, page, pageSize, ct));
 
     [HttpGet("{id:guid}")]
-    [Authorize(Roles = "Warehouse,Accountant,Admin")]
+    [Authorize(Policy = PermissionNames.ViewCatalogAccess)]
     public async Task<IActionResult> GetById(Guid id) =>
         Ok(await _skuLogic.GetByIdAsync(id, User.GetCatalogViewScope()));
 
     [HttpGet("by-code/{skuCode}")]
-    [Authorize(Roles = "Warehouse,Accountant,Admin")]
+    [Authorize(Policy = PermissionNames.ViewCatalogAccess)]
     public async Task<IActionResult> GetBySkuCode(string skuCode) =>
         Ok(await _skuLogic.GetBySkuCodeAsync(skuCode, User.GetCatalogViewScope()));
 
     [HttpGet("by-product/{productId:guid}")]
-    [Authorize(Roles = "Warehouse,Accountant,Admin")]
+    [Authorize(Policy = PermissionNames.ViewCatalogAccess)]
     public async Task<IActionResult> GetByProductId(Guid productId) =>
         Ok(await _skuLogic.GetByProductIdAsync(productId, User.GetCatalogViewScope()));
 
     [HttpPost]
-    [Authorize(Roles = "Warehouse")]
+    [Authorize(Policy = PermissionNames.ManageCatalog)]
     public IActionResult Create([FromBody] CreateProductSkuRequest request) =>
         StatusCode(StatusCodes.Status410Gone, MasterDataWriteDisabled);
 
     [HttpPut("{id:guid}")]
-    [Authorize(Roles = "Warehouse")]
+    [Authorize(Policy = PermissionNames.ManageCatalog)]
     public IActionResult Update(Guid id, [FromBody] UpdateProductSkuRequest request) =>
         StatusCode(StatusCodes.Status410Gone, MasterDataWriteDisabled);
 
     [HttpDelete("{id:guid}")]
-    [Authorize(Roles = "Warehouse")]
+    [Authorize(Policy = PermissionNames.ManageCatalog)]
     public IActionResult Delete(Guid id) =>
         StatusCode(StatusCodes.Status410Gone, MasterDataWriteDisabled);
 }

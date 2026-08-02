@@ -44,6 +44,44 @@ public static class AuthorizationServiceExtensions
                     PermissionNames.CreateOrder,
                     PermissionNames.CreateCustomer)));
 
+            // YC bổ sung kệ: Sale (tạo đơn) + kho/admin xem qua VIEW_INVENTORY
+            options.AddPolicy(PermissionNames.StockAdjustmentReadAccess, policy =>
+                policy.Requirements.Add(new AnyPermissionRequirement(
+                    PermissionNames.ViewInventory,
+                    PermissionNames.CreateOrder,
+                    PermissionNames.CreatePosOrder,
+                    PermissionNames.CreateCodOrder)));
+
+            options.AddPolicy(PermissionNames.StockAdjustmentCreateAccess, policy =>
+                policy.Requirements.Add(new AnyPermissionRequirement(
+                    PermissionNames.CreateOrder,
+                    PermissionNames.CreatePosOrder,
+                    PermissionNames.CreateCodOrder,
+                    PermissionNames.ManageEmployee)));
+
+            options.AddPolicy(PermissionNames.ViewCatalogAccess, policy =>
+                policy.Requirements.Add(new AnyPermissionRequirement(
+                    PermissionNames.ViewInventory,
+                    PermissionNames.ManageCatalog,
+                    PermissionNames.ViewCost)));
+
+            options.AddPolicy(PermissionNames.WarehouseOrManagerOps, policy =>
+                policy.Requirements.Add(new AnyPermissionRequirement(
+                    PermissionNames.OperateWarehouse,
+                    PermissionNames.ApproveInventory)));
+
+            options.AddPolicy(PermissionNames.MaterialsDeductAccess, policy =>
+                policy.Requirements.Add(new AnyPermissionRequirement(
+                    PermissionNames.OperateWarehouse,
+                    PermissionNames.ApproveInventory,
+                    PermissionNames.RejectStockDeduct,
+                    PermissionNames.ManageRole)));
+
+            options.AddPolicy(PermissionNames.CancelRetailPriceAccess, policy =>
+                policy.Requirements.Add(new AnyPermissionRequirement(
+                    PermissionNames.ApprovePrice,
+                    PermissionNames.ManageCost)));
+
             options.AddPolicy(PermissionNames.ShipOrderAccess, policy =>
                 policy.Requirements.Add(new AnyPermissionRequirement(
                     PermissionNames.CreateOrder,

@@ -42,6 +42,19 @@ public class GlobalExceptionMiddleware(RequestDelegate next, ILogger<GlobalExcep
             return context.Response.WriteAsync(body);
         }
 
+        if (ex is DuplicateStockAdjustmentRequestException duplicateEx)
+        {
+            context.Response.StatusCode = StatusCodes.Status409Conflict;
+            var body = JsonSerializer.Serialize(new
+            {
+                code = "DUPLICATE_STOCK_ADJUSTMENT_SKU",
+                message = duplicateEx.Message,
+                blocking = duplicateEx.Blocking,
+                duplicates = duplicateEx.Duplicates
+            }, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+            return context.Response.WriteAsync(body);
+        }
+
         var (statusCode, message) = ex switch
         {
             InventoryNotFoundException e => (StatusCodes.Status404NotFound, e.Message),
