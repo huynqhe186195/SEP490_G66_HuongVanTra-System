@@ -145,7 +145,7 @@ function columnXml(widths) {
   return widths.map((w) => `<Column ss:AutoFitWidth="0" ss:Width="${Math.round(w * 7)}"/>`).join('')
 }
 
-function buildOverviewSheet({ dateLabel, date, generated, doneTotal, snap, openCount }) {
+function buildOverviewSheet({ dateLabel, date, generated, doneTotal, snap, openCount, stockLabel, openLabel, notes }) {
   const rows = [
     rowXml([cellXml('BÁO CÁO CUỐI NGÀY KHO', 'Title'), cellXml('', 'Title')], 28),
     rowXml([cellXml('Hương Vân Trà — HVTPOSIMS', 'Subtitle'), cellXml('', 'Subtitle')], 20),
@@ -157,17 +157,16 @@ function buildOverviewSheet({ dateLabel, date, generated, doneTotal, snap, openC
     rowXml([cellXml('TÓM TẮT', 'Section'), cellXml('', 'Section')]),
     rowXml([cellXml('Chỉ số', 'Header'), cellXml('Giá trị', 'Header')]),
     rowXml([cellXml('Việc đã làm trong ngày', 'Label'), cellXml(doneTotal, 'NumCell', 'Number')]),
-    rowXml([cellXml('Tồn kho hiện tại', 'Label'), cellXml(snap.totalWarehouseQuantity, 'NumCell', 'Number')]),
+    rowXml([cellXml(stockLabel, 'Label'), cellXml(snap.totalWarehouseQuantity, 'NumCell', 'Number')]),
     rowXml([cellXml('Mặt hàng sắp hết', 'Label'), cellXml(snap.lowStockSkuCount, 'NumCell', 'Number')]),
     rowXml([cellXml('Lô sắp hết hạn (30 ngày)', 'Label'), cellXml(snap.expiringBatchCount30Days, 'NumCell', 'Number')]),
     rowXml([
-      cellXml('Việc còn dở hiện tại', 'Label'),
+      cellXml(openLabel, 'Label'),
       cellXml(openCount, openCount > 0 ? 'Warn' : 'NumCell', 'Number'),
     ]),
     rowXml([cellXml('', 'Value'), cellXml('', 'Value')]),
     rowXml([cellXml('GHI CHÚ', 'Section'), cellXml('', 'Section')]),
-    rowXml([cellXml('Phần “Còn dở” là tồn đọng hiện tại, không gắn ngày đang xem.', 'Note'), cellXml('', 'Note')]),
-    rowXml([cellXml('Các sheet còn lại liệt kê việc đã hoàn tất trong ngày chọn.', 'Note'), cellXml('', 'Note')]),
+    ...notes.map((note) => rowXml([cellXml(note, 'Note'), cellXml('', 'Note')])),
   ]
 
   return `
@@ -253,13 +252,51 @@ export function exportWarehouseDailyReportExcel({
   dateLabel,
   doneTotal,
   openRows,
+  source = 'live',
 }) {
   const snap = report.endingSnapshot
   const generated = formatVietnamDateTimeMinute(report.generatedAtUtc)
   const openCount = report.summary.openCarryCount
+  const isSnapshot = source === 'snapshot'
+  const isPointInTime = Boolean(snap?.isPointInTime) || isSnapshot
+  const stockLabel = isPointInTime ? 'Tồn kho cuối ngày' : 'Tồn kho hiện tại'
+  const openLabel = isSnapshot
+    ? 'Việc còn dở lúc gửi'
+    : isPointInTime
+      ? 'Việc còn dở cuối ngày'
+      : 'Việc còn dở hiện tại'
+  const openSheetTitle = isSnapshot
+    ? 'VIỆC CÒN DỞ LÚC GỬI'
+    : isPointInTime
+      ? 'VIỆC CÒN DỞ CUỐI NGÀY'
+      : 'VIỆC CÒN DỞ HIỆN TẠI'
+  const notes = isSnapshot
+    ? [
+      'Xuất từ snapshot đã gửi — số liệu cố định tại thời điểm Thủ kho gửi.',
+      'Các sheet còn lại liệt kê việc đã hoàn tất trong ngày chọn.',
+    ]
+    : isPointInTime
+      ? [
+        'Tồn kho / còn dở được tái dựng về cuối ngày chọn (không phải thời điểm xuất file).',
+        'Các sheet còn lại liệt kê việc đã hoàn tất trong ngày chọn.',
+      ]
+      : [
+        'Tồn kho / còn dở là số liệu hiện tại tại thời điểm xuất.',
+        'Các sheet còn lại liệt kê việc đã hoàn tất trong ngày chọn.',
+      ]
 
   const sheets = [
-    buildOverviewSheet({ dateLabel, date, generated, doneTotal, snap, openCount }),
+    buildOverviewSheet({
+      dateLabel,
+      date,
+      generated,
+      doneTotal,
+      snap,
+      openCount,
+      stockLabel,
+      openLabel,
+      notes,
+    }),
     buildDataSheet({
       name: 'Nhap NCC',
       title: 'NHẬP NCC ĐÃ HOÀN TẤT',
@@ -358,14 +395,14 @@ export function exportWarehouseDailyReportExcel({
     }),
     buildDataSheet({
       name: 'Con do',
-      title: 'VIỆC CÒN DỞ HIỆN TẠI',
-      dateLabel: 'Tồn đọng hiện tại',
+      title: openSheetTitle,
+      dateLabel: isPointInTime ? dateLabel : 'Tồn đọng hiện tại',
       headers: ['Loại việc', 'Mã phiếu / đơn', 'Trạng thái'],
       rows: openRows.map((r) => [r.kind, r.code, statusVi(r.status)]),
       widths: [22, 22, 16],
       amber: true,
       extraMeta: [
-        ['Lưu ý', 'Không gắn ngày đang xem'],
+        ['Lưu ý', isSnapshot ? 'Theo snapshot lúc gửi' : isPointInTime ? 'Tái dựng cuối ngày chọn' : 'Không gắn ngày đang xem'],
         ['Thời điểm xuất', generated],
       ],
     }),

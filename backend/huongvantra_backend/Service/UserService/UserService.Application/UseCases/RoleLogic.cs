@@ -28,10 +28,17 @@ public class RoleLogic(IRoleRepository roleRepo, IPermissionRepository permissio
         return MapToResponse(created);
     }
 
+    private static readonly HashSet<string> RetiredRoleNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "CooperativeOwner",
+    };
+
     public async Task<IEnumerable<RoleResponse>> GetAllAsync(bool onlyDeleted = false)
     {
         var roles = await roleRepo.GetAllAsync(onlyDeleted);
-        return roles.Select(MapToResponse);
+        return roles
+            .Where(r => !RetiredRoleNames.Contains(r.RoleName))
+            .Select(MapToResponse);
     }
 
     public async Task<IEnumerable<RoleResponse>> GetAssignableAsync(IReadOnlyList<string> actorPermissions)
@@ -76,6 +83,12 @@ public class RoleLogic(IRoleRepository roleRepo, IPermissionRepository permissio
 
     public async Task RestoreAsync(int id)
     {
+        var roles = await roleRepo.GetAllAsync(onlyDeleted: true);
+        var target = roles.FirstOrDefault(r => r.Id == id)
+            ?? throw new RoleNotFoundException(id);
+        if (RetiredRoleNames.Contains(target.RoleName))
+            throw new UserValidationException("Vai trò này đã ngừng dùng và không thể khôi phục.");
+
         await roleRepo.RestoreAsync(id);
         _ = await roleRepo.GetByIdAsync(id) ?? throw new RoleNotFoundException(id);
     }

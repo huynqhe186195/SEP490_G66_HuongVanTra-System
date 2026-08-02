@@ -12,11 +12,8 @@ namespace InventoryService.WebAPI.Controllers;
 [Authorize]
 public class SupplierProductsController(InventoryLogic _logic) : ControllerBase
 {
-    private const string ViewRoles = "Admin,Manager,Accountant,Warehouse";
-    private const string WriteRoles = "Accountant";
-
     [HttpGet]
-    [Authorize(Roles = ViewRoles)]
+    [Authorize(Policy = PermissionNames.ViewInventory)]
     public async Task<IActionResult> GetList(
         CancellationToken ct,
         [FromQuery] Guid? supplierId = null,
@@ -32,7 +29,7 @@ public class SupplierProductsController(InventoryLogic _logic) : ControllerBase
 
     /// <summary>Danh mục hàng đang cung ứng — dùng để lọc SKU và điền sẵn giá chào khi lập phiếu nhập.</summary>
     [HttpGet("by-supplier/{supplierId:guid}/active")]
-    [Authorize(Roles = ViewRoles)]
+    [Authorize(Policy = PermissionNames.ViewInventory)]
     public async Task<IActionResult> GetActiveBySupplier(Guid supplierId, CancellationToken ct)
     {
         return Ok(await _logic.GetActiveSupplierProductsAsync(supplierId, ct));
@@ -40,28 +37,28 @@ public class SupplierProductsController(InventoryLogic _logic) : ControllerBase
 
     /// <summary>Các nhà cung cấp đang cung ứng một SKU, sắp xếp theo giá chào tăng dần.</summary>
     [HttpGet("by-sku/{skuId:guid}")]
-    [Authorize(Roles = ViewRoles)]
+    [Authorize(Policy = PermissionNames.ViewInventory)]
     public async Task<IActionResult> GetBySku(Guid skuId, CancellationToken ct)
     {
         return Ok(await _logic.GetSupplierProductsBySkuAsync(skuId, ct));
     }
 
     [HttpGet("{id:guid}")]
-    [Authorize(Roles = ViewRoles)]
+    [Authorize(Policy = PermissionNames.ViewInventory)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
     {
         return Ok(await _logic.GetSupplierProductAsync(id, ct));
     }
 
     [HttpGet("{id:guid}/price-history")]
-    [Authorize(Roles = ViewRoles)]
+    [Authorize(Policy = PermissionNames.ViewInventory)]
     public async Task<IActionResult> GetPriceHistory(Guid id, CancellationToken ct)
     {
         return Ok(await _logic.GetSupplierProductPriceHistoryAsync(id, ct));
     }
 
     [HttpPost("by-supplier/{supplierId:guid}")]
-    [Authorize(Roles = WriteRoles)]
+    [Authorize(Policy = PermissionNames.ManageSuppliers)]
     public async Task<IActionResult> Create(
         Guid supplierId,
         [FromBody] CreateSupplierProductRequest request,
@@ -73,7 +70,7 @@ public class SupplierProductsController(InventoryLogic _logic) : ControllerBase
 
     /// <summary>Import danh mục hàng cung ứng từ Excel. Dòng lỗi bị bỏ qua, dòng hợp lệ vẫn được ghi.</summary>
     [HttpPost("by-supplier/{supplierId:guid}/import")]
-    [Authorize(Roles = WriteRoles)]
+    [Authorize(Policy = PermissionNames.ManageSuppliers)]
     public async Task<IActionResult> Import(
         Guid supplierId,
         [FromBody] ImportSupplierProductsRequest request,
@@ -83,7 +80,7 @@ public class SupplierProductsController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
-    [Authorize(Roles = WriteRoles)]
+    [Authorize(Policy = PermissionNames.ManageSuppliers)]
     public async Task<IActionResult> Update(
         Guid id,
         [FromBody] UpdateSupplierProductRequest request,
@@ -93,7 +90,7 @@ public class SupplierProductsController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpPut("{id:guid}/price")]
-    [Authorize(Roles = WriteRoles)]
+    [Authorize(Policy = PermissionNames.ManageSuppliers)]
     public async Task<IActionResult> UpdatePrice(
         Guid id,
         [FromBody] UpdateSupplierProductPriceRequest request,
@@ -103,14 +100,14 @@ public class SupplierProductsController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
-    [Authorize(Roles = WriteRoles)]
+    [Authorize(Policy = PermissionNames.ManageSuppliers)]
     public async Task<IActionResult> Deactivate(Guid id, CancellationToken ct)
     {
         return Ok(await _logic.DeactivateSupplierProductAsync(id, ct));
     }
 
     [HttpPost("{id:guid}/restore")]
-    [Authorize(Roles = WriteRoles)]
+    [Authorize(Policy = PermissionNames.ManageSuppliers)]
     public async Task<IActionResult> Restore(Guid id, CancellationToken ct)
     {
         return Ok(await _logic.RestoreSupplierProductAsync(id, ct));

@@ -29,7 +29,6 @@ public static class DataSeeder
             PermissionNames.ViewCustomer,
             PermissionNames.VerifyCod
         ]),
-        // Legacy: giữ để tương thích dữ liệu cũ; quyền gần SalePos (không VERIFY_COD).
         ("Sale", "Nhân viên kinh doanh (legacy → dùng SalePos/SaleCod)",
         [
             PermissionNames.CreateOrder,
@@ -38,9 +37,26 @@ public static class DataSeeder
             PermissionNames.ViewCustomer
         ]),
         ("Warehouse", "Thủ kho Kho tổng",
-        [PermissionNames.ViewOrder, PermissionNames.ManageCatalog]),
+        [
+            PermissionNames.ViewOrder,
+            PermissionNames.ManageCatalog,
+            PermissionNames.MonitorOutbox,
+            PermissionNames.ViewInventory,
+            PermissionNames.OperateWarehouse,
+            PermissionNames.SubmitWarehouseReport,
+            PermissionNames.BroadcastNotification,
+            PermissionNames.ViewProductRequest,
+            PermissionNames.ViewCost,
+        ]),
         ("Accountant", "Kế toán",
-        [PermissionNames.ViewOrder, PermissionNames.ViewAllCustomers]),
+        [
+            PermissionNames.ViewOrder,
+            PermissionNames.ViewAllCustomers,
+            PermissionNames.ViewInventory,
+            PermissionNames.ManageSuppliers,
+            PermissionNames.ManageCost,
+            PermissionNames.ViewCost,
+        ]),
         ("Manager", "Quản lý",
         [
             PermissionNames.CreateOrder,
@@ -51,7 +67,15 @@ public static class DataSeeder
             PermissionNames.ManageEmployee,
             PermissionNames.CreateCustomer,
             PermissionNames.ViewCustomer,
-            PermissionNames.VerifyCod
+            PermissionNames.VerifyCod,
+            PermissionNames.ApproveContract,
+            PermissionNames.MonitorOutbox,
+            PermissionNames.ViewInventory,
+            PermissionNames.ApproveInventory,
+            PermissionNames.RejectStockDeduct,
+            PermissionNames.ViewCost,
+            PermissionNames.ViewProductRequest,
+            PermissionNames.ApproveProductRequest,
         ])
     ];
 
@@ -82,11 +106,60 @@ public static class DataSeeder
         foreach (var (roleName, description, permissions) in DefaultRoles)
             await SeedRoleAsync(context, roleName, description, permissions);
 
+        await RetireObsoleteRolesAsync(context);
+
         foreach (var (username, fullName, department, roleName) in DemoUsers)
             await SeedDemoUserAsync(context, username, fullName, department, roleName);
 
         await SyncDemoUserPrimaryRoleAsync(context);
         await SeedShiftTemplatesAsync(context);
+    }
+
+    /// <summary>
+    /// Vai trò legacy không còn dùng trong HVTPOSIMS 1 cửa hàng — ẩn khỏi IAM.
+    /// </summary>
+    private static readonly string[] ObsoleteRoleNames = ["CooperativeOwner"];
+
+    private static async Task RetireObsoleteRolesAsync(UserDbContext context)
+    {
+        var obsolete = await context.Roles
+            .Include(r => r.UserRoles)
+            .Where(r => ObsoleteRoleNames.Contains(r.RoleName) && !r.IsDeleted)
+            .ToListAsync();
+
+        if (obsolete.Count > 0)
+        {
+            foreach (var role in obsolete)
+            {
+                if (role.UserRoles.Count > 0)
+                    context.UserRoles.RemoveRange(role.UserRoles);
+
+                role.IsDeleted = true;
+                role.Description = string.IsNullOrWhiteSpace(role.Description)
+                    ? "Đã ngừng dùng"
+                    : $"{role.Description.Trim()} — đã ngừng dùng";
+            }
+        }
+
+        // Tài khoản demo legacy gắn CooperativeOwner.
+        var legacyOwners = await context.Users
+            .Include(u => u.Employee)
+            .Include(u => u.UserRoles)
+            .Where(u => !u.IsDeleted && u.Username == "owner01")
+            .ToListAsync();
+
+        foreach (var user in legacyOwners)
+        {
+            if (user.UserRoles.Count > 0)
+                context.UserRoles.RemoveRange(user.UserRoles);
+            user.IsDeleted = true;
+            user.IsActive = false;
+            if (user.Employee is not null)
+                user.Employee.IsDeleted = true;
+        }
+
+        if (context.ChangeTracker.HasChanges())
+            await context.SaveChangesAsync();
     }
 
     // Chỉ Sale (SalePos/SaleCod) cần đăng ký ca — ca kho (Warehouse) bị vô hiệu hoá.
@@ -158,6 +231,14 @@ public static class DataSeeder
                 PermissionNames.ViewOrder,
                 PermissionNames.ViewCustomer,
                 PermissionNames.ViewAllCustomers,
+                PermissionNames.ApprovePrice,
+                PermissionNames.ApproveContract,
+                PermissionNames.ManageBusinessPolicy,
+                PermissionNames.MonitorOutbox,
+                PermissionNames.ViewInventory,
+                PermissionNames.RejectStockDeduct,
+                PermissionNames.ViewCost,
+                PermissionNames.ViewProductRequest,
             ]);
     }
 

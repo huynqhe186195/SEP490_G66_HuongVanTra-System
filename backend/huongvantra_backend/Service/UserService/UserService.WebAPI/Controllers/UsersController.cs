@@ -121,6 +121,11 @@ public class UsersController(UserLogic userLogic) : ControllerBase
     [HttpPut("{id:guid}/change-password")]
     public async Task<IActionResult> ChangePassword(Guid id, [FromBody] ChangePasswordRequest request)
     {
+        var currentUserId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? User.FindFirstValue("sub")!);
+        if (id != currentUserId)
+            return Forbid();
+
         await userLogic.ChangePasswordAsync(id, request);
         return NoContent();
     }

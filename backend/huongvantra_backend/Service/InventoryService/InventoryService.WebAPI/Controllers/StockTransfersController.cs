@@ -13,7 +13,7 @@ namespace InventoryService.WebAPI.Controllers;
 public class StockTransfersController(StockTransferLogic _logic) : ControllerBase
 {
     [HttpGet]
-    [Authorize(Roles = "Warehouse,Manager,Admin")]
+    [Authorize(Policy = PermissionNames.ViewInventory)]
     public async Task<IActionResult> GetList(
         CancellationToken ct,
         [FromQuery] string? status = null,
@@ -48,7 +48,7 @@ public class StockTransfersController(StockTransferLogic _logic) : ControllerBas
         value.HasValue ? DateTime.SpecifyKind(value.Value.Date.AddDays(1), DateTimeKind.Utc) : null;
 
     [HttpGet("{id:guid}")]
-    [Authorize(Roles = "Warehouse,Manager,Admin")]
+    [Authorize(Policy = PermissionNames.ViewInventory)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
     {
         var transfer = await _logic.GetByIdAsync(id, ct);
@@ -56,7 +56,7 @@ public class StockTransfersController(StockTransferLogic _logic) : ControllerBas
     }
 
     [HttpPost]
-    [Authorize(Roles = "Warehouse")]
+    [Authorize(Policy = PermissionNames.OperateWarehouse)]
     public async Task<IActionResult> Create([FromBody] UpsertStockTransferRequest request, CancellationToken ct)
     {
         if (User.IsInRole("Admin")) return Forbid();
@@ -67,7 +67,7 @@ public class StockTransfersController(StockTransferLogic _logic) : ControllerBas
     }
 
     [HttpPut("{id:guid}")]
-    [Authorize(Roles = "Warehouse")]
+    [Authorize(Policy = PermissionNames.OperateWarehouse)]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpsertStockTransferRequest request, CancellationToken ct)
     {
         if (User.IsInRole("Admin")) return Forbid();
@@ -77,7 +77,7 @@ public class StockTransfersController(StockTransferLogic _logic) : ControllerBas
     }
 
     [HttpPost("{id:guid}/complete")]
-    [Authorize(Roles = "Warehouse")]
+    [Authorize(Policy = PermissionNames.OperateWarehouse)]
     public async Task<IActionResult> Complete(Guid id, CancellationToken ct)
     {
         if (User.IsInRole("Admin")) return Forbid();
@@ -87,7 +87,7 @@ public class StockTransfersController(StockTransferLogic _logic) : ControllerBas
     }
 
     [HttpPost("{id:guid}/cancel")]
-    [Authorize(Roles = "Warehouse")]
+    [Authorize(Policy = PermissionNames.OperateWarehouse)]
     public async Task<IActionResult> Cancel(Guid id, [FromBody] CancelStockTransferRequest request, CancellationToken ct)
     {
         if (User.IsInRole("Admin")) return Forbid();

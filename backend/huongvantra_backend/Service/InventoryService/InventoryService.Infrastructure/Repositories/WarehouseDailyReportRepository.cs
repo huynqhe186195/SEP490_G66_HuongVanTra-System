@@ -10,7 +10,7 @@ public sealed class WarehouseDailyReportRepository(InventoryDbContext db) : IWar
 {
     private const string LocationWarehouse = "Warehouse";
     private const int ListCap = 200;
-    private const int OpenCarryCap = 50;
+    private const int OpenCarryListCap = 50;
 
     public async Task<IReadOnlyList<WarehouseDailyReceiptRow>> GetCompletedSupplierReceiptsAsync(
         DateTime fromUtc,
@@ -159,7 +159,6 @@ public sealed class WarehouseDailyReportRepository(InventoryDbContext db) : IWar
         DateTime toUtcExclusive,
         CancellationToken ct = default)
     {
-        // GroupBy + new record(...) không translate được trên Pomelo/EF — aggregate anonymous rồi map.
         var rows = await db.InventoryLedgerEntries.AsNoTracking()
             .Where(e => e.Location == LocationWarehouse
                 && e.OccurredAtUtc >= fromUtc
@@ -193,7 +192,30 @@ public sealed class WarehouseDailyReportRepository(InventoryDbContext db) : IWar
                 && e.OccurredAtUtc < toUtcExclusive, ct);
     }
 
-    public async Task<WarehouseDailyEndingSnapshot> GetEndingSnapshotAsync(CancellationToken ct = default)
+    public async Task<WarehouseDailyEndingSnapshot> GetEndingSnapshotAsync(
+        DateTime asOfUtcExclusive,
+        bool reconstructPointInTime,
+        DateOnly businessDate,
+        CancellationToken ct = default)
+    {
+        if (!reconstructPointInTime)
+            return await GetLiveEndingSnapshotAsync(ct);
+
+        return await GetPointInTimeEndingSnapshotAsync(asOfUtcExclusive, businessDate, ct);
+    }
+
+    public async Task<WarehouseDailyOpenCarry> GetOpenCarryAsync(
+        DateTime asOfUtcExclusive,
+        bool reconstructPointInTime,
+        CancellationToken ct = default)
+    {
+        if (!reconstructPointInTime)
+            return await GetLiveOpenCarryAsync(ct);
+
+        return await GetPointInTimeOpenCarryAsync(asOfUtcExclusive, ct);
+    }
+
+    private async Task<WarehouseDailyEndingSnapshot> GetLiveEndingSnapshotAsync(CancellationToken ct)
     {
         var skus = await db.SkuStocks.AsNoTracking().ToListAsync(ct);
         var totalSkus = skus.Count;
@@ -227,16 +249,72 @@ public sealed class WarehouseDailyReportRepository(InventoryDbContext db) : IWar
             lowStock,
             warehouseValue,
             expiring,
-            pendingDeduct);
+            pendingDeduct,
+            IsPointInTime: false,
+            AsOfUtc: DateTime.UtcNow);
     }
 
-    public async Task<WarehouseDailyOpenCarry> GetOpenCarryAsync(CancellationToken ct = default)
+    private async Task<WarehouseDailyEndingSnapshot> GetPointInTimeEndingSnapshotAsync(
+        DateTime asOfUtcExclusive,
+        DateOnly businessDate,
+        CancellationToken ct)
     {
-        var pendingReceipts = await db.SupplierReceipts.AsNoTracking()
+        var skus = await db.SkuStocks.AsNoTracking().ToListAsync(ct);
+        var deltasAfter = await db.InventoryLedgerEntries.AsNoTracking()
+            .Where(e => e.Location == LocationWarehouse && e.OccurredAtUtc >= asOfUtcExclusive)
+            .GroupBy(e => e.SkuId)
+            .Select(g => new { SkuId = g.Key, Delta = g.Sum(x => x.QuantityDelta) })
+            .ToDictionaryAsync(x => x.SkuId, x => x.Delta, ct);
+
+        var totalWarehouseQty = 0;
+        var lowStock = 0;
+        foreach (var sku in skus)
+        {
+            var eodQty = sku.WarehouseQuantityOnHand - deltasAfter.GetValueOrDefault(sku.SkuId, 0);
+            totalWarehouseQty += eodQty;
+            if (eodQty <= sku.WarehouseLowStockThreshold)
+                lowStock++;
+        }
+
+        // Giá trị: lô đã tồn tại trước mốc (ước lượng — qty lô có thể đổi sau EOD).
+        var warehouseValue = await db.WarehouseBatchItems.AsNoTracking()
+            .Where(i => i.QuantityOnHand > 0
+                && i.UnitCost.HasValue
+                && i.Batch != null
+                && i.Batch.Location == LocationWarehouse
+                && i.Batch.CreatedAt < asOfUtcExclusive)
+            .SumAsync(i => i.QuantityOnHand * i.UnitCost!.Value, ct);
+
+        var expiryLimit = businessDate.AddDays(30).ToDateTime(TimeOnly.MinValue);
+        var expiring = await db.WarehouseBatches.AsNoTracking()
+            .CountAsync(b => b.Location == LocationWarehouse
+                && b.Status == "active"
+                && b.CreatedAt < asOfUtcExclusive
+                && b.ExpiresAt != null
+                && b.ExpiresAt <= expiryLimit, ct);
+
+        var pendingDeduct = await CountOpenDeductAtAsync(asOfUtcExclusive, ct);
+
+        return new WarehouseDailyEndingSnapshot(
+            skus.Count,
+            totalWarehouseQty,
+            lowStock,
+            warehouseValue,
+            expiring,
+            pendingDeduct,
+            IsPointInTime: true,
+            AsOfUtc: asOfUtcExclusive);
+    }
+
+    private async Task<WarehouseDailyOpenCarry> GetLiveOpenCarryAsync(CancellationToken ct)
+    {
+        var pendingReceiptsQuery = db.SupplierReceipts.AsNoTracking()
             .Where(r => r.Status == SupplierReceiptStatus.Draft
-                || r.Status == SupplierReceiptStatus.PendingApproval)
+                || r.Status == SupplierReceiptStatus.PendingApproval);
+        var pendingReceiptsTotal = await pendingReceiptsQuery.CountAsync(ct);
+        var pendingReceipts = await pendingReceiptsQuery
             .OrderByDescending(r => r.UpdatedAt)
-            .Take(OpenCarryCap)
+            .Take(OpenCarryListCap)
             .Select(r => new WarehouseDailyOpenItem(
                 r.Id,
                 r.ReceiptCode,
@@ -245,12 +323,14 @@ public sealed class WarehouseDailyReportRepository(InventoryDbContext db) : IWar
                 r.CreatedByName))
             .ToListAsync(ct);
 
-        var pendingPo = await db.ProductionOrders.AsNoTracking()
+        var pendingPoQuery = db.ProductionOrders.AsNoTracking()
             .Where(o => o.Status == ProductionOrderStatus.Draft
                 || o.Status == ProductionOrderStatus.PendingApproval
-                || o.Status == ProductionOrderStatus.Approved)
+                || o.Status == ProductionOrderStatus.Approved);
+        var pendingPoTotal = await pendingPoQuery.CountAsync(ct);
+        var pendingPo = await pendingPoQuery
             .OrderByDescending(o => o.UpdatedAt)
-            .Take(OpenCarryCap)
+            .Take(OpenCarryListCap)
             .Select(o => new WarehouseDailyOpenItem(
                 o.Id,
                 o.ProductionCode,
@@ -259,13 +339,15 @@ public sealed class WarehouseDailyReportRepository(InventoryDbContext db) : IWar
                 o.CreatedByName))
             .ToListAsync(ct);
 
-        var openRequests = await db.StockAdjustmentRequests.AsNoTracking()
+        var openRequestsQuery = db.StockAdjustmentRequests.AsNoTracking()
             .Where(r => r.Status == StockAdjustmentRequestStatus.Pending
                 || r.Status == StockAdjustmentRequestStatus.Approved
                 || r.Status == StockAdjustmentRequestStatus.Processing
-                || r.Status == StockAdjustmentRequestStatus.PartiallyFulfilled)
+                || r.Status == StockAdjustmentRequestStatus.PartiallyFulfilled);
+        var openRequestsTotal = await openRequestsQuery.CountAsync(ct);
+        var openRequests = await openRequestsQuery
             .OrderByDescending(r => r.RequestedAt)
-            .Take(OpenCarryCap)
+            .Take(OpenCarryListCap)
             .Select(r => new WarehouseDailyOpenItem(
                 r.Id,
                 r.RequestCode,
@@ -274,10 +356,12 @@ public sealed class WarehouseDailyReportRepository(InventoryDbContext db) : IWar
                 r.RequestedByName))
             .ToListAsync(ct);
 
-        var openSuggestions = await db.ShelfReplenishmentSuggestions.AsNoTracking()
-            .Where(s => s.Status == ShelfReplenishmentSuggestionStatus.Open)
+        var openSuggestionsQuery = db.ShelfReplenishmentSuggestions.AsNoTracking()
+            .Where(s => s.Status == ShelfReplenishmentSuggestionStatus.Open);
+        var openSuggestionsTotal = await openSuggestionsQuery.CountAsync(ct);
+        var openSuggestions = await openSuggestionsQuery
             .OrderByDescending(s => s.CreatedAt)
-            .Take(OpenCarryCap)
+            .Take(OpenCarryListCap)
             .Select(s => new WarehouseDailyOpenItem(
                 s.Id,
                 s.SuggestionCode,
@@ -286,11 +370,13 @@ public sealed class WarehouseDailyReportRepository(InventoryDbContext db) : IWar
                 null))
             .ToListAsync(ct);
 
-        var waitingQueues = await db.StockDeductQueues.AsNoTracking()
+        var waitingQueuesQuery = db.StockDeductQueues.AsNoTracking()
             .Where(q => !q.IsDeducted
-                && (q.QueueStatus == QueueStatus.Waiting || q.QueueStatus == QueueStatus.Insufficient))
+                && (q.QueueStatus == QueueStatus.Waiting || q.QueueStatus == QueueStatus.Insufficient));
+        var waitingQueuesTotal = await waitingQueuesQuery.CountAsync(ct);
+        var waitingQueues = await waitingQueuesQuery
             .OrderByDescending(q => q.CreatedAt)
-            .Take(OpenCarryCap)
+            .Take(OpenCarryListCap)
             .Select(q => new WarehouseDailyOpenItem(
                 q.Id,
                 q.OrderCode,
@@ -304,6 +390,140 @@ public sealed class WarehouseDailyReportRepository(InventoryDbContext db) : IWar
             pendingPo,
             openRequests,
             openSuggestions,
-            waitingQueues);
+            waitingQueues,
+            pendingReceiptsTotal,
+            pendingPoTotal,
+            openRequestsTotal,
+            openSuggestionsTotal,
+            waitingQueuesTotal);
     }
+
+    private async Task<WarehouseDailyOpenCarry> GetPointInTimeOpenCarryAsync(
+        DateTime asOfUtcExclusive,
+        CancellationToken ct)
+    {
+        var receiptQuery = db.SupplierReceipts.AsNoTracking()
+            .Where(r => r.CreatedAt < asOfUtcExclusive
+                && (
+                    r.Status == SupplierReceiptStatus.Draft
+                    || r.Status == SupplierReceiptStatus.PendingApproval
+                    || ((r.Status == SupplierReceiptStatus.Completed
+                            || r.Status == SupplierReceiptStatus.Rejected
+                            || r.Status == SupplierReceiptStatus.Cancelled)
+                        && (r.ReviewedAt ?? r.UpdatedAt) >= asOfUtcExclusive)));
+        var receiptsTotal = await receiptQuery.CountAsync(ct);
+        var receipts = await receiptQuery
+            .OrderByDescending(r => r.UpdatedAt)
+            .Take(OpenCarryListCap)
+            .Select(r => new WarehouseDailyOpenItem(
+                r.Id,
+                r.ReceiptCode,
+                r.Status.ToString(),
+                r.UpdatedAt,
+                r.CreatedByName))
+            .ToListAsync(ct);
+
+        var poQuery = db.ProductionOrders.AsNoTracking()
+            .Where(o => o.CreatedAt < asOfUtcExclusive
+                && (
+                    o.Status == ProductionOrderStatus.Draft
+                    || o.Status == ProductionOrderStatus.PendingApproval
+                    || o.Status == ProductionOrderStatus.Approved
+                    || (o.Status == ProductionOrderStatus.Completed
+                        && o.CompletedAt != null
+                        && o.CompletedAt >= asOfUtcExclusive)
+                    || ((o.Status == ProductionOrderStatus.Rejected
+                            || o.Status == ProductionOrderStatus.Cancelled)
+                        && (o.ReviewedAt ?? o.UpdatedAt) >= asOfUtcExclusive)));
+        var poTotal = await poQuery.CountAsync(ct);
+        var pos = await poQuery
+            .OrderByDescending(o => o.UpdatedAt)
+            .Take(OpenCarryListCap)
+            .Select(o => new WarehouseDailyOpenItem(
+                o.Id,
+                o.ProductionCode,
+                o.Status.ToString(),
+                o.UpdatedAt,
+                o.CreatedByName))
+            .ToListAsync(ct);
+
+        var requestQuery = db.StockAdjustmentRequests.AsNoTracking()
+            .Where(r => r.RequestedAt < asOfUtcExclusive
+                && (
+                    r.Status == StockAdjustmentRequestStatus.Pending
+                    || r.Status == StockAdjustmentRequestStatus.Approved
+                    || r.Status == StockAdjustmentRequestStatus.Processing
+                    || r.Status == StockAdjustmentRequestStatus.PartiallyFulfilled
+                    || ((r.Status == StockAdjustmentRequestStatus.Fulfilled
+                            || r.Status == StockAdjustmentRequestStatus.Completed
+                            || r.Status == StockAdjustmentRequestStatus.Rejected
+                            || r.Status == StockAdjustmentRequestStatus.ClosedPartial
+                            || r.Status == StockAdjustmentRequestStatus.Cancelled)
+                        && r.ReviewedAt != null
+                        && r.ReviewedAt >= asOfUtcExclusive)));
+        var requestTotal = await requestQuery.CountAsync(ct);
+        var requests = await requestQuery
+            .OrderByDescending(r => r.RequestedAt)
+            .Take(OpenCarryListCap)
+            .Select(r => new WarehouseDailyOpenItem(
+                r.Id,
+                r.RequestCode,
+                r.Status.ToString(),
+                r.RequestedAt,
+                r.RequestedByName))
+            .ToListAsync(ct);
+
+        var suggestionQuery = db.ShelfReplenishmentSuggestions.AsNoTracking()
+            .Where(s => s.CreatedAt < asOfUtcExclusive
+                && (
+                    s.Status == ShelfReplenishmentSuggestionStatus.Open
+                    || (s.HandledAt != null && s.HandledAt >= asOfUtcExclusive)));
+        var suggestionTotal = await suggestionQuery.CountAsync(ct);
+        var suggestions = await suggestionQuery
+            .OrderByDescending(s => s.CreatedAt)
+            .Take(OpenCarryListCap)
+            .Select(s => new WarehouseDailyOpenItem(
+                s.Id,
+                s.SuggestionCode,
+                s.Status.ToString(),
+                s.CreatedAt,
+                null))
+            .ToListAsync(ct);
+
+        var deductQuery = OpenDeductAtQuery(asOfUtcExclusive);
+        var deductTotal = await deductQuery.CountAsync(ct);
+        var deducts = await deductQuery
+            .OrderByDescending(q => q.CreatedAt)
+            .Take(OpenCarryListCap)
+            .Select(q => new WarehouseDailyOpenItem(
+                q.Id,
+                q.OrderCode,
+                q.QueueStatus.ToString(),
+                q.CreatedAt,
+                q.CustomerSnapshotName))
+            .ToListAsync(ct);
+
+        return new WarehouseDailyOpenCarry(
+            receipts,
+            pos,
+            requests,
+            suggestions,
+            deducts,
+            receiptsTotal,
+            poTotal,
+            requestTotal,
+            suggestionTotal,
+            deductTotal);
+    }
+
+    private Task<int> CountOpenDeductAtAsync(DateTime asOfUtcExclusive, CancellationToken ct) =>
+        OpenDeductAtQuery(asOfUtcExclusive).CountAsync(ct);
+
+    private IQueryable<Domain.Entities.StockDeductQueue> OpenDeductAtQuery(DateTime asOfUtcExclusive) =>
+        db.StockDeductQueues.AsNoTracking()
+            .Where(q => q.CreatedAt < asOfUtcExclusive
+                && (
+                    (!q.IsDeducted
+                        && (q.QueueStatus == QueueStatus.Waiting || q.QueueStatus == QueueStatus.Insufficient))
+                    || (q.ConfirmedAt != null && q.ConfirmedAt >= asOfUtcExclusive)));
 }

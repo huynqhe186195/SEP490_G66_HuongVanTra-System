@@ -1,3 +1,4 @@
+using HuongVanTra.Shared.Auth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using ProductService.Application.DTOs.Requests;
@@ -27,7 +28,7 @@ public class NotificationsController(NotificationLogic _logic) : ControllerBase
         Ok(await _logic.GetSummaryAsync(User.ToProductApprovalActorSnapshot(), ct));
 
     [HttpPost("broadcast")]
-    [Authorize(Roles = "Warehouse,Admin")]
+    [Authorize(Policy = PermissionNames.BroadcastNotification)]
     public async Task<IActionResult> Broadcast(
         [FromBody] BroadcastNotificationRequest request,
         CancellationToken ct = default) =>

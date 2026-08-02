@@ -20,8 +20,10 @@ import {
   RESTORE_CONFIRM,
   SOFT_DELETE_CONFIRM,
   formatPermissionName,
+  formatRoleDescription,
   formatRoleName,
   getPermissionHint,
+  isRetiredRoleName,
 } from '../utils/iamLabels.js'
 
 const TAB_ROLES = 'vai-tro'
@@ -102,8 +104,8 @@ function AccessControlPage() {
         fetchPermissions(),
         fetchPermissions({ onlyDeleted: true }),
       ])
-      setRoles((Array.isArray(rolesData) ? rolesData : []).map(mapRole).filter(Boolean))
-      setDeletedRoles((Array.isArray(deletedRolesData) ? deletedRolesData : []).map(mapRole).filter(Boolean))
+      setRoles((Array.isArray(rolesData) ? rolesData : []).map(mapRole).filter((role) => role && !isRetiredRoleName(role.roleName)))
+      setDeletedRoles((Array.isArray(deletedRolesData) ? deletedRolesData : []).map(mapRole).filter((role) => role && !isRetiredRoleName(role.roleName)))
       setPermissions((Array.isArray(permissionsData) ? permissionsData : []).map(mapPermission).filter(Boolean))
       setDeletedPermissions((Array.isArray(deletedPermissionsData) ? deletedPermissionsData : []).map(mapPermission).filter(Boolean))
     } catch (error) {
@@ -386,8 +388,10 @@ function AccessControlPage() {
                     <div className="min-w-0 flex-1">
                       <h3 className="text-xl font-bold text-[#1b1c17]">{formatRoleName(role.roleName)}</h3>
                       <p className="mt-1 text-sm text-[#414942]">Mã hệ thống: {role.roleName}</p>
-                      {role.description ? (
-                        <p className="mt-2 text-base text-[#414942]">{role.description}</p>
+                      {formatRoleDescription(role.roleName, role.description) ? (
+                        <p className="mt-2 text-base text-[#414942]">
+                          {formatRoleDescription(role.roleName, role.description)}
+                        </p>
                       ) : null}
                       <div className="mt-3 flex flex-wrap gap-2">
                         {(role.permissions || []).length ? (
@@ -526,7 +530,7 @@ function AccessControlPage() {
                 <span className="text-base font-bold text-[#1b1c17]">Tên vai trò (mã hệ thống)</span>
                 <input
                   className="mt-2 w-full rounded-2xl border-2 border-[#c1c9c0] px-4 py-3 text-base"
-                  placeholder="Ví dụ: Sale, Warehouse"
+                  placeholder="Ví dụ: SalePos, Warehouse"
                   value={roleForm.roleName}
                   onChange={(e) => setRoleForm((p) => ({ ...p, roleName: e.target.value }))}
                 />

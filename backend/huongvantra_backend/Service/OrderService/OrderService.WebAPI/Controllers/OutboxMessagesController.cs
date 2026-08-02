@@ -12,11 +12,10 @@ namespace OrderService.WebAPI.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/outbox-messages")]
-[Authorize]
+[Authorize(Policy = PermissionNames.MonitorOutbox)]
 public class OutboxMessagesController(IOutboxMonitoringLogic _logic) : ControllerBase
 {
     [HttpGet]
-    [Authorize(Policy = PermissionNames.ViewOrder)]
     public async Task<IActionResult> GetPaged(
         [FromQuery] OutboxMessageStatus? status,
         [FromQuery] string? eventType,
@@ -29,7 +28,6 @@ public class OutboxMessagesController(IOutboxMonitoringLogic _logic) : Controlle
     }
 
     [HttpGet("stats")]
-    [Authorize(Policy = PermissionNames.ViewOrder)]
     public async Task<IActionResult> GetStats(CancellationToken ct)
     {
         var stats = await _logic.GetStatsAsync(ct);
@@ -37,7 +35,6 @@ public class OutboxMessagesController(IOutboxMonitoringLogic _logic) : Controlle
     }
 
     [HttpGet("{id:guid}")]
-    [Authorize(Policy = PermissionNames.ViewOrder)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
     {
         var detail = await _logic.GetByIdAsync(id, ct);
@@ -45,7 +42,6 @@ public class OutboxMessagesController(IOutboxMonitoringLogic _logic) : Controlle
     }
 
     [HttpPost("{id:guid}/retry")]
-    [Authorize(Policy = PermissionNames.ViewOrder)]
     public async Task<IActionResult> Retry(Guid id, CancellationToken ct)
     {
         var result = await _logic.RetryAsync(id, ct);

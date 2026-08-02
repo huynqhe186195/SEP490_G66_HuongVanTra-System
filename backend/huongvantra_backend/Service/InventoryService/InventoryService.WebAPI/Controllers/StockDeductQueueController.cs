@@ -13,7 +13,7 @@ namespace InventoryService.WebAPI.Controllers;
 public class StockDeductQueueController(InventoryLogic _logic) : ControllerBase
 {
     [HttpGet("waiting")]
-    [Authorize(Roles = "Warehouse,Manager,Admin")]
+    [Authorize(Policy = PermissionNames.ViewInventory)]
     public async Task<IActionResult> GetWaiting(
         [FromQuery] string? status,
         [FromQuery] string? search,
@@ -26,7 +26,7 @@ public class StockDeductQueueController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpGet("{queueId:guid}/preview")]
-    [Authorize(Roles = "Warehouse,Manager,Admin")]
+    [Authorize(Policy = PermissionNames.ViewInventory)]
     public async Task<IActionResult> Preview(Guid queueId, CancellationToken ct)
     {
         var preview = await _logic.PreviewQueueAsync(queueId, ct);
@@ -34,7 +34,7 @@ public class StockDeductQueueController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpPatch("{queueId:guid}/confirm")]
-    [Authorize(Roles = "Warehouse")]
+    [Authorize(Policy = PermissionNames.OperateWarehouse)]
     public async Task<IActionResult> Confirm(Guid queueId, CancellationToken ct)
     {
         if (User.IsInRole("Admin")) return Forbid();
@@ -44,7 +44,7 @@ public class StockDeductQueueController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpPatch("{queueId:guid}/cancel")]
-    [Authorize(Roles = "Manager,Admin")]
+    [Authorize(Policy = PermissionNames.RejectStockDeduct)]
     public async Task<IActionResult> Cancel(Guid queueId, [FromBody] CancelStockDeductRequest? request, CancellationToken ct)
     {
         var result = await _logic.CancelQueueAsync(queueId, request, User.GetUserId(), User.ToCreatorSnapshot(), ct);
@@ -56,7 +56,7 @@ public class StockDeductQueueController(InventoryLogic _logic) : ControllerBase
     /// Chỉ đọc — Warehouse, Manager và Admin tra được giữ chỗ của đơn đó.
     /// </summary>
     [HttpGet("reservations/by-order/{orderId:guid}")]
-    [Authorize(Roles = "Warehouse,Manager,Admin")]
+    [Authorize(Policy = PermissionNames.ViewInventory)]
     public async Task<IActionResult> GetReservationsByOrder(Guid orderId, CancellationToken ct)
     {
         var result = await _logic.GetOrderCodReservationsAsync(orderId, ct);
@@ -67,7 +67,7 @@ public class StockDeductQueueController(InventoryLogic _logic) : ControllerBase
     /// POS-04 (truy vết giữ chỗ, chiều SKU → đơn): các đơn đang giữ chỗ một SKU.
     /// </summary>
     [HttpGet("reservations/by-sku/{skuId:guid}")]
-    [Authorize(Roles = "Warehouse,Manager,Admin")]
+    [Authorize(Policy = PermissionNames.ViewInventory)]
     public async Task<IActionResult> GetActiveReservationsBySku(Guid skuId, CancellationToken ct)
     {
         var result = await _logic.GetSkuCodReservationsAsync(skuId, ct);
@@ -78,7 +78,7 @@ public class StockDeductQueueController(InventoryLogic _logic) : ControllerBase
     /// POS-04 (truy vết giữ chỗ): danh sách đơn đang giữ chỗ tồn Kệ Hàng.
     /// </summary>
     [HttpGet("reservations/active-orders")]
-    [Authorize(Roles = "Warehouse,Manager,Admin")]
+    [Authorize(Policy = PermissionNames.ViewInventory)]
     public async Task<IActionResult> GetOrdersWithActiveReservation(
         [FromQuery] string? search,
         [FromQuery] int page = 1,
@@ -94,7 +94,7 @@ public class StockDeductQueueController(InventoryLogic _logic) : ControllerBase
     /// Dùng cho badge trên danh sách đơn — OrderService gọi qua service client, không đọc chéo database.
     /// </summary>
     [HttpPost("reservations/active-order-ids")]
-    [Authorize(Roles = "Warehouse,Manager,Admin")]
+    [Authorize(Policy = PermissionNames.ViewInventory)]
     public async Task<IActionResult> FilterOrderIdsWithActiveReservation(
         [FromBody] List<Guid>? orderIds,
         CancellationToken ct)

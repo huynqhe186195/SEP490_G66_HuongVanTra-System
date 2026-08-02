@@ -100,6 +100,8 @@ function mapReport(raw) {
       totalWarehouseValue: Number(snapshot.totalWarehouseValue ?? snapshot.TotalWarehouseValue ?? 0),
       expiringBatchCount30Days: Number(snapshot.expiringBatchCount30Days ?? snapshot.ExpiringBatchCount30Days ?? 0),
       pendingDeductQueueCount: Number(snapshot.pendingDeductQueueCount ?? snapshot.PendingDeductQueueCount ?? 0),
+      isPointInTime: Boolean(snapshot.isPointInTime ?? snapshot.IsPointInTime ?? false),
+      asOfUtc: snapshot.asOfUtc ?? snapshot.AsOfUtc ?? null,
     },
     openCarry: {
       pendingSupplierReceipts: asArray(open.pendingSupplierReceipts ?? open.PendingSupplierReceipts).map(mapOpenItem).filter(Boolean),
@@ -107,6 +109,11 @@ function mapReport(raw) {
       openStockAdjustmentRequests: asArray(open.openStockAdjustmentRequests ?? open.OpenStockAdjustmentRequests).map(mapOpenItem).filter(Boolean),
       openSuggestions: asArray(open.openSuggestions ?? open.OpenSuggestions).map(mapOpenItem).filter(Boolean),
       waitingDeductQueues: asArray(open.waitingDeductQueues ?? open.WaitingDeductQueues).map(mapOpenItem).filter(Boolean),
+      pendingSupplierReceiptsTotal: Number(open.pendingSupplierReceiptsTotal ?? open.PendingSupplierReceiptsTotal ?? 0),
+      pendingProductionOrdersTotal: Number(open.pendingProductionOrdersTotal ?? open.PendingProductionOrdersTotal ?? 0),
+      openStockAdjustmentRequestsTotal: Number(open.openStockAdjustmentRequestsTotal ?? open.OpenStockAdjustmentRequestsTotal ?? 0),
+      openSuggestionsTotal: Number(open.openSuggestionsTotal ?? open.OpenSuggestionsTotal ?? 0),
+      waitingDeductQueuesTotal: Number(open.waitingDeductQueuesTotal ?? open.WaitingDeductQueuesTotal ?? 0),
     },
   }
 }
@@ -141,7 +148,13 @@ function mapSubmissionListItem(raw) {
 
 export async function fetchWarehouseDailyReportSubmissions(params = {}) {
   const search = new URLSearchParams()
-  if (params.date) search.set('date', params.date)
+  // Khoảng ngày báo cáo (ưu tiên). date = exact 1 ngày (tương thích cũ).
+  if (params.from || params.fromDate) search.set('fromDate', params.from || params.fromDate)
+  if (params.to || params.toDate) search.set('toDate', params.to || params.toDate)
+  if (params.date && !params.from && !params.fromDate && !params.to && !params.toDate) {
+    search.set('date', params.date)
+  }
+  if (params.sentBy) search.set('sentBy', params.sentBy)
   search.set('page', String(params.page ?? 1))
   search.set('pageSize', String(Math.min(100, Math.max(1, params.pageSize ?? 20))))
   const data = await apiRequestAuth(`/api/v1/inventory/reports/warehouse-daily/submissions?${search}`)

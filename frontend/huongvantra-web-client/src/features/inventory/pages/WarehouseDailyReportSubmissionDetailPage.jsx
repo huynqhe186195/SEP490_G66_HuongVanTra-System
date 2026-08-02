@@ -58,6 +58,7 @@ export default function WarehouseDailyReportSubmissionDetailPage() {
         dateLabel,
         doneTotal,
         openRows,
+        source: 'snapshot',
       })
       showSuccess('Đã xuất file Excel từ snapshot.')
     } catch (error) {

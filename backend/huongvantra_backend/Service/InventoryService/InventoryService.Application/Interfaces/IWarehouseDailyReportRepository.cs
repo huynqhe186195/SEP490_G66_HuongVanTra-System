@@ -48,7 +48,18 @@ public interface IWarehouseDailyReportRepository
         DateTime toUtcExclusive,
         CancellationToken ct = default);
 
-    Task<WarehouseDailyEndingSnapshot> GetEndingSnapshotAsync(CancellationToken ct = default);
+    /// <param name="asOfUtcExclusive">Mốc UTC exclusive (cuối ngày VN).</param>
+    /// <param name="reconstructPointInTime">
+    /// True = tái dựng tồn/còn dở tại mốc (ngày quá khứ); false = snapshot hiện tại.
+    /// </param>
+    Task<WarehouseDailyEndingSnapshot> GetEndingSnapshotAsync(
+        DateTime asOfUtcExclusive,
+        bool reconstructPointInTime,
+        DateOnly businessDate,
+        CancellationToken ct = default);
 
-    Task<WarehouseDailyOpenCarry> GetOpenCarryAsync(CancellationToken ct = default);
+    Task<WarehouseDailyOpenCarry> GetOpenCarryAsync(
+        DateTime asOfUtcExclusive,
+        bool reconstructPointInTime,
+        CancellationToken ct = default);
 }

@@ -1,3 +1,4 @@
+using HuongVanTra.Shared.Auth;
 using InventoryService.Application.UseCases;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -6,7 +7,7 @@ namespace InventoryService.WebAPI.Controllers;
 
 [ApiController]
 [Route("api/v1/inventory/statistics")]
-[Authorize(Roles = "Warehouse,Admin,Manager,Accountant")]
+[Authorize(Policy = PermissionNames.ViewInventory)]
 public class StatisticsController(StatisticsLogic _logic) : ControllerBase
 {
     [HttpGet]

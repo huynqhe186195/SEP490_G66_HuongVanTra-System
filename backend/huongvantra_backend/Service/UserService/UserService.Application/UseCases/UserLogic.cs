@@ -10,7 +10,11 @@ using UserService.Domain.Exceptions;
 
 namespace UserService.Application.UseCases;
 
-public class UserLogic(IUserRepository userRepo, IRoleRepository roleRepo, IEmployeeRepository employeeRepo)
+public class UserLogic(
+    IUserRepository userRepo,
+    IRoleRepository roleRepo,
+    IEmployeeRepository employeeRepo,
+    IRefreshTokenRepository refreshTokenRepo)
 {
     public async Task<UserResponse> CreateAsync(CreateUserRequest request)
     {
@@ -222,6 +226,7 @@ public class UserLogic(IUserRepository userRepo, IRoleRepository roleRepo, IEmpl
         user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
         user.UpdatedAt = DateTime.UtcNow;
         userRepo.Update(user);
+        await refreshTokenRepo.RevokeAllForUserAsync(id);
         await userRepo.SaveChangesAsync();
     }
 

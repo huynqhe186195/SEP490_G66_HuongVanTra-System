@@ -1,3 +1,4 @@
+using HuongVanTra.Shared.Auth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using ProductService.Application.DTOs.Requests;
@@ -11,7 +12,7 @@ namespace ProductService.WebAPI.Controllers;
 public class ProductDeletionRequestsController(ProductDeletionRequestLogic _logic) : ControllerBase
 {
     [HttpGet]
-    [Authorize(Roles = "Admin,Manager,Warehouse")]
+    [Authorize(Policy = PermissionNames.ViewProductRequest)]
     public async Task<IActionResult> GetPaged(
         [FromQuery] string? status,
         [FromQuery] string? search,
@@ -25,12 +26,12 @@ public class ProductDeletionRequestsController(ProductDeletionRequestLogic _logi
             ct));
 
     [HttpGet("{id:guid}")]
-    [Authorize(Roles = "Admin,Manager,Warehouse")]
+    [Authorize(Policy = PermissionNames.ViewProductRequest)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct = default) =>
         Ok(await _logic.GetByIdAsync(id, User.ToProductApprovalActorSnapshot(), ct));
 
     [HttpPost]
-    [Authorize(Roles = "Warehouse")]
+    [Authorize(Policy = PermissionNames.ManageCatalog)]
     public async Task<IActionResult> Create([FromBody] CreateProductDeletionRequest request, CancellationToken ct = default)
     {
         var result = await _logic.CreateAsync(request, User.ToProductApprovalActorSnapshot(), GetAuthorizationHeader(), ct);
@@ -38,27 +39,27 @@ public class ProductDeletionRequestsController(ProductDeletionRequestLogic _logi
     }
 
     [HttpPut("{id:guid}")]
-    [Authorize(Roles = "Warehouse")]
+    [Authorize(Policy = PermissionNames.ManageCatalog)]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateProductDeletionRequest request, CancellationToken ct = default) =>
         Ok(await _logic.UpdateAsync(id, request, User.ToProductApprovalActorSnapshot(), GetAuthorizationHeader(), ct));
 
     [HttpPost("{id:guid}/submit")]
-    [Authorize(Roles = "Warehouse")]
+    [Authorize(Policy = PermissionNames.ManageCatalog)]
     public async Task<IActionResult> Submit(Guid id, [FromBody] SubmitProductDeletionRequest request, CancellationToken ct = default) =>
         Ok(await _logic.SubmitAsync(id, request, User.ToProductApprovalActorSnapshot(), GetAuthorizationHeader(), ct));
 
     [HttpPost("{id:guid}/approve")]
-    [Authorize(Roles = "Manager")]
+    [Authorize(Policy = PermissionNames.ApproveProductRequest)]
     public async Task<IActionResult> Approve(Guid id, [FromBody] ApproveProductDeletionRequest request, CancellationToken ct = default) =>
         Ok(await _logic.ApproveAsync(id, request, User.ToProductApprovalActorSnapshot(), GetAuthorizationHeader(), ct));
 
     [HttpPost("{id:guid}/reject")]
-    [Authorize(Roles = "Manager")]
+    [Authorize(Policy = PermissionNames.ApproveProductRequest)]
     public async Task<IActionResult> Reject(Guid id, [FromBody] RejectProductDeletionRequest request, CancellationToken ct = default) =>
         Ok(await _logic.RejectAsync(id, request, User.ToProductApprovalActorSnapshot(), ct));
 
     [HttpPost("{id:guid}/cancel")]
-    [Authorize(Roles = "Manager")]
+    [Authorize(Policy = PermissionNames.ApproveProductRequest)]
     public async Task<IActionResult> Cancel(Guid id, [FromBody] CancelProductDeletionRequest request, CancellationToken ct = default) =>
         Ok(await _logic.CancelAsync(id, request, User.ToProductApprovalActorSnapshot(), ct));
 

@@ -660,7 +660,7 @@ INSERT IGNORE INTO UserRoles (UserId, RoleId)
 -- TÓM TẮT SEED DATA
 -- ============================================================
 -- Tài khoản (mật khẩu: 123456):
---   admin        — Admin     (toàn quyền)
+--   admin        — Admin     (giám sát + IAM + duyệt nhẹ; không vận hành bán/kho)
 --   sale01       — Sale      (bán hàng)
 --   manager01    — Manager   (quản lý)
 --   warehouse01  — Warehouse (thủ kho) ← thêm bởi script này

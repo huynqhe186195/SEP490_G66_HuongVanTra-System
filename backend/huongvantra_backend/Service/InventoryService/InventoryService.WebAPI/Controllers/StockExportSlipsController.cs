@@ -11,7 +11,7 @@ namespace InventoryService.WebAPI.Controllers;
 public class StockExportSlipsController(InventoryLogic _logic) : ControllerBase
 {
     [HttpGet]
-    [Authorize(Policy = PermissionNames.ViewOrder)]
+    [Authorize(Policy = PermissionNames.ViewInventory)]
     public async Task<IActionResult> GetList(
         CancellationToken ct,
         [FromQuery] string? search = null)
@@ -21,7 +21,7 @@ public class StockExportSlipsController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpGet("{id:guid}")]
-    [Authorize(Policy = PermissionNames.ViewOrder)]
+    [Authorize(Policy = PermissionNames.ViewInventory)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
     {
         var item = await _logic.GetStockExportSlipAsync(id, ct);

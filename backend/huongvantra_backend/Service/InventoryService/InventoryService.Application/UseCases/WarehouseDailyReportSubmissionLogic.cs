@@ -65,11 +65,26 @@ public sealed class WarehouseDailyReportSubmissionLogic(
 
     public async Task<PagedResponse<WarehouseDailyReportSubmissionListItem>> GetPagedAsync(
         DateOnly? date,
+        DateOnly? fromDate,
+        DateOnly? toDate,
+        string? sentBy,
         int page,
         int pageSize,
         CancellationToken ct = default)
     {
-        var (items, total) = await repo.GetPagedAsync(date, page, pageSize, ct);
+        // date = exact (tương thích cũ); nếu có fromDate/toDate thì ưu tiên khoảng.
+        DateOnly? businessFrom = fromDate;
+        DateOnly? businessTo = toDate;
+        if (date.HasValue && !fromDate.HasValue && !toDate.HasValue)
+        {
+            businessFrom = date;
+            businessTo = date;
+        }
+
+        if (businessFrom.HasValue && businessTo.HasValue && businessFrom > businessTo)
+            throw new InventoryValidationException("Ngày bắt đầu không được sau ngày kết thúc.");
+
+        var (items, total) = await repo.GetPagedAsync(businessFrom, businessTo, sentBy, page, pageSize, ct);
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, 100);
         var mapped = items.Select(x => new WarehouseDailyReportSubmissionListItem(

@@ -4,10 +4,10 @@ import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination from '../../../components/shared/TablePagination.jsx'
 import { confirmDialog } from '../../../app/dialog.js'
-import { showError, showSuccess } from '../../../app/toast.js'
+import { showError, showInfo, showSuccess } from '../../../app/toast.js'
 import { formatVietnamDateTimeMinute, VIETNAM_TIME_ZONE } from '../../../utils/vietnamDateTime.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
-import { isWarehouseRole } from '../../auth/utils/permissions.js'
+import { canSubmitWarehouseDailyReport } from '../../auth/utils/permissions.js'
 import { broadcastNotification } from '../../products/services/notificationsApi.js'
 import {
   createWarehouseDailyReportSubmission,
@@ -129,7 +129,9 @@ export default function WarehouseDailyReportPage() {
   const [report, setReport] = useState(null)
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
+  const [notifying, setNotifying] = useState(false)
   const [sentSubmissionId, setSentSubmissionId] = useState(null)
+  const [notifyPendingSubmissionId, setNotifyPendingSubmissionId] = useState(null)
   const [checkingSent, setCheckingSent] = useState(false)
   const [openPage, setOpenPage] = useState(1)
   const [openPageSize, setOpenPageSize] = useState(OPEN_PAGE_SIZE_DEFAULT)
@@ -137,8 +139,9 @@ export default function WarehouseDailyReportPage() {
   const [openSearch, setOpenSearch] = useState('')
 
   const session = loadAuthSession()
-  const canSendReport = isWarehouseRole(session)
+  const canSendReport = canSubmitWarehouseDailyReport(session)
   const isToday = date === today
+  const isPointInTime = Boolean(report?.endingSnapshot?.isPointInTime)
 
   useEffect(() => {
     if (!dateFromQuery || !/^\d{4}-\d{2}-\d{2}$/.test(dateFromQuery)) return
@@ -189,6 +192,7 @@ export default function WarehouseDailyReportPage() {
     setOpenPage(1)
     setOpenKind('')
     setOpenSearch('')
+    setNotifyPendingSubmissionId(null)
   }, [date])
 
   useEffect(() => {
@@ -369,12 +373,61 @@ export default function WarehouseDailyReportPage() {
         dateLabel,
         doneTotal,
         openRows,
+        source: 'live',
       })
       showSuccess('Đã xuất file Excel.')
     } catch (error) {
       showError(error.message || 'Không xuất được file Excel.')
     }
   }, [report, date, dateLabel, doneTotal, openRows])
+
+  const buildNotifyPayload = useCallback((submission, snapData, done) => {
+    const senderName = session?.fullName || session?.username || 'Thủ kho'
+    return {
+      type: 'warehouse_daily_report_shared',
+      title: `Báo cáo cuối ngày kho · ${dateLabel}`,
+      body: [
+        `${senderName} đã gửi báo cáo cuối ngày kho ngày ${formatDateVi(date)}.`,
+        `Đã làm: ${done} việc.`,
+        `Tồn kho: ${Number(snapData.totalWarehouseQuantity || 0).toLocaleString('vi-VN')}.`,
+        `Sắp hết: ${snapData.lowStockSkuCount ?? submission.lowStockSkuCount}.`,
+        `Lô sắp HSD: ${snapData.expiringBatchCount30Days ?? submission.expiringBatchCount30Days}.`,
+        `Còn dở lúc gửi: ${submission.openCarryCount}.`,
+      ].join(' '),
+      link: `/inventory/warehouse-daily-report/submissions/${submission.id}`,
+      recipientRoleNames: ['Manager', 'Admin'],
+      referenceType: 'WarehouseDailyReportSubmission',
+      referenceId: submission.id,
+    }
+  }, [session, dateLabel, date])
+
+  const sendNotificationForSubmission = useCallback(async (submission, snapData, done) => {
+    await broadcastNotification(buildNotifyPayload(submission, snapData, done))
+  }, [buildNotifyPayload])
+
+  const handleRetryNotify = useCallback(async () => {
+    if (!notifyPendingSubmissionId || !report) return
+    setNotifying(true)
+    try {
+      const submission = {
+        id: notifyPendingSubmissionId,
+        openCarryCount: report.summary?.openCarryCount ?? 0,
+        lowStockSkuCount: report.endingSnapshot?.lowStockSkuCount,
+        expiringBatchCount30Days: report.endingSnapshot?.expiringBatchCount30Days,
+      }
+      await sendNotificationForSubmission(
+        submission,
+        report.endingSnapshot,
+        doneTotal,
+      )
+      setNotifyPendingSubmissionId(null)
+      showSuccess('Đã gửi lại thông báo tới Quản lý và Admin.')
+    } catch (error) {
+      showError(error.message || 'Không gửi lại được thông báo.')
+    } finally {
+      setNotifying(false)
+    }
+  }, [notifyPendingSubmissionId, report, doneTotal, sendNotificationForSubmission])
 
   const handleSend = useCallback(async () => {
     if (!report) {
@@ -386,7 +439,6 @@ export default function WarehouseDailyReportPage() {
       return
     }
 
-    const senderName = session?.fullName || session?.username || 'Thủ kho'
     const confirmed = await confirmDialog({
       title: 'Gửi báo cáo cho Quản lý / Admin?',
       message: `Lưu snapshot báo cáo ngày ${dateLabel} (${date}) rồi gửi thông báo tới Quản lý và Admin. Mỗi ngày chỉ gửi được một lần.`,
@@ -397,48 +449,61 @@ export default function WarehouseDailyReportPage() {
     if (!confirmed) return
 
     setSending(true)
+    let submission = null
     try {
-      const submission = await createWarehouseDailyReportSubmission(date)
+      submission = await createWarehouseDailyReportSubmission(date)
+      setSentSubmissionId(submission.id)
+      setNotifyPendingSubmissionId(null)
+
       const snapData = submission.report?.endingSnapshot ?? report.endingSnapshot
       const done = submission.doneTotal ?? doneTotal
-      await broadcastNotification({
-        type: 'warehouse_daily_report_shared',
-        title: `Báo cáo cuối ngày kho · ${dateLabel}`,
-        body: [
-          `${senderName} đã gửi báo cáo cuối ngày kho ngày ${formatDateVi(date)}.`,
-          `Đã làm: ${done} việc.`,
-          `Tồn kho: ${Number(snapData.totalWarehouseQuantity || 0).toLocaleString('vi-VN')}.`,
-          `Sắp hết: ${snapData.lowStockSkuCount ?? submission.lowStockSkuCount}.`,
-          `Lô sắp HSD: ${snapData.expiringBatchCount30Days ?? submission.expiringBatchCount30Days}.`,
-          `Còn dở lúc gửi: ${submission.openCarryCount}.`,
-        ].join(' '),
-        link: `/inventory/warehouse-daily-report/submissions/${submission.id}`,
-        recipientRoleNames: ['Manager', 'Admin'],
-        referenceType: 'WarehouseDailyReportSubmission',
-        referenceId: submission.id,
-      })
-      setSentSubmissionId(submission.id)
-      showSuccess('Đã gửi báo cáo tới Quản lý và Admin.')
+      try {
+        await sendNotificationForSubmission(submission, snapData, done)
+        showSuccess('Đã gửi báo cáo tới Quản lý và Admin.')
+      } catch (notifyError) {
+        setNotifyPendingSubmissionId(submission.id)
+        showInfo(
+          notifyError.message
+            || 'Đã lưu snapshot nhưng chưa gửi được thông báo. Bấm “Gửi lại thông báo”.',
+        )
+      }
     } catch (error) {
       showError(error.message || 'Không gửi được báo cáo.')
       try {
         const result = await fetchWarehouseDailyReportSubmissions({ date, page: 1, pageSize: 1 })
-        if (result.items[0]?.id) setSentSubmissionId(result.items[0].id)
+        if (result.items[0]?.id) {
+          setSentSubmissionId(result.items[0].id)
+        }
       } catch {
         // ignore refresh failure
       }
     } finally {
       setSending(false)
     }
-  }, [report, session, dateLabel, date, doneTotal, sentSubmissionId])
+  }, [report, dateLabel, date, doneTotal, sentSubmissionId, sendNotificationForSubmission])
 
   return (
     <PageShell>
       <PageHeader
         title="Báo cáo cuối ngày"
-        titleInfo="Tóm tắt việc kho đã hoàn tất theo ngày. Phần còn dở là tồn đọng hiện tại, không gắn ngày chọn."
+        titleInfo={
+          isPointInTime
+            ? 'Việc đã làm theo ngày chọn. Tồn kho và còn dở được tái dựng về cuối ngày đó.'
+            : 'Tóm tắt việc kho đã hoàn tất theo ngày. Tồn kho và còn dở là số liệu hiện tại.'
+        }
         rightContent={(
           <div className="flex flex-wrap items-center gap-2">
+            {canSendReport && notifyPendingSubmissionId ? (
+              <button
+                type="button"
+                onClick={handleRetryNotify}
+                disabled={notifying}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm font-bold text-amber-900 hover:bg-amber-100 disabled:opacity-60"
+              >
+                <span className="material-symbols-outlined text-[18px]">notifications_active</span>
+                {notifying ? 'Đang gửi lại…' : 'Gửi lại thông báo'}
+              </button>
+            ) : null}
             {canSendReport && sentSubmissionId ? (
               <Link
                 to={`/inventory/warehouse-daily-report/submissions/${sentSubmissionId}`}
@@ -534,7 +599,9 @@ export default function WarehouseDailyReportPage() {
           {/* Snapshot */}
           <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div className="rounded-2xl bg-white p-4 shadow-sm">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Tồn kho</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                {isPointInTime ? 'Tồn kho cuối ngày' : 'Tồn kho hiện tại'}
+              </p>
               <p className="mt-1 text-2xl font-bold tabular-nums text-slate-900">
                 {snap.totalWarehouseQuantity.toLocaleString('vi-VN')}
               </p>
@@ -555,17 +622,22 @@ export default function WarehouseDailyReportPage() {
 
           {/* Còn dở */}
           {openCount > 0 ? (
-            isToday ? (
+            (isToday || isPointInTime) ? (
               <section className="mb-4 overflow-hidden rounded-2xl border border-amber-100 bg-white shadow-sm">
                 <div className="border-b border-amber-100 bg-amber-50 px-5 py-3">
                   <p className="text-sm font-bold text-amber-900">
-                    Còn dở hiện tại · {openCount}
+                    {isPointInTime ? `Còn dở cuối ngày · ${openCount}` : `Còn dở hiện tại · ${openCount}`}
                     {filteredOpenRows.length !== openCount ? (
                       <span className="font-semibold text-amber-800/80"> · đang hiện {filteredOpenRows.length}</span>
                     ) : null}
+                    {openRows.length < openCount ? (
+                      <span className="font-semibold text-amber-800/80"> · danh sách tối đa {openRows.length}/{openCount}</span>
+                    ) : null}
                   </p>
                   <p className="mt-0.5 text-xs text-amber-800/80">
-                    Phiếu chưa xong đến lúc này. Bấm mã để mở và xử lý.
+                    {isPointInTime
+                      ? 'Phiếu còn mở tại cuối ngày chọn (tái dựng từ lịch sử trạng thái).'
+                      : 'Phiếu chưa xong đến lúc này. Bấm mã để mở và xử lý.'}
                   </p>
                   <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
                     <div className="flex flex-wrap gap-1.5">
@@ -654,7 +726,7 @@ export default function WarehouseDailyReportPage() {
               </section>
             ) : (
               <div className="mb-4 rounded-2xl border border-slate-100 bg-white px-5 py-3.5 text-sm text-slate-600 shadow-sm">
-                Hiện còn <strong className="text-slate-800">{openCount}</strong> việc chưa xong (không thuộc ngày {dateLabel}).
+                Hiện còn <strong className="text-slate-800">{openCount}</strong> việc chưa xong.
                 {' '}
                 <button
                   type="button"

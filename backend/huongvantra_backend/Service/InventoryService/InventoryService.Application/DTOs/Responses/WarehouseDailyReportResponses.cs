@@ -89,14 +89,30 @@ public sealed record WarehouseDailyEndingSnapshot(
     int LowStockSkuCount,
     decimal TotalWarehouseValue,
     int ExpiringBatchCount30Days,
-    int PendingDeductQueueCount);
+    int PendingDeductQueueCount,
+    /// <summary>True khi số liệu được tái dựng về cuối ngày (ngày quá khứ).</summary>
+    bool IsPointInTime = false,
+    DateTime? AsOfUtc = null);
 
 public sealed record WarehouseDailyOpenCarry(
     IReadOnlyList<WarehouseDailyOpenItem> PendingSupplierReceipts,
     IReadOnlyList<WarehouseDailyOpenItem> PendingProductionOrders,
     IReadOnlyList<WarehouseDailyOpenItem> OpenStockAdjustmentRequests,
     IReadOnlyList<WarehouseDailyOpenItem> OpenSuggestions,
-    IReadOnlyList<WarehouseDailyOpenItem> WaitingDeductQueues);
+    IReadOnlyList<WarehouseDailyOpenItem> WaitingDeductQueues,
+    int PendingSupplierReceiptsTotal = 0,
+    int PendingProductionOrdersTotal = 0,
+    int OpenStockAdjustmentRequestsTotal = 0,
+    int OpenSuggestionsTotal = 0,
+    int WaitingDeductQueuesTotal = 0)
+{
+    public int TotalCount =>
+        PendingSupplierReceiptsTotal
+        + PendingProductionOrdersTotal
+        + OpenStockAdjustmentRequestsTotal
+        + OpenSuggestionsTotal
+        + WaitingDeductQueuesTotal;
+}
 
 public sealed record WarehouseDailyOpenItem(
     Guid Id,
@@ -132,4 +148,3 @@ public sealed record WarehouseDailyReportSubmissionDetail(
     int LowStockSkuCount,
     int ExpiringBatchCount30Days,
     WarehouseDailyReportResponse Report);
-

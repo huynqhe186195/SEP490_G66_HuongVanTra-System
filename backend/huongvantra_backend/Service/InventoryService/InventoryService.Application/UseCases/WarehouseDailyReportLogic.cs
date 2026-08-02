@@ -14,6 +14,7 @@ public sealed class WarehouseDailyReportLogic(IWarehouseDailyReportRepository _r
     {
         var businessDate = date ?? VietnamToday();
         var (fromUtc, toUtcExclusive) = ToUtcDayRange(businessDate);
+        var reconstructPointInTime = businessDate < VietnamToday();
 
         var receipts = await _repo.GetCompletedSupplierReceiptsAsync(fromUtc, toUtcExclusive, ct);
         var production = await _repo.GetCompletedProductionOrdersAsync(fromUtc, toUtcExclusive, ct);
@@ -23,15 +24,16 @@ public sealed class WarehouseDailyReportLogic(IWarehouseDailyReportRepository _r
         var stocktakes = await _repo.GetCompletedWarehouseStocktakesAsync(fromUtc, toUtcExclusive, businessDate, ct);
         var ledgerByType = await _repo.GetWarehouseLedgerSummaryAsync(fromUtc, toUtcExclusive, ct);
         var ledgerCount = await _repo.CountWarehouseLedgerEntriesAsync(fromUtc, toUtcExclusive, ct);
-        var snapshot = await _repo.GetEndingSnapshotAsync(ct);
-        var openCarry = await _repo.GetOpenCarryAsync(ct);
+        var snapshot = await _repo.GetEndingSnapshotAsync(toUtcExclusive, reconstructPointInTime, businessDate, ct);
+        var openCarry = await _repo.GetOpenCarryAsync(toUtcExclusive, reconstructPointInTime, ct);
 
-        var openCarryCount =
-            openCarry.PendingSupplierReceipts.Count
-            + openCarry.PendingProductionOrders.Count
-            + openCarry.OpenStockAdjustmentRequests.Count
-            + openCarry.OpenSuggestions.Count
-            + openCarry.WaitingDeductQueues.Count;
+        var openCarryCount = openCarry.TotalCount > 0
+            ? openCarry.TotalCount
+            : openCarry.PendingSupplierReceipts.Count
+              + openCarry.PendingProductionOrders.Count
+              + openCarry.OpenStockAdjustmentRequests.Count
+              + openCarry.OpenSuggestions.Count
+              + openCarry.WaitingDeductQueues.Count;
 
         var summary = new WarehouseDailyReportSummary(
             receipts.Count,

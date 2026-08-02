@@ -1,3 +1,4 @@
+using HuongVanTra.Shared.Auth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using ProductService.Infrastructure.Services;
@@ -14,7 +15,7 @@ public class CostBasisReconciliationController(
     ICostBasisReconciliationService reconciliationService) : ControllerBase
 {
     [HttpPost]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Policy = PermissionNames.ManageBusinessPolicy)]
     public async Task<IActionResult> Reconcile(
         [FromQuery] Guid? skuId = null,
         CancellationToken ct = default)

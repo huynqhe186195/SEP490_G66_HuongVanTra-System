@@ -55,6 +55,19 @@ export function hasPermission(session, permission) {
   return session.permissions.includes(permission)
 }
 
+/** Báo cáo cuối ngày kho — trang live + gửi (Thủ kho). */
+export function canSubmitWarehouseDailyReport(session) {
+  return hasPermission(session, 'SUBMIT_WAREHOUSE_REPORT')
+}
+
+/** Xem báo cáo live (không gồm lịch sử đã gửi). */
+export function canViewWarehouseDailyReportLive(session) {
+  return (
+    hasPermission(session, 'SUBMIT_WAREHOUSE_REPORT')
+    || hasPermission(session, 'OPERATE_WAREHOUSE')
+  )
+}
+
 export function canViewAllCustomers(session) {
   return hasPermission(session, 'VIEW_ALL_CUSTOMERS') || hasPermission(session, 'MANAGE_ROLE')
 }
@@ -350,8 +363,15 @@ export function isBranchManager(session) {
 function isManagerRole(session) {
   if (isSystemAdmin(session) || isWarehouseRole(session)) return false
   return (session?.roles ?? []).some((role) => {
-    const normalized = String(role || '').trim().toLowerCase().replace(/[._-]+/g, ' ').replace(/\s+/g, ' ')
-    return ['manager', 'agency manager', 'branch manager', 'owner', 'chu co so', 'chủ cơ sở'].includes(normalized)
+    const compact = normalizeRoleToken(role)
+    return [
+      'manager',
+      'agencymanager',
+      'branchmanager',
+      'owner',
+      'chucoso',
+      'chủcơsở',
+    ].includes(compact)
   })
 }
 

@@ -12,7 +12,7 @@ namespace InventoryService.WebAPI.Controllers;
 public class InventorySettingsController(IOptions<InventoryOptions> options) : ControllerBase
 {
     [HttpGet("settings")]
-    [Authorize(Policy = PermissionNames.ViewOrder)]
+    [Authorize(Policy = PermissionNames.ViewInventory)]
     public IActionResult GetSettings() =>
         Ok(new { simulateWarehouse = options.Value.SimulateWarehouse });
 }

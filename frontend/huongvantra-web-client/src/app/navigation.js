@@ -450,6 +450,20 @@ function groupAdminManagerSidebar(items, isAdmin) {
     ]
 
   // Manager: ẩn thống kê tồn kho / lịch sử tạo / yêu cầu xóa (không hiện ở nhóm Hàng hóa).
+  // Trước khi consume statistics: giữ mục Báo cáo đã gửi cho Admin/Manager giám sát.
+  const statsItem = byPath.get('/inventory/statistics')
+  const submissionsNav = statsItem?.children?.find((child) =>
+    String(child.path || '').includes('/warehouse-daily-report/submissions'))
+  if (submissionsNav) {
+    result.push({
+      label: submissionsNav.label || 'Báo cáo đã gửi',
+      path: submissionsNav.path,
+      module: submissionsNav.module || 'warehouse_daily_report',
+      icon: 'assignment_turned_in',
+      roles: submissionsNav.roles,
+    })
+  }
+
   for (const path of [
     '/inventory/statistics',
     '/inventory/product-approvals',
@@ -801,6 +815,7 @@ const MODULE_PATH_PREFIXES = [
   { module: 'inventory_reports', prefix: '/inventory/reports' },
   { module: 'inventory_ledger', prefix: '/inventory/ledger' },
   { module: 'warehouse_daily_report', prefix: '/inventory/warehouse-daily-report' },
+  { module: 'inventory_statistics', prefix: '/inventory/statistics' },
   { module: 'inventory', prefix: '/inventory' },
   { module: 'cod_ops', prefix: '/orders/cod' },
   { module: 'stock_deduct_ops', prefix: '/orders/stock-deduct' },
@@ -914,6 +929,20 @@ export function canAccessPath(session, pathname, search = '') {
     ) {
       return true
     }
+  }
+
+  // Live báo cáo cuối ngày: chỉ Thủ kho. Admin/Manager chỉ xem /submissions.
+  const liveDaily = '/inventory/warehouse-daily-report'
+  const submissionsDaily = `${liveDaily}/submissions`
+  if (path === liveDaily) {
+    const permissions = session?.permissions ?? []
+    return (
+      permissions.includes('SUBMIT_WAREHOUSE_REPORT')
+      || permissions.includes('OPERATE_WAREHOUSE')
+    )
+  }
+  if (path === submissionsDaily || path.startsWith(`${submissionsDaily}/`)) {
+    return canAccessModule(session, 'warehouse_daily_report')
   }
 
   const module = getModuleForPath(pathname)
@@ -1085,6 +1114,19 @@ export function isNavigationItemActive(pathname, item, search = '') {
   }
 
   if (item.module === 'orders') {
+    // Các route anh em dưới /orders — không được kích hoạt "Quản Lý Đơn POS" (/orders).
+    const isOrdersSiblingPath = (current) =>
+      current === '/orders/cod'
+      || current.startsWith('/orders/cod/')
+      || current === '/orders/b2b-debts'
+      || current.startsWith('/orders/b2b-debts/')
+      || current === '/orders/exchange'
+      || current.startsWith('/orders/exchange/')
+      || current === '/orders/returns'
+      || current.startsWith('/orders/returns/')
+      || current === '/orders/stock-deduct'
+      || current.startsWith('/orders/stock-deduct/')
+
     if (target === '/orders/exchange') {
       return (
         path === '/orders/exchange'
@@ -1094,22 +1136,22 @@ export function isNavigationItemActive(pathname, item, search = '') {
         || orderDetailContext === 'exchange'
       )
     }
-    if (path === '/orders/cod' || path.startsWith('/orders/cod/')) {
+
+    if (target === '/orders/b2b-debts') {
+      return path === target || path.startsWith(`${target}/`)
+    }
+
+    // Mục "Quản Lý Đơn POS" (path=/orders) và các mục orders khác trừ sibling.
+    if (target === '/orders') {
+      if (isOrdersSiblingPath(path)) return false
+      if (orderDetailContext === 'exchange' || orderDetailContext === 'cod') return false
+      return path === '/orders' || path.startsWith('/orders/')
+    }
+
+    if (isOrdersSiblingPath(path) && !(path === target || path.startsWith(`${target}/`))) {
       return false
     }
-    if (path === '/orders/exchange') {
-      return false
-    }
-    if (path === '/orders/returns' || path.startsWith('/orders/returns/')) {
-      return false
-    }
-    if (orderDetailContext === 'exchange') {
-      return false
-    }
-    if (orderDetailContext === 'cod') {
-      return false
-    }
-    if (path === '/orders/stock-deduct' || path.startsWith('/orders/stock-deduct/')) {
+    if (orderDetailContext === 'exchange' || orderDetailContext === 'cod') {
       return false
     }
     return path === target || path.startsWith(`${target}/`)

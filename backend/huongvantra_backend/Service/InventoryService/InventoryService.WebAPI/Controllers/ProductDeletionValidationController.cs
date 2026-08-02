@@ -1,3 +1,4 @@
+using HuongVanTra.Shared.Auth;
 using InventoryService.Domain.Enums;
 using InventoryService.Infrastructure.Data;
 using Microsoft.AspNetCore.Authorization;
@@ -25,7 +26,7 @@ public record ProductDeletionValidationResponse(List<SkuDeletionValidationResult
 public class ProductDeletionValidationController(InventoryDbContext _db) : ControllerBase
 {
     [HttpPost]
-    [Authorize(Roles = "Admin,Warehouse")]
+    [Authorize(Policy = PermissionNames.ViewProductRequest)]
     public async Task<IActionResult> Validate([FromBody] ProductDeletionValidationRequest request, CancellationToken ct = default)
     {
         var skuIds = (request.SkuIds ?? [])

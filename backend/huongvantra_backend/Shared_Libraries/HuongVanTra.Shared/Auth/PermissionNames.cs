@@ -16,27 +16,34 @@ public static class PermissionNames
     public const string ApprovePrice = "APPROVE_PRICE";
     public const string ApproveContract = "APPROVE_CONTRACT";
     public const string ManageBusinessPolicy = "MANAGE_BUSINESS_POLICY";
-
-    /// <summary>Tạo/theo dõi/xác nhận thu COD — SaleCod, Manager, Admin.</summary>
     public const string VerifyCod = "VERIFY_COD";
+    public const string MonitorOutbox = "MONITOR_OUTBOX";
 
-    /// <summary>Xem danh sách/chi tiết KH — Sale (VIEW_CUSTOMER) hoặc Manager/Kế toán (VIEW_ALL_CUSTOMERS).</summary>
+    // ── Inventory / Product ops ──────────────────────────────────────────
+    public const string ViewInventory = "VIEW_INVENTORY";
+    public const string OperateWarehouse = "OPERATE_WAREHOUSE";
+    public const string ApproveInventory = "APPROVE_INVENTORY";
+    public const string RejectStockDeduct = "REJECT_STOCK_DEDUCT";
+    public const string ManageSuppliers = "MANAGE_SUPPLIERS";
+    public const string ManageCost = "MANAGE_COST";
+    public const string ViewCost = "VIEW_COST";
+    public const string SubmitWarehouseReport = "SUBMIT_WAREHOUSE_REPORT";
+    public const string BroadcastNotification = "BROADCAST_NOTIFICATION";
+    public const string ViewProductRequest = "VIEW_PRODUCT_REQUEST";
+    public const string ApproveProductRequest = "APPROVE_PRODUCT_REQUEST";
+
+    // ── Composite policy names (không seed DB) ───────────────────────────
     public const string ViewCustomerAccess = "VIEW_CUSTOMER_ACCESS";
-
-    /// <summary>Sửa hồ sơ KH — Admin (MANAGE_ROLE) hoặc Manager (CREATE_CUSTOMER). Kế toán chỉ xem.</summary>
     public const string EditCustomerProfile = "EDIT_CUSTOMER_PROFILE";
-
-    /// <summary>
-    /// Tạo hồ sơ KH mới — Sale (CREATE_ORDER) vẫn được tạo khách trong phạm vi cửa hàng,
-    /// ngoài Manager (CREATE_CUSTOMER) và Admin (MANAGE_ROLE). Import/công nợ vẫn giữ ở CREATE_CUSTOMER.
-    /// </summary>
     public const string CreateCustomerProfile = "CREATE_CUSTOMER_PROFILE";
-
-    /// <summary>Admin hoặc Thủ kho — tạo/sửa sản phẩm, danh mục, SKU.</summary>
     public const string CatalogManagement = "CATALOG_MANAGEMENT";
-
-    /// <summary>POS cashier (CREATE_ORDER) hoặc admin (CREATE_CUSTOMER) đều được trừ công nợ khi checkout.</summary>
     public const string ApplyDebtPayment = "APPLY_DEBT_PAYMENT";
+    public const string StockAdjustmentReadAccess = "STOCK_ADJUSTMENT_READ_ACCESS";
+    public const string StockAdjustmentCreateAccess = "STOCK_ADJUSTMENT_CREATE_ACCESS";
+    public const string ViewCatalogAccess = "VIEW_CATALOG_ACCESS";
+    public const string WarehouseOrManagerOps = "WAREHOUSE_OR_MANAGER_OPS";
+    public const string MaterialsDeductAccess = "MATERIALS_DEDUCT_ACCESS";
+    public const string CancelRetailPriceAccess = "CANCEL_RETAIL_PRICE_ACCESS";
 
     public static readonly string[] All =
     [
@@ -54,6 +61,18 @@ public static class PermissionNames
         ApprovePrice,
         ApproveContract,
         ManageBusinessPolicy,
-        VerifyCod
+        VerifyCod,
+        MonitorOutbox,
+        ViewInventory,
+        OperateWarehouse,
+        ApproveInventory,
+        RejectStockDeduct,
+        ManageSuppliers,
+        ManageCost,
+        ViewCost,
+        SubmitWarehouseReport,
+        BroadcastNotification,
+        ViewProductRequest,
+        ApproveProductRequest,
     ];
 }

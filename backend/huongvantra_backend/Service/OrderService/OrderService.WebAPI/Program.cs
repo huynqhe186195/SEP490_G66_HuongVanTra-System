@@ -67,6 +67,9 @@ builder.Services.AddHttpClient<IProductCatalogClient, ProductCatalogClient>(clie
 {
     var baseUrl = builder.Configuration["ProductService:BaseUrl"] ?? "http://product-service:8080";
     client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
+    var internalKey = builder.Configuration["InternalApi:Key"];
+    if (!string.IsNullOrWhiteSpace(internalKey))
+        client.DefaultRequestHeaders.TryAddWithoutValidation("X-Internal-Api-Key", internalKey);
 });
 builder.Services.AddHttpClient<ICustomerCatalogClient, CustomerCatalogClient>(client =>
 {

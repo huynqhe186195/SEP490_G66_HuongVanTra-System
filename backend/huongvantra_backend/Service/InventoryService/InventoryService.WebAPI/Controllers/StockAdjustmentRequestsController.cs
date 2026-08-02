@@ -17,11 +17,6 @@ namespace InventoryService.WebAPI.Controllers;
 [Authorize]
 public class StockAdjustmentRequestsController(InventoryLogic _logic) : ControllerBase
 {
-    // JWT phát tên vai trò cụ thể (SalePos/SaleCod); "Sale" giữ lại cho dữ liệu vai trò gộp cũ.
-    private const string SaleRoles = "Sale,SalePos,SaleCod";
-    private const string ReadRoles = SaleRoles + ",Manager,Warehouse,Admin,Accountant";
-    private const string CreateRoles = SaleRoles + ",Manager";
-
     private bool IsSaleRole() =>
         User.IsInRole("Sale") || User.IsInRole("SalePos") || User.IsInRole("SaleCod");
 
@@ -34,7 +29,7 @@ public class StockAdjustmentRequestsController(InventoryLogic _logic) : Controll
         && !User.IsInRole("Accountant");
 
     [HttpGet]
-    [Authorize(Roles = ReadRoles)]
+    [Authorize(Policy = PermissionNames.StockAdjustmentReadAccess)]
     public async Task<IActionResult> GetList(
         CancellationToken ct,
         [FromQuery] string? status,
@@ -81,7 +76,7 @@ public class StockAdjustmentRequestsController(InventoryLogic _logic) : Controll
 
     /// <summary>Tùy chọn cho bộ lọc audit: người tạo và vai trò người tạo đã xuất hiện trong dữ liệu.</summary>
     [HttpGet("filter-options")]
-    [Authorize(Roles = "Manager,Warehouse,Admin,Accountant")]
+    [Authorize(Policy = PermissionNames.ViewInventory)]
     public async Task<IActionResult> GetFilterOptions(CancellationToken ct) =>
         Ok(await _logic.GetStockAdjustmentRequestFilterOptionsAsync(ct));
 
@@ -94,7 +89,7 @@ public class StockAdjustmentRequestsController(InventoryLogic _logic) : Controll
         value.HasValue ? DateTime.SpecifyKind(value.Value.Date.AddDays(1), DateTimeKind.Utc) : null;
 
     [HttpGet("{id:guid}")]
-    [Authorize(Roles = ReadRoles)]
+    [Authorize(Policy = PermissionNames.StockAdjustmentReadAccess)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
     {
         var item = await _logic.GetStockAdjustmentRequestAsync(id, ct);
@@ -108,12 +103,12 @@ public class StockAdjustmentRequestsController(InventoryLogic _logic) : Controll
 
     /// <summary>Các Phiếu điều chuyển đã sinh ra từ yêu cầu này. Một yêu cầu có thể có nhiều phiếu.</summary>
     [HttpGet("{id:guid}/transfers")]
-    [Authorize(Roles = ReadRoles)]
+    [Authorize(Policy = PermissionNames.StockAdjustmentReadAccess)]
     public async Task<IActionResult> GetTransfers(Guid id, CancellationToken ct) =>
         Ok(await _logic.GetStockAdjustmentRequestTransfersAsync(id, ct));
 
     [HttpPost]
-    [Authorize(Roles = CreateRoles)]
+    [Authorize(Policy = PermissionNames.StockAdjustmentCreateAccess)]
     public async Task<IActionResult> Create([FromBody] CreateStockAdjustmentRequest request, CancellationToken ct)
     {
         if (User.IsInRole("Admin")) return Forbid();
@@ -127,7 +122,7 @@ public class StockAdjustmentRequestsController(InventoryLogic _logic) : Controll
 
     /// <summary>Warehouse duyệt/từ chối theo từng dòng. Không làm thay đổi tồn kho.</summary>
     [HttpPost("{id:guid}/review")]
-    [Authorize(Roles = "Warehouse")]
+    [Authorize(Policy = PermissionNames.OperateWarehouse)]
     public async Task<IActionResult> Review(
         Guid id,
         [FromBody] ReviewStockAdjustmentRequestLines? request,
@@ -142,7 +137,7 @@ public class StockAdjustmentRequestsController(InventoryLogic _logic) : Controll
     }
 
     [HttpPost("{id:guid}/reject")]
-    [Authorize(Roles = "Warehouse")]
+    [Authorize(Policy = PermissionNames.OperateWarehouse)]
     public async Task<IActionResult> Reject(
         Guid id,
         [FromBody] RejectStockAdjustmentRequest request,
@@ -158,7 +153,7 @@ public class StockAdjustmentRequestsController(InventoryLogic _logic) : Controll
 
     /// <summary>Warehouse đóng phần còn lại khi không thể cấp thêm; bắt buộc có lý do.</summary>
     [HttpPost("{id:guid}/close-remaining")]
-    [Authorize(Roles = "Warehouse")]
+    [Authorize(Policy = PermissionNames.OperateWarehouse)]
     public async Task<IActionResult> CloseRemaining(
         Guid id,
         [FromBody] CloseStockAdjustmentRemainingRequest? request,
@@ -173,7 +168,7 @@ public class StockAdjustmentRequestsController(InventoryLogic _logic) : Controll
     }
 
     [HttpPost("{id:guid}/cancel")]
-    [Authorize(Roles = CreateRoles)]
+    [Authorize(Policy = PermissionNames.StockAdjustmentCreateAccess)]
     public async Task<IActionResult> Cancel(
         Guid id,
         [FromBody] CancelStockAdjustmentRequest? request,

@@ -170,7 +170,7 @@ function UsersPage() {
 
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize))
   const assignableRoles = useMemo(
-    () => roles.filter((role) => role.roleName !== 'Sale'),
+    () => roles.filter((role) => role.roleName !== 'Sale' && role.roleName !== 'CooperativeOwner'),
     [roles],
   )
 

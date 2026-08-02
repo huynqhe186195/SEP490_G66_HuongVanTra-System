@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { canAccessModule, canAccessPath } from './navigation.js'
+import { canAccessModule, canAccessPath, isNavigationItemActive } from './navigation.js'
 
 test('SaleCod-only navigation exposes COD POS and COD operations but not normal order list', () => {
   const saleCod = {
@@ -46,4 +46,14 @@ test('SalePos-only navigation denies COD operations', () => {
   assert.equal(canAccessModule(salePos, 'orders'), true)
   assert.equal(canAccessModule(salePos, 'cod_ops'), false)
   assert.equal(canAccessPath(salePos, '/orders/cod'), false)
+})
+
+test('b2b debts path highlights debts item but not POS orders list', () => {
+  const posOrders = { path: '/orders', module: 'orders' }
+  const b2bDebts = { path: '/orders/b2b-debts', module: 'orders' }
+
+  assert.equal(isNavigationItemActive('/orders/b2b-debts', b2bDebts), true)
+  assert.equal(isNavigationItemActive('/orders/b2b-debts', posOrders), false)
+  assert.equal(isNavigationItemActive('/orders', posOrders), true)
+  assert.equal(isNavigationItemActive('/orders/cod', posOrders), false)
 })

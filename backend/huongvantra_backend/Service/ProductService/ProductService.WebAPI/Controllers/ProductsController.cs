@@ -17,7 +17,7 @@ public class ProductsController(ProductLogic _productLogic) : ControllerBase
     };
 
     [HttpGet]
-    [Authorize(Roles = "Warehouse,Accountant,Admin")]
+    [Authorize(Policy = PermissionNames.ViewCatalogAccess)]
     public async Task<IActionResult> GetPaged(
         [FromQuery] string? search,
         [FromQuery] int? categoryId,
@@ -31,37 +31,39 @@ public class ProductsController(ProductLogic _productLogic) : ControllerBase
             User.GetCatalogViewScope()));
 
     [HttpGet("{id:guid}")]
-    [Authorize(Roles = "Warehouse,Accountant,Admin")]
+    [Authorize(Policy = PermissionNames.ViewCatalogAccess)]
     public async Task<IActionResult> GetById(Guid id) =>
         Ok(await _productLogic.GetByIdAsync(id, User.GetCatalogViewScope()));
 
     [HttpGet("variants/{variantId:guid}/bom")]
-    [Authorize(Roles = "Warehouse,Accountant,Admin")]
+    [Authorize(Policy = PermissionNames.ViewCatalogAccess)]
     public async Task<IActionResult> GetVariantBom(Guid variantId) =>
         Ok(await _productLogic.GetVariantBomAsync(variantId));
 
     [HttpPut("variants/{variantId:guid}/bom")]
-    [Authorize(Roles = "Warehouse")]
+    [Authorize(Policy = PermissionNames.ManageCatalog)]
     public IActionResult UpdateVariantBom(Guid variantId, [FromBody] UpdateVariantBomRequest request) =>
         StatusCode(StatusCodes.Status410Gone, MasterDataWriteDisabled);
 
     [HttpPost]
-    [Authorize(Roles = "Warehouse")]
+    [Authorize(Policy = PermissionNames.ManageCatalog)]
     public IActionResult Create([FromBody] CreateProductRequest request) =>
         StatusCode(StatusCodes.Status410Gone, MasterDataWriteDisabled);
 
     [HttpPut("{id:guid}")]
-    [Authorize(Roles = "Warehouse")]
+    [Authorize(Policy = PermissionNames.ManageCatalog)]
     public IActionResult Update(Guid id, [FromBody] UpdateProductRequest request) =>
         StatusCode(StatusCodes.Status410Gone, MasterDataWriteDisabled);
 
     [HttpDelete("{id:guid}")]
-    [Authorize(Roles = "Warehouse")]
+    [Authorize(Policy = PermissionNames.ManageCatalog)]
     public IActionResult Delete(Guid id) =>
         StatusCode(StatusCodes.Status410Gone, MasterDataWriteDisabled);
 
+    // Giữ Roles: endpoint legacy trả 410 Gone, chỉ Admin khôi phục sản phẩm đã xóa;
+    // MANAGE_CATALOG chỉ Warehouse nên sẽ loại Admin, chưa có permission phù hợp cho thao tác này.
     [HttpPost("{id:guid}/restore")]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Policy = PermissionNames.ManageRole)]
     public IActionResult Restore(Guid id) =>
         StatusCode(StatusCodes.Status410Gone, MasterDataWriteDisabled);
 }

@@ -13,7 +13,22 @@ public static class PermissionNames
     public const string ManageUser = "MANAGE_USER";
     public const string ManageRole = "MANAGE_ROLE";
     public const string ManageCatalog = "MANAGE_CATALOG";
+    public const string ApprovePrice = "APPROVE_PRICE";
+    public const string ApproveContract = "APPROVE_CONTRACT";
+    public const string ManageBusinessPolicy = "MANAGE_BUSINESS_POLICY";
     public const string VerifyCod = "VERIFY_COD";
+    public const string MonitorOutbox = "MONITOR_OUTBOX";
+    public const string ViewInventory = "VIEW_INVENTORY";
+    public const string OperateWarehouse = "OPERATE_WAREHOUSE";
+    public const string ApproveInventory = "APPROVE_INVENTORY";
+    public const string RejectStockDeduct = "REJECT_STOCK_DEDUCT";
+    public const string ManageSuppliers = "MANAGE_SUPPLIERS";
+    public const string ManageCost = "MANAGE_COST";
+    public const string ViewCost = "VIEW_COST";
+    public const string SubmitWarehouseReport = "SUBMIT_WAREHOUSE_REPORT";
+    public const string BroadcastNotification = "BROADCAST_NOTIFICATION";
+    public const string ViewProductRequest = "VIEW_PRODUCT_REQUEST";
+    public const string ApproveProductRequest = "APPROVE_PRODUCT_REQUEST";
 
     public static readonly string[] All =
     [
@@ -28,6 +43,21 @@ public static class PermissionNames
         ManageUser,
         ManageRole,
         ManageCatalog,
-        VerifyCod
+        ApprovePrice,
+        ApproveContract,
+        ManageBusinessPolicy,
+        VerifyCod,
+        MonitorOutbox,
+        ViewInventory,
+        OperateWarehouse,
+        ApproveInventory,
+        RejectStockDeduct,
+        ManageSuppliers,
+        ManageCost,
+        ViewCost,
+        SubmitWarehouseReport,
+        BroadcastNotification,
+        ViewProductRequest,
+        ApproveProductRequest,
     ];
 }

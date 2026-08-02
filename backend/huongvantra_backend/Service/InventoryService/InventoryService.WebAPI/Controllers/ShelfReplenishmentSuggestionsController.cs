@@ -13,7 +13,7 @@ namespace InventoryService.WebAPI.Controllers;
 public class ShelfReplenishmentSuggestionsController(InventoryLogic _logic) : ControllerBase
 {
     [HttpGet]
-    [Authorize(Roles = "Warehouse,Manager,Admin")]
+    [Authorize(Policy = PermissionNames.ViewInventory)]
     public async Task<IActionResult> GetList(
         CancellationToken ct,
         [FromQuery] string? status = null,
@@ -23,12 +23,12 @@ public class ShelfReplenishmentSuggestionsController(InventoryLogic _logic) : Co
         Ok(await _logic.GetShelfReplenishmentSuggestionsAsync(status, search, page, pageSize, ct));
 
     [HttpGet("open-count")]
-    [Authorize(Roles = "Warehouse,Manager,Admin")]
+    [Authorize(Policy = PermissionNames.ViewInventory)]
     public async Task<IActionResult> GetOpenCount(CancellationToken ct) =>
         Ok(new { count = await _logic.CountOpenShelfReplenishmentSuggestionsAsync(ct) });
 
     [HttpGet("{id:guid}")]
-    [Authorize(Roles = "Warehouse,Manager,Admin")]
+    [Authorize(Policy = PermissionNames.ViewInventory)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
     {
         var suggestion = await _logic.GetShelfReplenishmentSuggestionAsync(id, ct);
@@ -36,7 +36,7 @@ public class ShelfReplenishmentSuggestionsController(InventoryLogic _logic) : Co
     }
 
     [HttpPost("{id:guid}/dismiss")]
-    [Authorize(Roles = "Warehouse")]
+    [Authorize(Policy = PermissionNames.OperateWarehouse)]
     public async Task<IActionResult> Dismiss(
         Guid id,
         [FromBody] DismissShelfReplenishmentSuggestionRequest request,

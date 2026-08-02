@@ -83,14 +83,16 @@ async function refreshSession(session) {
   }
 
   const data = await response.json()
+  const responsePermissions = data.permissions ?? data.Permissions ?? []
+  const tokenPermissions = getPermissionsFromAccessToken(data.accessToken)
   const nextSession = {
     ...session,
     accessToken: data.accessToken,
     refreshToken: data.refreshToken,
     expiresAt: data.expiresAt,
     username: data.username ?? session.username,
-    roles: data.roles ?? session.roles ?? [],
-    permissions: data.permissions ?? session.permissions ?? [],
+    roles: data.roles ?? data.Roles ?? session.roles ?? [],
+    permissions: [...new Set([...responsePermissions, ...tokenPermissions, ...(session.permissions ?? [])].map(String).filter(Boolean))],
     userId: getUserIdFromToken(data.accessToken) ?? session.userId,
   }
 

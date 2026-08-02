@@ -12,7 +12,7 @@ namespace InventoryService.WebAPI.Controllers;
 public class SkuStockController(InventoryLogic _logic) : ControllerBase
 {
     [HttpGet]
-    [Authorize(Roles = "Warehouse,Accountant")]
+    [Authorize(Policy = PermissionNames.ViewInventory)]
     public async Task<IActionResult> GetAll(CancellationToken ct)
     {
         var items = await _logic.GetSkuStocksAsync(ct);
@@ -20,7 +20,7 @@ public class SkuStockController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpGet("low-stock")]
-    [Authorize(Roles = "Warehouse,Accountant")]
+    [Authorize(Policy = PermissionNames.ViewInventory)]
     public async Task<IActionResult> GetLowStock(CancellationToken ct)
     {
         var items = await _logic.GetLowStockSkusAsync(ct);
@@ -28,7 +28,7 @@ public class SkuStockController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpPost("{skuId:guid}/adjust-warehouse")]
-    [Authorize(Roles = "Warehouse")]
+    [Authorize(Policy = PermissionNames.OperateWarehouse)]
     public async Task<IActionResult> AdjustWarehouse(Guid skuId, [FromBody] AdjustWarehouseStockRequest request, CancellationToken ct)
     {
         var result = await _logic.AdjustWarehouseStockAsync(skuId, request.QuantityDelta, null, ct);
@@ -36,7 +36,7 @@ public class SkuStockController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpPost("{skuId:guid}/simulate-adjust-store")]
-    [Authorize(Roles = "Warehouse")]
+    [Authorize(Policy = PermissionNames.OperateWarehouse)]
     public async Task<IActionResult> SimulateAdjustStore(Guid skuId, [FromBody] AdjustSkuStockRequest request, CancellationToken ct)
     {
         var result = await _logic.SimulateAdjustStoreStockAsync(skuId, request.QuantityDelta, null, ct);
@@ -44,7 +44,7 @@ public class SkuStockController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpPut("{skuId:guid}/warehouse-threshold")]
-    [Authorize(Roles = "Warehouse")]
+    [Authorize(Policy = PermissionNames.OperateWarehouse)]
     public async Task<IActionResult> UpdateWarehouseThreshold(Guid skuId, [FromBody] UpdateWarehouseLowStockThresholdRequest request, CancellationToken ct)
     {
         var result = await _logic.UpdateWarehouseLowStockThresholdAsync(skuId, request, ct);

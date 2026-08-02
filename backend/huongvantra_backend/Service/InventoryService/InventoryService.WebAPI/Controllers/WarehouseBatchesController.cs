@@ -13,7 +13,7 @@ namespace InventoryService.WebAPI.Controllers;
 public class WarehouseBatchesController(InventoryLogic _logic) : ControllerBase
 {
     [HttpGet]
-    [Authorize(Policy = PermissionNames.ViewOrder)]
+    [Authorize(Policy = PermissionNames.ViewInventory)]
     public async Task<IActionResult> GetList(
         CancellationToken ct,
         [FromQuery] Guid? skuId,
@@ -22,7 +22,7 @@ public class WarehouseBatchesController(InventoryLogic _logic) : ControllerBase
         Ok(await _logic.GetWarehouseBatchesAsync(skuId, search, availableOnly, ct));
 
     [HttpGet("{id:guid}")]
-    [Authorize(Policy = PermissionNames.ViewOrder)]
+    [Authorize(Policy = PermissionNames.ViewInventory)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
     {
         var item = await _logic.GetWarehouseBatchAsync(id, ct);
@@ -31,7 +31,7 @@ public class WarehouseBatchesController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Policy = PermissionNames.OperateWarehouse)]
     public async Task<IActionResult> Create([FromBody] CreateWarehouseBatchRequest request, CancellationToken ct)
     {
         var created = await _logic.CreateWarehouseBatchAsync(request, User.GetUserId(), User.ToCreatorSnapshot(), ct);

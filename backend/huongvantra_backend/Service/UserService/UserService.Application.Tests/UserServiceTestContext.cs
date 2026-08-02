@@ -13,7 +13,7 @@ internal static class UserServiceTestContext
             .Options);
 
     public static UserLogic CreateUserLogic(UserDbContext db) =>
-        new(new UserRepository(db), new RoleRepository(db), new EmployeeRepository(db));
+        new(new UserRepository(db), new RoleRepository(db), new EmployeeRepository(db), new RefreshTokenRepository(db));
 
     public static EmployeeLogic CreateEmployeeLogic(UserDbContext db) =>
         new(new UserRepository(db), new RoleRepository(db), new EmployeeRepository(db));

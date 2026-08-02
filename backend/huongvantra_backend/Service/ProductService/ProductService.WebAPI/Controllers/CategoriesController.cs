@@ -20,7 +20,7 @@ public class CategoriesController(CategoryLogic _categoryLogic) : ControllerBase
         Ok(await _categoryLogic.GetByIdAsync(id));
 
     [HttpPost]
-    [Authorize(Roles = "Warehouse")]
+    [Authorize(Policy = PermissionNames.ManageCatalog)]
     public async Task<IActionResult> Create([FromBody] CreateCategoryRequest request)
     {
         var result = await _categoryLogic.CreateAsync(request);
@@ -28,12 +28,12 @@ public class CategoriesController(CategoryLogic _categoryLogic) : ControllerBase
     }
 
     [HttpPut("{id:int}")]
-    [Authorize(Roles = "Warehouse")]
+    [Authorize(Policy = PermissionNames.ManageCatalog)]
     public async Task<IActionResult> Update(int id, [FromBody] UpdateCategoryRequest request) =>
         Ok(await _categoryLogic.UpdateAsync(id, request));
 
     [HttpDelete("{id:int}")]
-    [Authorize(Roles = "Warehouse")]
+    [Authorize(Policy = PermissionNames.ManageCatalog)]
     public async Task<IActionResult> Delete(int id)
     {
         await _categoryLogic.DeleteAsync(id);
@@ -41,7 +41,7 @@ public class CategoriesController(CategoryLogic _categoryLogic) : ControllerBase
     }
 
     [HttpPost("{id:int}/restore")]
-    [Authorize(Roles = "Warehouse")]
+    [Authorize(Policy = PermissionNames.ManageCatalog)]
     public async Task<IActionResult> Restore(int id) =>
         Ok(await _categoryLogic.RestoreAsync(id));
 }
