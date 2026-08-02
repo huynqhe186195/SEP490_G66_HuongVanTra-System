@@ -6,4 +6,5 @@ function HomeRedirect() {
   return <Navigate to={resolveHomeRoute(loadAuthSession())} replace />
 }
 
+
 export default HomeRedirect
