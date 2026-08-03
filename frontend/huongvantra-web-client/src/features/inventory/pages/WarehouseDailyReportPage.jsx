@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination from '../../../components/shared/TablePagination.jsx'
+import { useTotalAwarePageSize } from '../../../utils/totalAwarePageSize.js'
 import { confirmDialog } from '../../../app/dialog.js'
 import { showError, showInfo, showSuccess } from '../../../app/toast.js'
 import { formatVietnamDateTimeMinute, VIETNAM_TIME_ZONE } from '../../../utils/vietnamDateTime.js'
@@ -15,9 +16,6 @@ import {
   fetchWarehouseDailyReportSubmissions,
 } from '../services/warehouseDailyReportApi.js'
 import { exportWarehouseDailyReportExcel } from '../utils/warehouseDailyReportExcel.js'
-
-const OPEN_PAGE_SIZE_OPTIONS = [5, 10, 20]
-const OPEN_PAGE_SIZE_DEFAULT = 5
 
 const OPEN_KIND_FILTERS = [
   { key: '', label: 'Tất cả' },
@@ -134,7 +132,6 @@ export default function WarehouseDailyReportPage() {
   const [notifyPendingSubmissionId, setNotifyPendingSubmissionId] = useState(null)
   const [checkingSent, setCheckingSent] = useState(false)
   const [openPage, setOpenPage] = useState(1)
-  const [openPageSize, setOpenPageSize] = useState(OPEN_PAGE_SIZE_DEFAULT)
   const [openKind, setOpenKind] = useState('')
   const [openSearch, setOpenSearch] = useState('')
 
@@ -194,10 +191,6 @@ export default function WarehouseDailyReportPage() {
     setOpenSearch('')
     setNotifyPendingSubmissionId(null)
   }, [date])
-
-  useEffect(() => {
-    setOpenPage(1)
-  }, [openPageSize, openKind, openSearch])
 
   const counts = useMemo(() => {
     if (!report) return {}
@@ -264,13 +257,19 @@ export default function WarehouseDailyReportPage() {
     })
   }, [openRows, openKind, openSearch])
 
+  const { pageSize: openPageSize, setPageSize: setOpenPageSize, pageSizeOptions: openPageSizeOptions } = useTotalAwarePageSize(filteredOpenRows.length)
+
   const pagedOpenRows = useMemo(() => {
     const start = (openPage - 1) * openPageSize
     return filteredOpenRows.slice(start, start + openPageSize)
   }, [filteredOpenRows, openPage, openPageSize])
 
   useEffect(() => {
-    const totalPages = Math.max(1, Math.ceil(filteredOpenRows.length / openPageSize))
+    setOpenPage(1)
+  }, [openKind, openSearch])
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil((filteredOpenRows.length || 0) / openPageSize) || 1)
     if (openPage > totalPages) setOpenPage(totalPages)
   }, [filteredOpenRows.length, openPage, openPageSize])
 
@@ -715,7 +714,7 @@ export default function WarehouseDailyReportPage() {
                     pageSize={openPageSize}
                     totalCount={filteredOpenRows.length}
                     itemLabel="phiếu"
-                    pageSizeOptions={OPEN_PAGE_SIZE_OPTIONS}
+                    pageSizeOptions={openPageSizeOptions}
                     onPageChange={setOpenPage}
                     onPageSizeChange={(size) => {
                       setOpenPageSize(size)

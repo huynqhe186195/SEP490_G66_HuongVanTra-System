@@ -226,5 +226,20 @@ export function toPagedResult(data) {
     totalPages: Number(
       data.totalPages ?? data.TotalPages ?? (pageSize > 0 ? Math.max(1, Math.ceil(totalCount / pageSize)) : 1),
     ),
+    statusCounts: normalizeStatusCounts(data.statusCounts ?? data.StatusCounts),
   }
+}
+
+function normalizeStatusCounts(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
+  const counts = {}
+  for (const [key, value] of Object.entries(raw)) {
+    const n = Number(value)
+    if (!key || !Number.isFinite(n)) continue
+    // Giữ cả key gốc và lowercase để FE khớp chip (PascalCase / lowercase).
+    counts[key] = n
+    const lower = String(key).toLowerCase()
+    if (!(lower in counts)) counts[lower] = n
+  }
+  return counts
 }

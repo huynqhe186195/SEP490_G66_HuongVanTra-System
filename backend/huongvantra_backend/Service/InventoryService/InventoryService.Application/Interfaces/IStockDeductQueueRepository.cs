@@ -18,6 +18,7 @@ public interface IStockDeductQueueRepository
         int page,
         int pageSize,
         CancellationToken ct = default);
+    Task<Dictionary<string, int>> CountWaitingByStatusAsync(string? search, CancellationToken ct = default);
     Task AddAsync(StockDeductQueue queue, CancellationToken ct = default);
     Task<int> SaveChangesAsync(CancellationToken ct = default);
 

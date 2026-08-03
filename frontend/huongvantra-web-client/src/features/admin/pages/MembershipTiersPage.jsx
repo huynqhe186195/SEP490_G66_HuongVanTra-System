@@ -117,6 +117,7 @@ function MembershipTiersPage() {
   return (
     <PageShell>
       <PageHeader
+        compact
         title="Quản lý hạng thẻ"
         titleInfo="Cấu hình ngưỡng chi tiêu và chiết khấu theo hạng khách hàng thân thiết"
         rightContent={

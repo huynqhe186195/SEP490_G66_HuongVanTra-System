@@ -66,9 +66,22 @@ public class StockTransferLogic(
             fromDateUtc,
             toDateUtc,
             sort);
+        var statusCounts = await _transferRepo.CountByStatusAsync(
+            search,
+            ct,
+            sourceRequestId,
+            transferType,
+            createdBy,
+            fromDateUtc,
+            toDateUtc);
         var totalPages = Math.Max(1, (int)Math.Ceiling(totalCount / (double)safePageSize));
         return new PagedResponse<StockTransferResponse>(
-            items.Select(transfer => Map(transfer)).ToList(), safePage, safePageSize, totalCount, totalPages);
+            items.Select(transfer => Map(transfer)).ToList(),
+            safePage,
+            safePageSize,
+            totalCount,
+            totalPages,
+            statusCounts);
     }
 
     public async Task<StockTransferResponse?> GetByIdAsync(Guid id, CancellationToken ct = default)

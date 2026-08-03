@@ -2,13 +2,14 @@ import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
-import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
+import TablePagination from '../../../components/shared/TablePagination.jsx'
+import { useTotalAwarePageSize } from '../../../utils/totalAwarePageSize.js'
 import { showError } from '../../../app/toast.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import { canOperateSupplierReturn } from '../../auth/utils/permissions.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import { formatStockQuantity } from '../../products/utils/productDisplay.js'
-import { InfoTile, SUPPLIER_RETURN_FLOW_DESCRIPTION } from '../components/SupplierReturnConfirmModal.jsx'
+import { InfoTile } from '../components/SupplierReturnConfirmModal.jsx'
 import {
   fetchSupplierReturnRequests,
   getInventoryReturnStatusClass,
@@ -17,8 +18,12 @@ import {
 
 function getPrimaryItemSummary(row) {
   if (!row.items?.length) return 'Chưa có dòng sản phẩm'
-  if (row.items.length === 1) return `${row.items[0].skuSnapshotName} (${row.items[0].skuCode})`
-  return `${row.items.length} dòng sản phẩm`
+  if (row.items.length === 1) {
+    const item = row.items[0]
+    const name = String(item.skuSnapshotName || '').trim()
+    return name ? `${item.skuCode} — ${name}` : (item.skuCode || '—')
+  }
+  return `${row.items[0].skuCode} +${row.items.length - 1} SKU`
 }
 
 function ReturnDetailModal({ request, onClose }) {
@@ -60,8 +65,8 @@ function ReturnDetailModal({ request, onClose }) {
                 {request.items.map((item) => (
                   <tr key={item.id}>
                     <td className="px-4 py-3">
-                      <p className="font-semibold text-slate-800">{item.skuSnapshotName}</p>
-                      <p className="font-mono text-xs text-slate-500">{item.skuCode}</p>
+                      <p className="font-mono font-semibold text-[#356647]">{item.skuCode}</p>
+                      <p className="text-xs text-slate-600">{item.skuSnapshotName || '—'}</p>
                     </td>
                     <td className="px-4 py-3 font-mono text-slate-700">{item.warehouseBatchLotCode || '—'}</td>
                     <td className="px-4 py-3 text-right font-semibold">{formatStockQuantity(item.quantity)}</td>
@@ -108,8 +113,13 @@ export default function InventoryReturnsPage() {
   const navigate = useNavigate()
   const [searchInput, setSearchInput] = useState('')
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE)
   const [data, setData] = useState({ items: [], totalItems: 0, totalPages: 1 })
+  const { pageSize, setPageSize, pageSizeOptions } = useTotalAwarePageSize(data.totalItems)
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil((data.totalItems || 0) / pageSize) || 1)
+    if (page > totalPages) setPage(totalPages)
+  }, [data.totalItems, pageSize, page])
   const [isLoading, setIsLoading] = useState(true)
   const [selectedRequest, setSelectedRequest] = useState(null)
   const canCreate = canOperateSupplierReturn(loadAuthSession())
@@ -144,6 +154,7 @@ export default function InventoryReturnsPage() {
   return (
     <PageShell>
       <PageHeader
+        compact
         title="Trả hàng nhập"
         titleInfo={canCreate
           ? 'Tạo phiếu trả hàng lỗi từ Kho về nhà cung cấp, tồn Kho trừ ngay khi tạo.'
@@ -164,9 +175,6 @@ export default function InventoryReturnsPage() {
       />
 
       <section className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
-        <div className="border-b border-slate-100 bg-slate-50/80 px-6 py-3 text-sm text-slate-600">
-          {SUPPLIER_RETURN_FLOW_DESCRIPTION}
-        </div>
         <div className="overflow-x-auto">
           <table className="min-w-full text-left text-sm">
             <thead className="bg-slate-50 text-xs font-bold uppercase tracking-wide text-slate-500">
@@ -229,6 +237,7 @@ export default function InventoryReturnsPage() {
         <TablePagination
           page={page}
           pageSize={pageSize}
+          pageSizeOptions={pageSizeOptions}
           totalCount={data.totalItems}
           onPageChange={setPage}
           onPageSizeChange={(size) => { setPageSize(size); setPage(1) }}

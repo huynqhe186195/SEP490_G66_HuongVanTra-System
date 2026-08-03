@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
-import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
+import TablePagination from '../../../components/shared/TablePagination.jsx'
+import { useTotalAwarePageSize } from '../../../utils/totalAwarePageSize.js'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import {
@@ -159,10 +160,17 @@ export default function CostProfitReportPage() {
     })
   }, [costFilter, profitFilter, receiptFilter, rows, search, sortDirection, sortField])
 
+  const { pageSize, setPageSize, pageSizeOptions } = useTotalAwarePageSize(filtered.length)
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil((filtered.length || 0) / pageSize) || 1)
+    if (page > totalPages) setPage(totalPages)
+  }, [filtered.length, pageSize, page])
+
   const pageItems = useMemo(() => {
-    const start = (page - 1) * TABLE_PAGE_SIZE
-    return filtered.slice(start, start + TABLE_PAGE_SIZE)
-  }, [filtered, page])
+    const start = (page - 1) * pageSize
+    return filtered.slice(start, start + pageSize)
+  }, [filtered, page, pageSize])
 
   function resetPageAnd(setter, value) {
     setter(value)
@@ -220,6 +228,7 @@ export default function CostProfitReportPage() {
   return (
     <PageShell>
       <PageHeader
+        compact
         title="Bảng giá vốn trung bình & giá bán"
         titleInfo="Giá vốn trung bình cập nhật từ Phiếu nhập NCC đã duyệt. Chỉ Kế toán được chỉnh giá bán; Admin/Manager chỉ xem."
         rightContent={(
@@ -477,9 +486,14 @@ export default function CostProfitReportPage() {
       <div className="mt-3 overflow-hidden rounded-2xl border border-slate-200 bg-white">
         <TablePagination
           page={page}
-          pageSize={TABLE_PAGE_SIZE}
+          pageSize={pageSize}
+          pageSizeOptions={pageSizeOptions}
           totalCount={filtered.length}
           onPageChange={setPage}
+          onPageSizeChange={(size) => {
+            setPageSize(size)
+            setPage(1)
+          }}
           itemLabel="SKU"
         />
       </div>

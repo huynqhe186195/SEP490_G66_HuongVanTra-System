@@ -60,6 +60,7 @@ function InventoryExportPage() {
     <PageShell>
       <SlipPrintStyles />
       <PageHeader
+        compact
         title="Phiếu xuất kho"
         titleInfo="Chứng từ xuất nguyên liệu, gồm phiếu xuất sản xuất và các phiếu xuất kho khác."
         searchPlaceholder="Tìm mã phiếu, SKU, mã lệnh SX..."

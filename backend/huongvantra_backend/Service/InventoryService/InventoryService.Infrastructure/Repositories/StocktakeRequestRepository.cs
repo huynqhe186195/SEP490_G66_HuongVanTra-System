@@ -59,6 +59,39 @@ public class StocktakeRequestRepository(InventoryDbContext _db) : IStocktakeRequ
         return (items, totalCount);
     }
 
+    public async Task<Dictionary<string, int>> CountByStatusAsync(
+        string? location,
+        Guid? createdBy,
+        string? search,
+        CancellationToken ct = default)
+    {
+        var query = WithItems().AsQueryable();
+        if (!string.IsNullOrWhiteSpace(location))
+            query = query.Where(r => r.Location == location.Trim());
+        if (createdBy.HasValue)
+            query = query.Where(r => r.CreatedBy == createdBy.Value);
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var keyword = search.Trim().ToLower();
+            query = query.Where(r =>
+                r.RequestCode.ToLower().Contains(keyword) ||
+                (r.Reason != null && r.Reason.ToLower().Contains(keyword)) ||
+                r.Items.Any(i =>
+                    i.SkuCode.ToLower().Contains(keyword) ||
+                    i.SkuSnapshotName.ToLower().Contains(keyword) ||
+                    (i.WarehouseBatchLotCode != null && i.WarehouseBatchLotCode.ToLower().Contains(keyword))));
+        }
+
+        var rows = await query
+            .GroupBy(r => r.Status)
+            .Select(group => new { Status = group.Key, Count = group.Count() })
+            .ToListAsync(ct);
+        return rows.ToDictionary(
+            row => row.Status.ToString(),
+            row => row.Count,
+            StringComparer.OrdinalIgnoreCase);
+    }
+
     public Task<int> CountCreatedSinceAsync(DateTime sinceUtc, CancellationToken ct = default) =>
         _db.StocktakeRequests.CountAsync(r => r.CreatedAt >= sinceUtc, ct);
 

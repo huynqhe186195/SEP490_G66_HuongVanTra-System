@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
-import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
+import TablePagination from '../../../components/shared/TablePagination.jsx'
+import { useTotalAwarePageSize } from '../../../utils/totalAwarePageSize.js'
 import { showError } from '../../../app/toast.js'
 import { canAccessModule } from '../../../app/navigation.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
@@ -32,8 +33,13 @@ function CodOrdersPage() {
   const [orders, setOrders] = useState([])
   const [counts, setCounts] = useState({ pending: 0, overdue: 0, done: 0 })
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE)
   const [totalCount, setTotalCount] = useState(0)
+  const { pageSize, setPageSize, pageSizeOptions } = useTotalAwarePageSize(totalCount)
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil((totalCount || 0) / pageSize) || 1)
+    if (page > totalPages) setPage(totalPages)
+  }, [totalCount, pageSize, page])
   const [isLoading, setIsLoading] = useState(true)
 
   const loadTab = useCallback(async (codTab, nextPage = 1, nextPageSize = 1) => {
@@ -92,6 +98,7 @@ function CodOrdersPage() {
   return (
     <PageShell>
       <PageHeader
+        compact
         title="Quản lý đơn COD"
         titleInfo="Theo dõi đơn kênh COD và xác nhận thu tiền tại trang chi tiết đơn hàng."
         searchPlaceholder="Tìm mã đơn, tên khách..."
@@ -253,10 +260,14 @@ function CodOrdersPage() {
         <TablePagination
           page={page}
           pageSize={pageSize}
+          pageSizeOptions={pageSizeOptions}
           totalCount={totalCount}
           itemLabel="đơn COD"
           onPageChange={setPage}
-          onPageSizeChange={setPageSize}
+          onPageSizeChange={(size) => {
+            setPageSize(size)
+            setPage(1)
+          }}
         />
       </section>
     </PageShell>

@@ -217,6 +217,7 @@ function InventoryBomPage() {
   return (
     <PageShell>
       <PageHeader
+        compact
         title="Định mức BOM"
         titleInfo="Cấu hình nguyên liệu / bao bì tiêu hao cho từng SKU Sản phẩm kệ."
         searchPlaceholder="Tìm theo SKU hoặc tên Sản phẩm kệ..."

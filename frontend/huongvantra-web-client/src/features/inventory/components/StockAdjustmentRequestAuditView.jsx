@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
-import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
+import TablePagination from '../../../components/shared/TablePagination.jsx'
+import { useTotalAwarePageSize } from '../../../utils/totalAwarePageSize.js'
 import { showError } from '../../../app/toast.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import { formatCreatorRole, UNKNOWN_CREATOR_VALUE } from '../utils/inventoryCreatorDisplay.js'
@@ -59,8 +60,13 @@ export default function StockAdjustmentRequestAuditView() {
   const [appliedFilters, setAppliedFilters] = useState(EMPTY_FILTERS)
   const [rows, setRows] = useState([])
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE)
   const [totalCount, setTotalCount] = useState(0)
+  const { pageSize, setPageSize, pageSizeOptions } = useTotalAwarePageSize(totalCount)
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil((totalCount || 0) / pageSize) || 1)
+    if (page > totalPages) setPage(totalPages)
+  }, [totalCount, pageSize, page])
   const [isLoading, setIsLoading] = useState(true)
   const [creatorOptions, setCreatorOptions] = useState([])
   const [creatorRoleOptions, setCreatorRoleOptions] = useState([])
@@ -421,11 +427,15 @@ export default function StockAdjustmentRequestAuditView() {
         <TablePagination
           page={page}
           pageSize={pageSize}
+          pageSizeOptions={pageSizeOptions}
           totalCount={totalCount}
           itemLabel="yêu cầu"
           disabled={isLoading}
           onPageChange={setPage}
-          onPageSizeChange={setPageSize}
+          onPageSizeChange={(size) => {
+            setPageSize(size)
+            setPage(1)
+          }}
         />
       </section>
 

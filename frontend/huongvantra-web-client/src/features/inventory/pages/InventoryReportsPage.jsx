@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
-import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
+import TablePagination from '../../../components/shared/TablePagination.jsx'
+import { useTotalAwarePageSize } from '../../../utils/totalAwarePageSize.js'
 import { showError } from '../../../app/toast.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import { formatStockQuantity } from '../../products/utils/productDisplay.js'
@@ -178,7 +179,6 @@ function InventoryReportsPage() {
   const [productType, setProductType] = useState('')
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE)
   const [source, setSource] = useState({
     stockRows: [],
     batches: [],
@@ -264,6 +264,13 @@ function InventoryReportsPage() {
     () => buildReportRows(reportType, source, { location, productType, search }),
     [location, productType, reportType, search, source],
   )
+  const { pageSize, setPageSize, pageSizeOptions } = useTotalAwarePageSize(rows.length)
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil((rows.length || 0) / pageSize) || 1)
+    if (page > totalPages) setPage(totalPages)
+  }, [rows.length, pageSize, page])
+
   const pageRows = rows.slice((page - 1) * pageSize, page * pageSize)
 
   function resetPageAndSet(setter, value) {
@@ -293,6 +300,7 @@ function InventoryReportsPage() {
   return (
     <PageShell>
       <PageHeader
+        compact
         title="Báo cáo kho"
         titleInfo="Báo cáo tồn hiện tại, cảnh báo tồn thấp, lô sắp hết hạn, biến động tồn, kiểm kê và nhà cung cấp."
         searchPlaceholder="Tìm SKU, tên hàng, mã lô, mã chứng từ, nhà cung cấp..."
@@ -420,6 +428,7 @@ function InventoryReportsPage() {
         <TablePagination
           page={page}
           pageSize={pageSize}
+          pageSizeOptions={pageSizeOptions}
           totalCount={rows.length}
           onPageChange={setPage}
           onPageSizeChange={(size) => { setPageSize(size); setPage(1) }}

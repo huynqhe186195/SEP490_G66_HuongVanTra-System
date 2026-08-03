@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
-import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
+import TablePagination from '../../../components/shared/TablePagination.jsx'
+import { useTotalAwarePageSize } from '../../../utils/totalAwarePageSize.js'
 import { confirmDialog } from '../../../app/dialog.js'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
@@ -60,9 +61,14 @@ function ContractsPage() {
   const [search, setSearch] = useState('')
   const [searchInput, setSearchInput] = useState('')
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE)
   const [contracts, setContracts] = useState([])
   const [totalCount, setTotalCount] = useState(0)
+  const { pageSize, setPageSize, pageSizeOptions } = useTotalAwarePageSize(totalCount)
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil((totalCount || 0) / pageSize) || 1)
+    if (page > totalPages) setPage(totalPages)
+  }, [totalCount, pageSize, page])
   const [isLoading, setIsLoading] = useState(false)
   const [deletingId, setDeletingId] = useState(null)
 
@@ -117,6 +123,7 @@ function ContractsPage() {
   return (
     <PageShell>
       <PageHeader
+        compact
         title="Hợp đồng"
         titleInfo="Quản lý hợp đồng với khách doanh nghiệp"
         rightContent={
@@ -269,6 +276,7 @@ function ContractsPage() {
         <TablePagination
           page={page}
           pageSize={pageSize}
+          pageSizeOptions={pageSizeOptions}
           totalCount={totalCount}
           totalPages={totalPages}
           onPageChange={setPage}

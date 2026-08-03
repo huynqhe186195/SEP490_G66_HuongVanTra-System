@@ -2,7 +2,8 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { AUTH_SESSION_CHANGED_EVENT, loadAuthSession } from '../../auth/services/authSession.js'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import PageShell from '../../../components/shared/PageShell.jsx'
-import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
+import TablePagination from '../../../components/shared/TablePagination.jsx'
+import { useTotalAwarePageSize } from '../../../utils/totalAwarePageSize.js'
 import { promptDialog } from '../../../app/dialog.js'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { getReasonSuggestions } from '../../shared/reasonSuggestions.js'
@@ -270,7 +271,6 @@ export default function ProductsWarehouseListPage() {
   const [statusFilter, setStatusFilter] = useState(() => initialState.statusFilter)
   const [productTypeFilter, setProductTypeFilter] = useState('')
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE)
   const [isLoading, setIsLoading] = useState(true)
   const [stockBySkuId, setStockBySkuId] = useState(() => new Map())
   const [storeStockBySkuId, setStoreStockBySkuId] = useState(() => new Map())
@@ -415,13 +415,15 @@ export default function ProductsWarehouseListPage() {
     [skuRows, search, statusFilter],
   )
   const totalCount = filteredSkuRows.length
+  const { pageSize, setPageSize, pageSizeOptions } = useTotalAwarePageSize(totalCount)
+
   const pagedSkuRows = useMemo(() => {
     const start = (page - 1) * pageSize
     return filteredSkuRows.slice(start, start + pageSize)
   }, [filteredSkuRows, page, pageSize])
 
   useEffect(() => {
-    const maxPage = Math.max(1, Math.ceil(totalCount / pageSize))
+    const maxPage = Math.max(1, Math.ceil((totalCount || 0) / pageSize) || 1)
     if (page <= maxPage) return undefined
     const timer = window.setTimeout(() => setPage(maxPage), 0)
     return () => window.clearTimeout(timer)
@@ -922,9 +924,13 @@ export default function ProductsWarehouseListPage() {
               <TablePagination
                 page={page}
                 pageSize={pageSize}
+                pageSizeOptions={pageSizeOptions}
                 totalCount={totalCount}
                 onPageChange={setPage}
-                onPageSizeChange={setPageSize}
+                onPageSizeChange={(size) => {
+                  setPageSize(size)
+                  setPage(1)
+                }}
                 itemLabel="SKU"
               />
             </div>

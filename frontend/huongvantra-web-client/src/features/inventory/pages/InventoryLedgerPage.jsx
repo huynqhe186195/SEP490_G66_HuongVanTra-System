@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
-import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
+import StatusFilterChips from '../../../components/shared/StatusFilterChips.jsx'
+import TablePagination from '../../../components/shared/TablePagination.jsx'
 import { showError } from '../../../app/toast.js'
+import { useTotalAwarePageSize } from '../../../utils/totalAwarePageSize.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import { formatStockQuantity } from '../../products/utils/productDisplay.js'
 import { fetchInventoryLedger } from '../services/inventoryLedgerApi.js'
@@ -14,13 +16,13 @@ const LOCATION_OPTIONS = [
 ]
 
 const TRANSACTION_OPTIONS = [
-  { value: '', label: 'Tất cả giao dịch' },
+  { value: '', label: 'Tất cả GD' },
   { value: 'SUPPLIER_RECEIPT', label: 'Nhập NCC' },
-  { value: 'SHELF_REPLENISHMENT_OUT', label: 'Xuất Kho → Quầy/Kệ' },
-  { value: 'SHELF_REPLENISHMENT_IN', label: 'Nhập Quầy/Kệ từ Kho' },
-  { value: 'STOCKTAKE_ADJUSTMENT', label: 'Kiểm kê điều chỉnh' },
-  { value: 'PRODUCTION_CONSUME', label: 'Sản xuất tiêu hao' },
-  { value: 'PRODUCTION_RECEIPT', label: 'Nhập sau sản xuất' },
+  { value: 'SHELF_REPLENISHMENT_OUT', label: 'Xuất Kho → Quầy' },
+  { value: 'SHELF_REPLENISHMENT_IN', label: 'Nhập Quầy từ Kho' },
+  { value: 'STOCKTAKE_ADJUSTMENT', label: 'Kiểm kê' },
+  { value: 'PRODUCTION_CONSUME', label: 'SX tiêu hao' },
+  { value: 'PRODUCTION_RECEIPT', label: 'Nhập sau SX' },
 ]
 
 function getLocationLabel(location) {
@@ -46,9 +48,14 @@ function InventoryLedgerPage() {
   const [fromDate, setFromDate] = useState('')
   const [toDate, setToDate] = useState('')
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE)
   const [data, setData] = useState({ items: [], totalItems: 0, totalPages: 1 })
+  const { pageSize, setPageSize, pageSizeOptions } = useTotalAwarePageSize(data.totalItems)
   const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil((data.totalItems || 0) / pageSize) || 1)
+    if (page > totalPages) setPage(totalPages)
+  }, [data.totalItems, pageSize, page])
 
   const fromUtc = useMemo(() => (fromDate ? new Date(`${fromDate}T00:00:00`).toISOString() : undefined), [fromDate])
   const toUtc = useMemo(() => (toDate ? new Date(`${toDate}T23:59:59`).toISOString() : undefined), [toDate])
@@ -82,11 +89,11 @@ function InventoryLedgerPage() {
 
   function exportCsv() {
     const rows = [
-      ['Thời gian tạo', 'SKU', 'Tên hàng', 'Vị trí', 'Tồn trước', 'Chênh lệch', 'Tồn sau', 'Loại giao dịch', 'Tham chiếu', 'Mã lô', 'Người thực hiện'],
+      ['SKU', 'Tên hàng', 'Thời gian tạo', 'Vị trí', 'Tồn trước', 'Chênh lệch', 'Tồn sau', 'Loại giao dịch', 'Tham chiếu', 'Mã lô', 'Người thực hiện'],
       ...data.items.map((entry) => [
-        entry.occurredAtUtc,
         entry.skuCode,
         entry.skuNameSnapshot,
+        entry.occurredAtUtc,
         getLocationLabel(entry.location),
         entry.quantityBefore,
         entry.quantityDelta,
@@ -115,6 +122,7 @@ function InventoryLedgerPage() {
   return (
     <PageShell>
       <PageHeader
+        compact
         title="Nhật ký kho"
         titleInfo="Nhật ký bất biến các lần thay đổi tồn Kho/Quầy/Kệ hàng."
         searchPlaceholder="Tìm SKU, tên hàng, mã chứng từ, mã lô..."
@@ -134,21 +142,29 @@ function InventoryLedgerPage() {
         )}
       />
 
-      <div className="mb-4 grid grid-cols-1 gap-3 rounded-2xl bg-white p-4 shadow-sm md:grid-cols-5">
-        <select className="rounded-xl border border-slate-200 px-3 py-2 text-sm" value={location} onChange={(event) => resetPageAndSet(setLocation, event.target.value)}>
-          {LOCATION_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-        </select>
-        <select className="rounded-xl border border-slate-200 px-3 py-2 text-sm" value={transactionType} onChange={(event) => resetPageAndSet(setTransactionType, event.target.value)}>
-          {TRANSACTION_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-        </select>
-        <input
-          className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
-          placeholder="Mã chứng từ"
-          value={referenceCode}
-          onChange={(event) => resetPageAndSet(setReferenceCode, event.target.value)}
+      <div className="mb-3 space-y-2.5">
+        <StatusFilterChips
+          options={LOCATION_OPTIONS}
+          value={location}
+          onChange={(value) => resetPageAndSet(setLocation, value)}
+          ariaLabel="Lọc theo vị trí"
         />
-        <input type="date" className="rounded-xl border border-slate-200 px-3 py-2 text-sm" value={fromDate} onChange={(event) => resetPageAndSet(setFromDate, event.target.value)} />
-        <input type="date" className="rounded-xl border border-slate-200 px-3 py-2 text-sm" value={toDate} onChange={(event) => resetPageAndSet(setToDate, event.target.value)} />
+        <StatusFilterChips
+          options={TRANSACTION_OPTIONS}
+          value={transactionType}
+          onChange={(value) => resetPageAndSet(setTransactionType, value)}
+          ariaLabel="Lọc theo loại giao dịch"
+        />
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            className="min-h-[40px] rounded-xl border border-slate-200 px-3 py-2 text-sm"
+            placeholder="Mã chứng từ"
+            value={referenceCode}
+            onChange={(event) => resetPageAndSet(setReferenceCode, event.target.value)}
+          />
+          <input type="date" className="min-h-[40px] rounded-xl border border-slate-200 px-3 py-2 text-sm" value={fromDate} onChange={(event) => resetPageAndSet(setFromDate, event.target.value)} />
+          <input type="date" className="min-h-[40px] rounded-xl border border-slate-200 px-3 py-2 text-sm" value={toDate} onChange={(event) => resetPageAndSet(setToDate, event.target.value)} />
+        </div>
       </div>
 
       <section className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
@@ -156,8 +172,8 @@ function InventoryLedgerPage() {
           <table className="min-w-full text-left text-sm">
             <thead className="bg-slate-50 text-xs font-bold uppercase tracking-wide text-slate-500">
               <tr>
-                <th className="px-6 py-3">Thời gian</th>
-                <th className="px-4 py-3">Sản Phẩm</th>
+                <th className="px-6 py-3">Sản Phẩm</th>
+                <th className="px-4 py-3">Thời gian</th>
                 <th className="px-4 py-3">Vị trí</th>
                 <th className="px-4 py-3 text-right">Trước</th>
                 <th className="px-4 py-3 text-right">+/−</th>
@@ -175,11 +191,11 @@ function InventoryLedgerPage() {
               ) : (
                 data.items.map((entry) => (
                   <tr key={entry.id} className="hover:bg-slate-50/80">
-                    <td className="px-6 py-4 text-slate-600">{formatVietnamDateTime(entry.occurredAtUtc)}</td>
-                    <td className="px-4 py-4">
-                      <p className="font-semibold text-slate-900">{entry.skuNameSnapshot}</p>
-                      <p className="font-mono text-xs text-slate-500">{entry.skuCode}</p>
+                    <td className="px-6 py-4">
+                      <p className="font-mono font-semibold text-[#356647]">{entry.skuCode}</p>
+                      <p className="text-xs text-slate-600">{entry.skuNameSnapshot || '—'}</p>
                     </td>
+                    <td className="px-4 py-4 text-slate-600">{formatVietnamDateTime(entry.occurredAtUtc)}</td>
                     <td className="px-4 py-4">{getLocationLabel(entry.location)}</td>
                     <td className="px-4 py-4 text-right">{formatStockQuantity(entry.quantityBefore)}</td>
                     <td className={`px-4 py-4 text-right font-semibold ${entry.quantityDelta >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
@@ -199,6 +215,7 @@ function InventoryLedgerPage() {
         <TablePagination
           page={page}
           pageSize={pageSize}
+          pageSizeOptions={pageSizeOptions}
           totalCount={data.totalItems}
           onPageChange={setPage}
           onPageSizeChange={(size) => { setPageSize(size); setPage(1) }}

@@ -1,8 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
-import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
+import StatusFilterChips from '../../../components/shared/StatusFilterChips.jsx'
+import TablePagination from '../../../components/shared/TablePagination.jsx'
+import { useTotalAwarePageSize } from '../../../utils/totalAwarePageSize.js'
+import { applyStatusCounts } from '../../../utils/statusFilterCounts.js'
 import { promptDialog } from '../../../app/dialog.js'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { getReasonSuggestions } from '../../shared/reasonSuggestions.js'
@@ -11,7 +14,6 @@ import { formatVnd } from '../../../utils/vietnamCurrency.js'
 import { formatStockQuantity } from '../../products/utils/productDisplay.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import { canOperateSupplierReceipt, canReviewSupplierReceipt } from '../../auth/utils/permissions.js'
-import InventoryNavTabs from '../components/InventoryNavTabs.jsx'
 import SupplierReceiptDocument from '../components/SupplierReceiptDocument.jsx'
 import {
   approveSupplierReceipt,
@@ -23,8 +25,8 @@ import {
 
 const STATUS_OPTIONS = [
   { value: '', label: 'Tất cả' },
+  { value: 'pendingapproval', label: 'Chờ duyệt' },
   { value: 'completed', label: 'Đã nhận' },
-  { value: 'pendingapproval', label: 'Chờ duyệt (phiếu cũ)' },
   { value: 'cancelled', label: 'Đã hủy' },
 ]
 
@@ -225,8 +227,13 @@ function SupplierReceiptsPage() {
   const [searchInput, setSearchInput] = useState('')
   const [status, setStatus] = useState('')
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE)
-  const [data, setData] = useState({ items: [], totalItems: 0, totalPages: 1 })
+  const [data, setData] = useState({ items: [], totalItems: 0, totalPages: 1, statusCounts: null })
+  const { pageSize, setPageSize, pageSizeOptions } = useTotalAwarePageSize(data.totalItems)
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil((data.totalItems || 0) / pageSize) || 1)
+    if (page > totalPages) setPage(totalPages)
+  }, [data.totalItems, pageSize, page])
   const [isLoading, setIsLoading] = useState(true)
   const [actionId, setActionId] = useState(null)
   const [detailReceipt, setDetailReceipt] = useState(null)
@@ -235,6 +242,11 @@ function SupplierReceiptsPage() {
   const session = loadAuthSession()
   const canOperate = canOperateSupplierReceipt(session)
   const canReview = canReviewSupplierReceipt(session)
+
+  const statusChipOptions = useMemo(
+    () => applyStatusCounts(STATUS_OPTIONS, data.statusCounts),
+    [data.statusCounts],
+  )
   const currentUserId = session?.userId ?? null
 
   const loadReceipts = useCallback(async () => {
@@ -248,7 +260,7 @@ function SupplierReceiptsPage() {
       })
       setData(result)
     } catch (error) {
-      setData({ items: [], totalItems: 0, totalPages: 1 })
+      setData({ items: [], totalItems: 0, totalPages: 1, statusCounts: null })
       showError(error.message)
     } finally {
       setIsLoading(false)
@@ -343,19 +355,17 @@ function SupplierReceiptsPage() {
     return (
       <PageShell>
         <PageHeader
+          compact
           title="Chi tiết Phiếu nhập nhà cung cấp"
           titleInfo="Màn hình read-only dùng cho Warehouse, Manager, Admin và Accountant."
           rightContent={(
-            <>
-              <Link
-                to="/inventory/supplier-receipts"
-                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-              >
-                <span className="material-symbols-outlined text-[18px]">arrow_back</span>
-                Danh sách Phiếu nhập
-              </Link>
-              <InventoryNavTabs />
-            </>
+            <Link
+              to="/inventory/supplier-receipts"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              <span className="material-symbols-outlined text-[18px]">arrow_back</span>
+              Danh sách Phiếu nhập
+            </Link>
           )}
         />
         {isDetailLoading ? (
@@ -374,37 +384,29 @@ function SupplierReceiptsPage() {
   return (
     <PageShell>
       <PageHeader
+        compact
         title="Phiếu nhập nhà cung cấp"
         titleInfo="Thủ kho tạo phiếu nhập là tồn Kho tăng ngay, đồng thời sinh phiếu nhập PN- và cập nhật giá vốn."
         searchPlaceholder="Tìm mã phiếu, nhà cung cấp, SKU, mã lô..."
         searchValue={searchInput}
         onSearchChange={handleSearchChange}
-        rightContent={(
-          <>
-            {canOperate ? (
-              <Link
-                to="/inventory/import/create"
-                className="inline-flex items-center gap-1.5 rounded-xl bg-[#538463] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#457053]"
-              >
-                <span className="material-symbols-outlined text-[18px]">add</span>
-                Tạo Phiếu Nhập
-              </Link>
-            ) : null}
-            <InventoryNavTabs />
-          </>
-        )}
+        rightContent={canOperate ? (
+          <Link
+            to="/inventory/import/create"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-[#538463] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#457053]"
+          >
+            <span className="material-symbols-outlined text-[18px]">add</span>
+            Tạo Phiếu Nhập
+          </Link>
+        ) : null}
       />
 
-      <div className="mb-4 flex flex-wrap items-center gap-3">
-        <select
-          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+      <div className="mb-3">
+        <StatusFilterChips
+          options={statusChipOptions}
           value={status}
-          onChange={(event) => handleStatusChange(event.target.value)}
-        >
-          {STATUS_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>{option.label}</option>
-          ))}
-        </select>
+          onChange={handleStatusChange}
+        />
       </div>
 
       <section className="rounded-2xl border border-slate-100 bg-white shadow-sm">
@@ -413,11 +415,11 @@ function SupplierReceiptsPage() {
             <thead className="bg-slate-50 text-xs font-bold uppercase tracking-wide text-slate-500">
               <tr>
                 <th className="w-[11%] px-4 py-3 xl:px-6">Mã phiếu</th>
+                <th className="w-[10%] px-3 py-3 xl:px-4">Trạng thái</th>
                 <th className="w-[16%] px-3 py-3 xl:px-4">Nhà cung cấp</th>
                 <th className="w-[16%] px-3 py-3 xl:px-4">Nội dung</th>
                 <th className="w-[9%] px-3 py-3 text-right xl:px-4">Số lượng</th>
                 <th className="w-[11%] px-3 py-3 text-right xl:px-4">Tổng tiền</th>
-                <th className="w-[10%] px-3 py-3 xl:px-4">Trạng thái</th>
                 <th className="w-[10%] px-3 py-3 xl:px-4">Người tạo</th>
                 <th className="w-[12%] px-3 py-3 xl:px-4">Thời gian</th>
                 <th className="sticky right-0 z-10 w-[4.75rem] bg-slate-50 px-1 py-3 text-center shadow-[-6px_0_8px_-6px_rgba(15,23,42,0.12)]">
@@ -442,6 +444,11 @@ function SupplierReceiptsPage() {
                       <td className="truncate px-4 py-3 font-mono text-xs font-semibold text-[#356647] xl:px-6 xl:text-sm">
                         {receipt.receiptCode}
                       </td>
+                      <td className="px-3 py-3 xl:px-4">
+                        <span className={`inline-flex max-w-full truncate rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusClass(receipt.status)}`}>
+                          {getStatusLabel(receipt.status)}
+                        </span>
+                      </td>
                       <td className="truncate px-3 py-3 text-slate-700 xl:px-4" title={receipt.supplierName || ''}>
                         {receipt.supplierName || '—'}
                       </td>
@@ -453,11 +460,6 @@ function SupplierReceiptsPage() {
                       </td>
                       <td className="whitespace-nowrap px-3 py-3 text-right font-semibold text-slate-800 xl:px-4">
                         {formatReceiptAmount(receipt)}
-                      </td>
-                      <td className="px-3 py-3 xl:px-4">
-                        <span className={`inline-flex max-w-full truncate rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusClass(receipt.status)}`}>
-                          {getStatusLabel(receipt.status)}
-                        </span>
                       </td>
                       <td className="truncate px-3 py-3 text-slate-700 xl:px-4" title={receipt.createdByName || ''}>
                         {receipt.createdByName || '—'}
@@ -490,6 +492,7 @@ function SupplierReceiptsPage() {
         <TablePagination
           page={page}
           pageSize={pageSize}
+          pageSizeOptions={pageSizeOptions}
           totalCount={data.totalItems}
           onPageChange={setPage}
           onPageSizeChange={(size) => { setPageSize(size); setPage(1) }}

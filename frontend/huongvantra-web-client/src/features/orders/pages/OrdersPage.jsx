@@ -2,12 +2,15 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
-import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
+import StatusFilterChips from '../../../components/shared/StatusFilterChips.jsx'
+import TablePagination from '../../../components/shared/TablePagination.jsx'
 import LoadingIndicator from '../../../components/shared/LoadingIndicator.jsx'
 import { canViewStockDeductOps } from '../../../app/navigation.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import { canCreateOrder } from '../../auth/utils/permissions.js'
 import { showError } from '../../../app/toast.js'
+import { useTotalAwarePageSize } from '../../../utils/totalAwarePageSize.js'
+import { applyStatusCounts } from '../../../utils/statusFilterCounts.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import OrderCustomerCell from '../components/OrderCustomerCell.jsx'
 import { fetchOrders } from '../services/ordersApi.js'
@@ -18,9 +21,33 @@ import {
   getOrderChannelLabel,
   getOrderStatusClass,
   getOrderStatusLabel,
-  ORDER_CHANNEL_OPTIONS,
-  ORDER_STATUS_OPTIONS,
 } from '../utils/orderDisplay.js'
+
+const ORDER_STATUS_CHIPS = [
+  { value: '', label: 'Tất cả' },
+  { value: 'Processing', label: 'Đang xử lý' },
+  { value: 'PendingPayment', label: 'Chờ thanh toán' },
+  { value: 'Shipping', label: 'Đang giao' },
+  { value: 'Completed', label: 'Hoàn tất' },
+  { value: 'Cancelled', label: 'Đã hủy' },
+]
+
+const ORDER_CHANNEL_CHIPS = [
+  { value: '', label: 'Tất cả kênh' },
+  { value: 'POS', label: 'POS' },
+  { value: 'B2B', label: 'B2B' },
+  { value: 'Website', label: 'Website' },
+  { value: 'Zalo', label: 'Zalo' },
+  { value: 'Phone', label: 'Điện thoại' },
+]
+
+const QUICK_DATE_CHIPS = [
+  { value: '', label: 'Tùy chọn' },
+  { value: 'today', label: 'Hôm nay' },
+  { value: 'last7', label: '7 ngày' },
+  { value: 'thisMonth', label: 'Tháng này' },
+  { value: 'lastMonth', label: 'Tháng trước' },
+]
 
 const initialFilters = {
   search: '',
@@ -91,9 +118,20 @@ function OrdersPage() {
   const [searchInput, setSearchInput] = useState('')
   const [orders, setOrders] = useState([])
   const [totalCount, setTotalCount] = useState(0)
+  const [statusCounts, setStatusCounts] = useState(null)
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE)
+  const { pageSize, setPageSize, pageSizeOptions } = useTotalAwarePageSize(totalCount)
   const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil((totalCount || 0) / pageSize) || 1)
+    if (page > totalPages) setPage(totalPages)
+  }, [totalCount, pageSize, page])
+
+  const statusChipOptions = useMemo(
+    () => applyStatusCounts(ORDER_STATUS_CHIPS, statusCounts),
+    [statusCounts],
+  )
 
   const queryParams = useMemo(
     () => ({
@@ -129,11 +167,13 @@ function OrdersPage() {
         if (mounted) {
           setOrders(data.items)
           setTotalCount(data.totalCount)
+          setStatusCounts(data.statusCounts)
         }
       } catch (error) {
         if (mounted) {
           setOrders([])
           setTotalCount(0)
+          setStatusCounts(null)
           showError(error.message)
         }
       } finally {
@@ -158,6 +198,7 @@ function OrdersPage() {
   return (
     <PageShell className="pb-8">
       <PageHeader
+        compact
         title="Đơn hàng"
         titleInfo="Theo dõi đơn đã tạo từ POS bán hàng. Tạo đơn mới tại màn POS."
         searchPlaceholder="Tìm mã đơn, tên khách..."
@@ -176,64 +217,37 @@ function OrdersPage() {
         }
       />
 
-      <section className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
+      <section className="rounded-2xl border border-slate-100 bg-white p-3 shadow-sm sm:p-4">
+        <div className="mb-2.5 space-y-2">
+          <StatusFilterChips
+            options={statusChipOptions}
+            value={filters.status}
+            onChange={(status) => {
+              setFilters((prev) => ({ ...prev, status }))
+              setPage(1)
+            }}
+          />
+          <StatusFilterChips
+            options={ORDER_CHANNEL_CHIPS}
+            value={filters.channel}
+            onChange={(channel) => {
+              setFilters((prev) => ({ ...prev, channel }))
+              setPage(1)
+            }}
+            ariaLabel="Lọc theo kênh bán"
+          />
+          <StatusFilterChips
+            options={QUICK_DATE_CHIPS}
+            value={quickDateKey}
+            onChange={(key) => {
+              setQuickDateKey(key)
+              setFilters((prev) => ({ ...prev, ...getQuickDateRange(key) }))
+              setPage(1)
+            }}
+            ariaLabel="Khoảng thời gian nhanh"
+          />
+        </div>
         <div className="flex flex-wrap items-end gap-3">
-          <label className="min-w-[180px] flex-1">
-            <span className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-400">Trạng thái</span>
-            <select
-              className="min-h-[44px] w-full rounded-xl border border-slate-200 bg-[#fbf9f1] px-4 py-3 text-sm outline-none focus:border-[#538463]"
-              value={filters.status}
-              onChange={(e) => {
-                setFilters((prev) => ({ ...prev, status: e.target.value }))
-                setPage(1)
-              }}
-            >
-              {ORDER_STATUS_OPTIONS.map((opt) => (
-                <option key={opt.value || 'all-status'} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="min-w-[180px] flex-1">
-            <span className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-400">Kênh bán</span>
-            <select
-              className="min-h-[44px] w-full rounded-xl border border-slate-200 bg-[#fbf9f1] px-4 py-3 text-sm outline-none focus:border-[#538463]"
-              value={filters.channel}
-              onChange={(e) => {
-                setFilters((prev) => ({ ...prev, channel: e.target.value }))
-                setPage(1)
-              }}
-            >
-              {ORDER_CHANNEL_OPTIONS.filter((opt) => opt.value !== 'COD').map((opt) => (
-                <option key={opt.value || 'all-channel'} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="min-w-[160px]">
-            <span className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-400">Khoảng thời gian</span>
-            <select
-              value={quickDateKey}
-              onChange={(e) => {
-                const key = e.target.value
-                setQuickDateKey(key)
-                setFilters((prev) => ({ ...prev, ...getQuickDateRange(key) }))
-                setPage(1)
-              }}
-              className="min-h-[44px] w-full rounded-xl border border-slate-200 bg-[#fbf9f1] px-4 py-3 text-sm outline-none focus:border-[#538463]"
-            >
-              <option value="">Tùy chọn (Từ / Đến ngày)</option>
-              <option value="today">Hôm nay</option>
-              <option value="last7">7 ngày qua</option>
-              <option value="thisMonth">Tháng này</option>
-              <option value="lastMonth">Tháng trước</option>
-            </select>
-          </label>
-
           <label className="min-w-[150px]">
             <span className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-400">Từ ngày</span>
             <input
@@ -244,7 +258,7 @@ function OrdersPage() {
                 setFilters((prev) => ({ ...prev, fromDate: e.target.value }))
                 setPage(1)
               }}
-              className="min-h-[44px] w-full rounded-xl border border-slate-200 bg-[#fbf9f1] px-4 py-3 text-sm outline-none focus:border-[#538463]"
+              className="min-h-[40px] w-full rounded-xl border border-slate-200 bg-[#fbf9f1] px-4 py-2.5 text-sm outline-none focus:border-[#538463]"
             />
           </label>
 
@@ -258,7 +272,7 @@ function OrdersPage() {
                 setFilters((prev) => ({ ...prev, toDate: e.target.value }))
                 setPage(1)
               }}
-              className="min-h-[44px] w-full rounded-xl border border-slate-200 bg-[#fbf9f1] px-4 py-3 text-sm outline-none focus:border-[#538463]"
+              className="min-h-[40px] w-full rounded-xl border border-slate-200 bg-[#fbf9f1] px-4 py-2.5 text-sm outline-none focus:border-[#538463]"
             />
           </label>
 
@@ -334,14 +348,14 @@ function OrdersPage() {
             <thead className="bg-slate-50">
               <tr>
                 <th className="px-6 py-3 text-xs font-bold uppercase tracking-wide text-[#717971]">Mã đơn</th>
-                <th className="px-4 py-3 text-xs font-bold uppercase tracking-wide text-[#717971]">Khách hàng</th>
-                <th className="px-4 py-3 text-xs font-bold uppercase tracking-wide text-[#717971]">Người bán</th>
-                <th className="px-4 py-3 text-xs font-bold uppercase tracking-wide text-[#717971]">Ghi chú</th>
-                <th className="px-4 py-3 text-xs font-bold uppercase tracking-wide text-[#717971]">Kênh</th>
+                <th className="px-4 py-3 text-xs font-bold uppercase tracking-wide text-[#717971]">Khách</th>
                 <th className="px-4 py-3 text-xs font-bold uppercase tracking-wide text-[#717971]">Trạng thái</th>
+                <th className="px-4 py-3 text-xs font-bold uppercase tracking-wide text-[#717971]">Kênh</th>
+                <th className="px-4 py-3 text-xs font-bold uppercase tracking-wide text-[#717971]">Người bán</th>
                 <th className="px-4 py-3 text-xs font-bold uppercase tracking-wide text-[#717971]">Kho</th>
                 <th className="px-4 py-3 text-xs font-bold uppercase tracking-wide text-[#717971]">Ngày tạo</th>
                 <th className="px-6 py-3 text-right text-xs font-bold uppercase tracking-wide text-[#717971]">Thành tiền</th>
+                <th className="px-4 py-3 text-xs font-bold uppercase tracking-wide text-[#717971]">Ghi chú</th>
                 <th className="px-4 py-3" />
               </tr>
             </thead>
@@ -382,9 +396,26 @@ function OrdersPage() {
                           customerId={order.customerId}
                         />
                       </td>
+                      <td className="px-4 py-4">
+                        <span className={`rounded-full px-3 py-1 text-xs font-semibold ${getOrderStatusClass(order.orderStatus)}`}>
+                          {getOrderStatusLabel(order.orderStatus)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-4">
+                        <span className={`rounded-full px-3 py-1 text-xs font-semibold ${getOrderChannelClass(order.orderChannel)}`}>
+                          {getOrderChannelLabel(order.orderChannel)}
+                        </span>
+                      </td>
                       <td className="px-4 py-4 text-sm text-slate-700">
                         {order.sellerName?.trim() ? order.sellerName : <span className="text-slate-300">—</span>}
                       </td>
+                      <td className="px-4 py-4">
+                        <span className={`rounded-full px-3 py-1 text-xs font-semibold ${inventorySyncMeta.className}`}>
+                          {inventorySyncMeta.label}
+                        </span>
+                      </td>
+                      <td className="px-4 py-4 text-xs text-slate-500">{formatVietnamDateTime(order.createdAt)}</td>
+                      <td className="px-6 py-4 text-right font-bold text-[#356647]">{formatVnd(order.finalAmount)}</td>
                       <td className="max-w-[200px] px-4 py-4 text-xs text-slate-600">
                         {order.note?.trim() ? (
                           <span className="line-clamp-2" title={order.note}>
@@ -394,23 +425,6 @@ function OrdersPage() {
                           <span className="text-slate-300">—</span>
                         )}
                       </td>
-                      <td className="px-4 py-4">
-                        <span className={`rounded-full px-3 py-1 text-xs font-semibold ${getOrderChannelClass(order.orderChannel)}`}>
-                          {getOrderChannelLabel(order.orderChannel)}
-                        </span>
-                      </td>
-                      <td className="px-4 py-4">
-                        <span className={`rounded-full px-3 py-1 text-xs font-semibold ${getOrderStatusClass(order.orderStatus)}`}>
-                          {getOrderStatusLabel(order.orderStatus)}
-                        </span>
-                      </td>
-                      <td className="px-4 py-4">
-                        <span className={`rounded-full px-3 py-1 text-xs font-semibold ${inventorySyncMeta.className}`}>
-                          {inventorySyncMeta.label}
-                        </span>
-                      </td>
-                      <td className="px-4 py-4 text-xs text-slate-500">{formatVietnamDateTime(order.createdAt)}</td>
-                      <td className="px-6 py-4 text-right font-bold text-[#356647]">{formatVnd(order.finalAmount)}</td>
                       <td className="px-4 py-4 text-right">
                         <Link className="text-sm font-semibold text-[#538463] hover:underline" to={`/orders/${order.id}`}>
                           Chi tiết
@@ -427,10 +441,14 @@ function OrdersPage() {
         <TablePagination
           page={page}
           pageSize={pageSize}
+          pageSizeOptions={pageSizeOptions}
           totalCount={totalCount}
           itemLabel="đơn"
           onPageChange={setPage}
-          onPageSizeChange={setPageSize}
+          onPageSizeChange={(size) => {
+            setPageSize(size)
+            setPage(1)
+          }}
         />
       </section>
     </PageShell>

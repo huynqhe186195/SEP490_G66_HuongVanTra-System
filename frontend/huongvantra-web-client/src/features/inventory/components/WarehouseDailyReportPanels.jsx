@@ -1,10 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import TablePagination from '../../../components/shared/TablePagination.jsx'
+import { useTotalAwarePageSize } from '../../../utils/totalAwarePageSize.js'
 import { formatVietnamDateTimeMinute } from '../../../utils/vietnamDateTime.js'
-
-const OPEN_PAGE_SIZE_OPTIONS = [5, 10, 20]
-const OPEN_PAGE_SIZE_DEFAULT = 5
 
 const OPEN_KIND_FILTERS = [
   { key: '', label: 'Tất cả' },
@@ -105,7 +103,6 @@ function buildOpenRows(report) {
 export default function WarehouseDailyReportPanels({ report, showOpenAsFrozen = false, dateLabel = '' }) {
   const [category, setCategory] = useState('receipt')
   const [openPage, setOpenPage] = useState(1)
-  const [openPageSize, setOpenPageSize] = useState(OPEN_PAGE_SIZE_DEFAULT)
   const [openKind, setOpenKind] = useState('')
   const [openSearch, setOpenSearch] = useState('')
 
@@ -141,6 +138,8 @@ export default function WarehouseDailyReportPanels({ report, showOpenAsFrozen = 
     })
   }, [openRows, openKind, openSearch])
 
+  const { pageSize: openPageSize, setPageSize: setOpenPageSize, pageSizeOptions: openPageSizeOptions } = useTotalAwarePageSize(filteredOpenRows.length)
+
   const pagedOpenRows = useMemo(() => {
     const start = (openPage - 1) * openPageSize
     return filteredOpenRows.slice(start, start + openPageSize)
@@ -148,10 +147,10 @@ export default function WarehouseDailyReportPanels({ report, showOpenAsFrozen = 
 
   useEffect(() => {
     setOpenPage(1)
-  }, [openPageSize, openKind, openSearch])
+  }, [openKind, openSearch])
 
   useEffect(() => {
-    const totalPages = Math.max(1, Math.ceil(filteredOpenRows.length / openPageSize))
+    const totalPages = Math.max(1, Math.ceil((filteredOpenRows.length || 0) / openPageSize) || 1)
     if (openPage > totalPages) setOpenPage(totalPages)
   }, [filteredOpenRows.length, openPage, openPageSize])
 
@@ -356,7 +355,7 @@ export default function WarehouseDailyReportPanels({ report, showOpenAsFrozen = 
               pageSize={openPageSize}
               totalCount={filteredOpenRows.length}
               itemLabel="phiếu"
-              pageSizeOptions={OPEN_PAGE_SIZE_OPTIONS}
+              pageSizeOptions={openPageSizeOptions}
               onPageChange={setOpenPage}
               onPageSizeChange={(size) => {
                 setOpenPageSize(size)

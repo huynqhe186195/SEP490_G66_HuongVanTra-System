@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
-import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
+import TablePagination from '../../../components/shared/TablePagination.jsx'
+import { useTotalAwarePageSize } from '../../../utils/totalAwarePageSize.js'
 import { confirmDialog } from '../../../app/dialog.js'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { useAuthSession } from '../../auth/hooks/useAuthSession.js'
@@ -105,7 +106,12 @@ function UsersPage() {
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const [totalCount, setTotalCount] = useState(0)
-  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE)
+  const { pageSize, setPageSize, pageSizeOptions } = useTotalAwarePageSize(totalCount)
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil((totalCount || 0) / pageSize) || 1)
+    if (page > totalPages) setPage(totalPages)
+  }, [totalCount, pageSize, page])
 
   const [createOpen, setCreateOpen] = useState(false)
   const [editUser, setEditUser] = useState(null)
@@ -347,6 +353,7 @@ function UsersPage() {
   return (
     <PageShell className="[font-family:'Manrope',sans-serif]">
       <PageHeader
+        compact
         title="Quản lý tài khoản đăng nhập"
         titleInfo="Thêm, sửa, khóa hoặc ngừng sử dụng tài khoản — chữ to, thao tác rõ ràng"
         rightContent={
@@ -516,10 +523,14 @@ function UsersPage() {
           <TablePagination
             page={page}
             pageSize={pageSize}
+            pageSizeOptions={pageSizeOptions}
             totalCount={totalCount}
             itemLabel="tài khoản"
             onPageChange={setPage}
-            onPageSizeChange={setPageSize}
+            onPageSizeChange={(size) => {
+              setPageSize(size)
+              setPage(1)
+            }}
           />
         </div>
 

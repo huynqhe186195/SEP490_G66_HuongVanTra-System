@@ -31,6 +31,8 @@ function PageHeader({
   searchWide = false,
   searchDropdown = null,
   rightContent = null,
+  /** Gọn hơn cho trang danh sách — thêm chỗ cho bảng. */
+  compact = false,
 }) {
   const hasTitle = Boolean(title)
   const hasSearch = Boolean(searchPlaceholder)
@@ -45,7 +47,7 @@ function PageHeader({
         value={searchValue ?? undefined}
         onChange={onSearchChange ? (e) => onSearchChange(e.target.value) : undefined}
         className={`w-full rounded-full border border-[#c1c9c0]/90 bg-white pl-12 pr-5 text-[#1b1c17] shadow-[0_1px_0_rgba(255,255,255,0.8),0_8px_20px_rgba(0,0,0,0.03)] outline-none transition focus:border-[#538463] focus:ring-2 focus:ring-[#356647]/20 ${
-          searchWide ? 'h-12 text-base sm:pl-14' : 'h-11 text-sm'
+          searchWide ? 'h-12 text-base sm:pl-14' : compact ? 'h-10 text-sm' : 'h-11 text-sm'
         }`}
       />
 
@@ -58,18 +60,35 @@ function PageHeader({
   ) : null
 
   return (
-    <header className="rounded-2xl border border-[#c1c9c0]/40 bg-[linear-gradient(180deg,#fdfcf6_0%,#fbf9f1_100%)] px-4 py-4 shadow-[0_10px_30px_rgba(27,28,23,0.04)] sm:rounded-[28px] sm:px-6 sm:py-6">
-      <div className="flex flex-col gap-5">
+    <header
+      className={
+        compact
+          ? 'rounded-2xl border border-[#c1c9c0]/40 bg-[linear-gradient(180deg,#fdfcf6_0%,#fbf9f1_100%)] px-4 py-3 shadow-[0_10px_30px_rgba(27,28,23,0.04)] sm:px-5'
+          : 'rounded-2xl border border-[#c1c9c0]/40 bg-[linear-gradient(180deg,#fdfcf6_0%,#fbf9f1_100%)] px-4 py-4 shadow-[0_10px_30px_rgba(27,28,23,0.04)] sm:rounded-[28px] sm:px-6 sm:py-6'
+      }
+    >
+      <div className={`flex flex-col ${compact ? 'gap-3' : 'gap-5'}`}>
         {hasTitle ? (
           <div className="min-w-0">
-            <div className="space-y-3">
-              <div className="flex items-center gap-3">
-                <span className="h-10 w-1 rounded-full bg-[#538463]" aria-hidden="true" />
-                <span className="text-[11px] font-semibold uppercase tracking-[0.28em] text-[#7b847c]">Trang quản trị</span>
-              </div>
+            <div className={compact ? 'space-y-1' : 'space-y-3'}>
+              {compact ? null : (
+                <div className="flex items-center gap-3">
+                  <span className="h-10 w-1 rounded-full bg-[#538463]" aria-hidden="true" />
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.28em] text-[#7b847c]">Trang quản trị</span>
+                </div>
+              )}
               <div>
                 <div className="flex items-center gap-2">
-                  <h1 className="text-xl font-semibold leading-tight tracking-[-0.03em] text-[#1f241f] sm:text-[1.75rem] lg:text-[2rem]">{title}</h1>
+                  {compact ? <span className="h-6 w-1 shrink-0 rounded-full bg-[#538463]" aria-hidden="true" /> : null}
+                  <h1
+                    className={
+                      compact
+                        ? 'text-lg font-semibold leading-tight tracking-[-0.03em] text-[#1f241f] sm:text-xl'
+                        : 'text-xl font-semibold leading-tight tracking-[-0.03em] text-[#1f241f] sm:text-[1.75rem] lg:text-[2rem]'
+                    }
+                  >
+                    {title}
+                  </h1>
                   <TitleInfoButton text={titleInfo} />
                 </div>
                 {description ? <p className={`mt-2 max-w-3xl text-[0.95rem] leading-7 text-[#707a72] ${descriptionClassName}`.trim()}>{description}</p> : null}

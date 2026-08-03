@@ -570,13 +570,15 @@ public class InventoryLogic(
     {
         var (safePage, safePageSize) = NormalizePagination(page, pageSize);
         var (queues, totalCount) = await _queueRepo.GetWaitingPagedAsync(status, search, safePage, safePageSize, ct);
+        var statusCounts = await _queueRepo.CountWaitingByStatusAsync(search, ct);
         var totalPages = Math.Max(1, (int)Math.Ceiling(totalCount / (double)safePageSize));
         return new PagedResponse<StockDeductQueueResponse>(
             queues.Select(MapQueue).ToList(),
             safePage,
             safePageSize,
             totalCount,
-            totalPages);
+            totalPages,
+            statusCounts);
     }
 
     public async Task<StockDeductPreviewResponse> PreviewQueueAsync(Guid queueId, CancellationToken ct = default)
@@ -3061,13 +3063,15 @@ public class InventoryLogic(
             safePage,
             safePageSize,
             ct);
+        var statusCounts = await _supplierReceiptRepo.CountByStatusAsync(createdBy, search, ct);
         var totalPages = Math.Max(1, (int)Math.Ceiling(totalCount / (double)safePageSize));
         return new PagedResponse<SupplierReceiptResponse>(
             items.Select(MapSupplierReceipt).ToList(),
             safePage,
             safePageSize,
             totalCount,
-            totalPages);
+            totalPages,
+            statusCounts);
     }
 
     public async Task<SupplierReceiptResponse?> GetSupplierReceiptAsync(Guid id, CancellationToken ct = default)
@@ -3814,13 +3818,19 @@ public class InventoryLogic(
             safePage,
             safePageSize,
             ct);
+        var statusCounts = await _stocktakeRepo.CountByStatusAsync(
+            normalizedLocation,
+            createdBy,
+            search,
+            ct);
         var totalPages = Math.Max(1, (int)Math.Ceiling(totalCount / (double)safePageSize));
         return new PagedResponse<StocktakeRequestResponse>(
             items.Select(MapStocktakeRequest).ToList(),
             safePage,
             safePageSize,
             totalCount,
-            totalPages);
+            totalPages,
+            statusCounts);
     }
 
     public async Task<StocktakeRequestResponse?> GetStocktakeRequestAsync(Guid id, CancellationToken ct = default)
@@ -7389,6 +7399,7 @@ public class InventoryLogic(
             statusFilter = parsed;
 
         var (items, total) = await _productionOrderRepo.GetPagedAsync(statusFilter, page, pageSize, ct);
+        var statusCounts = await _productionOrderRepo.CountByStatusAsync(ct);
         var totalPages = (int)Math.Ceiling(total / (double)pageSize);
 
         return new PagedResponse<ProductionOrderResponse>(
@@ -7396,7 +7407,8 @@ public class InventoryLogic(
             page,
             pageSize,
             total,
-            totalPages);
+            totalPages,
+            statusCounts);
     }
 
     public async Task<ProductionOrderResponse?> GetProductionOrderByIdAsync(Guid id, CancellationToken ct = default)

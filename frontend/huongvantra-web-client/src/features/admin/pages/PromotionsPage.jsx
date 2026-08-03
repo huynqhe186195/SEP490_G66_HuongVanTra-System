@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination from '../../../components/shared/TablePagination.jsx'
+import { useTotalAwarePageSize } from '../../../utils/totalAwarePageSize.js'
 import { confirmDialog } from '../../../app/dialog.js'
 import { showError, showSuccess } from '../../../app/toast.js'
 import {
@@ -48,11 +49,8 @@ const MAX_FIXED_DISCOUNT_VALUE = 10000000
 const MAX_PERCENTAGE_DISCOUNT_AMOUNT = 10000000
 const MAX_MINIMUM_ORDER_AMOUNT = 100000000
 const MAX_USAGE_LIMIT = 1000000
-const PROMOTION_PAGE_SIZE = 10
 const PROMO_CODE_REGEX = /^[A-Z0-9_-]+$/
 const DEFAULT_PAGINATION = {
-  page: 1,
-  pageSize: PROMOTION_PAGE_SIZE,
   totalItems: 0,
   totalPages: 1,
 }
@@ -272,8 +270,16 @@ function PromotionsPage() {
   const [scopeTypeFilter, setScopeTypeFilter] = useState('ALL')
   const [statusFilter, setStatusFilter] = useState('ALL')
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(PROMOTION_PAGE_SIZE)
-  const [pagination, setPagination] = useState(DEFAULT_PAGINATION)
+  const [pagination, setPagination] = useState({
+    totalItems: 0,
+    totalPages: 1,
+  })
+  const { pageSize, setPageSize, pageSizeOptions } = useTotalAwarePageSize(pagination.totalItems)
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil((pagination.totalItems || 0) / pageSize) || 1)
+    if (page > totalPages) setPage(totalPages)
+  }, [pagination.totalItems, pageSize, page])
 
   const categoryTreeOptions = useMemo(() => {
     const visible = categoryOptions.filter((c) => !c.isDeleted && c.isActive !== false)
@@ -293,8 +299,6 @@ function PromotionsPage() {
       })
       setPromotions(result.items)
       setPagination({
-        page: result.page || page,
-        pageSize: result.pageSize || pageSize,
         totalItems: result.totalItems || 0,
         totalPages: Math.max(1, result.totalPages || 1),
       })
@@ -729,6 +733,7 @@ function PromotionsPage() {
   return (
     <PageShell>
       <PageHeader
+        compact
         title="Quản lý mã giảm giá"
         titleInfo="Tạo và chỉnh sửa mã khuyến mãi dùng tại POS và trên đơn hàng"
         rightContent={
@@ -896,9 +901,13 @@ function PromotionsPage() {
         <TablePagination
           page={page}
           pageSize={pageSize}
+          pageSizeOptions={pageSizeOptions}
           totalCount={pagination.totalItems}
           onPageChange={setPage}
-          onPageSizeChange={setPageSize}
+          onPageSizeChange={(size) => {
+            setPageSize(size)
+            setPage(1)
+          }}
           disabled={isLoading}
           itemLabel="mã giảm giá"
         />

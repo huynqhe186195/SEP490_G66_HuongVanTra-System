@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
-import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
+import TablePagination from '../../../components/shared/TablePagination.jsx'
+import { useTotalAwarePageSize } from '../../../utils/totalAwarePageSize.js'
 import { showError } from '../../../app/toast.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import { fetchCashSessionHistory } from '../services/posCashSessionApi.js'
@@ -48,8 +49,13 @@ export default function PosCashSessionsPage() {
   const [status, setStatus] = useState('')
   const [searchInput, setSearchInput] = useState('')
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE)
   const [data, setData] = useState({ items: [], totalItems: 0, totalPages: 1 })
+  const { pageSize, setPageSize, pageSizeOptions } = useTotalAwarePageSize(data.totalItems)
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil((data.totalItems || 0) / pageSize) || 1)
+    if (page > totalPages) setPage(totalPages)
+  }, [data.totalItems, pageSize, page])
   const [isLoading, setIsLoading] = useState(true)
 
   const load = useCallback(async () => {
@@ -85,6 +91,7 @@ export default function PosCashSessionsPage() {
   return (
     <PageShell>
       <PageHeader
+        compact
         title="Quỹ ca POS"
         titleInfo="Lịch sử mở/đóng quỹ tiền mặt tại quầy — theo dõi doanh thu tiền mặt, lệch quỹ theo ca."
         searchPlaceholder="Tìm người mở/đóng, tên ca, ghi chú..."
@@ -199,6 +206,7 @@ export default function PosCashSessionsPage() {
         <TablePagination
           page={page}
           pageSize={pageSize}
+          pageSizeOptions={pageSizeOptions}
           totalCount={data.totalItems}
           onPageChange={setPage}
           onPageSizeChange={(size) => { setPageSize(size); setPage(1) }}

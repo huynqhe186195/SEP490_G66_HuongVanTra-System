@@ -42,7 +42,7 @@ function InventoryPage() {
 
   return (
     <>
-      <PageHeader title="Quản lý Kho hàng" searchPlaceholder="Tìm kiếm..." />
+      <PageHeader compact title="Quản lý Kho hàng" searchPlaceholder="Tìm kiếm..." />
 
       <section className="mb-6 flex flex-col justify-between gap-4 md:flex-row md:items-start">
         <div className="max-w-lg">

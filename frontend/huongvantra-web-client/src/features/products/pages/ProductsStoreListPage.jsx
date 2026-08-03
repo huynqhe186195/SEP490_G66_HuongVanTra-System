@@ -3,7 +3,8 @@ import { AUTH_SESSION_CHANGED_EVENT, loadAuthSession } from '../../auth/services
 import { Link } from 'react-router-dom'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import { TitleInfoButton } from '../../../components/shared/PageHeader.jsx'
-import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
+import TablePagination from '../../../components/shared/TablePagination.jsx'
+import { useTotalAwarePageSize } from '../../../utils/totalAwarePageSize.js'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { canAdjustStoreStock, canEditShelfThreshold, canSyncCatalog } from '../../auth/utils/permissions.js'
 import { fetchCategories } from '../services/categoriesApi.js'
@@ -93,7 +94,6 @@ export default function ProductsStoreListPage() {
   const [stockFilter, setStockFilter] = useState('all')
   const [directSellFilter, setDirectSellFilter] = useState('all')
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE)
   const [isLoading, setIsLoading] = useState(true)
   const [stockBySkuId, setStockBySkuId] = useState(() => new Map())
   // POS-04 (H6): tồn Kệ đang giữ chỗ theo skuId để hiển thị "khả bán / giữ chỗ".
@@ -210,6 +210,12 @@ export default function ProductsStoreListPage() {
   }, [filteredSkus])
 
   const totalCount = groupedProducts.length
+  const { pageSize, setPageSize, pageSizeOptions } = useTotalAwarePageSize(totalCount)
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil((totalCount || 0) / pageSize) || 1)
+    if (page > totalPages) setPage(totalPages)
+  }, [totalCount, pageSize, page])
 
   const pagedGroups = useMemo(() => {
     const start = (page - 1) * pageSize
@@ -775,9 +781,13 @@ export default function ProductsStoreListPage() {
               <TablePagination
                 page={page}
                 pageSize={pageSize}
+                pageSizeOptions={pageSizeOptions}
                 totalCount={totalCount}
                 onPageChange={setPage}
-                onPageSizeChange={setPageSize}
+                onPageSizeChange={(size) => {
+                  setPageSize(size)
+                  setPage(1)
+                }}
                 itemLabel="sản phẩm"
               />
             </div>

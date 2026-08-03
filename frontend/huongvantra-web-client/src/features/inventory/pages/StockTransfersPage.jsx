@@ -1,17 +1,19 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
-import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
+import TablePagination from '../../../components/shared/TablePagination.jsx'
+import StatusFilterChips from '../../../components/shared/StatusFilterChips.jsx'
 import { promptDialog } from '../../../app/dialog.js'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import { canOperateStockTransfer, canViewStockTransfer } from '../../auth/utils/permissions.js'
 import { getReasonSuggestions } from '../../shared/reasonSuggestions.js'
+import { useTotalAwarePageSize } from '../../../utils/totalAwarePageSize.js'
+import { applyStatusCounts } from '../../../utils/statusFilterCounts.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import { formatStockQuantity } from '../../products/utils/productDisplay.js'
 import { fetchAllActiveSkus } from '../../products/services/productSkusApi.js'
-import InventoryNavTabs from '../components/InventoryNavTabs.jsx'
 import { fetchSkuStocks } from '../services/inventoryStockApi.js'
 import { fetchStockAdjustmentRequestById } from '../services/stockAdjustmentRequestApi.js'
 import {
@@ -36,17 +38,20 @@ const EMPTY_LINE = () => ({
 })
 
 const STATUS_OPTIONS = [
-  { value: '', label: 'Tất cả trạng thái' },
+  { value: '', label: 'Tất cả' },
   { value: 'Draft', label: 'Nháp' },
   { value: 'Completed', label: 'Đã hoàn tất' },
   { value: 'Cancelled', label: 'Đã hủy' },
 ]
 
 const TRANSFER_TYPE_OPTIONS = [
-  { value: '', label: 'Tất cả loại phiếu' },
+  { value: '', label: 'Tất cả loại' },
   { value: 'fromRequest', label: 'Từ yêu cầu' },
   { value: 'direct', label: 'Trực tiếp' },
 ]
+
+/** API list clamp pageSize tối đa 50. */
+const TRANSFER_PAGE_SIZE_MAX = 50
 
 const SORT_OPTIONS = [
   { value: '', label: 'Mới nhất' },
@@ -464,8 +469,15 @@ function StockTransfersPage() {
   const [toDate, setToDate] = useState('')
   const [sort, setSort] = useState('')
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE)
-  const [data, setData] = useState({ items: [], totalCount: 0 })
+  const [data, setData] = useState({ items: [], totalCount: 0, statusCounts: null })
+  const { pageSize, setPageSize, pageSizeOptions } = useTotalAwarePageSize(data.totalCount, {
+    max: TRANSFER_PAGE_SIZE_MAX,
+  })
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil((data.totalCount || 0) / pageSize) || 1)
+    if (page > totalPages) setPage(totalPages)
+  }, [data.totalCount, pageSize, page])
   const [catalog, setCatalog] = useState([])
   const [stocks, setStocks] = useState([])
   const [selected, setSelected] = useState(null)
@@ -480,6 +492,15 @@ function StockTransfersPage() {
   const stockBySkuId = useMemo(
     () => new Map(stocks.map((stock) => [stock.skuId, stock])),
     [stocks],
+  )
+
+  const statusChipOptions = useMemo(
+    () => applyStatusCounts(STATUS_OPTIONS, data.statusCounts),
+    [data.statusCounts],
+  )
+
+  const hasActiveFilters = Boolean(
+    search.trim() || status || transferType || fromDate || toDate || sort || sourceRequestId,
   )
 
   const loadTransfers = useCallback(async () => {
@@ -503,7 +524,7 @@ function StockTransfersPage() {
       })
       setData(result)
     } catch (error) {
-      setData({ items: [], totalCount: 0 })
+      setData({ items: [], totalCount: 0, statusCounts: null })
       setLoadError('Không thể tải danh sách phiếu điều chuyển. Vui lòng thử lại.')
       showError(error.message)
     } finally {
@@ -524,6 +545,7 @@ function StockTransfersPage() {
     setToDate('')
     setSort('')
     setPage(1)
+    if (sourceRequestId) clearSourceRequestFilter()
   }
 
   const loadCatalog = useCallback(async () => {
@@ -647,7 +669,6 @@ function StockTransfersPage() {
   if (!canView) {
     return (
       <PageShell>
-        <InventoryNavTabs />
         <p className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-600">
           Bạn không có quyền xem {STOCK_FLOW_TERMS.transfer}.
         </p>
@@ -657,11 +678,10 @@ function StockTransfersPage() {
 
   return (
     <PageShell>
-      <InventoryNavTabs />
       <PageHeader
+        compact
         title={STOCK_FLOW_TERMS.transfer}
-        description="Thủ kho tạo, sửa và hoàn tất trực tiếp. Quản lý và Admin chỉ xem, giám sát."
-        titleInfo={`Hoàn tất sẽ trừ ${STOCK_FLOW_TERMS.warehouse} theo FEFO, cộng ${STOCK_FLOW_TERMS.shelf} và tạo đầy đủ lineage, Phiếu xuất, Phiếu nhập, Inventory Ledger trong cùng transaction.`}
+        titleInfo={`Thủ kho tạo/sửa/hoàn tất. Hoàn tất trừ ${STOCK_FLOW_TERMS.warehouse} (FEFO), cộng ${STOCK_FLOW_TERMS.shelf}.`}
         searchPlaceholder="Tìm mã phiếu, mã yêu cầu nguồn, sản phẩm hoặc người tạo..."
         searchValue={search}
         onSearchChange={(value) => { setSearch(value); setPage(1) }}
@@ -683,85 +703,75 @@ function StockTransfersPage() {
               <span className="material-symbols-outlined text-[20px]">add</span>
               Tạo phiếu trực tiếp
             </button>
-            <Link
-              to="/inventory/stock-requests"
-              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 font-semibold text-slate-700 hover:bg-slate-50"
-            >
-              <span className="material-symbols-outlined text-[20px]">edit_note</span>
-              Yêu cầu bổ sung Kệ Hàng
-            </Link>
-            <Link
-              to="/inventory/shelf-replenishment-suggestions"
-              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 font-semibold text-slate-700 hover:bg-slate-50"
-            >
-              <span className="material-symbols-outlined text-[20px]">lightbulb</span>
-              Gợi ý bổ sung Kệ Hàng
-            </Link>
           </div>
         ) : null}
       />
 
-      <div className="my-4 flex flex-wrap items-center gap-3">
+      <div className="my-3 space-y-2.5">
+        <StatusFilterChips
+          options={statusChipOptions}
+          value={status}
+          onChange={(value) => { setStatus(value); setPage(1) }}
+        />
+        <StatusFilterChips
+          options={TRANSFER_TYPE_OPTIONS}
+          value={transferType}
+          onChange={(value) => { setTransferType(value); setPage(1) }}
+          ariaLabel="Lọc theo loại phiếu"
+        />
         {sourceRequestId ? (
-          <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
+          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
             <span className="material-symbols-outlined text-[18px]">filter_alt</span>
-            <span>Đang lọc theo yêu cầu <span className="font-mono font-semibold">{filterRequestCode || sourceRequestId}</span></span>
+            <span>
+              Đang lọc theo yêu cầu{' '}
+              <span className="font-mono font-semibold">{filterRequestCode || sourceRequestId}</span>
+            </span>
             <button
               type="button"
               onClick={clearSourceRequestFilter}
-              className="ml-2 rounded-lg px-2 py-0.5 text-xs font-semibold text-amber-700 hover:bg-amber-100"
+              className="rounded-lg px-2 py-0.5 text-xs font-semibold text-amber-700 hover:bg-amber-100"
             >
               Bỏ lọc
             </button>
           </div>
         ) : null}
-        <div className="ml-auto flex flex-wrap items-center gap-3">
-          <select
-            value={status}
-            onChange={(event) => { setStatus(event.target.value); setPage(1) }}
-            className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm"
-          >
-            {STATUS_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-          </select>
-          <select
-            value={transferType}
-            onChange={(event) => { setTransferType(event.target.value); setPage(1) }}
-            className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm"
-          >
-            {TRANSFER_TYPE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-          </select>
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           <label className="flex items-center gap-2 text-sm text-slate-600">
-            Từ ngày
+            Từ
             <input
               type="date"
               value={fromDate}
               onChange={(event) => { setFromDate(event.target.value); setPage(1) }}
-              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+              className="min-h-[40px] rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
             />
           </label>
           <label className="flex items-center gap-2 text-sm text-slate-600">
-            Đến ngày
+            Đến
             <input
               type="date"
               value={toDate}
               onChange={(event) => { setToDate(event.target.value); setPage(1) }}
-              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+              className="min-h-[40px] rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
             />
           </label>
           <select
             value={sort}
             onChange={(event) => { setSort(event.target.value); setPage(1) }}
-            className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm"
+            className="min-h-[40px] rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
           >
-            {SORT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            {SORT_OPTIONS.map((option) => (
+              <option key={option.value || 'newest'} value={option.value}>{option.label}</option>
+            ))}
           </select>
-          <button
-            type="button"
-            onClick={resetFilters}
-            className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-          >
-            Xóa bộ lọc
-          </button>
+          {hasActiveFilters ? (
+            <button
+              type="button"
+              onClick={resetFilters}
+              className="min-h-[40px] rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Xóa bộ lọc
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -825,6 +835,7 @@ function StockTransfersPage() {
         <TablePagination
           page={page}
           pageSize={pageSize}
+          pageSizeOptions={pageSizeOptions}
           totalCount={data.totalCount}
           onPageChange={setPage}
           onPageSizeChange={(size) => { setPageSize(size); setPage(1) }}

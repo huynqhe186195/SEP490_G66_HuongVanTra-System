@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
-import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
+import TablePagination from '../../../components/shared/TablePagination.jsx'
+import { useTotalAwarePageSize } from '../../../utils/totalAwarePageSize.js'
 import { confirmDialog } from '../../../app/dialog.js'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { formatVnd, formatVndInput, parseVndInput, sanitizeVndInput } from '../../../utils/vietnamCurrency.js'
@@ -851,8 +852,13 @@ export default function SupplierProductsPage() {
   const [productType, setProductType] = useState('')
   const [includeInactive, setIncludeInactive] = useState(false)
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE)
   const [totalItems, setTotalItems] = useState(0)
+  const { pageSize, setPageSize, pageSizeOptions } = useTotalAwarePageSize(totalItems)
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil((totalItems || 0) / pageSize) || 1)
+    if (page > totalPages) setPage(totalPages)
+  }, [totalItems, pageSize, page])
 
   const [formTarget, setFormTarget] = useState(null)
   const [priceTarget, setPriceTarget] = useState(null)
@@ -950,6 +956,7 @@ export default function SupplierProductsPage() {
   return (
     <PageShell>
       <PageHeader
+        compact
         title="Sản phẩm theo nhà cung cấp"
         titleInfo="Danh mục mặt hàng mỗi nhà cung cấp đang cung ứng, kèm mã hàng riêng, giá chào và lịch sử giá. Giá chào chỉ là tham chiếu khi lập phiếu nhập, không ghi đè giá vốn."
         rightContent={
@@ -1125,6 +1132,7 @@ export default function SupplierProductsPage() {
         <TablePagination
           page={page}
           pageSize={pageSize}
+          pageSizeOptions={pageSizeOptions}
           totalCount={totalItems}
           disabled={isLoading}
           itemLabel="mặt hàng"

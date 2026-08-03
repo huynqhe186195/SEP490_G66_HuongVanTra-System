@@ -100,7 +100,7 @@ function statusBadge(status) {
 function ReportsPage() {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-6 [font-family:'Manrope',sans-serif]">
-      <PageHeader title="Báo cáo kho hàng" titleInfo="Theo dõi tồn kho, định mức nguyên vật liệu và biến động hàng hóa" searchPlaceholder="Tìm kiếm báo cáo..." />
+      <PageHeader compact title="Báo cáo kho hàng" titleInfo="Theo dõi tồn kho, định mức nguyên vật liệu và biến động hàng hóa" searchPlaceholder="Tìm kiếm báo cáo..." />
 
       <div className="rounded-2xl border border-[#c1c9c0]/30 bg-white p-3 shadow-sm">
         <div className="flex flex-wrap items-center justify-end gap-3">

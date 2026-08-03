@@ -99,6 +99,7 @@ function ReportsOverviewPage() {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-6 [font-family:'Manrope',sans-serif]">
       <PageHeader
+        compact
         title="Báo cáo doanh thu"
         titleInfo="Tổng quan doanh thu, lợi nhuận, kênh bán và top sản phẩm"
         searchPlaceholder="Tìm báo cáo, doanh số..."

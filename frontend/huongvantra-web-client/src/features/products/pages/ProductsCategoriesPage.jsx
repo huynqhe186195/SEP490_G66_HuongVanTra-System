@@ -279,6 +279,7 @@ function ProductsCategoriesPage() {
   return (
     <PageShell>
       <PageHeader
+        compact
         title="Danh mục sản phẩm"
         titleInfo={
           canCreate

@@ -6,7 +6,8 @@ import {
 } from 'recharts'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
-import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
+import TablePagination from '../../../components/shared/TablePagination.jsx'
+import { useTotalAwarePageSize } from '../../../utils/totalAwarePageSize.js'
 import { apiRequestAuth } from '../../../lib/apiClient.js'
 import { fetchAllActiveSkus, fetchAllActiveStoreSkus } from '../../products/services/productSkusApi.js'
 import { fetchProducts, fetchStoreProducts } from '../../products/services/productsApi.js'
@@ -29,7 +30,6 @@ function InventoryStatisticsPage() {
   const [error, setError] = useState(null)
   
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE)
 
   const [filterPeriod, setFilterPeriod] = useState('month')
   const [filterMonth, setFilterMonth] = useState(new Date().getMonth() + 1)
@@ -249,9 +249,12 @@ function InventoryStatisticsPage() {
     return generatedAlerts.sort((a, b) => severityWeight[b.severity] - severityWeight[a.severity])
   }, [skuStocks, skus, products, batches])
 
+  const { pageSize, setPageSize, pageSizeOptions } = useTotalAwarePageSize(alerts.length)
+
   useEffect(() => {
-    setPage(1)
-  }, [alerts])
+    const totalPages = Math.max(1, Math.ceil((alerts.length || 0) / pageSize) || 1)
+    if (page > totalPages) setPage(totalPages)
+  }, [alerts.length, pageSize, page])
 
   const paginatedAlerts = useMemo(() => {
     const start = (page - 1) * pageSize
@@ -262,6 +265,7 @@ function InventoryStatisticsPage() {
   return (
     <PageShell className="flex-1">
       <PageHeader
+        compact
         title="Thống kê trong kho"
         titleInfo="Tổng quan số liệu hàng hóa hiện tại"
       />
@@ -393,9 +397,13 @@ function InventoryStatisticsPage() {
                 <TablePagination
                   page={page}
                   pageSize={pageSize}
+                  pageSizeOptions={pageSizeOptions}
                   totalCount={alerts.length}
                   onPageChange={setPage}
-                  onPageSizeChange={setPageSize}
+                  onPageSizeChange={(size) => {
+                    setPageSize(size)
+                    setPage(1)
+                  }}
                 />
               )}
             </div>

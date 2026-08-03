@@ -32,6 +32,57 @@ public class OrderRepository(OrderDbContext _db) : IOrderRepository
         int page, int pageSize, CancellationToken ct = default,
         IReadOnlyCollection<Guid>? restrictToOrderIds = null)
     {
+        var query = BuildListQuery(
+            search, customerId, status, channel,
+            excludeChannel, codTab, returnableOnly,
+            orderKind, excludeOrderKind,
+            fromDate, toDate, employeeId, includeAllCodOrders,
+            restrictToOrderIds);
+
+        var total = await query.CountAsync(ct);
+         var items = await query
+            .Include(o => o.Payments)
+            .Include(o => o.OrderDetails)
+            .OrderByDescending(o => o.CreatedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(ct);
+
+        return (items, total);
+    }
+
+    public async Task<Dictionary<string, int>> CountByStatusAsync(
+        string? search, Guid? customerId, string? channel,
+        string? excludeChannel, string? codTab, bool returnableOnly,
+        string? orderKind, string? excludeOrderKind,
+        DateTime? fromDate, DateTime? toDate, Guid? employeeId, bool includeAllCodOrders,
+        CancellationToken ct = default,
+        IReadOnlyCollection<Guid>? restrictToOrderIds = null)
+    {
+        var query = BuildListQuery(
+            search, customerId, status: null, channel,
+            excludeChannel, codTab, returnableOnly,
+            orderKind, excludeOrderKind,
+            fromDate, toDate, employeeId, includeAllCodOrders,
+            restrictToOrderIds);
+
+        var rows = await query
+            .GroupBy(o => o.OrderStatus)
+            .Select(group => new { Status = group.Key, Count = group.Count() })
+            .ToListAsync(ct);
+        return rows.ToDictionary(
+            row => row.Status.ToString(),
+            row => row.Count,
+            StringComparer.OrdinalIgnoreCase);
+    }
+
+    private IQueryable<Order> BuildListQuery(
+        string? search, Guid? customerId, string? status, string? channel,
+        string? excludeChannel, string? codTab, bool returnableOnly,
+        string? orderKind, string? excludeOrderKind,
+        DateTime? fromDate, DateTime? toDate, Guid? employeeId, bool includeAllCodOrders,
+        IReadOnlyCollection<Guid>? restrictToOrderIds)
+    {
         var query = _db.Orders.AsQueryable();
 
         // POS-04 (truy vết giữ chỗ): tập OrderId đang giữ chỗ do InventoryService trả về qua service client.
@@ -155,16 +206,7 @@ public class OrderRepository(OrderDbContext _db) : IOrderRepository
         if (toDate.HasValue)
             query = query.Where(o => o.CreatedAt <= toDate.Value);
 
-        var total = await query.CountAsync(ct);
-         var items = await query
-            .Include(o => o.Payments)
-            .Include(o => o.OrderDetails)
-            .OrderByDescending(o => o.CreatedAt)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .ToListAsync(ct);
-
-        return (items, total);
+        return query;
     }
 
     public async Task<Order?> GetSinglePendingTransferByAmountAsync(

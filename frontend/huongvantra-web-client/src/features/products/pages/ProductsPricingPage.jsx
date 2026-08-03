@@ -279,6 +279,7 @@ function ProductsPricingPage() {
   return (
     <PageShell>
       <PageHeader
+        compact
         title="Bảng giá sản phẩm"
         titleInfo="Quản lý price_books và price_book_entries cho SKU, biến thể hoặc đơn vị quy đổi."
         searchPlaceholder="Tìm bảng giá theo mã hoặc tên..."

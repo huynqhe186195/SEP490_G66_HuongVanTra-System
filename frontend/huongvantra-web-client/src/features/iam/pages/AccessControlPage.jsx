@@ -287,6 +287,7 @@ function AccessControlPage() {
   return (
     <PageShell className="[font-family:'Manrope',sans-serif]">
       <PageHeader
+        compact
         title="Phân quyền hệ thống"
         titleInfo="Thiết lập vai trò (nhóm người dùng) và quyền thao tác — giao diện đơn giản, chữ to, dễ thao tác"
         rightContent={(

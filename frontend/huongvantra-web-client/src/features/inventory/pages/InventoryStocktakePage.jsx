@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
-import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
+import StatusFilterChips from '../../../components/shared/StatusFilterChips.jsx'
+import TablePagination from '../../../components/shared/TablePagination.jsx'
+import { useTotalAwarePageSize } from '../../../utils/totalAwarePageSize.js'
 import { promptDialog } from '../../../app/dialog.js'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { getReasonSuggestions } from '../../shared/reasonSuggestions.js'
+import { applyStatusCounts } from '../../../utils/statusFilterCounts.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import { formatStockQuantity } from '../../products/utils/productDisplay.js'
 import { fetchAllActiveSkus, fetchAllActiveStoreSkus } from '../../products/services/productSkusApi.js'
@@ -39,9 +42,9 @@ const WAREHOUSE_PRODUCT_TYPES = new Set([PRODUCT_TYPE.NGUYEN_LIEU, PRODUCT_TYPE.
 const SHELF_PRODUCT_TYPES = new Set([PRODUCT_TYPE.THANH_PHAM])
 
 const STATUS_OPTIONS = [
-  { value: '', label: 'Tất cả trạng thái' },
-  { value: 'Draft', label: 'Nháp' },
+  { value: '', label: 'Tất cả' },
   { value: 'PendingApproval', label: 'Chờ duyệt' },
+  { value: 'Draft', label: 'Nháp' },
   { value: 'Completed', label: 'Hoàn thành' },
   { value: 'Rejected', label: 'Đã từ chối' },
   { value: 'Cancelled', label: 'Đã hủy' },
@@ -734,8 +737,17 @@ function InventoryStocktakePage() {
   const [status, setStatus] = useState('')
   const [location, setLocation] = useState('')
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE)
-  const [data, setData] = useState({ items: [], totalItems: 0, totalPages: 1 })
+  const [data, setData] = useState({ items: [], totalItems: 0, totalPages: 1, statusCounts: null })
+  const { pageSize, setPageSize, pageSizeOptions } = useTotalAwarePageSize(data.totalItems)
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil((data.totalItems || 0) / pageSize) || 1)
+    if (page > totalPages) setPage(totalPages)
+  }, [data.totalItems, pageSize, page])
+  const statusChipOptions = useMemo(
+    () => applyStatusCounts(STATUS_OPTIONS, data.statusCounts),
+    [data.statusCounts],
+  )
   const [isLoading, setIsLoading] = useState(true)
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [detail, setDetail] = useState(null)
@@ -772,7 +784,7 @@ function InventoryStocktakePage() {
       })
       setData(result)
     } catch (error) {
-      setData({ items: [], totalItems: 0, totalPages: 1 })
+      setData({ items: [], totalItems: 0, totalPages: 1, statusCounts: null })
       showError(error.message)
     } finally {
       setIsLoading(false)
@@ -866,6 +878,7 @@ function InventoryStocktakePage() {
   return (
     <PageShell>
       <PageHeader
+        compact
         title={fixedLocation === 'Warehouse' ? 'Kiểm kê Kho' : 'Kiểm kê kệ hàng'}
         titleInfo={
           fixedLocation === 'Warehouse'
@@ -898,25 +911,33 @@ function InventoryStocktakePage() {
         )}
       />
 
-      <div className="mb-4 grid grid-cols-1 gap-3 rounded-2xl bg-white p-4 shadow-sm md:grid-cols-3">
-        <select className="rounded-xl border border-slate-200 px-3 py-2 text-sm" value={status} onChange={(event) => resetPageAndSet(setStatus, event.target.value)}>
-          {STATUS_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-        </select>
-        <select className="rounded-xl border border-slate-200 px-3 py-2 text-sm" value={fixedLocation || location} disabled={Boolean(fixedLocation)} onChange={(event) => resetPageAndSet(setLocation, event.target.value)}>
-          <option value="">Tất cả vị trí</option>
-          {LOCATION_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-        </select>
-        <button
-          type="button"
-          onClick={() => downloadCsv('stocktake-list.csv', [
-            ['RequestCode', 'Location', 'Status', 'CreatedAt', 'PositiveVariance', 'NegativeVariance'],
-            ...data.items.map((item) => [item.requestCode, getLocationLabel(item.location), getStatusLabel(item.status), item.createdAt, item.totalPositiveVariance, item.totalNegativeVariance]),
-          ])}
-          className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
-        >
-          <span className="material-symbols-outlined text-[18px]">download</span>
-          Xuất danh sách CSV
-        </button>
+      <div className="mb-3 space-y-2.5">
+        <StatusFilterChips
+          options={statusChipOptions}
+          value={status}
+          onChange={(value) => resetPageAndSet(setStatus, value)}
+        />
+        <div className="flex flex-wrap items-center gap-2">
+          {!fixedLocation ? (
+            <StatusFilterChips
+              options={[{ value: '', label: 'Tất cả vị trí' }, ...LOCATION_OPTIONS]}
+              value={location}
+              onChange={(value) => resetPageAndSet(setLocation, value)}
+              ariaLabel="Lọc theo vị trí"
+            />
+          ) : null}
+          <button
+            type="button"
+            onClick={() => downloadCsv('stocktake-list.csv', [
+              ['RequestCode', 'Location', 'Status', 'CreatedAt', 'PositiveVariance', 'NegativeVariance'],
+              ...data.items.map((item) => [item.requestCode, getLocationLabel(item.location), getStatusLabel(item.status), item.createdAt, item.totalPositiveVariance, item.totalNegativeVariance]),
+            ])}
+            className="inline-flex min-h-[40px] items-center justify-center gap-1.5 rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
+          >
+            <span className="material-symbols-outlined text-[18px]">download</span>
+            Xuất CSV
+          </button>
+        </div>
       </div>
 
       <section className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
@@ -925,8 +946,8 @@ function InventoryStocktakePage() {
             <thead className="bg-slate-50 text-xs font-bold uppercase tracking-wide text-slate-500">
               <tr>
                 <th className="px-6 py-3">Mã phiếu</th>
-                <th className="px-4 py-3">Vị trí</th>
                 <th className="px-4 py-3">Trạng thái</th>
+                <th className="px-4 py-3">Vị trí</th>
                 <th className="px-4 py-3 text-right">Tăng</th>
                 <th className="px-4 py-3 text-right">Giảm</th>
                 <th className="px-4 py-3">Người tạo</th>
@@ -947,12 +968,12 @@ function InventoryStocktakePage() {
                     </button>
                     <p className="text-xs text-slate-500">{item.items.length} SKU</p>
                   </td>
-                  <td className="px-4 py-4">{getLocationLabel(item.location)}</td>
                   <td className="px-4 py-4">
                     <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ring-1 ${getStatusClass(item.status)}`}>
                       {getStatusLabel(item.status)}
                     </span>
                   </td>
+                  <td className="px-4 py-4">{getLocationLabel(item.location)}</td>
                   <td className="px-4 py-4 text-right font-semibold text-emerald-700">+{formatStockQuantity(item.totalPositiveVariance)}</td>
                   <td className="px-4 py-4 text-right font-semibold text-rose-700">-{formatStockQuantity(item.totalNegativeVariance)}</td>
                   <td className="px-4 py-4">{item.createdByName || '—'}</td>
@@ -972,6 +993,7 @@ function InventoryStocktakePage() {
         <TablePagination
           page={page}
           pageSize={pageSize}
+          pageSizeOptions={pageSizeOptions}
           totalCount={data.totalItems}
           onPageChange={setPage}
           onPageSizeChange={(size) => { setPageSize(size); setPage(1) }}

@@ -3,7 +3,8 @@ import { useAuthSession } from '../../auth/hooks/useAuthSession.js'
 import { Link, useSearchParams } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
-import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
+import TablePagination from '../../../components/shared/TablePagination.jsx'
+import { useTotalAwarePageSize } from '../../../utils/totalAwarePageSize.js'
 import { confirmDialog } from '../../../app/dialog.js'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { getCustomerSectionFromSearch, getCustomerSectionLabel, buildCustomerPath } from '../../../app/customerSections.js'
@@ -274,7 +275,6 @@ function CustomersPage() {
   const [sortBy, setSortBy] = useState('')
   const [filterOpen, setFilterOpen] = useState(false)
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE)
   const [membershipTiers, setMembershipTiers] = useState([])
   const [statistics, setStatistics] = useState(null)
   const [activityRefreshKey, setActivityRefreshKey] = useState(0)
@@ -296,6 +296,8 @@ function CustomersPage() {
     sortBy,
     pollIntervalMs: 30000,
   })
+
+  const { pageSize, setPageSize, pageSizeOptions } = useTotalAwarePageSize(customers.length)
 
   const hasActiveFilters = Boolean(tierFilter || debtFilter || sortBy)
   const importResultGroups = useMemo(
@@ -466,7 +468,7 @@ function CustomersPage() {
   }
 
   useEffect(() => {
-    const totalPages = Math.max(1, Math.ceil(customers.length / pageSize))
+    const totalPages = Math.max(1, Math.ceil((customers.length || 0) / pageSize) || 1)
     if (page > totalPages) {
       setPage(totalPages)
     }
@@ -574,6 +576,7 @@ function CustomersPage() {
   return (
     <PageShell className="min-w-0 [font-family:'Manrope',sans-serif]">
       <PageHeader
+        compact
         title="Khách hàng"
         titleInfo={`${sectionLabel} — quản lý hồ sơ, công nợ và hoạt động khách hàng.`}
         searchPlaceholder="Tìm theo tên, SĐT"
@@ -824,10 +827,14 @@ function CustomersPage() {
             <TablePagination
               page={page}
               pageSize={pageSize}
+              pageSizeOptions={pageSizeOptions}
               totalCount={customers.length}
               itemLabel="khách hàng"
               onPageChange={setPage}
-              onPageSizeChange={setPageSize}
+              onPageSizeChange={(size) => {
+                setPageSize(size)
+                setPage(1)
+              }}
             />
           </section>
         ) : activeTab === 'corporate' && CUSTOMER_CORPORATE_ENABLED ? (
@@ -944,10 +951,14 @@ function CustomersPage() {
             <TablePagination
               page={page}
               pageSize={pageSize}
+              pageSizeOptions={pageSizeOptions}
               totalCount={customers.length}
                 itemLabel="khách hàng"
               onPageChange={setPage}
-              onPageSizeChange={setPageSize}
+              onPageSizeChange={(size) => {
+                setPageSize(size)
+                setPage(1)
+              }}
             />
             </section>
 
@@ -1086,10 +1097,14 @@ function CustomersPage() {
               <TablePagination
                 page={page}
                 pageSize={pageSize}
+                pageSizeOptions={pageSizeOptions}
                 totalCount={customers.length}
                 itemLabel="khách hàng"
                 onPageChange={setPage}
-                onPageSizeChange={setPageSize}
+                onPageSizeChange={(size) => {
+                  setPageSize(size)
+                  setPage(1)
+                }}
               />
             </section>
           </>
@@ -1306,10 +1321,14 @@ function CustomersPage() {
             <TablePagination
               page={page}
               pageSize={pageSize}
+              pageSizeOptions={pageSizeOptions}
               totalCount={customers.length}
                 itemLabel="khách hàng"
               onPageChange={setPage}
-              onPageSizeChange={setPageSize}
+              onPageSizeChange={(size) => {
+                setPageSize(size)
+                setPage(1)
+              }}
             />
 
               <div className="border-t border-[#f0eee6] bg-[#f6f4ec]/40 p-3 sm:p-6">
@@ -1488,10 +1507,14 @@ function CustomersPage() {
             <TablePagination
               page={page}
               pageSize={pageSize}
+              pageSizeOptions={pageSizeOptions}
               totalCount={customers.length}
                 itemLabel="khách hàng"
               onPageChange={setPage}
-              onPageSizeChange={setPageSize}
+              onPageSizeChange={(size) => {
+                setPageSize(size)
+                setPage(1)
+              }}
             />
             </section>
           </>

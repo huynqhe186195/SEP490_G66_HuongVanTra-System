@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
-import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
+import TablePagination from '../../../components/shared/TablePagination.jsx'
+import { useTotalAwarePageSize } from '../../../utils/totalAwarePageSize.js'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { fetchSystemActivities, fetchSystemActivityDetail } from '../services/systemActivityApi.js'
 import {
@@ -92,10 +93,17 @@ function SystemActivityLogPage() {
   const [activities, setActivities] = useState([])
   const [pagination, setPagination] = useState({
     page: 1,
-    pageSize: TABLE_PAGE_SIZE,
     totalCount: 0,
     totalPages: 1,
   })
+  const { pageSize, setPageSize, pageSizeOptions } = useTotalAwarePageSize(pagination.totalCount)
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil((pagination.totalCount || 0) / pageSize) || 1)
+    if (pagination.page > totalPages) {
+      setPagination((current) => ({ ...current, page: totalPages }))
+    }
+  }, [pagination.totalCount, pagination.page, pageSize])
   const [isLoading, setIsLoading] = useState(true)
   const [selectedActivity, setSelectedActivity] = useState(null)
   const [isDetailLoading, setIsDetailLoading] = useState(false)
@@ -107,9 +115,9 @@ function SystemActivityLogPage() {
       toUtc: toUtcIso(filters.toUtc),
       result: filters.result === 'all' ? '' : filters.result,
       page: pagination.page,
-      pageSize: pagination.pageSize,
+      pageSize,
     }),
-    [filters, pagination.page, pagination.pageSize],
+    [filters, pagination.page, pageSize],
   )
 
   const loadActivities = useCallback(async () => {
@@ -120,7 +128,6 @@ function SystemActivityLogPage() {
       setPagination((current) => ({
         ...current,
         page: result.page,
-        pageSize: result.pageSize,
         totalCount: result.totalCount,
         totalPages: result.totalPages,
       }))
@@ -177,6 +184,7 @@ function SystemActivityLogPage() {
   return (
     <PageShell>
       <PageHeader
+        compact
         title="Nhật ký hoạt động hệ thống"
         titleInfo="Theo dõi các thao tác ghi dữ liệu từ sản phẩm, kho, đơn hàng, tài khoản, khách hàng và tài liệu."
         rightContent={
@@ -320,10 +328,14 @@ function SystemActivityLogPage() {
         </div>
         <TablePagination
           page={pagination.page}
-          pageSize={pagination.pageSize}
+          pageSize={pageSize}
+          pageSizeOptions={pageSizeOptions}
           totalCount={pagination.totalCount}
           onPageChange={(page) => setPagination((current) => ({ ...current, page }))}
-          onPageSizeChange={(pageSize) => setPagination((current) => ({ ...current, page: 1, pageSize }))}
+          onPageSizeChange={(size) => {
+            setPageSize(size)
+            setPagination((current) => ({ ...current, page: 1 }))
+          }}
           disabled={isLoading}
           itemLabel="hoạt động"
         />

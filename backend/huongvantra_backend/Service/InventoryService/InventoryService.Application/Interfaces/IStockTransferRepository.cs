@@ -19,6 +19,15 @@ public interface IStockTransferRepository
         DateTime? fromDateUtc = null,
         DateTime? toDateUtc = null,
         string? sort = null);
+    /// <summary>Đếm theo Status với cùng filter list, bỏ status.</summary>
+    Task<Dictionary<string, int>> CountByStatusAsync(
+        string? search,
+        CancellationToken ct = default,
+        Guid? sourceRequestId = null,
+        string? transferType = null,
+        Guid? createdBy = null,
+        DateTime? fromDateUtc = null,
+        DateTime? toDateUtc = null);
     Task<bool> TryLockDraftForUpdateAsync(Guid id, DateTime updatedAt, CancellationToken ct = default);
     Task<bool> TryClaimDraftForCompletionAsync(Guid id, DateTime claimedAt, CancellationToken ct = default);
     Task<bool> TryCancelDraftAsync(

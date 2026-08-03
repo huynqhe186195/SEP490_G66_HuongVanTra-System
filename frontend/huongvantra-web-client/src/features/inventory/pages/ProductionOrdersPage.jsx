@@ -1,9 +1,12 @@
-import { Fragment, useCallback, useEffect, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
-import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
+import StatusFilterChips from '../../../components/shared/StatusFilterChips.jsx'
+import TablePagination from '../../../components/shared/TablePagination.jsx'
+import { useTotalAwarePageSize } from '../../../utils/totalAwarePageSize.js'
 import ReasonSuggestionChips from '../../../components/shared/ReasonSuggestionChips.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
+import { applyStatusCounts } from '../../../utils/statusFilterCounts.js'
 import { formatVietnamDate, formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import {
@@ -27,13 +30,13 @@ import {
 } from '../services/productionOrderApi.js'
 
 const STATUS_TABS = [
-  { key: '', label: 'Tất cả' },
-  { key: 'Draft', label: 'Chờ xác nhận' },
-  { key: 'PendingApproval', label: 'Chờ duyệt' },
-  { key: 'Approved', label: 'Đã duyệt' },
-  { key: 'Completed', label: 'Hoàn thành' },
-  { key: 'Rejected', label: 'Bị từ chối' },
-  { key: 'Cancelled', label: 'Đã hủy' },
+  { value: '', label: 'Tất cả' },
+  { value: 'PendingApproval', label: 'Chờ duyệt' },
+  { value: 'Draft', label: 'Chờ xác nhận' },
+  { value: 'Approved', label: 'Đã duyệt' },
+  { value: 'Completed', label: 'Hoàn thành' },
+  { value: 'Rejected', label: 'Bị từ chối' },
+  { value: 'Cancelled', label: 'Đã hủy' },
 ]
 
 function ConfirmDialog({ message, requiresReason = false, reasonLabel = 'Lý do', reasonSuggestions = [], onConfirm, onCancel }) {
@@ -152,15 +155,26 @@ function ProductionOrdersPage() {
   const canReview = canReviewProductionOrder(session)
   const canComplete = canCompleteProductionOrder(session)
   const canCancel = canCancelProductionOrder(session)
-  const [activeTab, setActiveTab] = useState('')
+  const [activeTab, setActiveTab] = useState('PendingApproval')
   const [orders, setOrders] = useState([])
+  const [statusCounts, setStatusCounts] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE)
   const [totalCount, setTotalCount] = useState(0)
+  const { pageSize, setPageSize, pageSizeOptions } = useTotalAwarePageSize(totalCount)
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil((totalCount || 0) / pageSize) || 1)
+    if (page > totalPages) setPage(totalPages)
+  }, [totalCount, pageSize, page])
   const [expandedId, setExpandedId] = useState(null)
   const [actingId, setActingId] = useState(null)
   const [confirmAction, setConfirmAction] = useState(null)
+
+  const statusChipOptions = useMemo(
+    () => applyStatusCounts(STATUS_TABS, statusCounts),
+    [statusCounts],
+  )
   const [showCreateModal, setShowCreateModal] = useState(false)
 
   const loadOrders = useCallback(async () => {
@@ -173,7 +187,11 @@ function ProductionOrdersPage() {
       })
       setOrders(result.items)
       setTotalCount(result.totalCount)
+      setStatusCounts(result.statusCounts)
     } catch (err) {
+      setOrders([])
+      setTotalCount(0)
+      setStatusCounts(null)
       showError(err.message)
     } finally {
       setIsLoading(false)
@@ -287,8 +305,9 @@ function ProductionOrdersPage() {
   return (
     <PageShell>
       <PageHeader
+        compact
         title="Quản lý lệnh sản xuất"
-        titleInfo="Một lệnh sản xuất có thể chứa nhiều SKU thành phẩm; hệ thống xuất nguyên liệu và nhập lô thành phẩm về kho tổng."
+        titleInfo="Một lệnh có thể chứa nhiều SKU thành phẩm; hệ thống xuất NVL và nhập lô TP về Kho."
         rightContent={
           <div className="flex items-center gap-3">
             {canCreate ? (
@@ -304,21 +323,12 @@ function ProductionOrdersPage() {
         }
       />
 
-      {/* Status tabs */}
-      <div className="flex flex-wrap gap-2">
-        {STATUS_TABS.map((tab) => (
-          <button
-            key={tab.key}
-            onClick={() => handleTabChange(tab.key)}
-            className={`rounded-xl px-4 py-2 text-sm font-semibold transition-colors ${
-              activeTab === tab.key
-                ? 'bg-[#538463] text-white'
-                : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
+      <div className="mb-3">
+        <StatusFilterChips
+          options={statusChipOptions}
+          value={activeTab}
+          onChange={handleTabChange}
+        />
       </div>
 
       <div className="overflow-hidden rounded-2xl bg-white shadow-sm">
@@ -327,9 +337,9 @@ function ProductionOrdersPage() {
           <thead>
             <tr className="border-b border-slate-100 text-left text-xs font-semibold text-[#717971]">
               <th className="px-4 py-3">Mã lệnh sản xuất</th>
+              <th className="px-4 py-3">Trạng thái</th>
               <th className="px-4 py-3">Thành phẩm đầu ra</th>
               <th className="px-4 py-3 text-right">Tổng SL</th>
-              <th className="px-4 py-3">Trạng thái</th>
               <th className="px-4 py-3">Ngày tạo</th>
               <th className="px-4 py-3"></th>
             </tr>
@@ -364,6 +374,9 @@ function ProductionOrdersPage() {
                       {order.productionCode}
                     </td>
                     <td className="px-4 py-3">
+                      <StatusChip status={order.status} />
+                    </td>
+                    <td className="px-4 py-3">
                       {isMultiOutput ? (
                         <>
                           <p className="inline-flex rounded-full bg-[#f3f7f4] px-2.5 py-1 text-xs font-bold text-[#356647]">
@@ -390,9 +403,6 @@ function ProductionOrdersPage() {
                       ) : (
                         formatQuantity(outputLines[0]?.plannedQuantity)
                       )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <StatusChip status={order.status} />
                     </td>
                     <td className="px-4 py-3 text-xs text-slate-500">
                       {order.createdAt ? formatVietnamDateTime(order.createdAt) : '—'}
@@ -579,6 +589,7 @@ function ProductionOrdersPage() {
             <TablePagination
               page={page}
               pageSize={pageSize}
+              pageSizeOptions={pageSizeOptions}
               totalCount={totalCount}
               onPageChange={setPage}
               onPageSizeChange={(size) => { setPageSize(size); setPage(1) }}

@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
-import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
+import TablePagination from '../../../components/shared/TablePagination.jsx'
+import { useTotalAwarePageSize } from '../../../utils/totalAwarePageSize.js'
 import { showError } from '../../../app/toast.js'
 import { canAccessModule } from '../../../app/navigation.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
@@ -42,7 +43,12 @@ function ExchangeOrdersPage() {
   const [returns, setReturns] = useState([])
   const [totalCount, setTotalCount] = useState(0)
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE)
+  const { pageSize, setPageSize, pageSizeOptions } = useTotalAwarePageSize(totalCount)
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil((totalCount || 0) / pageSize) || 1)
+    if (page > totalPages) setPage(totalPages)
+  }, [totalCount, pageSize, page])
   const [isLoading, setIsLoading] = useState(true)
 
   const queryParams = useMemo(
@@ -133,6 +139,7 @@ function ExchangeOrdersPage() {
   return (
     <PageShell className="pb-8">
       <PageHeader
+        compact
         title="Trả / đổi hàng"
         titleInfo={
           viewTab === 'returns'
@@ -401,10 +408,14 @@ function ExchangeOrdersPage() {
           <TablePagination
             page={page}
             pageSize={pageSize}
+            pageSizeOptions={pageSizeOptions}
             totalCount={totalCount}
             itemLabel="phiếu trả"
             onPageChange={setPage}
-            onPageSizeChange={setPageSize}
+            onPageSizeChange={(size) => {
+              setPageSize(size)
+              setPage(1)
+            }}
           />
         </section>
       ) : null}
@@ -514,10 +525,14 @@ function ExchangeOrdersPage() {
         <TablePagination
           page={page}
           pageSize={pageSize}
+          pageSizeOptions={pageSizeOptions}
           totalCount={totalCount}
           itemLabel="đơn đổi"
           onPageChange={setPage}
-          onPageSizeChange={setPageSize}
+          onPageSizeChange={(size) => {
+            setPageSize(size)
+            setPage(1)
+          }}
         />
       </section>
       ) : null}

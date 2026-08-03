@@ -5,7 +5,9 @@ public record PagedResponse<T>(
     int Page,
     int PageSize,
     int TotalItems,
-    int TotalPages);
+    int TotalPages,
+    /// <summary>Số lượng theo trạng thái (cùng filter list, bỏ status). Key = status string.</summary>
+    Dictionary<string, int>? StatusCounts = null);
 
 public record StockDeductQueueResponse(
     Guid QueueId,

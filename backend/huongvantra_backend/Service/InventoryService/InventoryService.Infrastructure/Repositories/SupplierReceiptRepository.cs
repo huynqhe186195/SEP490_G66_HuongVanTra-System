@@ -75,6 +75,39 @@ public class SupplierReceiptRepository(InventoryDbContext _db) : ISupplierReceip
         return (items, total);
     }
 
+    public async Task<Dictionary<string, int>> CountByStatusAsync(
+        Guid? createdBy,
+        string? search,
+        CancellationToken ct = default)
+    {
+        var query = WithItems().AsNoTracking().AsQueryable();
+        if (createdBy.HasValue)
+            query = query.Where(r => r.CreatedBy == createdBy.Value);
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var keyword = search.Trim().ToLower();
+            query = query.Where(r =>
+                r.ReceiptCode.ToLower().Contains(keyword) ||
+                (r.SupplierName != null && r.SupplierName.ToLower().Contains(keyword)) ||
+                (r.SupplierReference != null && r.SupplierReference.ToLower().Contains(keyword)) ||
+                (r.SupplierDocumentNumber != null && r.SupplierDocumentNumber.ToLower().Contains(keyword)) ||
+                (r.StockImportSlipCode != null && r.StockImportSlipCode.ToLower().Contains(keyword)) ||
+                r.Items.Any(i =>
+                    i.SkuCode.ToLower().Contains(keyword) ||
+                    i.SkuNameSnapshot.ToLower().Contains(keyword) ||
+                    i.LotCode.ToLower().Contains(keyword)));
+        }
+
+        var rows = await query
+            .GroupBy(r => r.Status)
+            .Select(group => new { Status = group.Key, Count = group.Count() })
+            .ToListAsync(ct);
+        return rows.ToDictionary(
+            row => row.Status.ToString().ToLowerInvariant(),
+            row => row.Count,
+            StringComparer.OrdinalIgnoreCase);
+    }
+
     public Task<int> CountCreatedSinceAsync(DateTime sinceUtc, CancellationToken ct = default) =>
         _db.SupplierReceipts.CountAsync(r => r.CreatedAt >= sinceUtc, ct);
 

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
-import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
+import TablePagination from '../../../components/shared/TablePagination.jsx'
 import ReasonSuggestionChips from '../../../components/shared/ReasonSuggestionChips.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
@@ -17,6 +17,7 @@ import {
 } from '../../auth/utils/permissions.js'
 import { getReasonSuggestions } from '../../shared/reasonSuggestions.js'
 import { formatStockQuantity } from '../../products/utils/productDisplay.js'
+import { useTotalAwarePageSize } from '../../../utils/totalAwarePageSize.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import InventorySimulationBanner from '../components/InventorySimulationBanner.jsx'
 import StockAdjustmentRequestAuditView from '../components/StockAdjustmentRequestAuditView.jsx'
@@ -79,7 +80,7 @@ const SORT_OPTIONS = [
 ]
 
 const FIELD_CLASS =
-  'min-h-[44px] w-full rounded-xl border border-slate-200 bg-[#fbf9f1] px-4 py-3 text-sm outline-none focus:border-[#538463]'
+  'min-h-[40px] w-full rounded-xl border border-slate-200 bg-[#fbf9f1] px-4 py-2.5 text-sm outline-none focus:border-[#538463]'
 const LABEL_CLASS = 'mb-1 block text-xs font-bold uppercase tracking-wider text-slate-400'
 
 /** Lý do từ chối gợi ý cho Thủ kho, bấm để điền nhanh vào ô lý do. */
@@ -303,9 +304,14 @@ function StockAdjustmentRequestOperationsPage() {
   const [sort, setSort] = useState(canReview ? 'warehouse_priority' : '')
   const [requests, setRequests] = useState([])
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE)
   const [totalCount, setTotalCount] = useState(0)
+  const { pageSize, setPageSize, pageSizeOptions } = useTotalAwarePageSize(totalCount)
   const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil((totalCount || 0) / pageSize) || 1)
+    if (page > totalPages) setPage(totalPages)
+  }, [totalCount, pageSize, page])
   const [creatorOptions, setCreatorOptions] = useState([])
   const [creatorRoleOptions, setCreatorRoleOptions] = useState([])
   const [detailId, setDetailId] = useState(null)
@@ -565,6 +571,7 @@ function StockAdjustmentRequestOperationsPage() {
   return (
     <PageShell>
       <PageHeader
+        compact
         title={STOCK_FLOW_TERMS.request}
         titleInfo={
           canReview
@@ -728,7 +735,7 @@ function StockAdjustmentRequestOperationsPage() {
             </select>
           </label>
 
-          <label className="inline-flex min-h-[44px] items-center gap-2 text-sm font-semibold text-slate-700">
+          <label className="inline-flex min-h-[40px] items-center gap-2 text-sm font-semibold text-slate-700">
             <input
               type="checkbox"
               checked={draftFilters.onlyRemaining}
@@ -853,11 +860,15 @@ function StockAdjustmentRequestOperationsPage() {
         <TablePagination
           page={page}
           pageSize={pageSize}
+          pageSizeOptions={pageSizeOptions}
           totalCount={totalCount}
           itemLabel="yêu cầu"
           disabled={isLoading}
           onPageChange={setPage}
-          onPageSizeChange={setPageSize}
+          onPageSizeChange={(size) => {
+            setPageSize(size)
+            setPage(1)
+          }}
         />
       </section>
 

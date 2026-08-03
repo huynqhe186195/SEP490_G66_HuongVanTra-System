@@ -64,6 +64,13 @@ public class OrderLogic(
             fromDate, toDate, employeeFilter, access.IncludeAllCodOrders,
             page, pageSize, ct, restrictToOrderIds);
 
+        var statusCounts = await _orderRepo.CountByStatusAsync(
+            req.Search, customerId, channel,
+            excludeChannel, req.CodTab, req.ReturnableOnly,
+            req.OrderKind, req.ExcludeOrderKind,
+            fromDate, toDate, employeeFilter, access.IncludeAllCodOrders,
+            ct, restrictToOrderIds);
+
         var dtos = items.Select(MapToSummary).ToList();
 
         if (dtos.Count > 0)
@@ -85,7 +92,8 @@ public class OrderLogic(
 
         return new PagedResponse<OrderSummaryResponse>(
             dtos, page, pageSize, total,
-            (int)Math.Ceiling((double)total / pageSize));
+            (int)Math.Ceiling((double)total / pageSize),
+            statusCounts);
     }
 
     private static int ParsePositiveInt(string? value, int fallback)

@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
-import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
+import TablePagination from '../../../components/shared/TablePagination.jsx'
+import { useTotalAwarePageSize } from '../../../utils/totalAwarePageSize.js'
 import { showError } from '../../../app/toast.js'
 import { formatStockQuantity } from '../../products/utils/productDisplay.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
@@ -45,7 +46,12 @@ function InventoryImportPage() {
   const [isLoadingImportSlips, setIsLoadingImportSlips] = useState(true)
   const [selectedSlip, setSelectedSlip] = useState(null)
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE)
+  const { pageSize, setPageSize, pageSizeOptions } = useTotalAwarePageSize(importSlips.length)
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil((importSlips.length || 0) / pageSize) || 1)
+    if (page > totalPages) setPage(totalPages)
+  }, [importSlips.length, pageSize, page])
   const importSlipDocumentRef = useRef(null)
 
   const loadImportSlips = useCallback(async () => {
@@ -79,6 +85,7 @@ function InventoryImportPage() {
     <PageShell>
       <SlipPrintStyles />
       <PageHeader
+        compact
         title="Phiếu nhập kho"
         titleInfo="Theo dõi phiếu nhập nguyên liệu thủ công và phiếu nhập thành phẩm sau sản xuất."
         searchPlaceholder="Tìm mã phiếu, SKU, mã lô..."
@@ -159,6 +166,7 @@ function InventoryImportPage() {
           <TablePagination
             page={page}
             pageSize={pageSize}
+            pageSizeOptions={pageSizeOptions}
             totalCount={importSlips.length}
             onPageChange={setPage}
             onPageSizeChange={(size) => { setPageSize(size); setPage(1) }}

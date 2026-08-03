@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
-import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
+import TablePagination from '../../../components/shared/TablePagination.jsx'
+import { useTotalAwarePageSize } from '../../../utils/totalAwarePageSize.js'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { canEditWarehouseThreshold, canWriteInventory } from '../../auth/utils/permissions.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
@@ -16,7 +17,6 @@ function InventoryStockPage() {
   const [searchInput, setSearchInput] = useState('')
   const [rows, setRows] = useState([])
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE)
   const [isLoading, setIsLoading] = useState(true)
   const [editingThreshold, setEditingThreshold] = useState(null) // { skuId, value }
   const [savingSkuId, setSavingSkuId] = useState(null)
@@ -82,13 +82,15 @@ function InventoryStockPage() {
     })
   }, [rows, searchInput])
 
+  const { pageSize, setPageSize, pageSizeOptions } = useTotalAwarePageSize(filteredRows.length)
+
   useEffect(() => {
     const timer = window.setTimeout(() => setPage(1), 0)
     return () => window.clearTimeout(timer)
   }, [searchInput])
 
   useEffect(() => {
-    const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize))
+    const totalPages = Math.max(1, Math.ceil((filteredRows.length || 0) / pageSize) || 1)
     if (page <= totalPages) return undefined
     const timer = window.setTimeout(() => setPage(totalPages), 0)
     return () => window.clearTimeout(timer)
@@ -191,6 +193,7 @@ function InventoryStockPage() {
   return (
     <PageShell>
       <PageHeader
+        compact
         title="Kho"
         titleInfo="Tồn Kho = tổng các lô còn hàng. Nhà cung cấp nhập vào Kho trước, xuất theo FIFO khi có yêu cầu hợp lệ."
         searchPlaceholder="Tìm SKU, sản phẩm..."
@@ -276,10 +279,14 @@ function InventoryStockPage() {
         <TablePagination
           page={page}
           pageSize={pageSize}
+          pageSizeOptions={pageSizeOptions}
           totalCount={filteredRows.length}
           itemLabel="SKU"
           onPageChange={setPage}
-          onPageSizeChange={setPageSize}
+          onPageSizeChange={(size) => {
+            setPageSize(size)
+            setPage(1)
+          }}
         />
       </section>
     </PageShell>

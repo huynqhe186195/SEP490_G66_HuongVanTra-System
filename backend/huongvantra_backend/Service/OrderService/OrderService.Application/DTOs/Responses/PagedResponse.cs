@@ -5,5 +5,7 @@ public record PagedResponse<T>(
     int Page,
     int PageSize,
     int TotalCount,
-    int TotalPages
+    int TotalPages,
+    /// <summary>Số lượng theo trạng thái (cùng filter list, bỏ status). Key = status string.</summary>
+    Dictionary<string, int>? StatusCounts = null
 );

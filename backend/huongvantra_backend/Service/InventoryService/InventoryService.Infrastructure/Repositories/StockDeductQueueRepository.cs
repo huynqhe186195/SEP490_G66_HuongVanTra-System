@@ -70,6 +70,19 @@ public class StockDeductQueueRepository(InventoryDbContext _db) : IStockDeductQu
         return (items, totalCount);
     }
 
+    public async Task<Dictionary<string, int>> CountWaitingByStatusAsync(string? search, CancellationToken ct = default)
+    {
+        var query = BuildWaitingQuery(null, search);
+        var rows = await query
+            .GroupBy(q => q.QueueStatus)
+            .Select(group => new { Status = group.Key, Count = group.Count() })
+            .ToListAsync(ct);
+        return rows.ToDictionary(
+            row => row.Status.ToString().ToLowerInvariant(),
+            row => row.Count,
+            StringComparer.OrdinalIgnoreCase);
+    }
+
     private IQueryable<StockDeductQueue> BuildWaitingQuery(string? status, string? search)
     {
         var query = _db.StockDeductQueues

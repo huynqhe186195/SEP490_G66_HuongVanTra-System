@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
-import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
+import TablePagination from '../../../components/shared/TablePagination.jsx'
+import { useTotalAwarePageSize } from '../../../utils/totalAwarePageSize.js'
 import { confirmDialog } from '../../../app/dialog.js'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { formatVnd } from '../../../utils/vietnamCurrency.js'
@@ -261,6 +262,12 @@ export default function SuppliersPage() {
   const [page, setPage] = useState(1)
   const [totalItems, setTotalItems] = useState(0)
   const [totalPages, setTotalPages] = useState(1)
+  const { pageSize, setPageSize, pageSizeOptions } = useTotalAwarePageSize(totalItems)
+
+  useEffect(() => {
+    const computedTotalPages = Math.max(1, Math.ceil((totalItems || 0) / pageSize) || 1)
+    if (page > computedTotalPages) setPage(computedTotalPages)
+  }, [totalItems, pageSize, page])
   const [modalSupplier, setModalSupplier] = useState(null)
   const [showModal, setShowModal] = useState(false)
   const searchTimerRef = useRef(null)
@@ -272,7 +279,7 @@ export default function SuppliersPage() {
     async (p = 1, q = searchRef.current, showDeleted = includeDeleted) => {
       setIsLoading(true)
       try {
-        const result = await fetchSuppliers({ search: q, includeDeleted: showDeleted, page: p, pageSize: TABLE_PAGE_SIZE })
+        const result = await fetchSuppliers({ search: q, includeDeleted: showDeleted, page: p, pageSize })
         setItems(result.items)
         setTotalItems(result.totalItems)
         setTotalPages(result.totalPages)
@@ -283,7 +290,7 @@ export default function SuppliersPage() {
         setIsLoading(false)
       }
     },
-    [includeDeleted],
+    [includeDeleted, pageSize],
   )
 
   useEffect(() => {
@@ -342,6 +349,7 @@ export default function SuppliersPage() {
   return (
     <PageShell>
       <PageHeader
+        compact
         title="Nhà cung cấp"
         titleInfo="Quản lý danh mục nhà cung cấp dùng cho phiếu nhập và trả hàng."
         rightContent={
@@ -469,14 +477,19 @@ export default function SuppliersPage() {
           </tbody>
         </table>
 
-        {totalPages > 1 ? (
+        {totalItems > pageSize || page > 1 ? (
           <TablePagination
             page={page}
-            pageSize={TABLE_PAGE_SIZE}
+            pageSize={pageSize}
+            pageSizeOptions={pageSizeOptions}
             totalCount={totalItems}
             disabled={isLoading}
             itemLabel="nhà cung cấp"
             onPageChange={(p) => load(p)}
+            onPageSizeChange={(size) => {
+              setPageSize(size)
+              setPage(1)
+            }}
           />
         ) : null}
       </div>

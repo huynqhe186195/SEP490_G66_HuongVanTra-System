@@ -24,6 +24,10 @@ public interface ISupplierReceiptRepository
         int page,
         int pageSize,
         CancellationToken ct = default);
+    Task<Dictionary<string, int>> CountByStatusAsync(
+        Guid? createdBy,
+        string? search,
+        CancellationToken ct = default);
     Task<int> CountCreatedSinceAsync(DateTime sinceUtc, CancellationToken ct = default);
     Task<SupplierReceiptStats> GetStatsBySupplierIdAsync(Guid supplierId, CancellationToken ct = default);
     Task<SupplierReceipt?> FindDuplicateDocumentAsync(Guid? supplierId, string? supplierDocumentNumber, Guid? excludeId, CancellationToken ct = default);

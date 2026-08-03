@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
-import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
+import TablePagination from '../../../components/shared/TablePagination.jsx'
+import { useTotalAwarePageSize } from '../../../utils/totalAwarePageSize.js'
 import { showError } from '../../../app/toast.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import OrderCustomerCell from '../components/OrderCustomerCell.jsx'
@@ -15,15 +16,22 @@ function ReturnOrdersPage() {
   const [returns, setReturns] = useState([])
   const [totalCount, setTotalCount] = useState(0)
   const [page, setPage] = useState(1)
+  const { pageSize, setPageSize, pageSizeOptions } = useTotalAwarePageSize(totalCount)
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil((totalCount || 0) / pageSize) || 1)
+    if (page > totalPages) setPage(totalPages)
+  }, [totalCount, pageSize, page])
+
   const [isLoading, setIsLoading] = useState(true)
 
   const queryParams = useMemo(
     () => ({
       search: search.trim() || undefined,
       page,
-      pageSize: TABLE_PAGE_SIZE,
+      pageSize,
     }),
-    [search, page],
+    [search, page, pageSize],
   )
 
   useEffect(() => {
@@ -65,6 +73,7 @@ function ReturnOrdersPage() {
   return (
     <PageShell className="pb-8">
       <PageHeader
+        compact
         title="Phiếu trả hàng"
         titleInfo="Danh sách phiếu trả từ POS — tra cứu theo mã phiếu, mã hóa đơn gốc hoặc tên khách."
         searchPlaceholder="Tìm TH-..., HVT-..., tên khách..."
@@ -158,8 +167,13 @@ function ReturnOrdersPage() {
         <TablePagination
           page={page}
           totalCount={totalCount}
-          pageSize={TABLE_PAGE_SIZE}
+          pageSize={pageSize}
+          pageSizeOptions={pageSizeOptions}
           onPageChange={setPage}
+          onPageSizeChange={(size) => {
+            setPageSize(size)
+            setPage(1)
+          }}
         />
       </section>
     </PageShell>

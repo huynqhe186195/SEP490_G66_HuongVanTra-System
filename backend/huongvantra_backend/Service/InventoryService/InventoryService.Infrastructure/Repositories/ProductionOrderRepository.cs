@@ -33,6 +33,18 @@ public class ProductionOrderRepository(InventoryDbContext _db) : IProductionOrde
         return (items, total);
     }
 
+    public async Task<Dictionary<string, int>> CountByStatusAsync(CancellationToken ct = default)
+    {
+        var rows = await _db.ProductionOrders.AsNoTracking()
+            .GroupBy(o => o.Status)
+            .Select(group => new { Status = group.Key, Count = group.Count() })
+            .ToListAsync(ct);
+        return rows.ToDictionary(
+            row => row.Status.ToString(),
+            row => row.Count,
+            StringComparer.OrdinalIgnoreCase);
+    }
+
     public Task<int> CountCreatedSinceAsync(DateTime since, CancellationToken ct = default) =>
         _db.ProductionOrders.CountAsync(o => o.CreatedAt >= since, ct);
 

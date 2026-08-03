@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
-import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
+import TablePagination from '../../../components/shared/TablePagination.jsx'
+import { useTotalAwarePageSize } from '../../../utils/totalAwarePageSize.js'
 import { showError, showSuccess } from '../../../app/toast.js'
 import {
   fetchOutboxMessages,
@@ -42,10 +43,17 @@ function InventorySyncMonitorPage() {
   const [stats, setStats] = useState({ pending: 0, processing: 0, published: 0, failed: 0 })
   const [pagination, setPagination] = useState({
     page: 1,
-    pageSize: TABLE_PAGE_SIZE,
     totalCount: 0,
     totalPages: 1,
   })
+  const { pageSize, setPageSize, pageSizeOptions } = useTotalAwarePageSize(pagination.totalCount)
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil((pagination.totalCount || 0) / pageSize) || 1)
+    if (pagination.page > totalPages) {
+      setPagination((current) => ({ ...current, page: totalPages }))
+    }
+  }, [pagination.totalCount, pagination.page, pageSize])
   const [isLoading, setIsLoading] = useState(true)
   const [selected, setSelected] = useState(null)
   const [isDetailLoading, setIsDetailLoading] = useState(false)
@@ -56,9 +64,9 @@ function InventorySyncMonitorPage() {
       status: filters.status,
       eventType: filters.eventType.trim(),
       page: pagination.page,
-      pageSize: pagination.pageSize,
+      pageSize,
     }),
-    [filters, pagination.page, pagination.pageSize],
+    [filters, pagination.page, pageSize],
   )
 
   const loadStats = useCallback(async () => {
@@ -77,7 +85,6 @@ function InventorySyncMonitorPage() {
       setPagination((current) => ({
         ...current,
         page: result.page,
-        pageSize: result.pageSize,
         totalCount: result.totalCount,
         totalPages: result.totalPages,
       }))
@@ -137,6 +144,7 @@ function InventorySyncMonitorPage() {
   return (
     <PageShell>
       <PageHeader
+        compact
         title="Giám sát đồng bộ tồn kho"
         titleInfo="Theo dõi hàng đợi Outbox phát sự kiện đơn hàng sang kho và gửi lại thủ công khi thất bại."
         rightContent={
@@ -256,10 +264,14 @@ function InventorySyncMonitorPage() {
         </div>
         <TablePagination
           page={pagination.page}
-          pageSize={pagination.pageSize}
+          pageSize={pageSize}
+          pageSizeOptions={pageSizeOptions}
           totalCount={pagination.totalCount}
           onPageChange={(page) => setPagination((current) => ({ ...current, page }))}
-          onPageSizeChange={(pageSize) => setPagination((current) => ({ ...current, page: 1, pageSize }))}
+          onPageSizeChange={(size) => {
+            setPageSize(size)
+            setPagination((current) => ({ ...current, page: 1 }))
+          }}
           disabled={isLoading}
           itemLabel="message"
         />

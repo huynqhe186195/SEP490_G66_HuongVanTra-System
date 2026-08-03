@@ -2,8 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
-import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
+import TablePagination from '../../../components/shared/TablePagination.jsx'
 import { showError } from '../../../app/toast.js'
+import { useTotalAwarePageSize } from '../../../utils/totalAwarePageSize.js'
 import { formatVietnamDateTimeMinute, VIETNAM_TIME_ZONE } from '../../../utils/vietnamDateTime.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import { canViewWarehouseDailyReportLive } from '../../auth/utils/permissions.js'
@@ -45,11 +46,16 @@ export default function WarehouseDailyReportSubmissionsPage() {
   const today = vietnamTodayInput()
   const [items, setItems] = useState([])
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE)
-  const [totalItems, setTotalItems] = useState(0)
-  const [loading, setLoading] = useState(true)
   const [fromDate, setFromDate] = useState('')
   const [toDate, setToDate] = useState('')
+  const [totalItems, setTotalItems] = useState(0)
+  const { pageSize, setPageSize, pageSizeOptions } = useTotalAwarePageSize(totalItems)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil((totalItems || 0) / pageSize) || 1)
+    if (page > totalPages) setPage(totalPages)
+  }, [totalItems, pageSize, page])
   const [sentBy, setSentBy] = useState('')
   const [sentByDraft, setSentByDraft] = useState('')
   const canOpenLive = canViewWarehouseDailyReportLive(loadAuthSession())
@@ -106,6 +112,7 @@ export default function WarehouseDailyReportSubmissionsPage() {
   return (
     <PageShell>
       <PageHeader
+        compact
         title="Báo cáo đã gửi"
         titleInfo="Lịch sử các lần Thủ kho gửi báo cáo cuối ngày cho Quản lý / Admin. Mỗi lần là một snapshot đầy đủ tại thời điểm gửi."
         rightContent={canOpenLive ? (
@@ -273,6 +280,7 @@ export default function WarehouseDailyReportSubmissionsPage() {
         <TablePagination
           page={page}
           pageSize={pageSize}
+          pageSizeOptions={pageSizeOptions}
           totalCount={totalItems}
           itemLabel="lần gửi"
           onPageChange={setPage}

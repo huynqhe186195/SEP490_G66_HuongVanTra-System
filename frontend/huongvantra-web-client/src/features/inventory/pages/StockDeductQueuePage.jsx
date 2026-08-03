@@ -2,10 +2,13 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
-import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
+import StatusFilterChips from '../../../components/shared/StatusFilterChips.jsx'
+import TablePagination from '../../../components/shared/TablePagination.jsx'
+import { useTotalAwarePageSize } from '../../../utils/totalAwarePageSize.js'
 import { showError } from '../../../app/toast.js'
 import { canCancelStockDeduct, canConfirmStockDeduct } from '../../../app/navigation.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
+import { applyStatusCounts } from '../../../utils/statusFilterCounts.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import StockDeductPreviewModal from '../components/StockDeductPreviewModal.jsx'
 import { fetchPendingStockDeductQueues } from '../services/stockDeductQueueApi.js'
@@ -19,35 +22,57 @@ import {
 } from '../../orders/utils/orderDisplay.js'
 
 const TABS = [
-  { key: 'all', label: 'Tất cả', status: undefined },
-  { key: 'waiting', label: 'Chờ đóng gói', status: 'waiting' },
-  { key: 'insufficient', label: 'Chờ hàng', status: 'insufficient' },
-  { key: 'confirmed', label: 'Đã trừ', status: 'confirmed' },
-  { key: 'cancelled', label: 'Đã hủy', status: 'cancelled' },
+  { value: 'waiting', label: 'Chờ đóng gói', status: 'waiting' },
+  { value: 'insufficient', label: 'Chờ hàng', status: 'insufficient' },
+  { value: 'confirmed', label: 'Đã trừ', status: 'confirmed' },
+  { value: 'cancelled', label: 'Đã hủy', status: 'cancelled' },
+  { value: 'all', label: 'Tất cả', status: undefined },
 ]
 
 function getStockDeductTabLabel(tab) {
-  if (tab?.key === 'waiting') return 'Chờ đóng gói'
-  if (tab?.key === 'insufficient') return 'Chờ nguyên liệu'
+  if (tab?.value === 'waiting') return 'Chờ đóng gói'
+  if (tab?.value === 'insufficient') return 'Chờ nguyên liệu'
   return tab?.label ?? ''
 }
 
 function StockDeductQueuePage() {
   const canExecuteDeduct = canConfirmStockDeduct(loadAuthSession())
   const canCancelQueue = canCancelStockDeduct(loadAuthSession())
-  const [activeTab, setActiveTab] = useState('all')
+  const [activeTab, setActiveTab] = useState('waiting')
   const [searchValue, setSearchValue] = useState('')
   const [queues, setQueues] = useState([])
+  const [statusCounts, setStatusCounts] = useState(null)
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE)
   const [totalCount, setTotalCount] = useState(0)
+  const { pageSize, setPageSize, pageSizeOptions } = useTotalAwarePageSize(totalCount)
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil((totalCount || 0) / pageSize) || 1)
+    if (page > totalPages) setPage(totalPages)
+  }, [totalCount, pageSize, page])
   const [isLoading, setIsLoading] = useState(true)
   const [previewQueue, setPreviewQueue] = useState(null)
+
+  const tabChipOptions = useMemo(() => {
+    if (!statusCounts) return TABS.map((tab) => ({ value: tab.value, label: getStockDeductTabLabel(tab) }))
+    const seen = new Set()
+    let all = 0
+    for (const [key, value] of Object.entries(statusCounts)) {
+      const lower = String(key).toLowerCase()
+      if (seen.has(lower)) continue
+      seen.add(lower)
+      all += Number(value) || 0
+    }
+    return applyStatusCounts(
+      TABS.map((tab) => ({ value: tab.value, label: getStockDeductTabLabel(tab) })),
+      { ...statusCounts, all },
+    )
+  }, [statusCounts])
 
   const loadData = useCallback(async () => {
     setIsLoading(true)
     try {
-      const tab = TABS.find((t) => t.key === activeTab)
+      const tab = TABS.find((t) => t.value === activeTab)
       const items = await fetchPendingStockDeductQueues({
         status: tab?.status,
         search: searchValue.trim() || undefined,
@@ -56,9 +81,11 @@ function StockDeductQueuePage() {
       })
       setQueues(items.items)
       setTotalCount(items.totalCount)
+      setStatusCounts(items.statusCounts)
     } catch (error) {
       setQueues([])
       setTotalCount(0)
+      setStatusCounts(null)
       showError(error.message)
     } finally {
       setIsLoading(false)
@@ -72,26 +99,10 @@ function StockDeductQueuePage() {
     return () => clearTimeout(timer)
   }, [loadData])
 
-  const stats = useMemo(() => {
-    const waiting = queues.filter((q) => q.queueStatus === 'waiting').length
-    const insufficient = queues.filter((q) => q.queueStatus === 'insufficient').length
-    const confirmed = queues.filter((q) => q.queueStatus === 'confirmed').length
-    const cancelled = queues.filter((q) => q.queueStatus === 'cancelled').length
-    return [
-      { label: 'Chờ đóng gói', value: String(waiting), note: 'Thủ kho xác nhận theo Queue' },
-      {
-        label: 'Chờ hàng',
-        value: String(insufficient),
-        note: 'Thiếu nguyên liệu Kho - cần xử lý trước khi xác nhận',
-        warning: insufficient > 0,
-      },
-      { label: 'Đã trừ / Đã hủy', value: `${confirmed} / ${cancelled}`, note: 'Theo bộ lọc hiện tại' },
-    ]
-  }, [queues])
-
   return (
     <PageShell>
       <PageHeader
+        compact
         title="Chờ đóng gói / trừ Kho"
         titleInfo={
           canExecuteDeduct
@@ -108,24 +119,15 @@ function StockDeductQueuePage() {
         }}
       />
 
-      <div className="mb-6 flex flex-wrap items-center gap-3">
-        {TABS.map((tab) => (
-          <button
-            key={tab.key}
-            type="button"
-            onClick={() => {
-              setActiveTab(tab.key)
-              setPage(1)
-            }}
-            className={`rounded-xl px-5 py-2.5 text-sm font-semibold transition-colors ${
-              activeTab === tab.key
-                ? 'bg-[#538463] text-white shadow-md shadow-[#538463]/20'
-                : 'bg-white text-slate-600 hover:bg-slate-100'
-            }`}
-          >
-            {getStockDeductTabLabel(tab)}
-          </button>
-        ))}
+      <div className="mb-3 flex flex-wrap items-center gap-3">
+        <StatusFilterChips
+          options={tabChipOptions}
+          value={activeTab}
+          onChange={(value) => {
+            setActiveTab(value)
+            setPage(1)
+          }}
+        />
         <Link
           className="ml-auto rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
           to="/orders"
@@ -134,25 +136,10 @@ function StockDeductQueuePage() {
         </Link>
       </div>
 
-      <section className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-3">
-        {stats.map((stat) => (
-          <div
-            key={stat.label}
-            className={`rounded-2xl border p-5 shadow-sm ${
-              stat.warning ? 'border-amber-200 bg-amber-50' : 'border-slate-100 bg-white'
-            }`}
-          >
-            <p className="text-sm text-slate-500">{stat.label}</p>
-            <p className="mt-1 text-2xl font-bold text-slate-800">{stat.value}</p>
-            <p className="mt-1 text-xs text-slate-400">{stat.note}</p>
-          </div>
-        ))}
-      </section>
-
       <section className="rounded-3xl border border-slate-100 bg-white shadow-sm">
         <div className="border-b border-slate-50 p-6">
           <h2 className="text-xl font-bold text-slate-800">
-            {getStockDeductTabLabel(TABS.find((t) => t.key === activeTab))}
+            {getStockDeductTabLabel(TABS.find((t) => t.value === activeTab))}
           </h2>
         </div>
 
@@ -258,10 +245,11 @@ function StockDeductQueuePage() {
         <TablePagination
           page={page}
           pageSize={pageSize}
+          pageSizeOptions={pageSizeOptions}
           totalCount={totalCount}
           itemLabel="Queue đóng gói"
           onPageChange={setPage}
-          onPageSizeChange={setPageSize}
+          onPageSizeChange={(size) => { setPageSize(size); setPage(1) }}
         />
       </section>
 

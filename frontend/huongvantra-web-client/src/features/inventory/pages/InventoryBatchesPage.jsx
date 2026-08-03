@@ -2,16 +2,29 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
-import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
+import StatusFilterChips from '../../../components/shared/StatusFilterChips.jsx'
+import TablePagination from '../../../components/shared/TablePagination.jsx'
+import { useTotalAwarePageSize } from '../../../utils/totalAwarePageSize.js'
 import { showError } from '../../../app/toast.js'
 import { formatStockQuantity } from '../../products/utils/productDisplay.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
-import InventoryNavTabs from '../components/InventoryNavTabs.jsx'
 import { fetchWarehouseBatches } from '../services/warehouseBatchApi.js'
 
 const TIME_SORT_OPTIONS = [
   { value: 'desc', label: 'Mới → cũ', icon: 'arrow_downward' },
   { value: 'asc', label: 'Cũ → mới', icon: 'arrow_upward' },
+]
+
+const STOCK_FILTER_OPTIONS = [
+  { value: '', label: 'Tất cả tồn' },
+  { value: 'in_stock', label: 'Còn hàng' },
+  { value: 'depleted', label: 'Hết' },
+]
+
+const TYPE_FILTER_OPTIONS = [
+  { value: '', label: 'Tất cả loại' },
+  { value: 'import', label: 'Nhập nguyên liệu' },
+  { value: 'production', label: 'Sản xuất thành phẩm' },
 ]
 
 function getBatchSourceLabel(sourceType) {
@@ -82,8 +95,9 @@ function InventoryBatchesPage() {
   const [batches, setBatches] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [timeSort, setTimeSort] = useState('desc')
+  const [stockFilter, setStockFilter] = useState('')
+  const [typeFilter, setTypeFilter] = useState('')
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE)
   const [expandedId, setExpandedId] = useState(null)
 
   const loadData = useCallback(async () => {
@@ -107,16 +121,26 @@ function InventoryBatchesPage() {
   useEffect(() => {
     setPage(1)
     setExpandedId(null)
-  }, [searchInput, timeSort])
+  }, [searchInput, timeSort, stockFilter, typeFilter])
 
   const filteredBatches = useMemo(() => {
-    const matched = batches.filter((batch) => batchMatchesSearch(batch, searchInput))
+    const matched = batches.filter((batch) => {
+      if (!batchMatchesSearch(batch, searchInput)) return false
+      const hasStock = Number(batch.totalQuantityOnHand || 0) > 0 && batch.status !== 'depleted'
+      if (stockFilter === 'in_stock' && !hasStock) return false
+      if (stockFilter === 'depleted' && hasStock) return false
+      if (typeFilter === 'production' && !isProductionBatch(batch)) return false
+      if (typeFilter === 'import' && isProductionBatch(batch)) return false
+      return true
+    })
     const direction = timeSort === 'asc' ? 1 : -1
     return [...matched].sort((a, b) => (getBatchTime(a) - getBatchTime(b)) * direction)
-  }, [batches, searchInput, timeSort])
+  }, [batches, searchInput, timeSort, stockFilter, typeFilter])
+
+  const { pageSize, setPageSize, pageSizeOptions } = useTotalAwarePageSize(filteredBatches.length)
 
   useEffect(() => {
-    const totalPages = Math.max(1, Math.ceil(filteredBatches.length / pageSize))
+    const totalPages = Math.max(1, Math.ceil((filteredBatches.length || 0) / pageSize) || 1)
     if (page > totalPages) setPage(totalPages)
   }, [filteredBatches.length, page, pageSize])
 
@@ -133,6 +157,7 @@ function InventoryBatchesPage() {
   return (
     <PageShell>
       <PageHeader
+        compact
         title="Lô hàng nhập"
         titleInfo="Theo dõi tồn theo từng lô — mỗi lô có thể chứa nhiều mã hàng."
         searchPlaceholder="Tìm mã lô nội bộ, mã lô NCC, mã hàng, nhà cung cấp..."
@@ -141,52 +166,61 @@ function InventoryBatchesPage() {
           setSearchInput(value)
           setPage(1)
         }}
-        rightContent={<InventoryNavTabs />}
       />
 
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white p-1.5 shadow-sm">
-          <span className="hidden items-center gap-1 px-2 text-xs font-semibold uppercase tracking-wide text-slate-400 sm:inline-flex">
-            <span className="material-symbols-outlined text-[16px]">schedule</span>
-            Thời gian
-          </span>
-          <div className="inline-flex rounded-xl bg-slate-100 p-0.5" role="group" aria-label="Sắp xếp theo thời gian">
-            {TIME_SORT_OPTIONS.map((option) => {
-              const active = timeSort === option.value
-              return (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => {
-                    setTimeSort(option.value)
-                    setPage(1)
-                  }}
-                  className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold transition ${
-                    active
-                      ? 'bg-white text-[#356647] shadow-sm'
-                      : 'text-slate-500 hover:text-slate-700'
-                  }`}
-                  aria-pressed={active}
-                >
-                  <span className="material-symbols-outlined text-[16px]">{option.icon}</span>
-                  {option.label}
-                </button>
-              )
-            })}
+      <div className="mb-3 space-y-2.5">
+        <StatusFilterChips
+          options={STOCK_FILTER_OPTIONS}
+          value={stockFilter}
+          onChange={setStockFilter}
+          ariaLabel="Lọc theo tồn lô"
+        />
+        <StatusFilterChips
+          options={TYPE_FILTER_OPTIONS}
+          value={typeFilter}
+          onChange={setTypeFilter}
+          ariaLabel="Lọc theo loại lô"
+        />
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white p-1.5 shadow-sm">
+            <div className="inline-flex rounded-xl bg-slate-100 p-0.5" role="group" aria-label="Sắp xếp theo thời gian">
+              {TIME_SORT_OPTIONS.map((option) => {
+                const active = timeSort === option.value
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => {
+                      setTimeSort(option.value)
+                      setPage(1)
+                    }}
+                    className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold transition ${
+                      active
+                        ? 'bg-white text-[#356647] shadow-sm'
+                        : 'text-slate-500 hover:text-slate-700'
+                    }`}
+                    aria-pressed={active}
+                  >
+                    <span className="material-symbols-outlined text-[16px]">{option.icon}</span>
+                    {option.label}
+                  </button>
+                )
+              })}
+            </div>
           </div>
-        </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-          <p className="text-sm text-slate-500">
-            {filteredBatches.length} lô · tổng còn <strong>{formatStockQuantity(totalQty)}</strong> đơn vị
-          </p>
-          <Link
-            to="/inventory/import/create"
-            className="flex items-center gap-1.5 rounded-lg bg-[#356647] px-4 py-2 text-sm font-bold text-white hover:bg-[#2a5238]"
-          >
-            <span className="material-symbols-outlined text-base">add</span>
-            Tạo lô nhập
-          </Link>
+          <div className="flex flex-wrap items-center gap-3">
+            <p className="text-sm text-slate-500">
+              {filteredBatches.length} lô · tổng còn <strong>{formatStockQuantity(totalQty)}</strong> đơn vị
+            </p>
+            <Link
+              to="/inventory/import/create"
+              className="flex items-center gap-1.5 rounded-lg bg-[#356647] px-4 py-2 text-sm font-bold text-white hover:bg-[#2a5238]"
+            >
+              <span className="material-symbols-outlined text-base">add</span>
+              Tạo lô nhập
+            </Link>
+          </div>
         </div>
       </div>
 
@@ -196,14 +230,14 @@ function InventoryBatchesPage() {
             <thead className="bg-slate-50 text-xs font-bold uppercase tracking-wide text-slate-500">
               <tr>
                 <th className="px-6 py-3">Mã lô nội bộ</th>
-                <th className="px-4 py-3">Mã lô NCC</th>
-                <th className="px-4 py-3">Dòng SKU</th>
+                <th className="px-4 py-3">Trạng thái</th>
+                <th className="px-4 py-3">HSD</th>
                 <th className="px-4 py-3">Loại lô</th>
                 <th className="px-4 py-3">Tổng còn</th>
+                <th className="px-4 py-3">Mã lô NCC</th>
+                <th className="px-4 py-3">Dòng SKU</th>
                 <th className="px-4 py-3">Ngày nhập</th>
-                <th className="px-4 py-3">HSD</th>
                 <th className="px-4 py-3">NCC</th>
-                <th className="px-4 py-3">Trạng thái</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -214,8 +248,8 @@ function InventoryBatchesPage() {
               ) : filteredBatches.length === 0 ? (
                 <tr>
                   <td colSpan={9} className="px-6 py-8 text-slate-500">
-                    {searchInput.trim() ? (
-                      <>Không tìm thấy lô khớp từ khóa.</>
+                    {searchInput.trim() || stockFilter || typeFilter ? (
+                      <>Không tìm thấy lô khớp bộ lọc.</>
                     ) : (
                       <>
                         Chưa có lô —{' '}
@@ -248,23 +282,6 @@ function InventoryBatchesPage() {
                             </div>
                           ) : null}
                         </td>
-                        <td className="px-4 py-4 font-mono text-slate-700">{batch.lotCode || '—'}</td>
-                        <td className="px-4 py-4 text-slate-700">{batch.skuLineCount} SKU</td>
-                        <td className="px-4 py-4">
-                          <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${getBatchTypeClass(batch)}`}>
-                            {getBatchTypeLabel(batch)}
-                          </span>
-                        </td>
-                        <td className="px-4 py-4 font-semibold text-slate-800">
-                          {formatStockQuantity(batch.totalQuantityOnHand)}
-                        </td>
-                        <td className="whitespace-nowrap px-4 py-4 text-slate-600">
-                          {batch.createdAt ? formatVietnamDateTime(batch.createdAt) : '—'}
-                        </td>
-                        <td className="px-4 py-4 text-slate-600">
-                          {batch.expiresAt ? formatVietnamDateTime(batch.expiresAt) : '—'}
-                        </td>
-                        <td className="px-4 py-4 text-slate-600">{batch.supplier || '—'}</td>
                         <td className="px-4 py-4">
                           <span
                             className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
@@ -276,6 +293,23 @@ function InventoryBatchesPage() {
                             {batch.status === 'depleted' || !hasStock ? 'Hết' : 'Còn hàng'}
                           </span>
                         </td>
+                        <td className="px-4 py-4 text-slate-600">
+                          {batch.expiresAt ? formatVietnamDateTime(batch.expiresAt) : '—'}
+                        </td>
+                        <td className="px-4 py-4">
+                          <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${getBatchTypeClass(batch)}`}>
+                            {getBatchTypeLabel(batch)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-4 font-semibold text-slate-800">
+                          {formatStockQuantity(batch.totalQuantityOnHand)}
+                        </td>
+                        <td className="px-4 py-4 font-mono text-slate-700">{batch.lotCode || '—'}</td>
+                        <td className="px-4 py-4 text-slate-700">{batch.skuLineCount} SKU</td>
+                        <td className="whitespace-nowrap px-4 py-4 text-slate-600">
+                          {batch.createdAt ? formatVietnamDateTime(batch.createdAt) : '—'}
+                        </td>
+                        <td className="px-4 py-4 text-slate-600">{batch.supplier || '—'}</td>
                       </tr>
                       {isOpen ? (
                         <tr key={`${batch.id}-detail`}>
@@ -292,8 +326,8 @@ function InventoryBatchesPage() {
                                 {batch.items.map((item) => (
                                   <tr key={item.id}>
                                     <td className="py-2 pr-4 text-slate-700">
-                                      <p className="font-semibold text-slate-900">{item.productSnapshotName || '—'}</p>
-                                      <p className="font-mono text-xs text-slate-500">{item.skuCode}</p>
+                                      <p className="font-mono font-semibold text-[#356647]">{item.skuCode}</p>
+                                      <p className="text-xs text-slate-600">{item.productSnapshotName || '—'}</p>
                                     </td>
                                     <td className="py-2 pr-4 font-semibold">
                                       {formatStockQuantity(item.quantityOnHand)}
@@ -322,10 +356,11 @@ function InventoryBatchesPage() {
         <TablePagination
           page={page}
           pageSize={pageSize}
+          pageSizeOptions={pageSizeOptions}
           totalCount={filteredBatches.length}
           itemLabel="lô"
           onPageChange={setPage}
-          onPageSizeChange={setPageSize}
+          onPageSizeChange={(size) => { setPageSize(size); setPage(1) }}
           disabled={isLoading}
         />
       </section>

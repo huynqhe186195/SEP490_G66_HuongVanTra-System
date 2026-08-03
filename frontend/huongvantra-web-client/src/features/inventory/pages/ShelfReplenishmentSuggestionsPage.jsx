@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
-import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
+import TablePagination from '../../../components/shared/TablePagination.jsx'
+import { useTotalAwarePageSize } from '../../../utils/totalAwarePageSize.js'
 import ReasonSuggestionChips from '../../../components/shared/ReasonSuggestionChips.jsx'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
@@ -88,8 +89,13 @@ export default function ShelfReplenishmentSuggestionsPage() {
   const [searchValue, setSearchValue] = useState('')
   const [suggestions, setSuggestions] = useState([])
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE)
   const [totalCount, setTotalCount] = useState(0)
+  const { pageSize, setPageSize, pageSizeOptions } = useTotalAwarePageSize(totalCount)
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil((totalCount || 0) / pageSize) || 1)
+    if (page > totalPages) setPage(totalPages)
+  }, [totalCount, pageSize, page])
   const [isLoading, setIsLoading] = useState(true)
   const [expandedId, setExpandedId] = useState(null)
   const [dismissTarget, setDismissTarget] = useState(null)
@@ -146,6 +152,7 @@ export default function ShelfReplenishmentSuggestionsPage() {
   return (
     <PageShell>
       <PageHeader
+        compact
         title="Gợi ý bổ sung Kệ Hàng"
         titleInfo={
           `Sinh tự động khi phiếu kiểm ${STOCK_FLOW_TERMS.shelf} được duyệt và tồn khả dụng chạm ngưỡng tối thiểu.`
@@ -302,11 +309,15 @@ export default function ShelfReplenishmentSuggestionsPage() {
         <TablePagination
           page={page}
           pageSize={pageSize}
+          pageSizeOptions={pageSizeOptions}
           totalCount={totalCount}
           itemLabel="gợi ý"
           disabled={isLoading}
           onPageChange={setPage}
-          onPageSizeChange={setPageSize}
+          onPageSizeChange={(size) => {
+            setPageSize(size)
+            setPage(1)
+          }}
         />
       </section>
 

@@ -36,6 +36,47 @@ public class StockTransferRepository(InventoryDbContext _db) : IStockTransferRep
         DateTime? toDateUtc = null,
         string? sort = null)
     {
+        var query = BuildListQuery(status, search, sourceRequestId, transferType, createdBy, fromDateUtc, toDateUtc);
+        var totalCount = await query.CountAsync(ct);
+        var items = await ApplySort(query, sort)
+            .Include(transfer => transfer.Lines)
+            .Include(transfer => transfer.SourceRequest)
+            .Include(transfer => transfer.SourceSuggestion)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(ct);
+        return (items, totalCount);
+    }
+
+    public async Task<Dictionary<string, int>> CountByStatusAsync(
+        string? search,
+        CancellationToken ct = default,
+        Guid? sourceRequestId = null,
+        string? transferType = null,
+        Guid? createdBy = null,
+        DateTime? fromDateUtc = null,
+        DateTime? toDateUtc = null)
+    {
+        var query = BuildListQuery(null, search, sourceRequestId, transferType, createdBy, fromDateUtc, toDateUtc);
+        var rows = await query
+            .GroupBy(transfer => transfer.Status)
+            .Select(group => new { Status = group.Key, Count = group.Count() })
+            .ToListAsync(ct);
+        return rows.ToDictionary(
+            row => row.Status.ToString(),
+            row => row.Count,
+            StringComparer.OrdinalIgnoreCase);
+    }
+
+    private IQueryable<StockTransfer> BuildListQuery(
+        StockTransferStatus? status,
+        string? search,
+        Guid? sourceRequestId,
+        string? transferType,
+        Guid? createdBy,
+        DateTime? fromDateUtc,
+        DateTime? toDateUtc)
+    {
         var query = _db.StockTransfers.AsNoTracking().AsQueryable();
 
         if (status.HasValue)
@@ -44,7 +85,6 @@ public class StockTransferRepository(InventoryDbContext _db) : IStockTransferRep
         if (sourceRequestId.HasValue)
             query = query.Where(transfer => transfer.SourceRequestId == sourceRequestId.Value);
 
-        // Loại phiếu: "fromrequest" có yêu cầu nguồn, "direct" thì không.
         var normalizedType = (transferType ?? string.Empty).Trim().ToLowerInvariant();
         if (normalizedType == "fromrequest")
             query = query.Where(transfer => transfer.SourceRequestId != null);
@@ -74,15 +114,7 @@ public class StockTransferRepository(InventoryDbContext _db) : IStockTransferRep
                     || line.SkuNameSnapshot.ToLower().Contains(keyword)));
         }
 
-        var totalCount = await query.CountAsync(ct);
-        var items = await ApplySort(query, sort)
-            .Include(transfer => transfer.Lines)
-            .Include(transfer => transfer.SourceRequest)
-            .Include(transfer => transfer.SourceSuggestion)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .ToListAsync(ct);
-        return (items, totalCount);
+        return query;
     }
 
     private static IQueryable<StockTransfer> ApplySort(

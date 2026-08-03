@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import PageHeader from '../../../components/shared/PageHeader.jsx'
-import TablePagination, { TABLE_PAGE_SIZE } from '../../../components/shared/TablePagination.jsx'
+import TablePagination from '../../../components/shared/TablePagination.jsx'
+import { useTotalAwarePageSize } from '../../../utils/totalAwarePageSize.js'
 import ReasonSuggestionChips from '../../../components/shared/ReasonSuggestionChips.jsx'
 import { showError, showSuccess, showToast } from '../../../app/toast.js'
 import { useAuthSession } from '../../auth/hooks/useAuthSession.js'
@@ -2361,6 +2362,7 @@ function AdminProductCreationRequestsTable({
   isLoading,
   page,
   pageSize,
+  pageSizeOptions,
   totalCount,
   onPageChange,
   onPageSizeChange,
@@ -2422,6 +2424,7 @@ function AdminProductCreationRequestsTable({
       <TablePagination
         page={page}
         pageSize={pageSize}
+        pageSizeOptions={pageSizeOptions}
         totalCount={totalCount}
         onPageChange={onPageChange}
         onPageSizeChange={onPageSizeChange}
@@ -2644,7 +2647,6 @@ export default function ProductApprovalsPage() {
   const [statusFilter, setStatusFilter] = useState(initialRequestStatus)
   const [requestSearch, setRequestSearch] = useState('')
   const [listPage, setListPage] = useState(1)
-  const [listPageSize, setListPageSize] = useState(TABLE_PAGE_SIZE)
   const [detailRequest, setDetailRequest] = useState(null)
   const [decisionModal, setDecisionModal] = useState(null)
   const [importPreview, setImportPreview] = useState(null)
@@ -2675,17 +2677,19 @@ export default function ProductApprovalsPage() {
       return titleMatch || productMatch
     })
   }, [requests, requestSearch])
-  const pagedRequests = useMemo(() => {
-    const start = (listPage - 1) * listPageSize
-    return filteredRequests.slice(start, start + listPageSize)
-  }, [filteredRequests, listPage, listPageSize])
+  const { pageSize: listPageSize, setPageSize: setListPageSize, pageSizeOptions: listPageSizeOptions } = useTotalAwarePageSize(filteredRequests.length)
 
   useEffect(() => {
-    const maxPage = Math.max(1, Math.ceil(filteredRequests.length / listPageSize))
+    const maxPage = Math.max(1, Math.ceil((filteredRequests.length || 0) / listPageSize) || 1)
     if (listPage <= maxPage) return undefined
     const timer = window.setTimeout(() => setListPage(maxPage), 0)
     return () => window.clearTimeout(timer)
   }, [filteredRequests.length, listPage, listPageSize])
+
+  const pagedRequests = useMemo(() => {
+    const start = (listPage - 1) * listPageSize
+    return filteredRequests.slice(start, start + listPageSize)
+  }, [filteredRequests, listPage, listPageSize])
 
   const loadRequests = useCallback(async (nextStatus) => {
     setIsLoading(true)
@@ -3082,6 +3086,7 @@ export default function ProductApprovalsPage() {
   return (
     <PageShell>
       <PageHeader
+        compact
         title={showCreateForm ? 'Tạo biên bản yêu cầu' : 'Lịch sử tạo hàng hóa'}
         titleInfo={showCreateForm ? 'Tạo biên bản nhiều sản phẩm, gửi Manager duyệt.' : 'Manager duyệt yêu cầu tạo hàng hóa và theo dõi lịch sử trạng thái từng yêu cầu.'}
         rightContent={warehouse ? (
@@ -3288,6 +3293,7 @@ export default function ProductApprovalsPage() {
             isLoading={isLoading}
             page={listPage}
             pageSize={listPageSize}
+            pageSizeOptions={listPageSizeOptions}
             totalCount={filteredRequests.length}
             onPageChange={setListPage}
             onPageSizeChange={(size) => { setListPageSize(size); setListPage(1) }}
@@ -3352,6 +3358,7 @@ export default function ProductApprovalsPage() {
         <TablePagination
           page={listPage}
           pageSize={listPageSize}
+          pageSizeOptions={listPageSizeOptions}
           totalCount={filteredRequests.length}
           onPageChange={setListPage}
           onPageSizeChange={(size) => { setListPageSize(size); setListPage(1) }}
