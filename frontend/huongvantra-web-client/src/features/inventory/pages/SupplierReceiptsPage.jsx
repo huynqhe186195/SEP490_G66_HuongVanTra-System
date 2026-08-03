@@ -19,15 +19,12 @@ import {
   fetchSupplierReceiptById,
   fetchSupplierReceipts,
   rejectSupplierReceipt,
-  submitSupplierReceipt,
 } from '../services/supplierReceiptApi.js'
 
 const STATUS_OPTIONS = [
   { value: '', label: 'Tất cả' },
-  { value: 'draft', label: 'Nháp' },
-  { value: 'pendingapproval', label: 'Chờ duyệt' },
   { value: 'completed', label: 'Đã nhận' },
-  { value: 'rejected', label: 'Từ chối' },
+  { value: 'pendingapproval', label: 'Chờ duyệt (phiếu cũ)' },
   { value: 'cancelled', label: 'Đã hủy' },
 ]
 
@@ -69,7 +66,6 @@ function ReceiptRowActions({
   canReview,
   isOwn,
   actionId,
-  onSubmit,
   onApprove,
   onReject,
   onCancel,
@@ -81,11 +77,12 @@ function ReceiptRowActions({
   const busy = actionId === receipt.id
   const anyBusy = Boolean(actionId)
 
+  // Phiếu tạo mới áp tồn ngay nên luôn ở 'completed'. Các gate dưới đây chỉ còn
+  // phục vụ phiếu tồn dư từ quy trình duyệt cũ.
   const canEdit = canOperate && isOwn && (receipt.status === 'draft' || receipt.status === 'rejected')
-  const canSubmit = canEdit
   const canCancel = canOperate && isOwn && receipt.status === 'draft'
-  const canDecide = canReview && receipt.status === 'pendingapproval' && !isOwn
-  const hasMenu = canEdit || canSubmit || canCancel || canDecide
+  const canDecide = canReview && receipt.status === 'pendingapproval'
+  const hasMenu = canEdit || canCancel || canDecide
 
   function updateMenuPosition() {
     const rect = triggerRef.current?.getBoundingClientRect()
@@ -180,18 +177,6 @@ function ReceiptRowActions({
               <span className="material-symbols-outlined text-[16px] text-[#356647]">edit</span>
               Chỉnh sửa
             </Link>
-          ) : null}
-          {canSubmit ? (
-            <button
-              type="button"
-              role="menuitem"
-              disabled={anyBusy}
-              onClick={() => runAction(onSubmit)}
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-            >
-              <span className="material-symbols-outlined text-[16px] text-[#356647]">send</span>
-              Gửi duyệt
-            </button>
           ) : null}
           {canDecide ? (
             <>
@@ -324,10 +309,6 @@ function SupplierReceiptsPage() {
     await runAction(receipt, (id) => cancelSupplierReceipt(id, reason), (updated) => `Đã hủy ${updated.receiptCode}.`)
   }
 
-  async function handleSubmitForApproval(receipt) {
-    await runAction(receipt, submitSupplierReceipt, (updated) => `Đã gửi duyệt ${updated.receiptCode}. Tồn kho chưa thay đổi.`)
-  }
-
   async function handleApprove(receipt) {
     await runAction(receipt, approveSupplierReceipt, (updated) => `Đã duyệt ${updated.receiptCode}. Tồn Kho đã được cập nhật.`)
   }
@@ -394,7 +375,7 @@ function SupplierReceiptsPage() {
     <PageShell>
       <PageHeader
         title="Phiếu nhập nhà cung cấp"
-        titleInfo="Phiếu nhập từ NCC theo quy trình Nháp → Chờ duyệt → Đã nhận. Tồn Kho chỉ tăng khi phiếu được duyệt."
+        titleInfo="Thủ kho tạo phiếu nhập là tồn Kho tăng ngay, đồng thời sinh phiếu nhập PN- và cập nhật giá vốn."
         searchPlaceholder="Tìm mã phiếu, nhà cung cấp, SKU, mã lô..."
         searchValue={searchInput}
         onSearchChange={handleSearchChange}
@@ -492,7 +473,6 @@ function SupplierReceiptsPage() {
                             canReview={canReview}
                             isOwn={isOwnReceipt(receipt)}
                             actionId={actionId}
-                            onSubmit={() => handleSubmitForApproval(receipt)}
                             onApprove={() => handleApprove(receipt)}
                             onReject={() => handleReject(receipt)}
                             onCancel={() => handleCancel(receipt)}

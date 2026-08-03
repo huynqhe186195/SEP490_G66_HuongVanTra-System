@@ -71,6 +71,15 @@ function normalizeInitialLine(line) {
   }
 }
 
+function resolveBomLineName(line, material) {
+  const productName = line.materialName || material?.materialName || material?.name || ''
+  const variantName = line.componentVariantName || ''
+  if (productName && variantName && !variantName.toLowerCase().includes(productName.toLowerCase())) {
+    return `${productName} · ${variantName}`
+  }
+  return productName || variantName || `#${line.material_id}`
+}
+
 export default function ProductBomConfigModal({
   isOpen,
   onClose,
@@ -337,7 +346,7 @@ export default function ProductBomConfigModal({
                       <tr key={`${line.componentVariantId || line.material_id}-${index}`} className={line.isRequiredBaseComponent ? 'bg-emerald-50/45' : 'hover:bg-slate-50/60'}>
                         <td className="px-4 py-3 font-medium text-slate-800">
                           <span className="font-mono text-xs text-[#356647]">{line.componentSkuCode || line.material_id}</span>
-                          <span className="ml-2">{line.componentVariantName || material?.materialName || material?.name || `#${line.material_id}`}</span>
+                          <span className="ml-2">{resolveBomLineName(line, material)}</span>
                           {line.isRequiredBaseComponent ? (
                             <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-bold text-emerald-700">
                               <span className="material-symbols-outlined text-[14px]">lock</span>

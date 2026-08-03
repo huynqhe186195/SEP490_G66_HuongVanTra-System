@@ -38,8 +38,9 @@ const POS_PATH = '/pos'
  */
 export function needsWeeklyShiftGate(session) {
   if (!session) return false
-  if (hasPermission(session, 'MANAGE_EMPLOYEE')) return false
-  if (hasPermission(session, 'MANAGE_ROLE')) return false
+  // Khớp với StaffShiftGuard ở backend: ai xem được toàn bộ đơn (Manager/Admin/Kế toán)
+  // đều không thuộc ca quầy nên không bị gate.
+  if (canViewAllOrders(session)) return false
   if (isWarehouseRole(session)) return false
   if (isSalePosRole(session) || isSaleCodRole(session)) return true
   if (hasPermission(session, 'CREATE_ORDER')) return true

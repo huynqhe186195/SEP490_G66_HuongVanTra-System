@@ -3088,7 +3088,8 @@ public class InventoryLogic(
         ValidateSupplierReceiptHeaderMetadata(request);
         await ValidateSupplierReceiptDocumentAsync(BuildSupplierReceiptCheck(request), excludeReceiptId: null, ct);
 
-        var normalized = await NormalizeSupplierReceiptItemsAsync(request, ct);
+        // ProductService HTTP hoàn tất trước khi mở transaction Inventory.
+        var (normalized, catalog) = await NormalizeSupplierReceiptItemsAsync(request, ct);
         var now = DateTime.UtcNow;
         var countToday = await _supplierReceiptRepo.CountCreatedSinceAsync(now.Date, ct);
         var snapshot = await ResolveSupplierSnapshotAsync(request.SupplierId, request.SupplierName, ct);
@@ -3111,6 +3112,8 @@ public class InventoryLogic(
             CreatedBy = createdBy,
             CreatedByName = NormalizeSnapshotText(creator?.CreatedByName),
             CreatedByRoleName = NormalizeSnapshotText(creator?.CreatedByRoleName),
+            SubmittedBy = createdBy,
+            SubmittedAt = now,
             CreatedAt = now,
             UpdatedAt = now,
         };
@@ -3143,9 +3146,13 @@ public class InventoryLogic(
         }
 
         receipt.TotalAmount = CalculateSupplierReceiptTotal(receipt.Items);
-        await _supplierReceiptRepo.AddAsync(receipt, ct);
-        await _supplierReceiptRepo.SaveChangesAsync(ct);
-        return MapSupplierReceipt(receipt);
+
+        return await _unitOfWork.ExecuteInTransactionAsync(async innerCt =>
+        {
+            await _supplierReceiptRepo.AddAsync(receipt, innerCt);
+            await ApplySupplierReceiptToWarehouseAsync(receipt, createdBy, creator, catalog, innerCt);
+            return MapSupplierReceipt(receipt);
+        }, ct);
     }
 
     public async Task<SupplierReceiptResponse> UpdateSupplierReceiptAsync(
@@ -3166,7 +3173,7 @@ public class InventoryLogic(
         ValidateSupplierReceiptHeaderMetadata(request);
         await ValidateSupplierReceiptDocumentAsync(BuildSupplierReceiptCheck(request), excludeReceiptId: receipt.Id, ct);
 
-        var normalized = await NormalizeSupplierReceiptItemsAsync(request, ct);
+        var (normalized, _) = await NormalizeSupplierReceiptItemsAsync(request, ct);
         var now = DateTime.UtcNow;
         var snapshot = await ResolveSupplierSnapshotAsync(request.SupplierId, request.SupplierName, ct);
         receipt.SupplierId = request.SupplierId;
@@ -3295,8 +3302,6 @@ public class InventoryLogic(
         }
         if (approvalContext.Status != SupplierReceiptStatus.PendingApproval)
             throw new InventoryValidationException("Chỉ được duyệt phiếu nhập đang chờ xác nhận.");
-        if (approvalContext.CreatedBy == reviewerId)
-            throw new InventoryValidationException("Người tạo phiếu không được tự duyệt phiếu nhập của mình.");
 
         // ProductService HTTP is deliberately completed before the Inventory
         // transaction. The snapshot is rechecked against every receipt line
@@ -3315,9 +3320,6 @@ public class InventoryLogic(
 
             if (receipt.Status != SupplierReceiptStatus.PendingApproval)
                 throw new InventoryValidationException("Chỉ được duyệt phiếu nhập đang chờ xác nhận.");
-
-            if (receipt.CreatedBy == reviewerId)
-                throw new InventoryValidationException("Người tạo phiếu không được tự duyệt phiếu nhập của mình.");
 
             await ValidateSupplierReceiptDocumentAsync(BuildSupplierReceiptCheck(receipt), excludeReceiptId: receipt.Id, innerCt);
             await ApplySupplierReceiptToWarehouseAsync(
@@ -5787,7 +5789,7 @@ public class InventoryLogic(
         }
     }
 
-    private async Task<List<NormalizedSupplierReceiptItem>> NormalizeSupplierReceiptItemsAsync(
+    private async Task<(List<NormalizedSupplierReceiptItem> Items, ProductCatalogSnapshot Catalog)> NormalizeSupplierReceiptItemsAsync(
         UpsertSupplierReceiptRequest request,
         CancellationToken ct)
     {
@@ -5872,7 +5874,7 @@ public class InventoryLogic(
                 NormalizeSnapshotText(line.QualityNote)));
         }
 
-        return normalized;
+        return (normalized, catalog);
     }
 
     private async Task ValidateSupplierReceiptItemsForApprovalAsync(
@@ -5897,7 +5899,7 @@ public class InventoryLogic(
             if (!IsPositiveInteger(item.DocumentQuantity))
                 throw new InventoryValidationException($"Dòng {index + 1}: Số lượng theo chứng từ phải là số nguyên lớn hơn 0.");
             if (!item.UnitCost.HasValue || item.UnitCost.Value <= 0)
-                throw new InventoryValidationException($"Dòng {index + 1}: Đơn giá theo chứng từ phải lớn hơn 0 trước khi gửi duyệt.");
+                throw new InventoryValidationException($"Dòng {index + 1}: Đơn giá theo chứng từ phải lớn hơn 0.");
             if (item.SkuId == Guid.Empty)
                 throw new InventoryValidationException($"Dòng {index + 1}: SKU là bắt buộc.");
             var product = catalog.FindProductByVariant(item.SkuId)

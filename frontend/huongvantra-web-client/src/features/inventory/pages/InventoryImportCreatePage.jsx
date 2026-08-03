@@ -16,7 +16,6 @@ import { isSupplierReceiptEligibleSku } from '../../products/services/productsAp
 import {
   createSupplierReceipt,
   fetchSupplierReceiptById,
-  submitSupplierReceipt,
   updateSupplierReceipt,
 } from '../services/supplierReceiptApi.js'
 import { fetchActiveSuppliers } from '../services/suppliersApi.js'
@@ -97,7 +96,7 @@ function isPositiveIntegerText(value) {
 const IMPORT_FORMAT_TIPS = [
   'Bấm “Tải mẫu”, mở file vừa tải, điền vào các ô trống — đừng xóa dòng tiêu đề có chữ “Mã số” và “Số lượng”.',
   'Mỗi dòng hàng cần có: Mã số hàng (đúng như trên hệ thống) và Số lượng thực nhập (số nguyên, ví dụ 10).',
-  'Nên điền Đơn giá. Nếu thiếu đơn giá vẫn nạp được nhưng chỉ lưu nháp, chưa gửi duyệt được.',
+  'Phải điền Đơn giá cho mọi dòng hàng — phiếu áp tồn ngay khi tạo nên không được để trống.',
   'Ngày sản xuất / hạn dùng viết kiểu 01/07/2026. Tên nhà cung cấp phải giống tên đã có trong hệ thống.',
 ]
 
@@ -108,7 +107,7 @@ function tipsForImportErrors(items) {
     tips.add('Bấm “Tải mẫu”, dùng đúng file mẫu đó để điền, rồi nạp lại. Đừng tự tạo file mới từ Word/Excel trống.')
   }
   if (/chưa có dòng|không có dòng|trống/.test(joined) && /hàng|dữ liệu/.test(joined)) {
-    tips.add('Trong file mẫu, điền ít nhất 1 dòng hàng phía trên chữ “Cộng”: mã số hàng + số lượng (+ đơn giá nếu muốn gửi duyệt).')
+    tips.add('Trong file mẫu, điền ít nhất 1 dòng hàng phía trên chữ “Cộng”: mã số hàng + số lượng + đơn giá.')
   }
   if (/danh sách hàng|hệ thống chưa sẵn|chưa tải được|đang tải danh sách/.test(joined)) {
     tips.add('Bấm F5 (tải lại trang). Nếu vẫn lỗi, nhờ người phụ trách kỹ thuật khởi động lại hệ thống rồi thử lại.')
@@ -483,7 +482,7 @@ function InventoryImportCreatePage() {
     return supplierReceiptSkus.filter((sku) => supplierCatalogBySkuId.has(sku.id))
   }, [supplierCatalogBySkuId, supplierReceiptSkus])
 
-  // SP-12 / BR-15: lệch giá chào chỉ cảnh báo, không chặn lưu hay gửi duyệt.
+  // SP-12 / BR-15: lệch giá chào chỉ cảnh báo, không chặn nhập kho.
   const quotedPriceOf = useCallback((skuId) => {
     const quoted = Number(supplierCatalogBySkuId.get(skuId)?.quotedPrice)
     return Number.isFinite(quoted) && quoted > 0 ? quoted : null
@@ -663,7 +662,7 @@ function InventoryImportCreatePage() {
         )
       }
       if (!unitCost) {
-        previewWarnings.push(`Dòng ${rowLabel}: thiếu đơn giá — vẫn nạp được, nhưng chỉ lưu nháp.`)
+        previewWarnings.push(`Dòng ${rowLabel}: thiếu đơn giá — cần bổ sung trước khi nhập kho.`)
       }
       if (!String(raw.documentQuantity ?? '').trim() && actualQuantity) {
         previewWarnings.push(
@@ -775,7 +774,7 @@ function InventoryImportCreatePage() {
           fileName,
           items: allWarnings,
           tips: [
-            'File đã nạp. Kiểm tra nhà cung cấp và đơn giá trước khi gửi duyệt.',
+            'File đã nạp. Kiểm tra nhà cung cấp và đơn giá trước khi nhập kho.',
           ],
         })
         showSuccess(`Đã nạp ${nextLines.length} dòng hàng (cần kiểm tra thêm).`)
@@ -894,7 +893,7 @@ function InventoryImportCreatePage() {
           kind: 'warning',
           fileName,
           items: previewWarnings,
-          tips: ['File đã nạp. Kiểm tra đơn giá trước khi gửi duyệt.'],
+          tips: ['File đã nạp. Kiểm tra đơn giá trước khi nhập kho.'],
         })
         showSuccess(`Đã nạp ${nextLines.length} dòng hàng (cần kiểm tra thêm).`)
       } else {
@@ -948,7 +947,7 @@ function InventoryImportCreatePage() {
 
   const LOT_CODE_REGEX = /^[A-Za-z0-9\-_]{1,50}$/
 
-  function validateLines(requireUnitCost = false) {
+  function validateLines() {
     const errors = {}
     const warnings = {}
     const compositeKeys = new Set()
@@ -975,8 +974,8 @@ function InventoryImportCreatePage() {
         }
       }
 
-      // Draft có thể thiếu metadata lô; Submit bắt buộc đầy đủ.
-      if (requireUnitCost && !lotCode) {
+      // Phiếu áp tồn ngay khi tạo nên metadata lô bắt buộc đầy đủ.
+      if (!lotCode) {
         lineErr.lotCode = 'Mã lô NCC không được để trống.'
       } else if (lotCode.length > 50) {
         lineErr.lotCode = 'Mã lô NCC không được vượt quá 50 ký tự.'
@@ -996,13 +995,13 @@ function InventoryImportCreatePage() {
       }
       if (line.unitCost !== '' && (!Number.isFinite(unitCost) || unitCost < 0)) {
         lineErr.unitCost = 'Đơn giá không được âm.'
-      } else if (requireUnitCost && (line.unitCost === '' || unitCost <= 0)) {
-        lineErr.unitCost = 'Đơn giá theo chứng từ phải lớn hơn 0 trước khi gửi duyệt.'
+      } else if (line.unitCost === '' || unitCost <= 0) {
+        lineErr.unitCost = 'Đơn giá theo chứng từ phải lớn hơn 0.'
       }
 
       // Ngày SX
-      if (requireUnitCost && !line.manufacturedAt) {
-        lineErr.manufacturedAt = 'Ngày sản xuất là bắt buộc trước khi Submit.'
+      if (!line.manufacturedAt) {
+        lineErr.manufacturedAt = 'Ngày sản xuất là bắt buộc.'
       } else if (line.manufacturedAt) {
         if (line.manufacturedAt > today) {
           lineErr.manufacturedAt = 'Ngày sản xuất không được là ngày tương lai.'
@@ -1012,8 +1011,8 @@ function InventoryImportCreatePage() {
       }
 
       // Hạn dùng
-      if (requireUnitCost && !line.expiresAt) {
-        lineErr.expiresAt = 'Hạn dùng là bắt buộc trước khi Submit.'
+      if (!line.expiresAt) {
+        lineErr.expiresAt = 'Hạn dùng là bắt buộc.'
       } else if (line.expiresAt) {
         if (line.manufacturedAt && line.expiresAt <= line.manufacturedAt) {
           lineErr.expiresAt = 'Hạn dùng phải sau ngày sản xuất.'
@@ -1076,13 +1075,13 @@ function InventoryImportCreatePage() {
     return valid
   }
 
-  async function saveReceipt(submitForApproval) {
+  async function saveReceipt() {
     if (!canManage) {
-      showError('Chỉ Thủ kho được tạo hoặc gửi phiếu nhập nhà cung cấp.')
+      showError('Chỉ Thủ kho được tạo phiếu nhập nhà cung cấp.')
       return
     }
     const headerOk = validateHeader()
-    const linesOk = validateLines(submitForApproval)
+    const linesOk = validateLines(true)
     if (!headerOk || !linesOk) {
       setTimeout(() => {
         const firstError = document.querySelector('[data-error="true"]')
@@ -1134,12 +1133,7 @@ function InventoryImportCreatePage() {
       const receipt = editingReceiptId
         ? await updateSupplierReceipt(editingReceiptId, receiptPayload)
         : await createSupplierReceipt(receiptPayload)
-      if (submitForApproval) {
-        const submitted = await submitSupplierReceipt(receipt.id)
-        showSuccess(`Đã gửi phiếu ${submitted.receiptCode} chờ duyệt. Tồn kho chỉ tăng sau khi phiếu được duyệt.`)
-      } else {
-        showSuccess(`${editingReceiptId ? 'Đã cập nhật' : 'Đã lưu nháp'} phiếu ${receipt.receiptCode}. Phiếu chưa ảnh hưởng tồn kho.`)
-      }
+      showSuccess(`Đã nhập kho theo phiếu ${receipt.receiptCode}. Tồn Kho đã được cập nhật.`)
       navigate('/inventory/supplier-receipts')
     } catch (error) {
       showError(error.message)
@@ -1150,14 +1144,14 @@ function InventoryImportCreatePage() {
 
   function handleSubmit(event) {
     event.preventDefault()
-    return saveReceipt(true)
+    return saveReceipt()
   }
 
   return (
     <PageShell>
       <PageHeader
         title={editingReceiptId ? 'CẬP NHẬT PHIẾU NHẬP KHO' : 'PHIẾU NHẬP KHO'}
-        titleInfo="Thủ kho nhập lại dữ liệu từ chứng từ NCC. Thành tiền do hệ thống tính; tồn kho và Giá vốn trung bình chỉ cập nhật sau khi Manager duyệt."
+        titleInfo="Thủ kho nhập lại dữ liệu từ chứng từ NCC. Thành tiền do hệ thống tính; tồn Kho và Giá vốn trung bình cập nhật ngay khi tạo phiếu."
       />
 
       {!canManage ? (
@@ -1660,7 +1654,7 @@ function InventoryImportCreatePage() {
                                     updateLine(line.key, { unitCost: sanitizeVndInput(event.target.value) })
                                     setLineErrors((prev) => ({ ...prev, [line.key]: { ...(prev[line.key] ?? {}), unitCost: undefined } }))
                                   }}
-                                  placeholder="Có thể để trống khi lưu Draft"
+                                  placeholder="Đơn giá theo chứng từ"
                                 />
                                 <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-400">₫</span>
                               </div>
@@ -1787,15 +1781,7 @@ function InventoryImportCreatePage() {
               disabled={isSaving || isEditLoading || !canManage}
               className="rounded-xl bg-[#538463] px-6 py-2.5 text-sm font-bold text-white hover:bg-[#457053] disabled:opacity-50"
             >
-              {isSaving ? 'Đang xử lý...' : 'Gửi duyệt'}
-            </button>
-            <button
-              type="button"
-              disabled={isSaving || isEditLoading || !canManage}
-              onClick={() => saveReceipt(false)}
-              className="rounded-xl border border-[#538463] px-6 py-2.5 text-sm font-bold text-[#538463] hover:bg-[#f2f7f3] disabled:opacity-50"
-            >
-              Lưu nháp
+              {isSaving ? 'Đang xử lý...' : 'Nhập kho'}
             </button>
             <Link
               to="/inventory/supplier-receipts"

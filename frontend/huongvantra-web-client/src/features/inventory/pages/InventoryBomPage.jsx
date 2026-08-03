@@ -45,7 +45,12 @@ function buildBomRows(products) {
 }
 
 function getBomLineName(line) {
-  return line.componentVariantName || line.materialName || line.componentSkuCode || line.materialId || line.material_id || '—'
+  const productName = line.materialName || ''
+  const variantName = line.componentVariantName || ''
+  if (productName && variantName && !variantName.toLowerCase().includes(productName.toLowerCase())) {
+    return `${productName} · ${variantName}`
+  }
+  return productName || variantName || line.componentSkuCode || line.materialId || line.material_id || '—'
 }
 
 function getBomLineUnit(line) {
