@@ -547,6 +547,12 @@ export async function fetchPosOrderPaymentStatus(orderId) {
   }
 }
 
+// POS chỉ bán thành phẩm; nguyên liệu/bao bì thuộc luồng kho. Type rỗng (cache cũ) được cho qua để POS offline không trắng màn hình.
+function isFinishedGoods(product) {
+  const type = String(product?.productType ?? '').trim().toUpperCase()
+  return type === '' || type === 'THANH_PHAM'
+}
+
 export function mapPosProduct(item) {
   const productName = item.productName ?? item.ProductName ?? ''
   const packagingType = item.packagingType ?? item.PackagingType ?? ''
@@ -895,7 +901,7 @@ export async function fetchPosProducts({ storeId, search, limit = 30 }) {
       inventoryUnit: p.inventoryUnit ?? '',
       isSellable: p.isSellable ?? true,
       priceUnit: p.priceUnit ?? p.inventoryUnit ?? '',
-    })).filter((product) => product.isSellable !== false)
+    })).filter((product) => product.isSellable !== false && isFinishedGoods(product))
   }
 
   void storeId
@@ -906,6 +912,7 @@ export async function fetchPosProducts({ storeId, search, limit = 30 }) {
   query.set('page', '1')
   query.set('pageSize', String(skuPageSize))
   query.set('isActive', 'true')
+  query.set('productType', 'THANH_PHAM')
 
   const [data, productItems] = await Promise.all([
     apiRequestAuth(`/api/v1/store/skus?${query.toString()}`, { method: 'GET' }),
@@ -988,7 +995,7 @@ export async function fetchPosProducts({ storeId, search, limit = 30 }) {
       })
     })
     .filter(Boolean)
-    .filter((product) => product.isSellable !== false)
+    .filter((product) => product.isSellable !== false && isFinishedGoods(product))
 }
 
 export function resolvePosStoreId() {

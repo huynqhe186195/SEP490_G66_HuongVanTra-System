@@ -25,7 +25,8 @@ public record GetProductSkusRequest(
     Guid? ProductId,
     bool? IsActive,
     int Page = 1,
-    int PageSize = 20);
+    int PageSize = 20,
+    string? ProductType = null);
 
 // Create/Update SKU requests are deprecated — variants are managed through product endpoints
 public record CreateProductSkuRequest(

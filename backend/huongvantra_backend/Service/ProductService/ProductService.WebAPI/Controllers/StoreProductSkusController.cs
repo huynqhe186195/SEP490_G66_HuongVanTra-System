@@ -24,11 +24,12 @@ public class StoreProductSkusController(ProductSkuLogic _skuLogic) : ControllerB
         [FromQuery] Guid? productId,
         [FromQuery] bool? isActive,
         [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 20)
+        [FromQuery] int pageSize = 20,
+        [FromQuery] string? productType = null)
     {
         if (IsWarehouse) return Forbid();
         return Ok(await _skuLogic.GetPagedAsync(
-            new GetProductSkusRequest(search, productId, isActive, page, pageSize),
+            new GetProductSkusRequest(search, productId, isActive, page, pageSize, productType),
             CatalogViewScope.Store));
     }
 

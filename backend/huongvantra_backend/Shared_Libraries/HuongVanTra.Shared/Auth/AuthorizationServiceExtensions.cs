@@ -59,6 +59,15 @@ public static class AuthorizationServiceExtensions
                     PermissionNames.CreateCodOrder,
                     PermissionNames.ManageEmployee)));
 
+            // Kiểm kê: ngoài Sale/Manager còn có Thủ kho (kiểm kê Kho tổng) — vị trí siết ở controller.
+            options.AddPolicy(PermissionNames.StocktakeCreateAccess, policy =>
+                policy.Requirements.Add(new AnyPermissionRequirement(
+                    PermissionNames.CreateOrder,
+                    PermissionNames.CreatePosOrder,
+                    PermissionNames.CreateCodOrder,
+                    PermissionNames.ManageEmployee,
+                    PermissionNames.OperateWarehouse)));
+
             options.AddPolicy(PermissionNames.ViewCatalogAccess, policy =>
                 policy.Requirements.Add(new AnyPermissionRequirement(
                     PermissionNames.ViewInventory,

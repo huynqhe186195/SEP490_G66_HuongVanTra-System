@@ -5,6 +5,7 @@ using ProductService.Application.DTOs.Responses;
 using ProductService.Application.Interfaces;
 using ProductService.Application.Validation;
 using ProductService.Domain.Entities;
+using ProductService.Domain.Enums;
 using ProductService.Domain.Exceptions;
 using ProductService.Infrastructure.Data;
 
@@ -45,6 +46,12 @@ public class ProductSkuLogic(
             query = query.Where(v => v.IsActive);
         else if (request.IsActive == false)
             query = query.Where(v => !v.IsActive);
+
+        if (!string.IsNullOrWhiteSpace(request.ProductType)
+            && Enum.TryParse<ProductType>(request.ProductType, ignoreCase: true, out var productTypeFilter))
+        {
+            query = query.Where(v => v.Product.ProductType == productTypeFilter);
+        }
 
         var totalCount = await query.CountAsync();
         var items = await query

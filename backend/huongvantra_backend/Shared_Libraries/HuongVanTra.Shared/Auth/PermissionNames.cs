@@ -40,6 +40,10 @@ public static class PermissionNames
     public const string ApplyDebtPayment = "APPLY_DEBT_PAYMENT";
     public const string StockAdjustmentReadAccess = "STOCK_ADJUSTMENT_READ_ACCESS";
     public const string StockAdjustmentCreateAccess = "STOCK_ADJUSTMENT_CREATE_ACCESS";
+
+    /// <summary>Tạo phiếu kiểm kê: Sale (kệ hàng) hoặc Thủ kho (kho tổng). Vị trí được siết thêm ở controller.</summary>
+    public const string StocktakeCreateAccess = "STOCKTAKE_CREATE_ACCESS";
+
     public const string ViewCatalogAccess = "VIEW_CATALOG_ACCESS";
     public const string WarehouseOrManagerOps = "WAREHOUSE_OR_MANAGER_OPS";
     public const string MaterialsDeductAccess = "MATERIALS_DEDUCT_ACCESS";

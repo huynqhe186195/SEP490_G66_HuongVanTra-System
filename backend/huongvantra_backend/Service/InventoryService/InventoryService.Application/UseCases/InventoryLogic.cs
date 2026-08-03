@@ -4404,7 +4404,7 @@ public class InventoryLogic(
         ProductCatalogSnapshot? catalog = null;
         try
         {
-            catalog = await _productCatalogClient.GetCatalogAsync(ct);
+            catalog = await _productCatalogClient.GetCatalogForVariantIdsAsync(items.Select(i => i.SkuId), ct);
         }
         catch (InventoryValidationException)
         {
@@ -6761,9 +6761,11 @@ public class InventoryLogic(
         List<ProductionOrderLineInput> materials,
         CancellationToken ct)
     {
-        // Full catalog is intentionally used here: consumer-side validation must
-        // resolve every BOM component without choosing an arbitrary SKU.
-        var catalog = await _productCatalogClient.GetCatalogAsync(ct);
+        // bom-catalog tự resolve component variants của từng SKU đầu ra, nên chỉ cần
+        // gửi SKU đầu ra + nguyên liệu; endpoint full catalog yêu cầu JWT nên service-to-service gọi sẽ 401.
+        var focusedSkuIds = outputs.Select(o => o.FinishedSkuId)
+            .Concat(materials.Select(m => m.MaterialSkuId));
+        var catalog = await _productCatalogClient.GetCatalogForVariantIdsAsync(focusedSkuIds, ct);
 
         foreach (var output in outputs)
         {

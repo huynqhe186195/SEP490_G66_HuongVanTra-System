@@ -129,7 +129,7 @@ public class StocktakeRequestsController(InventoryLogic _logic) : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Policy = PermissionNames.StockAdjustmentCreateAccess)]
+    [Authorize(Policy = PermissionNames.StocktakeCreateAccess)]
     public async Task<IActionResult> Create([FromBody] CreateStocktakeRequest request, CancellationToken ct)
     {
         var userId = User.GetUserId();

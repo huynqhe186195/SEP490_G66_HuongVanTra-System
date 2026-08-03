@@ -320,6 +320,10 @@ function CreateStocktakeModal({ onClose, onSaved, fixedLocation }) {
     [location, skuSearch, skus],
   )
   const stockBySkuId = useMemo(() => new Map(stocks.map((stock) => [stock.skuId, stock])), [stocks])
+  const allowedSkuCount = useMemo(
+    () => skus.filter((sku) => isSkuAllowedForLocation(sku, location)).length,
+    [location, skus],
+  )
   const updateSkuDropdownPosition = useCallback(() => {
     const rect = skuInputWrapRef.current?.getBoundingClientRect()
     if (!rect) return
@@ -393,6 +397,30 @@ function CreateStocktakeModal({ onClose, onSaved, fixedLocation }) {
         note: '',
       },
     ])
+    setSelectedSkuId('')
+    setSkuSearch('')
+    setIsSkuComboboxOpen(false)
+  }
+
+  function addAllEligibleSkus() {
+    const allowed = skus.filter((sku) => isSkuAllowedForLocation(sku, location))
+    if (allowed.length === 0) {
+      showError('Không có mặt hàng phù hợp với vị trí kiểm kê.')
+      return
+    }
+    setRows((current) => {
+      const bySkuId = new Map(current.map((row) => [row.skuId, row]))
+      allowed.forEach((sku) => {
+        if (bySkuId.has(sku.id)) return
+        bySkuId.set(sku.id, {
+          skuId: sku.id,
+          actualQuantity: String(getSystemQuantity(stockBySkuId.get(sku.id), location)),
+          reasonCode: 'OTHER',
+          note: '',
+        })
+      })
+      return [...bySkuId.values()]
+    })
     setSelectedSkuId('')
     setSkuSearch('')
     setIsSkuComboboxOpen(false)
@@ -599,6 +627,14 @@ function CreateStocktakeModal({ onClose, onSaved, fixedLocation }) {
                 </div>
               ) : null}
             </div>
+            <button
+              type="button"
+              onClick={addAllEligibleSkus}
+              disabled={isLoading || allowedSkuCount === 0}
+              className="rounded-xl border border-[#356647] bg-[#356647] px-4 py-2 text-sm font-bold text-white hover:bg-[#2b5239] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Chọn tất cả ({allowedSkuCount})
+            </button>
             <button type="button" onClick={downloadTemplate} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">
               Tải mẫu CSV
             </button>
