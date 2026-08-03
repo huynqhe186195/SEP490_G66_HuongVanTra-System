@@ -105,7 +105,7 @@ for (const m of materials) {
   const skuId = guid(0xa2000000 + vi)
   skus.push({
     skuId, prodId, code: `${m.code}-1KG`, barcode: `8934673${String(300000 + vi).padStart(6, '0')}`,
-    vname: '1kg', cost: m.c, retail: m.r, wg: 1000, shelf: 0, wh: Math.max(40, 55 + vi),
+    vname: 'Theo gram', cost: m.c, retail: m.r, wg: 1000, shelf: 0, wh: Math.max(40, 55 + vi),
     type: 'NL', name: m.n, sell: 0, pts: 0, sync: false, min: 20, max: 2000,
   })
   vi++; pi++
@@ -126,7 +126,7 @@ for (const m of packaging) {
 }
 
 const fgBom = skus.filter((s) => s.type === 'FG').slice(0, 8)
-const nlTea = skus.find((s) => s.code === 'NL-TRAXANH-1KG')
+const nlTea = skus.find((s) => s.code === 'NL-TRAXANH')
 const bbZip = skus.find((s) => s.code === 'BB-ZIP-100')
 const bbHop = skus.find((s) => s.code === 'BB-HOP-NHO')
 
