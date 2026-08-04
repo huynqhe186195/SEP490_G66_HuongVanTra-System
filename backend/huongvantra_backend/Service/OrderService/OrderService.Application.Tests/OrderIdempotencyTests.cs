@@ -160,6 +160,44 @@ public class OrderIdempotencyTests
             Times.Once);
     }
 
+    [Fact]
+    public async Task PosRetry_AfterInventoryFailure_DoesNotReturnUnstockedOrderAsSuccess()
+    {
+        var store = new ConcurrentOrderStore();
+        var inventoryCatalog = new Mock<IInventoryCatalogClient>();
+        inventoryCatalog
+            .Setup(client => client.PreparePosStockDeductionAsync(
+                It.Is<InventoryStockHandlingRequest>(request => request.PreviewOnly),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync((InventoryStockHandlingRequest request, CancellationToken _) =>
+                new InventoryStockHandlingResponse(
+                    request.OrderId, request.OrderCode, "FinishedGoods", false,
+                    "Stock previewed", [], []));
+        inventoryCatalog
+            .Setup(client => client.PreparePosStockDeductionAsync(
+                It.Is<InventoryStockHandlingRequest>(request => !request.PreviewOnly),
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InventoryStockHandlingException("Inventory unavailable"));
+
+        var logic = CreateLogic(
+            new TestOrderRepository(store),
+            new Mock<IOrderEventPublisher>().Object,
+            inventoryCatalog.Object);
+        var actorId = Guid.NewGuid();
+        var clientKey = Guid.NewGuid().ToString("D");
+
+        await Assert.ThrowsAsync<OrderValidationException>(() => logic.CreateAsync(
+            CreateRequest(OrderChannel.POS), Access(actorId), actorId, "Sale POS", clientKey));
+
+        await Assert.ThrowsAsync<OrderDependencyUnavailableException>(() => logic.CreateAsync(
+            CreateRequest(OrderChannel.POS), Access(actorId), actorId, "Sale POS", clientKey));
+
+        Assert.Equal(1, store.Count);
+        inventoryCatalog.Verify(client => client.PreparePosStockDeductionAsync(
+            It.Is<InventoryStockHandlingRequest>(request => !request.PreviewOnly),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
     private static OrderLogic CreateLogic(
         IOrderRepository repository,
         IOrderEventPublisher eventPublisher,

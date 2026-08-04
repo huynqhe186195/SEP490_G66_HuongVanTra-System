@@ -275,7 +275,10 @@ public class OrderLogic(
         {
             var existing = await _orderRepo.GetByIdempotencyKeyAsync(effectiveIdempotencyKey, ct);
             if (existing != null)
+            {
+                EnsureIdempotentOrderCanBeReturned(existing);
                 return MapToResponse(existing);
+            }
         }
 
         var skuProfiles = await GetRequiredSkuProfilesAsync(
@@ -615,7 +618,14 @@ public class OrderLogic(
             {
                 var existing = await _orderRepo.GetByIdempotencyKeyAsync(effectiveIdempotencyKey, ct);
                 if (existing is not null)
+                {
+                    // A simultaneous request can lose the unique-claim race while
+                    // the winning request is still completing InventoryService.
+                    // Preserve the established idempotent response for that race;
+                    // the initial lookup above protects later manual retries after
+                    // a failed inventory call has left PendingDeduction persisted.
                     return MapToResponse(existing);
+                }
 
                 throw;
             }
@@ -2207,6 +2217,19 @@ public class OrderLogic(
         order.OrderChannel == OrderChannel.POS
         && order.OrderStatus is OrderStatus.Completed or OrderStatus.WaitingMaterials
         && (order.OrderDetails?.Count ?? 0) > 0;
+
+    private static void EnsureIdempotentOrderCanBeReturned(Order order)
+    {
+        // The idempotency claim is deliberately persisted before calling InventoryService.
+        // If that remote call fails, the retry must not look like a successful checkout:
+        // the POS UI would otherwise print a receipt for stock that was never deducted.
+        if (order.OrderChannel == OrderChannel.POS
+            && order.InventorySyncStatus == InventorySyncStatus.PendingDeduction)
+        {
+            throw new OrderDependencyUnavailableException(
+                "Đơn POS trước đó chưa đồng bộ được tồn kho. Hóa đơn chưa được xác nhận; vui lòng thử lại sau khi kiểm tra dịch vụ Kho.");
+        }
+    }
 
     private static bool ShouldSuppressLegacyOrderPlacedEvent(Order order) =>
         order.OrderChannel == OrderChannel.POS;

@@ -5603,6 +5603,10 @@ public class InventoryLogic(
                 CreatedAt = now,
                 UpdatedAt = now,
             };
+            // BatchCode is a required unique database column. Set it explicitly instead
+            // of relying on the WarehouseBatch getter fallback so this automatic POS
+            // Warehouse -> Shelf transfer is safe with the physical MySQL schema.
+            batch.BatchCode = batch.LotCode;
             batch.Items.Add(new WarehouseBatchItem
             {
                 Id = Guid.NewGuid(),
