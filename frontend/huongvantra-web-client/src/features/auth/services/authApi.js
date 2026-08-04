@@ -151,6 +151,16 @@ export async function me(accessToken) {
   }
 }
 
+/** false nếu phiên bị thay bởi đăng nhập ở thiết bị khác / đã thu hồi. */
+export async function checkAuthSessionActive() {
+  try {
+    await apiRequestAuth('/api/auth/session', { method: 'GET', silentAuthErrors: true })
+    return true
+  } catch {
+    return false
+  }
+}
+
 export async function logout(accessToken, refreshToken) {
   return apiRequest('/api/auth/logout', {
     method: 'POST',
@@ -172,6 +182,27 @@ export async function resetPassword(username, newPassword) {
   return apiRequestAuth('/api/auth/reset-password', {
     method: 'POST',
     body: JSON.stringify({ username, newPassword }),
+  })
+}
+
+export async function requestForgotPasswordOtp(phone) {
+  return apiRequest('/api/auth/forgot-password', {
+    method: 'POST',
+    body: JSON.stringify({ phone }),
+  })
+}
+
+export async function verifyForgotPasswordOtp(phone, otp) {
+  return apiRequest('/api/auth/forgot-password/verify-otp', {
+    method: 'POST',
+    body: JSON.stringify({ phone, otp }),
+  })
+}
+
+export async function resetPasswordWithToken(resetToken, newPassword) {
+  return apiRequest('/api/auth/forgot-password/reset', {
+    method: 'POST',
+    body: JSON.stringify({ resetToken, newPassword }),
   })
 }
 

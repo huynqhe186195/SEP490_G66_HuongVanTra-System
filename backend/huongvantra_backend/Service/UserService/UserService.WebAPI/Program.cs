@@ -7,10 +7,12 @@ using HuongVanTra.Shared.Audit;
 using MassTransit;
 using UserService.Application.Authorization;
 using UserService.Application.Interfaces;
+using UserService.Application.Options;
 using UserService.Application.UseCases;
 using UserService.Domain.Constants;
 using UserService.Infrastructure.Data;
 using UserService.Infrastructure.Repositories;
+using UserService.Infrastructure.Services;
 using UserService.WebAPI.Middlewares;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -32,8 +34,16 @@ builder.Services.AddScoped<IRoleRepository, RoleRepository>();
 builder.Services.AddScoped<IEmployeeRepository, EmployeeRepository>();
 builder.Services.AddScoped<IPermissionRepository, PermissionRepository>();
 builder.Services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
+builder.Services.AddScoped<IPasswordResetChallengeRepository, PasswordResetChallengeRepository>();
 builder.Services.AddScoped<IShiftRepository, ShiftRepository>();
+builder.Services.Configure<SmsOptions>(builder.Configuration.GetSection(SmsOptions.SectionName));
+builder.Services.AddHttpClient("esms", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(20);
+});
+builder.Services.AddSingleton<ISmsSender, EsmsSmsSender>();
 builder.Services.AddScoped<AuthLogic>();
+builder.Services.AddScoped<PasswordResetLogic>();
 builder.Services.AddScoped<UserLogic>();
 builder.Services.AddScoped<RoleLogic>();
 builder.Services.AddScoped<PermissionLogic>();

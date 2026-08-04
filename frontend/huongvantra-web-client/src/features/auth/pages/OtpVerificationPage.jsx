@@ -1,36 +1,41 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { showError, showSuccess } from '../../../app/toast.js'
+import { requestForgotPasswordOtp, verifyForgotPasswordOtp } from '../services/authApi.js'
 
 const OTP_LENGTH = 6
-const RESEND_WAIT_SECONDS = 30
 
 function OtpVerificationPage() {
   const navigate = useNavigate()
   const { state } = useLocation()
-  const phone = state?.phone || '09** *** 888'
+  const phoneDigits = state?.phoneDigits || ''
+  const maskedPhone = state?.maskedPhone || '09** *** ***'
+  const initialResend = Number(state?.resendAfterSeconds) || 60
 
   const [otp, setOtp] = useState(Array(OTP_LENGTH).fill(''))
   const [errorMessage, setErrorMessage] = useState('')
   const [isVerifying, setIsVerifying] = useState(false)
-  const [showGatewayAlert, setShowGatewayAlert] = useState(true)
-  const [resendCountdown, setResendCountdown] = useState(0)
+  const [resendCountdown, setResendCountdown] = useState(initialResend)
   const [isResending, setIsResending] = useState(false)
+  const [devOtp, setDevOtp] = useState(state?.devOtp || '')
 
   const inputRefs = useRef([])
+
+  useEffect(() => {
+    if (!phoneDigits) {
+      navigate('/forgot-password', { replace: true })
+    }
+  }, [phoneDigits, navigate])
 
   useEffect(() => {
     inputRefs.current[0]?.focus()
   }, [])
 
   useEffect(() => {
-    if (!resendCountdown) {
-      return
-    }
-
+    if (!resendCountdown) return undefined
     const interval = setInterval(() => {
       setResendCountdown((current) => (current > 0 ? current - 1 : 0))
     }, 1000)
-
     return () => clearInterval(interval)
   }, [resendCountdown])
 
@@ -46,12 +51,9 @@ function OtpVerificationPage() {
 
   const handleOtpChange = (index, value) => {
     const clean = value.replace(/\D/g, '')
-    if (!clean && value) {
-      return
-    }
+    if (!clean && value) return
 
     setErrorMessage('')
-
     const nextOtp = [...otp]
     nextOtp[index] = clean.slice(-1)
     setOtp(nextOtp)
@@ -67,54 +69,68 @@ function OtpVerificationPage() {
     }
   }
 
-  const handleVerify = () => {
-    if (!canVerify) {
-      return
-    }
-
-    setIsVerifying(true)
-    setErrorMessage('')
-
-    setTimeout(() => {
-      setIsVerifying(false)
-
-      if (otpValue !== '123456') {
-        setErrorMessage('Mã OTP không chính xác hoặc đã hết hạn. Vui lòng thử lại.')
-        return
-      }
-
-      navigate('/login')
-    }, 1000)
+  const handleOtpPaste = (event) => {
+    event.preventDefault()
+    const pasted = event.clipboardData.getData('text').replace(/\D/g, '').slice(0, OTP_LENGTH)
+    if (!pasted) return
+    const next = Array(OTP_LENGTH).fill('')
+    pasted.split('').forEach((digit, i) => {
+      next[i] = digit
+    })
+    setOtp(next)
+    inputRefs.current[Math.min(pasted.length, OTP_LENGTH) - 1]?.focus()
   }
 
-  const handleResendOtp = () => {
-    if (isResendLocked) {
-      return
+  const handleVerify = async () => {
+    if (!canVerify) return
+    setIsVerifying(true)
+    setErrorMessage('')
+    try {
+      const result = await verifyForgotPasswordOtp(phoneDigits, otpValue)
+      const resetToken = result.resetToken ?? result.ResetToken
+      if (!resetToken) throw new Error('Không nhận được mã đặt lại mật khẩu.')
+      navigate('/forgot-password/reset', {
+        replace: true,
+        state: {
+          resetToken,
+          expiresAtUtc: result.expiresAtUtc ?? result.ExpiresAtUtc,
+          maskedPhone,
+        },
+      })
+    } catch (error) {
+      setErrorMessage(error.message || 'Mã OTP không chính xác hoặc đã hết hạn.')
+    } finally {
+      setIsVerifying(false)
     }
+  }
 
+  const handleResendOtp = async () => {
+    if (isResendLocked) return
     setIsResending(true)
     setErrorMessage('')
-
-    setTimeout(() => {
+    try {
+      const result = await requestForgotPasswordOtp(phoneDigits)
+      const otpHint = result.devOtp ?? result.DevOtp ?? ''
+      setDevOtp(otpHint)
+      setResendCountdown(result.resendAfterSeconds ?? result.ResendAfterSeconds ?? 60)
+      setOtp(Array(OTP_LENGTH).fill(''))
+      inputRefs.current[0]?.focus()
+      if (otpHint) showSuccess(`Mã OTP mới (dev): ${otpHint}`)
+      else showSuccess('Đã gửi lại mã OTP (nếu số tồn tại).')
+    } catch (error) {
+      showError(error.message || 'Không gửi lại được OTP.')
+    } finally {
       setIsResending(false)
-      setShowGatewayAlert(true)
-      setResendCountdown(RESEND_WAIT_SECONDS)
-    }, 1200)
+    }
   }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-[#fbf9f1] p-4 text-[#1b1c17] [font-family:'Manrope',sans-serif]">
       <main className="w-full max-w-[480px] space-y-6">
-        {showGatewayAlert ? (
-          <div className="flex items-start gap-2 rounded-xl border border-[#ba1a1a]/20 bg-[#ffdad6] p-5 text-[#93000a] shadow-[0px_8px_24px_rgba(0,0,0,0.08)]">
-            <span className="material-symbols-outlined mt-0.5">error_outline</span>
-            <div className="flex-1">
-              <p className="mb-1 text-lg font-semibold">Hệ thống gián đoạn</p>
-              <p className="text-sm">OTP gửi thất bại (lỗi Gateway). Vui lòng kiểm tra kết nối mạng hoặc thử lại sau vài phút.</p>
-            </div>
-            <button className="rounded-full p-1 transition-colors hover:bg-[#93000a]/10" type="button" onClick={() => setShowGatewayAlert(false)}>
-              <span className="material-symbols-outlined">close</span>
-            </button>
+        {devOtp ? (
+          <div className="rounded-xl border border-[#356647]/20 bg-[#e8f5e9] p-4 text-sm text-[#1f5033]">
+            <p className="font-semibold">Chế độ demo — OTP hiện tại: {devOtp}</p>
+            <p className="mt-1 text-xs opacity-80">Production sẽ tắt ExposeOtpInResponse; mã cũng được ghi trong log UserService.</p>
           </div>
         ) : null}
 
@@ -126,11 +142,11 @@ function OtpVerificationPage() {
 
           <h2 className="mb-2 text-xl font-semibold">Xác thực OTP</h2>
           <p className="mb-6 text-sm text-[#414942]">
-            Mã xác thực đã được gửi tới số điện thoại <br />
-            <span className="font-bold text-[#1b1c17]">{phone}</span>
+            Nhập mã xác thực đã gửi tới số điện thoại <br />
+            <span className="font-bold text-[#1b1c17]">{maskedPhone}</span>
           </p>
 
-          <div className="mb-6 flex justify-center gap-2">
+          <div className="mb-6 flex justify-center gap-2" onPaste={handleOtpPaste}>
             {otp.map((digit, index) => (
               <input
                 key={`otp-${index}`}
@@ -192,21 +208,17 @@ function OtpVerificationPage() {
             </button>
 
             <p className="text-xs text-[#414942]">
-              Bạn chưa nhận được mã? Thử lại sau <span className="font-bold text-[#356647]">{formatTimer(resendCountdown)}</span>
+              Gửi lại sau <span className="font-bold text-[#356647]">{formatTimer(resendCountdown)}</span>
             </p>
           </div>
 
           <div className="mt-6 border-t border-[#c1c9c0]/30 pt-6">
-            <Link className="inline-flex items-center gap-1 text-sm text-[#356647] hover:underline" to="/login">
+            <Link className="inline-flex items-center gap-1 text-sm text-[#356647] hover:underline" to="/forgot-password">
               <span className="material-symbols-outlined text-[16px]">arrow_back</span>
-              Quay lại trang đăng nhập
+              Đổi số điện thoại
             </Link>
           </div>
         </div>
-
-        <p className="px-6 text-center text-xs text-[#717971]">
-          Gặp sự cố kỹ thuật? Liên hệ bộ phận hỗ trợ qua <span className="font-bold underline">hotro@huongvantra.vn</span>
-        </p>
       </main>
     </div>
   )

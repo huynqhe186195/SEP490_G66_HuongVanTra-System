@@ -38,6 +38,8 @@ public class DuplicatePermissionException(string name)
 
 public class UserValidationException(string message) : Exception(message);
 
+public class PasswordResetException(string message) : Exception(message);
+
 public class ShiftTemplateNotFoundException(Guid id)
     : Exception($"Shift template with id '{id}' was not found.");
 

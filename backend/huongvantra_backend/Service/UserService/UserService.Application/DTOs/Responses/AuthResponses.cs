@@ -8,6 +8,18 @@ public record LoginResponse(
     List<string> Roles,
     List<string> Permissions);
 
+public record ForgotPasswordResponse(
+    bool Sent,
+    string Message,
+    string MaskedPhone,
+    int ResendAfterSeconds,
+    /// <summary>Chỉ trả khi PasswordReset:ExposeOtpInResponse = true (dev/demo).</summary>
+    string? DevOtp);
+
+public record VerifyForgotPasswordOtpResponse(
+    string ResetToken,
+    DateTime ExpiresAtUtc);
+
 public record UserResponse(
     Guid Id,
     string Username,

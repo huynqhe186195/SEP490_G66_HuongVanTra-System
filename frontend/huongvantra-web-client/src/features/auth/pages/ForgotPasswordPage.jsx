@@ -1,56 +1,53 @@
 import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { showError, showSuccess } from '../../../app/toast.js'
+import { requestForgotPasswordOtp } from '../services/authApi.js'
 
 function ForgotPasswordPage() {
   const navigate = useNavigate()
-  const [phone, setPhone] = useState('0912345678')
+  const [phone, setPhone] = useState('')
   const [touched, setTouched] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [attempted, setAttempted] = useState(false)
-  const [isSuccess, setIsSuccess] = useState(false)
+  const [devOtpHint, setDevOtpHint] = useState('')
 
-  const hasPhoneFormatError = useMemo(() => {
-    const digits = phone.replace(/\D/g, '')
-    return digits.length > 0 && digits.length !== 10
-  }, [phone])
+  const digits = useMemo(() => phone.replace(/\D/g, ''), [phone])
+  const hasPhoneFormatError = digits.length > 0 && digits.length !== 10 && !(digits.startsWith('02') && digits.length === 11)
+  const showErrorState = touched && (digits.length === 0 || hasPhoneFormatError)
 
-  const hasNotFoundError = attempted && !isSuccess
-  const showError = (touched && hasPhoneFormatError) || hasNotFoundError
-
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault()
     setTouched(true)
-    setAttempted(false)
-    setIsSuccess(false)
+    setDevOtpHint('')
 
-    const digits = phone.replace(/\D/g, '')
-
-    if (digits.length !== 10) {
+    if (digits.length !== 10 && !(digits.startsWith('02') && digits.length === 11)) {
       return
     }
 
     setIsSubmitting(true)
-
-    setTimeout(() => {
-      setIsSubmitting(false)
-
-      if (digits !== '0912345678') {
-        setAttempted(true)
-        setIsSuccess(false)
-        return
+    try {
+      const result = await requestForgotPasswordOtp(digits)
+      const masked = result.maskedPhone ?? result.MaskedPhone ?? `${digits.slice(0, 2)}** *** ${digits.slice(-3)}`
+      const otp = result.devOtp ?? result.DevOtp ?? ''
+      if (otp) {
+        setDevOtpHint(otp)
+        showSuccess(`Mã OTP (dev): ${otp}`)
+      } else {
+        showSuccess(result.message ?? result.Message ?? 'Đã gửi mã OTP (nếu số tồn tại).')
       }
 
-      setAttempted(true)
-      setIsSuccess(true)
-
-      setTimeout(() => {
-        navigate('/forgot-password/otp', {
-          state: {
-            phone: `${digits.slice(0, 2)}** *** ${digits.slice(-3)}`,
-          },
-        })
-      }, 600)
-    }, 1100)
+      navigate('/forgot-password/otp', {
+        state: {
+          phoneDigits: digits,
+          maskedPhone: masked,
+          devOtp: otp || undefined,
+          resendAfterSeconds: result.resendAfterSeconds ?? result.ResendAfterSeconds ?? 60,
+        },
+      })
+    } catch (error) {
+      showError(error.message || 'Không gửi được mã OTP.')
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -70,12 +67,6 @@ function ForgotPasswordPage() {
             <div className="h-1 w-12 rounded-full bg-[#fec25b]" />
             <span className="text-xs font-semibold uppercase tracking-widest text-[#f6fff5]">Premium Quality</span>
           </div>
-
-          <img
-            alt="Tea leaves"
-            className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-40 mix-blend-overlay"
-            src="https://lh3.googleusercontent.com/aida-public/AB6AXuB01an7T4oTDf4LZhoVv1RiTIHv4ym75_YGdww7vP0ZgYVppXClhgjXgUWHQKX5_Js24ttsL25OJ7IXWPeKKJsKwQWyRHdpJtWQh5D9A0g4VfYZONi0XhsC8KBXYqGlx9qXne0nCCtluFGCxcuJLO1H-vsbwHyILOL3WQtksWEX33QLfeFwDBdMYS1MHFNQOv6iTNc3G1SlCDpJ_go2ziHi9JS5eU1oqP_dRTnF8RCX7AlWzZjtnuIVfiE6LAAIMiY-5ZTHhnjyS9Sn"
-          />
         </section>
 
         <section className="relative flex flex-1 flex-col justify-center bg-[#fbf9f1] px-8 py-12 md:px-20">
@@ -90,7 +81,9 @@ function ForgotPasswordPage() {
                 <span className="material-symbols-outlined text-[32px] text-[#356647]">lock_reset</span>
               </div>
               <h2 className="mb-2 text-3xl font-bold text-[#1b1c17]">Quên mật khẩu?</h2>
-              <p className="text-sm text-[#414942]">Nhập số điện thoại liên kết với tài khoản. Chúng tôi sẽ gửi mã xác minh để đặt lại mật khẩu.</p>
+              <p className="text-sm text-[#414942]">
+                Nhập số điện thoại đã lưu trên hồ sơ nhân viên. Hệ thống sẽ gửi mã OTP để đặt lại mật khẩu.
+              </p>
             </header>
 
             <form className="space-y-6" onSubmit={handleSubmit}>
@@ -102,39 +95,35 @@ function ForgotPasswordPage() {
                 <div className="relative transition-transform focus-within:scale-[1.01]">
                   <input
                     id="identifier"
-                    className={`h-14 w-full rounded-xl border-2 bg-white px-12 text-[#1b1c17] outline-none transition-all ${showError ? 'border-[#ba1a1a]' : 'border-[#c1c9c0] focus:border-[#356647]'}`}
+                    className={`h-14 w-full rounded-xl border-2 bg-white px-12 text-[#1b1c17] outline-none transition-all ${showErrorState ? 'border-[#ba1a1a]' : 'border-[#c1c9c0] focus:border-[#356647]'}`}
                     placeholder="09xx xxx xxx"
-                    type="text"
+                    type="tel"
+                    inputMode="numeric"
+                    autoComplete="off"
+                    name="forgot-phone"
                     value={phone}
                     onBlur={() => setTouched(true)}
-                    onChange={(event) => {
-                      setPhone(event.target.value)
-                      setAttempted(false)
-                      setIsSuccess(false)
-                    }}
+                    onChange={(event) => setPhone(event.target.value)}
                   />
 
-                  <span className={`material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 ${showError ? 'text-[#ba1a1a]' : 'text-[#717971]'}`}>
+                  <span className={`material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 ${showErrorState ? 'text-[#ba1a1a]' : 'text-[#717971]'}`}>
                     phone_iphone
                   </span>
-
-                  {showError ? <span className="material-symbols-outlined absolute right-4 top-1/2 -translate-y-1/2 text-[#ba1a1a]">error</span> : null}
                 </div>
 
-                {showError ? (
+                {showErrorState ? (
                   <div className="ml-1 mt-2 flex items-center gap-1.5 text-[#ba1a1a]">
                     <span className="material-symbols-outlined text-[16px]">warning</span>
                     <p className="text-xs font-semibold">
-                      {hasPhoneFormatError ? 'Số điện thoại không hợp lệ. Vui lòng nhập đủ 10 số.' : 'Số điện thoại không tồn tại trong hệ thống'}
+                      {digits.length === 0
+                        ? 'Vui lòng nhập số điện thoại.'
+                        : 'Số điện thoại không hợp lệ. Vui lòng nhập đủ 10 số.'}
                     </p>
                   </div>
                 ) : null}
 
-                {attempted && isSuccess ? (
-                  <div className="ml-1 mt-2 flex items-center gap-1.5 text-[#1f5033]">
-                    <span className="material-symbols-outlined text-[16px]">check_circle</span>
-                    <p className="text-xs font-semibold">Đã gửi mã OTP thành công đến số điện thoại của bạn.</p>
-                  </div>
+                {devOtpHint ? (
+                  <p className="ml-1 text-xs font-semibold text-[#1f5033]">OTP (dev): {devOtpHint}</p>
                 ) : null}
               </div>
 
@@ -156,10 +145,6 @@ function ForgotPasswordPage() {
                 )}
               </button>
             </form>
-
-            <footer className="mt-12 border-t border-[#c1c9c0]/40 pt-8 text-center">
-       
-            </footer>
           </div>
         </section>
       </main>

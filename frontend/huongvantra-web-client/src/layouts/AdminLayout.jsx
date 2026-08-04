@@ -8,13 +8,14 @@ import OfflineBanner from '../features/pos/components/OfflineBanner.jsx'
 import SyncStatusBadge from '../features/pos/components/SyncStatusBadge.jsx'
 import Sidebar from '../components/shared/Sidebar.jsx'
 import { getNavigationItemsForSession } from '../app/navigation.js'
-import { isWarehouseUserRole } from '../features/auth/services/authApi.js'
-import { syncSessionFromServer } from '../features/auth/services/authApi.js'
-import { loadAuthSession, saveAuthSession } from '../features/auth/services/authSession.js'
+import { isWarehouseUserRole, checkAuthSessionActive, syncSessionFromServer } from '../features/auth/services/authApi.js'
+import { clearAuthSession, loadAuthSession, saveAuthSession } from '../features/auth/services/authSession.js'
+import { showError } from '../app/toast.js'
 import { useNetworkStatus } from '../hooks/useNetworkStatus.js'
 import { syncOfflineCache } from '../lib/offlineCache.js'
 
 const OFFLINE_SYNC_INTERVAL_MS = 30 * 60 * 1000
+const SESSION_CHECK_INTERVAL_MS = 20 * 1000
 
 const SIDEBAR_COLLAPSED_KEY = 'hvt-sidebar-collapsed'
 const SIDEBAR_WIDTH_KEY = 'hvt-sidebar-width'
@@ -72,7 +73,38 @@ function AdminLayout() {
       clearInterval(interval)
       document.removeEventListener('visibilitychange', handleVisibility)
     }
-  }, [isOnline])
+  }, [isOnline, authSession?.permissions])
+
+  // Single-session: nếu tài khoản đăng nhập ở thiết bị khác → logout client này.
+  useEffect(() => {
+    if (!authSession?.accessToken) return undefined
+
+    let cancelled = false
+    const kickIfSuperseded = async () => {
+      if (cancelled || document.visibilityState === 'hidden') return
+      const active = await checkAuthSessionActive()
+      if (cancelled || active) return
+      showError('Tài khoản đã đăng nhập ở thiết bị khác. Bạn đã bị đăng xuất.')
+      clearAuthSession()
+      window.location.href = '/login'
+    }
+
+    void kickIfSuperseded()
+    const interval = window.setInterval(() => {
+      void kickIfSuperseded()
+    }, SESSION_CHECK_INTERVAL_MS)
+
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void kickIfSuperseded()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(interval)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [authSession?.accessToken])
 
   const toggleSidebarCollapsed = () => {
     setSidebarCollapsed((prev) => {

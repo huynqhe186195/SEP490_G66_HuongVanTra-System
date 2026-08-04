@@ -5,6 +5,7 @@ import RootRedirect from './RootRedirect.jsx'
 import ForgotPasswordPage from '../features/auth/pages/ForgotPasswordPage.jsx'
 import LoginPage from '../features/auth/pages/LoginPage.jsx'
 import OtpVerificationPage from '../features/auth/pages/OtpVerificationPage.jsx'
+import ResetPasswordPage from '../features/auth/pages/ResetPasswordPage.jsx'
 import ContractsPage from '../features/contracts/pages/ContractsPage.jsx'
 import ContractFormPage from '../features/contracts/pages/ContractFormPage.jsx'
 import ContractDetailPage from '../features/contracts/pages/ContractDetailPage.jsx'
@@ -80,6 +81,7 @@ function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/forgot-password/otp" element={<OtpVerificationPage />} />
+      <Route path="/forgot-password/reset" element={<ResetPasswordPage />} />
       <Route path="/customer-display" element={<CustomerDisplayPage />} />
 
       <Route element={<AdminLayout />}>

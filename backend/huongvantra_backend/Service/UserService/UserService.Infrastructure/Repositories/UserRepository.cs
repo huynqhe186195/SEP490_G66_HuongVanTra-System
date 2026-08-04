@@ -27,6 +27,34 @@ public class UserRepository(UserDbContext context) : IUserRepository
                         .ThenInclude(rp => rp.Permission)
             .FirstOrDefaultAsync(u => u.Username == username && !u.IsDeleted);
 
+    public async Task<User?> GetByEmployeePhoneAsync(string phoneDigits)
+    {
+        if (string.IsNullOrWhiteSpace(phoneDigits))
+            return null;
+
+        var candidates = await context.Users
+            .Include(u => u.Employee)
+            .Include(u => u.UserRoles)
+                .ThenInclude(ur => ur.Role)
+            .Where(u =>
+                !u.IsDeleted
+                && u.IsActive
+                && u.Employee != null
+                && u.Employee.BankAccountInfo != null
+                && u.Employee.BankAccountInfo != "")
+            .ToListAsync();
+
+        return candidates.FirstOrDefault(u =>
+            NormalizePhoneDigits(u.Employee!.BankAccountInfo) == phoneDigits);
+    }
+
+    private static string NormalizePhoneDigits(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return string.Empty;
+        return new string(value.Where(char.IsDigit).ToArray());
+    }
+
     public async Task<IReadOnlyList<User>> GetLegacySaleUsersAsync() =>
         await context.Users
             .AsNoTracking()

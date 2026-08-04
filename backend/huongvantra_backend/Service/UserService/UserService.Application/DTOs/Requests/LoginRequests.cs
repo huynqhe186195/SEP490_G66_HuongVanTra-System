@@ -10,6 +10,12 @@ public record AuthChangePasswordRequest(string CurrentPassword, string NewPasswo
 
 public record ResetPasswordRequest(string Username, string NewPassword);
 
+public record ForgotPasswordRequest(string Phone);
+
+public record VerifyForgotPasswordOtpRequest(string Phone, string Otp);
+
+public record ResetPasswordWithTokenRequest(string ResetToken, string NewPassword);
+
 public record UpdateMyProfileRequest(
     string FullName,
     string? Phone,

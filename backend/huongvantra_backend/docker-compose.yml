@@ -97,6 +97,15 @@ services:
       RabbitMQ__Host: rabbitmq
       RabbitMQ__Username: ${RABBITMQ_USER:-hvt}
       RabbitMQ__Password: ${RABBITMQ_PASS:-hvtrabbit123}
+      # eSMS — đặt trong .env: ESMS_API_KEY, ESMS_SECRET_KEY, ESMS_BRANDNAME; Sms__Enabled=true khi gửi thật
+      Sms__Enabled: ${SMS_ENABLED:-false}
+      Sms__Provider: Esms
+      Sms__ApiKey: ${ESMS_API_KEY:-}
+      Sms__SecretKey: ${ESMS_SECRET_KEY:-}
+      Sms__BrandName: ${ESMS_BRANDNAME:-}
+      Sms__Sandbox: ${ESMS_SANDBOX:-1}
+      Sms__OtpTemplate: "${ESMS_OTP_TEMPLATE:-HVT: Ma OTP dat lai mat khau la {otp}. Hieu luc {minutes} phut. Khong chia se ma nay.}"
+      PasswordReset__ExposeOtpInResponse: ${PASSWORD_RESET_EXPOSE_OTP:-true}
     ports:
       - "5002:8080"
     networks:

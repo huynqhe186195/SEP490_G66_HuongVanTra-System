@@ -19,6 +19,8 @@ public class AuthLogic(
     IRefreshTokenRepository refreshTokenRepo,
     IConfiguration config)
 {
+    public const string SessionVersionClaim = "session_version";
+
     private const int AccessTokenHours = 8;
     private const int RefreshTokenDays = 7;
 
@@ -32,9 +34,13 @@ public class AuthLogic(
         if (!BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
             throw new InvalidCredentialsException();
 
+        // Phiên mới: thu hồi mọi refresh token cũ → client khác không gia hạn được.
+        await refreshTokenRepo.RevokeAllForUserAsync(user.Id);
+        user.SessionVersion = checked(user.SessionVersion + 1);
         user.LastLoginAt = DateTime.UtcNow;
         userRepo.Update(user);
         await userRepo.SaveChangesAsync();
+        await refreshTokenRepo.SaveChangesAsync();
 
         return await IssueTokensAsync(user);
     }
@@ -77,10 +83,12 @@ public class AuthLogic(
             throw new InvalidCredentialsException();
 
         user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
+        user.SessionVersion = checked(user.SessionVersion + 1);
         user.UpdatedAt = DateTime.UtcNow;
         userRepo.Update(user);
         await refreshTokenRepo.RevokeAllForUserAsync(userId);
         await userRepo.SaveChangesAsync();
+        await refreshTokenRepo.SaveChangesAsync();
     }
 
     public async Task ResetPasswordAsync(ResetPasswordRequest request, IReadOnlyList<string>? actorPermissions = null)
@@ -97,10 +105,23 @@ public class AuthLogic(
         }
 
         user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
+        user.SessionVersion = checked(user.SessionVersion + 1);
         user.UpdatedAt = DateTime.UtcNow;
         userRepo.Update(user);
         await refreshTokenRepo.RevokeAllForUserAsync(user.Id);
         await userRepo.SaveChangesAsync();
+        await refreshTokenRepo.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// true nếu JWT còn khớp SessionVersion hiện tại (chưa bị đăng nhập ở thiết bị khác).
+    /// </summary>
+    public async Task EnsureSessionActiveAsync(Guid userId, int tokenSessionVersion)
+    {
+        var user = await userRepo.GetByIdAsync(userId) ?? throw new UserNotFoundException(userId);
+        if (!user.IsActive) throw new UserInactiveException();
+        if (user.SessionVersion != tokenSessionVersion)
+            throw new InvalidRefreshTokenException();
     }
 
     private async Task<LoginResponse> IssueTokensAsync(User user)
@@ -137,6 +158,7 @@ public class AuthLogic(
             new(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
             new(JwtRegisteredClaimNames.UniqueName, user.Username),
             new("username", user.Username),
+            new(SessionVersionClaim, user.SessionVersion.ToString()),
         };
         if (!string.IsNullOrWhiteSpace(user.Employee?.FullName))
         {

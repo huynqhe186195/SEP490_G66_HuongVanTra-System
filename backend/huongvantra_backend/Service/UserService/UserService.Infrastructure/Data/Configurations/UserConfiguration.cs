@@ -15,6 +15,7 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
         builder.HasIndex(u => u.Username).IsUnique();
         builder.Property(u => u.PasswordHash).HasMaxLength(255).IsRequired();
         builder.Property(u => u.IsActive).HasDefaultValue(true);
+        builder.Property(u => u.SessionVersion).HasDefaultValue(0);
         builder.Property(u => u.CreatedAt).IsRequired();
         builder.Property(u => u.UpdatedAt);
         builder.Property(u => u.IsDeleted).HasDefaultValue(false);

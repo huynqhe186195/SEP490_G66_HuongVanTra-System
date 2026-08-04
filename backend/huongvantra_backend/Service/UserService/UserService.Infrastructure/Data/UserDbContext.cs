@@ -14,6 +14,7 @@ public class UserDbContext : DbContext
     public DbSet<UserRole> UserRoles => Set<UserRole>();
     public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<PasswordResetChallenge> PasswordResetChallenges => Set<PasswordResetChallenge>();
     public DbSet<ShiftTemplate> ShiftTemplates => Set<ShiftTemplate>();
     public DbSet<ShiftSlot> ShiftSlots => Set<ShiftSlot>();
     public DbSet<ShiftRegistration> ShiftRegistrations => Set<ShiftRegistration>();

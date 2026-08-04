@@ -10,13 +10,37 @@ namespace UserService.WebAPI.Controllers;
 
 [ApiController]
 [Route("api/auth")]
-public class AuthController(AuthLogic authLogic, UserLogic userLogic) : ControllerBase
+public class AuthController(AuthLogic authLogic, UserLogic userLogic, PasswordResetLogic passwordResetLogic) : ControllerBase
 {
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginRequest request)
     {
         var result = await authLogic.LoginAsync(request);
         return Ok(result);
+    }
+
+    [HttpPost("forgot-password")]
+    [AllowAnonymous]
+    public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest request)
+    {
+        var result = await passwordResetLogic.RequestOtpAsync(request);
+        return Ok(result);
+    }
+
+    [HttpPost("forgot-password/verify-otp")]
+    [AllowAnonymous]
+    public async Task<IActionResult> VerifyForgotPasswordOtp([FromBody] VerifyForgotPasswordOtpRequest request)
+    {
+        var result = await passwordResetLogic.VerifyOtpAsync(request);
+        return Ok(result);
+    }
+
+    [HttpPost("forgot-password/reset")]
+    [AllowAnonymous]
+    public async Task<IActionResult> ResetPasswordWithToken([FromBody] ResetPasswordWithTokenRequest request)
+    {
+        await passwordResetLogic.ResetWithTokenAsync(request);
+        return NoContent();
     }
 
     [HttpPost("refresh-token")]
@@ -42,6 +66,21 @@ public class AuthController(AuthLogic authLogic, UserLogic userLogic) : Controll
             ?? User.FindFirstValue("sub")!);
         var result = await userLogic.GetByIdAsync(userId);
         return Ok(result);
+    }
+
+    /// <summary>Kiểm tra phiên còn hiệu lực (chưa bị đăng nhập ở thiết bị khác).</summary>
+    [HttpGet("session")]
+    [Authorize]
+    public async Task<IActionResult> Session()
+    {
+        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? User.FindFirstValue("sub")!);
+        var versionRaw = User.FindFirstValue(AuthLogic.SessionVersionClaim) ?? "0";
+        if (!int.TryParse(versionRaw, out var tokenVersion))
+            tokenVersion = 0;
+
+        await authLogic.EnsureSessionActiveAsync(userId, tokenVersion);
+        return Ok(new { active = true, sessionVersion = tokenVersion });
     }
 
     [HttpPost("update-profile")]

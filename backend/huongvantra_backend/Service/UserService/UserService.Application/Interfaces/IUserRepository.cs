@@ -6,6 +6,7 @@ public interface IUserRepository
 {
     Task<User?> GetByIdAsync(Guid id);
     Task<User?> GetByUsernameAsync(string username);
+    Task<User?> GetByEmployeePhoneAsync(string phoneDigits);
     Task<IReadOnlyList<User>> GetLegacySaleUsersAsync();
     Task<bool> ExistsAsync(string username);
     Task<(IEnumerable<User> Items, int TotalCount)> GetAllAsync(int page, int pageSize, bool onlyDeleted = false);

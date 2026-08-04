@@ -570,8 +570,8 @@ function groupAdminManagerSidebar(items, isAdmin) {
   const peopleEntries = isAdmin
     ? [['/staff', 'Nhân sự']]
     : [
-      ['/shifts', 'Lịch làm việc'],
       ['/staff', 'Nhân sự'],
+      ['/shifts', 'Lịch làm việc'],
     ]
   if (isAdmin) {
     if (byPath.has('/shifts')) consumed.add('/shifts')
@@ -591,11 +591,11 @@ function groupAdminManagerSidebar(items, isAdmin) {
   // Hệ thống — chỉ Admin
   if (isAdmin) {
     const systemChildren = takeNavLeaves(byPath, consumed, [
-      ['/admin/system-activities', 'Nhật ký hệ thống'],
       ['/admin/users', 'Tài khoản'],
       ['/admin/phan-quyen', 'Phân quyền'],
       ['/admin/membership-tiers', 'Hạng khách hàng'],
       ['/admin/promotions', 'Mã giảm giá'],
+      ['/admin/system-activities', 'Nhật ký hệ thống'],
     ])
     if (systemChildren.length) {
       result.push({
@@ -798,9 +798,19 @@ export function resolveHomeRoute(authSession) {
 
   const roles = authSession.roles ?? []
 
-  // Admin luôn vào trang thống kê bán hàng để giám sát.
+  // Admin → Quản lý tài khoản
   if (isAdminSession(roles) || hasPermissionManageRole(authSession)) {
-    return '/dashboard'
+    return '/admin/users'
+  }
+
+  // Manager → Nhân sự
+  if (isAgencyManagerSession(roles)) {
+    return '/staff'
+  }
+
+  // Thủ kho → Tồn kho / Kho
+  if (hasAnyRoleGroup(roles, ['inventoryManager'])) {
+    return '/inventory'
   }
 
   for (const [groupKey, route] of Object.entries(ROLE_HOME_ROUTES)) {
