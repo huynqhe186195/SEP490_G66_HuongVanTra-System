@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import {
   formatPromotionLabel,
   formatPromotionMinimumOrderText,
@@ -70,6 +71,7 @@ export default function PosPaymentSidebar({
   useCustomShippingAddress,
   onSavedShippingAddressChange,
   isLoadingShippingAddresses,
+  onRefreshShippingAddresses,
   hasShippingAddress,
   orderDiscountPercentInput,
   onOrderDiscountPercentChange,
@@ -198,28 +200,76 @@ export default function PosPaymentSidebar({
 
           {isTakeaway ? (
             <div className="rounded-xl bg-white p-3 shadow-sm">
-              <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[#717971]" htmlFor="sidebar-shipping-address">
-                Địa chỉ giao hàng
-              </label>
-              {isLoadingShippingAddresses ? (
-                <p className="text-xs text-[#717971]">Đang tải địa chỉ đã giao...</p>
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <label className="block text-xs font-bold uppercase tracking-wider text-[#717971]" htmlFor="sidebar-shipping-address">
+                  Địa chỉ giao hàng
+                </label>
+                <div className="flex items-center gap-2">
+                  {selectedCustomer?.customerId ? (
+                    <Link
+                      to={`/customers/${selectedCustomer.customerId}/addresses`}
+                      className="text-[11px] font-semibold text-[#356647] underline underline-offset-2"
+                      title="Quản lý địa chỉ khách"
+                    >
+                      Quản lý
+                    </Link>
+                  ) : null}
+                  {typeof onRefreshShippingAddresses === 'function' ? (
+                    <button
+                      type="button"
+                      onClick={onRefreshShippingAddresses}
+                      disabled={isLoadingShippingAddresses || !selectedCustomer?.customerId}
+                      className="rounded-md border border-[#c1c9c0] px-1.5 py-0.5 text-[11px] font-semibold text-[#414942] hover:bg-[#f3f5f1] disabled:opacity-40"
+                    >
+                      Tải lại
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+              {!selectedCustomer?.customerId ? (
+                <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
+                  Chọn khách hàng trước để dùng địa chỉ đã lưu.
+                </p>
               ) : null}
-              {!isLoadingShippingAddresses && savedShippingAddresses.length > 0 ? (
+              {selectedCustomer?.customerId && isLoadingShippingAddresses ? (
+                <p className="text-xs text-[#717971]">Đang tải địa chỉ đã lưu...</p>
+              ) : null}
+              {selectedCustomer?.customerId && !isLoadingShippingAddresses && savedShippingAddresses.length > 0 ? (
                 <select
                   id="sidebar-shipping-address-select"
                   className="mb-2 w-full rounded-lg border border-[#c1c9c0] bg-[#fbf9f1] px-3 py-2 text-sm outline-none focus:border-[#356647] focus:ring-2 focus:ring-[#356647]/20"
                   value={useCustomShippingAddress ? '__custom__' : shippingAddress}
                   onChange={(event) => onSavedShippingAddressChange(event.target.value)}
                 >
-                  {savedShippingAddresses.map((addr) => (
-                    <option key={addr} value={addr}>
-                      {addr.length > 72 ? `${addr.slice(0, 72)}…` : addr}
-                    </option>
-                  ))}
+                  {savedShippingAddresses.map((addr) => {
+                    const value = typeof addr === 'string' ? addr : addr.address
+                    const label = typeof addr === 'string' ? addr : (addr.label || addr.address)
+                    return (
+                      <option key={value} value={value}>
+                        {label.length > 80 ? `${label.slice(0, 80)}…` : label}
+                      </option>
+                    )
+                  })}
                   <option value="__custom__">Nhập địa chỉ khác...</option>
                 </select>
               ) : null}
-              {(useCustomShippingAddress || savedShippingAddresses.length === 0) && !isLoadingShippingAddresses ? (
+              {selectedCustomer?.customerId
+                && !isLoadingShippingAddresses
+                && savedShippingAddresses.length === 0 ? (
+                <p className="mb-2 rounded-lg border border-dashed border-[#c1c9c0] bg-[#fbf9f1] px-3 py-2 text-xs text-[#717971]">
+                  Khách chưa có địa chỉ đã lưu.{' '}
+                  <Link
+                    to={`/customers/${selectedCustomer.customerId}/addresses`}
+                    className="font-semibold text-[#356647] underline underline-offset-2"
+                  >
+                    Thêm địa chỉ
+                  </Link>
+                  {' '}hoặc nhập bên dưới.
+                </p>
+              ) : null}
+              {selectedCustomer?.customerId
+                && (useCustomShippingAddress || savedShippingAddresses.length === 0)
+                && !isLoadingShippingAddresses ? (
                 <textarea
                   id="sidebar-shipping-address"
                   rows={3}
@@ -229,7 +279,7 @@ export default function PosPaymentSidebar({
                   onChange={(event) => onShippingAddressChange(event.target.value)}
                 />
               ) : null}
-              {!hasShippingAddress && !isLoadingShippingAddresses ? (
+              {selectedCustomer?.customerId && !hasShippingAddress && !isLoadingShippingAddresses ? (
                 <p className="mt-2 text-xs font-medium text-[#ba1a1a]">Vui lòng chọn hoặc nhập địa chỉ giao.</p>
               ) : null}
             </div>

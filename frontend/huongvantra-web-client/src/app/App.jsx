@@ -96,6 +96,7 @@ function App() {
         <Route path="/orders/returns" element={<Navigate to="/orders/exchange?tab=returns" replace />} />
         <Route path="/orders/returns/:id" element={<ReturnOrderDetailPage />} />
         <Route path="/orders/cod" element={<CodOrdersPage />} />
+        <Route path="/orders/cod/shift-report" element={<Navigate to="/orders/cod?view=report" replace />} />
         <Route path="/orders/stock-deduct" element={<StockDeductQueuePage />} />
         <Route path="/orders/create" element={<OrderCreatePage />} />
         <Route path="/orders/:id" element={<OrderDetailPage />} />

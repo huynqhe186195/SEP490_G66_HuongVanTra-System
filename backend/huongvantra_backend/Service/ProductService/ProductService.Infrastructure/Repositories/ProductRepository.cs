@@ -269,6 +269,17 @@ public class ProductRepository(ProductDbContext _db) : IProductRepository
         return (await GetByIdAsync(product.Id, includeDeleted: true))!;
     }
 
+    public async Task AddRetailPriceHistoriesAsync(
+        IReadOnlyList<ProductRetailPriceHistory> histories,
+        CancellationToken ct = default)
+    {
+        if (histories is null || histories.Count == 0)
+            return;
+
+        _db.ProductRetailPriceHistories.AddRange(histories);
+        await _db.SaveChangesAsync(ct);
+    }
+
     public async Task<ProductVariant> ReplaceVariantBomAsync(Guid variantId, List<ProductVariantBomLine> lines)
     {
         var variant = await _db.ProductVariants

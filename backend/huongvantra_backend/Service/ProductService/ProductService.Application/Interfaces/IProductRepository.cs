@@ -27,6 +27,7 @@ public interface IProductRepository
     Task<bool> ExistsVariantSkuCodeAsync(string skuCode, Guid? excludeVariantId = null, Guid? excludeProductId = null);
     Task<Product> CreateAsync(Product product);
     Task<Product> UpdateAsync(Product product);
+    Task AddRetailPriceHistoriesAsync(IReadOnlyList<ProductRetailPriceHistory> histories, CancellationToken ct = default);
     Task<ProductVariant> ReplaceVariantBomAsync(Guid variantId, List<ProductVariantBomLine> lines);
     Task ApplyVariantBomSynchronizationAsync(VariantBomSynchronizationPlan plan);
     Task DeleteAsync(Product product);

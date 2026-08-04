@@ -1100,7 +1100,8 @@ export function isNavigationItemActive(pathname, item, search = '') {
   }
 
   if (item.module === 'cod_ops') {
-    return path === target || path.startsWith(`${target}/`) || orderDetailContext === 'cod'
+    // Exact /orders/cod (incl. ?view=report) — do not treat child paths as active.
+    return path === target || orderDetailContext === 'cod'
   }
 
   if (item.module === 'stock_deduct_ops') {

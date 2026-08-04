@@ -158,6 +158,8 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
 
         var productType = ParseProductType(request.ProductType);
         var productId = Guid.NewGuid();
+        var (mappedVariants, _) = await MapVariantsAsync(
+            productId, input.Name, variants, request.Variants, productType);
         var product = new Product
         {
             Id = productId,
@@ -176,7 +178,7 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
             Images = images.Select(MapImage).ToList(),
             Units = units.Select(MapUnit).ToList(),
             AttributeValues = MapAttributeValues(attributes).ToList(),
-            Variants = await MapVariantsAsync(productId, input.Name, variants, request.Variants, productType)
+            Variants = mappedVariants
         };
 
         var created = await _productRepository.CreateAsync(product);
@@ -234,15 +236,18 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
         Replace(product.Images, images.Select(MapImage));
         Replace(product.Units, units.Select(MapUnit));
         Replace(product.AttributeValues, MapAttributeValues(attributes));
-        Replace(product.Variants, await MapVariantsAsync(
+        var (mappedVariants, retailPriceHistories) = await MapVariantsAsync(
             product.Id,
             input.Name,
             variants,
             request.Variants,
             product.ProductType,
-            product.Variants));
+            product.Variants);
+        Replace(product.Variants, mappedVariants);
 
         var updated = await _productRepository.UpdateAsync(product);
+        if (retailPriceHistories.Count > 0)
+            await _productRepository.AddRetailPriceHistoriesAsync(retailPriceHistories);
         return MapToResponse(updated, CatalogViewScope.Warehouse);
     }
 
@@ -270,7 +275,7 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
         return MapToResponse((await _productRepository.GetByIdAsync(id))!, CatalogViewScope.Warehouse);
     }
 
-    private async Task<List<ProductVariant>> MapVariantsAsync(
+    private async Task<(List<ProductVariant> Variants, List<ProductRetailPriceHistory> RetailPriceHistories)> MapVariantsAsync(
         Guid productId,
         string productName,
         List<ValidatedProductVariantInput> inputs,
@@ -279,6 +284,7 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
         IEnumerable<ProductVariant>? existingVariants = null)
     {
         var variants = new List<ProductVariant>();
+        var retailPriceHistories = new List<ProductRetailPriceHistory>();
         var usedInBatch = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var existingBySku = (existingVariants ?? [])
             .Where(variant => !string.IsNullOrWhiteSpace(variant.SkuCode))
@@ -321,6 +327,7 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
                 input.CanUseInCustom,
                 input.CanHaveBom);
 
+            var previousRetailPrice = existingVariant?.RetailPrice;
             variant.ProductId = productId;
             variant.SkuCode = skuCode;
             variant.Barcode = input.Barcode;
@@ -344,6 +351,19 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
             variant.CanHaveBom = capabilities.CanHaveBom;
             Replace(variant.Units, BuildVariantUnits(productId, variantId, unitName, input));
             variants.Add(variant);
+
+            if (previousRetailPrice is not null)
+            {
+                var history = RetailPriceHistoryFactory.TryCreate(
+                    variantId,
+                    previousRetailPrice.Value,
+                    input.RetailPrice,
+                    changedBy: null,
+                    changedByName: null,
+                    RetailPriceHistoryFactory.SourceProductCatalogUpdate);
+                if (history is not null)
+                    retailPriceHistories.Add(history);
+            }
         }
 
         var localBySku = variants.ToDictionary(v => v.SkuCode, StringComparer.OrdinalIgnoreCase);
@@ -391,7 +411,7 @@ public class ProductLogic(IProductRepository _productRepository, ICategoryReposi
         }
 
         await EnsureNoBomCyclesAsync(pendingEdges);
-        return variants;
+        return (variants, retailPriceHistories);
     }
 
     private async Task<List<ProductVariantBomLine>> BuildVariantBomLinesAsync(

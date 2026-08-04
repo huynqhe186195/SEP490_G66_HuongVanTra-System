@@ -2,6 +2,7 @@ import { apiRequestAuth, toPagedResult } from '../../../lib/apiClient.js'
 import { loadAuthSession } from '../../auth/services/authSession.js'
 import {
   buildCreateCustomerBody,
+  fetchCustomerAddresses,
   fetchCustomerById,
   fetchCustomerByPhone,
   mapCustomer,
@@ -673,17 +674,22 @@ export function mapPosCustomerContext(item) {
       createdAt: row.createdAt ?? row.CreatedAt,
     })),
     shippingAddresses: (item.shippingAddresses ?? item.ShippingAddresses ?? []).map((row) => ({
+      id: row.id ?? row.Id ?? null,
       address: row.address ?? row.Address ?? '',
+      label: row.label ?? row.Label ?? row.address ?? row.Address ?? '',
       lastUsedAt: row.lastUsedAt ?? row.LastUsedAt ?? null,
       isProfileAddress: Boolean(row.isProfileAddress ?? row.IsProfileAddress),
+      receiverName: row.receiverName ?? row.ReceiverName ?? '',
+      receiverPhone: row.receiverPhone ?? row.ReceiverPhone ?? '',
     })),
   }
 }
 
 export async function fetchPosCustomerContext(customerId) {
-  const [customer, ordersResult] = await Promise.all([
+  const [customer, ordersResult, addressRows] = await Promise.all([
     fetchCustomerById(customerId),
     fetchOrders({ customerId, page: 1, pageSize: 10 }),
+    fetchCustomerAddresses(customerId).catch(() => []),
   ])
 
   const tierDiscountPercent = Number(customer.tier?.discountPercent ?? 0)
@@ -709,19 +715,52 @@ export async function fetchPosCustomerContext(customerId) {
       createdAt: order.createdAt,
     }))
 
-  const shippingAddresses = (customer.addresses ?? []).map((row) => ({
-    address: [row.addressLine, row.ward, row.district, row.province].filter(Boolean).join(', '),
-    lastUsedAt: null,
-    isProfileAddress: Boolean(row.isDefault),
-  }))
+  const fromAddressApi = (Array.isArray(addressRows) ? addressRows : []).map((row) => {
+    const line = [row.addressLine, row.ward, row.district, row.province].filter(Boolean).join(', ')
+    if (!line.trim()) return null
+    const receiver = [row.receiverName, row.receiverPhone].filter(Boolean).join(' · ')
+    return {
+      id: row.id,
+      address: line.trim(),
+      label: receiver ? `${receiver} — ${line.trim()}` : line.trim(),
+      lastUsedAt: null,
+      isProfileAddress: Boolean(row.isDefault),
+      receiverName: row.receiverName || '',
+      receiverPhone: row.receiverPhone || '',
+    }
+  }).filter(Boolean)
+
+  const fromCustomerEmbed = (customer.addresses ?? []).map((row) => {
+    const line = [row.addressLine, row.ward, row.district, row.province].filter(Boolean).join(', ')
+    if (!line.trim()) return null
+    const receiver = [row.receiverName, row.receiverPhone].filter(Boolean).join(' · ')
+    return {
+      id: row.id,
+      address: line.trim(),
+      label: receiver ? `${receiver} — ${line.trim()}` : line.trim(),
+      lastUsedAt: null,
+      isProfileAddress: Boolean(row.isDefault),
+      receiverName: row.receiverName || '',
+      receiverPhone: row.receiverPhone || '',
+    }
+  }).filter(Boolean)
+
+  const shippingAddresses = fromAddressApi.length > 0 ? fromAddressApi : fromCustomerEmbed
 
   if (customer.address && !shippingAddresses.length) {
     shippingAddresses.push({
+      id: 'profile',
       address: customer.address,
+      label: customer.address,
       lastUsedAt: null,
       isProfileAddress: true,
+      receiverName: '',
+      receiverPhone: '',
     })
   }
+
+  // Prefer default address first for COD checkout.
+  shippingAddresses.sort((a, b) => Number(b.isProfileAddress) - Number(a.isProfileAddress))
 
   return mapPosCustomerContext({
     customerId: customer.customerId,

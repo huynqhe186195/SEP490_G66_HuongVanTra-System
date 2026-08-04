@@ -2221,10 +2221,65 @@ public class OrderLogic(
             codPayment?.Id,
             codPayment?.IsCodVerified,
             codPayment?.CodWarningDate,
-            codPayment is { IsCodVerified: false } && codPayment.Amount > 0 ? codPayment.Amount : null,
+            ResolveCodExpectedAmount(codPayment),
             o.OrderDetails?.Sum(d => d.Quantity) ?? 0,
             HasActiveStockReservation: false,
             EmployeeSnapshotName: o.EmployeeSnapshotName);
+    }
+
+    private static decimal? ResolveCodExpectedAmount(Payment? payment)
+    {
+        if (payment is null || payment.IsCodVerified)
+            return null;
+
+        var fromMeta = TryReadExpectedCollectedAmount(payment.CodDebtSettlementJson);
+        if (fromMeta is > 0)
+            return fromMeta;
+
+        return payment.Amount > 0 ? payment.Amount : null;
+    }
+
+    private static decimal? TryReadExpectedCollectedAmount(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return null;
+
+        try
+        {
+            using var document = System.Text.Json.JsonDocument.Parse(json);
+            if (document.RootElement.ValueKind != System.Text.Json.JsonValueKind.Object)
+                return null;
+
+            if (!document.RootElement.TryGetProperty("expectedCollectedAmount", out var amountNode)
+                && !document.RootElement.TryGetProperty("ExpectedCollectedAmount", out amountNode))
+            {
+                return null;
+            }
+
+            if (amountNode.ValueKind == System.Text.Json.JsonValueKind.Number
+                && amountNode.TryGetDecimal(out var amount)
+                && amount > 0)
+            {
+                return Math.Round(amount, 2, MidpointRounding.AwayFromZero);
+            }
+
+            if (amountNode.ValueKind == System.Text.Json.JsonValueKind.String
+                && decimal.TryParse(
+                    amountNode.GetString(),
+                    NumberStyles.Number,
+                    CultureInfo.InvariantCulture,
+                    out var parsed)
+                && parsed > 0)
+            {
+                return Math.Round(parsed, 2, MidpointRounding.AwayFromZero);
+            }
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return null;
+        }
+
+        return null;
     }
 
     private static string FormatVnd(decimal amount)

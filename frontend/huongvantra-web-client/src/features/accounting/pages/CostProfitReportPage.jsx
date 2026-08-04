@@ -4,6 +4,7 @@ import PageHeader from '../../../components/shared/PageHeader.jsx'
 import PageShell from '../../../components/shared/PageShell.jsx'
 import TablePagination from '../../../components/shared/TablePagination.jsx'
 import { useTotalAwarePageSize } from '../../../utils/totalAwarePageSize.js'
+import { confirmDialog } from '../../../app/dialog.js'
 import { showError, showSuccess } from '../../../app/toast.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import {
@@ -62,12 +63,11 @@ function compareNullable(left, right) {
   return Number(left) - Number(right)
 }
 
-function historyTypeLabel(type) {
-  return type === 'RetailPrice' ? 'Giá bán' : 'Giá vốn trung bình'
-}
-
 const HISTORY_SOURCE_LABELS = {
   supplier_receipt: 'Phiếu nhập NCC',
+  manual_admin_accounting: 'Kế toán cập nhật',
+  product_catalog_update: 'Cập nhật catalog SP',
+  approved_price_change_request: 'Duyệt yêu cầu đổi giá',
 }
 
 function historySourceLabel(sourceType) {
@@ -117,6 +117,41 @@ export default function CostProfitReportPage() {
   const [sortDirection, setSortDirection] = useState('asc')
   const [historyState, setHistoryState] = useState(null)
 
+  const historyFilteredItems = useMemo(() => {
+    if (!historyState?.items?.length) return []
+    if (!historyState.typeFilter) return historyState.items
+    return historyState.items.filter((item) => item.type === historyState.typeFilter)
+  }, [historyState])
+
+  const {
+    pageSize: historyPageSize,
+    setPageSize: setHistoryPageSize,
+    pageSizeOptions: historyPageSizeOptions,
+  } = useTotalAwarePageSize(historyFilteredItems.length)
+
+  const historyPage = historyState?.page || 1
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(historyFilteredItems.length / historyPageSize) || 1)
+    if (historyPage > totalPages) {
+      setHistoryState((current) => (current ? { ...current, page: totalPages } : current))
+    }
+  }, [historyFilteredItems.length, historyPage, historyPageSize])
+
+  const historyPageItems = useMemo(() => {
+    const start = (historyPage - 1) * historyPageSize
+    return historyFilteredItems.slice(start, start + historyPageSize)
+  }, [historyFilteredItems, historyPage, historyPageSize])
+
+  const historyTypeCounts = useMemo(() => {
+    const items = historyState?.items ?? []
+    return {
+      all: items.length,
+      RetailPrice: items.filter((item) => item.type === 'RetailPrice').length,
+      AverageCost: items.filter((item) => item.type === 'AverageCost').length,
+    }
+  }, [historyState?.items])
+
   const tableColSpan = canEditSalePrice ? 10 : 9
 
   const load = useCallback(async () => {
@@ -160,6 +195,16 @@ export default function CostProfitReportPage() {
     })
   }, [costFilter, profitFilter, receiptFilter, rows, search, sortDirection, sortField])
 
+  const negativeProfitCount = useMemo(
+    () => rows.filter((row) => row.profit < 0).length,
+    [rows],
+  )
+
+  const filteredNegativeProfitCount = useMemo(
+    () => filtered.filter((row) => row.profit < 0).length,
+    [filtered],
+  )
+
   const { pageSize, setPageSize, pageSizeOptions } = useTotalAwarePageSize(filtered.length)
 
   useEffect(() => {
@@ -184,6 +229,17 @@ export default function CostProfitReportPage() {
       return
     }
 
+    const projectedProfit = retailPrice - Number(row.averageCostPrice || 0)
+    if (projectedProfit < 0) {
+      const confirmed = await confirmDialog({
+        title: 'Lợi nhuận dự kiến âm',
+        message: `SKU ${row.skuCode}: giá bán ${formatVnd(retailPrice)} thấp hơn giá vốn TB ${formatVnd(row.averageCostPrice)}. Lợi nhuận dự kiến ${formatVnd(projectedProfit)}. Vẫn lưu?`,
+        tone: 'danger',
+        confirmLabel: 'Vẫn lưu',
+      })
+      if (!confirmed) return
+    }
+
     setSavingId(row.skuId)
     try {
       const updated = toRow(await updateAccountingRetailPrice(row.skuId, retailPrice))
@@ -198,13 +254,49 @@ export default function CostProfitReportPage() {
   }
 
   async function openHistory(row) {
-    setHistoryState({ row, items: [], isLoading: true, error: '' })
+    setHistoryState({
+      row,
+      items: [],
+      isLoading: true,
+      error: '',
+      typeFilter: '',
+      page: 1,
+    })
     try {
       const result = await fetchSkuPriceHistory(row.skuId, { page: 1, pageSize: 100 })
-      setHistoryState({ row, items: result.items, isLoading: false, error: '' })
+      setHistoryState({
+        row,
+        items: result.items,
+        isLoading: false,
+        error: '',
+        typeFilter: '',
+        page: 1,
+        totalFromApi: result.totalCount,
+      })
     } catch (error) {
-      setHistoryState({ row, items: [], isLoading: false, error: error.message })
+      setHistoryState({
+        row,
+        items: [],
+        isLoading: false,
+        error: error.message,
+        typeFilter: '',
+        page: 1,
+        totalFromApi: 0,
+      })
     }
+  }
+
+  function setHistoryTypeFilter(typeFilter) {
+    setHistoryState((current) => (current ? { ...current, typeFilter, page: 1 } : current))
+  }
+
+  function setHistoryPage(nextPage) {
+    setHistoryState((current) => (current ? { ...current, page: nextPage } : current))
+  }
+
+  function handleHistoryPageSizeChange(size) {
+    setHistoryPageSize(size)
+    setHistoryPage(1)
   }
 
   function handleExport() {
@@ -315,6 +407,42 @@ export default function CostProfitReportPage() {
         </p>
       ) : null}
 
+      {negativeProfitCount > 0 ? (
+        <div className="mb-3 flex flex-col gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-3 text-sm text-rose-800 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-2">
+            <span className="material-symbols-outlined mt-0.5 shrink-0 text-[20px] text-rose-600">warning</span>
+            <div>
+              <p className="font-semibold">
+                {negativeProfitCount} SKU có lợi nhuận dự kiến âm
+              </p>
+              <p className="mt-0.5 text-xs text-rose-700/90">
+                Giá bán đang thấp hơn giá vốn trung bình — nên kiểm tra trước khi bán.
+                {profitFilter === 'loss' && filteredNegativeProfitCount !== negativeProfitCount
+                  ? ` Đang hiển thị ${filteredNegativeProfitCount} SKU sau bộ lọc.`
+                  : null}
+              </p>
+            </div>
+          </div>
+          {profitFilter !== 'loss' ? (
+            <button
+              type="button"
+              onClick={() => resetPageAnd(setProfitFilter, 'loss')}
+              className="shrink-0 rounded-lg border border-rose-300 bg-white px-3 py-1.5 text-xs font-bold text-rose-700 hover:bg-rose-100"
+            >
+              Chỉ xem SKU đang lỗ
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => resetPageAnd(setProfitFilter, 'all')}
+              className="shrink-0 rounded-lg border border-rose-300 bg-white px-3 py-1.5 text-xs font-bold text-rose-700 hover:bg-rose-100"
+            >
+              Xem tất cả
+            </button>
+          )}
+        </div>
+      ) : null}
+
       {/* Mobile / tablet cards */}
       <div className="space-y-3 lg:hidden">
         {isLoading ? (
@@ -322,16 +450,29 @@ export default function CostProfitReportPage() {
         ) : pageItems.length === 0 ? (
           <p className="rounded-2xl border border-slate-200 bg-white px-4 py-8 text-center text-sm text-slate-500">Không có dữ liệu</p>
         ) : pageItems.map((row) => (
-          <article key={row.skuId} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <article
+            key={row.skuId}
+            className={`rounded-2xl border bg-white p-4 shadow-sm ${
+              row.profit < 0 ? 'border-rose-200 ring-1 ring-rose-100' : 'border-slate-200'
+            }`}
+          >
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-slate-900">{row.name}</p>
                 <p className="mt-0.5 font-mono text-xs text-slate-500">{row.skuCode}</p>
                 <p className="mt-1 text-xs text-slate-500">Đơn vị: {row.unitName || '—'}</p>
               </div>
-              <p className={`shrink-0 text-sm font-semibold ${row.profit >= 0 ? 'text-[#356647]' : 'text-rose-600'}`}>
-                {formatVnd(row.profit)}
-              </p>
+              <div className="shrink-0 text-right">
+                {row.profit < 0 ? (
+                  <span className="mb-1 inline-flex items-center gap-0.5 rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-rose-700">
+                    <span className="material-symbols-outlined text-[12px]">warning</span>
+                    Lỗ
+                  </span>
+                ) : null}
+                <p className={`text-sm font-semibold ${row.profit >= 0 ? 'text-[#356647]' : 'text-rose-600'}`}>
+                  {formatVnd(row.profit)}
+                </p>
+              </div>
             </div>
 
             <dl className="mt-3 grid grid-cols-2 gap-2 text-sm">
@@ -422,7 +563,12 @@ export default function CostProfitReportPage() {
               ) : pageItems.length === 0 ? (
                 <tr><td colSpan={tableColSpan} className="px-4 py-8 text-center text-slate-500">Không có dữ liệu</td></tr>
               ) : pageItems.map((row) => (
-                <tr key={row.skuId} className="border-t border-slate-100">
+                <tr
+                  key={row.skuId}
+                  className={`border-t ${
+                    row.profit < 0 ? 'border-rose-100 bg-rose-50/40' : 'border-slate-100'
+                  }`}
+                >
                   <td className="max-w-[240px] px-4 py-3 text-slate-700">
                     <p className="font-semibold text-slate-900">{row.name}</p>
                     <p className="font-mono text-xs text-slate-500">{row.skuCode}</p>
@@ -453,7 +599,13 @@ export default function CostProfitReportPage() {
                   </td>
                   <td className="px-4 py-3 text-slate-600">{row.costUpdatedAt ? formatVietnamDateTime(row.costUpdatedAt) : '—'}</td>
                   <td className={`px-4 py-3 text-right font-semibold ${row.profit >= 0 ? 'text-[#356647]' : 'text-rose-600'}`}>
-                    {formatVnd(row.profit)}
+                    {row.profit < 0 ? (
+                      <span className="mb-1 inline-flex items-center gap-0.5 rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-rose-700">
+                        <span className="material-symbols-outlined text-[12px]">warning</span>
+                        Lỗ
+                      </span>
+                    ) : null}
+                    <p>{formatVnd(row.profit)}</p>
                   </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex justify-end gap-2">
@@ -500,102 +652,179 @@ export default function CostProfitReportPage() {
 
       {historyState ? (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3 backdrop-blur-sm sm:p-4"
           onClick={() => setHistoryState(null)}
         >
           <div
-            className="max-h-[calc(100dvh-2rem)] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl"
+            className="flex max-h-[min(92dvh,52rem)] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
             onClick={(event) => event.stopPropagation()}
           >
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <div>
-                <h2 className="text-lg font-bold text-slate-800">Lịch sử — {historyState.row.skuCode}</h2>
-                <p className="text-sm text-slate-500">{historyState.row.name}</p>
+            <div className="shrink-0 border-b border-slate-100 px-4 py-3 sm:px-5">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h2 className="truncate text-base font-bold text-slate-800 sm:text-lg">
+                    Lịch sử giá — {historyState.row.skuCode}
+                  </h2>
+                  <p className="truncate text-sm text-slate-500">{historyState.row.name}</p>
+                  {!historyState.isLoading && !historyState.error ? (
+                    <p className="mt-1 text-xs text-slate-400">
+                      {historyFilteredItems.length} bản ghi
+                      {historyState.totalFromApi > historyState.items.length
+                        ? ` (hiển thị ${historyState.items.length}/${historyState.totalFromApi})`
+                        : null}
+                    </p>
+                  ) : null}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setHistoryState(null)}
+                  className="shrink-0 rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"
+                  aria-label="Đóng"
+                >
+                  <span className="material-symbols-outlined">close</span>
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={() => setHistoryState(null)}
-                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"
-              >
-                <span className="material-symbols-outlined">close</span>
-              </button>
+
+              {!historyState.isLoading && !historyState.error && historyState.items.length > 0 ? (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {[
+                    { value: '', label: 'Tất cả', count: historyTypeCounts.all },
+                    { value: 'RetailPrice', label: 'Giá bán', count: historyTypeCounts.RetailPrice },
+                    { value: 'AverageCost', label: 'Giá vốn', count: historyTypeCounts.AverageCost },
+                  ].map((chip) => {
+                    const active = historyState.typeFilter === chip.value
+                    return (
+                      <button
+                        key={chip.value || 'all'}
+                        type="button"
+                        onClick={() => setHistoryTypeFilter(chip.value)}
+                        className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+                          active
+                            ? 'bg-[#356647] text-white'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        {chip.label}
+                        <span className={`ml-1 ${active ? 'text-white/80' : 'text-slate-400'}`}>
+                          ({chip.count})
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+              ) : null}
             </div>
 
-            {historyState.isLoading ? (
-              <p className="py-8 text-center text-sm text-slate-500">Đang tải lịch sử...</p>
-            ) : historyState.error ? (
-              <p className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{historyState.error}</p>
-            ) : historyState.items.length === 0 ? (
-              <p className="py-8 text-center text-sm text-slate-500">Chưa có lịch sử thay đổi giá.</p>
-            ) : (
-              <div className="space-y-3">
-                {historyState.items.map((item) => {
-                  const status = historyStatusLabel(item)
-                  return (
-                    <article key={item.id} className="rounded-xl border border-slate-200 p-4">
-                      <div className="flex flex-wrap items-start justify-between gap-2">
-                        <div>
-                          <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${
-                            item.type === 'RetailPrice'
-                              ? 'bg-blue-50 text-blue-700'
-                              : 'bg-emerald-50 text-emerald-700'
-                          }`}
-                          >
-                            {historyTypeLabel(item.type)}
-                          </span>
-                          <p className="mt-2 text-sm text-slate-700">
-                            <strong>{formatVnd(item.oldValue)}</strong>
-                            <span className="mx-2 text-slate-400">→</span>
-                            <strong className="text-[#356647]">{formatVnd(item.newValue)}</strong>
-                          </p>
-                          {item.incomingUnitCost != null || item.incomingQuantity != null ? (
-                            <p className="mt-1 text-xs text-slate-500">
-                              {item.incomingQuantity != null ? `Số lượng nhập: ${item.incomingQuantity}` : null}
-                              {item.incomingQuantity != null && item.incomingUnitCost != null ? ' · ' : null}
-                              {item.incomingUnitCost != null ? `Đơn giá nhập: ${formatVnd(item.incomingUnitCost)}` : null}
-                            </p>
-                          ) : null}
-                        </div>
-                        <div className="text-right text-xs text-slate-500">
-                          {item.type === 'AverageCost' ? (
-                            <>
-                              <p>Duyệt nguồn: {item.sourceApprovedAt ? formatVietnamDateTime(item.sourceApprovedAt) : '—'}</p>
-                              <p className="mt-1">Cập nhật: {item.updatedAt ? formatVietnamDateTime(item.updatedAt) : '—'}</p>
-                            </>
-                          ) : (
-                            <p>{item.changedAt ? formatVietnamDateTime(item.changedAt) : '—'}</p>
-                          )}
-                          <p className="mt-1">{item.changedBy || '—'}</p>
-                        </div>
-                      </div>
-                      <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
-                        {historySourceLabel(item.sourceType) ? (
-                          <span className="rounded-md bg-slate-100 px-2 py-1 text-slate-600">
-                            {historySourceLabel(item.sourceType)}
-                          </span>
-                        ) : null}
-                        {status ? (
-                          <span className={`rounded-md px-2 py-1 ${
-                            item.wasApplied === true ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
-                          }`}
-                          >
-                            {status}
-                          </span>
-                        ) : null}
-                        {item.sourceReceiptId ? (
-                          <Link
-                            to={`/inventory/supplier-receipts/${item.sourceReceiptId}`}
-                            className="font-semibold text-[#356647] underline underline-offset-2"
-                          >
-                            {item.sourceReceiptCode || 'Phiếu nhập nguồn'}
-                          </Link>
-                        ) : null}
-                      </div>
-                    </article>
-                  )
-                })}
+            <div className="min-h-0 flex-1 overflow-auto px-0">
+              {historyState.isLoading ? (
+                <p className="px-5 py-10 text-center text-sm text-slate-500">Đang tải lịch sử...</p>
+              ) : historyState.error ? (
+                <p className="m-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{historyState.error}</p>
+              ) : historyState.items.length === 0 ? (
+                <p className="px-5 py-10 text-center text-sm text-slate-500">Chưa có lịch sử thay đổi giá.</p>
+              ) : historyFilteredItems.length === 0 ? (
+                <p className="px-5 py-10 text-center text-sm text-slate-500">Không có bản ghi thuộc loại đã chọn.</p>
+              ) : (
+                <table className="min-w-full text-left text-sm">
+                  <thead className="sticky top-0 z-10 bg-slate-50 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                    <tr>
+                      <th className="whitespace-nowrap px-4 py-2.5 sm:px-5">Loại</th>
+                      <th className="whitespace-nowrap px-3 py-2.5 text-right">Cũ → Mới</th>
+                      <th className="hidden whitespace-nowrap px-3 py-2.5 md:table-cell">Nguồn / trạng thái</th>
+                      <th className="whitespace-nowrap px-3 py-2.5">Thời gian</th>
+                      <th className="hidden whitespace-nowrap px-3 py-2.5 pr-5 lg:table-cell">Người thực hiện</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {historyPageItems.map((item) => {
+                      const status = historyStatusLabel(item)
+                      const source = historySourceLabel(item.sourceType)
+                      const timeLabel = item.type === 'AverageCost'
+                        ? (item.sourceApprovedAt || item.updatedAt || item.changedAt)
+                        : item.changedAt
+                      return (
+                        <tr key={item.id} className="align-top hover:bg-slate-50/80">
+                          <td className="px-4 py-2.5 sm:px-5">
+                            <span
+                              className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-bold ${
+                                item.type === 'RetailPrice'
+                                  ? 'bg-blue-50 text-blue-700'
+                                  : 'bg-emerald-50 text-emerald-700'
+                              }`}
+                            >
+                              {item.type === 'RetailPrice' ? 'Giá bán' : 'Giá vốn'}
+                            </span>
+                            {item.incomingUnitCost != null || item.incomingQuantity != null ? (
+                              <p className="mt-1 max-w-[9rem] text-[11px] leading-snug text-slate-400 sm:max-w-none">
+                                {item.incomingQuantity != null ? `SL ${item.incomingQuantity}` : null}
+                                {item.incomingQuantity != null && item.incomingUnitCost != null ? ' · ' : null}
+                                {item.incomingUnitCost != null ? `ĐG ${formatVnd(item.incomingUnitCost)}` : null}
+                              </p>
+                            ) : null}
+                          </td>
+                          <td className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums">
+                            <span className="text-slate-500">{formatVnd(item.oldValue)}</span>
+                            <span className="mx-1 text-slate-300">→</span>
+                            <span className="font-semibold text-[#356647]">{formatVnd(item.newValue)}</span>
+                          </td>
+                          <td className="hidden px-3 py-2.5 md:table-cell">
+                            <div className="flex max-w-[14rem] flex-col gap-1">
+                              {source ? (
+                                <span className="w-fit rounded bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-600">
+                                  {source}
+                                </span>
+                              ) : null}
+                              {status ? (
+                                <span
+                                  className={`w-fit rounded px-1.5 py-0.5 text-[11px] ${
+                                    item.wasApplied === true
+                                      ? 'bg-emerald-50 text-emerald-700'
+                                      : 'bg-amber-50 text-amber-700'
+                                  }`}
+                                >
+                                  {status}
+                                </span>
+                              ) : null}
+                              {item.sourceReceiptId ? (
+                                <Link
+                                  to={`/inventory/supplier-receipts/${item.sourceReceiptId}`}
+                                  className="truncate text-[11px] font-semibold text-[#356647] underline underline-offset-2"
+                                >
+                                  {item.sourceReceiptCode || 'Phiếu nhập'}
+                                </Link>
+                              ) : null}
+                              {!source && !status && !item.sourceReceiptId ? (
+                                <span className="text-xs text-slate-400">—</span>
+                              ) : null}
+                            </div>
+                          </td>
+                          <td className="whitespace-nowrap px-3 py-2.5 text-xs text-slate-600">
+                            {timeLabel ? formatVietnamDateTime(timeLabel) : '—'}
+                          </td>
+                          <td className="hidden max-w-[10rem] truncate px-3 py-2.5 pr-5 text-xs text-slate-600 lg:table-cell">
+                            {item.changedBy || '—'}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            {!historyState.isLoading && !historyState.error && historyFilteredItems.length > 0 ? (
+              <div className="shrink-0 border-t border-slate-100">
+                <TablePagination
+                  page={historyState.page || 1}
+                  pageSize={historyPageSize}
+                  pageSizeOptions={historyPageSizeOptions}
+                  totalCount={historyFilteredItems.length}
+                  onPageChange={setHistoryPage}
+                  onPageSizeChange={handleHistoryPageSizeChange}
+                  itemLabel="bản ghi"
+                />
               </div>
-            )}
+            ) : null}
           </div>
         </div>
       ) : null}

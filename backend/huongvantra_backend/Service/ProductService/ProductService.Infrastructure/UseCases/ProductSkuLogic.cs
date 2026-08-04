@@ -351,19 +351,17 @@ public class ProductSkuLogic(
                     // from the client and remains owned by the receipt consumer.
                     variant.RetailPrice = normalizedRetailPrice;
                     variant.UpdatedAt = changedAt;
-                    _db.ProductRetailPriceHistories.Add(new ProductRetailPriceHistory
-                    {
-                        Id = Guid.NewGuid(),
-                        SkuId = skuId,
-                        OldRetailPrice = oldRetailPrice,
-                        NewRetailPrice = normalizedRetailPrice,
-                        ChangedBy = actor.UserId is { } userId && userId != Guid.Empty ? userId : null,
-                        ChangedByName = string.IsNullOrWhiteSpace(actor.FullName)
-                            ? null
-                            : actor.FullName.Trim(),
-                        ChangedAt = changedAt,
-                        SourceType = "manual_admin_accounting"
-                    });
+                    var history = RetailPriceHistoryFactory.TryCreate(
+                        skuId,
+                        oldRetailPrice,
+                        normalizedRetailPrice,
+                        actor.UserId,
+                        actor.FullName,
+                        RetailPriceHistoryFactory.SourceManualAccounting,
+                        note: null,
+                        changedAtUtc: changedAt);
+                    if (history is not null)
+                        _db.ProductRetailPriceHistories.Add(history);
                     await _db.SaveChangesAsync(ct);
                 }
 

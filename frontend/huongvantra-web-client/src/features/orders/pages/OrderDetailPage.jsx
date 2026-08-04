@@ -8,7 +8,7 @@ import { fetchOnDutyShift } from '../../shifts/services/shiftsApi.js'
 import { formatVietnamDateTime } from '../../../utils/vietnamDateTime.js'
 import CodVerifyModal from '../components/CodVerifyModal.jsx'
 import ConfirmDialog from '../../../components/shared/ConfirmDialog.jsx'
-import { parseCodDebtSettlement } from '../../customers/utils/codDebtSettlementUtils.js'
+import { parseCodDebtSettlement, parseExpectedCollectedAmount } from '../../customers/utils/codDebtSettlementUtils.js'
 import OrderCustomerCell from '../components/OrderCustomerCell.jsx'
 import OrderProductsSection from '../components/OrderProductsSection.jsx'
 import OrderReturnsSection from '../components/OrderReturnsSection.jsx'
@@ -601,7 +601,11 @@ function OrderDetailPage() {
                   customerId: order.customerId,
                   customerSnapshotName: order.customerSnapshotName,
                   codPaymentId: codPayment?.id,
-                  codExpectedAmount: codPayment?.amount ?? null,
+                  codExpectedAmount:
+                    parseExpectedCollectedAmount(codPayment?.codDebtSettlementJson)
+                    ?? order.codExpectedAmount
+                    ?? codPayment?.amount
+                    ?? null,
                   codDebtSettlement: parseCodDebtSettlement(codPayment?.codDebtSettlementJson),
                   payments: order.payments,
                 }

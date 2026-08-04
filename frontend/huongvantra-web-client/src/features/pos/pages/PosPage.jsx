@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { showError, showInfo, showSuccess } from "../../../app/toast.js";
 import AddCustomerModal from "../components/AddCustomerModal.jsx";
@@ -22,7 +22,7 @@ import {
   clampDebtSettlement,
   resolveMaxDebtPayable,
 } from '../../customers/utils/debtAllocationEditor.js'
-import { serializeCodDebtSettlement } from '../../customers/utils/codDebtSettlementUtils.js'
+import { buildCodMetaJson, serializeCodDebtSettlement } from '../../customers/utils/codDebtSettlementUtils.js'
 import {
   applyPromotionPreview,
   buildTakeawayOrderPayload,
@@ -321,6 +321,7 @@ function PosPage() {
   const [pendingCatalogSync, setPendingCatalogSync] = useState(0)
   const [tabCloseConfirm, setTabCloseConfirm] = useState(null)
   const [savedShippingAddresses, setSavedShippingAddresses] = useState([])
+  // Each entry: { address, label }
   const [isLoadingShippingAddresses, setIsLoadingShippingAddresses] = useState(false)
   const [useCustomShippingAddress, setUseCustomShippingAddress] = useState(false)
   const [seller, setSeller] = useState({ name: 'Nhân viên POS', role: '—', display: 'Nhân viên POS · —' })
@@ -938,18 +939,23 @@ function PosPage() {
         fetchPosCustomerContext(selectedCustomer.customerId)
             .then((context) => {
                 if (cancelled) return;
-                const addresses = (context.shippingAddresses ?? []).map((row) => row.address?.trim()).filter(Boolean);
+                const addresses = (context.shippingAddresses ?? [])
+                    .map((row) => ({
+                        address: String(row.address || '').trim(),
+                        label: String(row.label || row.address || '').trim(),
+                    }))
+                    .filter((row) => row.address);
                 setSavedShippingAddresses(addresses);
 
                 const current = shippingAddress?.trim();
-                if (current && addresses.some((addr) => addr === current)) {
+                if (current && addresses.some((addr) => addr.address === current)) {
                     setUseCustomShippingAddress(false);
                     return;
                 }
 
                 if (addresses.length > 0) {
                     setUseCustomShippingAddress(false);
-                    updateActiveSession({ shippingAddress: addresses[0] });
+                    updateActiveSession({ shippingAddress: addresses[0].address });
                 } else {
                     setUseCustomShippingAddress(true);
                     if (!current) {
@@ -974,6 +980,27 @@ function PosPage() {
             cancelled = true;
         };
     }, [isTakeaway, selectedCustomer?.customerId]);
+
+    const refreshShippingAddresses = useCallback(() => {
+        if (!selectedCustomer?.customerId) return;
+        setIsLoadingShippingAddresses(true);
+        fetchPosCustomerContext(selectedCustomer.customerId)
+            .then((context) => {
+                const addresses = (context.shippingAddresses ?? [])
+                    .map((row) => ({
+                        address: String(row.address || '').trim(),
+                        label: String(row.label || row.address || '').trim(),
+                    }))
+                    .filter((row) => row.address);
+                setSavedShippingAddresses(addresses);
+                if (addresses.length > 0 && !shippingAddress?.trim()) {
+                    setUseCustomShippingAddress(false);
+                    updateActiveSession({ shippingAddress: addresses[0].address });
+                }
+            })
+            .catch((error) => showError(error.message))
+            .finally(() => setIsLoadingShippingAddresses(false));
+    }, [selectedCustomer?.customerId, shippingAddress]);
 
     const addTab = () => {
         const nextId = tabs.length ? Math.max(...tabs.map((tab) => tab.id)) + 1 : 1;
@@ -1868,9 +1895,10 @@ function PosPage() {
         }
 
         const activeSettlement = debtSettlement ?? null;
-        const codDebtSettlementJson = serializeCodDebtSettlement(
-            activeSettlement ? { ...activeSettlement, paymentMethod: "COD" } : null,
-        );
+        const codDebtSettlementJson = buildCodMetaJson({
+            expectedCollectedAmount: codExpectedAmount,
+            settlement: activeSettlement ? { ...activeSettlement, paymentMethod: "COD" } : null,
+        });
         const result = await createTakeawayCodOrder(payload, codExpectedAmount, {
             paymentAmount: total,
             codDebtSettlementJson,
@@ -1880,11 +1908,17 @@ function PosPage() {
             activeSettlement?.payDebtsEnabled && Number(activeSettlement.allocatedAmount || 0) > 0 ?
                 ` · Dự kiến trừ nợ ${formatMoney(activeSettlement.allocatedAmount)} đ khi thu COD`
             :   "";
-        showSuccess(`Đã tạo đơn COD ${result.orderCode}. Theo dõi tại Quản lý đơn COD.${debtNote}`);
+        const expectedNote =
+            codExpectedAmount > total
+                ? ` · Dự kiến thu ${formatMoney(codExpectedAmount)} đ khi giao`
+                : "";
+        showSuccess(`Đã tạo đơn COD ${result.orderCode}. Theo dõi tại Quản lý đơn COD.${debtNote}${expectedNote}`);
         const receipt = buildReceiptData({
             orderCode: result.orderCode,
             method: "COD",
             orderTotal: result.totalAmount,
+            amountPaid: codExpectedAmount,
+            customerPaid: codExpectedAmount,
         });
         resetCheckoutState();
         printReceiptFromData(receipt);
@@ -3038,6 +3072,7 @@ function PosPage() {
         useCustomShippingAddress={useCustomShippingAddress}
         onSavedShippingAddressChange={handleSavedShippingAddressChange}
         isLoadingShippingAddresses={isLoadingShippingAddresses}
+        onRefreshShippingAddresses={refreshShippingAddresses}
         hasShippingAddress={hasShippingAddress}
         orderDiscountPercentInput={orderDiscountPercent}
         onOrderDiscountPercentChange={updateOrderDiscountPercent}

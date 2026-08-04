@@ -15,8 +15,6 @@ public class RetailPriceChangeRequestLogic(
     ProductDbContext _db,
     IAdminNotificationSender _adminNotificationSender)
 {
-    private const string RetailPriceHistorySourceType = "approved_price_change_request";
-
     public async Task<PagedResponse<RetailPriceChangeRequestResponse>> GetPagedAsync(
         GetRetailPriceChangeRequestsRequest request,
         ProductApprovalActorSnapshot actor,
@@ -166,18 +164,17 @@ public class RetailPriceChangeRequestLogic(
                     // Chỉ RetailPrice được đổi. CostPrice do luồng phiếu nhập sở hữu.
                     variant.RetailPrice = entity.RequestedRetailPrice;
                     variant.UpdatedAt = appliedAt;
-                    _db.ProductRetailPriceHistories.Add(new ProductRetailPriceHistory
-                    {
-                        Id = Guid.NewGuid(),
-                        SkuId = variant.Id,
-                        OldRetailPrice = oldRetailPrice,
-                        NewRetailPrice = entity.RequestedRetailPrice,
-                        ChangedBy = NormalizeActorId(actor),
-                        ChangedByName = NormalizeText(actor.FullName),
-                        ChangedAt = appliedAt,
-                        SourceType = RetailPriceHistorySourceType,
-                        Note = entity.RequestCode
-                    });
+                    var history = RetailPriceHistoryFactory.TryCreate(
+                        variant.Id,
+                        oldRetailPrice,
+                        entity.RequestedRetailPrice,
+                        NormalizeActorId(actor),
+                        NormalizeText(actor.FullName),
+                        RetailPriceHistoryFactory.SourceApprovedPriceChangeRequest,
+                        note: entity.RequestCode,
+                        changedAtUtc: appliedAt);
+                    if (history is not null)
+                        _db.ProductRetailPriceHistories.Add(history);
                 }
 
                 entity.Status = RetailPriceChangeRequestStatus.Approved;
